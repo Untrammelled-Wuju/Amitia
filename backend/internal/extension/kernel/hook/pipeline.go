@@ -10,18 +10,21 @@ import (
 )
 
 type Pipeline struct {
-	PointRegistry   HookPointRegistry
-	ContribStore    ContributionStore
-	RuntimeBridge   RuntimeBridge
-	Permission      PermissionChecker
-	Scope           ScopeChecker
-	Dependency      DependencyChecker
-	Trace           TraceRecorder
-	Circuit         *CircuitBreaker
-	DepthGuard      *DepthGuard
-	Validator       *PatchValidator
-	MaxDepth        int
-	PipelineTimeout time.Duration
+	PointRegistry    HookPointRegistry
+	ContribStore     ContributionStore
+	RuntimeBridge    RuntimeBridge
+	Permission       PermissionChecker
+	Scope            ScopeChecker
+	Dependency       DependencyChecker
+	Trace            TraceRecorder
+	Circuit          *CircuitBreaker
+	DepthGuard       *DepthGuard
+	Validator        *PatchValidator
+	PlanCache        *PlanCache
+	HostRevalidator  HostRevalidator
+	MaxDepth         int
+	PipelineTimeout  time.Duration
+	chainBudgetMs    int64
 }
 
 func NewPipeline(
@@ -40,8 +43,11 @@ func NewPipeline(
 		Circuit:         NewCircuitBreaker(),
 		DepthGuard:      NewDepthGuard(DefaultMaxDepth),
 		Validator:       NewPatchValidator(),
+		PlanCache:       NewPlanCache(),
+		HostRevalidator: NopHostRevalidator{},
 		MaxDepth:        DefaultMaxDepth,
 		PipelineTimeout: 2000 * time.Millisecond,
+		chainBudgetMs:   5000,
 	}
 }
 
@@ -65,6 +71,48 @@ func (p *Pipeline) WithTrace(recorder TraceRecorder) *Pipeline {
 	return p
 }
 
+func (p *Pipeline) WithHostRevalidator(r HostRevalidator) *Pipeline {
+	p.HostRevalidator = r
+	return p
+}
+
+func (p *Pipeline) WithPlanCache(c *PlanCache) *Pipeline {
+	p.PlanCache = c
+	return p
+}
+
+func (p *Pipeline) WithChainBudget(ms int64) *Pipeline {
+	p.chainBudgetMs = ms
+	return p
+}
+
+func (p *Pipeline) InvalidatePlan(hookPointID string) {
+	if p.PlanCache != nil {
+		p.PlanCache.Invalidate(hookPointID)
+	}
+}
+
+func (p *Pipeline) RebuildPlan(ctx context.Context, hookPointID string) *CompiledHookPlan {
+	point, err := p.PointRegistry.GetPoint(ctx, hookPointID)
+	if err != nil {
+		return nil
+	}
+	contribs, err := p.ContribStore.ListByHookPoint(ctx, hookPointID)
+	if err != nil {
+		return nil
+	}
+	circuitStates := p.collectCircuitStates(contribs)
+	return p.PlanCache.BuildOrReplace(point, contribs, circuitStates)
+}
+
+func (p *Pipeline) collectCircuitStates(contribs []HookContributionDefinition) map[string]CircuitStats {
+	states := make(map[string]CircuitStats)
+	for _, c := range contribs {
+		states[c.ContributionID] = p.Circuit.GetStats(c.ContributionID)
+	}
+	return states
+}
+
 type InvokeRequest struct {
 	HookPointID string
 	Payload     json.RawMessage
@@ -80,14 +128,28 @@ func (p *Pipeline) Invoke(ctx context.Context, req InvokeRequest) PipelineResult
 		operationID = uuid.NewString()
 	}
 
+	parentDepth := req.Depth
+	if parentDepth < 0 {
+		parentDepth = 0
+	}
+	if ctxDepth := DepthFromContext(ctx); ctxDepth > parentDepth {
+		parentDepth = ctxDepth
+	}
+
 	result := PipelineResult{
 		OperationID: operationID,
 		HookPointID: req.HookPointID,
 		Decision:    DecisionContinue,
-		Depth:       req.Depth,
+		Depth:       parentDepth,
 	}
 
-	pipelineCtx, pipelineCancel := context.WithTimeout(ctx, p.PipelineTimeout)
+	var chainBudget time.Duration
+	if p.chainBudgetMs > 0 {
+		chainBudget = time.Duration(p.chainBudgetMs) * time.Millisecond
+	} else {
+		chainBudget = p.PipelineTimeout
+	}
+	pipelineCtx, pipelineCancel := context.WithTimeout(ctx, chainBudget)
 	defer pipelineCancel()
 
 	point, err := p.PointRegistry.GetPoint(pipelineCtx, req.HookPointID)
@@ -105,46 +167,16 @@ func (p *Pipeline) Invoke(ctx context.Context, req InvokeRequest) PipelineResult
 		return result
 	}
 
-	contribs, err := p.ContribStore.ListByHookPoint(pipelineCtx, req.HookPointID)
-	if err != nil {
+	plan := p.getOrBuildPlan(pipelineCtx, point)
+	if plan == nil {
 		result.Aborted = true
-		result.AbortReason = "list contributions: " + err.Error()
+		result.AbortReason = "no eligible contributions or plan build failed"
 		result.TotalDuration = time.Since(start).Milliseconds()
 		return result
 	}
-
-	var enabled []HookContributionDefinition
-	for _, c := range contribs {
-		if !c.Enabled {
-			continue
-		}
-		if p.Circuit.IsOpen(c.ContributionID) {
-			exec := HookExecution{
-				ContributionID: c.ContributionID,
-				ExtensionID:    c.ExtensionID,
-				Phase:          c.Phase,
-				Status:         StatusCircuitOpen,
-				ErrorCode:      string(ErrCodeCircuitOpen),
-				StartedAt:      time.Now().UTC().Format(time.RFC3339),
-			}
-			result.Executions = append(result.Executions, exec)
-			p.Trace.RecordCircuit(pipelineCtx, c.ContributionID, p.Circuit.GetStats(c.ContributionID))
-			continue
-		}
-		enabled = append(enabled, c)
-	}
-
-	if len(enabled) > point.MaxHandlers {
-		result.Aborted = true
-		result.AbortReason = fmt.Sprintf("handlers %d exceeds max %d", len(enabled), point.MaxHandlers)
-		result.TotalDuration = time.Since(start).Milliseconds()
-		return result
-	}
-
-	orderResult := OrderHooks(OrderingInput{Contributions: enabled})
 
 	currentPayload := req.Payload
-	var writtenPaths = make(map[string]string)
+	writtenPaths := make(map[string]string)
 	sequence := 0
 
 	phaseOrder := []HookPhase{PhaseBefore, PhaseFilter, PhaseTransform, PhaseAfter, PhaseObserve}
@@ -152,10 +184,14 @@ func (p *Pipeline) Invoke(ctx context.Context, req InvokeRequest) PipelineResult
 		if result.Aborted {
 			break
 		}
-		phaseContribs := filterByPhase(orderResult.Ordered, phase)
-		for _, contrib := range phaseContribs {
+		phaseContribs := plan.LookupByPhase(phase)
+		for _, compiled := range phaseContribs {
+			contribDef := p.resolveContribution(pipelineCtx, compiled.ContributionID)
+			if contribDef == nil {
+				continue
+			}
 			sequence++
-			exec := p.executeContribution(pipelineCtx, contrib, point, currentPayload, req.Context, req.Depth, req.ParentStack, sequence, writtenPaths)
+			exec := p.executeContribCompiled(pipelineCtx, *contribDef, point, currentPayload, req.Context, parentDepth, req.ParentStack, sequence, writtenPaths)
 			result.Executions = append(result.Executions, exec)
 
 			if exec.Status == StatusDenied {
@@ -177,7 +213,7 @@ func (p *Pipeline) Invoke(ctx context.Context, req InvokeRequest) PipelineResult
 			}
 
 			if exec.Status == StatusFailed && point.ExecutionPolicy.StopOnFailure {
-				if contrib.EffectiveFailurePolicy(point).OnRuntimeError == FailureFailClosed {
+				if contribDef.EffectiveFailurePolicy(point).OnRuntimeError == FailureFailClosed {
 					result.Aborted = true
 					result.AbortReason = exec.Error
 					break
@@ -196,13 +232,49 @@ func (p *Pipeline) Invoke(ctx context.Context, req InvokeRequest) PipelineResult
 		}
 	}
 
+	if result.Transformed && p.HostRevalidator != nil && !result.Aborted {
+		if revalErr := p.HostRevalidator.Revalidate(pipelineCtx, point, PhaseTransform, req.Payload, currentPayload); revalErr != nil {
+			result.Aborted = true
+			result.AbortReason = "post-hook revalidation failed: " + revalErr.Error()
+		}
+	}
+
 	result.FinalPayload = currentPayload
 	result.TotalDuration = time.Since(start).Milliseconds()
 	p.Trace.RecordPipeline(ctx, result)
 	return result
 }
 
-func (p *Pipeline) executeContribution(
+func (p *Pipeline) getOrBuildPlan(ctx context.Context, point HookPointDefinition) *CompiledHookPlan {
+	if p.PlanCache == nil {
+		contribs, err := p.ContribStore.ListByHookPoint(ctx, point.HookPointID)
+		if err != nil {
+			return nil
+		}
+		circuitStates := p.collectCircuitStates(contribs)
+		tmpCache := NewPlanCache()
+		return tmpCache.BuildOrReplace(point, contribs, circuitStates)
+	}
+	if cached, ok := p.PlanCache.Get(point.HookPointID); ok && !cached.IsStale(p.PlanCache.Generation()) {
+		return cached
+	}
+	contribs, err := p.ContribStore.ListByHookPoint(ctx, point.HookPointID)
+	if err != nil {
+		return nil
+	}
+	circuitStates := p.collectCircuitStates(contribs)
+	return p.PlanCache.BuildOrReplace(point, contribs, circuitStates)
+}
+
+func (p *Pipeline) resolveContribution(ctx context.Context, contributionID string) *HookContributionDefinition {
+	c, err := p.ContribStore.Get(ctx, contributionID)
+	if err != nil {
+		return nil
+	}
+	return &c
+}
+
+func (p *Pipeline) executeContribCompiled(
 	ctx context.Context,
 	contrib HookContributionDefinition,
 	point HookPointDefinition,
@@ -270,8 +342,9 @@ func (p *Pipeline) executeContribution(
 		p.Trace.RecordInvocation(ctx, exec, inputHash, "")
 		return exec
 	}
+	enteredDepth := newDepth
+	_ = enteredDepth
 	defer p.DepthGuard.Exit(hookCtx.InvocationID, contrib.ContributionID)
-	_ = newDepth
 
 	if !p.RuntimeBridge.IsReady(ctx, contrib) {
 		exec.Status = StatusSkipped
@@ -283,6 +356,8 @@ func (p *Pipeline) executeContribution(
 		return exec
 	}
 
+	nestedCtx := ContextWithDepth(ctx, newDepth)
+
 	invocationInput := HookInvocationInput{
 		HookPointID:     contrib.HookPointID,
 		ContractVersion: contrib.ContractVersion,
@@ -290,7 +365,7 @@ func (p *Pipeline) executeContribution(
 		Context:         hookCtx,
 	}
 
-	result, err := p.RuntimeBridge.Invoke(ctx, contrib, invocationInput)
+	result, err := p.RuntimeBridge.Invoke(nestedCtx, contrib, invocationInput)
 	if err != nil {
 		exec.ErrorCode = classifyError(err)
 		exec.Error = err.Error()
@@ -452,14 +527,4 @@ func (p *Pipeline) failureStatus(code string) string {
 	default:
 		return StatusFailed
 	}
-}
-
-func filterByPhase(contribs []HookContributionDefinition, phase HookPhase) []HookContributionDefinition {
-	var out []HookContributionDefinition
-	for _, c := range contribs {
-		if c.Phase == phase {
-			out = append(out, c)
-		}
-	}
-	return out
 }

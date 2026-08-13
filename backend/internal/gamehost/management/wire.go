@@ -2,8 +2,10 @@ package management
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/u-ai/backend/internal/gamehost"
+	ghupgrade "github.com/u-ai/backend/internal/gamehost/upgrade"
 )
 
 func NewProductionService(container *gamehost.GameHostContainer, kernel KernelManagementReader) *GameCenterManagementService {
@@ -68,15 +70,41 @@ func (f *kernelMutationFromFuncs) Uninstall(ctx context.Context, extensionID str
 	return f.opts.UninstallFn(ctx, extensionID)
 }
 
-func NewProductionPackageMutationServiceFromKernelReader(kernelReader *KernelReader, pluginReg PluginRegistryReader, kernelMutation KernelMutation) *PackageMutationService {
+type packageUpgradeCoordinatorAdapter struct {
+	coordinator gamehostUpgradeCoordinator
+}
+
+type gamehostUpgradeCoordinator interface {
+	ExecuteUpgradeByArchive(ctx context.Context, extensionID, archivePath string) error
+}
+
+// GameHostUpgradeCoordinatorAdapter 公开适配器，让外部包可以把 upgrade.UpgradeCoordinator 包装为 management.PackageUpgradeCoordinator
+type GameHostUpgradeCoordinatorAdapter struct {
+	UC *ghupgrade.UpgradeCoordinator
+}
+
+func (a *GameHostUpgradeCoordinatorAdapter) ExecuteUpgrade(ctx context.Context, extensionID, archivePath string) error {
+	if a.UC == nil {
+		return fmt.Errorf("management: gamehost upgrade coordinator is nil")
+	}
+	return a.UC.ExecuteUpgradeByArchive(ctx, extensionID, archivePath)
+}
+
+func (a *packageUpgradeCoordinatorAdapter) ExecuteUpgrade(ctx context.Context, extensionID, archivePath string) error {
+	return a.coordinator.ExecuteUpgradeByArchive(ctx, extensionID, archivePath)
+}
+
+func NewProductionPackageMutationServiceFromKernelReader(kernelReader *KernelReader, pluginReg PluginRegistryReader, kernelMutation KernelMutation, upgradeCoordinator PackageUpgradeCoordinator) *PackageMutationService {
 	var reader KernelTargetReader
 	if kernelReader != nil {
 		reader = kernelReader
 	}
+	var uc PackageUpgradeCoordinator = upgradeCoordinator
 	return NewPackageMutationService(PackageMutationServiceOptions{
-		Kernel:   kernelMutation,
-		Reader:   reader,
-		Registry: pluginReg,
+		Kernel:             kernelMutation,
+		Reader:             reader,
+		Registry:           pluginReg,
+		UpgradeCoordinator: uc,
 	})
 }
 

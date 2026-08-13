@@ -6,8 +6,8 @@ import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
-import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/services/error_utils.dart';
 import '../../../../core/services/providers.dart';
 
 class AgentSkillsPage extends ConsumerStatefulWidget {
@@ -35,7 +35,7 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
       final data = await svc.agentSkills();
       if (mounted) setState(() { _skills = data; _loading = false; });
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+      if (mounted) setState(() { _error = safeErrorMessage(e); _loading = false; });
     }
   }
 
@@ -395,7 +395,7 @@ class _ImportSkillSheet extends StatelessWidget {
           Text('导入 Agent Skill', style: AppTypography.pageTitle(context)),
           const SizedBox(height: 16),
           GestureDetector(
-            onTap: () => amitiaComingSoon(context, '导入Agent Skill'),
+            onTap: null,
             child: Container(
               padding: const EdgeInsets.all(24),
               decoration: BoxDecoration(

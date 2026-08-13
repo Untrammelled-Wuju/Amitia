@@ -385,7 +385,7 @@ func (s *memStore) GetCircuit(ctx context.Context, scheduleID string) (*Schedule
 	defer s.mu.Unlock()
 	record, ok := s.circuits[scheduleID]
 	if !ok {
-		return nil, ErrScheduleNotFound
+		return nil, nil
 	}
 	return record, nil
 }

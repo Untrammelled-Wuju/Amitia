@@ -12,6 +12,7 @@ type HookLifecycleManager struct {
 	Permission    PermissionChecker
 	Scope         ScopeChecker
 	Dependency    DependencyChecker
+	PlanCache     *PlanCache
 }
 
 func (lm *HookLifecycleManager) permissionChecker() PermissionChecker {
@@ -51,6 +52,12 @@ func (lm *HookLifecycleManager) validatePermissionRequirements(reqs []Permission
 	return nil
 }
 
+func (lm *HookLifecycleManager) invalidatePlanFor(hookPointID string) {
+	if lm.PlanCache != nil {
+		lm.PlanCache.Invalidate(hookPointID)
+	}
+}
+
 func (lm *HookLifecycleManager) InstallContribution(ctx context.Context, contrib HookContributionDefinition) error {
 	point, err := lm.PointRegistry.GetPoint(ctx, contrib.HookPointID)
 	if err != nil {
@@ -69,6 +76,7 @@ func (lm *HookLifecycleManager) InstallContribution(ctx context.Context, contrib
 	if err := lm.ContribStore.Register(ctx, contrib); err != nil {
 		return WrapHookError(ErrCodeHookResultInvalid, "register contribution", err)
 	}
+	lm.invalidatePlanFor(contrib.HookPointID)
 	return nil
 }
 
@@ -94,6 +102,7 @@ func (lm *HookLifecycleManager) activateContribution(ctx context.Context, contri
 	if lm.Circuit != nil {
 		lm.Circuit.Reset(contrib.ContributionID)
 	}
+	lm.invalidatePlanFor(contrib.HookPointID)
 	return nil
 }
 
@@ -109,12 +118,14 @@ func (lm *HookLifecycleManager) EnableContribution(ctx context.Context, contribu
 }
 
 func (lm *HookLifecycleManager) DisableContribution(ctx context.Context, contributionID string) error {
-	if _, err := lm.ContribStore.Get(ctx, contributionID); err != nil {
+	contrib, err := lm.ContribStore.Get(ctx, contributionID)
+	if err != nil {
 		return WrapHookError(ErrCodeHookNotFound, "get contribution", err)
 	}
 	if err := lm.ContribStore.SetEnabled(ctx, contributionID, false); err != nil {
 		return WrapHookError(ErrCodeHookRuntimeError, "deactivate contribution", err)
 	}
+	lm.invalidatePlanFor(contrib.HookPointID)
 	return nil
 }
 
@@ -154,17 +165,23 @@ func (lm *HookLifecycleManager) UpdateContribution(ctx context.Context, oldID st
 	if lm.Circuit != nil {
 		lm.Circuit.Reset(oldID)
 	}
+	lm.invalidatePlanFor(old.HookPointID)
+	if newContrib.HookPointID != old.HookPointID {
+		lm.invalidatePlanFor(newContrib.HookPointID)
+	}
 	return nil
 }
 
 func (lm *HookLifecycleManager) UninstallContribution(ctx context.Context, contributionID string) error {
-	if _, err := lm.ContribStore.Get(ctx, contributionID); err != nil {
+	contrib, err := lm.ContribStore.Get(ctx, contributionID)
+	if err != nil {
 		return WrapHookError(ErrCodeHookNotFound, "get contribution", err)
 	}
 	_ = lm.ContribStore.SetEnabled(ctx, contributionID, false)
 	if err := lm.ContribStore.Unregister(ctx, contributionID); err != nil {
 		return WrapHookError(ErrCodeHookRuntimeError, "unregister contribution", err)
 	}
+	lm.invalidatePlanFor(contrib.HookPointID)
 	return nil
 }
 

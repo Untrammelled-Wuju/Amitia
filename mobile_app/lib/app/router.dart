@@ -105,6 +105,8 @@ import '../features/developer/presentation/pages/dev_console_page.dart';
 import '../features/developer/presentation/pages/migrations_page.dart';
 import '../features/developer/presentation/pages/dev_mode_page.dart';
 
+import '../core/services/providers.dart' show startupStageProvider;
+
 Widget backTargetTransition({
   required Animation<double> secondaryAnimation,
   required Widget child,
@@ -289,25 +291,23 @@ final goRouterProvider = Provider<GoRouter>((ref) {
     initialLocation: '/chat',
     navigatorKey: _shellNavigatorKey,
     redirect: (context, state) {
-    final stage = ref.read(startupStageProvider);
+    final stage = ref.read(startupStageProvider).valueOrNull;
     final location = state.matchedLocation;
 
       if (location == '/about') return '/settings/about';
       if (location == '/toolbox') return '/settings/toolbox';
 
       switch (stage) {
-        case MockStartupStage.firstLaunch:
-          if (location != '/onboarding') return '/onboarding';
-        case MockStartupStage.needsLogin:
+        case 'needsLogin':
           if (location != '/login') return '/login';
-        case MockStartupStage.privacyRequired:
-          if (location != '/privacy') return '/privacy';
-        case MockStartupStage.ready:
+          break;
+        case 'ready':
           if (location == '/onboarding' ||
               location == '/login' ||
               location == '/privacy') {
             return '/chat';
           }
+          break;
       }
 
       return null;

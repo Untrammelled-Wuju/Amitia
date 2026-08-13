@@ -98,6 +98,9 @@ func NewService(cfg ServiceConfig) (*Service, error) {
 	pipeline.DepthGuard = depthGuard
 	pipeline.Validator = validator
 
+	pcache := NewPlanCache()
+	pipeline.PlanCache = pcache
+
 	integrator := &HostHookIntegrator{Pipeline: pipeline}
 	readModel := &HookReadModel{Pipeline: pipeline, Registry: pointRegistry}
 
@@ -109,6 +112,7 @@ func NewService(cfg ServiceConfig) (*Service, error) {
 		Permission:    permChecker,
 		Scope:         scopeChecker,
 		Dependency:    depChecker,
+		PlanCache:     pcache,
 	}
 
 	return &Service{

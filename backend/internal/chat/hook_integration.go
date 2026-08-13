@@ -83,7 +83,7 @@ func (a *HookAdapter) InvokeToolAfterExecute(ctx context.Context, payload json.R
 	return a.integrator.InvokeToolAfterExecute(ctx, payload, hookCtx)
 }
 
-func buildHookContext(invocationID, operationID, extensionID, userID, characterID, conversationID, sessionID, channel string) hook.HookContextSnapshot {
+func buildHookContext(ctx context.Context, invocationID, operationID, extensionID, userID, characterID, conversationID, sessionID, channel string) hook.HookContextSnapshot {
 	var charID *string
 	if characterID != "" {
 		c := characterID
@@ -94,6 +94,7 @@ func buildHookContext(invocationID, operationID, extensionID, userID, characterI
 		c := conversationID
 		convID = &c
 	}
+	depth := hook.DepthFromContext(ctx)
 	return hook.HookContextSnapshot{
 		InvocationID:   invocationID,
 		OperationID:    operationID,
@@ -102,7 +103,7 @@ func buildHookContext(invocationID, operationID, extensionID, userID, characterI
 		ConversationID: convID,
 		Platform:       channel,
 		Timestamp:      time.Now().UTC(),
-		Depth:          0,
+		Depth:          depth,
 	}
 }
 
@@ -149,7 +150,7 @@ func (s *service) invokeMessageHook(ctx context.Context, hookPoint string, paylo
 		return payload, false, nil
 	}
 
-	hookCtx := buildHookContext(invocationID, "", "", userID, characterID, conversationID, sessionID, channel)
+	hookCtx := buildHookContext(ctx, invocationID, "", "", userID, characterID, conversationID, sessionID, channel)
 	rawPayload := mapToHookPayload(payload)
 
 	var result json.RawMessage

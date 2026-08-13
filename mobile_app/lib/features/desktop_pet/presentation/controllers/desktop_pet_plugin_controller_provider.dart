@@ -1,13 +1,11 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
+import '../../../../core/services/error_utils.dart';
 import '../../infrastructure/desktop_pet_plugin_api.dart';
 import '../../infrastructure/desktop_pet_plugin_dto.dart';
 
 final desktopPetPluginApiProvider = Provider<DesktopPetPluginApi>((ref) {
   final api = ref.watch(backendServiceProvider);
-  if (api == null) {
-    throw StateError('BackendServiceApi not available');
-  }
   return DesktopPetPluginApi(api);
 });
 
@@ -105,7 +103,7 @@ class DesktopPetPluginController extends StateNotifier<DesktopPetPluginState> {
     } catch (e) {
       if (!mounted) return;
       if (gen != state.generation) return;
-      state = state.copyWith(loading: false, error: e.toString());
+      state = state.copyWith(loading: false, error: safeErrorMessage(e));
     }
   }
 
@@ -134,7 +132,7 @@ class DesktopPetPluginController extends StateNotifier<DesktopPetPluginState> {
     } catch (e) {
       if (!mounted) return;
       if (gen != state.generation) return;
-      state = state.copyWith(refreshing: false, error: e.toString());
+      state = state.copyWith(refreshing: false, error: safeErrorMessage(e));
     }
   }
 

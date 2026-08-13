@@ -1,9 +1,12 @@
 import 'dart:async';
+import 'dart:io';
 
+import 'package:web_socket_channel/io.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 
 import '../../backend_connection/backend_connection_config.dart';
 import '../../backend_connection/backend_uri_builder.dart';
+import '../auth/backend_auth_header.dart';
 import '../errors/backend_transport_error.dart';
 import '../errors/backend_transport_error_code.dart';
 import '../state/backend_websocket_state.dart';
@@ -124,9 +127,17 @@ class BackendWebSocketClient implements BackendWebSocketTransport {
       queryParameters: queryParameters,
     );
 
-    final channel = WebSocketChannel.connect(
-      uri,
+    final token = _config.credential.revealForTransport();
+    final headers = <String, String>{
+      BackendAuthHeader.localToken: token,
+      'User-Agent': 'Amitia-Mobile',
+    };
+
+    final webSocket = await WebSocket.connect(
+      uri.toString(),
+      headers: headers,
     );
+    final channel = IOWebSocketChannel(webSocket);
 
     final session = BackendWebSocketSessionImpl(
       generation: _config.generation,

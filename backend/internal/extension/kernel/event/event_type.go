@@ -191,4 +191,5 @@ type EventTypeRegistry interface {
 	ListEventTypes(ctx context.Context) ([]EventTypeDefinition, error)
 	ListByNamespace(ctx context.Context, namespace string) ([]EventTypeDefinition, error)
 	IsRegistered(ctx context.Context, typeID EventTypeID, version int) bool
+	ValidatePayload(ctx context.Context, typeID EventTypeID, version int, payload []byte) error
 }

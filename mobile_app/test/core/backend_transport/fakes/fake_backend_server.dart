@@ -32,6 +32,12 @@ class FakeBackendServer {
       body: null,
     ));
 
+    final isWsUpgrade = headers['upgrade']?.toLowerCase() == 'websocket';
+    if (isWsUpgrade && path.startsWith('/ws')) {
+      await _handleWebSocketUpgrade(request, headers);
+      return;
+    }
+
     if (requireToken) {
       final token = headers['x-amitia-local-token'];
       if (token == validToken) {
@@ -119,6 +125,41 @@ class FakeBackendServer {
       'message': 'Not found',
     }));
     await request.response.close();
+  }
+
+  Future<void> _handleWebSocketUpgrade(
+      HttpRequest request, Map<String, String> headers) async {
+    if (requireToken) {
+      final token = headers['x-amitia-local-token'];
+      if (token != validToken) {
+        authFailures++;
+        request.response.statusCode = 401;
+        request.response.headers.contentType = ContentType.json;
+        request.response.write(jsonEncode({
+          'code': 401,
+          'message': 'Unauthorized',
+        }));
+        await request.response.close();
+        return;
+      }
+    }
+
+    try {
+      final socket = await WebSocketTransformer.upgrade(request);
+      socket.listen(
+        (data) {
+          if (data is String) {
+            socket.add('echo: $data');
+          } else {
+            socket.add(data);
+          }
+        },
+        onDone: () => socket.close(),
+        onError: (_) => socket.close(),
+      );
+    } catch (_) {
+      // WebSocket upgrade failed, silently ignore
+    }
   }
 
   Future<void> stop() async {

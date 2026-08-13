@@ -72,8 +72,8 @@ class ProductionCompositionTest {
             layout = layout,
             abiGate = createSupportedAbiGate(),
             packageVerifier = com.amitia.amitia_app.runtime.install.internal.DefaultPackageVerifier(),
-            archiveExtractor = com.amitia.amitia_app.runtime.install.internal.DefaultSafeArchiveExtractor(),
-            rootfsManager = com.amitia.amitia_app.runtime.install.internal.DefaultRootfsManager(layout.controlRoot, com.amitia.amitia_app.runtime.install.internal.DefaultSafeArchiveExtractor()),
+            archiveExtractor = com.amitia.amitia_app.runtime.install.DefaultSafeArchiveExtractor(),
+            rootfsManager = com.amitia.amitia_app.runtime.install.DefaultRootfsManager(layout.controlRoot, com.amitia.amitia_app.runtime.install.DefaultSafeArchiveExtractor()),
             runtimeVerifier = com.amitia.amitia_app.runtime.install.DefaultInstalledRuntimeVerifier(treeHasher = { "" }),
             receiptStore = com.amitia.amitia_app.runtime.install.DefaultInstallReceiptStore(layout),
         )
@@ -100,7 +100,7 @@ class ProductionCompositionTest {
             manifestStore = manifestStore,
             backendConnectionProvider = object : com.amitia.amitia_app.runtime.connection.BackendConnectionProvider {
                 override fun current(): com.amitia.amitia_app.runtime.connection.BackendConnectionAvailability {
-                    return com.amitia.amitia_app.runtime.connection.BackendConnectionAvailability.Unavailable(null)
+                    return com.amitia.amitia_app.runtime.connection.BackendConnectionAvailability.Unavailable
                 }
             },
         )

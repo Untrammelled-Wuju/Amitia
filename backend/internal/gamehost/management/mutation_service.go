@@ -31,23 +31,30 @@ type KernelTargetReader interface {
 	ListGameCenterContributions(ctx context.Context, extensionID string) ([]kerneldomain.ContributionDefinition, error)
 }
 
+type PackageUpgradeCoordinator interface {
+	ExecuteUpgrade(ctx context.Context, extensionID, archivePath string) error
+}
+
 type PackageMutationService struct {
-	kernel   KernelMutation
-	reader   KernelTargetReader
-	registry PluginRegistryReader
+	kernel             KernelMutation
+	reader             KernelTargetReader
+	registry           PluginRegistryReader
+	upgradeCoordinator PackageUpgradeCoordinator
 }
 
 type PackageMutationServiceOptions struct {
-	Kernel   KernelMutation
-	Reader   KernelTargetReader
-	Registry PluginRegistryReader
+	Kernel             KernelMutation
+	Reader             KernelTargetReader
+	Registry           PluginRegistryReader
+	UpgradeCoordinator PackageUpgradeCoordinator
 }
 
 func NewPackageMutationService(opts PackageMutationServiceOptions) *PackageMutationService {
 	return &PackageMutationService{
-		kernel:   opts.Kernel,
-		reader:   opts.Reader,
-		registry: opts.Registry,
+		kernel:             opts.Kernel,
+		reader:             opts.Reader,
+		registry:           opts.Registry,
+		upgradeCoordinator: opts.UpgradeCoordinator,
 	}
 }
 
@@ -78,9 +85,6 @@ func (s *PackageMutationService) Install(ctx context.Context, req PackageInstall
 }
 
 func (s *PackageMutationService) Update(ctx context.Context, req PackageUpdateRequest) (*PackageMutationResult, error) {
-	if s.kernel == nil {
-		return nil, ErrKernelUnavailable
-	}
 	if req.ExtensionID == "" {
 		return nil, ErrInvalidInput
 	}
@@ -93,15 +97,37 @@ func (s *PackageMutationService) Update(ctx context.Context, req PackageUpdateRe
 		return nil, ErrInvalidInput
 	}
 
+	if s.upgradeCoordinator != nil {
+		if err := s.upgradeCoordinator.ExecuteUpgrade(ctx, req.ExtensionID, req.ArchivePath); err != nil {
+			return nil, fmt.Errorf("update failed: %w", err)
+		}
+		def, inst, readErr := s.reader.GetGameCenterExtension(ctx, req.ExtensionID)
+		version := ""
+		if readErr == nil && def != nil {
+			version = def.Version.String()
+		} else if readErr == nil && inst != nil {
+			version = inst.InstalledVersion.String()
+		}
+		return &PackageMutationResult{
+			ExtensionID:    req.ExtensionID,
+			Operation:      "update",
+			State:          "installed",
+			CurrentVersion: version,
+		}, nil
+	}
+
+	if s.kernel == nil {
+		return nil, ErrKernelUnavailable
+	}
 	installed, err := s.kernel.Update(ctx, req.ArchivePath)
 	if err != nil {
 		return nil, fmt.Errorf("update failed: %w", err)
 	}
 
 	return &PackageMutationResult{
-		ExtensionID:  installed.ID,
-		Operation:    "update",
-		State:        "installed",
+		ExtensionID:    installed.ID,
+		Operation:      "update",
+		State:          "installed",
 		CurrentVersion: installed.Version,
 	}, nil
 }

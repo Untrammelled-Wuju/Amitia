@@ -944,3 +944,123 @@ func TestEventE2E_UpdateGenerationAtomic(t *testing.T) {
 		t.Errorf("expected old generation preserved (1), got %d", sub.Definition.Generation)
 	}
 }
+
+func TestProjection_SensitiveFields(t *testing.T) {
+	def := DefaultHostEventTypes()[0]
+	projector := NewPayloadProjector(def)
+	payload, _ := json.Marshal(map[string]any{
+		"messageId":      "msg-1",
+		"conversationId": "conv-1",
+		"text":           "hello secret",
+		"attachments":    []string{"a.png"},
+		"context":        "sensitive context",
+		"systemPrompt":   "top secret prompt",
+	})
+
+	result, err := projector.Project(payload, EventProjectionRequest{}, map[string]bool{"message.read": true})
+	if err != nil {
+		t.Fatalf("projection failed: %v", err)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal(result.Payload, &parsed); err != nil {
+		t.Fatalf("unmarshal projected: %v", err)
+	}
+	if _, ok := parsed["messageId"]; !ok {
+		t.Errorf("expected normal field messageId to be present")
+	}
+	if _, ok := parsed["text"]; !ok {
+		t.Errorf("expected sensitive field with permission (text) to be present")
+	}
+	if _, ok := parsed["context"]; ok {
+		t.Errorf("expected sensitive omit field (context) to be removed")
+	}
+	if _, ok := parsed["systemPrompt"]; ok {
+		t.Errorf("expected sensitive omit field (systemPrompt) to be removed")
+	}
+}
+
+func TestProjection_SensitiveFields_NoPermission(t *testing.T) {
+	def := DefaultHostEventTypes()[0]
+	projector := NewPayloadProjector(def)
+	payload, _ := json.Marshal(map[string]any{
+		"messageId": "msg-1",
+		"text":      "hello secret",
+	})
+
+	result, err := projector.Project(payload, EventProjectionRequest{}, map[string]bool{})
+	if err != nil {
+		t.Fatalf("projection failed: %v", err)
+	}
+	var parsed map[string]any
+	if err := json.Unmarshal(result.Payload, &parsed); err != nil {
+		t.Fatalf("unmarshal projected: %v", err)
+	}
+	if _, ok := parsed["messageId"]; !ok {
+		t.Errorf("expected normal field messageId to be present")
+	}
+	textVal, ok := parsed["text"]
+	if !ok {
+		t.Errorf("expected sensitive field text to be present (masked)")
+	} else {
+		s := fmt.Sprintf("%v", textVal)
+		if s == "hello secret" {
+			t.Errorf("expected sensitive field text to be masked without permission, got %q", s)
+		}
+	}
+}
+
+func TestPublish_SchemaValidation_Rejected(t *testing.T) {
+	svc, _, _, _, cleanup := setupTestService(t, true, true, true, true)
+	defer cleanup()
+	schemaDef := EventTypeDefinition{
+		EventTypeID:      EventTypeID("system.schema.test"),
+		Version:          1,
+		Description:      "Test with schema",
+		PayloadSchema:    json.RawMessage(`{"required":["id","name"],"properties":{"id":{"type":"string"},"name":{"type":"string"}}}`),
+		MaxPayloadBytes:  1024,
+		MaxMetadataBytes: 256,
+		ProducerPolicy:   EventProducerPolicy{AllowedProducers: []string{"host"}},
+	}
+	if err := svc.RegisterEventType(context.Background(), schemaDef); err != nil {
+		t.Fatalf("register schema event type: %v", err)
+	}
+
+	missingRequiredPayload, _ := json.Marshal(map[string]any{"id": "only-id"})
+	_, err := svc.Publish(context.Background(), "system.schema.test", 1, missingRequiredPayload, PublishOptions{
+		ProducerID:   "host",
+		ProducerType: "host",
+	})
+	if err == nil {
+		t.Errorf("expected publish to fail when required field 'name' is missing")
+	}
+
+	validPayload, _ := json.Marshal(map[string]any{"id": "1", "name": "test"})
+	_, err = svc.Publish(context.Background(), "system.schema.test", 1, validPayload, PublishOptions{
+		ProducerID:   "host",
+		ProducerType: "host",
+	})
+	if err != nil {
+		t.Errorf("expected publish to succeed with valid payload, got %v", err)
+	}
+}
+
+func TestDeadLetter_OutcomeUnknown(t *testing.T) {
+	delivery := Delivery{
+		DeliveryID:     "del-unknown",
+		EventID:        "evt-unknown",
+		SubscriptionID: "sub-unknown",
+		Status:         DeliveryStatusDeadLetter,
+	}
+	env := EventEnvelope{EventID: "evt-unknown"}
+	subDef := EventSubscriptionDefinition{ContributionID: "sub-unknown"}
+	rec := NewDeadLetterRecord(delivery, env, subDef, DeadLetterOutcomeUnknown)
+	if rec.Reason != DeadLetterOutcomeUnknown {
+		t.Errorf("expected reason outcome_unknown, got %q", rec.Reason)
+	}
+	if !IsPermanent(ErrDeadLetterOutcomeUnknown) {
+		t.Errorf("expected ErrDeadLetterOutcomeUnknown to be permanent")
+	}
+	if ErrorCode(ErrDeadLetterOutcomeUnknown) != "outcome_unknown" {
+		t.Errorf("expected error code outcome_unknown, got %q", ErrorCode(ErrDeadLetterOutcomeUnknown))
+	}
+}

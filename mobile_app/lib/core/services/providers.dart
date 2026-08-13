@@ -29,16 +29,8 @@ import '../models/worldbook.dart';
 import '../models/reminder.dart';
 import '../models/model_config.dart';
 
-final _backendServiceProvider = Provider<BackendServiceApi?>((ref) {
-  return ref.watch(backendServiceProvider);
-});
-
 BackendServiceApi _getServiceApi(Ref ref) {
-  final api = ref.read(_backendServiceProvider);
-  if (api == null) {
-    throw StateError('BackendServiceApi not available - BackendTransport is not ready');
-  }
-  return api;
+  return ref.read(backendServiceProvider);
 }
 
 final authServiceProvider = Provider<AuthService>((ref) => AuthService(_getServiceApi(ref)));

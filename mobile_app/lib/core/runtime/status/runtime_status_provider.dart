@@ -14,13 +14,19 @@ final runtimeStatusProjectionProvider =
     Provider<RuntimeStatusProjection>((ref) {
   final bridge = ref.watch(runtimeBridgeProvider);
   final connectionSource = ref.watch(backendConnectionSourceProvider);
+  final transportSource = _TransportStateSourceImpl(ref);
   final projection = DefaultRuntimeStatusProjection(
     bridge: bridge,
     connectionSource: connectionSource,
-    transportStateSource: _TransportStateSourceImpl(ref),
+    transportStateSource: transportSource,
   );
 
-  ref.onDispose(() => projection.dispose());
+  ref.onDispose(() async {
+    await projection.dispose();
+    await transportSource.close();
+  });
+
+  unawaited(projection.initialize());
 
   return projection;
 });
@@ -31,10 +37,16 @@ final runtimeStatusSnapshotProvider =
   return projection.snapshots.distinct();
 });
 
+final runtimeStatusCurrentProvider = Provider<RuntimeStatusSnapshot>((ref) {
+  final projection = ref.watch(runtimeStatusProjectionProvider);
+  return projection.current;
+});
+
 class _TransportStateSourceImpl implements TransportStateSource {
   final Ref _ref;
   final StreamController<TransportStateSnapshot> _controller =
       StreamController<TransportStateSnapshot>.broadcast();
+  bool _closed = false;
 
   _TransportStateSourceImpl(this._ref) {
     _ref.listen<AsyncValue<BackendTransportState>>(
@@ -113,5 +125,11 @@ class _TransportStateSourceImpl implements TransportStateSource {
         webSocketState: BackendWebSocketState.disconnected,
       ),
     );
+  }
+
+  Future<void> close() async {
+    if (_closed) return;
+    _closed = true;
+    await _controller.close();
   }
 }

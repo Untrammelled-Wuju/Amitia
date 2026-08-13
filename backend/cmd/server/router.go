@@ -444,7 +444,11 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 				DisableFn:   func(ctx context.Context, extensionID string) error { return services.Extension.Kernel.Disable(ctx, extensionID) },
 				UninstallFn: func(ctx context.Context, extensionID string) error { return services.Extension.Kernel.Uninstall(ctx, extensionID) },
 			})
-			packageSvc := management.NewProductionPackageMutationServiceFromKernelReader(kernelReader, management.NewGameHostPluginRegistryFromContainer(services.KernelContainer.GameHost), kernelMutation)
+			var upgradeCoordinator management.PackageUpgradeCoordinator = nil
+			if services.KernelContainer.GameHost != nil && services.KernelContainer.GameHost.UpgradeCoordinator != nil {
+				upgradeCoordinator = &management.GameHostUpgradeCoordinatorAdapter{UC: services.KernelContainer.GameHost.UpgradeCoordinator}
+			}
+			packageSvc := management.NewProductionPackageMutationServiceFromKernelReader(kernelReader, management.NewGameHostPluginRegistryFromContainer(services.KernelContainer.GameHost), kernelMutation, upgradeCoordinator)
 			runtimeSvc := management.NewProductionRuntimeMutationService(services.KernelContainer.GameHost, nil)
 			gameCenterMutationHandler := management.NewMutationHandler(packageSvc, runtimeSvc)
 			management.RegisterGameCenterMutationRouter(apiGroup, gameCenterMutationHandler)

@@ -26,6 +26,7 @@ type HookContributionSummary struct {
 	Enabled                bool                    `json:"enabled"`
 	CircuitState           CircuitState            `json:"circuitState"`
 	EffectiveState         string                  `json:"effectiveState"`
+	EffectiveReason        string                  `json:"effectiveReason,omitempty"`
 	Before                 []string                `json:"before,omitempty"`
 	After                  []string                `json:"after,omitempty"`
 	Timeout                time.Duration           `json:"timeout"`
@@ -79,20 +80,6 @@ type HookReadModel struct {
 	Registry HookPointRegistry
 }
 
-func effectiveContributionState(enabled bool, circuitState CircuitState) string {
-	if !enabled {
-		return "disabled"
-	}
-	switch circuitState {
-	case CircuitOpen:
-		return "circuit_open"
-	case CircuitHalfOpen:
-		return "half_open"
-	default:
-		return "active"
-	}
-}
-
 func (rm *HookReadModel) circuitStateOf(contributionID string) CircuitState {
 	if rm.Pipeline == nil || rm.Pipeline.Circuit == nil {
 		return CircuitClosed
@@ -106,6 +93,7 @@ func (rm *HookReadModel) GetSummary(contrib HookContributionDefinition) HookCont
 
 func (rm *HookReadModel) toContributionSummary(contrib HookContributionDefinition) HookContributionSummary {
 	circuitState := rm.circuitStateOf(contrib.ContributionID)
+	effectiveResult := rm.computeEffectiveState(contrib, circuitState)
 	return HookContributionSummary{
 		ContributionID:         contrib.ContributionID,
 		ExtensionID:            contrib.ExtensionID,
@@ -114,7 +102,8 @@ func (rm *HookReadModel) toContributionSummary(contrib HookContributionDefinitio
 		Priority:               contrib.Priority,
 		Enabled:                contrib.Enabled,
 		CircuitState:           circuitState,
-		EffectiveState:         effectiveContributionState(contrib.Enabled, circuitState),
+		EffectiveState:         string(effectiveResult.State),
+		EffectiveReason:        effectiveResult.Reason,
 		Before:                 contrib.Before,
 		After:                  contrib.After,
 		Timeout:                contrib.Timeout,
@@ -125,6 +114,51 @@ func (rm *HookReadModel) toContributionSummary(contrib HookContributionDefinitio
 		RuntimeBinding:         contrib.RuntimeBinding,
 		DefinitionHash:         contrib.DefinitionHash,
 	}
+}
+
+func (rm *HookReadModel) computeEffectiveState(contrib HookContributionDefinition, circuitState CircuitState) EffectiveStateResult {
+	point, err := rm.Registry.GetPoint(nil, contrib.HookPointID)
+	if err != nil {
+		return ComputeEffectiveState(EffectiveStateInput{
+			Contribution:    contrib,
+			Point:           nil,
+			CircuitState:    circuitState,
+			ExtensionActive: true,
+			RuntimeReady:    true,
+			PermissionOK:    true,
+			ScopeOK:         true,
+		})
+	}
+	return ComputeEffectiveState(EffectiveStateInput{
+		Contribution:    contrib,
+		Point:           &point,
+		CircuitState:    circuitState,
+		ExtensionActive: true,
+		RuntimeReady:    rm.Pipeline != nil && rm.Pipeline.RuntimeBridge.IsReady(nil, contrib),
+		PermissionOK:    true,
+		ScopeOK:         true,
+		PlanExists:      rm.Pipeline != nil && rm.Pipeline.PlanCache != nil,
+	})
+}
+
+func (rm *HookReadModel) GetEffectiveState(ctx context.Context, contributionID string) (EffectiveStateResult, error) {
+	contrib, err := rm.Pipeline.ContribStore.Get(ctx, contributionID)
+	if err != nil {
+		return EffectiveStateResult{State: StateDisabled, Reason: "contribution not found"}, err
+	}
+	circuitState := rm.circuitStateOf(contributionID)
+	return rm.computeEffectiveState(contrib, circuitState), nil
+}
+
+func (rm *HookReadModel) GetPlan(ctx context.Context, hookPointID string) (*CompiledHookPlan, error) {
+	if rm.Pipeline == nil || rm.Pipeline.PlanCache == nil {
+		return nil, nil
+	}
+	if plan, ok := rm.Pipeline.PlanCache.Get(hookPointID); ok {
+		return plan, nil
+	}
+	plan := rm.Pipeline.RebuildPlan(ctx, hookPointID)
+	return plan, nil
 }
 
 func (rm *HookReadModel) ListHookPoints(ctx context.Context) ([]HookPointSummary, error) {

@@ -21,6 +21,7 @@ var (
 	ErrNoSubscribers                  = errors.New("event: no subscribers")
 	ErrDeliveryFailed                 = errors.New("event: delivery failed")
 	ErrDeadLetter                     = errors.New("event: dead letter")
+	ErrDeadLetterOutcomeUnknown       = errors.New("event: dead letter outcome unknown")
 	ErrEventLoopDetected              = errors.New("event: loop detected")
 	ErrEventDepthExceeded             = errors.New("event: depth exceeded")
 	ErrPermissionDenied               = errors.New("event: permission denied")
@@ -83,7 +84,8 @@ func IsPermanent(err error) bool {
 		errors.Is(err, ErrInvalidResult),
 		errors.Is(err, ErrProtocolError),
 		errors.Is(err, ErrHostAPIAbuse),
-		errors.Is(err, ErrCircuitOpen):
+		errors.Is(err, ErrCircuitOpen),
+		errors.Is(err, ErrDeadLetterOutcomeUnknown):
 		return true
 	default:
 		return false
@@ -138,6 +140,8 @@ func ErrorCode(err error) string {
 		return "reject_stale_producer"
 	case errors.Is(err, ErrStaleSubscription):
 		return "cancel_stale_subscription"
+	case errors.Is(err, ErrDeadLetterOutcomeUnknown):
+		return "outcome_unknown"
 	default:
 		return fmt.Sprintf("unknown:%v", err)
 	}

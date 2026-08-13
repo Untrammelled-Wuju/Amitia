@@ -20,6 +20,7 @@ const (
 	DeadLetterExtensionDisabled   DeadLetterReason = "extension_disabled"
 	DeadLetterCircuitOpen         DeadLetterReason = "circuit_open"
 	DeadLetterManualDiscard       DeadLetterReason = "manual_discard"
+	DeadLetterOutcomeUnknown      DeadLetterReason = "outcome_unknown"
 )
 
 type DeadLetterRecord struct {

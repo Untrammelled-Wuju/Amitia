@@ -180,14 +180,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   Row(
                     children: [
                       GestureDetector(
-                        onTap: () {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: const Text('记住密码功能暂未实现'),
-                              duration: const Duration(seconds: 1),
-                            ),
-                          );
-                        },
+                        onTap: null,
                         child: Container(
                           width: 20,
                           height: 20,

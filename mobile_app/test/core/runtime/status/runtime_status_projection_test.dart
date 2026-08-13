@@ -4,7 +4,6 @@ import 'package:amitia_app/core/runtime/runtime_bridge_state.dart';
 import 'package:amitia_app/core/runtime/status/default_runtime_status_projection.dart';
 import 'package:amitia_app/core/runtime/status/runtime_status_snapshot.dart';
 import 'package:amitia_app/core/runtime/status/runtime_status_phase.dart';
-import 'package:amitia_app/core/runtime/status/runtime_status_error.dart';
 import 'package:amitia_app/core/runtime/status/runtime_status_projection.dart';
 import 'package:amitia_app/core/backend_connection/backend_connection_availability.dart';
 import 'package:amitia_app/core/backend_connection/backend_connection_config.dart';

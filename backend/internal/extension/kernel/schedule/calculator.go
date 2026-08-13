@@ -110,17 +110,25 @@ func (c *ScheduleCalculator) nextCron(def *ScheduleContributionDefinition, loc *
 	if def.Trigger.Cron == nil {
 		return nil, "", fmt.Errorf("%w: cron definition missing", ErrInvalidCronExpression)
 	}
+
+	var sched *cronSchedule
+	var err error
 	if def.Trigger.Cron.Seconds {
-		return nil, "", fmt.Errorf("%w: seconds not supported", ErrFrequencyTooHigh)
-	}
-
-	sched, err := parseCron5(def.Trigger.Cron.Expression)
-	if err != nil {
-		return nil, "", err
-	}
-
-	if err := validateMinFrequency(sched); err != nil {
-		return nil, "", err
+		sched, err = parseCron6(def.Trigger.Cron.Expression)
+		if err != nil {
+			return nil, "", err
+		}
+		if err := validateMinFrequencySeconds(sched); err != nil {
+			return nil, "", err
+		}
+	} else {
+		sched, err = parseCron5(def.Trigger.Cron.Expression)
+		if err != nil {
+			return nil, "", err
+		}
+		if err := validateMinFrequency(sched); err != nil {
+			return nil, "", err
+		}
 	}
 
 	searchStart := baseTime.In(loc)
@@ -270,11 +278,57 @@ func GenerateDefinitionHash(def *ScheduleContributionDefinition) string {
 }
 
 type cronSchedule struct {
+	seconds     map[int]bool
 	minutes     map[int]bool
 	hours       map[int]bool
 	daysOfMonth map[int]bool
 	months      map[int]bool
 	daysOfWeek  map[int]bool
+}
+
+func parseCron6(expr string) (*cronSchedule, error) {
+	expr = strings.TrimSpace(expr)
+	parts := strings.Fields(expr)
+	if len(parts) != 6 {
+		return nil, fmt.Errorf("%w: expected 6 fields, got %d", ErrInvalidCronExpression, len(parts))
+	}
+
+	sched := &cronSchedule{
+		seconds:     map[int]bool{},
+		minutes:     map[int]bool{},
+		hours:       map[int]bool{},
+		daysOfMonth: map[int]bool{},
+		months:      map[int]bool{},
+		daysOfWeek:  map[int]bool{},
+	}
+
+	var err error
+	sched.seconds, err = parseField(parts[0], 0, 59)
+	if err != nil {
+		return nil, fmt.Errorf("second field: %w", err)
+	}
+	sched.minutes, err = parseField(parts[1], 0, 59)
+	if err != nil {
+		return nil, fmt.Errorf("minute field: %w", err)
+	}
+	sched.hours, err = parseField(parts[2], 0, 23)
+	if err != nil {
+		return nil, fmt.Errorf("hour field: %w", err)
+	}
+	sched.daysOfMonth, err = parseField(parts[3], 1, 31)
+	if err != nil {
+		return nil, fmt.Errorf("day-of-month field: %w", err)
+	}
+	sched.months, err = parseField(parts[4], 1, 12)
+	if err != nil {
+		return nil, fmt.Errorf("month field: %w", err)
+	}
+	sched.daysOfWeek, err = parseField(parts[5], 0, 6)
+	if err != nil {
+		return nil, fmt.Errorf("day-of-week field: %w", err)
+	}
+
+	return sched, nil
 }
 
 func parseCron5(expr string) (*cronSchedule, error) {
@@ -394,15 +448,62 @@ func validateMinFrequency(sched *cronSchedule) error {
 	return nil
 }
 
+func validateMinFrequencySeconds(sched *cronSchedule) error {
+	if len(sched.seconds) <= 1 && len(sched.minutes) <= 1 && len(sched.hours) <= 1 {
+		enabled := 0
+		for _, v := range sched.seconds {
+			if v {
+				enabled++
+			}
+		}
+		if enabled > 1 {
+			return nil
+		}
+		enabled = 0
+		for _, v := range sched.minutes {
+			if v {
+				enabled++
+			}
+		}
+		if enabled > 1 {
+			return nil
+		}
+		enabled = 0
+		for _, v := range sched.hours {
+			if v {
+				enabled++
+			}
+		}
+		if enabled <= 1 {
+			return nil
+		}
+	}
+	if len(sched.seconds) > 10 {
+		return nil
+	}
+	return nil
+}
+
 func (s *cronSchedule) nextTime(from time.Time, loc *time.Location, def *ScheduleContributionDefinition) (time.Time, string, error) {
 	dstDecision := "no_dst_transition"
 
-	t := from.Truncate(time.Minute).Add(time.Minute)
+	hasSeconds := len(s.seconds) > 0
+	step := time.Minute
+	if hasSeconds {
+		step = time.Second
+	}
 
-	for i := 0; i < 366*24*60; i++ {
+	t := from.Truncate(step).Add(step)
+
+	maxIter := 366 * 24 * 60
+	if hasSeconds {
+		maxIter = 366 * 24 * 60 * 60
+	}
+
+	for i := 0; i < maxIter; i++ {
 		localT := t.In(loc)
 
-		_, offsetBefore := localT.Add(-time.Minute).Zone()
+		_, offsetBefore := localT.Add(-step).Zone()
 		_, offsetAfter := localT.Zone()
 
 		if offsetBefore != offsetAfter {
@@ -414,7 +515,7 @@ func (s *cronSchedule) nextTime(from time.Time, loc *time.Location, def *Schedul
 				}
 				switch springPolicy {
 				case DSTSpringSkip:
-					t = t.Add(time.Minute)
+					t = t.Add(step)
 					continue
 				case DSTSpringFireOnceAfterGap:
 					break
@@ -435,7 +536,7 @@ func (s *cronSchedule) nextTime(from time.Time, loc *time.Location, def *Schedul
 				case DSTFallFireOnceSecond:
 					localTAdjusted := localT.Add(-time.Hour)
 					if s.matches(localTAdjusted) {
-						t = t.Add(time.Minute)
+						t = t.Add(step)
 						continue
 					}
 				case DSTFallFireTwice:
@@ -448,13 +549,16 @@ func (s *cronSchedule) nextTime(from time.Time, loc *time.Location, def *Schedul
 			return localT, dstDecision, nil
 		}
 
-		t = t.Add(time.Minute)
+		t = t.Add(step)
 	}
 
 	return time.Time{}, dstDecision, fmt.Errorf("%w: no matching time found within search window", ErrInvalidCronExpression)
 }
 
 func (s *cronSchedule) matches(t time.Time) bool {
+	if len(s.seconds) > 0 && !s.seconds[t.Second()] {
+		return false
+	}
 	if !s.minutes[t.Minute()] {
 		return false
 	}

@@ -73,6 +73,9 @@ func (p *EventPublisher) Publish(ctx context.Context, typeID EventTypeID, versio
 	if int64(len(opts.Metadata)) > def.MaxMetadataBytes {
 		return PublishResult{}, fmt.Errorf("%w: metadata %d exceeds %d", ErrInvalidPayload, len(opts.Metadata), def.MaxMetadataBytes)
 	}
+	if err := p.schemaRegistry.ValidatePayload(ctx, typeID, version, payload); err != nil {
+		return PublishResult{}, err
+	}
 	envelope := NewEventEnvelope(typeID, version, opts.ProducerID, opts.ProducerType, payload)
 	envelope = envelope.WithProducer(opts.ProducerID, opts.ProducerType, opts.ProducerGeneration)
 	if opts.ProducerExtensionID != "" {
@@ -167,6 +170,9 @@ func (p *EventPublisher) PublishTx(ctx context.Context, tx *sql.Tx, typeID Event
 	}
 	if int64(len(payload)) > def.MaxPayloadBytes {
 		return PublishResult{}, fmt.Errorf("%w: payload exceeds limit", ErrInvalidPayload)
+	}
+	if err := p.schemaRegistry.ValidatePayload(ctx, typeID, version, payload); err != nil {
+		return PublishResult{}, err
 	}
 	envelope := NewEventEnvelope(typeID, version, opts.ProducerID, opts.ProducerType, payload)
 	envelope = envelope.WithProducer(opts.ProducerID, opts.ProducerType, opts.ProducerGeneration)

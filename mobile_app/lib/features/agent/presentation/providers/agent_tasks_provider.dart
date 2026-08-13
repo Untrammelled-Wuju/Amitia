@@ -91,7 +91,6 @@ class AgentTaskNotifier extends AsyncNotifier<List<AgentTaskItem>> {
   @override
   Future<List<AgentTaskItem>> build() async {
     final api = ref.watch(backendServiceProvider);
-    if (api == null) return [];
     final resp = await api.get<List<dynamic>>('/api/agent/tasks');
     if (resp == null) return [];
     return resp.map((e) => AgentTaskItem.fromJson(e as Map<String, dynamic>)).toList();
@@ -101,7 +100,6 @@ class AgentTaskNotifier extends AsyncNotifier<List<AgentTaskItem>> {
     state = const AsyncValue.loading();
     state = await AsyncValue.guard(() async {
       final api = ref.watch(backendServiceProvider);
-      if (api == null) return <AgentTaskItem>[];
       final resp = await api.get<List<dynamic>>('/api/agent/tasks');
       if (resp == null) return <AgentTaskItem>[];
       return resp.map((e) => AgentTaskItem.fromJson(e as Map<String, dynamic>)).toList();
@@ -115,7 +113,6 @@ class AgentTaskNotifier extends AsyncNotifier<List<AgentTaskItem>> {
     int stepCount = 3,
   }) async {
     final api = ref.watch(backendServiceProvider);
-    if (api == null) return;
     await api.post('/api/agent/tasks', data: {
       'title': title,
       'description': description,
@@ -127,7 +124,6 @@ class AgentTaskNotifier extends AsyncNotifier<List<AgentTaskItem>> {
 
   Future<void> changeStatus(String id, AgentTaskStatus newStatus) async {
     final api = ref.watch(backendServiceProvider);
-    if (api == null) return;
     await api.post('/api/agent/tasks/$id/status', data: {
       'status': newStatus.name,
     });

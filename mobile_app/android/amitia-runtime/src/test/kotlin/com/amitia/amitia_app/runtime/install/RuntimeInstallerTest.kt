@@ -277,6 +277,10 @@ class RuntimeInstallerTest {
                 current = version
                 return ActiveRuntimeResult.Active(ActiveRuntimeInfo(version, 0L))
             }
+
+            override fun resolveActiveProgramRoot(): ActiveProgramRootResult {
+                return ActiveProgramRootResult.NoActiveRuntime
+            }
         }
 
         val installer = createInstaller(

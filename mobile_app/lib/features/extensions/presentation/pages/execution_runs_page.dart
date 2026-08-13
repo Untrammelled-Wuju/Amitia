@@ -9,6 +9,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/services/error_utils.dart';
 
 class ExecutionRunsPage extends ConsumerStatefulWidget {
   const ExecutionRunsPage({super.key});
@@ -37,7 +38,7 @@ class _ExecutionRunsPageState extends ConsumerState<ExecutionRunsPage> {
       final data = await svc.extensionRuns();
       if (mounted) setState(() { _runs = data; _loading = false; });
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+      if (mounted) setState(() { _error = safeErrorMessage(e); _loading = false; });
     }
   }
 

@@ -47,12 +47,6 @@ class _ToolboxLogPageState extends ConsumerState<ToolboxLogPage> {
     setState(() { _loading = true; _error = null; });
     try {
       final api = ref.watch(backendServiceProvider);
-      if (api == null) {
-        if (mounted) {
-          setState(() { _error = '后端服务未连接'; _loading = false; });
-        }
-        return;
-      }
       final resp = await api.get<List<dynamic>>('/api/system/logs');
       final items = resp ?? [];
       final logs = items.map((e) {

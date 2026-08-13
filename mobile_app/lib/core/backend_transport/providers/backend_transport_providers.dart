@@ -3,9 +3,13 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logger/logger.dart';
 
+import '../../backend_access/business_backend_access.dart';
+import '../../backend_access/business_backend_access_provider.dart';
+import '../../backend_access/business_backend_unavailable.dart';
 import '../../backend_connection/backend_connection_availability.dart';
 import '../../backend_connection/backend_connection_config.dart';
 import '../../backend_connection/providers/backend_connection_providers.dart';
+import '../../runtime/status/runtime_status_phase.dart';
 import '../backend_service_api.dart';
 import '../backend_transport.dart';
 import '../default_backend_transport.dart';
@@ -98,12 +102,6 @@ final backendTransportApiProvider = Provider<BackendTransportApi?>((ref) {
   return BackendTransportApi(transport.http, transport.generation);
 });
 
-final backendServiceProvider = Provider<BackendServiceApi?>((ref) {
-  final transport = ref.watch(backendCurrentTransportProvider);
-  if (transport == null) return null;
-  return BackendServiceApi(transport.http, transport.generation);
-});
-
 final streamTimeoutProvider = Provider<Duration>((ref) {
   return const Duration(seconds: 120);
 });
@@ -185,5 +183,83 @@ class BackendTransportApi {
       body: body,
       timeout: timeout,
     ));
+  }
+}
+
+final backendServiceProvider = Provider<BackendServiceApi>((ref) {
+  final gate = ref.watch(businessBackendAccessProvider);
+  final transport = ref.watch(backendCurrentTransportProvider);
+  final rawApi = transport != null
+      ? BackendServiceApi(transport.http, transport.generation)
+      : null;
+  return _GatedBackendServiceApi(gate, rawApi);
+});
+
+class _GatedBackendServiceApi implements BackendServiceApi {
+  final BusinessBackendAccess _gate;
+  final BackendServiceApi? _raw;
+
+  _GatedBackendServiceApi(this._gate, this._raw);
+
+  @override
+  int get generation => _gate.businessGeneration;
+
+  void _check() {
+    _gate.requireBusinessAvailable();
+    final raw = _raw;
+    if (raw == null || raw.generation != _gate.businessGeneration) {
+      throw const BusinessBackendUnavailable(
+        phase: RuntimeStatusPhase.degraded,
+        generation: 0,
+        primaryError: null,
+      );
+    }
+  }
+
+  @override
+  Future<T?> get<T>(
+    String path, {
+    Map<String, dynamic>? queryParameters,
+    T Function(dynamic)? fromJson,
+  }) {
+    _check();
+    return _raw!.get<T>(path,
+        queryParameters: queryParameters, fromJson: fromJson);
+  }
+
+  @override
+  Future<T?> post<T>(
+    String path, {
+    Object? data,
+    T Function(dynamic)? fromJson,
+  }) {
+    _check();
+    return _raw!.post<T>(path, data: data, fromJson: fromJson);
+  }
+
+  @override
+  Future<T?> put<T>(
+    String path, {
+    Object? data,
+    T Function(dynamic)? fromJson,
+  }) {
+    _check();
+    return _raw!.put<T>(path, data: data, fromJson: fromJson);
+  }
+
+  @override
+  Future<void> delete(String path) {
+    _check();
+    return _raw!.delete(path);
+  }
+
+  @override
+  Future<T?> deleteWithResponse<T>(
+    String path, {
+    Object? data,
+    T Function(dynamic)? fromJson,
+  }) {
+    _check();
+    return _raw!.deleteWithResponse<T>(path, data: data, fromJson: fromJson);
   }
 }

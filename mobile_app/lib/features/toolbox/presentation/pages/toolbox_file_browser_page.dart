@@ -52,12 +52,6 @@ class _ToolboxFileBrowserPageState extends ConsumerState<ToolboxFileBrowserPage>
     setState(() { _loading = true; _error = null; });
     try {
       final api = ref.watch(backendServiceProvider);
-      if (api == null) {
-        if (mounted) {
-          setState(() { _error = '后端服务未连接'; _loading = false; });
-        }
-        return;
-      }
       List<_FileItem> files = [];
       try {
         final resp = await api.get<List<dynamic>>('/api/system/files');

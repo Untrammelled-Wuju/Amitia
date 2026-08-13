@@ -233,6 +233,11 @@ func (c *StartupRecoveryCoordinator) classifyOrphans(ctx context.Context, report
 				Generation:     pc.Generation,
 			}
 			result := c.verifyProcessOwnership(ctx, pc, proof)
+			if result == OwnershipUnknown || result == OwnershipBelongsToForeign {
+				log.Printf("[startup-recovery] skip process candidate pid=%d runtime=%s extension=%s ownership=%s",
+					pc.PID, pc.RuntimeID, pc.ExtensionID, result)
+				continue
+			}
 			candidates = append(candidates, &OrphanResource{
 				Type:        ResourceOrphanProcess,
 				ResourceID:  fmt.Sprintf("pid-%d", pc.PID),
@@ -243,7 +248,6 @@ func (c *StartupRecoveryCoordinator) classifyOrphans(ctx context.Context, report
 				Ownership:   proof,
 				Path:        pc.Output,
 			})
-			_ = result
 		}
 	}
 
@@ -415,6 +419,24 @@ func (c *StartupRecoveryCoordinator) reconstructRuntimes(ctx context.Context, re
 }
 
 func (c *StartupRecoveryCoordinator) verifyProcessOwnership(ctx context.Context, candidate ProcessCandidate, proof OwnershipProof) OwnershipResult {
+	if c.deps.HostIdentity == nil {
+		return OwnershipUnknown
+	}
+	actualHostID := c.deps.HostIdentity.GetHostInstanceID()
+	if actualHostID == "" || proof.HostInstanceID == "" {
+		return OwnershipUnknown
+	}
+	if proof.HostInstanceID != actualHostID {
+		return OwnershipBelongsToForeign
+	}
+	if proof.RuntimeID == "" && proof.PluginID == "" {
+		return OwnershipUnknown
+	}
+	if c.deps.KernelRecon != nil && proof.ExtensionID != "" {
+		if valid, err := c.deps.KernelRecon.IsValidExtension(ctx, proof.ExtensionID); err == nil && !valid {
+			return OwnershipUnknown
+		}
+	}
 	return OwnershipVerified
 }
 

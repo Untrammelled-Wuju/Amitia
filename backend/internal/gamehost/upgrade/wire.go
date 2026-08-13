@@ -27,6 +27,21 @@ func (a *KernelLifecycleAdapter) ExecuteUpdate(ctx context.Context, extensionID 
 	return nil, fmt.Errorf("kernel lifecycle not wired")
 }
 
+type KernelArchiveUpdaterAdapter struct {
+	updateArchiveFn func(ctx context.Context, extensionID string, archivePath string) (*KernelUpdateResult, error)
+}
+
+func NewKernelArchiveUpdaterAdapter(fn func(ctx context.Context, extensionID string, archivePath string) (*KernelUpdateResult, error)) KernelArchiveUpdater {
+	return &KernelArchiveUpdaterAdapter{updateArchiveFn: fn}
+}
+
+func (a *KernelArchiveUpdaterAdapter) UpdateArchive(ctx context.Context, extensionID string, archivePath string) (*KernelUpdateResult, error) {
+	if a.updateArchiveFn != nil {
+		return a.updateArchiveFn(ctx, extensionID, archivePath)
+	}
+	return nil, fmt.Errorf("kernel archive updater not wired")
+}
+
 type UpgradeCoordinatorDeps struct {
 	PluginRegistry   *ghregistry.Registry
 	RuntimeManager   ghruntime.RuntimeManager
@@ -35,6 +50,7 @@ type UpgradeCoordinatorDeps struct {
 	ContributionSync *ghintegration.GamePluginSyncService
 	ConfigResolver   *config.Resolver
 	KernelLifecycle  KernelExtensionLifecycle
+	ArchiveUpdater   KernelArchiveUpdater
 }
 
 func BuildUpgradeCoordinator(deps UpgradeCoordinatorDeps) *UpgradeCoordinator {
@@ -46,6 +62,7 @@ func BuildUpgradeCoordinator(deps UpgradeCoordinatorDeps) *UpgradeCoordinator {
 		contributionReconcilerAdapter{deps.ContributionSync},
 		deps.ConfigResolver,
 		deps.KernelLifecycle,
+		deps.ArchiveUpdater,
 	)
 	return c
 }

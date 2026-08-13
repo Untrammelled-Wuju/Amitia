@@ -451,7 +451,7 @@ class _InstallPreviewSheet extends StatelessWidget {
                       ),
                     ),
                     GestureDetector(
-                      onTap: () => amitiaComingSoon(context, '文件选择'),
+                      onTap: null,
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                         decoration: BoxDecoration(

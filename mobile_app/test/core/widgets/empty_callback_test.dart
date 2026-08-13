@@ -48,7 +48,6 @@ void main() {
       expect(content, contains('showAmitiaInfoDialog'));
       expect(content, contains('showAmitiaActionSheet'));
       expect(content, contains('amitiaSnackBar'));
-      expect(content, contains('amitiaComingSoon'));
       expect(content, contains('AmitiaActionSheetItem'));
     });
 

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../app/theme/app_colors.dart';
-import '../../app/theme/app_spacing.dart';
 import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_typography.dart';
 import 'amitia_button.dart';
@@ -177,9 +176,4 @@ void amitiaSnackBar(BuildContext context, String message) {
       behavior: SnackBarBehavior.floating,
     ),
   );
-}
-
-void amitiaComingSoon(BuildContext context, [String? featureName]) {
-  final msg = featureName != null ? '$featureName功能即将上线' : '该功能即将上线';
-  amitiaSnackBar(context, msg);
 }

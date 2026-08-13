@@ -1,7 +1,6 @@
 import 'package:amitia_app/app/app.dart';
 import 'package:amitia_app/core/models/character.dart';
-import 'package:amitia_app/core/services/providers.dart'
-    hide startupStageProvider;
+import 'package:amitia_app/core/services/providers.dart';
 import 'package:amitia_app/core/widgets/amitia_drawer.dart';
 import 'package:amitia_app/features/agent/presentation/pages/agent_page.dart';
 import 'package:amitia_app/features/chat/presentation/pages/chat_page.dart';
@@ -52,7 +51,7 @@ void main() {
       await tester.pumpWidget(
         ProviderScope(
           overrides: [
-            startupStageProvider.overrideWithValue(MockStartupStage.ready),
+            startupStageProvider.overrideWith((ref) async => 'ready'),
             characterListProvider.overrideWith((ref) async {
               return [
                 CharacterDto(
@@ -140,7 +139,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          startupStageProvider.overrideWithValue(MockStartupStage.ready),
+          startupStageProvider.overrideWith((ref) async => 'ready'),
           characterListProvider.overrideWith((ref) async {
             return [
               CharacterDto(
@@ -209,7 +208,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          startupStageProvider.overrideWithValue(MockStartupStage.ready),
+          startupStageProvider.overrideWith((ref) async => 'ready'),
           characterListProvider.overrideWith((ref) async {
             return [
               CharacterDto(
@@ -269,7 +268,7 @@ void main() {
     await tester.pumpWidget(
       ProviderScope(
         overrides: [
-          startupStageProvider.overrideWithValue(MockStartupStage.ready),
+          startupStageProvider.overrideWith((ref) async => 'ready'),
           characterListProvider.overrideWith((ref) async {
             return [
               CharacterDto(

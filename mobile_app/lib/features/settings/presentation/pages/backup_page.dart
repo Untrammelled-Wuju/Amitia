@@ -32,12 +32,6 @@ class _BackupPageState extends ConsumerState<BackupPage> {
     setState(() { _loadingBackups = true; _backupsError = null; });
     try {
       final apiClient = ref.watch(backendServiceProvider);
-      if (apiClient == null) {
-        if (mounted) {
-          setState(() { _backupsError = '后端服务未连接'; _loadingBackups = false; });
-        }
-        return;
-      }
       final resp = await apiClient.get<List<dynamic>>('/api/maintenance/backups');
       if (mounted) {
         final list = resp ?? [];
@@ -54,14 +48,6 @@ class _BackupPageState extends ConsumerState<BackupPage> {
   Future<void> _handleAction(String label) async {
     final svc = ref.read(systemServiceProvider);
     final apiClient = ref.watch(backendServiceProvider);
-    if (apiClient == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$label · 失败: 后端服务未连接'), duration: const Duration(seconds: 2)),
-        );
-      }
-      return;
-    }
     try {
       switch (label) {
         case '导出数据':

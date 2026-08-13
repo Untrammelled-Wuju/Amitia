@@ -3,7 +3,7 @@ package com.amitia.amitia_app.runtime.connection
 class BackendConnectionCredential private constructor(
     private val token: String,
 ) {
-    fun reveal(): String = token
+    internal fun reveal(): String = token
 
     override fun toString(): String = "BackendConnectionCredential([REDACTED])"
 

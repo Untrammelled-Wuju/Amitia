@@ -2,7 +2,7 @@ import 'backend_connection_availability.dart';
 import 'backend_connection_error.dart';
 
 abstract interface class BackendConnectionSource {
-  Future<BackendConnectionAvailability> resolve();
+  Future<BackendConnectionAvailability> resolve({int expectedGeneration = 0});
 }
 
 class BackendConnectionSourceException {

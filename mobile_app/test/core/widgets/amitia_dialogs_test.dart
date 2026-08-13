@@ -262,48 +262,6 @@ void main() {
     });
   });
 
-  group('amitiaComingSoon', () {
-    testWidgets('displays coming soon snackbar with feature name', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (context) => ElevatedButton(
-                onPressed: () => amitiaComingSoon(context, '语音输入'),
-                child: const Text('Show'),
-              ),
-            ),
-          ),
-        ),
-      );
-
-      await tester.tap(find.text('Show'));
-      await tester.pump();
-
-      expect(find.text('语音输入功能即将上线'), findsOneWidget);
-    });
-
-    testWidgets('displays coming soon snackbar without feature name', (tester) async {
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: Builder(
-              builder: (context) => ElevatedButton(
-                onPressed: () => amitiaComingSoon(context),
-                child: const Text('Show'),
-              ),
-            ),
-          ),
-        ),
-      );
-
-      await tester.tap(find.text('Show'));
-      await tester.pump();
-
-      expect(find.text('该功能即将上线'), findsOneWidget);
-    });
-  });
-
   group('AmitiaActionSheetItem', () {
     test('creates with required parameters', () {
       const item = AmitiaActionSheetItem<int>(

@@ -193,6 +193,12 @@ func (e *ScheduleExecutor) Execute(ctx context.Context, trigger *ScheduleTrigger
 		_ = e.leaseManager.ReleaseLease(ctx, trigger.TriggerID)
 	}()
 
+	if trigger.OverlapDecision == "replace_cancellable" {
+		if err := e.cancelActiveRuns(ctx, trigger.ScheduleID); err != nil {
+			return e.failTrigger(ctx, trigger, ErrCodeTargetExecutionFailed, "failed to cancel active runs for replace")
+		}
+	}
+
 	if len(def.PermissionRequirements) > 0 && e.permissionChecker == nil {
 		return e.failTrigger(ctx, trigger, ErrCodePermissionDenied, "permission checker not configured")
 	}
@@ -449,6 +455,32 @@ func (e *ScheduleExecutor) updateScheduleStateOnSuccess(ctx context.Context, def
 	}
 	state.UpdatedAt = now.UTC()
 	_ = e.store.PutState(ctx, state)
+}
+
+func (e *ScheduleExecutor) cancelActiveRuns(ctx context.Context, scheduleID string) error {
+	runs, err := e.store.ListRunsBySchedule(ctx, scheduleID, 50)
+	if err != nil {
+		return err
+	}
+	now := e.clock.Now().UTC()
+	for _, run := range runs {
+		if run.Status == RunStatusRunning || run.Status == RunStatusTriggering {
+			run.Status = RunStatusCancelled
+			finishedAt := now
+			run.FinishedAt = &finishedAt
+			run.ErrorCode = strPtr("REPLACED")
+			run.ErrorMessage = strPtr("replaced by newer trigger")
+			run.UpdatedAt = now
+			if err := e.store.UpdateRunStatus(ctx, run.RunID, RunStatusCancelled, map[string]any{
+				"error_code":    "REPLACED",
+				"error_message": "replaced by newer trigger",
+			}); err != nil {
+				return err
+			}
+			_ = e.store.PutRun(ctx, run)
+		}
+	}
+	return nil
 }
 
 func strPtr(s string) *string {

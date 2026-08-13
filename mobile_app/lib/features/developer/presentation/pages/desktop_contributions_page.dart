@@ -35,12 +35,6 @@ class _DesktopContributionsPageState extends ConsumerState<DesktopContributionsP
     });
     try {
       final api = ref.watch(backendServiceProvider);
-      if (api == null) {
-        if (mounted) {
-          setState(() { _error = '后端服务未连接'; _loading = false; });
-        }
-        return;
-      }
       final resp = await api.get<List<dynamic>>('/api/desktop/contributions');
       final data = resp;
       if (mounted) {

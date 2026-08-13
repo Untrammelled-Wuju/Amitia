@@ -612,7 +612,7 @@ internal class DefaultRuntimeController(
             cancelPendingRecovery()
             cancelStartupDetector()
 
-            stateStore.update { it.copy(state = RuntimeState.STOPPING) }
+            stateStore.update { it.copy(state = RuntimeState.STOPPING, generation = it.generation + 1) }
 
             val stopResult = serviceHost.requestStop()
             if (stopResult is RuntimeServiceResult.Failure) {

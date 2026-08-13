@@ -89,8 +89,6 @@ class DefaultRuntimeStatusProjection implements RuntimeStatusProjection {
     final currentBridge = await _bridge.snapshot();
     _handleBridgeSnapshot(currentBridge);
 
-    await _refreshConnection();
-
     if (_transportStateSource case final source?) {
       _transportSubscription = source.snapshots.listen(
         _handleTransportState,
@@ -102,7 +100,8 @@ class DefaultRuntimeStatusProjection implements RuntimeStatusProjection {
 
   Future<void> _refreshConnection() async {
     try {
-      final result = await _connectionSource.resolve();
+      final expectedGen = _lastBridge.state == RuntimeBridgeState.ready ? _lastBridge.generation : 0;
+      final result = await _connectionSource.resolve(expectedGeneration: expectedGen);
       if (!_disposed) {
         _lastConnection = result;
         _rederive();
@@ -115,11 +114,34 @@ class DefaultRuntimeStatusProjection implements RuntimeStatusProjection {
     }
   }
 
+  void _invalidateConnection() {
+    if (!_disposed) {
+      _lastConnection = BackendConnectionUnavailable();
+      _rederive();
+    }
+  }
+
   void _handleBridgeSnapshot(RuntimeBridgeSnapshot snapshot) {
     if (_disposed) return;
     if (snapshot.generation < _lastBridge.generation) return;
+    final previousState = _lastBridge.state;
+    final previousGeneration = _lastBridge.generation;
     _lastBridge = snapshot;
-    _rederive();
+
+    final generationChanged = snapshot.generation != previousGeneration;
+    final enteredReady = snapshot.state == RuntimeBridgeState.ready && previousState != RuntimeBridgeState.ready;
+    final leftReady = snapshot.state != RuntimeBridgeState.ready && previousState == RuntimeBridgeState.ready;
+    final isTerminalState = snapshot.state == RuntimeBridgeState.stopping ||
+        snapshot.state == RuntimeBridgeState.stopped ||
+        snapshot.state == RuntimeBridgeState.failed;
+
+    if (enteredReady || (snapshot.state == RuntimeBridgeState.ready && generationChanged)) {
+      _refreshConnection();
+    } else if (leftReady || isTerminalState) {
+      _invalidateConnection();
+    } else {
+      _rederive();
+    }
   }
 
   void _handleTransportState(TransportStateSnapshot snapshot) {
@@ -463,6 +485,20 @@ bool _hasManifestInconsistency(
 RuntimeStatusError? _deriveConnectionError(
   BackendConnectionAvailability connection,
 ) {
+  if (connection is BackendConnectionUnavailable) {
+    return const RuntimeStatusError(
+      source: RuntimeStatusErrorSource.backendConnection,
+      code: 'CONNECTION_UNAVAILABLE',
+      message: 'Backend connection unavailable',
+    );
+  }
+  if (connection is BackendConnectionResolving) {
+    return const RuntimeStatusError(
+      source: RuntimeStatusErrorSource.backendConnection,
+      code: 'CONNECTION_RESOLVING',
+      message: 'Backend connection resolving',
+    );
+  }
   return null;
 }
 

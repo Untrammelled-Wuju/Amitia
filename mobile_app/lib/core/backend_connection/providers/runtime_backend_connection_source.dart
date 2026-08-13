@@ -12,7 +12,7 @@ class RuntimeBackendConnectionSource implements BackendConnectionSource {
   const RuntimeBackendConnectionSource();
 
   @override
-  Future<BackendConnectionAvailability> resolve() async {
+  Future<BackendConnectionAvailability> resolve({int expectedGeneration = 0}) async {
     try {
       final result = await _channel.invokeMethod<Map<Object?, Object?>>(_methodGetBackendConnection);
       if (result == null) return BackendConnectionUnavailable();
@@ -20,7 +20,7 @@ class RuntimeBackendConnectionSource implements BackendConnectionSource {
       for (final entry in result.entries) {
         converted[entry.key.toString()] = entry.value;
       }
-      return _parsePayload(converted);
+      return _parsePayload(converted, expectedGeneration: expectedGeneration);
     } on PlatformException {
       return BackendConnectionUnavailable();
     } on MissingPluginException {
@@ -28,7 +28,7 @@ class RuntimeBackendConnectionSource implements BackendConnectionSource {
     }
   }
 
-  BackendConnectionAvailability _parsePayload(Map<String, dynamic> decoded) {
+  BackendConnectionAvailability _parsePayload(Map<String, dynamic> decoded, {int expectedGeneration = 0}) {
     try {
       final schemaVersion = decoded['schemaVersion'];
       if (schemaVersion is! int || schemaVersion != 1) {
@@ -38,6 +38,9 @@ class RuntimeBackendConnectionSource implements BackendConnectionSource {
       if (status == 'available') {
         final generationRaw = decoded['generation'];
         if (generationRaw is! int || generationRaw <= 0) {
+          return BackendConnectionUnavailable();
+        }
+        if (expectedGeneration > 0 && generationRaw != expectedGeneration) {
           return BackendConnectionUnavailable();
         }
         final endpointMap = decoded['endpoint'];

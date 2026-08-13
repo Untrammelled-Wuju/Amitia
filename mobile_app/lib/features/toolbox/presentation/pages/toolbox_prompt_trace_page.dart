@@ -51,12 +51,6 @@ class _ToolboxPromptTracePageState extends ConsumerState<ToolboxPromptTracePage>
     setState(() { _loading = true; _error = null; });
     try {
       final api = ref.watch(backendServiceProvider);
-      if (api == null) {
-        if (mounted) {
-          setState(() { _error = '后端服务未连接'; _loading = false; });
-        }
-        return;
-      }
       final resp = await api.get<List<dynamic>>('/api/system/prompt-traces');
       final items = resp ?? [];
       final traces = items.map((e) {

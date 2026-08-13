@@ -11,7 +11,6 @@ import com.amitia.amitia_app.runtime.connection.BackendConnectionErrorCode
 import com.amitia.amitia_app.runtime.connection.BackendConnectionProvider
 import com.amitia.amitia_app.runtime.connection.BackendEndpointPolicy
 import com.amitia.amitia_app.runtime.connection.embeddedAndroidBackendPolicy
-import java.util.concurrent.atomic.AtomicLong
 
 internal class DefaultBackendConnectionProvider(
     private val snapshotProvider: () -> RuntimeSnapshot,
@@ -20,8 +19,6 @@ internal class DefaultBackendConnectionProvider(
     private val policy: BackendEndpointPolicy = embeddedAndroidBackendPolicy(),
 ) : BackendConnectionProvider {
 
-    private val lastSeenRuntimeGeneration = AtomicLong(0L)
-
     override fun current(): BackendConnectionAvailability {
         val validationError = BackendConnectionValidator.validate(policy)
         if (validationError != null) {
@@ -29,7 +26,7 @@ internal class DefaultBackendConnectionProvider(
         }
 
         val snapshot = snapshotProvider()
-        if (snapshot.state != RuntimeState.READY && snapshot.state != RuntimeState.DEGRADED) {
+        if (snapshot.state != RuntimeState.READY) {
             return BackendConnectionAvailability.Unavailable
         }
 
@@ -48,7 +45,6 @@ internal class DefaultBackendConnectionProvider(
         val credential = credentialResult.getOrNull() ?: return BackendConnectionAvailability.Unavailable
 
         val runtimeGeneration = snapshot.generation
-        lastSeenRuntimeGeneration.set(runtimeGeneration)
         val descriptor = BackendConnectionMapper.buildDescriptor(
             policy = policy,
             generation = runtimeGeneration,

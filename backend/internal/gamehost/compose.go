@@ -2,6 +2,7 @@ package gamehost
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 	"github.com/u-ai/backend/internal/gamehost/channel"
@@ -35,6 +36,7 @@ type GameHostComposeOptions struct {
 	TrustedSupervisor *ghTrustedService.ProcessSupervisor
 	EventService      *event.Service
 	HostAPIGateway    host_api.Gateway
+	ArchiveUpdater    upgrade.KernelArchiveUpdater
 }
 
 func NewKernelContributionSource(
@@ -45,17 +47,32 @@ func NewKernelContributionSource(
 	return newKernelContributionSource(instRepo, defRepo, contribRepo)
 }
 
+type kernelArchiveUpdaterFunc func(ctx context.Context, extensionID string, archivePath string) (*upgrade.KernelUpdateResult, error)
+
+type kernelArchiveUpdaterAdapter struct {
+	fn kernelArchiveUpdaterFunc
+}
+
+func (a *kernelArchiveUpdaterAdapter) UpdateArchive(ctx context.Context, extensionID string, archivePath string) (*upgrade.KernelUpdateResult, error) {
+	if a.fn != nil {
+		return a.fn(ctx, extensionID, archivePath)
+	}
+	return nil, fmt.Errorf("archive updater not wired")
+}
+
 func ComposeUpgradeCoordinator(
 	pluginReg *registry.Registry,
 	contributionSync *integration.GamePluginSyncService,
 	configResolver *config.Resolver,
 	runtimeExecutor runtime.RuntimeExecutor,
+	archiveUpdater upgrade.KernelArchiveUpdater,
 ) *upgrade.UpgradeCoordinator {
 	return upgrade.BuildUpgradeCoordinator(upgrade.UpgradeCoordinatorDeps{
 		PluginRegistry:   pluginReg,
 		RuntimeExecutor:  runtimeExecutor,
 		ContributionSync: contributionSync,
 		ConfigResolver:   configResolver,
+		ArchiveUpdater:   archiveUpdater,
 	})
 }
 
@@ -143,9 +160,10 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	startupGate := startup.NewStartupGate()
 
 	nsAdapter := handshake.NewNamespaceAdapter(nsReg)
+	channelAdvertiser := handshake.NewChannelAdvertiser(pluginReg)
 	handshakeMgr := handshake.NewHandshakeManager(handshake.HandshakeManagerConfig{
 		NamespaceAdapter:  nsAdapter,
-		ChannelAdvertiser: handshake.NoopChannelAdvertiser{},
+		ChannelAdvertiser: channelAdvertiser,
 	})
 
 	contributionSync, err := integration.NewGamePluginSyncService(
@@ -214,7 +232,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		AuthorityAudit:   authorityAuditSink,
 
 		StartupGate:         startupGate,
-		UpgradeCoordinator:  ComposeUpgradeCoordinator(pluginReg, contributionSync, configResolver, nil),
+		UpgradeCoordinator:  ComposeUpgradeCoordinator(pluginReg, contributionSync, configResolver, nil, opts.ArchiveUpdater),
 		RecoveryCoordinator: ComposeRecoveryCoordinator(checkpointStore, nil),
 		StartupRecovery:     ComposeStartupRecovery(startupGate),
 	}

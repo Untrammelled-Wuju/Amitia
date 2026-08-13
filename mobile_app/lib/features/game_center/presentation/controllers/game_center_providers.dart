@@ -5,9 +5,6 @@ import 'game_center_controller.dart';
 
 final gameCenterApiProvider = Provider<GameCenterApi>((ref) {
   final api = ref.watch(backendServiceProvider);
-  if (api == null) {
-    throw StateError('BackendServiceApi not available');
-  }
   return GameCenterApi(api);
 });
 

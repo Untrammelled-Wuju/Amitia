@@ -9,6 +9,7 @@ import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/services/error_utils.dart';
 
 class CompatibleSkillsPage extends ConsumerStatefulWidget {
   const CompatibleSkillsPage({super.key});
@@ -35,7 +36,7 @@ class _CompatibleSkillsPageState extends ConsumerState<CompatibleSkillsPage> {
       final data = await svc.skills();
       if (mounted) setState(() { _skills = data; _loading = false; });
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+      if (mounted) setState(() { _error = safeErrorMessage(e); _loading = false; });
     }
   }
 

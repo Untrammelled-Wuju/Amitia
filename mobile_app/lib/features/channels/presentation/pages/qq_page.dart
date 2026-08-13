@@ -6,9 +6,9 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
-import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/services/error_utils.dart';
 
 enum _QqStatus { connected, disconnected, connecting, expired }
 
@@ -182,7 +182,7 @@ class _QqPageState extends ConsumerState<QqPage> {
       setState(() {
         _status = _QqStatus.disconnected;
         _wsStatus = '未连接';
-        _errorMessage = e.toString();
+        _errorMessage = safeErrorMessage(e);
         _logs.insert(0, '[${DateTime.now().toString().substring(11, 19)}] 连接失败: $e');
       });
       _snack('连接失败: $e', color: context.error);

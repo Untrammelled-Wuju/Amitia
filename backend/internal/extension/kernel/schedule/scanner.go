@@ -284,6 +284,20 @@ func (p *TriggerPlanner) checkOverlap(def *ScheduleContributionDefinition, state
 		return "skipped_overlap", nil
 	case OverlapPolicyQueueOne:
 		return "queued_one", nil
+	case OverlapPolicyReplace:
+		runs, err := p.store.ListRunsBySchedule(p.ctx(), def.ScheduleID, 10)
+		if err != nil {
+			return "", err
+		}
+		for _, run := range runs {
+			if run.Status == RunStatusRunning || run.Status == RunStatusTriggering {
+				if run.TargetType == TargetTypeTask {
+					return "replace_cancellable", nil
+				}
+				return "blocked_uncancellable", ErrOverlapForbidden
+			}
+		}
+		return "replace_no_active", nil
 	default:
 		return "blocked_overlap", ErrOverlapForbidden
 	}

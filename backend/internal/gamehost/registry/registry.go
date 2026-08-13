@@ -2,6 +2,7 @@ package registry
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"sync"
 
@@ -180,4 +181,47 @@ func (r *Registry) Count() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	return len(r.plugins)
+}
+
+func (r *Registry) DescriptorCapabilities(pluginID string) ([]string, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	p, ok := r.plugins[domain.PluginID(pluginID)]
+	if !ok {
+		return nil, fmt.Errorf("plugin not found: %s", pluginID)
+	}
+	caps := make([]string, 0, len(p.Capabilities))
+	for _, c := range p.Capabilities {
+		caps = append(caps, string(c))
+	}
+	return caps, nil
+}
+
+func (r *Registry) DescriptorChannels(pluginID string) ([]string, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	p, ok := r.plugins[domain.PluginID(pluginID)]
+	if !ok {
+		return nil, fmt.Errorf("plugin not found: %s", pluginID)
+	}
+	channels := make([]string, 0, len(p.Channels))
+	for _, ch := range p.Channels {
+		channels = append(channels, string(ch.ID))
+	}
+	return channels, nil
+}
+
+func (r *Registry) HasCapability(pluginID, capability string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	p, ok := r.plugins[domain.PluginID(pluginID)]
+	if !ok {
+		return false
+	}
+	for _, c := range p.Capabilities {
+		if string(c) == capability {
+			return true
+		}
+	}
+	return false
 }

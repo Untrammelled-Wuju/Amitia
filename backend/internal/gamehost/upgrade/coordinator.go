@@ -22,6 +22,10 @@ type KernelExtensionLifecycle interface {
 	ExecuteUpdate(ctx context.Context, extensionID string, targetVersion string, operationID UpgradeOperationID) (*KernelUpdateResult, error)
 }
 
+type KernelArchiveUpdater interface {
+	UpdateArchive(ctx context.Context, extensionID string, archivePath string) (*KernelUpdateResult, error)
+}
+
 type KernelUpdateResult struct {
 	Success    bool
 	NewVersion string
@@ -63,6 +67,7 @@ type UpgradeCoordinator struct {
 	configValidator       ConfigValidator
 	migrationHooks        *MigrationHookRegistry
 	kernelLifecycle       KernelExtensionLifecycle
+	archiveUpdater        KernelArchiveUpdater
 }
 
 func NewUpgradeCoordinator(
@@ -73,6 +78,7 @@ func NewUpgradeCoordinator(
 	contributionReconcile ContributionReconciler,
 	configValidator ConfigValidator,
 	kernelLifecycle KernelExtensionLifecycle,
+	archiveUpdater KernelArchiveUpdater,
 ) *UpgradeCoordinator {
 	return &UpgradeCoordinator{
 		gate:                  NewUpgradeGate(),
@@ -84,6 +90,7 @@ func NewUpgradeCoordinator(
 		configValidator:       configValidator,
 		migrationHooks:        NewMigrationHookRegistry(),
 		kernelLifecycle:       kernelLifecycle,
+		archiveUpdater:        archiveUpdater,
 	}
 }
 
@@ -226,6 +233,100 @@ func (c *UpgradeCoordinator) ExecuteUpgrade(ctx context.Context, req UpgradeRequ
 	c.logStage(operationID, req.ExtensionID, UpgradeStateCompleted, fmt.Sprintf("resumed=%d", len(result.ResumedRuntimes)))
 	c.recordAudit(operationID, req, result, nil)
 	return result, nil
+}
+
+func (c *UpgradeCoordinator) ExecuteUpgradeByArchive(ctx context.Context, extensionID, archivePath string) error {
+	if c.archiveUpdater == nil {
+		return fmt.Errorf("archive updater not wired in upgrade coordinator")
+	}
+
+	result := &UpgradeResult{
+		OperationID: generateUpgradeOperationID(extensionID),
+		ExtensionID: extensionID,
+		Stage:       UpgradeStatePreparing,
+	}
+
+	if err := c.gate.Acquire(extensionID, result.OperationID); err != nil {
+		return err
+	}
+	defer c.gate.Release(extensionID, result.OperationID)
+
+	affectedPlugins, err := c.findAffectedPlugins(ctx, extensionID)
+	if err != nil {
+		return fmt.Errorf("preflight: find affected plugins: %w", err)
+	}
+	result.AffectedPlugins = affectedPlugins
+
+	runtimeSnapshots, err := c.discoverRuntimes(affectedPlugins)
+	if err != nil {
+		return fmt.Errorf("preflight: discover runtimes: %w", err)
+	}
+
+	result.Stage = UpgradeStateQuiescing
+	c.logStage(result.OperationID, extensionID, UpgradeStateQuiescing, fmt.Sprintf("runtimes=%d", len(runtimeSnapshots)))
+	if err := c.quiesceRuntimes(ctx, runtimeSnapshots); err != nil {
+		return fmt.Errorf("quiesce failed: %w", err)
+	}
+	for _, snap := range runtimeSnapshots {
+		result.QuiescedRuntimes = append(result.QuiescedRuntimes, snap.RuntimeID)
+	}
+
+	result.Stage = UpgradeStateUpdating
+	c.logStage(result.OperationID, extensionID, UpgradeStateUpdating, "")
+	kernelResult, kerr := c.archiveUpdater.UpdateArchive(ctx, extensionID, archivePath)
+	if kerr != nil || (kernelResult != nil && !kernelResult.Success) {
+		err := kerr
+		if err == nil && kernelResult != nil {
+			err = fmt.Errorf("kernel update failed: %s", kernelResult.Reason)
+		}
+		if err == nil {
+			err = fmt.Errorf("kernel archive update failed: unknown reason")
+		}
+		return fmt.Errorf("kernel package update failed: %w", err)
+	}
+
+	result.Stage = UpgradeStateMigrating
+	c.logStage(result.OperationID, extensionID, UpgradeStateMigrating, "")
+	if err := c.executeMigrationHooks(ctx, UpgradeRequest{ExtensionID: extensionID}, result.OperationID, runtimeSnapshots); err != nil {
+		return fmt.Errorf("migration failed: %w", err)
+	}
+
+	result.Stage = UpgradeStateReconciling
+	c.logStage(result.OperationID, extensionID, UpgradeStateReconciling, "")
+	defReport := c.definitionReconcile.ReconcileExtension(extensionID)
+	if len(defReport.Errors) > 0 {
+		return fmt.Errorf("definition reconcile failed: %v", defReport.Errors)
+	}
+
+	descSync := c.contributionReconcile.SyncExtension(ctx, extensionID)
+	if descSync.HasError() {
+		return fmt.Errorf("descriptor sync failed: %v", descSync.Errors)
+	}
+
+	configErrors := c.reconcileConfigs(ctx, runtimeSnapshots)
+	if len(configErrors) > 0 {
+		return fmt.Errorf("config validation failed: %v", configErrors)
+	}
+
+	result.Stage = UpgradeStateResuming
+	c.logStage(result.OperationID, extensionID, UpgradeStateResuming, fmt.Sprintf("runtimes=%d", len(runtimeSnapshots)))
+	resumeFailures := c.resumeRuntimes(ctx, runtimeSnapshots)
+	for _, snap := range runtimeSnapshots {
+		if snap.UserStopped {
+			continue
+		}
+		if snap.WasRunning || snap.WasSuspended {
+			if _, failed := resumeFailures[snap.RuntimeID]; failed {
+				return fmt.Errorf("partial resume failure: runtime=%s", snap.RuntimeID)
+			}
+		}
+	}
+
+	result.Stage = UpgradeStateCompleted
+	result.Success = true
+	c.logStage(result.OperationID, extensionID, UpgradeStateCompleted, "")
+	c.recordAudit(result.OperationID, UpgradeRequest{ExtensionID: extensionID}, result, nil)
+	return nil
 }
 
 func (c *UpgradeCoordinator) findAffectedPlugins(ctx context.Context, extensionID string) ([]domain.PluginID, error) {
