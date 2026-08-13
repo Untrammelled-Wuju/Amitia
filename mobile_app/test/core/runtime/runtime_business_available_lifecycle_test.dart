@@ -3,6 +3,10 @@ import 'package:amitia_app/core/runtime/runtime_bridge_snapshot.dart';
 import 'package:amitia_app/core/runtime/runtime_bridge_state.dart';
 import 'package:amitia_app/core/runtime/status/default_runtime_status_projection.dart';
 import 'package:amitia_app/core/runtime/status/runtime_status_phase.dart';
+import 'package:amitia_app/core/backend_connection/backend_connection_availability.dart';
+import 'package:amitia_app/core/backend_connection/backend_connection_config.dart';
+import 'package:amitia_app/core/backend_connection/backend_connection_endpoint.dart';
+import 'package:amitia_app/core/backend_connection/backend_connection_credential.dart';
 
 import 'status/fakes/fake_runtime_bridge.dart';
 import 'status/fakes/fake_backend_connection_source.dart';
