@@ -4,6 +4,7 @@ package system
 
 import (
 	"encoding/json"
+	"github.com/u-ai/backend/internal/system/dataportability"
 	"github.com/u-ai/backend/internal/temporal"
 	"os"
 	"strconv"
@@ -149,6 +150,7 @@ type Service interface {
 	WechatReplyTimingRecover() map[string]interface{}
 	WechatReplyTimingStatus() map[string]interface{}
 	AttachTemporalService(temporalSvc *temporal.Service)
+	SetDataPortabilityCoordinator(coord *dataportability.Coordinator)
 }
 
 type service struct {
@@ -157,6 +159,7 @@ type service struct {
 	healthLog   []map[string]interface{}
 	dataDir     string
 	temporalSvc *temporal.Service
+	coordinator *dataportability.Coordinator
 }
 
 func NewService(ctx *app.AppContext) Service {
@@ -165,6 +168,10 @@ func NewService(ctx *app.AppContext) Service {
 
 func (s *service) AttachTemporalService(temporalSvc *temporal.Service) {
 	s.temporalSvc = temporalSvc
+}
+
+func (s *service) SetDataPortabilityCoordinator(coord *dataportability.Coordinator) {
+	s.coordinator = coord
 }
 func (s *service) MaintenanceRestartBridge() map[string]interface{} {
 	result := s.readSidecarResponse(s.sidecarPost("/api/login/reconnect", nil))

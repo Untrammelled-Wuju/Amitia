@@ -12,6 +12,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/pkg/util"
 )
 
@@ -157,14 +158,14 @@ func (h *Handler) ConfirmImportsBatchMemories(c *gin.Context) {
 	for _, msg := range msgs {
 		content, _ := msg["content"].(string)
 		if len(content) > 10 {
-			prefix := id
-			if len(prefix) > 8 {
-				prefix = prefix[:8]
+			_, err := h.memorySvc.Create(&memory.CreateMemoryRequest{
+				Key:    fmt.Sprintf("imported_%d", confirmed),
+				Value:  content,
+				Source: "import",
+			})
+			if err == nil {
+				confirmed++
 			}
-			memID := fmt.Sprintf("mem_%s_%d", prefix, confirmed)
-			h.db.Exec("INSERT OR IGNORE INTO memories (id, key, value, source, created_at) VALUES (?, ?, ?, ?, ?)",
-				memID, fmt.Sprintf("imported_%d", confirmed), content, "import", time.Now().Format("2006-01-02 15:04:05"))
-			confirmed++
 		}
 	}
 	util.SuccessResponse(c, map[string]interface{}{"confirmed": true, "memoriesCreated": confirmed})

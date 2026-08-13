@@ -37,7 +37,7 @@ func NewExternalAutomationHandler(client ExternalAutomationClient) *ExternalAuto
 	}
 }
 
-func (h *ExternalAutomationHandler) Execute(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *ExternalAutomationHandler) Execute(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	switch request.Operation {
 	case OperationStatus:
 		return h.handleStatus(ctx, request)
@@ -58,10 +58,10 @@ func (h *ExternalAutomationHandler) Execute(ctx context.Context, request android
 	case OperationWaitForeground:
 		return h.handleWaitForeground(ctx, request)
 	default:
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    AUTOMATION_UNSUPPORTED,
 				Message: "unknown external automation operation: " + request.Operation,
 			},
@@ -69,12 +69,12 @@ func (h *ExternalAutomationHandler) Execute(ctx context.Context, request android
 	}
 }
 
-func (h *ExternalAutomationHandler) handleStatus(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *ExternalAutomationHandler) handleStatus(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	state, err := h.client.Status(ctx)
 	if err != nil {
 		return h.errorResponse(request, err)
 	}
-	return androidsystem.NotificationResponse{
+	return androidsystem.SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
@@ -93,7 +93,7 @@ func (h *ExternalAutomationHandler) handleStatus(ctx context.Context, request an
 	}
 }
 
-func (h *ExternalAutomationHandler) handleResolveApp(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *ExternalAutomationHandler) handleResolveApp(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	req := h.parseResolveAppRequest(request.Payload)
 	if err := h.policy.ValidateResolveApp(req); err != nil {
 		return h.policyErrorResponse(request, err)
@@ -104,7 +104,7 @@ func (h *ExternalAutomationHandler) handleResolveApp(ctx context.Context, reques
 		return h.errorResponse(request, err)
 	}
 
-	return androidsystem.NotificationResponse{
+	return androidsystem.SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
@@ -114,7 +114,7 @@ func (h *ExternalAutomationHandler) handleResolveApp(ctx context.Context, reques
 	}
 }
 
-func (h *ExternalAutomationHandler) handleOpenApp(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *ExternalAutomationHandler) handleOpenApp(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	req := h.parseOpenAppRequest(request.Payload)
 	if err := h.policy.ValidateOpenApp(req); err != nil {
 		return h.policyErrorResponse(request, err)
@@ -125,7 +125,7 @@ func (h *ExternalAutomationHandler) handleOpenApp(ctx context.Context, request a
 		return h.errorResponse(request, err)
 	}
 
-	return androidsystem.NotificationResponse{
+	return androidsystem.SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
@@ -141,7 +141,7 @@ func (h *ExternalAutomationHandler) handleOpenApp(ctx context.Context, request a
 	}
 }
 
-func (h *ExternalAutomationHandler) handleResolveURI(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *ExternalAutomationHandler) handleResolveURI(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	req := h.parseResolveURIRequest(request.Payload)
 	if err := h.policy.ValidateResolveURI(req); err != nil {
 		return h.policyErrorResponse(request, err)
@@ -152,7 +152,7 @@ func (h *ExternalAutomationHandler) handleResolveURI(ctx context.Context, reques
 		return h.errorResponse(request, err)
 	}
 
-	return androidsystem.NotificationResponse{
+	return androidsystem.SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
@@ -165,7 +165,7 @@ func (h *ExternalAutomationHandler) handleResolveURI(ctx context.Context, reques
 	}
 }
 
-func (h *ExternalAutomationHandler) handleOpenURI(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *ExternalAutomationHandler) handleOpenURI(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	req := h.parseOpenURIRequest(request.Payload)
 	if err := h.policy.ValidateOpenURI(req); err != nil {
 		return h.policyErrorResponse(request, err)
@@ -176,7 +176,7 @@ func (h *ExternalAutomationHandler) handleOpenURI(ctx context.Context, request a
 		return h.errorResponse(request, err)
 	}
 
-	return androidsystem.NotificationResponse{
+	return androidsystem.SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
@@ -190,7 +190,7 @@ func (h *ExternalAutomationHandler) handleOpenURI(ctx context.Context, request a
 	}
 }
 
-func (h *ExternalAutomationHandler) handleOpenSettings(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *ExternalAutomationHandler) handleOpenSettings(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	req := h.parseOpenSettingsRequest(request.Payload)
 	if err := h.policy.ValidateOpenSettings(req); err != nil {
 		return h.policyErrorResponse(request, err)
@@ -201,7 +201,7 @@ func (h *ExternalAutomationHandler) handleOpenSettings(ctx context.Context, requ
 		return h.errorResponse(request, err)
 	}
 
-	return androidsystem.NotificationResponse{
+	return androidsystem.SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
@@ -213,7 +213,7 @@ func (h *ExternalAutomationHandler) handleOpenSettings(ctx context.Context, requ
 	}
 }
 
-func (h *ExternalAutomationHandler) handleInvokeIntent(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *ExternalAutomationHandler) handleInvokeIntent(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	spec := h.parseIntentSpec(request.Payload)
 	if err := h.policy.ValidateIntentSpec(spec); err != nil {
 		return h.policyErrorResponse(request, err)
@@ -224,7 +224,7 @@ func (h *ExternalAutomationHandler) handleInvokeIntent(ctx context.Context, requ
 		return h.errorResponse(request, err)
 	}
 
-	return androidsystem.NotificationResponse{
+	return androidsystem.SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
@@ -238,13 +238,13 @@ func (h *ExternalAutomationHandler) handleInvokeIntent(ctx context.Context, requ
 	}
 }
 
-func (h *ExternalAutomationHandler) handleForeground(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *ExternalAutomationHandler) handleForeground(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	state, err := h.client.Foreground(ctx)
 	if err != nil {
 		return h.errorResponse(request, err)
 	}
 
-	return androidsystem.NotificationResponse{
+	return androidsystem.SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
@@ -259,7 +259,7 @@ func (h *ExternalAutomationHandler) handleForeground(ctx context.Context, reques
 	}
 }
 
-func (h *ExternalAutomationHandler) handleWaitForeground(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *ExternalAutomationHandler) handleWaitForeground(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	req := h.parseWaitForegroundRequest(request.Payload)
 	if err := h.policy.ValidateWaitForeground(req); err != nil {
 		return h.policyErrorResponse(request, err)
@@ -270,7 +270,7 @@ func (h *ExternalAutomationHandler) handleWaitForeground(ctx context.Context, re
 		return h.errorResponse(request, err)
 	}
 
-	return androidsystem.NotificationResponse{
+	return androidsystem.SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
@@ -284,44 +284,44 @@ func (h *ExternalAutomationHandler) handleWaitForeground(ctx context.Context, re
 	}
 }
 
-func (h *ExternalAutomationHandler) errorResponse(request androidsystem.NotificationRequest, err error) androidsystem.NotificationResponse {
+func (h *ExternalAutomationHandler) errorResponse(request androidsystem.SystemRequest, err error) androidsystem.SystemResponse {
 	var ae *automationError
 	if errors.As(err, &ae) {
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    ae.code,
 				Message: ae.message,
 			},
 		}
 	}
-	return androidsystem.NotificationResponse{
+	return androidsystem.SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "error",
-		Error: &androidsystem.NotificationError{
+		Error: &androidsystem.SystemError{
 			Code:    AUTOMATION_NATIVE_HOST_UNAVAILABLE,
 			Message: err.Error(),
 		},
 	}
 }
 
-func (h *ExternalAutomationHandler) policyErrorResponse(request androidsystem.NotificationRequest, err error) androidsystem.NotificationResponse {
+func (h *ExternalAutomationHandler) policyErrorResponse(request androidsystem.SystemRequest, err error) androidsystem.SystemResponse {
 	var ae *automationError
 	if errors.As(err, &ae) {
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    ae.code,
 				Message: ae.message,
 			},
 		}
 	}
-	return androidsystem.NotificationResponse{
+	return androidsystem.SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "error",
-		Error: &androidsystem.NotificationError{
+		Error: &androidsystem.SystemError{
 			Code:    AUTOMATION_INVALID_REQUEST,
 			Message: err.Error(),
 		},

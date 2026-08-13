@@ -8,6 +8,7 @@ import (
 
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/extension/kernel/sandbox"
+	"github.com/u-ai/backend/internal/nativebridge"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/runtimeorchestrator/builtin"
 )
@@ -42,6 +43,19 @@ func (b *runtimeBootstrap) registerProviderFactoriesIOS() error {
 	}
 
 	return nil
+}
+
+func (b *runtimeBootstrap) SetIOSNativeBridge(bridge nativebridge.Bridge) {
+	if b == nil {
+		return
+	}
+	b.iosNativeBridge = bridge
+	if b.iosNativeProvider != nil {
+		prov, ok := b.iosNativeProvider.(interface{ SetBridge(nativebridge.Bridge) })
+		if ok {
+			prov.SetBridge(bridge)
+		}
+	}
 }
 
 func (b *runtimeBootstrap) buildPlatformProvidersIOS() error {

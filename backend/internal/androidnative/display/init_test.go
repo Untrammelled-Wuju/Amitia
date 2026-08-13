@@ -61,9 +61,12 @@ func (m *mockNativeBridgeDisplay) Health(ctx context.Context) androidnative.Nati
 
 func TestRegister(t *testing.T) {
 	bridge := &mockNativeBridgeDisplay{}
-	adapter := androidnative.NewNativeProviderAdapter(bridge)
+	provider := androidnative.NewProvider(bridge)
 	cap := &mockDisplayCapability{}
-	svc := Register(adapter, bridge, cap)
+	svc, err := Register(provider, bridge, cap)
+	if err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
 	if svc == nil {
 		t.Fatal("Register returned nil service")
 	}
@@ -71,11 +74,14 @@ func TestRegister(t *testing.T) {
 
 func TestRegister_ListOperation(t *testing.T) {
 	bridge := &mockNativeBridgeDisplay{}
-	adapter := androidnative.NewNativeProviderAdapter(bridge)
+	provider := androidnative.NewProvider(bridge)
 	cap := &mockDisplayCapability{}
-	Register(adapter, bridge, cap)
+	_, err := Register(provider, bridge, cap)
+	if err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
 
-	resp := adapter.Execute(context.Background(), capability.AndroidBridgeRequest{
+	resp := provider.Execute(context.Background(), capability.AndroidBridgeRequest{
 		ProtocolVersion: 1,
 		RequestID:       "test-list-1",
 		Operation:       OperationList,
@@ -94,15 +100,18 @@ func TestRegister_ListOperation(t *testing.T) {
 
 func TestRegister_GetOperation(t *testing.T) {
 	bridge := &mockNativeBridgeDisplay{}
-	adapter := androidnative.NewNativeProviderAdapter(bridge)
+	provider := androidnative.NewProvider(bridge)
 	cap := &mockDisplayCapability{}
-	Register(adapter, bridge, cap)
+	_, err := Register(provider, bridge, cap)
+	if err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
 
 	payload, _ := json.Marshal(map[string]any{"displayId": 0.0})
 	var payloadMap map[string]any
 	_ = json.Unmarshal(payload, &payloadMap)
 
-	resp := adapter.Execute(context.Background(), capability.AndroidBridgeRequest{
+	resp := provider.Execute(context.Background(), capability.AndroidBridgeRequest{
 		ProtocolVersion: 1,
 		RequestID:       "test-get-1",
 		Operation:       OperationGet,
@@ -115,15 +124,18 @@ func TestRegister_GetOperation(t *testing.T) {
 
 func TestRegister_GetNotFound(t *testing.T) {
 	bridge := &mockNativeBridgeDisplay{}
-	adapter := androidnative.NewNativeProviderAdapter(bridge)
+	provider := androidnative.NewProvider(bridge)
 	cap := &mockDisplayCapability{}
-	Register(adapter, bridge, cap)
+	_, err := Register(provider, bridge, cap)
+	if err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
 
 	payload, _ := json.Marshal(map[string]any{"displayId": 99.0})
 	var payloadMap map[string]any
 	_ = json.Unmarshal(payload, &payloadMap)
 
-	resp := adapter.Execute(context.Background(), capability.AndroidBridgeRequest{
+	resp := provider.Execute(context.Background(), capability.AndroidBridgeRequest{
 		ProtocolVersion: 1,
 		RequestID:       "test-get-404",
 		Operation:       OperationGet,
@@ -136,11 +148,14 @@ func TestRegister_GetNotFound(t *testing.T) {
 
 func TestRegister_StatusOperation(t *testing.T) {
 	bridge := &mockNativeBridgeDisplay{}
-	adapter := androidnative.NewNativeProviderAdapter(bridge)
+	provider := androidnative.NewProvider(bridge)
 	cap := &mockDisplayCapability{}
-	Register(adapter, bridge, cap)
+	_, err := Register(provider, bridge, cap)
+	if err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
 
-	resp := adapter.Execute(context.Background(), capability.AndroidBridgeRequest{
+	resp := provider.Execute(context.Background(), capability.AndroidBridgeRequest{
 		ProtocolVersion: 1,
 		RequestID:       "test-status-1",
 		Operation:       OperationStatus,
@@ -155,15 +170,18 @@ func TestRegister_StatusOperation(t *testing.T) {
 
 func TestRegister_ResolveOperation(t *testing.T) {
 	bridge := &mockNativeBridgeDisplay{}
-	adapter := androidnative.NewNativeProviderAdapter(bridge)
+	provider := androidnative.NewProvider(bridge)
 	cap := &mockDisplayCapability{}
-	Register(adapter, bridge, cap)
+	_, err := Register(provider, bridge, cap)
+	if err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
 
 	payload, _ := json.Marshal(map[string]any{"displayId": 0.0})
 	var payloadMap map[string]any
 	_ = json.Unmarshal(payload, &payloadMap)
 
-	resp := adapter.Execute(context.Background(), capability.AndroidBridgeRequest{
+	resp := provider.Execute(context.Background(), capability.AndroidBridgeRequest{
 		ProtocolVersion: 1,
 		RequestID:       "test-resolve-1",
 		Operation:       OperationResolve,

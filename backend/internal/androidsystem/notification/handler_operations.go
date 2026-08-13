@@ -6,8 +6,8 @@ import (
 	"github.com/u-ai/backend/internal/androidsystem"
 )
 
-func (h *NotificationHandler) handleStatus(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
-	resp := h.provider.Execute(ctx, androidsystem.NotificationRequest{
+func (h *NotificationHandler) handleStatus(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
+	resp := h.provider.Execute(ctx, androidsystem.SystemRequest{
 		RequestID: request.RequestID,
 		Operation: OperationStatus,
 		Payload:   map[string]any{},
@@ -19,7 +19,7 @@ func (h *NotificationHandler) handleStatus(ctx context.Context, request androids
 		return resp
 	}
 
-	return androidsystem.NotificationResponse{
+	return androidsystem.SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
@@ -39,7 +39,7 @@ func (h *NotificationHandler) handleStatus(ctx context.Context, request androids
 	}
 }
 
-func (h *NotificationHandler) handleList(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *NotificationHandler) handleList(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	h.RefreshState(ctx)
 
 	if !h.state.CanRead {
@@ -49,10 +49,10 @@ func (h *NotificationHandler) handleList(ctx context.Context, request androidsys
 		if !h.state.ListenerGranted {
 			return listenerPermissionResponse(request.RequestID)
 		}
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    androidsystem.NOTIFICATION_UNSUPPORTED,
 				Message: "notification read capability not available",
 			},
@@ -84,7 +84,7 @@ func (h *NotificationHandler) handleList(ctx context.Context, request androidsys
 
 	payload["includeOwn"] = false
 
-	resp := h.provider.Execute(ctx, androidsystem.NotificationRequest{
+	resp := h.provider.Execute(ctx, androidsystem.SystemRequest{
 		RequestID: request.RequestID,
 		Operation: OperationList,
 		Payload:   payload,
@@ -97,13 +97,13 @@ func (h *NotificationHandler) handleList(ctx context.Context, request androidsys
 	return resp
 }
 
-func (h *NotificationHandler) handleGet(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *NotificationHandler) handleGet(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	ref := stringFrom(request.Payload, "notificationRef")
 	if ref == "" {
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    androidsystem.NOTIFICATION_NOT_FOUND,
 				Message: "notificationRef is required",
 			},
@@ -120,32 +120,32 @@ func (h *NotificationHandler) handleGet(ctx context.Context, request androidsyst
 	} else if key, ok := h.store.LookupNotification(ref); ok {
 		payload["nativeKey"] = key
 	} else {
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    androidsystem.NOTIFICATION_NOT_FOUND,
 				Message: "notification reference not found or stale",
 			},
 		}
 	}
 
-	return h.provider.Execute(ctx, androidsystem.NotificationRequest{
+	return h.provider.Execute(ctx, androidsystem.SystemRequest{
 		RequestID: request.RequestID,
 		Operation: OperationGet,
 		Payload:   payload,
 	})
 }
 
-func (h *NotificationHandler) handlePost(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *NotificationHandler) handlePost(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	title := stringFrom(request.Payload, "title")
 	body := stringFrom(request.Payload, "body")
 
 	if title == "" && body == "" {
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    androidsystem.NOTIFICATION_POST_FAILED,
 				Message: "both title and body are empty",
 			},
@@ -173,20 +173,20 @@ func (h *NotificationHandler) handlePost(ctx context.Context, request androidsys
 		payload["silent"] = v
 	}
 
-	return h.provider.Execute(ctx, androidsystem.NotificationRequest{
+	return h.provider.Execute(ctx, androidsystem.SystemRequest{
 		RequestID: request.RequestID,
 		Operation: OperationPost,
 		Payload:   payload,
 	})
 }
 
-func (h *NotificationHandler) handleCancelOwn(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *NotificationHandler) handleCancelOwn(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	ref := stringFrom(request.Payload, "notificationRef")
 	if ref == "" {
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    androidsystem.NOTIFICATION_CANCEL_FAILED,
 				Message: "notificationRef is required",
 			},
@@ -195,17 +195,17 @@ func (h *NotificationHandler) handleCancelOwn(ctx context.Context, request andro
 
 	tag, ok := h.store.LookupOwnTag(ref)
 	if !ok {
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    androidsystem.NOTIFICATION_NOT_FOUND,
 				Message: "own notification reference not found",
 			},
 		}
 	}
 
-	return h.provider.Execute(ctx, androidsystem.NotificationRequest{
+	return h.provider.Execute(ctx, androidsystem.SystemRequest{
 		RequestID: request.RequestID,
 		Operation: OperationCancelOwn,
 		Payload: map[string]any{
@@ -215,14 +215,14 @@ func (h *NotificationHandler) handleCancelOwn(ctx context.Context, request andro
 	})
 }
 
-func (h *NotificationHandler) handleDismiss(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *NotificationHandler) handleDismiss(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	h.RefreshState(ctx)
 
 	if !h.state.CanDismiss {
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    androidsystem.NOTIFICATION_LISTENER_PERMISSION_REQUIRED,
 				Message: "notification dismiss capability not available",
 			},
@@ -231,10 +231,10 @@ func (h *NotificationHandler) handleDismiss(ctx context.Context, request android
 
 	ref := stringFrom(request.Payload, "notificationRef")
 	if ref == "" {
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    androidsystem.NOTIFICATION_NOT_FOUND,
 				Message: "notificationRef is required",
 			},
@@ -243,17 +243,17 @@ func (h *NotificationHandler) handleDismiss(ctx context.Context, request android
 
 	key, ok := h.store.LookupNotification(ref)
 	if !ok {
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    androidsystem.NOTIFICATION_NOT_FOUND,
 				Message: "notification reference not found or stale",
 			},
 		}
 	}
 
-	return h.provider.Execute(ctx, androidsystem.NotificationRequest{
+	return h.provider.Execute(ctx, androidsystem.SystemRequest{
 		RequestID: request.RequestID,
 		Operation: OperationDismiss,
 		Payload: map[string]any{
@@ -263,14 +263,14 @@ func (h *NotificationHandler) handleDismiss(ctx context.Context, request android
 	})
 }
 
-func (h *NotificationHandler) handleOpen(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *NotificationHandler) handleOpen(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	h.RefreshState(ctx)
 
 	if !h.state.CanDismiss {
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    androidsystem.NOTIFICATION_LISTENER_PERMISSION_REQUIRED,
 				Message: "notification open capability not available",
 			},
@@ -279,10 +279,10 @@ func (h *NotificationHandler) handleOpen(ctx context.Context, request androidsys
 
 	ref := stringFrom(request.Payload, "notificationRef")
 	if ref == "" {
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    androidsystem.NOTIFICATION_NOT_FOUND,
 				Message: "notificationRef is required",
 			},
@@ -291,17 +291,17 @@ func (h *NotificationHandler) handleOpen(ctx context.Context, request androidsys
 
 	key, ok := h.store.LookupNotification(ref)
 	if !ok {
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    androidsystem.NOTIFICATION_NOT_FOUND,
 				Message: "notification reference not found or stale",
 			},
 		}
 	}
 
-	return h.provider.Execute(ctx, androidsystem.NotificationRequest{
+	return h.provider.Execute(ctx, androidsystem.SystemRequest{
 		RequestID: request.RequestID,
 		Operation: OperationOpen,
 		Payload: map[string]any{
@@ -311,14 +311,14 @@ func (h *NotificationHandler) handleOpen(ctx context.Context, request androidsys
 	})
 }
 
-func (h *NotificationHandler) handleInvokeAction(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *NotificationHandler) handleInvokeAction(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	h.RefreshState(ctx)
 
 	if !h.state.CanDismiss {
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    androidsystem.NOTIFICATION_LISTENER_PERMISSION_REQUIRED,
 				Message: "notification action capability not available",
 			},
@@ -328,10 +328,10 @@ func (h *NotificationHandler) handleInvokeAction(ctx context.Context, request an
 	ref := stringFrom(request.Payload, "notificationRef")
 	actionRef := stringFrom(request.Payload, "actionRef")
 	if ref == "" || actionRef == "" {
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    androidsystem.NOTIFICATION_ACTION_NOT_FOUND,
 				Message: "notificationRef and actionRef are required",
 			},
@@ -340,17 +340,17 @@ func (h *NotificationHandler) handleInvokeAction(ctx context.Context, request an
 
 	key, ok := h.store.LookupNotification(ref)
 	if !ok {
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    androidsystem.NOTIFICATION_NOT_FOUND,
 				Message: "notification reference not found or stale",
 			},
 		}
 	}
 
-	return h.provider.Execute(ctx, androidsystem.NotificationRequest{
+	return h.provider.Execute(ctx, androidsystem.SystemRequest{
 		RequestID: request.RequestID,
 		Operation: OperationInvokeAction,
 		Payload: map[string]any{
@@ -361,7 +361,7 @@ func (h *NotificationHandler) handleInvokeAction(ctx context.Context, request an
 	})
 }
 
-func (h *NotificationHandler) sanitizeListResult(resp androidsystem.NotificationResponse) {
+func (h *NotificationHandler) sanitizeListResult(resp androidsystem.SystemResponse) {
 	if resp.Result == nil {
 		return
 	}
@@ -388,22 +388,22 @@ func (h *NotificationHandler) sanitizeListResult(resp androidsystem.Notification
 	}
 }
 
-func listenerPermissionResponse(requestID string) androidsystem.NotificationResponse {
-	return androidsystem.NotificationResponse{
+func listenerPermissionResponse(requestID string) androidsystem.SystemResponse {
+	return androidsystem.SystemResponse{
 		RequestID: requestID,
 		Status:    "error",
-		Error: &androidsystem.NotificationError{
+		Error: &androidsystem.SystemError{
 			Code:    androidsystem.NOTIFICATION_LISTENER_PERMISSION_REQUIRED,
 			Message: "notification listener access not granted",
 		},
 	}
 }
 
-func notConnectedResponse(requestID string) androidsystem.NotificationResponse {
-	return androidsystem.NotificationResponse{
+func notConnectedResponse(requestID string) androidsystem.SystemResponse {
+	return androidsystem.SystemResponse{
 		RequestID: requestID,
 		Status:    "error",
-		Error: &androidsystem.NotificationError{
+		Error: &androidsystem.SystemError{
 			Code:    androidsystem.NOTIFICATION_LISTENER_NOT_CONNECTED,
 			Message: "notification listener not connected",
 		},

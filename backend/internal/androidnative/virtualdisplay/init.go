@@ -4,9 +4,7 @@ import (
 	"github.com/u-ai/backend/internal/androidnative"
 )
 
-const RuntimeID = "android_native_virtual_display"
-
-func Register(provider *androidnative.NativeProviderAdapter, bridge androidnative.NativeBridge) *Service {
+func Register(provider *androidnative.Provider, bridge androidnative.NativeBridge) (*Service, error) {
 	store := &Store{}
 	var virtualBridge VirtualBridge
 	if bridge != nil {
@@ -16,10 +14,12 @@ func Register(provider *androidnative.NativeProviderAdapter, bridge androidnativ
 	resolver := NewDefaultResolver(store)
 	service := NewService(store, virtualBridge, policy, resolver)
 	handler := NewHandler(service)
-	provider.RegisterHandler(OperationStatus, handler)
-	provider.RegisterHandler(OperationCreate, handler)
-	provider.RegisterHandler(OperationGet, handler)
-	provider.RegisterHandler(OperationResize, handler)
-	provider.RegisterHandler(OperationRelease, handler)
-	return service
+
+	registerOps := []string{OperationStatus, OperationCreate, OperationGet, OperationResize, OperationRelease}
+	for _, op := range registerOps {
+		if err := provider.RegisterHandler(op, handler); err != nil {
+			return nil, err
+		}
+	}
+	return service, nil
 }

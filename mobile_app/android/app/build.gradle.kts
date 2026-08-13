@@ -74,8 +74,42 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
+            pickFirsts += ["**/libc++_shared.so"]
         }
     }
+
+    aaptOptions {
+        noCompress += listOf("zip", "so", "xz")
+    }
+}
+
+val frozenRuntimePackagePath: String? = System.getenv("FROZEN_RUNTIME_PACKAGE_PATH")
+val frozenRuntimePackageSha256: String? = System.getenv("FROZEN_RUNTIME_PACKAGE_SHA256")
+
+tasks.register<Delete>("cleanFrozenRuntimePackage") {
+    group = "candidate"
+    description = "Removes previously copied frozen Runtime Package from assets"
+    delete(layout.projectDirectory.dir("src/main/assets/runtime-package"))
+}
+
+tasks.register<Copy>("copyFrozenRuntimePackage") {
+    group = "candidate"
+    description = "Copies the Step 7 frozen Runtime Package into APK assets"
+    dependsOn("cleanFrozenRuntimePackage")
+    if (frozenRuntimePackagePath != null && file(frozenRuntimePackagePath).exists()) {
+        from(file(frozenRuntimePackagePath)) {
+            rename { "amitia-runtime-1.0.0.zip" }
+        }
+        into(layout.projectDirectory.dir("src/main/assets/runtime-package"))
+    } else {
+        doLast {
+            logger.lifecycle("copyFrozenRuntimePackage: FROZEN_RUNTIME_PACKAGE_PATH not set or file missing, skipping asset embed")
+        }
+    }
+}
+
+tasks.named("preBuild").configure {
+    dependsOn("copyFrozenRuntimePackage")
 }
 
 flutter {

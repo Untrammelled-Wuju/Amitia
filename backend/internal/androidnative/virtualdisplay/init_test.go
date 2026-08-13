@@ -28,12 +28,15 @@ func (m *mockNativeBridge) Health(ctx context.Context) androidnative.NativeBridg
 
 func TestRegister(t *testing.T) {
 	bridge := &mockNativeBridge{}
-	adapter := androidnative.NewNativeProviderAdapter(bridge)
-	svc := Register(adapter, bridge)
+	provider := androidnative.NewProvider(bridge)
+	svc, err := Register(provider, bridge)
+	if err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
 	if svc == nil {
 		t.Fatal("Register returned nil service")
 	}
-	resp := adapter.Execute(context.Background(), capability.AndroidBridgeRequest{
+	resp := provider.Execute(context.Background(), capability.AndroidBridgeRequest{
 		ProtocolVersion: 1,
 		RequestID:       "test-1",
 		Operation:       OperationStatus,
@@ -48,9 +51,12 @@ func TestRegister(t *testing.T) {
 
 func TestRegister_CreateAndGet(t *testing.T) {
 	bridge := &mockNativeBridge{}
-	adapter := androidnative.NewNativeProviderAdapter(bridge)
-	_ = adapter
-	svc := Register(adapter, bridge)
+	provider := androidnative.NewProvider(bridge)
+	_ = provider
+	svc, err := Register(provider, bridge)
+	if err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
 	createResult, err := svc.Create(context.Background(), CreateRequest{
 		Width:      1080,
 		Height:     1920,
@@ -74,14 +80,17 @@ func TestRegister_CreateAndGet(t *testing.T) {
 
 func TestRegister_Create_DuplicateRejected(t *testing.T) {
 	bridge := &mockNativeBridge{}
-	adapter := androidnative.NewNativeProviderAdapter(bridge)
-	Register(adapter, bridge)
-	adapter.Execute(context.Background(), capability.AndroidBridgeRequest{
+	provider := androidnative.NewProvider(bridge)
+	_, err := Register(provider, bridge)
+	if err != nil {
+		t.Fatalf("Register returned error: %v", err)
+	}
+	provider.Execute(context.Background(), capability.AndroidBridgeRequest{
 		ProtocolVersion: 1,
 		RequestID:       "test-1",
 		Operation:       OperationCreate,
 	})
-	resp := adapter.Execute(context.Background(), capability.AndroidBridgeRequest{
+	resp := provider.Execute(context.Background(), capability.AndroidBridgeRequest{
 		ProtocolVersion: 1,
 		RequestID:       "test-2",
 		Operation:       OperationCreate,

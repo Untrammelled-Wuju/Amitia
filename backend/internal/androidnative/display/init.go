@@ -7,7 +7,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 )
 
-func Register(adapter *androidnative.NativeProviderAdapter, bridge androidnative.NativeBridge, cap DisplayCapability) *DisplayService {
+func Register(provider *androidnative.Provider, bridge androidnative.NativeBridge, cap DisplayCapability) (*DisplayService, error) {
 	classifier := NewDisplayClassifier()
 	store := NewDisplayStore(classifier)
 	listener := NewListener()
@@ -16,11 +16,14 @@ func Register(adapter *androidnative.NativeProviderAdapter, bridge androidnative
 	resolver := NewDefaultResolver(store, policy)
 	svc := NewDisplayService(store, classifier, listener, resolver, topology, policy, cap)
 	handler := NewHandler(svc)
-	adapter.RegisterHandler(OperationStatus, handler)
-	adapter.RegisterHandler(OperationList, handler)
-	adapter.RegisterHandler(OperationGet, handler)
-	adapter.RegisterHandler(OperationResolve, handler)
-	return svc
+
+	registerOps := []string{OperationStatus, OperationList, OperationGet, OperationResolve}
+	for _, op := range registerOps {
+		if err := provider.RegisterHandler(op, handler); err != nil {
+			return nil, err
+		}
+	}
+	return svc, nil
 }
 
 type Handler struct {

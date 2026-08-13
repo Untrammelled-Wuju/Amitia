@@ -6,11 +6,11 @@ import (
 )
 
 func MapToToolError(code string, message string) *capability.ToolError {
-	notifErr := &androidsystem.NotificationError{
+	notifErr := &androidsystem.SystemError{
 		Code:    code,
 		Message: message,
 	}
-	return androidsystem.MapNotificationError(notifErr)
+	return androidsystem.MapSystemError(notifErr)
 }
 
 func ListenerPermissionError() *capability.ToolError {

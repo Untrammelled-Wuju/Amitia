@@ -10,18 +10,37 @@ import (
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/mindruntime"
+	"github.com/u-ai/backend/internal/migration"
 	"github.com/u-ai/backend/internal/modelerror"
 	"github.com/u-ai/backend/internal/profile"
+	"github.com/u-ai/backend/internal/system/dataportability"
 	"github.com/u-ai/backend/internal/temporal"
 	"github.com/u-ai/backend/pkg/app"
 	"github.com/u-ai/backend/pkg/sse"
+	"fmt"
+	"os"
+	"runtime"
 	"time"
 )
 
 func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.Service, unifiedEntry *interaction.UnifiedEntry, dataLifecycle *mindruntime.DataLifecycleCoordinator, reconciliation *mindruntime.ReconciliationEngine, memSvc memory.Service, profSvc profile.Service, epiSvc episodic.Service, graphSvc graph.Service, temporalSvc *temporal.Service) {
 	svc := NewService(ctx)
-	handler := NewHandler(svc, ctx.DB, chatSvc, dataLifecycle, unifiedEntry, reconciliation)
+	handler := NewHandler(svc, ctx.DB, chatSvc, dataLifecycle, unifiedEntry, reconciliation, memSvc)
 	svc.AttachTemporalService(temporalSvc)
+
+	appVersion := os.Getenv("AMITIA_VERSION")
+	if appVersion == "" {
+		appVersion = "dev"
+	}
+	schemaFinger := fmt.Sprintf("mig-%d-%s", len(migration.DefaultMigrations()), runtime.GOOS)
+	coord := dataportability.NewCoordinator("data", appVersion, runtime.GOOS, schemaFinger,
+		dataportability.NewStagingManager("data"))
+	coord.RegisterContributors(
+		dataportability.NewCharacterContributor(ctx.DB),
+		memory.NewMemoryBackupContributor(memSvc),
+	)
+	svc.SetDataPortabilityCoordinator(coord)
+
 	modelerror.SetReporter(handler.publishModelError)
 
 	chat.RegisterMessageCommitHook(func(event *chat.MessageCommitEvent) {

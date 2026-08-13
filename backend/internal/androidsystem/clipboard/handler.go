@@ -24,7 +24,7 @@ func NewClipboardHandler(client ClipboardClient) *ClipboardHandler {
 	}
 }
 
-func (h *ClipboardHandler) Execute(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *ClipboardHandler) Execute(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	switch request.Operation {
 	case OperationStatus:
 		return h.handleStatus(ctx, request)
@@ -35,10 +35,10 @@ func (h *ClipboardHandler) Execute(ctx context.Context, request androidsystem.No
 	case OperationClear:
 		return h.handleClear(ctx, request)
 	default:
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    androidsystem.NOTIFICATION_UNSUPPORTED,
 				Message: "unknown clipboard operation: " + request.Operation,
 			},
@@ -59,31 +59,31 @@ func (h *ClipboardHandler) CapabilityState(ctx context.Context) ClipboardCapabil
 	return state
 }
 
-func (h *ClipboardHandler) handleStatus(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *ClipboardHandler) handleStatus(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	state, err := h.client.Status(ctx)
 	if err != nil {
 		var ce *clipboardError
 		if errors.As(err, &ce) {
-			return androidsystem.NotificationResponse{
+			return androidsystem.SystemResponse{
 				RequestID: request.RequestID,
 				Status:    "error",
-				Error: &androidsystem.NotificationError{
+				Error: &androidsystem.SystemError{
 					Code:    ce.code,
 					Message: ce.message,
 				},
 			}
 		}
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    androidsystem.NOTIFICATION_UNSUPPORTED,
 				Message: err.Error(),
 			},
 		}
 	}
 
-	return androidsystem.NotificationResponse{
+	return androidsystem.SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
@@ -102,31 +102,31 @@ func (h *ClipboardHandler) handleStatus(ctx context.Context, request androidsyst
 	}
 }
 
-func (h *ClipboardHandler) handleRead(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *ClipboardHandler) handleRead(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	result, err := h.client.ReadText(ctx)
 	if err != nil {
 		var ce *clipboardError
 		if errors.As(err, &ce) {
-			return androidsystem.NotificationResponse{
+			return androidsystem.SystemResponse{
 				RequestID: request.RequestID,
 				Status:    "error",
-				Error: &androidsystem.NotificationError{
+				Error: &androidsystem.SystemError{
 					Code:    ce.code,
 					Message: ce.message,
 				},
 			}
 		}
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    CLIPBOARD_READ_FAILED,
 				Message: err.Error(),
 			},
 		}
 	}
 
-	return androidsystem.NotificationResponse{
+	return androidsystem.SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
@@ -141,26 +141,26 @@ func (h *ClipboardHandler) handleRead(ctx context.Context, request androidsystem
 	}
 }
 
-func (h *ClipboardHandler) handleWrite(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *ClipboardHandler) handleWrite(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	text, _ := request.Payload["text"].(string)
 	sensitive, _ := request.Payload["sensitive"].(bool)
 
 	if err := h.policy.validateWriteText(text); err != nil {
 		var ce *clipboardError
 		if errors.As(err, &ce) {
-			return androidsystem.NotificationResponse{
+			return androidsystem.SystemResponse{
 				RequestID: request.RequestID,
 				Status:    "error",
-				Error: &androidsystem.NotificationError{
+				Error: &androidsystem.SystemError{
 					Code:    ce.code,
 					Message: ce.message,
 				},
 			}
 		}
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    CLIPBOARD_INPUT_TOO_LARGE,
 				Message: err.Error(),
 			},
@@ -174,26 +174,26 @@ func (h *ClipboardHandler) handleWrite(ctx context.Context, request androidsyste
 	if err != nil {
 		var ce *clipboardError
 		if errors.As(err, &ce) {
-			return androidsystem.NotificationResponse{
+			return androidsystem.SystemResponse{
 				RequestID: request.RequestID,
 				Status:    "error",
-				Error: &androidsystem.NotificationError{
+				Error: &androidsystem.SystemError{
 					Code:    ce.code,
 					Message: ce.message,
 				},
 			}
 		}
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    CLIPBOARD_WRITE_FAILED,
 				Message: err.Error(),
 			},
 		}
 	}
 
-	return androidsystem.NotificationResponse{
+	return androidsystem.SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
@@ -205,30 +205,30 @@ func (h *ClipboardHandler) handleWrite(ctx context.Context, request androidsyste
 	}
 }
 
-func (h *ClipboardHandler) handleClear(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *ClipboardHandler) handleClear(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	if err := h.client.Clear(ctx); err != nil {
 		var ce *clipboardError
 		if errors.As(err, &ce) {
-			return androidsystem.NotificationResponse{
+			return androidsystem.SystemResponse{
 				RequestID: request.RequestID,
 				Status:    "error",
-				Error: &androidsystem.NotificationError{
+				Error: &androidsystem.SystemError{
 					Code:    ce.code,
 					Message: ce.message,
 				},
 			}
 		}
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    CLIPBOARD_CLEAR_FAILED,
 				Message: err.Error(),
 			},
 		}
 	}
 
-	return androidsystem.NotificationResponse{
+	return androidsystem.SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{"cleared": true},

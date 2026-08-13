@@ -4,17 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
-	legacymcp "github.com/u-ai/backend/internal/mcp"
 	"github.com/u-ai/backend/internal/extension/kernel/mcp"
-	mcpclient "github.com/u-ai/backend/internal/mcp/client"
-	mcpmanager "github.com/u-ai/backend/internal/mcp/manager"
 )
 
 // MCPConnectionCaller is the abstract interface for MCP tool calls.
-// Both Legacy adapter and Canonical stdio connector implement this interface.
 type MCPConnectionCaller interface {
 	Call(
 		ctx context.Context,
@@ -24,24 +19,35 @@ type MCPConnectionCaller interface {
 	) (json.RawMessage, error)
 }
 
-// LegacyMCPCallerAdapter wraps Legacy mcpmanager.Manager to implement MCPConnectionCaller.
-// migration-only: temporary compatibility adapter
-// remove at step 65 cutover
-type LegacyMCPCallerAdapter struct {
-	mgr *mcpmanager.Manager
+// CanonicalMCPCaller implements MCPConnectionCaller by dispatching to
+// both the stdio and remote registries. It is the single production
+// MCP caller wired into the Extension Kernel MCP adapter.
+type CanonicalMCPCaller struct {
+	stdio  *CanonicalStdioCaller
+	remote *CanonicalRemoteCaller
 }
 
-// NewLegacyMCPCallerAdapter creates a new adapter for Legacy MCP Manager.
-func NewLegacyMCPCallerAdapter(mgr *mcpmanager.Manager) *LegacyMCPCallerAdapter {
-	return &LegacyMCPCallerAdapter{mgr: mgr}
-}
-
-// Call implements MCPConnectionCaller.
-func (a *LegacyMCPCallerAdapter) Call(ctx context.Context, serverID string, method string, params any) (json.RawMessage, error) {
-	if a.mgr == nil {
-		return nil, fmt.Errorf("MCP manager not configured")
+// NewCanonicalMCPCaller creates a caller backed by both registries.
+func NewCanonicalMCPCaller(stdio *mcp.CanonicalStdioRegistry, remote *mcp.CanonicalRemoteRegistry) *CanonicalMCPCaller {
+	return &CanonicalMCPCaller{
+		stdio:  &CanonicalStdioCaller{registry: stdio},
+		remote: &CanonicalRemoteCaller{registry: remote},
 	}
-	return a.mgr.Call(ctx, serverID, method, params, mcpclient.CallOptions{})
+}
+
+// Call implements MCPConnectionCaller. Tries stdio first, falls back to remote.
+func (c *CanonicalMCPCaller) Call(ctx context.Context, serverID string, method string, params any) (json.RawMessage, error) {
+	if c.stdio != nil {
+		if conn, ok := c.stdio.registry.Get(serverID); ok {
+			return conn.Call(ctx, method, params)
+		}
+	}
+	if c.remote != nil {
+		if conn, ok := c.remote.registry.Get(serverID); ok {
+			return conn.Call(ctx, method, params)
+		}
+	}
+	return nil, fmt.Errorf("MCP server not found: %s", serverID)
 }
 
 // CanonicalStdioCaller implements MCPConnectionCaller for Extension Kernel stdio connections.
@@ -83,7 +89,6 @@ func (c *CanonicalRemoteCaller) Call(ctx context.Context, serverID string, metho
 }
 
 // makeKernelMCPCaller creates an MCPCallFunc from the abstract MCPConnectionCaller.
-// The caller parameter abstracts over Legacy and Canonical implementations.
 func makeKernelMCPCaller(caller MCPConnectionCaller) capability.MCPCallFunc {
 	return func(ctx context.Context, serverID string, toolName string, input json.RawMessage) (json.RawMessage, error) {
 		if caller == nil {
@@ -119,96 +124,4 @@ func makeKernelMCPHealth(caller MCPConnectionCaller) capability.MCPHealthFunc {
 		}
 		return capability.HealthReady
 	}
-}
-
-// makeLegacyMCPHealth creates an MCPHealthFunc from Legacy Manager (for backward compatibility).
-func makeLegacyMCPHealth(mgr *mcpmanager.Manager) capability.MCPHealthFunc {
-	return func(ctx context.Context, serverID string) capability.HealthStatus {
-		if mgr == nil {
-			return capability.HealthUnknown
-		}
-		_, ok := mgr.Connection(serverID)
-		if !ok {
-			return capability.HealthUnknown
-		}
-		return capability.HealthReady
-	}
-}
-
-type mcpRemoteTask struct {
-	TaskID        string          `json:"taskId"`
-	Status        string          `json:"status"`
-	StatusMessage string          `json:"statusMessage"`
-	Result        json.RawMessage `json:"result"`
-	ExpiresAt     string          `json:"expiresAt"`
-}
-
-type mcpRemoteCallResult struct {
-	Content []json.RawMessage `json:"content"`
-	IsError bool              `json:"isError"`
-	Task    *mcpRemoteTask    `json:"task,omitempty"`
-}
-
-type mcpPostProcessor struct {
-	repo *legacymcp.Repository
-}
-
-func newMCPPostProcessor(repo *legacymcp.Repository) *mcpPostProcessor {
-	return &mcpPostProcessor{repo: repo}
-}
-
-func (p *mcpPostProcessor) AfterExecute(ctx context.Context, serverID string, invocation capability.ToolInvocationContext, raw json.RawMessage) {
-	if p.repo == nil {
-		return
-	}
-
-	p.handleRemoteTask(ctx, serverID, invocation, raw)
-}
-
-func (p *mcpPostProcessor) handleRemoteTask(ctx context.Context, serverID string, invocation capability.ToolInvocationContext, raw json.RawMessage) {
-	if len(raw) == 0 {
-		return
-	}
-
-	var remoteResult mcpRemoteCallResult
-	if json.Unmarshal(raw, &remoteResult) != nil {
-		return
-	}
-
-	if remoteResult.Task == nil || remoteResult.Task.TaskID == "" || !validMCPRemoteTaskStatus(remoteResult.Task.Status) {
-		return
-	}
-
-	enabled, _, capabilityErr := p.repo.ServerCapabilityEnabled(ctx, serverID, "tasks")
-	if capabilityErr != nil || !enabled {
-		return
-	}
-
-	taskResult := remoteResult.Task.Result
-	if len(taskResult) == 0 {
-		taskResult = json.RawMessage(`{}`)
-	}
-	if len(taskResult) > 2<<20 {
-		taskResult = json.RawMessage(`{"truncated":true}`)
-	}
-
-	expires := time.Now().Add(24 * time.Hour)
-	if parsed, parseErr := time.Parse(time.RFC3339Nano, remoteResult.Task.ExpiresAt); parseErr == nil && parsed.After(time.Now()) && parsed.Before(time.Now().Add(7*24*time.Hour)) {
-		expires = parsed
-	}
-
-	_ = p.repo.UpsertTask(ctx, legacymcp.Task{
-		ServerID:      serverID,
-		RemoteTaskID:  remoteResult.Task.TaskID,
-		CharacterID:   invocation.CharacterID,
-		RunID:         invocation.InvocationID,
-		Status:        remoteResult.Task.Status,
-		StatusMessage: remoteResult.Task.StatusMessage,
-		ResultJSON:    string(taskResult),
-		ExpiresAt:     expires.UTC().Format(time.RFC3339Nano),
-	})
-}
-
-func validMCPRemoteTaskStatus(value string) bool {
-	return value == "working" || value == "input_required" || value == "completed" || value == "failed" || value == "cancelled"
 }

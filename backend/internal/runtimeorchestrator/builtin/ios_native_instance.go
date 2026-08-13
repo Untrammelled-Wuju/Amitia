@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/nativebridge"
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
@@ -16,20 +17,22 @@ import (
 const ComponentIDIOSNative runtimeorchestrator.ComponentID = "provider.ios-native"
 
 type IOSNativeProviderCapability struct {
-	ProviderID   string `json:"providerId"`
-	Slot         string `json:"slot"`
-	RuntimeID    string `json:"runtimeId"`
-	HostPlatform string `json:"hostPlatform"`
-	Healthy      bool   `json:"healthy"`
-	BridgeReady  bool   `json:"bridgeReady"`
+	ProviderID   string                    `json:"providerId"`
+	Slot         string                    `json:"slot"`
+	RuntimeID    string                    `json:"runtimeId"`
+	HostPlatform string                    `json:"hostPlatform"`
+	Healthy      bool                      `json:"healthy"`
+	BridgeReady  bool                      `json:"bridgeReady"`
+	Generation   nativebridge.HostGeneration `json:"generation"`
 }
 
 type iosNativeProviderInstance struct {
-	mu      sync.RWMutex
-	bridge  nativebridge.Bridge
-	host    runtimehost.RuntimeHost
-	orch    *runtimeorchestrator.RuntimeOrchestrator
-	healthy bool
+	mu         sync.RWMutex
+	bridge     nativebridge.Bridge
+	host       runtimehost.RuntimeHost
+	orch       *runtimeorchestrator.RuntimeOrchestrator
+	healthy    bool
+	generation nativebridge.HostGeneration
 }
 
 func newIOSNativeProviderInstance(
@@ -37,8 +40,19 @@ func newIOSNativeProviderInstance(
 	host runtimehost.RuntimeHost,
 ) *iosNativeProviderInstance {
 	return &iosNativeProviderInstance{
-		bridge: bridge,
-		host:   host,
+		bridge:     bridge,
+		host:       host,
+		generation: nativebridge.HostGenerationZero,
+	}
+}
+
+func (p *iosNativeProviderInstance) SetBridge(bridge nativebridge.Bridge) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.bridge = bridge
+	p.generation++
+	if p.orch != nil {
+		p.reportComponentStateLocked()
 	}
 }
 
@@ -134,6 +148,7 @@ func (p *iosNativeProviderInstance) Capability() any {
 		HostPlatform: hostPlatform,
 		Healthy:      p.healthy,
 		BridgeReady:  p.bridge != nil,
+		Generation:   p.generation,
 	}
 }
 
@@ -161,3 +176,81 @@ func (p *iosNativeProviderInstance) reportComponentStateLocked() {
 }
 
 var _ runtimeorchestrator.ProviderInstance = (*iosNativeProviderInstance)(nil)
+
+var _ capability.IOSProvider = (*iosNativeProviderInstance)(nil)
+
+func (p *iosNativeProviderInstance) Execute(ctx context.Context, request capability.IOSBridgeRequest) capability.IOSBridgeResponse {
+	p.mu.RLock()
+	bridge := p.bridge
+	p.mu.RUnlock()
+
+	if bridge == nil {
+		return capability.IOSBridgeResponse{
+			ProtocolVersion: request.ProtocolVersion,
+			RequestID:       request.RequestID,
+			Status:          "error",
+			Error: &capability.IOSError{
+				Code:    nativebridge.ErrProviderUnavailable,
+				Message: "ios native bridge is not available",
+			},
+		}
+	}
+
+	req := nativebridge.Request{
+		ProtocolVersion: request.ProtocolVersion,
+		RequestID:       request.RequestID,
+		Platform:        "ios",
+		Operation:       request.Operation,
+		Payload:         request.Payload,
+	}
+
+	resp, err := bridge.Execute(ctx, req)
+	if err != nil {
+		return capability.IOSBridgeResponse{
+			ProtocolVersion: request.ProtocolVersion,
+			RequestID:       request.RequestID,
+			Status:          "error",
+			Error: &capability.IOSError{
+				Code:    nativebridge.ErrBridgeTimeout,
+				Message: err.Error(),
+			},
+		}
+	}
+
+	return capability.IOSBridgeResponse{
+		ProtocolVersion: resp.ProtocolVersion,
+		RequestID:       resp.RequestID,
+		Status:          resp.Status,
+		Result:          resp.Result,
+		Error: func() *capability.IOSError {
+			if resp.Error == nil {
+				return nil
+			}
+			return &capability.IOSError{
+				Code:       resp.Error.Code,
+				Message:    resp.Error.Message,
+				DomainCode: resp.Error.DomainCode,
+			}
+		}(),
+	}
+}
+
+func (p *iosNativeProviderInstance) Health(ctx context.Context) capability.HealthStatus {
+	p.mu.RLock()
+	bridge := p.bridge
+	p.mu.RUnlock()
+
+	if bridge == nil {
+		return capability.HealthUnhealthy
+	}
+
+	h := bridge.Health(ctx)
+	switch h {
+	case nativebridge.HealthReady:
+		return capability.HealthReady
+	case nativebridge.HealthUnhealthy:
+		return capability.HealthUnhealthy
+	default:
+		return capability.HealthUnknown
+	}
+}

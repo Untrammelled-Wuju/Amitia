@@ -297,6 +297,7 @@ func setupTestCoordinator(reg *fakePluginRegistry, rtMgr *fakeRuntimeManager, rt
 		contribRec,
 		cfgVal,
 		kernel,
+		nil,
 	)
 	return c, defRec, contribRec, cfgVal, kernel
 }

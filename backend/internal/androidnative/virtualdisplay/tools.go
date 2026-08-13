@@ -7,10 +7,12 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 )
 
+const RuntimeID = "android_native_virtual_display"
+
 func BuildVirtualDisplayTools() []capability.ToolDefinition {
 	runtime := capability.RuntimeBinding{
 		RuntimeType: capability.RuntimeTypeAndroid_Native,
-		RuntimeID:   "android_native_virtual_display",
+		RuntimeID:   RuntimeID,
 	}
 
 	return []capability.ToolDefinition{

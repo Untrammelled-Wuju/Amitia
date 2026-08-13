@@ -577,7 +577,7 @@ kernelContainer, err := kernelBuilder.Build(context.Background())
 	oauthManager := mcpauth.NewManager(nil, secretStore, mcpRepository)
 	connectionManager := mcpmanager.New(mcpRepository, mcpmanager.DefaultFactory{Repository: mcpRepository, Secrets: secretStore, OAuth: oauthManager, Commands: commandResolver}, mcpmanager.Config{Connection: mcpclient.Config{ClientInfo: protocol.Implementation{Name: "amitia", Title: "Amitia", Version: "1.0.0"}, Capabilities: protocol.ClientCapabilities{Roots: map[string]any{"listChanged": true}, Sampling: map[string]any{}, Elicitation: map[string]any{}, Tasks: map[string]any{}}}})
 	discoveryService := mcpdiscovery.New(mcpRepository, connectionManager)
-	skillRuntime := mcpskill.New(mcpRepository, extensionRuntime, mcpskill.WithToolFacadeSyncer(newMCPToolFacadeSyncerAdapter(toolFacade)), mcpskill.WithDuplicateRecorder(mcpDuplicateStore))
+	skillRuntime := mcpskill.New(mcpRepository, extensionRuntime, mcpskill.WithDuplicateRecorder(mcpDuplicateStore))
 	featureService := mcpfeatures.New(mcpRepository, connectionManager)
 	interactionBroker := mcphost.NewBroker(chatSvc)
 	hostService := mcphost.New(mcpRepository, connectionManager, mcphost.NewConfiguredRoots(mcpRepository), interactionBroker, interactionBroker)
@@ -607,23 +607,12 @@ kernelContainer, err := kernelBuilder.Build(context.Background())
 			log.Warn("MCP skill registration failed server=", serverID, " error=", registerErr)
 		}
 	})
-	if err := skillRuntime.RegisterAll(context.Background()); err != nil {
-		log.Warn("MCP skill restore warning: ", err)
-	}
-	if err := connectionManager.Restore(context.Background()); err != nil {
-		log.Warn("MCP connection restore warning: ", err)
-	}
 	canonicalStdioFactory := extensionmcp.NewCanonicalStdioFactory(commandResolver)
 	canonicalStdioRegistry := extensionmcp.NewCanonicalStdioRegistry(canonicalStdioFactory)
-	canonicalStdioCaller := NewCanonicalStdioCaller(canonicalStdioRegistry)
 	canonicalRemoteFactory := extensionmcp.NewCanonicalRemoteFactory()
 	canonicalRemoteRegistry := extensionmcp.NewCanonicalRemoteRegistry(canonicalRemoteFactory)
-	canonicalRemoteCaller := NewCanonicalRemoteCaller(canonicalRemoteRegistry)
-	legacyMCPCaller := NewLegacyMCPCallerAdapter(connectionManager)
-	legacyMCPHealth := makeLegacyMCPHealth(connectionManager)
-	kernelContainer.WireMCPAdapter(makeKernelMCPCaller(legacyMCPCaller), legacyMCPHealth, newMCPPostProcessor(mcpRepository))
-	_ = canonicalStdioCaller
-	_ = canonicalRemoteCaller
+	canonicalMCPCaller := NewCanonicalMCPCaller(canonicalStdioRegistry, canonicalRemoteRegistry)
+	kernelContainer.WireMCPAdapter(makeKernelMCPCaller(canonicalMCPCaller), makeKernelMCPHealth(canonicalMCPCaller), nil)
 	desktopPetRepo := desktoppet.NewRepository(ctx.DB, ctx)
 	desktopPetWorker := worker.NewWorker(ctx.DB, desktopPetRepo, providerRegistry)
 	processingRepo := processing.NewRepository(ctx.DB, ctx)

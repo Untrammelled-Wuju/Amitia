@@ -115,27 +115,21 @@ func TestProvider_Health_Ready(t *testing.T) {
 	}
 }
 
-func TestNativeProviderAdapter_Execute_UnknownOperation(t *testing.T) {
+func TestProvider_RegisterHandler_Duplicate(t *testing.T) {
 	bridge := &mockBridge{}
-	a := NewNativeProviderAdapter(bridge)
+	p := NewProvider(bridge)
 
-	resp := a.Execute(context.Background(), capability.AndroidBridgeRequest{
-		ProtocolVersion: 1,
-		RequestID:       "test-adapter-1",
-		Operation:       "accessibility.unknown",
-	})
-
-	if resp.Status != "error" {
-		t.Fatalf("expected error status, got %s", resp.Status)
+	if err := p.RegisterHandler("accessibility.status", &testHandler{}); err != nil {
+		t.Fatalf("first registration should succeed, got: %v", err)
 	}
-	if resp.Error == nil || resp.Error.Code != "OPERATION_NOT_SUPPORTED" {
-		t.Fatalf("expected OPERATION_NOT_SUPPORTED, got %+v", resp.Error)
+	if err := p.RegisterHandler("accessibility.status", &testHandler{}); err == nil {
+		t.Fatal("expected error for duplicate registration, got nil")
 	}
 }
 
-func TestNativeProviderAdapter_Health_NilBridge(t *testing.T) {
-	a := NewNativeProviderAdapter(nil)
-	health := a.Health(context.Background())
+func TestProvider_Health_NilBridge_Uint(t *testing.T) {
+	p := NewProvider(nil)
+	health := p.Health(context.Background())
 	if health != capability.HealthUnhealthy {
 		t.Fatalf("expected unhealthy, got %s", health)
 	}
@@ -144,6 +138,16 @@ func TestNativeProviderAdapter_Health_NilBridge(t *testing.T) {
 type testHandler struct{}
 
 func (h *testHandler) Execute(ctx context.Context, req capability.AndroidBridgeRequest) capability.AndroidBridgeResponse {
+	return capability.AndroidBridgeResponse{
+		ProtocolVersion: req.ProtocolVersion,
+		RequestID:       req.RequestID,
+		Status:          "success",
+	}
+}
+
+type duplicateCheckHandler struct{}
+
+func (h *duplicateCheckHandler) Execute(ctx context.Context, req capability.AndroidBridgeRequest) capability.AndroidBridgeResponse {
 	return capability.AndroidBridgeResponse{
 		ProtocolVersion: req.ProtocolVersion,
 		RequestID:       req.RequestID,

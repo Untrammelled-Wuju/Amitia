@@ -2,6 +2,8 @@ package androidnative
 
 import (
 	"context"
+	"fmt"
+	"sync"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 )
@@ -13,6 +15,7 @@ type Handler interface {
 type Provider struct {
 	bridge   NativeBridge
 	handlers map[string]Handler
+	mu       sync.RWMutex
 }
 
 func NewProvider(bridge NativeBridge) *Provider {
@@ -22,8 +25,14 @@ func NewProvider(bridge NativeBridge) *Provider {
 	}
 }
 
-func (p *Provider) RegisterHandler(operation string, handler Handler) {
+func (p *Provider) RegisterHandler(operation string, handler Handler) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if _, exists := p.handlers[operation]; exists {
+		return fmt.Errorf("androidnative: duplicate handler registration for operation %q", operation)
+	}
 	p.handlers[operation] = handler
+	return nil
 }
 
 func (p *Provider) Execute(ctx context.Context, request capability.AndroidBridgeRequest) capability.AndroidBridgeResponse {
@@ -39,7 +48,10 @@ func (p *Provider) Execute(ctx context.Context, request capability.AndroidBridge
 		}
 	}
 
+	p.mu.RLock()
 	handler, ok := p.handlers[request.Operation]
+	p.mu.RUnlock()
+
 	if !ok {
 		return capability.AndroidBridgeResponse{
 			ProtocolVersion: request.ProtocolVersion,
@@ -67,7 +79,14 @@ func (p *Provider) Health(ctx context.Context) capability.HealthStatus {
 	case <-ctx.Done():
 		return capability.HealthUnknown
 	case h := <-done:
-		return mapNativeBridgeHealth(h)
+		switch h {
+		case NativeBridgeHealthReady:
+			return capability.HealthReady
+		case NativeBridgeHealthUnhealthy:
+			return capability.HealthUnhealthy
+		default:
+			return capability.HealthUnknown
+		}
 	}
 }
 

@@ -24,13 +24,13 @@ type HandlerCapabilityState struct {
 }
 
 type NotificationHandler struct {
-	provider androidsystem.NotificationProvider
+	provider androidsystem.SystemProvider
 	store    *ProjectionStore
 	mu       sync.RWMutex
 	state    HandlerCapabilityState
 }
 
-func NewNotificationHandler(provider androidsystem.NotificationProvider) *NotificationHandler {
+func NewNotificationHandler(provider androidsystem.SystemProvider) *NotificationHandler {
 	if provider == nil {
 		provider = androidsystem.NewBlockedNotificationProvider(androidsystem.BLOCKED_ANDROID_NATIVE_HOST_SOURCE)
 	}
@@ -44,7 +44,7 @@ func NewNotificationHandler(provider androidsystem.NotificationProvider) *Notifi
 	}
 }
 
-func (h *NotificationHandler) Execute(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *NotificationHandler) Execute(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	switch request.Operation {
 	case OperationStatus:
 		return h.handleStatus(ctx, request)
@@ -63,10 +63,10 @@ func (h *NotificationHandler) Execute(ctx context.Context, request androidsystem
 	case OperationInvokeAction:
 		return h.handleInvokeAction(ctx, request)
 	default:
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    androidsystem.NOTIFICATION_UNSUPPORTED,
 				Message: "unknown notification operation: " + request.Operation,
 			},
@@ -75,7 +75,7 @@ func (h *NotificationHandler) Execute(ctx context.Context, request androidsystem
 }
 
 func (h *NotificationHandler) RefreshState(ctx context.Context) {
-	resp := h.provider.Execute(ctx, androidsystem.NotificationRequest{
+	resp := h.provider.Execute(ctx, androidsystem.SystemRequest{
 		RequestID: "internal_state_refresh",
 		Operation: OperationStatus,
 		Payload:   map[string]any{},
@@ -112,11 +112,11 @@ func (h *NotificationHandler) Store() *ProjectionStore {
 	return h.store
 }
 
-func (h *NotificationHandler) Provider() androidsystem.NotificationProvider {
+func (h *NotificationHandler) Provider() androidsystem.SystemProvider {
 	return h.provider
 }
 
-func (h *NotificationHandler) mapAndroidError(err *androidsystem.NotificationError) *capability.ToolError {
+func (h *NotificationHandler) mapAndroidError(err *androidsystem.SystemError) *capability.ToolError {
 	if err == nil {
 		return &capability.ToolError{
 			Code:        capability.ErrorCodeExecutionFailed,
@@ -124,7 +124,7 @@ func (h *NotificationHandler) mapAndroidError(err *androidsystem.NotificationErr
 			UserVisible: true,
 		}
 	}
-	return androidsystem.MapNotificationError(err)
+	return androidsystem.MapSystemError(err)
 }
 
 func boolFrom(m map[string]any, key string) bool {

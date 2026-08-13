@@ -86,7 +86,7 @@ func TestHandlerStatus(t *testing.T) {
 	client := newDefaultFakeClient()
 	handler := NewExternalAutomationHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationStatus,
 	})
@@ -107,7 +107,7 @@ func TestHandlerStatusError(t *testing.T) {
 	client.statusErr = newAutomationError(AUTOMATION_NATIVE_HOST_UNAVAILABLE, "host not ready")
 	handler := NewExternalAutomationHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationStatus,
 	})
@@ -127,7 +127,7 @@ func TestHandlerResolveApp(t *testing.T) {
 	}
 	handler := NewExternalAutomationHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationResolveApp,
 		Payload: map[string]any{
@@ -147,7 +147,7 @@ func TestHandlerResolveAppEmptyQuery(t *testing.T) {
 	client := newDefaultFakeClient()
 	handler := NewExternalAutomationHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationResolveApp,
 		Payload:   map[string]any{},
@@ -170,7 +170,7 @@ func TestHandlerOpenApp(t *testing.T) {
 	}
 	handler := NewExternalAutomationHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationOpenApp,
 		Payload: map[string]any{
@@ -190,7 +190,7 @@ func TestHandlerOpenAppEmptyPackage(t *testing.T) {
 	client := newDefaultFakeClient()
 	handler := NewExternalAutomationHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationOpenApp,
 		Payload:   map[string]any{},
@@ -213,7 +213,7 @@ func TestHandlerResolveURI(t *testing.T) {
 	}
 	handler := NewExternalAutomationHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationResolveURI,
 		Payload: map[string]any{
@@ -233,7 +233,7 @@ func TestHandlerResolveURIEmptyURI(t *testing.T) {
 	client := newDefaultFakeClient()
 	handler := NewExternalAutomationHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationResolveURI,
 		Payload:   map[string]any{},
@@ -254,7 +254,7 @@ func TestHandlerOpenURI(t *testing.T) {
 	}
 	handler := NewExternalAutomationHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationOpenURI,
 		Payload: map[string]any{
@@ -271,7 +271,7 @@ func TestHandlerOpenURIBlockedScheme(t *testing.T) {
 	client := newDefaultFakeClient()
 	handler := NewExternalAutomationHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationOpenURI,
 		Payload: map[string]any{
@@ -294,7 +294,7 @@ func TestHandlerOpenSettings(t *testing.T) {
 	}
 	handler := NewExternalAutomationHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationOpenSettings,
 		Payload: map[string]any{
@@ -311,7 +311,7 @@ func TestHandlerOpenSettingsUnsupported(t *testing.T) {
 	client := newDefaultFakeClient()
 	handler := NewExternalAutomationHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationOpenSettings,
 		Payload: map[string]any{
@@ -334,7 +334,7 @@ func TestHandlerInvokeIntent(t *testing.T) {
 	}
 	handler := NewExternalAutomationHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationInvokeIntent,
 		Payload: map[string]any{
@@ -351,7 +351,7 @@ func TestHandlerInvokeIntentBlockedAction(t *testing.T) {
 	client := newDefaultFakeClient()
 	handler := NewExternalAutomationHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationInvokeIntent,
 		Payload: map[string]any{
@@ -371,7 +371,7 @@ func TestHandlerInvokeIntentSendRejected(t *testing.T) {
 	client := newDefaultFakeClient()
 	handler := NewExternalAutomationHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationInvokeIntent,
 		Payload: map[string]any{
@@ -396,7 +396,7 @@ func TestHandlerForeground(t *testing.T) {
 	}
 	handler := NewExternalAutomationHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationForeground,
 	})
@@ -417,7 +417,7 @@ func TestHandlerWaitForeground(t *testing.T) {
 	}
 	handler := NewExternalAutomationHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationWaitForeground,
 		Payload: map[string]any{
@@ -435,7 +435,7 @@ func TestHandlerWaitForegroundEmptyPackage(t *testing.T) {
 	client := newDefaultFakeClient()
 	handler := NewExternalAutomationHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationWaitForeground,
 		Payload:   map[string]any{},
@@ -453,7 +453,7 @@ func TestHandlerUnknownOperation(t *testing.T) {
 	client := newDefaultFakeClient()
 	handler := NewExternalAutomationHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: "unknown.op",
 	})
@@ -471,7 +471,7 @@ func TestHandlerGenericError(t *testing.T) {
 	client.statusErr = errors.New("generic error")
 	handler := NewExternalAutomationHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationStatus,
 	})
@@ -488,7 +488,7 @@ func TestBlockedClient(t *testing.T) {
 	client := NewBlockedExternalAutomationClient()
 	handler := NewExternalAutomationHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationStatus,
 	})
@@ -501,7 +501,7 @@ func TestBlockedClient(t *testing.T) {
 func TestHandlerWithNilClient(t *testing.T) {
 	handler := NewExternalAutomationHandler(nil)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationStatus,
 	})
@@ -519,7 +519,7 @@ func TestHandlerOpenAppWithExtras(t *testing.T) {
 	}
 	handler := NewExternalAutomationHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationOpenApp,
 		Payload: map[string]any{
@@ -544,7 +544,7 @@ func TestHandlerInvokeIntentWithCategories(t *testing.T) {
 	}
 	handler := NewExternalAutomationHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationInvokeIntent,
 		Payload: map[string]any{

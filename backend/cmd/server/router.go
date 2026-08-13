@@ -119,7 +119,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 	})
 
 	systemSvc := system.NewService(ctx)
-	systemHandler := system.NewHandler(systemSvc, ctx.DB, services.Chat, services.DataLifecycle, services.UnifiedEntry, services.Reconciliation)
+	systemHandler := system.NewHandler(systemSvc, ctx.DB, services.Chat, services.DataLifecycle, services.UnifiedEntry, services.Reconciliation, services.Memory)
 
 	public := r.Group("/api/public")
 	{

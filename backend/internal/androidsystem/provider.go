@@ -7,31 +7,31 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 )
 
-type NotificationRequest struct {
+type SystemRequest struct {
 	RequestID string         `json:"requestId"`
 	Operation string         `json:"operation"`
 	Payload   map[string]any `json:"payload,omitempty"`
 }
 
-type NotificationResponse struct {
-	RequestID string              `json:"requestId"`
-	Status    string              `json:"status"`
-	Result    map[string]any      `json:"result,omitempty"`
-	Error     *NotificationError  `json:"error,omitempty"`
+type SystemResponse struct {
+	RequestID string         `json:"requestId"`
+	Status    string         `json:"status"`
+	Result    map[string]any `json:"result,omitempty"`
+	Error     *SystemError   `json:"error,omitempty"`
 }
 
-type NotificationError struct {
+type SystemError struct {
 	Code       string `json:"code"`
 	Message    string `json:"message"`
 	DomainCode string `json:"domainCode,omitempty"`
 }
 
-type NotificationProvider interface {
-	Execute(ctx context.Context, request NotificationRequest) NotificationResponse
+type SystemProvider interface {
+	Execute(ctx context.Context, request SystemRequest) SystemResponse
 	Health(ctx context.Context) NotificationHealthStatus
 }
 
-type NotificationCancellableProvider interface {
+type SystemCancellableProvider interface {
 	CancelOp(ctx context.Context, requestID string, reason string) error
 }
 
@@ -63,22 +63,22 @@ type blockedNotificationProvider struct {
 	reason string
 }
 
-func NewBlockedNotificationProvider(reason string) NotificationProvider {
+func NewBlockedNotificationProvider(reason string) SystemProvider {
 	if reason == "" {
 		reason = BLOCKED_ANDROID_NATIVE_HOST_SOURCE
 	}
 	return &blockedNotificationProvider{reason: reason}
 }
 
-func (b *blockedNotificationProvider) Execute(ctx context.Context, request NotificationRequest) NotificationResponse {
+func (b *blockedNotificationProvider) Execute(ctx context.Context, request SystemRequest) SystemResponse {
 	b.mu.RLock()
 	reason := b.reason
 	b.mu.RUnlock()
 
-	return NotificationResponse{
+	return SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "error",
-		Error: &NotificationError{
+		Error: &SystemError{
 			Code:    reason,
 			Message: "android native host source not available; notification provider blocked",
 		},
@@ -89,7 +89,7 @@ func (b *blockedNotificationProvider) Health(ctx context.Context) NotificationHe
 	return NotificationHealthUnhealthy
 }
 
-type NotificationRuntimeAdapter interface {
+type SystemRuntimeAdapter interface {
 	Supports(binding capability.RuntimeBinding) bool
 	Execute(
 		ctx context.Context,
@@ -111,11 +111,11 @@ func MapNotificationHealth(status NotificationHealthStatus) capability.HealthSta
 	}
 }
 
-func MapNotificationError(err *NotificationError) *capability.ToolError {
+func MapSystemError(err *SystemError) *capability.ToolError {
 	if err == nil {
 		return &capability.ToolError{
 			Code:        capability.ErrorCodeExecutionFailed,
-			Message:     "notification operation failed",
+			Message:     "system operation failed",
 			UserVisible: true,
 		}
 	}

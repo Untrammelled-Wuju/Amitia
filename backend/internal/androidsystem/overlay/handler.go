@@ -39,7 +39,7 @@ func NewOverlayHandler(client OverlayClient) *OverlayHandler {
 	}
 }
 
-func (h *OverlayHandler) Execute(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *OverlayHandler) Execute(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	switch request.Operation {
 	case OperationStatus:
 		return h.handleStatus(ctx, request)
@@ -60,10 +60,10 @@ func (h *OverlayHandler) Execute(ctx context.Context, request androidsystem.Noti
 	case OperationCloseAll:
 		return h.handleCloseAll(ctx, request)
 	default:
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    OVERLAY_UNSUPPORTED,
 				Message: "unknown overlay operation: " + request.Operation,
 			},
@@ -71,31 +71,31 @@ func (h *OverlayHandler) Execute(ctx context.Context, request androidsystem.Noti
 	}
 }
 
-func (h *OverlayHandler) handleStatus(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *OverlayHandler) handleStatus(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	state, err := h.client.Status(ctx)
 	if err != nil {
 		var oe *overlayError
 		if errors.As(err, &oe) {
-			return androidsystem.NotificationResponse{
+			return androidsystem.SystemResponse{
 				RequestID: request.RequestID,
 				Status:    "error",
-				Error: &androidsystem.NotificationError{
+				Error: &androidsystem.SystemError{
 					Code:    oe.code,
 					Message: oe.message,
 				},
 			}
 		}
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    OVERLAY_NATIVE_HOST_UNAVAILABLE,
 				Message: err.Error(),
 			},
 		}
 	}
 
-	return androidsystem.NotificationResponse{
+	return androidsystem.SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
@@ -113,31 +113,31 @@ func (h *OverlayHandler) handleStatus(ctx context.Context, request androidsystem
 	}
 }
 
-func (h *OverlayHandler) handlePermissionRequest(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *OverlayHandler) handlePermissionRequest(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	result, err := h.client.RequestPermission(ctx)
 	if err != nil {
 		var oe *overlayError
 		if errors.As(err, &oe) {
-			return androidsystem.NotificationResponse{
+			return androidsystem.SystemResponse{
 				RequestID: request.RequestID,
 				Status:    "error",
-				Error: &androidsystem.NotificationError{
+				Error: &androidsystem.SystemError{
 					Code:    oe.code,
 					Message: oe.message,
 				},
 			}
 		}
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    OVERLAY_PERMISSION_DENIED,
 				Message: err.Error(),
 			},
 		}
 	}
 
-	return androidsystem.NotificationResponse{
+	return androidsystem.SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
@@ -148,15 +148,15 @@ func (h *OverlayHandler) handlePermissionRequest(ctx context.Context, request an
 	}
 }
 
-func (h *OverlayHandler) handleCreate(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *OverlayHandler) handleCreate(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	h.mu.RLock()
 	activeState, err := h.client.Status(ctx)
 	h.mu.RUnlock()
 	if err != nil {
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    OVERLAY_NATIVE_HOST_UNAVAILABLE,
 				Message: "failed to query overlay status: " + err.Error(),
 			},
@@ -164,10 +164,10 @@ func (h *OverlayHandler) handleCreate(ctx context.Context, request androidsystem
 	}
 
 	if !activeState.PermissionGranted {
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    OVERLAY_PERMISSION_REQUIRED,
 				Message: "overlay permission not granted, please request permission first",
 			},
@@ -179,19 +179,19 @@ func (h *OverlayHandler) handleCreate(ctx context.Context, request androidsystem
 	if err := h.policy.ValidateCreateRequest(req, activeState.ActiveCount); err != nil {
 		var oe *overlayError
 		if errors.As(err, &oe) {
-			return androidsystem.NotificationResponse{
+			return androidsystem.SystemResponse{
 				RequestID: request.RequestID,
 				Status:    "error",
-				Error: &androidsystem.NotificationError{
+				Error: &androidsystem.SystemError{
 					Code:    oe.code,
 					Message: oe.message,
 				},
 			}
 		}
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    OVERLAY_INVALID_INPUT,
 				Message: err.Error(),
 			},
@@ -202,26 +202,26 @@ func (h *OverlayHandler) handleCreate(ctx context.Context, request androidsystem
 	if err != nil {
 		var oe *overlayError
 		if errors.As(err, &oe) {
-			return androidsystem.NotificationResponse{
+			return androidsystem.SystemResponse{
 				RequestID: request.RequestID,
 				Status:    "error",
-				Error: &androidsystem.NotificationError{
+				Error: &androidsystem.SystemError{
 					Code:    oe.code,
 					Message: oe.message,
 				},
 			}
 		}
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    OVERLAY_CREATE_FAILED,
 				Message: err.Error(),
 			},
 		}
 	}
 
-	return androidsystem.NotificationResponse{
+	return androidsystem.SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
@@ -230,13 +230,13 @@ func (h *OverlayHandler) handleCreate(ctx context.Context, request androidsystem
 	}
 }
 
-func (h *OverlayHandler) handleUpdate(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *OverlayHandler) handleUpdate(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	overlayID, _ := request.Payload["overlayId"].(string)
 	if overlayID == "" {
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    OVERLAY_INVALID_INPUT,
 				Message: "overlayId is required",
 			},
@@ -248,19 +248,19 @@ func (h *OverlayHandler) handleUpdate(ctx context.Context, request androidsystem
 	if err := h.policy.ValidateUpdateRequest(req); err != nil {
 		var oe *overlayError
 		if errors.As(err, &oe) {
-			return androidsystem.NotificationResponse{
+			return androidsystem.SystemResponse{
 				RequestID: request.RequestID,
 				Status:    "error",
-				Error: &androidsystem.NotificationError{
+				Error: &androidsystem.SystemError{
 					Code:    oe.code,
 					Message: oe.message,
 				},
 			}
 		}
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    OVERLAY_INVALID_INPUT,
 				Message: err.Error(),
 			},
@@ -271,26 +271,26 @@ func (h *OverlayHandler) handleUpdate(ctx context.Context, request androidsystem
 	if err != nil {
 		var oe *overlayError
 		if errors.As(err, &oe) {
-			return androidsystem.NotificationResponse{
+			return androidsystem.SystemResponse{
 				RequestID: request.RequestID,
 				Status:    "error",
-				Error: &androidsystem.NotificationError{
+				Error: &androidsystem.SystemError{
 					Code:    oe.code,
 					Message: oe.message,
 				},
 			}
 		}
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    OVERLAY_UPDATE_FAILED,
 				Message: err.Error(),
 			},
 		}
 	}
 
-	return androidsystem.NotificationResponse{
+	return androidsystem.SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
@@ -299,13 +299,13 @@ func (h *OverlayHandler) handleUpdate(ctx context.Context, request androidsystem
 	}
 }
 
-func (h *OverlayHandler) handleShow(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *OverlayHandler) handleShow(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	overlayID, _ := request.Payload["overlayId"].(string)
 	if overlayID == "" {
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    OVERLAY_INVALID_INPUT,
 				Message: "overlayId is required",
 			},
@@ -316,26 +316,26 @@ func (h *OverlayHandler) handleShow(ctx context.Context, request androidsystem.N
 	if err != nil {
 		var oe *overlayError
 		if errors.As(err, &oe) {
-			return androidsystem.NotificationResponse{
+			return androidsystem.SystemResponse{
 				RequestID: request.RequestID,
 				Status:    "error",
-				Error: &androidsystem.NotificationError{
+				Error: &androidsystem.SystemError{
 					Code:    oe.code,
 					Message: oe.message,
 				},
 			}
 		}
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    OVERLAY_SHOW_FAILED,
 				Message: err.Error(),
 			},
 		}
 	}
 
-	return androidsystem.NotificationResponse{
+	return androidsystem.SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
@@ -344,13 +344,13 @@ func (h *OverlayHandler) handleShow(ctx context.Context, request androidsystem.N
 	}
 }
 
-func (h *OverlayHandler) handleHide(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *OverlayHandler) handleHide(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	overlayID, _ := request.Payload["overlayId"].(string)
 	if overlayID == "" {
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    OVERLAY_INVALID_INPUT,
 				Message: "overlayId is required",
 			},
@@ -361,26 +361,26 @@ func (h *OverlayHandler) handleHide(ctx context.Context, request androidsystem.N
 	if err != nil {
 		var oe *overlayError
 		if errors.As(err, &oe) {
-			return androidsystem.NotificationResponse{
+			return androidsystem.SystemResponse{
 				RequestID: request.RequestID,
 				Status:    "error",
-				Error: &androidsystem.NotificationError{
+				Error: &androidsystem.SystemError{
 					Code:    oe.code,
 					Message: oe.message,
 				},
 			}
 		}
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    OVERLAY_HIDE_FAILED,
 				Message: err.Error(),
 			},
 		}
 	}
 
-	return androidsystem.NotificationResponse{
+	return androidsystem.SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
@@ -389,13 +389,13 @@ func (h *OverlayHandler) handleHide(ctx context.Context, request androidsystem.N
 	}
 }
 
-func (h *OverlayHandler) handleClose(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *OverlayHandler) handleClose(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	overlayID, _ := request.Payload["overlayId"].(string)
 	if overlayID == "" {
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    OVERLAY_INVALID_INPUT,
 				Message: "overlayId is required",
 			},
@@ -405,26 +405,26 @@ func (h *OverlayHandler) handleClose(ctx context.Context, request androidsystem.
 	if err := h.client.Close(ctx, overlayID); err != nil {
 		var oe *overlayError
 		if errors.As(err, &oe) {
-			return androidsystem.NotificationResponse{
+			return androidsystem.SystemResponse{
 				RequestID: request.RequestID,
 				Status:    "error",
-				Error: &androidsystem.NotificationError{
+				Error: &androidsystem.SystemError{
 					Code:    oe.code,
 					Message: oe.message,
 				},
 			}
 		}
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    OVERLAY_CLOSE_FAILED,
 				Message: err.Error(),
 			},
 		}
 	}
 
-	return androidsystem.NotificationResponse{
+	return androidsystem.SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
@@ -433,31 +433,31 @@ func (h *OverlayHandler) handleClose(ctx context.Context, request androidsystem.
 	}
 }
 
-func (h *OverlayHandler) handleList(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *OverlayHandler) handleList(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	overlays, err := h.client.List(ctx)
 	if err != nil {
 		var oe *overlayError
 		if errors.As(err, &oe) {
-			return androidsystem.NotificationResponse{
+			return androidsystem.SystemResponse{
 				RequestID: request.RequestID,
 				Status:    "error",
-				Error: &androidsystem.NotificationError{
+				Error: &androidsystem.SystemError{
 					Code:    oe.code,
 					Message: oe.message,
 				},
 			}
 		}
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    OVERLAY_NATIVE_HOST_UNAVAILABLE,
 				Message: err.Error(),
 			},
 		}
 	}
 
-	return androidsystem.NotificationResponse{
+	return androidsystem.SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
@@ -467,31 +467,31 @@ func (h *OverlayHandler) handleList(ctx context.Context, request androidsystem.N
 	}
 }
 
-func (h *OverlayHandler) handleCloseAll(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *OverlayHandler) handleCloseAll(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	count, err := h.client.CloseAll(ctx)
 	if err != nil {
 		var oe *overlayError
 		if errors.As(err, &oe) {
-			return androidsystem.NotificationResponse{
+			return androidsystem.SystemResponse{
 				RequestID: request.RequestID,
 				Status:    "error",
-				Error: &androidsystem.NotificationError{
+				Error: &androidsystem.SystemError{
 					Code:    oe.code,
 					Message: oe.message,
 				},
 			}
 		}
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    OVERLAY_CLOSE_FAILED,
 				Message: err.Error(),
 			},
 		}
 	}
 
-	return androidsystem.NotificationResponse{
+	return androidsystem.SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{

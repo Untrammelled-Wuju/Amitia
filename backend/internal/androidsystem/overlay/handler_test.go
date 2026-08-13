@@ -82,7 +82,7 @@ func TestHandlerStatus(t *testing.T) {
 	client := newDefaultFakeClient()
 	handler := NewOverlayHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationStatus,
 	})
@@ -103,7 +103,7 @@ func TestHandlerStatusError(t *testing.T) {
 	client.statusErr = newOverlayError(OVERLAY_NATIVE_HOST_UNAVAILABLE, "host not ready")
 	handler := NewOverlayHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationStatus,
 	})
@@ -125,7 +125,7 @@ func TestHandlerPermissionRequest(t *testing.T) {
 	}
 	handler := NewOverlayHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationPermissionRequest,
 	})
@@ -147,7 +147,7 @@ func TestHandlerCreate(t *testing.T) {
 	}
 	handler := NewOverlayHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationCreate,
 		Payload: map[string]any{
@@ -175,7 +175,7 @@ func TestHandlerCreatePermissionRequired(t *testing.T) {
 	client.statusResult.PermissionGranted = false
 	handler := NewOverlayHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationCreate,
 		Payload: map[string]any{
@@ -195,7 +195,7 @@ func TestHandlerCreateInvalidKind(t *testing.T) {
 	client := newDefaultFakeClient()
 	handler := NewOverlayHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationCreate,
 		Payload: map[string]any{
@@ -220,7 +220,7 @@ func TestHandlerUpdate(t *testing.T) {
 	}
 	handler := NewOverlayHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationUpdate,
 		Payload: map[string]any{
@@ -240,7 +240,7 @@ func TestHandlerUpdateMissingID(t *testing.T) {
 	client := newDefaultFakeClient()
 	handler := NewOverlayHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationUpdate,
 		Payload:   map[string]any{},
@@ -262,7 +262,7 @@ func TestHandlerShow(t *testing.T) {
 	}
 	handler := NewOverlayHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationShow,
 		Payload: map[string]any{
@@ -283,7 +283,7 @@ func TestHandlerHide(t *testing.T) {
 	}
 	handler := NewOverlayHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationHide,
 		Payload: map[string]any{
@@ -300,7 +300,7 @@ func TestHandlerClose(t *testing.T) {
 	client := newDefaultFakeClient()
 	handler := NewOverlayHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationClose,
 		Payload: map[string]any{
@@ -324,7 +324,7 @@ func TestHandlerList(t *testing.T) {
 	}
 	handler := NewOverlayHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationList,
 	})
@@ -342,7 +342,7 @@ func TestHandlerCloseAll(t *testing.T) {
 	client.closeAllCount = 3
 	handler := NewOverlayHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationCloseAll,
 	})
@@ -359,7 +359,7 @@ func TestHandlerUnknownOperation(t *testing.T) {
 	client := newDefaultFakeClient()
 	handler := NewOverlayHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: "unknown.op",
 	})
@@ -377,7 +377,7 @@ func TestHandlerGenericError(t *testing.T) {
 	client.statusErr = errors.New("generic error")
 	handler := NewOverlayHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationStatus,
 	})
@@ -425,7 +425,7 @@ func TestBlockedClient(t *testing.T) {
 	client := NewBlockedOverlayClient()
 	handler := NewOverlayHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationStatus,
 	})
@@ -464,7 +464,7 @@ func TestCreateRequestZeroValues(t *testing.T) {
 func TestHandlerWithNilClient(t *testing.T) {
 	handler := NewOverlayHandler(nil)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationList,
 	})
@@ -479,7 +479,7 @@ func TestHandlerListEmpty(t *testing.T) {
 	client.listResult = []OverlayInstance{}
 	handler := NewOverlayHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationList,
 	})
@@ -511,7 +511,7 @@ func TestHandlerCreateResultFields(t *testing.T) {
 	}
 	handler := NewOverlayHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationCreate,
 		Payload: map[string]any{
@@ -552,7 +552,7 @@ func TestHandlerUpdateResultFields(t *testing.T) {
 	}
 	handler := NewOverlayHandler(client)
 
-	resp := handler.Execute(context.Background(), androidsystem.NotificationRequest{
+	resp := handler.Execute(context.Background(), androidsystem.SystemRequest{
 		RequestID: "test-1",
 		Operation: OperationUpdate,
 		Payload: map[string]any{

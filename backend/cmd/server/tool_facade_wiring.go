@@ -7,9 +7,7 @@ import (
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/extension/kernel"
-	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/mcp"
-	mcpskill "github.com/u-ai/backend/internal/mcp/skill"
 )
 
 type chatToolRuntimeAdapter struct {
@@ -123,45 +121,6 @@ func (a *chatToolRuntimeAdapter) AfterReply(scope chat.SkillScope, reply chat.Re
 		Content:        reply.Content,
 		CreatedAt:      reply.CreatedAt,
 	})
-}
-
-type mcpToolFacadeSyncerAdapter struct {
-	facade *kernel.ToolFacade
-}
-
-var _ mcpskill.ToolFacadeSyncer = (*mcpToolFacadeSyncerAdapter)(nil)
-
-func newMCPToolFacadeSyncerAdapter(facade *kernel.ToolFacade) *mcpToolFacadeSyncerAdapter {
-	return &mcpToolFacadeSyncerAdapter{facade: facade}
-}
-
-func (a *mcpToolFacadeSyncerAdapter) SyncMCPTools(ctx context.Context, serverID string, tools []mcp.ToolDefinition) error {
-	if a.facade == nil {
-		return nil
-	}
-	descriptors := make([]capability.MCPToolDescriptor, 0, len(tools))
-	for _, t := range tools {
-		descriptors = append(descriptors, capability.MCPToolDescriptor{
-			ServerID:     serverID,
-			ServerName:   serverID,
-			Name:         t.RemoteName,
-			Title:        t.Title,
-			Description:  t.Description,
-			InputSchema:  json.RawMessage(t.InputSchemaJSON),
-			OutputSchema: json.RawMessage(t.OutputSchemaJSON),
-			RevisionHash: t.Hash,
-		})
-	}
-	_, err := a.facade.SyncMCPTools(ctx, serverID, descriptors)
-	return err
-}
-
-func (a *mcpToolFacadeSyncerAdapter) UnregisterMCPTools(ctx context.Context, serverID string) error {
-	if a.facade == nil {
-		return nil
-	}
-	a.facade.UnregisterMCPTools(ctx, serverID)
-	return nil
 }
 
 type mcpDuplicateMetricAdapter struct {

@@ -58,17 +58,17 @@ func NewShareHandler(client ShareClient) *ShareHandler {
 	}
 }
 
-func (h *ShareHandler) Execute(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *ShareHandler) Execute(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	switch request.Operation {
 	case OperationStatus:
 		return h.handleStatus(ctx, request)
 	case OperationSend:
 		return h.handleSend(ctx, request)
 	default:
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    SHARE_UNAVAILABLE,
 				Message: "unknown share operation: " + request.Operation,
 			},
@@ -76,31 +76,31 @@ func (h *ShareHandler) Execute(ctx context.Context, request androidsystem.Notifi
 	}
 }
 
-func (h *ShareHandler) handleStatus(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *ShareHandler) handleStatus(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	state, err := h.client.Status(ctx)
 	if err != nil {
 		var se *shareError
 		if errors.As(err, &se) {
-			return androidsystem.NotificationResponse{
+			return androidsystem.SystemResponse{
 				RequestID: request.RequestID,
 				Status:    "error",
-				Error: &androidsystem.NotificationError{
+				Error: &androidsystem.SystemError{
 					Code:    se.code,
 					Message: se.message,
 				},
 			}
 		}
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: request.RequestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    SHARE_UNAVAILABLE,
 				Message: err.Error(),
 			},
 		}
 	}
 
-	return androidsystem.NotificationResponse{
+	return androidsystem.SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
@@ -116,7 +116,7 @@ func (h *ShareHandler) handleStatus(ctx context.Context, request androidsystem.N
 	}
 }
 
-func (h *ShareHandler) handleSend(ctx context.Context, request androidsystem.NotificationRequest) androidsystem.NotificationResponse {
+func (h *ShareHandler) handleSend(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	text, _ := request.Payload["text"].(string)
 	subject, _ := request.Payload["subject"].(string)
 	mimeType, _ := request.Payload["mimeType"].(string)
@@ -169,7 +169,7 @@ func (h *ShareHandler) handleSend(ctx context.Context, request androidsystem.Not
 		return h.errorResponse(request.RequestID, err)
 	}
 
-	return androidsystem.NotificationResponse{
+	return androidsystem.SystemResponse{
 		RequestID: request.RequestID,
 		Status:    "success",
 		Result: map[string]any{
@@ -202,22 +202,22 @@ func (h *ShareHandler) validateChooserTitle(title string) error {
 	return nil
 }
 
-func (h *ShareHandler) errorResponse(requestID string, err error) androidsystem.NotificationResponse {
+func (h *ShareHandler) errorResponse(requestID string, err error) androidsystem.SystemResponse {
 	var se *shareError
 	if errors.As(err, &se) {
-		return androidsystem.NotificationResponse{
+		return androidsystem.SystemResponse{
 			RequestID: requestID,
 			Status:    "error",
-			Error: &androidsystem.NotificationError{
+			Error: &androidsystem.SystemError{
 				Code:    se.code,
 				Message: se.message,
 			},
 		}
 	}
-	return androidsystem.NotificationResponse{
+	return androidsystem.SystemResponse{
 		RequestID: requestID,
 		Status:    "error",
-		Error: &androidsystem.NotificationError{
+		Error: &androidsystem.SystemError{
 			Code:    SHARE_UNAVAILABLE,
 			Message: err.Error(),
 		},
