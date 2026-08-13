@@ -90,10 +90,7 @@ func (s *service) buildMemoryInjectItems(results []memory.HybridSearchResult) st
 		if isMemoryBlocked(r.Memory) {
 			continue
 		}
-		cat := r.Memory.MemoryType
-		if cat == "" {
-			cat = "fact"
-		}
+		cat := string(memory.CanonicalMemoryType(r.Memory.MemoryType))
 		tier := mapLayerToTier(r.MemoryLayer)
 		injectItems = append(injectItems, promptir.MemoryInjectItem{
 			Content:  r.Memory.Value,

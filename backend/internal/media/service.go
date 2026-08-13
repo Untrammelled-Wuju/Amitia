@@ -8,7 +8,6 @@ import (
 	"sync"
 
 	"github.com/u-ai/backend/internal/media/conversion"
-	"github.com/u-ai/backend/internal/media/ffmpeg"
 	"github.com/u-ai/backend/internal/media/metadata"
 )
 

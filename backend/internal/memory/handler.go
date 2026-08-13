@@ -71,7 +71,11 @@ func (h *Handler) Delete(c *gin.Context) {
 func (h *Handler) Search(c *gin.Context) {
 	var req SearchMemoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "keyword不能为空", nil)
+		util.ErrorResponse(c, response.InvalidParams, "参数错误", nil)
+		return
+	}
+	if req.Keyword == "" && req.Time == nil && len(req.Types) == 0 {
+		util.ErrorResponse(c, response.InvalidParams, "keyword、time或types至少需要一个", nil)
 		return
 	}
 	items, err := h.service.Search(&req)

@@ -547,6 +547,7 @@ CREATE INDEX IF NOT EXISTS idx_memories_verified ON memories(character_id, verif
 CREATE INDEX IF NOT EXISTS idx_memories_entity ON memories(entity_id, entity_type);
 CREATE INDEX IF NOT EXISTS idx_memories_importance_conf ON memories(character_id, importance, confidence);
 CREATE INDEX IF NOT EXISTS idx_memories_scope_type ON memories(scope_type);
+CREATE INDEX IF NOT EXISTS idx_memories_character_type ON memories(character_id, memory_type);
 
 CREATE TABLE IF NOT EXISTS memory_embeddings (
     memory_id TEXT PRIMARY KEY,
@@ -3837,6 +3838,9 @@ created_at_utc DATETIME NOT NULL,
 updated_at_utc DATETIME NOT NULL
 );
 
+CREATE INDEX IF NOT EXISTS idx_memory_temporal_validity ON memory_temporal_metadata(valid_from_utc, valid_to_utc);
+CREATE INDEX IF NOT EXISTS idx_memory_temporal_local_date ON memory_temporal_metadata(local_date);
+
 -- 来源: temporal_relationship_time.go
 CREATE TABLE IF NOT EXISTS temporal_global_presence_states (
 user_id TEXT PRIMARY KEY,
@@ -5616,3 +5620,32 @@ CREATE TABLE IF NOT EXISTS message_attachments (
     created_at TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_message_attachments_message_id ON message_attachments(message_id);
+
+CREATE TABLE IF NOT EXISTS voice_profiles (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL DEFAULT '',
+    asr_config_id INTEGER DEFAULT 0,
+    tts_config_id INTEGER DEFAULT 0,
+    realtime_provider_id TEXT DEFAULT '',
+    wake_config_id TEXT DEFAULT '',
+    vad_preset TEXT DEFAULT 'default',
+    interrupt_policy TEXT DEFAULT 'immediate',
+    privacy_mode TEXT DEFAULT 'standard',
+    is_default INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_voice_profiles_is_default ON voice_profiles(is_default);
+
+CREATE TABLE IF NOT EXISTS wake_configs (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL DEFAULT '',
+    enabled INTEGER DEFAULT 0,
+    backend TEXT DEFAULT 'software',
+    model_resource_uri TEXT DEFAULT '',
+    phrases TEXT DEFAULT '',
+    threshold REAL DEFAULT 0.05,
+    cooldown_ms INTEGER DEFAULT 2000,
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT ''
+);

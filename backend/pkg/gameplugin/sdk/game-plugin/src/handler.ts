@@ -10,6 +10,7 @@ export interface HelloConfiguration {
   capabilities: string[];
   rpcNamespaces: string[];
   services?: ServiceHelloDescriptor[];
+  sinks?: SinkHelloDescriptor[];
   sdk?: {
     name: string;
     version: string;
@@ -20,6 +21,12 @@ export interface HelloConfiguration {
 export interface ServiceHelloDescriptor {
   serviceId: string;
   capabilities?: string[];
+}
+
+export interface SinkHelloDescriptor {
+  sinkId: string;
+  kind: string;
+  serviceId?: string;
 }
 
 export interface RunnerConfig {

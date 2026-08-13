@@ -31,14 +31,15 @@ func init() {
 						Type:        "string",
 						Description: "记忆关键词，简短标签如'姓名'、'爱好'、'职业'、'宠物'、'计划'等",
 					},
-					"value": {
-						Type:        "string",
-						Description: "记忆具体内容，如'张三'、'喜欢爬山和摄影'",
-					},
-					"memoryType": {
-						Type:        "string",
-						Description: "记忆类型：personal_info(个人信息)、hobby(爱好)、preference(偏好)、fact(事实)、plan(计划)、habit(习惯)、relationship(关系)",
-					},
+				"value": {
+					Type:        "string",
+					Description: "记忆具体内容，如'张三'、'喜欢爬山和摄影'",
+				},
+				"memoryType": {
+					Type:        "string",
+					Description: "记忆类型",
+					Enum:        []string{"personal_info", "hobby", "preference", "fact", "plan", "habit", "relationship", "custom"},
+				},
 					"importance": {
 						Type:        "integer",
 						Description: "重要程度 1-10，10为最重要。个人信息如姓名通常为9-10，爱好为7-8，一般事实为5-6",
@@ -94,6 +95,9 @@ func saveMemory(callCtx context.Context, execCtx ToolExecutionContext, args map[
 	}
 	if memoryType == "" {
 		memoryType = "fact"
+	}
+	if normalized := memorysvc.CanonicalMemoryType(memoryType); normalized != "" {
+		memoryType = string(normalized)
 	}
 	if importance < 1 {
 		importance = 5

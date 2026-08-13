@@ -238,6 +238,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	temporalSvc.SetRelationshipTimeProvider(relTimeCoordinator)
 	memRepo := memory.NewRepository(ctx)
 	memSvc := memory.NewService(memRepo, ctx, graphSvc)
+	memory.SetTemporalRepo(memSvc, temporal.NewRepository(ctx.DB))
 	profRepo := profile.NewRepository(ctx)
 	profSvc := profile.NewService(profRepo, ctx, graphSvc)
 	epiRepo := episodic.NewRepository(ctx)

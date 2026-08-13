@@ -1,66 +1,152 @@
 package metadata
 
-import (
-	"github.com/u-ai/backend/internal/media/ffmpeg"
-)
+import "errors"
 
-func FromFFProbeResult(resourceURI string, full *ffmpeg.FullProbeResult, req MetadataRequest) (*MediaMetadata, error) {
-	if !full.Valid {
-		return nil, ffmpeg.NewError(ffmpeg.MEDIA_METADATA_INVALID, "invalid probe result")
+var ErrInvalidProbeResult = errors.New("invalid probe result")
+
+type rawStream struct {
+	Index         int
+	Type          string
+	Codec         string
+	CodecLongName string
+	Profile       string
+	DurationMs    int64
+	BitRate       int64
+	Language      string
+	Tags          map[string]string
+	Disposition   StreamDisposition
+	Video         *rawVideoStream
+	Audio         *rawAudioStream
+	Subtitle      *rawSubtitleStream
+}
+
+type StreamDisposition struct {
+	Default         bool
+	Dub             bool
+	Original        bool
+	Comment         bool
+	Lyrics          bool
+	Karaoke         bool
+	Forced          bool
+	HearingImpaired bool
+	VisualImpaired  bool
+	Effects         bool
+	AttachedPic     bool
+	TimedThumbnails bool
+}
+
+type rawVideoStream struct {
+	Width          int
+	Height         int
+	PixelFormat    string
+	FrameRateNum   int64
+	FrameRateDen   int64
+	SAR            string
+	DAR            string
+	ColorSpace     string
+	ColorTransfer  string
+	ColorPrimaries string
+	Rotation       int
+	Level          int
+	FieldOrder     string
+}
+
+type rawAudioStream struct {
+	SampleRate    int
+	Channels      int
+	ChannelLayout string
+	SampleFormat  string
+}
+
+type rawSubtitleStream struct {
+	Codec   string
+	Forced  bool
+	Default bool
+}
+
+type rawChapter struct {
+	ID      int64
+	StartMs int64
+	EndMs   int64
+	Title   string
+}
+
+type rawFormat struct {
+	FormatName     string
+	FormatLongName string
+	Container      string
+	ProbeScore     int
+}
+
+type rawProbeData struct {
+	Valid       bool
+	Format      rawFormat
+	DurationMs  int64
+	StartTimeMs int64
+	BitRate     int64
+	SizeBytes   int64
+	Streams     []rawStream
+	Chapters    []rawChapter
+	Tags        map[string]string
+	Warnings    []string
+}
+
+func FromRawProbeResult(resourceURI string, data rawProbeData, req MetadataRequest) (*MediaMetadata, error) {
+	if !data.Valid {
+		return nil, ErrInvalidProbeResult
 	}
 
 	result := &MediaMetadata{
-		ResourceURI:  resourceURI,
-		SizeBytes:    full.SizeBytes,
-		DurationMs:   full.DurationMS,
-		StartTimeMS:  full.StartTimeMS,
-		BitRate:      full.BitRate,
-		Tags:         make(map[string]string),
-		ContentHash:  "",
+		ResourceURI: resourceURI,
+		SizeBytes:   data.SizeBytes,
+		DurationMs:  data.DurationMs,
+		StartTimeMs: data.StartTimeMs,
+		BitRate:     data.BitRate,
+		Tags:        make(map[string]string),
 	}
 
 	result.Format = MediaFormatInfo{
-		FormatName:     safeFirstFormatName(full.FormatNames),
-		FormatLongName: full.FormatLong,
-		Container:      ffmpeg.ParseContainer(full.FormatLong),
-		ProbeScore:     full.FormatScore,
+		FormatName:     data.Format.FormatName,
+		FormatLongName: data.Format.FormatLongName,
+		Container:      data.Format.Container,
+		ProbeScore:     data.Format.ProbeScore,
 	}
 
 	maxStreams := req.EffectiveMaxStreams()
-	if req.IncludeStreams && len(full.Streams) > 0 {
-		streamCount := len(full.Streams)
+	if req.IncludeStreams && len(data.Streams) > 0 {
+		streamCount := len(data.Streams)
 		if streamCount > maxStreams {
 			streamCount = maxStreams
 			result.Warnings = append(result.Warnings, "stream count exceeded max, truncated")
 		}
 		for i := 0; i < streamCount; i++ {
-			s := full.Streams[i]
-			streamInfo := convertStreamInfo(s)
+			s := data.Streams[i]
+			streamInfo := convertRawStream(s)
 			result.Streams = append(result.Streams, streamInfo)
 		}
 	}
 
 	maxChapters := req.EffectiveMaxChapters()
-	if req.IncludeChapters && len(full.Chapters) > 0 {
-		chapCount := len(full.Chapters)
+	if req.IncludeChapters && len(data.Chapters) > 0 {
+		chapCount := len(data.Chapters)
 		if chapCount > maxChapters {
 			chapCount = maxChapters
 			result.Warnings = append(result.Warnings, "chapter count exceeded max, truncated")
 		}
 		for i := 0; i < chapCount; i++ {
-			c := full.Chapters[i]
+			c := data.Chapters[i]
 			chapter := MediaChapterInfo{
 				ID:     int(c.ID),
-				StartMS: c.StartMS,
-				EndMS:   c.EndMS,
+				StartMs: c.StartMs,
+				EndMs:   c.EndMs,
 				Title:   c.Title,
 			}
 			result.Chapters = append(result.Chapters, chapter)
 		}
 	}
 
-	if req.IncludeTags && full.Tags != nil {
-		safeTags := sanitizeTags(full.Tags, req.IncludeSensitiveTags)
+	if req.IncludeTags && data.Tags != nil {
+		safeTags := sanitizeTags(data.Tags, req.IncludeSensitiveTags)
 		for k, v := range safeTags {
 			result.Tags[k] = v
 		}
@@ -70,26 +156,19 @@ func FromFFProbeResult(resourceURI string, full *ffmpeg.FullProbeResult, req Met
 		result.Warnings = filterTechnicalWarnings(result.Warnings)
 	}
 
-	result.MediaKind = DetermineMediaKind(result.Streams)
+	result.MediaKind = string(DetermineMediaKind(result.Streams))
 
 	return result, nil
 }
 
-func safeFirstFormatName(names []string) string {
-	if len(names) > 0 {
-		return names[0]
-	}
-	return ""
-}
-
-func convertStreamInfo(s ffmpeg.FullStreamInfo) MediaStreamInfo {
+func convertRawStream(s rawStream) MediaStreamInfo {
 	info := MediaStreamInfo{
 		Index:         s.Index,
 		Type:          s.Type,
 		Codec:         s.Codec,
 		CodecLongName: s.CodecLongName,
 		Profile:       s.Profile,
-		DurationMS:    s.DurationMS,
+		DurationMs:    s.DurationMs,
 		BitRate:       s.BitRate,
 		Language:      s.Language,
 	}
@@ -118,16 +197,16 @@ func convertStreamInfo(s ffmpeg.FullStreamInfo) MediaStreamInfo {
 
 	if s.Video != nil {
 		info.Video = &MediaVideoStreamInfo{
-			Width:          s.Video.Width,
-			Height:         s.Video.Height,
-			PixelFormat:    s.Video.PixelFormat,
-			FrameRateNum:   s.Video.FrameRateNum,
-			FrameRateDen:   s.Video.FrameRateDen,
-			SAR:            s.Video.SAR,
-			DAR:            s.Video.DAR,
-			ColorSpace:     s.Video.ColorSpace,
-			ColorTransfer:  s.Video.ColorTransfer,
-			ColorPrimaries: s.Video.ColorPrimaries,
+			Width:           s.Video.Width,
+			Height:          s.Video.Height,
+			PixelFormat:     s.Video.PixelFormat,
+			FrameRateNum:    s.Video.FrameRateNum,
+			FrameRateDen:    s.Video.FrameRateDen,
+			SAR:             s.Video.SAR,
+			DAR:             s.Video.DAR,
+			ColorSpace:      s.Video.ColorSpace,
+			ColorTransfer:   s.Video.ColorTransfer,
+			ColorPrimaries:  s.Video.ColorPrimaries,
 			RotationDegrees: s.Video.Rotation,
 		}
 

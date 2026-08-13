@@ -8,6 +8,12 @@ import (
 	"gorm.io/gorm"
 )
 
+type EpisodicTimeFilter struct {
+	TimeFrom string
+	TimeTo   string
+	Basis    string
+}
+
 type Repository interface {
 	List(q EpisodicListQuery) ([]EpisodicMemory, int64, error)
 	FindByID(id string) (*EpisodicMemory, error)
@@ -17,6 +23,7 @@ type Repository interface {
 	GetRecent(userID string, limit int) ([]EpisodicMemory, error)
 	GetRecentScoped(userID string, limit int) ([]EpisodicMemory, error)
 	GetDetailWithMessages(id string, db *gorm.DB) (*EpisodicMemory, []map[string]interface{}, error)
+	FindByTime(filter EpisodicTimeFilter, userID string, limit int) ([]EpisodicMemory, int64, error)
 }
 
 type repository struct {
@@ -97,6 +104,40 @@ func (r *repository) GetRecentScoped(userID string, limit int) ([]EpisodicMemory
 		return []EpisodicMemory{}, nil
 	}
 	return r.GetRecent(userID, limit)
+}
+
+func (r *repository) FindByTime(filter EpisodicTimeFilter, userID string, limit int) ([]EpisodicMemory, int64, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	query := r.db.Model(&EpisodicMemory{})
+	if userID != "" && userID != "default" {
+		query = query.Where("user_id = ?", userID)
+	}
+	switch filter.Basis {
+	case "validity":
+		if filter.TimeFrom != "" {
+			query = query.Where("message_time_end >= ? OR message_time_end = ''", filter.TimeFrom)
+		}
+		if filter.TimeTo != "" {
+			query = query.Where("message_time_start <= ? OR message_time_start = ''", filter.TimeTo)
+		}
+	default:
+		if filter.TimeFrom != "" {
+			query = query.Where("created_at >= ?", filter.TimeFrom)
+		}
+		if filter.TimeTo != "" {
+			query = query.Where("created_at <= ?", filter.TimeTo)
+		}
+	}
+	var total int64
+	query.Count(&total)
+	var items []EpisodicMemory
+	err := query.Order("message_time_start ASC, created_at ASC").Limit(limit).Find(&items).Error
+	if items == nil {
+		items = []EpisodicMemory{}
+	}
+	return items, total, err
 }
 
 func (r *repository) GetDetailWithMessages(id string, db *gorm.DB) (*EpisodicMemory, []map[string]interface{}, error) {

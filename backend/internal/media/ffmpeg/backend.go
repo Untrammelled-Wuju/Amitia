@@ -2,6 +2,10 @@ package ffmpeg
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"io"
+	"os"
 	"sync"
 
 	"github.com/u-ai/backend/internal/runtimehost"
@@ -10,9 +14,13 @@ import (
 type Backend interface {
 	Capabilities(ctx context.Context) CapabilityState
 
+	GetCapabilities(ctx context.Context) (*Capabilities, error)
+
 	CheckVersion(ctx context.Context) (*Environment, error)
 
 	Probe(ctx context.Context, localPath string) (*ProbeResult, error)
+
+	ProbeFull(ctx context.Context, localPath string) (*FullProbeResult, error)
 
 	CancelAll()
 }
@@ -67,6 +75,11 @@ func (b *sharedBackend) Capabilities(ctx context.Context) CapabilityState {
 	}
 }
 
+func (b *sharedBackend) GetCapabilities(ctx context.Context) (*Capabilities, error) {
+	introspector := NewCapabilityIntrospector(b)
+	return introspector.Introspect(ctx)
+}
+
 func (b *sharedBackend) CheckVersion(ctx context.Context) (*Environment, error) {
 	env, err := b.getEnvironment(ctx)
 	if err != nil {
@@ -105,6 +118,17 @@ func (b *sharedBackend) Probe(ctx context.Context, localPath string) (*ProbeResu
 	return Probe(ctx, b.runner, env.FFprobePath, localPath, b.config)
 }
 
+func (b *sharedBackend) ProbeFull(ctx context.Context, localPath string) (*FullProbeResult, error) {
+	env, err := b.getEnvironment(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !env.Available || env.FFprobePath == "" {
+		return nil, NewError(FFMPEG_UNAVAILABLE, "ffprobe not available")
+	}
+	return ProbeFull(ctx, b.runner, env.FFprobePath, localPath, b.config)
+}
+
 func (b *sharedBackend) CancelAll() {
 	b.runner.CancelAll()
 }
@@ -137,4 +161,19 @@ func (b *sharedBackend) invalidateCache() {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	b.env = nil
+}
+
+func computeFileHash(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+
+	return hex.EncodeToString(h.Sum(nil)), nil
 }

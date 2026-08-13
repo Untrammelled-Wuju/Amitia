@@ -27,6 +27,25 @@ func (s *service) Search(req *SearchMemoryRequest) ([]Memory, error) {
 	if fetchLimit < limit+20 {
 		fetchLimit = limit + 20
 	}
+
+	var typeFiltered map[string]bool
+	if len(req.Types) > 0 {
+		typeFiltered = make(map[string]bool, len(req.Types))
+		for _, t := range req.Types {
+			if normalized, ok := NormalizeMemoryType(t); ok {
+				typeFiltered[string(normalized)] = true
+			}
+		}
+	}
+
+	var timeScopedIDs map[string]bool
+	if req.Time != nil && s.temporalRepo != nil {
+		scopedIDs, err := s.queryTimeScopedMemoryIDs(req)
+		if err == nil && len(scopedIDs) > 0 {
+			timeScopedIDs = scopedIDs
+		}
+	}
+
 	items, err := s.repo.Search(req.Keyword, req.CharacterID, req.UserID, fetchLimit)
 	if err != nil {
 		return nil, err
@@ -45,12 +64,63 @@ func (s *service) Search(req *SearchMemoryRequest) ([]Memory, error) {
 		if !memoryAllowedBySQLiteAuthority(m, policy) {
 			continue
 		}
+		if typeFiltered != nil && !typeFiltered[m.MemoryType] {
+			continue
+		}
+		if timeScopedIDs != nil && !timeScopedIDs[m.ID] {
+			continue
+		}
 		filtered = append(filtered, m)
 		if len(filtered) >= limit {
 			break
 		}
 	}
 	return filtered, nil
+}
+
+func (s *service) queryTimeScopedMemoryIDs(req *SearchMemoryRequest) (map[string]bool, error) {
+	tf := req.Time
+	basis := temporal.MemoryTimeBasis(tf.Basis)
+	if basis == "" {
+		basis = temporal.TimeBasisOccurred
+	}
+	query := temporal.MemoryTemporalQuery{Basis: temporal.MemoryTimeBasis(basis), Order: "desc"}
+	if tf.FromUTC != nil && *tf.FromUTC != "" {
+		if t, err := parseFilterTime(*tf.FromUTC); err == nil {
+			query.OccurredFromUTC = &t
+		}
+	}
+	if tf.ToUTC != nil && *tf.ToUTC != "" {
+		if t, err := parseFilterTime(*tf.ToUTC); err == nil {
+			query.OccurredToUTC = &t
+		}
+	}
+	if tf.AtUTC != nil && *tf.AtUTC != "" {
+		if t, err := parseFilterTime(*tf.AtUTC); err == nil {
+			query.ValidAtUTC = &t
+		}
+	}
+	query.LocalDateFrom = tf.LocalDateFrom
+	query.LocalDateTo = tf.LocalDateTo
+	query.Dayparts = tf.Dayparts
+	query.Precisions = tf.Precisions
+	query.Limit = 500
+	ids, _, err := s.temporalRepo.QueryMemoryIDsByTime(query)
+	if err != nil {
+		return nil, err
+	}
+	result := make(map[string]bool, len(ids))
+	for _, id := range ids {
+		result[id] = true
+	}
+	return result, nil
+}
+
+func parseFilterTime(raw string) (time.Time, error) {
+	if t, err := time.Parse(time.RFC3339, raw); err == nil {
+		return t, nil
+	}
+	return time.Parse("2006-01-02 15:04:05", raw)
 }
 
 func (s *service) VectorSearch(req *VectorSearchRequest) ([]VectorSearchResult, error) {

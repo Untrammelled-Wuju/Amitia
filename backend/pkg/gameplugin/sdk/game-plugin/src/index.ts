@@ -13,5 +13,10 @@ export * from './channel';
 export * from './binary';
 export * from './stream';
 export * from './service';
+export * from './permission';
+export * from './secret';
+export * from './control';
+export * from './hostapi';
+export * from './security';
 
 export { SDK_NAME, SDK_VERSION } from './version';

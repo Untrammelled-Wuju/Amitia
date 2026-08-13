@@ -152,6 +152,7 @@ type service struct {
 	embedMu                  sync.Mutex
 	embedLocks               map[string]*sync.Mutex
 	temporalReranker         TemporalMemoryReranker
+	temporalRepo             *temporal.SQLiteRepository
 }
 
 type TemporalMemoryReranker interface {
@@ -161,6 +162,12 @@ type TemporalMemoryReranker interface {
 func SetTemporalMemoryReranker(memoryService Service, reranker TemporalMemoryReranker) {
 	if target, ok := memoryService.(*service); ok {
 		target.temporalReranker = reranker
+	}
+}
+
+func SetTemporalRepo(memoryService Service, temporalRepo *temporal.SQLiteRepository) {
+	if target, ok := memoryService.(*service); ok {
+		target.temporalRepo = temporalRepo
 	}
 }
 

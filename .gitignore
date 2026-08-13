@@ -253,3 +253,6 @@ runtime/mobile_app/
 
 testplugins/
 runtime/build/proot/android-x86_64/
+
+backend/err.txt
+backend/logs.txt

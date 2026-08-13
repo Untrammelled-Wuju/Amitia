@@ -68,12 +68,39 @@ type UpdateMemoryRequest struct {
 }
 
 type SearchMemoryRequest struct {
-	Keyword          string `json:"keyword" binding:"required"`
-	CharacterID      string `json:"characterId"`
-	UserID           string `json:"userId"`
-	SensitivityLevel string `json:"sensitivityLevel"`
-	Limit            int    `json:"limit"`
+	Keyword          string          `json:"keyword"`
+	CharacterID      string          `json:"characterId"`
+	UserID           string          `json:"userId"`
+	SensitivityLevel string          `json:"sensitivityLevel"`
+	Limit            int             `json:"limit"`
+	Layers           []MemoryLayer   `json:"layers"`
+	Types            []string        `json:"types"`
+	Time             *MemoryTimeFilter `json:"time"`
+	Cursor           string          `json:"cursor"`
+	Sort             MemorySort      `json:"sort"`
 }
+
+type MemoryTimeFilter struct {
+	Basis            MemoryTimeBasis `json:"basis"`
+	FromUTC          *string         `json:"from"`
+	ToUTC            *string         `json:"to"`
+	AtUTC            *string         `json:"at"`
+	LocalDateFrom    string          `json:"localDateFrom"`
+	LocalDateTo      string          `json:"localDateTo"`
+	Dayparts         []string        `json:"dayparts"`
+	Precisions       []string        `json:"precisions"`
+	IncludeUnknown   bool            `json:"includeUnknown"`
+}
+
+type MemorySort string
+
+const (
+	MemorySortRelevance  MemorySort = "relevance"
+	MemorySortTimeDesc   MemorySort = "time_desc"
+	MemorySortTimeAsc    MemorySort = "time_asc"
+	MemorySortImportance MemorySort = "importance"
+	MemorySortRecentlyUsed MemorySort = "recently_used"
+)
 
 type VectorSearchRequest struct {
 	Keyword          string `json:"keyword"`

@@ -22,6 +22,7 @@ type HelloConfiguration struct {
 	Capabilities       []string
 	RPCNamespaces      []string
 	Services           []ServiceHelloDescriptor
+	Sinks              []SinkHelloDescriptor
 	SDK                *SDKInfo
 	Metadata           map[string]json.RawMessage
 }
@@ -29,6 +30,12 @@ type HelloConfiguration struct {
 type ServiceHelloDescriptor struct {
 	ServiceID    string   `json:"serviceId"`
 	Capabilities []string `json:"capabilities,omitempty"`
+}
+
+type SinkHelloDescriptor struct {
+	SinkID    string `json:"sinkId"`
+	Kind      string `json:"kind"`
+	ServiceID string `json:"serviceId,omitempty"`
 }
 
 type RunnerConfig struct {
@@ -80,6 +87,9 @@ func (r *Runner) performHandshake(ctx context.Context) (*HelloResponse, error) {
 
 	if len(r.config.Hello.Services) > 0 {
 		helloReq["services"] = r.config.Hello.Services
+	}
+	if len(r.config.Hello.Sinks) > 0 {
+		helloReq["sinks"] = r.config.Hello.Sinks
 	}
 
 	if r.config.Hello.SDK != nil {

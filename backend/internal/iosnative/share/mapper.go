@@ -6,7 +6,30 @@ func MapErrorToNativeBridge(err error) (string, string) {
 	if err == nil {
 		return "", ""
 	}
-	return ErrOutcomeUnknown, err.Error()
+	msg := err.Error()
+	for _, code := range []string{
+		ErrShareTextTooLong,
+		ErrShareTooManyResources,
+		ErrShareSubjectTooLong,
+		ErrShareShareTitleTooLong,
+		ErrSharePreviewTitleTooLong,
+		ErrSharePreviewSubtitleTooLong,
+		ErrShareURLInvalid,
+		ErrShareURLSchemeNotAllowed,
+		ErrShareResourceTooLarge,
+		ErrShareTotalTooLarge,
+		ErrShareStagingInvalid,
+		ErrShareStagingNotCommitted,
+		ErrShareStagingPathEscape,
+		ErrShareStagingTooManyResources,
+		ErrShareStagingTooLarge,
+		ErrShareStagingTextTooLong,
+	} {
+		if len(msg) >= len(code) && msg[:len(code)] == code {
+			return code, msg
+		}
+	}
+	return ErrOutcomeUnknown, msg
 }
 
 func MapCodeToMessage(code string) string {

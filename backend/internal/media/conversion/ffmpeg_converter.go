@@ -38,7 +38,7 @@ type ConvertOptions struct {
 	OnProgress func(MediaProgress)
 }
 
-func (c *Converter) Convert(ctx context.Context, source, request ConvertRequest, plan *ConversionPlan, inputPath, outputPath string, opts ConvertOptions) (*ConversionResult, error) {
+func (c *Converter) Convert(ctx context.Context, source metadata.MediaMetadata, request ConvertRequest, plan *ConversionPlan, inputPath, outputPath string, opts ConvertOptions) (*ConversionResult, error) {
 	conversionArgs := c.buildFFmpegArgs(source, request, plan, inputPath, outputPath)
 
 	progress := &progressTracker{
@@ -78,9 +78,9 @@ func (c *Converter) buildFFmpegArgs(source metadata.MediaMetadata, request Conve
 	trimArgs := (*ffmpeg.TrimArgs)(nil)
 	if request.Trim != nil {
 		t := &ffmpeg.TrimArgs{
-			StartMs:    request.Trim.StartMs,
-			EndMs:      request.Trim.EndMs,
-			DurationMs: request.Trim.DurationMs,
+			StartMS:    request.Trim.StartMs,
+			EndMS:      request.Trim.EndMs,
+			DurationMS: request.Trim.DurationMs,
 			Precision:  request.Trim.Precision,
 		}
 		trimArgs = t
@@ -161,7 +161,7 @@ func (c *Converter) verifyOutput(outputPath string, request ConvertRequest, plan
 	}
 
 	result := &ConversionResult{
-		MediaKind:     metadata.DetermineMediaKind(convertStreams(fullProbe.Streams)),
+		MediaKind:     string(metadata.DetermineMediaKind(convertStreams(fullProbe.Streams))),
 		Container:     ffmpeg.ParseContainer(fullProbe.FormatLong),
 		DurationMs:    fullProbe.DurationMS,
 		SizeBytes:      info.Size(),
@@ -189,7 +189,7 @@ func (c *Converter) createStagingPath(request ConvertRequest) (string, error) {
 		ext = request.Output.Container
 	}
 
-	suffix := strconv.FormatInt(os.Getpid(), 10)
+	suffix := strconv.FormatInt(int64(os.Getpid()), 10)
 	staging := filepath.Join(c.tempDir, fmt.Sprintf("media_convert_%s.%s", suffix, ext))
 
 	if err := os.MkdirAll(filepath.Dir(staging), 0o755); err != nil {
