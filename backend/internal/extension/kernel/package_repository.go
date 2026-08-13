@@ -783,8 +783,9 @@ func (r *PackageRepository) FinalizeOperationAndReleaseLeaseTxWithStep(ctx conte
 	defer tx.Rollback()
 	var currentStatus string
 	var artifactID string
-	if err := tx.QueryRowContext(ctx, `SELECT status, artifact_id FROM extension_package_operations WHERE operation_id=?`,
-		operationID).Scan(&currentStatus, &artifactID); err != nil {
+	var previewSessionID string
+	if err := tx.QueryRowContext(ctx, `SELECT status, artifact_id, preview_session_id FROM extension_package_operations WHERE operation_id=?`,
+		operationID).Scan(&currentStatus, &artifactID, &previewSessionID); err != nil {
 		return classifyOperationRead("read operation for finalize with step", err)
 	}
 	if currentStatus != string(PackageOperationFinalizing) {
@@ -895,6 +896,11 @@ func (r *PackageRepository) FinalizeOperationAndReleaseLeaseTxWithStep(ctx conte
 			return storageOperationError("release terminal operation artifact during finalization with step", err)
 		}
 	}
+	if artifactID != "" && previewSessionID != "" {
+		if err := releaseArtifactReferenceTx(ctx, tx, artifactID, ArtifactReferencePreview, previewSessionID); err != nil {
+			return storageOperationError("release terminal preview artifact during finalization with step", err)
+		}
+	}
 	return tx.Commit()
 }
 
@@ -943,8 +949,9 @@ func (r *PackageRepository) FinalizeOperationAndReleaseLeaseTx(ctx context.Conte
 	defer tx.Rollback()
 	var currentStatus string
 	var artifactID string
-	if err := tx.QueryRowContext(ctx, `SELECT status, artifact_id FROM extension_package_operations WHERE operation_id=?`,
-		operationID).Scan(&currentStatus, &artifactID); err != nil {
+	var previewSessionID string
+	if err := tx.QueryRowContext(ctx, `SELECT status, artifact_id, preview_session_id FROM extension_package_operations WHERE operation_id=?`,
+		operationID).Scan(&currentStatus, &artifactID, &previewSessionID); err != nil {
 		return classifyOperationRead("read operation for finalize", err)
 	}
 	if currentStatus != string(PackageOperationFinalizing) {
@@ -1024,6 +1031,11 @@ func (r *PackageRepository) FinalizeOperationAndReleaseLeaseTx(ctx context.Conte
 	if artifactID != "" {
 		if err := releaseArtifactReferenceTx(ctx, tx, artifactID, ArtifactReferenceOperation, operationID); err != nil {
 			return storageOperationError("release terminal operation artifact during finalization", err)
+		}
+	}
+	if artifactID != "" && previewSessionID != "" {
+		if err := releaseArtifactReferenceTx(ctx, tx, artifactID, ArtifactReferencePreview, previewSessionID); err != nil {
+			return storageOperationError("release terminal preview artifact during finalization", err)
 		}
 	}
 	return tx.Commit()

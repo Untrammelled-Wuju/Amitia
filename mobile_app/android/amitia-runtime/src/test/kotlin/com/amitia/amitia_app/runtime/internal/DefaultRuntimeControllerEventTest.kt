@@ -18,7 +18,7 @@ import org.junit.Test
 
 internal class FakeRuntimeServiceHost : RuntimeServiceHost {
     private val listeners = mutableListOf<RuntimeServiceHostListener>()
-    override fun ensureStarted() = RuntimeServiceResult.Success
+    override fun ensureStarted(generation: Long) = RuntimeServiceResult.Success
     override fun requestStop() = RuntimeServiceResult.Success
     override fun addListener(listener: RuntimeServiceHostListener) { listeners.add(listener) }
     override fun removeListener(listener: RuntimeServiceHostListener) { listeners.remove(listener) }

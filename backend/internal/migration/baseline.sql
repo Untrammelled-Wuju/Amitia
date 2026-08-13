@@ -503,7 +503,9 @@ CREATE TABLE IF NOT EXISTS memories (
     last_used_at TEXT,
     sensitivity_level TEXT DEFAULT 'internal',
     allow_proactive_mention INTEGER DEFAULT 1,
-    requires_confirmation INTEGER DEFAULT 0
+    requires_confirmation INTEGER DEFAULT 0,
+    version INTEGER NOT NULL DEFAULT 1,
+    derivation_key TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS memory_events (
@@ -524,7 +526,11 @@ CREATE TABLE IF NOT EXISTS memory_events (
     last_verified_at TEXT DEFAULT NULL,
     source TEXT DEFAULT '',
     character_id TEXT DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (datetime('now')),
+    version INTEGER NOT NULL DEFAULT 1,
+    operation_id TEXT NOT NULL DEFAULT '',
+    snapshot_hash TEXT NOT NULL DEFAULT '',
+    event_reason TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS memory_candidates (
@@ -539,8 +545,33 @@ CREATE TABLE IF NOT EXISTS memory_candidates (
     created_at TEXT DEFAULT (datetime('now')),
     sensitivity_level TEXT DEFAULT 'internal',
     allow_proactive_mention INTEGER DEFAULT 1,
-    requires_confirmation INTEGER DEFAULT 0
+    requires_confirmation INTEGER DEFAULT 0,
+    candidate_kind TEXT NOT NULL DEFAULT 'extracted',
+    confidence REAL NOT NULL DEFAULT 0,
+    target_memory_id TEXT NOT NULL DEFAULT '',
+    proposed_action TEXT NOT NULL DEFAULT '',
+    source_memory_ids_json TEXT NOT NULL DEFAULT '',
+    source_versions_json TEXT NOT NULL DEFAULT '',
+    derivation_key TEXT NOT NULL DEFAULT '',
+    reason TEXT NOT NULL DEFAULT ''
 );
+
+CREATE TABLE IF NOT EXISTS memory_derivations (
+    id TEXT PRIMARY KEY,
+    output_memory_id TEXT NOT NULL,
+    input_memory_id TEXT NOT NULL,
+    input_version INTEGER NOT NULL,
+    input_snapshot_hash TEXT NOT NULL DEFAULT '',
+    derivation_kind TEXT NOT NULL,
+    ordinal INTEGER NOT NULL DEFAULT 0,
+    operation_id TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    UNIQUE(output_memory_id, input_memory_id, input_version, derivation_kind)
+);
+
+CREATE INDEX IF NOT EXISTS idx_memory_derivations_output ON memory_derivations(output_memory_id);
+CREATE INDEX IF NOT EXISTS idx_memory_derivations_input ON memory_derivations(input_memory_id);
+CREATE INDEX IF NOT EXISTS idx_memory_events_operation ON memory_events(operation_id);
 
 CREATE INDEX IF NOT EXISTS idx_memories_confidence ON memories(character_id, confidence);
 CREATE INDEX IF NOT EXISTS idx_memories_verified ON memories(character_id, verified_status);
@@ -548,6 +579,7 @@ CREATE INDEX IF NOT EXISTS idx_memories_entity ON memories(entity_id, entity_typ
 CREATE INDEX IF NOT EXISTS idx_memories_importance_conf ON memories(character_id, importance, confidence);
 CREATE INDEX IF NOT EXISTS idx_memories_scope_type ON memories(scope_type);
 CREATE INDEX IF NOT EXISTS idx_memories_character_type ON memories(character_id, memory_type);
+CREATE INDEX IF NOT EXISTS idx_memories_derivation_key ON memories(derivation_key);
 
 CREATE TABLE IF NOT EXISTS memory_embeddings (
     memory_id TEXT PRIMARY KEY,

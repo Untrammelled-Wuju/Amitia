@@ -5,6 +5,7 @@ internal object RuntimeServiceContract {
     const val ACTION_STOP_HOST = "com.amitia.amitia_app.runtime.action.STOP_HOST"
 
     const val EXTRA_REQUEST_ID = "com.amitia.amitia_app.runtime.extra.REQUEST_ID"
+    const val EXTRA_RUNTIME_GENERATION = "com.amitia.amitia_app.runtime.extra.RUNTIME_GENERATION"
 
     const val NOTIFICATION_CHANNEL_ID = "runtime_service"
     const val NOTIFICATION_ID = 0x52435541

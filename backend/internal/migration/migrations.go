@@ -153,5 +153,6 @@ func DefaultMigrations() []Migration {
 		EmbeddingConfigProviderConfigMigration(),
 		VoiceProfileMigration(),
 		MemoryTimeQueryIndexesMigration(),
+		MemorySummaryConsolidationMigration(),
 	}
 }

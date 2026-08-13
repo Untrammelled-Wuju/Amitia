@@ -5,12 +5,14 @@ import com.amitia.amitia_app.runtime.api.RuntimeController
 import com.amitia.amitia_app.runtime.api.RuntimeModule
 import com.amitia.amitia_app.runtime.connection.BackendConnectionProvider
 import com.amitia.amitia_app.runtime.install.RuntimeInstaller
+import com.amitia.amitia_app.runtime.manifest.RuntimeManifestStore
 import com.amitia.amitia_app.runtime.proot.ProotComponent
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHost
 
 class DefaultRuntimeModule(
     override val controller: RuntimeController = UnsupportedRuntimeController(),
     override val runtimeInstaller: RuntimeInstaller,
+    val manifestStore: RuntimeManifestStore,
     val backendConnectionProvider: BackendConnectionProvider,
     private val stateStore: RuntimeStateStore = RuntimeStateStore(),
     private val abiGate: RuntimeAbiGate? = null,

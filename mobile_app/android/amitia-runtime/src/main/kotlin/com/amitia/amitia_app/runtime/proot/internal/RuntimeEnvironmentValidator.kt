@@ -28,8 +28,8 @@ internal object RuntimeEnvironmentValidator {
         }
 
         val tempRoot = guest["AMITIA_TEMP_ROOT"]
-        if (tempRoot == null || !tempRoot.startsWith(GuestLayoutContract.RUN_ROOT)) {
-            return RuntimeEnvironmentValidationResult.Invalid("AMITIA_TEMP_ROOT must be within AMITIA_RUN_ROOT")
+        if (tempRoot == null || tempRoot != GuestLayoutContract.TEMP_ROOT) {
+            return RuntimeEnvironmentValidationResult.Invalid("AMITIA_TEMP_ROOT must be ${GuestLayoutContract.TEMP_ROOT}")
         }
 
         val workspaceRoot = guest["AMITIA_WORKSPACE_ROOT"]

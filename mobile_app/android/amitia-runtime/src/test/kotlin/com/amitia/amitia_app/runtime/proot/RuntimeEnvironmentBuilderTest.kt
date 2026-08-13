@@ -59,7 +59,7 @@ class RuntimeEnvironmentBuilderTest {
         assertEquals("/var/cache/amitia", env.guestRuntime["AMITIA_CACHE_ROOT"])
         assertEquals("/var/log/amitia", env.guestRuntime["AMITIA_LOG_ROOT"])
         assertEquals("/run/amitia", env.guestRuntime["AMITIA_RUN_ROOT"])
-        assertEquals("/run/amitia/tmp", env.guestRuntime["AMITIA_TEMP_ROOT"])
+        assertEquals("/tmp", env.guestRuntime["AMITIA_TEMP_ROOT"])
         assertEquals("/var/lib/amitia/workspaces", env.guestRuntime["AMITIA_WORKSPACE_ROOT"])
         assertEquals("/home/amitia", env.guestRuntime["AMITIA_HOME"])
     }
@@ -312,7 +312,7 @@ class RuntimeEnvironmentBuilderTest {
     }
 
     @Test
-    fun tempRootIsWithinRunRoot() {
+    fun tempRootIsGuestTmp() {
         val layout = createLayout()
         val builder = createBuilder()
         val request = RuntimeEnvironmentRequest(
@@ -321,8 +321,7 @@ class RuntimeEnvironmentBuilderTest {
         )
         val result = builder.build(request) as RuntimeEnvironmentResult.Success
         val tempRoot = result.environment.guestRuntime["AMITIA_TEMP_ROOT"]
-        val runRoot = result.environment.guestRuntime["AMITIA_RUN_ROOT"]
-        assertTrue(tempRoot!!.startsWith(runRoot!!))
+        assertEquals("/tmp", tempRoot)
     }
 
     @Test

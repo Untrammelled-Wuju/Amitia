@@ -19,6 +19,7 @@ import com.amitia.amitia_app.runtime.bridge.RuntimeBridgeErrorMapper
 import com.amitia.amitia_app.runtime.bridge.RuntimeBridgeSnapshotMapper
 import com.amitia.amitia_app.runtime.manifest.RuntimeManifestResult
 import com.amitia.amitia_app.runtime.manifest.RuntimeManifestStore
+import com.amitia.amitia_app.runtime.packagetrusted.TrustedRuntimePackageSource
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
@@ -97,9 +98,15 @@ internal class RuntimeBridgeHandler(
     }
 
     private fun handleInstall(result: MethodChannel.Result) {
+        val trustedRef = TrustedRuntimePackageSource.resolve(
+            packageFile = java.io.File(
+                java.io.File(com.amitia.amitia_app.runtime.AndroidRuntimeModule.runtimeHostLayout?.dataRoot ?: java.io.File("/data/local/tmp"), "packages"),
+                "amitia-runtime-${TrustedRuntimePackageSource.RUNTIME_VERSION}.zip"
+            )
+        )
         val request = RuntimeInstallRequest(
-            packageUri = "",
-            expectedVersion = null,
+            packageUri = trustedRef.packageFile.absolutePath,
+            expectedVersion = trustedRef.expectedRuntimeVersion,
             allowRepairExisting = false
         )
         controller.install(request, object : RuntimeOperationCallback {
@@ -119,8 +126,14 @@ internal class RuntimeBridgeHandler(
     }
 
     private fun handleRepair(result: MethodChannel.Result) {
+        val trustedRef = TrustedRuntimePackageSource.resolve(
+            packageFile = java.io.File(
+                java.io.File(com.amitia.amitia_app.runtime.AndroidRuntimeModule.runtimeHostLayout?.dataRoot ?: java.io.File("/data/local/tmp"), "packages"),
+                "amitia-runtime-${TrustedRuntimePackageSource.RUNTIME_VERSION}.zip"
+            )
+        )
         val request = RuntimeRepairRequest(
-            packageUri = null,
+            packageUri = trustedRef.packageFile.absolutePath,
             preserveUserData = true
         )
         controller.repair(request, object : RuntimeOperationCallback {

@@ -191,7 +191,7 @@ class _DeviceTile extends StatelessWidget {
           if (!item.isCurrent)
             IconButton(
               icon: Icon(Icons.logout, size: 18, color: context.textTertiary),
-              onPressed: () {},
+              onPressed: null,
               visualDensity: VisualDensity.compact,
             ),
         ],

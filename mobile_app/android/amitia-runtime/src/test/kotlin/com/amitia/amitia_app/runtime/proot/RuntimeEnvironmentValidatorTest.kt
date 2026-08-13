@@ -16,7 +16,7 @@ class RuntimeEnvironmentValidatorTest {
             "AMITIA_CACHE_ROOT" to "/var/cache/amitia",
             "AMITIA_LOG_ROOT" to "/var/log/amitia",
             "AMITIA_RUN_ROOT" to "/run/amitia",
-            "AMITIA_TEMP_ROOT" to "/run/amitia/tmp",
+            "AMITIA_TEMP_ROOT" to "/tmp",
             "AMITIA_WORKSPACE_ROOT" to "/var/lib/amitia/workspaces",
             "AMITIA_HOME" to "/home/amitia",
             "HOME" to "/home/amitia",
@@ -58,7 +58,7 @@ class RuntimeEnvironmentValidatorTest {
     fun invalidTempRootReturnsInvalid() {
         val env = validEnvironment().copy(
             guestRuntime = validEnvironment().guestRuntime.toMutableMap().apply {
-                this["AMITIA_TEMP_ROOT"] = "/tmp"
+                this["AMITIA_TEMP_ROOT"] = "/run/amitia/tmp"
             }
         )
         val result = RuntimeEnvironmentValidator.validate(env)

@@ -55,7 +55,7 @@ func TestMemoryProcessAdvancesCheckpointAndSkipsProcessedMessages(t *testing.T) 
 	stmts := []string{
 		`CREATE TABLE conversations (id TEXT PRIMARY KEY, character_id TEXT)`,
 		`CREATE TABLE messages (id TEXT PRIMARY KEY, conversation_id TEXT, sequence INTEGER, role TEXT, content TEXT, created_at TEXT)`,
-		`CREATE TABLE model_configs (id TEXT PRIMARY KEY, base_url TEXT, api_key TEXT, model_name TEXT, temperature REAL, max_tokens INTEGER, is_active INTEGER)`,
+		`CREATE TABLE model_configs (id TEXT PRIMARY KEY, base_url TEXT, api_key TEXT, model_name TEXT, temperature REAL, max_tokens INTEGER, api_type TEXT, is_active INTEGER)`,
 	}
 	for _, stmt := range stmts {
 		if err := db.Exec(stmt).Error; err != nil {
@@ -71,7 +71,7 @@ func TestMemoryProcessAdvancesCheckpointAndSkipsProcessedMessages(t *testing.T) 
 	if err := db.Exec(`INSERT INTO messages (id, conversation_id, sequence, role, content, created_at) VALUES (?, ?, ?, ?, ?, ?)`, "m2", "conv-1", 2, "assistant", "记住了", "2026-07-02 10:00:01").Error; err != nil {
 		t.Fatalf("insert message 2: %v", err)
 	}
-	if err := db.Exec(`INSERT INTO model_configs (id, base_url, api_key, model_name, temperature, max_tokens, is_active) VALUES (?, ?, ?, ?, ?, ?, ?)`, "model-1", llm.URL, "test-key", "test-model", 0.1, 128, 1).Error; err != nil {
+	if err := db.Exec(`INSERT INTO model_configs (id, base_url, api_key, model_name, temperature, max_tokens, is_active, api_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`, "model-1", llm.URL, "test-key", "test-model", 0.1, 128, 1, "openai").Error; err != nil {
 		t.Fatalf("insert model config: %v", err)
 	}
 

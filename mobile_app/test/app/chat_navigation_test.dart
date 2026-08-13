@@ -1,4 +1,7 @@
 import 'package:amitia_app/app/app.dart';
+import 'package:amitia_app/core/models/character.dart';
+import 'package:amitia_app/core/services/providers.dart'
+    hide startupStageProvider;
 import 'package:amitia_app/core/widgets/amitia_drawer.dart';
 import 'package:amitia_app/features/agent/presentation/pages/agent_page.dart';
 import 'package:amitia_app/features/chat/presentation/pages/chat_page.dart';
@@ -6,6 +9,30 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+ProviderContainer _createTestContainer() {
+  final container = ProviderContainer(
+    overrides: [
+      characterListProvider.overrideWith((ref) async {
+        return [
+          CharacterDto(
+            id: 'c1',
+            name: 'TestCharacter',
+            avatar: '',
+            identity: '',
+            personality: '',
+            speakingStyle: '',
+            description: '',
+            status: '',
+            isActive: 1,
+            createdAt: '',
+          ),
+        ];
+      }),
+    ],
+  );
+  return container;
+}
 
 void main() {
   testWidgets(
@@ -22,7 +49,30 @@ void main() {
       addTearDown(tester.view.resetPadding);
       addTearDown(tester.view.resetViewInsets);
 
-      await tester.pumpWidget(const ProviderScope(child: AmitiaApp()));
+      await tester.pumpWidget(
+        ProviderScope(
+          overrides: [
+            startupStageProvider.overrideWithValue(MockStartupStage.ready),
+            characterListProvider.overrideWith((ref) async {
+              return [
+                CharacterDto(
+                  id: 'c1',
+                  name: 'TestCharacter',
+                  avatar: '',
+                  identity: '',
+                  personality: '',
+                  speakingStyle: '',
+                  description: '',
+                  status: '',
+                  isActive: 1,
+                  createdAt: '',
+                ),
+              ];
+            }),
+          ],
+          child: const AmitiaApp(),
+        ),
+      );
       await tester.pumpAndSettle();
 
       final composerSurface = find.byKey(
@@ -87,7 +137,30 @@ void main() {
   testWidgets('drawer destination overlays chat and back reveals chat root', (
     tester,
   ) async {
-    await tester.pumpWidget(const ProviderScope(child: AmitiaApp()));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          startupStageProvider.overrideWithValue(MockStartupStage.ready),
+          characterListProvider.overrideWith((ref) async {
+            return [
+              CharacterDto(
+                id: 'c1',
+                name: 'TestCharacter',
+                avatar: '',
+                identity: '',
+                personality: '',
+                speakingStyle: '',
+                description: '',
+                status: '',
+                isActive: 1,
+                createdAt: '',
+              ),
+            ];
+          }),
+        ],
+        child: const AmitiaApp(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     expect(find.byType(ChatPage), findsOneWidget);
@@ -133,7 +206,30 @@ void main() {
   testWidgets('system back from drawer destination reveals chat root', (
     tester,
   ) async {
-    await tester.pumpWidget(const ProviderScope(child: AmitiaApp()));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          startupStageProvider.overrideWithValue(MockStartupStage.ready),
+          characterListProvider.overrideWith((ref) async {
+            return [
+              CharacterDto(
+                id: 'c1',
+                name: 'TestCharacter',
+                avatar: '',
+                identity: '',
+                personality: '',
+                speakingStyle: '',
+                description: '',
+                status: '',
+                isActive: 1,
+                createdAt: '',
+              ),
+            ];
+          }),
+        ],
+        child: const AmitiaApp(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.tap(find.byIcon(Icons.menu_rounded));
@@ -170,7 +266,30 @@ void main() {
       );
     });
 
-    await tester.pumpWidget(const ProviderScope(child: AmitiaApp()));
+    await tester.pumpWidget(
+      ProviderScope(
+        overrides: [
+          startupStageProvider.overrideWithValue(MockStartupStage.ready),
+          characterListProvider.overrideWith((ref) async {
+            return [
+              CharacterDto(
+                id: 'c1',
+                name: 'TestCharacter',
+                avatar: '',
+                identity: '',
+                personality: '',
+                speakingStyle: '',
+                description: '',
+                status: '',
+                isActive: 1,
+                createdAt: '',
+              ),
+            ];
+          }),
+        ],
+        child: const AmitiaApp(),
+      ),
+    );
     await tester.pumpAndSettle();
 
     await tester.binding.handlePopRoute();

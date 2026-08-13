@@ -11,7 +11,7 @@ data class ProotLaunchSpec(
     val killOnExit: Boolean = true,
 ) {
     companion object {
-        const val DEFAULT_WORKDIR = "/opt/amitia"
+        const val DEFAULT_WORKDIR = GuestLayout.PROGRAM
 
         fun from(
             request: ProotLaunchRequest,

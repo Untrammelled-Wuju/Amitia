@@ -2,6 +2,9 @@
 # SPDX-FileCopyrightText: 2026 彭旭
 # SPDX-License-Identifier: AGPL-3.0-only
 # Qdrant 二进制下载脚本 (Linux)
+# 状态: DESKTOP_DEV_ONLY - 仅用于桌面开发环境
+# 正式 Linux ARM64 Artifact 请使用: scripts/prepare/prepare-qdrant-linux-arm64.sh
+# 此脚本不承担 Android Runtime Package Candidate 职责
 # 用法: bash scripts/download-qdrant.sh
 
 set -e

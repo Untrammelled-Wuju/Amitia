@@ -651,6 +651,21 @@ func (s *AgentSkillService) activeDefinition(scope ExecutionScope, nameOrID stri
 	s.mu.RUnlock()
 	return AgentSkillDefinition{}, NewExtensionError(ErrAgentSkillResourceDenied, "Agent Skill is not active in the current round", nameOrID, false, nil)
 }
+
+func (s *AgentSkillService) ActiveSkillDefinitions(scope ExecutionScope) []AgentSkillDefinition {
+	s.mu.RLock()
+	state := s.rounds[roundKey(scope)]
+	if state == nil {
+		s.mu.RUnlock()
+		return nil
+	}
+	result := make([]AgentSkillDefinition, 0, len(state.active))
+	for _, item := range state.active {
+		result = append(result, item.Definition)
+	}
+	s.mu.RUnlock()
+	return result
+}
 func (s *AgentSkillService) resolve(ctx context.Context, scope ExecutionScope, nameOrID string) (AgentSkillDefinition, error) {
 	page, err := s.List(ctx, scope, AgentSkillFilter{Page: 1, PageSize: 100})
 	if err != nil {

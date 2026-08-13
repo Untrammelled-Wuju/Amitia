@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.security.MessageDigest
 
 plugins {
     id("com.android.library")
@@ -25,7 +26,6 @@ android {
         ndk {
             abiFilters.clear()
             abiFilters.add("arm64-v8a")
-            abiFilters.add("x86_64")
         }
     }
 
@@ -42,14 +42,6 @@ kotlin {
     }
 }
 
-tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach {
-    if (name.contains("Test", ignoreCase = true)) {
-        exclude("**/proot/internal/AndroidProotComponentAbiTest.kt")
-        exclude("**/proot/internal/AndroidProotComponentConcurrentTest.kt")
-        exclude("**/proot/internal/ProotEnvironmentAssemblerTest.kt")
-    }
-}
-
 tasks.withType<Test>().configureEach {
     testLogging {
         showStandardStreams = true
@@ -62,6 +54,57 @@ tasks.withType<Test>().configureEach {
         "--add-opens=java.base/java.io=ALL-UNNAMED",
         "--add-opens=java.base/jdk.internal.loader=ALL-UNNAMED"
     )
+}
+
+val prootArmDir = layout.projectDirectory.dir("src/main/jniLibs/arm64-v8a")
+val prootArmFile = layout.projectDirectory.file("src/main/jniLibs/arm64-v8a/libamitia_proot.so")
+val prootMetadataFile = layout.projectDirectory.file("src/main/res/raw/proot_artifact.json")
+
+tasks.register("verifyProotArtifact") {
+    group = "verification"
+    description = "Verifies PRoot arm64-v8a artifact, metadata, and ABI contract"
+    doLast {
+        if (!prootArmFile.asFile.exists()) throw GradleException("verifyProotArtifact FAILED: arm64-v8a/libamitia_proot.so not found")
+        if (prootArmFile.asFile.length() == 0L) throw GradleException("verifyProotArtifact FAILED: arm64-v8a/libamitia_proot.so is empty")
+        listOf("x86", "x86_64", "armeabi-v7a", "armeabi", "mips", "mips64").forEach { abi ->
+            val dir = layout.projectDirectory.dir("src/main/jniLibs/$abi").asFile
+            if (dir.exists()) throw GradleException("verifyProotArtifact FAILED: forbidden jniLibs directory exists: $abi")
+        }
+        if (!prootMetadataFile.asFile.exists()) throw GradleException("verifyProotArtifact FAILED: proot_artifact.json not found")
+        val metadata = prootMetadataFile.asFile.readText()
+        val json = groovy.json.JsonSlurper().parseText(metadata) as Map<*, *>
+        if (json["abi"] != "arm64-v8a") throw GradleException("verifyProotArtifact FAILED: metadata abi must be arm64-v8a, got: ${json["abi"]}")
+        if (json["architecture"] != "aarch64") throw GradleException("verifyProotArtifact FAILED: metadata architecture must be aarch64, got: ${json["architecture"]}")
+        if (json["fileName"] != "libamitia_proot.so") throw GradleException("verifyProotArtifact FAILED: metadata fileName must be libamitia_proot.so, got: ${json["fileName"]}")
+        if (json["componentId"] != "runtime.proot") throw GradleException("verifyProotArtifact FAILED: metadata componentId must be runtime.proot, got: ${json["componentId"]}")
+        if ((json["schemaVersion"] as? Int) != 1) throw GradleException("verifyProotArtifact FAILED: metadata schemaVersion must be 1, got: ${json["schemaVersion"]}")
+        val metadataSha = json["sha256"] as? String ?: throw GradleException("verifyProotArtifact FAILED: metadata sha256 missing")
+        if (!metadataSha.matches(Regex("^[0-9a-f]{64}$"))) throw GradleException("verifyProotArtifact FAILED: metadata sha256 invalid format")
+        val source = json["source"] as? Map<*, *>
+        if (source != null) {
+            val patchCommit = source["androidPatchCommit"] as? String ?: ""
+            if (patchCommit.contains("placeholder")) throw GradleException("verifyProotArtifact FAILED: patch provenance is placeholder")
+        }
+        val sha256 = MessageDigest.getInstance("SHA-256")
+        prootArmFile.asFile.inputStream().use { fis ->
+            val buf = ByteArray(8192)
+            while (true) { val r = fis.read(buf); if (r == -1) break; sha256.update(buf, 0, r) }
+        }
+        val actualSha = sha256.digest().joinToString("") { b -> "%02x".format(b) }
+        if (actualSha != metadataSha) throw GradleException("verifyProotArtifact FAILED: SHA256 mismatch (metadata=$metadataSha, actual=$actualSha)")
+        val header = ByteArray(64)
+        prootArmFile.asFile.inputStream().use { it.read(header) }
+        if (header[0] != 0x7F.toByte() || header[1] != 'E'.code.toByte() || header[2] != 'L'.code.toByte() || header[3] != 'F'.code.toByte())
+            throw GradleException("verifyProotArtifact FAILED: not an ELF binary")
+        if (header[4].toInt() and 0xFF != 2) throw GradleException("verifyProotArtifact FAILED: not ELF64")
+        val machine = (header[18].toInt() and 0xFF) or ((header[19].toInt() and 0xFF) shl 8)
+        if (machine != 183) throw GradleException("verifyProotArtifact FAILED: not AArch64 (machine=$machine)")
+        logger.lifecycle("verifyProotArtifact PASSED: arm64-v8a/libamitia_proot.so verified (SHA256=$actualSha, ELF64 AArch64)")
+    }
+}
+
+tasks.named("preBuild").configure {
+    dependsOn("verifyProotArtifact")
 }
 
 dependencies {

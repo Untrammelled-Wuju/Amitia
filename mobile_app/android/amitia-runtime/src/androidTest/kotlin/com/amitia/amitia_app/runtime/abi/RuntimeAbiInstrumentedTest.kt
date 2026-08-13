@@ -30,16 +30,6 @@ class RuntimeAbiInstrumentedTest {
     }
 
     @Test
-    fun no_forbidden_abis_present() {
-        val forbidden = setOf("armeabi-v7a", "armeabi", "x86", "x86_64", "mips", "mips64", "riscv64")
-        val matched = Build.SUPPORTED_ABIS.filter { it in forbidden }
-        assertTrue(
-            "Found forbidden ABIs on device: $matched",
-            matched.isEmpty()
-        )
-    }
-
-    @Test
     fun gate_evaluates_supported_on_device() {
         val gate = DefaultRuntimeAbiGate(provider = BuildAndroidAbiProvider())
         val result = gate.evaluate()

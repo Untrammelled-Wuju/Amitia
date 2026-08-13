@@ -27,11 +27,11 @@ func (p *testOutboxPublisher) Count() int {
 }
 
 type recordingReflectionMemory struct {
-	requests []ReflectionMemoryCreateRequest
+	requests []ReflectionCandidateSubmitRequest
 	err      error
 }
 
-func (m *recordingReflectionMemory) CreateReflectionMemory(req ReflectionMemoryCreateRequest) error {
+func (m *recordingReflectionMemory) SubmitReflectionCandidate(req ReflectionCandidateSubmitRequest) error {
 	m.requests = append(m.requests, req)
 	if m.err != nil {
 		return m.err
@@ -61,14 +61,14 @@ func TestReflectionMemoryPublisherCreatesMemoryFromAbstractionEvent(t *testing.T
 		t.Fatal(err)
 	}
 	if len(mem.requests) != 1 {
-		t.Fatalf("expected one memory create, got %d", len(mem.requests))
+		t.Fatalf("expected one candidate submit, got %d", len(mem.requests))
 	}
 	req := mem.requests[0]
-	if req.CharacterID != "char-1" || req.MemoryType != "reflection" || req.Key != "reflection:ref-1:偏好" || req.Value != "用户连续表达了喜欢安静环境的偏好" {
-		t.Fatalf("unexpected memory request: %#v", req)
+	if req.CharacterID != "char-1" || req.Topic != "偏好" || req.Abstract != "用户连续表达了喜欢安静环境的偏好" {
+		t.Fatalf("unexpected submit request: %#v", req)
 	}
-	if req.Source != "reflection" || req.SourceMsgID != "ref-1" || req.SourceConvID != "conv-1" || req.Confidence != 82 || req.Importance != 8 {
-		t.Fatalf("unexpected memory metadata: %#v", req)
+	if req.Importance != 8 {
+		t.Fatalf("unexpected importance: %d", req.Importance)
 	}
 	if next.Count() != 1 {
 		t.Fatalf("expected next publisher to receive event, got %d", next.Count())
@@ -100,12 +100,15 @@ func TestReflectionMemoryPublisherCreatesMemoryFromApprovedCandidate(t *testing.
 		t.Fatal(err)
 	}
 	if len(mem.requests) != 2 {
-		t.Fatalf("expected two memory creates, got %d", len(mem.requests))
+		t.Fatalf("expected two candidate submits, got %d", len(mem.requests))
 	}
-	if mem.requests[0].CharacterID != "char-2" || mem.requests[0].Confidence != 60 || mem.requests[0].Importance != 6 {
+	if mem.requests[0].CharacterID != "char-2" || mem.requests[0].Importance != 6 {
 		t.Fatalf("unexpected first request: %#v", mem.requests[0])
 	}
-	if mem.requests[1].Key != "reflection:ref-2:情绪" || mem.requests[1].Value != "用户在考试前更容易紧张" {
+	if mem.requests[0].Topic != "作息" || mem.requests[0].Abstract != "用户常在夜间安排学习" {
+		t.Fatalf("unexpected first request content: %#v", mem.requests[0])
+	}
+	if mem.requests[1].Topic != "情绪" || mem.requests[1].Abstract != "用户在考试前更容易紧张" {
 		t.Fatalf("unexpected second request: %#v", mem.requests[1])
 	}
 }
@@ -124,15 +127,15 @@ func TestReflectionMemoryPublisherPassesThroughNonReflectionEvents(t *testing.T)
 		t.Fatal(err)
 	}
 	if len(mem.requests) != 0 {
-		t.Fatalf("expected no memory create, got %d", len(mem.requests))
+		t.Fatalf("expected no candidate submit, got %d", len(mem.requests))
 	}
 	if next.Count() != 1 {
 		t.Fatalf("expected next publisher to receive event, got %d", next.Count())
 	}
 }
 
-func TestReflectionMemoryPublisherReturnsCreateError(t *testing.T) {
-	mem := &recordingReflectionMemory{err: errors.New("create failed")}
+func TestReflectionMemoryPublisherReturnsSubmitError(t *testing.T) {
+	mem := &recordingReflectionMemory{err: errors.New("submit failed")}
 	publisher := NewReflectionMemoryPublisher(mem, nil)
 
 	err := publisher.Publish(outbox.OutboxRecord{
@@ -142,6 +145,6 @@ func TestReflectionMemoryPublisherReturnsCreateError(t *testing.T) {
 		Payload:     []byte(`{"characterId":"char-1","candidateId":"ref-1","topic":"偏好","abstract":"用户喜欢安静环境"}`),
 	})
 	if err == nil {
-		t.Fatal("expected create error")
+		t.Fatal("expected submit error")
 	}
 }

@@ -1,13 +1,17 @@
 package com.amitia.amitia_app.runtime.install.internal
 
+import com.amitia.amitia_app.runtime.install.ActiveProgramRoot
+import com.amitia.amitia_app.runtime.install.ActiveProgramRootResult
 import com.amitia.amitia_app.runtime.install.ActiveRuntimeManager
 import com.amitia.amitia_app.runtime.install.ActiveRuntimeResult
 import com.amitia.amitia_app.runtime.install.RuntimeHostLayout
 import com.amitia.amitia_app.runtime.install.RuntimeInstallErrorCode
+import com.amitia.amitia_app.runtime.manifest.RuntimeManifestStore
 import java.io.File
 
 internal class DefaultActiveRuntimeManager(
     private val layout: RuntimeHostLayout,
+    private val manifestStore: RuntimeManifestStore? = null,
 ) : ActiveRuntimeManager {
 
     override fun current(): ActiveRuntimeResult {
@@ -64,6 +68,13 @@ internal class DefaultActiveRuntimeManager(
             )
         }
 
+        if (manifestStore != null) {
+            val manifestError = verifyManifestForActivation(version, versionDir)
+            if (manifestError != null) {
+                return manifestError
+            }
+        }
+
         val markerContent = buildMarkerContent(version)
         val markerFile = layout.activeRuntimeFile
 
@@ -94,6 +105,145 @@ internal class DefaultActiveRuntimeManager(
                 message = "failed to write active runtime marker: ${e.message}"
             )
         }
+    }
+
+    private fun verifyManifestForActivation(
+        version: String,
+        versionDir: File,
+    ): ActiveRuntimeResult.Failure? {
+        val result = manifestStore!!.read()
+        when (result) {
+            is com.amitia.amitia_app.runtime.manifest.RuntimeManifestResult.Success -> {
+                if (result.manifest.runtimeVersion != version) {
+                    return ActiveRuntimeResult.Failure(
+                        code = RuntimeInstallErrorCode.ACTIVE_RUNTIME_NOT_INSTALLED,
+                        message = "manifest version ${result.manifest.runtimeVersion} does not match active version $version"
+                    )
+                }
+            }
+            is com.amitia.amitia_app.runtime.manifest.RuntimeManifestResult.Failure -> {
+                return ActiveRuntimeResult.Failure(
+                    code = RuntimeInstallErrorCode.ACTIVE_RUNTIME_NOT_INSTALLED,
+                    message = "no valid installed manifest found: ${result.error.message}"
+                )
+            }
+        }
+
+        val backendFile = File(versionDir, "backend/amitia-server")
+        if (!backendFile.exists()) {
+            return ActiveRuntimeResult.Failure(
+                code = RuntimeInstallErrorCode.ACTIVE_RUNTIME_MISSING,
+                message = "backend entry missing: backend/amitia-server"
+            )
+        }
+        val nodeFile = File(versionDir, "node/bin/node")
+        if (!nodeFile.exists()) {
+            return ActiveRuntimeResult.Failure(
+                code = RuntimeInstallErrorCode.ACTIVE_RUNTIME_MISSING,
+                message = "node entry missing: node/bin/node"
+            )
+        }
+        val qdrantFile = File(versionDir, "qdrant/bin/qdrant")
+        if (!qdrantFile.exists()) {
+            return ActiveRuntimeResult.Failure(
+                code = RuntimeInstallErrorCode.ACTIVE_RUNTIME_MISSING,
+                message = "qdrant entry missing: qdrant/bin/qdrant"
+            )
+        }
+
+        return null
+    }
+
+    override fun resolveActiveProgramRoot(): ActiveProgramRootResult {
+        val markerFile = layout.activeRuntimeFile
+        if (!markerFile.exists()) {
+            return ActiveProgramRootResult.NoActiveRuntime
+        }
+
+        val content = try {
+            markerFile.readText(Charsets.UTF_8)
+        } catch (e: Exception) {
+            return ActiveProgramRootResult.Failure(
+                code = RuntimeInstallErrorCode.ACTIVE_RUNTIME_METADATA_INVALID,
+                message = "failed to read active runtime marker: ${e.message}"
+            )
+        }
+
+        val version = try {
+            parseRuntimeVersion(content)
+        } catch (e: Exception) {
+            return ActiveProgramRootResult.Failure(
+                code = RuntimeInstallErrorCode.ACTIVE_RUNTIME_METADATA_INVALID,
+                message = "invalid active runtime marker: ${e.message}"
+            )
+        }
+
+        val versionDir = layout.runtimeVersionRoot(version)
+        if (!versionDir.exists() || !versionDir.isDirectory) {
+            return ActiveProgramRootResult.Failure(
+                code = RuntimeInstallErrorCode.ACTIVE_RUNTIME_MISSING,
+                message = "active runtime version directory missing: $version"
+            )
+        }
+
+        if (!versionDir.absolutePath.startsWith(layout.versionsRoot.absolutePath + "/")) {
+            return ActiveProgramRootResult.Failure(
+                code = RuntimeInstallErrorCode.ACTIVE_RUNTIME_MISSING,
+                message = "active program root must be within versionsRoot"
+            )
+        }
+
+        if (versionDir.absolutePath == layout.versionsRoot.absolutePath) {
+            return ActiveProgramRootResult.Failure(
+                code = RuntimeInstallErrorCode.ACTIVE_RUNTIME_MISSING,
+                message = "active program root must not be versionsRoot directly"
+            )
+        }
+
+        val manifestIdentity = try {
+            val canon = versionDir.canonicalFile
+            val versionsCanon = layout.versionsRoot.canonicalFile
+            if (!canon.absolutePath.startsWith(versionsCanon.absolutePath + "/")) {
+                return ActiveProgramRootResult.Failure(
+                    code = RuntimeInstallErrorCode.ACTIVE_RUNTIME_MISSING,
+                    message = "active program root symlink escape detected"
+                )
+            }
+            canon.absolutePath
+        } catch (e: Exception) {
+            return ActiveProgramRootResult.Failure(
+                code = RuntimeInstallErrorCode.ACTIVE_RUNTIME_MISSING,
+                message = "failed to resolve canonical path: ${e.message}"
+            )
+        }
+
+        if (manifestStore != null) {
+            val storeResult = manifestStore.read()
+            when (storeResult) {
+                is com.amitia.amitia_app.runtime.manifest.RuntimeManifestResult.Success -> {
+                    if (storeResult.manifest.runtimeVersion != version) {
+                        return ActiveProgramRootResult.Failure(
+                            code = RuntimeInstallErrorCode.ACTIVE_RUNTIME_NOT_INSTALLED,
+                            message = "manifest version ${storeResult.manifest.runtimeVersion} does not match active version $version"
+                        )
+                    }
+                }
+                is com.amitia.amitia_app.runtime.manifest.RuntimeManifestResult.Failure -> {
+                    return ActiveProgramRootResult.Failure(
+                        code = RuntimeInstallErrorCode.ACTIVE_RUNTIME_NOT_INSTALLED,
+                        message = "no valid installed manifest: ${storeResult.error.message}"
+                    )
+                }
+            }
+        }
+
+        return ActiveProgramRootResult.Ready(
+            ActiveProgramRoot(
+                runtimeVersion = version,
+                hostDirectory = versionDir,
+                manifestIdentity = manifestIdentity,
+            )
+        )
     }
 
     private fun parseRuntimeVersion(content: String): String {

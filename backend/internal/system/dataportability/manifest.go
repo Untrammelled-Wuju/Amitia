@@ -22,6 +22,7 @@ const (
 	ScopeAll       BackupScope = "all"
 	ScopeCharacter BackupScope = "character"
 	ScopeSettings  BackupScope = "settings"
+	ScopeMemory    BackupScope = "memory"
 
 	PurposeMigration  BackupPurpose = "migration"
 	PurposeUser       BackupPurpose = "user"
@@ -33,6 +34,7 @@ const (
 	KindResource   ComponentKind = "resource"
 	KindMetadata   ComponentKind = "metadata"
 	KindManifest   ComponentKind = "manifest"
+	KindNDJSON     ComponentKind = "ndjson"
 )
 
 type BackupManifest struct {

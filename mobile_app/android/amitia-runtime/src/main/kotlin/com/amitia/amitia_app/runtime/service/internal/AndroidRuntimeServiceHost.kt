@@ -32,8 +32,8 @@ internal class AndroidRuntimeServiceHost(
         }
     }
 
-    override fun ensureStarted(): RuntimeServiceResult {
-        val result = RuntimeService.startHost(context)
+    override fun ensureStarted(generation: Long): RuntimeServiceResult {
+        val result = RuntimeService.startHost(context, generation)
         if (result is RuntimeServiceResult.Success && !bound) {
             bound = RuntimeServiceConnection.bind(context, serviceConnection)
         }

@@ -3,43 +3,45 @@ package com.amitia.amitia_app.runtime.proot.internal
 import com.amitia.amitia_app.runtime.connection.BackendEndpointPolicy
 import com.amitia.amitia_app.runtime.connection.embeddedAndroidBackendPolicy
 import com.amitia.amitia_app.runtime.install.RuntimeHostLayout
+import com.amitia.amitia_app.runtime.proot.GuestLayout
+import com.amitia.amitia_app.runtime.proot.MountContract
 import com.amitia.amitia_app.runtime.proot.ProotBindMount
 import com.amitia.amitia_app.runtime.proot.ProotEnvironment
 import com.amitia.amitia_app.runtime.proot.ProotLaunchRequest
 import com.amitia.amitia_app.runtime.proot.ProotLaunchSpec
-import com.amitia.amitia_app.runtime.proot.RuntimeEnvironment
 import com.amitia.amitia_app.runtime.proot.RuntimeEnvironmentBuilder
 import com.amitia.amitia_app.runtime.proot.RuntimeEnvironmentRequest
 import com.amitia.amitia_app.runtime.proot.RuntimeEnvironmentResult
+import java.io.File
 
 internal class ProotEnvironmentAssembler(
     private val layout: RuntimeHostLayout,
     private val environmentBuilder: RuntimeEnvironmentBuilder,
 ) {
 
-    fun assembleRootfsProbe(): ProotLaunchSpec {
+    fun assembleRootfsProbe(activeProgramSource: File): ProotLaunchSpec {
         val environment = buildEnvironment()
-        val bindMounts = buildBindMounts(layout)
+        val bindMounts = buildBindMounts(activeProgramSource)
 
         return ProotLaunchSpec(
             binaryPath = "",
             rootfsPath = layout.rootfsRoot.absolutePath,
-            workingDirectory = ProotLaunchSpec.DEFAULT_WORKDIR,
+            workingDirectory = GuestLayout.BACKEND_DIR,
             command = listOf("/usr/bin/env"),
             bindMounts = bindMounts,
             environment = environment,
         )
     }
 
-    fun assembleBackendLaunch(): ProotLaunchSpec {
+    fun assembleBackendLaunch(activeProgramSource: File): ProotLaunchSpec {
         val environment = buildEnvironment()
-        val bindMounts = buildBindMounts(layout)
+        val bindMounts = buildBindMounts(activeProgramSource)
 
         return ProotLaunchSpec(
             binaryPath = "",
             rootfsPath = layout.rootfsRoot.absolutePath,
-            workingDirectory = ProotLaunchSpec.DEFAULT_WORKDIR,
-            command = listOf("/opt/amitia/backend/amitia-server"),
+            workingDirectory = GuestLayout.BACKEND_DIR,
+            command = listOf(GuestLayout.BACKEND_SERVER),
             bindMounts = bindMounts,
             environment = environment,
         )
@@ -69,20 +71,9 @@ internal class ProotEnvironmentAssembler(
         }
     }
 
-    private fun buildBindMounts(layout: RuntimeHostLayout): List<ProotBindMount> {
-        val mounts = mutableListOf<ProotBindMount>()
-
-        mounts.add(ProotBindMount.create(layout.versionsRoot.absolutePath, "/opt/amitia"))
-        mounts.add(ProotBindMount.create(layout.configRoot.absolutePath, "/etc/amitia"))
-        mounts.add(ProotBindMount.create(layout.dataRoot.absolutePath, "/var/lib/amitia"))
-        mounts.add(ProotBindMount.create(layout.cacheRoot.absolutePath, "/var/cache/amitia"))
-        mounts.add(ProotBindMount.create(layout.logRoot.absolutePath, "/var/log/amitia"))
-        mounts.add(ProotBindMount.create(layout.runRoot.absolutePath, "/run/amitia"))
-        mounts.add(ProotBindMount.create(layout.homeRoot.absolutePath, "/home/amitia"))
-        mounts.add(ProotBindMount.create("/system", "/system"))
-        mounts.add(ProotBindMount.create("/proc", "/proc"))
-
-        return mounts
+    private fun buildBindMounts(activeProgramSource: File): List<ProotBindMount> {
+        val contract = MountContract.build(layout, activeProgramSource)
+        return contract.toProotBindMounts()
     }
 }
 

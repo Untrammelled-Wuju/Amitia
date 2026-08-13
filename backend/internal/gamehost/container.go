@@ -71,7 +71,9 @@ func (c *GameHostContainer) Start(ctx context.Context) error {
 	if c == nil {
 		return nil
 	}
-	if c.StartupGate != nil {
+	if c.StartupRecovery != nil {
+		c.StartupRecovery.RunStartupRecovery(ctx)
+	} else if c.StartupGate != nil {
 		c.StartupGate.Open()
 	}
 	return nil

@@ -31,7 +31,6 @@ android {
         ndk {
             abiFilters.clear()
             abiFilters.add("arm64-v8a")
-            abiFilters.add("x86_64")
         }
     }
 

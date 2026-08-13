@@ -3,6 +3,7 @@ package system
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
+	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"gorm.io/gorm"
 )
@@ -47,7 +49,27 @@ func newWebChatScopeTestHandler(t *testing.T) (*Handler, *gorm.DB) {
 	)`).Error; err != nil {
 		t.Fatal(err)
 	}
-	return &Handler{db: db}, db
+	return &Handler{db: db, chatSvc: &fakeWebChatService{}}, db
+}
+
+type fakeWebChatService struct {
+	chat.Service
+	seq int
+}
+
+func (f *fakeWebChatService) EnsureChannelConversation(channel string) (*chat.Conversation, error) {
+	return nil, fmt.Errorf("not found")
+}
+
+func (f *fakeWebChatService) CreateConversation(req *chat.CreateConversationRequest) (*chat.Conversation, error) {
+	f.seq++
+	return &chat.Conversation{
+		ID:          fmt.Sprintf("conv-auto-%d", f.seq),
+		Title:       req.Title,
+		CharacterID: req.CharacterID,
+		Channel:     req.Channel,
+		Source:      req.Source,
+	}, nil
 }
 
 func postWebChatCreateConv(t *testing.T, h *Handler, body map[string]any) map[string]any {

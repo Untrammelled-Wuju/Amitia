@@ -53,11 +53,11 @@ func (r *Runtime) renewPackageExtensionLease(ctx context.Context, extensionID, o
 	return err
 }
 
-func (r *Runtime) releasePackageExtensionLease(ctx context.Context, extensionID, operationID string) error {
+func (r *Runtime) releasePackageExtensionLease(ctx context.Context, extensionID, operationID string, fencingTokens ...int64) error {
 	if r.container == nil || r.container.PackageRepository == nil {
 		return fmt.Errorf("kernel: package repository unavailable")
 	}
-	return r.container.PackageRepository.ReleaseExtensionLease(ctx, extensionID, operationID, operationID)
+	return r.container.PackageRepository.ReleaseExtensionLease(ctx, extensionID, operationID, operationID, fencingTokens...)
 }
 
 func packageWriteGuard(lease PackageExtensionLease) PackageWriteGuard {
@@ -68,6 +68,7 @@ type PackageLeaseGuard struct {
 	runtime       *Runtime
 	extensionID   string
 	operationID   string
+	fencingToken  int64
 	cancel        context.CancelFunc
 	lastErr       error
 	mu            sync.Mutex
@@ -164,7 +165,7 @@ func (g *PackageLeaseGuard) Stop(ctx context.Context) error {
 	if alreadyReleased {
 		return nil
 	}
-	releaseErr := g.runtime.releasePackageExtensionLease(ctx, g.extensionID, g.operationID)
+	releaseErr := g.runtime.releasePackageExtensionLease(ctx, g.extensionID, g.operationID, g.fencingToken)
 	if releaseErr != nil {
 		if IsPackageOperationError(releaseErr, OperationErrLeaseConflict) {
 			return nil

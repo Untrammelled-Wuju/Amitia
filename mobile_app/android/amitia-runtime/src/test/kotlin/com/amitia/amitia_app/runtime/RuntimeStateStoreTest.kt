@@ -69,14 +69,65 @@ class RuntimeStateStoreTest {
     }
 
     @Test
-    fun realUpdate_incrementsGeneration() {
+    fun realUpdate_generationUnchangedWithoutExplicitSet() {
         val store = RuntimeStateStore(FakeClock(1000))
         val initialGen = store.snapshot().generation
 
         store.update { it.copy(state = RuntimeState.INSTALLED) }
 
         val newGen = store.snapshot().generation
-        assertEquals(initialGen + 1, newGen)
+        assertEquals(initialGen, newGen)
+    }
+
+    @Test
+    fun transitionToStarting_generatesNewGeneration() {
+        val store = RuntimeStateStore(FakeClock(1000))
+        store.update { it.copy(state = RuntimeState.INSTALLED, generation = 5) }
+
+        val result = store.transitionToStarting()
+
+        assertEquals(RuntimeState.STARTING, result.state)
+        assertEquals(6, result.generation)
+        assertEquals(6, store.snapshot().generation)
+    }
+
+    @Test
+    fun transitionFromStopped_generatesFirstGeneration() {
+        val store = RuntimeStateStore(FakeClock(1000))
+        store.update { it.copy(state = RuntimeState.INSTALLED, generation = 0) }
+        store.update { it.copy(state = RuntimeState.STOPPED) }
+
+        val result = store.transitionToStarting()
+
+        assertEquals(RuntimeState.STARTING, result.state)
+        assertEquals(1, result.generation)
+    }
+
+    @Test
+    fun transitionToStarting_fromReady_fails() {
+        val store = RuntimeStateStore(FakeClock(1000))
+        store.update { it.copy(state = RuntimeState.INSTALLED, generation = 1) }
+        store.update { it.copy(state = RuntimeState.STARTING, generation = 2) }
+        store.update { it.copy(state = RuntimeState.READY) }
+
+        try {
+            store.transitionToStarting()
+            throw AssertionError("should have thrown")
+        } catch (_: IllegalRuntimeTransitionException) {
+        }
+    }
+
+    @Test
+    fun transitionToStarting_fromStarting_fails() {
+        val store = RuntimeStateStore(FakeClock(1000))
+        store.update { it.copy(state = RuntimeState.INSTALLED, generation = 1) }
+        store.transitionToStarting()
+
+        try {
+            store.transitionToStarting()
+            throw AssertionError("should have thrown")
+        } catch (_: IllegalRuntimeTransitionException) {
+        }
     }
 
     @Test

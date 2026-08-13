@@ -14,6 +14,7 @@ sealed interface RuntimeServiceHostEvent {
         val sessionId: String
     ) : RuntimeServiceHostEvent
     data class SessionExited(
+        val generation: Long,
         val sessionId: String,
         val exitCode: Int?,
         val forced: Boolean

@@ -14,7 +14,7 @@ import org.junit.Test
 internal class FakeServiceHostNoRecovery : RuntimeServiceHost {
     private val listeners = mutableListOf<com.amitia.amitia_app.runtime.service.RuntimeServiceHostListener>()
 
-    override fun ensureStarted() = com.amitia.amitia_app.runtime.service.RuntimeServiceResult.Success
+    override fun ensureStarted(generation: Long) = com.amitia.amitia_app.runtime.service.RuntimeServiceResult.Success
     override fun requestStop() = com.amitia.amitia_app.runtime.service.RuntimeServiceResult.Success
     override fun addListener(listener: com.amitia.amitia_app.runtime.service.RuntimeServiceHostListener) {
         listeners.add(listener)

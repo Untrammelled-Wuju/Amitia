@@ -231,6 +231,27 @@ type HostAPIRouteDeps struct {
 	ClipboardHost       ClipboardHost
 	RuntimeSupervisor   RuntimeHealthReader
 	ScopeSnapshotStore  host_api.ScopeSnapshotStore
+	SecretStore         SecretStore
+	ProviderInvoker     ProviderInvoker
+}
+
+type SecretStore interface {
+	Get(ctx context.Context, ref string) ([]byte, error)
+}
+
+type ProviderInvoker interface {
+	Invoke(ctx context.Context, request ProviderInvokeRequest) (ProviderInvokeResponse, error)
+}
+
+type ProviderInvokeRequest struct {
+	Target  string          `json:"target"`
+	Action  string          `json:"action"`
+	Payload json.RawMessage `json:"payload"`
+}
+
+type ProviderInvokeResponse struct {
+	Success bool            `json:"success"`
+	Result  json.RawMessage `json:"result"`
 }
 
 type resourceHandle struct {
@@ -1524,6 +1545,80 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 					"moduleId":    modID,
 					"instances":   instances,
 					"total":       len(instances),
+				})
+				return host_api.CallResult{
+					Status: host_api.StatusSuccess,
+					Output: output,
+				}, nil
+			},
+		},
+		{
+			method:          host_api.MethodSecretGet,
+			riskLevel:       host_api.RiskHigh,
+			sideEffectLevel: host_api.SideEffectReadOnly,
+			timeout:         5 * time.Second,
+			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+				var p struct {
+					Ref string `json:"ref"`
+				}
+				if err := json.Unmarshal(req.Input, &p); err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+					}, nil
+				}
+				if deps.SecretStore == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "secret store not configured"},
+					}, nil
+				}
+				value, err := deps.SecretStore.Get(ctx, p.Ref)
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeResourceNotFound, Message: err.Error()},
+					}, nil
+				}
+				output, _ := json.Marshal(map[string]any{
+					"ref":   p.Ref,
+					"value": string(value),
+				})
+				return host_api.CallResult{
+					Status: host_api.StatusSuccess,
+					Output: output,
+				}, nil
+			},
+		},
+		{
+			method:          host_api.MethodProviderInvoke,
+			riskLevel:       host_api.RiskCritical,
+			sideEffectLevel: host_api.SideEffectExternal,
+			timeout:         30 * time.Second,
+			handler: func(ctx context.Context, req host_api.CallRequest) (host_api.CallResult, error) {
+				var p ProviderInvokeRequest
+				if err := json.Unmarshal(req.Input, &p); err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInputInvalid, Message: err.Error()},
+					}, nil
+				}
+				if deps.ProviderInvoker == nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeHostUnavailable, Message: "provider invoker not configured"},
+					}, nil
+				}
+				resp, err := deps.ProviderInvoker.Invoke(ctx, p)
+				if err != nil {
+					return host_api.CallResult{
+						Status: host_api.StatusFailed,
+						Error:  &host_api.Error{Code: host_api.ErrorCodeInternal, Message: err.Error()},
+					}, nil
+				}
+				output, _ := json.Marshal(map[string]any{
+					"success": resp.Success,
+					"result":  json.RawMessage(resp.Result),
 				})
 				return host_api.CallResult{
 					Status: host_api.StatusSuccess,

@@ -75,7 +75,7 @@ type AgentSkillLimits struct {
 }
 
 func DefaultAgentSkillLimits() AgentSkillLimits {
-	return AgentSkillLimits{MaxFiles: 500, MaxDepth: 12, MaxExpandedBytes: 50 << 20, MaxSkillMDBytes: 256 << 10, MaxTextResourceBytes: 2 << 20, MaxResourceBytes: 20 << 20, MaxCompressionRatio: 100, MaxFrontmatterBytes: 64 << 10, MaxYAMLDepth: 16, MaxActivations: 3, MaxBodyTokens: 32768, MaxPromptTokens: 49152, MaxCatalogEntries: 100, MaxCatalogTokens: 8192, MaxResourceReads: 20, MaxResourceReadBytes: 4 << 20}
+	return AgentSkillLimits{MaxFiles: 500, MaxDepth: 12, MaxExpandedBytes: 50 << 20, MaxSkillMDBytes: 256 << 10, MaxTextResourceBytes: 2 << 20, MaxResourceBytes: 20 << 20, MaxCompressionRatio: 100, MaxFrontmatterBytes: 64 << 10, MaxYAMLDepth: 16, MaxActivations: 4, MaxBodyTokens: 5000, MaxPromptTokens: 10000, MaxCatalogEntries: 100, MaxCatalogTokens: 10000, MaxResourceReads: 20, MaxResourceReadBytes: 4 << 20}
 }
 
 type AgentSkillWarning struct {
@@ -120,13 +120,53 @@ type AgentSkillMCPDependency struct {
 	RequiresManualConfirmation bool     `json:"requiresManualConfirmation"`
 }
 type AgentSkillCompatibilityReport struct {
-	Status          AgentSkillCompatibilityStatus `json:"status"`
-	ToolMappings    []AgentSkillToolMapping       `json:"toolMappings"`
-	RequiredScripts []string                      `json:"requiredScripts"`
-	MissingFiles    []string                      `json:"missingFiles"`
-	Unsupported     []string                      `json:"unsupported"`
-	Warnings        []AgentSkillWarning           `json:"warnings"`
-	Errors          []AgentSkillError             `json:"errors"`
+	Status             AgentSkillCompatibilityStatus `json:"status"`
+	DetectedProfiles   []AgentSkillEcosystemProfile  `json:"detectedProfiles,omitempty"`
+	FieldMappings      []AgentSkillFieldMapping      `json:"fieldMappings,omitempty"`
+	ToolMappings       []AgentSkillToolMapping       `json:"toolMappings"`
+	MappedFeatures     []AgentSkillFeatureResult     `json:"mappedFeatures,omitempty"`
+	DependencyMappings []AgentSkillDependencyMapping `json:"dependencyMappings,omitempty"`
+	RequiredScripts    []string                      `json:"requiredScripts"`
+	MissingFiles       []string                      `json:"missingFiles"`
+	Unsupported        []string                      `json:"unsupported"`
+	Warnings           []AgentSkillWarning           `json:"warnings"`
+	Errors             []AgentSkillError             `json:"errors"`
+	Fingerprint        *AgentSkillCompatibilityFingerprint `json:"fingerprint,omitempty"`
+	EvaluatedAt        time.Time                     `json:"evaluatedAt"`
+}
+
+type AgentSkillEcosystemProfile struct {
+	ID       string   `json:"id"`
+	Version  string   `json:"version"`
+	Evidence []string `json:"evidence"`
+}
+
+type AgentSkillFieldMapping struct {
+	Profile string `json:"profile"`
+	Source  string `json:"source"`
+	Target  string `json:"target"`
+	State   string `json:"state"`
+	Reason  string `json:"reason,omitempty"`
+}
+
+type AgentSkillFeatureResult struct {
+	Profile string `json:"profile"`
+	Feature string `json:"feature"`
+	State   string `json:"state"`
+	Reason  string `json:"reason,omitempty"`
+}
+
+type AgentSkillDependencyMapping struct {
+	Profile    string `json:"profile"`
+	ResolvedAs string `json:"resolvedAs"`
+	State      string `json:"state"`
+	Reason     string `json:"reason,omitempty"`
+}
+
+type AgentSkillCompatibilityFingerprint struct {
+	ContentHash     string            `json:"contentHash"`
+	AdapterVersions map[string]string `json:"adapterVersions"`
+	CapabilityGen   int               `json:"capabilityGeneration"`
 }
 
 type AgentSkillDefinition struct {

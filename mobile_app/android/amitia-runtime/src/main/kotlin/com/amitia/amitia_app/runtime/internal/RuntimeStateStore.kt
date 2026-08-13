@@ -64,19 +64,67 @@ class RuntimeStateStore(
                 )
             }
 
-            val resolvedSnapshot = if (oldSnapshot.generation == newSnapshot.generation) {
-                newSnapshot.copy(
-                    generation = oldSnapshot.generation + 1,
-                    updatedAtEpochMillis = clock.nowEpochMillis()
-                )
-            } else {
-                newSnapshot
-            }
+            val resolvedSnapshot = newSnapshot.copy(
+                updatedAtEpochMillis = clock.nowEpochMillis()
+            )
 
             currentSnapshot = resolvedSnapshot
             resultSnapshot = resolvedSnapshot
             snapshotToNotify = resolvedSnapshot.copy(
                 components = resolvedSnapshot.components.toList()
+            )
+        }
+
+        val snap = snapshotToNotify
+        if (snap != null) {
+            val snapshotListeners = ArrayList(listeners)
+            for (entry in snapshotListeners) {
+                try {
+                    if (!entry.cancelled.get()) {
+                        entry.listener.onRuntimeSnapshotChanged(snap)
+                    }
+                } catch (_: Throwable) {
+                }
+            }
+        }
+
+        return resultSnapshot.copy(
+            components = resultSnapshot.components.toList()
+        )
+    }
+
+    fun transitionToStarting(): RuntimeSnapshot {
+        var resultSnapshot: RuntimeSnapshot
+        var snapshotToNotify: RuntimeSnapshot? = null
+
+        lock.writeLock().withLock {
+            if (closed.get()) {
+                throw IllegalStateException("state store is closed")
+            }
+
+            val oldSnapshot = currentSnapshot
+
+            val stateError = RuntimeStateMachine.requireTransitionTo(oldSnapshot.state, RuntimeState.STARTING)
+            if (stateError != null) {
+                throw IllegalRuntimeTransitionException(stateError.from, stateError.to)
+            }
+
+            if (oldSnapshot.generation == Long.MAX_VALUE) {
+                throw IllegalStateException("generation overflow")
+            }
+
+            val newGeneration = oldSnapshot.generation + 1
+
+            val newSnapshot = oldSnapshot.copy(
+                state = RuntimeState.STARTING,
+                generation = newGeneration,
+                updatedAtEpochMillis = clock.nowEpochMillis()
+            )
+
+            currentSnapshot = newSnapshot
+            resultSnapshot = newSnapshot
+            snapshotToNotify = newSnapshot.copy(
+                components = newSnapshot.components.toList()
             )
         }
 

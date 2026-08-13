@@ -2151,6 +2151,10 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 		return fmt.Errorf("sqlite: iterate migration rows: %w", err)
 	}
 
+	if err := ensureSchemaColumns(ctx, tx); err != nil {
+		return fmt.Errorf("sqlite: pre-ensure schema columns: %w", err)
+	}
+
 	for i, ddl := range schemaMigrations {
 		version := i + 1
 		checksum := computeChecksum(ddl)
@@ -2308,6 +2312,10 @@ var schemaColumnAdditions = []columnAddition{
 	{"extension_package_resource_quarantine", "namespace_hash", "TEXT NOT NULL DEFAULT ''"},
 	{"extension_package_resource_quarantine", "original_path", "TEXT NOT NULL DEFAULT ''"},
 	{"extension_package_resource_quarantine", "content_storage_reference", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_package_user_data_restore_journal", "applied_count", "INTEGER NOT NULL DEFAULT 0"},
+	{"extension_package_user_data_restore_journal", "cursor", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_package_user_data_restore_journal", "batch_hash", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_package_user_data_restore_journal", "namespace_hash", "TEXT NOT NULL DEFAULT ''"},
 	{"package_quarantine_metadata", "fencing_token", "INTEGER NOT NULL DEFAULT 0"},
 	{"package_quarantine_metadata", "release_state", "TEXT NOT NULL DEFAULT 'active'"},
 	{"package_quarantine_metadata", "release_error", "TEXT NOT NULL DEFAULT ''"},

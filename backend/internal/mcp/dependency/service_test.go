@@ -21,7 +21,7 @@ func dependencyTestService(t *testing.T) (*Service, *mcp.Repository) {
 		t.Fatal(err)
 	}
 	repository := mcp.NewRepository(db)
-	return New(repository, nil, nil, nil), repository
+	return New(repository, nil, nil, nil, nil), repository
 }
 
 func httpDependency(id string, required bool) extension.AgentSkillMCPDependency {

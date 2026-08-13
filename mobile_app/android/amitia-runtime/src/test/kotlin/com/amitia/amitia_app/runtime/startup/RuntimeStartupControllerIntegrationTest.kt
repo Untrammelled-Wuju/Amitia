@@ -59,7 +59,7 @@ class RuntimeStartupControllerIntegrationTest {
     fun start_withServiceReady_transitionsToStartingAndReturnsSuccess() {
         val stateStore = createStoppedStateStore()
         val serviceHost = object : RuntimeServiceHost {
-            override fun ensureStarted(): RuntimeServiceResult = RuntimeServiceResult.Success
+            override fun ensureStarted(generation: Long): RuntimeServiceResult = RuntimeServiceResult.Success
             override fun requestStop(): RuntimeServiceResult = RuntimeServiceResult.Success
             override fun addListener(listener: RuntimeServiceHostListener) {}
             override fun removeListener(listener: RuntimeServiceHostListener) {}
@@ -91,7 +91,7 @@ class RuntimeStartupControllerIntegrationTest {
     fun start_whenServiceFails_returnsFailure() {
         val stateStore = createStoppedStateStore()
         val serviceHost = object : RuntimeServiceHost {
-            override fun ensureStarted(): RuntimeServiceResult = RuntimeServiceResult.Failure(
+            override fun ensureStarted(generation: Long): RuntimeServiceResult = RuntimeServiceResult.Failure(
                 com.amitia.amitia_app.runtime.service.RuntimeServiceError(
                     com.amitia.amitia_app.runtime.service.RuntimeServiceErrorCode.SERVICE_START_FAILED,
                     "service start unavailable"
@@ -129,7 +129,7 @@ class RuntimeStartupControllerIntegrationTest {
         val stateStore = createStoppedStateStore()
         stateStore.update { it.copy(state = RuntimeState.STARTING) }
         val serviceHost = object : RuntimeServiceHost {
-            override fun ensureStarted(): RuntimeServiceResult = RuntimeServiceResult.Success
+            override fun ensureStarted(generation: Long): RuntimeServiceResult = RuntimeServiceResult.Success
             override fun requestStop(): RuntimeServiceResult = RuntimeServiceResult.Success
             override fun addListener(listener: RuntimeServiceHostListener) {}
             override fun removeListener(listener: RuntimeServiceHostListener) {}
@@ -163,7 +163,7 @@ class RuntimeStartupControllerIntegrationTest {
         store.update { it.copy(state = RuntimeState.UNKNOWN) }
         store.update { it.copy(state = RuntimeState.CORRUPTED) }
         val serviceHost = object : RuntimeServiceHost {
-            override fun ensureStarted(): RuntimeServiceResult = RuntimeServiceResult.Success
+            override fun ensureStarted(generation: Long): RuntimeServiceResult = RuntimeServiceResult.Success
             override fun requestStop(): RuntimeServiceResult = RuntimeServiceResult.Success
             override fun addListener(listener: RuntimeServiceHostListener) {}
             override fun removeListener(listener: RuntimeServiceHostListener) {}

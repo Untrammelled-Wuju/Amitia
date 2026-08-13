@@ -535,6 +535,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		OperationRepository: opRepo,
 		ExtensionRoot:       b.extRoot,
 		ScopeSnapshotStore:  host_api.NewSnapshotStoreAdapter(scopeStore),
+		SecretStore:         nil,
+		ProviderInvoker:     nil,
 	}); err != nil {
 		return nil, fmt.Errorf("kernel: setup host api routes: %w", err)
 	}

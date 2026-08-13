@@ -168,7 +168,7 @@ class PluginDetailPage extends ConsumerWidget {
                     label: '更新',
                     isSecondary: true,
                     height: 36,
-                    onPressed: () {},
+                    onPressed: null,
                   ),
                   AmitiaButton(
                     label: '卸载',

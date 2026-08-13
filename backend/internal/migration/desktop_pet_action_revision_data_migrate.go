@@ -10,6 +10,14 @@ func DesktopPetActionRevisionDataMigrateMigration() Migration {
 		Version: "202607310020",
 		Name:    "migrate_legacy_action_revision_data_to_stream",
 		Up: func(s *Step) error {
+			exists, err := s.TableExists("desktop_pet_action_revisions")
+			if err != nil {
+				return err
+			}
+			if !exists {
+				return nil
+			}
+
 			db := s.DB()
 			if db == nil {
 				return nil
@@ -49,8 +57,8 @@ func DesktopPetActionRevisionDataMigrateMigration() Migration {
 						streamID = existingID.ID
 					} else {
 						streamID = fmt.Sprintf("as-mig-%d", time.Now().UnixNano())
-						if err := db.Exec(`INSERT INTO desktop_pet_action_streams 
-							(id, user_id, character_id, action_key, root_processing_task_id, stream_key, next_revision_number, created_at, updated_at) 
+						if err := db.Exec(`INSERT INTO desktop_pet_action_streams
+							(id, user_id, character_id, action_key, root_processing_task_id, stream_key, next_revision_number, created_at, updated_at)
 							VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)`,
 							streamID, rev.UserID, rev.CharacterID, rev.ActionKey,
 							rev.ProcessingTaskID, streamKey, now, now).Error; err != nil {
@@ -130,8 +138,8 @@ func DesktopPetActionRevisionDataMigrateMigration() Migration {
 				}
 
 				bindingID := fmt.Sprintf("ab-mig-%d", time.Now().UnixNano())
-				if err := db.Exec(`INSERT INTO desktop_pet_active_action_revision_bindings 
-					(id, action_stream_id, user_id, character_id, action_key, active_action_revision_id, binding_revision, bound_reason, bound_by, bound_at, created_at, updated_at) 
+				if err := db.Exec(`INSERT INTO desktop_pet_active_action_revision_bindings
+					(id, action_stream_id, user_id, character_id, action_key, active_action_revision_id, binding_revision, bound_reason, bound_by, bound_at, created_at, updated_at)
 					VALUES (?, ?, ?, ?, ?, ?, ?, 'legacy_migration', 'system', ?, ?, ?)`,
 					bindingID, streamID, lb.UserID, lb.CharacterID, lb.ActionKey,
 					lb.RevisionID, lb.BindingVersion, now, now, now).Error; err != nil {

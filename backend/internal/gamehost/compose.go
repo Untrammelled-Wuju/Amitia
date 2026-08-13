@@ -59,8 +59,10 @@ func ComposeUpgradeCoordinator(
 	})
 }
 
-func ComposeStartupRecovery() *startup.StartupRecoveryCoordinator {
-	return startup.NewStartupRecoveryCoordinator(startup.StartupRecoveryDeps{})
+func ComposeStartupRecovery(gate *startup.StartupGate) *startup.StartupRecoveryCoordinator {
+	return startup.NewStartupRecoveryCoordinator(startup.StartupRecoveryDeps{
+		Gate: gate,
+	})
 }
 
 func ComposeRecoveryCoordinator(checkpointStore *checkpoint.FileStore, auditFn func(recovery.RecoveryAuditEvent)) *recovery.RecoveryCoordinator {
@@ -138,6 +140,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	connReg := ipc.NewConnectionRegistry()
 
 	readyGate := handshake.NewReadyGate([]string{"control.handshake.hello", "control.request.cancel"})
+	startupGate := startup.NewStartupGate()
 
 	nsAdapter := handshake.NewNamespaceAdapter(nsReg)
 	handshakeMgr := handshake.NewHandshakeManager(handshake.HandshakeManagerConfig{
@@ -210,10 +213,10 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		TakeoverService:  takeoverService,
 		AuthorityAudit:   authorityAuditSink,
 
+		StartupGate:         startupGate,
 		UpgradeCoordinator:  ComposeUpgradeCoordinator(pluginReg, contributionSync, configResolver, nil),
 		RecoveryCoordinator: ComposeRecoveryCoordinator(checkpointStore, nil),
-		StartupRecovery:     ComposeStartupRecovery(),
-		StartupGate:         startup.NewStartupGate(),
+		StartupRecovery:     ComposeStartupRecovery(startupGate),
 	}
 
 	if opts.HostAPIGateway != nil {

@@ -5,6 +5,8 @@ import com.amitia.amitia_app.runtime.abi.internal.BuildAndroidAbiProvider
 import com.amitia.amitia_app.runtime.abi.internal.DefaultRuntimeAbiGate
 import com.amitia.amitia_app.runtime.api.RuntimeModule
 import com.amitia.amitia_app.runtime.connection.internal.DefaultBackendConnectionProvider
+import com.amitia.amitia_app.runtime.install.ActiveRuntimeManager
+import com.amitia.amitia_app.runtime.install.ActiveRuntimeResult
 import com.amitia.amitia_app.runtime.install.RuntimeInstaller
 import com.amitia.amitia_app.runtime.install.internal.DefaultActiveRuntimeManager
 import com.amitia.amitia_app.runtime.install.internal.DefaultPackageVerifier
@@ -13,6 +15,9 @@ import com.amitia.amitia_app.runtime.install.internal.DefaultRuntimeInstaller
 import com.amitia.amitia_app.runtime.internal.DefaultRuntimeController
 import com.amitia.amitia_app.runtime.internal.DefaultRuntimeModule
 import com.amitia.amitia_app.runtime.internal.RuntimeStateStore
+import com.amitia.amitia_app.runtime.manifest.RuntimeManifestStore
+import com.amitia.amitia_app.runtime.manifest.internal.DefaultRuntimeManifestStore
+import com.amitia.amitia_app.runtime.packagetrusted.TrustedRuntimePackageSource
 import com.amitia.amitia_app.runtime.proot.ProotComponent
 import com.amitia.amitia_app.runtime.proot.internal.AndroidProotBinaryLocator
 import com.amitia.amitia_app.runtime.proot.internal.AndroidProotComponent
@@ -34,12 +39,18 @@ object AndroidRuntimeModule {
     @Volatile private var cachedProotComponent: ProotComponent? = null
     @Volatile private var cachedProotEnvironmentAssembler: com.amitia.amitia_app.runtime.proot.internal.ProotEnvironmentAssembler? = null
     @Volatile private var cachedRuntimeHostLayout: com.amitia.amitia_app.runtime.install.RuntimeHostLayout? = null
+    @Volatile private var cachedActiveRuntimeManager: ActiveRuntimeManager? = null
     @Volatile private var cachedRootfsPath: String? = null
+    @Volatile private var cachedManifestStore: RuntimeManifestStore? = null
+    @Volatile private var cachedRuntimeInstaller: RuntimeInstaller? = null
 
     val prootComponent: ProotComponent? get() = cachedProotComponent
     internal val prootEnvironmentAssembler: com.amitia.amitia_app.runtime.proot.internal.ProotEnvironmentAssembler? get() = cachedProotEnvironmentAssembler
     internal val runtimeHostLayout: com.amitia.amitia_app.runtime.install.RuntimeHostLayout? get() = cachedRuntimeHostLayout
+    internal val activeRuntimeManager: ActiveRuntimeManager? get() = cachedActiveRuntimeManager
     val prootRootfsPath: String? get() = cachedRootfsPath
+    internal val manifestStore: RuntimeManifestStore? get() = cachedManifestStore
+    internal val runtimeInstaller: RuntimeInstaller? get() = cachedRuntimeInstaller
 
     fun create(context: Context): RuntimeModule {
         return cachedModule ?: synchronized(this) {
@@ -70,15 +81,24 @@ object AndroidRuntimeModule {
         )
         cachedProotEnvironmentAssembler = prootEnvironmentAssembler
 
-        val activeRuntimeManager = DefaultActiveRuntimeManager(layout)
+        val manifestStore = DefaultRuntimeManifestStore(layout.metadataRoot.absolutePath)
+        cachedManifestStore = manifestStore
+
+        val activeRuntimeManager = DefaultActiveRuntimeManager(layout, manifestStore)
+        cachedActiveRuntimeManager = activeRuntimeManager
         val installedRuntimeSource = ActiveRuntimeBackedInstalledRuntimeSource(activeRuntimeManager)
         val recoveryPolicy: RuntimeCrashRecoveryPolicy = DefaultRuntimeCrashRecoveryPolicy(
             installedRuntimeSource = installedRuntimeSource
         )
         val recoveryScheduler: RuntimeRecoveryScheduler = ExecutorRuntimeRecoveryScheduler()
+
+        val installer = createRuntimeInstaller(appContext)
+        cachedRuntimeInstaller = installer
+
         val controller = DefaultRuntimeController(
             stateStore = stateStore,
             serviceHost = serviceHost,
+            installer = installer,
             abiGate = abiGate,
             recoveryPolicy = recoveryPolicy,
             recoveryScheduler = recoveryScheduler,
@@ -90,10 +110,10 @@ object AndroidRuntimeModule {
             dataRootProvider = { layout.dataRoot.absolutePath },
         )
 
-        val installer = createRuntimeInstaller(appContext)
         return DefaultRuntimeModule(
             controller = controller,
             runtimeInstaller = installer,
+            manifestStore = manifestStore,
             backendConnectionProvider = backendConnectionProvider,
             stateStore = stateStore,
             abiGate = abiGate,
@@ -149,6 +169,9 @@ object AndroidRuntimeModule {
         cachedProotComponent = null
         cachedProotEnvironmentAssembler = null
         cachedRuntimeHostLayout = null
+        cachedActiveRuntimeManager = null
         cachedRootfsPath = null
+        cachedManifestStore = null
+        cachedRuntimeInstaller = null
     }
 }

@@ -185,6 +185,19 @@ func (r *resolver) performDetection(ctx context.Context) (Environment, error) {
 		return env, nil
 	}
 
+	if isAndroidPRootStrict(guest, architecture) {
+		if runtimeRoot == "" {
+			return Environment{}, newRuntimeRootUnavailable("runtime resource root unavailable")
+		}
+		target := standardInstallTarget(guest, qdrantRoot)
+		env.BinaryPath = target
+		env.DistributionRoot = qdrantRoot
+		env.Source = SourceRuntimePackage
+		env.Installed = false
+		env.Explicit = false
+		return env, newQdrantBinaryNotInstalled(SourceRuntimePackage)
+	}
+
 	paths := r.host.Paths()
 	for _, candidate := range legacyCandidates(guest, architecture, paths.Root, paths.WorkspaceDir) {
 		info, err := r.inspector.Stat(candidate)

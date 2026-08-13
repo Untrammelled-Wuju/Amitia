@@ -4,6 +4,7 @@ import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
+import com.amitia.amitia_app.runtime.bridge.RuntimeBridgePlugin
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.android.FlutterView
 import io.flutter.embedding.engine.FlutterEngine
@@ -17,6 +18,7 @@ class MainActivity : FlutterActivity() {
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
+        flutterEngine.plugins.add(RuntimeBridgePlugin())
     }
 
     override fun onPostResume() {

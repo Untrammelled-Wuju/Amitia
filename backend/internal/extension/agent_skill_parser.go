@@ -99,9 +99,10 @@ func parseAgentSkillFiles(files map[string][]byte, rootName string, source Agent
 	}
 	mappings := mapAgentSkillTools(frontmatter.AllowedTools)
 	report := analyzeAgentSkillCompatibility(body, files, resources, mappings, warnings)
+	hash := hashAgentSkillFiles(files)
+	report = EnhanceAgentSkillCompatibility(files, rootName, source, report, hash)
 	metadataRaw, _ := json.Marshal(rawFrontmatter)
 	extraRaw, _ := json.Marshal(extra)
-	hash := hashAgentSkillFiles(files)
 	definition := AgentSkillDefinition{Name: frontmatter.Name, Description: frontmatter.Description, License: frontmatter.License, Compatibility: frontmatter.Compatibility, Metadata: frontmatter.Metadata, AllowedTools: frontmatter.AllowedTools, Source: source, ContentHash: hash, Body: body, RawSkillMD: string(bytes.TrimPrefix(raw, []byte{0xef, 0xbb, 0xbf})), RawFrontmatter: metadataRaw, ExtraFrontmatter: extraRaw, Resources: resources, ToolMappings: mappings, CompatibilityStatus: report.Status, Warnings: report.Warnings, MCPDependencies: dependencies, Enabled: false}
 	if openai != nil {
 		definition.DisplayName = openai.DisplayName

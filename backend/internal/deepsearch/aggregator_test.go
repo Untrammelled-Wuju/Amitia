@@ -2,6 +2,8 @@ package deepsearch
 
 import (
 	"testing"
+
+	search "github.com/u-ai/backend/internal/search"
 )
 
 func makeHit(url, title string, rank int) ChildSearchResult {
@@ -87,7 +89,7 @@ func TestAggregator_SeenCount(t *testing.T) {
 	agg.AddResults([]ChildSearchResult{
 		makeHit("https://example.com/a", "Article A", 1),
 	}, 3, 0, "")
-	res := agg.BuildResult("test", nil, 3, 3, StopReasonMaxRounds, 1700000000)
+	res := agg.BuildResult("test", search.SearchKindWeb, nil, 3, 3, StopReasonMaxRounds, 1700000000)
 	if len(res.Sources) != 1 {
 		t.Fatalf("expected 1 source, got %d", len(res.Sources))
 	}
@@ -102,7 +104,7 @@ func TestAggregator_RankScore(t *testing.T) {
 		makeHit("https://a.com/page", "First Result", 1),
 		makeHit("https://b.com/page", "Tenth Result", 10),
 	}, 1, 0, "")
-	res := agg.BuildResult("test", nil, 1, 1, StopReasonMaxRounds, 1700000000)
+	res := agg.BuildResult("test", search.SearchKindWeb, nil, 1, 1, StopReasonMaxRounds, 1700000000)
 	if len(res.Sources) != 2 {
 		t.Fatalf("expected 2 sources, got %d", len(res.Sources))
 	}
@@ -122,7 +124,7 @@ func TestAggregator_DomainDiversity(t *testing.T) {
 		makeHit("https://example.com/a3", "A3", 3),
 		makeHit("https://other.com/b", "B", 4),
 	}, 1, 0, "")
-	res := agg.BuildResult("test", nil, 1, 1, StopReasonMaxRounds, 1700000000)
+	res := agg.BuildResult("test", search.SearchKindWeb, nil, 1, 1, StopReasonMaxRounds, 1700000000)
 	seen := 0
 	for _, r := range res.Sources {
 		if r.Domain == "example.com" {
@@ -140,7 +142,7 @@ func TestAggregator_BuildResult_Coverage(t *testing.T) {
 		makeHit("https://example.com/a", "A1", 1),
 		makeHit("https://example.com/b", "A2", 2),
 	}, 1, 0, "security")
-	res := agg.BuildResult("test", []string{"security"}, 1, 1, StopReasonMaxRounds, 1700000000)
+	res := agg.BuildResult("test", search.SearchKindWeb, []string{"security"}, 1, 1, StopReasonMaxRounds, 1700000000)
 	if len(res.Coverage.FocusAreas) != 1 {
 		t.Fatalf("expected 1 focus area in coverage, got %d", len(res.Coverage.FocusAreas))
 	}

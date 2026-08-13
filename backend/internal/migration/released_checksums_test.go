@@ -1,6 +1,11 @@
 package migration
 
-import "testing"
+import (
+	"testing"
+
+	"gorm.io/driver/sqlite"
+	"gorm.io/gorm"
+)
 
 func TestReleasedMigrationChecksums(t *testing.T) {
 	expected := map[string]string{
@@ -25,8 +30,13 @@ func TestReleasedMigrationChecksums(t *testing.T) {
 		"202607090001": "399b307e5d9dd6a7a7a9899e49cbd2b4e6eae2ac99e12719cd29e5066ed70524",
 	}
 
+	db, err := gorm.Open(sqlite.Open(":memory:"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("open in-memory db: %v", err)
+	}
+
 	actual := make(map[string]string)
-	runner := Runner{}
+	runner := Runner{DB: db}
 	for _, item := range DefaultMigrations() {
 		checksum, err := runner.computeMigrationChecksum(item)
 		if err != nil {

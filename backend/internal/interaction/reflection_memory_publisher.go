@@ -2,7 +2,6 @@ package interaction
 
 import (
 	"encoding/json"
-	"fmt"
 	"strings"
 
 	"github.com/u-ai/backend/internal/outbox"
@@ -13,30 +12,25 @@ const (
 	ReflectionCandidateApprovedEventType = "reflection.candidate.approved"
 )
 
-type reflectionMemoryCreator interface {
-	CreateReflectionMemory(req ReflectionMemoryCreateRequest) error
+type reflectionCandidateSubmitter interface {
+	SubmitReflectionCandidate(req ReflectionCandidateSubmitRequest) error
 }
 
-type ReflectionMemoryCreateRequest struct {
-	CharacterID           string
-	MemoryType            string
-	Key                   string
-	Value                 string
-	Importance            int
-	Confidence            int
-	SourceMsgID           string
-	SourceConvID          string
-	VerifiedStatus        string
-	Source                string
-	SensitivityLevel      string
-	AllowProactiveMention bool
-	RequiresConfirmation  bool
-	Scope                 string
+type ReflectionCandidateSubmitRequest struct {
+	CharacterID      string
+	ConversationID   string
+	Topic            string
+	Abstract         string
+	Importance       int
+	Confidence       float64
+	SourceIDs        []string
+	CandidateID      string
+	RequestID        string
 }
 
 type ReflectionMemoryPublisher struct {
-	memory reflectionMemoryCreator
-	next   outbox.Publisher
+	submitter reflectionCandidateSubmitter
+	next      outbox.Publisher
 }
 
 type reflectionMemoryPayload struct {
@@ -66,8 +60,8 @@ type reflectionMemoryAbstraction struct {
 	Abstract  string   `json:"abstract"`
 }
 
-func NewReflectionMemoryPublisher(memory reflectionMemoryCreator, next outbox.Publisher) *ReflectionMemoryPublisher {
-	return &ReflectionMemoryPublisher{memory: memory, next: next}
+func NewReflectionMemoryPublisher(submitter reflectionCandidateSubmitter, next outbox.Publisher) *ReflectionMemoryPublisher {
+	return &ReflectionMemoryPublisher{submitter: submitter, next: next}
 }
 
 func (p *ReflectionMemoryPublisher) Publish(record outbox.OutboxRecord) error {
@@ -90,7 +84,7 @@ func isReflectionMemoryEvent(eventType string) bool {
 }
 
 func (p *ReflectionMemoryPublisher) publishReflectionMemory(record outbox.OutboxRecord) error {
-	if p.memory == nil {
+	if p.submitter == nil {
 		return publishNext(p.next, record)
 	}
 	var payload reflectionMemoryPayload
@@ -102,11 +96,11 @@ func (p *ReflectionMemoryPublisher) publishReflectionMemory(record outbox.Outbox
 	confidence := firstNonZero(payload.Confidence, nestedConfidence(payload.Candidate))
 	abstractions := collectReflectionAbstractions(payload)
 	for _, abstraction := range abstractions {
-		req, ok := buildReflectionMemoryRequest(characterID, candidateID, payload.ConversationID, payload.RequestID, confidence, abstraction)
+		submitReq, ok := buildReflectionCandidateSubmitRequest(characterID, candidateID, payload.ConversationID, payload.RequestID, confidence, abstraction)
 		if !ok {
 			continue
 		}
-		if err := p.memory.CreateReflectionMemory(req); err != nil {
+		if err := p.submitter.SubmitReflectionCandidate(submitReq); err != nil {
 			return err
 		}
 	}
@@ -132,31 +126,22 @@ func collectReflectionAbstractions(payload reflectionMemoryPayload) []reflection
 	return abstractions
 }
 
-func buildReflectionMemoryRequest(characterID, candidateID, conversationID, requestID string, confidence float64, abstraction reflectionMemoryAbstraction) (ReflectionMemoryCreateRequest, bool) {
+func buildReflectionCandidateSubmitRequest(characterID, candidateID, conversationID, requestID string, confidence float64, abstraction reflectionMemoryAbstraction) (ReflectionCandidateSubmitRequest, bool) {
 	topic := strings.TrimSpace(abstraction.Topic)
 	abstract := strings.TrimSpace(abstraction.Abstract)
 	if characterID == "" || topic == "" || abstract == "" {
-		return ReflectionMemoryCreateRequest{}, false
+		return ReflectionCandidateSubmitRequest{}, false
 	}
-	memoryKey := fmt.Sprintf("reflection:%s:%s", strings.TrimSpace(candidateID), topic)
-	if memoryKey == "" || memoryKey == "reflection::" {
-		return ReflectionMemoryCreateRequest{}, false
-	}
-	return ReflectionMemoryCreateRequest{
-		CharacterID:           characterID,
-		MemoryType:            "reflection",
-		Key:                   memoryKey,
-		Value:                 abstract,
-		Importance:            reflectionImportance(confidence),
-		Confidence:            reflectionConfidence(confidence),
-		SourceMsgID:           firstNonEmpty(candidateID, requestID),
-		SourceConvID:          conversationID,
-		VerifiedStatus:        "verified",
-		Source:                "reflection",
-		SensitivityLevel:      "internal",
-		AllowProactiveMention: true,
-		RequiresConfirmation:  false,
-		Scope:                 "character",
+	return ReflectionCandidateSubmitRequest{
+		CharacterID:    characterID,
+		ConversationID: conversationID,
+		Topic:          topic,
+		Abstract:       abstract,
+		Importance:     reflectionImportance(confidence),
+		Confidence:     confidence,
+		SourceIDs:      abstraction.SourceIDs,
+		CandidateID:    firstNonEmpty(candidateID, requestID),
+		RequestID:      requestID,
 	}, true
 }
 
@@ -170,20 +155,6 @@ func reflectionImportance(confidence float64) int {
 	}
 	if value > 10 {
 		return 10
-	}
-	return value
-}
-
-func reflectionConfidence(confidence float64) int {
-	if confidence <= 0 {
-		return 70
-	}
-	value := int(confidence*100 + 0.5)
-	if value < 1 {
-		return 1
-	}
-	if value > 100 {
-		return 100
 	}
 	return value
 }

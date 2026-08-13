@@ -27,6 +27,7 @@ func newIdentityCoreTestService(t *testing.T) (*service, *gorm.DB) {
 		id TEXT PRIMARY KEY,
 		name TEXT DEFAULT '',
 		identity TEXT DEFAULT '',
+		character_base TEXT DEFAULT '',
 		system_prompt TEXT DEFAULT '',
 		boundary_rules TEXT DEFAULT '',
 		gender TEXT DEFAULT '',

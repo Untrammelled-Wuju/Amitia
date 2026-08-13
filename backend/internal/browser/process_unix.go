@@ -4,7 +4,6 @@ package browser
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"

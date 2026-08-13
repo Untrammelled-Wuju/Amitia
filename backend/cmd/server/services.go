@@ -65,6 +65,7 @@ import (
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/extension/kernel"
+	"github.com/u-ai/backend/internal/extension/kernel/skill"
 	extensionmcp "github.com/u-ai/backend/internal/extension/kernel/mcp"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
@@ -208,22 +209,16 @@ type reflectionMemoryServiceAdapter struct {
 	memory memory.Service
 }
 
-func (a reflectionMemoryServiceAdapter) CreateReflectionMemory(req interaction.ReflectionMemoryCreateRequest) error {
-	_, err := a.memory.Create(&memory.CreateMemoryRequest{
-		CharacterID:           req.CharacterID,
-		MemoryType:            req.MemoryType,
-		Key:                   req.Key,
-		Value:                 req.Value,
-		Importance:            req.Importance,
-		Confidence:            req.Confidence,
-		SourceMsgID:           req.SourceMsgID,
-		SourceConvID:          req.SourceConvID,
-		VerifiedStatus:        req.VerifiedStatus,
-		Source:                req.Source,
-		SensitivityLevel:      req.SensitivityLevel,
-		AllowProactiveMention: req.AllowProactiveMention,
-		RequiresConfirmation:  req.RequiresConfirmation,
-		Scope:                 req.Scope,
+func (a reflectionMemoryServiceAdapter) SubmitReflectionCandidate(req interaction.ReflectionCandidateSubmitRequest) error {
+	memoryKey := fmt.Sprintf("reflection:%s:%s", strings.TrimSpace(req.CandidateID), req.Topic)
+	_, err := a.memory.SubmitCandidate(&memory.SubmitCandidateRequest{
+		Key:            memoryKey,
+		Value:          req.Abstract,
+		MemoryType:     "reflection",
+		Importance:     req.Importance,
+		SourceText:     req.Abstract,
+		ConversationID: req.ConversationID,
+		CharacterID:    req.CharacterID,
 	})
 	return err
 }
@@ -376,6 +371,31 @@ kernelContainer, err := kernelBuilder.Build(context.Background())
 	toolFacade := kernelContainer.ToolFacade
 	if toolFacade == nil {
 		panic("kernel container did not construct ToolFacade")
+	}
+	if extensionRuntime.AgentSkills != nil {
+		toolFacade.SetAgentSkillBackend(extension.NewAgentSkillKernelAdapter(extensionRuntime.AgentSkills))
+	}
+	if extensionRuntime.AgentSkills != nil && bootstrap != nil {
+		if host := bootstrap.RuntimeHost(); host != nil {
+			nodeEnvResolver := bootstrap.NodeEnvironmentResolver()
+			interpResolver, interpErr := skill.NewScriptInterpreterResolver(skill.InterpreterResolveContext{
+				NodeResolver:    nodeEnvResolver,
+				CommandResolver: commandResolver,
+			})
+			if interpErr == nil {
+				scriptRuntime := skill.NewScriptRuntime(skill.ScriptRuntimeDeps{
+					InterpreterResolver: interpResolver,
+					ProcessSupervisor:   host.Processes(),
+				})
+				toolFacade.SetRunSkillScriptHandler(extension.NewSkillScriptHandler(extensionRuntime.AgentSkills, scriptRuntime))
+			} else {
+				log.Warn("failed to create skill script interpreter resolver: ", interpErr)
+			}
+		}
+	}
+	if extensionRuntime.AgentSkills != nil {
+		baseURL := "http://" + config.AppCfg.Server.Addr()
+		toolFacade.SetSkillResourceHandler(extension.NewSkillResourceAdapter(extensionRuntime.AgentSkills, baseURL))
 	}
 	chatSvc.SetToolRuntime(newChatToolRuntimeAdapter(toolFacade))
 	actionMaterializer := interaction.NewActionMaterializer(toolFacade)

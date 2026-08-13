@@ -98,9 +98,10 @@ func (r *Runtime) recoverPackageOperation(ctx context.Context, operation Package
 	}
 	guard := packageWriteGuard(lease)
 	leaseGuard := r.newPackageLeaseGuard(operation.ExtensionID, operation.OperationID)
+	leaseGuard.fencingToken = lease.FencingToken
 	sagaCtx, startErr := leaseGuard.Start(ctx)
 	if startErr != nil {
-		releaseErr := r.releasePackageExtensionLease(context.Background(), operation.ExtensionID, operation.OperationID)
+		releaseErr := r.releasePackageExtensionLease(context.Background(), operation.ExtensionID, operation.OperationID, lease.FencingToken)
 		if releaseErr != nil {
 			if putErr := r.container.PackageRepository.PutConsistencyFinding(context.Background(), PackageConsistencyFinding{
 				FindingID:         "stale-lease-" + operation.OperationID,
@@ -1254,6 +1255,9 @@ func (r *Runtime) executeUninstallRecoveryChain(ctx context.Context, operation P
 		return string(resultBytes), nil
 	})
 	if err != nil {
+		if isLeaseRelatedError(err) {
+			return err
+		}
 		return r.requirePackageRecovery(ctx, operation, "uninstall recovery load_quarantine_metadata failed", err, guard)
 	}
 
@@ -2085,10 +2089,13 @@ func (r *Runtime) finalizeUninstallRecovery(ctx context.Context, operation Packa
 		PackageOperationFinalizing,
 		PackageOperationTransition{CurrentStep: StepUninstallRecoveryFinalize},
 		guard); err != nil {
+		if isLeaseRelatedError(err) {
+			return err
+		}
 		return r.requirePackageRecovery(ctx, operation, "uninstall recovery transition to finalizing failed", err, guard)
 	}
 	finalGateResultHash := fmt.Sprintf("%x", sha256.Sum256([]byte(gateStep.ResultJSON)))
-	finalizeResultJSON := fmt.Sprintf(`{"finalized":true,"atomic":true,"operationId":%q,"extensionId":%q,"fencingToken":%d,"finalGateStep":%q,"finalGateResultHash":%q}`,
+	finalizeResultJSON := fmt.Sprintf(`{"finalized":true,"atomic":true,"operationId":%q,"extensionId":%q,"fencingToken":%d,"finalGateStepId":%q,"finalGateResultHash":%q}`,
 		operation.OperationID, operation.ExtensionID, guard.FencingToken, StepUninstallRecoveryFinalGate, finalGateResultHash)
 	finalizeResultHash := fmt.Sprintf("%x", sha256.Sum256([]byte(finalizeResultJSON)))
 	finalizeStep := PackageOperationStep{
@@ -2267,6 +2274,9 @@ func (r *Runtime) requirePackageRecovery(ctx context.Context, operation PackageO
 	}
 	if setErr != nil {
 		return errors.Join(errors.New(detail), fmt.Errorf("persist recovery state: %w", setErr))
+	}
+	if cause != nil {
+		return fmt.Errorf("%s: %w", detail, cause)
 	}
 	return errors.New(detail)
 }

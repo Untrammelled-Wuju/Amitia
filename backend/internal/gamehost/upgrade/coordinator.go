@@ -109,7 +109,7 @@ func (c *UpgradeCoordinator) ExecuteUpgrade(ctx context.Context, req UpgradeRequ
 		c.recordAudit(operationID, req, result, err)
 		return result, err
 	}
-	defer c.gate.Release(req.ExtensionID)
+	defer c.gate.Release(req.ExtensionID, operationID)
 
 	affectedPlugins, err := c.findAffectedPlugins(ctx, req.ExtensionID)
 	if err != nil {

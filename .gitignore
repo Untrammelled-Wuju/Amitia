@@ -256,3 +256,13 @@ runtime/build/proot/android-x86_64/
 
 backend/err.txt
 backend/logs.txt
+
+backend/_vet_output.txt
+backend/runtime-artifacts/
+backend/target/
+runtime/build/runtime-package/linux-arm64/
+shaders/
+backend/scripts/prepare/
+mobile_app/android/amitia-runtime/scripts/
+mobile_app/android/docs/
+mobile_app/android/scripts/

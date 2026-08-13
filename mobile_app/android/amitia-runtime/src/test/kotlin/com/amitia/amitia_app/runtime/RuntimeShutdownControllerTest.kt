@@ -34,7 +34,7 @@ internal class FakeRuntimeServiceHost : RuntimeServiceHost {
     var stopCallCount = 0
     var activeSession: ProotSession? = null
 
-    override fun ensureStarted(): RuntimeServiceResult {
+    override fun ensureStarted(generation: Long): RuntimeServiceResult {
         ensureStartCount++
         return RuntimeServiceResult.Success
     }
@@ -386,7 +386,7 @@ class RuntimeShutdownControllerTest {
         val stateStore = createStateStoreWith(RuntimeState.READY)
         val host = object : RuntimeServiceHost {
             private val listeners = mutableListOf<RuntimeServiceHostListener>()
-            override fun ensureStarted(): RuntimeServiceResult = RuntimeServiceResult.Success
+            override fun ensureStarted(generation: Long): RuntimeServiceResult = RuntimeServiceResult.Success
             override fun requestStop(): RuntimeServiceResult = RuntimeServiceResult.Failure(
                 com.amitia.amitia_app.runtime.service.RuntimeServiceError(
                     com.amitia.amitia_app.runtime.service.RuntimeServiceErrorCode.SERVICE_STOP_FAILED,

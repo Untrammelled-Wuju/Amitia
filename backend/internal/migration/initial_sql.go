@@ -63,15 +63,6 @@ func ApplyInitialSQL(db *gorm.DB, raw string) error {
 				continue
 			}
 			if err := tx.Exec(item.sql).Error; err != nil {
-				if shouldRepairMessageSequenceBackfill(item.sql, err) {
-					if repairErr := repairMessageSequenceBackfill(tx); repairErr != nil {
-						return fmt.Errorf("repair deferred initial sql statement %d failed after retry: %w", item.number, repairErr)
-					}
-					continue
-				}
-				if shouldDeferInitialSQL(item.sql, err) {
-					continue
-				}
 				return fmt.Errorf("execute deferred initial sql statement %d failed after retry: %w", item.number, err)
 			}
 		}

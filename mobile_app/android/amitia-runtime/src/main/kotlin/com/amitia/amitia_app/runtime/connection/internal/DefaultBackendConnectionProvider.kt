@@ -20,7 +20,7 @@ internal class DefaultBackendConnectionProvider(
     private val policy: BackendEndpointPolicy = embeddedAndroidBackendPolicy(),
 ) : BackendConnectionProvider {
 
-    private val lastBackendGeneration = AtomicLong(0L)
+    private val lastSeenRuntimeGeneration = AtomicLong(0L)
 
     override fun current(): BackendConnectionAvailability {
         val validationError = BackendConnectionValidator.validate(policy)
@@ -47,10 +47,11 @@ internal class DefaultBackendConnectionProvider(
         }
         val credential = credentialResult.getOrNull() ?: return BackendConnectionAvailability.Unavailable
 
-        val currentBackendGen = deriveBackendGeneration(snapshot)
+        val runtimeGeneration = snapshot.generation
+        lastSeenRuntimeGeneration.set(runtimeGeneration)
         val descriptor = BackendConnectionMapper.buildDescriptor(
             policy = policy,
-            generation = currentBackendGen,
+            generation = runtimeGeneration,
             credential = credential,
         )
 
@@ -64,19 +65,5 @@ internal class DefaultBackendConnectionProvider(
             }
         }
         return true
-    }
-
-    private fun deriveBackendGeneration(snapshot: RuntimeSnapshot): Long {
-        val stored = lastBackendGeneration.get()
-        val incoming = snapshot.generation
-        if (stored == 0L) {
-            lastBackendGeneration.compareAndSet(0L, incoming)
-            return incoming
-        }
-        if (incoming > stored) {
-            lastBackendGeneration.set(incoming)
-            return incoming
-        }
-        return stored
     }
 }

@@ -17,7 +17,7 @@ type fakeProviderForService struct {
 
 func (p *fakeProviderForService) ID() string { return "fake" }
 func (p *fakeProviderForService) Capabilities() ProviderCapabilities {
-	return ProviderCapabilities{GeneralWeb: true, MaxResults: 20}
+	return ProviderCapabilities{GeneralWeb: true, MaxResults: 20, LanguageFilter: true, CountryFilter: true, SafeSearch: true, TimeRangeFilter: true, DomainFilter: true}
 }
 func (p *fakeProviderForService) Search(ctx context.Context, req SearchRequest) (ProviderSearchResponse, error) {
 	p.calls++

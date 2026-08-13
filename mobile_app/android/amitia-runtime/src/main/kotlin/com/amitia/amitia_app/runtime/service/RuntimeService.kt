@@ -16,7 +16,6 @@ import com.amitia.amitia_app.runtime.proot.ProotLaunchRequest
 import com.amitia.amitia_app.runtime.proot.ProotObserver
 import com.amitia.amitia_app.runtime.proot.ProotSession
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 import java.util.concurrent.locks.ReentrantLock
 import kotlin.concurrent.withLock
@@ -32,9 +31,9 @@ class RuntimeService : Service() {
     private val endpoint by lazy { DefaultRuntimeServiceEndpoint { this@RuntimeService } }
     private val binder by lazy { RuntimeServiceBinder(endpoint) }
 
-    private val sessionGeneration = AtomicLong(0L)
     private val currentSessionRef: AtomicReference<ProotSession?> = AtomicReference(null)
     private val currentSessionIdRef: AtomicReference<String?> = AtomicReference(null)
+    private val currentGenerationRef: AtomicReference<Long> = AtomicReference(0L)
 
     init {
         instanceRef.set(this)
@@ -46,9 +45,9 @@ class RuntimeService : Service() {
         lock.withLock {
             destroyed.set(false)
             serviceState.set(ServiceHostState.CREATED)
-            sessionGeneration.set(0L)
             currentSessionRef.set(null)
             currentSessionIdRef.set(null)
+            currentGenerationRef.set(0L)
         }
     }
 
@@ -63,7 +62,10 @@ class RuntimeService : Service() {
         }
 
         when (intent.action) {
-            RuntimeServiceContract.ACTION_START_HOST -> handleStartHost()
+            RuntimeServiceContract.ACTION_START_HOST -> {
+                val generation = intent.getLongExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 0L)
+                handleStartHost(generation)
+            }
             RuntimeServiceContract.ACTION_STOP_HOST -> handleStopHost()
             else -> {
                 stopSelfSafely()
@@ -74,7 +76,19 @@ class RuntimeService : Service() {
         return START_NOT_STICKY
     }
 
-    private fun handleStartHost() {
+    private fun handleStartHost(generation: Long) {
+        if (generation <= 0L) {
+            terminalEventEmitted.compareAndSet(false, true)
+            serviceState.set(ServiceHostState.DESTROYED)
+            endpoint.notify(
+                RuntimeServiceHostEvent.UnexpectedTermination(
+                    RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
+                )
+            )
+            stopSelfSafely()
+            return
+        }
+
         if (!serviceState.compareAndSet(ServiceHostState.CREATED, ServiceHostState.FOREGROUND)) {
             return
         }
@@ -88,7 +102,7 @@ class RuntimeService : Service() {
                         notificationResult.notification,
                         RuntimeServiceContract.FOREGROUND_SERVICE_TYPE
                     )
-                    startProotSessionLocked()
+                    startProotSessionLocked(generation)
                 } catch (e: Exception) {
                     terminalEventEmitted.compareAndSet(false, true)
                     serviceState.set(ServiceHostState.DESTROYED)
@@ -113,14 +127,16 @@ class RuntimeService : Service() {
         }
     }
 
-    private fun startProotSessionLocked() {
+    private fun startProotSessionLocked(generation: Long) {
         val component = AndroidRuntimeModule.prootComponent ?: return
         val rootfsPath = AndroidRuntimeModule.prootRootfsPath ?: return
         val assembler = AndroidRuntimeModule.prootEnvironmentAssembler
-        val nextGen = sessionGeneration.incrementAndGet()
+        val activeProgramSource = resolveActiveProgramSource()
 
-        val request = if (assembler != null) {
-            val spec = assembler.assembleBackendLaunch()
+        currentGenerationRef.set(generation)
+
+        val request = if (assembler != null && activeProgramSource != null) {
+            val spec = assembler.assembleBackendLaunch(activeProgramSource)
             assembler.toProotLaunchRequest(spec, "")
         } else {
             ProotLaunchRequest.create(
@@ -131,17 +147,26 @@ class RuntimeService : Service() {
                 environmentSource = ProotEnvironment.EMPTY
             )
         }
-        val observer = ProotObserver { event -> onProotEvent(event, nextGen) }
+        val observer = ProotObserver { event -> onProotEvent(event, generation) }
         val session = component.launch(request, observer)
         currentSessionRef.set(session)
         currentSessionIdRef.set(session.sessionId)
     }
 
+    private fun resolveActiveProgramSource(): java.io.File? {
+        val manager = AndroidRuntimeModule.activeRuntimeManager ?: return null
+        return when (val result = manager.resolveActiveProgramRoot()) {
+            is com.amitia.amitia_app.runtime.install.ActiveProgramRootResult.Ready ->
+                result.root.hostDirectory
+            else -> null
+        }
+    }
+
     private fun onProotEvent(event: ProotEvent, generation: Long) {
-        if (sessionGeneration.get() != generation) return
+        if (currentGenerationRef.get() != generation) return
         when (event) {
             is ProotEvent.Started -> {
-                if (sessionGeneration.get() == generation) {
+                if (currentGenerationRef.get() == generation) {
                     endpoint.notify(
                         RuntimeServiceHostEvent.SessionReady(
                             generation = generation,
@@ -156,6 +181,7 @@ class RuntimeService : Service() {
                     if (serviceState.get() == ServiceHostState.DESTROYED) return
                     endpoint.notify(
                         RuntimeServiceHostEvent.SessionExited(
+                            generation = generation,
                             sessionId = event.sessionId,
                             exitCode = event.exitCode,
                             forced = event.forced
@@ -256,16 +282,17 @@ class RuntimeService : Service() {
         }
 
         fun currentGeneration(context: Context): Long {
-            return instanceRef.get()?.sessionGeneration?.get() ?: 0L
+            return instanceRef.get()?.currentGenerationRef?.get() ?: 0L
         }
 
-        private const val WORKING_DIRECTORY = "/opt/amitia/backend"
-        private const val GUEST_SERVER_COMMAND = "/opt/amitia/backend/amitia-server"
+        private const val WORKING_DIRECTORY = com.amitia.amitia_app.runtime.proot.GuestLayout.BACKEND_DIR
+        private const val GUEST_SERVER_COMMAND = com.amitia.amitia_app.runtime.proot.GuestLayout.BACKEND_SERVER
 
-        internal fun startHost(context: Context): RuntimeServiceResult {
+        internal fun startHost(context: Context, generation: Long): RuntimeServiceResult {
             return try {
                 val intent = Intent(context, RuntimeService::class.java).apply {
                     action = RuntimeServiceContract.ACTION_START_HOST
+                    putExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, generation)
                 }
                 ContextCompat.startForegroundService(context, intent)
                 RuntimeServiceResult.Success

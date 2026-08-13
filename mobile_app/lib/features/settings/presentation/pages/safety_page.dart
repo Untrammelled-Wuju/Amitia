@@ -149,7 +149,7 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
           _divider(),
           _buildNavTile(icon: Icons.gpp_good_outlined, title: '使用边界', onTap: () => _showTip('使用边界')),
           _divider(),
-          _buildNavTile(icon: Icons.security, title: '隐私扫描', onTap: () {}),
+          _buildNavTile(icon: Icons.security, title: '隐私扫描', onTap: null),
         ]),
         const SizedBox(height: AppSpacing.sectionGap),
         Padding(
@@ -185,7 +185,8 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
     );
   }
 
-  Widget _buildNavTile({required IconData icon, required String title, required VoidCallback onTap}) {
+  Widget _buildNavTile(
+      {required IconData icon, required String title, VoidCallback? onTap}) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
       onTap: onTap,

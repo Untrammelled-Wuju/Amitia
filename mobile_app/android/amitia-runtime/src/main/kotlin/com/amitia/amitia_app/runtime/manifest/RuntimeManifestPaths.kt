@@ -46,11 +46,11 @@ data class RuntimeManifestPaths(
         const val JSON_GUEST_LOG_ROOT: String = "guestLogRoot"
         const val JSON_GUEST_RUN_ROOT: String = "guestRunRoot"
 
-        const val GUEST_RUNTIME_ROOT: String = "/opt/amitia"
-        const val GUEST_CONFIG_ROOT: String = "/etc/amitia"
-        const val GUEST_DATA_ROOT: String = "/var/lib/amitia"
-        const val GUEST_CACHE_ROOT: String = "/var/cache/amitia"
-        const val GUEST_LOG_ROOT: String = "/var/log/amitia"
-        const val GUEST_RUN_ROOT: String = "/run/amitia"
+        const val GUEST_RUNTIME_ROOT: String = com.amitia.amitia_app.runtime.proot.GuestLayout.PROGRAM
+        const val GUEST_CONFIG_ROOT: String = com.amitia.amitia_app.runtime.proot.GuestLayout.CONFIG
+        const val GUEST_DATA_ROOT: String = com.amitia.amitia_app.runtime.proot.GuestLayout.DATA
+        const val GUEST_CACHE_ROOT: String = com.amitia.amitia_app.runtime.proot.GuestLayout.CACHE
+        const val GUEST_LOG_ROOT: String = com.amitia.amitia_app.runtime.proot.GuestLayout.LOGS
+        const val GUEST_RUN_ROOT: String = com.amitia.amitia_app.runtime.proot.GuestLayout.RUN
     }
 }

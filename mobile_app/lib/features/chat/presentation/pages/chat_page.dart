@@ -377,7 +377,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     );
 
     final avatarInitial = character?.name.isNotEmpty == true ? character!.name[0] : '?';
-    final avatarColor = '#${((character!.name.hashCode & 0xFFFFFF) | 0xFF000000).toRadixString(16).padLeft(8, '0')}';
+    final avatarColor =
+        '#${(((character?.name.hashCode ?? 0) & 0xFFFFFF) | 0xFF000000).toRadixString(16).padLeft(8, '0')}';
     final characterName = character?.name ?? '';
 
     return AmitiaScaffold(
@@ -552,7 +553,7 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
             ConduitStyleToolbarButton(
               icon: isApplePlatform
                   ? CupertinoIcons.line_horizontal_3
-                  : Icons.menu,
+                  : Icons.menu_rounded,
               iconSize: 20,
               tooltip: '打开侧边栏',
               onPressed: onOpenDrawer,

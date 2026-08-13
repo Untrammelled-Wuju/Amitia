@@ -413,18 +413,27 @@ func (r *PackageRepository) RenewExtensionLease(ctx context.Context, extensionID
 	return lease, nil
 }
 
-func (r *PackageRepository) ReleaseExtensionLease(ctx context.Context, extensionID, operationID, owner string) error {
+func (r *PackageRepository) ReleaseExtensionLease(ctx context.Context, extensionID, operationID, owner string, fencingTokens ...int64) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {
 		return storageOperationError("begin lease release", err)
 	}
 	defer tx.Rollback()
-	result, err := tx.ExecContext(ctx, `DELETE FROM extension_package_operation_leases WHERE extension_id=? AND operation_id=? AND lease_owner=?`, extensionID, operationID, owner)
+	deleteQuery := `DELETE FROM extension_package_operation_leases WHERE extension_id=? AND operation_id=? AND lease_owner=?`
+	deleteArgs := []any{extensionID, operationID, owner}
+	if len(fencingTokens) > 0 && fencingTokens[0] > 0 {
+		deleteQuery += ` AND fencing_token=?`
+		deleteArgs = append(deleteArgs, fencingTokens[0])
+	}
+	result, err := tx.ExecContext(ctx, deleteQuery, deleteArgs...)
 	if err != nil {
 		return storageOperationError("release extension lease", err)
 	}
 	rows, err := result.RowsAffected()
-	if err != nil || rows != 1 {
+	if err != nil {
+		return storageOperationError("inspect lease release", err)
+	}
+	if rows == 0 {
 		return operationStateError(OperationErrLeaseConflict, "lease is not owned", err)
 	}
 	_, err = tx.ExecContext(ctx, `UPDATE extension_package_operations SET lease_owner='', lease_expires_at='', updated_at=? WHERE operation_id=? AND lease_owner=?`,
@@ -732,8 +741,8 @@ func validOperationTransition(expected []PackageOperationStatus, target PackageO
 		PackageOperationInProgress: {PackageOperationInProgress: true, PackageOperationCompleted: true,
 			PackageOperationFailed: true, PackageOperationCancelled: true, PackageOperationRequiresRecovery: true,
 			PackageOperationFinalizing: true},
-		PackageOperationRequiresRecovery: {PackageOperationRequiresRecovery: true, PackageOperationCompleted: true,
-			PackageOperationFailed: true, PackageOperationCancelled: true},
+		PackageOperationRequiresRecovery: {PackageOperationRequiresRecovery: true, PackageOperationInProgress: true,
+			PackageOperationCompleted: true, PackageOperationFailed: true, PackageOperationCancelled: true},
 		PackageOperationFinalizing: {PackageOperationFinalizing: true, PackageOperationCompleted: true,
 			PackageOperationFailed: true, PackageOperationCancelled: true, PackageOperationRequiresRecovery: true,
 			PackageOperationReleasePending: true},

@@ -828,3 +828,453 @@ func evaluateWhen(when json.RawMessage) (bool, error) {
 		return true, nil
 	}
 }
+
+type CompiledExecuteRequest struct {
+	DAG        *CompiledWorkflowDAG
+	Input      json.RawMessage
+	Context    ExecutionContext
+	Opts       ExecutionOptions
+	Journal    *SideEffectJournal
+}
+
+func (e *WorkflowExecutor) ExecuteCompiled(ctx context.Context, req CompiledExecuteRequest) (*ExecuteResult, error) {
+	start := time.Now()
+
+	if req.DAG == nil {
+		return nil, fmt.Errorf("workflow: missing compiled DAG")
+	}
+	if req.DAG.WorkflowID == "" {
+		return nil, fmt.Errorf("workflow: missing compiled workflow id")
+	}
+
+	if req.Opts.IsDryRun() {
+		dryResult := ExecuteDryRun(ctx, req.DAG)
+		result := &ExecuteResult{
+			ExecutionID: req.Context.InvocationID,
+			WorkflowID:  req.DAG.WorkflowID,
+			Status:      RunStatusSucceeded,
+			Success:     true,
+			Duration:    time.Since(start),
+			Steps:       make([]StepResult, 0),
+		}
+		for _, id := range dryResult.WouldExecute {
+			result.Steps = append(result.Steps, StepResult{NodeID: id, Status: "succeeded"})
+		}
+		for _, id := range dryResult.WouldSkip {
+			result.Steps = append(result.Steps, StepResult{NodeID: id, Status: "skipped"})
+		}
+		return result, nil
+	}
+
+	execCtx := ctx
+	var execCancel context.CancelFunc
+	limits := req.DAG.Limits
+	if limits.MaxExecutionDurationMS > 0 {
+		execCtx, execCancel = context.WithTimeout(ctx, time.Duration(limits.MaxExecutionDurationMS)*time.Millisecond)
+		if execCancel != nil {
+			defer execCancel()
+		}
+	}
+
+	executionID := req.Context.InvocationID
+	if executionID == "" {
+		executionID = fmt.Sprintf("%s-%d", req.DAG.WorkflowID, start.UnixNano())
+	}
+	execCtx, runCancel := context.WithCancel(execCtx)
+	e.activeMu.Lock()
+	e.active[executionID] = runCancel
+	e.activeMu.Unlock()
+	defer func() {
+		runCancel()
+		e.activeMu.Lock()
+		delete(e.active, executionID)
+		e.activeMu.Unlock()
+	}()
+
+	states := make(map[string]NodeState)
+	for _, id := range req.DAG.TopologicalOrder {
+		if len(req.DAG.DependedOnBy[id]) == 0 {
+			states[id] = NodeStateReady
+		} else {
+			states[id] = NodeStateBlocked
+		}
+	}
+
+	outputs := make(map[string]json.RawMessage)
+	outputsMu := sync.RWMutex{}
+	stepResults := make([]StepResult, 0, len(req.DAG.TopologicalOrder))
+	var resultMu sync.Mutex
+
+	mockLookup := BuildMockLookup(req.Opts.Mocks)
+	totalRecorded := 0
+
+	runReadySet := func(ready []string) (bool, string) {
+		if len(ready) == 0 {
+			return false, ""
+		}
+
+		type execResult struct {
+			nodeID string
+			step   StepResult
+		}
+
+		resultChan := make(chan execResult, len(ready))
+		var wg sync.WaitGroup
+
+		maxConcurrency := limits.MaxConcurrency
+		if maxConcurrency <= 0 {
+			maxConcurrency = 8
+		}
+		if maxConcurrency > len(ready) {
+			maxConcurrency = len(ready)
+		}
+		semaphore := make(chan struct{}, maxConcurrency)
+
+		for _, nid := range ready {
+			wg.Add(1)
+			go func(nodeID string) {
+				defer wg.Done()
+				semaphore <- struct{}{}
+				defer func() { <-semaphore }()
+
+				cnode := req.DAG.Nodes[nodeID]
+				node := WorkflowNode{
+					ID:        cnode.ID,
+					Type:      cnode.Type,
+					DependsOn: cnode.DependsOn,
+					TargetID:  cnode.TargetID,
+					Scope:     cnode.Scope,
+					Step: WorkflowStepInput{
+						Input: json.RawMessage{},
+					},
+				}
+
+				if mockOutput, mockErr, isMocked := req.Opts.EffectiveMockOutput(nodeID); isMocked {
+					step := StepResult{NodeID: nodeID}
+					if mockErr != "" {
+						step.Status = "failed"
+						step.Error = mockErr
+						step.Attempt = 1
+					} else {
+						step.Status = "succeeded"
+						step.Output = mockOutput
+						step.Attempt = 1
+					}
+					resultChan <- execResult{nodeID: nodeID, step: step}
+					return
+				}
+
+				var inputJSON json.RawMessage = req.Input
+				if len(cnode.DataRefs) > 0 {
+					resolved := e.resolveDataRefs(cnode.DataRefs, req.Input, outputs, &outputsMu)
+					if merged, err := json.Marshal(resolved); err == nil {
+						inputJSON = merged
+					}
+				}
+
+				if cnode.When != nil {
+					shouldRun, err := EvaluateExpression(cnode.When, ExpressionEvalConfig{
+						Input: func() map[string]any {
+							var m map[string]any
+							_ = json.Unmarshal(req.Input, &m)
+							if m == nil {
+								m = make(map[string]any)
+							}
+							return m
+						}(),
+						Outputs: func() map[string]json.RawMessage {
+							outputsMu.RLock()
+							defer outputsMu.RUnlock()
+							cp := make(map[string]json.RawMessage, len(outputs))
+							for k, v := range outputs {
+								cp[k] = v
+							}
+							return cp
+						}(),
+					})
+					if err != nil || !shouldRun {
+						resultChan <- execResult{
+							nodeID: nodeID,
+							step:   StepResult{NodeID: nodeID, Status: "skipped"},
+						}
+						return
+					}
+				}
+
+				handler, hOK := e.handlers[node.Type]
+				if !hOK {
+					handler, hOK = e.handlers[strings.ToLower(node.Type)]
+				}
+				if !hOK {
+					resultChan <- execResult{
+						nodeID: nodeID,
+						step:   StepResult{NodeID: nodeID, Status: "failed", Error: ErrHandlerNotFound.Error()},
+					}
+					return
+				}
+
+				retryPolicy := cnode.Retry
+				if retryPolicy == nil {
+					retryPolicy = DefaultRetryPolicy()
+				}
+				normalizedRetry := retryPolicyNormalize(retryPolicy)
+
+				stepResult := e.executeStepCompiled(execCtx, handler, node, inputJSON, limits, normalizedRetry, req.Journal)
+				stepResult.NodeID = nodeID
+
+				if cnode.OnError.Mode == WorkflowErrorModeUseDefault && stepResult.Status == "failed" && len(cnode.OnError.Default) > 0 {
+					stepResult.Status = "defaulted"
+					stepResult.Output = cnode.OnError.Default
+					stepResult.Error = ""
+				}
+
+				resultChan <- execResult{nodeID: nodeID, step: stepResult}
+			}(nid)
+		}
+
+		wg.Wait()
+		close(resultChan)
+
+		aborted := false
+		var abortReason string
+		for er := range resultChan {
+			resultMu.Lock()
+			stepResults = append(stepResults, er.step)
+			resultMu.Unlock()
+
+			switch er.step.Status {
+			case "succeeded", "defaulted":
+				outputsMu.Lock()
+				outputs[er.nodeID] = er.step.Output
+				outputsMu.Unlock()
+				states[er.nodeID] = NodeStateSucceeded
+			case "skipped":
+				states[er.nodeID] = NodeStateSkipped
+			case "cancelled":
+				states[er.nodeID] = NodeStateCancelled
+				aborted = true
+				abortReason = er.step.Error
+			default:
+				cnode := req.DAG.Nodes[er.nodeID]
+				states[er.nodeID] = NodeStateFailed
+				if cnode.OnError.Mode == WorkflowErrorModeContinue {
+					if len(cnode.OnError.Default) > 0 {
+						outputsMu.Lock()
+						outputs[er.nodeID] = cnode.OnError.Default
+						outputsMu.Unlock()
+					}
+				} else {
+					aborted = true
+					if abortReason == "" {
+						abortReason = er.step.Error
+					}
+				}
+			}
+		}
+
+		if req.Journal != nil {
+			totalRecorded = req.Journal.Count()
+		}
+		_ = mockLookup
+		_ = totalRecorded
+
+		return aborted, abortReason
+	}
+
+	for {
+		select {
+		case <-execCtx.Done():
+			result := &ExecuteResult{
+				ExecutionID: executionID,
+				WorkflowID:  req.DAG.WorkflowID,
+				Status:      RunStatusFailed,
+				Success:     false,
+				Steps:       stepResults,
+				Duration:    time.Since(start),
+			}
+			if execCtx.Err() == context.DeadlineExceeded {
+				result.Error = ErrExecutionTimeout.Error()
+			} else {
+				result.Error = execCtx.Err().Error()
+			}
+			return result, nil
+		default:
+		}
+
+		ready := ReadyNodes(req.DAG, states)
+		if len(ready) == 0 {
+			allTerminal := true
+			anyFailed := false
+			for _, s := range states {
+				if !s.IsTerminal() {
+					allTerminal = false
+					break
+				}
+				if s == NodeStateFailed {
+					anyFailed = true
+				}
+			}
+			if allTerminal {
+				result := &ExecuteResult{
+					ExecutionID: executionID,
+					WorkflowID:  req.DAG.WorkflowID,
+					Steps:       stepResults,
+					Duration:    time.Since(start),
+				}
+				if anyFailed {
+					result.Status = RunStatusFailed
+					result.Success = false
+				} else {
+					result.Status = RunStatusSucceeded
+					result.Success = true
+					for i := len(stepResults) - 1; i >= 0; i-- {
+						if stepResults[i].Status == "succeeded" && len(stepResults[i].Output) > 0 {
+							result.Output = stepResults[i].Output
+							break
+						}
+					}
+				}
+				return result, nil
+			}
+			time.Sleep(50 * time.Millisecond)
+			continue
+		}
+
+		for _, id := range ready {
+			states[id] = NodeStateRunning
+		}
+
+		aborted, abortReason := runReadySet(ready)
+		if aborted {
+			result := &ExecuteResult{
+				ExecutionID: executionID,
+				WorkflowID:  req.DAG.WorkflowID,
+				Status:      RunStatusFailed,
+				Success:     false,
+				Error:       abortReason,
+				Steps:       stepResults,
+				Duration:    time.Since(start),
+			}
+			return result, nil
+		}
+	}
+}
+
+func (e *WorkflowExecutor) resolveDataRefs(refs []*WorkflowValueRef, input json.RawMessage, outputs map[string]json.RawMessage, outputsMu *sync.RWMutex) map[string]any {
+	resolved := make(map[string]any)
+	var inputMap map[string]any
+	_ = json.Unmarshal(input, &inputMap)
+	if inputMap == nil {
+		inputMap = make(map[string]any)
+	}
+
+	for _, ref := range refs {
+		switch ref.Source {
+		case RefSourceInput:
+			if v := traversePath(inputMap, ref.Path); v != nil {
+				key := strings.Join(ref.Path, ".")
+				resolved[key] = v
+			}
+		case RefSourceNodeOutput:
+			outputsMu.RLock()
+			raw, ok := outputs[ref.NodeID]
+			outputsMu.RUnlock()
+			if ok {
+				var outMap map[string]any
+				if err := json.Unmarshal(raw, &outMap); err == nil {
+					if v := traversePath(outMap, ref.Path); v != nil {
+						key := ref.NodeID + "." + strings.Join(ref.Path, ".")
+						resolved[key] = v
+					}
+				}
+			}
+		}
+	}
+	return resolved
+}
+
+func (e *WorkflowExecutor) executeStepCompiled(ctx context.Context, handler StepHandler, node WorkflowNode, input json.RawMessage, limits WorkflowLimits, retry *WorkflowRetryPolicy, journal *SideEffectJournal) StepResult {
+	start := time.Now()
+
+	maxAttempts := retry.MaxAttempts
+	if maxAttempts < 1 {
+		maxAttempts = 1
+	}
+
+	var lastErr error
+
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		select {
+		case <-ctx.Done():
+			if ctx.Err() == context.Canceled {
+				return StepResult{Status: "cancelled", Error: ctx.Err().Error(), Duration: time.Since(start), Attempt: attempt}
+			}
+			return StepResult{Status: "failed", Error: ErrExecutionTimeout.Error(), Duration: time.Since(start), Attempt: attempt}
+		default:
+		}
+
+		stepCtx := ctx
+		var cancel context.CancelFunc
+		if limits.MaxStepDurationMS > 0 {
+			stepCtx, cancel = context.WithTimeout(ctx, time.Duration(limits.MaxStepDurationMS)*time.Millisecond)
+		}
+
+		output, err := handler.Execute(stepCtx, node, input)
+		if cancel != nil {
+			cancel()
+		}
+
+		if err == nil {
+			if journal != nil {
+				journal.Record(node.ID, SideEffectToolCall, node.TargetID, input, output, "", time.Since(start))
+			}
+			return StepResult{Status: "succeeded", Output: output, Duration: time.Since(start), Attempt: attempt}
+		}
+
+		lastErr = err
+		if stepCtx.Err() == context.DeadlineExceeded {
+			lastErr = ErrStepTimeout
+		}
+
+		if attempt < maxAttempts && retry.IsRetryable("") {
+			backoff := retry.ComputeBackoff(attempt)
+			select {
+			case <-ctx.Done():
+				return StepResult{Status: "cancelled", Error: ctx.Err().Error(), Duration: time.Since(start), Attempt: attempt}
+			case <-time.After(backoff):
+			}
+		}
+	}
+
+	errMsg := ""
+	if lastErr != nil {
+		errMsg = lastErr.Error()
+	}
+	return StepResult{Status: "failed", Error: errMsg, Duration: time.Since(start), Attempt: maxAttempts}
+}
+
+func retryPolicyNormalize(p *WorkflowRetryPolicy) *WorkflowRetryPolicy {
+	if p == nil {
+		return DefaultRetryPolicy()
+	}
+	return p.Normalize()
+}
+
+func (e *WorkflowExecutor) ExecuteWithOptions(ctx context.Context, req CompiledExecuteRequest) (*ExecuteResult, error) {
+	return e.ExecuteCompiled(ctx, req)
+}
+
+func (e *WorkflowExecutor) CompileAndExecute(ctx context.Context, def WorkflowDefinition, input json.RawMessage, execContext ExecutionContext, opts CompileOptions) (*ExecuteResult, error) {
+	compiler := NewCompiler()
+	dag, err := compiler.Compile(def, opts)
+	if err != nil {
+		return nil, err
+	}
+	req := CompiledExecuteRequest{
+		DAG:     dag,
+		Input:   input,
+		Context: execContext,
+		Opts:    DefaultExecutionOptions(),
+	}
+	return e.ExecuteCompiled(ctx, req)
+}

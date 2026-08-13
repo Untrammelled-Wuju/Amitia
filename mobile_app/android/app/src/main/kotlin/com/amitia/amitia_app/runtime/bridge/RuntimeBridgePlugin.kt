@@ -22,12 +22,13 @@ class RuntimeBridgePlugin : FlutterPlugin {
         val module = AndroidRuntimeModule.create(context)
         val controller = module.controller
         val backendConnectionProvider = (module as DefaultRuntimeModule).backendConnectionProvider
+        val manifestStore = (module as DefaultRuntimeModule).manifestStore
 
         val methodChannel = MethodChannel(binding.binaryMessenger, RuntimeBridgeContract.METHOD_CHANNEL)
         val methodHandler = RuntimeBridgeHandler(
             controller = controller,
             backendConnectionProvider = backendConnectionProvider,
-            manifestStore = null,
+            manifestStore = manifestStore,
         )
         methodChannel.setMethodCallHandler(methodHandler)
         this.methodChannel = methodChannel
@@ -36,7 +37,7 @@ class RuntimeBridgePlugin : FlutterPlugin {
         val eventChannel = EventChannel(binding.binaryMessenger, RuntimeBridgeContract.EVENT_CHANNEL)
         val streamHandler = RuntimeBridgeStreamHandler(
             controller = controller,
-            manifestStore = null,
+            manifestStore = manifestStore,
         )
         eventChannel.setStreamHandler(streamHandler)
         this.eventChannel = eventChannel

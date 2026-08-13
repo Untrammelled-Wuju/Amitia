@@ -41,7 +41,6 @@ import com.amitia.amitia_app.runtime.startup.RuntimeStartupError
 import com.amitia.amitia_app.runtime.startup.RuntimeStartupRequest
 import com.amitia.amitia_app.runtime.startup.RuntimeStartupResult
 import java.util.concurrent.atomic.AtomicBoolean
-import java.util.concurrent.atomic.AtomicLong
 import java.util.concurrent.atomic.AtomicReference
 
 internal class DefaultRuntimeController(
@@ -50,7 +49,6 @@ internal class DefaultRuntimeController(
     private val installer: RuntimeInstaller? = null,
     private val abiGate: RuntimeAbiGate? = null,
     private val idGenerator: RuntimeIdGenerator = UuidRuntimeIdGenerator,
-    private val clock: RuntimeClock = SystemRuntimeClock,
     private val startupDetector: RuntimeStartupDetector = DefaultRuntimeStartupDetector(),
     private val endpointPolicy: BackendEndpointPolicy = embeddedAndroidBackendPolicy(),
     private val recoveryPolicy: RuntimeCrashRecoveryPolicy = NoOpRecoveryPolicy(),
@@ -63,7 +61,6 @@ internal class DefaultRuntimeController(
         onServiceHostEvent(event)
     }
 
-    private val currentStartGeneration = AtomicLong(0L)
     private val currentStartAttemptId = AtomicReference<String?>(null)
     private val activeDetectorSession = AtomicReference<ProotSession?>(null)
     private val startupDetectionThread = AtomicReference<Thread?>(null)
@@ -76,6 +73,12 @@ internal class DefaultRuntimeController(
         serviceHost.addListener(serviceHostListener)
     }
 
+    private fun currentGeneration(): Long = stateStore.snapshot().generation
+
+    private fun isCurrentGeneration(generation: Long): Boolean {
+        return generation > 0 && generation == stateStore.snapshot().generation
+    }
+
     private fun onServiceHostEvent(event: RuntimeServiceHostEvent) {
         when (event) {
             is RuntimeServiceHostEvent.ForegroundStarted -> {
@@ -84,13 +87,11 @@ internal class DefaultRuntimeController(
                 onSessionReady(event.generation)
             }
             is RuntimeServiceHostEvent.SessionExited -> {
-                onSessionExited(event.exitCode)
+                onSessionExited(event.generation, event.exitCode)
             }
             is RuntimeServiceHostEvent.ExpectedStopped -> {
                 cancelPendingRecovery()
                 cancelStartupDetector()
-                currentStartGeneration.set(0L)
-                currentStartAttemptId.set(null)
                 val current = stateStore.snapshot()
                 val target = RuntimeStateMachine.expectedStopTarget(current.state)
                 if (target != null && target != current.state) {
@@ -99,8 +100,6 @@ internal class DefaultRuntimeController(
             }
             is RuntimeServiceHostEvent.UnexpectedTermination -> {
                 cancelStartupDetector()
-                currentStartGeneration.set(0L)
-                currentStartAttemptId.set(null)
                 val current = stateStore.snapshot()
                 val target = RuntimeStateMachine.unexpectedTerminationTarget(current.state)
                 if (target != null && target != current.state) {
@@ -116,9 +115,11 @@ internal class DefaultRuntimeController(
     }
 
     private fun onSessionReady(generation: Long) {
+        if (!isCurrentGeneration(generation)) return
+
         val current = stateStore.snapshot()
         if (current.state != RuntimeState.STARTING) return
-        if (currentStartGeneration.get() != 0L && currentStartGeneration.get() != generation) return
+        if (current.generation != generation) return
 
         val attemptId = idGenerator.nextOperationId()
         currentStartAttemptId.set(attemptId)
@@ -161,7 +162,9 @@ internal class DefaultRuntimeController(
         startStartupDetection(session, generation, attemptId)
     }
 
-    private fun onSessionExited(exitCode: Int?) {
+    private fun onSessionExited(generation: Long, exitCode: Int?) {
+        if (!isCurrentGeneration(generation)) return
+
         cancelStartupDetector()
         val current = stateStore.snapshot()
         if (current.state == RuntimeState.STARTING) {
@@ -183,7 +186,6 @@ internal class DefaultRuntimeController(
 
     private fun startStartupDetection(session: ProotSession, generation: Long, attemptId: String) {
         cancelStartupDetector()
-        currentStartGeneration.set(generation)
         currentStartAttemptId.set(attemptId)
         activeDetectorSession.set(session)
         val workerThread = Thread({
@@ -217,14 +219,13 @@ internal class DefaultRuntimeController(
     private fun onStartupDetectionCompleted(result: RuntimeStartupResult, expectedGeneration: Long, expectedAttemptId: String) {
         startupDetectionThread.set(null)
         if (currentStartAttemptId.get() != expectedAttemptId) return
-        if (currentStartGeneration.get() != expectedGeneration) return
+        if (!isCurrentGeneration(expectedGeneration)) return
 
         when (result) {
             is RuntimeStartupResult.Ready -> {
                 val current = stateStore.snapshot()
                 if (current.state == RuntimeState.STARTING &&
-                    currentStartGeneration.get() == expectedGeneration &&
-                    currentStartAttemptId.get() == expectedAttemptId
+                    current.generation == expectedGeneration
                 ) {
                     val target = RuntimeStateMachine.startupReadyTarget(current.state)
                     if (target != null) {
@@ -236,8 +237,7 @@ internal class DefaultRuntimeController(
             is RuntimeStartupResult.Failed -> {
                 val current = stateStore.snapshot()
                 if ((current.state == RuntimeState.STARTING || current.state == RuntimeState.STOPPING) &&
-                    currentStartGeneration.get() == expectedGeneration &&
-                    currentStartAttemptId.get() == expectedAttemptId
+                    current.generation == expectedGeneration
                 ) {
                     val error = mapStartupErrorToRuntimeError(result.error)
                     val target = RuntimeStateMachine.startupFailureTarget(current.state)
@@ -524,13 +524,11 @@ internal class DefaultRuntimeController(
 
         cancelPendingRecovery()
 
-        val newGeneration = clock.nowEpochMillis()
-        currentStartGeneration.set(newGeneration)
-        stateStore.update { it.copy(state = RuntimeState.STARTING, generation = current.generation + 1) }
+        val newSnapshot = stateStore.transitionToStarting()
+        val allocatedGeneration = newSnapshot.generation
 
-        val startResult = serviceHost.ensureStarted()
+        val startResult = serviceHost.ensureStarted(allocatedGeneration)
         if (startResult is RuntimeServiceResult.Failure) {
-            currentStartGeneration.set(0L)
             val error = RuntimeError(
                 code = RuntimeErrorCode.START_FAILED,
                 message = "failed to ensure service is started: ${startResult.error.message}",
@@ -802,3 +800,5 @@ internal class DefaultRuntimeController(
         override fun isCompleted(): Boolean = true
     }
 }
+
+private typealias AtomicLong = java.util.concurrent.atomic.AtomicLong

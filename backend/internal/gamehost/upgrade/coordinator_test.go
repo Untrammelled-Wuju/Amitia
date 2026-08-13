@@ -842,13 +842,21 @@ func TestUpgrade_GateIsolation(t *testing.T) {
 	}
 
 	err = gate.Acquire("ext-1", "op-2")
-	if err == nil {
-		t.Error("expected error when acquiring same extension twice")
+	if err != nil {
+		t.Fatalf("unexpected error acquiring second op: %v", err)
+	}
+	if !gate.IsUpgrading("ext-1") {
+		t.Error("ext-1 should still be upgrading with concurrent ops")
 	}
 
-	gate.Release("ext-1")
+	gate.Release("ext-1", "op-1")
+	if !gate.IsUpgrading("ext-1") {
+		t.Error("ext-1 should still be upgrading after releasing one op")
+	}
+
+	gate.Release("ext-1", "op-2")
 	if gate.IsUpgrading("ext-1") {
-		t.Error("ext-1 should not be upgrading after release")
+		t.Error("ext-1 should not be upgrading after releasing both ops")
 	}
 }
 

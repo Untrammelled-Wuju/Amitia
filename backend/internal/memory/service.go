@@ -49,6 +49,12 @@ type Service interface {
 	BatchVerify(ids []string, status string) error
 	BatchSetImportance(ids []string, importance int) error
 	RetrieveStats() (map[string]interface{}, error)
+
+	SummarizeMemories(req *MemorySummaryRequest) (*MemorySummaryResult, error)
+	RunConsolidation(req *ConsolidationRequest) (*ConsolidationResult, error)
+	ListConsolidationCandidates(kind string) ([]MemoryCandidate, error)
+	AcceptConsolidationCandidate(id string) (*Memory, error)
+	RejectConsolidationCandidate(id string) error
 }
 
 type RankedMemory struct {

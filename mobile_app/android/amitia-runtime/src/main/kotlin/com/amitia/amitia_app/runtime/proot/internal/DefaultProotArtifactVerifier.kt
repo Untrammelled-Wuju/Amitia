@@ -1,4 +1,4 @@
-﻿package com.amitia.amitia_app.runtime.proot.internal
+package com.amitia.amitia_app.runtime.proot.internal
 
 import com.amitia.amitia_app.runtime.proot.ProotAvailability
 import com.amitia.amitia_app.runtime.proot.ProotBinaryLocator
@@ -20,6 +20,7 @@ internal class DefaultProotArtifactVerifier(private val locator: ProotBinaryLoca
         if (!file.exists()) return ProotAvailability.Unavailable(ProotErrorCode.BINARY_NOT_FOUND, "proot.binary.not_found")
         if (!file.isFile) return ProotAvailability.Unavailable(ProotErrorCode.BINARY_NOT_FILE, "proot.binary.not_file")
         if (!file.canRead()) return ProotAvailability.Unavailable(ProotErrorCode.BINARY_NOT_READABLE, "proot.binary.not_readable")
+        if (!file.canExecute()) return ProotAvailability.Unavailable(ProotErrorCode.BINARY_NOT_EXECUTABLE, "proot.binary.not_executable")
         val elfError = ProotElfInspector().inspect(file)
         if (elfError != null) return ProotAvailability.Invalid(elfError.code, "proot.elf.${elfError.code.name.lowercase()}")
         if (!verifyChecksum(file, artifact.sha256)) return ProotAvailability.Invalid(ProotErrorCode.CHECKSUM_MISMATCH, "proot.checksum.mismatch")

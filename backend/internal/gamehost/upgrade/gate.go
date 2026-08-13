@@ -1,7 +1,6 @@
 package upgrade
 
 import (
-	"fmt"
 	"sync"
 )
 
@@ -12,49 +11,49 @@ type upgradeGateEntry struct {
 
 type UpgradeGate struct {
 	mu      sync.RWMutex
-	entries map[string]upgradeGateEntry
+	entries map[UpgradeOperationID]upgradeGateEntry
 }
 
 func NewUpgradeGate() *UpgradeGate {
 	return &UpgradeGate{
-		entries: make(map[string]upgradeGateEntry),
+		entries: make(map[UpgradeOperationID]upgradeGateEntry),
 	}
 }
 
 func (g *UpgradeGate) Acquire(extensionID string, operationID UpgradeOperationID) error {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-
-	if existing, exists := g.entries[extensionID]; exists {
-		return fmt.Errorf("extension %s already upgrading: operation=%s", extensionID, existing.operationID)
-	}
-
-	g.entries[extensionID] = upgradeGateEntry{
+	g.entries[operationID] = upgradeGateEntry{
 		operationID: operationID,
 		extensionID: extensionID,
 	}
 	return nil
 }
 
-func (g *UpgradeGate) Release(extensionID string) {
+func (g *UpgradeGate) Release(extensionID string, operationID UpgradeOperationID) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	delete(g.entries, extensionID)
+	delete(g.entries, operationID)
 }
 
 func (g *UpgradeGate) IsUpgrading(extensionID string) bool {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
-	_, exists := g.entries[extensionID]
-	return exists
+	for _, entry := range g.entries {
+		if entry.extensionID == extensionID {
+			return true
+		}
+	}
+	return false
 }
 
 func (g *UpgradeGate) GetOperationID(extensionID string) (UpgradeOperationID, bool) {
 	g.mu.RLock()
 	defer g.mu.RUnlock()
-	entry, exists := g.entries[extensionID]
-	if !exists {
-		return "", false
+	for _, entry := range g.entries {
+		if entry.extensionID == extensionID {
+			return entry.operationID, true
+		}
 	}
-	return entry.operationID, true
+	return "", false
 }

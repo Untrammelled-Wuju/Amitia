@@ -3,11 +3,10 @@
 package main
 
 import (
-	"log"
-
 	"github.com/u-ai/backend/internal/androidlinux/terminal"
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/runtimehost"
+	"github.com/u-ai/backend/log"
 )
 
 func applyAndroidLinuxProvider(builder *kernel.ContainerBuilder, host runtimehost.RuntimeHost) *kernel.ContainerBuilder {

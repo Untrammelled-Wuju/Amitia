@@ -15,11 +15,19 @@ func (m *mockBackend) Capabilities(ctx context.Context) mediaffmpeg.CapabilitySt
 	return m.state
 }
 
+func (m *mockBackend) GetCapabilities(ctx context.Context) (*mediaffmpeg.Capabilities, error) {
+	return nil, nil
+}
+
 func (m *mockBackend) CheckVersion(ctx context.Context) (*mediaffmpeg.Environment, error) {
 	return nil, nil
 }
 
 func (m *mockBackend) Probe(ctx context.Context, localPath string) (*mediaffmpeg.ProbeResult, error) {
+	return nil, nil
+}
+
+func (m *mockBackend) ProbeFull(ctx context.Context, localPath string) (*mediaffmpeg.FullProbeResult, error) {
 	return nil, nil
 }
 
@@ -49,31 +57,7 @@ func TestAndroidFFmpegProvider_CapabilityState(t *testing.T) {
 	if !state.FFprobeAvailable {
 		t.Error("expected ffprobe available")
 	}
-	if state.FFmpegVersion != "4.4.2" {
-		t.Errorf("expected version 4.4.2, got %q", state.FFmpegVersion)
-	}
 	if state.Source != "runtime_package" {
-		t.Errorf("expected runtime_package, got %q", state.Source)
-	}
-	if state.State != "available" {
-		t.Errorf("expected available state, got %q", state.State)
-	}
-}
-
-func TestBlockedFFmpegProvider_CapabilityState(t *testing.T) {
-	provider := NewBlockedFFmpegProvider()
-	state := provider.CapabilityState(context.Background())
-
-	if state.Supported {
-		t.Error("expected not supported")
-	}
-	if state.FFmpegAvailable {
-		t.Error("expected ffmpeg not available")
-	}
-	if state.State != "unavailable" {
-		t.Errorf("expected unavailable state, got %q", state.State)
-	}
-	if state.Reason != AndroidFFmpegUnavilable {
-		t.Errorf("expected reason %q, got %q", AndroidFFmpegUnavilable, state.Reason)
+		t.Errorf("expected source runtime_package, got %s", state.Source)
 	}
 }

@@ -179,7 +179,7 @@ class _AiConfigContentState extends State<_AiConfigContent> {
             label: '管理模型配置',
             icon: Icons.settings,
             isFullWidth: true,
-            onPressed: () {},
+            onPressed: null,
           ),
         ),
         const SizedBox(height: AppSpacing.xl),

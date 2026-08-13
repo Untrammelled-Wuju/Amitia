@@ -29,18 +29,18 @@ internal fun interface RuntimeEnvironmentBuilder {
 }
 
 internal object GuestLayoutContract {
-    const val RUNTIME_ROOT = "/opt/amitia"
-    const val CONFIG_ROOT = "/etc/amitia"
-    const val DATA_ROOT = "/var/lib/amitia"
-    const val CACHE_ROOT = "/var/cache/amitia"
-    const val LOG_ROOT = "/var/log/amitia"
-    const val RUN_ROOT = "/run/amitia"
-    const val TEMP_ROOT = "/run/amitia/tmp"
-    const val WORKSPACE_ROOT = "/var/lib/amitia/workspaces"
-    const val HOME = "/home/amitia"
+    const val RUNTIME_ROOT = GuestLayout.PROGRAM
+    const val CONFIG_ROOT = GuestLayout.CONFIG
+    const val DATA_ROOT = GuestLayout.DATA
+    const val CACHE_ROOT = GuestLayout.CACHE
+    const val LOG_ROOT = GuestLayout.LOGS
+    const val RUN_ROOT = GuestLayout.RUN
+    const val TEMP_ROOT = GuestLayout.TMP
+    const val WORKSPACE_ROOT = "${GuestLayout.DATA}/workspaces"
+    const val HOME = GuestLayout.HOME
 
-    const val NODE_BIN = "/opt/amitia/node/bin"
-    val PATH = "$NODE_BIN:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+    const val NODE_BIN = GuestLayout.NODE_BIN
+    val PATH = GuestLayout.PATH
 
     const val LANG = "C.UTF-8"
     const val LC_ALL = "C.UTF-8"

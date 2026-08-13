@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/agent/tool"
@@ -26,13 +27,16 @@ func DefaultToolFacadeConfig() ToolFacadeConfig {
 }
 
 type ToolFacade struct {
-	toolRegistry      *capability.ToolRegistry
-	executionKernel   *execution.ExecutionPipeline
-	hookService       *hook.Service
-	agentSkillCatalog *agent_skill.AgentSkillCatalog
-	activationService *agent_skill.ActivationService
-	counters          *ToolFacadeCounters
-	config            ToolFacadeConfig
+	toolRegistry           *capability.ToolRegistry
+	executionKernel        *execution.ExecutionPipeline
+	hookService            *hook.Service
+	agentSkillCatalog      *agent_skill.AgentSkillCatalog
+	activationService      *agent_skill.ActivationService
+	agentSkillBackend      AgentSkillBackend
+	runSkillScriptHandler  RunSkillScriptHandler
+	skillResourceHandler   SkillResourceHandler
+	counters               *ToolFacadeCounters
+	config                 ToolFacadeConfig
 }
 
 func NewToolFacade(toolRegistry *capability.ToolRegistry, executionKernel *execution.ExecutionPipeline, args ...any) *ToolFacade {
@@ -65,8 +69,23 @@ func (f *ToolFacade) SetAgentSkillCatalog(catalog *agent_skill.AgentSkillCatalog
 	}
 }
 
+func (f *ToolFacade) SetAgentSkillBackend(backend AgentSkillBackend) {
+	f.agentSkillBackend = backend
+}
+
+func (f *ToolFacade) SetRunSkillScriptHandler(handler RunSkillScriptHandler) {
+	f.runSkillScriptHandler = handler
+}
+
+func (f *ToolFacade) SetSkillResourceHandler(handler SkillResourceHandler) {
+	f.skillResourceHandler = handler
+}
+
 func (f *ToolFacade) PrepareAgentSkillPrompt(ctx context.Context, scope LegacyScope, message string) (string, []LegacyActivatedSkill, []string) {
 	f.counters.IncPrepareAgentSkillPrompt()
+	if f.agentSkillBackend != nil {
+		return f.prepareAgentSkillPromptFromBackend(ctx, scope, message)
+	}
 	if f.agentSkillCatalog == nil {
 		return "", nil, nil
 	}
@@ -75,6 +94,66 @@ func (f *ToolFacade) PrepareAgentSkillPrompt(ctx context.Context, scope LegacySc
 
 func (f *ToolFacade) EndAgentSkillRound(scope LegacyScope) {
 	f.counters.IncEndAgentSkillRound()
+	if f.agentSkillBackend != nil {
+		f.agentSkillBackend.EndRound(scope)
+	}
+}
+
+func (f *ToolFacade) prepareAgentSkillPromptFromBackend(ctx context.Context, scope LegacyScope, message string) (string, []LegacyActivatedSkill, []string) {
+	catalog, err := f.agentSkillBackend.ResolveCatalog(ctx, scope)
+	if err != nil {
+		return "", nil, []string{err.Error()}
+	}
+
+	errorsList := []string{}
+	activated := []LegacyActivatedSkill{}
+
+	explicitNames := parseExplicitSkillNames(message)
+	for _, name := range explicitNames {
+		result, activateErr := f.agentSkillBackend.Activate(ctx, scope, name, true)
+		if activateErr != nil {
+			errorsList = append(errorsList, activateErr.Error())
+			continue
+		}
+		prompts, promptErr := f.agentSkillBackend.ActivePrompts(ctx, scope)
+		if promptErr != nil {
+			errorsList = append(errorsList, promptErr.Error())
+			continue
+		}
+		for _, p := range prompts {
+			if p.ActivationID == result.ActivationID {
+				activated = append(activated, LegacyActivatedSkill{
+					ActivationID:        p.ActivationID,
+					ExtensionID:         p.ExtensionID,
+					Name:                p.Name,
+					Source:              p.Source,
+					Scope:               p.Scope,
+					CompatibilityStatus: p.CompatibilityStatus,
+					Prompt:              p.Body,
+					BodyTokens:          p.BodyTokens,
+					Explicit:            p.Explicit,
+				})
+				break
+			}
+		}
+	}
+
+	catalogSection := renderSkillCatalogFromEntries(catalog)
+	return catalogSection, activated, errorsList
+}
+
+func renderSkillCatalogFromEntries(catalog []SkillCatalogEntry) string {
+	if len(catalog) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString("# Available Agent Skills\n\n")
+	for _, s := range catalog {
+		sb.WriteString(fmt.Sprintf("- **%s**", s.Name))
+		sb.WriteString(fmt.Sprintf(": %s\n", s.Description))
+	}
+	sb.WriteString("\nTo activate a skill, use the activate_skill tool or include $skill-name in your message.\n")
+	return sb.String()
 }
 
 func (f *ToolFacade) BeforePrompt(ctx context.Context, scope LegacyScope) []LegacyContextContribution {
@@ -99,7 +178,29 @@ func (f *ToolFacade) ModelTools(ctx context.Context, scope LegacyScope) ([]tool.
 	if f.toolRegistry == nil {
 		return nil, nil
 	}
-	return f.buildKernelModelTools(ctx, scope)
+	tools, err := f.buildKernelModelTools(ctx, scope)
+	if err != nil {
+		return nil, err
+	}
+	if f.agentSkillBackend != nil {
+		names, namesErr := f.resolveVisibleSkillNames(ctx, scope)
+		if namesErr == nil && len(names) > 0 {
+			tools = append(tools, buildActivateSkillTool(names))
+		}
+	}
+	if f.runSkillScriptHandler != nil {
+		scriptNames, scriptErr := f.resolveScriptCapableSkillNames(ctx, scope)
+		if scriptErr == nil && len(scriptNames) > 0 {
+			tools = append(tools, buildRunSkillScriptTool(scriptNames))
+		}
+	}
+	if f.skillResourceHandler != nil {
+		resourceNames, resourceErr := f.resolveResourceCapableSkillNames(ctx, scope)
+		if resourceErr == nil && len(resourceNames) > 0 {
+			tools = append(tools, buildListSkillResourcesTool(), buildReadSkillResourceTool(), buildMaterializeSkillResourceTool())
+		}
+	}
+	return tools, nil
 }
 
 type ResolvedToolReference struct {
@@ -150,6 +251,26 @@ func (f *ToolFacade) ExecuteTool(ctx context.Context, toolID capability.Capabili
 
 func (f *ToolFacade) ExecuteModelTool(ctx context.Context, modelName string, input json.RawMessage, scope LegacyScope, idempotencyKey string) (LegacyToolResult, bool) {
 	f.counters.IncExecuteModelTool()
+	if modelName == ActivateSkillToolName && f.agentSkillBackend != nil {
+		result, _ := f.handleActivateSkill(ctx, input, scope)
+		return result, true
+	}
+	if modelName == RunSkillScriptToolName && f.runSkillScriptHandler != nil {
+		result, _ := f.handleRunSkillScript(ctx, input, scope)
+		return result, true
+	}
+	if modelName == ListSkillResourcesToolName && f.skillResourceHandler != nil {
+		result, _ := f.handleListSkillResources(ctx, input, scope)
+		return result, true
+	}
+	if modelName == ReadSkillResourceToolName && f.skillResourceHandler != nil {
+		result, _ := f.handleReadSkillResource(ctx, input, scope)
+		return result, true
+	}
+	if modelName == MaterializeSkillResourceToolName && f.skillResourceHandler != nil {
+		result, _ := f.handleMaterializeSkillResource(ctx, input, scope)
+		return result, true
+	}
 	if f.toolRegistry == nil {
 		return LegacyToolResult{Status: "FAILED", VisibleText: "tool registry not configured", Error: &LegacyToolError{Code: "TOOL_REGISTRY_UNAVAILABLE"}}, false
 	}

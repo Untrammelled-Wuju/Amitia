@@ -43,6 +43,9 @@ func (i *ensureInstaller) EnsureInstalled(req InstallRequest) error {
 	if req.Target.Source != SourceRuntimePackage {
 		return NewInvalidInstallTargetError("only runtime-package source supports auto-install")
 	}
+	if isAndroidPRootStrict(req.Target.Guest, req.Target.Architecture) {
+		return NewInvalidInstallTargetError("android-proot strict mode prohibits runtime auto-install")
+	}
 	if req.Target.Installed {
 		return nil
 	}
@@ -215,4 +218,8 @@ func NewArchiveExtractionError(archive string, err error) error {
 
 func NewInstallArchiveNotFoundError(distributionRoot string) error {
 	return &installArchiveNotFoundError{distributionRoot: distributionRoot}
+}
+
+func isAndroidPRootStrict(guest platform.GuestPlatform, architecture string) bool {
+	return guest == platform.GuestPlatformLinux && architecture == "arm64"
 }

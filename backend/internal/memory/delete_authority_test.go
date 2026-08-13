@@ -107,6 +107,52 @@ func (r *memoryAuthorityRepo) GetCandidateByID(id string) (*MemoryCandidateModel
 
 func (r *memoryAuthorityRepo) DeleteAllCandidates() error { return nil }
 
+func (r *memoryAuthorityRepo) FindByDerivationKey(derivationKey string) (*Memory, error) {
+	return nil, nil
+}
+
+func (r *memoryAuthorityRepo) ListDerivationsByOutput(outputMemoryID string) ([]MemoryDerivation, error) {
+	return nil, nil
+}
+
+func (r *memoryAuthorityRepo) ListDerivationsByInput(inputMemoryID string) ([]MemoryDerivation, error) {
+	return nil, nil
+}
+
+func (r *memoryAuthorityRepo) CreateDerivation(d *MemoryDerivation) error { return nil }
+
+func (r *memoryAuthorityRepo) FindDerivedMemoryBySourceIDs(sourceIDs []string, kind string) (*Memory, error) {
+	return nil, nil
+}
+
+func (r *memoryAuthorityRepo) StreamExportable(characterID string, limit, offset int) ([]Memory, error) {
+	return nil, nil
+}
+
+func (r *memoryAuthorityRepo) StreamExportableByIDs(ids []string, limit, offset int) ([]Memory, error) {
+	return nil, nil
+}
+
+func (r *memoryAuthorityRepo) CountExportable(characterID string) (int64, error) { return 0, nil }
+
+func (r *memoryAuthorityRepo) CountExportableByIDs(ids []string) (int64, error) { return 0, nil }
+
+func (r *memoryAuthorityRepo) ListEventsByMemoryIDs(memoryIDs []string) ([]MemoryEventV1, error) {
+	return nil, nil
+}
+
+func (r *memoryAuthorityRepo) ListTemporalByMemoryIDs(memoryIDs []string) ([]MemoryTemporalV1, error) {
+	return nil, nil
+}
+
+func (r *memoryAuthorityRepo) ListDerivationsByMemoryIDs(memoryIDs []string) ([]MemoryDerivationV1, error) {
+	return nil, nil
+}
+
+func (r *memoryAuthorityRepo) IsNewID(id string) (bool, error) { return true, nil }
+
+func (r *memoryAuthorityRepo) BatchUpsert(records []MemoryEventV1) error { return nil }
+
 func TestMemorySearchFiltersDeletedInvalidatedAndTombstone(t *testing.T) {
 	repo := &memoryAuthorityRepo{items: []Memory{
 		{ID: "deleted", CharacterID: "char-a", Scope: "character", Key: "favorite", Value: "deleted", VerifiedStatus: "deleted"},

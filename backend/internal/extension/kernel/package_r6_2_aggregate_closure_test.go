@@ -37,7 +37,6 @@ func newR62SnapshotFixture(t *testing.T, rows []r62Row) *r62SnapshotFixture {
 	var jsonlLines []string
 	for _, row := range rows {
 		payload := map[string]interface{}{
-			"entity_id":    row.EntityID,
 			"entity_value": row.Value,
 			"amount":       row.Amount,
 		}

@@ -1681,6 +1681,7 @@ func (s *UserDataSnapshotStore) computeAggregateHashFromDB(ctx context.Context, 
 		return "", NewPackageError(PackageErrCodeUserDataEntityIDMissing, 422,
 			fmt.Errorf("kernel: table %s has no id or entity_id column during aggregate verification", table))
 	}
+	idCol := detectIDColumnName(columns)
 	hashes := make([]string, 0, 64)
 	for rows.Next() {
 		values := make([]interface{}, len(columns))
@@ -1693,7 +1694,14 @@ func (s *UserDataSnapshotStore) computeAggregateHashFromDB(ctx context.Context, 
 		}
 		payload := make(map[string]interface{}, len(columns))
 		for i, col := range columns {
-			payload[col] = normalizeSQLValue(values[i])
+			if col == idCol {
+				continue
+			}
+			v := normalizeSQLValue(values[i])
+			if v == nil {
+				continue
+			}
+			payload[col] = v
 		}
 		hashes = append(hashes, computeUserDataPayloadHash(payload))
 	}

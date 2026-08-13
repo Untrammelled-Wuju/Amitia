@@ -443,10 +443,14 @@ func captureUserDataTableSnapshot(
 		entityID := ""
 		for index, column := range columns {
 			value := normalizeSQLValue(values[index])
-			payload[column] = value
 			if column == idColumn {
 				entityID = fmt.Sprintf("%v", value)
+				continue
 			}
+			if value == nil {
+				continue
+			}
+			payload[column] = value
 		}
 
 		entityID = strings.TrimSpace(entityID)
