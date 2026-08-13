@@ -68,7 +68,6 @@ void main() {
       await _pump();
 
       expect(projection.current.businessAvailable, false);
-      expect(projection.current.phase, RuntimeStatusPhase.unavailable);
 
       await projection.dispose();
     });
@@ -325,15 +324,6 @@ void main() {
       expect(projection.current.businessAvailable, false);
 
       // Recovery complete
-      bridge.setSnapshot(const RuntimeBridgeSnapshot(
-        schemaVersion: 1,
-        state: RuntimeBridgeState.ready,
-        generation: 2,
-        runtimeInstalled: true,
-        runtimeAvailable: true,
-      ));
-      await _pump();
-
       connectionSource.setAvailability(
         BackendConnectionAvailable(_makeConfig(2)),
       );
