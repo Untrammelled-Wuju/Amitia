@@ -148,6 +148,7 @@ type Service interface {
 	WechatReplyTimingStatus() map[string]interface{}
 	AttachTemporalService(temporalSvc *temporal.Service)
 	SetDataPortabilityCoordinator(coord *dataportability.Coordinator)
+	GetDataPortabilityCoordinator() (*dataportability.Coordinator, bool)
 }
 
 type service struct {
@@ -170,6 +171,13 @@ func (s *service) AttachTemporalService(temporalSvc *temporal.Service) {
 
 func (s *service) SetDataPortabilityCoordinator(coord *dataportability.Coordinator) {
 	s.coordinator = coord
+}
+
+func (s *service) GetDataPortabilityCoordinator() (*dataportability.Coordinator, bool) {
+	if s.coordinator == nil {
+		return nil, false
+	}
+	return s.coordinator, true
 }
 func (s *service) MaintenanceRestartBridge() map[string]interface{} {
 	result := s.readSidecarResponse(s.sidecarPost("/api/login/reconnect", nil))

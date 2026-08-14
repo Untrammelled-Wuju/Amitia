@@ -250,7 +250,6 @@ func (s *service) AutoResolveConflict(key, value, characterID string, newConfide
 			err := s.deleteCanonicalMemory(m.ID, canonicalDeleteRequest{
 				OperationID: operationID,
 				EventReason: "auto_replaced",
-				HardDelete:  false,
 			})
 			if err != nil {
 				return nil, err

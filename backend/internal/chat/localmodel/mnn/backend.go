@@ -20,6 +20,7 @@ type mnnBackend struct {
 	lastError string
 	runtime   *mnnRuntime
 	host      runtimehost.RuntimeHost
+	generateMu sync.Mutex
 }
 
 func NewMNNBackend(params localmodel.CreateLocalModelParams) (localmodel.LocalModelInference, error) {
@@ -54,8 +55,9 @@ func (b *mnnBackend) Capabilities(ctx context.Context) (localmodel.LocalModelCap
 		Text:       true,
 		Vision:     b.config.Multimodal,
 		ToolCalling: false,
+		JSONMode:   false,
 		Streaming:  true,
-		MaxContext: 4096,
+		MaxContext: b.config.ContextSize,
 		Backends:   []string{b.config.Backend},
 	}
 
@@ -67,21 +69,17 @@ func (b *mnnBackend) Capabilities(ctx context.Context) (localmodel.LocalModelCap
 }
 
 func (b *mnnBackend) Generate(ctx context.Context, request localmodel.LocalModelRequest, sink localmodel.LocalModelStreamSink) (localmodel.LocalModelResult, error) {
+	b.generateMu.Lock()
+	defer b.generateMu.Unlock()
+
 	b.mu.Lock()
 	if b.state != "ready" {
 		b.mu.Unlock()
 		return localmodel.LocalModelResult{}, localmodel.ErrLoadFailed
 	}
-	b.state = "generating"
 	b.mu.Unlock()
 
-	defer func() {
-		b.mu.Lock()
-		b.state = "ready"
-		b.mu.Unlock()
-	}()
-
-	return b.runtime.chatRequest(ctx, request.Messages, sink)
+	return b.runtime.chatRequest(ctx, request, sink)
 }
 
 func (b *mnnBackend) Load(ctx context.Context) error {
@@ -101,12 +99,16 @@ func (b *mnnBackend) Load(ctx context.Context) error {
 		return fmt.Errorf("%w: %v", localmodel.ErrLoadFailed, err)
 	}
 
-	if b.host != nil {
-		if err := b.runtime.startServer(ctx); err != nil {
-			b.lastError = err.Error()
-			b.state = "failed"
-			return fmt.Errorf("%w: %v", localmodel.ErrLoadFailed, err)
-		}
+	if b.host == nil {
+		b.lastError = localmodel.ErrNativeBridgeUnavailable.Error()
+		b.state = "failed"
+		return fmt.Errorf("%w: runtime host unavailable", localmodel.ErrLoadFailed)
+	}
+
+	if err := b.runtime.startServer(ctx); err != nil {
+		b.lastError = err.Error()
+		b.state = "failed"
+		return fmt.Errorf("%w: %v", localmodel.ErrLoadFailed, err)
 	}
 
 	b.loadedAt = time.Now().Format("2006-01-02 15:04:05")

@@ -10,12 +10,12 @@ internal class ShareNativeHandlerAdapter(
     private val delegate: ShareNativeHandler,
 ) : AndroidNativeOperationHandler {
 
-    override fun supports(operation: String): Boolean {
-        return operation == ShareConstants.OP_STATUS ||
-            operation == ShareConstants.OP_SEND ||
-            operation == ShareConstants.OP_RECEIVE_PENDING ||
-            operation == ShareConstants.OP_RECEIVE_CONSUME
-    }
+    override val operations: Set<String> = setOf(
+        ShareConstants.OP_STATUS,
+        ShareConstants.OP_SEND,
+        ShareConstants.OP_RECEIVE_PENDING,
+        ShareConstants.OP_RECEIVE_CONSUME,
+    )
 
     override suspend fun execute(request: NativeBridgeRequest): NativeBridgeResponse {
         val domainRequest = ShareNativeRequest(

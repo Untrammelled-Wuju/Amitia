@@ -1,8 +1,10 @@
 package com.amitia.amitia_app.runtime.service.internal
 
 import android.content.Context
+import android.content.Intent
 import com.amitia.amitia_app.runtime.proot.ProotSession
 import com.amitia.amitia_app.runtime.service.RuntimeService
+import com.amitia.amitia_app.runtime.service.RuntimeServiceContract
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHost
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHostListener
 import com.amitia.amitia_app.runtime.service.RuntimeServiceResult
@@ -42,6 +44,16 @@ internal class AndroidRuntimeServiceHost(
 
     override fun requestStop(targetGeneration: Long): RuntimeServiceResult {
         return RuntimeService.stopHost(context, targetGeneration)
+    }
+
+    override fun requestTeardownAfterStartupFailure() {
+        try {
+            val intent = Intent(context, RuntimeService::class.java).apply {
+                action = RuntimeServiceContract.ACTION_TEARDOWN_AFTER_STARTUP_FAILURE
+            }
+            context.startService(intent)
+        } catch (_: Throwable) {
+        }
     }
 
     override fun addListener(listener: RuntimeServiceHostListener) {

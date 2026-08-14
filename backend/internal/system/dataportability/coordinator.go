@@ -2,6 +2,7 @@ package dataportability
 
 import (
 	"context"
+	"fmt"
 	"sync"
 )
 
@@ -73,8 +74,22 @@ func NewCoordinator(dataDir, appVersion, platform, schemaFinger string, staging 
 	}
 }
 
-func (c *Coordinator) RegisterContributors(list ...BackupContributor) {
-	c.Contributors = append(c.Contributors, list...)
+func (c *Coordinator) RegisterContributors(list ...BackupContributor) error {
+	seen := make(map[string]bool)
+	for _, existing := range c.Contributors {
+		if seen[existing.ID()] {
+			return fmt.Errorf("duplicate contributor ID: %s", existing.ID())
+		}
+		seen[existing.ID()] = true
+	}
+	for _, ct := range list {
+		if seen[ct.ID()] {
+			return fmt.Errorf("duplicate contributor ID: %s", ct.ID())
+		}
+		seen[ct.ID()] = true
+		c.Contributors = append(c.Contributors, ct)
+	}
+	return nil
 }
 
 func (c *Coordinator) GetBackupOp(id string) *BackupOperation {

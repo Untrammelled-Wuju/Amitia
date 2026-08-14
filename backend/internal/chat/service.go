@@ -4,6 +4,8 @@ package chat
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -134,6 +136,8 @@ type service struct {
 	continuationService interaction.ContinuationService
 	replanner           interaction.Replanner
 	reflectionProcessor interaction.ReflectionProcessor
+	localModelMu        sync.Mutex
+	localModels         map[string]LocalModelInfer
 }
 
 var visionModelConfigProviderMu sync.RWMutex
@@ -201,6 +205,15 @@ func (s *service) SetReplanner(replanner interaction.Replanner) {
 
 func (s *service) SetReflectionProcessor(r interaction.ReflectionProcessor) {
 	s.reflectionProcessor = r
+}
+
+func (s *service) invalidateLocalModels(ctx context.Context) {
+	s.localModelMu.Lock()
+	defer s.localModelMu.Unlock()
+	for key, backend := range s.localModels {
+		_ = backend.Unload(ctx)
+		delete(s.localModels, key)
+	}
 }
 
 func (s *service) TestChat(ctx context.Context, characterID string, userMessage string) (string, error) {
@@ -311,5 +324,5 @@ func NewService(repo Repository, ctx *app.AppContext, memSvc memory.Service, pro
 		qdrant.NewQdrantClient(),
 		graphLayer,
 	)
-	return &service{repo: repo, charRepo: character.NewRepository(ctx), db: ctx.DB, psycheStore: psycheStore, memorySvc: memSvc, profileSvc: profSvc, episodicSvc: epiSvc, worldBookSvc: wbSvc, wmCache: wmCache, stateProvider: stateProvider, compressor: comp, pipeline: p}
+	return &service{repo: repo, charRepo: character.NewRepository(ctx), db: ctx.DB, psycheStore: psycheStore, memorySvc: memSvc, profileSvc: profSvc, episodicSvc: epiSvc, worldBookSvc: wbSvc, wmCache: wmCache, stateProvider: stateProvider, compressor: comp, pipeline: p, localModels: make(map[string]LocalModelInfer)}
 }

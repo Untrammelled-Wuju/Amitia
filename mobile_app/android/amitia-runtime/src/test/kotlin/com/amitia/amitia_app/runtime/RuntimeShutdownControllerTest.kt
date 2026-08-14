@@ -44,6 +44,7 @@ internal class FakeRuntimeServiceHost : RuntimeServiceHost {
         activeSession = null
         return RuntimeServiceResult.Success
     }
+    override fun requestTeardownAfterStartupFailure() {}
     override fun addListener(listener: RuntimeServiceHostListener) { listeners.add(listener) }
     override fun removeListener(listener: RuntimeServiceHostListener) { listeners.remove(listener) }
     override fun currentSession(): ProotSession? = activeSession
@@ -396,6 +397,7 @@ class RuntimeShutdownControllerTest {
                     "stop failed"
                 )
             )
+            override fun requestTeardownAfterStartupFailure() {}
             override fun addListener(listener: RuntimeServiceHostListener) {}
             override fun removeListener(listener: RuntimeServiceHostListener) {}
             override fun currentSession(): com.amitia.amitia_app.runtime.proot.ProotSession? = null

@@ -20,6 +20,7 @@ internal class FakeRuntimeServiceHost : RuntimeServiceHost {
     private val listeners = mutableListOf<RuntimeServiceHostListener>()
     override fun ensureStarted(generation: Long) = RuntimeServiceResult.Success
     override fun requestStop(targetGeneration: Long) = RuntimeServiceResult.Success
+    override fun requestTeardownAfterStartupFailure() {}
     override fun addListener(listener: RuntimeServiceHostListener) { listeners.add(listener) }
     override fun removeListener(listener: RuntimeServiceHostListener) { listeners.remove(listener) }
     override fun currentSession(): com.amitia.amitia_app.runtime.proot.ProotSession? = null

@@ -106,7 +106,7 @@ func (s *service) callLLMWithTools(ctx context.Context, cfg *ModelConfig, messag
 }
 
 func (s *service) callMNNMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (string, int, error) {
-	backend, err := s.getLocalModelBackend(cfg)
+	backend, err := s.getLocalModelBackend(ctx, cfg)
 	if err != nil {
 		return "", 0, err
 	}
@@ -122,7 +122,7 @@ func (s *service) callMNNMode(ctx context.Context, cfg *ModelConfig, messages []
 }
 
 func (s *service) callMNNWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool) (string, string, []map[string]interface{}, int, error) {
-	backend, err := s.getLocalModelBackend(cfg)
+	backend, err := s.getLocalModelBackend(ctx, cfg)
 	if err != nil {
 		return "", "", nil, 0, err
 	}
@@ -151,7 +151,7 @@ func (s *service) callMNNWithTools(ctx context.Context, cfg *ModelConfig, messag
 }
 
 func (s *service) callLlamaCppMode(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, jsonOnly bool) (string, int, error) {
-	backend, err := s.getLocalModelBackend(cfg)
+	backend, err := s.getLocalModelBackend(ctx, cfg)
 	if err != nil {
 		return "", 0, err
 	}
@@ -167,7 +167,7 @@ func (s *service) callLlamaCppMode(ctx context.Context, cfg *ModelConfig, messag
 }
 
 func (s *service) callLlamaCppWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, tools []tool.Tool) (string, string, []map[string]interface{}, int, error) {
-	backend, err := s.getLocalModelBackend(cfg)
+	backend, err := s.getLocalModelBackend(ctx, cfg)
 	if err != nil {
 		return "", "", nil, 0, err
 	}
@@ -195,13 +195,68 @@ func (s *service) callLlamaCppWithTools(ctx context.Context, cfg *ModelConfig, m
 	return result.Text, "", toolCalls, result.Usage.TotalTokens, nil
 }
 
-func (s *service) getLocalModelBackend(cfg *ModelConfig) (LocalModelInfer, error) {
-	return localmodel.Create(localmodel.CreateLocalModelParams{
+func (s *service) getLocalModelBackend(ctx context.Context, cfg *ModelConfig) (LocalModelInfer, error) {
+	key := localModelRuntimeKey(cfg)
+
+	s.localModelMu.Lock()
+
+	if backend := s.localModels[key]; backend != nil {
+		s.localModelMu.Unlock()
+
+		if err := ensureLocalModelReady(ctx, backend); err != nil {
+			return nil, err
+		}
+
+		return backend, nil
+	}
+
+	backend, err := localmodel.Create(localmodel.CreateLocalModelParams{
 		Provider:     cfg.APIType,
 		ModelName:    cfg.ModelName,
 		ProviderJSON: cfg.ProviderConfigJSON,
 		Timeout:      time.Duration(cfg.TimeoutSeconds) * time.Second,
 	})
+	if err != nil {
+		s.localModelMu.Unlock()
+		return nil, err
+	}
+
+	if err := backend.Load(ctx); err != nil {
+		s.localModelMu.Unlock()
+		_ = backend.Unload(context.Background())
+		return nil, err
+	}
+
+	health := backend.Health(ctx)
+	if health.State != "ready" {
+		s.localModelMu.Unlock()
+		_ = backend.Unload(context.Background())
+		return nil, fmt.Errorf("local model not ready: %s", health.State)
+	}
+
+	s.localModels[key] = backend
+	s.localModelMu.Unlock()
+
+	return backend, nil
+}
+
+func localModelRuntimeKey(cfg *ModelConfig) string {
+	h := sha256.New()
+	h.Write([]byte(cfg.APIType))
+	h.Write([]byte(cfg.ModelName))
+	h.Write([]byte(cfg.ProviderConfigJSON))
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func ensureLocalModelReady(ctx context.Context, backend LocalModelInfer) error {
+	health := backend.Health(ctx)
+	if health.State == "ready" {
+		return nil
+	}
+	if health.State == "failed" || health.State == "unloaded" {
+		return backend.Load(ctx)
+	}
+	return nil
 }
 
 func toLocalModelRequest(req ModelRequest, messages []map[string]interface{}) localmodel.LocalModelRequest {

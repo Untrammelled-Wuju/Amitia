@@ -10,12 +10,12 @@ internal class ClipboardNativeHandlerAdapter(
     private val delegate: ClipboardNativeHandler,
 ) : AndroidNativeOperationHandler {
 
-    override fun supports(operation: String): Boolean {
-        return operation == ClipboardNativeHandler.OP_STATUS ||
-            operation == ClipboardNativeHandler.OP_READ ||
-            operation == ClipboardNativeHandler.OP_WRITE ||
-            operation == ClipboardNativeHandler.OP_CLEAR
-    }
+    override val operations: Set<String> = setOf(
+        ClipboardNativeHandler.OP_STATUS,
+        ClipboardNativeHandler.OP_READ,
+        ClipboardNativeHandler.OP_WRITE,
+        ClipboardNativeHandler.OP_CLEAR,
+    )
 
     override suspend fun execute(request: NativeBridgeRequest): NativeBridgeResponse {
         val domainRequest = ClipboardNativeRequest(

@@ -28,11 +28,12 @@ import (
 	"github.com/u-ai/backend/internal/tts"
 	"github.com/u-ai/backend/internal/workspace"
 	"github.com/u-ai/backend/internal/worldbook"
+	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
 	"github.com/u-ai/backend/pkg/sse"
 )
 
-func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.Service, unifiedEntry *interaction.UnifiedEntry, dataLifecycle *mindruntime.DataLifecycleCoordinator, reconciliation *mindruntime.ReconciliationEngine, memSvc memory.Service, profSvc profile.Service, epiSvc episodic.Service, graphSvc graph.Service, temporalSvc *temporal.Service) {
+func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.Service, unifiedEntry *interaction.UnifiedEntry, dataLifecycle *mindruntime.DataLifecycleCoordinator, reconciliation *mindruntime.ReconciliationEngine, memSvc memory.Service, profSvc profile.Service, epiSvc episodic.Service, graphSvc graph.Service, temporalSvc *temporal.Service, dpCoord *dataportability.Coordinator) {
 	svc := NewService(ctx, runtimeprofile.Profile(""))
 	handler := NewHandler(svc, ctx.DB, chatSvc, dataLifecycle, unifiedEntry, reconciliation, memSvc)
 	svc.AttachTemporalService(temporalSvc)
@@ -42,25 +43,11 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 		appVersion = "dev"
 	}
 	schemaFinger := fmt.Sprintf("mig-%d-%s", len(migration.DefaultMigrations()), runtime.GOOS)
-	coord := dataportability.NewCoordinator("data", appVersion, runtime.GOOS, schemaFinger,
-		dataportability.NewStagingManager("data"))
-	coord.RegisterContributors(
-		dataportability.NewCharacterContributor(ctx.DB),
-		memory.NewMemoryBackupContributor(memSvc),
-		chat.NewChatBackupContributor(ctx.DB),
-		episodic.NewEpisodicBackupContributor(ctx.DB),
-		relationship.NewRelationshipBackupContributor(ctx.DB),
-		psyche.NewPsycheBackupContributor(ctx.DB),
-		worldbook.NewWorldbookBackupContributor(ctx.DB),
-		NewSettingsBackupContributor(ctx.DB),
-		chat.NewModelConfigBackupContributor(ctx.DB),
-		tts.NewVoiceBackupContributor(ctx.DB),
-		embedding_config.NewEmbeddingBackupContributor(ctx.DB),
-		NewResourceBackupContributor(ctx.DB, "data"),
-		extension.NewExtensionBackupContributor(ctx.DB),
-		workspace.NewWorkspaceBackupContributor(ctx.DB),
-	)
-	svc.SetDataPortabilityCoordinator(coord)
+	if dpCoord == nil {
+		return fmt.Errorf("DataPortability Coordinator is nil")
+	}
+	svc.SetDataPortabilityCoordinator(dpCoord)
+	coord := dpCoord
 
 	modelerror.SetReporter(handler.publishModelError)
 

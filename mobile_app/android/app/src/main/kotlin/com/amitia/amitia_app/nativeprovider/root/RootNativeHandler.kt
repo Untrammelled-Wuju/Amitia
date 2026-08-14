@@ -24,9 +24,7 @@ internal class RootNativeHandler(
         "/data/local/su",
     )
 
-    override fun supports(operation: String): Boolean {
-        return operation == OP_STATUS || operation == OP_REQUEST || operation == OP_EXECUTE
-    }
+    override val operations: Set<String> = setOf(OP_STATUS, OP_REQUEST, OP_EXECUTE)
 
     override suspend fun execute(request: NativeBridgeRequest): NativeBridgeResponse {
         return when (request.operation) {
@@ -97,11 +95,8 @@ internal class RootNativeHandler(
         }
 
         val args = (payload["args"] as? List<*>)?.mapNotNull { it as? String } ?: emptyList()
-        val env = (payload["env"] as? Map<*, *>)?.entries?.associate { (k, v) ->
-            (k as? String) to (v as? String)
-        }?.filterKeys { it != null }?.mapKeys { it.key!! } ?: emptyMap()
         val workDir = payload["workDir"] as? String
-        val timeoutSeconds = (payload["timeoutSeconds"] as? Number)?.toInt() ?: 30
+        val timeoutMs = (payload["timeoutMs"] as? Number)?.toLong() ?: 30000L
 
         val state = detectRootState()
         if (!state.suAvailable) {
@@ -116,15 +111,55 @@ internal class RootNativeHandler(
             )
         }
 
-        return NativeBridgeResponse(
-            protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
-            requestId = request.requestId,
-            status = NativeBridgeProtocol.STATUS_ERROR,
-            error = NativeBridgeError(
-                code = "ROOT_AUTHORIZATION_DENIED",
-                message = "root execution requires user authorization",
-            ),
-        )
+        return try {
+            val command = mutableListOf("su", "-c", executable)
+            command.addAll(args)
+
+            val processBuilder = ProcessBuilder(command)
+            if (workDir != null) {
+                processBuilder.directory(File(workDir))
+            }
+            processBuilder.redirectErrorStream(true)
+
+            val process = processBuilder.start()
+            val output = process.inputStream.bufferedReader().readText()
+
+            val completed = process.waitFor(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
+            if (!completed) {
+                process.destroyForcibly()
+                return NativeBridgeResponse(
+                    protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+                    requestId = request.requestId,
+                    status = NativeBridgeProtocol.STATUS_ERROR,
+                    error = NativeBridgeError(
+                        code = "ROOT_EXECUTION_TIMEOUT",
+                        message = "root command timed out after ${timeoutMs}ms",
+                    ),
+                )
+            }
+
+            val exitCode = process.exitValue()
+            NativeBridgeResponse(
+                protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+                requestId = request.requestId,
+                status = if (exitCode == 0) NativeBridgeProtocol.STATUS_SUCCESS else NativeBridgeProtocol.STATUS_ERROR,
+                result = mapOf(
+                    "exitCode" to exitCode,
+                    "output" to output,
+                    "completed" to true,
+                ),
+            )
+        } catch (e: Exception) {
+            NativeBridgeResponse(
+                protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+                requestId = request.requestId,
+                status = NativeBridgeProtocol.STATUS_ERROR,
+                error = NativeBridgeError(
+                    code = "ROOT_EXECUTION_FAILED",
+                    message = "root execution failed: ${e.message}",
+                ),
+            )
+        }
     }
 
     private fun detectRootState(): RootCapabilityState {

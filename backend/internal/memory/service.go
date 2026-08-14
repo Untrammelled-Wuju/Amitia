@@ -55,6 +55,15 @@ type Service interface {
 	ListConsolidationCandidates(kind string) ([]MemoryCandidate, error)
 	AcceptConsolidationCandidate(id string) (*Memory, error)
 	RejectConsolidationCandidate(id string) error
+
+	WriteAuthoritySnapshot() WriteAuthoritySnapshot
+}
+
+type WriteAuthoritySnapshot struct {
+	CanonicalMutationEnabled    bool `json:"canonicalMutationEnabled"`
+	LegacyRawWriterEnabled      bool `json:"legacyRawWriterEnabled"`
+	LegacyHistoryWriterEnabled  bool `json:"legacyHistoryWriterEnabled"`
+	RawImportWriterEnabled      bool `json:"rawImportWriterEnabled"`
 }
 
 type RankedMemory struct {

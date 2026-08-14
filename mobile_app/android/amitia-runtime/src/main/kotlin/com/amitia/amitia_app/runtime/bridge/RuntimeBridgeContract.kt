@@ -6,6 +6,7 @@ object RuntimeBridgeContract {
 
     const val METHOD_SNAPSHOT = "runtime.snapshot"
     const val METHOD_START = "runtime.start"
+    const val METHOD_START_WITH_PROFILE = "runtime.startWithProfile"
     const val METHOD_STOP = "runtime.stop"
     const val METHOD_INSTALL = "runtime.install"
     const val METHOD_VERIFY = "runtime.verify"

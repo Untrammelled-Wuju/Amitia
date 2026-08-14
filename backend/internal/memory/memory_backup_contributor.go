@@ -526,44 +526,22 @@ func (c *MemoryBackupContributor) Import(ctx context.Context, req dataportabilit
 		memory.SourceMsgID = idMap.RemapMessageRef(rec.SourceMessageID)
 		memory.SourceConvID = idMap.RemapConversationRef(rec.SourceConversationID)
 
-		if err := c.getRepository().Create(&memory); err != nil {
-			return fmt.Errorf("import: create memory %s: %w", newID, err)
-		}
-
-		evtRC, err := in.ReadComponent(ComponentIDMemoryEvents + ".v1")
-		if err == nil {
-			c.importEvents(evtRC, rec.ID, newID, idMap)
-			evtRC.Close()
+		_, err = c.svc.SubmitCandidate(&SubmitCandidateRequest{
+			Key:           memory.Key,
+			Value:         memory.Value,
+			MemoryType:    memory.MemoryType,
+			Importance:    memory.Importance,
+			SourceText:    "portable_import",
+			CharacterID:   memory.CharacterID,
+			CandidateKind: string(CandidateKindExtracted),
+			Reason:        "portable_import",
+		})
+		if err != nil {
+			return fmt.Errorf("import: submit candidate for memory %s: %w", newID, err)
 		}
 	}
 	_ = stats
 	return nil
-}
-
-func (c *MemoryBackupContributor) importEvents(r io.Reader, oldID, newID string, idMap *dataportability.ImportIdentityMap) {
-	buf := make([]byte, 128*1024)
-	scanner := bufio.NewScanner(r)
-	scanner.Buffer(buf, RecordSizeLimit)
-	var events []MemoryEventV1
-	for scanner.Scan() {
-		line := scanner.Bytes()
-		if len(line) == 0 {
-			continue
-		}
-		var e MemoryEventV1
-		if err := json.Unmarshal(line, &e); err != nil {
-			continue
-		}
-		if e.MemoryID != oldID {
-			continue
-		}
-		e.ID = uuid.New().String()
-		e.MemoryID = newID
-		events = append(events, e)
-	}
-	if len(events) > 0 {
-		_ = c.getRepository().BatchUpsert(events)
-	}
 }
 
 func (c *MemoryBackupContributor) extractTargetCharacters(req dataportability.ImportRequest) map[string]bool {
@@ -583,12 +561,8 @@ func (c *MemoryBackupContributor) getRepository() Repository {
 }
 
 func validateMemoryType(mt string) bool {
-	switch strings.ToLower(mt) {
-	case "fact", "profile", "episodic", "working", "worldbook", "graph", "custom", "preference", "habit", "relationship", "nickname", "personal_info", "event", "scene":
-		return true
-	default:
-		return false
-	}
+	_, ok := NormalizeMemoryType(mt)
+	return ok
 }
 
 func normalizeMemoryRecord(rec *MemoryRecordV1) error {
@@ -623,7 +597,7 @@ func sameMemorySnapshot(m *Memory, rec *MemoryRecordV1) bool {
 	if m == nil || rec == nil {
 		return false
 	}
-	return m.Key == rec.Key && m.Value == rec.Value && m.MemoryType == rec.MemoryType && m.Importance == rec.Importance && m.SensitivityLevel == rec.SensitivityLevel
+	return computeMemorySnapshotHashCanonical(m) == computeMemorySnapshotHashCanonical(rec.toMemory())
 }
 
 func (m *Memory) toV1() MemoryRecordV1 {

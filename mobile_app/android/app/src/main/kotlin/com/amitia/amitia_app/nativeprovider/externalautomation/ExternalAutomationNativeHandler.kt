@@ -18,19 +18,21 @@ internal class ExternalAutomationNativeHandler(
 
     private val generation = AtomicLong(0L)
 
-    override fun supports(operation: String): Boolean {
-        return operation == OP_RESOLVE_APP ||
-            operation == OP_OPEN_APP ||
-            operation == OP_RESOLVE_URI ||
-            operation == OP_OPEN_URI ||
-            operation == OP_OPEN_SETTINGS ||
-            operation == OP_INVOKE_INTENT ||
-            operation == OP_FOREGROUND_STATE ||
-            operation == OP_WAIT_FOREGROUND
-    }
+    override val operations: Set<String> = setOf(
+        OP_STATUS,
+        OP_RESOLVE_APP,
+        OP_OPEN_APP,
+        OP_RESOLVE_URI,
+        OP_OPEN_URI,
+        OP_OPEN_SETTINGS,
+        OP_INVOKE_INTENT,
+        OP_FOREGROUND_STATE,
+        OP_WAIT_FOREGROUND,
+    )
 
     override suspend fun execute(request: NativeBridgeRequest): NativeBridgeResponse {
         return when (request.operation) {
+            OP_STATUS -> handleStatus(request)
             OP_RESOLVE_APP -> handleResolveApp(request)
             OP_OPEN_APP -> handleOpenApp(request)
             OP_RESOLVE_URI -> handleResolveUri(request)
@@ -384,6 +386,18 @@ internal class ExternalAutomationNativeHandler(
         }
     }
 
+    private fun handleStatus(request: NativeBridgeRequest): NativeBridgeResponse {
+        return NativeBridgeResponse(
+            protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+            requestId = request.requestId,
+            status = NativeBridgeProtocol.STATUS_SUCCESS,
+            result = mapOf(
+                "generation" to generation.get(),
+                "capabilities" to listOf("resolve_app", "open_app", "resolve_uri", "open_uri", "open_settings", "invoke_intent"),
+            ),
+        )
+    }
+
     private fun handleForegroundState(request: NativeBridgeRequest): NativeBridgeResponse {
         return NativeBridgeResponse(
             protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
@@ -427,13 +441,14 @@ internal class ExternalAutomationNativeHandler(
     }
 
     companion object {
-        const val OP_RESOLVE_APP = "externalautomation.resolve_app"
-        const val OP_OPEN_APP = "externalautomation.open_app"
-        const val OP_RESOLVE_URI = "externalautomation.resolve_uri"
-        const val OP_OPEN_URI = "externalautomation.open_uri"
-        const val OP_OPEN_SETTINGS = "externalautomation.open_settings"
-        const val OP_INVOKE_INTENT = "externalautomation.invoke_intent"
-        const val OP_FOREGROUND_STATE = "externalautomation.foreground_state"
-        const val OP_WAIT_FOREGROUND = "externalautomation.wait_foreground"
+        const val OP_STATUS = "external_automation.status"
+        const val OP_RESOLVE_APP = "external_automation.resolve_app"
+        const val OP_OPEN_APP = "external_automation.open_app"
+        const val OP_RESOLVE_URI = "external_automation.resolve_uri"
+        const val OP_OPEN_URI = "external_automation.open_uri"
+        const val OP_OPEN_SETTINGS = "external_automation.open_settings"
+        const val OP_INVOKE_INTENT = "external_automation.invoke_intent"
+        const val OP_FOREGROUND_STATE = "external_automation.foreground_state"
+        const val OP_WAIT_FOREGROUND = "external_automation.wait_foreground"
     }
 }

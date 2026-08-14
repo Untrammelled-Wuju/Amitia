@@ -160,7 +160,6 @@ func (s *service) Delete(id string) error {
 	err = s.deleteCanonicalMemory(id, canonicalDeleteRequest{
 		OperationID: operationID,
 		EventReason: "manual_delete",
-		HardDelete:  false,
 	})
 	if err != nil {
 		return err
@@ -180,6 +179,16 @@ func (s *service) DeleteAll(characterID string) error {
 	}
 	query.Pluck("id", &ids)
 
+	for _, id := range ids {
+		operationID := uuid.New().String()
+		if err := s.deleteCanonicalMemory(id, canonicalDeleteRequest{
+			OperationID: operationID,
+			EventReason: "bulk_delete",
+		}); err != nil {
+			return err
+		}
+	}
+
 	deleteVectorsFromCollections(ids)
 	for _, id := range ids {
 		_ = s.repo.UnmarkEmbedded(id)
@@ -190,16 +199,7 @@ func (s *service) DeleteAll(characterID string) error {
 		}
 	}
 
-	for _, id := range ids {
-		operationID := uuid.New().String()
-		_ = s.deleteCanonicalMemory(id, canonicalDeleteRequest{
-			OperationID: operationID,
-			EventReason: "bulk_delete",
-			HardDelete:  false,
-		})
-	}
-
-	return s.repo.DeleteAll(characterID)
+	return nil
 }
 
 func (s *service) RecordUse(id string) (*Memory, error) {

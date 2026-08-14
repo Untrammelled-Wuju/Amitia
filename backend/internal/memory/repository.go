@@ -46,7 +46,7 @@ type Repository interface {
 	ListTemporalByMemoryIDs(memoryIDs []string) ([]MemoryTemporalV1, error)
 	ListDerivationsByMemoryIDs(memoryIDs []string) ([]MemoryDerivationV1, error)
 	IsNewID(id string) (bool, error)
-	BatchUpsert(records []MemoryEventV1) error
+	AppendRestoredEvents(events []MemoryEventV1) error
 }
 
 type repository struct {
@@ -144,28 +144,6 @@ func (r *repository) Create(m *Memory) error {
 
 func (r *repository) Update(id string, updates map[string]interface{}) error {
 	return r.db.Model(&Memory{}).Where("id = ?", id).Updates(updates).Error
-}
-
-func (r *repository) CreateVersioned(tx *gorm.DB, m *Memory, event MemoryEventRecord) error {
-	if err := tx.Create(m).Error; err != nil {
-		return err
-	}
-	return insertMemoryEventRepository(tx, event)
-}
-
-func (r *repository) UpdateVersioned(tx *gorm.DB, id string, expectedVersion int, updates map[string]interface{}, event MemoryEventRecord) error {
-	if err := tx.Model(&Memory{}).Where("id = ? AND version = ?", id, expectedVersion).Updates(updates).Error; err != nil {
-		return err
-	}
-	return insertMemoryEventRepository(tx, event)
-}
-
-func insertMemoryEventRepository(tx *gorm.DB, event MemoryEventRecord) error {
-	return tx.Exec(
-		`INSERT INTO memory_events (id, memory_id, event_type, key, value, memory_type, importance, source, character_id, created_at, version, operation_id, snapshot_hash, event_reason)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		event.ID, event.MemoryID, event.EventType, event.Key, event.Value, event.MemoryType, event.Importance, event.Source, event.CharacterID, event.CreatedAt, event.Version, event.OperationID, event.SnapshotHash, event.EventReason,
-	).Error
 }
 
 func (r *repository) Delete(id string) error {
@@ -523,7 +501,7 @@ func (r *repository) IsNewID(id string) (bool, error) {
 	return count == 0, err
 }
 
-func (r *repository) BatchUpsert(events []MemoryEventV1) error {
+func (r *repository) AppendRestoredEvents(events []MemoryEventV1) error {
 	if len(events) == 0 {
 		return nil
 	}
@@ -532,7 +510,7 @@ func (r *repository) BatchUpsert(events []MemoryEventV1) error {
 			err := tx.Exec(
 				`INSERT INTO memory_events (id, memory_id, version, event_type, operation_id, snapshot_hash, event_reason, created_at)
 				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-				 ON CONFLICT(id) DO UPDATE SET version=excluded.version, operation_id=excluded.operation_id, snapshot_hash=excluded.snapshot_hash`,
+				 ON CONFLICT(id) DO NOTHING`,
 				e.ID, e.MemoryID, e.Version, e.EventType, e.OperationID, e.SnapshotHash, e.EventReason, e.CreatedAt,
 			).Error
 			if err != nil {

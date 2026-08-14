@@ -20,17 +20,17 @@ internal class OverlayNativeHandler(
     private val generation = AtomicLong(0L)
     private val activeOverlays = ConcurrentHashMap<String, OverlayInfo>()
 
-    override fun supports(operation: String): Boolean {
-        return operation == OP_STATUS ||
-            operation == OP_REQUEST_PERMISSION ||
-            operation == OP_CREATE ||
-            operation == OP_UPDATE ||
-            operation == OP_SHOW ||
-            operation == OP_HIDE ||
-            operation == OP_CLOSE ||
-            operation == OP_LIST ||
-            operation == OP_CLOSE_ALL
-    }
+    override val operations: Set<String> = setOf(
+        OP_STATUS,
+        OP_REQUEST_PERMISSION,
+        OP_CREATE,
+        OP_UPDATE,
+        OP_SHOW,
+        OP_HIDE,
+        OP_CLOSE,
+        OP_LIST,
+        OP_CLOSE_ALL,
+    )
 
     override suspend fun execute(request: NativeBridgeRequest): NativeBridgeResponse {
         return when (request.operation) {
@@ -364,14 +364,14 @@ internal class OverlayNativeHandler(
     }
 
     companion object {
-        const val OP_STATUS = "overlay.status"
-        const val OP_REQUEST_PERMISSION = "overlay.request_permission"
-        const val OP_CREATE = "overlay.create"
-        const val OP_UPDATE = "overlay.update"
-        const val OP_SHOW = "overlay.show"
-        const val OP_HIDE = "overlay.hide"
-        const val OP_CLOSE = "overlay.close"
-        const val OP_LIST = "overlay.list"
-        const val OP_CLOSE_ALL = "overlay.close_all"
+        const val OP_STATUS = "system.overlay.status"
+        const val OP_REQUEST_PERMISSION = "system.overlay.permission.request"
+        const val OP_CREATE = "system.overlay.create"
+        const val OP_UPDATE = "system.overlay.update"
+        const val OP_SHOW = "system.overlay.show"
+        const val OP_HIDE = "system.overlay.hide"
+        const val OP_CLOSE = "system.overlay.close"
+        const val OP_LIST = "system.overlay.list"
+        const val OP_CLOSE_ALL = "system.overlay.close_all"
     }
 }

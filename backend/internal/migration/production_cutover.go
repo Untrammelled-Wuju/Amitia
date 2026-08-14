@@ -45,6 +45,7 @@ type CutoverState struct {
 	OperationID         string       `gorm:"column:operation_id;primaryKey" json:"operation_id"`
 	Phase               CutoverPhase `gorm:"column:phase" json:"phase"`
 	Status              string       `gorm:"column:status" json:"status"`
+	PhaseStatus         string       `gorm:"column:phase_status" json:"phase_status"`
 	SnapshotID          string       `gorm:"column:snapshot_id" json:"snapshot_id"`
 	ErrorMessage        string       `gorm:"column:error_message" json:"error_message"`
 	StartedAt           time.Time    `gorm:"column:started_at" json:"started_at"`
@@ -271,13 +272,14 @@ func (p *CutoverPlan) Run(ctx context.Context) error {
 	}
 
 	var state *CutoverState
-	if existing != nil && existing.Status != "committed" && existing.Status != "failed" && existing.Status != "rolled_back" {
+	if existing != nil && existing.Status == "running" {
 		state = existing
 	} else {
 		state = &CutoverState{
 			OperationID:         uuid.NewString(),
 			Phase:               "",
 			Status:              "running",
+			PhaseStatus:         "pending",
 			StartedAt:           p.deps.Now(),
 			UpdatedAt:           p.deps.Now(),
 			PlanVersion:         1,
@@ -306,7 +308,7 @@ func (p *CutoverPlan) Run(ctx context.Context) error {
 
 	started := false
 	for _, phase := range phases {
-		if !started && state.Phase != "" && state.Phase != phase.name {
+		if !started && state.Phase != "" && state.PhaseStatus == "completed" && state.Phase != phase.name {
 			continue
 		}
 		if !started {
@@ -315,6 +317,7 @@ func (p *CutoverPlan) Run(ctx context.Context) error {
 
 		state.Phase = phase.name
 		state.Status = "running"
+		state.PhaseStatus = "running"
 		state.UpdatedAt = p.deps.Now()
 		if err := store.SaveState(ctx, state); err != nil {
 			return fmt.Errorf("persist phase %s running: %w", phase.name, err)
@@ -322,20 +325,23 @@ func (p *CutoverPlan) Run(ctx context.Context) error {
 
 		if err := phase.fn(ctx, state); err != nil {
 			state.Status = "failed"
+			state.PhaseStatus = "failed"
 			state.ErrorMessage = err.Error()
 			state.UpdatedAt = p.deps.Now()
-			_ = store.SaveState(ctx, state)
+			if saveErr := store.SaveState(ctx, state); saveErr != nil {
+				return fmt.Errorf("phase %s failed: %v; additionally state persistence failed: %w", phase.name, err, saveErr)
+			}
 			return fmt.Errorf("phase %s failed: %w", phase.name, err)
+		}
+
+		state.PhaseStatus = "completed"
+		state.ErrorMessage = ""
+		state.UpdatedAt = p.deps.Now()
+		if err := store.SaveState(ctx, state); err != nil {
+			return fmt.Errorf("persist phase %s completed: %w", phase.name, err)
 		}
 	}
 
-	state.Status = "completed"
-	now := p.deps.Now()
-	state.CompletedAt = &now
-	state.UpdatedAt = now
-	if err := store.SaveState(ctx, state); err != nil {
-		return fmt.Errorf("persist final cutover state: %w", err)
-	}
 	return nil
 }
 
@@ -434,13 +440,20 @@ func (p *CutoverPlan) runSmoke(ctx context.Context, state *CutoverState) error {
 }
 
 func (p *CutoverPlan) runCommit(ctx context.Context, state *CutoverState) error {
-	state.Status = "committed"
-	state.SnapshotID = state.SnapshotID
-
 	var calcErr error
 	state.CanonicalGeneration, calcErr = p.computeCanonicalGeneration()
 	if calcErr != nil {
 		state.CanonicalGeneration = p.deps.Now().Unix()
+	}
+
+	commitTime := p.deps.Now()
+	state.CompletedAt = &commitTime
+	state.PhaseStatus = "completed"
+	state.Status = "committed"
+	state.UpdatedAt = commitTime
+	state.ErrorMessage = ""
+	if err := p.getStateStore().SaveState(ctx, state); err != nil {
+		return fmt.Errorf("persist committed state: %w", err)
 	}
 
 	if p.getMaintenance() != nil {
@@ -449,13 +462,6 @@ func (p *CutoverPlan) runCommit(ctx context.Context, state *CutoverState) error 
 		}
 	}
 
-	commitTime := p.deps.Now()
-	state.CompletedAt = &commitTime
-	state.Status = "committed"
-	state.UpdatedAt = commitTime
-	if err := p.getStateStore().SaveState(ctx, state); err != nil {
-		return fmt.Errorf("persist committed state: %w", err)
-	}
 	return nil
 }
 
@@ -541,22 +547,40 @@ func (p *CutoverPlan) VerifyCanonicalAuthorities() []string {
 	return failures
 }
 
+type CutoverCheck struct {
+	Committed  bool
+	Incomplete bool
+	Failed     bool
+	State      *CutoverState
+}
+
 func (p *CutoverPlan) CheckCutoverState(ctx context.Context) (committed bool, incomplete bool, err error) {
-	store := p.getStateStore()
-	state, err := store.LoadLatestState(ctx)
+	check, err := p.computeCutoverCheck(ctx)
 	if err != nil {
 		return false, false, err
 	}
+	return check.Committed, check.Incomplete, nil
+}
+
+func (p *CutoverPlan) computeCutoverCheck(ctx context.Context) (*CutoverCheck, error) {
+	store := p.getStateStore()
+	state, err := store.LoadLatestState(ctx)
+	if err != nil {
+		return nil, err
+	}
 	if state == nil {
-		return false, false, nil
+		return &CutoverCheck{}, nil
 	}
 	if state.Status == "committed" {
-		return true, false, nil
+		return &CutoverCheck{Committed: true, State: state}, nil
+	}
+	if state.Status == "failed" || state.Status == "rolled_back" {
+		return &CutoverCheck{Failed: true, State: state}, nil
 	}
 	if state.Status == "running" {
-		return false, true, nil
+		return &CutoverCheck{Incomplete: true, State: state}, nil
 	}
-	return false, false, nil
+	return &CutoverCheck{State: state}, nil
 }
 
 func ProductionCutoverMigration() Migration {
@@ -568,6 +592,7 @@ func ProductionCutoverMigration() Migration {
 				operation_id TEXT PRIMARY KEY,
 				phase TEXT NOT NULL DEFAULT '',
 				status TEXT NOT NULL DEFAULT '',
+				phase_status TEXT NOT NULL DEFAULT '',
 				snapshot_id TEXT NOT NULL DEFAULT '',
 				error_message TEXT NOT NULL DEFAULT '',
 				started_at TEXT NOT NULL,

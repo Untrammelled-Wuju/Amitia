@@ -123,12 +123,19 @@ func rankedMemoryVectorFilters(characterID, userID string) []map[string]interfac
 }
 
 func (s *service) BatchVerify(ids []string, status string) error {
+	operationID := uuid.New().String()
 	for _, id := range ids {
 		now := time.Now().Format("2006-01-02 15:04:05")
-		if err := s.repo.Update(id, map[string]interface{}{
-			"verified_status":  status,
-			"last_verified_at": now,
-		}); err != nil {
+		_, err := s.updateCanonicalMemory(id, canonicalUpdateRequest{
+			Updates: map[string]interface{}{
+				"verified_status":  status,
+				"last_verified_at": now,
+			},
+			OperationID: operationID,
+			EventType:   "memory_verified",
+			EventReason: "batch_verify",
+		})
+		if err != nil {
 			return err
 		}
 		if memoryStatusBlocksRetrieval(status) {
@@ -143,8 +150,19 @@ func (s *service) BatchVerify(ids []string, status string) error {
 }
 
 func (s *service) BatchSetImportance(ids []string, importance int) error {
+	operationID := uuid.New().String()
 	for _, id := range ids {
-		s.repo.Update(id, map[string]interface{}{"importance": importance})
+		_, err := s.updateCanonicalMemory(id, canonicalUpdateRequest{
+			Updates: map[string]interface{}{
+				"importance": importance,
+			},
+			OperationID: operationID,
+			EventType:   "memory_updated",
+			EventReason: "batch_set_importance",
+		})
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }

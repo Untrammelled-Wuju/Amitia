@@ -75,7 +75,6 @@ internal class DefaultRuntimeController(
     private val currentStartAttemptId = AtomicReference<String?>(null)
     private val activeDetectorSession = AtomicReference<ProotSession?>(null)
     private val startupDetectionThread = AtomicReference<Thread?>(null)
-    private val shutdownAfterFailedStartup = AtomicBoolean(false)
     private val pendingRecoveryJob = AtomicReference<com.amitia.amitia_app.runtime.recovery.RuntimeRecoveryJob?>(null)
     private val lastFailedGeneration = AtomicLong(-1L)
     private val lastFailedAttemptId = AtomicReference<String?>(null)
@@ -290,47 +289,11 @@ internal class DefaultRuntimeController(
                 }
             }
             is RuntimeStartupResult.Failed -> {
-                val current = stateStore.snapshot()
-                if ((current.state == RuntimeState.STARTING || current.state == RuntimeState.STOPPING) &&
-                    current.generation == expectedGeneration
-                ) {
-                    val error = mapStartupErrorToRuntimeError(result.error)
-                    val target = RuntimeStateMachine.startupFailureTarget(current.state)
-                    if (target != null) {
-                        stateStore.update {
-                            it.copy(
-                                state = target,
-                                lastError = error
-                            )
-                        }
-                        if (target == RuntimeState.FAILED) {
-                            lastFailedGeneration.set(stateStore.snapshot().generation)
-                            lastFailedAttemptId.set(expectedAttemptId)
-                            evaluateRecovery(error, requestedStop = false)
-                        }
-                    }
-                    if (shutdownAfterFailedStartup.compareAndSet(true, false)) {
-                        triggerSessionCleanup()
-                    }
-                }
+                cancelStartupDetector()
+                serviceHost.requestTeardownAfterStartupFailure()
             }
             is RuntimeStartupResult.Cancelled -> {
-                shutdownAfterFailedStartup.set(false)
             }
-        }
-    }
-
-    private fun triggerSessionCleanup() {
-        try {
-            serviceHost.currentSession()?.let { session ->
-                if (session.isAlive()) {
-                    try {
-                        session.stop(5000)
-                    } catch (_: Throwable) {
-                    }
-                }
-            }
-        } catch (_: Throwable) {
         }
     }
 
@@ -389,7 +352,6 @@ internal class DefaultRuntimeController(
     private fun cancelStartupDetector() {
         currentStartAttemptId.set(null)
         activeDetectorSession.set(null)
-        shutdownAfterFailedStartup.set(false)
         try {
             startupDetector.cancel()
         } catch (_: Throwable) {

@@ -17,6 +17,7 @@ type MNNProviderConfig struct {
 	Sampler          MNNGenerationConfig `json:"sampler,omitempty"`
 	Multimodal       bool               `json:"multimodal,omitempty"`
 	LocalModelID     string             `json:"localModelId,omitempty"`
+	ContextSize      int                `json:"contextSize,omitempty"`
 }
 
 type MNNGenerationConfig struct {

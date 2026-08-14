@@ -16,6 +16,7 @@ internal class FakeServiceHostNoRecovery : RuntimeServiceHost {
 
     override fun ensureStarted(generation: Long) = com.amitia.amitia_app.runtime.service.RuntimeServiceResult.Success
     override fun requestStop(targetGeneration: Long) = com.amitia.amitia_app.runtime.service.RuntimeServiceResult.Success
+    override fun requestTeardownAfterStartupFailure() {}
     override fun addListener(listener: com.amitia.amitia_app.runtime.service.RuntimeServiceHostListener) {
         listeners.add(listener)
     }

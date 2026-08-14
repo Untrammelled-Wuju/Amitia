@@ -50,29 +50,7 @@ internal class AndroidNativeHost private constructor(
     }
 
     private fun collectOperations(handler: AndroidNativeOperationHandler): List<String> {
-        val knownOperations = listOf(
-            "accessibility.status", "accessibility.open_settings",
-            "clipboard.status", "clipboard.read_text", "clipboard.write_text", "clipboard.clear",
-            "share.status", "share.send",
-            "notification.status", "notification.list", "notification.get",
-            "notification.post", "notification.cancel_own", "notification.dismiss",
-            "notification.open", "notification.invoke_action",
-            "root.status", "root.request", "root.execute",
-            "uitree.snapshot", "uitree.query",
-            "interaction.tap", "interaction.swipe", "interaction.input_text",
-            "interaction.clear_text", "interaction.scroll", "interaction.action",
-            "display.list", "display.get", "display.primary",
-            "virtualdisplay.create", "virtualdisplay.resize", "virtualdisplay.release",
-            "camera.status", "camera.list", "camera.capture",
-            "overlay.status", "overlay.request_permission", "overlay.create",
-            "overlay.update", "overlay.show", "overlay.hide", "overlay.close",
-            "overlay.list", "overlay.close_all",
-            "externalautomation.resolve_app", "externalautomation.open_app",
-            "externalautomation.resolve_uri", "externalautomation.open_uri",
-            "externalautomation.open_settings", "externalautomation.invoke_intent",
-            "externalautomation.foreground_state", "externalautomation.wait_foreground",
-        )
-        return knownOperations.filter { handler.supports(it) }
+        return handler.operations.toList()
     }
 
     suspend fun execute(request: NativeBridgeRequest): NativeBridgeResponse {

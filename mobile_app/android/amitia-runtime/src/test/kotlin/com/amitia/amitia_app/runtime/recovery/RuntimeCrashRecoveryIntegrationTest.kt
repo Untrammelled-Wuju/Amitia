@@ -41,6 +41,7 @@ internal class FakeRecoveryTestHost : RuntimeServiceHost {
         return RuntimeServiceResult.Success
     }
     override fun requestStop(targetGeneration: Long): RuntimeServiceResult = RuntimeServiceResult.Success
+    override fun requestTeardownAfterStartupFailure() {}
     override fun addListener(listener: RuntimeServiceHostListener) { listeners.add(listener) }
     override fun removeListener(listener: RuntimeServiceHostListener) { listeners.remove(listener) }
     override fun currentSession(): ProotSession? = sessionOverride

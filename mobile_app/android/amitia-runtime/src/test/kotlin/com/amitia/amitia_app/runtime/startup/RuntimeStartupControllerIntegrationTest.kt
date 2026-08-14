@@ -63,6 +63,7 @@ class RuntimeStartupControllerIntegrationTest {
         val serviceHost = object : RuntimeServiceHost {
             override fun ensureStarted(generation: Long): RuntimeServiceResult = RuntimeServiceResult.Success
             override fun requestStop(targetGeneration: Long): RuntimeServiceResult = RuntimeServiceResult.Success
+            override fun requestTeardownAfterStartupFailure() {}
             override fun addListener(listener: RuntimeServiceHostListener) {}
             override fun removeListener(listener: RuntimeServiceHostListener) {}
             override fun currentSession(): ProotSession? = createAlwaysAliveSession()
@@ -100,6 +101,7 @@ class RuntimeStartupControllerIntegrationTest {
                 )
             )
             override fun requestStop(targetGeneration: Long): RuntimeServiceResult = RuntimeServiceResult.Success
+            override fun requestTeardownAfterStartupFailure() {}
             override fun addListener(listener: RuntimeServiceHostListener) {}
             override fun removeListener(listener: RuntimeServiceHostListener) {}
             override fun currentSession(): ProotSession? = null
@@ -133,6 +135,7 @@ class RuntimeStartupControllerIntegrationTest {
         val serviceHost = object : RuntimeServiceHost {
             override fun ensureStarted(generation: Long): RuntimeServiceResult = RuntimeServiceResult.Success
             override fun requestStop(targetGeneration: Long): RuntimeServiceResult = RuntimeServiceResult.Success
+            override fun requestTeardownAfterStartupFailure() {}
             override fun addListener(listener: RuntimeServiceHostListener) {}
             override fun removeListener(listener: RuntimeServiceHostListener) {}
             override fun currentSession(): ProotSession? = null
@@ -167,6 +170,7 @@ class RuntimeStartupControllerIntegrationTest {
         val serviceHost = object : RuntimeServiceHost {
             override fun ensureStarted(generation: Long): RuntimeServiceResult = RuntimeServiceResult.Success
             override fun requestStop(targetGeneration: Long): RuntimeServiceResult = RuntimeServiceResult.Success
+            override fun requestTeardownAfterStartupFailure() {}
             override fun addListener(listener: RuntimeServiceHostListener) {}
             override fun removeListener(listener: RuntimeServiceHostListener) {}
             override fun currentSession(): ProotSession? = null

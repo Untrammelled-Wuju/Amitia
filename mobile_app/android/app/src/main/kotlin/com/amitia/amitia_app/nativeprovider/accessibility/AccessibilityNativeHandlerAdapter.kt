@@ -10,10 +10,10 @@ internal class AccessibilityNativeHandlerAdapter(
     private val delegate: AccessibilityNativeHandler,
 ) : AndroidNativeOperationHandler {
 
-    override fun supports(operation: String): Boolean {
-        return operation == AccessibilityNativeHandler.OP_STATUS ||
-            operation == AccessibilityNativeHandler.OP_OPEN_SETTINGS
-    }
+    override val operations: Set<String> = setOf(
+        AccessibilityNativeHandler.OP_STATUS,
+        AccessibilityNativeHandler.OP_OPEN_SETTINGS,
+    )
 
     override suspend fun execute(request: NativeBridgeRequest): NativeBridgeResponse {
         val domainRequest = NativeAccessibilityRequest(

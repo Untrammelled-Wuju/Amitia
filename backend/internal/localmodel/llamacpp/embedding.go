@@ -364,12 +364,16 @@ func (b *llamaCppEmbeddingBackend) Load(ctx context.Context) error {
 
 	b.manifest = manifest
 
-	if b.host != nil {
-		if err := b.runtime.startServer(ctx); err != nil {
-			b.lastError = err.Error()
-			b.state = "failed"
-			return fmt.Errorf("start embedding server failed: %w", err)
-		}
+	if b.host == nil {
+		b.lastError = "native bridge unavailable"
+		b.state = "failed"
+		return fmt.Errorf("load embedding model failed: runtime host unavailable")
+	}
+
+	if err := b.runtime.startServer(ctx); err != nil {
+		b.lastError = err.Error()
+		b.state = "failed"
+		return fmt.Errorf("start embedding server failed: %w", err)
 	}
 
 	b.state = "ready"

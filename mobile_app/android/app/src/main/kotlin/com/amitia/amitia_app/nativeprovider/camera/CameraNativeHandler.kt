@@ -14,9 +14,7 @@ internal class CameraNativeHandler(
     private val context: Context,
 ) : AndroidNativeOperationHandler {
 
-    override fun supports(operation: String): Boolean {
-        return operation == OP_STATUS || operation == OP_LIST || operation == OP_CAPTURE
-    }
+    override val operations: Set<String> = setOf(OP_STATUS, OP_LIST, OP_CAPTURE)
 
     override suspend fun execute(request: NativeBridgeRequest): NativeBridgeResponse {
         return when (request.operation) {
@@ -146,8 +144,8 @@ internal class CameraNativeHandler(
     }
 
     companion object {
-        const val OP_STATUS = "camera.status"
-        const val OP_LIST = "camera.list"
-        const val OP_CAPTURE = "camera.capture"
+        const val OP_STATUS = "media.camera.status"
+        const val OP_LIST = "media.camera.list"
+        const val OP_CAPTURE = "media.camera.capture"
     }
 }

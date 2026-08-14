@@ -23,6 +23,7 @@ type llamaCppBackend struct {
 	manifest   atomic.Pointer[gguf.GGUFModelManifest]
 	runtime    *llamaRuntime
 	host       runtimehost.RuntimeHost
+	generateMu sync.Mutex
 }
 
 func NewLlamaCppBackend(params localmodel.CreateLocalModelParams) (localmodel.LocalModelInference, error) {
@@ -68,21 +69,17 @@ func (b *llamaCppBackend) Capabilities(ctx context.Context) (localmodel.LocalMod
 }
 
 func (b *llamaCppBackend) Generate(ctx context.Context, request localmodel.LocalModelRequest, sink localmodel.LocalModelStreamSink) (localmodel.LocalModelResult, error) {
+	b.generateMu.Lock()
+	defer b.generateMu.Unlock()
+
 	b.mu.Lock()
 	if b.state != "ready" {
 		b.mu.Unlock()
 		return localmodel.LocalModelResult{}, localmodel.ErrLoadFailed
 	}
-	b.state = "generating"
 	b.mu.Unlock()
 
-	defer func() {
-		b.mu.Lock()
-		b.state = "ready"
-		b.mu.Unlock()
-	}()
-
-	return b.runtime.chatRequest(ctx, request.Messages, sink)
+	return b.runtime.chatRequest(ctx, request, sink)
 }
 
 func (b *llamaCppBackend) Load(ctx context.Context) error {
@@ -110,12 +107,16 @@ func (b *llamaCppBackend) Load(ctx context.Context) error {
 	}
 	b.manifest.Store(manifest)
 
-	if b.host != nil {
-		if err := b.runtime.startServer(ctx); err != nil {
-			b.lastError = err.Error()
-			b.state = "failed"
-			return wrapError(localmodel.ErrLoadFailed, err)
-		}
+	if b.host == nil {
+		b.lastError = localmodel.ErrNativeBridgeUnavailable.Error()
+		b.state = "failed"
+		return wrapError(localmodel.ErrLoadFailed, fmt.Errorf("runtime host unavailable"))
+	}
+
+	if err := b.runtime.startServer(ctx); err != nil {
+		b.lastError = err.Error()
+		b.state = "failed"
+		return wrapError(localmodel.ErrLoadFailed, err)
 	}
 
 	b.loadedAt = time.Now().Format("2006-01-02 15:04:05")

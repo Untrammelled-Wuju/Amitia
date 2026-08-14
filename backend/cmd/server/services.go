@@ -20,6 +20,7 @@ import (
 	"github.com/u-ai/backend/internal/browser"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
+	chatlocalmodel "github.com/u-ai/backend/internal/chat/localmodel"
 	"github.com/u-ai/backend/internal/companion"
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/delivery"
@@ -96,6 +97,7 @@ import (
 	"github.com/u-ai/backend/internal/safety"
 	"github.com/u-ai/backend/internal/scriptruntime/commandenv"
 	"github.com/u-ai/backend/internal/search"
+	"github.com/u-ai/backend/internal/system/dataportability"
 	"github.com/u-ai/backend/internal/temporal"
 	"github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/workspace"
@@ -110,6 +112,7 @@ import (
 type AppServices struct {
 	RuntimeProfile               runtimeprofile.Profile
 	RuntimePolicy                runtimeprofile.Policy
+	DataPortability              *dataportability.Coordinator
 	DeliveryStore                *delivery.SQLiteDeliveryStore
 	ChatDeliveryAdapter          chat.DeliveryStore
 	DeliveryWorker               *delivery.Worker
@@ -281,6 +284,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		nodeResolver = bootstrap.NodeEnvironmentResolver()
 		host := bootstrap.RuntimeHost()
 		if host != nil {
+			chatlocalmodel.SetGlobalRuntimeHost(host)
+			llamacpp.SetGlobalEmbeddingHost(host)
 			var resolverErr error
 			artifactResolver, resolverErr = script_host.NewArtifactResolver(script_host.ResolveContext{
 				Host: host,
@@ -933,9 +938,22 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	maintenanceHandler := maintenance.NewHandler(migrationRunner, nil, nil, nil)
 
+	dpCoord, err := buildDataPortabilityCoordinator(dataPortabilityDeps{
+		DataDir:   config.AppCfg.Storage.DataDir,
+		DB:        ctx.DB,
+		MemSvc:    memSvc,
+		EpicSvc:   epiSvc,
+		ExtSvc:    extensionRuntime,
+		Workspace: workspaceService,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("build data portability coordinator: %w", err)
+	}
+
 	services := &AppServices{
 		RuntimeProfile:               runtimeProfile,
 		RuntimePolicy:                policy,
+		DataPortability:              dpCoord,
 		Graph:                        graphSvc,
 		ChatDeliveryAdapter:          deliveryAdapter,
 		Memory:                       memSvc,

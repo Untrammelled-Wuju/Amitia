@@ -5,6 +5,8 @@ package memory
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -12,6 +14,8 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
+
+var ErrMemoryVersionConflict = errors.New("memory version conflict")
 
 type canonicalCreateRequest struct {
 	CharacterID string
@@ -61,8 +65,6 @@ type canonicalUpdateRequest struct {
 type canonicalDeleteRequest struct {
 	OperationID string
 	EventReason string
-
-	HardDelete bool
 }
 
 type MemoryDerivationInput struct {
@@ -96,6 +98,36 @@ type MemoryEventRecord struct {
 	CharacterID string
 
 	CreatedAt string
+}
+
+type memorySemanticSnapshot struct {
+	CharacterID string `json:"characterId"`
+
+	MemoryType string `json:"memoryType"`
+	Source     string `json:"source"`
+	Scope      string `json:"scope"`
+
+	Key   string `json:"key"`
+	Value string `json:"value"`
+
+	Importance int `json:"importance"`
+	Confidence int `json:"confidence"`
+
+	ExpiresAt *string `json:"expiresAt,omitempty"`
+
+	EntityID   string `json:"entityId,omitempty"`
+	EntityType string `json:"entityType,omitempty"`
+
+	SourceMsgID  string `json:"sourceMsgId,omitempty"`
+	SourceConvID string `json:"sourceConvId,omitempty"`
+
+	VerifiedStatus string `json:"verifiedStatus"`
+
+	SensitivityLevel string `json:"sensitivityLevel"`
+
+	AllowProactiveMention bool `json:"allowProactiveMention"`
+
+	RequiresConfirmation bool `json:"requiresConfirmation"`
 }
 
 func (s *service) createCanonicalMemory(req canonicalCreateRequest) (*Memory, error) {
@@ -260,7 +292,7 @@ func (s *service) updateCanonicalMemory(id string, req canonicalUpdateRequest) (
 			expectedVersion = *req.ExpectedVersion
 		}
 		if expectedVersion > 0 && current.Version != expectedVersion {
-			return fmt.Errorf("version_conflict: expected %d, got %d", expectedVersion, current.Version)
+			return ErrMemoryVersionConflict
 		}
 
 		newVersion := current.Version + 1
@@ -271,8 +303,12 @@ func (s *service) updateCanonicalMemory(id string, req canonicalUpdateRequest) (
 		}
 		updates["version"] = newVersion
 
-		if err := tx.Model(&Memory{}).Where("id = ? AND version = ?", id, current.Version).Updates(updates).Error; err != nil {
-			return err
+		res := tx.Model(&Memory{}).Where("id = ? AND version = ?", id, current.Version).Updates(updates)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected != 1 {
+			return ErrMemoryVersionConflict
 		}
 
 		var updated Memory
@@ -337,8 +373,12 @@ func (s *service) deleteCanonicalMemory(id string, req canonicalDeleteRequest) e
 			"verified_status": "tombstone",
 		}
 
-		if err := tx.Model(&Memory{}).Where("id = ? AND version = ?", id, current.Version).Updates(updates).Error; err != nil {
-			return err
+		res := tx.Model(&Memory{}).Where("id = ? AND version = ?", id, current.Version).Updates(updates)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected != 1 {
+			return ErrMemoryVersionConflict
 		}
 
 		var updated Memory
@@ -382,19 +422,29 @@ func computeMemorySnapshotHashCanonical(m *Memory) string {
 	if m == nil {
 		return ""
 	}
-	var sb strings.Builder
-	sb.WriteString(strings.TrimSpace(m.Key))
-	sb.WriteString("|")
-	sb.WriteString(strings.TrimSpace(m.Value))
-	sb.WriteString("|")
-	sb.WriteString(strings.TrimSpace(m.MemoryType))
-	sb.WriteString("|")
-	sb.WriteString(fmt.Sprintf("%d", m.Importance))
-	sb.WriteString("|")
-	sb.WriteString(fmt.Sprintf("%d", m.Confidence))
-	sb.WriteString("|")
-	sb.WriteString(strings.TrimSpace(m.Scope))
-
-	hash := sha256.Sum256([]byte(sb.String()))
+	snapshot := memorySemanticSnapshot{
+		CharacterID:           m.CharacterID,
+		MemoryType:            m.MemoryType,
+		Source:                m.Source,
+		Scope:                 m.Scope,
+		Key:                   m.Key,
+		Value:                 m.Value,
+		Importance:            m.Importance,
+		Confidence:            m.Confidence,
+		ExpiresAt:             m.ExpiresAt,
+		EntityID:              m.EntityID,
+		EntityType:            m.EntityType,
+		SourceMsgID:           m.SourceMsgID,
+		SourceConvID:          m.SourceConvID,
+		VerifiedStatus:        m.VerifiedStatus,
+		SensitivityLevel:      m.SensitivityLevel,
+		AllowProactiveMention: m.AllowProactiveMention,
+		RequiresConfirmation:  m.RequiresConfirmation,
+	}
+	payload, err := json.Marshal(snapshot)
+	if err != nil {
+		return ""
+	}
+	hash := sha256.Sum256(payload)
 	return hex.EncodeToString(hash[:])
 }

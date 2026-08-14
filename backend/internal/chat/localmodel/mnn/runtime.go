@@ -240,15 +240,15 @@ func (r *mnnRuntime) buildServerArgs(port int) []string {
 	return args
 }
 
-func (r *mnnRuntime) chatRequest(ctx context.Context, messages []localmodel.LocalModelMessage, sink localmodel.LocalModelStreamSink) (localmodel.LocalModelResult, error) {
+func (r *mnnRuntime) chatRequest(ctx context.Context, request localmodel.LocalModelRequest, sink localmodel.LocalModelStreamSink) (localmodel.LocalModelResult, error) {
 	if sink == nil {
-		return r.chatNonStream(ctx, messages)
+		return r.chatNonStream(ctx, request)
 	}
-	return r.chatStream(ctx, messages, sink)
+	return r.chatStream(ctx, request, sink)
 }
 
-func (r *mnnRuntime) chatNonStream(ctx context.Context, messages []localmodel.LocalModelMessage) (localmodel.LocalModelResult, error) {
-	reqBody := r.buildChatRequestBody(messages, false)
+func (r *mnnRuntime) chatNonStream(ctx context.Context, request localmodel.LocalModelRequest) (localmodel.LocalModelResult, error) {
+	reqBody := r.buildChatRequestBody(request, false)
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
 		return localmodel.LocalModelResult{}, fmt.Errorf("marshal request: %w", err)
@@ -279,8 +279,8 @@ func (r *mnnRuntime) chatNonStream(ctx context.Context, messages []localmodel.Lo
 	return parseMNNChatResponse(body)
 }
 
-func (r *mnnRuntime) chatStream(ctx context.Context, messages []localmodel.LocalModelMessage, sink localmodel.LocalModelStreamSink) (localmodel.LocalModelResult, error) {
-	reqBody := r.buildChatRequestBody(messages, true)
+func (r *mnnRuntime) chatStream(ctx context.Context, request localmodel.LocalModelRequest, sink localmodel.LocalModelStreamSink) (localmodel.LocalModelResult, error) {
+	reqBody := r.buildChatRequestBody(request, true)
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
 		return localmodel.LocalModelResult{}, fmt.Errorf("marshal request: %w", err)
@@ -302,9 +302,9 @@ func (r *mnnRuntime) chatStream(ctx context.Context, messages []localmodel.Local
 	return parseMNNChatStream(resp.Body, sink)
 }
 
-func (r *mnnRuntime) buildChatRequestBody(messages []localmodel.LocalModelMessage, stream bool) map[string]interface{} {
-	reqMsgs := make([]map[string]interface{}, 0, len(messages))
-	for _, msg := range messages {
+func (r *mnnRuntime) buildChatRequestBody(request localmodel.LocalModelRequest, stream bool) map[string]interface{} {
+	reqMsgs := make([]map[string]interface{}, 0, len(request.Messages))
+	for _, msg := range request.Messages {
 		content := mnnBuildMessageContent(msg)
 		reqMsgs = append(reqMsgs, map[string]interface{}{
 			"role":    msg.Role,
@@ -316,18 +316,49 @@ func (r *mnnRuntime) buildChatRequestBody(messages []localmodel.LocalModelMessag
 		"messages": reqMsgs,
 		"stream":   stream,
 	}
-	if r.config.Sampler.Temperature > 0 {
+
+	if request.MaxNewTokens > 0 {
+		reqBody["max_tokens"] = request.MaxNewTokens
+	}
+
+	if request.Temperature > 0 {
+		reqBody["temperature"] = request.Temperature
+	} else if r.config.Sampler.Temperature > 0 {
 		reqBody["temperature"] = r.config.Sampler.Temperature
 	}
-	if r.config.Sampler.TopP > 0 && r.config.Sampler.TopP < 1 {
+
+	if request.TopP > 0 && request.TopP < 1 {
+		reqBody["top_p"] = request.TopP
+	} else if r.config.Sampler.TopP > 0 && r.config.Sampler.TopP < 1 {
 		reqBody["top_p"] = r.config.Sampler.TopP
 	}
+
 	if r.config.Sampler.TopK > 0 {
 		reqBody["top_k"] = r.config.Sampler.TopK
 	}
 	if r.config.Sampler.MinP > 0 {
 		reqBody["min_p"] = r.config.Sampler.MinP
 	}
+
+	if request.JSONOnly {
+		reqBody["response_format"] = map[string]interface{}{"type": "json_object"}
+	}
+
+	if len(request.Tools) > 0 {
+		tools := make([]map[string]interface{}, 0, len(request.Tools))
+		for _, t := range request.Tools {
+			tools = append(tools, map[string]interface{}{
+				"type": "function",
+				"function": map[string]interface{}{
+					"name":        t.Name,
+					"description": t.Description,
+					"parameters":  t.Parameters,
+				},
+			})
+		}
+		reqBody["tools"] = tools
+	}
+
 	return reqBody
 }
 

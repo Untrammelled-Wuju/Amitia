@@ -35,6 +35,8 @@ internal class GenerationTrackingServiceHost : RuntimeServiceHost {
         return RuntimeServiceResult.Success
     }
 
+    override fun requestTeardownAfterStartupFailure() {}
+
     override fun addListener(listener: RuntimeServiceHostListener) {
         listeners.add(listener)
     }
@@ -66,6 +68,8 @@ internal class FailingStopServiceHost : RuntimeServiceHost {
             )
         )
     }
+
+    override fun requestTeardownAfterStartupFailure() {}
 
     override fun addListener(listener: RuntimeServiceHostListener) {
         listeners.add(listener)

@@ -10,16 +10,16 @@ internal class NotificationNativeHandlerAdapter(
     private val delegate: NotificationNativeHandler,
 ) : AndroidNativeOperationHandler {
 
-    override fun supports(operation: String): Boolean {
-        return operation == NotificationNativeHandler.OP_STATUS ||
-            operation == NotificationNativeHandler.OP_LIST ||
-            operation == NotificationNativeHandler.OP_GET ||
-            operation == NotificationNativeHandler.OP_POST ||
-            operation == NotificationNativeHandler.OP_CANCEL_OWN ||
-            operation == NotificationNativeHandler.OP_DISMISS ||
-            operation == NotificationNativeHandler.OP_OPEN ||
-            operation == NotificationNativeHandler.OP_INVOKE_ACTION
-    }
+    override val operations: Set<String> = setOf(
+        NotificationNativeHandler.OP_STATUS,
+        NotificationNativeHandler.OP_LIST,
+        NotificationNativeHandler.OP_GET,
+        NotificationNativeHandler.OP_POST,
+        NotificationNativeHandler.OP_CANCEL_OWN,
+        NotificationNativeHandler.OP_DISMISS,
+        NotificationNativeHandler.OP_OPEN,
+        NotificationNativeHandler.OP_INVOKE_ACTION,
+    )
 
     override suspend fun execute(request: NativeBridgeRequest): NativeBridgeResponse {
         val domainRequest = NativeNotificationRequest(

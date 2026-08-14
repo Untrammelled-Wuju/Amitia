@@ -33,17 +33,23 @@ func (s *service) UpdateModel(id int, updates map[string]interface{}) (*ModelCon
 	if err := s.repo.UpdateModel(id, updates); err != nil {
 		return nil, fmt.Errorf("更新失败: %w", err)
 	}
+	s.invalidateLocalModels(context.Background())
 	return s.repo.GetModelByID(id)
 }
 
 func (s *service) DeleteModel(id int) error {
-	return s.repo.DeleteModel(id)
+	err := s.repo.DeleteModel(id)
+	if err == nil {
+		s.invalidateLocalModels(context.Background())
+	}
+	return err
 }
 
 func (s *service) ActivateModel(id int) (*ModelConfig, error) {
 	if err := s.repo.ActivateModel(id); err != nil {
 		return nil, fmt.Errorf("激活失败: %w", err)
 	}
+	s.invalidateLocalModels(context.Background())
 	return s.repo.GetModelByID(id)
 }
 

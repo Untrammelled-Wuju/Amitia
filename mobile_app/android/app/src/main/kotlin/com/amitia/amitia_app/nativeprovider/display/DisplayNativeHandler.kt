@@ -16,15 +16,14 @@ internal class DisplayNativeHandler(
 
     private val generation = AtomicLong(0L)
 
-    override fun supports(operation: String): Boolean {
-        return operation == OP_LIST || operation == OP_GET || operation == OP_PRIMARY
-    }
+    override val operations: Set<String> = setOf(OP_STATUS, OP_LIST, OP_GET, OP_RESOLVE)
 
     override suspend fun execute(request: NativeBridgeRequest): NativeBridgeResponse {
         return when (request.operation) {
+            OP_STATUS -> handleStatus(request)
             OP_LIST -> handleList(request)
             OP_GET -> handleGet(request)
-            OP_PRIMARY -> handlePrimary(request)
+            OP_RESOLVE -> handleResolve(request)
             else -> unsupportedOperation(request)
         }
     }
@@ -69,7 +68,21 @@ internal class DisplayNativeHandler(
         }
     }
 
-    private fun handlePrimary(request: NativeBridgeRequest): NativeBridgeResponse {
+    private fun handleStatus(request: NativeBridgeRequest): NativeBridgeResponse {
+        val displays = readDisplays()
+        return NativeBridgeResponse(
+            protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+            requestId = request.requestId,
+            status = NativeBridgeProtocol.STATUS_SUCCESS,
+            result = mapOf(
+                "count" to displays.size,
+                "primaryDisplayId" to displays.firstOrNull { it.isPrimary }?.displayId,
+                "generation" to generation.get(),
+            ),
+        )
+    }
+
+    private fun handleResolve(request: NativeBridgeRequest): NativeBridgeResponse {
         val displays = readDisplays()
         val primary = displays.firstOrNull { it.isPrimary } ?: displays.firstOrNull()
         return if (primary != null) {
@@ -141,8 +154,9 @@ internal class DisplayNativeHandler(
     }
 
     companion object {
+        const val OP_STATUS = "display.status"
         const val OP_LIST = "display.list"
         const val OP_GET = "display.get"
-        const val OP_PRIMARY = "display.primary"
+        const val OP_RESOLVE = "display.resolve"
     }
 }
