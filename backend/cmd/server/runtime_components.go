@@ -506,6 +506,19 @@ func newBrowserComponent(services *AppServices, host runtimehost.RuntimeHost) *b
 	}
 }
 
+func buildBrowserProcessSpec(engine browser.BrowserEngine) runtimehost.ProcessSpec {
+	return runtimehost.ProcessSpec{
+		ID:      runtimehost.ProcessIDBrowser,
+		Executable: "",
+		WorkingDir: "",
+		StartupTimeout: 60 * time.Second,
+		StopGracePeriod: 10 * time.Second,
+		RestartPolicy: runtimehost.RestartPolicy{Mode: runtimehost.RestartNever},
+		HealthInterval: 10 * time.Second,
+		ExecutableProcess: browser.NewBrowserProcessExec(engine),
+	}
+}
+
 func (c *browserComponent) Descriptor() runtimeorchestrator.ComponentDescriptor {
 	return runtimeorchestrator.ComponentDescriptor{
 		ID:           runtimeorchestrator.ComponentBrowser,
@@ -567,12 +580,9 @@ func (c *browserComponent) Stop(ctx context.Context) error {
 	if !c.started {
 		return nil
 	}
-	svc := c.services
-	if svc == nil || svc.Browser == nil {
-		return nil
-	}
-	if err := svc.Browser.Runtime().Stop(ctx); err != nil {
-		return fmt.Errorf("browser runtime stop: %w", err)
+	supervisor := c.host.Processes()
+	if err := supervisor.Stop(ctx, runtimehost.ProcessIDBrowser); err != nil {
+		return fmt.Errorf("stop browser: %w", err)
 	}
 	c.started = false
 	return nil

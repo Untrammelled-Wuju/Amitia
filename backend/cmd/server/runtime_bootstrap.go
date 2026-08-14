@@ -167,7 +167,7 @@ func (b *runtimeBootstrap) RegisterApplication(services *AppServices) error {
 	if err := b.orchestrator.Register(newDesktopPetComponent(services)); err != nil {
 		return fmt.Errorf("register desktop pet: %w", err)
 	}
-	if err := b.orchestrator.Register(newBrowserComponent(services)); err != nil {
+	if err := b.orchestrator.Register(newBrowserComponent(services, b.host)); err != nil {
 		return fmt.Errorf("register browser: %w", err)
 	}
 	return nil
