@@ -64,7 +64,7 @@ func (h *Handler) CreateTask(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actor.UserID
+	userID := string(actor.UserID)
 
 	taskSummary, err := h.service.CreateTask(c.Request.Context(), userID, characterID, modelConfigID, name, prompt, negativePrompt, outputWidth, outputHeight, selectedActionKeys, fileHeader)
 	if err != nil {
@@ -99,7 +99,7 @@ func (h *Handler) ListTasks(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actor.UserID
+	userID := string(actor.UserID)
 	characterID := c.Query("characterId")
 	status := c.Query("status")
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
@@ -150,7 +150,7 @@ func (h *Handler) ReferenceImage(c *gin.Context) {
 		writeOwnershipError(c, err)
 		return
 	}
-	ref, err := h.service.GetTaskSourceImageRef(taskID, actor.UserID)
+	ref, err := h.service.GetTaskSourceImageRef(taskID, string(actor.UserID))
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -246,7 +246,7 @@ func (h *Handler) ActionFrameImage(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "帧索引无效", nil)
 		return
 	}
-	ref, err := h.service.GetFrameImageRef(taskID, actionKey, frameIndex, actor.UserID)
+	ref, err := h.service.GetFrameImageRef(taskID, actionKey, frameIndex, string(actor.UserID))
 	if err != nil {
 		writeServiceError(c, err)
 		return
@@ -297,7 +297,7 @@ func (h *Handler) TaskEventsStream(c *gin.Context) {
 	c.Header("X-Accel-Buffering", "no")
 
 	bus := DefaultEventBus()
-	subscriberID := fmt.Sprintf("sse-%s-%p-%d", actor.UserID, c.Request, time.Now().UnixNano())
+	subscriberID := fmt.Sprintf("sse-%s-%p-%d", string(actor.UserID), c.Request, time.Now().UnixNano())
 	events := bus.Subscribe(taskID, subscriberID)
 	defer bus.Unsubscribe(taskID, subscriberID)
 

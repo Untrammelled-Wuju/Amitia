@@ -564,7 +564,7 @@ func ProductionCutoverMigration() Migration {
 		Version: "20260101001",
 		Name:    "production_cutover_state",
 		Up: func(s *Step) error {
-			return s.CreateTable(`CREATE TABLE IF NOT EXISTS production_cutover_state (
+			s.CreateTable(`CREATE TABLE IF NOT EXISTS production_cutover_state (
 				operation_id TEXT PRIMARY KEY,
 				phase TEXT NOT NULL DEFAULT '',
 				status TEXT NOT NULL DEFAULT '',
@@ -576,6 +576,7 @@ func ProductionCutoverMigration() Migration {
 				canonical_generation INTEGER NOT NULL DEFAULT 0,
 				plan_version INTEGER NOT NULL DEFAULT 1
 			)`)
+			return nil
 		},
 	}
 }

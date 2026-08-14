@@ -155,7 +155,7 @@ func (h *Handler) GetRelease(c *gin.Context) {
 		writeReleaseOwnershipError(c, err)
 		return
 	}
-	release, err := h.svc.GetRelease(c.Request.Context(), releaseID, actor.UserID)
+	release, err := h.svc.GetRelease(c.Request.Context(), releaseID, string(actor.UserID))
 	if err != nil {
 		writeReleaseError(c, err)
 		return
@@ -174,7 +174,7 @@ func (h *Handler) GetReleaseFiles(c *gin.Context) {
 		writeReleaseOwnershipError(c, err)
 		return
 	}
-	files, err := h.svc.GetReleaseFiles(c.Request.Context(), releaseID, actor.UserID)
+	files, err := h.svc.GetReleaseFiles(c.Request.Context(), releaseID, string(actor.UserID))
 	if err != nil {
 		writeReleaseError(c, err)
 		return
@@ -193,7 +193,7 @@ func (h *Handler) ArchiveRelease(c *gin.Context) {
 		writeReleaseOwnershipError(c, err)
 		return
 	}
-	if err := h.svc.ArchiveRelease(c.Request.Context(), releaseID, actor.UserID); err != nil {
+	if err := h.svc.ArchiveRelease(c.Request.Context(), releaseID, string(actor.UserID)); err != nil {
 		writeReleaseError(c, err)
 		return
 	}
@@ -212,7 +212,7 @@ func (h *Handler) RevokeRelease(c *gin.Context) {
 		return
 	}
 	reason := c.Query("reason")
-	if err := h.svc.RevokeRelease(c.Request.Context(), releaseID, actor.UserID, reason); err != nil {
+	if err := h.svc.RevokeRelease(c.Request.Context(), releaseID, string(actor.UserID), reason); err != nil {
 		writeReleaseError(c, err)
 		return
 	}
@@ -230,7 +230,7 @@ func (h *Handler) GetPetIdentity(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	identity, err := h.svc.GetPetIdentity(c.Request.Context(), actor.UserID, petID)
+	identity, err := h.svc.GetPetIdentity(c.Request.Context(), string(actor.UserID), petID)
 	if err != nil {
 		writeReleaseError(c, err)
 		return
@@ -249,7 +249,7 @@ func (h *Handler) DownloadRelease(c *gin.Context) {
 		writeReleaseOwnershipError(c, err)
 		return
 	}
-	release, err := h.svc.GetRelease(c.Request.Context(), releaseID, actor.UserID)
+	release, err := h.svc.GetRelease(c.Request.Context(), releaseID, string(actor.UserID))
 	if err != nil {
 		writeReleaseError(c, err)
 		return

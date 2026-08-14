@@ -112,7 +112,7 @@ func (h *Handler) ActivateRevision(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", nil)
 		return
 	}
-	err = h.service.ActivateRevision(c.Request.Context(), processingTaskID, actionKey, req.RevisionID, req.ExpectedBindingVersion, req.Reason, actor.UserID)
+	err = h.service.ActivateRevision(c.Request.Context(), processingTaskID, actionKey, req.RevisionID, req.ExpectedBindingVersion, req.Reason, string(actor.UserID))
 	if err != nil {
 		writeEditError(c, err)
 		return
@@ -216,7 +216,7 @@ func (h *Handler) CreateSession(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", nil)
 		return
 	}
-	resp, err := h.service.CreateSession(c.Request.Context(), processingTaskID, actionKey, actor.UserID, req)
+	resp, err := h.service.CreateSession(c.Request.Context(), processingTaskID, actionKey, string(actor.UserID), req)
 	if err != nil {
 		writeEditError(c, err)
 		return
@@ -254,7 +254,7 @@ func (h *Handler) ApplyOperation(c *gin.Context) {
 		writeEditOwnershipError(c, err)
 		return
 	}
-	userID := actor.UserID
+	userID := string(actor.UserID)
 	var req ApplyOperationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", nil)
@@ -279,7 +279,7 @@ func (h *Handler) Undo(c *gin.Context) {
 		writeEditOwnershipError(c, err)
 		return
 	}
-	userID := actor.UserID
+	userID := string(actor.UserID)
 	baseVersion, _ := strconv.ParseInt(c.Query("baseSessionVersion"), 10, 64)
 	resp, err := h.service.Undo(c.Request.Context(), sessionID, userID, baseVersion)
 	if err != nil {
@@ -300,7 +300,7 @@ func (h *Handler) Redo(c *gin.Context) {
 		writeEditOwnershipError(c, err)
 		return
 	}
-	userID := actor.UserID
+	userID := string(actor.UserID)
 	baseVersion, _ := strconv.ParseInt(c.Query("baseSessionVersion"), 10, 64)
 	resp, err := h.service.Redo(c.Request.Context(), sessionID, userID, baseVersion)
 	if err != nil {
@@ -340,7 +340,7 @@ func (h *Handler) CommitSession(c *gin.Context) {
 		writeEditOwnershipError(c, err)
 		return
 	}
-	userID := actor.UserID
+	userID := string(actor.UserID)
 	var req CommitSessionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", nil)
@@ -365,7 +365,7 @@ func (h *Handler) AbandonSession(c *gin.Context) {
 		writeEditOwnershipError(c, err)
 		return
 	}
-	userID := actor.UserID
+	userID := string(actor.UserID)
 	err = h.service.AbandonSession(c.Request.Context(), sessionID, userID)
 	if err != nil {
 		writeEditError(c, err)
@@ -458,7 +458,7 @@ func (h *Handler) CancelRegenerationJob(c *gin.Context) {
 		writeEditOwnershipError(c, security.ErrNotFound)
 		return
 	}
-	userID := actor.UserID
+	userID := string(actor.UserID)
 	err = h.service.CancelRegenerationJob(c.Request.Context(), jobID, userID)
 	if err != nil {
 		writeEditError(c, err)
@@ -507,7 +507,7 @@ func (h *Handler) ListRegenerationJobs(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	jobs, err := h.service.ListRegenerationJobs(c.Request.Context(), actor.UserID, limit, offset)
+	jobs, err := h.service.ListRegenerationJobs(c.Request.Context(), string(actor.UserID), limit, offset)
 	if err != nil {
 		writeEditError(c, err)
 		return
@@ -534,7 +534,7 @@ func (h *Handler) AcceptCandidate(c *gin.Context) {
 		writeEditOwnershipError(c, security.ErrNotFound)
 		return
 	}
-	userID := actor.UserID
+	userID := string(actor.UserID)
 	var req AcceptCandidateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		req = AcceptCandidateRequest{}
@@ -563,7 +563,7 @@ func (h *Handler) RejectCandidate(c *gin.Context) {
 		writeEditOwnershipError(c, security.ErrNotFound)
 		return
 	}
-	userID := actor.UserID
+	userID := string(actor.UserID)
 	var req RejectCandidateRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		req = RejectCandidateRequest{}
@@ -587,7 +587,7 @@ func (h *Handler) UploadCandidate(c *gin.Context) {
 		writeEditOwnershipError(c, err)
 		return
 	}
-	userID := actor.UserID
+	userID := string(actor.UserID)
 	targetFrameID := c.PostForm("targetFrameId")
 	file, err := c.FormFile("file")
 	if err != nil {
@@ -634,7 +634,7 @@ func (h *Handler) ApplyBackgroundPatch(c *gin.Context) {
 		writeEditOwnershipError(c, err)
 		return
 	}
-	userID := actor.UserID
+	userID := string(actor.UserID)
 	var req BackgroundApplyPatchPayload
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", nil)
@@ -661,7 +661,7 @@ func (h *Handler) ResetBackgroundPatch(c *gin.Context) {
 		writeEditOwnershipError(c, err)
 		return
 	}
-	userID := actor.UserID
+	userID := string(actor.UserID)
 	err = h.service.ResetBackgroundPatch(c.Request.Context(), sessionID, frameID, userID)
 	if err != nil {
 		writeEditError(c, err)
@@ -681,7 +681,7 @@ func (h *Handler) SetFrameAnchor(c *gin.Context) {
 		writeEditOwnershipError(c, err)
 		return
 	}
-	userID := actor.UserID
+	userID := string(actor.UserID)
 	var req AnchorSetFramePayload
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", nil)
@@ -706,7 +706,7 @@ func (h *Handler) BatchOffsetAnchors(c *gin.Context) {
 		writeEditOwnershipError(c, err)
 		return
 	}
-	userID := actor.UserID
+	userID := string(actor.UserID)
 	var req AnchorBatchOffsetPayload
 	if err := c.ShouldBindJSON(&req); err != nil {
 		util.ErrorResponse(c, response.InvalidParams, "请求参数无效", nil)
@@ -731,7 +731,7 @@ func (h *Handler) ResetAnchors(c *gin.Context) {
 		writeEditOwnershipError(c, err)
 		return
 	}
-	userID := actor.UserID
+	userID := string(actor.UserID)
 	var req AnchorResetPayload
 	if err := c.ShouldBindJSON(&req); err != nil {
 		req = AnchorResetPayload{}
@@ -794,7 +794,7 @@ func (h *Handler) ImportLegacyRevision(c *gin.Context) {
 		writeEditOwnershipError(c, err)
 		return
 	}
-	resp, err := h.service.ImportLegacyRevision(c.Request.Context(), processingTaskID, actionKey, actor.UserID)
+	resp, err := h.service.ImportLegacyRevision(c.Request.Context(), processingTaskID, actionKey, string(actor.UserID))
 	if err != nil {
 		writeEditError(c, err)
 		return
@@ -938,7 +938,7 @@ func (h *Handler) ListRevisionsByStream(c *gin.Context) {
 		writeEditOwnershipError(c, err)
 		return
 	}
-	revs, err := h.service.ListRevisionsByStream(c.Request.Context(), actor.UserID, streamID)
+	revs, err := h.service.ListRevisionsByStream(c.Request.Context(), string(actor.UserID), streamID)
 	if err != nil {
 		writeEditError(c, err)
 		return
@@ -961,7 +961,7 @@ func (h *Handler) GetActiveRevisionByStream(c *gin.Context) {
 		writeEditOwnershipError(c, err)
 		return
 	}
-	detail, err := h.service.GetActiveRevisionByStream(c.Request.Context(), actor.UserID, streamID)
+	detail, err := h.service.GetActiveRevisionByStream(c.Request.Context(), string(actor.UserID), streamID)
 	if err != nil {
 		writeEditError(c, err)
 		return

@@ -44,7 +44,7 @@ func (g *SQLiteOwnershipGuard) RequireCharacter(ctx context.Context, actor *desk
 	if result.Owner == "" {
 		return nil, ErrNotFound
 	}
-	if result.Owner != actor.UserID && !actor.HasRole("admin") {
+	if result.Owner != string(actor.UserID) && !actor.HasRole("admin") {
 		return nil, ErrForbidden
 	}
 	return &CharacterScope{UserID: result.Owner, CharacterID: characterID}, nil
@@ -73,7 +73,7 @@ func (g *SQLiteOwnershipGuard) RequireGenerationTask(ctx context.Context, actor 
 	if result.UserID == "" {
 		return nil, ErrNotFound
 	}
-	if result.UserID != actor.UserID && !actor.HasRole("admin") {
+	if result.UserID != string(actor.UserID) && !actor.HasRole("admin") {
 		return nil, ErrForbidden
 	}
 	return &GenerationTaskScope{
@@ -106,7 +106,7 @@ func (g *SQLiteOwnershipGuard) RequireProcessingTask(ctx context.Context, actor 
 	if result.UserID == "" {
 		return nil, ErrNotFound
 	}
-	if result.UserID != actor.UserID && !actor.HasRole("admin") {
+	if result.UserID != string(actor.UserID) && !actor.HasRole("admin") {
 		return nil, ErrForbidden
 	}
 	return &ProcessingTaskScope{
@@ -149,7 +149,7 @@ func (g *SQLiteOwnershipGuard) RequireActionRevision(ctx context.Context, actor 
 				Select("user_id, character_id").
 				Where("id = ?", result.TaskID).
 				Take(&taskResult).Error; taskErr == nil && taskResult.UserID != "" {
-				if taskResult.UserID != actor.UserID && !actor.HasRole("admin") {
+				if taskResult.UserID != string(actor.UserID) && !actor.HasRole("admin") {
 					return nil, ErrForbidden
 				}
 				return &ActionRevisionScope{
@@ -162,7 +162,7 @@ func (g *SQLiteOwnershipGuard) RequireActionRevision(ctx context.Context, actor 
 		}
 		return nil, ErrNotFound
 	}
-	if result.UserID != actor.UserID && !actor.HasRole("admin") {
+	if result.UserID != string(actor.UserID) && !actor.HasRole("admin") {
 		return nil, ErrForbidden
 	}
 	return &ActionRevisionScope{
@@ -193,7 +193,7 @@ func (g *SQLiteOwnershipGuard) resolveProcessingTaskOwner(ctx context.Context, a
 	if result.UserID == "" {
 		return nil, ErrNotFound
 	}
-	if result.UserID != actor.UserID && !actor.HasRole("admin") {
+	if result.UserID != string(actor.UserID) && !actor.HasRole("admin") {
 		return nil, ErrForbidden
 	}
 	return &ActionRevisionScope{
@@ -228,7 +228,7 @@ func (g *SQLiteOwnershipGuard) RequireActionStream(ctx context.Context, actor *d
 	if result.UserID == "" {
 		return nil, ErrNotFound
 	}
-	if result.UserID != actor.UserID && !actor.HasRole("admin") {
+	if result.UserID != string(actor.UserID) && !actor.HasRole("admin") {
 		return nil, ErrForbidden
 	}
 	return &ActionStreamScope{
@@ -281,7 +281,7 @@ func (g *SQLiteOwnershipGuard) RequireQualityEvaluation(ctx context.Context, act
 	if owner == "" {
 		return nil, ErrNotFound
 	}
-	if owner != actor.UserID && !actor.HasRole("admin") {
+	if owner != string(actor.UserID) && !actor.HasRole("admin") {
 		return nil, ErrForbidden
 	}
 
@@ -332,7 +332,7 @@ func (g *SQLiteOwnershipGuard) resolveProcessingTaskOwnerLegacy(ctx context.Cont
 	if result.UserID == "" {
 		return "", "", gorm.ErrRecordNotFound
 	}
-	if result.UserID != actor.UserID && !actor.HasRole("admin") {
+	if result.UserID != string(actor.UserID) && !actor.HasRole("admin") {
 		return "", "", ErrForbidden
 	}
 	return result.UserID, result.CharacterID, nil
@@ -361,7 +361,7 @@ func (g *SQLiteOwnershipGuard) RequireRelease(ctx context.Context, actor *deskto
 	if result.Owner == "" {
 		return nil, ErrNotFound
 	}
-	if result.Owner != actor.UserID && !actor.HasRole("admin") {
+	if result.Owner != string(actor.UserID) && !actor.HasRole("admin") {
 		return nil, ErrForbidden
 	}
 	return &ReleaseScope{
@@ -394,7 +394,7 @@ func (g *SQLiteOwnershipGuard) RequireInstallation(ctx context.Context, actor *d
 	if result.UserID == "" {
 		return nil, ErrNotFound
 	}
-	if result.UserID != actor.UserID && !actor.HasRole("admin") {
+	if result.UserID != string(actor.UserID) && !actor.HasRole("admin") {
 		return nil, ErrForbidden
 	}
 	return &InstallationScope{
@@ -427,7 +427,7 @@ func (g *SQLiteOwnershipGuard) RequireInstallationStrict(ctx context.Context, ac
 	if result.UserID == "" {
 		return nil, ErrNotFound
 	}
-	if result.UserID != actor.UserID && !actor.HasRole("admin") {
+	if result.UserID != string(actor.UserID) && !actor.HasRole("admin") {
 		return nil, ErrForbidden
 	}
 	if deviceID == "" || result.DeviceID == "" || result.DeviceID != deviceID {
@@ -462,7 +462,7 @@ func (g *SQLiteOwnershipGuard) RequireEditSession(ctx context.Context, actor *de
 	if result.UserID == "" {
 		return nil, ErrNotFound
 	}
-	if result.UserID != actor.UserID && !actor.HasRole("admin") {
+	if result.UserID != string(actor.UserID) && !actor.HasRole("admin") {
 		return nil, ErrForbidden
 	}
 	return &EditSessionScope{
@@ -494,7 +494,7 @@ func (g *SQLiteOwnershipGuard) RequireRegenerationJob(ctx context.Context, actor
 	if result.UserID == "" {
 		return nil, ErrNotFound
 	}
-	if result.UserID != actor.UserID && !actor.HasRole("admin") {
+	if result.UserID != string(actor.UserID) && !actor.HasRole("admin") {
 		return nil, ErrForbidden
 	}
 	return &RegenerationJobScope{
@@ -530,7 +530,7 @@ func (g *SQLiteOwnershipGuard) RequireCandidate(ctx context.Context, actor *desk
 	if result.UserID == "" {
 		return nil, ErrNotFound
 	}
-	if result.UserID != actor.UserID && !actor.HasRole("admin") {
+	if result.UserID != string(actor.UserID) && !actor.HasRole("admin") {
 		return nil, ErrForbidden
 	}
 	return &CandidateScope{
@@ -571,7 +571,7 @@ func (g *SQLiteOwnershipGuard) RequireRuntimeCommand(ctx context.Context, actor 
 	if result.RuntimeID == "" {
 		return nil, ErrNotFound
 	}
-	if result.UserID != actor.UserID && !actor.HasRole("admin") {
+	if result.UserID != string(actor.UserID) && !actor.HasRole("admin") {
 		return nil, ErrForbidden
 	}
 	return &RuntimeCommandScope{
@@ -605,7 +605,7 @@ func (g *SQLiteOwnershipGuard) RequireBehaviorBinding(ctx context.Context, actor
 	if result.UserID == "" {
 		return nil, ErrNotFound
 	}
-	if result.UserID != actor.UserID && !actor.HasRole("admin") {
+	if result.UserID != string(actor.UserID) && !actor.HasRole("admin") {
 		return nil, ErrForbidden
 	}
 	return &BehaviorBindingScope{

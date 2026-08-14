@@ -30,6 +30,7 @@ func (s *SQLiteSessionStore) EnsureSchema(ctx context.Context) error {
     platform TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL,
     connection_generation INTEGER NOT NULL DEFAULT 1,
+    revision INTEGER NOT NULL DEFAULT 1,
     runtime_version TEXT NOT NULL DEFAULT '',
     runtime_contract_version TEXT NOT NULL DEFAULT '',
     capabilities_json TEXT NOT NULL DEFAULT '[]',
@@ -68,11 +69,11 @@ func (s *SQLiteSessionStore) Create(ctx context.Context, session RuntimeSession)
 	_, err = s.db.ExecContext(ctx,
 		`INSERT INTO kernel_device_runtime_sessions (
         runtime_session_id, user_id, device_id, runtime_id, platform,
-        status, connection_generation, runtime_version, runtime_contract_version,
+        status, connection_generation, revision, runtime_version, runtime_contract_version,
         capabilities_json, capabilities_hash,
         last_applied_state_revision, last_processed_command_sequence, last_event_sequence, actual_state_hash,
         created_at, updated_at, last_heartbeat_at, expires_at, closed_at, close_reason
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		session.ID.String(),
 		session.UserID.String(),
 		session.DeviceID.String(),
@@ -80,6 +81,7 @@ func (s *SQLiteSessionStore) Create(ctx context.Context, session RuntimeSession)
 		session.Platform.String(),
 		string(session.Status),
 		session.ConnectionGeneration,
+		session.Revision,
 		session.RuntimeVersion,
 		session.RuntimeContractVersion,
 		string(capsJSON),
@@ -101,7 +103,7 @@ func (s *SQLiteSessionStore) Create(ctx context.Context, session RuntimeSession)
 func (s *SQLiteSessionStore) Get(ctx context.Context, sessionID runtimeidentity.RuntimeSessionID) (RuntimeSession, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT runtime_session_id, user_id, device_id, runtime_id, platform,
-        status, connection_generation, runtime_version, runtime_contract_version,
+        status, connection_generation, revision, runtime_version, runtime_contract_version,
         capabilities_json, capabilities_hash,
         last_applied_state_revision, last_processed_command_sequence, last_event_sequence, actual_state_hash,
         created_at, updated_at, last_heartbeat_at, expires_at, closed_at, close_reason
@@ -119,7 +121,7 @@ func (s *SQLiteSessionStore) GetActiveByRuntime(
 ) (RuntimeSession, error) {
 	row := s.db.QueryRowContext(ctx,
 		`SELECT runtime_session_id, user_id, device_id, runtime_id, platform,
-        status, connection_generation, runtime_version, runtime_contract_version,
+        status, connection_generation, revision, runtime_version, runtime_contract_version,
         capabilities_json, capabilities_hash,
         last_applied_state_revision, last_processed_command_sequence, last_event_sequence, actual_state_hash,
         created_at, updated_at, last_heartbeat_at, expires_at, closed_at, close_reason
@@ -142,7 +144,7 @@ func (s *SQLiteSessionStore) Update(ctx context.Context, session RuntimeSession)
 	}
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE kernel_device_runtime_sessions SET
-        status = ?, connection_generation = ?, platform = ?,
+        status = ?, connection_generation = ?, revision = ?, platform = ?,
         runtime_version = ?, runtime_contract_version = ?,
         capabilities_json = ?, capabilities_hash = ?,
         last_applied_state_revision = ?, last_processed_command_sequence = ?, last_event_sequence = ?, actual_state_hash = ?,
@@ -150,6 +152,7 @@ func (s *SQLiteSessionStore) Update(ctx context.Context, session RuntimeSession)
     WHERE runtime_session_id = ?`,
 		string(session.Status),
 		session.ConnectionGeneration,
+		session.Revision,
 		session.Platform.String(),
 		session.RuntimeVersion,
 		session.RuntimeContractVersion,
@@ -179,7 +182,7 @@ func (s *SQLiteSessionStore) Update(ctx context.Context, session RuntimeSession)
 func (s *SQLiteSessionStore) ListActive(ctx context.Context) ([]RuntimeSession, error) {
 	rows, err := s.db.QueryContext(ctx,
 		`SELECT runtime_session_id, user_id, device_id, runtime_id, platform,
-        status, connection_generation, runtime_version, runtime_contract_version,
+        status, connection_generation, revision, runtime_version, runtime_contract_version,
         capabilities_json, capabilities_hash,
         last_applied_state_revision, last_processed_command_sequence, last_event_sequence, actual_state_hash,
         created_at, updated_at, last_heartbeat_at, expires_at, closed_at, close_reason
@@ -299,7 +302,7 @@ func (s *SQLiteSessionStore) UpdateStatus(
 	at time.Time,
 ) error {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE kernel_device_runtime_sessions SET status = ?, updated_at = ?
+		`UPDATE kernel_device_runtime_sessions SET status = ?, revision = revision + 1, updated_at = ?
     WHERE runtime_session_id = ? AND connection_generation = ? AND status IN (?, ?, ?, ?)`,
 		string(status),
 		at.UnixMilli(),
@@ -335,7 +338,7 @@ func (s *SQLiteSessionStore) Close(
 
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE kernel_device_runtime_sessions SET
-        status = ?, close_reason = ?, closed_at = ?, updated_at = ?
+        status = ?, revision = revision + 1, close_reason = ?, closed_at = ?, updated_at = ?
     WHERE runtime_session_id = ? AND connection_generation = ? AND status NOT IN (?, ?)`,
 		string(protocol.SessionStatusClosed),
 		reason,
@@ -367,7 +370,7 @@ func (s *SQLiteSessionStore) ReplaceForReconnect(
 	}
 	res, err := s.db.ExecContext(ctx,
 		`UPDATE kernel_device_runtime_sessions SET
-        status = ?, connection_generation = ?, platform = ?,
+        status = ?, connection_generation = ?, revision = ?, platform = ?,
         runtime_version = ?, runtime_contract_version = ?,
         capabilities_json = ?, capabilities_hash = ?,
         last_applied_state_revision = ?, last_processed_command_sequence = ?, last_event_sequence = ?, actual_state_hash = ?,
@@ -375,6 +378,7 @@ func (s *SQLiteSessionStore) ReplaceForReconnect(
     WHERE runtime_session_id = ? AND connection_generation = ? AND status IN (?, ?, ?, ?)`,
 		string(updated.Status),
 		updated.ConnectionGeneration,
+		updated.Revision,
 		updated.Platform.String(),
 		updated.RuntimeVersion,
 		updated.RuntimeContractVersion,
@@ -422,6 +426,7 @@ func scanRuntimeSession(row rowScanner) (RuntimeSession, error) {
 		&platformStr,
 		&statusStr,
 		&session.ConnectionGeneration,
+		&session.Revision,
 		&session.RuntimeVersion,
 		&session.RuntimeContractVersion,
 		&capsJSON,
@@ -483,4 +488,291 @@ func unixMillisFromTime(t *time.Time) int64 {
 	return t.UnixMilli()
 }
 
+func (s *SQLiteSessionStore) WithinTx(ctx context.Context, fn func(SessionTx) error) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	storeTx := &SQLiteSessionStoreTx{tx: tx}
+	if err := fn(storeTx); err != nil {
+		_ = tx.Rollback()
+		return err
+	}
+	return tx.Commit()
+}
+
+type SQLiteSessionStoreTx struct {
+	tx *sql.Tx
+}
+
+func (t *SQLiteSessionStoreTx) RawTx() *sql.Tx { return t.tx }
+
+func (t *SQLiteSessionStoreTx) Create(ctx context.Context, session RuntimeSession) error {
+	capsJSON, err := json.Marshal(session.Capabilities)
+	if err != nil {
+		return fmt.Errorf("deviceruntime: marshal capabilities: %w", err)
+	}
+	_, err = t.tx.ExecContext(ctx,
+		`INSERT INTO kernel_device_runtime_sessions (
+        runtime_session_id, user_id, device_id, runtime_id, platform,
+        status, connection_generation, revision, runtime_version, runtime_contract_version,
+        capabilities_json, capabilities_hash,
+        last_applied_state_revision, last_processed_command_sequence, last_event_sequence, actual_state_hash,
+        created_at, updated_at, last_heartbeat_at, expires_at, closed_at, close_reason
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		session.ID.String(), session.UserID.String(), session.DeviceID.String(), session.RuntimeID.String(),
+		session.Platform.String(), string(session.Status), session.ConnectionGeneration, session.Revision,
+		session.RuntimeVersion, session.RuntimeContractVersion, string(capsJSON), session.CapabilitiesHash,
+		session.LastAppliedStateRevision, session.LastProcessedCommandSequence, session.LastEventSequence, session.ActualStateHash,
+		session.CreatedAt.UnixMilli(), session.UpdatedAt.UnixMilli(), session.LastHeartbeatAt.UnixMilli(),
+		session.ExpiresAt.UnixMilli(), 0, "",
+	)
+	return err
+}
+
+func (t *SQLiteSessionStoreTx) Get(ctx context.Context, sessionID runtimeidentity.RuntimeSessionID) (RuntimeSession, error) {
+	row := t.tx.QueryRowContext(ctx,
+		`SELECT runtime_session_id, user_id, device_id, runtime_id, platform,
+        status, connection_generation, revision, runtime_version, runtime_contract_version,
+        capabilities_json, capabilities_hash,
+        last_applied_state_revision, last_processed_command_sequence, last_event_sequence, actual_state_hash,
+        created_at, updated_at, last_heartbeat_at, expires_at, closed_at, close_reason
+    FROM kernel_device_runtime_sessions WHERE runtime_session_id = ?`,
+		sessionID.String(),
+	)
+	return scanRuntimeSession(row)
+}
+
+func (t *SQLiteSessionStoreTx) GetActiveByRuntime(
+	ctx context.Context,
+	userID runtimeidentity.UserID,
+	deviceID runtimeidentity.DeviceID,
+	runtimeID runtimeidentity.RuntimeID,
+) (RuntimeSession, error) {
+	row := t.tx.QueryRowContext(ctx,
+		`SELECT runtime_session_id, user_id, device_id, runtime_id, platform,
+        status, connection_generation, revision, runtime_version, runtime_contract_version,
+        capabilities_json, capabilities_hash,
+        last_applied_state_revision, last_processed_command_sequence, last_event_sequence, actual_state_hash,
+        created_at, updated_at, last_heartbeat_at, expires_at, closed_at, close_reason
+    FROM kernel_device_runtime_sessions
+    WHERE user_id = ? AND device_id = ? AND runtime_id = ? AND status IN (?, ?, ?, ?)
+    ORDER BY connection_generation DESC LIMIT 1`,
+		userID.String(), deviceID.String(), runtimeID.String(),
+		string(protocol.SessionStatusRegistering), string(protocol.SessionStatusSyncing),
+		string(protocol.SessionStatusReady), string(protocol.SessionStatusDegraded),
+	)
+	return scanRuntimeSession(row)
+}
+
+func (t *SQLiteSessionStoreTx) Update(ctx context.Context, session RuntimeSession) error {
+	capsJSON, err := json.Marshal(session.Capabilities)
+	if err != nil {
+		return fmt.Errorf("deviceruntime: marshal capabilities: %w", err)
+	}
+	res, err := t.tx.ExecContext(ctx,
+		`UPDATE kernel_device_runtime_sessions SET
+        status = ?, connection_generation = ?, revision = ?, platform = ?,
+        runtime_version = ?, runtime_contract_version = ?,
+        capabilities_json = ?, capabilities_hash = ?,
+        last_applied_state_revision = ?, last_processed_command_sequence = ?, last_event_sequence = ?, actual_state_hash = ?,
+        updated_at = ?, last_heartbeat_at = ?, expires_at = ?, closed_at = ?, close_reason = ?
+    WHERE runtime_session_id = ?`,
+		string(session.Status), session.ConnectionGeneration, session.Revision, session.Platform.String(),
+		session.RuntimeVersion, session.RuntimeContractVersion, string(capsJSON), session.CapabilitiesHash,
+		session.LastAppliedStateRevision, session.LastProcessedCommandSequence, session.LastEventSequence, session.ActualStateHash,
+		session.UpdatedAt.UnixMilli(), session.LastHeartbeatAt.UnixMilli(), session.ExpiresAt.UnixMilli(),
+		sessionClosedAtUnix(session), session.CloseReason, session.ID.String(),
+	)
+	if err != nil {
+		return err
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return ErrRuntimeSessionNotFound
+	}
+	return nil
+}
+
+func (t *SQLiteSessionStoreTx) ListActive(ctx context.Context) ([]RuntimeSession, error) {
+	rows, err := t.tx.QueryContext(ctx,
+		`SELECT runtime_session_id, user_id, device_id, runtime_id, platform,
+        status, connection_generation, revision, runtime_version, runtime_contract_version,
+        capabilities_json, capabilities_hash,
+        last_applied_state_revision, last_processed_command_sequence, last_event_sequence, actual_state_hash,
+        created_at, updated_at, last_heartbeat_at, expires_at, closed_at, close_reason
+    FROM kernel_device_runtime_sessions WHERE status IN (?, ?, ?, ?)`,
+		string(protocol.SessionStatusRegistering), string(protocol.SessionStatusSyncing),
+		string(protocol.SessionStatusReady), string(protocol.SessionStatusDegraded),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var sessions []RuntimeSession
+	for rows.Next() {
+		session, err := scanRuntimeSession(rows)
+		if err != nil {
+			return nil, err
+		}
+		sessions = append(sessions, session)
+	}
+	return sessions, rows.Err()
+}
+
+func (t *SQLiteSessionStoreTx) CloseActiveOnStartup(ctx context.Context, at time.Time, reason string) error {
+	atMs := at.UnixMilli()
+	_, err := t.tx.ExecContext(ctx,
+		`UPDATE kernel_device_runtime_sessions SET
+        status = ?, close_reason = ?, closed_at = ?, updated_at = ?
+    WHERE status IN (?, ?, ?, ?)`,
+		string(protocol.SessionStatusClosed), reason, atMs, atMs,
+		string(protocol.SessionStatusRegistering), string(protocol.SessionStatusSyncing),
+		string(protocol.SessionStatusReady), string(protocol.SessionStatusDegraded),
+	)
+	return err
+}
+
+func (t *SQLiteSessionStoreTx) UpdateHeartbeat(
+	ctx context.Context,
+	sessionID runtimeidentity.RuntimeSessionID,
+	generation int64,
+	at time.Time,
+	expiresAt time.Time,
+) error {
+	res, err := t.tx.ExecContext(ctx,
+		`UPDATE kernel_device_runtime_sessions SET
+        last_heartbeat_at = ?, expires_at = ?, updated_at = ?
+    WHERE runtime_session_id = ? AND connection_generation = ? AND status IN (?, ?, ?, ?)`,
+		at.UnixMilli(), expiresAt.UnixMilli(), at.UnixMilli(), sessionID.String(), generation,
+		string(protocol.SessionStatusRegistering), string(protocol.SessionStatusSyncing),
+		string(protocol.SessionStatusReady), string(protocol.SessionStatusDegraded),
+	)
+	if err != nil {
+		return err
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return ErrRuntimeSessionNotFound
+	}
+	return nil
+}
+
+func (t *SQLiteSessionStoreTx) UpdateCursor(
+	ctx context.Context,
+	sessionID runtimeidentity.RuntimeSessionID,
+	generation int64,
+	cursor protocol.ResumeCursor,
+	at time.Time,
+) error {
+	res, err := t.tx.ExecContext(ctx,
+		`UPDATE kernel_device_runtime_sessions SET
+        last_applied_state_revision = ?, last_processed_command_sequence = ?,
+        last_event_sequence = ?, actual_state_hash = ?, updated_at = ?
+    WHERE runtime_session_id = ? AND connection_generation = ? AND status IN (?, ?, ?, ?)`,
+		cursor.LastAppliedStateRevision, cursor.LastProcessedCommandSequence, cursor.LastEventSequence,
+		cursor.ActualStateHash, at.UnixMilli(), sessionID.String(), generation,
+		string(protocol.SessionStatusRegistering), string(protocol.SessionStatusSyncing),
+		string(protocol.SessionStatusReady), string(protocol.SessionStatusDegraded),
+	)
+	if err != nil {
+		return err
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return ErrRuntimeSessionNotFound
+	}
+	return nil
+}
+
+func (t *SQLiteSessionStoreTx) UpdateStatus(
+	ctx context.Context,
+	sessionID runtimeidentity.RuntimeSessionID,
+	generation int64,
+	status protocol.SessionStatus,
+	at time.Time,
+) error {
+	res, err := t.tx.ExecContext(ctx,
+		`UPDATE kernel_device_runtime_sessions SET status = ?, revision = revision + 1, updated_at = ?
+    WHERE runtime_session_id = ? AND connection_generation = ? AND status IN (?, ?, ?, ?)`,
+		string(status), at.UnixMilli(), sessionID.String(), generation,
+		string(protocol.SessionStatusRegistering), string(protocol.SessionStatusSyncing),
+		string(protocol.SessionStatusReady), string(protocol.SessionStatusDegraded),
+	)
+	if err != nil {
+		return err
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return ErrRuntimeSessionNotFound
+	}
+	return nil
+}
+
+func (t *SQLiteSessionStoreTx) Close(
+	ctx context.Context,
+	sessionID runtimeidentity.RuntimeSessionID,
+	generation int64,
+	reason string,
+	at time.Time,
+) error {
+	var closedAt *time.Time
+	if reason != "" {
+		t := at
+		closedAt = &t
+	}
+	res, err := t.tx.ExecContext(ctx,
+		`UPDATE kernel_device_runtime_sessions SET
+        status = ?, revision = revision + 1, close_reason = ?, closed_at = ?, updated_at = ?
+    WHERE runtime_session_id = ? AND connection_generation = ? AND status NOT IN (?, ?)`,
+		string(protocol.SessionStatusClosed), reason, unixMillisFromTime(closedAt), at.UnixMilli(),
+		sessionID.String(), generation,
+		string(protocol.SessionStatusClosed), string(protocol.SessionStatusSuperseded),
+	)
+	if err != nil {
+		return err
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return ErrRuntimeSessionNotFound
+	}
+	return nil
+}
+
+func (t *SQLiteSessionStoreTx) ReplaceForReconnect(
+	ctx context.Context,
+	expectedGeneration int64,
+	updated RuntimeSession,
+) error {
+	capsJSON, err := json.Marshal(updated.Capabilities)
+	if err != nil {
+		return fmt.Errorf("deviceruntime: marshal capabilities: %w", err)
+	}
+	res, err := t.tx.ExecContext(ctx,
+		`UPDATE kernel_device_runtime_sessions SET
+        status = ?, connection_generation = ?, revision = ?, platform = ?,
+        runtime_version = ?, runtime_contract_version = ?,
+        capabilities_json = ?, capabilities_hash = ?,
+        last_applied_state_revision = ?, last_processed_command_sequence = ?, last_event_sequence = ?, actual_state_hash = ?,
+        last_heartbeat_at = ?, expires_at = ?, updated_at = ?
+    WHERE runtime_session_id = ? AND connection_generation = ? AND status IN (?, ?, ?, ?)`,
+		string(updated.Status), updated.ConnectionGeneration, updated.Revision, updated.Platform.String(),
+		updated.RuntimeVersion, updated.RuntimeContractVersion, string(capsJSON), updated.CapabilitiesHash,
+		updated.LastAppliedStateRevision, updated.LastProcessedCommandSequence, updated.LastEventSequence, updated.ActualStateHash,
+		updated.LastHeartbeatAt.UnixMilli(), updated.ExpiresAt.UnixMilli(), updated.UpdatedAt.UnixMilli(),
+		updated.ID.String(), expectedGeneration,
+		string(protocol.SessionStatusRegistering), string(protocol.SessionStatusSyncing),
+		string(protocol.SessionStatusReady), string(protocol.SessionStatusDegraded),
+	)
+	if err != nil {
+		return err
+	}
+	affected, _ := res.RowsAffected()
+	if affected == 0 {
+		return ErrConnectionSuperseded
+	}
+	return nil
+}
+
 var _ SessionStore = (*SQLiteSessionStore)(nil)
+var _ SessionTx = (*SQLiteSessionStoreTx)(nil)

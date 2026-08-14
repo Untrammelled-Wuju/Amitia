@@ -27,10 +27,10 @@ func (c *nativeBridgeOverlayClient) Status(ctx context.Context) (CapabilityState
 	}
 	resp, err := c.bridge.Execute(ctx, req)
 	if err != nil {
-		return CapabilityState{}, newOverlayError(OVERLAY_UNAVAILABLE, err.Error())
+		return CapabilityState{}, newOverlayError(OVERLAY_NATIVE_HOST_UNAVAILABLE, err.Error())
 	}
 	if resp.Status != "success" {
-		return CapabilityState{}, newOverlayError(OVERLAY_UNAVAILABLE, errorMessage(resp))
+		return CapabilityState{}, newOverlayError(OVERLAY_NATIVE_HOST_UNAVAILABLE, errorMessage(resp))
 	}
 	return decodeCapabilityState(resp.Result), nil
 }
@@ -45,10 +45,10 @@ func (c *nativeBridgeOverlayClient) RequestPermission(ctx context.Context) (Perm
 	}
 	resp, err := c.bridge.Execute(ctx, req)
 	if err != nil {
-		return PermissionResult{}, newOverlayError(OVERLAY_UNAVAILABLE, err.Error())
+		return PermissionResult{}, newOverlayError(OVERLAY_NATIVE_HOST_UNAVAILABLE, err.Error())
 	}
 	if resp.Status != "success" {
-		return PermissionResult{}, newOverlayError(OVERLAY_UNAVAILABLE, errorMessage(resp))
+		return PermissionResult{}, newOverlayError(OVERLAY_NATIVE_HOST_UNAVAILABLE, errorMessage(resp))
 	}
 	result := PermissionResult{}
 	if resp.Result != nil {
@@ -74,10 +74,10 @@ func (c *nativeBridgeOverlayClient) Create(ctx context.Context, req CreateReques
 	}
 	resp, err := c.bridge.Execute(ctx, bridgeReq)
 	if err != nil {
-		return OverlayInstance{}, newOverlayError(OVERLAY_UNAVAILABLE, err.Error())
+		return OverlayInstance{}, newOverlayError(OVERLAY_NATIVE_HOST_UNAVAILABLE, err.Error())
 	}
 	if resp.Status != "success" {
-		return OverlayInstance{}, newOverlayError(OVERLAY_UNAVAILABLE, errorMessage(resp))
+		return OverlayInstance{}, newOverlayError(OVERLAY_NATIVE_HOST_UNAVAILABLE, errorMessage(resp))
 	}
 	return decodeOverlayInstance(resp.Result), nil
 }
@@ -97,10 +97,10 @@ func (c *nativeBridgeOverlayClient) Update(ctx context.Context, req UpdateReques
 	}
 	resp, err := c.bridge.Execute(ctx, bridgeReq)
 	if err != nil {
-		return OverlayInstance{}, newOverlayError(OVERLAY_UNAVAILABLE, err.Error())
+		return OverlayInstance{}, newOverlayError(OVERLAY_NATIVE_HOST_UNAVAILABLE, err.Error())
 	}
 	if resp.Status != "success" {
-		return OverlayInstance{}, newOverlayError(OVERLAY_UNAVAILABLE, errorMessage(resp))
+		return OverlayInstance{}, newOverlayError(OVERLAY_NATIVE_HOST_UNAVAILABLE, errorMessage(resp))
 	}
 	return decodeOverlayInstance(resp.Result), nil
 }
@@ -151,10 +151,10 @@ func (c *nativeBridgeOverlayClient) Show(ctx context.Context, overlayID string) 
 	}
 	resp, err := c.bridge.Execute(ctx, bridgeReq)
 	if err != nil {
-		return OverlayInstance{}, newOverlayError(OVERLAY_UNAVAILABLE, err.Error())
+		return OverlayInstance{}, newOverlayError(OVERLAY_NATIVE_HOST_UNAVAILABLE, err.Error())
 	}
 	if resp.Status != "success" {
-		return OverlayInstance{}, newOverlayError(OVERLAY_UNAVAILABLE, errorMessage(resp))
+		return OverlayInstance{}, newOverlayError(OVERLAY_NATIVE_HOST_UNAVAILABLE, errorMessage(resp))
 	}
 	return decodeOverlayInstance(resp.Result), nil
 }
@@ -169,10 +169,10 @@ func (c *nativeBridgeOverlayClient) Hide(ctx context.Context, overlayID string) 
 	}
 	resp, err := c.bridge.Execute(ctx, bridgeReq)
 	if err != nil {
-		return OverlayInstance{}, newOverlayError(OVERLAY_UNAVAILABLE, err.Error())
+		return OverlayInstance{}, newOverlayError(OVERLAY_NATIVE_HOST_UNAVAILABLE, err.Error())
 	}
 	if resp.Status != "success" {
-		return OverlayInstance{}, newOverlayError(OVERLAY_UNAVAILABLE, errorMessage(resp))
+		return OverlayInstance{}, newOverlayError(OVERLAY_NATIVE_HOST_UNAVAILABLE, errorMessage(resp))
 	}
 	return decodeOverlayInstance(resp.Result), nil
 }
@@ -187,10 +187,10 @@ func (c *nativeBridgeOverlayClient) Close(ctx context.Context, overlayID string)
 	}
 	resp, err := c.bridge.Execute(ctx, bridgeReq)
 	if err != nil {
-		return newOverlayError(OVERLAY_UNAVAILABLE, err.Error())
+		return newOverlayError(OVERLAY_NATIVE_HOST_UNAVAILABLE, err.Error())
 	}
 	if resp.Status != "success" {
-		return newOverlayError(OVERLAY_UNAVAILABLE, errorMessage(resp))
+		return newOverlayError(OVERLAY_NATIVE_HOST_UNAVAILABLE, errorMessage(resp))
 	}
 	return nil
 }
@@ -205,10 +205,10 @@ func (c *nativeBridgeOverlayClient) List(ctx context.Context) ([]OverlayInstance
 	}
 	resp, err := c.bridge.Execute(ctx, req)
 	if err != nil {
-		return nil, newOverlayError(OVERLAY_UNAVAILABLE, err.Error())
+		return nil, newOverlayError(OVERLAY_NATIVE_HOST_UNAVAILABLE, err.Error())
 	}
 	if resp.Status != "success" {
-		return nil, newOverlayError(OVERLAY_UNAVAILABLE, errorMessage(resp))
+		return nil, newOverlayError(OVERLAY_NATIVE_HOST_UNAVAILABLE, errorMessage(resp))
 	}
 	if resp.Result == nil {
 		return nil, nil
@@ -238,10 +238,10 @@ func (c *nativeBridgeOverlayClient) CloseAll(ctx context.Context) (int, error) {
 	}
 	resp, err := c.bridge.Execute(ctx, req)
 	if err != nil {
-		return 0, newOverlayError(OVERLAY_UNAVAILABLE, err.Error())
+		return 0, newOverlayError(OVERLAY_NATIVE_HOST_UNAVAILABLE, err.Error())
 	}
 	if resp.Status != "success" {
-		return 0, newOverlayError(OVERLAY_UNAVAILABLE, errorMessage(resp))
+		return 0, newOverlayError(OVERLAY_NATIVE_HOST_UNAVAILABLE, errorMessage(resp))
 	}
 	if resp.Result == nil {
 		return 0, nil
@@ -261,7 +261,7 @@ func decodeCapabilityState(m map[string]any) CapabilityState {
 	state.CanCreate, _ = m["canCreate"].(bool)
 	state.CanUpdate, _ = m["canUpdate"].(bool)
 	state.CanInteract, _ = m["canInteract"].(bool)
-	state.ActiveCount, _ = toInt(m["activeCount"])
+	state.ActiveCount = toInt(m["activeCount"])
 	state.UserActionRequired, _ = m["userActionRequired"].(bool)
 	state.State, _ = m["state"].(string)
 	return state
@@ -277,14 +277,14 @@ func decodeOverlayInstance(m map[string]any) OverlayInstance {
 	inst.Visible, _ = m["visible"].(bool)
 	inst.Focusable, _ = m["focusable"].(bool)
 	inst.Touchable, _ = m["touchable"].(bool)
-	inst.X, _ = toInt(m["x"])
-	inst.Y, _ = toInt(m["y"])
-	inst.Width, _ = toInt(m["width"])
-	inst.Height, _ = toInt(m["height"])
+	inst.X = toInt(m["x"])
+	inst.Y = toInt(m["y"])
+	inst.Width = toInt(m["width"])
+	inst.Height = toInt(m["height"])
 	inst.Gravity, _ = m["gravity"].(string)
-	inst.DisplayID, _ = toInt(m["displayId"])
-	inst.CreatedAt, _ = toInt64(m["createdAt"])
-	inst.UpdatedAt, _ = toInt64(m["updatedAt"])
+	inst.DisplayID = toInt(m["displayId"])
+	inst.CreatedAt = toInt64(m["createdAt"])
+	inst.UpdatedAt = toInt64(m["updatedAt"])
 	return inst
 }
 

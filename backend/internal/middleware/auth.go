@@ -10,6 +10,7 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/u-ai/backend/config"
 	desktoppetAuth "github.com/u-ai/backend/internal/auth"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
@@ -93,7 +94,7 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		actor := &desktoppetAuth.ActorContext{
 			ActorType:   actorType,
-			UserID:      fmt.Sprintf("%d", claims.UserId),
+			UserID:      runtimeidentity.UserID(fmt.Sprintf("%d", claims.UserId)),
 			Roles:       roles,
 			Permissions: permissions,
 			AuthMethod:  "jwt",

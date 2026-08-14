@@ -459,6 +459,3 @@ func (r *registryRepository) MigrateSessionTokens(ctx context.Context) error {
 	return nil
 }
 
-func init() {
-	_ = strings.TrimSpace
-}

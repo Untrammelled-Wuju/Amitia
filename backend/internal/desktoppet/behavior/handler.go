@@ -58,7 +58,7 @@ func requireAdmin(c *gin.Context) (string, bool) {
 		util.ErrorResponse(c, response.Forbidden, "需要管理员权限", gin.H{"errorCode": "FORBIDDEN"})
 		return "", false
 	}
-	return actor.UserID, true
+	return string(actor.UserID), true
 }
 
 func (h *Handler) GetMetrics(c *gin.Context) {

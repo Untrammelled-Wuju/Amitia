@@ -17,6 +17,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/auth"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 	"gorm.io/gorm"
 )
 
@@ -175,7 +176,7 @@ func (s *DesktopSessionService) CreateSession(c *gin.Context) {
 	now := time.Now()
 	session := &DesktopSession{
 		ID:                generateSessionID(),
-		UserID:            actor.UserID,
+		UserID:            string(actor.UserID),
 		DesktopInstanceID: req.DesktopInstanceID,
 		TokenHash:         tokenHashStr,
 		Status:            DesktopSessionStatusActive,
@@ -556,7 +557,7 @@ func buildSessionActor(session *DesktopSession) *auth.ActorContext {
 
 	return &auth.ActorContext{
 		ActorType:      auth.ActorTypeLocalUser,
-		UserID:         session.UserID,
+		UserID:         runtimeidentity.UserID(session.UserID),
 		Roles:          []string{"local_user", "user"},
 		Permissions:    perms,
 		AuthMethod:     AuthMethodDesktopSession,
@@ -569,11 +570,11 @@ func buildSessionActor(session *DesktopSession) *auth.ActorContext {
 
 func applySessionActorToContext(c *gin.Context, actor *auth.ActorContext) {
 	c.Set("actorContext", actor)
-	c.Set("userId", actor.UserID)
-	c.Set("username", actor.UserID)
+	c.Set("userId", string(actor.UserID))
+	c.Set("username", string(actor.UserID))
 	c.Set("role", actor.Roles[0])
 	c.Set("desktopSession", actor.SessionID)
-	c.Set("actorUserID", actor.UserID)
+	c.Set("actorUserID", string(actor.UserID))
 	ctx := auth.WithActor(c.Request.Context(), actor)
 	c.Request = c.Request.WithContext(ctx)
 	c.Next()

@@ -255,7 +255,7 @@ func (s *sessionService) SyncFromDeviceRuntimeSession(ctx context.Context, runti
 		"status":                          existing.Status,
 		"last_applied_desired_revision":   hello.LastAppliedDesiredRevision,
 		"last_processed_command_sequence": hello.LastProcessedCommandSequence,
-		"last_event_sequence":            hello.LastEventSequence,
+		"last_event_sequence":             hello.LastEventSequence,
 		"updated_at":                      existing.UpdatedAt,
 	}).Error; updateErr != nil {
 		return nil, updateErr

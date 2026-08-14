@@ -30,15 +30,15 @@ const (
 )
 
 type Connection struct {
-	ID        string
-	UserID    runtimeidentity.UserID
-	DeviceID  runtimeidentity.DeviceID
-	RuntimeID runtimeidentity.RuntimeID
-	SessionID string
+	ID         string
+	UserID     runtimeidentity.UserID
+	DeviceID   runtimeidentity.DeviceID
+	RuntimeID  runtimeidentity.RuntimeID
+	SessionID  string
 	Generation int64
-	State     ConnectionState
-	LastSeq   int64
-	LastBeat  time.Time
+	State      ConnectionState
+	LastSeq    int64
+	LastBeat   time.Time
 
 	mu     sync.RWMutex
 	sendCh []byte

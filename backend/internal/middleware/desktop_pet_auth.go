@@ -102,7 +102,7 @@ func ResolveActorID(c *gin.Context) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return actor.UserID, nil
+	return string(actor.UserID), nil
 }
 
 func isValidCorrelationID(id string) bool {

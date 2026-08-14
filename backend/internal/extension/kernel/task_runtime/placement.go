@@ -59,14 +59,14 @@ type TaskExecutionTarget struct {
 	ProviderID         capability.ProviderID         `json:"providerId,omitempty"`
 	ProviderInstanceID capability.ProviderInstanceID `json:"providerInstanceId,omitempty"`
 
-	UserID             runtimeidentity.UserID        `json:"userId,omitempty"`
-	DeviceID           runtimeidentity.DeviceID      `json:"deviceId,omitempty"`
-	RuntimeID          runtimeidentity.RuntimeID     `json:"runtimeId,omitempty"`
-	RuntimeSessionID   runtimeidentity.RuntimeSessionID `json:"runtimeSessionId,omitempty"`
+	UserID           runtimeidentity.UserID           `json:"userId,omitempty"`
+	DeviceID         runtimeidentity.DeviceID         `json:"deviceId,omitempty"`
+	RuntimeID        runtimeidentity.RuntimeID        `json:"runtimeId,omitempty"`
+	RuntimeSessionID runtimeidentity.RuntimeSessionID `json:"runtimeSessionId,omitempty"`
 
-	ConnectionGeneration int64                       `json:"connectionGeneration,omitempty"`
+	ConnectionGeneration int64 `json:"connectionGeneration,omitempty"`
 
-	RuntimeInstanceID string                          `json:"runtimeInstanceId,omitempty"`
+	RuntimeInstanceID string `json:"runtimeInstanceId,omitempty"`
 }
 
 func (t TaskExecutionTarget) IsZero() bool {
@@ -106,14 +106,14 @@ func (t TaskExecutionTarget) HasCurrentConnectionBinding() bool {
 
 func (t TaskExecutionTarget) Normalize() TaskExecutionTarget {
 	return TaskExecutionTarget{
-		ProviderID:         capability.ParseProviderID(string(t.ProviderID)),
-		ProviderInstanceID: capability.ParseProviderInstanceID(string(t.ProviderInstanceID)),
-		UserID:             runtimeidentity.ParseUserID(string(t.UserID)),
-		DeviceID:           runtimeidentity.ParseDeviceID(string(t.DeviceID)),
-		RuntimeID:          runtimeidentity.ParseRuntimeID(string(t.RuntimeID)),
-		RuntimeSessionID:   runtimeidentity.ParseRuntimeSessionID(string(t.RuntimeSessionID)),
+		ProviderID:           capability.ParseProviderID(string(t.ProviderID)),
+		ProviderInstanceID:   capability.ParseProviderInstanceID(string(t.ProviderInstanceID)),
+		UserID:               runtimeidentity.ParseUserID(string(t.UserID)),
+		DeviceID:             runtimeidentity.ParseDeviceID(string(t.DeviceID)),
+		RuntimeID:            runtimeidentity.ParseRuntimeID(string(t.RuntimeID)),
+		RuntimeSessionID:     runtimeidentity.ParseRuntimeSessionID(string(t.RuntimeSessionID)),
 		ConnectionGeneration: t.ConnectionGeneration,
-		RuntimeInstanceID:  strings.TrimSpace(t.RuntimeInstanceID),
+		RuntimeInstanceID:    strings.TrimSpace(t.RuntimeInstanceID),
 	}
 }
 
@@ -218,10 +218,10 @@ type TaskExecutionRequest struct {
 }
 
 type TaskExecutionOutcome struct {
-	Status       TaskRunStatus
-	Result       *TaskRunResult
-	ErrorCode    string
-	ErrorMessage string
+	Status          TaskRunStatus
+	Result          *TaskRunResult
+	ErrorCode       string
+	ErrorMessage    string
 	RemoteReference string
 }
 

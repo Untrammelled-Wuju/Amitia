@@ -205,5 +205,3 @@ func (c *WorkspaceBackupContributor) Import(ctx context.Context, req dataportabi
 
 	return scanner.Err()
 }
-
-}

@@ -3,7 +3,6 @@ package notification
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"time"
 
 	"github.com/u-ai/backend/internal/androidsystem"

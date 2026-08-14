@@ -5695,3 +5695,32 @@ CREATE TABLE IF NOT EXISTS production_cutover_state (
     canonical_generation INTEGER NOT NULL DEFAULT 0,
     plan_version INTEGER NOT NULL DEFAULT 1
 );
+
+--- 来源: device_runtime_session.go ---
+CREATE TABLE IF NOT EXISTS kernel_device_runtime_sessions (
+    runtime_session_id TEXT PRIMARY KEY,
+    user_id TEXT NOT NULL,
+    device_id TEXT NOT NULL,
+    runtime_id TEXT NOT NULL,
+    platform TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL,
+    connection_generation INTEGER NOT NULL DEFAULT 1,
+    runtime_version TEXT NOT NULL DEFAULT '',
+    runtime_contract_version TEXT NOT NULL DEFAULT '',
+    capabilities_json TEXT NOT NULL DEFAULT '[]',
+    capabilities_hash TEXT NOT NULL DEFAULT '',
+    last_applied_state_revision INTEGER NOT NULL DEFAULT 0,
+    last_processed_command_sequence INTEGER NOT NULL DEFAULT 0,
+    last_event_sequence INTEGER NOT NULL DEFAULT 0,
+    actual_state_hash TEXT NOT NULL DEFAULT '',
+    created_at INTEGER NOT NULL,
+    updated_at INTEGER NOT NULL,
+    last_heartbeat_at INTEGER NOT NULL,
+    expires_at INTEGER NOT NULL DEFAULT 0,
+    closed_at INTEGER NOT NULL DEFAULT 0,
+    close_reason TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_kernel_device_runtime_sessions_identity ON kernel_device_runtime_sessions(user_id, device_id, runtime_id);
+CREATE INDEX IF NOT EXISTS idx_kernel_device_runtime_sessions_status ON kernel_device_runtime_sessions(status);
+CREATE INDEX IF NOT EXISTS idx_kernel_device_runtime_sessions_heartbeat ON kernel_device_runtime_sessions(last_heartbeat_at);
+

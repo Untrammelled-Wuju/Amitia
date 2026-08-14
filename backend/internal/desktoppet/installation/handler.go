@@ -137,7 +137,7 @@ func (h *Handler) EnableInstallation(c *gin.Context) {
 		writeInstallationOwnershipError(c, err)
 		return
 	}
-	if err := h.service.EnableInstallation(actor.UserID, installationID); err != nil {
+	if err := h.service.EnableInstallation(string(actor.UserID), installationID); err != nil {
 		writeInstallationError(c, err)
 		return
 	}
@@ -163,7 +163,7 @@ func (h *Handler) DisableInstallation(c *gin.Context) {
 		writeInstallationOwnershipError(c, err)
 		return
 	}
-	if err := h.service.DisableInstallation(actor.UserID, installationID); err != nil {
+	if err := h.service.DisableInstallation(string(actor.UserID), installationID); err != nil {
 		writeInstallationError(c, err)
 		return
 	}
@@ -229,7 +229,7 @@ func (h *Handler) UpdateRuntimeSettings(c *gin.Context) {
 		writeInstallationOwnershipError(c, err)
 		return
 	}
-	settings, err := h.service.UpdateRuntimeSettings(actor.UserID, installationID, &payload)
+	settings, err := h.service.UpdateRuntimeSettings(string(actor.UserID), installationID, &payload)
 	if err != nil {
 		writeInstallationError(c, err)
 		return
@@ -256,7 +256,7 @@ func (h *Handler) Recenter(c *gin.Context) {
 		writeInstallationOwnershipError(c, err)
 		return
 	}
-	if err := h.service.Recenter(actor.UserID, installationID); err != nil {
+	if err := h.service.Recenter(string(actor.UserID), installationID); err != nil {
 		writeInstallationError(c, err)
 		return
 	}
@@ -287,7 +287,7 @@ func (h *Handler) PlayAction(c *gin.Context) {
 		writeInstallationOwnershipError(c, err)
 		return
 	}
-	if err := h.service.PlayAction(actor.UserID, installationID, actionKey); err != nil {
+	if err := h.service.PlayAction(string(actor.UserID), installationID, actionKey); err != nil {
 		writeInstallationError(c, err)
 		return
 	}
@@ -313,7 +313,7 @@ func (h *Handler) Uninstall(c *gin.Context) {
 		writeInstallationOwnershipError(c, err)
 		return
 	}
-	if err := h.service.Uninstall(actor.UserID, installationID); err != nil {
+	if err := h.service.Uninstall(string(actor.UserID), installationID); err != nil {
 		writeInstallationError(c, err)
 		return
 	}
@@ -492,7 +492,7 @@ func (h *CoordinatorHandler) EnableInstallation(c *gin.Context) {
 	}
 	result, err := h.coordinator.Enable(c.Request.Context(), coordinator.EnableDisableRequest{
 		DeviceCtx: device.DeviceContext{
-			UserID:   actor.UserID,
+			UserID:   string(actor.UserID),
 			DeviceID: deviceID,
 		},
 		InstallationID: installationID,
@@ -525,7 +525,7 @@ func (h *CoordinatorHandler) DisableInstallation(c *gin.Context) {
 	}
 	result, err := h.coordinator.Disable(c.Request.Context(), coordinator.EnableDisableRequest{
 		DeviceCtx: device.DeviceContext{
-			UserID:   actor.UserID,
+			UserID:   string(actor.UserID),
 			DeviceID: deviceID,
 		},
 		InstallationID: installationID,
@@ -567,7 +567,7 @@ func (h *CoordinatorHandler) UpdateDefaultAction(c *gin.Context) {
 	}
 	result, err := h.coordinator.ChangeDefaultAction(c.Request.Context(), coordinator.DefaultActionRequest{
 		DeviceCtx: device.DeviceContext{
-			UserID:   actor.UserID,
+			UserID:   string(actor.UserID),
 			DeviceID: deviceID,
 		},
 		InstallationID:   installationID,
@@ -606,7 +606,7 @@ func (h *CoordinatorHandler) UpdateRuntimeSettings(c *gin.Context) {
 	}
 	result, err := h.coordinator.UpdateSettings(c.Request.Context(), coordinator.SettingsRequest{
 		DeviceCtx: device.DeviceContext{
-			UserID:   actor.UserID,
+			UserID:   string(actor.UserID),
 			DeviceID: deviceID,
 		},
 		InstallationID: installationID,
@@ -639,7 +639,7 @@ func (h *CoordinatorHandler) Recenter(c *gin.Context) {
 	}
 	result, err := h.coordinator.Recenter(c.Request.Context(), coordinator.RecenterRequest{
 		DeviceCtx: device.DeviceContext{
-			UserID:   actor.UserID,
+			UserID:   string(actor.UserID),
 			DeviceID: deviceID,
 		},
 		InstallationID: installationID,
@@ -675,7 +675,7 @@ func (h *CoordinatorHandler) PlayAction(c *gin.Context) {
 		writeInstallationOwnershipError(c, err)
 		return
 	}
-	if err := h.coordinator.PlayAction(c.Request.Context(), actor.UserID, installationID, actionKey); err != nil {
+	if err := h.coordinator.PlayAction(c.Request.Context(), string(actor.UserID), installationID, actionKey); err != nil {
 		writeCoordinatorError(c, err)
 		return
 	}

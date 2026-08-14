@@ -234,8 +234,8 @@ func (c *nativeBridgeExternalAutomationClient) Foreground(ctx context.Context) (
 		result.PackageName, _ = resp.Result["packageName"].(string)
 		result.Component, _ = resp.Result["component"].(string)
 		result.Label, _ = resp.Result["label"].(string)
-		result.DisplayID, _ = toInt(resp.Result["displayId"])
-		result.ObservedAt, _ = toInt64(resp.Result["observedAt"])
+		result.DisplayID = toInt(resp.Result["displayId"])
+		result.ObservedAt = toInt64(resp.Result["observedAt"])
 		result.Source, _ = resp.Result["source"].(string)
 		result.Confidence, _ = resp.Result["confidence"].(string)
 	}
@@ -272,8 +272,8 @@ func (c *nativeBridgeExternalAutomationClient) WaitForeground(ctx context.Contex
 		result.PackageName, _ = resp.Result["packageName"].(string)
 		result.Component, _ = resp.Result["component"].(string)
 		result.Label, _ = resp.Result["label"].(string)
-		result.DisplayID, _ = toInt(resp.Result["displayId"])
-		result.ObservedAt, _ = toInt64(resp.Result["observedAt"])
+		result.DisplayID = toInt(resp.Result["displayId"])
+		result.ObservedAt = toInt64(resp.Result["observedAt"])
 		result.Source, _ = resp.Result["source"].(string)
 		result.Confidence, _ = resp.Result["confidence"].(string)
 	}
@@ -311,7 +311,7 @@ func decodeActionResult(m map[string]any) ActionResult {
 	r.Resolved, _ = m["resolved"].(bool)
 	r.Started, _ = m["started"].(bool)
 	r.UserActionRequired, _ = m["userActionRequired"].(bool)
-	r.Timestamp, _ = toInt64(m["timestamp"])
+	r.Timestamp = toInt64(m["timestamp"])
 	return r
 }
 

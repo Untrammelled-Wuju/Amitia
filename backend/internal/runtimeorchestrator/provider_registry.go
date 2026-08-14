@@ -5,6 +5,7 @@ import (
 
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/runtimehost"
+	"github.com/u-ai/backend/internal/runtimeprofile"
 )
 
 type ProviderSlot string
@@ -19,10 +20,13 @@ const (
 )
 
 type ProviderBuildContext struct {
-	Config *config.Config
-	Host   runtimehost.RuntimeHost
+	Config  *config.Config
+	Host    runtimehost.RuntimeHost
+	Profile runtimeprofile.Profile
 }
 
+// ProviderInstance is a runtime-orchestrator managed component instance.
+// This ProviderInstance is a runtime-orchestrator managed component instance, not capability.CapabilityProviderInstance.
 type ProviderInstance interface {
 	ManagedComponent
 	Slot() ProviderSlot
@@ -41,9 +45,15 @@ type ProviderFactory interface {
 	Build(ProviderBuildContext) (ProviderInstance, error)
 }
 
-// ProviderRegistry 仅负责 Runtime Provider Factory / Slot / ProviderInstance 构造。
-// 不负责 Agent Tool capability discovery，不负责 Device capability routing。
-// 不得在后续演变成 Capability Provider Registry。
+// ProfileAwareProviderFactory is an optional interface that ProviderFactory implementations
+// may implement to declare which runtime profiles they support. If a factory implements
+// this interface, Build will only be called when the profile is supported.
+type ProfileAwareProviderFactory interface {
+	SupportedProfiles() []runtimeprofile.Profile
+}
+
+// ProviderRegistry owns runtime provider factories used to construct infrastructure/runtime components.
+// It is not the capability ProviderRegistry and must not be used to resolve AI capability providers or device execution targets.
 type ProviderRegistry struct {
 	mu        sync.RWMutex
 	factories map[providerKey]ProviderFactory
@@ -95,7 +105,12 @@ func (r *ProviderRegistry) Build(slot ProviderSlot, providerID string, ctx Provi
 		return nil, providerNotFoundErr(string(slot), providerID)
 	}
 
-	// Check capability requirements
+	if profileAware, ok := factory.(ProfileAwareProviderFactory); ok {
+		if !isProfileSupported(profileAware, ctx.Profile) {
+			return nil, providerProfileUnsupportedErr(string(slot), providerID, string(ctx.Profile))
+		}
+	}
+
 	if ctx.Host != nil {
 		hostCaps := ctx.Host.Capabilities()
 		for _, req := range factory.Requirements() {
@@ -121,4 +136,16 @@ func (r *ProviderRegistry) Build(slot ProviderSlot, providerID string, ctx Provi
 		return nil, providerNotFoundErr(string(slot), instance.ProviderID())
 	}
 	return instance, nil
+}
+
+func isProfileSupported(factory ProfileAwareProviderFactory, profile runtimeprofile.Profile) bool {
+	if profile == "" {
+		profile = runtimeprofile.ProfileLocal
+	}
+	for _, supported := range factory.SupportedProfiles() {
+		if supported == profile {
+			return true
+		}
+	}
+	return false
 }

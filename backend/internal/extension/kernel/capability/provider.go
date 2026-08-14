@@ -115,6 +115,8 @@ type CapabilityProviderDefinition struct {
 	Platforms []runtimeidentity.Platform `json:"platforms,omitempty"`
 
 	Metadata map[string]any `json:"metadata,omitempty"`
+
+	Revision int64 `json:"revision"`
 }
 
 func (d CapabilityProviderDefinition) Normalize() CapabilityProviderDefinition {
@@ -171,6 +173,8 @@ type CapabilityProviderInstance struct {
 	UpdatedAt    time.Time `json:"updatedAt"`
 
 	Metadata map[string]any `json:"metadata,omitempty"`
+
+	Revision int64 `json:"revision"`
 }
 
 func (p CapabilityProviderInstance) Normalize() CapabilityProviderInstance {

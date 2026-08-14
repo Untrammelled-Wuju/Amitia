@@ -36,6 +36,7 @@ type AdapterRegistrationDeps struct {
 	MediaHealth           capability.MediaHealthFunc
 	WorkspaceCaller       capability.WorkspaceCallFunc
 	WorkspaceHealth       capability.WorkspaceHealthFunc
+	DeviceRuntimePort     capability.DeviceRuntimeInvocationPort
 }
 
 func RegisterProductionAdapters(registry *capability.RuntimeAdapterRegistry, deps AdapterRegistrationDeps) error {
@@ -140,6 +141,11 @@ func RegisterProductionAdapters(registry *capability.RuntimeAdapterRegistry, dep
 	if deps.WorkspaceCaller != nil {
 		workspaceAdapter := capability.NewWorkspaceRuntimeAdapter(deps.WorkspaceCaller, deps.WorkspaceHealth)
 		registry.Register(capability.RuntimeTypeWorkspace, workspaceAdapter)
+	}
+
+	if deps.DeviceRuntimePort != nil {
+		deviceAdapter := capability.NewDeviceRuntimeAdapter(deps.DeviceRuntimePort)
+		registry.RegisterDeviceAdapter(deviceAdapter)
 	}
 
 	return nil

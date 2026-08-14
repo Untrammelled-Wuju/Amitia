@@ -40,6 +40,8 @@ type runtimeBootstrap struct {
 	iosSandboxProvider runtimeorchestrator.ProviderInstance
 	iosNativeProvider  runtimeorchestrator.ProviderInstance
 	iosNativeBridge    nativebridge.Bridge
+
+	androidNativeBridge nativebridge.Bridge
 }
 
 func newRuntimeBootstrap(paths *util.RuntimePaths, profile runtimeprofile.Profile) (*runtimeBootstrap, error) {
@@ -216,6 +218,21 @@ func (b *runtimeBootstrap) IOSSandboxProvider() runtimeorchestrator.ProviderInst
 
 func (b *runtimeBootstrap) IOSNativeProvider() runtimeorchestrator.ProviderInstance {
 	return b.iosNativeProvider
+}
+
+func (b *runtimeBootstrap) AndroidNativeBridge() nativebridge.Bridge {
+	if b == nil {
+		return nil
+	}
+	return b.androidNativeBridge
+}
+
+func (b *runtimeBootstrap) SetAndroidNativeBridge(bridge nativebridge.Bridge) error {
+	if b == nil {
+		return nil
+	}
+	b.androidNativeBridge = bridge
+	return nil
 }
 
 type vectorStoreProviderAdapter struct {

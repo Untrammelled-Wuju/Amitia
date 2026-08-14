@@ -347,7 +347,7 @@ type SafeTreeDeleter interface {
 }
 
 func (s *SafeArtifactResponder) ServeArtifact(c *gin.Context, actor *auth.ActorContext, ref ArtifactReference) {
-	if actor == nil || ref.OwnerUserID == "" || actor.UserID != ref.OwnerUserID {
+	if actor == nil || ref.OwnerUserID == "" || string(actor.UserID) != ref.OwnerUserID {
 		c.Status(http.StatusNotFound)
 		return
 	}

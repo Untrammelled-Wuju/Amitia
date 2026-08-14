@@ -291,3 +291,5 @@ D:build-errors.txt
 
 runtime-package/
 *.zip
+
+build_out.txt

@@ -36,6 +36,8 @@ type RuntimeSession struct {
 	ExpiresAt       time.Time
 	ClosedAt        *time.Time
 	CloseReason     string
+
+	Revision int64
 }
 
 func (s RuntimeSession) Identity() protocol.SessionIdentity {

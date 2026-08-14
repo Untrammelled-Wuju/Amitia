@@ -1,380 +1,226 @@
 package task_runtime
 
 import (
+	"context"
 	"encoding/json"
-	"net/http"
-	"strings"
-
-	"github.com/google/uuid"
+	"time"
 )
 
-type TaskHandler struct {
+type TaskDTO struct {
+	TaskRunID         string            `json:"taskRunId"`
+	TaskDefinitionID  string            `json:"taskDefinitionId"`
+	ExtensionID       string            `json:"extensionId"`
+	ModuleID          string            `json:"moduleId"`
+	Status            string            `json:"status"`
+	Priority          int               `json:"priority"`
+	Input             json.RawMessage   `json:"input"`
+	InputHash         string            `json:"inputHash"`
+	InputArtifactID   *string           `json:"inputArtifactId,omitempty"`
+	RuntimeInstanceID *string           `json:"runtimeInstanceId,omitempty"`
+	CheckpointID      *string           `json:"checkpointId,omitempty"`
+	ResultArtifactID  *string           `json:"resultArtifactId,omitempty"`
+	Attempt           int               `json:"attempt"`
+	MaxAttempts       int               `json:"maxAttempts"`
+	CreatedAt         string            `json:"createdAt"`
+	QueuedAt          *string           `json:"queuedAt,omitempty"`
+	StartedAt         *string           `json:"startedAt,omitempty"`
+	FinishedAt        *string           `json:"finishedAt,omitempty"`
+	DeadlineAt        *string           `json:"deadlineAt,omitempty"`
+	CancelRequestedAt *string           `json:"cancelRequestedAt,omitempty"`
+	PauseReason       *string           `json:"pauseReason,omitempty"`
+	PauseRequestedAt  *string           `json:"pauseRequestedAt,omitempty"`
+	PausedAt          *string           `json:"pausedAt,omitempty"`
+	ResumedAt         *string           `json:"resumedAt,omitempty"`
+	ErrorCode         *string           `json:"errorCode,omitempty"`
+	ErrorMessage      *string           `json:"errorMessage,omitempty"`
+	Generation        int64             `json:"generation"`
+	HasResolvedTarget interface{}       `json:"hasResolvedTarget,omitempty"`
+	Execution         *TaskExecutionDTO `json:"execution,omitempty"`
+}
+
+type TaskExecutionDTO struct {
+	Placement  string              `json:"placement"`
+	Target     TaskExecutionTarget `json:"target,omitempty"`
+	AttemptID  string              `json:"attemptId,omitempty"`
+	ResolvedAt string              `json:"resolvedAt,omitempty"`
+	ResolvedBy string              `json:"resolvedBy,omitempty"`
+}
+
+func TaskRunToDTO(run *TaskRun) *TaskDTO {
+	if run == nil {
+		return nil
+	}
+	dto := &TaskDTO{
+		TaskRunID:         run.TaskRunID,
+		TaskDefinitionID:  run.TaskDefinitionID,
+		ExtensionID:       run.ExtensionID,
+		ModuleID:          run.ModuleID,
+		Status:            string(run.Status),
+		Priority:          run.Priority,
+		Input:             run.Input,
+		InputHash:         run.InputHash,
+		InputArtifactID:   run.InputArtifactID,
+		RuntimeInstanceID: run.RuntimeInstanceID,
+		CheckpointID:      run.CheckpointID,
+		ResultArtifactID:  run.ResultArtifactID,
+		Attempt:           run.Attempt,
+		MaxAttempts:       run.MaxAttempts,
+		CreatedAt:         run.CreatedAt.Format("2006-01-02T15:04:05.000Z07:00"),
+		PauseReason:       run.PauseReason,
+		ErrorCode:         run.ErrorCode,
+		ErrorMessage:      run.ErrorMessage,
+	}
+	if run.QueuedAt != nil {
+		s := run.QueuedAt.Format("2006-01-02T15:04:05.000Z07:00")
+		dto.QueuedAt = &s
+	}
+	if run.StartedAt != nil {
+		s := run.StartedAt.Format("2006-01-02T15:04:05.000Z07:00")
+		dto.StartedAt = &s
+	}
+	if run.FinishedAt != nil {
+		s := run.FinishedAt.Format("2006-01-02T15:04:05.000Z07:00")
+		dto.FinishedAt = &s
+	}
+	if run.DeadlineAt != nil {
+		s := run.DeadlineAt.Format("2006-01-02T15:04:05.000Z07:00")
+		dto.DeadlineAt = &s
+	}
+	if run.CancelRequestedAt != nil {
+		s := run.CancelRequestedAt.Format("2006-01-02T15:04:05.000Z07:00")
+		dto.CancelRequestedAt = &s
+	}
+	if run.PauseRequestedAt != nil {
+		s := run.PauseRequestedAt.Format("2006-01-02T15:04:05.000Z07:00")
+		dto.PauseRequestedAt = &s
+	}
+	if run.PausedAt != nil {
+		s := run.PausedAt.Format("2006-01-02T15:04:05.000Z07:00")
+		dto.PausedAt = &s
+	}
+	if run.ResumedAt != nil {
+		s := run.ResumedAt.Format("2006-01-02T15:04:05.000Z07:00")
+		dto.ResumedAt = &s
+	}
+
+	if !run.ExecutionTarget.IsZero() {
+		dto.Execution = &TaskExecutionDTO{
+			Placement: string(run.ExecutionPlacement),
+			Target:    run.ExecutionTarget,
+			AttemptID: string(run.ExecutionAttemptID),
+		}
+		if run.ExecutionResolvedAt != nil {
+			s := run.ExecutionResolvedAt.Format("2006-01-02T15:04:05.000Z07:00")
+			dto.Execution.ResolvedAt = s
+		}
+		dto.Execution.ResolvedBy = run.ExecutionResolvedBy
+	}
+
+	return dto
+}
+
+type TaskRuntimeHandler struct {
 	service *TaskRuntimeService
 }
 
-func NewTaskHandler(service *TaskRuntimeService) *TaskHandler {
-	return &TaskHandler{service: service}
+func NewTaskRuntimeHandler(service *TaskRuntimeService) *TaskRuntimeHandler {
+	return &TaskRuntimeHandler{service: service}
 }
 
-func (h *TaskHandler) RegisterRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("/api/extensions/tasks", h.handleTasks)
-	mux.HandleFunc("/api/extensions/tasks/", h.handleTaskDetail)
-	mux.HandleFunc("/api/extensions/task-definitions", h.handleTaskDefinitions)
-	mux.HandleFunc("/api/extensions/task-definitions/", h.handleTaskDefinitionDetail)
-}
-
-func (h *TaskHandler) handleTasks(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		h.listTasks(w, r)
-	case http.MethodPost:
-		h.createTask(w, r)
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-	}
-}
-
-func (h *TaskHandler) handleTaskDetail(w http.ResponseWriter, r *http.Request) {
-	path := strings.TrimPrefix(r.URL.Path, "/api/extensions/tasks/")
-	parts := strings.SplitN(path, "/", 2)
-	taskRunID := parts[0]
-	if taskRunID == "" {
-		http.Error(w, "task run id required", http.StatusBadRequest)
-		return
-	}
-
-	if len(parts) == 1 {
-		switch r.Method {
-		case http.MethodGet:
-			h.getTask(w, r, taskRunID)
-		default:
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		}
-		return
-	}
-
-	action := parts[1]
-
-	switch action {
-	case "progress", "result", "checkpoint":
-		if r.Method != http.MethodGet {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-	}
-
-	switch action {
-	case "cancel":
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		h.cancelTask(w, r, taskRunID)
-	case "retry", "recover":
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		if action == "retry" {
-			h.retryTask(w, r, taskRunID)
-		} else {
-			h.recoverTask(w, r, taskRunID)
-		}
-	case "pause":
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		h.pauseTask(w, r, taskRunID)
-	case "resume":
-		if r.Method != http.MethodPost {
-			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-			return
-		}
-		h.resumeTask(w, r, taskRunID)
-	case "progress":
-		h.getProgress(w, r, taskRunID)
-	case "result":
-		h.getResult(w, r, taskRunID)
-	case "checkpoint":
-		h.getCheckpoint(w, r, taskRunID)
-	default:
-		http.Error(w, "unknown action", http.StatusNotFound)
-	}
-}
-
-func (h *TaskHandler) listTasks(w http.ResponseWriter, r *http.Request) {
-	filter := ListTasksFilter{
-		ExtensionID: r.URL.Query().Get("extensionId"),
-		Status:      r.URL.Query().Get("status"),
-	}
-	runs, err := h.service.ListTaskRuns(r.Context(), filter)
+func (h *TaskRuntimeHandler) GetTaskRun(ctx context.Context, taskRunID string) (*TaskDTO, error) {
+	run, err := h.service.GetTaskRun(ctx, taskRunID)
 	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal", err.Error())
-		return
+		return nil, err
 	}
-	if runs == nil {
-		runs = []*TaskRun{}
-	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"items": runs,
-		"total": len(runs),
-	})
+	return TaskRunToDTO(run), nil
 }
 
-func (h *TaskHandler) createTask(w http.ResponseWriter, r *http.Request) {
-	var req EnqueueTaskRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeError(w, http.StatusBadRequest, "task_input_invalid", err.Error())
-		return
-	}
-	if req.TaskDefinitionID == "" {
-		writeError(w, http.StatusBadRequest, "task_definition_invalid", "taskDefinitionId required")
-		return
-	}
-	if req.OperationID == "" {
-		req.OperationID = "op-" + uuid.NewString()
-	}
-
-	def, err := h.service.GetTaskDefinition(r.Context(), req.TaskDefinitionID)
+func (h *TaskRuntimeHandler) ListTaskRuns(ctx context.Context, filter ListTasksFilter) ([]*TaskDTO, error) {
+	runs, err := h.service.ListTaskRuns(ctx, filter)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "task_definition_invalid", err.Error())
-		return
+		return nil, err
 	}
+	dtos := make([]*TaskDTO, 0, len(runs))
+	for _, run := range runs {
+		dtos = append(dtos, TaskRunToDTO(run))
+	}
+	return dtos, nil
+}
 
-	result, err := h.service.Enqueue(r.Context(), req, def)
+func (h *TaskRuntimeHandler) GetProgress(ctx context.Context, taskRunID string) (*TaskRunProgress, error) {
+	return h.service.GetProgress(ctx, taskRunID)
+}
+
+func (h *TaskRuntimeHandler) GetResult(ctx context.Context, taskRunID string) (*TaskRunResult, error) {
+	return h.service.GetResult(ctx, taskRunID)
+}
+
+func (h *TaskRuntimeHandler) GetTaskRunJSON(ctx context.Context, taskRunID string) (json.RawMessage, error) {
+	run, err := h.service.GetTaskRun(ctx, taskRunID)
 	if err != nil {
-		if te, ok := err.(*TaskError); ok {
-			writeError(w, HTTPStatusForErrorCode(te.Code), string(te.Code), te.Message)
-		} else {
-			writeError(w, http.StatusInternalServerError, "internal", err.Error())
-		}
-		return
+		return nil, err
 	}
-	writeJSON(w, http.StatusCreated, result)
+	return json.Marshal(TaskRunToDTO(run))
 }
 
-func (h *TaskHandler) getTask(w http.ResponseWriter, r *http.Request, taskRunID string) {
-	run, err := h.service.GetTaskRun(r.Context(), taskRunID)
+func (h *TaskRuntimeHandler) BindExecutionTarget(
+	ctx context.Context,
+	taskRunID string,
+	request TrustedExecutionTargetRequest,
+) (*TaskDTO, error) {
+	run, err := h.service.BindExecutionTarget(ctx, taskRunID, request)
 	if err != nil {
-		writeError(w, http.StatusNotFound, "task_not_found", err.Error())
-		return
+		return nil, err
 	}
-	writeJSON(w, http.StatusOK, run)
+	return TaskRunToDTO(run), nil
 }
 
-func (h *TaskHandler) cancelTask(w http.ResponseWriter, r *http.Request, taskRunID string) {
-	var body struct {
-		Reason string `json:"reason"`
-	}
-	if r.Body != nil {
-		_ = json.NewDecoder(r.Body).Decode(&body)
-	}
-	if body.Reason == "" {
-		body.Reason = "user_requested"
-	}
-	if err := h.service.Cancel(r.Context(), taskRunID, body.Reason); err != nil {
-		if te, ok := err.(*TaskError); ok {
-			writeError(w, HTTPStatusForErrorCode(te.Code), string(te.Code), te.Message)
-		} else {
-			writeError(w, http.StatusInternalServerError, "internal", err.Error())
-		}
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]string{"taskRunId": taskRunID, "status": "cancelling"})
+func (h *TaskRuntimeHandler) ClearExecutionConnectionBinding(
+	ctx context.Context,
+	taskRunID string,
+) error {
+	return h.service.ClearExecutionConnectionBinding(ctx, taskRunID)
 }
 
-func (h *TaskHandler) retryTask(w http.ResponseWriter, r *http.Request, taskRunID string) {
-	run, err := h.service.Retry(r.Context(), taskRunID)
-	if err != nil {
-		if te, ok := err.(*TaskError); ok {
-			writeError(w, HTTPStatusForErrorCode(te.Code), string(te.Code), te.Message)
-		} else {
-			writeError(w, http.StatusInternalServerError, "internal", err.Error())
-		}
-		return
-	}
-	writeJSON(w, http.StatusCreated, run)
+func (h *TaskRuntimeHandler) Enqueue(ctx context.Context, req EnqueueTaskRequest, def *TaskDefinition) (*EnqueueTaskResult, error) {
+	return h.service.Enqueue(ctx, req, def)
 }
 
-func (h *TaskHandler) pauseTask(w http.ResponseWriter, r *http.Request, taskRunID string) {
-	var body struct {
-		Reason string `json:"reason"`
-	}
-	if r.Body != nil {
-		_ = json.NewDecoder(r.Body).Decode(&body)
-	}
-	if body.Reason == "" {
-		body.Reason = "user_requested"
-	}
-	run, err := h.service.Pause(r.Context(), taskRunID, body.Reason)
-	if err != nil {
-		if te, ok := err.(*TaskError); ok {
-			writeError(w, HTTPStatusForErrorCode(te.Code), string(te.Code), te.Message)
-		} else {
-			writeError(w, http.StatusInternalServerError, "internal", err.Error())
-		}
-		return
-	}
-	writeJSON(w, http.StatusOK, run)
+func (h *TaskRuntimeHandler) Cancel(ctx context.Context, taskRunID, reason string) error {
+	return h.service.Cancel(ctx, taskRunID, reason)
 }
 
-func (h *TaskHandler) resumeTask(w http.ResponseWriter, r *http.Request, taskRunID string) {
-	run, err := h.service.Resume(r.Context(), taskRunID)
-	if err != nil {
-		if te, ok := err.(*TaskError); ok {
-			writeError(w, HTTPStatusForErrorCode(te.Code), string(te.Code), te.Message)
-		} else {
-			writeError(w, http.StatusInternalServerError, "internal", err.Error())
-		}
-		return
-	}
-	writeJSON(w, http.StatusOK, run)
+func (h *TaskRuntimeHandler) Retry(ctx context.Context, taskRunID string) (*TaskRun, error) {
+	return h.service.Retry(ctx, taskRunID)
 }
 
-func (h *TaskHandler) recoverTask(w http.ResponseWriter, r *http.Request, taskRunID string) {
-	run, err := h.service.Recover(r.Context(), taskRunID)
-	if err != nil {
-		if te, ok := err.(*TaskError); ok {
-			writeError(w, HTTPStatusForErrorCode(te.Code), string(te.Code), te.Message)
-		} else {
-			writeError(w, http.StatusInternalServerError, "internal", err.Error())
-		}
-		return
-	}
-	writeJSON(w, http.StatusOK, run)
+func (h *TaskRuntimeHandler) Recover(ctx context.Context, taskRunID string) (*TaskRun, error) {
+	return h.service.Recover(ctx, taskRunID)
 }
 
-func (h *TaskHandler) getProgress(w http.ResponseWriter, r *http.Request, taskRunID string) {
-	prog, err := h.service.GetProgress(r.Context(), taskRunID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal", err.Error())
-		return
-	}
-	if prog == nil {
-		writeJSON(w, http.StatusOK, map[string]interface{}{"taskRunId": taskRunID})
-		return
-	}
-	writeJSON(w, http.StatusOK, prog)
+func (h *TaskRuntimeHandler) GetTaskDefinition(ctx context.Context, defID string) (*TaskDefinition, error) {
+	return h.service.GetTaskDefinition(ctx, defID)
 }
 
-func (h *TaskHandler) getResult(w http.ResponseWriter, r *http.Request, taskRunID string) {
-	result, err := h.service.GetResult(r.Context(), taskRunID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal", err.Error())
-		return
-	}
-	if result == nil {
-		writeJSON(w, http.StatusOK, map[string]interface{}{"taskRunId": taskRunID})
-		return
-	}
-	writeJSON(w, http.StatusOK, result)
+func (h *TaskRuntimeHandler) PutTaskDefinition(ctx context.Context, def *TaskDefinition) error {
+	return h.service.PutTaskDefinition(ctx, def)
 }
 
-func (h *TaskHandler) getCheckpoint(w http.ResponseWriter, r *http.Request, taskRunID string) {
-	cp, err := h.service.GetLatestCheckpoint(r.Context(), taskRunID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal", err.Error())
-		return
-	}
-	if cp == nil {
-		writeJSON(w, http.StatusOK, map[string]interface{}{"taskRunId": taskRunID})
-		return
-	}
-	writeJSON(w, http.StatusOK, cp)
+func (h *TaskRuntimeHandler) DeleteTaskDefinition(ctx context.Context, defID string) error {
+	return h.service.DeleteTaskDefinition(ctx, defID)
 }
 
-func (h *TaskHandler) handleTaskDefinitions(w http.ResponseWriter, r *http.Request) {
-	switch r.Method {
-	case http.MethodGet:
-		h.listTaskDefinitions(w, r)
-	case http.MethodPost:
-		h.createTaskDefinition(w, r)
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-	}
+func (h *TaskRuntimeHandler) DeleteByExtension(ctx context.Context, extensionID string) error {
+	return h.service.DeleteByExtension(ctx, extensionID)
 }
 
-func (h *TaskHandler) handleTaskDefinitionDetail(w http.ResponseWriter, r *http.Request) {
-	path := strings.TrimPrefix(r.URL.Path, "/api/extensions/task-definitions/")
-	defID := strings.TrimSuffix(path, "/")
-	if defID == "" {
-		http.Error(w, "task definition id required", http.StatusBadRequest)
-		return
-	}
-
-	switch r.Method {
-	case http.MethodGet:
-		h.getTaskDefinition(w, r, defID)
-	default:
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-	}
+func (h *TaskRuntimeHandler) ListTaskDefinitions(ctx context.Context, extensionID string) ([]*TaskDefinition, error) {
+	return h.service.ListTaskDefinitions(ctx, extensionID)
 }
 
-func (h *TaskHandler) listTaskDefinitions(w http.ResponseWriter, r *http.Request) {
-	extensionID := r.URL.Query().Get("extensionId")
-	defs, err := h.service.ListTaskDefinitions(r.Context(), extensionID)
-	if err != nil {
-		writeError(w, http.StatusInternalServerError, "internal", err.Error())
-		return
+func FormatTime(t *time.Time) string {
+	if t == nil {
+		return ""
 	}
-	if defs == nil {
-		defs = []*TaskDefinition{}
-	}
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"items": defs,
-		"total": len(defs),
-	})
-}
-
-func (h *TaskHandler) createTaskDefinition(w http.ResponseWriter, r *http.Request) {
-	var def TaskDefinition
-	if err := json.NewDecoder(r.Body).Decode(&def); err != nil {
-		writeError(w, http.StatusBadRequest, "task_definition_invalid", err.Error())
-		return
-	}
-	if def.TaskID == "" {
-		writeError(w, http.StatusBadRequest, "task_definition_invalid", "taskId required")
-		return
-	}
-	if def.ExtensionID == "" {
-		writeError(w, http.StatusBadRequest, "task_definition_invalid", "extensionId required")
-		return
-	}
-	if def.Entry == "" {
-		writeError(w, http.StatusBadRequest, "task_definition_invalid", "entry required")
-		return
-	}
-	if def.RuntimeType == "" {
-		def.RuntimeType = "task_javascript"
-	}
-	if err := h.service.PutTaskDefinition(r.Context(), &def); err != nil {
-		writeError(w, http.StatusInternalServerError, "internal", err.Error())
-		return
-	}
-	writeJSON(w, http.StatusCreated, def)
-}
-
-func (h *TaskHandler) getTaskDefinition(w http.ResponseWriter, r *http.Request, defID string) {
-	def, err := h.service.GetTaskDefinition(r.Context(), defID)
-	if err != nil {
-		writeError(w, http.StatusNotFound, "task_definition_invalid", err.Error())
-		return
-	}
-	writeJSON(w, http.StatusOK, def)
-}
-
-func writeJSON(w http.ResponseWriter, status int, data interface{}) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(data)
-}
-
-func writeError(w http.ResponseWriter, status int, code, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(map[string]string{
-		"error":   code,
-		"message": message,
-	})
+	return t.Format("2006-01-02T15:04:05.000Z07:00")
 }

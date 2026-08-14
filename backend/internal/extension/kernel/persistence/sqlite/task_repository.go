@@ -7,7 +7,9 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 type TaskRepository struct {
@@ -589,6 +591,147 @@ func (r *TaskRepository) CountActive(ctx context.Context) (int, error) {
 		return 0, fmt.Errorf("sqlite: count active: %w", err)
 	}
 	return count, nil
+}
+
+func (r *TaskRepository) UpdateExecutionTarget(
+	ctx context.Context,
+	taskRunID string,
+	placement task_runtime.TaskExecutionPlacement,
+	target task_runtime.TaskExecutionTarget,
+	resolvedAt time.Time,
+	resolvedBy string,
+) error {
+	ex := getExecutor(ctx, r.db)
+	_, err := ex.ExecContext(ctx, `
+		UPDATE extension_task_runs
+		SET execution_placement = ?,
+		    execution_target_json = ?,
+		    execution_resolved_at = ?,
+		    execution_resolved_by = ?
+		WHERE task_run_id = ?
+	`,
+		string(placement),
+		serializeExecutionTarget(target),
+		resolvedAt,
+		resolvedBy,
+		taskRunID,
+	)
+	if err != nil {
+		return fmt.Errorf("sqlite: update execution target: %w", err)
+	}
+	return nil
+}
+
+func (r *TaskRepository) UpdateExecutionConnectionBinding(
+	ctx context.Context,
+	taskRunID string,
+	runtimeSessionID interface{ String() string },
+	generation int64,
+	at time.Time,
+) error {
+	ex := getExecutor(ctx, r.db)
+	_, err := ex.ExecContext(ctx, `
+		UPDATE extension_task_runs
+		SET execution_target_json = json_set(
+			COALESCE(execution_target_json, '{} '),
+			'$.runtimeSessionId', ?,
+			'$.connectionGeneration', ?
+		)
+		WHERE task_run_id = ?
+	`,
+		runtimeSessionID.String(),
+		generation,
+		taskRunID,
+	)
+	if err != nil {
+		return fmt.Errorf("sqlite: update execution connection binding: %w", err)
+	}
+	return nil
+}
+
+func (r *TaskRepository) UpdateExecutionAttempt(
+	ctx context.Context,
+	taskRunID string,
+	attemptID task_runtime.TaskExecutionAttemptID,
+	runtimeInstanceID string,
+	at time.Time,
+) error {
+	ex := getExecutor(ctx, r.db)
+	_, err := ex.ExecContext(ctx, `
+		UPDATE extension_task_runs
+		SET execution_attempt_id = ?,
+		    runtime_instance_id = COALESCE(?, runtime_instance_id)
+		WHERE task_run_id = ?
+	`,
+		string(attemptID),
+		runtimeInstanceID,
+		taskRunID,
+	)
+	if err != nil {
+		return fmt.Errorf("sqlite: update execution attempt: %w", err)
+	}
+	return nil
+}
+
+func serializeExecutionTarget(target task_runtime.TaskExecutionTarget) string {
+	type targetJSON struct {
+		ProviderID           string `json:"providerId,omitempty"`
+		ProviderInstanceID   string `json:"providerInstanceId,omitempty"`
+		UserID               string `json:"userId,omitempty"`
+		DeviceID             string `json:"deviceId,omitempty"`
+		RuntimeID            string `json:"runtimeId,omitempty"`
+		RuntimeSessionID     string `json:"runtimeSessionId,omitempty"`
+		ConnectionGeneration int64  `json:"connectionGeneration,omitempty"`
+		RuntimeInstanceID    string `json:"runtimeInstanceId,omitempty"`
+	}
+	return mustMarshalJSON(targetJSON{
+		ProviderID:           target.ProviderID.String(),
+		ProviderInstanceID:   target.ProviderInstanceID.String(),
+		UserID:               target.UserID.String(),
+		DeviceID:             target.DeviceID.String(),
+		RuntimeID:            target.RuntimeID.String(),
+		RuntimeSessionID:     target.RuntimeSessionID.String(),
+		ConnectionGeneration: target.ConnectionGeneration,
+		RuntimeInstanceID:    target.RuntimeInstanceID,
+	})
+}
+
+func deserializeExecutionTarget(s string) task_runtime.TaskExecutionTarget {
+	if s == "" {
+		return task_runtime.TaskExecutionTarget{}
+	}
+	type targetJSON struct {
+		ProviderID           string `json:"providerId,omitempty"`
+		ProviderInstanceID   string `json:"providerInstanceId,omitempty"`
+		UserID               string `json:"userId,omitempty"`
+		DeviceID             string `json:"deviceId,omitempty"`
+		RuntimeID            string `json:"runtimeId,omitempty"`
+		RuntimeSessionID     string `json:"runtimeSessionId,omitempty"`
+		ConnectionGeneration int64  `json:"connectionGeneration,omitempty"`
+		RuntimeInstanceID    string `json:"runtimeInstanceId,omitempty"`
+	}
+	var j targetJSON
+	if err := json.Unmarshal([]byte(s), &j); err != nil {
+		return task_runtime.TaskExecutionTarget{}
+	}
+	return task_runtime.TaskExecutionTarget{
+		ProviderID:           capability.ParseProviderID(j.ProviderID),
+		ProviderInstanceID:   capability.ParseProviderInstanceID(j.ProviderInstanceID),
+		UserID:               runtimeidentity.ParseUserID(j.UserID),
+		DeviceID:             runtimeidentity.ParseDeviceID(j.DeviceID),
+		RuntimeID:            runtimeidentity.ParseRuntimeID(j.RuntimeID),
+		RuntimeSessionID:     runtimeidentity.ParseRuntimeSessionID(j.RuntimeSessionID),
+		ConnectionGeneration: j.ConnectionGeneration,
+		RuntimeInstanceID:    j.RuntimeInstanceID,
+	}
+}
+
+func mustMarshalJSON(v interface{}) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
 }
 
 var _ task_runtime.TaskStore = (*TaskRepository)(nil)

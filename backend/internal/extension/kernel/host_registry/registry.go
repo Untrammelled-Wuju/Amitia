@@ -550,7 +550,7 @@ func (r *Registry) BindRuntimeSession(ctx context.Context, binding RuntimeSessio
 			ConnectionGeneration: binding.ConnectionGeneration,
 			LastHeartbeat:        at,
 			CreatedAt:            now,
-			AuthenticatedAt:     now,
+			AuthenticatedAt:      now,
 		}
 		if err := r.repo.SaveEntry(ctx, newEntry); err != nil {
 			return nil, err

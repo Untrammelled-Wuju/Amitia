@@ -4,6 +4,8 @@ import android.os.Build
 import android.os.Bundle
 import android.view.View
 import android.view.ViewGroup
+import com.amitia.amitia_app.nativeprovider.AndroidNativeBridgePlugin
+import com.amitia.amitia_app.nativeprovider.AndroidNativeCompositionRoot
 import com.amitia.amitia_app.runtime.bridge.RuntimeBridgePlugin
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.android.FlutterView
@@ -14,11 +16,13 @@ class MainActivity : FlutterActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        AndroidNativeCompositionRoot.initialize(applicationContext)
     }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         flutterEngine.plugins.add(RuntimeBridgePlugin())
+        flutterEngine.plugins.add(AndroidNativeBridgePlugin())
     }
 
     override fun onPostResume() {

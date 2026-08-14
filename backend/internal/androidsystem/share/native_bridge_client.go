@@ -52,7 +52,7 @@ func (c *nativeBridgeShareClient) Send(ctx context.Context, req ShareSendRequest
 	result := ShareSendResult{}
 	if resp.Result != nil {
 		result.Status, _ = resp.Result["status"].(string)
-		result.ResourceCount, _ = toInt(resp.Result["resourceCount"])
+		result.ResourceCount = toInt(resp.Result["resourceCount"])
 		result.MIMEType, _ = resp.Result["mimeType"].(string)
 		result.UserActionRequired, _ = resp.Result["userActionRequired"].(bool)
 	}
@@ -80,9 +80,9 @@ func (c *nativeBridgeShareClient) Status(ctx context.Context) (ShareCapabilitySt
 		state.CanSend, _ = resp.Result["canSend"].(bool)
 		state.CanReceive, _ = resp.Result["canReceive"].(bool)
 		state.NativeHostReady, _ = resp.Result["nativeHostReady"].(bool)
-		state.MaxResources, _ = toInt(resp.Result["maxResources"])
-		state.MaxSingleResourceBytes, _ = toInt64(resp.Result["maxSingleResourceBytes"])
-		state.MaxTotalBytes, _ = toInt64(resp.Result["maxTotalBytes"])
+		state.MaxResources = toInt(resp.Result["maxResources"])
+		state.MaxSingleResourceBytes = toInt64(resp.Result["maxSingleResourceBytes"])
+		state.MaxTotalBytes = toInt64(resp.Result["maxTotalBytes"])
 		state.State, _ = resp.Result["state"].(string)
 	}
 	return state, nil

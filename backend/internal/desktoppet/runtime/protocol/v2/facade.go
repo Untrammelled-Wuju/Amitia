@@ -73,12 +73,12 @@ func NewRuntimeFacadeWithDeviceRuntime(db *gorm.DB, config *FacadeConfig, device
 	states := svc.ActualStates
 	reconciler := NewReconciler(svc, handler)
 	return &RuntimeFacade{
-		db:         db,
-		config:     config,
-		services:   svc,
-		handler:    handler,
-		states:     states,
-		reconciler: reconciler,
+		db:                    db,
+		config:                config,
+		services:              svc,
+		handler:               handler,
+		states:                states,
+		reconciler:            reconciler,
 		deviceRuntimeSessions: deviceRuntimeSessions,
 	}
 }

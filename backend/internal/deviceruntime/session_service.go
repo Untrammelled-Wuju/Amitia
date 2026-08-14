@@ -41,18 +41,20 @@ type AcquireResult struct {
 }
 
 type Service struct {
-	store     SessionStore
-	presence  PresencePort
-	idFactory SessionIDFactory
+	store      SessionStore
+	presence   PresencePort
+	idFactory  SessionIDFactory
 	sessionTTL time.Duration
+	events     SessionEventPublisher
 
 	mu sync.Mutex
 }
 
 type ServiceOptions struct {
-	PresencePort    PresencePort
+	PresencePort     PresencePort
 	SessionIDFactory SessionIDFactory
-	SessionTTL      time.Duration
+	SessionTTL       time.Duration
+	Events           SessionEventPublisher
 }
 
 func NewService(store SessionStore, opts ServiceOptions) (*Service, error) {
@@ -60,10 +62,11 @@ func NewService(store SessionStore, opts ServiceOptions) (*Service, error) {
 		return nil, errors.New("deviceruntime: store is required")
 	}
 	s := &Service{
-		store:     store,
-		presence:  opts.PresencePort,
-		idFactory: opts.SessionIDFactory,
+		store:      store,
+		presence:   opts.PresencePort,
+		idFactory:  opts.SessionIDFactory,
 		sessionTTL: opts.SessionTTL,
+		events:     opts.Events,
 	}
 	if s.presence == nil {
 		s.presence = NoopPresencePort{}
@@ -84,6 +87,14 @@ func (s *Service) normalizeTime(now time.Time) time.Time {
 	return now.UTC()
 }
 
+func (s *Service) txEnabled() (SessionUnitOfWork, bool) {
+	if s.events == nil {
+		return nil, false
+	}
+	uow, ok := s.store.(SessionUnitOfWork)
+	return uow, ok
+}
+
 func (s *Service) Acquire(ctx context.Context, req AcquireRequest) (AcquireResult, error) {
 	now := s.normalizeTime(req.Now)
 
@@ -97,34 +108,55 @@ func (s *Service) Acquire(ctx context.Context, req AcquireRequest) (AcquireResul
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	uow, txOn := s.txEnabled()
+
 	existing, err := s.store.GetActiveByRuntime(ctx, req.Identity.UserID, req.Identity.DeviceID, req.Identity.RuntimeID)
 	if err != nil && !errors.Is(err, ErrRuntimeSessionNotFound) {
 		return AcquireResult{}, err
 	}
 
 	if err == nil && !existing.IsExpiredAt(now) {
-		return s.reconnectExisting(ctx, existing, req, now, caps, capHash)
+		return s.reconnectExisting(ctx, existing, req, now, caps, capHash, uow, txOn)
 	}
 
 	if err == nil && existing.IsExpiredAt(now) {
-		if closeErr := s.store.Close(ctx, existing.ID, existing.ConnectionGeneration, "session_expired", now); closeErr != nil {
-			return AcquireResult{}, closeErr
+		prev := existing
+		if txOn {
+			if closeErr := uow.WithinTx(ctx, func(tx SessionTx) error {
+				if err := tx.Close(ctx, prev.ID, prev.ConnectionGeneration, "session_expired", now); err != nil {
+					return err
+				}
+				prev.Revision++
+				prev.Status = protocol.SessionStatusClosed
+				prev.CloseReason = "session_expired"
+				return s.events.PublishTx(ctx, tx.RawTx(), SessionDomainEvent{
+					Type:       SessionEventExpired,
+					Session:    prev,
+					Reason:     "session_expired",
+					OccurredAt: now,
+				})
+			}); closeErr != nil {
+				return AcquireResult{}, closeErr
+			}
+		} else {
+			if closeErr := s.store.Close(ctx, prev.ID, prev.ConnectionGeneration, "session_expired", now); closeErr != nil {
+				return AcquireResult{}, closeErr
+			}
 		}
-		presenceErr := s.presence.SessionDisconnected(ctx, PresenceSnapshot{
-			UserID:               existing.UserID,
-			DeviceID:             existing.DeviceID,
-			RuntimeID:            existing.RuntimeID,
-			RuntimeSessionID:     existing.ID,
-			Platform:             existing.Platform,
-			ConnectionGeneration: existing.ConnectionGeneration,
+		if presenceErr := s.presence.SessionDisconnected(ctx, PresenceSnapshot{
+			UserID:               prev.UserID,
+			DeviceID:             prev.DeviceID,
+			RuntimeID:            prev.RuntimeID,
+			RuntimeSessionID:     prev.ID,
+			Platform:             prev.Platform,
+			ConnectionGeneration: prev.ConnectionGeneration,
 			At:                   now,
-		}, "session_expired")
-		if presenceErr != nil {
+		}, "session_expired"); presenceErr != nil {
 			return AcquireResult{}, fmt.Errorf("%w: %v", ErrPresenceProjectionFailed, presenceErr)
 		}
 	}
 
-	return s.createNewSession(ctx, req, now, caps, capHash)
+	return s.createNewSession(ctx, req, now, caps, capHash, uow, txOn)
 }
 
 func (s *Service) reconnectExisting(
@@ -134,6 +166,8 @@ func (s *Service) reconnectExisting(
 	now time.Time,
 	caps []string,
 	capHash string,
+	uow SessionUnitOfWork,
+	txOn bool,
 ) (AcquireResult, error) {
 	newGen := existing.ConnectionGeneration + 1
 
@@ -246,7 +280,7 @@ func (s *Service) createNewSession(
 		CreatedAt:                    now,
 		UpdatedAt:                    now,
 		LastHeartbeatAt:              now,
-		ExpiresAt:                   now.Add(s.sessionTTL),
+		ExpiresAt:                    now.Add(s.sessionTTL),
 	}
 
 	if err := s.store.Create(ctx, session); err != nil {

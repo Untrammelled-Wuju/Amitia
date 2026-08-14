@@ -244,8 +244,12 @@ func (s *TaskRuntimeService) ClearExecutionConnectionBinding(
 
 	run.ClearTransientConnectionBinding()
 	now := time.Now().UTC()
-	return s.store.UpdateExecutionConnectionBinding(ctx, taskRunID, "", 0, now)
+	return s.store.UpdateExecutionConnectionBinding(ctx, taskRunID, emptyRuntimeSessionID(""), 0, now)
 }
+
+type emptyRuntimeSessionID string
+
+func (s emptyRuntimeSessionID) String() string { return string(s) }
 
 func (s *TaskRuntimeService) tryDispatch() {
 	if !atomic.CompareAndSwapInt32(&s.dispatching, 0, 1) {
@@ -355,7 +359,7 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 		return
 	}
 
-	workspace, err := createTaskWorkspace(s.config.WorkspaceRoot, run.TaskRunID)
+	workspace, err := s.createTaskWorkspace(run.TaskRunID)
 	if err != nil {
 		s.failRun(ctx, run, ErrTaskRuntimeStartFailed, fmt.Sprintf("workspace: %v", err))
 		return
@@ -472,11 +476,11 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 
 func (s *TaskRuntimeService) runRemoteExecution(ctx context.Context, run *TaskRun, def *TaskDefinition, executor TaskExecutorPort) TaskExecutionOutcome {
 	request := TaskExecutionRequest{
-		Run:       run,
+		Run:        run,
 		Definition: def,
-		AttemptID: run.ExecutionAttemptID,
-		Placement: run.EffectiveExecutionPlacement(),
-		Target:    run.ExecutionTarget,
+		AttemptID:  run.ExecutionAttemptID,
+		Placement:  run.EffectiveExecutionPlacement(),
+		Target:     run.ExecutionTarget,
 	}
 	outcome, _ := executor.Execute(ctx, request)
 	return outcome
@@ -822,16 +826,16 @@ func (s *TaskRuntimeService) Retry(ctx context.Context, taskRunID string) (*Task
 			RuntimeID:          run.ExecutionTarget.RuntimeID,
 			RuntimeInstanceID:  run.ExecutionTarget.RuntimeInstanceID,
 		},
-		ExecutionResolvedAt:  &now,
-		ExecutionResolvedBy:  "retry-inherit",
-		Input:                run.Input,
-		InputHash:            run.InputHash,
-		Attempt:              run.Attempt + 1,
-		MaxAttempts:          run.MaxAttempts,
-		CreatedAt:            now,
-		QueuedAt:             ptrTime(now),
-		DeadlineAt:           run.DeadlineAt,
-		Generation:           run.Generation + 1,
+		ExecutionResolvedAt: &now,
+		ExecutionResolvedBy: "retry-inherit",
+		Input:               run.Input,
+		InputHash:           run.InputHash,
+		Attempt:             run.Attempt + 1,
+		MaxAttempts:         run.MaxAttempts,
+		CreatedAt:           now,
+		QueuedAt:            ptrTime(now),
+		DeadlineAt:          run.DeadlineAt,
+		Generation:          run.Generation + 1,
 	}
 
 	if err := s.store.PutTaskRun(ctx, newRun); err != nil {
@@ -1015,6 +1019,18 @@ func (s *TaskRuntimeService) leaseReclaimLoop() {
 func (s *TaskRuntimeService) cleanupWorkspace(taskRunID, workspace string) {
 	_ = os.RemoveAll(workspace)
 	_ = filepath.Clean(workspace)
+}
+
+func (s *TaskRuntimeService) createTaskWorkspace(taskRunID string) (string, error) {
+	base := s.config.WorkspaceRoot
+	if base == "" {
+		base = os.TempDir()
+	}
+	workspace := filepath.Join(base, "task-workspace-"+taskRunID)
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		return "", err
+	}
+	return workspace, nil
 }
 
 func hashBytes(data []byte) string {

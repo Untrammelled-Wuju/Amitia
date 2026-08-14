@@ -15,9 +15,10 @@ type ToolExecutor interface {
 }
 
 type DefaultToolExecutor struct {
-	Registry         *ToolRegistry
-	AvailabilityEval AvailabilityEvaluator
-	AdapterRegistry  *RuntimeAdapterRegistry
+	Registry          *ToolRegistry
+	AvailabilityEval  AvailabilityEvaluator
+	AdapterRegistry   *RuntimeAdapterRegistry
+	ExecutionResolver RuntimeExecutionResolver
 }
 
 func (e *DefaultToolExecutor) Execute(
@@ -56,11 +57,31 @@ func (e *DefaultToolExecutor) Execute(
 		}
 	}
 
-	adapter, ok := e.AdapterRegistry.Resolve(tool.Runtime)
+	resolver := e.ExecutionResolver
+	if resolver == nil {
+		resolver = &LegacyRuntimeExecutionResolver{}
+	}
+
+	route, err := resolver.ResolveRuntimeExecution(ctx, tool, invocation)
+	if err != nil {
+		return UnifiedToolResult{
+			InvocationID: invocation.InvocationID,
+			Status:       ToolResultStatusFailed,
+			Error: &ToolError{
+				Code:    mapResolverErrorToErrorCode(err),
+				Message: err.Error(),
+				Details: map[string]any{
+					"reason": mapResolverErrorToReason(err),
+				},
+			},
+		}
+	}
+
+	adapter, ok := e.AdapterRegistry.ResolveRoute(route)
 	if !ok {
 		err := &ToolError{
 			Code:        ErrorCodeRuntimeUnavailable,
-			Message:     "no adapter found for runtime: " + string(tool.Runtime.RuntimeType),
+			Message:     "no adapter found for runtime: " + string(route.Binding.RuntimeType),
 			UserVisible: false,
 		}
 		return UnifiedToolResult{
@@ -70,25 +91,38 @@ func (e *DefaultToolExecutor) Execute(
 		}
 	}
 
-	result := adapter.Execute(ctx, tool.Runtime, invocation, input)
-	return result
+	if routedAdapter, ok := adapter.(RoutedRuntimeAdapter); ok {
+		return routedAdapter.ExecuteRoute(ctx, route, invocation, input)
+	}
+
+	return adapter.Execute(ctx, route.Binding, invocation, input)
 }
 
-type RuntimeAdapterRegistry struct {
-	adapters map[RuntimeType]RuntimeAdapter
-}
-
-func NewRuntimeAdapterRegistry() *RuntimeAdapterRegistry {
-	return &RuntimeAdapterRegistry{
-		adapters: make(map[RuntimeType]RuntimeAdapter),
+func mapResolverErrorToErrorCode(err error) string {
+	switch {
+	case IsProviderExecutionError(err):
+		return ErrorCodeRuntimeUnavailable
+	default:
+		return ErrorCodeRuntimeUnavailable
 	}
 }
 
-func (r *RuntimeAdapterRegistry) Register(rt RuntimeType, adapter RuntimeAdapter) {
-	r.adapters[rt] = adapter
+func mapResolverErrorToReason(err error) string {
+	switch {
+	case IsProviderExecutionError(err):
+		return "provider_execution_error"
+	default:
+		return "runtime_error"
+	}
 }
 
-func (r *RuntimeAdapterRegistry) Resolve(binding RuntimeBinding) (RuntimeAdapter, bool) {
-	adapter, ok := r.adapters[binding.RuntimeType]
-	return adapter, ok
+func IsProviderExecutionError(err error) bool {
+	if err == nil {
+		return false
+	}
+	switch err.(type) {
+	case interface{ IsProviderExecutionError() bool }:
+		return true
+	}
+	return false
 }

@@ -61,18 +61,9 @@ func (
 		)
 	}
 
-	identity.UserID =
-		strings.TrimSpace(
-			identity.UserID,
-		)
-	identity.DeviceID =
-		strings.TrimSpace(
-			identity.DeviceID,
-		)
-	identity.DesktopInstanceID =
-		strings.TrimSpace(
-			identity.DesktopInstanceID,
-		)
+	identity.UserID = runtimeidentity.ParseUserID(string(identity.UserID))
+	identity.DeviceID = runtimeidentity.ParseDeviceID(string(identity.DeviceID))
+	identity.DesktopInstanceID = strings.TrimSpace(string(identity.DesktopInstanceID))
 
 	if identity.UserID == "" ||
 		identity.DeviceID == "" ||

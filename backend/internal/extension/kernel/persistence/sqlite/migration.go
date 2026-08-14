@@ -276,6 +276,8 @@ var schemaMigrations = []string{
 	`CREATE INDEX IF NOT EXISTS idx_ext_task_runs_ext_id ON extension_task_runs(extension_id)`,
 	`CREATE INDEX IF NOT EXISTS idx_ext_task_runs_status ON extension_task_runs(status)`,
 	`CREATE INDEX IF NOT EXISTS idx_ext_task_runs_def_id ON extension_task_runs(task_definition_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_task_runs_execution_placement ON extension_task_runs(execution_placement)`,
+	`CREATE INDEX IF NOT EXISTS idx_ext_task_runs_execution_attempt ON extension_task_runs(execution_attempt_id)`,
 
 	`CREATE TABLE IF NOT EXISTS extension_task_queue (
 		task_run_id TEXT PRIMARY KEY,
@@ -2361,6 +2363,12 @@ var schemaColumnAdditions = []columnAddition{
 	{"extension_workflow_executions", "pause_reason", "TEXT NOT NULL DEFAULT ''"},
 	{"extension_workflow_executions", "pause_requested_at", "DATETIME"},
 	{"extension_workflow_executions", "paused_at", "DATETIME"},
+
+	{"extension_task_runs", "execution_placement", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_task_runs", "execution_target_json", "TEXT NOT NULL DEFAULT '{}'"},
+	{"extension_task_runs", "execution_attempt_id", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_task_runs", "execution_resolved_at", "DATETIME"},
+	{"extension_task_runs", "execution_resolved_by", "TEXT NOT NULL DEFAULT ''"},
 }
 
 func ensureSchemaColumns(ctx context.Context, db dbExecutor) error {

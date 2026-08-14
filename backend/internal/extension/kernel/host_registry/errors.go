@@ -10,6 +10,6 @@ var (
 	ErrInvalidHostEntry        = ErrInvalidRegistryEntry
 	ErrHostNotFound            = ErrRegistryEntryNotFound
 
-	ErrStaleRuntimeSessionBinding   = errors.New("host_registry: stale runtime session binding")
+	ErrStaleRuntimeSessionBinding    = errors.New("host_registry: stale runtime session binding")
 	ErrRuntimeSessionBindingConflict = errors.New("host_registry: runtime session binding conflict")
 )

@@ -47,10 +47,10 @@ type GameHostContainer struct {
 	HandshakeManager     *handshake.HandshakeManager
 	ReadyGate            *handshake.ReadyGate
 	ConnectionRegistry   *ipc.ConnectionRegistry
-	ControlPlane         *ipc.ControlPlane
+	ControlPlane         ipc.ControlPlane
 	RPCDispatcher        *rpc.RPCDispatcher
 	RPCLifecycle         *rpc.RequestLifecycleManager
-	HostHandlerRegistry  *rpc.HostHandlerRegistry
+	HostHandlerRegistry  rpc.HandlerRegistry
 	ChannelRegistry      channel.Registry
 
 	NotificationBridge   *notification.Bridge

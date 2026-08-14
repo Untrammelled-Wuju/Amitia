@@ -42,10 +42,10 @@ func (c *nativeBridgeClipboardClient) ReadText(ctx context.Context) (ClipboardRe
 		result.HasContent, _ = resp.Result["hasContent"].(bool)
 		result.Text, _ = resp.Result["text"].(string)
 		result.MIMEType, _ = resp.Result["mimeType"].(string)
-		result.ItemCount, _ = toInt(resp.Result["itemCount"])
+		result.ItemCount = toInt(resp.Result["itemCount"])
 		result.Truncated, _ = resp.Result["truncated"].(bool)
 		result.Sensitive, _ = resp.Result["sensitive"].(bool)
-		result.Generation, _ = toUint64(resp.Result["generation"])
+		result.Generation = toUint64(resp.Result["generation"])
 	}
 	return result, nil
 }
@@ -75,13 +75,13 @@ func (c *nativeBridgeClipboardClient) WriteText(ctx context.Context, req Clipboa
 	result := WriteResult{}
 	if resp.Result != nil {
 		result.Written, _ = resp.Result["written"].(bool)
-		result.Bytes, _ = toInt(resp.Result["bytes"])
+		result.Bytes = toInt(resp.Result["bytes"])
 		if s, ok := resp.Result["sensitive"].(bool); ok {
 			result.Sensitive = s
 		} else if req.Sensitive != nil {
 			result.Sensitive = *req.Sensitive
 		}
-		result.Generation, _ = toUint64(resp.Result["generation"])
+		result.Generation = toUint64(resp.Result["generation"])
 	}
 	return result, nil
 }
@@ -113,7 +113,7 @@ func (c *nativeBridgeClipboardClient) Status(ctx context.Context) (ClipboardCapa
 		state.AppHasInputFocus, _ = resp.Result["appHasInputFocus"].(bool)
 		state.ReadRequiresForeground, _ = resp.Result["readRequiresForeground"].(bool)
 		state.HasPrimaryClip, _ = resp.Result["hasPrimaryClip"].(bool)
-		state.MaxTextBytes, _ = toInt(resp.Result["maxTextBytes"])
+		state.MaxTextBytes = toInt(resp.Result["maxTextBytes"])
 		state.State, _ = resp.Result["state"].(string)
 		state.Reason, _ = resp.Result["reason"].(string)
 	}

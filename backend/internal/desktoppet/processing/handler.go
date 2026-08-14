@@ -213,7 +213,7 @@ func (h *Handler) CreatePackage(c *gin.Context) {
 
 	req := &CreatePackageRequest{
 		ProcessingTaskID:  processingTaskID,
-		UserID:            actor.UserID,
+		UserID:            string(actor.UserID),
 		DefaultAction:     payload.DefaultAction,
 		IncludedActions:   payload.IncludedActions,
 		UserDefaultAction: payload.UserDefaultAction,

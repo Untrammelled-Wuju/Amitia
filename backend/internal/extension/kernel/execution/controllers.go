@@ -140,12 +140,28 @@ func (g *DepthGuard) getChain(ctx context.Context, inv capability.ToolInvocation
 	return chain
 }
 
-func NewRuntimeDispatcher(adapterRegistry *capability.RuntimeAdapterRegistry) *RuntimeDispatcher {
-	return &RuntimeDispatcher{adapterRegistry: adapterRegistry}
+func NewRuntimeDispatcher(adapterRegistry *capability.RuntimeAdapterRegistry, resolvers ...capability.RuntimeExecutionResolver) *RuntimeDispatcher {
+	var resolver capability.RuntimeExecutionResolver
+	if len(resolvers) > 0 && resolvers[0] != nil {
+		resolver = resolvers[0]
+	} else {
+		resolver = &capability.LegacyRuntimeExecutionResolver{}
+	}
+	return &RuntimeDispatcher{
+		adapterRegistry:   adapterRegistry,
+		executionResolver: resolver,
+	}
 }
 
 type RuntimeDispatcher struct {
-	adapterRegistry *capability.RuntimeAdapterRegistry
+	adapterRegistry   *capability.RuntimeAdapterRegistry
+	executionResolver capability.RuntimeExecutionResolver
+}
+
+func (d *RuntimeDispatcher) SetExecutionResolver(resolver capability.RuntimeExecutionResolver) {
+	if resolver != nil {
+		d.executionResolver = resolver
+	}
 }
 
 func (d *RuntimeDispatcher) Dispatch(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext, input json.RawMessage) capability.UnifiedToolResult {
@@ -160,19 +176,38 @@ func (d *RuntimeDispatcher) Dispatch(ctx context.Context, tool capability.ToolDe
 		}
 	}
 
-	adapter, ok := d.adapterRegistry.Resolve(tool.Runtime)
+	route, err := d.executionResolver.ResolveRuntimeExecution(ctx, tool, inv)
+	if err != nil {
+		return capability.UnifiedToolResult{
+			InvocationID: inv.InvocationID,
+			Status:       capability.ToolResultStatusFailed,
+			Error: &capability.ToolError{
+				Code:    mapDispatcherResolverError(err),
+				Message: err.Error(),
+				Details: map[string]any{
+					"reason": mapDispatcherResolverReason(err),
+				},
+			},
+		}
+	}
+
+	adapter, ok := d.adapterRegistry.ResolveRoute(route)
 	if !ok {
 		return capability.UnifiedToolResult{
 			InvocationID: inv.InvocationID,
 			Status:       capability.ToolResultStatusFailed,
 			Error: &capability.ToolError{
 				Code:    capability.ErrorCodeRuntimeUnavailable,
-				Message: "no adapter for runtime: " + string(tool.Runtime.RuntimeType),
+				Message: "no adapter for runtime: " + string(route.Binding.RuntimeType),
 			},
 		}
 	}
 
-	return adapter.Execute(ctx, tool.Runtime, inv, input)
+	if routedAdapter, ok := adapter.(capability.RoutedRuntimeAdapter); ok {
+		return routedAdapter.ExecuteRoute(ctx, route, inv, input)
+	}
+
+	return adapter.Execute(ctx, route.Binding, inv, input)
 }
 
 func (d *RuntimeDispatcher) DispatchStream(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext, input json.RawMessage, emitter capability.ToolStreamEmitter) (capability.UnifiedToolResult, bool) {
@@ -187,25 +222,44 @@ func (d *RuntimeDispatcher) DispatchStream(ctx context.Context, tool capability.
 		}, false
 	}
 
-	adapter, ok := d.adapterRegistry.Resolve(tool.Runtime)
+	route, err := d.executionResolver.ResolveRuntimeExecution(ctx, tool, inv)
+	if err != nil {
+		return capability.UnifiedToolResult{
+			InvocationID: inv.InvocationID,
+			Status:       capability.ToolResultStatusFailed,
+			Error: &capability.ToolError{
+				Code:    mapDispatcherResolverError(err),
+				Message: err.Error(),
+				Details: map[string]any{
+					"reason": mapDispatcherResolverReason(err),
+				},
+			},
+		}, false
+	}
+
+	adapter, ok := d.adapterRegistry.ResolveRoute(route)
 	if !ok {
 		return capability.UnifiedToolResult{
 			InvocationID: inv.InvocationID,
 			Status:       capability.ToolResultStatusFailed,
 			Error: &capability.ToolError{
 				Code:    capability.ErrorCodeRuntimeUnavailable,
-				Message: "no adapter for runtime: " + string(tool.Runtime.RuntimeType),
+				Message: "no adapter for runtime: " + string(route.Binding.RuntimeType),
 			},
 		}, false
 	}
 
-	streamingAdapter, ok := adapter.(capability.StreamingRuntimeAdapter)
-	if !ok {
-		return adapter.Execute(ctx, tool.Runtime, inv, input), false
+	if routedStreamingAdapter, ok := adapter.(capability.RoutedStreamingRuntimeAdapter); ok {
+		result := routedStreamingAdapter.ExecuteStreamRoute(ctx, route, inv, input, emitter)
+		return result, true
 	}
 
-	result := streamingAdapter.ExecuteStream(ctx, tool.Runtime, inv, input, emitter)
-	return result, true
+	if streamingAdapter, ok := adapter.(capability.StreamingRuntimeAdapter); ok {
+		result := streamingAdapter.ExecuteStream(ctx, route.Binding, inv, input, emitter)
+		return result, true
+	}
+
+	return adapter.Execute(ctx, route.Binding, inv, input), false
 }
 
 func (d *RuntimeDispatcher) Cancel(ctx context.Context, tool capability.ToolDefinition, inv capability.ToolInvocationContext, reason capability.ToolCancellationReason) (bool, error) {
@@ -213,9 +267,19 @@ func (d *RuntimeDispatcher) Cancel(ctx context.Context, tool capability.ToolDefi
 		return false, nil
 	}
 
-	adapter, ok := d.adapterRegistry.Resolve(tool.Runtime)
+	route, err := d.executionResolver.ResolveRuntimeExecution(ctx, tool, inv)
+	if err != nil {
+		return false, nil
+	}
+
+	adapter, ok := d.adapterRegistry.ResolveRoute(route)
 	if !ok {
 		return false, nil
+	}
+
+	if routedCancellableAdapter, ok := adapter.(capability.RoutedCancellableRuntimeAdapter); ok {
+		err := routedCancellableAdapter.CancelRoute(ctx, route, inv, reason)
+		return true, err
 	}
 
 	cancellableAdapter, ok := adapter.(capability.CancellableRuntimeAdapter)
@@ -223,6 +287,26 @@ func (d *RuntimeDispatcher) Cancel(ctx context.Context, tool capability.ToolDefi
 		return false, capability.ErrRuntimeCancellationUnsupported{}
 	}
 
-	err := cancellableAdapter.Cancel(ctx, tool.Runtime, inv, reason)
+	err = cancellableAdapter.Cancel(ctx, route.Binding, inv, reason)
 	return true, err
+}
+
+func mapDispatcherResolverError(err error) string {
+	if err == nil {
+		return capability.ErrorCodeRuntimeUnavailable
+	}
+	if capability.IsProviderExecutionError(err) {
+		return capability.ErrorCodeRuntimeUnavailable
+	}
+	return capability.ErrorCodeRuntimeUnavailable
+}
+
+func mapDispatcherResolverReason(err error) string {
+	if err == nil {
+		return "runtime_error"
+	}
+	if capability.IsProviderExecutionError(err) {
+		return "provider_execution_error"
+	}
+	return "runtime_error"
 }

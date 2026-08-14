@@ -15,6 +15,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/u-ai/backend/internal/auth"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
@@ -229,7 +230,7 @@ func handleLocalSingleUserAuth(c *gin.Context, cfg AuthConfig) {
 		if err == nil && token.Valid && claims.UserId > 0 {
 			actor := &auth.ActorContext{
 				ActorType:      auth.ActorTypeUser,
-				UserID:         fmt.Sprintf("%d", claims.UserId),
+				UserID:         runtimeidentity.UserID(fmt.Sprintf("%d", claims.UserId)),
 				Roles:          []string{claims.Role},
 				AuthMethod:     "jwt",
 				IsLocalTrusted: true,
@@ -321,7 +322,7 @@ func parseAndValidateJWT(tokenStr, secret, issuer, audience string) (*auth.Actor
 
 	return &auth.ActorContext{
 		ActorType:     actorType,
-		UserID:        fmt.Sprintf("%d", claims.UserId),
+		UserID:        runtimeidentity.UserID(fmt.Sprintf("%d", claims.UserId)),
 		Roles:         roles,
 		Permissions:   permissions,
 		AuthMethod:    AuthMethodJWT,
@@ -345,7 +346,7 @@ func buildLocalUserActor(cfg AuthConfig) *auth.ActorContext {
 
 	return &auth.ActorContext{
 		ActorType:      auth.ActorTypeLocalUser,
-		UserID:         userID,
+		UserID:         runtimeidentity.UserID(userID),
 		Roles:          []string{"local_user", "user"},
 		Permissions:    append(auth.DefaultUserPermissions(), auth.PermDesktopPetRepair),
 		AuthMethod:     AuthMethodLocalToken,
@@ -361,7 +362,7 @@ func buildDesktopSessionActor(session *DesktopSession, cfg AuthConfig) *auth.Act
 
 	return &auth.ActorContext{
 		ActorType:      auth.ActorTypeLocalUser,
-		UserID:         session.UserID,
+		UserID:         runtimeidentity.UserID(session.UserID),
 		Roles:          []string{"local_user", "user"},
 		Permissions:    perms,
 		AuthMethod:     AuthMethodDesktopSession,
@@ -375,7 +376,7 @@ func buildDesktopSessionActor(session *DesktopSession, cfg AuthConfig) *auth.Act
 func buildAdminActor(c *gin.Context, authMethod string) *auth.ActorContext {
 	return &auth.ActorContext{
 		ActorType:      auth.ActorTypeAdmin,
-		UserID:         "local_admin",
+		UserID:         runtimeidentity.UserID("local_admin"),
 		Roles:          []string{"admin"},
 		Permissions:    auth.AdminPermissions(),
 		AuthMethod:     authMethod,
