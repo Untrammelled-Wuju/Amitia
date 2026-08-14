@@ -213,6 +213,7 @@ func (s *Service) reconnectExisting(
 
 	updated := existing
 	updated.ConnectionGeneration = newGen
+	updated.Revision = existing.Revision + 1
 	updated.RuntimeVersion = req.RuntimeVersion
 	updated.RuntimeContractVersion = req.RuntimeContractVersion
 	updated.Capabilities = caps
@@ -226,11 +227,30 @@ func (s *Service) reconnectExisting(
 	updated.ExpiresAt = now.Add(s.sessionTTL)
 	updated.UpdatedAt = now
 
-	if err := s.store.ReplaceForReconnect(ctx, existing.ConnectionGeneration, updated); err != nil {
-		if errors.Is(err, ErrConnectionSuperseded) {
+	if txOn {
+		if err := uow.WithinTx(ctx, func(tx SessionTx) error {
+			if err := tx.ReplaceForReconnect(ctx, existing.ConnectionGeneration, updated); err != nil {
+				return err
+			}
+			return s.events.PublishTx(ctx, tx.RawTx(), SessionDomainEvent{
+				Type:       SessionEventAcquired,
+				Session:    updated,
+				Reconnect:  true,
+				OccurredAt: now,
+			})
+		}); err != nil {
+			if errors.Is(err, ErrConnectionSuperseded) {
+				return AcquireResult{}, err
+			}
 			return AcquireResult{}, err
 		}
-		return AcquireResult{}, err
+	} else {
+		if err := s.store.ReplaceForReconnect(ctx, existing.ConnectionGeneration, updated); err != nil {
+			if errors.Is(err, ErrConnectionSuperseded) {
+				return AcquireResult{}, err
+			}
+			return AcquireResult{}, err
+		}
 	}
 
 	return AcquireResult{
@@ -247,6 +267,8 @@ func (s *Service) createNewSession(
 	now time.Time,
 	caps []string,
 	capHash string,
+	uow SessionUnitOfWork,
+	txOn bool,
 ) (AcquireResult, error) {
 	sessionID := s.idFactory()
 
@@ -269,6 +291,7 @@ func (s *Service) createNewSession(
 		Platform:                     req.Platform,
 		Status:                       protocol.SessionStatusRegistering,
 		ConnectionGeneration:         1,
+		Revision:                     1,
 		RuntimeVersion:               req.RuntimeVersion,
 		RuntimeContractVersion:       req.RuntimeContractVersion,
 		Capabilities:                 caps,
@@ -283,8 +306,24 @@ func (s *Service) createNewSession(
 		ExpiresAt:                    now.Add(s.sessionTTL),
 	}
 
-	if err := s.store.Create(ctx, session); err != nil {
-		return AcquireResult{}, err
+	if txOn {
+		if err := uow.WithinTx(ctx, func(tx SessionTx) error {
+			if err := tx.Create(ctx, session); err != nil {
+				return err
+			}
+			return s.events.PublishTx(ctx, tx.RawTx(), SessionDomainEvent{
+				Type:       SessionEventAcquired,
+				Session:    session,
+				Reconnect:  false,
+				OccurredAt: now,
+			})
+		}); err != nil {
+			return AcquireResult{}, err
+		}
+	} else {
+		if err := s.store.Create(ctx, session); err != nil {
+			return AcquireResult{}, err
+		}
 	}
 
 	return AcquireResult{
@@ -306,6 +345,8 @@ func (s *Service) MarkReady(
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	uow, txOn := s.txEnabled()
+
 	session, err := s.store.Get(ctx, sessionID)
 	if err != nil {
 		return RuntimeSession{}, err
@@ -323,9 +364,25 @@ func (s *Service) MarkReady(
 	session.LastHeartbeatAt = now
 	session.ExpiresAt = now.Add(s.sessionTTL)
 	session.UpdatedAt = now
+	session.Revision++
 
-	if err := s.store.UpdateStatus(ctx, sessionID, generation, protocol.SessionStatusReady, now); err != nil {
-		return RuntimeSession{}, err
+	if txOn {
+		if err := uow.WithinTx(ctx, func(tx SessionTx) error {
+			if err := tx.UpdateStatus(ctx, sessionID, generation, protocol.SessionStatusReady, now); err != nil {
+				return err
+			}
+			return s.events.PublishTx(ctx, tx.RawTx(), SessionDomainEvent{
+				Type:       SessionEventReady,
+				Session:    session,
+				OccurredAt: now,
+			})
+		}); err != nil {
+			return RuntimeSession{}, err
+		}
+	} else {
+		if err := s.store.UpdateStatus(ctx, sessionID, generation, protocol.SessionStatusReady, now); err != nil {
+			return RuntimeSession{}, err
+		}
 	}
 
 	presenceErr := s.presence.SessionReady(ctx, PresenceSnapshot{
