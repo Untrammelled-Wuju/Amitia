@@ -9,6 +9,7 @@ import (
 	"sync"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	"github.com/u-ai/backend/internal/iosnative"
 	"github.com/u-ai/backend/internal/nativebridge"
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
@@ -27,33 +28,53 @@ type IOSNativeProviderCapability struct {
 }
 
 type iosNativeProviderInstance struct {
-	mu         sync.RWMutex
-	bridge     nativebridge.Bridge
-	host       runtimehost.RuntimeHost
-	orch       *runtimeorchestrator.RuntimeOrchestrator
-	healthy    bool
-	generation nativebridge.HostGeneration
+	mu              sync.RWMutex
+	bridge          nativebridge.Bridge
+	domainProvider  *iosnative.Provider
+	host            runtimehost.RuntimeHost
+	orch            *runtimeorchestrator.RuntimeOrchestrator
+	healthy         bool
+	generation      nativebridge.HostGeneration
 }
 
 func newIOSNativeProviderInstance(
 	bridge nativebridge.Bridge,
 	host runtimehost.RuntimeHost,
 ) *iosNativeProviderInstance {
-	return &iosNativeProviderInstance{
-		bridge:     bridge,
+	instance := &iosNativeProviderInstance{
 		host:       host,
 		generation: nativebridge.HostGenerationZero,
 	}
+
+	if bridge != nil {
+		domain, err := iosnative.NewCanonicalProvider(bridge)
+		if err != nil {
+			instance.bridge = bridge
+			return instance
+		}
+		instance.bridge = bridge
+		instance.domainProvider = domain
+	}
+
+	return instance
 }
 
-func (p *iosNativeProviderInstance) SetBridge(bridge nativebridge.Bridge) {
+func (p *iosNativeProviderInstance) SetBridge(bridge nativebridge.Bridge) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	domain, err := iosnative.NewCanonicalProvider(bridge)
+	if err != nil {
+		return err
+	}
+
 	p.bridge = bridge
+	p.domainProvider = domain
 	p.generation++
 	if p.orch != nil {
 		p.reportComponentStateLocked()
 	}
+	return nil
 }
 
 func (p *iosNativeProviderInstance) SetOrchestrator(orch *runtimeorchestrator.RuntimeOrchestrator) {
@@ -181,8 +202,38 @@ var _ capability.IOSProvider = (*iosNativeProviderInstance)(nil)
 
 func (p *iosNativeProviderInstance) Execute(ctx context.Context, request capability.IOSBridgeRequest) capability.IOSBridgeResponse {
 	p.mu.RLock()
+	domain := p.domainProvider
 	bridge := p.bridge
 	p.mu.RUnlock()
+
+	if domain != nil {
+		req := nativebridge.Request{
+			ProtocolVersion: request.ProtocolVersion,
+			RequestID:       request.RequestID,
+			Platform:        "ios",
+			Operation:       request.Operation,
+			Payload:         request.Payload,
+		}
+
+		resp := domain.Execute(ctx, req)
+
+		return capability.IOSBridgeResponse{
+			ProtocolVersion: resp.ProtocolVersion,
+			RequestID:       resp.RequestID,
+			Status:          resp.Status,
+			Result:          resp.Result,
+			Error: func() *capability.IOSError {
+				if resp.Error == nil {
+					return nil
+				}
+				return &capability.IOSError{
+					Code:       resp.Error.Code,
+					Message:    resp.Error.Message,
+					DomainCode: resp.Error.DomainCode,
+				}
+			}(),
+		}
+	}
 
 	if bridge == nil {
 		return capability.IOSBridgeResponse{

@@ -31,9 +31,10 @@ func composeTestContainer(t *testing.T) *GameHostContainer {
 	supervisorDir := filepath.Join(t.TempDir(), "supervisor")
 	supervisor := trusted_service.NewProcessSupervisor(supervisorDir)
 	c, err := ComposeGameHost(GameHostComposeOptions{
-		DataRoot:          root,
-		KernelSource:      fakeKernelSource{},
-		TrustedSupervisor: supervisor,
+		DataRoot:            root,
+		KernelSource:        fakeKernelSource{},
+		TrustedSupervisor:   supervisor,
+		DefinitionReconcile: fakeDefinitionReconcile{},
 	})
 	if err != nil {
 		t.Fatalf("ComposeGameHost error: %v", err)
@@ -47,9 +48,10 @@ func composeTestContainerWithSupervisor(t *testing.T) *GameHostContainer {
 	supervisorDir := filepath.Join(t.TempDir(), "supervisor")
 	supervisor := trusted_service.NewProcessSupervisor(supervisorDir)
 	c, err := ComposeGameHost(GameHostComposeOptions{
-		DataRoot:          root,
-		KernelSource:      fakeKernelSource{},
-		TrustedSupervisor: supervisor,
+		DataRoot:            root,
+		KernelSource:        fakeKernelSource{},
+		TrustedSupervisor:   supervisor,
+		DefinitionReconcile: fakeDefinitionReconcile{},
 	})
 	if err != nil {
 		t.Fatalf("ComposeGameHost with supervisor error: %v", err)

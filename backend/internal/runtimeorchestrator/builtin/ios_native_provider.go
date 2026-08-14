@@ -83,13 +83,6 @@ func (f *IOSNativeProviderFactory) Build(
 		}
 	}
 
-	if f.config.Bridge == nil {
-		return nil, &IOSNativeError{
-			Code:  IOSNativeErrBridgeRequired,
-			Cause: fmt.Errorf("native bridge is required"),
-		}
-	}
-
 	return newIOSNativeProviderInstance(f.config.Bridge, bc.Host), nil
 }
 

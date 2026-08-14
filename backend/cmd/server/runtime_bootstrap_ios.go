@@ -45,17 +45,18 @@ func (b *runtimeBootstrap) registerProviderFactoriesIOS() error {
 	return nil
 }
 
-func (b *runtimeBootstrap) SetIOSNativeBridge(bridge nativebridge.Bridge) {
+func (b *runtimeBootstrap) SetIOSNativeBridge(bridge nativebridge.Bridge) error {
 	if b == nil {
-		return
+		return nil
 	}
 	b.iosNativeBridge = bridge
 	if b.iosNativeProvider != nil {
-		prov, ok := b.iosNativeProvider.(interface{ SetBridge(nativebridge.Bridge) })
+		prov, ok := b.iosNativeProvider.(interface{ SetBridge(nativebridge.Bridge) error })
 		if ok {
-			prov.SetBridge(bridge)
+			return prov.SetBridge(bridge)
 		}
 	}
+	return nil
 }
 
 func (b *runtimeBootstrap) buildPlatformProvidersIOS() error {

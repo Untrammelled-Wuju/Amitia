@@ -284,3 +284,5 @@ build_log.txt
 *.bak
 
 U-Ai-source.tar.gz
+
+build_errors.txt
