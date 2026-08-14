@@ -7,6 +7,8 @@ import (
 	"encoding/hex"
 	"sync"
 	"time"
+
+	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 type HostCapability string
@@ -34,9 +36,10 @@ const heartbeatValidDuration = 5 * time.Minute
 type HostEntry struct {
 	HostClientID    string
 	HostSessionID   string
-	UserID          string
-	Platform        string
-	DeviceID        string
+	UserID          runtimeidentity.UserID
+	Platform        runtimeidentity.Platform
+	DeviceID        runtimeidentity.DeviceID
+	RuntimeID       runtimeidentity.RuntimeID
 	WindowID        string
 	Capabilities    []HostCapability
 	AuthenticatedAt time.Time
@@ -154,7 +157,7 @@ func (r *HostRegistry) GetHost(ctx context.Context, hostClientID string) (*HostE
 	return entry, nil
 }
 
-func (r *HostRegistry) ListHostsByUser(ctx context.Context, userID string) ([]*HostEntry, error) {
+func (r *HostRegistry) ListHostsByUser(ctx context.Context, userID runtimeidentity.UserID) ([]*HostEntry, error) {
 	r.mu.RLock()
 	var result []*HostEntry
 	for _, h := range r.hosts {
@@ -169,7 +172,11 @@ func (r *HostRegistry) ListHostsByUser(ctx context.Context, userID string) ([]*H
 	return r.repo.ListHostsByUser(ctx, userID)
 }
 
-func (r *HostRegistry) ListReadyHosts(ctx context.Context, userID string, capability HostCapability) ([]*HostEntry, error) {
+func (r *HostRegistry) ListHostsByUserString(ctx context.Context, userID string) ([]*HostEntry, error) {
+	return r.ListHostsByUser(ctx, runtimeidentity.ParseUserID(userID))
+}
+
+func (r *HostRegistry) ListReadyHosts(ctx context.Context, userID runtimeidentity.UserID, capability HostCapability) ([]*HostEntry, error) {
 	hosts, err := r.ListHostsByUser(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -184,6 +191,10 @@ func (r *HostRegistry) ListReadyHosts(ctx context.Context, userID string, capabi
 		}
 	}
 	return result, nil
+}
+
+func (r *HostRegistry) ListReadyHostsString(ctx context.Context, userID string, capability HostCapability) ([]*HostEntry, error) {
+	return r.ListReadyHosts(ctx, runtimeidentity.ParseUserID(userID), capability)
 }
 
 func (r *HostRegistry) UpdateHeartbeat(ctx context.Context, hostClientID string) error {
@@ -211,7 +222,7 @@ func (r *HostRegistry) SetDisconnected(ctx context.Context, hostClientID string)
 	return nil
 }
 
-func (r *HostRegistry) FindTargetHost(ctx context.Context, userID string, capability HostCapability, platform string, windowID string) (*HostEntry, error) {
+func (r *HostRegistry) FindTargetHost(ctx context.Context, userID runtimeidentity.UserID, capability HostCapability, platform runtimeidentity.Platform, windowID string) (*HostEntry, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -242,6 +253,10 @@ func (r *HostRegistry) FindTargetHost(ctx context.Context, userID string, capabi
 		break
 	}
 	return bestMatch, nil
+}
+
+func (r *HostRegistry) FindTargetHostString(ctx context.Context, userID string, capability HostCapability, platform string, windowID string) (*HostEntry, error) {
+	return r.FindTargetHost(ctx, runtimeidentity.ParseUserID(userID), capability, runtimeidentity.ParsePlatform(platform), windowID)
 }
 
 func (r *HostRegistry) LoadFromStore(ctx context.Context) error {
@@ -282,10 +297,14 @@ func (r *HostRegistry) Count() int {
 	return len(r.hosts)
 }
 
-func (r *HostRegistry) HasReadyHost(ctx context.Context, userID string, capability HostCapability) bool {
+func (r *HostRegistry) HasReadyHost(ctx context.Context, userID runtimeidentity.UserID, capability HostCapability) bool {
 	hosts, err := r.ListReadyHosts(ctx, userID, capability)
 	if err != nil {
 		return false
 	}
 	return len(hosts) > 0
+}
+
+func (r *HostRegistry) HasReadyHostString(ctx context.Context, userID string, capability HostCapability) bool {
+	return r.HasReadyHost(ctx, runtimeidentity.ParseUserID(userID), capability)
 }

@@ -43,11 +43,11 @@ func (c *Client) PublishState(ctx context.Context, input StatePublishInput, opts
 	if input.Metadata != nil {
 		payload["metadata"] = input.Metadata
 	}
-	return c.SendNotification(ctx, MethodStatePublish, payload, opts...)
+	return c.sendHostNotification(ctx, MethodStatePublish, payload, opts...)
 }
 
 func (c *Client) GetState(ctx context.Context, input StateGetInput, opts ...MessageOption) (StateGetOutput, error) {
-	envelope, err := c.SendRequest(ctx, MethodStateGet, input, opts...)
+	envelope, err := c.sendHostRequest(ctx, MethodStateGet, input, opts...)
 	if err != nil {
 		return StateGetOutput{}, err
 	}

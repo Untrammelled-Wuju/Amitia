@@ -9,12 +9,53 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 type ExtensionID string
 type ModuleID string
 type ContributionID string
-type RuntimeID string
+type RuntimeID = runtimeidentity.RuntimeID
+
+// ExtensionPlacement describes the deployment/execution placement of an Extension.
+// cloud: Extension's executable modules are only allowed to be hosted by cloud-core type Runtime Profile.
+// device: Extension's executable modules are hosted by device-agent on specific devices.
+// hybrid: The same Extension contains both Cloud Module(s) and Device Module(s),
+// with a single ID, version, and install/upgrade semantics - not split into two plugins.
+type ExtensionPlacement string
+
+const (
+	ExtensionPlacementCloud  ExtensionPlacement = "cloud"
+	ExtensionPlacementDevice ExtensionPlacement = "device"
+	ExtensionPlacementHybrid ExtensionPlacement = "hybrid"
+)
+
+// ModulePlacement describes the placement of a single Module.
+// Module only allows expressing "cloud" or "device".
+// Extension-level "hybrid" is composed by the placement combination of multiple Modules.
+type ModulePlacement string
+
+const (
+	ModulePlacementCloud  ModulePlacement = "cloud"
+	ModulePlacementDevice ModulePlacement = "device"
+)
+
+func IsKnownExtensionPlacement(v ExtensionPlacement) bool {
+	switch v {
+	case "", ExtensionPlacementCloud, ExtensionPlacementDevice, ExtensionPlacementHybrid:
+		return true
+	}
+	return false
+}
+
+func IsKnownModulePlacement(v ModulePlacement) bool {
+	switch v {
+	case "", ModulePlacementCloud, ModulePlacementDevice:
+		return true
+	}
+	return false
+}
 
 type LocalizedText struct {
 	Default      string            `json:"default"`
@@ -199,6 +240,27 @@ type RollbackPointReference struct {
 	Reason     string          `json:"reason,omitempty"`
 }
 
+type ProviderMetadata struct {
+	ID       string            `json:"id,omitempty"`
+	Priority int               `json:"priority,omitempty"`
+	Labels   map[string]string `json:"labels,omitempty"`
+	Metadata map[string]any    `json:"metadata,omitempty"`
+}
+
+type ProvidedCapability struct {
+	ID       string         `json:"id"`
+	Version  string         `json:"version,omitempty"`
+	Metadata map[string]any `json:"metadata,omitempty"`
+}
+
+type DeviceRequirements struct {
+	Platforms         []string `json:"platforms,omitempty"`
+	Architectures     []string `json:"architectures,omitempty"`
+	MinAppVersion     string   `json:"minAppVersion,omitempty"`
+	MinRuntimeVersion string   `json:"minRuntimeVersion,omitempty"`
+	RequiredFeatures  []string `json:"requiredFeatures,omitempty"`
+}
+
 type ExtensionDefinition struct {
 	ID              ExtensionID     `json:"id"`
 	Name            LocalizedText   `json:"name"`
@@ -206,6 +268,8 @@ type ExtensionDefinition struct {
 	Version         SemanticVersion `json:"version"`
 	ManifestVersion int             `json:"manifestVersion"`
 	Domain          ExtensionDomain `json:"domain"`
+
+	Placement ExtensionPlacement `json:"placement,omitempty"`
 
 	Publisher PublisherReference `json:"publisher"`
 	Package   PackageReference   `json:"package"`
@@ -339,6 +403,11 @@ type ModuleDefinition struct {
 	Compatibility ModuleCompatibility      `json:"compatibility,omitempty"`
 	Policies      ModulePolicies           `json:"policies,omitempty"`
 	Metadata      map[string]any           `json:"metadata,omitempty"`
+
+	Placement            ModulePlacement      `json:"placement,omitempty"`
+	DeviceRequirements   *DeviceRequirements  `json:"deviceRequirements,omitempty"`
+	ProvidedCapabilities []ProvidedCapability `json:"providedCapabilities,omitempty"`
+	Provider             *ProviderMetadata    `json:"provider,omitempty"`
 }
 
 func (m *ModuleDefinition) Validate() error {
@@ -442,10 +511,10 @@ type RuntimeDefinition struct {
 }
 
 type RuntimeBinding struct {
-	RuntimeID   RuntimeID        `json:"runtimeId"`
-	RuntimeType RuntimeType      `json:"runtimeType"`
-	Generation  int64            `json:"generation"`
-	InstanceID  string           `json:"instanceId,omitempty"`
+	RuntimeID   RuntimeID         `json:"runtimeId"`
+	RuntimeType RuntimeType       `json:"runtimeType"`
+	Generation  int64             `json:"generation"`
+	InstanceID  string            `json:"instanceId,omitempty"`
 	Env         map[string]string `json:"env,omitempty"`
 }
 

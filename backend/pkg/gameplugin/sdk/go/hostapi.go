@@ -77,7 +77,7 @@ type HostAPIRateLimitStatusResult struct {
 }
 
 func (c *Client) InvokeHostAPI(ctx context.Context, input HostAPIInvokeInput, opts ...MessageOption) (HostAPIInvokeResult, error) {
-	envelope, err := c.SendRequest(ctx, MethodHostAPIInvoke, input, opts...)
+	envelope, err := c.sendHostRequest(ctx, MethodHostAPIInvoke, input, opts...)
 	if err != nil {
 		return HostAPIInvokeResult{}, err
 	}
@@ -91,7 +91,7 @@ func (c *Client) InvokeHostAPI(ctx context.Context, input HostAPIInvokeInput, op
 }
 
 func (c *Client) QueryHostAPICapabilities(ctx context.Context, input HostAPIQueryCapsInput, opts ...MessageOption) (HostAPIQueryCapsResult, error) {
-	envelope, err := c.SendRequest(ctx, MethodHostAPIQueryCaps, input, opts...)
+	envelope, err := c.sendHostRequest(ctx, MethodHostAPIQueryCaps, input, opts...)
 	if err != nil {
 		return HostAPIQueryCapsResult{}, err
 	}
@@ -106,7 +106,7 @@ func (c *Client) QueryHostAPICapabilities(ctx context.Context, input HostAPIQuer
 
 func (c *Client) QueryHostAPIRateLimit(ctx context.Context, method string, opts ...MessageOption) (HostAPIRateLimitStatusResult, error) {
 	input := map[string]any{"method": method}
-	envelope, err := c.SendRequest(ctx, MethodHostAPIRateLimit, input, opts...)
+	envelope, err := c.sendHostRequest(ctx, MethodHostAPIRateLimit, input, opts...)
 	if err != nil {
 		return HostAPIRateLimitStatusResult{}, err
 	}

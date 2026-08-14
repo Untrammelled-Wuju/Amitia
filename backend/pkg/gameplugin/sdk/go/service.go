@@ -41,7 +41,7 @@ func (c *Client) RegisterService(ctx context.Context, input ServiceRegisterInput
 		payload["metadata"] = input.Metadata
 	}
 
-	envelope, err := c.SendRequest(ctx, MethodServiceRegister, payload, opts...)
+	envelope, err := c.sendHostRequest(ctx, MethodServiceRegister, payload, opts...)
 	if err != nil {
 		return ServiceRegisterOutput{}, err
 	}
@@ -55,6 +55,6 @@ func (c *Client) RegisterService(ctx context.Context, input ServiceRegisterInput
 }
 
 func (c *Client) UnregisterService(ctx context.Context, input ServiceUnregisterInput, opts ...MessageOption) error {
-	_, err := c.SendRequest(ctx, MethodServiceUnregister, input, opts...)
+	_, err := c.sendHostRequest(ctx, MethodServiceUnregister, input, opts...)
 	return err
 }

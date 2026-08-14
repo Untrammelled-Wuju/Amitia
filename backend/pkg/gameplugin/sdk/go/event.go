@@ -27,5 +27,5 @@ func (c *Client) PublishEvent(ctx context.Context, input EventPublishInput, opts
 	if input.Metadata != nil {
 		payload["metadata"] = input.Metadata
 	}
-	return c.SendNotification(ctx, MethodEventPublish, payload, opts...)
+	return c.sendHostNotification(ctx, MethodEventPublish, payload, opts...)
 }

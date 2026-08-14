@@ -36,6 +36,10 @@ const (
 	ErrTaskAlreadyExists          TaskErrorCode = "task_already_exists"
 	ErrTaskNotCancelable          TaskErrorCode = "task_not_cancelable"
 	ErrTaskNotRetryable           TaskErrorCode = "task_not_retryable"
+	ErrTaskExecutionPlacementInvalid TaskErrorCode = "task_execution_placement_invalid"
+	ErrTaskExecutionTargetInvalid    TaskErrorCode = "task_execution_target_invalid"
+	ErrTaskExecutionTargetUnresolved TaskErrorCode = "task_execution_target_unresolved"
+	ErrTaskExecutionUnsupported      TaskErrorCode = "task_execution_unsupported"
 )
 
 type TaskError struct {

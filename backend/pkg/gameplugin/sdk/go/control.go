@@ -152,7 +152,7 @@ func (c *Client) GetAuthoritySnapshot(ctx context.Context, runtimeID, serviceID 
 		"runtimeId": runtimeID,
 		"serviceId": serviceID,
 	}
-	envelope, err := c.SendRequest(ctx, MethodAuthoritySnapshot, input, opts...)
+	envelope, err := c.sendHostRequest(ctx, MethodAuthoritySnapshot, input, opts...)
 	if err != nil {
 		return AuthoritySnapshot{}, err
 	}
@@ -166,7 +166,7 @@ func (c *Client) GetAuthoritySnapshot(ctx context.Context, runtimeID, serviceID 
 }
 
 func (c *Client) RegisterControlSink(ctx context.Context, input ControlSinkRegisterInput, opts ...MessageOption) (ControlSinkRegisterResult, error) {
-	envelope, err := c.SendRequest(ctx, MethodControlRegisterSink, input, opts...)
+	envelope, err := c.sendHostRequest(ctx, MethodControlRegisterSink, input, opts...)
 	if err != nil {
 		return ControlSinkRegisterResult{}, err
 	}
@@ -180,7 +180,7 @@ func (c *Client) RegisterControlSink(ctx context.Context, input ControlSinkRegis
 }
 
 func (c *Client) SubmitControlOutput(ctx context.Context, input ControlOutputInput, opts ...MessageOption) (ControlOutputResult, error) {
-	envelope, err := c.SendRequest(ctx, MethodControlOutput, input, opts...)
+	envelope, err := c.sendHostRequest(ctx, MethodControlOutput, input, opts...)
 	if err != nil {
 		return ControlOutputResult{}, err
 	}
@@ -194,7 +194,7 @@ func (c *Client) SubmitControlOutput(ctx context.Context, input ControlOutputInp
 }
 
 func (c *Client) TakeoverAuthority(ctx context.Context, input AuthorityTakeoverInput, runtimeID string, opts ...MessageOption) (AuthorityTakeoverResult, error) {
-	envelope, err := c.SendRequest(ctx, MethodControlAuthorityTakeover, input, opts...)
+	envelope, err := c.sendHostRequest(ctx, MethodControlAuthorityTakeover, input, opts...)
 	if err != nil {
 		return AuthorityTakeoverResult{}, err
 	}
@@ -208,7 +208,7 @@ func (c *Client) TakeoverAuthority(ctx context.Context, input AuthorityTakeoverI
 }
 
 func (c *Client) ReleaseAuthority(ctx context.Context, input AuthorityReleaseInput, runtimeID string, opts ...MessageOption) (AuthorityReleaseResult, error) {
-	envelope, err := c.SendRequest(ctx, MethodControlAuthorityRelease, input, opts...)
+	envelope, err := c.sendHostRequest(ctx, MethodControlAuthorityRelease, input, opts...)
 	if err != nil {
 		return AuthorityReleaseResult{}, err
 	}
@@ -222,7 +222,7 @@ func (c *Client) ReleaseAuthority(ctx context.Context, input AuthorityReleaseInp
 }
 
 func (c *Client) GetEmergencyStopStatus(ctx context.Context, input EmergencyStopStatusInput, opts ...MessageOption) (EmergencyStopStatusResult, error) {
-	envelope, err := c.SendRequest(ctx, MethodEmergencyStopStatus, input, opts...)
+	envelope, err := c.sendHostRequest(ctx, MethodEmergencyStopStatus, input, opts...)
 	if err != nil {
 		return EmergencyStopStatusResult{}, err
 	}

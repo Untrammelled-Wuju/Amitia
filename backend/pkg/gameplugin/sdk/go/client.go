@@ -93,6 +93,21 @@ func (c *Client) SendRequest(ctx context.Context, method string, payload any, op
 		return protocol.Envelope{}, NewValidationError("method '%s' uses reserved namespace", method)
 	}
 
+	return c.sendValidatedRequest(ctx, method, payload, opts...)
+}
+
+func (c *Client) sendHostRequest(ctx context.Context, method string, payload any, opts ...MessageOption) (protocol.Envelope, error) {
+	if err := protocol.ValidateMethod(method); err != nil {
+		return protocol.Envelope{}, NewValidationError("invalid method: %v", err)
+	}
+	if !protocol.IsReservedNamespace(method) {
+		return protocol.Envelope{}, NewValidationError("host method %q is not reserved", method)
+	}
+
+	return c.sendValidatedRequest(ctx, method, payload, opts...)
+}
+
+func (c *Client) sendValidatedRequest(ctx context.Context, method string, payload any, opts ...MessageOption) (protocol.Envelope, error) {
 	envelope, err := c.NewRequest(method, payload, opts...)
 	if err != nil {
 		return protocol.Envelope{}, err
@@ -124,6 +139,21 @@ func (c *Client) SendNotification(ctx context.Context, method string, payload an
 		return protocol.Envelope{}, NewValidationError("method '%s' uses reserved namespace", method)
 	}
 
+	return c.sendValidatedNotification(ctx, method, payload, opts...)
+}
+
+func (c *Client) sendHostNotification(ctx context.Context, method string, payload any, opts ...MessageOption) (protocol.Envelope, error) {
+	if err := protocol.ValidateMethod(method); err != nil {
+		return protocol.Envelope{}, NewValidationError("invalid method: %v", err)
+	}
+	if !protocol.IsReservedNamespace(method) {
+		return protocol.Envelope{}, NewValidationError("host notification method %q is not reserved", method)
+	}
+
+	return c.sendValidatedNotification(ctx, method, payload, opts...)
+}
+
+func (c *Client) sendValidatedNotification(ctx context.Context, method string, payload any, opts ...MessageOption) (protocol.Envelope, error) {
 	envelope, err := c.NewNotification(method, payload, opts...)
 	if err != nil {
 		return protocol.Envelope{}, err

@@ -40,11 +40,11 @@ func (c *Client) ChannelPublish(ctx context.Context, input ChannelPublishInput, 
 	if input.Metadata != nil {
 		payload["metadata"] = input.Metadata
 	}
-	return c.SendNotification(ctx, MethodChannelPublish, payload, opts...)
+	return c.sendHostNotification(ctx, MethodChannelPublish, payload, opts...)
 }
 
 func (c *Client) ChannelSubscribe(ctx context.Context, input ChannelSubscribeInput, opts ...MessageOption) (ChannelSubscribeOutput, error) {
-	envelope, err := c.SendRequest(ctx, MethodChannelSubscribe, input, opts...)
+	envelope, err := c.sendHostRequest(ctx, MethodChannelSubscribe, input, opts...)
 	if err != nil {
 		return ChannelSubscribeOutput{}, err
 	}
@@ -58,6 +58,6 @@ func (c *Client) ChannelSubscribe(ctx context.Context, input ChannelSubscribeInp
 }
 
 func (c *Client) ChannelUnsubscribe(ctx context.Context, input ChannelUnsubscribeInput, opts ...MessageOption) error {
-	_, err := c.SendRequest(ctx, MethodChannelUnsubscribe, input, opts...)
+	_, err := c.sendHostRequest(ctx, MethodChannelUnsubscribe, input, opts...)
 	return err
 }

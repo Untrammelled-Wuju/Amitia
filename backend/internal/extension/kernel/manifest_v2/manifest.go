@@ -21,6 +21,7 @@ const ManifestVersion = 2
 
 type Manifest struct {
 	ManifestVersion int             `json:"manifestVersion"`
+	Placement       string          `json:"placement,omitempty"`
 	Extension       ExtensionMeta   `json:"extension"`
 	Publisher       PublisherMeta   `json:"publisher"`
 	Compatibility   Compatibility   `json:"compatibility"`
@@ -73,6 +74,11 @@ type ModuleMeta struct {
 	Dependencies  []Dependency         `json:"dependencies,omitempty"`
 	Compatibility *ModuleCompatibility `json:"compatibility,omitempty"`
 	Policies      *ModulePolicies      `json:"policies,omitempty"`
+
+	Placement            string                   `json:"placement,omitempty"`
+	DeviceRequirements   *DeviceRequirementsMeta  `json:"deviceRequirements,omitempty"`
+	ProvidedCapabilities []ProvidedCapabilityMeta `json:"providedCapabilities,omitempty"`
+	Provider             *ProviderMetadataMeta    `json:"provider,omitempty"`
 }
 
 type ModuleCompatibility struct {
@@ -165,6 +171,27 @@ type DevelopmentMeta struct {
 	SourceMaps    bool     `json:"sourceMaps,omitempty"`
 	TestEntry     string   `json:"testEntry,omitempty"`
 	WatchPaths    []string `json:"watchPaths,omitempty"`
+}
+
+type DeviceRequirementsMeta struct {
+	Platforms         []string `json:"platforms,omitempty"`
+	Architectures     []string `json:"architectures,omitempty"`
+	MinAppVersion     string   `json:"minAppVersion,omitempty"`
+	MinRuntimeVersion string   `json:"minRuntimeVersion,omitempty"`
+	RequiredFeatures  []string `json:"requiredFeatures,omitempty"`
+}
+
+type ProvidedCapabilityMeta struct {
+	ID       string         `json:"id"`
+	Version  string         `json:"version,omitempty"`
+	Metadata map[string]any `json:"metadata,omitempty"`
+}
+
+type ProviderMetadataMeta struct {
+	ID       string            `json:"id,omitempty"`
+	Priority int               `json:"priority,omitempty"`
+	Labels   map[string]string `json:"labels,omitempty"`
+	Metadata map[string]any    `json:"metadata,omitempty"`
 }
 
 type LocalizedText struct {
@@ -469,6 +496,7 @@ func (m Manifest) ToExtensionDefinition() (domain.ExtensionDefinition, error) {
 		Description:     m.Extension.Description.ToDomain(),
 		Version:         version,
 		ManifestVersion: m.ManifestVersion,
+		Placement:       domain.ExtensionPlacement(m.Placement),
 		Publisher: domain.PublisherReference{
 			PublisherID: m.Publisher.ID,
 			DisplayName: m.Publisher.DisplayName,
@@ -555,7 +583,36 @@ func (m ModuleMeta) ToDomain(extID domain.ExtensionID) (domain.ModuleDefinition,
 		Runtime:       runtime,
 		Compatibility: deref(compat),
 		Policies:      deref(policies),
+		Placement:     domain.ModulePlacement(m.Placement),
 	}
+
+	if m.DeviceRequirements != nil {
+		mod.DeviceRequirements = &domain.DeviceRequirements{
+			Platforms:         m.DeviceRequirements.Platforms,
+			Architectures:     m.DeviceRequirements.Architectures,
+			MinAppVersion:     m.DeviceRequirements.MinAppVersion,
+			MinRuntimeVersion: m.DeviceRequirements.MinRuntimeVersion,
+			RequiredFeatures:  m.DeviceRequirements.RequiredFeatures,
+		}
+	}
+
+	for _, pc := range m.ProvidedCapabilities {
+		mod.ProvidedCapabilities = append(mod.ProvidedCapabilities, domain.ProvidedCapability{
+			ID:       pc.ID,
+			Version:  pc.Version,
+			Metadata: pc.Metadata,
+		})
+	}
+
+	if m.Provider != nil {
+		mod.Provider = &domain.ProviderMetadata{
+			ID:       m.Provider.ID,
+			Priority: m.Provider.Priority,
+			Labels:   m.Provider.Labels,
+			Metadata: m.Provider.Metadata,
+		}
+	}
+
 	for _, c := range m.Contributions {
 		cd, err := c.ToDomain(extID, domain.ModuleID(m.ID))
 		if err != nil {

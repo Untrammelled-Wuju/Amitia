@@ -30,6 +30,7 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/upgrade"
 	ghTrustedService "github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
+	"github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
 type GameHostComposeOptions struct {
@@ -154,7 +155,13 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 
 	nsReg := rpc.NewNamespaceRegistry(rpc.NamespaceRegistryConfig{})
 
-	notifBridge := notification.NewBridge(notification.NewCompositeSink())
+	var notifSink notification.NotificationSink
+	if opts.EventService != nil {
+		notifSink = integration.NewKernelEventNotificationSink(opts.EventService, pluginReg)
+	} else {
+		notifSink = notification.NewCompositeSink()
+	}
+	notifBridge := notification.NewBridge(notifSink)
 
 	connReg := ipc.NewConnectionRegistry()
 
@@ -167,6 +174,28 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		NamespaceAdapter:  nsAdapter,
 		ChannelAdvertiser: channelAdvertiser,
 	})
+
+	hostHandlers := rpc.NewHostHandlerRegistry()
+	rpcLifecycle := rpc.NewLifecycleManager(rpc.LifecycleManagerConfig{})
+	rpcDispatcher := rpc.NewRPCDispatcher(rpc.DispatcherConfig{
+		Namespaces:   nsReg,
+		HostHandlers: hostHandlers,
+		Lifecycle:    rpcLifecycle,
+	})
+
+	handshakeController := handshake.NewHandshakeControllerAdapter(handshakeMgr, readyGate)
+
+	controlPlane, err := ipc.NewControlPlane(ipc.ControlPlaneConfig{
+		Registry:            connReg,
+		Dispatcher:          rpcDispatcher,
+		HandshakeController: handshakeController,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("compose control plane: %w", err)
+	}
+
+	rpcDispatcher.SetControlPlane(controlPlane)
+	rpcLifecycle.SetControlPlane(controlPlane)
 
 	contributionSync, err := integration.NewGamePluginSyncService(
 		pluginReg,
@@ -265,28 +294,32 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	}
 
 	container := &GameHostContainer{
-		DirectoryManager:    dirMgr,
-		CheckpointStore:     checkpointStore,
-		ConfigStore:         configStore,
-		ConfigResolver:      configResolver,
-		PluginRegistry:      pluginReg,
-		ContributionSync:    contributionSync,
-		RuntimeManager:      runtimeManager,
+		DirectoryManager:     dirMgr,
+		CheckpointStore:      checkpointStore,
+		ConfigStore:          configStore,
+		ConfigResolver:       configResolver,
+		PluginRegistry:       pluginReg,
+		ContributionSync:     contributionSync,
+		RuntimeManager:       runtimeManager,
 		RuntimeTopologyStore: topologyStore,
-		RuntimeHealth:       runtimeHealth,
-		RuntimeExecutor:     runtimeExecutor,
-		RuntimeProvisioner:  runtimeProvisioner,
-		NamespaceRegistry:   nsReg,
-		HandshakeManager:    handshakeMgr,
-		ReadyGate:           readyGate,
-		ConnectionRegistry:  connReg,
-		ChannelRegistry:     channelReg,
-		NotificationBridge:  notifBridge,
-		StateStore:          stateStore,
+		RuntimeHealth:        runtimeHealth,
+		RuntimeExecutor:      runtimeExecutor,
+		RuntimeProvisioner:   runtimeProvisioner,
+		NamespaceRegistry:    nsReg,
+		HandshakeManager:     handshakeMgr,
+		ReadyGate:            readyGate,
+		ConnectionRegistry:   connReg,
+		ControlPlane:         controlPlane,
+		RPCDispatcher:        rpcDispatcher,
+		RPCLifecycle:         rpcLifecycle,
+		HostHandlerRegistry:  hostHandlers,
+		ChannelRegistry:      channelReg,
+		NotificationBridge:   notifBridge,
+		StateStore:           stateStore,
 		BinaryObjectRegistry: binaryReg,
-		StreamManager:       streamMgr,
-		procAdapter:         procAdapter,
-		HostAPIGateway:      opts.HostAPIGateway,
+		StreamManager:        streamMgr,
+		procAdapter:          procAdapter,
+		HostAPIGateway:       opts.HostAPIGateway,
 
 		ResourceAdapter:    resourceAdapter,
 		ResourceViewer:     resourceViewer,
@@ -313,6 +346,18 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 			return nil, err
 		}
 		container.HostAPIAdapter = adapter
+	}
+
+	if opts.TrustedSupervisor != nil {
+		handler := integration.NewGameHostStdioProtocolHandler(
+			controlPlane,
+			runtimeManager,
+			topologyStore,
+			pluginReg,
+		)
+		if err := opts.TrustedSupervisor.RegisterStdioProtocolHandler(protocol.ProtocolVersion, handler); err != nil {
+			return nil, fmt.Errorf("register gamehost stdio protocol handler: %w", err)
+		}
 	}
 
 	return container, nil
