@@ -310,11 +310,8 @@ func (b *llamaCppEmbeddingBackend) Embed(ctx context.Context, inputs []string, p
 		truncated := make([]bool, len(inputs))
 		tokenCounts := make([]int, len(inputs))
 		for i, text := range inputs {
-			tokenCounts[i] = len([]rune(text))
 			if b.config.Truncate && b.manifest != nil && b.manifest.ContextLength > 0 {
-				if tokenCounts[i] > b.manifest.ContextLength {
-					truncated[i] = true
-				}
+				tokenCounts[i] = 0
 			}
 		}
 

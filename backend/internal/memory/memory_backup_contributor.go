@@ -40,6 +40,10 @@ func (c *MemoryBackupContributor) Name() string {
 	return "Memory"
 }
 
+func (c *MemoryBackupContributor) Dependencies() []string {
+	return []string{"character", "chat"}
+}
+
 func (c *MemoryBackupContributor) Plan(ctx context.Context, req dataportability.BackupRequest) ([]dataportability.BackupComponentPlan, error) {
 	characterID := req.CharacterID
 	if req.Scope == dataportability.ScopeMemory && characterID == "" {
@@ -446,7 +450,10 @@ func (c *MemoryBackupContributor) PreviewImport(ctx context.Context, req datapor
 }
 
 func (c *MemoryBackupContributor) Import(ctx context.Context, req dataportability.ImportRequest, in dataportability.BackupReader) error {
-	idMap := dataportability.NewImportIdentityMap()
+	idMap := req.IdentityMap
+	if idMap == nil {
+		idMap = dataportability.NewImportIdentityMap()
+	}
 	charPolicy := string(req.CharacterPolicy)
 
 	recRC, err := in.ReadComponent(ComponentIDMemoryRecords + ".v1")
