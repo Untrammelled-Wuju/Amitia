@@ -4,6 +4,8 @@ package memory
 
 import (
 	"fmt"
+
+	"github.com/google/uuid"
 )
 
 func (s *service) List(q MemoryListQuery) (*MemoryListResponse, error) {
@@ -15,32 +17,22 @@ func (s *service) List(q MemoryListQuery) (*MemoryListResponse, error) {
 }
 
 func (s *service) Create(req *CreateMemoryRequest) (*Memory, error) {
-	if req.MemoryType == "" {
-		req.MemoryType = "custom"
+	memoryType, ok := NormalizeMemoryType(req.MemoryType)
+	if !ok {
+		memoryType = MemoryTypeFact
 	}
+
 	if req.Source == "" {
 		req.Source = "manual"
-	}
-	if req.Importance < 0 {
-		req.Importance = 0
-	}
-	if req.Importance > 10 {
-		req.Importance = 10
-	}
-	if req.Confidence < 0 {
-		req.Confidence = 0
-	}
-	if req.Confidence > 100 {
-		req.Confidence = 100
-	}
-	if req.Confidence == 0 {
-		req.Confidence = 50
 	}
 	if req.VerifiedStatus == "" {
 		req.VerifiedStatus = "unverified"
 	}
 	if req.Scope == "" {
 		req.Scope = "character"
+	}
+	if req.Confidence == 0 {
+		req.Confidence = 50
 	}
 
 	resp, err := s.AutoResolveConflict(req.Key, req.Value, req.CharacterID, req.Confidence)
@@ -53,30 +45,37 @@ func (s *service) Create(req *CreateMemoryRequest) (*Memory, error) {
 		expiresAt = &req.ExpiresAt
 	}
 
-	m := &Memory{
-		CharacterID:    req.CharacterID,
-		MemoryType:     req.MemoryType,
-		Source:         req.Source,
-		Scope:          req.Scope,
-		Key:            req.Key,
-		Value:          req.Value,
-		Importance:     req.Importance,
-		Confidence:     req.Confidence,
-		ExpiresAt:      expiresAt,
-		EntityID:       req.EntityID,
-		EntityType:     req.EntityType,
-		SourceMsgID:    req.SourceMsgID,
-		SourceConvID:   req.SourceConvID,
-		VerifiedStatus: req.VerifiedStatus,
-	}
-	if err := s.repo.Create(m); err != nil {
+	operationID := uuid.New().String()
+
+	m, err := s.createCanonicalMemory(canonicalCreateRequest{
+		CharacterID:           req.CharacterID,
+		MemoryType:            memoryType,
+		Source:                req.Source,
+		Scope:                 req.Scope,
+		Key:                   req.Key,
+		Value:                 req.Value,
+		Importance:            req.Importance,
+		Confidence:            req.Confidence,
+		ExpiresAt:             expiresAt,
+		EntityID:              req.EntityID,
+		EntityType:            req.EntityType,
+		SourceMsgID:           req.SourceMsgID,
+		SourceConvID:          req.SourceConvID,
+		VerifiedStatus:        req.VerifiedStatus,
+		SensitivityLevel:      req.SensitivityLevel,
+		AllowProactiveMention: req.AllowProactiveMention,
+		RequiresConfirmation:  req.RequiresConfirmation,
+		OperationID:           operationID,
+		EventType:             "memory_created",
+		EventReason:           "manual_create",
+	})
+	if err != nil {
 		return nil, fmt.Errorf("创建失败: %w", err)
 	}
 
 	go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
 	s.syncGraph(m)
 
-	s.logEvent(m.ID, "memory_created", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
 	return m, nil
 }
 
@@ -90,7 +89,11 @@ func (s *service) Update(id string, req *UpdateMemoryRequest) (*Memory, error) {
 		updates["value"] = *req.Value
 	}
 	if req.MemoryType != nil {
-		updates["memory_type"] = *req.MemoryType
+		memoryType, ok := NormalizeMemoryType(*req.MemoryType)
+		if !ok {
+			memoryType = MemoryTypeFact
+		}
+		updates["memory_type"] = string(memoryType)
 	}
 	if req.CharacterID != nil {
 		updates["character_id"] = *req.CharacterID
@@ -119,13 +122,19 @@ func (s *service) Update(id string, req *UpdateMemoryRequest) (*Memory, error) {
 	if len(updates) == 0 {
 		return s.repo.FindByID(id)
 	}
-	if err := s.repo.Update(id, updates); err != nil {
+
+	operationID := uuid.New().String()
+
+	m, err := s.updateCanonicalMemory(id, canonicalUpdateRequest{
+		Updates:     updates,
+		OperationID: operationID,
+		EventType:   "memory_updated",
+		EventReason: "manual_update",
+	})
+	if err != nil {
 		return nil, fmt.Errorf("更新失败: %w", err)
 	}
-	m, err := s.repo.FindByID(id)
-	if err != nil {
-		return nil, err
-	}
+
 	if before != nil && before.MemoryType != m.MemoryType {
 		deleteVectorsFromCollections([]string{m.ID}, collectionNameForMemoryType(before.MemoryType))
 	}
@@ -133,25 +142,34 @@ func (s *service) Update(id string, req *UpdateMemoryRequest) (*Memory, error) {
 		deleteVectorsFromCollections([]string{m.ID})
 		_ = s.repo.UnmarkEmbedded(m.ID)
 		s.deleteGraph(m)
-		s.logEvent(m.ID, "memory_edited", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
 		return m, nil
 	}
 	go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
 	s.syncGraph(m)
-	s.logEvent(m.ID, "memory_edited", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
 	return m, nil
 }
 
 func (s *service) Delete(id string) error {
+	operationID := uuid.New().String()
+
 	m, err := s.repo.FindByID(id)
 	if err != nil {
 		return err
 	}
-	s.logEvent(id, "memory_deleted", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
+
+	err = s.deleteCanonicalMemory(id, canonicalDeleteRequest{
+		OperationID: operationID,
+		EventReason: "manual_delete",
+		HardDelete:  false,
+	})
+	if err != nil {
+		return err
+	}
+
 	deleteVectorsFromCollections([]string{id})
 	_ = s.repo.UnmarkEmbedded(id)
 	s.deleteGraph(m)
-	return s.repo.Delete(id)
+	return nil
 }
 
 func (s *service) DeleteAll(characterID string) error {
@@ -161,9 +179,7 @@ func (s *service) DeleteAll(characterID string) error {
 		query = query.Where("character_id = ?", characterID)
 	}
 	query.Pluck("id", &ids)
-	if characterID != "" {
-		s.logEvent("", "memory_deleted_all", "", "", "", 0, "", characterID)
-	}
+
 	deleteVectorsFromCollections(ids)
 	for _, id := range ids {
 		_ = s.repo.UnmarkEmbedded(id)
@@ -173,6 +189,16 @@ func (s *service) DeleteAll(characterID string) error {
 			_ = s.graphSvc.DeleteNode("memory:" + id)
 		}
 	}
+
+	for _, id := range ids {
+		operationID := uuid.New().String()
+		_ = s.deleteCanonicalMemory(id, canonicalDeleteRequest{
+			OperationID: operationID,
+			EventReason: "bulk_delete",
+			HardDelete:  false,
+		})
+	}
+
 	return s.repo.DeleteAll(characterID)
 }
 

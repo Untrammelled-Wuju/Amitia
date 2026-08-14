@@ -156,5 +156,6 @@ func DefaultMigrations() []Migration {
 		MemoryTimeQueryIndexesMigration(),
 		MemorySummaryConsolidationMigration(),
 		KernelHostRegistryEntryKindMigration(),
+		ProductionCutoverMigration(),
 	}
 }

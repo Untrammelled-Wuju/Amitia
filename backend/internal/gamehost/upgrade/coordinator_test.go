@@ -3,6 +3,7 @@ package upgrade
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 
@@ -287,22 +288,43 @@ func (f *fakeMigrationHook) ExecuteMigration(ctx context.Context, mc MigrationCo
 	return f.result, nil
 }
 
+type fakeRuntimeGraphReconciler struct {
+	mu         sync.Mutex
+	reconciled []string
+	failNext   bool
+}
+
+func (f *fakeRuntimeGraphReconciler) ReconcileExtension(ctx context.Context, extensionID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.reconciled = append(f.reconciled, extensionID)
+	if f.failNext {
+		return fmt.Errorf("runtime graph reconcile failure")
+	}
+	return nil
+}
+
 func setupTestCoordinator(reg *fakePluginRegistry, rtMgr *fakeRuntimeManager, rtExec *fakeRuntimeExecutor) (*UpgradeCoordinator, *fakeDefinitionReconciler, *fakeContributionReconciler, *fakeConfigValidator, *fakeKernelLifecycle) {
 	defRec := &fakeDefinitionReconciler{}
 	contribRec := &fakeContributionReconciler{}
 	cfgVal := &fakeConfigValidator{}
 	kernel := &fakeKernelLifecycle{}
+	rtGraph := &fakeRuntimeGraphReconciler{}
 
-	c := NewUpgradeCoordinator(
+	c, err := NewUpgradeCoordinator(
 		reg,
 		rtMgr,
 		rtExec,
 		defRec,
+		rtGraph,
 		contribRec,
 		cfgVal,
 		kernel,
 		nil,
 	)
+	if err != nil {
+		panic(err)
+	}
 	return c, defRec, contribRec, cfgVal, kernel
 }
 
