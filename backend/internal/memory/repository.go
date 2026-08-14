@@ -146,17 +146,36 @@ func (r *repository) Update(id string, updates map[string]interface{}) error {
 	return r.db.Model(&Memory{}).Where("id = ?", id).Updates(updates).Error
 }
 
+func (r *repository) CreateVersioned(tx *gorm.DB, m *Memory, event MemoryEventRecord) error {
+	if err := tx.Create(m).Error; err != nil {
+		return err
+	}
+	return insertMemoryEventRepository(tx, event)
+}
+
+func (r *repository) UpdateVersioned(tx *gorm.DB, id string, expectedVersion int, updates map[string]interface{}, event MemoryEventRecord) error {
+	if err := tx.Model(&Memory{}).Where("id = ? AND version = ?", id, expectedVersion).Updates(updates).Error; err != nil {
+		return err
+	}
+	return insertMemoryEventRepository(tx, event)
+}
+
+func insertMemoryEventRepository(tx *gorm.DB, event MemoryEventRecord) error {
+	return tx.Exec(
+		`INSERT INTO memory_events (id, memory_id, event_type, key, value, memory_type, importance, source, character_id, created_at, version, operation_id, snapshot_hash, event_reason)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		event.ID, event.MemoryID, event.EventType, event.Key, event.Value, event.MemoryType, event.Importance, event.Source, event.CharacterID, event.CreatedAt, event.Version, event.OperationID, event.SnapshotHash, event.EventReason,
+	).Error
+}
+
 func (r *repository) Delete(id string) error {
-	r.db.Exec("DELETE FROM memory_events WHERE memory_id = ?", id)
 	return r.db.Where("id = ?", id).Delete(&Memory{}).Error
 }
 
 func (r *repository) DeleteAll(characterID string) error {
 	if characterID != "" {
-		r.db.Exec("DELETE FROM memory_events WHERE character_id = ?", characterID)
 		return r.db.Where("character_id = ?", characterID).Delete(&Memory{}).Error
 	}
-	r.db.Exec("DELETE FROM memory_events")
 	return r.db.Where("1=1").Delete(&Memory{}).Error
 }
 

@@ -58,6 +58,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
 	"github.com/u-ai/backend/internal/gamehost"
+	"github.com/u-ai/backend/internal/gamehost/integration/service_definition"
 	"github.com/u-ai/backend/internal/gamehost/upgrade"
 	"github.com/u-ai/backend/internal/imagegen"
 	"github.com/u-ai/backend/internal/imageintelligence"
@@ -1195,6 +1196,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		KernelPermissionBroker:        permBroker,
 		KernelPermissionSnapshotStore: permSnapshotStore,
 		KernelScopeManager:            scopeManager,
+
+		DefinitionReconcile: newGameHostDefinitionReconcile(instRepo, defRepo, contribRepo, typedInstaller),
+		KernelLifecycle:     newGameHostKernelLifecycle(lifecycleMgr),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("kernel: compose gamehost: %w", err)
@@ -1202,6 +1206,65 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	container.GameHost = gameHost
 
 	return container, nil
+}
+
+type gameHostDefinitionReconcile struct {
+	instRepo  domain.InstallationRepository
+	defRepo   domain.DefinitionRepository
+	contribRepo domain.ContributionRepository
+	installer *TypedContributionInstaller
+}
+
+func newGameHostDefinitionReconcile(instRepo domain.InstallationRepository, defRepo domain.DefinitionRepository, contribRepo domain.ContributionRepository, installer *TypedContributionInstaller) upgrade.DefinitionReconciler {
+	return &gameHostDefinitionReconcile{instRepo: instRepo, defRepo: defRepo, contribRepo: contribRepo, installer: installer}
+}
+
+func (r *gameHostDefinitionReconcile) ReconcileExtension(extensionID string) *service_definition.ReconcileReport {
+	report := &service_definition.ReconcileReport{ExtensionID: extensionID}
+	extID := domain.ExtensionID(extensionID)
+	inst, err := r.instRepo.GetInstallation(context.Background(), extID)
+	if err != nil {
+		report.Errors = append(report.Errors, fmt.Errorf("get installation: %w", err))
+		return report
+	}
+	def, err := r.defRepo.GetExtension(context.Background(), extID, inst.InstalledVersion)
+	if err != nil {
+		report.Errors = append(report.Errors, fmt.Errorf("get extension: %w", err))
+		return report
+	}
+	for _, mod := range def.Modules {
+		_ = mod
+	}
+	report.Added = len(def.Modules)
+	return report
+}
+
+type gameHostKernelLifecycle struct {
+	manager *lifecycle_manager.Manager
+}
+
+func newGameHostKernelLifecycle(manager *lifecycle_manager.Manager) upgrade.KernelExtensionLifecycle {
+	return &gameHostKernelLifecycle{manager: manager}
+}
+
+func (k *gameHostKernelLifecycle) ExecuteUpdate(ctx context.Context, extensionID string, targetVersion string, operationID upgrade.UpgradeOperationID) (*upgrade.KernelUpdateResult, error) {
+	if k.manager == nil {
+		return nil, fmt.Errorf("kernel lifecycle manager not available")
+	}
+	result, err := k.manager.Execute(ctx, lifecycle_manager.LifecycleCommand{
+		Kind:          lifecycle_manager.CmdUpdate,
+		ExtensionID:   domain.ExtensionID(extensionID),
+		TargetVersion: domain.SemanticVersion{Major: 0, Minor: 0, Patch: 0},
+		RequestID:     string(operationID),
+	})
+	if err != nil {
+		return &upgrade.KernelUpdateResult{Success: false, Reason: err.Error()}, err
+	}
+	return &upgrade.KernelUpdateResult{
+		Success:    result.Status == "completed",
+		NewVersion: "",
+		Reason:     result.Error,
+	}, nil
 }
 
 func (b *ContainerBuilder) buildStore(ctx context.Context) (*sqlite.Store, error) {

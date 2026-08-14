@@ -280,7 +280,7 @@ func (s *service) updateCanonicalMemory(id string, req canonicalUpdateRequest) (
 			return err
 		}
 
-		snapshotHash := computeMemorySnapshotHash(&updated)
+		snapshotHash := computeMemorySnapshotHashCanonical(&updated)
 
 		event := MemoryEventRecord{
 			ID:           uuid.New().String(),
@@ -346,7 +346,7 @@ func (s *service) deleteCanonicalMemory(id string, req canonicalDeleteRequest) e
 			return err
 		}
 
-		snapshotHash := computeMemorySnapshotHash(&updated)
+		snapshotHash := computeMemorySnapshotHashCanonical(&updated)
 
 		event := MemoryEventRecord{
 			ID:           uuid.New().String(),
