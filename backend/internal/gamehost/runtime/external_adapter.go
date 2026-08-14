@@ -9,18 +9,36 @@ type ExternalServiceAdapter interface {
 	Stop(ctx context.Context, execCtx ServiceExecutionContext) error
 }
 
-type defaultExternalAdapter struct{}
+type unavailableExternalServiceAdapter struct{}
 
-func NewExternalServiceAdapter() ExternalServiceAdapter {
-	return &defaultExternalAdapter{}
+func NewUnavailableExternalServiceAdapter() ExternalServiceAdapter {
+	return &unavailableExternalServiceAdapter{}
 }
 
-func (a *defaultExternalAdapter) Start(ctx context.Context, execCtx ServiceExecutionContext) error {
-	return nil
+func (a *unavailableExternalServiceAdapter) Start(
+	ctx context.Context,
+	execCtx ServiceExecutionContext,
+) error {
+	return &ExecutionError{
+		Code:      ErrServiceUnavailable,
+		RuntimeID: string(execCtx.RuntimeID),
+		PluginID:  string(execCtx.PluginID),
+		ServiceID: string(execCtx.ServiceID),
+		Message:   "external service adapter is not configured",
+	}
 }
 
-func (a *defaultExternalAdapter) Stop(ctx context.Context, execCtx ServiceExecutionContext) error {
-	return nil
+func (a *unavailableExternalServiceAdapter) Stop(
+	ctx context.Context,
+	execCtx ServiceExecutionContext,
+) error {
+	return &ExecutionError{
+		Code:      ErrServiceUnavailable,
+		RuntimeID: string(execCtx.RuntimeID),
+		PluginID:  string(execCtx.PluginID),
+		ServiceID: string(execCtx.ServiceID),
+		Message:   "external service adapter is not configured",
+	}
 }
 
 type ExternalAdapterFunc struct {
@@ -32,7 +50,13 @@ func (f ExternalAdapterFunc) Start(ctx context.Context, execCtx ServiceExecution
 	if f.StartFn != nil {
 		return f.StartFn(ctx, execCtx)
 	}
-	return nil
+	return &ExecutionError{
+		Code:      ErrServiceUnavailable,
+		RuntimeID: string(execCtx.RuntimeID),
+		PluginID:  string(execCtx.PluginID),
+		ServiceID: string(execCtx.ServiceID),
+		Message:   "external service adapter is not configured",
+	}
 }
 
 func (f ExternalAdapterFunc) Stop(ctx context.Context, execCtx ServiceExecutionContext) error {

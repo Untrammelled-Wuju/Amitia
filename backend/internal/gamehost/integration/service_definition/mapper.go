@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
+	"github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
 type DefinitionMapper struct{}
@@ -56,7 +57,7 @@ func (m *DefinitionMapper) MapToDefinition(view ServiceRuntimeView) (*trusted_se
 				},
 			},
 		},
-		Protocol:          "amitia-trusted-service/1",
+		Protocol:          protocol.ProtocolVersion,
 		InstancePolicy:    "single",
 		HealthCheck: trusted_service.ServiceHealthCheck{
 			Type:                "heartbeat",

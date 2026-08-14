@@ -15,14 +15,15 @@ var _ ipc.HandshakeController = (*HandshakeControllerAdapter)(nil)
 // HandshakeControllerAdapter bridges a HandshakeManager to the ipc.HandshakeController
 // interface so the IPC layer can drive the protocol handshake without a circular import.
 type HandshakeControllerAdapter struct {
-	inner *HandshakeManager
+	inner     *HandshakeManager
+	readyGate *ReadyGate
 }
 
 // NewHandshakeControllerAdapter returns an ipc.HandshakeController backed by the
-// supplied HandshakeManager. The manager must be fully configured before the
+// supplied HandshakeManager and ReadyGate. The manager must be fully configured before the
 // returned controller is passed into ipc.ControlPlaneConfig.
-func NewHandshakeControllerAdapter(mgr *HandshakeManager) *HandshakeControllerAdapter {
-	return &HandshakeControllerAdapter{inner: mgr}
+func NewHandshakeControllerAdapter(mgr *HandshakeManager, gate *ReadyGate) *HandshakeControllerAdapter {
+	return &HandshakeControllerAdapter{inner: mgr, readyGate: gate}
 }
 
 // Register registers the connection ID with the underlying manager.
@@ -33,6 +34,9 @@ func (a *HandshakeControllerAdapter) Register(id ipc.ConnectionID) {
 // Remove clears all handshake state for the given connection.
 func (a *HandshakeControllerAdapter) Remove(id ipc.ConnectionID) {
 	a.inner.RemoveConnection(string(id))
+	if a.readyGate != nil {
+		a.readyGate.Remove(string(id))
+	}
 }
 
 // HandleHello parses the hello envelope payload, delegates to the manager, and
@@ -46,7 +50,13 @@ func (a *HandshakeControllerAdapter) HandleHello(
 ) (json.RawMessage, error) {
 	resp, err := a.inner.HandleHelloFromEnvelope(ctx, string(connID), peer, payload)
 	if err != nil {
+		if a.readyGate != nil {
+			a.readyGate.MarkNotReady(string(connID))
+		}
 		return nil, err
+	}
+	if a.readyGate != nil {
+		a.readyGate.MarkReady(string(connID))
 	}
 	return json.Marshal(resp)
 }

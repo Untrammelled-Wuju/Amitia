@@ -14,11 +14,12 @@ type HandshakeManager struct {
 	states    map[string]*stateCell
 	snapshots map[string]*HandshakeSnapshot
 
-	protocolNegotiator *ProtocolNegotiator
+	protocolNegotiator   *ProtocolNegotiator
 	capabilityNegotiator *CapabilityNegotiator
-	namespaceAdapter   NamespaceAdapter
-	channelAdvertiser  ChannelAdvertiser
-	runtimeValidator   RuntimeValidator
+	namespaceAdapter     NamespaceAdapter
+	channelAdvertiser    ChannelAdvertiser
+	runtimeValidator     RuntimeValidator
+	descriptorProvider   DescriptorProvider
 
 	timeout     int64
 	hostCaps    []domain.Capability
@@ -32,6 +33,7 @@ type HandshakeManagerConfig struct {
 	NamespaceAdapter       NamespaceAdapter
 	ChannelAdvertiser      ChannelAdvertiser
 	RuntimeValidator       RuntimeValidator
+	DescriptorProvider     DescriptorProvider
 
 	PreReadyAllowlist []string
 }
@@ -48,6 +50,7 @@ func NewHandshakeManager(config HandshakeManagerConfig) *HandshakeManager {
 		namespaceAdapter:     config.NamespaceAdapter,
 		channelAdvertiser:    config.ChannelAdvertiser,
 		runtimeValidator:     config.RuntimeValidator,
+		descriptorProvider:   config.DescriptorProvider,
 		hostCaps:             config.HostCapabilities,
 		allowlist:            append([]string{HelloMethod, "control.request.cancel"}, config.PreReadyAllowlist...),
 	}
@@ -318,6 +321,16 @@ func (m *HandshakeManager) SetHostCapabilities(caps []domain.Capability) {
 }
 
 func (m *HandshakeManager) descriptorCaps(pluginID domain.PluginID) []domain.Capability {
+	if m.descriptorProvider != nil {
+		caps, err := m.descriptorProvider.DescriptorCapabilities(string(pluginID))
+		if err == nil && len(caps) > 0 {
+			result := make([]domain.Capability, 0, len(caps))
+			for _, c := range caps {
+				result = append(result, domain.Capability(c))
+			}
+			return result
+		}
+	}
 	return m.hostCaps
 }
 

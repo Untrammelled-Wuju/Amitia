@@ -74,17 +74,17 @@ func (d *RPCDispatcher) getLifecycle() *RequestLifecycleManager {
 	return d.lifecycle
 }
 
-func (d *RPCDispatcher) Dispatch(ctx context.Context, peer ipc.Peer, envelope protocol.Envelope) error {
+func (d *RPCDispatcher) Dispatch(ctx context.Context, source ipc.DispatchSource, envelope protocol.Envelope) error {
 	switch envelope.Type {
 	case protocol.MessageTypeRequest:
-		return d.dispatchRequest(ctx, peer, envelope)
+		return d.dispatchRequest(ctx, source, envelope)
 	case protocol.MessageTypeResponse, protocol.MessageTypeError:
-		return d.dispatchResponse(peer, envelope)
+		return d.dispatchResponse(source, envelope)
 	case protocol.MessageTypeNotification:
 		if cancelReq, ok := ParseCancelEnvelope(&envelope); ok {
 			dm := d.getLifecycle()
 			if dm != nil {
-				_ = dm.HandleCancel(peer, cancelReq)
+				_ = dm.HandleCancel(source.Peer, cancelReq)
 			}
 			return nil
 		}
@@ -94,15 +94,15 @@ func (d *RPCDispatcher) Dispatch(ctx context.Context, peer ipc.Peer, envelope pr
 	}
 }
 
-func (d *RPCDispatcher) dispatchResponse(peer ipc.Peer, envelope protocol.Envelope) error {
+func (d *RPCDispatcher) dispatchResponse(source ipc.DispatchSource, envelope protocol.Envelope) error {
 	dm := d.getLifecycle()
 	if dm == nil {
 		return nil
 	}
-	return dm.HandleIncomingResponse(peer, envelope)
+	return dm.HandleIncomingResponse(source.Peer, envelope)
 }
 
-func (d *RPCDispatcher) dispatchRequest(ctx context.Context, sourcePeer ipc.Peer, envelope protocol.Envelope) error {
+func (d *RPCDispatcher) dispatchRequest(ctx context.Context, source ipc.DispatchSource, envelope protocol.Envelope) error {
 	if err := protocol.ValidateMethod(string(envelope.Method)); err != nil {
 		return NewRPCErrorWithCause(
 			RPCErrorMethodNotFound,
@@ -123,13 +123,13 @@ func (d *RPCDispatcher) dispatchRequest(ctx context.Context, sourcePeer ipc.Peer
 	}
 
 	if IsReservedNamespace(namespace) {
-		return d.dispatchReserved(ctx, sourcePeer, envelope, namespace)
+		return d.dispatchReserved(ctx, source, envelope, namespace)
 	}
 
-	return d.dispatchCustom(ctx, sourcePeer, envelope, namespace)
+	return d.dispatchCustom(ctx, source, envelope, namespace)
 }
 
-func (d *RPCDispatcher) dispatchReserved(ctx context.Context, sourcePeer ipc.Peer, envelope protocol.Envelope, namespace Namespace) error {
+func (d *RPCDispatcher) dispatchReserved(ctx context.Context, source ipc.DispatchSource, envelope protocol.Envelope, namespace Namespace) error {
 	if d.hostHandlers == nil {
 		return NewRPCErrorWithCause(
 			RPCErrorReservedNamespace,
@@ -150,13 +150,13 @@ func (d *RPCDispatcher) dispatchReserved(ctx context.Context, sourcePeer ipc.Pee
 	}
 
 	req := RPCRequest{
-		ID:        envelope.ID,
-		PluginID:  domain.PluginID(sourcePeer.PluginID),
-		RuntimeID: domain.RuntimeInstanceID(sourcePeer.RuntimeID),
-		ServiceID: domain.ServiceID(sourcePeer.ServiceID),
-		Namespace: namespace,
-		Method:    Method(envelope.Method),
-		Payload:   cloneRawMessage(envelope.Payload),
+		ConnectionID: string(source.ConnectionID),
+		PluginID:     domain.PluginID(source.Peer.PluginID),
+		RuntimeID:    domain.RuntimeInstanceID(source.Peer.RuntimeID),
+		ServiceID:    domain.ServiceID(source.Peer.ServiceID),
+		Namespace:    namespace,
+		Method:       Method(envelope.Method),
+		Payload:      cloneRawMessage(envelope.Payload),
 	}
 
 	resp, err := handler.Handle(ctx, req)
@@ -177,10 +177,10 @@ func (d *RPCDispatcher) dispatchReserved(ctx context.Context, sourcePeer ipc.Pee
 		)
 	}
 
-	return cp.Send(ctx, sourcePeer, normalizeEnvelope(env))
+	return cp.Send(ctx, source.Peer, normalizeEnvelope(env))
 }
 
-func (d *RPCDispatcher) dispatchCustom(ctx context.Context, sourcePeer ipc.Peer, envelope protocol.Envelope, namespace Namespace) error {
+func (d *RPCDispatcher) dispatchCustom(ctx context.Context, source ipc.DispatchSource, envelope protocol.Envelope, namespace Namespace) error {
 	if d.namespaces == nil {
 		return NewRPCErrorWithCause(
 			RPCErrorMethodNotFound,
@@ -190,7 +190,7 @@ func (d *RPCDispatcher) dispatchCustom(ctx context.Context, sourcePeer ipc.Peer,
 		)
 	}
 
-	route, err := d.namespaces.Resolve(ctx, domain.RuntimeInstanceID(sourcePeer.RuntimeID), Method(envelope.Method))
+	route, err := d.namespaces.Resolve(ctx, domain.RuntimeInstanceID(source.Peer.RuntimeID), Method(envelope.Method))
 	if err != nil {
 		return err
 	}

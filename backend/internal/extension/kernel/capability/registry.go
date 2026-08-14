@@ -13,6 +13,9 @@ type ToolFilter struct {
 	IncludeInternal bool
 }
 
+// ToolRegistry 是 Tool/Capability definition 的 canonical registry。
+// 后续 Capability Provider Registry 与 Provider Instance 必须属于 capability 领域。
+// runtimeorchestrator.ProviderRegistry 不是此层 Provider Registry。
 type ToolRegistry struct {
 	mu          sync.RWMutex
 	items       map[string]ToolDefinition

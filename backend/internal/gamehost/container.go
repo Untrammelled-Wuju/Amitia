@@ -2,6 +2,7 @@ package gamehost
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 	"github.com/u-ai/backend/internal/gamehost/channel"
@@ -34,13 +35,22 @@ type GameHostContainer struct {
 
 	PluginRegistry   *registry.Registry
 	ContributionSync *integration.GamePluginSyncService
-	RuntimeExecutor  runtime.RuntimeExecutor
 
-	NamespaceRegistry   rpc.NamespaceRegistry
-	HandshakeManager    *handshake.HandshakeManager
-	ReadyGate          *handshake.ReadyGate
-	ConnectionRegistry *ipc.ConnectionRegistry
-	ChannelRegistry    channel.Registry
+	RuntimeManager       *runtime.Manager
+	RuntimeTopologyStore *runtime.TopologyStore
+	RuntimeHealth        runtime.HealthAdapter
+	RuntimeExecutor      runtime.RuntimeExecutor
+	RuntimeProvisioner  *integration.RuntimeGraphProvisioner
+
+	NamespaceRegistry    rpc.NamespaceRegistry
+	HandshakeManager     *handshake.HandshakeManager
+	ReadyGate            *handshake.ReadyGate
+	ConnectionRegistry   *ipc.ConnectionRegistry
+	ControlPlane         *ipc.ControlPlane
+	RPCDispatcher        *rpc.RPCDispatcher
+	RPCLifecycle         *rpc.RequestLifecycleManager
+	HostHandlerRegistry  *rpc.HostHandlerRegistry
+	ChannelRegistry      channel.Registry
 
 	NotificationBridge   *notification.Bridge
 	StateStore           *state.LatestStateStore
@@ -71,6 +81,20 @@ func (c *GameHostContainer) Start(ctx context.Context) error {
 	if c == nil {
 		return nil
 	}
+
+	if c.ContributionSync != nil {
+		result := c.ContributionSync.FullSync(ctx)
+		if result.HasError() {
+			return fmt.Errorf("gamehost: contribution sync failed: %v", result.Errors)
+		}
+	}
+
+	if c.RuntimeProvisioner != nil {
+		if err := c.RuntimeProvisioner.Reconcile(ctx); err != nil {
+			return fmt.Errorf("gamehost: runtime graph reconcile: %w", err)
+		}
+	}
+
 	if c.StartupRecovery != nil {
 		c.StartupRecovery.RunStartupRecovery(ctx)
 	} else if c.StartupGate != nil {
@@ -85,6 +109,12 @@ func (c *GameHostContainer) Shutdown(ctx context.Context) error {
 	}
 	if c.StartupGate != nil {
 		c.StartupGate.Close()
+	}
+	if c.RPCLifecycle != nil {
+		c.RPCLifecycle.Shutdown(ctx)
+	}
+	if c.ControlPlane != nil {
+		_ = c.ControlPlane.Shutdown(ctx)
 	}
 	if c.ResourceLifecycle != nil {
 		c.ResourceLifecycle.OnHostShutdown()

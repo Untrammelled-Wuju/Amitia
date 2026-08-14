@@ -150,7 +150,7 @@ func ValidateMethod(method string) error {
 }
 
 func IsReservedNamespace(method string) bool {
-	reserved := []string{"host.", "plugin.", "runtime.", "service.", "channel.", "control."}
+	reserved := []string{"host.", "plugin.", "runtime.", "service.", "channel.", "control.", "emergency."}
 	for _, ns := range reserved {
 		if strings.HasPrefix(method, ns) {
 			return true

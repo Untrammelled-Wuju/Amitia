@@ -167,6 +167,9 @@ func MustTransition(from, to TaskRunStatus) error {
 	return nil
 }
 
+// TaskRun 是所有本地、Cloud、Device 分布式执行任务的唯一生命周期实体。
+// 未来只能扩展 execution placement / assigned provider / device 等字段。
+// 禁止创建平行 RemoteTask、CloudTask、DeviceTask 状态机。
 type TaskRun struct {
 	TaskRunID            string          `json:"taskRunId"`
 	OperationID          string          `json:"operationId"`
@@ -248,9 +251,9 @@ type TaskQueueEntry struct {
 }
 
 type TaskRuntimeConfig struct {
-	GlobalMaxConcurrent         int
-	PerExtensionMaxConcurrent   int
-	PerDefinitionMaxConcurrent  int
+	GlobalMaxConcurrent        int
+	PerExtensionMaxConcurrent  int
+	PerDefinitionMaxConcurrent int
 	DefaultTimeout             time.Duration
 	MaxProgressPerSecond       int
 	MaxCheckpointBytes         int

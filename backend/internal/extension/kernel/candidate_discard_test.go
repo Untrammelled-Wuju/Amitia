@@ -27,11 +27,13 @@ func TestDiscardCandidateContributions_PreservesStableTool(t *testing.T) {
 	}
 
 	candidateTool := capability.ToolDefinition{
-		ID:          "ext-a/tool-candidate",
-		ModelName:   "candidate",
-		ExtensionID: "ext-a",
-		Source:      capability.ToolSourcePlugin,
-		Enabled:     false,
+		ID:           "ext-a/tool-candidate",
+		ModelName:    "candidate",
+		ExtensionID:  "ext-a",
+		Source:       capability.ToolSourcePlugin,
+		Enabled:      false,
+		InputSchema:  json.RawMessage(`{"type":"object"}`),
+		OutputSchema: json.RawMessage(`{"type":"object"}`),
 	}
 	if err := registry.Register(ctx, candidateTool); err != nil {
 		t.Fatalf("register candidate tool: %v", err)

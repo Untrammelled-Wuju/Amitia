@@ -79,7 +79,11 @@ func (h *defaultConnectionHandler) OnEnvelope(conn *Connection, envelope protoco
 		return
 	}
 	ctx := context.Background()
-	_ = h.dispatcher.Dispatch(ctx, conn.Peer, envelope)
+	source := DispatchSource{
+		ConnectionID: conn.ID,
+		Peer:         conn.Peer,
+	}
+	_ = h.dispatcher.Dispatch(ctx, source, envelope)
 }
 
 func (h *defaultConnectionHandler) OnError(conn *Connection, err error) {
@@ -98,11 +102,12 @@ type IDGenerator interface {
 }
 
 type ControlPlaneConfig struct {
-	Resolver           RuntimePeerResolver
-	Dispatcher         Dispatcher
-	EventHandler       EventHandler
-	IDGenerator        IDGenerator
-	MaxEnvelopeSize    int64
+	Registry            *ConnectionRegistry
+	Resolver            RuntimePeerResolver
+	Dispatcher          Dispatcher
+	EventHandler        EventHandler
+	IDGenerator         IDGenerator
+	MaxEnvelopeSize     int64
 	HandshakeController HandshakeController
 }
 
@@ -123,11 +128,17 @@ type controlPlane struct {
 }
 
 func NewControlPlane(config ControlPlaneConfig) (ControlPlane, error) {
+	if config.Registry == nil {
+		return nil, NewIPCError(IPCErrorPeerRoute, domain.ErrInternal, "connection registry is required")
+	}
 	if config.Resolver == nil {
 		return nil, NewIPCError(IPCErrorPeerRoute, domain.ErrInternal, "runtime peer resolver is required")
 	}
 	if config.Dispatcher == nil {
-		config.Dispatcher = NewNoopDispatcher()
+		return nil, NewIPCError(IPCErrorPeerRoute, domain.ErrInternal, "dispatcher is required")
+	}
+	if config.HandshakeController == nil {
+		return nil, NewIPCError(IPCErrorPeerRoute, domain.ErrInternal, "handshake controller is required")
 	}
 	if config.IDGenerator == nil {
 		config.IDGenerator = NewUUIDIDGenerator()
@@ -135,14 +146,11 @@ func NewControlPlane(config ControlPlaneConfig) (ControlPlane, error) {
 	if config.MaxEnvelopeSize <= 0 {
 		config.MaxEnvelopeSize = defaultMaxEnvelopeSize
 	}
-	if config.HandshakeController == nil {
-		config.HandshakeController = NewNoopHandshakeController()
-	}
 
 	controlCtx, controlCancel := context.WithCancel(context.Background())
 
 	cp := &controlPlane{
-		registry:            NewConnectionRegistry(),
+		registry:            config.Registry,
 		resolver:            config.Resolver,
 		dispatcher:          config.Dispatcher,
 		handler:             config.EventHandler,

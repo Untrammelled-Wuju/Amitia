@@ -18,6 +18,24 @@ import (
 	"github.com/u-ai/backend/internal/platform/process"
 )
 
+type StdioProtocolSessionMeta struct {
+	Protocol    string
+	ServiceID   string
+	InstanceID  string
+	ExtensionID string
+	ModuleID    string
+	Generation  int64
+}
+
+type StdioProtocolHandler interface {
+	Attach(
+		ctx context.Context,
+		meta StdioProtocolSessionMeta,
+		stdin io.WriteCloser,
+		stdout io.ReadCloser,
+	) (io.Closer, error)
+}
+
 type GameHostNotifier interface {
 	Notify(ctx context.Context, extensionID, instanceID, serviceID, method string, params json.RawMessage)
 }
@@ -29,32 +47,34 @@ func (f NotifyFunc) Notify(ctx context.Context, extensionID, instanceID, service
 }
 
 type ProcessSupervisor struct {
-	mu               sync.Mutex
-	instances        map[string]*ServiceInstance
-	defs             map[string]*ServiceRuntimeDefinition
-	verifier         *BinaryVerifier
-	selector         *PlatformSelector
-	envBuilder       *EnvBuilder
-	logger           func(level, msg string, fields map[string]any)
-	healthMon        *HealthMonitor
-	quarantine       *QuarantineManager
-	rootDir          string
-	procMgr          *process.DefaultProcessManager
-	gameHostNotifier GameHostNotifier
+	mu                sync.Mutex
+	instances         map[string]*ServiceInstance
+	defs              map[string]*ServiceRuntimeDefinition
+	verifier          *BinaryVerifier
+	selector          *PlatformSelector
+	envBuilder        *EnvBuilder
+	logger            func(level, msg string, fields map[string]any)
+	healthMon         *HealthMonitor
+	quarantine        *QuarantineManager
+	rootDir           string
+	procMgr           *process.DefaultProcessManager
+	gameHostNotifier  GameHostNotifier
+	protocolHandlers  map[string]StdioProtocolHandler
 }
 
 func NewProcessSupervisor(rootDir string) *ProcessSupervisor {
 	return &ProcessSupervisor{
-		instances:  make(map[string]*ServiceInstance),
-		defs:       make(map[string]*ServiceRuntimeDefinition),
-		verifier:   NewBinaryVerifier(),
-		selector:   NewPlatformSelector(),
-		envBuilder: NewEnvBuilder(),
-		healthMon:  NewHealthMonitor(),
-		quarantine: NewQuarantineManager(),
-		procMgr:    process.NewDefaultProcessManager(),
-		rootDir:    rootDir,
-		logger:     func(level, msg string, fields map[string]any) {},
+		instances:       make(map[string]*ServiceInstance),
+		defs:            make(map[string]*ServiceRuntimeDefinition),
+		verifier:        NewBinaryVerifier(),
+		selector:        NewPlatformSelector(),
+		envBuilder:      NewEnvBuilder(),
+		healthMon:       NewHealthMonitor(),
+		quarantine:      NewQuarantineManager(),
+		procMgr:         process.NewDefaultProcessManager(),
+		rootDir:         rootDir,
+		logger:          func(level, msg string, fields map[string]any) {},
+		protocolHandlers: make(map[string]StdioProtocolHandler),
 	}
 }
 
@@ -63,16 +83,17 @@ func NewProcessSupervisorWithVerifier(rootDir string, verifier *BinaryVerifier) 
 		verifier = NewBinaryVerifier()
 	}
 	return &ProcessSupervisor{
-		instances:  make(map[string]*ServiceInstance),
-		defs:       make(map[string]*ServiceRuntimeDefinition),
-		verifier:   verifier,
-		selector:   NewPlatformSelector(),
-		envBuilder: NewEnvBuilder(),
-		healthMon:  NewHealthMonitor(),
-		quarantine: NewQuarantineManager(),
-		procMgr:    process.NewDefaultProcessManager(),
-		rootDir:    rootDir,
-		logger:     func(level, msg string, fields map[string]any) {},
+		instances:       make(map[string]*ServiceInstance),
+		defs:            make(map[string]*ServiceRuntimeDefinition),
+		verifier:        verifier,
+		selector:        NewPlatformSelector(),
+		envBuilder:      NewEnvBuilder(),
+		healthMon:       NewHealthMonitor(),
+		quarantine:      NewQuarantineManager(),
+		procMgr:         process.NewDefaultProcessManager(),
+		rootDir:         rootDir,
+		logger:          func(level, msg string, fields map[string]any) {},
+		protocolHandlers: make(map[string]StdioProtocolHandler),
 	}
 }
 
@@ -84,6 +105,25 @@ func (s *ProcessSupervisor) SetGameHostNotifier(n GameHostNotifier) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.gameHostNotifier = n
+}
+
+func (s *ProcessSupervisor) RegisterStdioProtocolHandler(protocol string, handler StdioProtocolHandler) error {
+	if protocol == "" || handler == nil {
+		return errors.New("trusted_service: invalid protocol handler registration")
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, exists := s.protocolHandlers[protocol]; exists {
+		return fmt.Errorf("trusted_service: protocol %s already has a registered handler", protocol)
+	}
+	s.protocolHandlers[protocol] = handler
+	return nil
+}
+
+func (s *ProcessSupervisor) UnregisterStdioProtocolHandler(protocol string) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.protocolHandlers, protocol)
 }
 
 func (s *ProcessSupervisor) QuarantineManager() *QuarantineManager {
@@ -115,6 +155,47 @@ func (s *ProcessSupervisor) Unregister(serviceID string) error {
 	delete(s.defs, serviceID)
 	delete(s.instances, serviceID)
 	return nil
+}
+
+func (s *ProcessSupervisor) GetDefinition(serviceID string) (*ServiceRuntimeDefinition, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	def, exists := s.defs[serviceID]
+	if !exists {
+		return nil, ErrServiceNotFound
+	}
+	execs := make([]PlatformExecutable, len(def.Executables))
+	copy(execs, def.Executables)
+	ns := make([]string, len(def.AllowedNamespaces))
+	copy(ns, def.AllowedNamespaces)
+	return &ServiceRuntimeDefinition{
+		ServiceID:         def.ServiceID,
+		ExtensionID:       def.ExtensionID,
+		ModuleID:          def.ModuleID,
+		Name:              def.Name,
+		Description:       def.Description,
+		Publisher:         def.Publisher,
+		TrustLevel:        def.TrustLevel,
+		Executables:       execs,
+		Protocol:          def.Protocol,
+		InstancePolicy:    def.InstancePolicy,
+		HealthCheck:       def.HealthCheck,
+		Recovery:          def.Recovery,
+		Shutdown:          def.Shutdown,
+		Limits:            def.Limits,
+		Network:           def.Network,
+		AllowedNamespaces: ns,
+		ManifestHash:      def.ManifestHash,
+		DefinitionVersion: def.DefinitionVersion,
+		AutoStart:         def.AutoStart,
+	}, nil
+}
+
+func (s *ProcessSupervisor) HasDefinition(serviceID string) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, exists := s.defs[serviceID]
+	return exists
 }
 
 type StartRequest struct {
@@ -236,7 +317,16 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 			s.mu.Unlock()
 			return nil, err
 		}
-	} else {
+	} else if handler, ok := s.protocolHandlers[def.Protocol]; ok {
+		if err := s.startManagedStdioProtocolService(ctx, instance, def, exe, fullExePath, args, env, workingDir, req, handler); err != nil {
+			instance.SetState(ServiceStateFailed)
+			instance.circuit.RecordFailure()
+			s.mu.Lock()
+			s.instances[req.ServiceID] = instance
+			s.mu.Unlock()
+			return nil, err
+		}
+	} else if def.Protocol == "" || def.Protocol == "plain" {
 		if err := s.startPlainService(ctx, instance, def, exe, fullExePath, args, env, workingDir, req); err != nil {
 			instance.SetState(ServiceStateFailed)
 			instance.circuit.RecordFailure()
@@ -245,6 +335,13 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 			s.mu.Unlock()
 			return nil, err
 		}
+	} else {
+		instance.SetState(ServiceStateFailed)
+		instance.circuit.RecordFailure()
+		s.mu.Lock()
+		s.instances[req.ServiceID] = instance
+		s.mu.Unlock()
+		return nil, fmt.Errorf("trusted_service: unknown protocol %q and no registered handler", def.Protocol)
 	}
 
 	instance.MarkStarted()
@@ -417,6 +514,102 @@ func (s *ProcessSupervisor) startPlainService(ctx context.Context, instance *Ser
 	return nil
 }
 
+func (s *ProcessSupervisor) startManagedStdioProtocolService(
+	ctx context.Context,
+	instance *ServiceInstance,
+	def *ServiceRuntimeDefinition,
+	exe *PlatformExecutable,
+	fullExePath string,
+	args, env []string,
+	workingDir string,
+	req StartRequest,
+	handler StdioProtocolHandler,
+) error {
+	cmd := exec.CommandContext(ctx, fullExePath, args...)
+	cmd.Dir = workingDir
+	cmd.Env = env
+	process.ConfigureProcess(cmd)
+
+	stdinPipe, err := cmd.StdinPipe()
+	if err != nil {
+		return fmt.Errorf("trusted_service: create stdin pipe: %w", err)
+	}
+	stdoutPipe, err := cmd.StdoutPipe()
+	if err != nil {
+		stdinPipe.Close()
+		return fmt.Errorf("trusted_service: create stdout pipe: %w", err)
+	}
+	stderrPipe, err := cmd.StderrPipe()
+	if err != nil {
+		stdinPipe.Close()
+		stdoutPipe.Close()
+		return fmt.Errorf("trusted_service: create stderr pipe: %w", err)
+	}
+
+	if err := cmd.Start(); err != nil {
+		stdinPipe.Close()
+		stdoutPipe.Close()
+		stderrPipe.Close()
+		return fmt.Errorf("trusted_service: start process: %w", err)
+	}
+
+	handle, attachErr := process.AttachProcessTree(cmd)
+	if attachErr != nil {
+		_ = cmd.Process.Kill()
+		_ = cmd.Wait()
+		stdinPipe.Close()
+		stdoutPipe.Close()
+		stderrPipe.Close()
+		return fmt.Errorf("trusted_service: attach process tree: %w", attachErr)
+	}
+
+	instance.PID = cmd.Process.Pid
+	instance.managedProc = cmd
+	instance.procHandle = uint64(handle)
+
+	go s.drainStderr(stderrPipe, instance.ServiceID, instance.InstanceID)
+
+	meta := StdioProtocolSessionMeta{
+		Protocol:    def.Protocol,
+		ServiceID:   instance.ServiceID,
+		InstanceID:  instance.InstanceID,
+		ExtensionID: def.ExtensionID,
+		ModuleID:    def.ModuleID,
+		Generation:  instance.Generation,
+	}
+
+	closer, err := handler.Attach(ctx, meta, stdinPipe, stdoutPipe)
+	if err != nil {
+		s.killProcessTree(instance)
+		return fmt.Errorf("trusted_service: protocol handler attach failed: %w", err)
+	}
+
+	instance.protocolSession = closer
+	instance.StdioConn = def.Protocol + "-stdio"
+
+	go s.watchProcess(instance, cmd)
+
+	return nil
+}
+
+func (s *ProcessSupervisor) drainStderr(stderrPipe io.ReadCloser, serviceID, instanceID string) {
+	defer stderrPipe.Close()
+	buf := make([]byte, 4096)
+	for {
+		n, err := stderrPipe.Read(buf)
+		if n > 0 {
+			s.log("warn", string(buf[:n]), map[string]any{
+				"service":  serviceID,
+				"instance": instanceID,
+				"source":   "stderr",
+			})
+		}
+		if err != nil {
+			return
+		}
+	}
+}
+
 func (s *ProcessSupervisor) buildSafeEnvironment(exe *PlatformExecutable, def *ServiceRuntimeDefinition, session, instance string, generation int64, tempDir, logLevel, secretLease string) []string {
 	envB := process.NewEnvironmentBuilder().
 		SetRuntimeInstance(instance).
@@ -463,6 +656,10 @@ func (s *ProcessSupervisor) watchProcess(inst *ServiceInstance, cmd *exec.Cmd) {
 
 	if inst.rpcSession != nil {
 		inst.rpcSession.Close()
+	}
+
+	if inst.protocolSession != nil {
+		inst.protocolSession.Close()
 	}
 
 	handle := process.ProcessTreeHandle(inst.procHandle)
@@ -612,6 +809,10 @@ func (s *ProcessSupervisor) Stop(ctx context.Context, req StopRequest) (*StopRes
 		shutdownCancel()
 	}
 
+	if inst.protocolSession != nil {
+		inst.protocolSession.Close()
+	}
+
 	exited := s.waitForProcessExit(inst, grace)
 
 	if !exited {
@@ -660,6 +861,10 @@ func (s *ProcessSupervisor) killProcessTree(inst *ServiceInstance) {
 
 	if inst.rpcSession != nil {
 		inst.rpcSession.Close()
+	}
+
+	if inst.protocolSession != nil {
+		inst.protocolSession.Close()
 	}
 
 	if err := process.TerminateProcessTree(pid, handle); err != nil {

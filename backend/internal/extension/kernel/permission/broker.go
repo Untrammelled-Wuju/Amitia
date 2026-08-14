@@ -10,6 +10,9 @@ import (
 	"time"
 )
 
+// PermissionBroker 是插件、本地工具、Cloud Provider、Device Provider 执行权限的唯一决策入口。
+// 后续远程执行仍必须经过这里。
+// 禁止创建 CloudPermissionManager / DevicePermissionManager 绕过 Broker。
 type PermissionBroker interface {
 	Evaluate(ctx context.Context, request PermissionEvaluationRequest) PermissionEvaluationResult
 	Grant(ctx context.Context, request PermissionGrantRequest) (PermissionGrant, error)

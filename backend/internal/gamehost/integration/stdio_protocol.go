@@ -1,0 +1,133 @@
+package integration
+
+import (
+	"context"
+	"fmt"
+	"io"
+
+	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
+	"github.com/u-ai/backend/internal/gamehost/contracts"
+	"github.com/u-ai/backend/internal/gamehost/domain"
+	"github.com/u-ai/backend/internal/gamehost/ipc"
+	"github.com/u-ai/backend/internal/gamehost/runtime"
+)
+
+type RuntimeReader interface {
+	GetRuntime(runtimeID domain.RuntimeInstanceID) (*runtime.RuntimeInstanceRef, error)
+}
+
+type RuntimeTopologyReader interface {
+	GetTopologySnapshot(runtimeID domain.RuntimeInstanceID) (runtime.RuntimeTopologySnapshot, error)
+}
+
+type GameHostStdioProtocolHandler struct {
+	controlPlane *ipc.ControlPlane
+	runtimes     RuntimeReader
+	topology     RuntimeTopologyReader
+	plugins      contracts.PluginRegistry
+}
+
+func NewGameHostStdioProtocolHandler(
+	controlPlane *ipc.ControlPlane,
+	runtimes RuntimeReader,
+	topology RuntimeTopologyReader,
+	plugins contracts.PluginRegistry,
+) *GameHostStdioProtocolHandler {
+	return &GameHostStdioProtocolHandler{
+		controlPlane: controlPlane,
+		runtimes:     runtimes,
+		topology:     topology,
+		plugins:      plugins,
+	}
+}
+
+func (h *GameHostStdioProtocolHandler) Attach(
+	ctx context.Context,
+	meta trusted_service.StdioProtocolSessionMeta,
+	stdin io.WriteCloser,
+	stdout io.ReadCloser,
+) (io.Closer, error) {
+	runtimeID, serviceID, err := runtime.ParseProcessInstanceID(meta.InstanceID)
+	if err != nil {
+		return nil, fmt.Errorf("gamehost stdio: invalid instance id %q: %w", meta.InstanceID, err)
+	}
+
+	rt, err := h.runtimes.GetRuntime(runtimeID)
+	if err != nil {
+		return nil, fmt.Errorf("gamehost stdio: runtime %q not found: %w", runtimeID, err)
+	}
+
+	if err := h.validateServiceBelongsToRuntime(runtimeID, serviceID, rt.PluginID); err != nil {
+		return nil, fmt.Errorf("gamehost stdio: service validation failed: %w", err)
+	}
+
+	if err := h.validatePluginExtension(rt.PluginID, meta.ExtensionID); err != nil {
+		return nil, fmt.Errorf("gamehost stdio: plugin validation failed: %w", err)
+	}
+
+	peer := ipc.Peer{
+		PluginID:  rt.PluginID,
+		RuntimeID: rt.ID,
+		ServiceID: serviceID,
+	}
+
+	transport := ipc.NewStdioTransport(ipc.StdioTransportConfig{
+		Reader: stdout,
+		Writer: stdin,
+		Closer: io.NopCloser(stdin),
+	})
+
+	conn, err := h.controlPlane.Attach(ctx, peer, transport)
+	if err != nil {
+		return nil, fmt.Errorf("gamehost stdio: control plane attach failed: %w", err)
+	}
+
+	return &attachedConnectionCloser{
+		plane: h.controlPlane,
+		id:    conn.ID,
+	}, nil
+}
+
+func (h *GameHostStdioProtocolHandler) validateServiceBelongsToRuntime(
+	runtimeID domain.RuntimeInstanceID,
+	serviceID domain.ServiceID,
+	pluginID domain.PluginID,
+) error {
+	snapshot, err := h.topology.GetTopologySnapshot(runtimeID)
+	if err != nil {
+		return fmt.Errorf("topology not found for runtime %q: %w", runtimeID, err)
+	}
+
+	for _, svc := range snapshot.Services {
+		if svc.ID == serviceID {
+			if svc.PluginID != pluginID {
+				return fmt.Errorf("service %q does not belong to plugin %q", serviceID, pluginID)
+			}
+			return nil
+		}
+	}
+	return fmt.Errorf("service %q not found in runtime %q topology", serviceID, runtimeID)
+}
+
+func (h *GameHostStdioProtocolHandler) validatePluginExtension(
+	pluginID domain.PluginID,
+	extensionID string,
+) error {
+	descriptor, err := h.plugins.Get(context.Background(), pluginID)
+	if err != nil {
+		return fmt.Errorf("plugin %q not found: %w", pluginID, err)
+	}
+	if descriptor.ExtensionID != extensionID {
+		return fmt.Errorf("plugin %q extension mismatch: expected %q, got %q", pluginID, descriptor.ExtensionID, extensionID)
+	}
+	return nil
+}
+
+type attachedConnectionCloser struct {
+	plane *ipc.ControlPlane
+	id    ipc.ConnectionID
+}
+
+func (c *attachedConnectionCloser) Close() error {
+	return c.plane.Detach(context.Background(), c.id)
+}

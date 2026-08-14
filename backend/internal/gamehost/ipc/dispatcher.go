@@ -6,17 +6,22 @@ import (
 	"github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
+type DispatchSource struct {
+	ConnectionID ConnectionID
+	Peer         Peer
+}
+
 type Dispatcher interface {
 	Dispatch(
 		ctx context.Context,
-		peer Peer,
+		source DispatchSource,
 		envelope protocol.Envelope,
 	) error
 }
 
 type noopDispatcher struct{}
 
-func (n *noopDispatcher) Dispatch(ctx context.Context, peer Peer, envelope protocol.Envelope) error {
+func (n *noopDispatcher) Dispatch(ctx context.Context, source DispatchSource, envelope protocol.Envelope) error {
 	return nil
 }
 
@@ -34,7 +39,7 @@ func NewMainDispatcher(eventHandler EventHandler) *MainDispatcher {
 	}
 }
 
-func (d *MainDispatcher) Dispatch(ctx context.Context, peer Peer, envelope protocol.Envelope) error {
+func (d *MainDispatcher) Dispatch(ctx context.Context, source DispatchSource, envelope protocol.Envelope) error {
 	return nil
 }
 

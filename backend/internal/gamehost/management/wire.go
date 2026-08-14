@@ -23,6 +23,18 @@ func NewProductionService(container *gamehost.GameHostContainer, kernel KernelMa
 		opts.Registry = NewGameHostPluginRegistry(container.PluginRegistry)
 	}
 
+	if container.RuntimeManager != nil {
+		opts.Runtimes = NewGameHostRuntimeManager(container.RuntimeManager)
+	}
+
+	if container.RuntimeTopologyStore != nil {
+		opts.Topology = NewGameHostTopologyStore(container.RuntimeTopologyStore)
+	}
+
+	if container.RuntimeHealth != nil {
+		opts.Health = NewGameHostHealthAdapter(container.RuntimeHealth)
+	}
+
 	if container.HandshakeManager != nil {
 		opts.Handshake = NewGameHostHandshakeManager(container.HandshakeManager)
 	}
@@ -108,18 +120,21 @@ func NewProductionPackageMutationServiceFromKernelReader(kernelReader *KernelRea
 	})
 }
 
-func NewProductionRuntimeMutationService(container *gamehost.GameHostContainer, runtimeLister RuntimeLister) *RuntimeMutationService {
+func NewProductionRuntimeMutationService(container *gamehost.GameHostContainer) *RuntimeMutationService {
 	if container == nil {
 		return NewRuntimeMutationService(RuntimeMutationServiceOptions{})
 	}
+
 	var lister RuntimeLister
-	if runtimeLister != nil {
-		lister = runtimeLister
+	if container.RuntimeManager != nil {
+		lister = NewGameHostRuntimeManagerAdapter(container.RuntimeManager)
 	}
+
 	var pluginReg PluginRegistryReader
 	if container.PluginRegistry != nil {
 		pluginReg = NewGameHostPluginRegistry(container.PluginRegistry)
 	}
+
 	return NewRuntimeMutationService(RuntimeMutationServiceOptions{
 		Executor:       container.RuntimeExecutor,
 		RuntimeLister:  lister,

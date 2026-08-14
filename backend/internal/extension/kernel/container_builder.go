@@ -10,8 +10,11 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/agent/tool"
+	"github.com/u-ai/backend/internal/deepsearch"
+	"github.com/u-ai/backend/internal/desktoppet/plugin_boundary"
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
+	"github.com/u-ai/backend/internal/extension/kernel/authority"
 	"github.com/u-ai/backend/internal/extension/kernel/canary"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/chat_ui_extension"
@@ -52,15 +55,13 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/update"
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
-	"github.com/u-ai/backend/internal/desktoppet/plugin_boundary"
-	"github.com/u-ai/backend/internal/deepsearch"
 	"github.com/u-ai/backend/internal/gamehost"
 	"github.com/u-ai/backend/internal/imagegen"
 	"github.com/u-ai/backend/internal/imageintelligence"
 	"github.com/u-ai/backend/internal/imageprovider"
-	"github.com/u-ai/backend/internal/search"
 	"github.com/u-ai/backend/internal/platform/process"
 	"github.com/u-ai/backend/internal/runtimehost"
+	"github.com/u-ai/backend/internal/search"
 	"github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/pkg/resourceuri"
 	"github.com/u-ai/backend/pkg/sse"
@@ -87,6 +88,7 @@ type ContainerBuilder struct {
 }
 
 func NewContainerBuilder() *ContainerBuilder {
+	authority.MustValidate()
 	return &ContainerBuilder{}
 }
 
@@ -389,9 +391,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		Dispatcher:          execution.NewRuntimeDispatcher(adapterRegistry),
 		ResultValidator:     execution.NewResultValidator(),
 		Sanitizer:           execution.NewSanitizer(),
-		SideEffectRec:  execution.NewSideEffectRecorder(),
-		AuditSink:     executionAuditHook,
-		MetricsRec:    execution.NewMetricsRecorder(),
+		SideEffectRec:       execution.NewSideEffectRecorder(),
+		AuditSink:           executionAuditHook,
+		MetricsRec:          execution.NewMetricsRecorder(),
 		CircuitBreaker:      execution.NewCircuitBreakerCoordinator(),
 		SecretBroker:        kernelSecretBroker,
 	}
@@ -593,18 +595,18 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 
 	if err := RegisterProductionAdapters(adapterRegistry, AdapterRegistrationDeps{
-		JSGlobalFactory:     jsFactory,
-		WASMFactory:         wasmFactory,
-		WASMModuleMgr:       wasmModuleMgr,
-		Supervisor:          supervisor,
-		TaskService:         taskRuntimeService,
-		WorkflowCaller:      makeWorkflowCallFunc(workflowExecutor),
-		WorkflowCancel:      makeWorkflowCancelFunc(workflowExecutor),
-		BuiltinDispatcher:   builtinDispatcher,
+		JSGlobalFactory:      jsFactory,
+		WASMFactory:          wasmFactory,
+		WASMModuleMgr:        wasmModuleMgr,
+		Supervisor:           supervisor,
+		TaskService:          taskRuntimeService,
+		WorkflowCaller:       makeWorkflowCallFunc(workflowExecutor),
+		WorkflowCancel:       makeWorkflowCancelFunc(workflowExecutor),
+		BuiltinDispatcher:    builtinDispatcher,
 		AndroidLinuxProvider: b.androidLinuxProvider,
-		SearchCaller:        makeSearchCallFunc(b.searchConfig, kernelSecretBroker),
-		SearchHealth:        makeSearchHealthFunc(b.searchConfig, kernelSecretBroker),
-		InternalDispatcher: internalDispatcher,
+		SearchCaller:         makeSearchCallFunc(b.searchConfig, kernelSecretBroker),
+		SearchHealth:         makeSearchHealthFunc(b.searchConfig, kernelSecretBroker),
+		InternalDispatcher:   internalDispatcher,
 	}); err != nil {
 		return nil, fmt.Errorf("kernel: register production adapters: %w", err)
 	}

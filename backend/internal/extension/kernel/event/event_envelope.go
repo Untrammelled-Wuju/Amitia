@@ -11,6 +11,8 @@ import (
 	"github.com/google/uuid"
 )
 
+// EventEnvelope 是后续 Device/Task/Sync 可靠事件的公共 envelope 基线。
+// 后续不得另建独立的 envelope 类型作为跨设备事件权威结构。
 type EventEnvelope struct {
 	EventID              string
 	EventTypeID          EventTypeID

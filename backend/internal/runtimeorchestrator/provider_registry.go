@@ -14,8 +14,8 @@ const (
 	ProviderSlotVectorStore   ProviderSlot = "vector-store"
 	ProviderSlotGraphStore    ProviderSlot = "graph-store"
 
-	ProviderSlotIOSSandbox  ProviderSlot = "ios-sandbox"
-	ProviderSlotIOSNative   ProviderSlot = "ios-native"
+	ProviderSlotIOSSandbox ProviderSlot = "ios-sandbox"
+	ProviderSlotIOSNative  ProviderSlot = "ios-native"
 )
 
 type ProviderBuildContext struct {
@@ -41,6 +41,9 @@ type ProviderFactory interface {
 	Build(ProviderBuildContext) (ProviderInstance, error)
 }
 
+// ProviderRegistry 仅负责 Runtime Provider Factory / Slot / ProviderInstance 构造。
+// 不负责 Agent Tool capability discovery，不负责 Device capability routing。
+// 不得在后续演变成 Capability Provider Registry。
 type ProviderRegistry struct {
 	mu        sync.RWMutex
 	factories map[providerKey]ProviderFactory

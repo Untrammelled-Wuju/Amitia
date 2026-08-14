@@ -163,8 +163,7 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
   async function connect() {
     disconnect();
     try {
-      const token = localStorage.getItem("ai-companion-token") || "";
-      const url = await resolveApiUrl(`/api/proactive-sse?clientId=ui-host&token=${encodeURIComponent(token)}`);
+      const url = await resolveApiUrl(`/api/proactive-sse?clientId=ui-host`);
       eventSource = new EventSource(url);
       eventSource.addEventListener("ui_notify", handleNotify);
       eventSource.addEventListener("ui_navigate", handleNavigate);

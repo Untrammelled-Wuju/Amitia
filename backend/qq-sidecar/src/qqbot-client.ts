@@ -314,7 +314,7 @@ export class QQBotClient {
         properties: {}
       }
     }
-    console.log(`[QQBot] Identify token: ${payload.d.token.substring(0, 40)}... intents: ${payload.d.intents}`)
+    console.log(`[QQBot] Identify token: **** intents: ${payload.d.intents}`)
     this.ws.send(JSON.stringify(payload))
     this.debugLog(`已发送鉴权 (第${this.identifyRetries}次)`)
   }

@@ -75,7 +75,7 @@ export class UIHostSSE {
       return;
     }
 
-    const path = `/api/proactive-sse?clientId=electron-ui-host&token=${encodeURIComponent(token)}`;
+    const path = `/api/proactive-sse?clientId=electron-ui-host`;
 
     this.req = http.request(
       {

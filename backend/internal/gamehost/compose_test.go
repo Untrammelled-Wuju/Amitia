@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/integration"
 	"github.com/u-ai/backend/internal/gamehost/rpc"
@@ -20,12 +21,31 @@ func (fakeKernelSource) ListEnabledGamePlugins(ctx context.Context) ([]integrati
 func composeTestContainer(t *testing.T) *GameHostContainer {
 	t.Helper()
 	root := filepath.Join(t.TempDir(), "data")
+	supervisorDir := filepath.Join(t.TempDir(), "supervisor")
+	supervisor := trusted_service.NewProcessSupervisor(supervisorDir)
 	c, err := ComposeGameHost(GameHostComposeOptions{
-		DataRoot:     root,
-		KernelSource: fakeKernelSource{},
+		DataRoot:          root,
+		KernelSource:      fakeKernelSource{},
+		TrustedSupervisor: supervisor,
 	})
 	if err != nil {
 		t.Fatalf("ComposeGameHost error: %v", err)
+	}
+	return c
+}
+
+func composeTestContainerWithSupervisor(t *testing.T) *GameHostContainer {
+	t.Helper()
+	root := filepath.Join(t.TempDir(), "data")
+	supervisorDir := filepath.Join(t.TempDir(), "supervisor")
+	supervisor := trusted_service.NewProcessSupervisor(supervisorDir)
+	c, err := ComposeGameHost(GameHostComposeOptions{
+		DataRoot:          root,
+		KernelSource:      fakeKernelSource{},
+		TrustedSupervisor: supervisor,
+	})
+	if err != nil {
+		t.Fatalf("ComposeGameHost with supervisor error: %v", err)
 	}
 	return c
 }
@@ -81,6 +101,55 @@ func TestComposeGameHost_AllComponentsNonNull(t *testing.T) {
 	if c.StreamManager == nil {
 		t.Error("StreamManager is nil")
 	}
+	if c.RuntimeManager == nil {
+		t.Error("RuntimeManager is nil")
+	}
+	if c.RuntimeTopologyStore == nil {
+		t.Error("RuntimeTopologyStore is nil")
+	}
+	if c.RuntimeExecutor == nil {
+		t.Error("RuntimeExecutor is nil")
+	}
+	if c.RuntimeHealth == nil {
+		t.Error("RuntimeHealth is nil")
+	}
+	if c.RuntimeProvisioner == nil {
+		t.Error("RuntimeProvisioner is nil")
+	}
+}
+
+func TestComposeGameHost_RuntimeComponentsShared(t *testing.T) {
+	c := composeTestContainer(t)
+
+	if c.RuntimeManager == nil {
+		t.Fatal("RuntimeManager is nil")
+	}
+	if c.RuntimeTopologyStore == nil {
+		t.Fatal("RuntimeTopologyStore is nil")
+	}
+	if c.RuntimeExecutor == nil {
+		t.Fatal("RuntimeExecutor is nil")
+	}
+
+	ctx := context.Background()
+	rt, err := c.RuntimeManager.Create(ctx, "plugin-test")
+	if err != nil {
+		t.Fatalf("RuntimeManager.Create error: %v", err)
+	}
+
+	ref, err := c.RuntimeManager.GetRuntime(rt.ID)
+	if err != nil {
+		t.Fatalf("RuntimeManager.GetRuntime error: %v", err)
+	}
+	if ref.ID != rt.ID {
+		t.Errorf("got RuntimeID %q, want %q", ref.ID, rt.ID)
+	}
+
+	topo, err := c.RuntimeTopologyStore.GetTopology(rt.ID)
+	if err == nil {
+		t.Error("expected error for runtime without topology, got nil")
+	}
+	_ = topo
 }
 
 func TestComposeGameHost_SingletonIdentity(t *testing.T) {

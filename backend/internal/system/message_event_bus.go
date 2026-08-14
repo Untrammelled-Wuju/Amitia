@@ -35,6 +35,10 @@ type MessageEventSubscriber struct {
 	Events   chan MessageEvent
 }
 
+// MessageEventBus 是 ephemeral in-process projection / notification bus。
+// channel 满时允许丢事件是现有实时 UI 行为。
+// 它绝不能被用作 Cloud durable sync、Device Mesh event log 或任务恢复的数据源。
+// 后续 durable sync 统一复用 extension/kernel/event。
 type MessageEventBus struct {
 	mu          sync.RWMutex
 	subscribers map[string]*MessageEventSubscriber

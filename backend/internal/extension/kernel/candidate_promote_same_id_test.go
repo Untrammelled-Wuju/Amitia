@@ -62,8 +62,10 @@ func seedStableTool(t *testing.T, ctx context.Context, container *Container, ext
 		Name:        domain.LocalizedText{Default: "Stable " + modelSuffix},
 		Version:     "1.0.0",
 		Definition: map[string]any{
-			"toolId":    toolID,
-			"modelName": "stable-" + modelSuffix,
+			"toolId":       toolID,
+			"modelName":    "stable-" + modelSuffix,
+			"inputSchema":  map[string]any{"type": "object"},
+			"outputSchema": map[string]any{"type": "object"},
 		},
 	}
 	if err := container.ContributionRepository.PutContribution(ctx, stableContrib); err != nil {
@@ -93,8 +95,10 @@ func buildCandidateToolContrib(extID string, toolID string, modelSuffix string) 
 			Name:        domain.LocalizedText{Default: "Candidate " + modelSuffix},
 			Version:     "2.0.0",
 			Definition: map[string]any{
-				"toolId":    toolID,
-				"modelName": "candidate-" + modelSuffix,
+				"toolId":       toolID,
+				"modelName":    "candidate-" + modelSuffix,
+				"inputSchema":  map[string]any{"type": "object"},
+				"outputSchema": map[string]any{"type": "object"},
 			},
 		},
 	}
@@ -310,11 +314,13 @@ func TestSameID_DiscardCandidate_PreservesStableSameID(t *testing.T) {
 	registry := capability.NewToolRegistry()
 
 	stableTool := capability.ToolDefinition{
-		ID:          "ext-dup/tool",
-		ModelName:   "stable",
-		ExtensionID: "ext-dup",
-		Source:      capability.ToolSourcePlugin,
-		Enabled:     true,
+		ID:           "ext-dup/tool",
+		ModelName:    "stable",
+		ExtensionID:  "ext-dup",
+		Source:       capability.ToolSourcePlugin,
+		Enabled:      true,
+		InputSchema:  json.RawMessage(`{"type":"object"}`),
+		OutputSchema: json.RawMessage(`{"type":"object"}`),
 	}
 	if err := registry.Register(ctx, stableTool); err != nil {
 		t.Fatalf("register stable: %v", err)
@@ -330,8 +336,9 @@ func TestSameID_DiscardCandidate_PreservesStableSameID(t *testing.T) {
 			ExtensionID: "ext-dup",
 			Kind:        domain.ContributionKindTool,
 			Definition: map[string]any{
-				"toolId":    "ext-dup/tool",
-				"modelName": "candidate",
+				"toolId":      "ext-dup/tool",
+				"modelName":   "candidate",
+				"inputSchema": map[string]any{"type": "object"},
 			},
 		},
 	}
@@ -439,11 +446,13 @@ func TestSameID_RestoreStableFromSnapshot(t *testing.T) {
 	}
 
 	candidateTool := capability.ToolDefinition{
-		ID:          toolID,
-		ModelName:   "candidate-tool",
-		ExtensionID: extID,
-		Source:      capability.ToolSourcePlugin,
-		Enabled:     false,
+		ID:           toolID,
+		ModelName:    "candidate-tool",
+		ExtensionID:  extID,
+		Source:       capability.ToolSourcePlugin,
+		Enabled:      false,
+		InputSchema:  json.RawMessage(`{"type":"object"}`),
+		OutputSchema: json.RawMessage(`{"type":"object"}`),
 	}
 	if err := container.ToolRegistry.Replace(ctx, candidateTool); err != nil {
 		t.Fatalf("replace stable with candidate: %v", err)
@@ -475,11 +484,13 @@ func TestSameID_PromoteHook_SameIDRecoverable(t *testing.T) {
 	}
 
 	stableTool := capability.ToolDefinition{
-		ID:          "ext-hook/stable",
-		ModelName:   "stable",
-		ExtensionID: "ext-hook",
-		Source:      capability.ToolSourcePlugin,
-		Enabled:     true,
+		ID:           "ext-hook/stable",
+		ModelName:    "stable",
+		ExtensionID:  "ext-hook",
+		Source:       capability.ToolSourcePlugin,
+		Enabled:      true,
+		InputSchema:  json.RawMessage(`{"type":"object"}`),
+		OutputSchema: json.RawMessage(`{"type":"object"}`),
 	}
 	if err := registry.Register(ctx, stableTool); err != nil {
 		t.Fatalf("register stable: %v", err)
@@ -515,11 +526,13 @@ func TestSameID_PromoteWorkflow_SameIDRecoverable(t *testing.T) {
 	}
 
 	stableTool := capability.ToolDefinition{
-		ID:          "ext-wf/stable",
-		ModelName:   "stable",
-		ExtensionID: "ext-wf",
-		Source:      capability.ToolSourcePlugin,
-		Enabled:     true,
+		ID:           "ext-wf/stable",
+		ModelName:    "stable",
+		ExtensionID:  "ext-wf",
+		Source:       capability.ToolSourcePlugin,
+		Enabled:      true,
+		InputSchema:  json.RawMessage(`{"type":"object"}`),
+		OutputSchema: json.RawMessage(`{"type":"object"}`),
 	}
 	if err := registry.Register(ctx, stableTool); err != nil {
 		t.Fatalf("register stable: %v", err)
@@ -636,12 +649,14 @@ func TestSameID_PromoteTool_Success_ActivatesStable(t *testing.T) {
 	toolID := "ext-promote-act/tool"
 
 	stableTool := capability.ToolDefinition{
-		ID:          toolID,
-		ModelName:   "stable",
-		ExtensionID: extID,
-		Source:      capability.ToolSourcePlugin,
-		Name:        "Stable",
-		Enabled:     true,
+		ID:           toolID,
+		ModelName:    "stable",
+		ExtensionID:  extID,
+		Source:       capability.ToolSourcePlugin,
+		Name:         "Stable",
+		Enabled:      true,
+		InputSchema:  json.RawMessage(`{"type":"object"}`),
+		OutputSchema: json.RawMessage(`{"type":"object"}`),
 	}
 	if err := container.ToolRegistry.Register(ctx, stableTool); err != nil {
 		t.Fatalf("register stable tool: %v", err)
@@ -655,8 +670,9 @@ func TestSameID_PromoteTool_Success_ActivatesStable(t *testing.T) {
 		Name:        domain.LocalizedText{Default: "Stable"},
 		Version:     "1.0.0",
 		Definition: map[string]any{
-			"toolId":    toolID,
-			"modelName": "stable",
+			"toolId":      toolID,
+			"modelName":   "stable",
+			"inputSchema": map[string]any{"type": "object"},
 		},
 	}
 	if err := container.ContributionRepository.PutContribution(ctx, stableContrib); err != nil {

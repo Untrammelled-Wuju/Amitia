@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
@@ -22,35 +23,32 @@ type ServiceExecutor interface {
 type DefinitionResolverFunc func(definitionID string) (*trusted_service.ServiceRuntimeDefinition, error)
 
 type serviceExecutor struct {
-	processAdapter  ProcessSupervisorAdapter
-	externalAdapter ExternalServiceAdapter
-	topology        TopologyAccessor
-	topologySnapshot RuntimeTopologySnapshot
-	definitionIDs   map[string]string
+	processAdapter     ProcessSupervisorAdapter
+	externalAdapter    ExternalServiceAdapter
+	topologyStore      RuntimeTopologyStore
+	definitionResolver ServiceDefinitionBindingResolver
 }
 
 func NewServiceExecutor(
 	processAdapter ProcessSupervisorAdapter,
 	externalAdapter ExternalServiceAdapter,
-	topologyAccessor TopologyAccessor,
-	topologySnapshot RuntimeTopologySnapshot,
-	definitionIDs map[string]string,
+	topologyStore RuntimeTopologyStore,
+	definitionResolver ServiceDefinitionBindingResolver,
 ) (ServiceExecutor, error) {
 	if processAdapter == nil {
 		return nil, &TopologyError{Code: ErrInvalidArgument, Message: "process adapter must not be nil"}
 	}
 	if externalAdapter == nil {
-		externalAdapter = NewExternalServiceAdapter()
+		externalAdapter = NewUnavailableExternalServiceAdapter()
 	}
-	if topologyAccessor == nil {
-		return nil, &TopologyError{Code: ErrInvalidArgument, Message: "topology accessor must not be nil"}
+	if topologyStore == nil {
+		return nil, &TopologyError{Code: ErrInvalidArgument, Message: "topology store must not be nil"}
 	}
 	return &serviceExecutor{
-		processAdapter:   processAdapter,
-		externalAdapter:  externalAdapter,
-		topology:         topologyAccessor,
-		topologySnapshot: topologySnapshot,
-		definitionIDs:    definitionIDs,
+		processAdapter:     processAdapter,
+		externalAdapter:    externalAdapter,
+		topologyStore:      topologyStore,
+		definitionResolver: definitionResolver,
 	}, nil
 }
 
@@ -63,16 +61,32 @@ func (e *serviceExecutor) Start(ctx context.Context, entry ServicePlanEntry, res
 		}
 	}
 
-	definitionID, ok := e.definitionIDs[string(entry.ServiceID)]
-	if !ok || definitionID == "" {
+	runtimeID, serviceID, err := ParseServiceInstanceID(entry.ServiceInstanceID)
+	if err != nil {
 		return nil, &ExecutionError{
-			Code:      ErrDefinitionNotResolved,
+			Code:      ErrInvalidArgument,
 			ServiceID: string(entry.ServiceID),
-			Message:   "definition id not mapped for service",
+			Message:   fmt.Sprintf("invalid service instance id: %v", err),
 		}
 	}
 
-	svc, err := e.topology.GetService(entry.ServiceID)
+	topology, err := e.topologyStore.GetTopology(runtimeID)
+	if err != nil {
+		return nil, &ExecutionError{
+			Code:      ErrNotFound,
+			RuntimeID: string(runtimeID),
+			ServiceID: string(serviceID),
+			Message:   "runtime topology not found",
+			Cause:     err,
+		}
+	}
+
+	definitionID, err := e.resolveDefinitionIDForService(runtimeID, serviceID)
+	if err != nil {
+		return nil, err
+	}
+
+	svc, err := topology.GetService(serviceID)
 	if err != nil {
 		return nil, err
 	}
@@ -90,12 +104,12 @@ func (e *serviceExecutor) Start(ctx context.Context, entry ServicePlanEntry, res
 		return nil, &ExecutionError{
 			Code:      ErrInvalidState,
 			RuntimeID: string(svc.RuntimeID),
-			ServiceID: string(entry.ServiceID),
+			ServiceID: string(serviceID),
 			Message:   "service not in startable state: " + string(svc.State),
 		}
 	}
 
-	if err := e.topology.UpdateServiceState(entry.ServiceID, ServiceStateStarting, now); err != nil {
+	if err := topology.UpdateServiceState(serviceID, ServiceStateStarting, now); err != nil {
 		return nil, err
 	}
 
@@ -110,7 +124,7 @@ func (e *serviceExecutor) Start(ctx context.Context, entry ServicePlanEntry, res
 
 	if svc.ServiceKind == domain.ServiceKindExternal {
 		if err := e.externalAdapter.Start(ctx, execCtx); err != nil {
-			e.topology.UpdateServiceState(entry.ServiceID, ServiceStateFailed, time.Now())
+			topology.UpdateServiceState(serviceID, ServiceStateFailed, time.Now())
 			return nil, &ExecutionError{
 				Code:         ErrServiceLaunchFailed,
 				RuntimeID:    string(execCtx.RuntimeID),
@@ -121,7 +135,7 @@ func (e *serviceExecutor) Start(ctx context.Context, entry ServicePlanEntry, res
 				Cause:        err,
 			}
 		}
-		if err := e.topology.UpdateServiceState(entry.ServiceID, ServiceStateRunning, time.Now()); err != nil {
+		if err := topology.UpdateServiceState(serviceID, ServiceStateRunning, time.Now()); err != nil {
 			return nil, err
 		}
 		return &ServiceExecutionHandle{
@@ -132,7 +146,7 @@ func (e *serviceExecutor) Start(ctx context.Context, entry ServicePlanEntry, res
 
 	def, err := resolveDefinition(definitionID)
 	if err != nil {
-		e.topology.UpdateServiceState(entry.ServiceID, ServiceStateFailed, time.Now())
+		topology.UpdateServiceState(serviceID, ServiceStateFailed, time.Now())
 		return nil, &ExecutionError{
 			Code:         ErrDefinitionNotResolved,
 			RuntimeID:    string(execCtx.RuntimeID),
@@ -146,11 +160,11 @@ func (e *serviceExecutor) Start(ctx context.Context, entry ServicePlanEntry, res
 
 	_, handle, err := e.processAdapter.StartProcess(ctx, def, execCtx)
 	if err != nil {
-		e.topology.UpdateServiceState(entry.ServiceID, ServiceStateFailed, time.Now())
+		topology.UpdateServiceState(serviceID, ServiceStateFailed, time.Now())
 		return nil, err
 	}
 
-	if err := e.topology.UpdateServiceState(entry.ServiceID, ServiceStateRunning, time.Now()); err != nil {
+	if err := topology.UpdateServiceState(serviceID, ServiceStateRunning, time.Now()); err != nil {
 		return nil, err
 	}
 
@@ -158,7 +172,21 @@ func (e *serviceExecutor) Start(ctx context.Context, entry ServicePlanEntry, res
 }
 
 func (e *serviceExecutor) Stop(ctx context.Context, handle ServiceExecutionHandle, force bool) error {
-	svc, err := e.topology.GetService(domain.ServiceID(handle.ServiceID))
+	runtimeID := domain.RuntimeInstanceID(handle.RuntimeID)
+	serviceID := domain.ServiceID(handle.ServiceID)
+
+	topology, err := e.topologyStore.GetTopology(runtimeID)
+	if err != nil {
+		return &ExecutionError{
+			Code:      ErrNotFound,
+			RuntimeID: handle.RuntimeID,
+			ServiceID: handle.ServiceID,
+			Message:   "runtime topology not found",
+			Cause:     err,
+		}
+	}
+
+	svc, err := topology.GetService(serviceID)
 	if err != nil {
 		return &ExecutionError{
 			Code:      ErrNotFound,
@@ -184,7 +212,7 @@ func (e *serviceExecutor) Stop(ctx context.Context, handle ServiceExecutionHandl
 
 	now := time.Now()
 
-	if err := e.topology.UpdateServiceState(domain.ServiceID(handle.ServiceID), ServiceStateStopping, now); err != nil {
+	if err := topology.UpdateServiceState(serviceID, ServiceStateStopping, now); err != nil {
 		return err
 	}
 
@@ -197,7 +225,7 @@ func (e *serviceExecutor) Stop(ctx context.Context, handle ServiceExecutionHandl
 
 	if svc.ServiceKind == domain.ServiceKindExternal {
 		if err := e.externalAdapter.Stop(ctx, execCtx); err != nil {
-			e.topology.UpdateServiceState(domain.ServiceID(handle.ServiceID), ServiceStateFailed, time.Now())
+			topology.UpdateServiceState(serviceID, ServiceStateFailed, time.Now())
 			return &ExecutionError{
 				Code:      ErrServiceUnavailable,
 				RuntimeID: handle.RuntimeID,
@@ -206,15 +234,27 @@ func (e *serviceExecutor) Stop(ctx context.Context, handle ServiceExecutionHandl
 				Cause:     err,
 			}
 		}
-		return e.topology.UpdateServiceState(domain.ServiceID(handle.ServiceID), ServiceStateStopped, time.Now())
+		return topology.UpdateServiceState(serviceID, ServiceStateStopped, time.Now())
 	}
 
 	if err := e.processAdapter.StopProcess(ctx, handle, force); err != nil {
-		e.topology.UpdateServiceState(domain.ServiceID(handle.ServiceID), ServiceStateFailed, time.Now())
+		topology.UpdateServiceState(serviceID, ServiceStateFailed, time.Now())
 		return err
 	}
 
-	return e.topology.UpdateServiceState(domain.ServiceID(handle.ServiceID), ServiceStateStopped, time.Now())
+	return topology.UpdateServiceState(serviceID, ServiceStateStopped, time.Now())
+}
+
+func (e *serviceExecutor) resolveDefinitionIDForService(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID) (string, error) {
+	if e.definitionResolver != nil {
+		return e.definitionResolver.ResolveDefinitionID(runtimeID, serviceID)
+	}
+	return "", &ExecutionError{
+		Code:      ErrDefinitionNotResolved,
+		RuntimeID: string(runtimeID),
+		ServiceID: string(serviceID),
+		Message:   "definition resolver not configured",
+	}
 }
 
 func canStartService(state ServiceRuntimeState) bool {

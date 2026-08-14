@@ -34,6 +34,8 @@ func (c ServiceConfig) WithDB(db *sql.DB) ServiceConfig {
 	return c
 }
 
+// Service 是 Extension Kernel durable event 发布/投递基础。
+// 后续不得另建 CloudEventBus / RemoteEventBus 作为另一套 durable authority。
 type Service struct {
 	mu                 sync.RWMutex
 	config             ServiceConfig

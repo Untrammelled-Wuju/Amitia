@@ -442,10 +442,11 @@ type RuntimeDefinition struct {
 }
 
 type RuntimeBinding struct {
-	RuntimeID   RuntimeID   `json:"runtimeId"`
-	RuntimeType RuntimeType `json:"runtimeType"`
-	Generation  int64       `json:"generation"`
-	InstanceID  string      `json:"instanceId,omitempty"`
+	RuntimeID   RuntimeID        `json:"runtimeId"`
+	RuntimeType RuntimeType      `json:"runtimeType"`
+	Generation  int64            `json:"generation"`
+	InstanceID  string           `json:"instanceId,omitempty"`
+	Env         map[string]string `json:"env,omitempty"`
 }
 
 type RuntimeInstance struct {

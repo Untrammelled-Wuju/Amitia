@@ -33,10 +33,12 @@ const (
 )
 
 type TopologyError struct {
-	Code      ErrorCode
-	Message   string
-	Retryable bool
-	Cause     error
+	Code       ErrorCode
+	Message    string
+	Retryable  bool
+	Cause      error
+	RuntimeID  string
+	ServiceID  string
 }
 
 func (e *TopologyError) Error() string {

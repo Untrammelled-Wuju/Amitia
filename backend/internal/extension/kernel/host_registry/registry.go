@@ -76,6 +76,8 @@ func (e *HostEntry) IsHeartbeatValid() bool {
 	return time.Since(e.LastHeartbeat) <= heartbeatValidDuration
 }
 
+// HostRegistry 是 Extension Kernel 中 Device/Host presence 的 canonical registry baseline。
+// 后续通用 Device Mesh 在此基础上提升，UI Host、DesktopPet、GameHost 不允许拥有另一套全局 Device Registry。
 type HostRegistry struct {
 	mu    sync.RWMutex
 	db    *sql.DB

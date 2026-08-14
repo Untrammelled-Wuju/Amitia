@@ -8,14 +8,15 @@ import (
 )
 
 type RPCRequest struct {
-	ID        string
-	PluginID  domain.PluginID
-	RuntimeID domain.RuntimeInstanceID
-	ServiceID domain.ServiceID
-	Namespace Namespace
-	Method    Method
-	Payload   json.RawMessage
-	Metadata  map[string]json.RawMessage
+	ConnectionID string
+	ID           string
+	PluginID     domain.PluginID
+	RuntimeID    domain.RuntimeInstanceID
+	ServiceID    domain.ServiceID
+	Namespace    Namespace
+	Method       Method
+	Payload      json.RawMessage
+	Metadata     map[string]json.RawMessage
 }
 
 type RPCResponse struct {

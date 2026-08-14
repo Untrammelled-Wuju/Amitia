@@ -294,7 +294,7 @@ var QQBotClient = class {
         properties: {}
       }
     };
-    console.log(`[QQBot] Identify token: ${payload.d.token.substring(0, 40)}... intents: ${payload.d.intents}`);
+    console.log(`[QQBot] Identify token: **** intents: ${payload.d.intents}`);
     this.ws.send(JSON.stringify(payload));
     this.debugLog(`\u5DF2\u53D1\u9001\u9274\u6743 (\u7B2C${this.identifyRetries}\u6B21)`);
   }

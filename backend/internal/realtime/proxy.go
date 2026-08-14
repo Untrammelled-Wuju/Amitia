@@ -98,13 +98,17 @@ func HandleSession(c *gin.Context) {
 	appLog.Info("browser WS upgraded")
 
 	volcanoHeaders := http.Header{}
-	volcanoHeaders.Set("X-Api-App-Key", "PlgvMymc7f3tQnJ6")
+	volcanoAppKey := os.Getenv("AMITIA_VOLCANO_APP_KEY")
+	if ttsCfg.RealtimeSecretKey != "" {
+		volcanoAppKey = ttsCfg.RealtimeSecretKey
+	}
+	volcanoHeaders.Set("X-Api-App-Key", volcanoAppKey)
 	volcanoHeaders.Set("X-Api-Access-Key", realtimeAccessToken)
 	volcanoHeaders.Set("X-Api-Resource-Id", resourceId)
 	volcanoHeaders.Set("X-Api-Connect-Id", uuid.New().String())
 	volcanoHeaders.Set("X-Api-App-ID", realtimeAppId)
 
-	appLog.Info("volc headers: AppID=" + realtimeAppId + " AccessKey=" + realtimeAccessToken + " ResourceId=" + resourceId)
+	appLog.Info("volc headers: AppID=" + realtimeAppId + " ResourceId=" + resourceId)
 	dialer := websocket.Dialer{HandshakeTimeout: 10 * time.Second}
 	volcanoConn, resp, err := dialer.Dial(volcanoRealtimeURI(), volcanoHeaders)
 	if err != nil {

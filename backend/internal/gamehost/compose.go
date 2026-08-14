@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
+	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	"github.com/u-ai/backend/internal/gamehost/channel"
 	"github.com/u-ai/backend/internal/gamehost/config"
 	"github.com/u-ai/backend/internal/gamehost/control"
@@ -12,6 +13,7 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/handshake"
 	"github.com/u-ai/backend/internal/gamehost/hostapi"
 	"github.com/u-ai/backend/internal/gamehost/integration"
+	"github.com/u-ai/backend/internal/gamehost/integration/service_definition"
 	"github.com/u-ai/backend/internal/gamehost/ipc"
 	"github.com/u-ai/backend/internal/gamehost/notification"
 	"github.com/u-ai/backend/internal/gamehost/registry"
@@ -184,6 +186,9 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		procAdapter = adapt
 	}
 
+	runtimeManager := runtime.NewManager(runtime.ManagerOptions{})
+	topologyStore := runtime.NewTopologyStore()
+
 	resourceMapper := newResourceSubjectMapper(pluginReg)
 	resourceGovernor := newRuntimeLimitGovernor()
 	resourceAdapter := resource.NewResourceAdmissionAdapter(resourceMapper, nil, binaryReg, resourceGovernor)
@@ -202,6 +207,63 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		Audit:   authorityAuditSink,
 	})
 
+	var runtimeProvisioner *integration.RuntimeGraphProvisioner
+	var serviceExecutor runtime.ServiceExecutor
+	var runtimeExecutor runtime.RuntimeExecutor
+	var runtimeHealth runtime.HealthAdapter
+
+	if opts.TrustedSupervisor != nil && procAdapter != nil {
+		var err error
+		runtimeProvisioner, err = integration.NewRuntimeGraphProvisioner(integration.RuntimeGraphProvisionerOptions{
+			Source:           opts.KernelSource,
+			Mapper:           integration.NewDefaultGamePluginContributionMapper(),
+			PluginRegistry:   pluginReg,
+			RuntimeManager:   runtimeManager,
+			TopologyStore:    topologyStore,
+			Supervisor:       opts.TrustedSupervisor,
+			DefinitionMapper: service_definition.NewDefinitionMapper(),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("compose runtime graph provisioner: %w", err)
+		}
+
+		serviceExecutor, err = runtime.NewServiceExecutor(
+			procAdapter,
+			runtime.NewUnavailableExternalServiceAdapter(),
+			topologyStore,
+			topologyStore,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("compose service executor: %w", err)
+		}
+
+		lifecyclePlanner := runtime.NewLifecyclePlanner()
+		runtimeExecutor, err = runtime.NewRuntimeExecutor(
+			topologyStore,
+			runtimeManager,
+		serviceExecutor,
+			lifecyclePlanner,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("compose runtime executor: %w", err)
+		}
+
+		runtimeExecutor.SetResolveDefinition(
+			func(definitionID string) (*trusted_service.ServiceRuntimeDefinition, error) {
+				return opts.TrustedSupervisor.GetDefinition(definitionID)
+			},
+		)
+
+		runtimeHealth, err = runtime.NewHealthAdapter(
+			topologyStore,
+			runtimeManager,
+			runtime.NewHealthAggregator(),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("compose health adapter: %w", err)
+		}
+	}
+
 	container := &GameHostContainer{
 		DirectoryManager:    dirMgr,
 		CheckpointStore:     checkpointStore,
@@ -209,6 +271,11 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		ConfigResolver:      configResolver,
 		PluginRegistry:      pluginReg,
 		ContributionSync:    contributionSync,
+		RuntimeManager:      runtimeManager,
+		RuntimeTopologyStore: topologyStore,
+		RuntimeHealth:       runtimeHealth,
+		RuntimeExecutor:     runtimeExecutor,
+		RuntimeProvisioner:  runtimeProvisioner,
 		NamespaceRegistry:   nsReg,
 		HandshakeManager:    handshakeMgr,
 		ReadyGate:           readyGate,
@@ -218,7 +285,6 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		StateStore:          stateStore,
 		BinaryObjectRegistry: binaryReg,
 		StreamManager:       streamMgr,
-		RuntimeExecutor:     nil,
 		procAdapter:         procAdapter,
 		HostAPIGateway:      opts.HostAPIGateway,
 
@@ -232,7 +298,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		AuthorityAudit:   authorityAuditSink,
 
 		StartupGate:         startupGate,
-		UpgradeCoordinator:  ComposeUpgradeCoordinator(pluginReg, contributionSync, configResolver, nil, opts.ArchiveUpdater),
+		UpgradeCoordinator:  ComposeUpgradeCoordinator(pluginReg, contributionSync, configResolver, runtimeExecutor, opts.ArchiveUpdater),
 		RecoveryCoordinator: ComposeRecoveryCoordinator(checkpointStore, nil),
 		StartupRecovery:     ComposeStartupRecovery(startupGate),
 	}

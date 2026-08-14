@@ -448,7 +448,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 				upgradeCoordinator = &management.GameHostUpgradeCoordinatorAdapter{UC: services.KernelContainer.GameHost.UpgradeCoordinator}
 			}
 			packageSvc := management.NewProductionPackageMutationServiceFromKernelReader(kernelReader, management.NewGameHostPluginRegistryFromContainer(services.KernelContainer.GameHost), kernelMutation, upgradeCoordinator)
-			runtimeSvc := management.NewProductionRuntimeMutationService(services.KernelContainer.GameHost, nil)
+			runtimeSvc := management.NewProductionRuntimeMutationService(services.KernelContainer.GameHost)
 			gameCenterMutationHandler := management.NewMutationHandler(packageSvc, runtimeSvc)
 			management.RegisterGameCenterMutationRouter(apiGroup, gameCenterMutationHandler)
 
