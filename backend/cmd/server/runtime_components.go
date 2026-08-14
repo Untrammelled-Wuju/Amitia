@@ -508,13 +508,13 @@ func newBrowserComponent(services *AppServices, host runtimehost.RuntimeHost) *b
 
 func buildBrowserProcessSpec(engine browser.BrowserEngine) runtimehost.ProcessSpec {
 	return runtimehost.ProcessSpec{
-		ID:      runtimehost.ProcessIDBrowser,
-		Executable: "",
-		WorkingDir: "",
-		StartupTimeout: 60 * time.Second,
-		StopGracePeriod: 10 * time.Second,
-		RestartPolicy: runtimehost.RestartPolicy{Mode: runtimehost.RestartNever},
-		HealthInterval: 10 * time.Second,
+		ID:                runtimehost.ProcessIDBrowser,
+		Executable:        "",
+		WorkingDir:        "",
+		StartupTimeout:    60 * time.Second,
+		StopGracePeriod:   10 * time.Second,
+		RestartPolicy:     runtimehost.RestartPolicy{Mode: runtimehost.RestartNever},
+		HealthInterval:    10 * time.Second,
 		ExecutableProcess: browser.NewBrowserProcessExec(engine),
 	}
 }

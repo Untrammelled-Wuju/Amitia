@@ -30,22 +30,22 @@ const (
 )
 
 type managedProcess struct {
-	spec            ProcessSpec
-	mu              sync.Mutex
-	state           ProcessState
-	pid             int
-	procHandle      process.ProcessTreeHandle
-	executable      string
-	startedAt       time.Time
-	readyAt         time.Time
-	stoppedAt       time.Time
-	restartCount    int
-	lastExitCode    int
-	lastError       string
-	healthFailures  int
-	stopRequested   bool
-	cancelMonitor   context.CancelFunc
-	cancelHealth    context.CancelFunc
+	spec           ProcessSpec
+	mu             sync.Mutex
+	state          ProcessState
+	pid            int
+	procHandle     process.ProcessTreeHandle
+	executable     string
+	startedAt      time.Time
+	readyAt        time.Time
+	stoppedAt      time.Time
+	restartCount   int
+	lastExitCode   int
+	lastError      string
+	healthFailures int
+	stopRequested  bool
+	cancelMonitor  context.CancelFunc
+	cancelHealth   context.CancelFunc
 }
 
 type ProcessStopper interface {

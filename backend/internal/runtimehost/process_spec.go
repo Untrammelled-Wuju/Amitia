@@ -38,9 +38,9 @@ const (
 type EnvironmentPolicy string
 
 type EnvironmentSpec struct {
-	Policy       EnvironmentPolicy   `json:"policy"`
-	Values       map[string]string   `json:"values"`
-	SensitiveKeys []string            `json:"sensitive_keys"`
+	Policy        EnvironmentPolicy `json:"policy"`
+	Values        map[string]string `json:"values"`
+	SensitiveKeys []string          `json:"sensitive_keys"`
 }
 
 type LoopbackPortClaim struct {
@@ -50,26 +50,26 @@ type LoopbackPortClaim struct {
 }
 
 type RestartPolicy struct {
-	Mode        RestartMode       `json:"mode"`
-	MaxRestarts int               `json:"max_restarts"`
-	BaseDelay   time.Duration     `json:"base_delay"`
-	MaxDelay    time.Duration     `json:"max_delay"`
-	ResetAfter  time.Duration     `json:"reset_after"`
+	Mode        RestartMode   `json:"mode"`
+	MaxRestarts int           `json:"max_restarts"`
+	BaseDelay   time.Duration `json:"base_delay"`
+	MaxDelay    time.Duration `json:"max_delay"`
+	ResetAfter  time.Duration `json:"reset_after"`
 }
 
 type RestartMode string
 
 const (
-	RestartNever    RestartMode = "never"
+	RestartNever     RestartMode = "never"
 	RestartOnFailure RestartMode = "on-failure"
-	RestartAlways   RestartMode = "always"
+	RestartAlways    RestartMode = "always"
 )
 
 const (
-	DefaultStartupTimeout   = 30 * time.Second
-	DefaultStopGracePeriod  = 5 * time.Second
-	DefaultHealthInterval   = 10 * time.Second
-	DefaultMaxRestarts      = 5
+	DefaultStartupTimeout  = 30 * time.Second
+	DefaultStopGracePeriod = 5 * time.Second
+	DefaultHealthInterval  = 10 * time.Second
+	DefaultMaxRestarts     = 5
 )
 
 type ProcessExec interface {
@@ -77,22 +77,22 @@ type ProcessExec interface {
 }
 
 type ProcessSpec struct {
-	ID                ProcessID         `json:"id"`
-	Executable        string            `json:"executable"`
-	Args              []string          `json:"args,omitempty"`
-	WorkingDir        string            `json:"working_dir"`
-	Environment       EnvironmentSpec   `json:"environment"`
-	Ports             []LoopbackPortClaim `json:"ports"`
-	StartupTimeout    time.Duration     `json:"startup_timeout"`
-	StopGracePeriod   time.Duration     `json:"stop_grace_period"`
-	HealthProbe       HealthProbe       `json:"health_probe,omitempty"`
-	HealthInterval    time.Duration     `json:"health_interval"`
-	RestartPolicy     RestartPolicy     `json:"restart_policy"`
-	OnStdout          func(line string) `json:"-"`
-	OnStderr          func(line string) `json:"-"`
-	OnStreamError     func(error)       `json:"-"`
-	SensitiveArgIndexes []int           `json:"-"`
-	ExecutableProcess ProcessExec       `json:"-"`
+	ID                  ProcessID           `json:"id"`
+	Executable          string              `json:"executable"`
+	Args                []string            `json:"args,omitempty"`
+	WorkingDir          string              `json:"working_dir"`
+	Environment         EnvironmentSpec     `json:"environment"`
+	Ports               []LoopbackPortClaim `json:"ports"`
+	StartupTimeout      time.Duration       `json:"startup_timeout"`
+	StopGracePeriod     time.Duration       `json:"stop_grace_period"`
+	HealthProbe         HealthProbe         `json:"health_probe,omitempty"`
+	HealthInterval      time.Duration       `json:"health_interval"`
+	RestartPolicy       RestartPolicy       `json:"restart_policy"`
+	OnStdout            func(line string)   `json:"-"`
+	OnStderr            func(line string)   `json:"-"`
+	OnStreamError       func(error)         `json:"-"`
+	SensitiveArgIndexes []int               `json:"-"`
+	ExecutableProcess   ProcessExec         `json:"-"`
 }
 
 func cloneSliceInt(in []int) []int {
@@ -135,25 +135,25 @@ func clonePorts(in []LoopbackPortClaim) []LoopbackPortClaim {
 
 func (s ProcessSpec) Clone() ProcessSpec {
 	return ProcessSpec{
-		ID:                s.ID,
-		Executable:        s.Executable,
-		Args:              cloneSliceString(s.Args),
-		WorkingDir:        s.WorkingDir,
+		ID:         s.ID,
+		Executable: s.Executable,
+		Args:       cloneSliceString(s.Args),
+		WorkingDir: s.WorkingDir,
 		Environment: EnvironmentSpec{
-			Policy:       s.Environment.Policy,
-			Values:       cloneMapString(s.Environment.Values),
+			Policy:        s.Environment.Policy,
+			Values:        cloneMapString(s.Environment.Values),
 			SensitiveKeys: cloneSliceString(s.Environment.SensitiveKeys),
 		},
-		Ports:             clonePorts(s.Ports),
-		StartupTimeout:    s.StartupTimeout,
-		StopGracePeriod:   s.StopGracePeriod,
-		HealthInterval:    s.HealthInterval,
-		RestartPolicy:     s.RestartPolicy,
-		OnStdout:          s.OnStdout,
-		OnStderr:          s.OnStderr,
-		OnStreamError:     s.OnStreamError,
+		Ports:               clonePorts(s.Ports),
+		StartupTimeout:      s.StartupTimeout,
+		StopGracePeriod:     s.StopGracePeriod,
+		HealthInterval:      s.HealthInterval,
+		RestartPolicy:       s.RestartPolicy,
+		OnStdout:            s.OnStdout,
+		OnStderr:            s.OnStderr,
+		OnStreamError:       s.OnStreamError,
 		SensitiveArgIndexes: cloneSliceInt(s.SensitiveArgIndexes),
-		ExecutableProcess: s.ExecutableProcess,
+		ExecutableProcess:   s.ExecutableProcess,
 	}
 }
 
