@@ -50,13 +50,13 @@ func (s NodeState) IsValid() bool {
 type DAGState string
 
 const (
-	DAGStateCreated         DAGState = "created"
-	DAGStateRunning         DAGState = "running"
-	DAGStateWaiting         DAGState = "waiting"
-	DAGStateSucceeded       DAGState = "succeeded"
-	DAGStateFailed          DAGState = "failed"
-	DAGStateCancelled       DAGState = "cancelled"
-	DAGStateBlocked         DAGState = "blocked"
+	DAGStateCreated          DAGState = "created"
+	DAGStateRunning          DAGState = "running"
+	DAGStateWaiting          DAGState = "waiting"
+	DAGStateSucceeded        DAGState = "succeeded"
+	DAGStateFailed           DAGState = "failed"
+	DAGStateCancelled        DAGState = "cancelled"
+	DAGStateBlocked          DAGState = "blocked"
 	DAGStateRecoveryRequired DAGState = "recovery_required"
 )
 

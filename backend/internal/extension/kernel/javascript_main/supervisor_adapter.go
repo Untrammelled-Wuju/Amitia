@@ -74,13 +74,13 @@ func (f *SupervisorFactory) Create(ctx context.Context, spec runtime_supervisor.
 	}
 
 	req := CreateHostRequest{
-		ExtensionID:    string(spec.ExtensionID),
-		ModuleID:       string(spec.ModuleID),
-		Entry:          spec.EntryPoint,
-		DefinitionHash: spec.DefinitionHash,
-		Generation:     int(spec.Generation),
-		NodePath:       nodeEnv.NodeBinary,
-		PluginHostPath:  artifact.EntryPath,
+		ExtensionID:      string(spec.ExtensionID),
+		ModuleID:         string(spec.ModuleID),
+		Entry:            spec.EntryPoint,
+		DefinitionHash:   spec.DefinitionHash,
+		Generation:       int(spec.Generation),
+		NodePath:         nodeEnv.NodeBinary,
+		PluginHostPath:   artifact.EntryPath,
 		WorkingDirectory: artifact.DistributionRoot,
 		ResourceLimits: runtime.ResourceLimits{
 			MaxMemoryMB:        int(spec.Limits.MaxMemoryBytes / (1024 * 1024)),

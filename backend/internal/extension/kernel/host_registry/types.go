@@ -1,7 +1,10 @@
 package host_registry
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/runtimeidentity"
@@ -93,6 +96,9 @@ type RuntimeEntry struct {
 	HostClientID    string
 	HostSessionID   string
 	WindowID        string
+
+	RuntimeSessionID      runtimeidentity.RuntimeSessionID
+	ConnectionGeneration  int64
 }
 
 type HostEntry = RuntimeEntry
@@ -191,6 +197,14 @@ func cloneRuntimeEntry(entry *RuntimeEntry) *RuntimeEntry {
 		copy(clone.Features, entry.Features)
 	}
 	return &clone
+}
+
+func RuntimeEntryID(userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) string {
+	normalized := strings.TrimSpace(userID.String()) + "\x00" +
+		strings.TrimSpace(deviceID.String()) + "\x00" +
+		strings.TrimSpace(runtimeID.String())
+	sum := sha256.Sum256([]byte(normalized))
+	return "runtime_" + hex.EncodeToString(sum[:])
 }
 
 func aggregateRuntimePresence(entries []*RuntimeEntry) RuntimePresence {

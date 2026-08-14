@@ -43,9 +43,9 @@ type MCPHealthCoordinator struct {
 	store     MCPHealthStore
 	clock     Clock
 
-	mu       sync.Mutex
+	mu          sync.Mutex
 	generations map[string]int64
-	pending  map[string]bool
+	pending     map[string]bool
 }
 
 func NewMCPHealthCoordinator(lifecycle MCPLifecycleReader, auth MCPAuthorizationReader, client MCPProtocolClient, store MCPHealthStore) *MCPHealthCoordinator {
@@ -95,12 +95,12 @@ func (c *MCPHealthCoordinator) aggregate(serverID string, result HealthProbeResu
 	}
 
 	snapshot := MCPHealthSnapshot{
-		ServerID:        serverID,
-		Installed:       c.lifecycle.IsInstalled(serverID),
-		Enabled:         c.lifecycle.IsEnabled(serverID),
+		ServerID:           serverID,
+		Installed:          c.lifecycle.IsInstalled(serverID),
+		Enabled:            c.lifecycle.IsEnabled(serverID),
 		AuthorizationState: c.auth.AuthorizationState(serverID),
-		LastProbeAt:     now,
-		LatencyMS:       latencyMS,
+		LastProbeAt:        now,
+		LatencyMS:          latencyMS,
 	}
 
 	if probeErr != nil || !result.Reachable {

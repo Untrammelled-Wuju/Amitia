@@ -18,7 +18,7 @@ func (c *fakeCircuitClock) Add(d time.Duration) { c.now = c.now.Add(d) }
 
 func newCircuitTool(id, runtimeID string) capability.ToolDefinition {
 	return capability.ToolDefinition{
-		ID:            id,
+		ID:             id,
 		HasSideEffects: false,
 		Runtime: capability.RuntimeBinding{
 			RuntimeType: capability.RuntimeTypeMCP,
@@ -43,9 +43,9 @@ func TestCircuitCoordinator_AcquireAllowsClosed(t *testing.T) {
 func TestCircuitCoordinator_ThresholdOpens(t *testing.T) {
 	clock := &fakeCircuitClock{now: time.Unix(1_000_000, 0)}
 	config := CircuitBreakerConfig{
-		FailureThreshold:        3,
-		OpenTimeout:             30 * time.Second,
-		HalfOpenMaxInflight:     1,
+		FailureThreshold:         3,
+		OpenTimeout:              30 * time.Second,
+		HalfOpenMaxInflight:      1,
 		HalfOpenSuccessThreshold: 1,
 	}
 	coord := NewCircuitBreakerCoordinatorWithClock(config, clock)
@@ -75,9 +75,9 @@ func TestCircuitCoordinator_ThresholdOpens(t *testing.T) {
 func TestCircuitCoordinator_HalfOpenTransition(t *testing.T) {
 	clock := &fakeCircuitClock{now: time.Unix(1_000_000, 0)}
 	config := CircuitBreakerConfig{
-		FailureThreshold:        2,
-		OpenTimeout:             5 * time.Second,
-		HalfOpenMaxInflight:     1,
+		FailureThreshold:         2,
+		OpenTimeout:              5 * time.Second,
+		HalfOpenMaxInflight:      1,
 		HalfOpenSuccessThreshold: 1,
 	}
 	coord := NewCircuitBreakerCoordinatorWithClock(config, clock)
@@ -119,9 +119,9 @@ func TestCircuitCoordinator_HalfOpenTransition(t *testing.T) {
 func TestCircuitCoordinator_HalfOpenSuccessRecovers(t *testing.T) {
 	clock := &fakeCircuitClock{now: time.Unix(1_000_000, 0)}
 	config := CircuitBreakerConfig{
-		FailureThreshold:        1,
-		OpenTimeout:             1 * time.Second,
-		HalfOpenMaxInflight:     1,
+		FailureThreshold:         1,
+		OpenTimeout:              1 * time.Second,
+		HalfOpenMaxInflight:      1,
 		HalfOpenSuccessThreshold: 1,
 	}
 	coord := NewCircuitBreakerCoordinatorWithClock(config, clock)
@@ -153,9 +153,9 @@ func TestCircuitCoordinator_HalfOpenSuccessRecovers(t *testing.T) {
 func TestCircuitCoordinator_HalfOpenFailureReopens(t *testing.T) {
 	clock := &fakeCircuitClock{now: time.Unix(1_000_000, 0)}
 	config := CircuitBreakerConfig{
-		FailureThreshold:        1,
-		OpenTimeout:             1 * time.Second,
-		HalfOpenMaxInflight:     1,
+		FailureThreshold:         1,
+		OpenTimeout:              1 * time.Second,
+		HalfOpenMaxInflight:      1,
 		HalfOpenSuccessThreshold: 1,
 	}
 	coord := NewCircuitBreakerCoordinatorWithClock(config, clock)
@@ -182,9 +182,9 @@ func TestCircuitCoordinator_HalfOpenFailureReopens(t *testing.T) {
 func TestCircuitCoordinator_HalfOpenNeutralReleasesSlot(t *testing.T) {
 	clock := &fakeCircuitClock{now: time.Unix(1_000_000, 0)}
 	config := CircuitBreakerConfig{
-		FailureThreshold:        1,
-		OpenTimeout:             1 * time.Second,
-		HalfOpenMaxInflight:     1,
+		FailureThreshold:         1,
+		OpenTimeout:              1 * time.Second,
+		HalfOpenMaxInflight:      1,
 		HalfOpenSuccessThreshold: 1,
 	}
 	coord := NewCircuitBreakerCoordinatorWithClock(config, clock)
@@ -227,9 +227,9 @@ func TestCircuitCoordinator_HalfOpenNeutralReleasesSlot(t *testing.T) {
 func TestCircuitCoordinator_SuccessResetsFailures(t *testing.T) {
 	clock := &fakeCircuitClock{now: time.Unix(1_000_000, 0)}
 	config := CircuitBreakerConfig{
-		FailureThreshold:        3,
-		OpenTimeout:             30 * time.Second,
-		HalfOpenMaxInflight:     1,
+		FailureThreshold:         3,
+		OpenTimeout:              30 * time.Second,
+		HalfOpenMaxInflight:      1,
 		HalfOpenSuccessThreshold: 1,
 	}
 	coord := NewCircuitBreakerCoordinatorWithClock(config, clock)
@@ -264,9 +264,9 @@ func TestCircuitCoordinator_SuccessResetsFailures(t *testing.T) {
 
 func TestCircuitCoordinator_SameRuntimeSharedCircuit(t *testing.T) {
 	coord := NewCircuitBreakerCoordinatorWithClock(CircuitBreakerConfig{
-		FailureThreshold:        2,
-		OpenTimeout:             30 * time.Second,
-		HalfOpenMaxInflight:     1,
+		FailureThreshold:         2,
+		OpenTimeout:              30 * time.Second,
+		HalfOpenMaxInflight:      1,
 		HalfOpenSuccessThreshold: 1,
 	}, &fakeCircuitClock{now: time.Unix(1_000_000, 0)})
 
@@ -292,9 +292,9 @@ func TestCircuitCoordinator_SameRuntimeSharedCircuit(t *testing.T) {
 
 func TestCircuitCoordinator_DifferentRuntimeIsolated(t *testing.T) {
 	coord := NewCircuitBreakerCoordinatorWithClock(CircuitBreakerConfig{
-		FailureThreshold:        1,
-		OpenTimeout:             30 * time.Second,
-		HalfOpenMaxInflight:     1,
+		FailureThreshold:         1,
+		OpenTimeout:              30 * time.Second,
+		HalfOpenMaxInflight:      1,
 		HalfOpenSuccessThreshold: 1,
 	}, &fakeCircuitClock{now: time.Unix(1_000_000, 0)})
 
@@ -318,9 +318,9 @@ func TestCircuitCoordinator_DifferentRuntimeIsolated(t *testing.T) {
 
 func TestCircuitCoordinator_EmptyRuntimeIDFallback(t *testing.T) {
 	coord := NewCircuitBreakerCoordinatorWithClock(CircuitBreakerConfig{
-		FailureThreshold:        1,
-		OpenTimeout:             30 * time.Second,
-		HalfOpenMaxInflight:     1,
+		FailureThreshold:         1,
+		OpenTimeout:              30 * time.Second,
+		HalfOpenMaxInflight:      1,
 		HalfOpenSuccessThreshold: 1,
 	}, &fakeCircuitClock{now: time.Unix(1_000_000, 0)})
 
@@ -344,9 +344,9 @@ func TestCircuitCoordinator_EmptyRuntimeIDFallback(t *testing.T) {
 
 func TestCircuitCoordinator_Reset(t *testing.T) {
 	coord := NewCircuitBreakerCoordinatorWithClock(CircuitBreakerConfig{
-		FailureThreshold:        1,
-		OpenTimeout:             30 * time.Second,
-		HalfOpenMaxInflight:     1,
+		FailureThreshold:         1,
+		OpenTimeout:              30 * time.Second,
+		HalfOpenMaxInflight:      1,
 		HalfOpenSuccessThreshold: 1,
 	}, &fakeCircuitClock{now: time.Unix(1_000_000, 0)})
 
@@ -381,9 +381,9 @@ func TestCircuitCoordinator_Reset(t *testing.T) {
 func TestCircuitCoordinator_RefusedPermitDoesNotRefresh(t *testing.T) {
 	clock := &fakeCircuitClock{now: time.Unix(1_000_000, 0)}
 	config := CircuitBreakerConfig{
-		FailureThreshold:        1,
-		OpenTimeout:             30 * time.Second,
-		HalfOpenMaxInflight:     1,
+		FailureThreshold:         1,
+		OpenTimeout:              30 * time.Second,
+		HalfOpenMaxInflight:      1,
 		HalfOpenSuccessThreshold: 1,
 	}
 	coord := NewCircuitBreakerCoordinatorWithClock(config, clock)
@@ -443,9 +443,9 @@ func (c *circuitEventCapture) Record(snap CircuitSnapshot, from, to CircuitState
 func TestCircuitCoordinator_EventsEmitted(t *testing.T) {
 	capture := &circuitEventCapture{}
 	coord := NewCircuitBreakerCoordinatorWithClock(CircuitBreakerConfig{
-		FailureThreshold:        1,
-		OpenTimeout:             1 * time.Second,
-		HalfOpenMaxInflight:     1,
+		FailureThreshold:         1,
+		OpenTimeout:              1 * time.Second,
+		HalfOpenMaxInflight:      1,
 		HalfOpenSuccessThreshold: 1,
 	}, &fakeCircuitClock{now: time.Unix(1_000_000, 0)})
 	coord.SetEventHook(capture.Record)

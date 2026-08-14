@@ -50,18 +50,18 @@ type ToolContent struct {
 type ToolErrorCategory string
 
 const (
-	ToolErrorCategoryValidation  ToolErrorCategory = "validation"
-	ToolErrorCategoryPermission  ToolErrorCategory = "permission"
+	ToolErrorCategoryValidation   ToolErrorCategory = "validation"
+	ToolErrorCategoryPermission   ToolErrorCategory = "permission"
 	ToolErrorCategoryAvailability ToolErrorCategory = "availability"
-	ToolErrorCategoryRuntime     ToolErrorCategory = "runtime"
-	ToolErrorCategoryTimeout     ToolErrorCategory = "timeout"
+	ToolErrorCategoryRuntime      ToolErrorCategory = "runtime"
+	ToolErrorCategoryTimeout      ToolErrorCategory = "timeout"
 	ToolErrorCategoryCancellation ToolErrorCategory = "cancellation"
-	ToolErrorCategoryConflict    ToolErrorCategory = "conflict"
-	ToolErrorCategoryRateLimit   ToolErrorCategory = "rate_limit"
-	ToolErrorCategoryResource    ToolErrorCategory = "resource"
-	ToolErrorCategoryDependency  ToolErrorCategory = "dependency"
-	ToolErrorCategoryStream      ToolErrorCategory = "stream"
-	ToolErrorCategoryInternal    ToolErrorCategory = "internal"
+	ToolErrorCategoryConflict     ToolErrorCategory = "conflict"
+	ToolErrorCategoryRateLimit    ToolErrorCategory = "rate_limit"
+	ToolErrorCategoryResource     ToolErrorCategory = "resource"
+	ToolErrorCategoryDependency   ToolErrorCategory = "dependency"
+	ToolErrorCategoryStream       ToolErrorCategory = "stream"
+	ToolErrorCategoryInternal     ToolErrorCategory = "internal"
 )
 
 type ToolError struct {
@@ -90,38 +90,38 @@ func (e *ToolError) Unwrap() error {
 }
 
 const (
-	ErrorCodeInvalidInput       = "invalid_input"
-	ErrorCodePermissionDenied   = "permission_denied"
-	ErrorCodeScopeDenied        = "scope_denied"
-	ErrorCodeNotAvailable       = "not_available"
-	ErrorCodeRuntimeUnavailable = "runtime_unavailable"
-	ErrorCodeTimeout            = "timeout"
-	ErrorCodeCancelled          = "cancelled"
-	ErrorCodeConflict           = "conflict"
-	ErrorCodeRateLimited        = "rate_limited"
-	ErrorCodeDependencyMissing  = "dependency_missing"
-	ErrorCodeConnectionLost        = "connection_lost"
-	ErrorCodeExecutionFailed       = "execution_failed"
-	ErrorCodeInvalidResult         = "invalid_result"
-	ErrorCodeStreamProtocol        = "stream_protocol_error"
-	ErrorCodeStreamLimitExceeded   = "stream_limit_exceeded"
-	ErrorCodeStreamDeliveryFailed  = "stream_delivery_failed"
-	ErrorCodeInternalError         = "internal_error"
-	ErrorCodeResourceLimitInvalid   = "resource_limit_invalid"
-	ErrorCodeResourceLimitUnavailable = "resource_limit_unavailable"
-	ErrorCodeResourceLimitExceeded  = "resource_limit_exceeded"
-	ErrorCodeResourceUsageUnavailable = "resource_usage_unavailable"
-	ErrorCodeCircuitOpen              = "circuit_open"
-	ErrorCodeConcurrencyPolicyInvalid = "concurrency_policy_invalid"
-	ErrorCodeRateLimitPolicyInvalid   = "rate_limit_policy_invalid"
-	ErrorCodeBackpressureRejected     = "backpressure_rejected"
-	ErrorCodeIdempotencyConflict        = "idempotency_conflict"
-	ErrorCodeIdempotencyReservationFail = "idempotency_reservation_fail"
-	ErrorCodeIdempotencyIndeterminate    = "idempotency_indeterminate"
+	ErrorCodeInvalidInput                 = "invalid_input"
+	ErrorCodePermissionDenied             = "permission_denied"
+	ErrorCodeScopeDenied                  = "scope_denied"
+	ErrorCodeNotAvailable                 = "not_available"
+	ErrorCodeRuntimeUnavailable           = "runtime_unavailable"
+	ErrorCodeTimeout                      = "timeout"
+	ErrorCodeCancelled                    = "cancelled"
+	ErrorCodeConflict                     = "conflict"
+	ErrorCodeRateLimited                  = "rate_limited"
+	ErrorCodeDependencyMissing            = "dependency_missing"
+	ErrorCodeConnectionLost               = "connection_lost"
+	ErrorCodeExecutionFailed              = "execution_failed"
+	ErrorCodeInvalidResult                = "invalid_result"
+	ErrorCodeStreamProtocol               = "stream_protocol_error"
+	ErrorCodeStreamLimitExceeded          = "stream_limit_exceeded"
+	ErrorCodeStreamDeliveryFailed         = "stream_delivery_failed"
+	ErrorCodeInternalError                = "internal_error"
+	ErrorCodeResourceLimitInvalid         = "resource_limit_invalid"
+	ErrorCodeResourceLimitUnavailable     = "resource_limit_unavailable"
+	ErrorCodeResourceLimitExceeded        = "resource_limit_exceeded"
+	ErrorCodeResourceUsageUnavailable     = "resource_usage_unavailable"
+	ErrorCodeCircuitOpen                  = "circuit_open"
+	ErrorCodeConcurrencyPolicyInvalid     = "concurrency_policy_invalid"
+	ErrorCodeRateLimitPolicyInvalid       = "rate_limit_policy_invalid"
+	ErrorCodeBackpressureRejected         = "backpressure_rejected"
+	ErrorCodeIdempotencyConflict          = "idempotency_conflict"
+	ErrorCodeIdempotencyReservationFail   = "idempotency_reservation_fail"
+	ErrorCodeIdempotencyIndeterminate     = "idempotency_indeterminate"
 	ErrorCodeIdempotencyTakeoverForbidden = "idempotency_takeover_forbidden"
 	ErrorCodeIdempotencyStateInvalid      = "idempotency_state_invalid"
-	ErrorCodeSecretUnavailable             = "secret_unavailable"
-	ErrorCodeSecretLeaseIssueFailed        = "secret_lease_issue_failed"
+	ErrorCodeSecretUnavailable            = "secret_unavailable"
+	ErrorCodeSecretLeaseIssueFailed       = "secret_lease_issue_failed"
 )
 
 func ErrorCategoryForCode(code string) ToolErrorCategory {
@@ -228,16 +228,16 @@ type RecordedSideEffect struct {
 }
 
 type UnifiedToolResult struct {
-	InvocationID string               `json:"invocationId"`
-	ToolID       string               `json:"toolId,omitempty"`
-	Status       ToolResultStatus     `json:"status"`
-	Content      []ToolContent        `json:"content,omitempty"`
-	Structured   json.RawMessage      `json:"structured,omitempty"`
-	Error        *ToolError           `json:"error,omitempty"`
-	SideEffects  []RecordedSideEffect `json:"sideEffects,omitempty"`
-	DurationMS   int64                `json:"durationMs,omitempty"`
-	ResourceUsage *ResourceUsage      `json:"resourceUsage,omitempty"`
-	Metadata     map[string]any       `json:"metadata,omitempty"`
+	InvocationID  string               `json:"invocationId"`
+	ToolID        string               `json:"toolId,omitempty"`
+	Status        ToolResultStatus     `json:"status"`
+	Content       []ToolContent        `json:"content,omitempty"`
+	Structured    json.RawMessage      `json:"structured,omitempty"`
+	Error         *ToolError           `json:"error,omitempty"`
+	SideEffects   []RecordedSideEffect `json:"sideEffects,omitempty"`
+	DurationMS    int64                `json:"durationMs,omitempty"`
+	ResourceUsage *ResourceUsage       `json:"resourceUsage,omitempty"`
+	Metadata      map[string]any       `json:"metadata,omitempty"`
 }
 
 func NewToolSuccessResult(invocationID, toolID string) UnifiedToolResult {

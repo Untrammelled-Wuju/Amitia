@@ -50,13 +50,13 @@ type RateLimitSpec struct {
 }
 
 type RateLimitPolicy struct {
-	Global       RateLimitSpec
-	PerTool      RateLimitSpec
-	PerExtension RateLimitSpec
-	PerCharacter RateLimitSpec
+	Global          RateLimitSpec
+	PerTool         RateLimitSpec
+	PerExtension    RateLimitSpec
+	PerCharacter    RateLimitSpec
 	PerConversation RateLimitSpec
-	Backpressure BackpressurePolicy
-	Enabled      bool
+	Backpressure    BackpressurePolicy
+	Enabled         bool
 }
 
 type BackpressureMode string
@@ -76,9 +76,9 @@ type BackpressurePolicy struct {
 type RateLimitDecision string
 
 const (
-	RateLimitAdmitted          RateLimitDecision = "admitted"
-	RateLimitWaiting           RateLimitDecision = "waiting"
-	RateLimitRejected          RateLimitDecision = "rejected"
+	RateLimitAdmitted             RateLimitDecision = "admitted"
+	RateLimitWaiting              RateLimitDecision = "waiting"
+	RateLimitRejected             RateLimitDecision = "rejected"
 	RateLimitBackpressureRejected RateLimitDecision = "backpressure_rejected"
 )
 
@@ -122,9 +122,9 @@ type rateKeyType struct {
 }
 
 type rateBucket struct {
-	key       rateKeyType
-	spec      RateLimitSpec
-	tokens    float64
+	key        rateKeyType
+	spec       RateLimitSpec
+	tokens     float64
 	lastRefill time.Time
 	lastSeen   time.Time
 }
@@ -183,10 +183,10 @@ func NewRateLimiterWithClock(policy RateLimitPolicy, clock RateLimitClock) (*Rat
 
 func validatePolicy(policy RateLimitPolicy) error {
 	specs := map[string]RateLimitSpec{
-		"global":       policy.Global,
-		"perTool":      policy.PerTool,
-		"perExtension": policy.PerExtension,
-		"perCharacter": policy.PerCharacter,
+		"global":          policy.Global,
+		"perTool":         policy.PerTool,
+		"perExtension":    policy.PerExtension,
+		"perCharacter":    policy.PerCharacter,
 		"perConversation": policy.PerConversation,
 	}
 	for name, spec := range specs {
@@ -438,7 +438,7 @@ func (r *RateLimiter) refillLocked(keys []rateKeyType, now time.Time) []*rateBuc
 			interval := b.spec.Interval
 			if interval > 0 && b.spec.Tokens > 0 {
 				refill := float64(elapsed) / float64(interval) * float64(b.spec.Tokens)
-				b.tokens = math.Min(float64(b.spec.Burst), b.tokens + refill)
+				b.tokens = math.Min(float64(b.spec.Burst), b.tokens+refill)
 			}
 			b.lastRefill = now
 		}
@@ -572,9 +572,9 @@ func dimsToStrings(dims []RateLimitDimension) []string {
 }
 
 type RateLimitSnapshot struct {
-	Enabled         bool
-	BucketCount     int
-	Waiters         int
+	Enabled            bool
+	BucketCount        int
+	Waiters            int
 	BucketsByDimension map[RateLimitDimension]int
 }
 

@@ -27,16 +27,16 @@ func DefaultToolFacadeConfig() ToolFacadeConfig {
 }
 
 type ToolFacade struct {
-	toolRegistry           *capability.ToolRegistry
-	executionKernel        *execution.ExecutionPipeline
-	hookService            *hook.Service
-	agentSkillCatalog      *agent_skill.AgentSkillCatalog
-	activationService      *agent_skill.ActivationService
-	agentSkillBackend      AgentSkillBackend
-	runSkillScriptHandler  RunSkillScriptHandler
-	skillResourceHandler   SkillResourceHandler
-	counters               *ToolFacadeCounters
-	config                 ToolFacadeConfig
+	toolRegistry          *capability.ToolRegistry
+	executionKernel       *execution.ExecutionPipeline
+	hookService           *hook.Service
+	agentSkillCatalog     *agent_skill.AgentSkillCatalog
+	activationService     *agent_skill.ActivationService
+	agentSkillBackend     AgentSkillBackend
+	runSkillScriptHandler RunSkillScriptHandler
+	skillResourceHandler  SkillResourceHandler
+	counters              *ToolFacadeCounters
+	config                ToolFacadeConfig
 }
 
 func NewToolFacade(toolRegistry *capability.ToolRegistry, executionKernel *execution.ExecutionPipeline, args ...any) *ToolFacade {
@@ -204,15 +204,15 @@ func (f *ToolFacade) ModelTools(ctx context.Context, scope LegacyScope) ([]tool.
 }
 
 type ResolvedToolReference struct {
-	ID             capability.CapabilityID
-	ModelName      string
-	ExtensionID    string
-	ModuleID       string
-	RuntimeType    capability.RuntimeType
-	RuntimeID      string
+	ID              capability.CapabilityID
+	ModelName       string
+	ExtensionID     string
+	ModuleID        string
+	RuntimeType     capability.RuntimeType
+	RuntimeID       string
 	AllowBackground bool
-	ToolVersion    string
-	Generation     int64
+	ToolVersion     string
+	Generation      int64
 }
 
 func (f *ToolFacade) ResolveModelTool(modelName string) (ResolvedToolReference, error) {
@@ -429,7 +429,7 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 		IdempotencyKey: idempotencyKey,
 		TraceID:        scope.TraceID,
 		OperationID:    scope.RequestID,
-		IsBackground:  isBackground,
+		IsBackground:   isBackground,
 	})
 	req := execution.ToolExecutionRequest{
 		ToolID:     capability.CapabilityID(def.ID),
@@ -477,7 +477,7 @@ func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName strin
 		IdempotencyKey: idempotencyKey,
 		TraceID:        scope.TraceID,
 		OperationID:    scope.RequestID,
-		IsBackground:  isBackground,
+		IsBackground:   isBackground,
 	})
 	req := execution.ToolExecutionRequest{
 		ToolID:     capability.CapabilityID(def.ID),

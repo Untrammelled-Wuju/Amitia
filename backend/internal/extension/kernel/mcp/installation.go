@@ -8,18 +8,18 @@ import (
 )
 
 type MCPInstallation struct {
-	BindingID          string            `json:"bindingId"`
-	InstallState       MCPInstallState   `json:"installState"`
-	ActiveRevisionID   string            `json:"activeRevisionId"`
-	PreviousRevisionID string            `json:"previousRevisionId"`
-	Enabled            bool              `json:"enabled"`
-	RuntimeState       MCPRuntimeState   `json:"runtimeState"`
-	Generation         uint64            `json:"generation"`
-	LastOperationID    string            `json:"lastOperationId"`
-	LastErrorCode      string            `json:"lastErrorCode"`
-	LastErrorSummary   string            `json:"lastErrorSummary"`
-	CreatedAt          time.Time         `json:"createdAt"`
-	UpdatedAt          time.Time         `json:"updatedAt"`
+	BindingID          string          `json:"bindingId"`
+	InstallState       MCPInstallState `json:"installState"`
+	ActiveRevisionID   string          `json:"activeRevisionId"`
+	PreviousRevisionID string          `json:"previousRevisionId"`
+	Enabled            bool            `json:"enabled"`
+	RuntimeState       MCPRuntimeState `json:"runtimeState"`
+	Generation         uint64          `json:"generation"`
+	LastOperationID    string          `json:"lastOperationId"`
+	LastErrorCode      string          `json:"lastErrorCode"`
+	LastErrorSummary   string          `json:"lastErrorSummary"`
+	CreatedAt          time.Time       `json:"createdAt"`
+	UpdatedAt          time.Time       `json:"updatedAt"`
 }
 
 func (i MCPInstallation) IsInstalled() bool {
@@ -74,19 +74,19 @@ func (i MCPInstallation) ValidateTransition(newState MCPInstallState) error {
 }
 
 type MCPRevision struct {
-	RevisionID          string    `json:"revisionId"`
-	BindingID           string    `json:"bindingId"`
-	LauncherKind        string    `json:"launcherKind"`
-	RequestedSpecJSON   string    `json:"requestedSpecJson"`
-	ResolvedSpecJSON    string    `json:"resolvedSpecJson"`
-	PackageManager      string    `json:"packageManager"`
-	InstallRootURI      string    `json:"installRootUri"`
-	EntryPoint          string    `json:"entryPoint"`
-	ContentHash         string    `json:"contentHash"`
-	LockHash            string    `json:"lockHash"`
-	RuntimeFingerprint  string    `json:"runtimeFingerprint"`
-	CreatedAt           time.Time `json:"createdAt"`
-	Validated           bool      `json:"validated"`
+	RevisionID         string    `json:"revisionId"`
+	BindingID          string    `json:"bindingId"`
+	LauncherKind       string    `json:"launcherKind"`
+	RequestedSpecJSON  string    `json:"requestedSpecJson"`
+	ResolvedSpecJSON   string    `json:"resolvedSpecJson"`
+	PackageManager     string    `json:"packageManager"`
+	InstallRootURI     string    `json:"installRootUri"`
+	EntryPoint         string    `json:"entryPoint"`
+	ContentHash        string    `json:"contentHash"`
+	LockHash           string    `json:"lockHash"`
+	RuntimeFingerprint string    `json:"runtimeFingerprint"`
+	CreatedAt          time.Time `json:"createdAt"`
+	Validated          bool      `json:"validated"`
 }
 
 func (r MCPRevision) IsActive(installation MCPInstallation) bool {
@@ -98,12 +98,12 @@ func (r MCPRevision) IsValidated() bool {
 }
 
 type MCPPreparedLauncher struct {
-	Executable                  string            `json:"executable"`
-	Args                        []string          `json:"args"`
-	WorkDir                     string            `json:"workDir"`
-	Environment                 map[string]string `json:"environment,omitempty"`
-	RuntimeDependencyFingerprint string           `json:"runtimeDependencyFingerprint"`
-	RevisionID                  string            `json:"revisionId"`
+	Executable                   string            `json:"executable"`
+	Args                         []string          `json:"args"`
+	WorkDir                      string            `json:"workDir"`
+	Environment                  map[string]string `json:"environment,omitempty"`
+	RuntimeDependencyFingerprint string            `json:"runtimeDependencyFingerprint"`
+	RevisionID                   string            `json:"revisionId"`
 }
 
 type PreparedTransportConfig struct {
@@ -116,20 +116,20 @@ type PreparedTransportConfig struct {
 }
 
 type MCPBindingStatus struct {
-	BindingID          string `json:"bindingId"`
-	InstallState       string `json:"installState"`
-	RuntimeState       string `json:"runtimeState"`
-	Enabled            bool   `json:"enabled"`
-	ActiveRevision     string `json:"activeRevision"`
-	PreviousRevision   string `json:"previousRevision"`
-	RequestedVersion   string `json:"requestedVersion"`
-	ResolvedVersion    string `json:"resolvedVersion"`
-	Launcher           string `json:"launcher"`
-	Transport          string `json:"transport"`
-	Generation         uint64 `json:"generation"`
-	AuthorizationRequired bool `json:"authorizationRequired"`
-	LastErrorCode      string `json:"lastErrorCode"`
-	LastErrorSummary   string `json:"lastErrorSummary"`
+	BindingID             string `json:"bindingId"`
+	InstallState          string `json:"installState"`
+	RuntimeState          string `json:"runtimeState"`
+	Enabled               bool   `json:"enabled"`
+	ActiveRevision        string `json:"activeRevision"`
+	PreviousRevision      string `json:"previousRevision"`
+	RequestedVersion      string `json:"requestedVersion"`
+	ResolvedVersion       string `json:"resolvedVersion"`
+	Launcher              string `json:"launcher"`
+	Transport             string `json:"transport"`
+	Generation            uint64 `json:"generation"`
+	AuthorizationRequired bool   `json:"authorizationRequired"`
+	LastErrorCode         string `json:"lastErrorCode"`
+	LastErrorSummary      string `json:"lastErrorSummary"`
 }
 
 func BuildBindingStatus(installation MCPInstallation, binding MCPBinding, revision *MCPRevision) MCPBindingStatus {
@@ -157,9 +157,9 @@ func BuildBindingStatus(installation MCPInstallation, binding MCPBinding, revisi
 }
 
 type OperationConflictError struct {
-	BindingID     string
-	OperationID   string
-	CurrentState  MCPInstallState
+	BindingID    string
+	OperationID  string
+	CurrentState MCPInstallState
 }
 
 func (e *OperationConflictError) Error() string {

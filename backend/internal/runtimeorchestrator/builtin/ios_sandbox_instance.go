@@ -17,33 +17,33 @@ import (
 const ComponentIDIOSSandbox runtimeorchestrator.ComponentID = "provider.ios-sandbox"
 
 type IOSSandboxProviderCapability struct {
-	ProviderID          string `json:"providerId"`
-	Slot                string `json:"slot"`
-	RuntimeID           string `json:"runtimeId"`
-	HostPlatform        string `json:"hostPlatform"`
-	Availability        string `json:"availability"`
-	LifecycleState      string `json:"lifecycleState"`
-	Generation          uint64 `json:"generation"`
-	DesiredRunning      bool   `json:"desiredRunning"`
-	Healthy             bool   `json:"healthy"`
-	ISHInitialized      bool   `json:"ishInitialized"`
-	RootfsInstalled     bool   `json:"rootfsInstalled"`
-	RestartRequired     bool   `json:"restartRequired"`
-	RecoveryPending     bool   `json:"recoveryPending"`
-	ActiveExecutionID   string `json:"activeExecutionId,omitempty"`
-	ActiveRootfsVersion string `json:"activeRootfsVersion"`
+	ProviderID           string `json:"providerId"`
+	Slot                 string `json:"slot"`
+	RuntimeID            string `json:"runtimeId"`
+	HostPlatform         string `json:"hostPlatform"`
+	Availability         string `json:"availability"`
+	LifecycleState       string `json:"lifecycleState"`
+	Generation           uint64 `json:"generation"`
+	DesiredRunning       bool   `json:"desiredRunning"`
+	Healthy              bool   `json:"healthy"`
+	ISHInitialized       bool   `json:"ishInitialized"`
+	RootfsInstalled      bool   `json:"rootfsInstalled"`
+	RestartRequired      bool   `json:"restartRequired"`
+	RecoveryPending      bool   `json:"recoveryPending"`
+	ActiveExecutionID    string `json:"activeExecutionId,omitempty"`
+	ActiveRootfsVersion  string `json:"activeRootfsVersion"`
 	RunningRootfsVersion string `json:"runningRootfsVersion"`
-	LastErrorCode       string `json:"lastErrorCode"`
-	LastStartedAt       string `json:"lastStartedAt,omitempty"`
-	LastStoppedAt       string `json:"lastStoppedAt,omitempty"`
+	LastErrorCode        string `json:"lastErrorCode"`
+	LastStartedAt        string `json:"lastStartedAt,omitempty"`
+	LastStoppedAt        string `json:"lastStoppedAt,omitempty"`
 }
 
 type iosSandboxProviderInstance struct {
-	mu         sync.RWMutex
-	backend    sandbox.SandboxBackend
-	host       runtimehost.RuntimeHost
-	config     IOSSandboxProviderConfig
-	orch       *runtimeorchestrator.RuntimeOrchestrator
+	mu      sync.RWMutex
+	backend sandbox.SandboxBackend
+	host    runtimehost.RuntimeHost
+	config  IOSSandboxProviderConfig
+	orch    *runtimeorchestrator.RuntimeOrchestrator
 
 	lifecycleState sandbox.SandboxLifecycleState
 	desiredRunning bool

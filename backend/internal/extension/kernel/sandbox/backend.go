@@ -14,9 +14,9 @@ import (
 const (
 	ProviderIDIOSSandbox = "ios.ish-sandbox"
 
-	MaxStdinSize  = 1 * 1024 * 1024  // 1 MiB
-	MaxStdoutSize = 8 * 1024 * 1024  // 8 MiB
-	MaxStderrSize = 8 * 1024 * 1024  // 8 MiB
+	MaxStdinSize   = 1 * 1024 * 1024  // 1 MiB
+	MaxStdoutSize  = 8 * 1024 * 1024  // 8 MiB
+	MaxStderrSize  = 8 * 1024 * 1024  // 8 MiB
 	MaxTotalOutput = 16 * 1024 * 1024 // 16 MiB
 
 	NativeErrRuntimeNotStarted  = "ISH_RUNTIME_NOT_STARTED"

@@ -1209,10 +1209,10 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 }
 
 type gameHostDefinitionReconcile struct {
-	instRepo  domain.InstallationRepository
-	defRepo   domain.DefinitionRepository
+	instRepo    domain.InstallationRepository
+	defRepo     domain.DefinitionRepository
 	contribRepo domain.ContributionRepository
-	installer *TypedContributionInstaller
+	installer   *TypedContributionInstaller
 }
 
 func newGameHostDefinitionReconcile(instRepo domain.InstallationRepository, defRepo domain.DefinitionRepository, contribRepo domain.ContributionRepository, installer *TypedContributionInstaller) upgrade.DefinitionReconciler {

@@ -58,19 +58,19 @@ import (
 )
 
 type iosNativeBridgeClient struct {
-	mu         sync.RWMutex
-	state      BackendAvailability
-	lifecycle  SandboxLifecycleState
-	generation uint64
-	desiredRun bool
-	restartReq bool
+	mu           sync.RWMutex
+	state        BackendAvailability
+	lifecycle    SandboxLifecycleState
+	generation   uint64
+	desiredRun   bool
+	restartReq   bool
 	recoveryPend bool
-	rootVer    string
-	rootDigest string
-	lastErr    string
-	startedAt  time.Time
+	rootVer      string
+	rootDigest   string
+	lastErr      string
+	startedAt    time.Time
 	activeExecID string
-	runtimeID  string
+	runtimeID    string
 
 	lifecycleMu sync.Mutex
 	startCancel context.CancelFunc

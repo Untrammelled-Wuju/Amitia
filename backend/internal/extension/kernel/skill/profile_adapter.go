@@ -6,10 +6,10 @@ import (
 )
 
 const (
-	ProfileIDAgentSkills          = "agent-skills"
-	ProfileIDClaudeCode           = "claude-code"
-	ProfileIDClaudeCommandLegacy  = "claude-command-legacy"
-	ProfileIDOpenAI               = "openai"
+	ProfileIDAgentSkills         = "agent-skills"
+	ProfileIDClaudeCode          = "claude-code"
+	ProfileIDClaudeCommandLegacy = "claude-command-legacy"
+	ProfileIDOpenAI              = "openai"
 
 	AdapterVersionAgentSkills  = "agent-skills@1"
 	AdapterVersionClaudeCode   = "claude-code@1"
@@ -31,12 +31,12 @@ const (
 )
 
 type SkillPackageView struct {
-	RootURI    string
-	SourceFile string
-	Files      map[string][]byte
-	Parsed     ParsedSkill
+	RootURI     string
+	SourceFile  string
+	Files       map[string][]byte
+	Parsed      ParsedSkill
 	ContentHash string
-	Source     string
+	Source      string
 }
 
 type SkillArgumentSchema struct {
@@ -174,19 +174,19 @@ type CompatibilityFingerprint struct {
 }
 
 type SkillCompatibilityReport struct {
-	Status             string                   `json:"status"`
-	Detected           []SkillEcosystemProfile  `json:"detectedProfiles"`
-	FieldMappings      []SkillFieldMapping      `json:"fieldMappings"`
-	ToolMappings       []SkillToolMapping       `json:"toolMappings"`
-	DependencyMappings []SkillDependencyMapping `json:"dependencyMappings"`
-	RequiredScripts    []string                 `json:"requiredScripts"`
-	MissingFiles       []string                 `json:"missingFiles"`
-	MappedFeatures     []SkillFeatureResult     `json:"mappedFeatures"`
-	Unsupported        []string                 `json:"unsupported"`
-	Warnings           []SkillWarning           `json:"warnings"`
-	Errors             []SkillError             `json:"errors"`
+	Status             string                    `json:"status"`
+	Detected           []SkillEcosystemProfile   `json:"detectedProfiles"`
+	FieldMappings      []SkillFieldMapping       `json:"fieldMappings"`
+	ToolMappings       []SkillToolMapping        `json:"toolMappings"`
+	DependencyMappings []SkillDependencyMapping  `json:"dependencyMappings"`
+	RequiredScripts    []string                  `json:"requiredScripts"`
+	MissingFiles       []string                  `json:"missingFiles"`
+	MappedFeatures     []SkillFeatureResult      `json:"mappedFeatures"`
+	Unsupported        []string                  `json:"unsupported"`
+	Warnings           []SkillWarning            `json:"warnings"`
+	Errors             []SkillError              `json:"errors"`
 	Fingerprint        *CompatibilityFingerprint `json:"fingerprint,omitempty"`
-	EvaluatedAt        time.Time                `json:"evaluatedAt"`
+	EvaluatedAt        time.Time                 `json:"evaluatedAt"`
 }
 
 type SkillProfileAdapter interface {

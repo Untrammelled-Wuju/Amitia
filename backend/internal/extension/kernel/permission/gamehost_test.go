@@ -11,9 +11,9 @@ func TestGameHostPermissionDefinitions_Registered(t *testing.T) {
 	registry := permission.NewPermissionDefinitionRegistry()
 
 	expected := []struct {
-		id      string
-		cat     permission.PermissionCategory
-		risk    capability.RiskLevel
+		id   string
+		cat  permission.PermissionCategory
+		risk capability.RiskLevel
 	}{
 		{permission.PermissionGameHostControl, permission.CategoryGameHost, capability.RiskHigh},
 		{permission.PermissionGameHostChannelUse, permission.CategoryGameHost, capability.RiskMedium},

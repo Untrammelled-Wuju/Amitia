@@ -5,8 +5,8 @@ package script_host
 type Source string
 
 const (
-	SourceExplicit       Source = "explicit"
-	SourceRuntimePackage Source = "runtime-package"
+	SourceExplicit        Source = "explicit"
+	SourceRuntimePackage  Source = "runtime-package"
 	SourceLegacyWorkspace Source = "legacy-workspace"
 )
 

@@ -70,11 +70,11 @@ func RegisterDeepSearchTool(deps DeepSearchDeps) error {
 	}`)
 
 	definition := capability.ToolDefinition{
-		ID:          "internal/search/deep",
-		ModelName:   "deep_search",
-		Source:      capability.ToolSourceInternal,
-		Name:        "Deep Search",
-		Description: "Run a multi-round web search that aggregates, deduplicates, and ranks results into a research dossier.",
+		ID:           "internal/search/deep",
+		ModelName:    "deep_search",
+		Source:       capability.ToolSourceInternal,
+		Name:         "Deep Search",
+		Description:  "Run a multi-round web search that aggregates, deduplicates, and ranks results into a research dossier.",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{

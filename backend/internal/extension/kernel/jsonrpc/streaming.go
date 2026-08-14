@@ -59,25 +59,25 @@ type StreamCredit struct {
 }
 
 type Stream struct {
-	ID                      StreamID
-	Method                  string
-	Direction               string
-	ChunkMax                int
-	Credit                  int64
-	Consumed                int64
-	Produced                int64
-	State                   string
-	CreatedAt               time.Time
-	ClosedAt                *time.Time
-	mu                      sync.Mutex
-	ch                      chan []byte
-	errCh                   chan *Error
-	doneCh                  chan struct{}
-	onChunk                 func(chunk StreamChunk) error
-	onClose                 func(reason string)
-	cancel                  context.CancelFunc
-	creditSignal            chan struct{}
-	nextIncomingSequence    int64
+	ID                   StreamID
+	Method               string
+	Direction            string
+	ChunkMax             int
+	Credit               int64
+	Consumed             int64
+	Produced             int64
+	State                string
+	CreatedAt            time.Time
+	ClosedAt             *time.Time
+	mu                   sync.Mutex
+	ch                   chan []byte
+	errCh                chan *Error
+	doneCh               chan struct{}
+	onChunk              func(chunk StreamChunk) error
+	onClose              func(reason string)
+	cancel               context.CancelFunc
+	creditSignal         chan struct{}
+	nextIncomingSequence int64
 }
 
 func NewStream(id StreamID, method, direction string, chunkMax, initialCredit int, bufferSize int) *Stream {

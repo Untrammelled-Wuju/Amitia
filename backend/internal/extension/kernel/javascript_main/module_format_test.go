@@ -126,4 +126,3 @@ func TestNormalizedExtension(t *testing.T) {
 		}
 	}
 }
-

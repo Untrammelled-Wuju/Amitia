@@ -22,10 +22,10 @@ type MockBehavior struct {
 }
 
 type ExecutionOptions struct {
-	Mode            ExecutionMode        `json:"mode"`
-	Mocks           []MockBehavior       `json:"mocks,omitempty"`
-	ResumeFrom      string               `json:"resumeFrom,omitempty"`
-	SideEffectLimit int                  `json:"sideEffectLimit,omitempty"`
+	Mode              ExecutionMode                                                `json:"mode"`
+	Mocks             []MockBehavior                                               `json:"mocks,omitempty"`
+	ResumeFrom        string                                                       `json:"resumeFrom,omitempty"`
+	SideEffectLimit   int                                                          `json:"sideEffectLimit,omitempty"`
 	ConfirmSideEffect func(nodeID string, kind SideEffectKind, target string) bool `json:"-"`
 }
 
@@ -37,13 +37,13 @@ func DefaultExecutionOptions() ExecutionOptions {
 }
 
 type DryRunResult struct {
-	WouldExecute []string        `json:"wouldExecute"`
-	WouldSkip    []string        `json:"wouldSkip"`
+	WouldExecute []string              `json:"wouldExecute"`
+	WouldSkip    []string              `json:"wouldSkip"`
 	Transitions  []NodeStateTransition `json:"transitions"`
-	WouldFail    []string        `json:"wouldFail,omitempty"`
-	NodeOrder    []string        `json:"nodeOrder"`
-	Duration     time.Duration   `json:"duration"`
-	SideEffects  int             `json:"sideEffects"`
+	WouldFail    []string              `json:"wouldFail,omitempty"`
+	NodeOrder    []string              `json:"nodeOrder"`
+	Duration     time.Duration         `json:"duration"`
+	SideEffects  int                   `json:"sideEffects"`
 }
 
 func ExecuteDryRun(ctx context.Context, dag *CompiledWorkflowDAG) *DryRunResult {
@@ -96,7 +96,7 @@ func ExecuteDryRun(ctx context.Context, dag *CompiledWorkflowDAG) *DryRunResult 
 
 type MockedExecutionResult struct {
 	ExecuteResult
-	MocksApplied []string        `json:"mocksApplied"`
+	MocksApplied []string             `json:"mocksApplied"`
 	NodeStates   map[string]NodeState `json:"nodeStates"`
 }
 

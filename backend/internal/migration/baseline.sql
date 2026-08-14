@@ -5681,3 +5681,17 @@ CREATE TABLE IF NOT EXISTS wake_configs (
     created_at TEXT DEFAULT '',
     updated_at TEXT DEFAULT ''
 );
+
+--- 来源: production_cutover.go ---
+CREATE TABLE IF NOT EXISTS production_cutover_state (
+    operation_id TEXT PRIMARY KEY,
+    phase TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL DEFAULT '',
+    snapshot_id TEXT NOT NULL DEFAULT '',
+    error_message TEXT NOT NULL DEFAULT '',
+    started_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    completed_at TEXT NOT NULL DEFAULT '',
+    canonical_generation INTEGER NOT NULL DEFAULT 0,
+    plan_version INTEGER NOT NULL DEFAULT 1
+);

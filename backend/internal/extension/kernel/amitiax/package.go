@@ -194,9 +194,12 @@ func parsePackage(reader *zip.Reader) (*Package, error) {
 	if len(manifestData) == 0 {
 		return nil, ErrManifestMissing
 	}
-	m, err := manifest_v2.Parse(manifestData)
+	m, report, err := manifest_v2.ParseValidated(manifestData)
 	if err != nil {
 		return nil, err
+	}
+	if report.HasErrors() {
+		return nil, fmt.Errorf("%w: manifest validation failed", manifest_v2.ErrInvalidManifest)
 	}
 	if m.Integrity.ContentTreeHash == "" {
 		m.Integrity.ContentTreeHash = pkg.Tree.TreeHash

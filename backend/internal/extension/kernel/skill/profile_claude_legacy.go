@@ -11,7 +11,7 @@ func NewClaudeLegacyCommandAdapter() *ClaudeLegacyCommandAdapter {
 	return &ClaudeLegacyCommandAdapter{}
 }
 
-func (a *ClaudeLegacyCommandAdapter) ID() string    { return ProfileIDClaudeCommandLegacy }
+func (a *ClaudeLegacyCommandAdapter) ID() string      { return ProfileIDClaudeCommandLegacy }
 func (a *ClaudeLegacyCommandAdapter) Version() string { return AdapterVersionClaudeLegacy }
 
 func (a *ClaudeLegacyCommandAdapter) Detect(ctx context.Context, pkg SkillPackageView, parsed ParsedSkill) (SkillProfileDetection, error) {
@@ -63,15 +63,15 @@ func (a *ClaudeLegacyCommandAdapter) Analyze(ctx context.Context, pkg SkillPacka
 				State: FeatureStateMapped, Reason: "derived from source file name",
 			})
 			overlay.Warnings = append(overlay.Warnings, SkillWarning{
-				Code: "LEGACY_NAME_DERIVED",
+				Code:    "LEGACY_NAME_DERIVED",
 				Message: "name was derived from source directory/file name",
-				Path: pkg.SourceFile,
+				Path:    pkg.SourceFile,
 			})
 		} else {
 			overlay.Errors = append(overlay.Errors, SkillError{
-				Code: "LEGACY_NAME_REQUIRED",
+				Code:    "LEGACY_NAME_REQUIRED",
 				Message: "legacy command requires a valid name",
-				Path: pkg.SourceFile,
+				Path:    pkg.SourceFile,
 			})
 		}
 	}
@@ -84,9 +84,9 @@ func (a *ClaudeLegacyCommandAdapter) Analyze(ctx context.Context, pkg SkillPacka
 				State: FeatureStateDegraded, Reason: "description derived from first body paragraph as fallback",
 			})
 			overlay.Warnings = append(overlay.Warnings, SkillWarning{
-				Code: "LEGACY_DESCRIPTION_DERIVED",
+				Code:    "LEGACY_DESCRIPTION_DERIVED",
 				Message: "description was derived from first body paragraph; user should review before install",
-				Path: "SKILL.md",
+				Path:    "SKILL.md",
 			})
 			overlay.Features = append(overlay.Features, SkillFeatureResult{
 				Profile: ProfileIDClaudeCommandLegacy, Feature: "description", State: FeatureStateDegraded,
@@ -94,9 +94,9 @@ func (a *ClaudeLegacyCommandAdapter) Analyze(ctx context.Context, pkg SkillPacka
 			})
 		} else {
 			overlay.Errors = append(overlay.Errors, SkillError{
-				Code: "LEGACY_DESCRIPTION_REQUIRED",
+				Code:    "LEGACY_DESCRIPTION_REQUIRED",
 				Message: "legacy command requires a description; none could be derived",
-				Path: "SKILL.md",
+				Path:    "SKILL.md",
 			})
 			overlay.Features = append(overlay.Features, SkillFeatureResult{
 				Profile: ProfileIDClaudeCommandLegacy, Feature: "description", State: FeatureStateBlocked,

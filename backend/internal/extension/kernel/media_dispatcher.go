@@ -62,7 +62,7 @@ func (d *MediaToolDispatcher) handleConvert(ctx context.Context, input json.RawM
 	convertReq := conversion.ConvertRequest{
 		SourceURI: req.Resource,
 		Target: conversion.TargetSpec{
-			Container: req.TargetContainer,
+			Container:  req.TargetContainer,
 			VideoCodec: req.VideoCodec,
 			AudioCodec: req.AudioCodec,
 		},

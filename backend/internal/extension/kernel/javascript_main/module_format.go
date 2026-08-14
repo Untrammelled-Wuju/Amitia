@@ -16,7 +16,7 @@ const (
 )
 
 const (
-	ModuleTypeModule  = "module"
+	ModuleTypeModule   = "module"
 	ModuleTypeCommonJS = "commonjs"
 )
 

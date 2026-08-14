@@ -37,11 +37,11 @@ func TestRegistrationStrategy_PreRegisteredPriority(t *testing.T) {
 
 func TestRegistrationStrategy_CIMDPriority(t *testing.T) {
 	cimdDoc := map[string]any{
-		"client_id":                 "https://amitia.example.com/client-metadata.json",
-		"client_name":               "Amitia",
-		"redirect_uris":             []string{"http://127.0.0.1:8080/callback"},
-		"grant_types":               []string{"authorization_code", "refresh_token"},
-		"response_types":            []string{"code"},
+		"client_id":                  "https://amitia.example.com/client-metadata.json",
+		"client_name":                "Amitia",
+		"redirect_uris":              []string{"http://127.0.0.1:8080/callback"},
+		"grant_types":                []string{"authorization_code", "refresh_token"},
+		"response_types":             []string{"code"},
 		"token_endpoint_auth_method": "none",
 	}
 	cimdJSON, _ := json.Marshal(cimdDoc)
@@ -72,8 +72,8 @@ func TestRegistrationStrategy_CIMDPriority(t *testing.T) {
 
 func TestRegistrationStrategy_CIMD_ClientIDMustMatchURL(t *testing.T) {
 	cimdDoc := map[string]any{
-		"client_id":   "https://different-url.example.com/metadata",
-		"client_name": "Amitia",
+		"client_id":     "https://different-url.example.com/metadata",
+		"client_name":   "Amitia",
 		"redirect_uris": []string{"http://127.0.0.1:8080/callback"},
 	}
 	cimdJSON, _ := json.Marshal(cimdDoc)
@@ -98,9 +98,9 @@ func TestRegistrationStrategy_CIMD_ClientIDMustMatchURL(t *testing.T) {
 
 func TestRegistrationStrategy_DCRFallback(t *testing.T) {
 	dcrResp := map[string]any{
-		"client_id":                 "dcr-client-id",
-		"client_secret":             "dcr-secret",
-		"redirect_uris":             []string{"http://127.0.0.1:8080/callback"},
+		"client_id":                  "dcr-client-id",
+		"client_secret":              "dcr-secret",
+		"redirect_uris":              []string{"http://127.0.0.1:8080/callback"},
 		"token_endpoint_auth_method": "none",
 	}
 	dcrJSON, _ := json.Marshal(dcrResp)
@@ -171,8 +171,8 @@ func TestRegistrationStrategy_DCR_MissingClientID(t *testing.T) {
 
 func TestRegistrationStrategy_CIMDOverDCR(t *testing.T) {
 	cimdDoc := map[string]any{
-		"client_id":   "https://amitia.example.com/metadata",
-		"client_name": "Amitia",
+		"client_id":     "https://amitia.example.com/metadata",
+		"client_name":   "Amitia",
 		"redirect_uris": []string{"http://127.0.0.1:8080/callback"},
 	}
 	cimdJSON, _ := json.Marshal(cimdDoc)

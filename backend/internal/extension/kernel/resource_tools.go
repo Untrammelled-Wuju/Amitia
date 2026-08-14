@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	ListSkillResourcesToolName    = "list_skill_resources"
-	ReadSkillResourceToolName     = "read_skill_resource"
+	ListSkillResourcesToolName       = "list_skill_resources"
+	ReadSkillResourceToolName        = "read_skill_resource"
 	MaterializeSkillResourceToolName = "materialize_skill_resource"
 )
 

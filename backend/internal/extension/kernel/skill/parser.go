@@ -84,10 +84,10 @@ func (p *Parser) parseInternal(ctx context.Context, root SkillRoot, policy Parse
 	contentHash := "sha256:" + hex.EncodeToString(h.Sum(nil))
 
 	pc := &parseContext{
-		policy:     policy,
-		diags:      []SkillDiagnostic{},
-		directory:  directory,
-		startTime:  p.now(),
+		policy:    policy,
+		diags:     []SkillDiagnostic{},
+		directory: directory,
+		startTime: p.now(),
 	}
 
 	var yamlRoot yaml.Node
@@ -106,10 +106,10 @@ func (p *Parser) parseInternal(ctx context.Context, root SkillRoot, policy Parse
 	}
 
 	parsed := ParsedSkill{
-		RawFrontmatter: rawMap,
+		RawFrontmatter:   rawMap,
 		ExtraFrontmatter: make(map[string]interface{}),
-		Diagnostics:     pc.diags,
-		ContentHash:     contentHash,
+		Diagnostics:      pc.diags,
+		ContentHash:      contentHash,
 		Source: SkillSourceDescriptor{
 			RootURI: root.RootURI,
 			Source:  root.Source,

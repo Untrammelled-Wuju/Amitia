@@ -51,9 +51,9 @@ type InvocationRecord struct {
 	RuntimeType    string `json:"runtimeType,omitempty"`
 	RuntimeID      string `json:"runtimeId,omitempty"`
 
-	UserID          string `json:"userId,omitempty"`
-	CharacterID     string `json:"characterId,omitempty"`
-	ConversationID  string `json:"conversationId,omitempty"`
+	UserID               string `json:"userId,omitempty"`
+	CharacterID          string `json:"characterId,omitempty"`
+	ConversationID       string `json:"conversationId,omitempty"`
 	ScopeSnapshotID      string `json:"scopeSnapshotId,omitempty"`
 	PermissionSnapshotID string `json:"permissionSnapshotId,omitempty"`
 

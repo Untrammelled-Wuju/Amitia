@@ -122,8 +122,8 @@ func (b *controllableBackend) setHealthy(healthy bool, msg string) {
 
 type testHost struct {
 	runtimehost.RuntimeHost
-	descriptor   platform.RuntimeDescriptor
-	instanceID   string
+	descriptor platform.RuntimeDescriptor
+	instanceID string
 }
 
 func (h *testHost) Descriptor() platform.RuntimeDescriptor {

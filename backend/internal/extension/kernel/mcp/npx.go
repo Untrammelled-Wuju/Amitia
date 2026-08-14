@@ -17,7 +17,7 @@ type ProcessLauncher interface {
 }
 
 type NPXLauncher struct {
-	nodeResolver nodeenv.Resolver
+	nodeResolver    nodeenv.Resolver
 	commandResolver commandenv.Resolver
 }
 

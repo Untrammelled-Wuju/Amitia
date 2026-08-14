@@ -30,23 +30,23 @@ const (
 )
 
 type CircuitBreakerConfig struct {
-	FailureThreshold        int
-	OpenTimeout             time.Duration
-	HalfOpenMaxInflight     int
+	FailureThreshold         int
+	OpenTimeout              time.Duration
+	HalfOpenMaxInflight      int
 	HalfOpenSuccessThreshold int
 }
 
 func DefaultCircuitBreakerConfig() CircuitBreakerConfig {
 	return CircuitBreakerConfig{
-		FailureThreshold:        5,
-		OpenTimeout:             30 * time.Second,
-		HalfOpenMaxInflight:     1,
+		FailureThreshold:         5,
+		OpenTimeout:              30 * time.Second,
+		HalfOpenMaxInflight:      1,
 		HalfOpenSuccessThreshold: 1,
 	}
 }
 
 type CircuitPermit struct {
-	Key    CircuitKey
+	Key     CircuitKey
 	Allowed bool
 	Probe   bool
 }
@@ -111,9 +111,9 @@ type systemClock struct{}
 func (systemClock) Now() time.Time { return time.Now().UTC() }
 
 type CircuitBreakerCoordinator struct {
-	mu      sync.Mutex
-	config  CircuitBreakerConfig
-	clock   CircuitClock
+	mu       sync.Mutex
+	config   CircuitBreakerConfig
+	clock    CircuitClock
 	circuits map[string]*circuitBreaker
 
 	onEvent func(snapshot CircuitSnapshot, from, to CircuitState, reason string)

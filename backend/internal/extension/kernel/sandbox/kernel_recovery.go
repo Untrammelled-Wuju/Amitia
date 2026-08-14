@@ -46,27 +46,27 @@ func evaluateSandboxRecoveryItems(snap SandboxRecoverySnapshot, providerEnabled 
 		items = append(items, lifecycle.RecoveryItem{
 			Category:    "runtime",
 			ComponentID: "provider.ios-sandbox",
-			Subject:    "ios-sandbox-recovery",
+			Subject:     "ios-sandbox-recovery",
 			Severity:    "high",
 			Action:      "recover_ios_sandbox",
 			Metadata: map[string]any{
-				"startupId":       startupID,
-				"generation":      snap.Generation,
-				"desiredRunning":  snap.DesiredRunning,
-				"lastState":       string(snap.LifecycleState),
-				"scheduledAt":     now.Format(time.RFC3339),
+				"startupId":      startupID,
+				"generation":     snap.Generation,
+				"desiredRunning": snap.DesiredRunning,
+				"lastState":      string(snap.LifecycleState),
+				"scheduledAt":    now.Format(time.RFC3339),
 			},
 		})
 	case SandboxRecoveryManualRepair:
 		items = append(items, lifecycle.RecoveryItem{
 			Category:    "runtime",
 			ComponentID: "provider.ios-sandbox",
-			Subject:    "ios-sandbox-rootfs-repair",
+			Subject:     "ios-sandbox-rootfs-repair",
 			Severity:    "critical",
 			Action:      "repair_rootfs",
 			Metadata: map[string]any{
-				"startupId":  startupID,
-				"generation": snap.Generation,
+				"startupId":   startupID,
+				"generation":  snap.Generation,
 				"scheduledAt": now.Format(time.RFC3339),
 			},
 		})
@@ -76,11 +76,11 @@ func evaluateSandboxRecoveryItems(snap SandboxRecoverySnapshot, providerEnabled 
 		items = append(items, lifecycle.RecoveryItem{
 			Category:    "runtime",
 			ComponentID: "provider.ios-sandbox",
-			Subject:    "ios-sandbox-discard-interrupted",
+			Subject:     "ios-sandbox-discard-interrupted",
 			Severity:    "warning",
 			Action:      "discard_interrupted_execution",
 			Metadata: map[string]any{
-				"startupId":    startupID,
+				"startupId":   startupID,
 				"scheduledAt": now.Format(time.RFC3339),
 			},
 		})

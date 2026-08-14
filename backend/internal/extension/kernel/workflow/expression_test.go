@@ -121,8 +121,8 @@ func TestEvaluateExpression(t *testing.T) {
 
 	t.Run("eq with matching values", func(t *testing.T) {
 		expr := &WorkflowExpression{
-			Op: OpEq,
-			Left: &WorkflowExpression{Ref: &WorkflowValueRef{Source: RefSourceInput, Path: []string{"x"}}},
+			Op:    OpEq,
+			Left:  &WorkflowExpression{Ref: &WorkflowValueRef{Source: RefSourceInput, Path: []string{"x"}}},
 			Right: &WorkflowExpression{Value: float64(42)},
 		}
 		result, err := EvaluateExpression(expr, ExpressionEvalConfig{
@@ -138,8 +138,8 @@ func TestEvaluateExpression(t *testing.T) {
 
 	t.Run("eq with non-matching values", func(t *testing.T) {
 		expr := &WorkflowExpression{
-			Op: OpEq,
-			Left: &WorkflowExpression{Ref: &WorkflowValueRef{Source: RefSourceInput, Path: []string{"x"}}},
+			Op:    OpEq,
+			Left:  &WorkflowExpression{Ref: &WorkflowValueRef{Source: RefSourceInput, Path: []string{"x"}}},
 			Right: &WorkflowExpression{Value: float64(42)},
 		}
 		result, err := EvaluateExpression(expr, ExpressionEvalConfig{
@@ -214,8 +214,8 @@ func TestEvaluateExpression(t *testing.T) {
 		expr := &WorkflowExpression{
 			Op: OpNot,
 			Right: &WorkflowExpression{
-				Op: OpEq,
-				Left: &WorkflowExpression{Ref: &WorkflowValueRef{Source: RefSourceInput, Path: []string{"x"}}},
+				Op:    OpEq,
+				Left:  &WorkflowExpression{Ref: &WorkflowValueRef{Source: RefSourceInput, Path: []string{"x"}}},
 				Right: &WorkflowExpression{Value: float64(1)},
 			},
 		}
@@ -232,7 +232,7 @@ func TestEvaluateExpression(t *testing.T) {
 
 	t.Run("exists when path present", func(t *testing.T) {
 		expr := &WorkflowExpression{
-			Op: OpExists,
+			Op:  OpExists,
 			Ref: &WorkflowValueRef{Source: RefSourceInput, Path: []string{"x"}},
 		}
 		result, err := EvaluateExpression(expr, ExpressionEvalConfig{
@@ -248,7 +248,7 @@ func TestEvaluateExpression(t *testing.T) {
 
 	t.Run("exists when path absent", func(t *testing.T) {
 		expr := &WorkflowExpression{
-			Op: OpExists,
+			Op:  OpExists,
 			Ref: &WorkflowValueRef{Source: RefSourceInput, Path: []string{"missing"}},
 		}
 		result, err := EvaluateExpression(expr, ExpressionEvalConfig{
@@ -264,7 +264,7 @@ func TestEvaluateExpression(t *testing.T) {
 
 	t.Run("is_null when nil", func(t *testing.T) {
 		expr := &WorkflowExpression{
-			Op: OpIsNull,
+			Op:  OpIsNull,
 			Ref: &WorkflowValueRef{Source: RefSourceInput, Path: []string{"missing"}},
 		}
 		result, err := EvaluateExpression(expr, ExpressionEvalConfig{
@@ -280,8 +280,8 @@ func TestEvaluateExpression(t *testing.T) {
 
 	t.Run("gt comparison", func(t *testing.T) {
 		expr := &WorkflowExpression{
-			Op: OpGt,
-			Left: &WorkflowExpression{Ref: &WorkflowValueRef{Source: RefSourceInput, Path: []string{"x"}}},
+			Op:    OpGt,
+			Left:  &WorkflowExpression{Ref: &WorkflowValueRef{Source: RefSourceInput, Path: []string{"x"}}},
 			Right: &WorkflowExpression{Value: float64(10)},
 		}
 		result, err := EvaluateExpression(expr, ExpressionEvalConfig{
@@ -297,8 +297,8 @@ func TestEvaluateExpression(t *testing.T) {
 
 	t.Run("in check", func(t *testing.T) {
 		expr := &WorkflowExpression{
-			Op: OpIn,
-			Left: &WorkflowExpression{Ref: &WorkflowValueRef{Source: RefSourceInput, Path: []string{"item"}}},
+			Op:    OpIn,
+			Left:  &WorkflowExpression{Ref: &WorkflowValueRef{Source: RefSourceInput, Path: []string{"item"}}},
 			Right: &WorkflowExpression{Value: []any{"a", "b", "c"}},
 		}
 		result, err := EvaluateExpression(expr, ExpressionEvalConfig{

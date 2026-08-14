@@ -45,5 +45,35 @@
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>
+	<key>NSHealthShareUsageDescription</key>
+	<string>Amitia App 需要访问您的健康数据来提供健康管理服务</string>
+	<key>NSHealthUpdateUsageDescription</key>
+	<string>Amitia App 需要更新您的健康数据来记录健身和健康信息</string>
+	<key>NSCalendarsUsageDescription</key>
+	<string>Amitia App 需要访问日历来读取和创建日程事件</string>
+	<key>NSCalendarsFullAccessUsageDescription</key>
+	<string>Amitia App 需要完全访问日历来管理您的日程安排</string>
+	<key>NSRemindersUsageDescription</key>
+	<string>Amitia App 需要访问提醒事项来读取和管理您的提醒</string>
+	<key>NSRemindersFullAccessUsageDescription</key>
+	<string>Amitia App 需要完全访问提醒事项来创建和管理提醒</string>
+	<key>NSContactsUsageDescription</key>
+	<string>Amitia App 需要访问联系人来读取和管理您的联系人信息</string>
+	<key>NSHomeKitUsageDescription</key>
+	<string>Amitia App 需要访问HomeKit来控制您的智能家居设备</string>
+	<key>NSBluetoothAlwaysUsageDescription</key>
+	<string>Amitia App 需要始终访问蓝牙来连接和管理蓝牙设备</string>
+	<key>NSBluetoothPeripheralUsageDescription</key>
+	<string>Amitia App 需要作为蓝牙外设与其他设备通信</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Amitia App 需要访问照片库来读取和保存照片</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Amitia App 需要添加照片到图库</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Amitia App 需要访问相机来拍摄照片和视频</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Amitia App 需要访问麦克风来录制音频</string>
+	<key>NSUserTrackingUsageDescription</key>
+	<string>Amitia App 需要跟踪数据以提供个性化体验</string>
 </dict>
 </plist>

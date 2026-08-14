@@ -18,23 +18,23 @@ import (
 const ComponentIDIOSNative runtimeorchestrator.ComponentID = "provider.ios-native"
 
 type IOSNativeProviderCapability struct {
-	ProviderID   string                    `json:"providerId"`
-	Slot         string                    `json:"slot"`
-	RuntimeID    string                    `json:"runtimeId"`
-	HostPlatform string                    `json:"hostPlatform"`
-	Healthy      bool                      `json:"healthy"`
-	BridgeReady  bool                      `json:"bridgeReady"`
+	ProviderID   string                      `json:"providerId"`
+	Slot         string                      `json:"slot"`
+	RuntimeID    string                      `json:"runtimeId"`
+	HostPlatform string                      `json:"hostPlatform"`
+	Healthy      bool                        `json:"healthy"`
+	BridgeReady  bool                        `json:"bridgeReady"`
 	Generation   nativebridge.HostGeneration `json:"generation"`
 }
 
 type iosNativeProviderInstance struct {
-	mu              sync.RWMutex
-	bridge          nativebridge.Bridge
-	domainProvider  *iosnative.Provider
-	host            runtimehost.RuntimeHost
-	orch            *runtimeorchestrator.RuntimeOrchestrator
-	healthy         bool
-	generation      nativebridge.HostGeneration
+	mu             sync.RWMutex
+	bridge         nativebridge.Bridge
+	domainProvider *iosnative.Provider
+	host           runtimehost.RuntimeHost
+	orch           *runtimeorchestrator.RuntimeOrchestrator
+	healthy        bool
+	generation     nativebridge.HostGeneration
 }
 
 func newIOSNativeProviderInstance(

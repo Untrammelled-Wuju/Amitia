@@ -30,26 +30,26 @@ type Config struct {
 }
 
 type ProvidersConfig struct {
-	ScriptRuntime ScriptRuntimeProviderConfig `mapstructure:"scriptRuntime"`
-	VectorStore   VectorStoreProviderConfig   `mapstructure:"vectorStore"`
-	GraphStore    GraphStoreProviderConfig    `mapstructure:"graphStore"`
+	ScriptRuntime ScriptRuntimeProviderConfig  `mapstructure:"scriptRuntime"`
+	VectorStore   VectorStoreProviderConfig    `mapstructure:"vectorStore"`
+	GraphStore    GraphStoreProviderConfig     `mapstructure:"graphStore"`
 	Browser       BrowserRuntimeProviderConfig `mapstructure:"browser"`
 }
 
 type BrowserRuntimeProviderConfig struct {
-	Enabled                  bool     `mapstructure:"enabled"`
-	ExecutablePath           string   `mapstructure:"executablePath"`
-	Headless                 bool     `mapstructure:"headless"`
-	UserDataRoot             string   `mapstructure:"userDataRoot"`
-	StartupTimeoutSec        int      `mapstructure:"startupTimeoutSec"`
-	ShutdownTimeoutSec       int      `mapstructure:"shutdownTimeoutSec"`
-	MaxBrowserMemoryBytes    int64    `mapstructure:"maxBrowserMemoryBytes"`
-	AllowedSchemes           []string `mapstructure:"allowedSchemes"`
-	MaxSessions              int      `mapstructure:"maxSessions"`
-	MaxTabsPerSession        int      `mapstructure:"maxTabsPerSession"`
-	MaxTabsTotal             int      `mapstructure:"maxTabsTotal"`
-	NavigationTimeoutSec     int      `mapstructure:"navigationTimeoutSec"`
-	MaxNavigationTimeoutSec  int      `mapstructure:"maxNavigationTimeoutSec"`
+	Enabled                 bool     `mapstructure:"enabled"`
+	ExecutablePath          string   `mapstructure:"executablePath"`
+	Headless                bool     `mapstructure:"headless"`
+	UserDataRoot            string   `mapstructure:"userDataRoot"`
+	StartupTimeoutSec       int      `mapstructure:"startupTimeoutSec"`
+	ShutdownTimeoutSec      int      `mapstructure:"shutdownTimeoutSec"`
+	MaxBrowserMemoryBytes   int64    `mapstructure:"maxBrowserMemoryBytes"`
+	AllowedSchemes          []string `mapstructure:"allowedSchemes"`
+	MaxSessions             int      `mapstructure:"maxSessions"`
+	MaxTabsPerSession       int      `mapstructure:"maxTabsPerSession"`
+	MaxTabsTotal            int      `mapstructure:"maxTabsTotal"`
+	NavigationTimeoutSec    int      `mapstructure:"navigationTimeoutSec"`
+	MaxNavigationTimeoutSec int      `mapstructure:"maxNavigationTimeoutSec"`
 }
 
 type ScriptRuntimeProviderConfig struct {
@@ -138,18 +138,18 @@ type ChatConfig struct {
 }
 
 type QdrantConfig struct {
-	Host             string                      `mapstructure:"host"`
-	Port             int                         `mapstructure:"port"`
-	BinaryPath       string                      `mapstructure:"binaryPath"`
-	ConfigDir        string                      `mapstructure:"configDir"`
-	DataDir          string                      `mapstructure:"dataDir"`
-	SnapshotsDir     string                      `mapstructure:"snapshotsDir"`
-	CollectionName   string                      `mapstructure:"collectionName"`
-	VectorDim        int                         `mapstructure:"vectorDim"`
-	Limit            int                         `mapstructure:"limit"`
-	Collections      map[string]CollectionConfig `mapstructure:"collections"`
-	Enabled          bool                        `mapstructure:"enabled"`
-	ResourceProfile  string                      `mapstructure:"resourceProfile"`
+	Host            string                      `mapstructure:"host"`
+	Port            int                         `mapstructure:"port"`
+	BinaryPath      string                      `mapstructure:"binaryPath"`
+	ConfigDir       string                      `mapstructure:"configDir"`
+	DataDir         string                      `mapstructure:"dataDir"`
+	SnapshotsDir    string                      `mapstructure:"snapshotsDir"`
+	CollectionName  string                      `mapstructure:"collectionName"`
+	VectorDim       int                         `mapstructure:"vectorDim"`
+	Limit           int                         `mapstructure:"limit"`
+	Collections     map[string]CollectionConfig `mapstructure:"collections"`
+	Enabled         bool                        `mapstructure:"enabled"`
+	ResourceProfile string                      `mapstructure:"resourceProfile"`
 }
 
 type CollectionConfig struct {

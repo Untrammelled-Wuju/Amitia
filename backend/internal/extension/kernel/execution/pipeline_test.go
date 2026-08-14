@@ -12,8 +12,8 @@ import (
 	_ "github.com/glebarez/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/observability"
-	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
+	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/scope"
 )
 
@@ -151,12 +151,12 @@ func buildPipelineForTest(adapter capability.RuntimeAdapter, storage Idempotency
 			_testAuditWriter = observability.NewRecordWriter(_testAuditStore, observability.DefaultWriterConfig())
 			return observability.NewExecutionHook(_testAuditWriter, nil)
 		}(),
-		MetricsRec: NewMetricsRecorder(),
-		CircuitBreaker:      NewCircuitBreakerCoordinator(),
+		MetricsRec:     NewMetricsRecorder(),
+		CircuitBreaker: NewCircuitBreakerCoordinator(),
 		ToolResolver: func(ctx context.Context, toolID string) (capability.ToolDefinition, error) {
 			return newTestTool(toolID), nil
 		},
-		ScopeStore:             scopeStore,
+		ScopeStore:              scopeStore,
 		PermissionSnapshotStore: permSnapStore,
 	}
 	p.ScopeGate.ScopeManager = mockScopeMgr
@@ -269,7 +269,7 @@ func (m *mockScopeStore) SaveSnapshot(_ context.Context, _ scope.ScopeSnapshot) 
 func (m *mockScopeStore) GetSnapshot(_ context.Context, _ string) (scope.ScopeSnapshot, error) {
 	return scope.ScopeSnapshot{SnapshotID: "found"}, nil
 }
-func (m *mockScopeStore) DeleteSnapshot(_ context.Context, _ string) error { return nil }
+func (m *mockScopeStore) DeleteSnapshot(_ context.Context, _ string) error           { return nil }
 func (m *mockScopeStore) DeleteSnapshotsBySession(_ context.Context, _ string) error { return nil }
 
 type mockPermissionSnapshotStore struct{}
@@ -280,8 +280,8 @@ func (m *mockPermissionSnapshotStore) SaveSnapshot(_ context.Context, _ permissi
 func (m *mockPermissionSnapshotStore) GetSnapshot(_ context.Context, _ string) (permission.PermissionSnapshot, error) {
 	return permission.PermissionSnapshot{SnapshotID: "found"}, nil
 }
-func (m *mockPermissionSnapshotStore) DeleteSnapshot(_ context.Context, _ string) error { return nil }
-func (m *mockPermissionSnapshotStore) RevokeSnapshot(_ context.Context, _ string) error { return nil }
+func (m *mockPermissionSnapshotStore) DeleteSnapshot(_ context.Context, _ string) error  { return nil }
+func (m *mockPermissionSnapshotStore) RevokeSnapshot(_ context.Context, _ string) error  { return nil }
 func (m *mockPermissionSnapshotStore) DeleteBySession(_ context.Context, _ string) error { return nil }
 
 func TestPipelineSuccessPath(t *testing.T) {
@@ -709,9 +709,9 @@ func TestCircuitBreakerOpen(t *testing.T) {
 
 	p := buildPipeline(adapter)
 	p.CircuitBreaker = NewCircuitBreakerCoordinatorWithConfig(CircuitBreakerConfig{
-		FailureThreshold:        2,
-		OpenTimeout:             30 * time.Second,
-		HalfOpenMaxInflight:     1,
+		FailureThreshold:         2,
+		OpenTimeout:              30 * time.Second,
+		HalfOpenMaxInflight:      1,
 		HalfOpenSuccessThreshold: 1,
 	})
 	p.circuitClassifier = NewCircuitResultClassifier()

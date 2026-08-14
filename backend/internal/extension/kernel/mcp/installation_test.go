@@ -167,12 +167,12 @@ func TestMCPInstallation_CanUninstall(t *testing.T) {
 
 func TestMCPPreparedLauncher_Fields(t *testing.T) {
 	launcher := MCPPreparedLauncher{
-		Executable:                  "node",
-		Args:                        []string{"server.js"},
-		WorkDir:                     "/tmp",
-		Environment:                 map[string]string{"NODE_ENV": "production"},
+		Executable:                   "node",
+		Args:                         []string{"server.js"},
+		WorkDir:                      "/tmp",
+		Environment:                  map[string]string{"NODE_ENV": "production"},
 		RuntimeDependencyFingerprint: "abc123",
-		RevisionID:                  "rev-1",
+		RevisionID:                   "rev-1",
 	}
 	if launcher.Executable != "node" {
 		t.Errorf("unexpected executable: %q", launcher.Executable)
@@ -184,11 +184,11 @@ func TestMCPPreparedLauncher_Fields(t *testing.T) {
 
 func TestPreparedTransportConfig_Fields(t *testing.T) {
 	cfg := PreparedTransportConfig{
-		Kind:        "streamable_http",
-		Endpoint:    "https://mcp.example.com/sse",
-		Headers:     map[string]string{"Authorization": "Bearer token"},
+		Kind:          "streamable_http",
+		Endpoint:      "https://mcp.example.com/sse",
+		Headers:       map[string]string{"Authorization": "Bearer token"},
 		CredentialRef: "cred-1",
-		RevisionID:  "rev-1",
+		RevisionID:    "rev-1",
 	}
 	if cfg.Kind != "streamable_http" {
 		t.Errorf("unexpected kind: %q", cfg.Kind)

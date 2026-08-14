@@ -326,8 +326,8 @@ const PackageConfirmationClaimsSchemaVersion = 1
 const PackageConfirmationSnapshotExempt = "confirm.snapshot_exempt"
 
 const (
-	packageConfirmationLifetime      = 10 * time.Minute
-	packageConfirmationClockSkew     = 30 * time.Second
+	packageConfirmationLifetime       = 10 * time.Minute
+	packageConfirmationClockSkew      = 30 * time.Second
 	packageConfirmationMaxNonceLength = 128
 )
 

@@ -194,11 +194,11 @@ func RegisterWebSearchTool(deps SearchToolsDeps) error {
 	outputSchema := json.RawMessage(`{"type":"object","additionalProperties":false,"required":["query","provider","results","returned","retrievedAt"],"properties":{"query":{"type":"string"},"kind":{"type":"string"},"provider":{"type":"string"},"results":{"type":"array","items":{"type":"object"}},"returned":{"type":"integer"},"hasMore":{"type":"boolean"},"retrievedAt":{"type":"string","format":"date-time"},"citations":{"type":"array","items":{"type":"object"}}}}`)
 	enabled := deps.Config.Enabled && deps.Config.HasProvider()
 	definition := capability.ToolDefinition{
-		ID:          "internal/search/web",
-		ModelName:   "web_search",
-		Source:      capability.ToolSourceInternal,
-		Name:        "Web Search",
-		Description: "Search the web using the configured provider.",
+		ID:           "internal/search/web",
+		ModelName:    "web_search",
+		Source:       capability.ToolSourceInternal,
+		Name:         "Web Search",
+		Description:  "Search the web using the configured provider.",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{

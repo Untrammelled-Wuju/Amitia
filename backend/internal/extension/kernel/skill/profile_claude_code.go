@@ -13,7 +13,7 @@ func NewClaudeCodeProfileAdapter() *ClaudeCodeProfileAdapter {
 	return &ClaudeCodeProfileAdapter{}
 }
 
-func (a *ClaudeCodeProfileAdapter) ID() string    { return ProfileIDClaudeCode }
+func (a *ClaudeCodeProfileAdapter) ID() string      { return ProfileIDClaudeCode }
 func (a *ClaudeCodeProfileAdapter) Version() string { return AdapterVersionClaudeCode }
 
 var claudeCodeExtraFields = []string{
@@ -76,9 +76,9 @@ func (a *ClaudeCodeProfileAdapter) Analyze(ctx context.Context, pkg SkillPackage
 				Profile: ProfileIDClaudeCode, Feature: "argument-hint", State: FeatureStateIgnoredDisplayOnly,
 			})
 			overlay.Warnings = append(overlay.Warnings, SkillWarning{
-				Code: "CLAUDE_ARGUMENT_HINT_DISPLAY_ONLY",
+				Code:    "CLAUDE_ARGUMENT_HINT_DISPLAY_ONLY",
 				Message: "argument-hint is a display-only UI hint and does not affect execution permissions",
-				Path: "SKILL.md",
+				Path:    "SKILL.md",
 			})
 		}
 	}
@@ -130,9 +130,9 @@ func (a *ClaudeCodeProfileAdapter) Analyze(ctx context.Context, pkg SkillPackage
 			Reason: "both model and user invocation are disabled; skill has no valid invoker",
 		})
 		overlay.Warnings = append(overlay.Warnings, SkillWarning{
-			Code: "CLAUDE_NO_VALID_INVOKER",
+			Code:    "CLAUDE_NO_VALID_INVOKER",
 			Message: "disable-model-invocation and user-invocable=false leave skill with no valid invocation path",
-			Path: "SKILL.md",
+			Path:    "SKILL.md",
 		})
 	}
 
@@ -172,9 +172,9 @@ func (a *ClaudeCodeProfileAdapter) Analyze(ctx context.Context, pkg SkillPackage
 					Reason: "model preference cannot override Amitia model policy",
 				})
 				overlay.Warnings = append(overlay.Warnings, SkillWarning{
-					Code: "CLAUDE_MODEL_HINT_DEGRADED",
+					Code:    "CLAUDE_MODEL_HINT_DEGRADED",
 					Message: "model hint is a preference only; Amitia model policy decides the actual model",
-					Path: "SKILL.md",
+					Path:    "SKILL.md",
 				})
 			}
 		}
@@ -192,9 +192,9 @@ func (a *ClaudeCodeProfileAdapter) Analyze(ctx context.Context, pkg SkillPackage
 				Reason: "reasoning effort is a hint; Amitia may not support it",
 			})
 			overlay.Warnings = append(overlay.Warnings, SkillWarning{
-				Code: "CLAUDE_EFFORT_DISPLAY_ONLY",
+				Code:    "CLAUDE_EFFORT_DISPLAY_ONLY",
 				Message: "effort hint is advisory and may not affect model behavior",
-				Path: "SKILL.md",
+				Path:    "SKILL.md",
 			})
 		}
 	}
@@ -212,9 +212,9 @@ func (a *ClaudeCodeProfileAdapter) Analyze(ctx context.Context, pkg SkillPackage
 				Reason: "paths is an activation filter, not a permission grant",
 			})
 			overlay.Warnings = append(overlay.Warnings, SkillWarning{
-				Code: "CLAUDE_PATHS_FILTER_ONLY",
+				Code:    "CLAUDE_PATHS_FILTER_ONLY",
 				Message: "paths only affects catalog visibility and implicit activation, not file permissions",
-				Path: "SKILL.md",
+				Path:    "SKILL.md",
 			})
 		}
 	}
@@ -233,9 +233,9 @@ func (a *ClaudeCodeProfileAdapter) Analyze(ctx context.Context, pkg SkillPackage
 				Reason: "requires Amitia MultiAgent/Task Runtime which may not be fully equivalent",
 			})
 			overlay.Warnings = append(overlay.Warnings, SkillWarning{
-				Code: "CLAUDE_CONTEXT_FORK_LIMITED",
+				Code:    "CLAUDE_CONTEXT_FORK_LIMITED",
 				Message: "context=fork maps to canonical isolated execution but isolation semantics may differ",
-				Path: "SKILL.md",
+				Path:    "SKILL.md",
 			})
 		} else if ctx != "" {
 			overlay.FieldMappings = append(overlay.FieldMappings, SkillFieldMapping{
@@ -262,9 +262,9 @@ func (a *ClaudeCodeProfileAdapter) Analyze(ctx context.Context, pkg SkillPackage
 				Reason: "agent profile may not exist in Amitia",
 			})
 			overlay.Warnings = append(overlay.Warnings, SkillWarning{
-				Code: "CLAUDE_AGENT_PROFILE_LIMITED",
+				Code:    "CLAUDE_AGENT_PROFILE_LIMITED",
 				Message: "agent profile hint may not match any canonical agent",
-				Path: "SKILL.md",
+				Path:    "SKILL.md",
 			})
 		}
 	}
@@ -286,9 +286,9 @@ func (a *ClaudeCodeProfileAdapter) Analyze(ctx context.Context, pkg SkillPackage
 				Reason: "background execution capability is platform-dependent",
 			})
 			overlay.Warnings = append(overlay.Warnings, SkillWarning{
-				Code: "CLAUDE_BACKGROUND_PLATFORM_LIMITED",
+				Code:    "CLAUDE_BACKGROUND_PLATFORM_LIMITED",
 				Message: "background execution depends on platform capability",
-				Path: "SKILL.md",
+				Path:    "SKILL.md",
 			})
 		}
 	}
@@ -304,9 +304,9 @@ func (a *ClaudeCodeProfileAdapter) Analyze(ctx context.Context, pkg SkillPackage
 		})
 		overlay.UnsupportedFeatures = append(overlay.UnsupportedFeatures, "hooks")
 		overlay.Warnings = append(overlay.Warnings, SkillWarning{
-			Code: "CLAUDE_HOOKS_UNSUPPORTED",
+			Code:    "CLAUDE_HOOKS_UNSUPPORTED",
 			Message: "hooks are preserved but not executed until Step39 completes",
-			Path: "SKILL.md",
+			Path:    "SKILL.md",
 		})
 	}
 
@@ -316,9 +316,9 @@ func (a *ClaudeCodeProfileAdapter) Analyze(ctx context.Context, pkg SkillPackage
 			Reason: "Claude dynamic shell injection is never executed by Amitia",
 		})
 		overlay.Warnings = append(overlay.Warnings, SkillWarning{
-			Code: "CLAUDE_SHELL_BLOCKED",
+			Code:    "CLAUDE_SHELL_BLOCKED",
 			Message: "shell field indicates dependency on Claude dynamic shell injection which Amitia does not execute",
-			Path: "SKILL.md",
+			Path:    "SKILL.md",
 		})
 	}
 
@@ -329,9 +329,9 @@ func (a *ClaudeCodeProfileAdapter) Analyze(ctx context.Context, pkg SkillPackage
 		})
 		overlay.UnsupportedFeatures = append(overlay.UnsupportedFeatures, "claude.dynamic_shell_injection")
 		overlay.Warnings = append(overlay.Warnings, SkillWarning{
-			Code: "CLAUDE_DYNAMIC_SHELL_INJECTION",
+			Code:    "CLAUDE_DYNAMIC_SHELL_INJECTION",
 			Message: "body contains dynamic shell injection syntax that will not be executed",
-			Path: "SKILL.md",
+			Path:    "SKILL.md",
 		})
 	}
 
@@ -342,9 +342,9 @@ func (a *ClaudeCodeProfileAdapter) Analyze(ctx context.Context, pkg SkillPackage
 	unknownFields := detectUnknownExtraFields(parsed.ExtraFrontmatter, claudeCodeExtraFields)
 	for _, field := range unknownFields {
 		overlay.Warnings = append(overlay.Warnings, SkillWarning{
-			Code: "UNKNOWN_CLIUDE_EXTENSION_FIELD",
+			Code:    "UNKNOWN_CLIUDE_EXTENSION_FIELD",
 			Message: "unknown Claude Code extension field is preserved but not executed",
-			Path: field,
+			Path:    field,
 		})
 	}
 

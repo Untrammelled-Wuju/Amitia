@@ -15,18 +15,18 @@ import (
 )
 
 const (
-	SandboxErrDisabled               = "IOS_SANDBOX_DISABLED"
-	SandboxErrUnsupportedHost        = "IOS_SANDBOX_UNSUPPORTED_HOST"
+	SandboxErrDisabled              = "IOS_SANDBOX_DISABLED"
+	SandboxErrUnsupportedHost       = "IOS_SANDBOX_UNSUPPORTED_HOST"
 	SandboxErrCapabilityUnavailable = "IOS_SANDBOX_CAPABILITY_UNAVAILABLE"
-	SandboxErrBackendUnavailable     = "IOS_SANDBOX_BACKEND_UNAVAILABLE"
-	SandboxErrRootfsNotConfigured    = "IOS_SANDBOX_ROOTFS_NOT_CONFIGURED"
-	SandboxErrNotReady               = "IOS_SANDBOX_NOT_READY"
-	SandboxErrInvalidWorkspaceURI    = "IOS_SANDBOX_INVALID_WORKSPACE_URI"
-	SandboxErrInvalidRootfsURI       = "IOS_SANDBOX_INVALID_ROOTFS_URI"
-	SandboxErrSecretInEnvironment    = "IOS_SANDBOX_SECRET_IN_ENVIRONMENT"
-	SandboxErrInvalidEnvKey          = "IOS_SANDBOX_INVALID_ENV_KEY"
-	SandboxErrHostRequired           = "IOS_SANDBOX_HOST_REQUIRED"
-	SandboxErrConfigInvalid          = "IOS_SANDBOX_CONFIG_INVALID"
+	SandboxErrBackendUnavailable    = "IOS_SANDBOX_BACKEND_UNAVAILABLE"
+	SandboxErrRootfsNotConfigured   = "IOS_SANDBOX_ROOTFS_NOT_CONFIGURED"
+	SandboxErrNotReady              = "IOS_SANDBOX_NOT_READY"
+	SandboxErrInvalidWorkspaceURI   = "IOS_SANDBOX_INVALID_WORKSPACE_URI"
+	SandboxErrInvalidRootfsURI      = "IOS_SANDBOX_INVALID_ROOTFS_URI"
+	SandboxErrSecretInEnvironment   = "IOS_SANDBOX_SECRET_IN_ENVIRONMENT"
+	SandboxErrInvalidEnvKey         = "IOS_SANDBOX_INVALID_ENV_KEY"
+	SandboxErrHostRequired          = "IOS_SANDBOX_HOST_REQUIRED"
+	SandboxErrConfigInvalid         = "IOS_SANDBOX_CONFIG_INVALID"
 )
 
 type SandboxError struct {
@@ -129,7 +129,7 @@ func NewIOSSandboxProviderFactory(
 	config IOSSandboxProviderConfig,
 ) *IOSSandboxProviderFactory {
 	return &IOSSandboxProviderFactory{
-		config:    config.freeze(),
+		config:     config.freeze(),
 		newBackend: sandbox.NewIOSSandboxBackend,
 	}
 }

@@ -15,12 +15,12 @@ import (
 const managementTarget = "desktop_pet_center"
 
 var (
-	ErrKernelUnavailable         = errors.New("desktop_pet_center: extension kernel unavailable")
-	ErrExtensionNotFound         = errors.New("desktop_pet_center: extension not found")
-	ErrNotDesktopPetPlugin       = errors.New("desktop_pet_center: extension is not a desktop_pet_plugin")
-	ErrInvalidInput              = errors.New("desktop_pet_center: invalid input")
-	ErrManagementTargetMismatch  = errors.New("desktop_pet_center: package management target mismatch")
-	ErrPackageIdentityMismatch   = errors.New("desktop_pet_center: package identity mismatch")
+	ErrKernelUnavailable        = errors.New("desktop_pet_center: extension kernel unavailable")
+	ErrExtensionNotFound        = errors.New("desktop_pet_center: extension not found")
+	ErrNotDesktopPetPlugin      = errors.New("desktop_pet_center: extension is not a desktop_pet_plugin")
+	ErrInvalidInput             = errors.New("desktop_pet_center: invalid input")
+	ErrManagementTargetMismatch = errors.New("desktop_pet_center: package management target mismatch")
+	ErrPackageIdentityMismatch  = errors.New("desktop_pet_center: package identity mismatch")
 )
 
 type kernelContainer interface {

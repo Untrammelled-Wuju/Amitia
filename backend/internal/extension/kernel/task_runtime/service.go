@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 )
@@ -27,6 +28,9 @@ type TaskRuntimeService struct {
 
 	mu          sync.RWMutex
 	activeHosts map[string]*TaskProcessHost
+
+	localExecutor  TaskExecutorPort
+	remoteExecutor RemoteTaskExecutor
 
 	dispatchCtx    context.Context
 	dispatchCancel context.CancelFunc
@@ -49,7 +53,7 @@ func NewTaskRuntimeService(store TaskStore, config TaskRuntimeConfig) *TaskRunti
 	}
 	queue := NewTaskQueue(store, "amitia-task-runtime", config.LeaseDuration)
 	limiter := NewConcurrencyLimiter(store, config)
-	return &TaskRuntimeService{
+	svc := &TaskRuntimeService{
 		store:        store,
 		queue:        queue,
 		limiter:      limiter,
@@ -58,6 +62,9 @@ func NewTaskRuntimeService(store TaskStore, config TaskRuntimeConfig) *TaskRunti
 		progressSeq:  make(map[string]*int64),
 		progressLast: make(map[string]time.Time),
 	}
+	svc.localExecutor = NewLocalTaskExecutor(svc)
+	svc.remoteExecutor = UnavailableRemoteTaskExecutor{}
+	return svc
 }
 
 func (s *TaskRuntimeService) SetEventEmitter(emitter event.HostEventEmitter) {
@@ -190,6 +197,56 @@ func (s *TaskRuntimeService) Enqueue(ctx context.Context, req EnqueueTaskRequest
 	return result, nil
 }
 
+func (s *TaskRuntimeService) BindExecutionTarget(
+	ctx context.Context,
+	taskRunID string,
+	request TrustedExecutionTargetRequest,
+) (*TaskRun, error) {
+	run, err := s.store.GetTaskRun(ctx, taskRunID)
+	if err != nil {
+		return nil, NewTaskError(ErrTaskNotFound, err.Error())
+	}
+
+	if run.Status != RunStatusCreated && run.Status != RunStatusQueued && run.Status != RunStatusRecoveryRequired {
+		return nil, NewTaskError(ErrTaskExecutionTargetConflict, "execution target can only be bound in created/queued/recovery_required state")
+	}
+
+	decision := TaskPlacementDecision{
+		Placement: request.Placement,
+		Target:    request.Target,
+		Resolved:  true,
+	}
+
+	now := time.Now().UTC()
+	if err := run.BindExecutionTarget(decision, request.ResolvedBy, now); err != nil {
+		return nil, err
+	}
+
+	if err := s.store.UpdateExecutionTarget(ctx, run.TaskRunID, run.ExecutionPlacement, run.ExecutionTarget, *run.ExecutionResolvedAt, run.ExecutionResolvedBy); err != nil {
+		return nil, fmt.Errorf("task_runtime: update execution target: %w", err)
+	}
+
+	return run, nil
+}
+
+func (s *TaskRuntimeService) ClearExecutionConnectionBinding(
+	ctx context.Context,
+	taskRunID string,
+) error {
+	run, err := s.store.GetTaskRun(ctx, taskRunID)
+	if err != nil {
+		return NewTaskError(ErrTaskNotFound, err.Error())
+	}
+
+	if run.EffectiveExecutionPlacement() != TaskExecutionPlacementDevice {
+		return NewTaskError(ErrTaskExecutionPlacementInvalid, "connection binding only applies to device placement")
+	}
+
+	run.ClearTransientConnectionBinding()
+	now := time.Now().UTC()
+	return s.store.UpdateExecutionConnectionBinding(ctx, taskRunID, "", 0, now)
+}
+
 func (s *TaskRuntimeService) tryDispatch() {
 	if !atomic.CompareAndSwapInt32(&s.dispatching, 0, 1) {
 		return
@@ -246,6 +303,19 @@ func (s *TaskRuntimeService) dispatchOnce(ctx context.Context) {
 	}
 }
 
+func (s *TaskRuntimeService) executorFor(placement TaskExecutionPlacement) (TaskExecutorPort, error) {
+	switch placement {
+	case TaskExecutionPlacementLocal:
+		return s.localExecutor, nil
+	case TaskExecutionPlacementCloud, TaskExecutionPlacementDevice:
+		if s.remoteExecutor != nil && s.remoteExecutor.SupportsPlacement(placement) {
+			return s.remoteExecutor, nil
+		}
+		return nil, NewTaskError(ErrRemoteTaskExecutorUnavailable, "no remote executor available for placement: "+string(placement))
+	}
+	return nil, NewTaskError(ErrTaskExecutionPlacementInvalid, "unknown placement: "+string(placement))
+}
+
 func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 	defer s.tryDispatch()
 
@@ -255,9 +325,33 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 		return
 	}
 
+	attemptID := NewTaskExecutionAttemptID()
+	run.ExecutionAttemptID = attemptID
+
 	if run.EffectiveExecutionPlacement() != TaskExecutionPlacementLocal {
-		s.failRun(ctx, run, ErrTaskExecutionUnsupported,
-			"remote execution placement is not wired in stage G4")
+		if !run.HasResolvedExecutionTarget() {
+			s.failRun(ctx, run, ErrTaskExecutionTargetUnresolved, "remote task execution target is not resolved")
+			return
+		}
+
+		if err := s.store.UpdateExecutionAttempt(ctx, run.TaskRunID, attemptID, "", time.Now().UTC()); err != nil {
+			s.failRun(ctx, run, ErrTaskExecutionAttemptInvalid, fmt.Sprintf("persist attempt: %v", err))
+			return
+		}
+
+		executor, err := s.executorFor(run.EffectiveExecutionPlacement())
+		if err != nil {
+			s.failRun(ctx, run, ErrRemoteTaskExecutorUnavailable, err.Error())
+			return
+		}
+
+		outcome := s.runRemoteExecution(ctx, run, def, executor)
+		s.applyExecutionOutcome(ctx, run, def, outcome)
+		return
+	}
+
+	if err := s.store.UpdateExecutionAttempt(ctx, run.TaskRunID, attemptID, "", time.Now().UTC()); err != nil {
+		s.failRun(ctx, run, ErrTaskExecutionAttemptInvalid, fmt.Sprintf("persist attempt: %v", err))
 		return
 	}
 
@@ -374,6 +468,47 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 	if exitCode != 0 && !run.Status.IsTerminal() {
 		s.handleCrash(ctx, run, def, exitCode)
 	}
+}
+
+func (s *TaskRuntimeService) runRemoteExecution(ctx context.Context, run *TaskRun, def *TaskDefinition, executor TaskExecutorPort) TaskExecutionOutcome {
+	request := TaskExecutionRequest{
+		Run:       run,
+		Definition: def,
+		AttemptID: run.ExecutionAttemptID,
+		Placement: run.EffectiveExecutionPlacement(),
+		Target:    run.ExecutionTarget,
+	}
+	outcome, _ := executor.Execute(ctx, request)
+	return outcome
+}
+
+func (s *TaskRuntimeService) persistExecutionAttempt(ctx context.Context, run *TaskRun, attemptID TaskExecutionAttemptID, runtimeInstanceID string) error {
+	return s.store.UpdateExecutionAttempt(ctx, run.TaskRunID, attemptID, runtimeInstanceID, time.Now().UTC())
+}
+
+func (s *TaskRuntimeService) applyExecutionOutcome(ctx context.Context, run *TaskRun, def *TaskDefinition, outcome TaskExecutionOutcome) {
+	now := time.Now().UTC()
+	if outcome.Status.IsTerminal() {
+		run.Status = outcome.Status
+		run.FinishedAt = &now
+		if outcome.ErrorCode != "" {
+			ec := outcome.ErrorCode
+			run.ErrorCode = &ec
+		}
+		if outcome.ErrorMessage != "" {
+			em := outcome.ErrorMessage
+			run.ErrorMessage = &em
+		}
+		if outcome.Result != nil {
+			_ = s.store.PutResult(ctx, outcome.Result)
+		}
+		_ = s.store.PutTaskRun(ctx, run)
+		_ = s.queue.Remove(ctx, run.TaskRunID)
+		return
+	}
+
+	run.Status = outcome.Status
+	_ = s.store.PutTaskRun(ctx, run)
 }
 
 func (s *TaskRuntimeService) handleProgress(ctx context.Context, taskRunID string, seq int64, current, total, percentage *float64, stage, message string) {
@@ -578,6 +713,16 @@ func (s *TaskRuntimeService) Cancel(ctx context.Context, taskRunID, reason strin
 		return NewTaskError(ErrTaskNotCancelable, "task already terminal: "+string(run.Status))
 	}
 
+	placement := run.EffectiveExecutionPlacement()
+	if placement != TaskExecutionPlacementLocal {
+		if s.remoteExecutor != nil {
+			if err := s.remoteExecutor.Cancel(ctx, run); err != nil {
+				return err
+			}
+		}
+		return NewTaskError(ErrRemoteTaskExecutorUnavailable, "remote cancellation not available")
+	}
+
 	now := time.Now().UTC()
 	run.CancelRequestedAt = &now
 
@@ -659,6 +804,7 @@ func (s *TaskRuntimeService) Retry(ctx context.Context, taskRunID string) (*Task
 		return nil, NewTaskError(ErrTaskNotRetryable, "max attempts exceeded")
 	}
 
+	now := time.Now().UTC()
 	newRun := &TaskRun{
 		TaskRunID:          "tr-" + uuid.NewString(),
 		OperationID:        run.OperationID,
@@ -668,15 +814,24 @@ func (s *TaskRuntimeService) Retry(ctx context.Context, taskRunID string) (*Task
 		Status:             RunStatusQueued,
 		Priority:           run.Priority,
 		ExecutionPlacement: run.ExecutionPlacement,
-		ExecutionTarget:    run.ExecutionTarget,
-		Input:              run.Input,
-		InputHash:          run.InputHash,
-		Attempt:            run.Attempt + 1,
-		MaxAttempts:        run.MaxAttempts,
-		CreatedAt:          time.Now().UTC(),
-		QueuedAt:           ptrTime(time.Now().UTC()),
-		DeadlineAt:         run.DeadlineAt,
-		Generation:         run.Generation + 1,
+		ExecutionTarget: TaskExecutionTarget{
+			ProviderID:         run.ExecutionTarget.ProviderID,
+			ProviderInstanceID: run.ExecutionTarget.ProviderInstanceID,
+			UserID:             run.ExecutionTarget.UserID,
+			DeviceID:           run.ExecutionTarget.DeviceID,
+			RuntimeID:          run.ExecutionTarget.RuntimeID,
+			RuntimeInstanceID:  run.ExecutionTarget.RuntimeInstanceID,
+		},
+		ExecutionResolvedAt:  &now,
+		ExecutionResolvedBy:  "retry-inherit",
+		Input:                run.Input,
+		InputHash:            run.InputHash,
+		Attempt:              run.Attempt + 1,
+		MaxAttempts:          run.MaxAttempts,
+		CreatedAt:            now,
+		QueuedAt:             ptrTime(now),
+		DeadlineAt:           run.DeadlineAt,
+		Generation:           run.Generation + 1,
 	}
 
 	if err := s.store.PutTaskRun(ctx, newRun); err != nil {
@@ -721,6 +876,14 @@ func (s *TaskRuntimeService) Recover(ctx context.Context, taskRunID string) (*Ta
 	now := time.Now().UTC()
 	run.QueuedAt = &now
 	run.Generation++
+
+	if run.EffectiveExecutionPlacement() == TaskExecutionPlacementDevice {
+		run.ClearTransientConnectionBinding()
+	}
+
+	run.ExecutionAttemptID = ""
+	run.RuntimeInstanceID = nil
+
 	_ = s.store.PutTaskRun(ctx, run)
 	_ = s.queue.Enqueue(ctx, run)
 

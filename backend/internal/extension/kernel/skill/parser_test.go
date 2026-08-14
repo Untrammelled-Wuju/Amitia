@@ -484,9 +484,9 @@ func TestParser_Preview(t *testing.T) {
 
 func TestParser_CompatibilityStatus(t *testing.T) {
 	tests := []struct {
-		name string
+		name  string
 		diags []SkillDiagnostic
-		want string
+		want  string
 	}{
 		{"no diags", nil, SkillCompatStatusCompatible},
 		{"warning only", []SkillDiagnostic{{Severity: DiagnosticSeverityWarning, Code: "test"}}, SkillCompatStatusDegraded},

@@ -28,8 +28,8 @@ func TestSandboxRecoverySnapshot_Classify(t *testing.T) {
 		{
 			name: "rootfs corrupted returns manual repair",
 			snap: SandboxRecoverySnapshot{
-				DesiredRunning: true,
-				RuntimeID:      "runtime-1",
+				DesiredRunning:  true,
+				RuntimeID:       "runtime-1",
 				RootfsCorrupted: true,
 			},
 			enabled:  true,

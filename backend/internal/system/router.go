@@ -3,21 +3,28 @@
 package system
 
 import (
+	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/chat"
+	"github.com/u-ai/backend/internal/embedding_config"
 	"github.com/u-ai/backend/internal/episodic"
+	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/memory"
-	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/internal/migration"
+	"github.com/u-ai/backend/internal/mindruntime"
 	"github.com/u-ai/backend/internal/modelerror"
 	"github.com/u-ai/backend/internal/profile"
+	"github.com/u-ai/backend/internal/psyche"
+	"github.com/u-ai/backend/internal/relationship"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"github.com/u-ai/backend/internal/temporal"
+	"github.com/u-ai/backend/internal/tts"
+	"github.com/u-ai/backend/internal/workspace"
+	"github.com/u-ai/backend/internal/worldbook"
 	"github.com/u-ai/backend/pkg/app"
 	"github.com/u-ai/backend/pkg/sse"
-	"fmt"
 	"os"
 	"runtime"
 	"time"
@@ -38,6 +45,18 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	coord.RegisterContributors(
 		dataportability.NewCharacterContributor(ctx.DB),
 		memory.NewMemoryBackupContributor(memSvc),
+		chat.NewChatBackupContributor(ctx.DB),
+		episodic.NewEpisodicBackupContributor(ctx.DB),
+		relationship.NewRelationshipBackupContributor(ctx.DB),
+		psyche.NewPsycheBackupContributor(ctx.DB),
+		worldbook.NewWorldbookBackupContributor(ctx.DB),
+		NewSettingsBackupContributor(ctx.DB),
+		chat.NewModelConfigBackupContributor(ctx.DB),
+		tts.NewVoiceBackupContributor(ctx.DB),
+		embedding_config.NewEmbeddingBackupContributor(ctx.DB),
+		NewResourceBackupContributor(ctx.DB, "data"),
+		extension.NewExtensionBackupContributor(ctx.DB),
+		workspace.NewWorkspaceBackupContributor(ctx.DB),
 	)
 	svc.SetDataPortabilityCoordinator(coord)
 

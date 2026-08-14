@@ -61,34 +61,34 @@ type ProcessExitObserver interface {
 }
 
 type ProcessSupervisor struct {
-	mu                sync.Mutex
-	instances         map[string]*ServiceInstance
-	defs              map[string]*ServiceRuntimeDefinition
-	verifier          *BinaryVerifier
-	selector          *PlatformSelector
-	envBuilder        *EnvBuilder
-	logger            func(level, msg string, fields map[string]any)
-	healthMon         *HealthMonitor
-	quarantine        *QuarantineManager
-	rootDir           string
-	procMgr           *process.DefaultProcessManager
-	gameHostNotifier  GameHostNotifier
-	protocolHandlers  map[string]StdioProtocolHandler
-	exitObservers     []ProcessExitObserver
+	mu               sync.Mutex
+	instances        map[string]*ServiceInstance
+	defs             map[string]*ServiceRuntimeDefinition
+	verifier         *BinaryVerifier
+	selector         *PlatformSelector
+	envBuilder       *EnvBuilder
+	logger           func(level, msg string, fields map[string]any)
+	healthMon        *HealthMonitor
+	quarantine       *QuarantineManager
+	rootDir          string
+	procMgr          *process.DefaultProcessManager
+	gameHostNotifier GameHostNotifier
+	protocolHandlers map[string]StdioProtocolHandler
+	exitObservers    []ProcessExitObserver
 }
 
 func NewProcessSupervisor(rootDir string) *ProcessSupervisor {
 	return &ProcessSupervisor{
-		instances:       make(map[string]*ServiceInstance),
-		defs:            make(map[string]*ServiceRuntimeDefinition),
-		verifier:        NewBinaryVerifier(),
-		selector:        NewPlatformSelector(),
-		envBuilder:      NewEnvBuilder(),
-		healthMon:       NewHealthMonitor(),
-		quarantine:      NewQuarantineManager(),
-		procMgr:         process.NewDefaultProcessManager(),
-		rootDir:         rootDir,
-		logger:          func(level, msg string, fields map[string]any) {},
+		instances:        make(map[string]*ServiceInstance),
+		defs:             make(map[string]*ServiceRuntimeDefinition),
+		verifier:         NewBinaryVerifier(),
+		selector:         NewPlatformSelector(),
+		envBuilder:       NewEnvBuilder(),
+		healthMon:        NewHealthMonitor(),
+		quarantine:       NewQuarantineManager(),
+		procMgr:          process.NewDefaultProcessManager(),
+		rootDir:          rootDir,
+		logger:           func(level, msg string, fields map[string]any) {},
 		protocolHandlers: make(map[string]StdioProtocolHandler),
 	}
 }
@@ -98,16 +98,16 @@ func NewProcessSupervisorWithVerifier(rootDir string, verifier *BinaryVerifier) 
 		verifier = NewBinaryVerifier()
 	}
 	return &ProcessSupervisor{
-		instances:       make(map[string]*ServiceInstance),
-		defs:            make(map[string]*ServiceRuntimeDefinition),
-		verifier:        verifier,
-		selector:        NewPlatformSelector(),
-		envBuilder:      NewEnvBuilder(),
-		healthMon:       NewHealthMonitor(),
-		quarantine:      NewQuarantineManager(),
-		procMgr:         process.NewDefaultProcessManager(),
-		rootDir:         rootDir,
-		logger:          func(level, msg string, fields map[string]any) {},
+		instances:        make(map[string]*ServiceInstance),
+		defs:             make(map[string]*ServiceRuntimeDefinition),
+		verifier:         verifier,
+		selector:         NewPlatformSelector(),
+		envBuilder:       NewEnvBuilder(),
+		healthMon:        NewHealthMonitor(),
+		quarantine:       NewQuarantineManager(),
+		procMgr:          process.NewDefaultProcessManager(),
+		rootDir:          rootDir,
+		logger:           func(level, msg string, fields map[string]any) {},
 		protocolHandlers: make(map[string]StdioProtocolHandler),
 	}
 }

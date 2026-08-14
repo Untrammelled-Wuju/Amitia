@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/u-ai/backend/internal/desktoppet/plugin_boundary"
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/canary"
@@ -44,7 +45,6 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/update"
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
-	"github.com/u-ai/backend/internal/desktoppet/plugin_boundary"
 	"github.com/u-ai/backend/internal/gamehost"
 )
 

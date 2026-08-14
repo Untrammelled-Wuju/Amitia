@@ -99,8 +99,8 @@ func TestCalculateNextIntervalWithAnchor(t *testing.T) {
 		Trigger: ScheduleTriggerDefinition{
 			Type: TriggerTypeInterval,
 			Interval: &IntervalTriggerDefinition{
-				Interval:  5 * time.Minute,
-				AnchorAt:  anchor,
+				Interval: 5 * time.Minute,
+				AnchorAt: anchor,
 			},
 		},
 		Timezone: "UTC",
@@ -268,9 +268,9 @@ func TestMisfireFireOnce(t *testing.T) {
 		MisfirePolicy: ScheduleMisfirePolicy{Policy: MisfirePolicyFireOnce},
 	}
 	detection := &MisfireDetection{
-		HasMisfire:  true,
-		MissedCount: 3,
-		MissedTimes: []time.Time{missed1, missed2, missed3},
+		HasMisfire:   true,
+		MissedCount:  3,
+		MissedTimes:  []time.Time{missed1, missed2, missed3},
 		LatestMissed: &missed3,
 	}
 	result, err := svc.ApplyMisfirePolicy(context.Background(), def, detection)

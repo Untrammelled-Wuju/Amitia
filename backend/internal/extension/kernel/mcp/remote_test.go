@@ -17,16 +17,16 @@ import (
 
 func TestMCPRemoteSpec_Struct(t *testing.T) {
 	spec := MCPRemoteSpec{
-		ServerID:         "test-remote",
-		Endpoint:         "https://example.com/mcp",
-		Timeout:          30 * time.Second,
-		MaxMessageBytes:  4 << 20,
-		AllowLoopback:    true,
-		AllowPrivate:     false,
-		AllowPublicHTTP:  false,
-		MaxRedirects:     3,
-		CredentialRef:    "cred-123",
-		StaticHeaders:    map[string]string{"X-Custom": "value"},
+		ServerID:        "test-remote",
+		Endpoint:        "https://example.com/mcp",
+		Timeout:         30 * time.Second,
+		MaxMessageBytes: 4 << 20,
+		AllowLoopback:   true,
+		AllowPrivate:    false,
+		AllowPublicHTTP: false,
+		MaxRedirects:    3,
+		CredentialRef:   "cred-123",
+		StaticHeaders:   map[string]string{"X-Custom": "value"},
 	}
 
 	if spec.ServerID != "test-remote" {
@@ -252,8 +252,8 @@ func TestStreamableHTTP_StartWithTestServer(t *testing.T) {
 	defer server.Close()
 
 	spec := MCPRemoteResolvedSpec{
-		ServerID: "test",
-		Endpoint: server.URL + "/mcp",
+		ServerID:      "test",
+		Endpoint:      server.URL + "/mcp",
 		StaticHeaders: map[string]string{},
 	}
 	policy := RemoteEndpointPolicy{
@@ -280,8 +280,8 @@ func TestStreamableHTTP_SendJSONResponse(t *testing.T) {
 	defer server.Close()
 
 	spec := MCPRemoteResolvedSpec{
-		ServerID: "test",
-		Endpoint: server.URL + "/mcp",
+		ServerID:      "test",
+		Endpoint:      server.URL + "/mcp",
 		StaticHeaders: map[string]string{},
 	}
 	policy := RemoteEndpointPolicy{
@@ -316,8 +316,8 @@ func TestStreamableHTTP_SendSSEResponse(t *testing.T) {
 	defer server.Close()
 
 	spec := MCPRemoteResolvedSpec{
-		ServerID: "test",
-		Endpoint: server.URL + "/mcp",
+		ServerID:      "test",
+		Endpoint:      server.URL + "/mcp",
 		StaticHeaders: map[string]string{},
 	}
 	policy := RemoteEndpointPolicy{
@@ -350,8 +350,8 @@ func TestStreamableHTTP_Accepted202(t *testing.T) {
 	defer server.Close()
 
 	spec := MCPRemoteResolvedSpec{
-		ServerID: "test",
-		Endpoint: server.URL + "/mcp",
+		ServerID:      "test",
+		Endpoint:      server.URL + "/mcp",
 		StaticHeaders: map[string]string{},
 	}
 	policy := RemoteEndpointPolicy{
@@ -386,8 +386,8 @@ func TestStreamableHTTP_SessionIDFromResponse(t *testing.T) {
 	defer server.Close()
 
 	spec := MCPRemoteResolvedSpec{
-		ServerID: "test",
-		Endpoint: server.URL + "/mcp",
+		ServerID:      "test",
+		Endpoint:      server.URL + "/mcp",
 		StaticHeaders: map[string]string{},
 	}
 	policy := RemoteEndpointPolicy{

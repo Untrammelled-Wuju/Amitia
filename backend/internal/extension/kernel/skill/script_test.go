@@ -536,4 +536,3 @@ func TestSanitizeArgsDefault(t *testing.T) {
 		t.Errorf("Expected default value 'fast', got %v", result["mode"])
 	}
 }
-

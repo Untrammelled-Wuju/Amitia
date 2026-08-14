@@ -622,14 +622,14 @@ func (a *coordinatorRepoAdapter) SwitchRelease(ctx context.Context, op *operatio
 			return fmt.Errorf("update installation release: %w", err)
 		}
 		jrnl := &journal.InstallationSwitchJournal{
-			ID:             uuid.New().String(),
-			OperationID:    op.ID,
+			ID:                uuid.New().String(),
+			OperationID:       op.ID,
 			NewInstallationID: installationID,
-			OldReleaseID:   op.SourceReleaseID,
-			NewReleaseID:   targetReleaseID,
-			Stage:          journal.SwitchJournalCreated,
-			CreatedAt:      time.Now().Format("2006-01-02 15:04:05"),
-			UpdatedAt:      time.Now().Format("2006-01-02 15:04:05"),
+			OldReleaseID:      op.SourceReleaseID,
+			NewReleaseID:      targetReleaseID,
+			Stage:             journal.SwitchJournalCreated,
+			CreatedAt:         time.Now().Format("2006-01-02 15:04:05"),
+			UpdatedAt:         time.Now().Format("2006-01-02 15:04:05"),
 		}
 		if err := tx.Create(jrnl).Error; err != nil {
 			return fmt.Errorf("create switch journal: %w", err)

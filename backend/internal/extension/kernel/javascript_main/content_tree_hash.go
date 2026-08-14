@@ -67,9 +67,9 @@ func (c *ContentTreeHash) shouldIgnore(relPath string) bool {
 	}
 	ignored := map[string]bool{
 		"node_modules": true,
-		".git":          true,
-		"Thumbs.db":     true,
-		"desktop.ini":   true,
+		".git":         true,
+		"Thumbs.db":    true,
+		"desktop.ini":  true,
 	}
 	parts := strings.Split(relPath, "/")
 	for _, p := range parts {

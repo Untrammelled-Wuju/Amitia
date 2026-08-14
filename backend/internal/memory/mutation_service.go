@@ -66,11 +66,11 @@ type canonicalDeleteRequest struct {
 }
 
 type MemoryDerivationInput struct {
-	InputMemoryID    string
-	InputVersion     int
+	InputMemoryID     string
+	InputVersion      int
 	InputSnapshotHash string
-	DerivationKind   string
-	Ordinal          int
+	DerivationKind    string
+	Ordinal           int
 }
 
 type MemoryEventRecord struct {

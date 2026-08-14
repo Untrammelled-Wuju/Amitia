@@ -44,7 +44,7 @@ type CreateHostRequest struct {
 	Env                  []string
 	NetworkDisabled      bool
 	NodePath             string
-	PluginHostPath        string
+	PluginHostPath       string
 	WorkingDirectory     string
 }
 
@@ -107,7 +107,7 @@ func (f *RuntimeFactory) Create(ctx context.Context, req CreateHostRequest) (*Pl
 		HostAPIVersion:       req.HostAPIVersion,
 		AllowedContributions: req.AllowedContributions,
 		NodePath:             req.NodePath,
-		PluginHostPath:        req.PluginHostPath,
+		PluginHostPath:       req.PluginHostPath,
 		WorkingDirectory:     req.WorkingDirectory,
 		HostAPI:              gateway,
 		Env:                  req.Env,

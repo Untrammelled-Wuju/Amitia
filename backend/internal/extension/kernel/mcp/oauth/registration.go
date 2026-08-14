@@ -66,11 +66,11 @@ func (s *MCPRegistrationStrategy) ResolveClient(ctx context.Context, issuer stri
 	}
 
 	return MCPOAuthClientRegistration{
-			RegistrationMethod:     "manual",
-			Issuer:                 issuer,
-			RedirectURIs:           redirect.URIs,
-			TokenEndpointAuthMethod: "none",
-		}, fmt.Errorf("MCP_OAUTH_REGISTRATION_UNAVAILABLE: manual configuration required for issuer %s", issuer)
+		RegistrationMethod:      "manual",
+		Issuer:                  issuer,
+		RedirectURIs:            redirect.URIs,
+		TokenEndpointAuthMethod: "none",
+	}, fmt.Errorf("MCP_OAUTH_REGISTRATION_UNAVAILABLE: manual configuration required for issuer %s", issuer)
 }
 
 func (s *MCPRegistrationStrategy) resolveCIMD(ctx context.Context, cimdURL string, redirect MCPRedirectProfile) (MCPOAuthClientRegistration, error) {
@@ -96,12 +96,12 @@ func (s *MCPRegistrationStrategy) resolveCIMD(ctx context.Context, cimdURL strin
 	}
 
 	var meta struct {
-		ClientID              string   `json:"client_id"`
-		ClientName            string   `json:"client_name"`
-		RedirectURIs          []string `json:"redirect_uris"`
-		GrantTypes            []string `json:"grant_types"`
-		ResponseTypes         []string `json:"response_types"`
-		TokenEndpointAuthMethod string `json:"token_endpoint_auth_method"`
+		ClientID                string   `json:"client_id"`
+		ClientName              string   `json:"client_name"`
+		RedirectURIs            []string `json:"redirect_uris"`
+		GrantTypes              []string `json:"grant_types"`
+		ResponseTypes           []string `json:"response_types"`
+		TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, 1<<20)).Decode(&meta); err != nil {
 		return MCPOAuthClientRegistration{}, fmt.Errorf("MCP_OAUTH_CIMD_INVALID")

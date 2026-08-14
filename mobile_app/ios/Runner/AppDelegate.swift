@@ -5,6 +5,7 @@ import UIKit
 @objc class AppDelegate: FlutterAppDelegate {
   private var sandboxHandler: IOSSandboxMethodHandler?
   private var rootfsHandler: RootfsInstallMethodHandler?
+  private var iosNativeHost: IOSNativeHost?
 
   override func application(
     _ application: UIApplication,
@@ -16,6 +17,21 @@ import UIKit
     self.sandboxHandler = IOSSandboxMethodHandler(bridge: bridge)
     self.sandboxHandler?.register(with: self.registrar(forPlugin: "IOSSandboxBridge")!)
 
+    self.iosNativeHost = IOSNativeHost(bridge: bridge)
+    self.iosNativeHost?.registerHandler(HealthKitNativeHandler())
+    self.iosNativeHost?.registerHandler(CalendarNativeHandler())
+    self.iosNativeHost?.registerHandler(RemindersNativeHandler())
+    self.iosNativeHost?.registerHandler(ContactsNativeHandler())
+    self.iosNativeHost?.registerHandler(HomeKitNativeHandler())
+    self.iosNativeHost?.registerHandler(BluetoothNativeHandler())
+    self.iosNativeHost?.registerHandler(ClipboardNativeHandler())
+    self.iosNativeHost?.registerHandler(MediaNativeHandler())
+    self.iosNativeHost?.registerHandler(AlarmNativeHandler())
+    self.iosNativeHost?.registerHandler(ShareNativeHandler())
+    self.iosNativeHost?.registerHandler(ShortcutNativeHandler())
+    self.iosNativeHost?.registerHandler(BackgroundNativeHandler())
+    self.iosNativeHost?.registerHandler(FileNativeHandler())
+
     let resolver = RootfsResolver()
     let installer = RootfsInstaller(resolver: resolver)
     self.rootfsHandler = RootfsInstallMethodHandler(installer: installer, resolver: resolver)
@@ -26,16 +42,19 @@ import UIKit
 
   override func applicationDidEnterBackground(_ application: UIApplication) {
     IOSSandboxBridge.shared().applicationDidEnterBackground()
+    self.iosNativeHost?.didEnterBackground()
     super.applicationDidEnterBackground(application)
   }
 
   override func applicationWillEnterForeground(_ application: UIApplication) {
     IOSSandboxBridge.shared().applicationWillEnterForeground()
+    self.iosNativeHost?.willEnterForeground()
     super.applicationWillEnterForeground(application)
   }
 
   override func applicationWillTerminate(_ application: UIApplication) {
     IOSSandboxBridge.shared().applicationWillTerminate()
+    self.iosNativeHost?.willTerminate()
     super.applicationWillTerminate(application)
   }
 }

@@ -66,20 +66,20 @@ func (s *leaseState) hasValue() bool {
 }
 
 type LeaseRequest struct {
-	Ref                 SecretRef
-	Purpose             string
-	InvocationID        string
-	RuntimeInstanceID   string
-	UserID              string
-	CharacterID         string
-	ConversationID      string
-	ExtensionID         string
-	ModuleID            string
-	Generation          int64
+	Ref                  SecretRef
+	Purpose              string
+	InvocationID         string
+	RuntimeInstanceID    string
+	UserID               string
+	CharacterID          string
+	ConversationID       string
+	ExtensionID          string
+	ModuleID             string
+	Generation           int64
 	PermissionSnapshotID string
-	ScopeSnapshotID     string
-	TTL                 time.Duration
-	MaxUses             int
+	ScopeSnapshotID      string
+	TTL                  time.Duration
+	MaxUses              int
 }
 
 type LeaseUseContext struct {

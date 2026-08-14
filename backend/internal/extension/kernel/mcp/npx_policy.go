@@ -14,14 +14,14 @@ const (
 )
 
 var npxReservedEnvVars = map[string]bool{
-	"NPM_CONFIG_CACHE":        true,
-	"NPM_CONFIG_USERCONFIG":   true,
-	"NPM_CONFIG_REGISTRY":     true,
+	"NPM_CONFIG_CACHE":          true,
+	"NPM_CONFIG_USERCONFIG":     true,
+	"NPM_CONFIG_REGISTRY":       true,
 	"NPM_CONFIG_IGNORE_SCRIPTS": true,
-	"NPM_CONFIG_YES":          true,
-	"NODE_OPTIONS":            true,
-	"PATH":                    true,
-	"HOME":                    true,
+	"NPM_CONFIG_YES":            true,
+	"NODE_OPTIONS":              true,
+	"PATH":                      true,
+	"HOME":                      true,
 }
 
 func ValidateNPXPackageName(packageName string) error {

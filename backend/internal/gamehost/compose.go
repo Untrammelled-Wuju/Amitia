@@ -5,7 +5,7 @@ import (
 	"fmt"
 
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
-	"github.com/u-ai/backend/internal/extension/kernel/permission"
+	kernelpermission "github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/scope"
 	"github.com/u-ai/backend/internal/extension/kernel/secret"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
@@ -52,8 +52,8 @@ type GameHostComposeOptions struct {
 	EffectivePermission *permission.EffectivePermissionAdapter
 	PermissionBroker  permission.Broker
 
-	KernelPermissionBroker       permission.PermissionBroker
-	KernelPermissionSnapshotStore permission.PermissionSnapshotStore
+	KernelPermissionBroker       kernelpermission.PermissionBroker
+	KernelPermissionSnapshotStore kernelpermission.PermissionSnapshotStore
 	KernelScopeManager           scope.ScopeManager
 }
 

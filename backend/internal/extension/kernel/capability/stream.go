@@ -26,20 +26,20 @@ type ToolStreamProgress struct {
 }
 
 type ToolStreamEmission struct {
-	Type     ToolStreamEventType  `json:"type"`
-	Content  *ToolContent         `json:"content,omitempty"`
-	Progress *ToolStreamProgress  `json:"progress,omitempty"`
-	Metadata map[string]any       `json:"metadata,omitempty"`
+	Type     ToolStreamEventType `json:"type"`
+	Content  *ToolContent        `json:"content,omitempty"`
+	Progress *ToolStreamProgress `json:"progress,omitempty"`
+	Metadata map[string]any      `json:"metadata,omitempty"`
 }
 
 type ToolStreamEvent struct {
-	InvocationID string               `json:"invocationId"`
-	Sequence     uint64               `json:"sequence"`
-	Type         ToolStreamEventType  `json:"type"`
-	Content      *ToolContent         `json:"content,omitempty"`
-	Progress     *ToolStreamProgress  `json:"progress,omitempty"`
-	Result       *UnifiedToolResult   `json:"result,omitempty"`
-	Metadata     map[string]any       `json:"metadata,omitempty"`
+	InvocationID string              `json:"invocationId"`
+	Sequence     uint64              `json:"sequence"`
+	Type         ToolStreamEventType `json:"type"`
+	Content      *ToolContent        `json:"content,omitempty"`
+	Progress     *ToolStreamProgress `json:"progress,omitempty"`
+	Result       *UnifiedToolResult  `json:"result,omitempty"`
+	Metadata     map[string]any      `json:"metadata,omitempty"`
 }
 
 type ToolStreamEmitter interface {

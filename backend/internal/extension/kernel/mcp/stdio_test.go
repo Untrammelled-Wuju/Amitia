@@ -276,14 +276,14 @@ func TestCanonicalStdioRegistry_RegisterLegacyOwnership(t *testing.T) {
 func TestMCPStdioSpec_Struct(t *testing.T) {
 	env := map[string]string{"KEY": "VALUE"}
 	spec := MCPStdioSpec{
-		ServerID:         "test",
-		Command:          "echo",
-		Args:             []string{"hello", "world"},
-		WorkDir:          "/tmp",
-		Env:              env,
-		StartTimeout:     5 * time.Second,
-		ShutdownTimeout:  2 * time.Second,
-		MaxMessageBytes:  8 << 20,
+		ServerID:        "test",
+		Command:         "echo",
+		Args:            []string{"hello", "world"},
+		WorkDir:         "/tmp",
+		Env:             env,
+		StartTimeout:    5 * time.Second,
+		ShutdownTimeout: 2 * time.Second,
+		MaxMessageBytes: 8 << 20,
 	}
 
 	if spec.ServerID != "test" {

@@ -85,15 +85,15 @@ func TestSandboxRestartReason_Values(t *testing.T) {
 func TestSandboxRecoveryDescriptor_Fields(t *testing.T) {
 	now := time.Now().UTC()
 	desc := SandboxRecoveryDescriptor{
-		SchemaVersion:          1,
-		RuntimeID:              "runtime-1",
-		DesiredRunning:         true,
-		Generation:             7,
-		ActiveRootfsVersion:    "3.19",
-		ActiveRootfsDigest:     "abc123",
+		SchemaVersion:           1,
+		RuntimeID:               "runtime-1",
+		DesiredRunning:          true,
+		Generation:              7,
+		ActiveRootfsVersion:     "3.19",
+		ActiveRootfsDigest:      "abc123",
 		LastKnownLifecycleState: "running",
-		CleanShutdown:          true,
-		Timestamp:              now,
+		CleanShutdown:           true,
+		Timestamp:               now,
 	}
 
 	if desc.Generation != 7 {

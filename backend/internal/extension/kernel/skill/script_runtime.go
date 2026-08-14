@@ -30,7 +30,7 @@ type ScriptRuntime struct {
 type ScriptExecutionRequest struct {
 	ExtensionID      string
 	SkillName        string
-	RelativePath      string
+	RelativePath     string
 	Content          []byte
 	ExpectedHash     string
 	Args             map[string]any

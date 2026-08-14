@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
+	"github.com/u-ai/backend/internal/deviceruntime"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/log"
 	"gorm.io/gorm"
@@ -49,17 +50,26 @@ type RuntimeFacade struct {
 	states     ActualStateService
 	reconciler *Reconciler
 
+	deviceRuntimeSessions *deviceruntime.Service
+
 	started     atomic.Bool
 	cancel      context.CancelFunc
 	lifecycleMu sync.Mutex
 }
 
 func NewRuntimeFacade(db *gorm.DB, config *FacadeConfig) *RuntimeFacade {
+	return NewRuntimeFacadeWithDeviceRuntime(db, config, nil)
+}
+
+func NewRuntimeFacadeWithDeviceRuntime(db *gorm.DB, config *FacadeConfig, deviceRuntimeSessions *deviceruntime.Service) *RuntimeFacade {
 	if config == nil {
 		config = DefaultFacadeConfig()
 	}
 	svc := NewServices(db)
 	handler := NewHandler(svc)
+	if deviceRuntimeSessions != nil {
+		handler = NewHandlerWithDeviceRuntime(svc, deviceRuntimeSessions)
+	}
 	states := svc.ActualStates
 	reconciler := NewReconciler(svc, handler)
 	return &RuntimeFacade{
@@ -69,7 +79,12 @@ func NewRuntimeFacade(db *gorm.DB, config *FacadeConfig) *RuntimeFacade {
 		handler:    handler,
 		states:     states,
 		reconciler: reconciler,
+		deviceRuntimeSessions: deviceRuntimeSessions,
 	}
+}
+
+func (f *RuntimeFacade) DeviceRuntimeSessions() *deviceruntime.Service {
+	return f.deviceRuntimeSessions
 }
 
 func (f *RuntimeFacade) Start(ctx context.Context) error {

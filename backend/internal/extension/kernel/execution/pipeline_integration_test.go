@@ -310,8 +310,8 @@ func TestB8_RateLimitRejectNoDispatch(t *testing.T) {
 	adapter := &spyingAdapter{}
 	p := integPipeline(t, adapter, nil, false, false, nil)
 	rl, err := NewRateLimiter(RateLimitPolicy{
-		Enabled: true,
-		Global:  RateLimitSpec{Tokens: 1, Interval: time.Second, Burst: 1},
+		Enabled:      true,
+		Global:       RateLimitSpec{Tokens: 1, Interval: time.Second, Burst: 1},
 		Backpressure: BackpressurePolicy{Mode: BackpressureReject},
 	})
 	if err != nil {

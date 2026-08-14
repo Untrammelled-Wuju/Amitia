@@ -286,3 +286,8 @@ build_log.txt
 U-Ai-source.tar.gz
 
 build_errors.txt
+
+D:build-errors.txt
+
+runtime-package/
+*.zip

@@ -12,15 +12,15 @@ import (
 
 func TestMCPNPXSpec_Struct(t *testing.T) {
 	spec := MCPNPXSpec{
-		Package:               "@modelcontextprotocol/server-filesystem@1.2.3",
-		Binary:                "mcp-server",
-		Args:                  []string{"/tmp"},
-		FetchPolicy:           "allow",
-		AllowFloatingVersion:  false,
-		WorkDir:               "/tmp/work",
-		Environment:           map[string]string{"API_KEY": "secret"},
-		CredentialRef:         "cred-123",
-		StartTimeout:          0,
+		Package:              "@modelcontextprotocol/server-filesystem@1.2.3",
+		Binary:               "mcp-server",
+		Args:                 []string{"/tmp"},
+		FetchPolicy:          "allow",
+		AllowFloatingVersion: false,
+		WorkDir:              "/tmp/work",
+		Environment:          map[string]string{"API_KEY": "secret"},
+		CredentialRef:        "cred-123",
+		StartTimeout:         0,
 	}
 
 	if spec.Package != "@modelcontextprotocol/server-filesystem@1.2.3" {
@@ -92,9 +92,9 @@ func TestValidateNPXPackageName_Valid(t *testing.T) {
 
 func TestValidateNPXPackageName_Invalid(t *testing.T) {
 	invalidPackages := []struct {
-		name    string
-		pkg     string
-		errMsg  string
+		name   string
+		pkg    string
+		errMsg string
 	}{
 		{"empty", "", "MCP_NPX_PACKAGE_REQUIRED"},
 		{"url", "https://example.com/pkg", "MCP_NPX_PACKAGE_INVALID"},
@@ -227,8 +227,8 @@ func TestBuildNPXControlArgs(t *testing.T) {
 func TestBuildNPXEnvironment(t *testing.T) {
 	spec := MCPNPXSpec{
 		Environment: map[string]string{
-			"API_KEY":       "secret",
-			"NODE_OPTIONS":  "--require foo",
+			"API_KEY":          "secret",
+			"NODE_OPTIONS":     "--require foo",
 			"NPM_CONFIG_CACHE": "/tmp/cache",
 		},
 	}

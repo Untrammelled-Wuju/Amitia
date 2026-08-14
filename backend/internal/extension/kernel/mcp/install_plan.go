@@ -18,27 +18,27 @@ type MCPRuntimeDependency struct {
 }
 
 type MCPInstallScriptPreview struct {
-	HasScripts   bool     `json:"hasScripts"`
-	ScriptTypes  []string `json:"scriptTypes,omitempty"`
-	ScriptRisk   string   `json:"scriptRisk"`
+	HasScripts  bool     `json:"hasScripts"`
+	ScriptTypes []string `json:"scriptTypes,omitempty"`
+	ScriptRisk  string   `json:"scriptRisk"`
 }
 
 type MCPInstallPlan struct {
-	PlanID            string                   `json:"planId"`
-	BindingID         string                   `json:"bindingId"`
-	Source            string                   `json:"source"`
-	Transport         string                   `json:"transport"`
-	Launcher          string                   `json:"launcher"`
-	RequestedPackage  string                   `json:"requestedPackage"`
-	RequestedVersion  string                   `json:"requestedVersion"`
-	RuntimeDependencies []MCPRuntimeDependency `json:"runtimeDependencies"`
-	NetworkEndpoints  []string                 `json:"networkEndpoints"`
-	InstallScripts    MCPInstallScriptPreview  `json:"installScripts"`
-	Permissions       []string                 `json:"permissions"`
-	Risk              string                   `json:"risk"`
-	RequiresApproval  bool                     `json:"requiresApproval"`
-	PlanDigest        string                   `json:"planDigest"`
-	ExpiresAt         time.Time                `json:"expiresAt"`
+	PlanID              string                  `json:"planId"`
+	BindingID           string                  `json:"bindingId"`
+	Source              string                  `json:"source"`
+	Transport           string                  `json:"transport"`
+	Launcher            string                  `json:"launcher"`
+	RequestedPackage    string                  `json:"requestedPackage"`
+	RequestedVersion    string                  `json:"requestedVersion"`
+	RuntimeDependencies []MCPRuntimeDependency  `json:"runtimeDependencies"`
+	NetworkEndpoints    []string                `json:"networkEndpoints"`
+	InstallScripts      MCPInstallScriptPreview `json:"installScripts"`
+	Permissions         []string                `json:"permissions"`
+	Risk                string                  `json:"risk"`
+	RequiresApproval    bool                    `json:"requiresApproval"`
+	PlanDigest          string                  `json:"planDigest"`
+	ExpiresAt           time.Time               `json:"expiresAt"`
 }
 
 func (p MCPInstallPlan) ComputeDigest() string {

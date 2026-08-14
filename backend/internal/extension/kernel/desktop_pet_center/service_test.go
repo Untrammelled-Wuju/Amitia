@@ -11,15 +11,15 @@ import (
 )
 
 type fakeContainer struct {
-	installations []domain.ExtensionInstallation
-	modules       []domain.ModuleDefinition
-	contributions []domain.ContributionDefinition
-	grants        []sqlite.PermissionGrant
-	listInstErr   error
-	getInstErr    error
-	listModErr    error
+	installations  []domain.ExtensionInstallation
+	modules        []domain.ModuleDefinition
+	contributions  []domain.ContributionDefinition
+	grants         []sqlite.PermissionGrant
+	listInstErr    error
+	getInstErr     error
+	listModErr     error
 	listContribErr error
-	listGrantErr  error
+	listGrantErr   error
 }
 
 func (f *fakeContainer) ListInstallations(ctx context.Context) ([]domain.ExtensionInstallation, error) {
@@ -127,26 +127,26 @@ func makeInstallState(state domain.InstallationState) domain.ExtensionInstallati
 	now := time.Now().UTC()
 	prefix := string(state)
 	return domain.ExtensionInstallation{
-		InstallationID:   "inst-" + prefix,
-		ExtensionID:      domain.ExtensionID("com.example/" + prefix),
-		InstalledVersion: domain.SemanticVersion{Major: 1, Minor: 0, Patch: 0},
-		PackageID:        "pkg-" + prefix,
+		InstallationID:    "inst-" + prefix,
+		ExtensionID:       domain.ExtensionID("com.example/" + prefix),
+		InstalledVersion:  domain.SemanticVersion{Major: 1, Minor: 0, Patch: 0},
+		PackageID:         "pkg-" + prefix,
 		InstallationState: state,
-		EnablementState:  domain.EnablementEnabled,
-		InstalledAt:      now,
-		UpdatedAt:        now,
-		Generation:       1,
+		EnablementState:   domain.EnablementEnabled,
+		InstalledAt:       now,
+		UpdatedAt:         now,
+		Generation:        1,
 	}
 }
 
 func makePetPluginContrib(extID domain.ExtensionID, contribID string) domain.ContributionDefinition {
 	return domain.ContributionDefinition{
-		ID:           domain.ContributionID(contribID),
-		ModuleID:     "main",
-		ExtensionID:  extID,
-		Kind:         domain.ContributionKindDesktopPetPlugin,
-		Name:         domain.LocalizedText{Default: "Pet Plugin " + contribID},
-		Description:  domain.LocalizedText{Default: "A desktop pet plugin"},
+		ID:                  domain.ContributionID(contribID),
+		ModuleID:            "main",
+		ExtensionID:         extID,
+		Kind:                domain.ContributionKindDesktopPetPlugin,
+		Name:                domain.LocalizedText{Default: "Pet Plugin " + contribID},
+		Description:         domain.LocalizedText{Default: "A desktop pet plugin"},
 		RequiredPermissions: []string{"display.window", "input.mouse"},
 	}
 }
@@ -232,7 +232,7 @@ func TestList_PaginationBeforeFilter(t *testing.T) {
 		extID := domain.ExtensionID("com.example/pet-" + string(rune('a'+i)))
 		insts = append(insts, domain.ExtensionInstallation{
 			ExtensionID:       extID,
-			InstalledVersion: domain.SemanticVersion{Major: 1, Minor: 0, Patch: 0},
+			InstalledVersion:  domain.SemanticVersion{Major: 1, Minor: 0, Patch: 0},
 			InstallationState: domain.InstallationStateInstalled,
 			EnablementState:   domain.EnablementEnabled,
 		})

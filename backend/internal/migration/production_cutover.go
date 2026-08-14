@@ -42,16 +42,16 @@ func ValidCutoverPhases() []CutoverPhase {
 }
 
 type CutoverState struct {
-	OperationID       string       `gorm:"column:operation_id;primaryKey" json:"operation_id"`
-	Phase             CutoverPhase `gorm:"column:phase" json:"phase"`
-	Status            string       `gorm:"column:status" json:"status"`
-	SnapshotID        string       `gorm:"column:snapshot_id" json:"snapshot_id"`
-	ErrorMessage      string       `gorm:"column:error_message" json:"error_message"`
-	StartedAt         time.Time    `gorm:"column:started_at" json:"started_at"`
-	UpdatedAt         time.Time    `gorm:"column:updated_at" json:"updated_at"`
-	CompletedAt       *time.Time   `gorm:"column:completed_at" json:"completed_at,omitempty"`
-	CanonicalGeneration int64      `gorm:"column:canonical_generation" json:"canonical_generation"`
-	PlanVersion       int          `gorm:"column:plan_version" json:"plan_version"`
+	OperationID         string       `gorm:"column:operation_id;primaryKey" json:"operation_id"`
+	Phase               CutoverPhase `gorm:"column:phase" json:"phase"`
+	Status              string       `gorm:"column:status" json:"status"`
+	SnapshotID          string       `gorm:"column:snapshot_id" json:"snapshot_id"`
+	ErrorMessage        string       `gorm:"column:error_message" json:"error_message"`
+	StartedAt           time.Time    `gorm:"column:started_at" json:"started_at"`
+	UpdatedAt           time.Time    `gorm:"column:updated_at" json:"updated_at"`
+	CompletedAt         *time.Time   `gorm:"column:completed_at" json:"completed_at,omitempty"`
+	CanonicalGeneration int64        `gorm:"column:canonical_generation" json:"canonical_generation"`
+	PlanVersion         int          `gorm:"column:plan_version" json:"plan_version"`
 }
 
 func (CutoverState) TableName() string {
@@ -127,12 +127,12 @@ type CutoverStateStore interface {
 }
 
 type LegacyWorkerStatus struct {
-	PluginManagerStarted  bool
-	LegacyHookWorkerStarted bool
-	LegacyEventWorkerStarted bool
+	PluginManagerStarted        bool
+	LegacyHookWorkerStarted     bool
+	LegacyEventWorkerStarted    bool
 	LegacyScheduleWorkerStarted bool
-	LegacyRuntimeStarted  bool
-	LegacyMCPWorkerActive bool
+	LegacyRuntimeStarted        bool
+	LegacyMCPWorkerActive       bool
 }
 
 type AuthoritySnapshot struct {
@@ -147,19 +147,19 @@ type AuthoritySnapshot struct {
 }
 
 type CutoverDependencies struct {
-	DB            *gorm.DB
-	Container     CanonicalAuthorityProvider
-	Maintenance   CutoverMaintenanceGate
-	Snapshot      CutoverSnapshotPort
-	Migration     CutoverMigrationPort
-	Bootstrap     CutoverBootstrapPort
-	ReadSwitch    CutoverReadSwitchPort
-	WriteLockout  CutoverWriteLockoutPort
-	WorkerCutoff  CutoverWorkerCutoffPort
-	Smoke         CutoverSmokePort
+	DB             *gorm.DB
+	Container      CanonicalAuthorityProvider
+	Maintenance    CutoverMaintenanceGate
+	Snapshot       CutoverSnapshotPort
+	Migration      CutoverMigrationPort
+	Bootstrap      CutoverBootstrapPort
+	ReadSwitch     CutoverReadSwitchPort
+	WriteLockout   CutoverWriteLockoutPort
+	WorkerCutoff   CutoverWorkerCutoffPort
+	Smoke          CutoverSmokePort
 	LegacyVerifier CutoverLegacyVerifier
-	StateStore    CutoverStateStore
-	Now           func() time.Time
+	StateStore     CutoverStateStore
+	Now            func() time.Time
 }
 
 type CutoverPlan struct {

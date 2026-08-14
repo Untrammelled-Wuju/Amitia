@@ -294,10 +294,10 @@ func (spec MCPStdioResolvedSpec) MaxMessageBytes() int64 {
 
 func buildMinimalEnvironment(explicit map[string]string) map[string]string {
 	envMap := map[string]string{
-		"PATH":  getEnv("PATH"),
-		"HOME":  getEnv("HOME"),
-		"TEMP":  getEnv("TEMP"),
-		"TMP":   getEnv("TMP"),
+		"PATH": getEnv("PATH"),
+		"HOME": getEnv("HOME"),
+		"TEMP": getEnv("TEMP"),
+		"TMP":  getEnv("TMP"),
 	}
 	for k, v := range explicit {
 		envMap[k] = v

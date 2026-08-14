@@ -189,9 +189,9 @@ func (c *ConcurrencyController) Acquire(ctx context.Context, tool capability.Too
 			permits := c.acquireLocked(permitKeys)
 			now := time.Now()
 			c.mu.Unlock()
-		if waitStarted {
-			c.recordWaitDuration(permits, now.Sub(waitSince))
-		}
+			if waitStarted {
+				c.recordWaitDuration(permits, now.Sub(waitSince))
+			}
 			c.onAcquired(permits)
 			return newConcurrencyLease(c, permits, now), nil
 		}
@@ -348,8 +348,8 @@ func (c *ConcurrencyController) Snapshot() ConcurrencySnapshot {
 }
 
 type ConcurrencySnapshot struct {
-	GlobalInUse      int
-	ActiveBuckets    int
+	GlobalInUse        int
+	ActiveBuckets      int
 	BucketsByDimension map[ConcurrencyDimension]int
 }
 

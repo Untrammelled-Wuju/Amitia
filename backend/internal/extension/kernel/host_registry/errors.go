@@ -9,4 +9,7 @@ var (
 	ErrRuntimePresenceNotFound = errors.New("host_registry: runtime presence not found")
 	ErrInvalidHostEntry        = ErrInvalidRegistryEntry
 	ErrHostNotFound            = ErrRegistryEntryNotFound
+
+	ErrStaleRuntimeSessionBinding   = errors.New("host_registry: stale runtime session binding")
+	ErrRuntimeSessionBindingConflict = errors.New("host_registry: runtime session binding conflict")
 )

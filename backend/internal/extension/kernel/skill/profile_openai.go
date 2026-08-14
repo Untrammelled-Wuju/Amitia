@@ -17,7 +17,7 @@ func NewOpenAIProfileAdapter() *OpenAIProfileAdapter {
 	return &OpenAIProfileAdapter{}
 }
 
-func (a *OpenAIProfileAdapter) ID() string    { return ProfileIDOpenAI }
+func (a *OpenAIProfileAdapter) ID() string      { return ProfileIDOpenAI }
 func (a *OpenAIProfileAdapter) Version() string { return AdapterVersionOpenAI }
 
 var brandColorPattern = regexp.MustCompile(`^#[0-9A-Fa-f]{6}$`)
@@ -127,9 +127,9 @@ func (a *OpenAIProfileAdapter) Analyze(ctx context.Context, pkg SkillPackageView
 				Reason: "must match ^#[0-9A-Fa-f]{6}$",
 			})
 			overlay.Warnings = append(overlay.Warnings, SkillWarning{
-				Code: "OPENAI_BRAND_COLOR_INVALID",
+				Code:    "OPENAI_BRAND_COLOR_INVALID",
 				Message: "brand_color format is invalid and was ignored",
-				Path: "agents/openai.yaml",
+				Path:    "agents/openai.yaml",
 			})
 		}
 	}
@@ -145,9 +145,9 @@ func (a *OpenAIProfileAdapter) Analyze(ctx context.Context, pkg SkillPackageView
 			Reason: "default_prompt is a UI suggestion and never becomes system prompt",
 		})
 		overlay.Warnings = append(overlay.Warnings, SkillWarning{
-			Code: "OPENAI_DEFAULT_PROMPT_DISPLAY_ONLY",
+			Code:    "OPENAI_DEFAULT_PROMPT_DISPLAY_ONLY",
 			Message: "default_prompt is UI convenience only and does not become system prompt",
-			Path: "agents/openai.yaml",
+			Path:    "agents/openai.yaml",
 		})
 	}
 
@@ -161,17 +161,17 @@ func (a *OpenAIProfileAdapter) Analyze(ctx context.Context, pkg SkillPackageView
 		clean := strings.TrimPrefix(icon.path, "./")
 		if strings.Contains(icon.path, ":") || !strings.HasPrefix(clean, "assets/") {
 			overlay.Errors = append(overlay.Errors, SkillError{
-				Code: "OPENAI_ICON_PATH_INVALID",
+				Code:    "OPENAI_ICON_PATH_INVALID",
 				Message: "icon must be a local assets path: " + icon.path,
-				Path: "agents/openai.yaml",
+				Path:    "agents/openai.yaml",
 			})
 			continue
 		}
 		if _, exists := pkg.Files[clean]; !exists {
 			overlay.Warnings = append(overlay.Warnings, SkillWarning{
-				Code: "OPENAI_ICON_MISSING",
+				Code:    "OPENAI_ICON_MISSING",
 				Message: "icon file not found in artifact: " + clean,
-				Path: "agents/openai.yaml",
+				Path:    "agents/openai.yaml",
 			})
 		}
 		if icon.field == "icon_small" {
@@ -220,9 +220,9 @@ func (a *OpenAIProfileAdapter) Analyze(ctx context.Context, pkg SkillPackageView
 			Reason: "MCP dependencies require explicit user confirmation before installation",
 		})
 		overlay.Warnings = append(overlay.Warnings, SkillWarning{
-			Code: "OPENAI_MCP_REQUIRES_CONFIRMATION",
+			Code:    "OPENAI_MCP_REQUIRES_CONFIRMATION",
 			Message: "MCP dependencies require explicit user confirmation before installation",
-			Path: "agents/openai.yaml",
+			Path:    "agents/openai.yaml",
 		})
 	}
 
@@ -231,9 +231,9 @@ func (a *OpenAIProfileAdapter) Analyze(ctx context.Context, pkg SkillPackageView
 			unknownFields := detectUnknownMapFields(extra, "display_name", "short_description", "icon_small", "icon_large", "brand_color", "default_prompt")
 			for _, f := range unknownFields {
 				overlay.Warnings = append(overlay.Warnings, SkillWarning{
-					Code: "OPENAI_UNKNOWN_INTERFACE_FIELD",
+					Code:    "OPENAI_UNKNOWN_INTERFACE_FIELD",
 					Message: "unknown interface field: " + f,
-					Path: "agents/openai.yaml",
+					Path:    "agents/openai.yaml",
 				})
 			}
 		}
@@ -241,9 +241,9 @@ func (a *OpenAIProfileAdapter) Analyze(ctx context.Context, pkg SkillPackageView
 			unknownFields := detectUnknownMapFields(extra, "allow_implicit_invocation")
 			for _, f := range unknownFields {
 				overlay.Warnings = append(overlay.Warnings, SkillWarning{
-					Code: "OPENAI_UNKNOWN_POLICY_FIELD",
+					Code:    "OPENAI_UNKNOWN_POLICY_FIELD",
 					Message: "unknown policy field: " + f,
-					Path: "agents/openai.yaml",
+					Path:    "agents/openai.yaml",
 				})
 			}
 		}
@@ -261,9 +261,9 @@ func (a *OpenAIProfileAdapter) parseDependencies(tools []map[string]interface{},
 		typeName, _ := item["type"].(string)
 		if strings.ToLower(strings.TrimSpace(typeName)) != "mcp" {
 			errors = append(errors, SkillError{
-				Code: "OPENAI_DEPENDENCY_TYPE_UNSUPPORTED",
+				Code:    "OPENAI_DEPENDENCY_TYPE_UNSUPPORTED",
 				Message: "only MCP tool dependencies are supported, got: " + typeName,
-				Path: "agents/openai.yaml",
+				Path:    "agents/openai.yaml",
 			})
 			continue
 		}
@@ -277,18 +277,18 @@ func (a *OpenAIProfileAdapter) parseDependencies(tools []map[string]interface{},
 		toolAllowlist := parseYAMLStringList(item["tools.allow"])
 
 		dep := SkillMCPDependency{
-			ID:            valueName,
-			Description:   description,
-			Required:      true,
-			Transport:     strings.ToLower(transportName),
-			URL:           endpoint,
-			Command:       command,
-			Args:          args,
-			AuthType:      strings.ToLower(authType),
-			ToolAllowlist: toolAllowlist,
-			DefaultScope:  "character",
-			AutoConfigure: false,
-			AutoEnable:    false,
+			ID:                         valueName,
+			Description:                description,
+			Required:                   true,
+			Transport:                  strings.ToLower(transportName),
+			URL:                        endpoint,
+			Command:                    command,
+			Args:                       args,
+			AuthType:                   strings.ToLower(authType),
+			ToolAllowlist:              toolAllowlist,
+			DefaultScope:               "character",
+			AutoConfigure:              false,
+			AutoEnable:                 false,
 			RequiresManualConfirmation: true,
 		}
 		if dep.Transport == "" && dep.URL != "" {
@@ -300,9 +300,9 @@ func (a *OpenAIProfileAdapter) parseDependencies(tools []map[string]interface{},
 
 		if err := validateSkillMCPDependency(&dep); err != nil {
 			errors = append(errors, SkillError{
-				Code: "OPENAI_DEPENDENCY_INVALID",
+				Code:    "OPENAI_DEPENDENCY_INVALID",
 				Message: err.Error(),
-				Path: "agents/openai.yaml",
+				Path:    "agents/openai.yaml",
 			})
 			continue
 		}

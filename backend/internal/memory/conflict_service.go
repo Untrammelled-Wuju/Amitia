@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/prompt/textlib"
 )
 
@@ -85,80 +86,127 @@ func (s *service) ResolveConflict(req *ResolveConflictRequest) (*ResolveConflict
 		importance = 10
 	}
 
-	now := time.Now().Format("2006-01-02 15:04:05")
+	memoryType, ok := NormalizeMemoryType(newType)
+	if !ok {
+		memoryType = MemoryTypeFact
+	}
 
 	switch req.Action {
 	case "replace", "replace_old":
-		if req.ConflictID != "" {
-			if existing != nil {
-				s.preserveHistory(existing, "replaced", now)
-				s.deleteGraph(existing)
+		if req.ConflictID != "" && existing != nil {
+			operationID := uuid.New().String()
+			updates := map[string]interface{}{
+				"key":             newKey,
+				"value":           req.NewValue,
+				"memory_type":     string(memoryType),
+				"importance":      importance,
+				"verified_status": "user_verified",
 			}
-			s.repo.Delete(req.ConflictID)
+			m, err := s.updateCanonicalMemory(existing.ID, canonicalUpdateRequest{
+				Updates:     updates,
+				OperationID: operationID,
+				EventType:   "memory_replaced",
+				EventReason: "conflict_replace",
+			})
+			if err != nil {
+				return nil, err
+			}
+			go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
+			s.syncGraph(m)
+			resp.MemoryID = m.ID
+			return resp, nil
 		}
-		m := &Memory{
-			Key: newKey, Value: req.NewValue, MemoryType: newType,
-			Importance: importance, CharacterID: characterID, Source: "manual",
-			Confidence: 50, VerifiedStatus: "user_verified",
-		}
-		if err := s.repo.Create(m); err != nil {
+		operationID := uuid.New().String()
+		m, err := s.createCanonicalMemory(canonicalCreateRequest{
+			CharacterID:    characterID,
+			MemoryType:     memoryType,
+			Source:         "manual",
+			Key:            newKey,
+			Value:          req.NewValue,
+			Importance:     importance,
+			Confidence:     50,
+			VerifiedStatus: "user_verified",
+			OperationID:    operationID,
+			EventType:      "memory_created",
+			EventReason:    "conflict_replace",
+		})
+		if err != nil {
 			return nil, err
 		}
 		go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
 		s.syncGraph(m)
-		s.logEvent(m.ID, "memory_created", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
 		resp.MemoryID = m.ID
 		return resp, nil
 	case "keep_existing", "keep_old":
 		resp.MemoryID = req.ConflictID
 		return resp, nil
 	case "keep_both":
-		m := &Memory{
-			Key: newKey, Value: req.NewValue, MemoryType: newType,
-			Importance: importance, CharacterID: characterID, Source: "manual",
-			Confidence: 50, VerifiedStatus: "user_verified",
-		}
-		if err := s.repo.Create(m); err != nil {
+		operationID := uuid.New().String()
+		m, err := s.createCanonicalMemory(canonicalCreateRequest{
+			CharacterID:    characterID,
+			MemoryType:     memoryType,
+			Source:         "manual",
+			Key:            newKey,
+			Value:          req.NewValue,
+			Importance:     importance,
+			Confidence:     50,
+			VerifiedStatus: "user_verified",
+			OperationID:    operationID,
+			EventType:      "memory_created",
+			EventReason:    "conflict_keep_both",
+		})
+		if err != nil {
 			return nil, err
 		}
 		go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
 		s.syncGraph(m)
-		s.logEvent(m.ID, "memory_created", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
 		resp.MemoryID = m.ID
 		return resp, nil
 	case "merge":
 		newValue := req.NewValue
 		if existing != nil {
 			newValue = existing.Value + "; " + req.NewValue
-			s.preserveHistory(existing, "merged", now)
+			operationID := uuid.New().String()
 			updates := map[string]interface{}{
 				"value":            newValue,
 				"importance":       importance,
 				"confidence":       maxInt(existing.Confidence, 50),
 				"verified_status":  "user_verified",
-				"last_verified_at": now,
+				"last_verified_at": time.Now().Format("2006-01-02 15:04:05"),
 			}
-			if err := s.repo.Update(existing.ID, updates); err != nil {
+			m, err := s.updateCanonicalMemory(existing.ID, canonicalUpdateRequest{
+				Updates:     updates,
+				OperationID: operationID,
+				EventType:   "memory_merged",
+				EventReason: "conflict_merge",
+			})
+			if err != nil {
 				return nil, err
 			}
-			go s.SyncEmbedding(existing.ID, newKey, newValue, characterID, newType)
-			if updated, err := s.repo.FindByID(existing.ID); err == nil {
-				s.syncGraph(updated)
-			}
-			resp.MemoryID = existing.ID
+			go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
+			s.syncGraph(m)
+			resp.MemoryID = m.ID
 			return resp, nil
 		}
-		m := &Memory{
-			Key: newKey, Value: newValue, MemoryType: newType,
-			Importance: importance, CharacterID: characterID, Source: "manual",
-			Confidence: 50, VerifiedStatus: "user_verified",
-		}
-		if err := s.repo.Create(m); err != nil {
+		operationID := uuid.New().String()
+		m, err := s.createCanonicalMemory(canonicalCreateRequest{
+			CharacterID:    characterID,
+			MemoryType:     memoryType,
+			Source:         "manual",
+			Key:            newKey,
+			Value:          newValue,
+			Importance:     importance,
+			Confidence:     50,
+			VerifiedStatus: "user_verified",
+			OperationID:    operationID,
+			EventType:      "memory_created",
+			EventReason:    "conflict_merge",
+		})
+		if err != nil {
 			return nil, err
 		}
 		go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
 		s.syncGraph(m)
-		s.logEvent(m.ID, "memory_created", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
 		resp.MemoryID = m.ID
 		return resp, nil
 	default:
@@ -172,18 +220,24 @@ func (s *service) AutoResolveConflict(key, value, characterID string, newConfide
 		return &ResolveConflictResponse{Resolved: false}, nil
 	}
 
-	now := time.Now().Format("2006-01-02 15:04:05")
-
 	for _, m := range existing {
 		if m.Key != key {
 			continue
 		}
 		if m.Value == value {
 			if newConfidence > m.Confidence+10 {
-				s.repo.Update(m.ID, map[string]interface{}{
-					"confidence": newConfidence,
-					"updated_at": now,
+				operationID := uuid.New().String()
+				_, err := s.updateCanonicalMemory(m.ID, canonicalUpdateRequest{
+					Updates: map[string]interface{}{
+						"confidence": newConfidence,
+					},
+					OperationID: operationID,
+					EventType:   "memory_updated",
+					EventReason: "auto_resolve_confidence",
 				})
+				if err != nil {
+					return nil, err
+				}
 				if updated, err := s.repo.FindByID(m.ID); err == nil {
 					s.syncGraph(updated)
 				}
@@ -192,9 +246,18 @@ func (s *service) AutoResolveConflict(key, value, characterID string, newConfide
 		}
 		confDiff := newConfidence - m.Confidence
 		if confDiff >= 40 {
-			s.preserveHistory(&m, "auto_replaced", now)
+			operationID := uuid.New().String()
+			err := s.deleteCanonicalMemory(m.ID, canonicalDeleteRequest{
+				OperationID: operationID,
+				EventReason: "auto_replaced",
+				HardDelete:  false,
+			})
+			if err != nil {
+				return nil, err
+			}
+			deleteVectorsFromCollections([]string{m.ID})
+			_ = s.repo.UnmarkEmbedded(m.ID)
 			s.deleteGraph(&m)
-			s.repo.Delete(m.ID)
 			return &ResolveConflictResponse{Resolved: false}, nil
 		}
 	}
@@ -226,14 +289,4 @@ func (s *service) llmCheckContradiction(newVal, oldVal string) (bool, error) {
 	content = strings.TrimSpace(content)
 	lower := strings.ToLower(content)
 	return strings.Contains(lower, "strong_conflict") || strings.Contains(lower, "weak_conflict"), nil
-}
-
-func (s *service) preserveHistory(memory *Memory, action, timestamp string) {
-	if s.db == nil || memory == nil {
-		return
-	}
-	s.db.Exec(
-		"INSERT INTO memory_history (memory_id, previous_value, action, changed_at) VALUES (?, ?, ?, ?)",
-		memory.ID, memory.Value, action, timestamp,
-	)
 }

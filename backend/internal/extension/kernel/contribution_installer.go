@@ -254,9 +254,9 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 
 func (i *TypedContributionInstaller) buildGamePluginOp(ctx context.Context, contrib domain.ContributionDefinition, defData []byte, generation int64) (installOp, error) {
 	var def struct {
-		ProtocolVersion  string `json:"protocolVersion"`
-		RuntimeModuleID  string `json:"runtimeModuleId,omitempty"`
-		DisplayName      string `json:"displayName,omitempty"`
+		ProtocolVersion string `json:"protocolVersion"`
+		RuntimeModuleID string `json:"runtimeModuleId,omitempty"`
+		DisplayName     string `json:"displayName,omitempty"`
 	}
 	if err := json.Unmarshal(defData, &def); err != nil {
 		return installOp{}, fmt.Errorf("unmarshal game plugin: %w", err)

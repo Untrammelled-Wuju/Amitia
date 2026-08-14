@@ -51,7 +51,9 @@ func (b *runtimeBootstrap) SetIOSNativeBridge(bridge nativebridge.Bridge) error 
 	}
 	b.iosNativeBridge = bridge
 	if b.iosNativeProvider != nil {
-		prov, ok := b.iosNativeProvider.(interface{ SetBridge(nativebridge.Bridge) error })
+		prov, ok := b.iosNativeProvider.(interface {
+			SetBridge(nativebridge.Bridge) error
+		})
 		if ok {
 			return prov.SetBridge(bridge)
 		}

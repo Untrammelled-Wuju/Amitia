@@ -3,12 +3,12 @@ package oauth
 import "time"
 
 type MCPProtectedResourceMetadata struct {
-	Resource                   string   `json:"resource"`
-	AuthorizationServers       []string `json:"authorization_servers"`
-	ScopesSupported            []string `json:"scopes_supported,omitempty"`
-	BearerMethodsSupported     []string `json:"bearer_methods_supported,omitempty"`
+	Resource                     string   `json:"resource"`
+	AuthorizationServers         []string `json:"authorization_servers"`
+	ScopesSupported              []string `json:"scopes_supported,omitempty"`
+	BearerMethodsSupported       []string `json:"bearer_methods_supported,omitempty"`
 	ResourceSigningAlgsSupported []string `json:"resource_signing_alg_values_supported,omitempty"`
-	ResourceDocumentation      string   `json:"resource_documentation,omitempty"`
+	ResourceDocumentation        string   `json:"resource_documentation,omitempty"`
 }
 
 type MCPAuthorizationServerMetadata struct {
@@ -31,14 +31,14 @@ type MCPOAuthCredentialKey struct {
 }
 
 type MCPOAuthClientRegistration struct {
-	RegistrationMethod     string    `json:"registration_method"`
-	Issuer                 string    `json:"issuer"`
-	ClientID               string    `json:"client_id"`
-	ClientSecretRef        string    `json:"client_secret_ref"`
-	RedirectURIs           []string  `json:"redirect_uris"`
-	TokenEndpointAuthMethod string   `json:"token_endpoint_auth_method"`
-	CreatedAt              time.Time `json:"created_at"`
-	MetadataFingerprint    string    `json:"metadata_fingerprint"`
+	RegistrationMethod      string    `json:"registration_method"`
+	Issuer                  string    `json:"issuer"`
+	ClientID                string    `json:"client_id"`
+	ClientSecretRef         string    `json:"client_secret_ref"`
+	RedirectURIs            []string  `json:"redirect_uris"`
+	TokenEndpointAuthMethod string    `json:"token_endpoint_auth_method"`
+	CreatedAt               time.Time `json:"created_at"`
+	MetadataFingerprint     string    `json:"metadata_fingerprint"`
 }
 
 type MCPOAuthCredentialMetadata struct {
@@ -56,17 +56,17 @@ type MCPOAuthCredentialMetadata struct {
 type MCPOAuthOperationState string
 
 const (
-	MCPOAuthIdle              MCPOAuthOperationState = "idle"
-	MCPOAuthDiscovering       MCPOAuthOperationState = "discovering"
+	MCPOAuthIdle                 MCPOAuthOperationState = "idle"
+	MCPOAuthDiscovering          MCPOAuthOperationState = "discovering"
 	MCPOAuthRegistrationRequired MCPOAuthOperationState = "registration_required"
-	MCPOAuthAuthorizing       MCPOAuthOperationState = "authorizing"
-	MCPOAuthCallbackReceived  MCPOAuthOperationState = "callback_received"
-	MCPOAuthExchanging        MCPOAuthOperationState = "exchanging"
-	MCPOAuthAuthorized        MCPOAuthOperationState = "authorized"
+	MCPOAuthAuthorizing          MCPOAuthOperationState = "authorizing"
+	MCPOAuthCallbackReceived     MCPOAuthOperationState = "callback_received"
+	MCPOAuthExchanging           MCPOAuthOperationState = "exchanging"
+	MCPOAuthAuthorized           MCPOAuthOperationState = "authorized"
 	MCPOAuthScopeUpgradeRequired MCPOAuthOperationState = "scope_upgrade_required"
-	MCPOAuthFailed            MCPOAuthOperationState = "failed"
-	MCPOAuthCancelled         MCPOAuthOperationState = "cancelled"
-	MCPOAuthExpired           MCPOAuthOperationState = "expired"
+	MCPOAuthFailed               MCPOAuthOperationState = "failed"
+	MCPOAuthCancelled            MCPOAuthOperationState = "cancelled"
+	MCPOAuthExpired              MCPOAuthOperationState = "expired"
 )
 
 type MCPAuthorizationState string

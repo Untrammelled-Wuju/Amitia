@@ -8,12 +8,12 @@ import (
 )
 
 type WorkflowRetryPolicy struct {
-	MaxAttempts        int           `json:"maxAttempts,omitempty"`
-	InitialBackoff     time.Duration `json:"initialBackoff,omitempty"`
-	MaxBackoff         time.Duration `json:"maxBackoff,omitempty"`
-	Multiplier         float64       `json:"multiplier,omitempty"`
-	Jitter             float64       `json:"jitter,omitempty"`
-	RetryableErrorCodes []string     `json:"retryableErrorCodes,omitempty"`
+	MaxAttempts         int           `json:"maxAttempts,omitempty"`
+	InitialBackoff      time.Duration `json:"initialBackoff,omitempty"`
+	MaxBackoff          time.Duration `json:"maxBackoff,omitempty"`
+	Multiplier          float64       `json:"multiplier,omitempty"`
+	Jitter              float64       `json:"jitter,omitempty"`
+	RetryableErrorCodes []string      `json:"retryableErrorCodes,omitempty"`
 }
 
 func DefaultRetryPolicy() *WorkflowRetryPolicy {
@@ -88,8 +88,8 @@ type WorkflowNodeErrorPolicy struct {
 type WorkflowErrorMode string
 
 const (
-	WorkflowErrorModeFail      WorkflowErrorMode = "fail"
-	WorkflowErrorModeContinue  WorkflowErrorMode = "continue"
+	WorkflowErrorModeFail       WorkflowErrorMode = "fail"
+	WorkflowErrorModeContinue   WorkflowErrorMode = "continue"
 	WorkflowErrorModeUseDefault WorkflowErrorMode = "use_default"
 )
 

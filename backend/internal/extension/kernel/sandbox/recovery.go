@@ -10,15 +10,15 @@ import (
 type SandboxRecoveryClass string
 
 const (
-	SandboxRecoveryNone                SandboxRecoveryClass = "none"
-	SandboxRecoveryRestartRuntime      SandboxRecoveryClass = "restart_runtime"
+	SandboxRecoveryNone                    SandboxRecoveryClass = "none"
+	SandboxRecoveryRestartRuntime          SandboxRecoveryClass = "restart_runtime"
 	SandboxRecoveryRestartWithActiveRootfs SandboxRecoveryClass = "restart_with_active_rootfs"
-	SandboxRecoveryManualRepair        SandboxRecoveryClass = "manual_repair"
-	SandboxRecoveryDisabled            SandboxRecoveryClass = "disabled"
+	SandboxRecoveryManualRepair            SandboxRecoveryClass = "manual_repair"
+	SandboxRecoveryDisabled                SandboxRecoveryClass = "disabled"
 )
 
 type SandboxRecoveryPolicy struct {
-	MaxAttempts   int
+	MaxAttempts    int
 	InitialBackoff time.Duration
 	MaxBackoff     time.Duration
 }
@@ -26,7 +26,7 @@ type SandboxRecoveryPolicy struct {
 var DefaultRecoveryPolicy = SandboxRecoveryPolicy{
 	MaxAttempts:    3,
 	InitialBackoff: 500 * time.Millisecond,
-	MaxBackoff:      30 * time.Second,
+	MaxBackoff:     30 * time.Second,
 }
 
 type SandboxRecoverySnapshot struct {
@@ -47,15 +47,15 @@ type SandboxRecoverySnapshot struct {
 }
 
 type SandboxRecoveryDescriptor struct {
-	SchemaVersion         int       `json:"schemaVersion"`
-	RuntimeID             string    `json:"runtimeId"`
-	DesiredRunning        bool      `json:"desiredRunning"`
-	Generation            uint64    `json:"generation"`
-	ActiveRootfsVersion   string    `json:"activeRootfsVersion"`
-	ActiveRootfsDigest    string    `json:"activeRootfsDigest"`
-	LastKnownLifecycleState string  `json:"lastKnownLifecycleState"`
-	CleanShutdown         bool      `json:"cleanShutdown"`
-	Timestamp             time.Time `json:"timestamp"`
+	SchemaVersion           int       `json:"schemaVersion"`
+	RuntimeID               string    `json:"runtimeId"`
+	DesiredRunning          bool      `json:"desiredRunning"`
+	Generation              uint64    `json:"generation"`
+	ActiveRootfsVersion     string    `json:"activeRootfsVersion"`
+	ActiveRootfsDigest      string    `json:"activeRootfsDigest"`
+	LastKnownLifecycleState string    `json:"lastKnownLifecycleState"`
+	CleanShutdown           bool      `json:"cleanShutdown"`
+	Timestamp               time.Time `json:"timestamp"`
 }
 
 type SandboxRecoveryInspector interface {
@@ -83,14 +83,14 @@ func (s SandboxRecoverySnapshot) Classify(policy SandboxRecoveryPolicy, provider
 
 func BuildRecoveryDescriptor(providerEnabled bool, snap SandboxRecoverySnapshot, cleanShutdown bool) *SandboxRecoveryDescriptor {
 	return &SandboxRecoveryDescriptor{
-		SchemaVersion:         1,
-		RuntimeID:             snap.RuntimeID,
-		DesiredRunning:        providerEnabled && snap.DesiredRunning,
-		Generation:            snap.Generation,
-		ActiveRootfsVersion:   snap.ActiveRootfsVersion,
-		ActiveRootfsDigest:    snap.ActiveRootfsDigest,
+		SchemaVersion:           1,
+		RuntimeID:               snap.RuntimeID,
+		DesiredRunning:          providerEnabled && snap.DesiredRunning,
+		Generation:              snap.Generation,
+		ActiveRootfsVersion:     snap.ActiveRootfsVersion,
+		ActiveRootfsDigest:      snap.ActiveRootfsDigest,
 		LastKnownLifecycleState: string(snap.LifecycleState),
-		CleanShutdown:         cleanShutdown,
-		Timestamp:             time.Now().UTC(),
+		CleanShutdown:           cleanShutdown,
+		Timestamp:               time.Now().UTC(),
 	}
 }

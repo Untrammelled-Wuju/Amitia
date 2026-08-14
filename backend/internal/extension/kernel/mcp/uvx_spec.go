@@ -20,9 +20,9 @@ const (
 )
 
 const (
-	UVXMaxArgs          = 128
-	UVXMaxArgBytes      = 16 * 1024
-	UVXMaxArgsTotalBytes = 64 * 1024
+	UVXMaxArgs             = 128
+	UVXMaxArgBytes         = 16 * 1024
+	UVXMaxArgsTotalBytes   = 64 * 1024
 	UVXDefaultReadyTimeout = 120 * time.Second
 	UVXMaxReadyTimeout     = 300 * time.Second
 )
@@ -35,18 +35,18 @@ type PythonIndexSpec struct {
 }
 
 type UvxLaunchSpec struct {
-	Package         string            `json:"package"`
-	Command         string            `json:"command"`
-	Version         string            `json:"version,omitempty"`
-	Python          string            `json:"python,omitempty"`
-	Extras          []string          `json:"extras,omitempty"`
-	Args            []string          `json:"args,omitempty"`
-	WorkingDirectory string           `json:"workingDirectory,omitempty"`
-	Index           *PythonIndexSpec  `json:"index,omitempty"`
-	Offline         bool              `json:"offline,omitempty"`
-	Environment     map[string]string `json:"environment,omitempty"`
-	CredentialRef   string            `json:"credentialRef,omitempty"`
-	StartTimeout    time.Duration     `json:"startTimeout,omitempty"`
+	Package          string            `json:"package"`
+	Command          string            `json:"command"`
+	Version          string            `json:"version,omitempty"`
+	Python           string            `json:"python,omitempty"`
+	Extras           []string          `json:"extras,omitempty"`
+	Args             []string          `json:"args,omitempty"`
+	WorkingDirectory string            `json:"workingDirectory,omitempty"`
+	Index            *PythonIndexSpec  `json:"index,omitempty"`
+	Offline          bool              `json:"offline,omitempty"`
+	Environment      map[string]string `json:"environment,omitempty"`
+	CredentialRef    string            `json:"credentialRef,omitempty"`
+	StartTimeout     time.Duration     `json:"startTimeout,omitempty"`
 }
 
 func (s UvxLaunchSpec) StartTimeoutOrDefault() time.Duration {
@@ -60,8 +60,8 @@ func (s UvxLaunchSpec) StartTimeoutOrDefault() time.Duration {
 }
 
 type PythonToolRequirement struct {
-	Name       string
-	Extras     []string
+	Name        string
+	Extras      []string
 	VersionSpec string
 }
 

@@ -584,10 +584,10 @@ func TestRetryableResult_EmptyCodeBecomesExecutionFailed(t *testing.T) {
 func TestRetryableResult_CanonicalAllowlistOnly(t *testing.T) {
 	cases := map[string]bool{
 		capability.ErrorCodeRuntimeUnavailable: true,
-		capability.ErrorCodeConnectionLost:      true,
-		capability.ErrorCodeExecutionFailed:     false,
-		capability.ErrorCodePermissionDenied:    false,
-		capability.ErrorCodeTimeout:             false,
+		capability.ErrorCodeConnectionLost:     true,
+		capability.ErrorCodeExecutionFailed:    false,
+		capability.ErrorCodePermissionDenied:   false,
+		capability.ErrorCodeTimeout:            false,
 		"custom_provider_error":                false,
 	}
 	for code, expected := range cases {

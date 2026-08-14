@@ -23,9 +23,9 @@ const (
 
 var shellMetacharPattern = regexp.MustCompile(`[\s|&;(){}<>$\\\"'` + "`" + `]`)
 var restrictedHeaderNames = map[string]bool{
-	"host":            true,
-	"content-length":  true,
-	"origin":          true,
+	"host":           true,
+	"content-length": true,
+	"origin":         true,
 }
 var secretLikeHeaderNames = map[string]bool{
 	"authorization": true,

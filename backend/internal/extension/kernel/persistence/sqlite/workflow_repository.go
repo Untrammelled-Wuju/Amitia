@@ -406,12 +406,12 @@ func (r *WorkflowExecutionRepository) Start(ctx context.Context, run workflow.Wo
 			 started_at, duration_ms, created_at, updated_at)
 		VALUES (?, ?, ?, ?, NULL, '', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '[]', '[]', ?, ?, NULL, ?, 0, ?, ?)
 `, run.ExecutionID, run.WorkflowID, workflow.RunStatusRunning, run.Input,
-	run.Context.ExtensionID, run.Context.ModuleID, run.Context.CharacterID, run.Context.ConversationID,
-	run.Context.OperationID, run.Context.InvocationID, run.Context.ScheduleID, run.Context.TriggerID,
-	run.Context.TraceID, run.Context.IdempotencyKey, run.Context.ScopeSnapshotID,
-	run.Context.PermissionSnapID, run.Context.Generation, contextJSON, maxInt(run.Attempt, 1),
-	run.PauseReason, run.PauseRequestedAt,
-	run.StartedAt, now, now)
+		run.Context.ExtensionID, run.Context.ModuleID, run.Context.CharacterID, run.Context.ConversationID,
+		run.Context.OperationID, run.Context.InvocationID, run.Context.ScheduleID, run.Context.TriggerID,
+		run.Context.TraceID, run.Context.IdempotencyKey, run.Context.ScopeSnapshotID,
+		run.Context.PermissionSnapID, run.Context.Generation, contextJSON, maxInt(run.Attempt, 1),
+		run.PauseReason, run.PauseRequestedAt,
+		run.StartedAt, now, now)
 	if err != nil {
 		if run.Context.IdempotencyKey != "" {
 			duplicate, queryErr := r.getByIdempotency(ctx, run.WorkflowID, run.Context.IdempotencyKey)

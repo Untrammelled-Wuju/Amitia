@@ -48,19 +48,19 @@ type rpcError struct {
 }
 
 type TaskProcessHost struct {
-	mu             sync.Mutex
-	state          ProcessHostState
-	instanceID     string
-	taskRunID      string
-	extensionID    string
-	moduleID       string
-	defHash        string
-	nonce          string
-	nodePath       string
-	hostPath       string
-	workDir        string
-	entryPath      string
-	secretLeaseID  string
+	mu            sync.Mutex
+	state         ProcessHostState
+	instanceID    string
+	taskRunID     string
+	extensionID   string
+	moduleID      string
+	defHash       string
+	nonce         string
+	nodePath      string
+	hostPath      string
+	workDir       string
+	entryPath     string
+	secretLeaseID string
 
 	cmd        *exec.Cmd
 	stdin      io.WriteCloser

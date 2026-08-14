@@ -62,8 +62,8 @@ func ComputeEffectiveState(input EffectiveStateInput) EffectiveStateResult {
 
 	if c.ContractVersion != input.Point.ContractVersion {
 		return EffectiveStateResult{
-			State:     StateContractIncompat,
-			Reason:    "contract version mismatch",
+			State:      StateContractIncompat,
+			Reason:     "contract version mismatch",
 			Diagnostic: formatContractDiag(c.ContractVersion, input.Point.ContractVersion),
 		}
 	}

@@ -110,7 +110,7 @@ func (s *service) consolidateSelectCandidates(req *ConsolidationRequest, maxOutp
 
 	messages := []map[string]interface{}{
 		{"role": "system", "content": textlib.MemoryConsolidationSystemPrompt},
-		{"role": "user",   "content": userMsg},
+		{"role": "user", "content": userMsg},
 	}
 
 	content, _, err := s.callLLM(cfg, messages)
@@ -260,7 +260,6 @@ func (s *service) consolidateIdempotencyDedupe(candidates []ConsolidationCandida
 		}
 		existing, _ := s.repo.FindByDerivationKey(c.DerivationKey)
 		if existing != nil && existing.ID != "" {
-			s.recordConsolidationEvent(operationID, existing.ID, string(DerivationKindSummary), "", "idempotent_skip", c.DerivationKey)
 			continue
 		}
 		result = append(result, c)
@@ -291,7 +290,7 @@ func (s *service) commitDerivedMemory(c ConsolidationCandidateProposal, req *Con
 		importance = 10
 	}
 
-	confidence := int(c.Confidence*100+0.5)
+	confidence := int(c.Confidence*100 + 0.5)
 	if confidence < 1 {
 		confidence = 1
 	}
@@ -302,31 +301,12 @@ func (s *service) commitDerivedMemory(c ConsolidationCandidateProposal, req *Con
 		confidence = 50
 	}
 
-	m := &Memory{
-		CharacterID:           characterID,
-		MemoryType:            c.MemoryType,
-		Source:                source,
-		Scope:                 scope,
-		Key:                   c.Key,
-		Value:                 c.Value,
-		Importance:            importance,
-		Confidence:            confidence,
-		Version:               1,
-		DerivationKey:         c.DerivationKey,
-		SensitivityLevel:      sensitivity.level,
-		AllowProactiveMention: proactive,
-		RequiresConfirmation:  requiresConf,
-		SourceConvID:          req.Scope,
+	memoryType, ok := NormalizeMemoryType(c.MemoryType)
+	if !ok {
+		memoryType = MemoryTypeFact
 	}
 
-	if err := s.repo.Create(m); err != nil {
-		return err
-	}
-
-	now := time.Now().Format("2006-01-02 15:04:05")
-	snapshotHash := computeMemorySnapshotHash(m)
-	s.logEventWithVersion(m.ID, "memory_created", m.Key, m.Value, m.MemoryType, m.Importance, source, characterID, m.Version, operationID, snapshotHash, c.Reason)
-
+	var derivations []MemoryDerivationInput
 	for i, srcID := range c.SourceMemoryIDs {
 		srcVersion := 1
 		if i < len(c.SourceVersions) {
@@ -334,20 +314,38 @@ func (s *service) commitDerivedMemory(c ConsolidationCandidateProposal, req *Con
 		}
 		inputSnapshotHash := ""
 		if srcMem, err := s.repo.FindByID(srcID); err == nil {
-			inputSnapshotHash = computeMemorySnapshotHash(srcMem)
+			inputSnapshotHash = computeMemorySnapshotHashCanonical(srcMem)
 		}
-
-		s.repo.CreateDerivation(&MemoryDerivation{
-			ID:                uuid.New().String(),
-			OutputMemoryID:    m.ID,
+		derivations = append(derivations, MemoryDerivationInput{
 			InputMemoryID:     srcID,
 			InputVersion:      srcVersion,
 			InputSnapshotHash: inputSnapshotHash,
 			DerivationKind:    string(DerivationKindMerge),
 			Ordinal:           i,
-			OperationID:       operationID,
-			CreatedAt:         now,
 		})
+	}
+
+	m, err := s.createCanonicalMemory(canonicalCreateRequest{
+		CharacterID:           characterID,
+		MemoryType:            memoryType,
+		Source:                source,
+		Scope:                 scope,
+		Key:                   c.Key,
+		Value:                 c.Value,
+		Importance:            importance,
+		Confidence:            confidence,
+		DerivationKey:         c.DerivationKey,
+		SensitivityLevel:      sensitivity.level,
+		AllowProactiveMention: proactive,
+		RequiresConfirmation:  requiresConf,
+		SourceConvID:          req.Scope,
+		OperationID:           operationID,
+		EventType:             "memory_created",
+		EventReason:           "consolidation_create",
+		Derivations:           derivations,
+	})
+	if err != nil {
+		return err
 	}
 
 	go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
@@ -361,55 +359,33 @@ func (s *service) commitReinforceOrMerge(c ConsolidationCandidateProposal, opera
 		return err
 	}
 
-	now := time.Now().Format("2006-01-02 15:04:05")
-	newVersion := existing.Version + 1
-
 	updates := map[string]interface{}{
 		"importance":       maxInt(existing.Importance, c.Importance),
 		"confidence":       maxInt(existing.Confidence, int(c.Confidence*100+0.5)),
-		"version":          newVersion,
-		"last_verified_at": now,
+		"last_verified_at": time.Now().Format("2006-01-02 15:04:05"),
 	}
 
 	if c.ProposedAction == string(ProposedActionMerge) && c.Value != "" {
 		updates["value"] = existing.Value + "; " + c.Value
 	}
 
-	beforeHash := computeMemorySnapshotHash(existing)
-	if err := s.repo.Update(existing.ID, updates); err != nil {
+	memoryType, ok := NormalizeMemoryType(c.MemoryType)
+	if ok {
+		updates["memory_type"] = string(memoryType)
+	}
+
+	m, err := s.updateCanonicalMemory(existing.ID, canonicalUpdateRequest{
+		Updates:     updates,
+		OperationID: operationID,
+		EventType:   "memory_reinforced",
+		EventReason: "consolidation_merge",
+	})
+	if err != nil {
 		return err
 	}
 
-	after, _ := s.repo.FindByID(existing.ID)
-	afterHash := ""
-	if after != nil {
-		afterHash = computeMemorySnapshotHash(after)
-	}
-
-	s.logEventWithVersion(existing.ID, "memory_reinforced", existing.Key, existing.Value, existing.MemoryType, existing.Importance, "consolidation", existing.CharacterID, newVersion, operationID, afterHash, c.Reason)
-
-	for i, srcID := range c.SourceMemoryIDs {
-		srcVersion := 1
-		if i < len(c.SourceVersions) {
-			srcVersion = c.SourceVersions[i]
-		}
-		s.repo.CreateDerivation(&MemoryDerivation{
-			ID:                uuid.New().String(),
-			OutputMemoryID:    existing.ID,
-			InputMemoryID:     srcID,
-			InputVersion:      srcVersion,
-			InputSnapshotHash: beforeHash,
-			DerivationKind:    string(DerivationKindReinforce),
-			Ordinal:           i,
-			OperationID:       operationID,
-			CreatedAt:         time.Now().UTC().Format(time.RFC3339),
-		})
-	}
-
-	go s.SyncEmbedding(existing.ID, existing.Key, existing.Value, existing.CharacterID, existing.MemoryType)
-	if after != nil {
-		s.syncGraph(after)
-	}
+	go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
+	s.syncGraph(m)
 	return nil
 }
 
@@ -450,12 +426,6 @@ func (s *service) computeDerivationKey(req *ConsolidationRequest, sourceIDs []st
 
 	hash := sha256.Sum256([]byte(sb.String()))
 	return hex.EncodeToString(hash[:])
-}
-
-func (s *service) recordConsolidationEvent(operationID, memoryID, derivationKind, eventType, reason, derivationKey string) {
-	if eventType == "" {
-		eventType = "consolidation"
-	}
 }
 
 func (s *service) computeDerivedConfidence(mems []Memory) float64 {
@@ -510,27 +480,6 @@ func (s *service) RejectConsolidationCandidate(id string) error {
 	return s.RejectCandidate(id)
 }
 
-func computeMemorySnapshotHash(m *Memory) string {
-	if m == nil {
-		return ""
-	}
-	var sb strings.Builder
-	sb.WriteString(strings.TrimSpace(m.Key))
-	sb.WriteString("|")
-	sb.WriteString(strings.TrimSpace(m.Value))
-	sb.WriteString("|")
-	sb.WriteString(strings.TrimSpace(m.MemoryType))
-	sb.WriteString("|")
-	sb.WriteString(fmt.Sprintf("%d", m.Importance))
-	sb.WriteString("|")
-	sb.WriteString(fmt.Sprintf("%d", m.Confidence))
-	sb.WriteString("|")
-	sb.WriteString(strings.TrimSpace(m.Scope))
-
-	hash := sha256.Sum256([]byte(sb.String()))
-	return hex.EncodeToString(hash[:])
-}
-
 func computeConservativeSensitivity(sourceIDs []string, repo Repository) sensitivityAggregate {
 	level := "internal"
 	proactive := true
@@ -582,20 +531,8 @@ func parseSourceIDs(raw string) []string {
 	return strings.Split(raw, ",")
 }
 
-func (s *service) logEventWithVersion(memoryID, eventType, key, value, memoryType string, importance int, source, characterID string, version int, operationID, snapshotHash, eventReason string) {
-	if s.db == nil {
-		return
-	}
-	id := uuid.New().String()
-	now := time.Now().Format("2006-01-02 15:04:05")
-	s.db.Exec(
-		"INSERT INTO memory_events (id, memory_id, event_type, key, value, memory_type, importance, source, character_id, created_at, version, operation_id, snapshot_hash, event_reason) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		id, memoryID, eventType, key, value, memoryType, importance, source, characterID, now, version, operationID, snapshotHash, eventReason,
-	)
-}
-
 type sensitivityAggregate struct {
-	level               string
-	allowProactive      bool
+	level                string
+	allowProactive       bool
 	requiresConfirmation bool
 }

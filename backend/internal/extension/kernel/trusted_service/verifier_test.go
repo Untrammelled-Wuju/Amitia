@@ -136,8 +136,8 @@ func TestVerifyRejectsNilExecutable(t *testing.T) {
 func TestVerifyRejectsMissingFile(t *testing.T) {
 	v := NewBinaryVerifier()
 	exe := &PlatformExecutable{
-		Path: filepath.Join(t.TempDir(), "nonexistent"),
-		Sha256: "abc",
+		Path:      filepath.Join(t.TempDir(), "nonexistent"),
+		Sha256:    "abc",
 		Signature: BinarySignature{Trusted: true, Value: "x"},
 	}
 	err := v.Verify(context.Background(), exe, "")
@@ -150,8 +150,8 @@ func TestVerifyRejectsDirectory(t *testing.T) {
 	dir := t.TempDir()
 	v := NewBinaryVerifier()
 	exe := &PlatformExecutable{
-		Path: dir,
-		Sha256: "abc",
+		Path:      dir,
+		Sha256:    "abc",
 		Signature: BinarySignature{Trusted: true, Value: "x"},
 	}
 	err := v.Verify(context.Background(), exe, "")
@@ -172,8 +172,8 @@ func TestVerifyRejectsNonMatchingHash(t *testing.T) {
 
 	v := NewBinaryVerifier()
 	exe := &PlatformExecutable{
-		Path: exePath,
-		Sha256: "wrong-hash",
+		Path:      exePath,
+		Sha256:    "wrong-hash",
 		Signature: BinarySignature{Trusted: true, Value: "x"},
 	}
 	err := v.Verify(context.Background(), exe, "")
@@ -198,8 +198,8 @@ func TestVerifyAcceptsValidBinary(t *testing.T) {
 
 	v := NewBinaryVerifier()
 	exe := &PlatformExecutable{
-		Path: exePath,
-		Sha256: expectedHash,
+		Path:      exePath,
+		Sha256:    expectedHash,
 		Signature: BinarySignature{Trusted: true, Value: "valid-signature"},
 	}
 	if err := v.Verify(context.Background(), exe, ""); err != nil {
@@ -227,8 +227,8 @@ func TestVerifyRejectsNonManagedNodeWhenCheckerAvailable(t *testing.T) {
 	v := NewBinaryVerifierWithManagedNode(checker)
 
 	exe := &PlatformExecutable{
-		Path: nodePath,
-		Sha256: expectedHash,
+		Path:      nodePath,
+		Sha256:    expectedHash,
 		Signature: BinarySignature{Trusted: true, Value: "sig"},
 	}
 	err := v.Verify(context.Background(), exe, "")
@@ -257,8 +257,8 @@ func TestVerifyAcceptsManagedNodeWhenCheckerApproves(t *testing.T) {
 	v := NewBinaryVerifierWithManagedNode(checker)
 
 	exe := &PlatformExecutable{
-		Path: nodePath,
-		Sha256: expectedHash,
+		Path:      nodePath,
+		Sha256:    expectedHash,
 		Signature: BinarySignature{Trusted: true, Value: "sig"},
 	}
 	if err := v.Verify(context.Background(), exe, ""); err != nil {
@@ -278,8 +278,8 @@ func TestVerifyRejectsMissingSha256(t *testing.T) {
 
 	v := NewBinaryVerifier()
 	exe := &PlatformExecutable{
-		Path: exePath,
-		Sha256: "",
+		Path:      exePath,
+		Sha256:    "",
 		Signature: BinarySignature{Trusted: true, Value: "sig"},
 	}
 	err := v.Verify(context.Background(), exe, "")
@@ -304,8 +304,8 @@ func TestVerifyRejectsUntrustedSignature(t *testing.T) {
 
 	v := NewBinaryVerifier()
 	exe := &PlatformExecutable{
-		Path: exePath,
-		Sha256: expectedHash,
+		Path:      exePath,
+		Sha256:    expectedHash,
 		Signature: BinarySignature{Trusted: false, Value: "sig"},
 	}
 	err := v.Verify(context.Background(), exe, "")
@@ -333,8 +333,8 @@ func TestVerifyResolvesRelativePath(t *testing.T) {
 
 	v := NewBinaryVerifier()
 	exe := &PlatformExecutable{
-		Path: "test-binary",
-		Sha256: expectedHash,
+		Path:      "test-binary",
+		Sha256:    expectedHash,
 		Signature: BinarySignature{Trusted: true, Value: "sig"},
 	}
 	if err := v.Verify(context.Background(), exe, filepath.Join(root, "subdir")); err != nil {

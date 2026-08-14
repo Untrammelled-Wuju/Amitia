@@ -7,10 +7,10 @@ import (
 )
 
 type PreparedSecrets struct {
-	LeaseIDs      []LeaseID
-	RuntimeInput  json.RawMessage
-	Environment   []string
-	cleanup       func()
+	LeaseIDs     []LeaseID
+	RuntimeInput json.RawMessage
+	Environment  []string
+	cleanup      func()
 }
 
 type Injector interface {

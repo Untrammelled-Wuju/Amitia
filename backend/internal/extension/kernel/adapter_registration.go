@@ -14,28 +14,28 @@ import (
 )
 
 type AdapterRegistrationDeps struct {
-	JSGlobalFactory      *javascript_main.RuntimeFactory
-	WASMFactory          *wasm_runtime.WASMRuntimeFactory
-	WASMModuleMgr        *wasm_runtime.ModuleManager
-	Supervisor           runtime_supervisor.Supervisor
-	TaskService          *task_runtime.TaskRuntimeService
-	MCPCaller            capability.MCPCallFunc
-	MCPHealth            capability.MCPHealthFunc
-	WorkflowCaller       capability.WorkflowCallFunc
-	WorkflowCancel       capability.WorkflowCancelFunc
-	BuiltinDispatcher    capability.DispatchFunc
-	DesktopProvider      capability.DesktopProvider
-	AndroidLinuxProvider interface{}
+	JSGlobalFactory       *javascript_main.RuntimeFactory
+	WASMFactory           *wasm_runtime.WASMRuntimeFactory
+	WASMModuleMgr         *wasm_runtime.ModuleManager
+	Supervisor            runtime_supervisor.Supervisor
+	TaskService           *task_runtime.TaskRuntimeService
+	MCPCaller             capability.MCPCallFunc
+	MCPHealth             capability.MCPHealthFunc
+	WorkflowCaller        capability.WorkflowCallFunc
+	WorkflowCancel        capability.WorkflowCancelFunc
+	BuiltinDispatcher     capability.DispatchFunc
+	DesktopProvider       capability.DesktopProvider
+	AndroidLinuxProvider  interface{}
 	AndroidNativeProvider capability.AndroidProvider
-	SearchCaller         capability.SearchCallFunc
-	SearchHealth         capability.SearchHealthFunc
-	BrowserCaller        capability.BrowserCallFunc
-	BrowserHealth        capability.BrowserHealthFunc
-	InternalDispatcher   capability.InternalCallFunc
-	MediaCaller          capability.MediaCallFunc
-	MediaHealth          capability.MediaHealthFunc
-	WorkspaceCaller      capability.WorkspaceCallFunc
-	WorkspaceHealth      capability.WorkspaceHealthFunc
+	SearchCaller          capability.SearchCallFunc
+	SearchHealth          capability.SearchHealthFunc
+	BrowserCaller         capability.BrowserCallFunc
+	BrowserHealth         capability.BrowserHealthFunc
+	InternalDispatcher    capability.InternalCallFunc
+	MediaCaller           capability.MediaCallFunc
+	MediaHealth           capability.MediaHealthFunc
+	WorkspaceCaller       capability.WorkspaceCallFunc
+	WorkspaceHealth       capability.WorkspaceHealthFunc
 }
 
 func RegisterProductionAdapters(registry *capability.RuntimeAdapterRegistry, deps AdapterRegistrationDeps) error {

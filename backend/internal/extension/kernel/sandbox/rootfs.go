@@ -18,25 +18,25 @@ const (
 )
 
 const (
-	RootfsErrNotConfigured          = "ROOTFS_NOT_CONFIGURED"
-	RootfsErrSourceInvalid          = "ROOTFS_SOURCE_INVALID"
-	RootfsErrDownloadFailed         = "ROOTFS_DOWNLOAD_FAILED"
-	RootfsErrArchiveTooLarge        = "ROOTFS_ARCHIVE_TOO_LARGE"
-	RootfsErrDigestMismatch         = "ROOTFS_DIGEST_MISMATCH"
-	RootfsErrArchMismatch           = "ROOTFS_ARCH_MISMATCH"
-	RootfsErrArchiveInvalid         = "ROOTFS_ARCHIVE_INVALID"
-	RootfsErrPathTraversal          = "ROOTFS_PATH_TRAVERSAL"
-	RootfsErrSymlinkEscape          = "ROOTFS_SYMLINK_ESCAPE"
-	RootfsErrHardlinkEscape         = "ROOTFS_HARDLINK_ESCAPE"
-	RootfsErrExpandedSizeExceeded   = "ROOTFS_EXPANDED_SIZE_EXCEEDED"
+	RootfsErrNotConfigured         = "ROOTFS_NOT_CONFIGURED"
+	RootfsErrSourceInvalid         = "ROOTFS_SOURCE_INVALID"
+	RootfsErrDownloadFailed        = "ROOTFS_DOWNLOAD_FAILED"
+	RootfsErrArchiveTooLarge       = "ROOTFS_ARCHIVE_TOO_LARGE"
+	RootfsErrDigestMismatch        = "ROOTFS_DIGEST_MISMATCH"
+	RootfsErrArchMismatch          = "ROOTFS_ARCH_MISMATCH"
+	RootfsErrArchiveInvalid        = "ROOTFS_ARCHIVE_INVALID"
+	RootfsErrPathTraversal         = "ROOTFS_PATH_TRAVERSAL"
+	RootfsErrSymlinkEscape         = "ROOTFS_SYMLINK_ESCAPE"
+	RootfsErrHardlinkEscape        = "ROOTFS_HARDLINK_ESCAPE"
+	RootfsErrExpandedSizeExceeded  = "ROOTFS_EXPANDED_SIZE_EXCEEDED"
 	RootfsErrEntryCountExceeded    = "ROOTFS_ENTRY_COUNT_EXCEEDED"
-	RootfsErrValidationFailed       = "ROOTFS_VALIDATION_FAILED"
-	RootfsErrVersionDigestConflict  = "ROOTFS_VERSION_DIGEST_CONFLICT"
-	RootfsErrNotInstalled           = "ROOTFS_NOT_INSTALLED"
-	RootfsErrCorrupted              = "ROOTFS_CORRUPTED"
-	RootfsErrRuntimeBusy            = "ROOTFS_RUNTIME_BUSY"
-	RootfsErrInstallCancelled       = "ROOTFS_INSTALL_CANCELLED"
-	RootfsErrCommitFailed           = "ROOTFS_COMMIT_FAILED"
+	RootfsErrValidationFailed      = "ROOTFS_VALIDATION_FAILED"
+	RootfsErrVersionDigestConflict = "ROOTFS_VERSION_DIGEST_CONFLICT"
+	RootfsErrNotInstalled          = "ROOTFS_NOT_INSTALLED"
+	RootfsErrCorrupted             = "ROOTFS_CORRUPTED"
+	RootfsErrRuntimeBusy           = "ROOTFS_RUNTIME_BUSY"
+	RootfsErrInstallCancelled      = "ROOTFS_INSTALL_CANCELLED"
+	RootfsErrCommitFailed          = "ROOTFS_COMMIT_FAILED"
 )
 
 var archPattern = regexp.MustCompile(`^[a-z0-9_+-]+$`)
@@ -64,16 +64,16 @@ type RootfsRef struct {
 }
 
 type RootfsInstallSpec struct {
-	RootfsVersion      string         `json:"rootfsVersion"`
-	AlpineVersion      string         `json:"alpineVersion"`
-	GuestArchitecture  string         `json:"guestArchitecture"`
-	SourceType         RootfsSourceType `json:"sourceType"`
-	SourceURL          string         `json:"sourceURL,omitempty"`
-	BundleResource     string         `json:"bundleResource,omitempty"`
-	SHA256             string         `json:"sha256"`
-	ExpectedSize       int64          `json:"expectedSize"`
-	ArchiveFormat      ArchiveFormat  `json:"archiveFormat"`
-	Activate           bool           `json:"activate"`
+	RootfsVersion     string           `json:"rootfsVersion"`
+	AlpineVersion     string           `json:"alpineVersion"`
+	GuestArchitecture string           `json:"guestArchitecture"`
+	SourceType        RootfsSourceType `json:"sourceType"`
+	SourceURL         string           `json:"sourceURL,omitempty"`
+	BundleResource    string           `json:"bundleResource,omitempty"`
+	SHA256            string           `json:"sha256"`
+	ExpectedSize      int64            `json:"expectedSize"`
+	ArchiveFormat     ArchiveFormat    `json:"archiveFormat"`
+	Activate          bool             `json:"activate"`
 }
 
 func (s RootfsInstallSpec) Validate() error {
@@ -107,14 +107,14 @@ func (s RootfsInstallSpec) Validate() error {
 }
 
 type RootfsStatus struct {
-	Installed         bool      `json:"installed"`
-	ActiveVersion     string    `json:"activeVersion,omitempty"`
-	ActiveDigest      string    `json:"activeDigest,omitempty"`
-	RunningVersion    string    `json:"runningVersion,omitempty"`
-	RunningDigest     string    `json:"runningDigest,omitempty"`
-	RestartRequired   bool      `json:"restartRequired"`
-	Corrupted         bool      `json:"corrupted"`
-	AvailableVersions []string  `json:"availableVersions,omitempty"`
+	Installed         bool     `json:"installed"`
+	ActiveVersion     string   `json:"activeVersion,omitempty"`
+	ActiveDigest      string   `json:"activeDigest,omitempty"`
+	RunningVersion    string   `json:"runningVersion,omitempty"`
+	RunningDigest     string   `json:"runningDigest,omitempty"`
+	RestartRequired   bool     `json:"restartRequired"`
+	Corrupted         bool     `json:"corrupted"`
+	AvailableVersions []string `json:"availableVersions,omitempty"`
 }
 
 type RootfsVersionMetadata struct {
@@ -141,13 +141,13 @@ type RootfsInstallResult struct {
 }
 
 type RootfsProgress struct {
-	InstallationID string  `json:"installationId"`
-	Phase          string  `json:"phase"`
-	BytesWritten   int64   `json:"bytesWritten"`
-	TotalBytes     int64   `json:"totalBytes"`
-	Message        string  `json:"message,omitempty"`
-	Done           bool    `json:"done"`
-	Failed         bool    `json:"failed"`
+	InstallationID string `json:"installationId"`
+	Phase          string `json:"phase"`
+	BytesWritten   int64  `json:"bytesWritten"`
+	TotalBytes     int64  `json:"totalBytes"`
+	Message        string `json:"message,omitempty"`
+	Done           bool   `json:"done"`
+	Failed         bool   `json:"failed"`
 }
 
 type RootfsError struct {

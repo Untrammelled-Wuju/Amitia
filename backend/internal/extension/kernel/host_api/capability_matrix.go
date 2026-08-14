@@ -12,10 +12,10 @@ const (
 
 // CapabilityEntry 记录单项宿主能力的 G12 收敛结果。
 type CapabilityEntry struct {
-	Name        string
-	Route       string
-	Resolution  CapabilityResolution
-	Reason      string
+	Name       string
+	Route      string
+	Resolution CapabilityResolution
+	Reason     string
 }
 
 // CapabilityMatrix 是 G12 正式收敛结果表。

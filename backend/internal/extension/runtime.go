@@ -129,6 +129,19 @@ func (r *Runtime) Close(ctx context.Context) error {
 	return r.PluginManager.Stop(ctx)
 }
 
+func (r *Runtime) LegacyWorkerStatus() LegacyWorkerStatus {
+	if r == nil || r.PluginManager == nil {
+		return LegacyWorkerStatus{}
+	}
+	return LegacyWorkerStatus{
+		PluginManagerStarted: true,
+	}
+}
+
+type LegacyWorkerStatus struct {
+	PluginManagerStarted bool
+}
+
 func (r *Runtime) pluginSnapshot(ctx context.Context, scope ExecutionScope) (ExtensionSnapshot, error) {
 	if err := r.Repository.ValidateConversationScope(ctx, scope); err != nil {
 		return ExtensionSnapshot{}, err

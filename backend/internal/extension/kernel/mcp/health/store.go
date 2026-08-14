@@ -4,7 +4,7 @@ import "sync"
 
 type InMemoryHealthStore struct {
 	mu    sync.RWMutex
- snaps map[string]MCPHealthSnapshot
+	snaps map[string]MCPHealthSnapshot
 	gen   map[string]int64
 }
 

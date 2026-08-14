@@ -8,19 +8,19 @@ import (
 )
 
 const (
-	ResourceMimeTextPlain      = "text/plain"
-	ResourceMimeTextMarkdown   = "text/markdown"
-	ResourceMimeTextCSV        = "text/csv"
-	ResourceMimeTextHTML       = "text/html"
-	ResourceMimeApplicationJSON = "application/json"
-	ResourceMimeApplicationYAML = "application/yaml"
-	ResourceMimeApplicationXML  = "application/xml"
-	ResourceMimeApplicationTOML = "application/toml"
-	ResourceMimeImagePNG        = "image/png"
-	ResourceMimeImageJPEG       = "image/jpeg"
-	ResourceMimeImageGIF        = "image/gif"
-	ResourceMimeImageWebP       = "image/webp"
-	ResourceMimeApplicationPDF  = "application/pdf"
+	ResourceMimeTextPlain         = "text/plain"
+	ResourceMimeTextMarkdown      = "text/markdown"
+	ResourceMimeTextCSV           = "text/csv"
+	ResourceMimeTextHTML          = "text/html"
+	ResourceMimeApplicationJSON   = "application/json"
+	ResourceMimeApplicationYAML   = "application/yaml"
+	ResourceMimeApplicationXML    = "application/xml"
+	ResourceMimeApplicationTOML   = "application/toml"
+	ResourceMimeImagePNG          = "image/png"
+	ResourceMimeImageJPEG         = "image/jpeg"
+	ResourceMimeImageGIF          = "image/gif"
+	ResourceMimeImageWebP         = "image/webp"
+	ResourceMimeApplicationPDF    = "application/pdf"
 	ResourceMimeApplicationOffice = "application/vnd.openxmlformats-officedocument"
 )
 
@@ -47,32 +47,32 @@ const (
 )
 
 var (
-	ErrResourceSkillNotActive       = errors.New("SKILL_RESOURCE_SKILL_NOT_ACTIVE")
-	ErrResourceNotAvailable         = errors.New("SKILL_RESOURCE_NOT_AVAILABLE")
-	ErrResourceNotFound             = errors.New("SKILL_RESOURCE_NOT_FOUND")
-	ErrResourceKindUnsupported      = errors.New("SKILL_RESOURCE_KIND_UNSUPPORTED")
-	ErrResourcePathInvalid          = errors.New("SKILL_RESOURCE_PATH_INVALID")
-	ErrResourcePathTraversal        = errors.New("SKILL_RESOURCE_PATH_TRAVERSAL")
-	ErrResourceSymlinkRejected      = errors.New("SKILL_RESOURCE_SYMLINK_REJECTED")
-	ErrResourceIndexIncomplete      = errors.New("SKILL_RESOURCE_INDEX_INCOMPLETE")
-	ErrResourceIndexLimitExceeded   = errors.New("SKILL_RESOURCE_INDEX_LIMIT_EXCEEDED")
-	ErrResourceArtifactMissing      = errors.New("SKILL_RESOURCE_ARTIFACT_MISSING")
-	ErrResourceArtifactHashMismatch = errors.New("SKILL_RESOURCE_ARTIFACT_HASH_MISMATCH")
-	ErrResourceHashMismatch         = errors.New("SKILL_RESOURCE_HASH_MISMATCH")
-	ErrResourceContentChanged       = errors.New("SKILL_RESOURCE_CONTENT_CHANGED")
-	ErrResourceMimeUnsupported      = errors.New("SKILL_RESOURCE_MIME_UNSUPPORTED")
-	ErrResourceEncodingUnsupported  = errors.New("SKILL_RESOURCE_ENCODING_UNSUPPORTED")
-	ErrResourceTooLarge             = errors.New("SKILL_RESOURCE_TOO_LARGE")
-	ErrResourceReadLimitExceeded    = errors.New("SKILL_RESOURCE_READ_LIMIT_EXCEEDED")
-	ErrResourceTokenLimitExceeded   = errors.New("SKILL_RESOURCE_TOKEN_LIMIT_EXCEEDED")
-	ErrResourceContextBudgetExceeded = errors.New("SKILL_RESOURCE_CONTEXT_BUDGET_EXCEEDED")
+	ErrResourceSkillNotActive         = errors.New("SKILL_RESOURCE_SKILL_NOT_ACTIVE")
+	ErrResourceNotAvailable           = errors.New("SKILL_RESOURCE_NOT_AVAILABLE")
+	ErrResourceNotFound               = errors.New("SKILL_RESOURCE_NOT_FOUND")
+	ErrResourceKindUnsupported        = errors.New("SKILL_RESOURCE_KIND_UNSUPPORTED")
+	ErrResourcePathInvalid            = errors.New("SKILL_RESOURCE_PATH_INVALID")
+	ErrResourcePathTraversal          = errors.New("SKILL_RESOURCE_PATH_TRAVERSAL")
+	ErrResourceSymlinkRejected        = errors.New("SKILL_RESOURCE_SYMLINK_REJECTED")
+	ErrResourceIndexIncomplete        = errors.New("SKILL_RESOURCE_INDEX_INCOMPLETE")
+	ErrResourceIndexLimitExceeded     = errors.New("SKILL_RESOURCE_INDEX_LIMIT_EXCEEDED")
+	ErrResourceArtifactMissing        = errors.New("SKILL_RESOURCE_ARTIFACT_MISSING")
+	ErrResourceArtifactHashMismatch   = errors.New("SKILL_RESOURCE_ARTIFACT_HASH_MISMATCH")
+	ErrResourceHashMismatch           = errors.New("SKILL_RESOURCE_HASH_MISMATCH")
+	ErrResourceContentChanged         = errors.New("SKILL_RESOURCE_CONTENT_CHANGED")
+	ErrResourceMimeUnsupported        = errors.New("SKILL_RESOURCE_MIME_UNSUPPORTED")
+	ErrResourceEncodingUnsupported    = errors.New("SKILL_RESOURCE_ENCODING_UNSUPPORTED")
+	ErrResourceTooLarge               = errors.New("SKILL_RESOURCE_TOO_LARGE")
+	ErrResourceReadLimitExceeded      = errors.New("SKILL_RESOURCE_READ_LIMIT_EXCEEDED")
+	ErrResourceTokenLimitExceeded     = errors.New("SKILL_RESOURCE_TOKEN_LIMIT_EXCEEDED")
+	ErrResourceContextBudgetExceeded  = errors.New("SKILL_RESOURCE_CONTEXT_BUDGET_EXCEEDED")
 	ErrResourceReferenceDepthExceeded = errors.New("SKILL_RESOURCE_REFERENCE_DEPTH_EXCEEDED")
 	ErrResourceMaterializeUnavailable = errors.New("SKILL_RESOURCE_MATERIALIZE_UNAVAILABLE")
-	ErrResourceMaterializeFailed    = errors.New("SKILL_RESOURCE_MATERIALIZE_FAILED")
-	ErrResourceDiskSpaceInsufficient = errors.New("SKILL_RESOURCE_DISK_SPACE_INSUFFICIENT")
-	ErrResourcePermissionDenied     = errors.New("SKILL_RESOURCE_PERMISSION_DENIED")
-	ErrResourceCancelled            = errors.New("SKILL_RESOURCE_CANCELLED")
-	ErrResourceTimeout              = errors.New("SKILL_RESOURCE_TIMEOUT")
+	ErrResourceMaterializeFailed      = errors.New("SKILL_RESOURCE_MATERIALIZE_FAILED")
+	ErrResourceDiskSpaceInsufficient  = errors.New("SKILL_RESOURCE_DISK_SPACE_INSUFFICIENT")
+	ErrResourcePermissionDenied       = errors.New("SKILL_RESOURCE_PERMISSION_DENIED")
+	ErrResourceCancelled              = errors.New("SKILL_RESOURCE_CANCELLED")
+	ErrResourceTimeout                = errors.New("SKILL_RESOURCE_TIMEOUT")
 )
 
 type SkillResourceRef struct {
@@ -104,10 +104,10 @@ type SkillResourceFilter struct {
 }
 
 type SkillResourcePage struct {
-	Items          []SkillResourceDescriptor `json:"items"`
-	NextCursor     string                    `json:"nextCursor,omitempty"`
-	IndexComplete  bool                      `json:"indexComplete"`
-	TotalCount     int                       `json:"totalCount"`
+	Items         []SkillResourceDescriptor `json:"items"`
+	NextCursor    string                    `json:"nextCursor,omitempty"`
+	IndexComplete bool                      `json:"indexComplete"`
+	TotalCount    int                       `json:"totalCount"`
 }
 
 type TextReadWindow struct {
@@ -116,59 +116,59 @@ type TextReadWindow struct {
 }
 
 type SkillTextResourceResult struct {
-	Skill          string `json:"skill"`
-	Path           string `json:"path"`
-	MIMEType       string `json:"mimeType"`
-	StartLine      int    `json:"startLine"`
-	EndLine        int    `json:"endLine"`
-	TotalLines     int    `json:"totalLines,omitempty"`
-	Content        string `json:"content"`
-	Truncated      bool   `json:"truncated"`
-	NextStartLine  int    `json:"nextStartLine,omitempty"`
-	SHA256         string `json:"sha256"`
+	Skill         string `json:"skill"`
+	Path          string `json:"path"`
+	MIMEType      string `json:"mimeType"`
+	StartLine     int    `json:"startLine"`
+	EndLine       int    `json:"endLine"`
+	TotalLines    int    `json:"totalLines,omitempty"`
+	Content       string `json:"content"`
+	Truncated     bool   `json:"truncated"`
+	NextStartLine int    `json:"nextStartLine,omitempty"`
+	SHA256        string `json:"sha256"`
 }
 
 type MaterializedSkillResource struct {
-	Skill      string `json:"skill"`
-	Path       string `json:"path"`
+	Skill       string `json:"skill"`
+	Path        string `json:"path"`
 	ResourceURI string `json:"resourceUri"`
-	MIMEType   string `json:"mimeType"`
-	SizeBytes  int64  `json:"sizeBytes"`
-	SHA256     string `json:"sha256"`
-	LeaseID    string `json:"leaseId,omitempty"`
+	MIMEType    string `json:"mimeType"`
+	SizeBytes   int64  `json:"sizeBytes"`
+	SHA256      string `json:"sha256"`
+	LeaseID     string `json:"leaseId,omitempty"`
 }
 
 type SkillResourceEvidenceRef struct {
-	Skill         string
-	ArtifactID    string
-	Path          string
-	SHA256        string
-	StartLine     int
-	EndLine       int
+	Skill      string
+	ArtifactID string
+	Path       string
+	SHA256     string
+	StartLine  int
+	EndLine    int
 }
 
 type SkillActivationRef struct {
-	ActivationID     string
-	ExtensionID      string
-	ArtifactID       string
-	SkillContentHash string
-	ScopeCharacterID string
+	ActivationID        string
+	ExtensionID         string
+	ArtifactID          string
+	SkillContentHash    string
+	ScopeCharacterID    string
 	ScopeConversationID string
-	ScopeUserID      string
+	ScopeUserID         string
 }
 
 type ResourceReadMetrics struct {
-	Skill              string
-	ArtifactID         string
-	Path               string
-	ResourceHash       string
-	Kind               string
-	MIMEType           string
-	Operation          string
-	Bytes              int64
-	Tokens             int
-	Result             string
-	Duration           time.Duration
+	Skill        string
+	ArtifactID   string
+	Path         string
+	ResourceHash string
+	Kind         string
+	MIMEType     string
+	Operation    string
+	Bytes        int64
+	Tokens       int
+	Result       string
+	Duration     time.Duration
 }
 
 func (r SkillResourceRef) IsValid() bool {

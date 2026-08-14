@@ -7,10 +7,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"fmt"
-	"io"
-
-	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"gorm.io/gorm"
 )
@@ -198,7 +194,3 @@ func (p *PsycheBackupContributor) Import(ctx context.Context, req dataportabilit
 
 	return nil
 }
-
-var _ = uuid.New
-var _ = fmt.Sprintf
-var _ = io.EOF

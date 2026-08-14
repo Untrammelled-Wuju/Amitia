@@ -119,7 +119,7 @@ func TestValidate_RemoteMissingURL(t *testing.T) {
 	spec := MCPServerSpec{
 		SchemaVersion: MCPServerSpecVersion,
 		Transport: MCPTransportSpec{
-			Type: MCPTransportTypeStreamableHTTP,
+			Type:   MCPTransportTypeStreamableHTTP,
 			Remote: &MCPRemoteTransportSpec{},
 		},
 	}

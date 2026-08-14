@@ -3,6 +3,7 @@ package host_registry
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"sort"
 	"sync"
 	"time"
@@ -38,6 +39,10 @@ func NewHostRegistry(db *sql.DB) *HostRegistry {
 
 func MigrateSessionTokens(ctx context.Context, db *sql.DB) error {
 	return (&registryRepository{db: db}).MigrateSessionTokens(ctx)
+}
+
+func MigrateRuntimeSessionColumns(ctx context.Context, db *sql.DB) error {
+	return (&registryRepository{db: db}).MigrateRuntimeSessionColumns(ctx)
 }
 
 func (r *Registry) RegisterEntry(ctx context.Context, entry *RuntimeEntry) error {
@@ -492,6 +497,191 @@ func (r *Registry) SnapshotByUser(ctx context.Context, userID runtimeidentity.Us
 		Devices:  devices,
 		Runtimes: runtimes,
 	}, nil
+}
+
+type RuntimeSessionBinding struct {
+	UserID           runtimeidentity.UserID
+	DeviceID         runtimeidentity.DeviceID
+	RuntimeID        runtimeidentity.RuntimeID
+	RuntimeSessionID runtimeidentity.RuntimeSessionID
+	Platform         runtimeidentity.Platform
+
+	ConnectionGeneration int64
+	At                   time.Time
+}
+
+func (r *Registry) BindRuntimeSession(ctx context.Context, binding RuntimeSessionBinding) (*RuntimeEntry, error) {
+	if binding.UserID == "" || binding.DeviceID == "" || binding.RuntimeID == "" {
+		return nil, ErrInvalidRegistryEntry
+	}
+	if binding.RuntimeSessionID == "" {
+		return nil, ErrInvalidRegistryEntry
+	}
+	if binding.ConnectionGeneration < 1 {
+		return nil, ErrInvalidRegistryEntry
+	}
+
+	at := binding.At
+	if at.IsZero() {
+		at = time.Now().UTC()
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	entryID := RuntimeEntryID(binding.UserID, binding.DeviceID, binding.RuntimeID)
+
+	entry, err := r.repo.GetEntry(ctx, entryID)
+	if err != nil && !errors.Is(err, ErrRegistryEntryNotFound) {
+		return nil, err
+	}
+
+	if errors.Is(err, ErrRegistryEntryNotFound) {
+		now := at
+		newEntry := &RuntimeEntry{
+			EntryID:              entryID,
+			Kind:                 RegistryEntryKindRuntime,
+			UserID:               binding.UserID,
+			DeviceID:             binding.DeviceID,
+			RuntimeID:            binding.RuntimeID,
+			Platform:             binding.Platform,
+			PresenceState:        PresenceStateReady,
+			RuntimeSessionID:     binding.RuntimeSessionID,
+			ConnectionGeneration: binding.ConnectionGeneration,
+			LastHeartbeat:        at,
+			CreatedAt:            now,
+			AuthenticatedAt:     now,
+		}
+		if err := r.repo.SaveEntry(ctx, newEntry); err != nil {
+			return nil, err
+		}
+		r.entries[entryID] = cloneRuntimeEntry(newEntry)
+		return cloneRuntimeEntry(newEntry), nil
+	}
+
+	if entry.Kind != RegistryEntryKindRuntime {
+		return nil, nil
+	}
+
+	if entry.ConnectionGeneration > binding.ConnectionGeneration {
+		return nil, ErrStaleRuntimeSessionBinding
+	}
+	if entry.ConnectionGeneration == binding.ConnectionGeneration && entry.RuntimeSessionID != binding.RuntimeSessionID {
+		return nil, ErrRuntimeSessionBindingConflict
+	}
+
+	entry.RuntimeSessionID = binding.RuntimeSessionID
+	entry.ConnectionGeneration = binding.ConnectionGeneration
+	entry.Platform = binding.Platform
+	entry.LastHeartbeat = at
+	entry.PresenceState = PresenceStateReady
+
+	if err := r.repo.SaveEntry(ctx, entry); err != nil {
+		return nil, err
+	}
+
+	r.entries[entry.EntryID] = cloneRuntimeEntry(entry)
+	return cloneRuntimeEntry(entry), nil
+}
+
+func (r *Registry) HeartbeatRuntimeSession(ctx context.Context, binding RuntimeSessionBinding) error {
+	if binding.RuntimeSessionID == "" || binding.ConnectionGeneration < 1 {
+		return ErrStaleRuntimeSessionBinding
+	}
+
+	at := binding.At
+	if at.IsZero() {
+		at = time.Now().UTC()
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	entryID := RuntimeEntryID(binding.UserID, binding.DeviceID, binding.RuntimeID)
+
+	entry, ok := r.entries[entryID]
+	if !ok {
+		return ErrRuntimePresenceNotFound
+	}
+
+	if entry.Kind != RegistryEntryKindRuntime {
+		return ErrRuntimePresenceNotFound
+	}
+
+	if entry.RuntimeSessionID != binding.RuntimeSessionID || entry.ConnectionGeneration != binding.ConnectionGeneration {
+		return ErrStaleRuntimeSessionBinding
+	}
+
+	if err := r.repo.UpdateRuntimeSessionHeartbeat(ctx, entryID, binding.RuntimeSessionID, binding.ConnectionGeneration, at); err != nil {
+		return err
+	}
+
+	entry.LastHeartbeat = at
+	entry.PresenceState = PresenceStateReady
+	return nil
+}
+
+func (r *Registry) DisconnectRuntimeSession(ctx context.Context, binding RuntimeSessionBinding) error {
+	if binding.RuntimeSessionID == "" || binding.ConnectionGeneration < 1 {
+		return ErrStaleRuntimeSessionBinding
+	}
+
+	at := binding.At
+	if at.IsZero() {
+		at = time.Now().UTC()
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	entryID := RuntimeEntryID(binding.UserID, binding.DeviceID, binding.RuntimeID)
+
+	entry, ok := r.entries[entryID]
+	if !ok {
+		return ErrRuntimePresenceNotFound
+	}
+
+	if entry.Kind != RegistryEntryKindRuntime {
+		return ErrRuntimePresenceNotFound
+	}
+
+	if entry.RuntimeSessionID != binding.RuntimeSessionID || entry.ConnectionGeneration != binding.ConnectionGeneration {
+		return ErrStaleRuntimeSessionBinding
+	}
+
+	if entry.PresenceState == PresenceStateDisconnected {
+		return nil
+	}
+
+	if err := r.repo.SetRuntimeSessionDisconnected(ctx, entryID, binding.RuntimeSessionID, binding.ConnectionGeneration, at); err != nil {
+		return err
+	}
+
+	entry.PresenceState = PresenceStateDisconnected
+	entry.LastHeartbeat = at
+	return nil
+}
+
+func (r *Registry) MarkRuntimeEntriesDisconnectedOnStartup(ctx context.Context, at time.Time) error {
+	if at.IsZero() {
+		at = time.Now().UTC()
+	}
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	if err := r.repo.MarkRuntimeEntriesDisconnected(ctx, at); err != nil {
+		return err
+	}
+
+	for _, entry := range r.entries {
+		if entry.Kind == RegistryEntryKindRuntime && entry.PresenceState == PresenceStateReady {
+			entry.PresenceState = PresenceStateDisconnected
+			entry.LastHeartbeat = at
+		}
+	}
+
+	return nil
 }
 
 func (r *Registry) isHeartbeatValid(entry *RuntimeEntry, now time.Time) bool {

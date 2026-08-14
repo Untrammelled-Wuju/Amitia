@@ -7,9 +7,9 @@ import "time"
 type MCPBindingScope string
 
 const (
-	MCPScopeUser     MCPBindingScope = "user"
+	MCPScopeUser      MCPBindingScope = "user"
 	MCPScopeExtension MCPBindingScope = "extension"
-	MCPScopeBuiltin  MCPBindingScope = "builtin"
+	MCPScopeBuiltin   MCPBindingScope = "builtin"
 )
 
 type ExtensionOwnerRef struct {
@@ -18,29 +18,29 @@ type ExtensionOwnerRef struct {
 }
 
 type MCPTransportSpec struct {
-	Kind           string            `json:"kind"`
-	Endpoint       string            `json:"endpoint,omitempty"`
-	Headers        map[string]string `json:"headers,omitempty"`
-	Environment    map[string]string `json:"environment,omitempty"`
-	CredentialRef  string            `json:"credentialRef,omitempty"`
-	StartTimeout   time.Duration     `json:"startTimeout,omitempty"`
+	Kind          string            `json:"kind"`
+	Endpoint      string            `json:"endpoint,omitempty"`
+	Headers       map[string]string `json:"headers,omitempty"`
+	Environment   map[string]string `json:"environment,omitempty"`
+	CredentialRef string            `json:"credentialRef,omitempty"`
+	StartTimeout  time.Duration     `json:"startTimeout,omitempty"`
 }
 
 type MCPLauncherSpec struct {
-	Kind        string            `json:"kind"`
-	Package     string            `json:"package,omitempty"`
-	Command     string            `json:"command,omitempty"`
-	Version     string            `json:"version,omitempty"`
-	Args        []string          `json:"args,omitempty"`
-	Environment map[string]string `json:"environment,omitempty"`
-	WorkDir     string            `json:"workDir,omitempty"`
-	CredentialRef string          `json:"credentialRef,omitempty"`
+	Kind          string            `json:"kind"`
+	Package       string            `json:"package,omitempty"`
+	Command       string            `json:"command,omitempty"`
+	Version       string            `json:"version,omitempty"`
+	Args          []string          `json:"args,omitempty"`
+	Environment   map[string]string `json:"environment,omitempty"`
+	WorkDir       string            `json:"workDir,omitempty"`
+	CredentialRef string            `json:"credentialRef,omitempty"`
 }
 
 type MCPBinding struct {
 	ID          string            `json:"id"`
 	Owner       ExtensionOwnerRef `json:"owner"`
-	Transport   MCPTransportSpec `json:"transport"`
+	Transport   MCPTransportSpec  `json:"transport"`
 	Launcher    *MCPLauncherSpec  `json:"launcher,omitempty"`
 	Enabled     bool              `json:"enabled"`
 	Scope       MCPBindingScope   `json:"scope"`

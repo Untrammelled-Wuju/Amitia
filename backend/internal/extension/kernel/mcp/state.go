@@ -7,29 +7,29 @@ import "fmt"
 type MCPInstallState string
 
 const (
-	MCPInstallAbsent         MCPInstallState = "absent"
-	MCPInstallPlanning       MCPInstallState = "planning"
+	MCPInstallAbsent           MCPInstallState = "absent"
+	MCPInstallPlanning         MCPInstallState = "planning"
 	MCPInstallAwaitingApproval MCPInstallState = "awaiting_approval"
-	MCPInstallInstalling     MCPInstallState = "installing"
-	MCPInstallInstalled      MCPInstallState = "installed"
-	MCPInstallUpgrading      MCPInstallState = "upgrading"
-	MCPInstallRollbackPending MCPInstallState = "rollback_pending"
-	MCPInstallRollingBack    MCPInstallState = "rolling_back"
-	MCPInstallUninstalling   MCPInstallState = "uninstalling"
-	MCPInstallFailed         MCPInstallState = "install_failed"
-	MCPInstallRemoved        MCPInstallState = "removed"
+	MCPInstallInstalling       MCPInstallState = "installing"
+	MCPInstallInstalled        MCPInstallState = "installed"
+	MCPInstallUpgrading        MCPInstallState = "upgrading"
+	MCPInstallRollbackPending  MCPInstallState = "rollback_pending"
+	MCPInstallRollingBack      MCPInstallState = "rolling_back"
+	MCPInstallUninstalling     MCPInstallState = "uninstalling"
+	MCPInstallFailed           MCPInstallState = "install_failed"
+	MCPInstallRemoved          MCPInstallState = "removed"
 )
 
 type MCPRuntimeState string
 
 const (
-	MCPRuntimeDisabled    MCPRuntimeState = "disabled"
-	MCPRuntimeStopped     MCPRuntimeState = "stopped"
-	MCPRuntimeStarting    MCPRuntimeState = "starting"
-	MCPRuntimeReady       MCPRuntimeState = "ready"
-	MCPRuntimeStopping    MCPRuntimeState = "stopping"
-	MCPRuntimeDegraded    MCPRuntimeState = "degraded"
-	MCPRuntimeFailed      MCPRuntimeState = "runtime_failed"
+	MCPRuntimeDisabled MCPRuntimeState = "disabled"
+	MCPRuntimeStopped  MCPRuntimeState = "stopped"
+	MCPRuntimeStarting MCPRuntimeState = "starting"
+	MCPRuntimeReady    MCPRuntimeState = "ready"
+	MCPRuntimeStopping MCPRuntimeState = "stopping"
+	MCPRuntimeDegraded MCPRuntimeState = "degraded"
+	MCPRuntimeFailed   MCPRuntimeState = "runtime_failed"
 )
 
 func (s MCPInstallState) String() string { return string(s) }
@@ -37,15 +37,15 @@ func (s MCPRuntimeState) String() string { return string(s) }
 
 var validInstallTransitions = map[MCPInstallState][]MCPInstallState{
 	MCPInstallAbsent:           {MCPInstallPlanning, MCPInstallInstalling},
-	MCPInstallPlanning:        {MCPInstallAwaitingApproval, MCPInstallInstalling, MCPInstallFailed},
+	MCPInstallPlanning:         {MCPInstallAwaitingApproval, MCPInstallInstalling, MCPInstallFailed},
 	MCPInstallAwaitingApproval: {MCPInstallInstalling, MCPInstallFailed},
-	MCPInstallInstalling:      {MCPInstallInstalled, MCPInstallFailed},
-	MCPInstallInstalled:       {MCPInstallUpgrading, MCPInstallUninstalling, MCPInstallRollbackPending, MCPInstallRollingBack},
-	MCPInstallUpgrading:       {MCPInstallInstalled, MCPInstallFailed, MCPInstallRollbackPending},
-	MCPInstallRollbackPending: {MCPInstallRollingBack},
-	MCPInstallRollingBack:     {MCPInstallInstalled, MCPInstallFailed},
-	MCPInstallUninstalling:    {MCPInstallRemoved, MCPInstallFailed},
-	MCPInstallFailed:          {MCPInstallPlanning, MCPInstallInstalling, MCPInstallUninstalling},
+	MCPInstallInstalling:       {MCPInstallInstalled, MCPInstallFailed},
+	MCPInstallInstalled:        {MCPInstallUpgrading, MCPInstallUninstalling, MCPInstallRollbackPending, MCPInstallRollingBack},
+	MCPInstallUpgrading:        {MCPInstallInstalled, MCPInstallFailed, MCPInstallRollbackPending},
+	MCPInstallRollbackPending:  {MCPInstallRollingBack},
+	MCPInstallRollingBack:      {MCPInstallInstalled, MCPInstallFailed},
+	MCPInstallUninstalling:     {MCPInstallRemoved, MCPInstallFailed},
+	MCPInstallFailed:           {MCPInstallPlanning, MCPInstallInstalling, MCPInstallUninstalling},
 }
 
 var validRuntimeTransitions = map[MCPRuntimeState][]MCPRuntimeState{

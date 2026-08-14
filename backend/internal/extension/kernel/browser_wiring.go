@@ -189,7 +189,7 @@ func execSessionCreate(ctx context.Context, provider browser.BrowserProvider, _ 
 func execSessionClose(ctx context.Context, provider browser.BrowserProvider, input json.RawMessage) (json.RawMessage, error) {
 	var in sessionCloseInput
 	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidInput, Message: "invalid input: " + err.Error(), Cause: err}
+		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidRequest, Message: "invalid input: " + err.Error(), Cause: err}
 	}
 	if err := provider.Sessions().CloseSession(ctx, browser.BrowserSessionID(in.SessionID)); err != nil {
 		return nil, err
@@ -200,7 +200,7 @@ func execSessionClose(ctx context.Context, provider browser.BrowserProvider, inp
 func execSessionGet(ctx context.Context, provider browser.BrowserProvider, input json.RawMessage) (json.RawMessage, error) {
 	var in sessionGetInput
 	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidInput, Message: "invalid input: " + err.Error(), Cause: err}
+		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidRequest, Message: "invalid input: " + err.Error(), Cause: err}
 	}
 	info, err := provider.Sessions().GetSession(ctx, browser.BrowserSessionID(in.SessionID))
 	if err != nil {
@@ -220,7 +220,7 @@ func execSessionList(ctx context.Context, provider browser.BrowserProvider, _ js
 func execTabCreate(ctx context.Context, provider browser.BrowserProvider, input json.RawMessage) (json.RawMessage, error) {
 	var in tabInput
 	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidInput, Message: "invalid input: " + err.Error(), Cause: err}
+		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidRequest, Message: "invalid input: " + err.Error(), Cause: err}
 	}
 	info, err := provider.Tabs().CreateTab(ctx, browser.BrowserSessionID(in.SessionID))
 	if err != nil {
@@ -232,7 +232,7 @@ func execTabCreate(ctx context.Context, provider browser.BrowserProvider, input 
 func execTabClose(ctx context.Context, provider browser.BrowserProvider, input json.RawMessage) (json.RawMessage, error) {
 	var in tabInput
 	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidInput, Message: "invalid input: " + err.Error(), Cause: err}
+		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidRequest, Message: "invalid input: " + err.Error(), Cause: err}
 	}
 	if err := provider.Tabs().CloseTab(ctx, browser.BrowserSessionID(in.SessionID), browser.BrowserTabID(in.TabID)); err != nil {
 		return nil, err
@@ -243,7 +243,7 @@ func execTabClose(ctx context.Context, provider browser.BrowserProvider, input j
 func execTabGet(ctx context.Context, provider browser.BrowserProvider, input json.RawMessage) (json.RawMessage, error) {
 	var in tabInput
 	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidInput, Message: "invalid input: " + err.Error(), Cause: err}
+		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidRequest, Message: "invalid input: " + err.Error(), Cause: err}
 	}
 	info, err := provider.Tabs().GetTab(ctx, browser.BrowserSessionID(in.SessionID), browser.BrowserTabID(in.TabID))
 	if err != nil {
@@ -255,7 +255,7 @@ func execTabGet(ctx context.Context, provider browser.BrowserProvider, input jso
 func execTabList(ctx context.Context, provider browser.BrowserProvider, input json.RawMessage) (json.RawMessage, error) {
 	var in tabInput
 	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidInput, Message: "invalid input: " + err.Error(), Cause: err}
+		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidRequest, Message: "invalid input: " + err.Error(), Cause: err}
 	}
 	list, err := provider.Tabs().ListTabs(ctx, browser.BrowserSessionID(in.SessionID))
 	if err != nil {
@@ -267,7 +267,7 @@ func execTabList(ctx context.Context, provider browser.BrowserProvider, input js
 func execTabActivate(ctx context.Context, provider browser.BrowserProvider, input json.RawMessage) (json.RawMessage, error) {
 	var in tabInput
 	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidInput, Message: "invalid input: " + err.Error(), Cause: err}
+		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidRequest, Message: "invalid input: " + err.Error(), Cause: err}
 	}
 	if err := provider.Tabs().ActivateTab(ctx, browser.BrowserSessionID(in.SessionID), browser.BrowserTabID(in.TabID)); err != nil {
 		return nil, err
@@ -278,7 +278,7 @@ func execTabActivate(ctx context.Context, provider browser.BrowserProvider, inpu
 func execNavigate(ctx context.Context, provider browser.BrowserProvider, input json.RawMessage) (json.RawMessage, error) {
 	var in navigateInput
 	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidInput, Message: "invalid input: " + err.Error(), Cause: err}
+		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidRequest, Message: "invalid input: " + err.Error(), Cause: err}
 	}
 	req := browser.NavigateRequest{
 		URL:       in.URL,
@@ -296,7 +296,7 @@ func execNavigate(ctx context.Context, provider browser.BrowserProvider, input j
 func execReload(ctx context.Context, provider browser.BrowserProvider, input json.RawMessage) (json.RawMessage, error) {
 	var in navigateInput
 	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidInput, Message: "invalid input: " + err.Error(), Cause: err}
+		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidRequest, Message: "invalid input: " + err.Error(), Cause: err}
 	}
 	req := browser.NavigateRequest{
 		WaitUntil: in.WaitUntil,
@@ -313,7 +313,7 @@ func execReload(ctx context.Context, provider browser.BrowserProvider, input jso
 func execGoBack(ctx context.Context, provider browser.BrowserProvider, input json.RawMessage) (json.RawMessage, error) {
 	var in tabInput
 	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidInput, Message: "invalid input: " + err.Error(), Cause: err}
+		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidRequest, Message: "invalid input: " + err.Error(), Cause: err}
 	}
 	result, err := provider.Navigate().GoBack(ctx, browser.BrowserSessionID(in.SessionID), browser.BrowserTabID(in.TabID))
 	if err != nil {
@@ -325,7 +325,7 @@ func execGoBack(ctx context.Context, provider browser.BrowserProvider, input jso
 func execGoForward(ctx context.Context, provider browser.BrowserProvider, input json.RawMessage) (json.RawMessage, error) {
 	var in tabInput
 	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidInput, Message: "invalid input: " + err.Error(), Cause: err}
+		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidRequest, Message: "invalid input: " + err.Error(), Cause: err}
 	}
 	result, err := provider.Navigate().GoForward(ctx, browser.BrowserSessionID(in.SessionID), browser.BrowserTabID(in.TabID))
 	if err != nil {
@@ -337,7 +337,7 @@ func execGoForward(ctx context.Context, provider browser.BrowserProvider, input 
 func execStop(ctx context.Context, provider browser.BrowserProvider, input json.RawMessage) (json.RawMessage, error) {
 	var in tabInput
 	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidInput, Message: "invalid input: " + err.Error(), Cause: err}
+		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidRequest, Message: "invalid input: " + err.Error(), Cause: err}
 	}
 	if err := provider.Navigate().Stop(ctx, browser.BrowserSessionID(in.SessionID), browser.BrowserTabID(in.TabID)); err != nil {
 		return nil, err
@@ -348,7 +348,7 @@ func execStop(ctx context.Context, provider browser.BrowserProvider, input json.
 func execDOMSnapshot(ctx context.Context, provider browser.BrowserProvider, input json.RawMessage) (json.RawMessage, error) {
 	var in domSnapshotInput
 	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidInput, Message: "invalid input: " + err.Error(), Cause: err}
+		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidRequest, Message: "invalid input: " + err.Error(), Cause: err}
 	}
 	snapshot, err := provider.Observe().GetDOMSnapshot(ctx, browser.BrowserSessionID(in.SessionID), browser.BrowserTabID(in.TabID), in.MaxDepth)
 	if err != nil {
@@ -360,7 +360,7 @@ func execDOMSnapshot(ctx context.Context, provider browser.BrowserProvider, inpu
 func execFindElement(ctx context.Context, provider browser.BrowserProvider, input json.RawMessage) (json.RawMessage, error) {
 	var in findElementInput
 	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidInput, Message: "invalid input: " + err.Error(), Cause: err}
+		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidRequest, Message: "invalid input: " + err.Error(), Cause: err}
 	}
 	ref, err := provider.Observe().FindElement(ctx, browser.BrowserSessionID(in.SessionID), browser.BrowserTabID(in.TabID), in.Selector)
 	if err != nil {
@@ -372,7 +372,7 @@ func execFindElement(ctx context.Context, provider browser.BrowserProvider, inpu
 func execScrollToElement(ctx context.Context, provider browser.BrowserProvider, input json.RawMessage) (json.RawMessage, error) {
 	var in scrollToElementInput
 	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidInput, Message: "invalid input: " + err.Error(), Cause: err}
+		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidRequest, Message: "invalid input: " + err.Error(), Cause: err}
 	}
 	if err := provider.Observe().ScrollToElement(ctx, browser.BrowserSessionID(in.SessionID), browser.BrowserTabID(in.TabID), in.Element); err != nil {
 		return nil, err
@@ -383,7 +383,7 @@ func execScrollToElement(ctx context.Context, provider browser.BrowserProvider, 
 func execClick(ctx context.Context, provider browser.BrowserProvider, input json.RawMessage) (json.RawMessage, error) {
 	var in interactInput
 	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidInput, Message: "invalid input: " + err.Error(), Cause: err}
+		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidRequest, Message: "invalid input: " + err.Error(), Cause: err}
 	}
 	result, err := provider.Interact().Click(ctx, browser.BrowserSessionID(in.SessionID), browser.BrowserTabID(in.TabID), in.Element)
 	if err != nil {
@@ -395,7 +395,7 @@ func execClick(ctx context.Context, provider browser.BrowserProvider, input json
 func execInput(ctx context.Context, provider browser.BrowserProvider, input json.RawMessage) (json.RawMessage, error) {
 	var in interactInput
 	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidInput, Message: "invalid input: " + err.Error(), Cause: err}
+		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidRequest, Message: "invalid input: " + err.Error(), Cause: err}
 	}
 	result, err := provider.Interact().Input(ctx, browser.BrowserSessionID(in.SessionID), browser.BrowserTabID(in.TabID), in.Element, in.InputText)
 	if err != nil {
@@ -407,7 +407,7 @@ func execInput(ctx context.Context, provider browser.BrowserProvider, input json
 func execSelect(ctx context.Context, provider browser.BrowserProvider, input json.RawMessage) (json.RawMessage, error) {
 	var in interactInput
 	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidInput, Message: "invalid input: " + err.Error(), Cause: err}
+		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidRequest, Message: "invalid input: " + err.Error(), Cause: err}
 	}
 	result, err := provider.Interact().Select(ctx, browser.BrowserSessionID(in.SessionID), browser.BrowserTabID(in.TabID), in.Element, in.Value)
 	if err != nil {
@@ -419,7 +419,7 @@ func execSelect(ctx context.Context, provider browser.BrowserProvider, input jso
 func execHover(ctx context.Context, provider browser.BrowserProvider, input json.RawMessage) (json.RawMessage, error) {
 	var in interactInput
 	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidInput, Message: "invalid input: " + err.Error(), Cause: err}
+		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidRequest, Message: "invalid input: " + err.Error(), Cause: err}
 	}
 	result, err := provider.Interact().Hover(ctx, browser.BrowserSessionID(in.SessionID), browser.BrowserTabID(in.TabID), in.Element)
 	if err != nil {
@@ -431,7 +431,7 @@ func execHover(ctx context.Context, provider browser.BrowserProvider, input json
 func execScroll(ctx context.Context, provider browser.BrowserProvider, input json.RawMessage) (json.RawMessage, error) {
 	var in interactInput
 	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidInput, Message: "invalid input: " + err.Error(), Cause: err}
+		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidRequest, Message: "invalid input: " + err.Error(), Cause: err}
 	}
 	result, err := provider.Interact().Scroll(ctx, browser.BrowserSessionID(in.SessionID), browser.BrowserTabID(in.TabID), in.Direction)
 	if err != nil {
@@ -443,7 +443,7 @@ func execScroll(ctx context.Context, provider browser.BrowserProvider, input jso
 func execDownload(ctx context.Context, provider browser.BrowserProvider, input json.RawMessage) (json.RawMessage, error) {
 	var in downloadInput
 	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidInput, Message: "invalid input: " + err.Error(), Cause: err}
+		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidRequest, Message: "invalid input: " + err.Error(), Cause: err}
 	}
 	req := browser.BrowserDownloadRequest{
 		SessionID:     browser.BrowserSessionID(in.SessionID),
@@ -463,7 +463,7 @@ func execDownload(ctx context.Context, provider browser.BrowserProvider, input j
 func execUpload(ctx context.Context, provider browser.BrowserProvider, input json.RawMessage) (json.RawMessage, error) {
 	var in uploadInput
 	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidInput, Message: "invalid input: " + err.Error(), Cause: err}
+		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidRequest, Message: "invalid input: " + err.Error(), Cause: err}
 	}
 	req := browser.BrowserUploadRequest{
 		SessionID:   browser.BrowserSessionID(in.SessionID),
@@ -481,7 +481,7 @@ func execUpload(ctx context.Context, provider browser.BrowserProvider, input jso
 func execScreenshot(ctx context.Context, provider browser.BrowserProvider, input json.RawMessage) (json.RawMessage, error) {
 	var in screenshotInput
 	if err := json.Unmarshal(input, &in); err != nil {
-		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidInput, Message: "invalid input: " + err.Error(), Cause: err}
+		return nil, &browser.BrowserError{Code: browser.ErrCodeInvalidRequest, Message: "invalid input: " + err.Error(), Cause: err}
 	}
 	req := browser.BrowserScreenshotRequest{
 		SessionID: browser.BrowserSessionID(in.SessionID),

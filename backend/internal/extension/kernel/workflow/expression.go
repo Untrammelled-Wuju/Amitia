@@ -11,11 +11,11 @@ import (
 type RefSource string
 
 const (
-	RefSourceInput     RefSource = "input"
-	RefSourceConfig    RefSource = "config"
-	RefSourceRuntime   RefSource = "runtime"
+	RefSourceInput      RefSource = "input"
+	RefSourceConfig     RefSource = "config"
+	RefSourceRuntime    RefSource = "runtime"
 	RefSourceNodeOutput RefSource = "node_output"
-	RefSourceLiteral   RefSource = "literal"
+	RefSourceLiteral    RefSource = "literal"
 )
 
 type WorkflowValueRef struct {
@@ -112,12 +112,12 @@ const (
 )
 
 type WorkflowExpression struct {
-	Op    ExpressionOp    `json:"op"`
-	Left  *WorkflowExpression `json:"left,omitempty"`
-	Right *WorkflowExpression `json:"right,omitempty"`
+	Op    ExpressionOp          `json:"op"`
+	Left  *WorkflowExpression   `json:"left,omitempty"`
+	Right *WorkflowExpression   `json:"right,omitempty"`
 	Args  []*WorkflowExpression `json:"args,omitempty"`
-	Ref   *WorkflowValueRef `json:"ref,omitempty"`
-	Value any               `json:"value,omitempty"`
+	Ref   *WorkflowValueRef     `json:"ref,omitempty"`
+	Value any                   `json:"value,omitempty"`
 }
 
 func CompileExpression(raw json.RawMessage) (*WorkflowExpression, error) {

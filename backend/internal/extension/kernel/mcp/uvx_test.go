@@ -502,10 +502,10 @@ func TestIsUvxReservedEnvVar(t *testing.T) {
 func TestBuildUvxEnvironment(t *testing.T) {
 	spec := UvxLaunchSpec{
 		Environment: map[string]string{
-			"MY_API_KEY":    "secret123",
-			"UV_CACHE_DIR":  "should-be-ignored",
-			"FOO\x00BAR":    "invalid",
-			"VALID":         "value",
+			"MY_API_KEY":   "secret123",
+			"UV_CACHE_DIR": "should-be-ignored",
+			"FOO\x00BAR":   "invalid",
+			"VALID":        "value",
 		},
 	}
 

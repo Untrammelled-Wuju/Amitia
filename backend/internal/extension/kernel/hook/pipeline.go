@@ -10,21 +10,21 @@ import (
 )
 
 type Pipeline struct {
-	PointRegistry    HookPointRegistry
-	ContribStore     ContributionStore
-	RuntimeBridge    RuntimeBridge
-	Permission       PermissionChecker
-	Scope            ScopeChecker
-	Dependency       DependencyChecker
-	Trace            TraceRecorder
-	Circuit          *CircuitBreaker
-	DepthGuard       *DepthGuard
-	Validator        *PatchValidator
-	PlanCache        *PlanCache
-	HostRevalidator  HostRevalidator
-	MaxDepth         int
-	PipelineTimeout  time.Duration
-	chainBudgetMs    int64
+	PointRegistry   HookPointRegistry
+	ContribStore    ContributionStore
+	RuntimeBridge   RuntimeBridge
+	Permission      PermissionChecker
+	Scope           ScopeChecker
+	Dependency      DependencyChecker
+	Trace           TraceRecorder
+	Circuit         *CircuitBreaker
+	DepthGuard      *DepthGuard
+	Validator       *PatchValidator
+	PlanCache       *PlanCache
+	HostRevalidator HostRevalidator
+	MaxDepth        int
+	PipelineTimeout time.Duration
+	chainBudgetMs   int64
 }
 
 func NewPipeline(

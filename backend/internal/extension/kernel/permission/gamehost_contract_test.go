@@ -1,8 +1,8 @@
 package permission
 
 import (
-	"os"
 	"encoding/json"
+	"os"
 	"testing"
 )
 
@@ -16,8 +16,8 @@ func TestGameHostPermissionIDs_ExactlyThree(t *testing.T) {
 func TestGameHostPermissionIDs_CanonicalValues(t *testing.T) {
 	ids := GameHostPermissionIDs()
 	expected := map[string]bool{
-		"gamehost.control":      false,
-		"gamehost.channel.use":  false,
+		"gamehost.control":         false,
+		"gamehost.channel.use":     false,
 		"gamehost.host_api.invoke": false,
 	}
 	for _, id := range ids {

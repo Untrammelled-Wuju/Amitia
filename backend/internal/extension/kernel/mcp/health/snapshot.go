@@ -5,23 +5,23 @@ import "time"
 type MCPHealthState string
 
 const (
-	MCPHealthUnknown            MCPHealthState = "unknown"
-	MCPHealthDisabled           MCPHealthState = "disabled"
-	MCPHealthInstalling         MCPHealthState = "installing"
+	MCPHealthUnknown               MCPHealthState = "unknown"
+	MCPHealthDisabled              MCPHealthState = "disabled"
+	MCPHealthInstalling            MCPHealthState = "installing"
 	MCPHealthAuthorizationRequired MCPHealthState = "authorization_required"
-	MCPHealthStarting           MCPHealthState = "starting"
-	MCPHealthReady              MCPHealthState = "ready"
-	MCPHealthDegraded           MCPHealthState = "degraded"
-	MCPHealthUnreachable        MCPHealthState = "unreachable"
-	MCPHealthIncompatible       MCPHealthState = "incompatible"
-	MCPHealthFailed             MCPHealthState = "failed"
-	MCPHealthStopped            MCPHealthState = "stopped"
+	MCPHealthStarting              MCPHealthState = "starting"
+	MCPHealthReady                 MCPHealthState = "ready"
+	MCPHealthDegraded              MCPHealthState = "degraded"
+	MCPHealthUnreachable           MCPHealthState = "unreachable"
+	MCPHealthIncompatible          MCPHealthState = "incompatible"
+	MCPHealthFailed                MCPHealthState = "failed"
+	MCPHealthStopped               MCPHealthState = "stopped"
 )
 
 type MCPServerInfo struct {
-	Name        string `json:"name"`
-	Version     string `json:"version"`
-	Vendor      string `json:"vendor,omitempty"`
+	Name         string `json:"name"`
+	Version      string `json:"version"`
+	Vendor       string `json:"vendor,omitempty"`
 	Instructions string `json:"instructions,omitempty"`
 }
 
@@ -64,8 +64,8 @@ func (s MCPHealthSnapshot) IsUnavailable() bool {
 type HealthReachability string
 
 const (
-	MCPReachUnknown  HealthReachability = "unknown"
-	MCPReachReachable HealthReachability = "reachable"
+	MCPReachUnknown     HealthReachability = "unknown"
+	MCPReachReachable   HealthReachability = "reachable"
 	MCPReachUnreachable HealthReachability = "unreachable"
 )
 

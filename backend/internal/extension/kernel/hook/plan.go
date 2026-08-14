@@ -37,8 +37,8 @@ type CompiledHookPlan struct {
 }
 
 type PlanCache struct {
-	mu       sync.RWMutex
-	plans    map[string]*CompiledHookPlan
+	mu         sync.RWMutex
+	plans      map[string]*CompiledHookPlan
 	generation uint64
 }
 

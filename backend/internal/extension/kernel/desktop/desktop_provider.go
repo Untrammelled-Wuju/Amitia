@@ -20,7 +20,7 @@ func (p *DesktopHostProvider) Execute(ctx context.Context, request capability.De
 		return capability.DesktopBridgeResponse{
 			ProtocolVersion: request.ProtocolVersion,
 			RequestID:       request.RequestID,
-			Status:           "error",
+			Status:          "error",
 			Error: &capability.DesktopError{
 				Code:    "PROVIDER_UNAVAILABLE",
 				Message: "desktop host not available",
@@ -55,7 +55,7 @@ func (p *DesktopHostProvider) Execute(ctx context.Context, request capability.De
 		return capability.DesktopBridgeResponse{
 			ProtocolVersion: request.ProtocolVersion,
 			RequestID:       request.RequestID,
-			Status:           "error",
+			Status:          "error",
 			Error:           mapHostError(err),
 		}
 	}
@@ -69,8 +69,8 @@ func (p *DesktopHostProvider) Execute(ctx context.Context, request capability.De
 	return capability.DesktopBridgeResponse{
 		ProtocolVersion: request.ProtocolVersion,
 		RequestID:       request.RequestID,
-		Status:           "success",
-		Result:           resultMap,
+		Status:          "success",
+		Result:          resultMap,
 	}
 }
 
@@ -161,4 +161,3 @@ func mapHostError(err error) *capability.DesktopError {
 		DomainCode: domainCode,
 	}
 }
-

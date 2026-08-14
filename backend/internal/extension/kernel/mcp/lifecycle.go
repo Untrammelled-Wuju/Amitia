@@ -21,8 +21,8 @@ type MCPInstaller interface {
 }
 
 type MCPLifecycle struct {
-	provisioner MCPDependencyProvisioner
-	installer   MCPInstaller
+	provisioner   MCPDependencyProvisioner
+	installer     MCPInstaller
 	installations map[string]*MCPInstallation
 	operations    map[string]string
 	locks         map[string]bool

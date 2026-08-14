@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/system/dataportability"
@@ -159,11 +158,11 @@ func (c *ChatBackupContributor) PreviewImport(ctx context.Context, req dataporta
 	previews := make([]dataportability.ImportComponentPreview, 0, 2)
 
 	convPreview := dataportability.ImportComponentPreview{
-		ComponentID:  ComponentIDChatConversations,
-		Kind:         dataportability.KindNDJSON,
-		LogicalName:  "chat.conversations.v1",
-		Collisions:   make([]dataportability.ComponentCollision, 0),
-		Warnings:     make([]string, 0),
+		ComponentID: ComponentIDChatConversations,
+		Kind:        dataportability.KindNDJSON,
+		LogicalName: "chat.conversations.v1",
+		Collisions:  make([]dataportability.ComponentCollision, 0),
+		Warnings:    make([]string, 0),
 	}
 	convRC, err := in.ReadComponent(ComponentIDChatConversations + ".v1")
 	if err == nil {

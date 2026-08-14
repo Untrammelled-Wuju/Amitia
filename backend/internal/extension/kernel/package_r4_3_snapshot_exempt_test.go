@@ -20,19 +20,19 @@ func r43SnapshotExemptClaims() PackageConfirmationClaims {
 	}
 
 	return PackageConfirmationClaims{
-		SchemaVersion:   PackageConfirmationClaimsSchemaVersion,
-		OperationType:   string(PackageOperationTypeUpdate),
-		ExtensionID:     "com.example/r43",
-		ArtifactID:      "artifact-r43",
-		PreviewHash:     "sha256:r43-preview",
-		SecurityPolicyHash: computeSecurityPolicyHash(),
+		SchemaVersion:           PackageConfirmationClaimsSchemaVersion,
+		OperationType:           string(PackageOperationTypeUpdate),
+		ExtensionID:             "com.example/r43",
+		ArtifactID:              "artifact-r43",
+		PreviewHash:             "sha256:r43-preview",
+		SecurityPolicyHash:      computeSecurityPolicyHash(),
 		SnapshotRequirementHash: "sha256:r43-requirement",
 		RequiredConfirmationsHash: computePackageRequiredConfirmationsHash(
 			required,
 		),
 		ConfirmedItems: required,
 		Confirmations: map[string]bool{
-			"confirm.update":            true,
+			"confirm.update":                  true,
 			PackageConfirmationSnapshotExempt: true,
 		},
 		Nonce:     "nonce-r43",

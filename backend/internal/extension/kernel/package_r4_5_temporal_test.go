@@ -83,7 +83,7 @@ func TestR45TemporalBindingRejectsExpiredClaims(t *testing.T) {
 func TestR45TemporalBindingRejectsExcessiveLifetime(t *testing.T) {
 	now := time.Now().UTC()
 	issuedAt := now.Add(-time.Minute).Unix()
-	expiresAt := issuedAt + int64((packageConfirmationLifetime+packageConfirmationClockSkew+time.Second).Seconds())
+	expiresAt := issuedAt + int64((packageConfirmationLifetime + packageConfirmationClockSkew + time.Second).Seconds())
 	if err := validatePackageConfirmationTemporalBinding(issuedAt, expiresAt, "nonce-8", now); err == nil {
 		t.Fatal("lifetime exceeding policy should be rejected")
 	}

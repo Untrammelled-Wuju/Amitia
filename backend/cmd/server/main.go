@@ -170,6 +170,49 @@ func main() {
 	}
 	services.RuntimeOrchestrator = bootstrap
 
+	if err := runCanonicalRuntimeAssertions(services); err != nil {
+		log.Error("Canonical runtime startup assertions failed:", err)
+		_ = bootstrap.StopAll(context.Background())
+		os.Exit(1)
+	}
+
+	productionCutover := initCutoverGate(db, services)
+	committed, incomplete, err := productionCutover.CheckCutoverState(appCtx)
+	if err != nil {
+		log.Error("检查生产切换状态失败:", err)
+		_ = bootstrap.StopAll(context.Background())
+		os.Exit(1)
+	}
+
+	if incomplete {
+		log.Info("检测到未完成的生产切换，正在恢复执行...")
+		if err := productionCutover.RunCutover(appCtx); err != nil {
+			log.Error("生产切换执行失败:", err)
+			_ = bootstrap.StopAll(context.Background())
+			os.Exit(1)
+		}
+		log.Info("生产切换完成")
+	} else if !committed {
+		if !isNewDatabase(db) {
+			log.Info("执行生产切换...")
+			if err := productionCutover.RunCutover(appCtx); err != nil {
+				log.Error("生产切换执行失败:", err)
+				_ = bootstrap.StopAll(context.Background())
+				os.Exit(1)
+			}
+			log.Info("生产切换完成")
+		} else {
+			log.Info("新安装数据库，初始化canonical已提交状态...")
+			if err := initializeCommittedCutoverState(db); err != nil {
+				log.Error("初始化canonical切换状态失败:", err)
+				_ = bootstrap.StopAll(context.Background())
+				os.Exit(1)
+			}
+		}
+	}
+
+	services.ProductionCutover = productionCutover
+
 	cleanup := func() {
 		_ = bootstrap.StopAll(context.Background())
 	}
@@ -426,4 +469,36 @@ func initGraph() graph.Service {
 	}
 	log.Warn("SurrealDB连接失败，图谱功能不可用:", lastErr)
 	return nil
+}
+
+func isNewDatabase(db *gorm.DB) bool {
+	if db == nil {
+		return false
+	}
+	var count int64
+	if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table'").Count(&count).Error; err != nil {
+		return false
+	}
+	return count == 0
+}
+
+func initializeCommittedCutoverState(db *gorm.DB) error {
+	if db == nil {
+		return fmt.Errorf("database is nil")
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	return db.Exec(`INSERT OR REPLACE INTO production_cutover_state
+		(operation_id, phase, status, snapshot_id, error_message, started_at, updated_at, completed_at, canonical_generation, plan_version)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		"baseline-"+time.Now().Format("20060102"),
+		"commit",
+		"committed",
+		"",
+		"",
+		now,
+		now,
+		now,
+		1,
+		1,
+	).Error
 }

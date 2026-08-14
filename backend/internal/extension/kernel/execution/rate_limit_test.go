@@ -90,8 +90,8 @@ func (t *fakeRateLimitTimer) Stop() bool {
 	return false
 }
 
-func (t *fakeRateLimitTimer) isStopped() bool  { return atomic.LoadInt32(&t.stopped) == 1 }
-func (t *fakeRateLimitTimer) markFired()       { atomic.StoreInt32(&t.fired, 1) }
+func (t *fakeRateLimitTimer) isStopped() bool { return atomic.LoadInt32(&t.stopped) == 1 }
+func (t *fakeRateLimitTimer) markFired()      { atomic.StoreInt32(&t.fired, 1) }
 
 func waitForWaiters(r *RateLimiter, n int, timeout time.Duration) bool {
 	deadline := time.Now().Add(timeout)
@@ -332,9 +332,9 @@ func TestRateLimiter_PerCharacter_Isolated(t *testing.T) {
 func TestRateLimiter_PerConversation_Isolated(t *testing.T) {
 	clock := newFakeRateLimitClock(time.Unix(1_000_000, 0))
 	r, err := NewRateLimiterWithClock(RateLimitPolicy{
-		Enabled:        true,
+		Enabled:         true,
 		PerConversation: RateLimitSpec{Tokens: 10, Interval: time.Second, Burst: 1},
-		Backpressure: BackpressurePolicy{Mode: BackpressureReject},
+		Backpressure:    BackpressurePolicy{Mode: BackpressureReject},
 	}, clock)
 	if err != nil {
 		t.Fatal(err)
@@ -817,12 +817,12 @@ func TestRateLimiter_ClockRegression_NoNegativeTokens(t *testing.T) {
 func TestRateLimiter_EmptyIDs_SkipPerX(t *testing.T) {
 	clock := newFakeRateLimitClock(time.Unix(1_000_000, 0))
 	r, err := NewRateLimiterWithClock(RateLimitPolicy{
-		Enabled:        true,
-		PerTool:        RateLimitSpec{Tokens: 10, Interval: time.Second, Burst: 1},
-		PerExtension:   RateLimitSpec{Tokens: 10, Interval: time.Second, Burst: 1},
-		PerCharacter:   RateLimitSpec{Tokens: 10, Interval: time.Second, Burst: 1},
+		Enabled:         true,
+		PerTool:         RateLimitSpec{Tokens: 10, Interval: time.Second, Burst: 1},
+		PerExtension:    RateLimitSpec{Tokens: 10, Interval: time.Second, Burst: 1},
+		PerCharacter:    RateLimitSpec{Tokens: 10, Interval: time.Second, Burst: 1},
 		PerConversation: RateLimitSpec{Tokens: 10, Interval: time.Second, Burst: 1},
-		Backpressure: BackpressurePolicy{Mode: BackpressureReject},
+		Backpressure:    BackpressurePolicy{Mode: BackpressureReject},
 	}, clock)
 	if err != nil {
 		t.Fatal(err)

@@ -9,26 +9,26 @@ import (
 )
 
 const (
-	ScriptRuntimeNode    = "node"
-	ScriptRuntimePython  = "python"
-	ScriptRuntimeNative  = "native"
-	ScriptRuntimeShell   = "shell"
+	ScriptRuntimeNode   = "node"
+	ScriptRuntimePython = "python"
+	ScriptRuntimeNative = "native"
+	ScriptRuntimeShell  = "shell"
 )
 
 const (
-	ScriptKindExec     = "exec"
-	ScriptKindQuery    = "query"
-	ScriptKindRender   = "render"
-	ScriptKindService  = "service"
+	ScriptKindExec    = "exec"
+	ScriptKindQuery   = "query"
+	ScriptKindRender  = "render"
+	ScriptKindService = "service"
 )
 
 const (
-	ArgTypeString  = "string"
-	ArgTypeInt     = "int"
-	ArgTypeFloat   = "float"
-	ArgTypeBool    = "bool"
-	ArgTypeEnum    = "enum"
-	ArgTypePath    = "path"
+	ArgTypeString = "string"
+	ArgTypeInt    = "int"
+	ArgTypeFloat  = "float"
+	ArgTypeBool   = "bool"
+	ArgTypeEnum   = "enum"
+	ArgTypePath   = "path"
 )
 
 const (
@@ -45,18 +45,18 @@ const (
 )
 
 const (
-	WorkingDirPolicySkillRoot  = "skillRoot"
-	WorkingDirPolicyTemp       = "temp"
-	WorkingDirPolicyExplicit   = "explicit"
+	WorkingDirPolicySkillRoot = "skillRoot"
+	WorkingDirPolicyTemp      = "temp"
+	WorkingDirPolicyExplicit  = "explicit"
 )
 
 const (
-	StatusSuccess     = "success"
-	StatusFailed      = "failed"
-	StatusTimeout     = "timeout"
-	StatusCancelled   = "cancelled"
-	StatusDenied      = "denied"
-	StatusError       = "error"
+	StatusSuccess   = "success"
+	StatusFailed    = "failed"
+	StatusTimeout   = "timeout"
+	StatusCancelled = "cancelled"
+	StatusDenied    = "denied"
+	StatusError     = "error"
 )
 
 const (
@@ -66,14 +66,14 @@ const (
 )
 
 const (
-	DefaultScriptTimeout    = 30 * time.Second
-	MaxScriptTimeout        = 10 * time.Minute
-	MaxStdoutBytes          = 1 << 20
-	MaxStderrBytes          = 256 << 10
-	MaxDiskBytes            = 256 << 20
-	MaxOutputFiles          = 1000
-	MaxConcurrentPerUser    = 2
-	MaxConcurrentPerSkill   = 1
+	DefaultScriptTimeout  = 30 * time.Second
+	MaxScriptTimeout      = 10 * time.Minute
+	MaxStdoutBytes        = 1 << 20
+	MaxStderrBytes        = 256 << 10
+	MaxDiskBytes          = 256 << 20
+	MaxOutputFiles        = 1000
+	MaxConcurrentPerUser  = 2
+	MaxConcurrentPerSkill = 1
 )
 
 var (
@@ -186,16 +186,16 @@ type SkillScriptDependency struct {
 }
 
 type SkillScriptResult struct {
-	ExecutionID      string
-	ExitCode         int
-	Status           string
-	Output           string
-	Resources        map[string]string
-	StdoutTruncated  bool
-	StderrTruncated  bool
-	Duration         time.Duration
-	FileCount        int
-	ErrorMessage     string
+	ExecutionID     string
+	ExitCode        int
+	Status          string
+	Output          string
+	Resources       map[string]string
+	StdoutTruncated bool
+	StderrTruncated bool
+	Duration        time.Duration
+	FileCount       int
+	ErrorMessage    string
 }
 
 type SkillScriptExecutionPlan struct {

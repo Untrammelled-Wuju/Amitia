@@ -177,13 +177,13 @@ func TestBuildIOSSandboxRecoveryScanHook_CallsRealScan(t *testing.T) {
 		ProviderEnabled: true,
 		Inspector: &mockSandboxInspector{
 			snap: SandboxRecoverySnapshot{
-				RuntimeID:           "runtime-1",
-				LifecycleState:      SandboxStateRecoveryPending,
-				Generation:          5,
-				DesiredRunning:      true,
-				ActiveRootfsVersion: "3.19",
+				RuntimeID:            "runtime-1",
+				LifecycleState:       SandboxStateRecoveryPending,
+				Generation:           5,
+				DesiredRunning:       true,
+				ActiveRootfsVersion:  "3.19",
 				RunningRootfsVersion: "3.18",
-				RestartRequired:     true,
+				RestartRequired:      true,
 			},
 		},
 	}

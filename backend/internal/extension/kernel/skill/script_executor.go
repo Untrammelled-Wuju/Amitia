@@ -134,12 +134,12 @@ func (e *scriptExecutor) Execute(ctx context.Context, plan *SkillScriptExecution
 	}
 
 	spec := runtimehost.ProcessSpec{
-		ID:             runtimehost.ProcessID(processID),
-		Executable:     plan.Executable,
-		Args:           plan.Args,
-		WorkingDir:     plan.WorkingDir,
-		RestartPolicy:  runtimehost.RestartPolicy{Mode: runtimehost.RestartNever},
-		StartupTimeout: plan.Timeout,
+		ID:              runtimehost.ProcessID(processID),
+		Executable:      plan.Executable,
+		Args:            plan.Args,
+		WorkingDir:      plan.WorkingDir,
+		RestartPolicy:   runtimehost.RestartPolicy{Mode: runtimehost.RestartNever},
+		StartupTimeout:  plan.Timeout,
 		StopGracePeriod: 5 * time.Second,
 	}
 

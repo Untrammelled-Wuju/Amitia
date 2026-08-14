@@ -84,12 +84,12 @@ type IdempotencyGuard struct {
 	mu      sync.Mutex
 	flights map[string]*IdempotencyFlight
 
-	hooks             IdempotencyHook
-	now               func() time.Time
-	retentionWindow   time.Duration
-	staleOwnerTTE     time.Duration
+	hooks               IdempotencyHook
+	now                 func() time.Time
+	retentionWindow     time.Duration
+	staleOwnerTTE       time.Duration
 	cleanupIntervalNano int64
-	takeoverGraceNano  int64
+	takeoverGraceNano   int64
 
 	cleanupStop chan struct{}
 }
@@ -108,8 +108,8 @@ var _ IdempotencyHook = (*NoopIdempotencyHook)(nil)
 
 type NoopIdempotencyHook struct{}
 
-func (NoopIdempotencyHook) OnIdempotencyBegin(ctx context.Context, key string)               {}
-func (NoopIdempotencyHook) OnIdempotencyCacheHit(ctx context.Context, key string)            {}
+func (NoopIdempotencyHook) OnIdempotencyBegin(ctx context.Context, key string)    {}
+func (NoopIdempotencyHook) OnIdempotencyCacheHit(ctx context.Context, key string) {}
 func (NoopIdempotencyHook) OnIdempotencyConflict(ctx context.Context, key string, prevID string, prevState IdempotencyState) {
 }
 func (NoopIdempotencyHook) OnIdempotencySingleFlightJoin(ctx context.Context, key string)    {}
@@ -131,16 +131,16 @@ const (
 
 func NewIdempotencyGuard(storage IdempotencyStorage) *IdempotencyGuard {
 	g := &IdempotencyGuard{
-		storage:            storage,
-		nodeID:             uuid.NewString(),
-		flights:            make(map[string]*IdempotencyFlight),
-		hooks:              NoopIdempotencyHook{},
-		now:                func() time.Time { return time.Now().UTC() },
-		retentionWindow:    defaultRetentionWindow,
-		staleOwnerTTE:      defaultOwnerTTE,
+		storage:             storage,
+		nodeID:              uuid.NewString(),
+		flights:             make(map[string]*IdempotencyFlight),
+		hooks:               NoopIdempotencyHook{},
+		now:                 func() time.Time { return time.Now().UTC() },
+		retentionWindow:     defaultRetentionWindow,
+		staleOwnerTTE:       defaultOwnerTTE,
 		cleanupIntervalNano: int64(defaultCleanupInterval),
-		takeoverGraceNano:  int64(defaultTakeoverGrace),
-		cleanupStop:        make(chan struct{}),
+		takeoverGraceNano:   int64(defaultTakeoverGrace),
+		cleanupStop:         make(chan struct{}),
 	}
 	go g.cleanupLoop()
 	return g

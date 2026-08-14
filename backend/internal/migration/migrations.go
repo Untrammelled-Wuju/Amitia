@@ -157,5 +157,7 @@ func DefaultMigrations() []Migration {
 		MemorySummaryConsolidationMigration(),
 		KernelHostRegistryEntryKindMigration(),
 		ProductionCutoverMigration(),
+		DeviceRuntimeSessionMigration(),
+		KernelHostRegistryRuntimeSessionColumnsMigration(),
 	}
 }

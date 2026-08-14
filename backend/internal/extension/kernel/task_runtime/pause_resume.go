@@ -10,18 +10,18 @@ import (
 )
 
 type PauseTaskResult struct {
-	TaskRunID        string        `json:"taskRunId"`
-	Status           TaskRunStatus `json:"status"`
-	CheckpointID     string        `json:"checkpointId,omitempty"`
-	CheckpointVersion int64        `json:"checkpointVersion,omitempty"`
-	Generation       int64         `json:"generation"`
+	TaskRunID         string        `json:"taskRunId"`
+	Status            TaskRunStatus `json:"status"`
+	CheckpointID      string        `json:"checkpointId,omitempty"`
+	CheckpointVersion int64         `json:"checkpointVersion,omitempty"`
+	Generation        int64         `json:"generation"`
 }
 
 type TaskPauseAck struct {
-	TaskRunID        string `json:"task_run_id"`
-	CheckpointVersion int64 `json:"checkpoint_version"`
-	CheckpointHash   string `json:"checkpoint_hash"`
-	Paused           bool   `json:"paused"`
+	TaskRunID         string `json:"task_run_id"`
+	CheckpointVersion int64  `json:"checkpoint_version"`
+	CheckpointHash    string `json:"checkpoint_hash"`
+	Paused            bool   `json:"paused"`
 }
 
 func (s *TaskRuntimeService) Pause(ctx context.Context, taskRunID string, reason string) (*TaskRun, error) {
@@ -287,14 +287,14 @@ func (s *TaskRuntimeService) emitPauseEvent(ctx context.Context, run *TaskRun, e
 		return
 	}
 	payload, _ := json.Marshal(map[string]interface{}{
-		"taskRunId":    run.TaskRunID,
+		"taskRunId":        run.TaskRunID,
 		"taskDefinitionId": run.TaskDefinitionID,
-		"extensionId":  run.ExtensionID,
-		"moduleId":     run.ModuleID,
-		"status":       string(run.Status),
-		"generation":   run.Generation,
-		"checkpointId": run.CheckpointID,
-		"pauseReason":  run.PauseReason,
+		"extensionId":      run.ExtensionID,
+		"moduleId":         run.ModuleID,
+		"status":           string(run.Status),
+		"generation":       run.Generation,
+		"checkpointId":     run.CheckpointID,
+		"pauseReason":      run.PauseReason,
 	})
 	opts := event.PublishOptions{
 		AggregateType: "task_run",

@@ -15,15 +15,15 @@ type Executor interface {
 }
 
 type sqliteIdempotencyStorage struct {
-	db       Executor
-	now      func() time.Time
+	db        Executor
+	now       func() time.Time
 	retention time.Duration
 }
 
 func NewExecutionIdempotencyStorage(db Executor) IdempotencyStorage {
 	return &sqliteIdempotencyStorage{
-		db:       db,
-		now:      func() time.Time { return time.Now().UTC() },
+		db:        db,
+		now:       func() time.Time { return time.Now().UTC() },
 		retention: defaultRetentionWindow,
 	}
 }

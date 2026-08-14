@@ -72,12 +72,12 @@ func registerShellTools(toolRegistry *capability.ToolRegistry) error {
 	}`)
 
 	tool := capability.ToolDefinition{
-		ID:          string(execID),
-		ModelName:   "android_linux__shell__exec",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Execute Shell Command",
-		Description: "Execute a one-shot shell command on Android Linux Guest without interactive terminal",
-		InputSchema: inputSchema,
+		ID:           string(execID),
+		ModelName:    "android_linux__shell__exec",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Execute Shell Command",
+		Description:  "Execute a one-shot shell command on Android Linux Guest without interactive terminal",
+		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
 			{Capability: "runtime.linux.shell.execute", Risk: "high"},

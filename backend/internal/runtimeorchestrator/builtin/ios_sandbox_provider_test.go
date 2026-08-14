@@ -64,7 +64,7 @@ func (h *fakeHost) RuntimeInstanceID() string {
 
 func TestIOSSandboxProviderFactory_Build_NonIOSHost(t *testing.T) {
 	factory := NewIOSSandboxProviderFactory(IOSSandboxProviderConfig{
-		Enabled:  true,
+		Enabled:   true,
 		RootfsURI: "amitia://runtime/ios/rootfs",
 	})
 

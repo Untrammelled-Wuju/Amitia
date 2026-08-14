@@ -32,52 +32,52 @@ type DependencyRequirement struct {
 }
 
 type CompiledWorkflowNode struct {
-	ID             string                `json:"id"`
-	Type           string                `json:"type"`
-	DependsOn      []string              `json:"dependsOn"`
-	Index          int                   `json:"index"`
-	TargetID       string                `json:"targetId,omitempty"`
-	Runtime        json.RawMessage       `json:"runtime,omitempty"`
-	Permissions    []string              `json:"permissions,omitempty"`
-	Scope          string                `json:"scope,omitempty"`
-	Input          map[string]any        `json:"input,omitempty"`
-	When           *WorkflowExpression   `json:"when,omitempty"`
-	Timeout        *time.Duration        `json:"timeout,omitempty"`
-	Retry          *WorkflowRetryPolicy  `json:"retry,omitempty"`
+	ID             string                  `json:"id"`
+	Type           string                  `json:"type"`
+	DependsOn      []string                `json:"dependsOn"`
+	Index          int                     `json:"index"`
+	TargetID       string                  `json:"targetId,omitempty"`
+	Runtime        json.RawMessage         `json:"runtime,omitempty"`
+	Permissions    []string                `json:"permissions,omitempty"`
+	Scope          string                  `json:"scope,omitempty"`
+	Input          map[string]any          `json:"input,omitempty"`
+	When           *WorkflowExpression     `json:"when,omitempty"`
+	Timeout        *time.Duration          `json:"timeout,omitempty"`
+	Retry          *WorkflowRetryPolicy    `json:"retry,omitempty"`
 	OnError        WorkflowNodeErrorPolicy `json:"onError,omitempty"`
-	DataRefs       []*WorkflowValueRef   `json:"dataRefs,omitempty"`
-	Purity         NodePurity            `json:"purity"`
-	HasSideEffects bool                  `json:"hasSideEffects"`
+	DataRefs       []*WorkflowValueRef     `json:"dataRefs,omitempty"`
+	Purity         NodePurity              `json:"purity"`
+	HasSideEffects bool                    `json:"hasSideEffects"`
 }
 
 type NodePurity string
 
 const (
-	NodePurityPure        NodePurity = "pure"
-	NodePurityIdempotent  NodePurity = "idempotent"
+	NodePurityPure          NodePurity = "pure"
+	NodePurityIdempotent    NodePurity = "idempotent"
 	NodePuritySideEffecting NodePurity = "side_effecting"
-	NodePurityUnknown     NodePurity = "unknown"
+	NodePurityUnknown       NodePurity = "unknown"
 )
 
 type CompiledWorkflowDAG struct {
-	WorkflowID        string                    `json:"workflowId"`
-	SchemaVersion     string                    `json:"schemaVersion"`
-	CompilerVersion   string                    `json:"compilerVersion"`
-	WorkflowChecksum  string                    `json:"workflowChecksum"`
-	CompiledChecksum  string                    `json:"compiledChecksum"`
-	InputSchema       CompiledSchema            `json:"inputSchema"`
-	OutputSchema      CompiledSchema            `json:"outputSchema"`
+	WorkflowID        string                          `json:"workflowId"`
+	SchemaVersion     string                          `json:"schemaVersion"`
+	CompilerVersion   string                          `json:"compilerVersion"`
+	WorkflowChecksum  string                          `json:"workflowChecksum"`
+	CompiledChecksum  string                          `json:"compiledChecksum"`
+	InputSchema       CompiledSchema                  `json:"inputSchema"`
+	OutputSchema      CompiledSchema                  `json:"outputSchema"`
 	Nodes             map[string]CompiledWorkflowNode `json:"nodes"`
-	TopologicalOrder  []string                  `json:"topologicalOrder"`
-	Dependents        map[string][]string       `json:"dependents"`
-	DependedOnBy      map[string][]string       `json:"dependedOnBy"`
-	EntryNodes        []string                  `json:"entryNodes"`
-	ExitNodes         []string                  `json:"exitNodes"`
-	PermissionClosure []PermissionRequirement   `json:"permissionClosure"`
-	DependencyClosure []DependencyRequirement   `json:"dependencyClosure"`
-	Limits            WorkflowLimits            `json:"limits"`
-	DefinitionHash    string                    `json:"definitionHash"`
-	Output            any                       `json:"output,omitempty"`
+	TopologicalOrder  []string                        `json:"topologicalOrder"`
+	Dependents        map[string][]string             `json:"dependents"`
+	DependedOnBy      map[string][]string             `json:"dependedOnBy"`
+	EntryNodes        []string                        `json:"entryNodes"`
+	ExitNodes         []string                        `json:"exitNodes"`
+	PermissionClosure []PermissionRequirement         `json:"permissionClosure"`
+	DependencyClosure []DependencyRequirement         `json:"dependencyClosure"`
+	Limits            WorkflowLimits                  `json:"limits"`
+	DefinitionHash    string                          `json:"definitionHash"`
+	Output            any                             `json:"output,omitempty"`
 }
 
 type Compiler struct {
@@ -85,15 +85,15 @@ type Compiler struct {
 }
 
 type CompilerLimits struct {
-	MaxNodes        int
-	MaxDepth        int
+	MaxNodes           int
+	MaxDepth           int
 	MaxExpressionDepth int
 }
 
 func DefaultCompilerLimits() *CompilerLimits {
 	return &CompilerLimits{
-		MaxNodes:          128,
-		MaxDepth:          8,
+		MaxNodes:           128,
+		MaxDepth:           8,
 		MaxExpressionDepth: MaxExpressionDepth,
 	}
 }
@@ -107,10 +107,10 @@ func NewCompilerWithLimits(l *CompilerLimits) *Compiler {
 }
 
 type CompileOptions struct {
-	EnableWhen     bool
-	EnableRetry    bool
-	EnableTimeout  bool
-	StrictMode     bool
+	EnableWhen    bool
+	EnableRetry   bool
+	EnableTimeout bool
+	StrictMode    bool
 }
 
 func DefaultCompileOptions() CompileOptions {

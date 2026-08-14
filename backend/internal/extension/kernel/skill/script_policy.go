@@ -45,17 +45,17 @@ func (defaultScriptFileInspector) ReadLink(path string) (string, error) {
 }
 
 type ScriptPolicyContext struct {
-	Inspector    ScriptFileInspector
-	MaxFileSize  int64
-	AllowSymlink bool
+	Inspector     ScriptFileInspector
+	MaxFileSize   int64
+	AllowSymlink  bool
 	AllowHardlink bool
 }
 
 func DefaultScriptPolicyContext() ScriptPolicyContext {
 	return ScriptPolicyContext{
-		Inspector:    defaultScriptFileInspector{},
-		MaxFileSize:  1 << 20,
-		AllowSymlink: false,
+		Inspector:     defaultScriptFileInspector{},
+		MaxFileSize:   1 << 20,
+		AllowSymlink:  false,
 		AllowHardlink: false,
 	}
 }

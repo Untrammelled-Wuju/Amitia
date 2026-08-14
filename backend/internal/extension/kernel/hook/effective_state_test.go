@@ -256,7 +256,7 @@ func TestComputeEffectiveState_HandlerInvalid(t *testing.T) {
 
 func TestComputeEffectiveState_ReasonsPresent(t *testing.T) {
 	result := ComputeEffectiveState(EffectiveStateInput{
-		Contribution: HookContributionDefinition{Enabled: false},
+		Contribution:    HookContributionDefinition{Enabled: false},
 		ExtensionActive: true,
 	})
 	if result.Reason == "" {

@@ -28,17 +28,17 @@ type MCPTransportSpec struct {
 type MCPTransportType string
 
 const (
-	MCPTransportTypeStdio         MCPTransportType = "stdio"
+	MCPTransportTypeStdio          MCPTransportType = "stdio"
 	MCPTransportTypeStreamableHTTP MCPTransportType = "streamable_http"
-	MCPTransportTypeSSE           MCPTransportType = "sse"
+	MCPTransportTypeSSE            MCPTransportType = "sse"
 )
 
 type MCPStdioTransportSpec struct {
-	Command     string            `json:"command"`
-	Args        []string          `json:"args,omitempty"`
-	WorkDir     string            `json:"workDir,omitempty"`
-	Env         MCPEnvSpec        `json:"env,omitempty"`
-	RuntimeHint string            `json:"runtimeHint,omitempty"`
+	Command     string     `json:"command"`
+	Args        []string   `json:"args,omitempty"`
+	WorkDir     string     `json:"workDir,omitempty"`
+	Env         MCPEnvSpec `json:"env,omitempty"`
+	RuntimeHint string     `json:"runtimeHint,omitempty"`
 }
 
 type MCPEnvSpec struct {
@@ -47,31 +47,31 @@ type MCPEnvSpec struct {
 }
 
 type MCPRemoteTransportSpec struct {
-	URL                 string            `json:"url"`
+	URL                 string                 `json:"url"`
 	Headers             map[string]MCPValueRef `json:"headers,omitempty"`
-	Auth                *MCPAuthSpec      `json:"auth,omitempty"`
-	AllowPrivateNetwork bool              `json:"allowPrivateNetwork,omitempty"`
+	Auth                *MCPAuthSpec           `json:"auth,omitempty"`
+	AllowPrivateNetwork bool                   `json:"allowPrivateNetwork,omitempty"`
 }
 
 type MCPValueRef struct {
-	Value      string `json:"value,omitempty"`
-	SecretRef  string `json:"secretRef,omitempty"`
+	Value     string `json:"value,omitempty"`
+	SecretRef string `json:"secretRef,omitempty"`
 }
 
 type MCPAuthSpec struct {
-	Type       MCPAuthType `json:"type,omitempty"`
-	SecretRef  string      `json:"secretRef,omitempty"`
-	OAuth      *MCPOAuthRef `json:"oauth,omitempty"`
+	Type      MCPAuthType  `json:"type,omitempty"`
+	SecretRef string       `json:"secretRef,omitempty"`
+	OAuth     *MCPOAuthRef `json:"oauth,omitempty"`
 }
 
 type MCPAuthType string
 
 const (
-	MCPAuthTypeNone         MCPAuthType = "none"
-	MCPAuthTypeBearerToken  MCPAuthType = "bearer_token"
+	MCPAuthTypeNone          MCPAuthType = "none"
+	MCPAuthTypeBearerToken   MCPAuthType = "bearer_token"
 	MCPAuthTypeCustomHeaders MCPAuthType = "custom_headers"
-	MCPAuthTypeStdioEnv     MCPAuthType = "stdio_env"
-	MCPAuthTypeOAuth        MCPAuthType = "oauth"
+	MCPAuthTypeStdioEnv      MCPAuthType = "stdio_env"
+	MCPAuthTypeOAuth         MCPAuthType = "oauth"
 )
 
 type MCPOAuthRef struct {
@@ -95,10 +95,10 @@ type MCPServerFeaturePolicy struct {
 }
 
 type MCPClientFeaturePolicy struct {
-	Roots      MCPCapabilityState `json:"roots,omitempty"`
-	Sampling   MCPCapabilityState `json:"sampling,omitempty"`
+	Roots       MCPCapabilityState `json:"roots,omitempty"`
+	Sampling    MCPCapabilityState `json:"sampling,omitempty"`
 	Elicitation MCPCapabilityState `json:"elicitation,omitempty"`
-	Tasks      MCPCapabilityState `json:"tasks,omitempty"`
+	Tasks       MCPCapabilityState `json:"tasks,omitempty"`
 }
 
 type MCPCapabilityState string
@@ -110,21 +110,21 @@ const (
 )
 
 type MCPLifecyclePolicy struct {
-	AutoStart          bool                `json:"autoStart,omitempty"`
-	RestartPolicy      MCPRestartPolicy    `json:"restartPolicy,omitempty"`
-	MaxRestartAttempts int                 `json:"maxRestartAttempts,omitempty"`
-	StartupTimeout     string              `json:"startupTimeout,omitempty"`
-	ShutdownTimeout    string              `json:"shutdownTimeout,omitempty"`
-	ReconnectPolicy    MCPReconnectPolicy  `json:"reconnectPolicy,omitempty"`
-	RefreshOnReconnect bool                `json:"refreshOnReconnect,omitempty"`
+	AutoStart          bool               `json:"autoStart,omitempty"`
+	RestartPolicy      MCPRestartPolicy   `json:"restartPolicy,omitempty"`
+	MaxRestartAttempts int                `json:"maxRestartAttempts,omitempty"`
+	StartupTimeout     string             `json:"startupTimeout,omitempty"`
+	ShutdownTimeout    string             `json:"shutdownTimeout,omitempty"`
+	ReconnectPolicy    MCPReconnectPolicy `json:"reconnectPolicy,omitempty"`
+	RefreshOnReconnect bool               `json:"refreshOnReconnect,omitempty"`
 }
 
 type MCPRestartPolicy string
 
 const (
-	MCPRestartPolicyNever    MCPRestartPolicy = "never"
+	MCPRestartPolicyNever     MCPRestartPolicy = "never"
 	MCPRestartPolicyOnFailure MCPRestartPolicy = "on_failure"
-	MCPRestartPolicyAlways   MCPRestartPolicy = "always"
+	MCPRestartPolicyAlways    MCPRestartPolicy = "always"
 )
 
 type MCPReconnectPolicy struct {
@@ -138,14 +138,14 @@ type MCPSecurityPolicy struct {
 }
 
 type CompiledMCPServerManifest struct {
-	ServerID           string
-	ExtensionID        string
-	ModuleID           string
-	ContributionID     string
-	Spec               MCPServerSpec
-	ConfigurationHash  string
+	ServerID            string
+	ExtensionID         string
+	ModuleID            string
+	ContributionID      string
+	Spec                MCPServerSpec
+	ConfigurationHash   string
 	RequiredPermissions []string
-	RequiredScope      []string
+	RequiredScope       []string
 }
 
 func ParseSpec(raw map[string]any) (MCPServerSpec, error) {

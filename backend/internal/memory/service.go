@@ -126,6 +126,9 @@ type SubmitCandidateRequest struct {
 	SourceText     string `json:"sourceText"`
 	ConversationID string `json:"conversationId"`
 	CharacterID    string `json:"characterId"`
+	CandidateKind  string `json:"candidateKind"`
+	DerivationKey  string `json:"derivationKey"`
+	Reason         string `json:"reason"`
 }
 
 type VectorSearchResult struct {

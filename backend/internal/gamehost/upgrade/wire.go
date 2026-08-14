@@ -107,7 +107,7 @@ func BuildUpgradeCoordinator(deps UpgradeCoordinatorDeps) (*UpgradeCoordinator, 
 		return nil, fmt.Errorf("upgrade coordinator: ArchiveUpdater is required")
 	}
 
-	c := NewUpgradeCoordinator(
+	c, err := NewUpgradeCoordinator(
 		registryReaderAdapter{deps.PluginRegistry},
 		deps.RuntimeManager,
 		deps.RuntimeExecutor,
@@ -118,8 +118,8 @@ func BuildUpgradeCoordinator(deps UpgradeCoordinatorDeps) (*UpgradeCoordinator, 
 		deps.KernelLifecycle,
 		deps.ArchiveUpdater,
 	)
-	if c == nil {
-		return nil, fmt.Errorf("upgrade coordinator: construction failed")
+	if err != nil {
+		return nil, fmt.Errorf("upgrade coordinator: %w", err)
 	}
 	return c, nil
 }

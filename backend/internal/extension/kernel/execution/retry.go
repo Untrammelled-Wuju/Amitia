@@ -15,7 +15,7 @@ const (
 
 var retryableCanonicalCodes = map[string]bool{
 	capability.ErrorCodeRuntimeUnavailable: true,
-	capability.ErrorCodeConnectionLost:      true,
+	capability.ErrorCodeConnectionLost:     true,
 }
 
 func isRetryableResult(result capability.UnifiedToolResult) bool {

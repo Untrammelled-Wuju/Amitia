@@ -150,4 +150,3 @@ func contributionTags(ext domain.ExtensionDefinition) []ContributionTag {
 	}
 	return tags
 }
-

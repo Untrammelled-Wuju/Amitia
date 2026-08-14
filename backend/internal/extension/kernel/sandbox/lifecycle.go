@@ -22,32 +22,32 @@ const (
 )
 
 const (
-	SandboxErrInvalidState     = "SANDBOX_INVALID_STATE"
-	SandboxErrAlreadyRunning   = "SANDBOX_ALREADY_RUNNING"
-	SandboxErrNotRunning       = "SANDBOX_NOT_RUNNING"
-	SandboxErrQuiescing        = "SANDBOX_QUIESCING"
-	SandboxErrQuiesced         = "SANDBOX_QUIESCED"
-	SandboxErrStopping         = "SANDBOX_STOPPING"
-	SandboxErrRecoveryPending  = "SANDBOX_RECOVERY_PENDING"
-	SandboxErrRecoveryFailed   = "SANDBOX_RECOVERY_FAILED"
-	SandboxErrRestartFailed    = "SANDBOX_RESTART_FAILED"
-	SandboxErrStartCancelled   = "SANDBOX_START_CANCELLED"
-	SandboxErrStopFailed       = "SANDBOX_STOP_FAILED"
-	SandboxErrDrainTimeout     = "SANDBOX_DRAIN_TIMEOUT"
-	SandboxErrStaleGeneration  = "SANDBOX_STALE_GENERATION"
-	SandboxErrRootfsInvalid    = "SANDBOX_ROOTFS_INVALID"
-	SandboxErrNativeCrash      = "SANDBOX_NATIVE_CRASH"
+	SandboxErrInvalidState    = "SANDBOX_INVALID_STATE"
+	SandboxErrAlreadyRunning  = "SANDBOX_ALREADY_RUNNING"
+	SandboxErrNotRunning      = "SANDBOX_NOT_RUNNING"
+	SandboxErrQuiescing       = "SANDBOX_QUIESCING"
+	SandboxErrQuiesced        = "SANDBOX_QUIESCED"
+	SandboxErrStopping        = "SANDBOX_STOPPING"
+	SandboxErrRecoveryPending = "SANDBOX_RECOVERY_PENDING"
+	SandboxErrRecoveryFailed  = "SANDBOX_RECOVERY_FAILED"
+	SandboxErrRestartFailed   = "SANDBOX_RESTART_FAILED"
+	SandboxErrStartCancelled  = "SANDBOX_START_CANCELLED"
+	SandboxErrStopFailed      = "SANDBOX_STOP_FAILED"
+	SandboxErrDrainTimeout    = "SANDBOX_DRAIN_TIMEOUT"
+	SandboxErrStaleGeneration = "SANDBOX_STALE_GENERATION"
+	SandboxErrRootfsInvalid   = "SANDBOX_ROOTFS_INVALID"
+	SandboxErrNativeCrash     = "SANDBOX_NATIVE_CRASH"
 )
 
 const (
-	CommandDrainTimeout = 30 * time.Second
+	CommandDrainTimeout  = 30 * time.Second
 	CommandCancelTimeout = 10 * time.Second
 )
 
 type SandboxLifecycleError struct {
-	Code    string
-	State   SandboxLifecycleState
-	Cause   error
+	Code  string
+	State SandboxLifecycleState
+	Cause error
 }
 
 func (e *SandboxLifecycleError) Error() string {
@@ -64,21 +64,21 @@ func (e *SandboxLifecycleError) Unwrap() error {
 type SandboxStopReason string
 
 const (
-	StopReasonUser              SandboxStopReason = "user"
+	StopReasonUser                SandboxStopReason = "user"
 	StopReasonApplicationShutdown SandboxStopReason = "application_shutdown"
-	StopReasonRestart           SandboxStopReason = "restart"
-	StopReasonRecovery          SandboxStopReason = "recovery"
-	StopReasonDisable           SandboxStopReason = "disable"
+	StopReasonRestart             SandboxStopReason = "restart"
+	StopReasonRecovery            SandboxStopReason = "recovery"
+	StopReasonDisable             SandboxStopReason = "disable"
 )
 
 type SandboxRestartReason string
 
 const (
-	RestartReasonRootfsChanged       SandboxRestartReason = "rootfs_changed"
+	RestartReasonRootfsChanged        SandboxRestartReason = "rootfs_changed"
 	RestartReasonConfigurationChanged SandboxRestartReason = "configuration_changed"
-	RestartReasonHealthFailure       SandboxRestartReason = "health_failure"
-	RestartReasonManual              SandboxRestartReason = "manual"
-	RestartReasonRecovery            SandboxRestartReason = "recovery"
+	RestartReasonHealthFailure        SandboxRestartReason = "health_failure"
+	RestartReasonManual               SandboxRestartReason = "manual"
+	RestartReasonRecovery             SandboxRestartReason = "recovery"
 )
 
 type SandboxExecutionHandle struct {
@@ -102,9 +102,9 @@ var sandboxStateTransitions = map[SandboxLifecycleState]map[SandboxLifecycleStat
 		SandboxStateFailed:    true,
 	},
 	SandboxStateQuiescing: {
-		SandboxStateQuiesced:  true,
-		SandboxStateStopping:  true,
-		SandboxStateFailed:    true,
+		SandboxStateQuiesced: true,
+		SandboxStateStopping: true,
+		SandboxStateFailed:   true,
 	},
 	SandboxStateQuiesced: {
 		SandboxStateRunning:  true,
@@ -125,7 +125,7 @@ var sandboxStateTransitions = map[SandboxLifecycleState]map[SandboxLifecycleStat
 		SandboxStateStopping: true,
 	},
 	SandboxStateStopping: {
-		SandboxStateIdle:  true,
+		SandboxStateIdle:   true,
 		SandboxStateFailed: true,
 	},
 }

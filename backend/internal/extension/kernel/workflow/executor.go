@@ -28,7 +28,7 @@ type WorkflowExecutor struct {
 }
 
 type WorkflowExecutionControl struct {
-	executionID string
+	executionID    string
 	pauseRequested chan struct{}
 	paused         chan struct{}
 }
@@ -85,11 +85,11 @@ type StepResult struct {
 
 func NewWorkflowExecutor(registry *WorkflowRegistry) *WorkflowExecutor {
 	return &WorkflowExecutor{
-		registry:        registry,
-		handlers:        make(map[string]StepHandler),
-		retryMax:        3,
-		active:          make(map[string]context.CancelFunc),
-		pauseControls:   make(map[string]*WorkflowExecutionControl),
+		registry:      registry,
+		handlers:      make(map[string]StepHandler),
+		retryMax:      3,
+		active:        make(map[string]context.CancelFunc),
+		pauseControls: make(map[string]*WorkflowExecutionControl),
 	}
 }
 
@@ -182,7 +182,7 @@ func (e *WorkflowExecutor) Pause(ctx context.Context, executionID, reason string
 	ctrl, exists := e.pauseControls[executionID]
 	if !exists {
 		ctrl = &WorkflowExecutionControl{
-			executionID:   executionID,
+			executionID:    executionID,
 			pauseRequested: make(chan struct{}, 1),
 			paused:         make(chan struct{}),
 		}
@@ -830,11 +830,11 @@ func evaluateWhen(when json.RawMessage) (bool, error) {
 }
 
 type CompiledExecuteRequest struct {
-	DAG        *CompiledWorkflowDAG
-	Input      json.RawMessage
-	Context    ExecutionContext
-	Opts       ExecutionOptions
-	Journal    *SideEffectJournal
+	DAG     *CompiledWorkflowDAG
+	Input   json.RawMessage
+	Context ExecutionContext
+	Opts    ExecutionOptions
+	Journal *SideEffectJournal
 }
 
 func (e *WorkflowExecutor) ExecuteCompiled(ctx context.Context, req CompiledExecuteRequest) (*ExecuteResult, error) {

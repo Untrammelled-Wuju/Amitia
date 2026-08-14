@@ -314,18 +314,18 @@ func TestB21ExternalCallScope(t *testing.T) {
 	scopeB.ConversationID = "conv-B"
 
 	invA := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
-		UserID:          "user-1",
-		CharacterID:     "char-1",
-		ConversationID:  "conv-A",
-		ExternalCallID:  "call-123",
-		Source:          capability.InvocationSourceModel,
+		UserID:         "user-1",
+		CharacterID:    "char-1",
+		ConversationID: "conv-A",
+		ExternalCallID: "call-123",
+		Source:         capability.InvocationSourceModel,
 	})
 	invB := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
-		UserID:          "user-1",
-		CharacterID:     "char-1",
-		ConversationID:  "conv-B",
-		ExternalCallID:  "call-123",
-		Source:          capability.InvocationSourceModel,
+		UserID:         "user-1",
+		CharacterID:    "char-1",
+		ConversationID: "conv-B",
+		ExternalCallID: "call-123",
+		Source:         capability.InvocationSourceModel,
 	})
 
 	_, cleanupA, err := ctrl.Register(context.Background(), invA)

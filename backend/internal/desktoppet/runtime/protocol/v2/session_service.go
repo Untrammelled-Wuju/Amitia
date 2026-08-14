@@ -1,9 +1,12 @@
 package v2
 
 import (
+	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/deviceruntime"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"gorm.io/gorm"
 )
@@ -13,6 +16,7 @@ type SessionService interface {
 	GetSession(id string) (*RuntimeSession, error)
 	GetActiveSession(userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (*RuntimeSession, error)
 	AcquireSession(ctx *gorm.DB, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, caps []string, capsHash string, lastAppliedRev, lastCmdSeq, lastEvtSeq int64, contractVersion string) (*RuntimeSession, *RuntimeSession, error)
+	SyncFromDeviceRuntimeSession(ctx context.Context, runtimeSession deviceruntime.RuntimeSession, hello HelloPayload) (*RuntimeSession, error)
 	UpdateLastAppliedRevision(id string, revision int64) error
 	UpdateLastProcessedCommandSequence(id string, seq int64) error
 	UpdateLastEventSequence(id string, seq int64) error
@@ -187,6 +191,77 @@ func (s *sessionService) SupersedeSession(id, supersededBy string) error {
 		"superseded_at": now,
 		"updated_at":    now,
 	}).Error
+}
+
+func (s *sessionService) SyncFromDeviceRuntimeSession(ctx context.Context, runtimeSession deviceruntime.RuntimeSession, hello HelloPayload) (*RuntimeSession, error) {
+	var existing RuntimeSession
+	err := s.db.Where("id = ?", runtimeSession.ID.String()).First(&existing).Error
+
+	now := time.Now().Format("2006-01-02 15:04:05")
+
+	if err == gorm.ErrRecordNotFound {
+		session := &RuntimeSession{
+			ID:                           runtimeSession.ID.String(),
+			UserID:                       runtimeSession.UserID,
+			DeviceID:                     runtimeSession.DeviceID,
+			RuntimeID:                    runtimeSession.RuntimeID,
+			ConnectionGeneration:         runtimeSession.ConnectionGeneration,
+			RuntimeVersion:               runtimeSession.RuntimeVersion,
+			RuntimeContractVersion:       runtimeSession.RuntimeContractVersion,
+			CapabilitiesHash:             runtimeSession.CapabilitiesHash,
+			LastAppliedDesiredRevision:   hello.LastAppliedDesiredRevision,
+			LastProcessedCommandSequence: hello.LastProcessedCommandSequence,
+			LastEventSequence:            hello.LastEventSequence,
+			Status:                       string(runtimeSession.Status),
+			ConnectedAt:                  now,
+			LastHeartbeatAt:              now,
+			CreatedAt:                    now,
+			UpdatedAt:                    now,
+		}
+
+		capsJSON, _ := json.Marshal(hello.Capabilities)
+		if len(capsJSON) > 0 {
+			session.CapabilitiesJSON = string(capsJSON)
+		}
+
+		if createErr := s.db.Create(session).Error; createErr != nil {
+			return nil, createErr
+		}
+		return session, nil
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	existing.ConnectionGeneration = runtimeSession.ConnectionGeneration
+	existing.RuntimeVersion = runtimeSession.RuntimeVersion
+	existing.RuntimeContractVersion = runtimeSession.RuntimeContractVersion
+	existing.CapabilitiesHash = runtimeSession.CapabilitiesHash
+	existing.Status = string(runtimeSession.Status)
+	existing.UpdatedAt = now
+
+	capsJSON, _ := json.Marshal(hello.Capabilities)
+	if len(capsJSON) > 0 {
+		existing.CapabilitiesJSON = string(capsJSON)
+	}
+
+	if updateErr := s.db.Model(&RuntimeSession{}).Where("id = ?", runtimeSession.ID.String()).Updates(map[string]interface{}{
+		"connection_generation":           existing.ConnectionGeneration,
+		"runtime_version":                 existing.RuntimeVersion,
+		"runtime_contract_version":        existing.RuntimeContractVersion,
+		"capabilities_hash":               existing.CapabilitiesHash,
+		"capabilities_json":               existing.CapabilitiesJSON,
+		"status":                          existing.Status,
+		"last_applied_desired_revision":   hello.LastAppliedDesiredRevision,
+		"last_processed_command_sequence": hello.LastProcessedCommandSequence,
+		"last_event_sequence":            hello.LastEventSequence,
+		"updated_at":                      existing.UpdatedAt,
+	}).Error; updateErr != nil {
+		return nil, updateErr
+	}
+
+	return &existing, nil
 }
 
 func (s *sessionService) DeleteTerminalBefore(cutoff time.Time) (int64, error) {

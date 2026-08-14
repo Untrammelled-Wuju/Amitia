@@ -20,8 +20,8 @@ type MCPRemoteSpec struct {
 
 	MaxMessageBytes int64
 
-	AllowLoopback bool
-	AllowPrivate  bool
+	AllowLoopback   bool
+	AllowPrivate    bool
 	AllowPublicHTTP bool
 
 	MaxRedirects int
@@ -32,11 +32,11 @@ type MCPRemoteSpec struct {
 }
 
 type MCPRemoteResolvedSpec struct {
-	ServerID       string
-	Endpoint       string
-	Timeout        time.Duration
+	ServerID        string
+	Endpoint        string
+	Timeout         time.Duration
 	MaxMessageBytes int64
-	StaticHeaders  map[string]string
+	StaticHeaders   map[string]string
 }
 
 type RemoteTransportState string

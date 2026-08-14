@@ -270,7 +270,7 @@ func TestR45ConcurrentNonceReplayAllowsExactlyOneOperation(t *testing.T) {
 			defer wg.Done()
 			binding := r45NonceBindingFixture("nonce-concurrent-shared", "install", "ext-concurrent", "user-concurrent", now.Unix(), now.Add(5*time.Minute).Unix())
 			op := PackageOperationRecord{
-				OperationID: "op-concurrent-" + string(rune('A'+idx)),
+				OperationID:   "op-concurrent-" + string(rune('A'+idx)),
 				OperationType: "install", ExtensionID: "ext-concurrent", UserID: "user-concurrent",
 				IdempotencyKey: "key-concurrent-" + string(rune('a'+idx)), RequestHash: "hash-concurrent-" + string(rune('0'+idx)), AttemptCount: 1,
 			}

@@ -9,28 +9,28 @@ import (
 type SideEffectKind string
 
 const (
-	SideEffectToolCall      SideEffectKind = "tool_call"
-	SideEffectSkillInvoke   SideEffectKind = "skill_invoke"
-	SideEffectHTTPCall      SideEffectKind = "http_call"
+	SideEffectToolCall       SideEffectKind = "tool_call"
+	SideEffectSkillInvoke    SideEffectKind = "skill_invoke"
+	SideEffectHTTPCall       SideEffectKind = "http_call"
 	SideEffectNotification   SideEffectKind = "notification"
 	SideEffectScheduleCreate SideEffectKind = "schedule_create"
-	SideEffectMemoryWrite   SideEffectKind = "memory_write"
-	SideEffectArtifactWrite SideEffectKind = "artifact_write"
-	SideEffectContextWrite  SideEffectKind = "context_write"
+	SideEffectMemoryWrite    SideEffectKind = "memory_write"
+	SideEffectArtifactWrite  SideEffectKind = "artifact_write"
+	SideEffectContextWrite   SideEffectKind = "context_write"
 )
 
 type SideEffectRecord struct {
-	NodeID    string         `json:"nodeId"`
-	Kind      SideEffectKind `json:"kind"`
-	Target    string         `json:"target,omitempty"`
+	NodeID    string          `json:"nodeId"`
+	Kind      SideEffectKind  `json:"kind"`
+	Target    string          `json:"target,omitempty"`
 	Input     json.RawMessage `json:"input,omitempty"`
 	Output    json.RawMessage `json:"output,omitempty"`
-	Error     string         `json:"error,omitempty"`
-	Duration  time.Duration  `json:"duration"`
-	Timestamp time.Time      `json:"timestamp"`
+	Error     string          `json:"error,omitempty"`
+	Duration  time.Duration   `json:"duration"`
+	Timestamp time.Time       `json:"timestamp"`
 }
 
-type SideEffectJournal struct{
+type SideEffectJournal struct {
 	records []SideEffectRecord
 	mu      sync.RWMutex
 }

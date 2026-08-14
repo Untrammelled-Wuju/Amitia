@@ -25,6 +25,59 @@ type registryRepository struct {
 	db *sql.DB
 }
 
+func (r *registryRepository) MigrateRuntimeSessionColumns(ctx context.Context) error {
+	if r.db == nil {
+		return nil
+	}
+	if exists, err := r.columnExists(ctx, "kernel_host_registry", "runtime_session_id"); err != nil {
+		return err
+	} else if !exists {
+		if _, err := r.db.ExecContext(ctx, `ALTER TABLE kernel_host_registry ADD COLUMN runtime_session_id TEXT NOT NULL DEFAULT ''`); err != nil {
+			return fmt.Errorf("host_registry: add runtime_session_id column: %w", err)
+		}
+	}
+	if exists, err := r.columnExists(ctx, "kernel_host_registry", "connection_generation"); err != nil {
+		return err
+	} else if !exists {
+		if _, err := r.db.ExecContext(ctx, `ALTER TABLE kernel_host_registry ADD COLUMN connection_generation INTEGER NOT NULL DEFAULT 0`); err != nil {
+			return fmt.Errorf("host_registry: add connection_generation column: %w", err)
+		}
+	}
+	if exists, err := r.columnExists(ctx, "kernel_host_registry", "entry_id"); err != nil {
+		return err
+	} else if !exists {
+		if _, err := r.db.ExecContext(ctx, `ALTER TABLE kernel_host_registry ADD COLUMN entry_id TEXT NOT NULL DEFAULT ''`); err != nil {
+			return fmt.Errorf("host_registry: add entry_id column: %w", err)
+		}
+	}
+	return nil
+}
+
+func (r *registryRepository) columnExists(ctx context.Context, table, column string) (bool, error) {
+	rows, err := r.db.QueryContext(ctx, fmt.Sprintf("PRAGMA table_info(%s)", table))
+	if err != nil {
+		return false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			cid     int
+			name    string
+			ctype   string
+			notnull int
+			dflt    string
+			pk      int
+		)
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			return false, err
+		}
+		if name == column {
+			return true, nil
+		}
+	}
+	return false, rows.Err()
+}
+
 func (r *registryRepository) SaveEntry(ctx context.Context, entry *RuntimeEntry) error {
 	if r.db == nil {
 		return nil
@@ -41,10 +94,14 @@ func (r *registryRepository) SaveEntry(ctx context.Context, entry *RuntimeEntry)
 	if entry.SessionToken != "" {
 		tokenHash = hashSessionToken(entry.SessionToken)
 	}
+	entryID := entry.EntryID
+	if entryID == "" {
+		entryID = RuntimeEntryID(entry.UserID, entry.DeviceID, entry.RuntimeID)
+	}
 	_, err = r.db.ExecContext(ctx,
 		`INSERT OR REPLACE INTO kernel_host_registry
-		(host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		(host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at, runtime_session_id, connection_generation, entry_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		entry.HostClientID,
 		entry.HostSessionID,
 		entry.UserID.String(),
@@ -60,6 +117,9 @@ func (r *registryRepository) SaveEntry(ctx context.Context, entry *RuntimeEntry)
 		tokenHash,
 		entry.CreatedAt.Format(time.RFC3339Nano),
 		expiresAt,
+		entry.RuntimeSessionID.String(),
+		entry.ConnectionGeneration,
+		entryID,
 	)
 	return err
 }
@@ -69,8 +129,9 @@ func (r *registryRepository) GetEntry(ctx context.Context, entryID string) (*Run
 		return nil, ErrRegistryEntryNotFound
 	}
 	row := r.db.QueryRowContext(ctx,
-		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at
-		FROM kernel_host_registry WHERE host_client_id = ?`,
+		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at, runtime_session_id, connection_generation
+		FROM kernel_host_registry WHERE entry_id = ? OR host_client_id = ?`,
+		entryID,
 		entryID,
 	)
 	return scanEntry(row)
@@ -81,7 +142,7 @@ func (r *registryRepository) ListEntriesByUser(ctx context.Context, userID runti
 		return nil, nil
 	}
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at
+		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at, runtime_session_id, connection_generation
 		FROM kernel_host_registry WHERE user_id = ?`,
 		userID.String(),
 	)
@@ -97,7 +158,7 @@ func (r *registryRepository) ListEntriesByDevice(ctx context.Context, userID run
 		return nil, nil
 	}
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at
+		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at, runtime_session_id, connection_generation
 		FROM kernel_host_registry WHERE user_id = ? AND device_id = ?`,
 		userID.String(),
 		deviceID.String(),
@@ -114,7 +175,7 @@ func (r *registryRepository) ListEntriesByRuntime(ctx context.Context, userID ru
 		return nil, nil
 	}
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at
+		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at, runtime_session_id, connection_generation
 		FROM kernel_host_registry WHERE user_id = ? AND device_id = ? AND runtime_id = ?`,
 		userID.String(),
 		deviceID.String(),
@@ -132,7 +193,7 @@ func (r *registryRepository) ListAllEntries(ctx context.Context) ([]*RuntimeEntr
 		return nil, nil
 	}
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at
+		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at, runtime_session_id, connection_generation
 		FROM kernel_host_registry`,
 	)
 	if err != nil {
@@ -147,7 +208,8 @@ func (r *registryRepository) DeleteEntry(ctx context.Context, entryID string) er
 		return nil
 	}
 	_, err := r.db.ExecContext(ctx,
-		`DELETE FROM kernel_host_registry WHERE host_client_id = ?`,
+		`DELETE FROM kernel_host_registry WHERE entry_id = ? OR host_client_id = ?`,
+		entryID,
 		entryID,
 	)
 	return err
@@ -158,8 +220,9 @@ func (r *registryRepository) UpdateEntryState(ctx context.Context, entryID strin
 		return nil
 	}
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE kernel_host_registry SET connection_state = ? WHERE host_client_id = ?`,
+		`UPDATE kernel_host_registry SET connection_state = ? WHERE entry_id = ? OR host_client_id = ?`,
 		string(state),
+		entryID,
 		entryID,
 	)
 	return err
@@ -170,9 +233,71 @@ func (r *registryRepository) UpdateEntryHeartbeat(ctx context.Context, entryID s
 		return nil
 	}
 	_, err := r.db.ExecContext(ctx,
-		`UPDATE kernel_host_registry SET last_heartbeat = ? WHERE host_client_id = ?`,
+		`UPDATE kernel_host_registry SET last_heartbeat = ? WHERE entry_id = ? OR host_client_id = ?`,
 		heartbeat.Format(time.RFC3339Nano),
 		entryID,
+		entryID,
+	)
+	return err
+}
+
+func (r *registryRepository) UpdateRuntimeSessionBinding(ctx context.Context, entryID string, sessionID runtimeidentity.RuntimeSessionID, generation int64, state PresenceState, at time.Time) error {
+	if r.db == nil {
+		return nil
+	}
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE kernel_host_registry SET runtime_session_id = ?, connection_generation = ?, connection_state = ?, last_heartbeat = ? WHERE entry_id = ? AND (connection_generation < ? OR (connection_generation = ? AND runtime_session_id = ?))`,
+		sessionID.String(),
+		generation,
+		string(state),
+		at.Format(time.RFC3339Nano),
+		entryID,
+		generation,
+		generation,
+		sessionID.String(),
+	)
+	return err
+}
+
+func (r *registryRepository) UpdateRuntimeSessionHeartbeat(ctx context.Context, entryID string, sessionID runtimeidentity.RuntimeSessionID, generation int64, at time.Time) error {
+	if r.db == nil {
+		return nil
+	}
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE kernel_host_registry SET last_heartbeat = ?, connection_state = ? WHERE entry_id = ? AND runtime_session_id = ? AND connection_generation = ?`,
+		at.Format(time.RFC3339Nano),
+		string(PresenceStateReady),
+		entryID,
+		sessionID.String(),
+		generation,
+	)
+	return err
+}
+
+func (r *registryRepository) SetRuntimeSessionDisconnected(ctx context.Context, entryID string, sessionID runtimeidentity.RuntimeSessionID, generation int64, at time.Time) error {
+	if r.db == nil {
+		return nil
+	}
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE kernel_host_registry SET connection_state = ?, last_heartbeat = ? WHERE entry_id = ? AND runtime_session_id = ? AND connection_generation = ?`,
+		string(PresenceStateDisconnected),
+		at.Format(time.RFC3339Nano),
+		entryID,
+		sessionID.String(),
+		generation,
+	)
+	return err
+}
+
+func (r *registryRepository) MarkRuntimeEntriesDisconnected(ctx context.Context, at time.Time) error {
+	if r.db == nil {
+		return nil
+	}
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE kernel_host_registry SET connection_state = ? WHERE entry_kind = ? AND connection_state = ?`,
+		string(PresenceStateDisconnected),
+		string(RegistryEntryKindRuntime),
+		string(PresenceStateReady),
 	)
 	return err
 }
@@ -183,7 +308,7 @@ func (r *registryRepository) ListExpiredEntries(ctx context.Context) ([]*Runtime
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at
+		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at, runtime_session_id, connection_generation
 		FROM kernel_host_registry WHERE expires_at != '' AND expires_at < ?`,
 		now,
 	)
@@ -206,6 +331,8 @@ func scanEntry(row rowScanner) (*RuntimeEntry, error) {
 	var presenceState string
 	var userID, platform, deviceID, runtimeID string
 	var kind string
+	var runtimeSessionID string
+	var connectionGeneration int64
 
 	err := row.Scan(
 		&entry.HostClientID,
@@ -223,6 +350,8 @@ func scanEntry(row rowScanner) (*RuntimeEntry, error) {
 		&entry.SessionToken,
 		&createdAt,
 		&expiresAt,
+		&runtimeSessionID,
+		&connectionGeneration,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -236,6 +365,8 @@ func scanEntry(row rowScanner) (*RuntimeEntry, error) {
 	entry.DeviceID = runtimeidentity.ParseDeviceID(deviceID)
 	entry.RuntimeID = runtimeidentity.ParseRuntimeID(runtimeID)
 	entry.Kind = ParseRegistryEntryKind(kind)
+	entry.RuntimeSessionID = runtimeidentity.ParseRuntimeSessionID(runtimeSessionID)
+	entry.ConnectionGeneration = connectionGeneration
 
 	if featuresStr != "" {
 		var rawFeatures []string
@@ -326,4 +457,8 @@ func (r *registryRepository) MigrateSessionTokens(ctx context.Context) error {
 		}
 	}
 	return nil
+}
+
+func init() {
+	_ = strings.TrimSpace
 }

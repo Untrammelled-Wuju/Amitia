@@ -11,8 +11,8 @@ import (
 
 type mockHTTPClient struct {
 	responses []*http.Response
-	reqs       []*http.Request
-	index      int
+	reqs      []*http.Request
+	index     int
 }
 
 func (m *mockHTTPClient) Do(req *http.Request) (*http.Response, error) {

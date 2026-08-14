@@ -17,15 +17,16 @@ type reflectionCandidateSubmitter interface {
 }
 
 type ReflectionCandidateSubmitRequest struct {
-	CharacterID      string
-	ConversationID   string
-	Topic            string
-	Abstract         string
-	Importance       int
-	Confidence       float64
-	SourceIDs        []string
-	CandidateID      string
-	RequestID        string
+	CharacterID         string
+	ConversationID      string
+	Topic               string
+	Abstract            string
+	Importance          int
+	Confidence          float64
+	SourceIDs           []string
+	CandidateID         string
+	RequestID           string
+	SuggestedMemoryType string
 }
 
 type ReflectionMemoryPublisher struct {

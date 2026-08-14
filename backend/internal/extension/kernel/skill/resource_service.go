@@ -16,13 +16,13 @@ type ArtifactResourceReader interface {
 }
 
 type ResourceFileInfo struct {
-	Size         int64
-	SHA256       string
-	MIMEType     string
-	TextLike     bool
-	Exists       bool
-	IsSymlink    bool
-	IsValid      bool
+	Size      int64
+	SHA256    string
+	MIMEType  string
+	TextLike  bool
+	Exists    bool
+	IsSymlink bool
+	IsValid   bool
 }
 
 type ResourceMaterializer interface {

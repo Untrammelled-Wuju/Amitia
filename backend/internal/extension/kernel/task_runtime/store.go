@@ -19,6 +19,31 @@ type TaskStore interface {
 	ListTaskRuns(ctx context.Context, filter ListTasksFilter) ([]*TaskRun, error)
 	ListTaskRunsByStatus(ctx context.Context, status string) ([]*TaskRun, error)
 
+	UpdateExecutionTarget(
+		ctx context.Context,
+		taskRunID string,
+		placement TaskExecutionPlacement,
+		target TaskExecutionTarget,
+		resolvedAt time.Time,
+		resolvedBy string,
+	) error
+
+	UpdateExecutionConnectionBinding(
+		ctx context.Context,
+		taskRunID string,
+		runtimeSessionID interface{ String() string },
+		generation int64,
+		at time.Time,
+	) error
+
+	UpdateExecutionAttempt(
+		ctx context.Context,
+		taskRunID string,
+		attemptID TaskExecutionAttemptID,
+		runtimeInstanceID string,
+		at time.Time,
+	) error
+
 	EnqueueTask(ctx context.Context, entry *TaskQueueEntry) error
 	DequeueTask(ctx context.Context, leaseOwner string, leaseDuration time.Duration) (*TaskQueueEntry, error)
 	RemoveFromQueue(ctx context.Context, taskRunID string) error

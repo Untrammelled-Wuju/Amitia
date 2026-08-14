@@ -133,7 +133,7 @@ type qdrantProvider struct {
 	started      bool
 	stopped      bool
 
-	lifecycleMu sync.Mutex
+	lifecycleMu  sync.Mutex
 	activeLease  qdrantprocess.Lease
 	coordinator  *qdranthealth.Coordinator
 	processGuard *qdrantProcessGuard

@@ -35,7 +35,7 @@ func (f *fakeLifecycle) RuntimeState(serverID string) string {
 }
 
 type fakeAuth struct {
-	authStates map[string]string
+	authStates  map[string]string
 	credentials map[string]bool
 }
 
@@ -301,7 +301,7 @@ func TestCoordinator_Get(t *testing.T) {
 
 	client := newFakeProtocolClient()
 	client.results["server-get"] = HealthProbeResult{
-		Reachable: true,
+		Reachable:  true,
 		ServerInfo: MCPServerInfo{Name: "get-test"},
 	}
 

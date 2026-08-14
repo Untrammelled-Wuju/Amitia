@@ -289,11 +289,10 @@ func (r *Runtime) Recover() error {
 		if readErr != nil {
 			continue
 		}
-		manifest, parseErr := manifest_v2.Parse(data)
+		manifest, report, parseErr := manifest_v2.ParseValidated(data)
 		if parseErr != nil {
 			continue
 		}
-		report := manifest.Validate()
 		if report.HasErrors() {
 			continue
 		}

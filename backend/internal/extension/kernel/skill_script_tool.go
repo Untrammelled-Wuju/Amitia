@@ -27,13 +27,13 @@ type RunSkillScriptInput struct {
 }
 
 type RunSkillScriptOutput struct {
-	ExecutionID     string            `json:"executionId"`
-	Status          string            `json:"status"`
-	Output          string            `json:"output,omitempty"`
-	ExitCode        int               `json:"exitCode"`
-	Resources       map[string]string `json:"resources,omitempty"`
-	Error           string            `json:"error,omitempty"`
-	Duration        string            `json:"duration,omitempty"`
+	ExecutionID string            `json:"executionId"`
+	Status      string            `json:"status"`
+	Output      string            `json:"output,omitempty"`
+	ExitCode    int               `json:"exitCode"`
+	Resources   map[string]string `json:"resources,omitempty"`
+	Error       string            `json:"error,omitempty"`
+	Duration    string            `json:"duration,omitempty"`
 }
 
 func buildRunSkillScriptTool(skillNames []string) tool.Tool {
@@ -125,10 +125,10 @@ func (f *ToolFacade) handleRunSkillScript(ctx context.Context, input json.RawMes
 	}
 
 	return LegacyToolResult{
-		RunID:        output.ExecutionID,
-		Status:       output.Status,
-		Output:       resultJSON,
-		VisibleText:  visibleText,
+		RunID:       output.ExecutionID,
+		Status:      output.Status,
+		Output:      resultJSON,
+		VisibleText: visibleText,
 	}, nil
 }
 

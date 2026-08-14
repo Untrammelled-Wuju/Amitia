@@ -174,6 +174,7 @@ type AppServices struct {
 	MediaService                 *media.Service
 	WorkspaceRegistry            *workspace.Registry
 	WorkspaceService             *workspace.Service
+	ProductionCutover            *cutoverComposition
 }
 
 type RuntimeOrchestrator interface {
@@ -202,14 +203,19 @@ type reflectionMemoryServiceAdapter struct {
 
 func (a reflectionMemoryServiceAdapter) SubmitReflectionCandidate(req interaction.ReflectionCandidateSubmitRequest) error {
 	memoryKey := fmt.Sprintf("reflection:%s:%s", strings.TrimSpace(req.CandidateID), req.Topic)
+	memoryType := strings.TrimSpace(req.SuggestedMemoryType)
+	if _, ok := memory.NormalizeMemoryType(memoryType); !ok {
+		memoryType = string(memory.MemoryTypeFact)
+	}
 	_, err := a.memory.SubmitCandidate(&memory.SubmitCandidateRequest{
 		Key:            memoryKey,
 		Value:          req.Abstract,
-		MemoryType:     "reflection",
+		MemoryType:     memoryType,
 		Importance:     req.Importance,
 		SourceText:     req.Abstract,
 		ConversationID: req.ConversationID,
 		CharacterID:    req.CharacterID,
+		CandidateKind:  string(memory.CandidateKindReflection),
 	})
 	return err
 }
@@ -977,7 +983,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WorkspaceRegistry:            workspaceRegistry,
 		WorkspaceService:             workspaceService,
 	}
-	verifyCanonicalStartupOrPanic(services)
+	if err := runCanonicalBuildAssertions(services); err != nil {
+		return nil, fmt.Errorf("canonical build assertion failed: %w", err)
+	}
 	return services, nil
 }
 

@@ -44,7 +44,7 @@ func TestAndroidLinuxRuntimeAdapterExecuteNilProvider(t *testing.T) {
 	adapter := NewAndroidLinuxRuntimeAdapter(nil)
 	invocation := ToolInvocationContext{
 		InvocationID: "test-123",
-		UserID:        "user-1",
+		UserID:       "user-1",
 	}
 
 	result := adapter.Execute(context.Background(), RuntimeBinding{
@@ -74,9 +74,9 @@ func TestAndroidLinuxRuntimeAdapterExecuteSuccess(t *testing.T) {
 
 	invocation := ToolInvocationContext{
 		InvocationID:   "test-123",
-		UserID:          "user-1",
-		CharacterID:     "char-1",
-		ConversationID:  "conv-1",
+		UserID:         "user-1",
+		CharacterID:    "char-1",
+		ConversationID: "conv-1",
 	}
 
 	result := adapter.Execute(context.Background(), RuntimeBinding{
@@ -111,7 +111,7 @@ func TestAndroidLinuxRuntimeAdapterExecuteError(t *testing.T) {
 
 	invocation := ToolInvocationContext{
 		InvocationID: "test-456",
-		UserID:        "user-2",
+		UserID:       "user-2",
 	}
 
 	result := adapter.Execute(context.Background(), RuntimeBinding{
@@ -135,7 +135,7 @@ func TestAndroidLinuxRuntimeAdapterExecuteCancelled(t *testing.T) {
 
 	invocation := ToolInvocationContext{
 		InvocationID: "test-789",
-		UserID:        "user-3",
+		UserID:       "user-3",
 	}
 
 	result := adapter.Execute(context.Background(), RuntimeBinding{

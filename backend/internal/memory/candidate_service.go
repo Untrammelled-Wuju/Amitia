@@ -181,11 +181,11 @@ func (s *service) AcceptCandidate(id string) (*Memory, error) {
 	}
 
 	m, err := s.createCanonicalMemory(canonicalCreateRequest{
-		CharacterID:    model.CharacterID,
-		MemoryType:     memoryType,
-		Source:         "auto",
-		Key:            model.Key,
-		Value:          model.Value,
+		CharacterID:   model.CharacterID,
+		MemoryType:    memoryType,
+		Source:        "auto",
+		Key:           model.Key,
+		Value:         model.Value,
 		Importance:    model.Importance,
 		Confidence:    50,
 		SourceConvID:  model.ConversationID,

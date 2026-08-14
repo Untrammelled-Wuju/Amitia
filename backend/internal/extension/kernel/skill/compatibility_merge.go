@@ -13,11 +13,11 @@ func NewCompatibilityMerger() *CompatibilityMerger {
 
 func (m *CompatibilityMerger) Merge(overlays []SkillCompatibilityOverlay, basePolicy SkillInvocationPolicy, baseReport *SkillCompatibilityReport) (*CanonicalSkillCompatibility, *SkillCompatibilityReport) {
 	canonical := &CanonicalSkillCompatibility{
-		InvocationPolicy: basePolicy,
-		ActivationHints:  []string{},
-		ToolAllowHints:   []string{},
-		ToolDenyRules:    []string{},
-		MCPDependencies:  []SkillMCPDependency{},
+		InvocationPolicy:    basePolicy,
+		ActivationHints:     []string{},
+		ToolAllowHints:      []string{},
+		ToolDenyRules:       []string{},
+		MCPDependencies:     []SkillMCPDependency{},
 		UnsupportedFeatures: []string{},
 	}
 

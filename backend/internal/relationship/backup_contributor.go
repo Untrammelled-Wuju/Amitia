@@ -7,9 +7,6 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"fmt"
-	"io"
-
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"gorm.io/gorm"
@@ -243,6 +240,3 @@ func (r *RelationshipBackupContributor) Import(ctx context.Context, req dataport
 
 	return nil
 }
-
-var _ = fmt.Sprintf
-var _ = io.EOF

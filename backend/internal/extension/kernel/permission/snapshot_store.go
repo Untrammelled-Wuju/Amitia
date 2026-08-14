@@ -10,8 +10,8 @@ import (
 var (
 	ErrPermissionSnapshotNotFound = fmt.Errorf("permission: snapshot not found")
 	ErrPermissionSnapshotRevoked  = fmt.Errorf("permission: snapshot revoked")
-	ErrPermissionSnapshotExpired = fmt.Errorf("permission: snapshot expired")
-	ErrPermissionUnknown         = fmt.Errorf("permission: unknown permission")
+	ErrPermissionSnapshotExpired  = fmt.Errorf("permission: snapshot expired")
+	ErrPermissionUnknown          = fmt.Errorf("permission: unknown permission")
 )
 
 type PermissionSnapshotStore interface {

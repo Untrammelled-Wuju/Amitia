@@ -9,7 +9,7 @@ import (
 type pluginResolver func(extensionID string) (pluginID string, resolved bool)
 
 type bridgeNotifier struct {
-	mu       sync.RWMutex
+	mu        sync.RWMutex
 	pluginFor map[string]string
 	fallback  pluginResolver
 	routeFor  func(extensionID, instanceID, serviceID string) (pluginID string, runtimeID string)

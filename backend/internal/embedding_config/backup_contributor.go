@@ -29,15 +29,15 @@ func (c *EmbeddingBackupContributor) ID() string   { return "embedding" }
 func (c *EmbeddingBackupContributor) Name() string { return "Embedding Config" }
 
 type embeddingConfigV1 struct {
-	ID                  int    `json:"id"`
-	Name                string `json:"name"`
-	ApiType             string `json:"apiType"`
-	ModelName           string `json:"modelName"`
-	BaseUrl             string `json:"baseUrl"`
-	IsActive            int    `json:"isActive"`
-	ProviderConfigJSON  string `json:"providerConfigJSON"`
-	CreatedAt           string `json:"createdAt"`
-	UpdatedAt           string `json:"updatedAt"`
+	ID                 int    `json:"id"`
+	Name               string `json:"name"`
+	ApiType            string `json:"apiType"`
+	ModelName          string `json:"modelName"`
+	BaseUrl            string `json:"baseUrl"`
+	IsActive           int    `json:"isActive"`
+	ProviderConfigJSON string `json:"providerConfigJSON"`
+	CreatedAt          string `json:"createdAt"`
+	UpdatedAt          string `json:"updatedAt"`
 }
 
 func (c *EmbeddingBackupContributor) Plan(ctx context.Context, req dataportability.BackupRequest) ([]dataportability.BackupComponentPlan, error) {
@@ -99,11 +99,11 @@ func (c *EmbeddingBackupContributor) Export(ctx context.Context, req dataportabi
 
 func (c *EmbeddingBackupContributor) PreviewImport(ctx context.Context, req dataportability.ImportPreviewRequest, in dataportability.BackupReader) ([]dataportability.ImportComponentPreview, error) {
 	preview := dataportability.ImportComponentPreview{
-		ComponentID:  ComponentIDEmbeddingConfigs,
-		Kind:         dataportability.KindNDJSON,
+		ComponentID: ComponentIDEmbeddingConfigs,
+		Kind:        dataportability.KindNDJSON,
 		LogicalName: "embedding.configs.v1",
-		Collisions:   make([]dataportability.ComponentCollision, 0),
-		Warnings:     make([]string, 0),
+		Collisions:  make([]dataportability.ComponentCollision, 0),
+		Warnings:    make([]string, 0),
 	}
 
 	rc, err := in.ReadComponent(ComponentIDEmbeddingConfigs + ".v1")

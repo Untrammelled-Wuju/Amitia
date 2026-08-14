@@ -6,17 +6,14 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
-	"fmt"
-	"io"
-
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"gorm.io/gorm"
 )
 
 const (
-	ComponentIDEpisodicRecords      = "episodic.records.v1"
-	logicalNameEpisodicRecords      = "episodic.records"
+	ComponentIDEpisodicRecords = "episodic.records.v1"
+	logicalNameEpisodicRecords = "episodic.records"
 )
 
 type EpisodicBackupContributor struct {
@@ -201,9 +198,4 @@ func (c *EpisodicBackupContributor) Import(ctx context.Context, req dataportabil
 	}
 
 	return scanner.Err()
-}
-
-func init() {
-	_ = fmt.Sprintf
-	_ = io.EOF
 }

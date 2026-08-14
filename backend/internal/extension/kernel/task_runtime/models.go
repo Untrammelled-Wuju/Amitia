@@ -181,6 +181,9 @@ type TaskRun struct {
 	Priority             int                    `json:"priority"`
 	ExecutionPlacement   TaskExecutionPlacement `json:"executionPlacement,omitempty"`
 	ExecutionTarget      TaskExecutionTarget    `json:"executionTarget,omitempty"`
+	ExecutionAttemptID   TaskExecutionAttemptID `json:"executionAttemptId,omitempty"`
+	ExecutionResolvedAt  *time.Time             `json:"executionResolvedAt,omitempty"`
+	ExecutionResolvedBy  string                 `json:"executionResolvedBy,omitempty"`
 	Input                json.RawMessage        `json:"input"`
 	InputHash            string                 `json:"inputHash"`
 	InputArtifactID      *string                `json:"inputArtifactId,omitempty"`
@@ -227,15 +230,68 @@ func (r *TaskRun) HasResolvedExecutionTarget() bool {
 		return false
 	}
 	placement := r.EffectiveExecutionPlacement()
-	switch placement {
-	case TaskExecutionPlacementLocal:
-		return true
-	case TaskExecutionPlacementCloud:
-		return r.ExecutionTarget.HasProvider() || r.ExecutionTarget.HasRuntime()
-	case TaskExecutionPlacementDevice:
-		return r.ExecutionTarget.HasDevice()
+	if err := ValidateResolvedTaskExecutionTarget(placement, r.ExecutionTarget); err != nil {
+		return false
 	}
-	return false
+	return true
+}
+
+func (r *TaskRun) BindExecutionTarget(
+	decision TaskPlacementDecision,
+	resolvedBy string,
+	at time.Time,
+) error {
+	if !decision.Resolved {
+		return NewTaskError(ErrTaskExecutionTargetUnresolved, "placement decision is not resolved")
+	}
+
+	if err := ValidateTaskExecutionTargetShape(r.ExecutionPlacement, decision.Target); err != nil {
+		return err
+	}
+
+	if err := ValidateResolvedTaskExecutionTarget(r.ExecutionPlacement, decision.Target); err != nil {
+		return err
+	}
+
+	if r.ExecutionResolvedAt != nil {
+		if !r.ExecutionTarget.StableEqual(decision.Target) {
+			return NewTaskError(ErrTaskExecutionTargetConflict, "stable execution target already bound; re-placement not supported in G13")
+		}
+		r.ExecutionResolvedAt = &at
+		r.ExecutionResolvedBy = resolvedBy
+		return nil
+	}
+
+	r.ExecutionPlacement = decision.Placement
+	r.ExecutionTarget = decision.Target.Normalize()
+	r.ExecutionResolvedAt = &at
+	r.ExecutionResolvedBy = resolvedBy
+	return nil
+}
+
+func (r *TaskRun) ClearTransientConnectionBinding() {
+	if r == nil {
+		return
+	}
+	r.ExecutionTarget.RuntimeSessionID = ""
+	r.ExecutionTarget.ConnectionGeneration = 0
+}
+
+func (r *TaskRun) HasStaleDeviceConnection(
+	activeSessionID interface{ String() string },
+	generation int64,
+) bool {
+	if r == nil {
+		return false
+	}
+	if r.EffectiveExecutionPlacement() != TaskExecutionPlacementDevice {
+		return false
+	}
+	currentSession := string(r.ExecutionTarget.RuntimeSessionID)
+	if currentSession != activeSessionID.String() {
+		return true
+	}
+	return r.ExecutionTarget.ConnectionGeneration != generation
 }
 
 type TaskRunProgress struct {
@@ -328,6 +384,12 @@ type EnqueueTaskRequest struct {
 	Source               string                 `json:"source,omitempty"`
 	ScopeSnapshotID      string                 `json:"scopeSnapshotId"`
 	PermissionSnapshotID string                 `json:"permissionSnapshotId"`
+}
+
+type TrustedExecutionTargetRequest struct {
+	Placement  TaskExecutionPlacement `json:"placement"`
+	Target     TaskExecutionTarget    `json:"target"`
+	ResolvedBy string                 `json:"resolvedBy"`
 }
 
 type EnqueueTaskResult struct {

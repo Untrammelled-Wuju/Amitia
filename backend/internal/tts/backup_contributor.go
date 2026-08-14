@@ -8,8 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
-
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"gorm.io/gorm"
 )
@@ -372,13 +370,13 @@ func (c *VoiceBackupContributor) importASR(ctx context.Context, req dataportabil
 			now = "2025-01-01 00:00:00"
 		}
 		c.DB.WithContext(ctx).Table("asr_configs").Create(map[string]interface{}{
-			"name":         rec.Name,
-			"api_type":     rec.ApiType,
-			"base_url":     rec.BaseURL,
-			"resource_id":  rec.ResourceId,
-			"is_active":    0,
-			"created_at":   now,
-			"updated_at":   now,
+			"name":        rec.Name,
+			"api_type":    rec.ApiType,
+			"base_url":    rec.BaseURL,
+			"resource_id": rec.ResourceId,
+			"is_active":   0,
+			"created_at":  now,
+			"updated_at":  now,
 		})
 	}
 }

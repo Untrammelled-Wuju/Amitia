@@ -11,7 +11,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/pipelinecheckpoint"
-	"github.com/u-ai/backend/internal/prompt/textlib"
+	"github.com/u-ai/backend/log"
 )
 
 func (s *service) Name() string { return "结构化事实" }
@@ -97,85 +97,30 @@ func (s *service) consolidationNeeded(convID string) {
 }
 
 func (s *service) runConsolidation(charID string) {
-	cfg := s.getActiveModel()
-	if cfg == nil {
+	var count int64
+	s.db.Table("memories").Where("character_id = ? AND verified_status != 'replaced' AND verified_status != 'tombstone'", charID).Count(&count)
+	if count < 10 {
 		return
 	}
 
-	var facts []struct {
-		ID         string
-		Key        string
-		Value      string
-		MemoryType string
-		Importance int
-		CreatedAt  string
-	}
-	s.db.Table("memories").
-		Select("id, key, value, memory_type, importance, created_at").
-		Where("character_id = ? AND verified_status != 'replaced' AND verified_status != 'tombstone'", charID).
-		Order("importance DESC, created_at DESC").Limit(50).Find(&facts)
+	var lastConsolidation string
+	s.db.Table("memory_events").Select("created_at").
+		Where("character_id = ? AND event_type IN ('memory_created', 'memory_reinforced', 'memory_merged')", charID).
+		Order("created_at DESC").Limit(1).Row().Scan(&lastConsolidation)
 
-	if len(facts) < 10 {
-		return
+	if lastConsolidation != "" {
+		lastT, err := time.Parse("2006-01-02 15:04:05", lastConsolidation)
+		if err == nil && time.Since(lastT) < 2*time.Hour {
+			return
+		}
 	}
 
-	factLines := make([]string, 0, len(facts))
-	for i, f := range facts {
-		factLines = append(factLines, fmt.Sprintf("[%d] (%s) %s: %s", i+1, f.MemoryType, f.Key, f.Value))
-	}
-
-	userMsg := fmt.Sprintf(textlib.MemoryConsolidationUserMsgTemplate, len(facts), strings.Join(factLines, "\n"))
-
-	messages := []map[string]interface{}{
-		{"role": "system", "content": textlib.MemoryConsolidationSystemPrompt},
-		{"role": "user", "content": userMsg},
-	}
-
-	content, _, err := s.callLLM(cfg, messages)
+	_, err := s.RunConsolidation(&ConsolidationRequest{
+		CharacterID: charID,
+		Source:      "auto",
+	})
 	if err != nil {
-		return
-	}
-
-	content = extractJSONObject(content)
-	var result struct {
-		Insights     []map[string]interface{} `json:"insights"`
-		Associations []map[string]interface{} `json:"associations"`
-	}
-	if err := json.Unmarshal([]byte(content), &result); err != nil {
-		return
-	}
-
-	now := time.Now().Format("2006-01-02 15:04:05")
-	for _, insight := range result.Insights {
-		subcategory, _ := insight["subcategory"].(string)
-		subject, _ := insight["subject"].(string)
-		summary, _ := insight["summary"].(string)
-		triggersJSON, _ := json.Marshal(insight["triggers"])
-
-		eventID := uuid.New().String()
-		s.db.Exec(
-			"INSERT INTO memory_events (id, memory_id, event_type, key, value, memory_type, importance, source, character_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-			eventID, "", "consolidation", subject, summary, subcategory, 0, "auto", charID, now,
-		)
-
-		detailsJSON, _ := json.Marshal(map[string]interface{}{
-			"subcategory": subcategory,
-			"subject":     subject,
-			"summary":     summary,
-			"triggers":    string(triggersJSON),
-		})
-		s.db.Exec(
-			"INSERT INTO consolidation_results (id, character_id, insight_type, insight_text, details, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-			uuid.New().String(), charID, subcategory, summary, string(detailsJSON), now,
-		)
-	}
-
-	if len(result.Associations) > 0 {
-		assocJSON, _ := json.Marshal(result.Associations)
-		s.db.Exec(
-			"INSERT INTO consolidation_results (id, character_id, insight_type, insight_text, details, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-			uuid.New().String(), charID, "associations", fmt.Sprintf("%d associations", len(result.Associations)), string(assocJSON), now,
-		)
+		log.Warn("Pipeline consolidation failed:", err)
 	}
 }
 

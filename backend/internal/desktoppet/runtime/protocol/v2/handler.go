@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/deviceruntime"
 	"github.com/u-ai/backend/internal/deviceruntime/protocol"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/log"
@@ -34,6 +35,7 @@ type Connection struct {
 	DeviceID  runtimeidentity.DeviceID
 	RuntimeID runtimeidentity.RuntimeID
 	SessionID string
+	Generation int64
 	State     ConnectionState
 	LastSeq   int64
 	LastBeat  time.Time
@@ -75,6 +77,8 @@ type Handler struct {
 	events   EventService
 	states   ActualStateService
 
+	deviceRuntimeSessions *deviceruntime.Service
+
 	connections map[string]*Connection
 	mu          sync.RWMutex
 }
@@ -87,6 +91,12 @@ func NewHandler(services *Services) *Handler {
 		states:      services.ActualStates,
 		connections: make(map[string]*Connection),
 	}
+}
+
+func NewHandlerWithDeviceRuntime(services *Services, deviceRuntimeSessions *deviceruntime.Service) *Handler {
+	h := NewHandler(services)
+	h.deviceRuntimeSessions = deviceRuntimeSessions
+	return h
 }
 
 func RuntimeConnectionKey(
@@ -138,6 +148,42 @@ func (h *Handler) HandleHello(conn *Connection, payload *HelloPayload) (*HelloAc
 		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "runtime_id mismatch")
 	}
 
+	now := time.Now().UTC()
+
+	if h.deviceRuntimeSessions != nil {
+		acqReq := HelloToAcquireRequest(*payload, conn.UserID, runtimeidentity.PlatformUnknown, now)
+
+		result, err := h.deviceRuntimeSessions.Acquire(nil, acqReq)
+		if err != nil {
+			return nil, NewProtocolError(ErrCodeEnvelopeInvalid, fmt.Sprintf("session acquire failed: %v", err))
+		}
+
+		projection, projectionErr := h.sessions.SyncFromDeviceRuntimeSession(nil, result.Session, *payload)
+		if projectionErr != nil {
+			_ = h.deviceRuntimeSessions.Close(nil, result.Session.ID, result.Session.ConnectionGeneration, "desktop_pet_projection_failed", now)
+			return nil, NewProtocolError(ErrCodeEnvelopeInvalid, fmt.Sprintf("sync projection failed: %v", projectionErr))
+		}
+
+		var markErr error
+		if result.Session.Status != protocol.SessionStatusReady {
+			_, markErr = h.deviceRuntimeSessions.MarkReady(nil, result.Session.ID, result.Session.ConnectionGeneration, now)
+		}
+
+		conn.SessionID = result.Session.ID.String()
+		conn.Generation = result.Session.ConnectionGeneration
+		conn.State = ConnStateConnected
+		conn.LastSeq = result.Session.LastEventSequence
+
+		helloAck := SessionResultToHelloAck(result, projection.LastAppliedDesiredRevision)
+
+		if markErr != nil {
+			_ = h.deviceRuntimeSessions.Close(nil, result.Session.ID, result.Session.ConnectionGeneration, "presence_projection_failed", now)
+			return nil, NewProtocolError(ErrCodeEnvelopeInvalid, fmt.Sprintf("session mark ready failed: %v", markErr))
+		}
+
+		return helloAck, nil
+	}
+
 	newSession, oldSession, err := h.sessions.AcquireSession(
 		nil,
 		conn.UserID, conn.DeviceID, conn.RuntimeID,
@@ -153,6 +199,7 @@ func (h *Handler) HandleHello(conn *Connection, payload *HelloPayload) (*HelloAc
 	_ = oldSession
 
 	conn.SessionID = newSession.ID
+	conn.Generation = newSession.ConnectionGeneration
 	conn.State = ConnStateConnected
 	conn.LastSeq = newSession.LastEventSequence
 
@@ -246,6 +293,17 @@ func (h *Handler) HandleDisconnect(conn *Connection) error {
 	}
 
 	conn.SetState(ConnStateClosed)
+
+	if h.deviceRuntimeSessions != nil {
+		if conn.SessionID != "" && conn.Generation > 0 {
+			err := h.deviceRuntimeSessions.Close(nil, runtimeidentity.ParseRuntimeSessionID(conn.SessionID), conn.Generation, "client_disconnect", time.Now().UTC())
+			if err != nil && !errors.Is(err, deviceruntime.ErrConnectionSuperseded) {
+				log.Warn("[v2] device runtime close failed: ", err)
+			}
+		}
+		return h.sessions.SupersedeSession(conn.SessionID, "client_disconnect")
+	}
+
 	return h.sessions.SupersedeSession(conn.SessionID, "client_disconnect")
 }
 
@@ -254,7 +312,17 @@ func (h *Handler) HandleHeartbeat(conn *Connection) error {
 		return ErrConnectionClosed
 	}
 
-	conn.TouchHeartbeat(time.Now())
+	now := time.Now().UTC()
+	conn.TouchHeartbeat(now)
+
+	if h.deviceRuntimeSessions != nil && conn.SessionID != "" && conn.Generation > 0 {
+		_, err := h.deviceRuntimeSessions.Heartbeat(nil, runtimeidentity.ParseRuntimeSessionID(conn.SessionID), conn.Generation, now)
+		if err != nil {
+			return err
+		}
+		return h.sessions.UpdateLastHeartbeat(conn.SessionID)
+	}
+
 	return h.sessions.UpdateLastHeartbeat(conn.SessionID)
 }
 

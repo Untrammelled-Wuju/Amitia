@@ -16,8 +16,8 @@ type RetryPolicy struct {
 }
 
 type ResourceLimits struct {
-	MaxMemoryBytes int64                   `json:"maxMemoryBytes,omitempty"`
-	MaxCPUPercent  int                     `json:"maxCpuPercent,omitempty"`
+	MaxMemoryBytes int64                    `json:"maxMemoryBytes,omitempty"`
+	MaxCPUPercent  int                      `json:"maxCpuPercent,omitempty"`
 	Requirement    ResourceLimitRequirement `json:"requirement,omitempty"`
 }
 
@@ -110,29 +110,29 @@ type CapabilityDefinition struct {
 type CapabilityID string
 
 type ToolDefinition struct {
-	ID             string                  `json:"id"`
-	ModelName      string                  `json:"modelName"`
-	ExtensionID    string                  `json:"extensionId,omitempty"`
-	ModuleID       string                  `json:"moduleId,omitempty"`
-	Source         ToolSource              `json:"source"`
-	Name           string                  `json:"name"`
-	Description    string                  `json:"description"`
-	Version        string                  `json:"version,omitempty"`
-	InputSchema    json.RawMessage         `json:"inputSchema"`
-	OutputSchema   json.RawMessage         `json:"outputSchema"`
-	Permissions       []PermissionRequirement `json:"permissions,omitempty"`
-	SecretReferences  []string                `json:"secretReferences,omitempty"`
-	RiskLevel         RiskLevel               `json:"riskLevel,omitempty"`
-	SideEffect        SideEffectLevel         `json:"sideEffect,omitempty"`
-	Scope             ScopeRule               `json:"scope,omitempty"`
-	Enabled           bool                    `json:"enabled"`
-	Compatible     bool                    `json:"compatible,omitempty"`
-	Internal       bool                    `json:"internal,omitempty"`
-	HasSideEffects bool                    `json:"hasSideEffects"`
-	Idempotent     bool                    `json:"idempotent"`
-	Retryable      bool                    `json:"retryable"`
-	TimeoutMS      int64                   `json:"timeoutMs"`
-	Metadata       map[string]any          `json:"metadata,omitempty"`
+	ID               string                  `json:"id"`
+	ModelName        string                  `json:"modelName"`
+	ExtensionID      string                  `json:"extensionId,omitempty"`
+	ModuleID         string                  `json:"moduleId,omitempty"`
+	Source           ToolSource              `json:"source"`
+	Name             string                  `json:"name"`
+	Description      string                  `json:"description"`
+	Version          string                  `json:"version,omitempty"`
+	InputSchema      json.RawMessage         `json:"inputSchema"`
+	OutputSchema     json.RawMessage         `json:"outputSchema"`
+	Permissions      []PermissionRequirement `json:"permissions,omitempty"`
+	SecretReferences []string                `json:"secretReferences,omitempty"`
+	RiskLevel        RiskLevel               `json:"riskLevel,omitempty"`
+	SideEffect       SideEffectLevel         `json:"sideEffect,omitempty"`
+	Scope            ScopeRule               `json:"scope,omitempty"`
+	Enabled          bool                    `json:"enabled"`
+	Compatible       bool                    `json:"compatible,omitempty"`
+	Internal         bool                    `json:"internal,omitempty"`
+	HasSideEffects   bool                    `json:"hasSideEffects"`
+	Idempotent       bool                    `json:"idempotent"`
+	Retryable        bool                    `json:"retryable"`
+	TimeoutMS        int64                   `json:"timeoutMs"`
+	Metadata         map[string]any          `json:"metadata,omitempty"`
 
 	ToolVersion     ToolVersion         `json:"toolVersion"`
 	State           ToolState           `json:"state"`

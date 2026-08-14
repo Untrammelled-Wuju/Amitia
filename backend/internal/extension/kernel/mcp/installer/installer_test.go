@@ -273,8 +273,8 @@ func TestExecutableInstaller_Install_NilLauncher(t *testing.T) {
 func TestExecutableInstaller_Install_PlanDigestMismatch(t *testing.T) {
 	inst := NewExecutableInstaller()
 	plan := mcp.MCPInstallPlan{
-		PlanID:    "plan-1",
-		BindingID: "b1",
+		PlanID:     "plan-1",
+		BindingID:  "b1",
 		PlanDigest: "wrong",
 	}
 
@@ -294,7 +294,7 @@ func TestRemoteInstaller_Install_ValidPlan(t *testing.T) {
 	plan := mcp.MCPInstallPlan{
 		PlanID:    "plan-1",
 		BindingID: "b1",
-		Source:   "https://mcp.example.com/sse",
+		Source:    "https://mcp.example.com/sse",
 	}
 	plan.PlanDigest = plan.ComputeDigest()
 

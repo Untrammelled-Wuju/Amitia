@@ -386,11 +386,11 @@ func TestPipeline_DepthPropagation(t *testing.T) {
 		ContributionID:  "depth-test-1",
 		ExtensionID:     "ext-1",
 		HookPointID:     "message.before_send/1",
-		ContractVersion:  1,
-		Phase:            PhaseBefore,
-		Enabled:          true,
-		RuntimeBinding:   RuntimeBinding{RuntimeType: "wasm", ModuleID: "mod-1", Entry: "handler"},
-		DefinitionHash:   "h1",
+		ContractVersion: 1,
+		Phase:           PhaseBefore,
+		Enabled:         true,
+		RuntimeBinding:  RuntimeBinding{RuntimeType: "wasm", ModuleID: "mod-1", Entry: "handler"},
+		DefinitionHash:  "h1",
 	}
 	if err := store.Register(ctx, contrib); err != nil {
 		t.Fatalf("register: %v", err)

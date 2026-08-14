@@ -104,21 +104,21 @@ const (
 )
 
 type ResourceUsage struct {
-	PeakMemoryBytes    int64               `json:"peakMemoryBytes"`
-	CPUPercentPeak     float64             `json:"cpuPercentPeak"`
-	ProcessCountPeak   int                 `json:"processCountPeak"`
-	OpenFilesPeak      int                 `json:"openFilesPeak"`
-	ConnectionCountPeak int                `json:"connectionCountPeak"`
-	DiskBytesPeak      int64               `json:"diskBytesPeak"`
-	MeasuredDimensions []ResourceDimension `json:"measuredDimensions"`
+	PeakMemoryBytes     int64               `json:"peakMemoryBytes"`
+	CPUPercentPeak      float64             `json:"cpuPercentPeak"`
+	ProcessCountPeak    int                 `json:"processCountPeak"`
+	OpenFilesPeak       int                 `json:"openFilesPeak"`
+	ConnectionCountPeak int                 `json:"connectionCountPeak"`
+	DiskBytesPeak       int64               `json:"diskBytesPeak"`
+	MeasuredDimensions  []ResourceDimension `json:"measuredDimensions"`
 }
 
 type RuntimeResourceCapabilities struct {
-	MemoryMode  ResourceEnforcementMode `json:"memoryMode"`
-	CPUMode     ResourceEnforcementMode `json:"cpuMode"`
-	MaxMemory   int64                   `json:"maxMemory"`
-	MaxCPU      int                     `json:"maxCPU"`
-	RuntimeID   string                  `json:"runtimeID"`
+	MemoryMode ResourceEnforcementMode `json:"memoryMode"`
+	CPUMode    ResourceEnforcementMode `json:"cpuMode"`
+	MaxMemory  int64                   `json:"maxMemory"`
+	MaxCPU     int                     `json:"maxCPU"`
+	RuntimeID  string                  `json:"runtimeID"`
 }
 
 type RuntimeResourceCapabilityResolver interface {
@@ -147,7 +147,7 @@ type ResourceAwareRuntimeAdapter interface {
 }
 
 type RuntimeExecutionResourcePolicy struct {
-	Limits  EffectiveResourceLimits `json:"limits"`
-	Usage  *ResourceUsage           `json:"usage,omitempty"`
+	Limits   EffectiveResourceLimits `json:"limits"`
+	Usage    *ResourceUsage          `json:"usage,omitempty"`
 	Exceeded *ResourceDimension      `json:"exceeded,omitempty"`
 }

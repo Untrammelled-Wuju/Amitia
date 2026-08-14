@@ -9,7 +9,7 @@ type JavaScriptExecutionContext struct {
 	ExecutionID     string
 	ExtensionID     string
 	SkillName       string
-	EntryPoint       string
+	EntryPoint      string
 	Content         []byte
 	ModuleFormat    string
 	Args            map[string]any

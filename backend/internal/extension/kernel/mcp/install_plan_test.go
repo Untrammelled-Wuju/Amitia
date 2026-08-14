@@ -9,15 +9,15 @@ import (
 
 func TestMCPInstallPlan_ComputeDigest(t *testing.T) {
 	plan := MCPInstallPlan{
-		PlanID:            "plan-1",
-		BindingID:         "b1",
-		Source:            "npm",
-		Transport:         "stdio",
-		Launcher:          "npx",
-		RequestedPackage:  "mcp-server",
-		RequestedVersion:  "1.0.0",
-		Risk:              "low",
-		Permissions:       []string{"fs:read", "net:outbound"},
+		PlanID:           "plan-1",
+		BindingID:        "b1",
+		Source:           "npm",
+		Transport:        "stdio",
+		Launcher:         "npx",
+		RequestedPackage: "mcp-server",
+		RequestedVersion: "1.0.0",
+		Risk:             "low",
+		Permissions:      []string{"fs:read", "net:outbound"},
 		RuntimeDependencies: []MCPRuntimeDependency{
 			{Name: "node", Version: ">=18", Required: true},
 		},

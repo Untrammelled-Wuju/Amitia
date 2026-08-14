@@ -14,16 +14,16 @@ type RetryReason string
 
 const (
 	RetryReasonRetryableRuntimeFailure RetryReason = "retryable_runtime_failure"
-	RetryReasonNoBudget               RetryReason = "no_retry_budget"
-	RetryReasonBudgetExhausted        RetryReason = "retry_budget_exhausted"
-	RetryReasonDeadlineInsufficient   RetryReason = "deadline_budget_insufficient"
-	RetryReasonNonRetryableError      RetryReason = "non_retryable_error"
-	RetryReasonUnsafeSideEffect       RetryReason = "unsafe_side_effect"
-	RetryReasonStreamVisible          RetryReason = "stream_visible"
-	RetryReasonStreamFailure          RetryReason = "stream_failure"
-	RetryReasonCancelled              RetryReason = "cancelled"
-	RetryReasonTimedOut               RetryReason = "timed_out"
-	RetryReasonHalfOpenProbe          RetryReason = "half_open_probe"
+	RetryReasonNoBudget                RetryReason = "no_retry_budget"
+	RetryReasonBudgetExhausted         RetryReason = "retry_budget_exhausted"
+	RetryReasonDeadlineInsufficient    RetryReason = "deadline_budget_insufficient"
+	RetryReasonNonRetryableError       RetryReason = "non_retryable_error"
+	RetryReasonUnsafeSideEffect        RetryReason = "unsafe_side_effect"
+	RetryReasonStreamVisible           RetryReason = "stream_visible"
+	RetryReasonStreamFailure           RetryReason = "stream_failure"
+	RetryReasonCancelled               RetryReason = "cancelled"
+	RetryReasonTimedOut                RetryReason = "timed_out"
+	RetryReasonHalfOpenProbe           RetryReason = "half_open_probe"
 )
 
 type RetryDecisionInput struct {

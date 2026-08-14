@@ -362,8 +362,8 @@ func (h *ExecutionHook) BeginAttempt(ctx context.Context, inv capability.ToolInv
 	attemptID := NewAttemptID()
 
 	meta := map[string]any{
-		"tool_id":    tool.ID,
-		"tool_name":  tool.Name,
+		"tool_id":     tool.ID,
+		"tool_name":   tool.Name,
 		"tool_source": string(tool.Source),
 	}
 
@@ -429,10 +429,10 @@ func (h *ExecutionHook) FinishAttempt(ctx context.Context, attemptID string, res
 		Severity:     severityForStatus(status),
 		Timestamp:    finishedAt,
 		Data: map[string]any{
-			"status":       string(status),
-			"error_code":   errCode,
-			"duration_ms":  result.DurationMS,
-			"backoff_ms":   backoff.Milliseconds(),
+			"status":      string(status),
+			"error_code":  errCode,
+			"duration_ms": result.DurationMS,
+			"backoff_ms":  backoff.Milliseconds(),
 		},
 	})
 
@@ -585,7 +585,7 @@ func (h *ExecutionHook) OnPermissionDenied(ctx context.Context, inv capability.T
 		Timestamp:    now,
 		Data: map[string]any{
 			"tool_id": toolID,
-		"reason":  reason,
+			"reason":  reason,
 		},
 	})
 
@@ -627,7 +627,7 @@ func (h *ExecutionHook) OnScopeDenied(ctx context.Context, inv capability.ToolIn
 		Timestamp:    now,
 		Data: map[string]any{
 			"tool_id": toolID,
-		"reason":  reason,
+			"reason":  reason,
 		},
 	})
 
@@ -670,7 +670,7 @@ func (h *ExecutionHook) OnSideEffectRecorded(ctx context.Context, invocationID s
 	}
 
 	return h.writer.WriteInvocation(ctx, InvocationRecord{
-		InvocationID:   invocationID,
+		InvocationID:    invocationID,
 		SideEffectCount: len(effects),
 	})
 }
@@ -695,10 +695,10 @@ func (h *ExecutionHook) OnCircuitStateChange(ctx context.Context, circuitKey str
 		eventType = "circuit.closed"
 	}
 	return h.writer.WriteRuntimeEvent(ctx, RuntimeEventRecord{
-		EventID:      NewEventID(),
-		EventType:    eventType,
-		Severity:     severity,
-		Timestamp:    time.Now(),
+		EventID:   NewEventID(),
+		EventType: eventType,
+		Severity:  severity,
+		Timestamp: time.Now(),
 		Data: map[string]any{
 			"circuit_key":     circuitKey,
 			"from_state":      fromState,

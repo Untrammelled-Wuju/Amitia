@@ -9,7 +9,7 @@ import (
 )
 
 type domainMigrationBackupPort struct {
-	db       *gorm.DB
+	db        *gorm.DB
 	backupDir string
 }
 
@@ -19,9 +19,9 @@ func newDomainMigrationBackupPort(db *gorm.DB, backupDir string) *domainMigratio
 
 func (p *domainMigrationBackupPort) CreateBackup(ctx context.Context) (string, error) {
 	runner := migrationcore.Runner{
-		DB:        p.db,
-		BackupDir: p.backupDir,
-		Now:       func() time.Time { return time.Now() },
+		DB:         p.db,
+		BackupDir:  p.backupDir,
+		Now:        func() time.Time { return time.Now() },
 		SkipBackup: false,
 	}
 	if err := runner.CreatePreMigrationBackup(); err != nil {

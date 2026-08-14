@@ -5,14 +5,14 @@ package script_host
 import "errors"
 
 var (
-	ErrNodeResolverUnavailable    = errors.New("script_host: node environment resolver unavailable")
+	ErrNodeResolverUnavailable     = errors.New("script_host: node environment resolver unavailable")
 	ErrArtifactResolverUnavailable = errors.New("script_host: artifact resolver unavailable")
-	ErrUnknownHostKind            = errors.New("script_host: unknown host kind")
-	ErrHostArtifactNotFound       = errors.New("script_host: host artifact not found")
-	ErrInvalidHostArtifact        = errors.New("script_host: invalid host artifact")
-	ErrUnsupportedHostEntry       = errors.New("script_host: unsupported host entry type")
-	ErrRuntimeResourceUnavailable = errors.New("script_host: runtime resource unavailable")
-	ErrWorkspaceUnavailable       = errors.New("script_host: workspace unavailable")
+	ErrUnknownHostKind             = errors.New("script_host: unknown host kind")
+	ErrHostArtifactNotFound        = errors.New("script_host: host artifact not found")
+	ErrInvalidHostArtifact         = errors.New("script_host: invalid host artifact")
+	ErrUnsupportedHostEntry        = errors.New("script_host: unsupported host entry type")
+	ErrRuntimeResourceUnavailable  = errors.New("script_host: runtime resource unavailable")
+	ErrWorkspaceUnavailable        = errors.New("script_host: workspace unavailable")
 )
 
 type unknownHostKindError struct {

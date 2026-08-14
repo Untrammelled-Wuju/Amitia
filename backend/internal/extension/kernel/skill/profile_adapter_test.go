@@ -322,8 +322,8 @@ func TestMergeInvocationPolicy(t *testing.T) {
 		BackgroundAllowed:         true,
 	}
 	overlay := SkillInvocationPolicy{
-		UserInvocationAllowed:     false,
-		ImplicitInvocationAllowed: true,
+		UserInvocationAllowed:      false,
+		ImplicitInvocationAllowed:  true,
 		IsolatedExecutionRequested: true,
 	}
 	merged := MergeInvocationPolicy(base, overlay)

@@ -202,7 +202,6 @@ func (s *service) RestorePhysicalSafetySnapshot(name string) map[string]interfac
 	return map[string]interface{}{"restored": true}
 }
 
-
 func sanitizeName(s string) string {
 	r := strings.NewReplacer("/", "_", "\\", "_", ":", "_", "*", "_", "?", "_", "\"", "_", "<", "_", ">", "_", "|", "_")
 	return r.Replace(s)
