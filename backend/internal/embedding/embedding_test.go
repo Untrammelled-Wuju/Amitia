@@ -1,7 +1,6 @@
 package embedding
 
 import (
-	"math"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -24,7 +23,7 @@ func TestEmbedWithRawErrorPreservesProviderResponse(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := db.Exec("CREATE TABLE embedding_configs (base_url TEXT, api_key TEXT, model_name TEXT, api_type TEXT, is_active INTEGER)").Error; err != nil {
+	if err := db.Exec("CREATE TABLE embedding_configs (base_url TEXT, api_key TEXT, model_name TEXT, api_type TEXT, provider_config_json TEXT, is_active INTEGER)").Error; err != nil {
 		t.Fatal(err)
 	}
 	if err := db.Exec("INSERT INTO embedding_configs(base_url, api_key, model_name, api_type, is_active) VALUES (?, ?, ?, 'volcengine', 1)", server.URL, "test-key", "test-model").Error; err != nil {
@@ -32,11 +31,11 @@ func TestEmbedWithRawErrorPreservesProviderResponse(t *testing.T) {
 	}
 
 	vector, rawError, err := NewService(db).EmbedWithRawError("测试文本")
-	if err != nil {
-		t.Fatal(err)
+	if err == nil {
+		t.Fatal("expected error on provider failure, got nil")
 	}
-	if len(vector) == 0 {
-		t.Fatal("fallback vector is empty")
+	if vector != nil {
+		t.Fatalf("expected nil vector on failure, got %#v", vector)
 	}
 	if !strings.Contains(rawError, rawBody) || !strings.Contains(rawError, "tail") {
 		t.Fatalf("raw provider response was truncated: %s", rawError)
@@ -63,7 +62,7 @@ func TestEmbedAcceptsProviderDataShapes(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := db.Exec("CREATE TABLE embedding_configs (base_url TEXT, api_key TEXT, model_name TEXT, api_type TEXT, is_active INTEGER)").Error; err != nil {
+			if err := db.Exec("CREATE TABLE embedding_configs (base_url TEXT, api_key TEXT, model_name TEXT, api_type TEXT, provider_config_json TEXT, is_active INTEGER)").Error; err != nil {
 				t.Fatal(err)
 			}
 			if err := db.Exec("INSERT INTO embedding_configs(base_url, api_key, model_name, api_type, is_active) VALUES (?, ?, ?, 'volcengine', 1)", server.URL, "test-key", "test-model").Error; err != nil {
@@ -92,18 +91,19 @@ func TestFitEmbeddingDimension(t *testing.T) {
 		config.AppCfg = previous
 	})
 
-	vector := fitEmbeddingDimension([]float32{1, 2, 3, 4, 5})
+	vector, err := fitEmbeddingDimension([]float32{1, 2, 3, 4, 5})
+	if err == nil {
+		t.Fatal("expected error on dimension mismatch, got nil")
+	}
+	if vector != nil {
+		t.Fatalf("expected nil vector on mismatch, got %#v", vector)
+	}
+
+	vector, err = fitEmbeddingDimension([]float32{1, 2, 3})
+	if err != nil {
+		t.Fatalf("unexpected error on matching dimension: %v", err)
+	}
 	if len(vector) != 3 {
 		t.Fatalf("unexpected dimension: %d", len(vector))
-	}
-	if vector[0] <= 0 || vector[1] <= 0 || vector[2] <= 0 {
-		t.Fatalf("unexpected fitted vector: %#v", vector)
-	}
-	var norm float64
-	for _, value := range vector {
-		norm += float64(value * value)
-	}
-	if math.Abs(norm-1) > 0.0001 {
-		t.Fatalf("unexpected norm: %f", norm)
 	}
 }
