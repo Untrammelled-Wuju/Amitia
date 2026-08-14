@@ -13,10 +13,10 @@ import (
 var ErrManifestProviderIDCollision = errors.New("capability: manifest provider id collision")
 
 type ManifestProviderError struct {
-	ExtensionID string
-	ModuleID    string
+	ExtensionID  string
+	ModuleID     string
 	CapabilityID CapabilityID
-	Err         error
+	Err          error
 }
 
 func (e ManifestProviderError) Error() string {
@@ -115,10 +115,10 @@ func ProviderDefinitionsFromExtension(def domain.ExtensionDefinition) ([]Capabil
 
 			if seen[providerID] {
 				return nil, ManifestProviderError{
-					ExtensionID: string(def.ID),
-					ModuleID:    string(mod.ID),
+					ExtensionID:  string(def.ID),
+					ModuleID:     string(mod.ID),
 					CapabilityID: CapabilityID(pc.ID),
-					Err:         ErrManifestProviderIDCollision,
+					Err:          ErrManifestProviderIDCollision,
 				}
 			}
 			seen[providerID] = true

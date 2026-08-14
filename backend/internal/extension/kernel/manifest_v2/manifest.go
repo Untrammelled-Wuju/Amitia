@@ -749,4 +749,3 @@ func validateMCPServerContribution(spec map[string]any, cpath string, runtime *R
 	}
 	return nil
 }
-
