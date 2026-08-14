@@ -9,7 +9,6 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"gorm.io/gorm"
 )
@@ -205,6 +204,3 @@ func (c *EmbeddingBackupContributor) Import(ctx context.Context, req dataportabi
 
 	return nil
 }
-
-var _ = bufio.NewScanner
-var _ = uuid.New
