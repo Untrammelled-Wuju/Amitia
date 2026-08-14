@@ -70,37 +70,37 @@ type UpdateMemoryRequest struct {
 }
 
 type SearchMemoryRequest struct {
-	Keyword          string          `json:"keyword"`
-	CharacterID      string          `json:"characterId"`
-	UserID           string          `json:"userId"`
-	SensitivityLevel string          `json:"sensitivityLevel"`
-	Limit            int             `json:"limit"`
-	Layers           []MemoryLayer   `json:"layers"`
-	Types            []string        `json:"types"`
+	Keyword          string            `json:"keyword"`
+	CharacterID      string            `json:"characterId"`
+	UserID           string            `json:"userId"`
+	SensitivityLevel string            `json:"sensitivityLevel"`
+	Limit            int               `json:"limit"`
+	Layers           []MemoryLayer     `json:"layers"`
+	Types            []string          `json:"types"`
 	Time             *MemoryTimeFilter `json:"time"`
-	Cursor           string          `json:"cursor"`
-	Sort             MemorySort      `json:"sort"`
+	Cursor           string            `json:"cursor"`
+	Sort             MemorySort        `json:"sort"`
 }
 
 type MemoryTimeFilter struct {
-	Basis            MemoryTimeBasis `json:"basis"`
-	FromUTC          *string         `json:"from"`
-	ToUTC            *string         `json:"to"`
-	AtUTC            *string         `json:"at"`
-	LocalDateFrom    string          `json:"localDateFrom"`
-	LocalDateTo      string          `json:"localDateTo"`
-	Dayparts         []string        `json:"dayparts"`
-	Precisions       []string        `json:"precisions"`
-	IncludeUnknown   bool            `json:"includeUnknown"`
+	Basis          MemoryTimeBasis `json:"basis"`
+	FromUTC        *string         `json:"from"`
+	ToUTC          *string         `json:"to"`
+	AtUTC          *string         `json:"at"`
+	LocalDateFrom  string          `json:"localDateFrom"`
+	LocalDateTo    string          `json:"localDateTo"`
+	Dayparts       []string        `json:"dayparts"`
+	Precisions     []string        `json:"precisions"`
+	IncludeUnknown bool            `json:"includeUnknown"`
 }
 
 type MemorySort string
 
 const (
-	MemorySortRelevance  MemorySort = "relevance"
-	MemorySortTimeDesc   MemorySort = "time_desc"
-	MemorySortTimeAsc    MemorySort = "time_asc"
-	MemorySortImportance MemorySort = "importance"
+	MemorySortRelevance    MemorySort = "relevance"
+	MemorySortTimeDesc     MemorySort = "time_desc"
+	MemorySortTimeAsc      MemorySort = "time_asc"
+	MemorySortImportance   MemorySort = "importance"
 	MemorySortRecentlyUsed MemorySort = "recently_used"
 )
 
@@ -164,15 +164,15 @@ type MemoryCandidateModel struct {
 func (MemoryCandidateModel) TableName() string { return "memory_candidates" }
 
 type MemoryDerivation struct {
-	ID               string `gorm:"column:id;primaryKey" json:"id"`
-	OutputMemoryID   string `gorm:"column:output_memory_id" json:"outputMemoryId"`
-	InputMemoryID    string `gorm:"column:input_memory_id" json:"inputMemoryId"`
-	InputVersion     int    `gorm:"column:input_version" json:"inputVersion"`
+	ID                string `gorm:"column:id;primaryKey" json:"id"`
+	OutputMemoryID    string `gorm:"column:output_memory_id" json:"outputMemoryId"`
+	InputMemoryID     string `gorm:"column:input_memory_id" json:"inputMemoryId"`
+	InputVersion      int    `gorm:"column:input_version" json:"inputVersion"`
 	InputSnapshotHash string `gorm:"column:input_snapshot_hash" json:"inputSnapshotHash"`
-	DerivationKind   string `gorm:"column:derivation_kind" json:"derivationKind"`
-	Ordinal          int    `gorm:"column:ordinal" json:"ordinal"`
-	OperationID      string `gorm:"column:operation_id" json:"operationId"`
-	CreatedAt        string `gorm:"column:created_at" json:"createdAt"`
+	DerivationKind    string `gorm:"column:derivation_kind" json:"derivationKind"`
+	Ordinal           int    `gorm:"column:ordinal" json:"ordinal"`
+	OperationID       string `gorm:"column:operation_id" json:"operationId"`
+	CreatedAt         string `gorm:"column:created_at" json:"createdAt"`
 }
 
 func (MemoryDerivation) TableName() string { return "memory_derivations" }
@@ -192,37 +192,37 @@ type MemoryEvidenceRef struct {
 }
 
 type MemorySummaryRequest struct {
-	CharacterID      string
-	Topic            string
-	Layers           []MemoryLayer
-	Types            []string
-	Time             *MemoryTimeFilter
-	MinImportance    int
-	MinConfidence    int
-	Limit            int
-	IncludeEvidence  bool
-	Mode             MemorySummaryMode
+	CharacterID     string
+	Topic           string
+	Layers          []MemoryLayer
+	Types           []string
+	Time            *MemoryTimeFilter
+	MinImportance   int
+	MinConfidence   int
+	Limit           int
+	IncludeEvidence bool
+	Mode            MemorySummaryMode
 }
 
 type MemorySummaryResult struct {
-	Summary        string              `json:"summary"`
-	EvidenceCount  int                 `json:"evidenceCount"`
-	Evidence       []MemoryEvidenceRef `json:"evidence,omitempty"`
-	Topic          string              `json:"topic"`
-	Layers         []MemoryLayer       `json:"layers,omitempty"`
-	Types          []string            `json:"types,omitempty"`
-	GeneratedBy    string              `json:"generatedBy"`
-	Truncated      bool                `json:"truncated"`
-	Warnings       []string            `json:"warnings,omitempty"`
+	Summary       string              `json:"summary"`
+	EvidenceCount int                 `json:"evidenceCount"`
+	Evidence      []MemoryEvidenceRef `json:"evidence,omitempty"`
+	Topic         string              `json:"topic"`
+	Layers        []MemoryLayer       `json:"layers,omitempty"`
+	Types         []string            `json:"types,omitempty"`
+	GeneratedBy   string              `json:"generatedBy"`
+	Truncated     bool                `json:"truncated"`
+	Warnings      []string            `json:"warnings,omitempty"`
 }
 
 type DerivationKind string
 
 const (
-	DerivationKindReinforce         DerivationKind = "reinforce"
-	DerivationKindMerge             DerivationKind = "merge"
-	DerivationKindSummary           DerivationKind = "summary"
-	DerivationKindReflection        DerivationKind = "reflection"
+	DerivationKindReinforce          DerivationKind = "reinforce"
+	DerivationKindMerge              DerivationKind = "merge"
+	DerivationKindSummary            DerivationKind = "summary"
+	DerivationKindReflection         DerivationKind = "reflection"
 	DerivationKindConflictResolution DerivationKind = "conflict_resolution"
 )
 
@@ -238,13 +238,13 @@ const (
 type ProposedAction string
 
 const (
-	ProposedActionCreate   ProposedAction = "create"
+	ProposedActionCreate    ProposedAction = "create"
 	ProposedActionReinforce ProposedAction = "reinforce"
-	ProposedActionMerge    ProposedAction = "merge"
-	ProposedActionKeepOld  ProposedAction = "keep_old"
-	ProposedActionKeepNew  ProposedAction = "keep_new"
-	ProposedActionFlag     ProposedAction = "flag"
-	ProposedActionNoop     ProposedAction = "noop"
+	ProposedActionMerge     ProposedAction = "merge"
+	ProposedActionKeepOld   ProposedAction = "keep_old"
+	ProposedActionKeepNew   ProposedAction = "keep_new"
+	ProposedActionFlag      ProposedAction = "flag"
+	ProposedActionNoop      ProposedAction = "noop"
 )
 
 type ConsolidationRequest struct {
@@ -258,18 +258,18 @@ type ConsolidationRequest struct {
 }
 
 type ConsolidationCandidateProposal struct {
-	CandidateKind        string   `json:"candidateKind"`
-	Key                  string   `json:"key"`
-	Value                string   `json:"value"`
-	MemoryType           string   `json:"memoryType"`
-	Importance           int      `json:"importance"`
-	Confidence           float64  `json:"confidence"`
-	ProposedAction       string   `json:"proposedAction"`
-	SourceMemoryIDs      []string `json:"sourceMemoryIds"`
-	SourceVersions       []int    `json:"sourceVersions"`
-	DerivationKey        string   `json:"derivationKey"`
-	TargetMemoryID       string   `json:"targetMemoryId"`
-	Reason               string   `json:"reason"`
+	CandidateKind   string   `json:"candidateKind"`
+	Key             string   `json:"key"`
+	Value           string   `json:"value"`
+	MemoryType      string   `json:"memoryType"`
+	Importance      int      `json:"importance"`
+	Confidence      float64  `json:"confidence"`
+	ProposedAction  string   `json:"proposedAction"`
+	SourceMemoryIDs []string `json:"sourceMemoryIds"`
+	SourceVersions  []int    `json:"sourceVersions"`
+	DerivationKey   string   `json:"derivationKey"`
+	TargetMemoryID  string   `json:"targetMemoryId"`
+	Reason          string   `json:"reason"`
 }
 
 type ConsolidationResult struct {
@@ -311,42 +311,42 @@ type MemoryRecordV1 struct {
 }
 
 type MemoryEventV1 struct {
-	ID            string `json:"id"`
-	MemoryID      string `json:"memoryId"`
-	Version       int    `json:"version"`
-	EventType     string `json:"eventType"`
-	OperationID   string `json:"operationId"`
-	SnapshotHash  string `json:"snapshotHash"`
-	EventReason   string `json:"eventReason"`
-	CreatedAt     string `json:"createdAt"`
+	ID           string `json:"id"`
+	MemoryID     string `json:"memoryId"`
+	Version      int    `json:"version"`
+	EventType    string `json:"eventType"`
+	OperationID  string `json:"operationId"`
+	SnapshotHash string `json:"snapshotHash"`
+	EventReason  string `json:"eventReason"`
+	CreatedAt    string `json:"createdAt"`
 }
 
 type MemoryTemporalV1 struct {
-	MemoryID          string  `json:"memoryId"`
-	OccurredAtUTC     *string `json:"occurredAtUtc,omitempty"`
-	EndedAtUTC        *string `json:"endedAtUtc,omitempty"`
-	Timezone          string  `json:"timezone,omitempty"`
-	LocalDate         string  `json:"localDate,omitempty"`
-	Daypart           string  `json:"daypart,omitempty"`
-	TemporalPrecision string  `json:"temporalPrecision,omitempty"`
-	ValidFromUTC      *string `json:"validFromUtc,omitempty"`
-	ValidToUTC        *string `json:"validToUtc,omitempty"`
+	MemoryID          string   `json:"memoryId"`
+	OccurredAtUTC     *string  `json:"occurredAtUtc,omitempty"`
+	EndedAtUTC        *string  `json:"endedAtUtc,omitempty"`
+	Timezone          string   `json:"timezone,omitempty"`
+	LocalDate         string   `json:"localDate,omitempty"`
+	Daypart           string   `json:"daypart,omitempty"`
+	TemporalPrecision string   `json:"temporalPrecision,omitempty"`
+	ValidFromUTC      *string  `json:"validFromUtc,omitempty"`
+	ValidToUTC        *string  `json:"validToUtc,omitempty"`
 	AnchorIDs         []string `json:"anchorIds,omitempty"`
-	SourceTimeText    string  `json:"sourceTimeText,omitempty"`
-	CreatedAtUTC      string  `json:"createdAtUtc"`
-	UpdatedAtUTC      string  `json:"updatedAtUtc"`
+	SourceTimeText    string   `json:"sourceTimeText,omitempty"`
+	CreatedAtUTC      string   `json:"createdAtUtc"`
+	UpdatedAtUTC      string   `json:"updatedAtUtc"`
 }
 
 type MemoryDerivationV1 struct {
-	ID               string `json:"id"`
-	OutputMemoryID   string `json:"outputMemoryId"`
-	InputMemoryID    string `json:"inputMemoryId"`
-	InputVersion     int    `json:"inputVersion"`
+	ID                string `json:"id"`
+	OutputMemoryID    string `json:"outputMemoryId"`
+	InputMemoryID     string `json:"inputMemoryId"`
+	InputVersion      int    `json:"inputVersion"`
 	InputSnapshotHash string `json:"inputSnapshotHash"`
-	DerivationKind   string `json:"derivationKind"`
-	Ordinal          int    `json:"ordinal"`
-	OperationID      string `json:"operationId"`
-	CreatedAt        string `json:"createdAt"`
+	DerivationKind    string `json:"derivationKind"`
+	Ordinal           int    `json:"ordinal"`
+	OperationID       string `json:"operationId"`
+	CreatedAt         string `json:"createdAt"`
 }
 
 type MemoryExportDataset struct {
@@ -359,10 +359,10 @@ type MemoryExportDataset struct {
 type ExportScope string
 
 const (
-	ExportScopeAll       ExportScope = "all_memory"
-	ExportScopeCharacter ExportScope = "character"
+	ExportScopeAll        ExportScope = "all_memory"
+	ExportScopeCharacter  ExportScope = "character"
 	ExportScopeUserGlobal ExportScope = "user_global"
-	ExportScopeSelected  ExportScope = "selected"
+	ExportScopeSelected   ExportScope = "selected"
 )
 
 type HistoryMode string
@@ -373,22 +373,22 @@ const (
 )
 
 type MemoryExportRequest struct {
-	Scope              ExportScope `json:"scope"`
-	CharacterID        string      `json:"characterId,omitempty"`
-	SelectedIDs        []string    `json:"selectedIds,omitempty"`
-	HistoryMode        HistoryMode `json:"historyMode"`
-	IncludeCandidates  bool        `json:"includeCandidates"`
-	IncludeSourceMemory string     `json:"includeSourceMemory"`
+	Scope               ExportScope `json:"scope"`
+	CharacterID         string      `json:"characterId,omitempty"`
+	SelectedIDs         []string    `json:"selectedIds,omitempty"`
+	HistoryMode         HistoryMode `json:"historyMode"`
+	IncludeCandidates   bool        `json:"includeCandidates"`
+	IncludeSourceMemory string      `json:"includeSourceMemory"`
 }
 
 type MemoryExportResult struct {
-	OperationID      string `json:"operationId"`
-	RecordCount      int    `json:"recordCount"`
-	EventCount       int    `json:"eventCount"`
-	TemporalCount    int    `json:"temporalCount"`
-	DerivationCount  int    `json:"derivationCount"`
-	CandidateCount   int    `json:"candidateCount"`
-	Scope            string `json:"scope"`
+	OperationID     string `json:"operationId"`
+	RecordCount     int    `json:"recordCount"`
+	EventCount      int    `json:"eventCount"`
+	TemporalCount   int    `json:"temporalCount"`
+	DerivationCount int    `json:"derivationCount"`
+	CandidateCount  int    `json:"candidateCount"`
+	Scope           string `json:"scope"`
 }
 
 type MemoryImportRequest struct {
@@ -413,25 +413,25 @@ const (
 )
 
 type MemoryPreviewResult struct {
-	DatasetVersion    string   `json:"datasetVersion"`
-	RecordCount       int      `json:"recordCount"`
-	EventCount        int      `json:"eventCount"`
-	TemporalCount     int      `json:"temporalCount"`
-	DerivationCount   int      `json:"derivationCount"`
-	CandidateCount    int      `json:"candidateCount"`
-	CharacterScopes   []string `json:"characterScopes"`
-	TypeDistribution  map[string]int `json:"typeDistribution"`
-	SensitivityDistribution map[string]int `json:"sensitivityDistribution"`
-	IDCollisions      int      `json:"idCollisions"`
-	SemanticDuplicates int     `json:"semanticDuplicates"`
-	UnresolvedCharacters []string `json:"unresolvedCharacters"`
-	UnresolvedSourceMessages []string `json:"unresolvedSourceMessages"`
-	UnresolvedAnchors []string `json:"unresolvedAnchors"`
-	BrokenDerivations []string `json:"brokenDerivations"`
-	CycleRiskCount    int      `json:"cycleRiskCount"`
-	ReindexRequired   bool     `json:"reindexRequired"`
-	EstimatedSize     int64    `json:"estimatedSize"`
-	Warnings          []string `json:"warnings"`
+	DatasetVersion           string         `json:"datasetVersion"`
+	RecordCount              int            `json:"recordCount"`
+	EventCount               int            `json:"eventCount"`
+	TemporalCount            int            `json:"temporalCount"`
+	DerivationCount          int            `json:"derivationCount"`
+	CandidateCount           int            `json:"candidateCount"`
+	CharacterScopes          []string       `json:"characterScopes"`
+	TypeDistribution         map[string]int `json:"typeDistribution"`
+	SensitivityDistribution  map[string]int `json:"sensitivityDistribution"`
+	IDCollisions             int            `json:"idCollisions"`
+	SemanticDuplicates       int            `json:"semanticDuplicates"`
+	UnresolvedCharacters     []string       `json:"unresolvedCharacters"`
+	UnresolvedSourceMessages []string       `json:"unresolvedSourceMessages"`
+	UnresolvedAnchors        []string       `json:"unresolvedAnchors"`
+	BrokenDerivations        []string       `json:"brokenDerivations"`
+	CycleRiskCount           int            `json:"cycleRiskCount"`
+	ReindexRequired          bool           `json:"reindexRequired"`
+	EstimatedSize            int64          `json:"estimatedSize"`
+	Warnings                 []string       `json:"warnings"`
 }
 
 type MemoryImportResult struct {
@@ -449,14 +449,14 @@ type MemoryImportResult struct {
 }
 
 type MemoryRecoveryCheck struct {
-	RecordsValid        int64  `json:"recordsValid"`
-	RecordsInvalid      int64  `json:"recordsInvalid"`
-	TemporalValid       int64  `json:"temporalValid"`
-	TemporalInvalid     int64  `json:"temporalInvalid"`
-	HistoryIssues       int64  `json:"historyIssues"`
-	ProvenanceIssues    int64  `json:"provenanceIssues"`
-	VectorState         string `json:"vectorState"`
-	GraphState          string `json:"graphState"`
-	PendingReconciliation int64 `json:"pendingReconciliation"`
-	Ready               bool   `json:"ready"`
+	RecordsValid          int64  `json:"recordsValid"`
+	RecordsInvalid        int64  `json:"recordsInvalid"`
+	TemporalValid         int64  `json:"temporalValid"`
+	TemporalInvalid       int64  `json:"temporalInvalid"`
+	HistoryIssues         int64  `json:"historyIssues"`
+	ProvenanceIssues      int64  `json:"provenanceIssues"`
+	VectorState           string `json:"vectorState"`
+	GraphState            string `json:"graphState"`
+	PendingReconciliation int64  `json:"pendingReconciliation"`
+	Ready                 bool   `json:"ready"`
 }

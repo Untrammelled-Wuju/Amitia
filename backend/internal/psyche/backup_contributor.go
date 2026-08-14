@@ -26,6 +26,10 @@ func NewPsycheBackupContributor(db *gorm.DB) *PsycheBackupContributor {
 func (p *PsycheBackupContributor) ID() string   { return "psyche" }
 func (p *PsycheBackupContributor) Name() string { return "Psyche State" }
 
+func (p *PsycheBackupContributor) Dependencies() []string {
+	return []string{"character"}
+}
+
 type psycheStateV1 struct {
 	CharacterID  string  `json:"characterId"`
 	Version      string  `json:"version"`

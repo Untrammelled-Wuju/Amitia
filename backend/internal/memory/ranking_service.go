@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/temporal"
 
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"

@@ -19,26 +19,26 @@ func NewCharacterContributor(db *gorm.DB) *CharacterContributor {
 	return &CharacterContributor{DB: db}
 }
 
-func (c *CharacterContributor) ID() string   { return "character" }
-func (c *CharacterContributor) Name() string { return "Character Records" }
+func (c *CharacterContributor) ID() string             { return "character" }
+func (c *CharacterContributor) Name() string           { return "Character Records" }
 func (c *CharacterContributor) Dependencies() []string { return nil }
 
 type characterExportRecord struct {
-	ID              string `json:"id"`
-	Name            string `json:"name"`
-	Description     string `json:"description"`
-	Personality     string `json:"personality"`
-	SystemPrompt    string `json:"system_prompt"`
-	BasePrompt      string `json:"base_prompt"`
-	CharacterBase   string `json:"character_base"`
-	Avatar          string `json:"avatar"`
-	Status          string `json:"status"`
-	IsActive        bool   `json:"is_active"`
-	ConversationID  string `json:"conversation_id"`
-	CardDataJSON    string `json:"card_data_json"`
-	VoiceConfigID   string `json:"voice_config_id"`
-	Gender          string `json:"gender"`
-	SortOrder       int    `json:"sort_order"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Description    string `json:"description"`
+	Personality    string `json:"personality"`
+	SystemPrompt   string `json:"system_prompt"`
+	BasePrompt     string `json:"base_prompt"`
+	CharacterBase  string `json:"character_base"`
+	Avatar         string `json:"avatar"`
+	Status         string `json:"status"`
+	IsActive       bool   `json:"is_active"`
+	ConversationID string `json:"conversation_id"`
+	CardDataJSON   string `json:"card_data_json"`
+	VoiceConfigID  string `json:"voice_config_id"`
+	Gender         string `json:"gender"`
+	SortOrder      int    `json:"sort_order"`
 }
 
 func (c *CharacterContributor) Plan(ctx context.Context, req BackupRequest) ([]BackupComponentPlan, error) {

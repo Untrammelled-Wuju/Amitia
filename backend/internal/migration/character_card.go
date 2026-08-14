@@ -2,8 +2,8 @@ package migration
 
 func CharacterCardMigration() Migration {
 	return Migration{
-		Version:           "202608120001",
-		Name:              "add_character_card_and_worldbook_scope",
+		Version: "202608120001",
+		Name:    "add_character_card_and_worldbook_scope",
 		AcceptedChecksums: []string{
 			"6b8f92120d22a9380fcc4e1cf9eab4758504460d8d801de4289d43503196529b",
 			"4d0fd79342e12b04b0d3ed76a7565c16916716bae60943dab10fa27ca23cda0f",

@@ -164,7 +164,7 @@ func (s *service) renderSummary(mems []Memory, topic string, mode string, warnin
 
 	messages := []map[string]interface{}{
 		{"role": "system", "content": systemPrompt},
-		{"role": "user",   "content": userMsg},
+		{"role": "user", "content": userMsg},
 	}
 
 	content, _, err := s.callLLM(cfg, messages)

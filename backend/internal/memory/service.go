@@ -60,10 +60,10 @@ type Service interface {
 }
 
 type WriteAuthoritySnapshot struct {
-	CanonicalMutationEnabled    bool `json:"canonicalMutationEnabled"`
-	LegacyRawWriterEnabled      bool `json:"legacyRawWriterEnabled"`
-	LegacyHistoryWriterEnabled  bool `json:"legacyHistoryWriterEnabled"`
-	RawImportWriterEnabled      bool `json:"rawImportWriterEnabled"`
+	CanonicalMutationEnabled   bool `json:"canonicalMutationEnabled"`
+	LegacyRawWriterEnabled     bool `json:"legacyRawWriterEnabled"`
+	LegacyHistoryWriterEnabled bool `json:"legacyHistoryWriterEnabled"`
+	RawImportWriterEnabled     bool `json:"rawImportWriterEnabled"`
 }
 
 type RankedMemory struct {

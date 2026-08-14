@@ -3,7 +3,6 @@
 package system
 
 import (
-	"fmt"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -18,7 +17,6 @@ import (
 	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"github.com/u-ai/backend/internal/temporal"
-	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
 	"github.com/u-ai/backend/pkg/sse"
 )
@@ -29,7 +27,7 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	svc.AttachTemporalService(temporalSvc)
 
 	if dpCoord == nil {
-		return fmt.Errorf("DataPortability Coordinator is nil")
+		return
 	}
 	svc.SetDataPortabilityCoordinator(dpCoord)
 	_ = dpCoord

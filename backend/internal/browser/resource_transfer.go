@@ -8,12 +8,12 @@ import (
 )
 
 type productionResourceTransfer struct {
-	tabs      TabResolver
-	dom       DOMBackend
-	input     InputBackend
-	elements  *elementStore
-	policy    *InteractionPolicy
-	tabMgr    *productionTabManager
+	tabs     TabResolver
+	dom      DOMBackend
+	input    InputBackend
+	elements *elementStore
+	policy   *InteractionPolicy
+	tabMgr   *productionTabManager
 
 	downloadPolicy   DownloadPolicy
 	screenshotPolicy ScreenshotPolicy

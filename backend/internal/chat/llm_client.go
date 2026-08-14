@@ -5,6 +5,8 @@ package chat
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"github.com/u-ai/backend/internal/agent/tool"
@@ -270,7 +272,7 @@ func toLocalModelRequest(req ModelRequest, messages []map[string]interface{}) lo
 		role, _ := msg["role"].(string)
 		content, _ := msg["content"].(string)
 		localReq.Messages = append(localReq.Messages, localmodel.LocalModelMessage{
-			Role: role,
+			Role:  role,
 			Parts: []localmodel.LocalModelContent{{Type: "text", Text: content}},
 		})
 	}

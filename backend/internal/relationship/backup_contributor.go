@@ -25,6 +25,10 @@ func NewRelationshipBackupContributor(db *gorm.DB) *RelationshipBackupContributo
 func (r *RelationshipBackupContributor) ID() string   { return "relationship" }
 func (r *RelationshipBackupContributor) Name() string { return "Relationship" }
 
+func (r *RelationshipBackupContributor) Dependencies() []string {
+	return []string{"character"}
+}
+
 type relationshipRecordV1 struct {
 	ID               string  `json:"id"`
 	CharacterID      string  `json:"characterId"`

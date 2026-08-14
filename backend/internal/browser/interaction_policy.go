@@ -5,35 +5,35 @@ import (
 )
 
 const (
-	DefaultDOMMaxDepth           = 12
-	MaxDOMMaxDepth               = 64
-	DefaultMaxDOMNodes           = 5000
-	DefaultMaxSnapshotBytes      = 1024 * 1024
-	DefaultMaxTextBytesPerNode   = 4 * 1024
-	DefaultMaxSelectorBytes      = 4 * 1024
-	DefaultMaxElementRefsPerTab  = 1024
-	DefaultMaxInputRunes         = 10000
-	DefaultDOMTimeout            = 5 * time.Second
-	DefaultMaxDOMTimeout         = 15 * time.Second
-	DefaultInteractionTimeout    = 10 * time.Second
-	DefaultScrollDeltaRatio      = 0.7
-	DefaultMaxClickRetries       = 0
+	DefaultDOMMaxDepth          = 12
+	MaxDOMMaxDepth              = 64
+	DefaultMaxDOMNodes          = 5000
+	DefaultMaxSnapshotBytes     = 1024 * 1024
+	DefaultMaxTextBytesPerNode  = 4 * 1024
+	DefaultMaxSelectorBytes     = 4 * 1024
+	DefaultMaxElementRefsPerTab = 1024
+	DefaultMaxInputRunes        = 10000
+	DefaultDOMTimeout           = 5 * time.Second
+	DefaultMaxDOMTimeout        = 15 * time.Second
+	DefaultInteractionTimeout   = 10 * time.Second
+	DefaultScrollDeltaRatio     = 0.7
+	DefaultMaxClickRetries      = 0
 )
 
 type InteractionPolicy struct {
-	DOMMaxDepth           int
-	MaxDOMMaxDepth        int
-	MaxDOMNodes           int
-	MaxSnapshotBytes      int
-	MaxTextBytesPerNode   int
-	MaxSelectorBytes      int
-	MaxElementRefsPerTab  int
-	MaxInputRunes         int
-	DOMTimeout            time.Duration
-	MaxDOMTimeout         time.Duration
-	InteractionTimeout    time.Duration
-	ScrollDeltaRatio      float64
-	MaxClickRetries       int
+	DOMMaxDepth          int
+	MaxDOMMaxDepth       int
+	MaxDOMNodes          int
+	MaxSnapshotBytes     int
+	MaxTextBytesPerNode  int
+	MaxSelectorBytes     int
+	MaxElementRefsPerTab int
+	MaxInputRunes        int
+	DOMTimeout           time.Duration
+	MaxDOMTimeout        time.Duration
+	InteractionTimeout   time.Duration
+	ScrollDeltaRatio     float64
+	MaxClickRetries      int
 }
 
 func NewInteractionPolicy() *InteractionPolicy {

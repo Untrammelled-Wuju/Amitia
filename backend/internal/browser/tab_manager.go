@@ -398,10 +398,10 @@ func (m *productionTabManager) ResolveTab(ctx context.Context, sessionID Browser
 	}
 
 	return ResolvedBrowserTab{
-		SessionID:        record.sessionID,
-		TabID:            record.info.TabID,
-		BrowserContextID: record.browserContextID,
-		TargetID:         record.targetID,
+		SessionID:         record.sessionID,
+		TabID:             record.info.TabID,
+		BrowserContextID:  record.browserContextID,
+		TargetID:          record.targetID,
 		RuntimeGeneration: record.runtimeGeneration,
 	}, nil
 }

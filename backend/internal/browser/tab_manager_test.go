@@ -6,10 +6,10 @@ import (
 )
 
 type fakeSessionResolver struct {
-	sessionID        BrowserSessionID
-	contextID        BrowserContextID
-	generation       uint64
-	resolveErr       *BrowserError
+	sessionID  BrowserSessionID
+	contextID  BrowserContextID
+	generation uint64
+	resolveErr *BrowserError
 }
 
 func (r *fakeSessionResolver) ResolveSession(_ context.Context, sessionID BrowserSessionID) (ResolvedBrowserSession, *BrowserError) {
@@ -24,10 +24,10 @@ func (r *fakeSessionResolver) ResolveSession(_ context.Context, sessionID Browse
 }
 
 type fakeTabBackend struct {
-	createErr    error
-	closeErr     error
-	activateErr  error
-	targetID     TargetID
+	createErr   error
+	closeErr    error
+	activateErr error
+	targetID    TargetID
 }
 
 func (b *fakeTabBackend) CreateTarget(_ context.Context, _ BrowserContextID, _ string) (TargetID, error) {

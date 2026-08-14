@@ -6,9 +6,9 @@ import (
 )
 
 type productionElementResolver struct {
-	tabs    TabResolver
-	store   *elementStore
-	mu      sync.RWMutex
+	tabs  TabResolver
+	store *elementStore
+	mu    sync.RWMutex
 }
 
 func NewProductionElementResolver(tabs TabResolver, store *elementStore) ElementResolver {

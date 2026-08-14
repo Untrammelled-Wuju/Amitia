@@ -4,32 +4,33 @@ package localmodel
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/u-ai/backend/internal/runtimehost"
 )
 
 type LocalModelCapabilities struct {
-	Text         bool     `json:"text"`
-	Vision       bool     `json:"vision"`
-	AudioInput   bool     `json:"audioInput"`
-	VideoInput   bool     `json:"videoInput"`
-	ToolCalling  bool     `json:"toolCalling"`
-	JSONMode     bool     `json:"jsonMode"`
-	Reasoning    bool     `json:"reasoning"`
-	Streaming    bool     `json:"streaming"`
-	MaxContext   int      `json:"maxContextTokens"`
-	Backends     []string `json:"backends"`
+	Text        bool     `json:"text"`
+	Vision      bool     `json:"vision"`
+	AudioInput  bool     `json:"audioInput"`
+	VideoInput  bool     `json:"videoInput"`
+	ToolCalling bool     `json:"toolCalling"`
+	JSONMode    bool     `json:"jsonMode"`
+	Reasoning   bool     `json:"reasoning"`
+	Streaming   bool     `json:"streaming"`
+	MaxContext  int      `json:"maxContextTokens"`
+	Backends    []string `json:"backends"`
 }
 
 type LocalModelRequest struct {
-	Messages    []LocalModelMessage `json:"messages"`
-	Tools       []LocalModelTool    `json:"tools"`
-	MaxNewTokens int                `json:"maxNewTokens"`
-	Temperature float64             `json:"temperature"`
-	TopP        float64             `json:"topP"`
-	JSONOnly    bool                `json:"jsonOnly"`
-	RequestID   string              `json:"requestId"`
+	Messages     []LocalModelMessage `json:"messages"`
+	Tools        []LocalModelTool    `json:"tools"`
+	MaxNewTokens int                 `json:"maxNewTokens"`
+	Temperature  float64             `json:"temperature"`
+	TopP         float64             `json:"topP"`
+	JSONOnly     bool                `json:"jsonOnly"`
+	RequestID    string              `json:"requestId"`
 }
 
 type LocalModelMessage struct {
@@ -51,10 +52,10 @@ type LocalModelTool struct {
 }
 
 type LocalModelResult struct {
-	Text          string                `json:"text"`
-	ToolCalls     []LocalModelToolCall  `json:"toolCalls"`
-	Usage         LocalModelUsage       `json:"usage"`
-	FinishReason  string                `json:"finishReason"`
+	Text         string               `json:"text"`
+	ToolCalls    []LocalModelToolCall `json:"toolCalls"`
+	Usage        LocalModelUsage      `json:"usage"`
+	FinishReason string               `json:"finishReason"`
 }
 
 type LocalModelToolCall struct {
@@ -86,12 +87,12 @@ type LocalModelHealth struct {
 }
 
 type LocalModelInfo struct {
-	Backend      string `json:"backend"`
-	Threads      int    `json:"threads"`
-	Precision    string `json:"precision"`
-	Memory       string `json:"memory"`
-	UseMMap      bool   `json:"useMMap"`
-	KVCacheMMap  bool   `json:"kvCacheMmap"`
+	Backend     string `json:"backend"`
+	Threads     int    `json:"threads"`
+	Precision   string `json:"precision"`
+	Memory      string `json:"memory"`
+	UseMMap     bool   `json:"useMMap"`
+	KVCacheMMap bool   `json:"kvCacheMmap"`
 }
 
 type LocalModelInference interface {
@@ -119,8 +120,12 @@ type CreateInference func(params CreateLocalModelParams) (LocalModelInference, e
 
 var registry = make(map[string]CreateInference)
 
-func Register(provider string, factory CreateInference) {
+func Register(provider string, factory CreateInference) error {
+	if _, exists := registry[provider]; exists {
+		return fmt.Errorf("local model provider %q already registered", provider)
+	}
 	registry[provider] = factory
+	return nil
 }
 
 func Create(params CreateLocalModelParams) (LocalModelInference, error) {

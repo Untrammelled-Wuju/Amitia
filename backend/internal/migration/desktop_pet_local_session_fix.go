@@ -4,8 +4,8 @@ package migration
 
 func DesktopPetLocalSessionFixMigration() Migration {
 	return Migration{
-		Version:           "202608080001",
-		Name:              "fix_desktop_pet_local_sessions_revoked_at_nullable",
+		Version: "202608080001",
+		Name:    "fix_desktop_pet_local_sessions_revoked_at_nullable",
 		AcceptedChecksums: []string{
 			"38de07f93e610bc8278bb66b72fb003509c0b7404860c75ee1c47d0347169dd1",
 			"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",

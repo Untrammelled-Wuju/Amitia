@@ -21,9 +21,9 @@ type BrowserExecutableResolver interface {
 }
 
 type executableResolver struct {
-	config            BrowserConfig
-	packagedPaths     []string
-	osStandardPaths   []string
+	config          BrowserConfig
+	packagedPaths   []string
+	osStandardPaths []string
 }
 
 func NewBrowserExecutableResolver(config BrowserConfig) BrowserExecutableResolver {

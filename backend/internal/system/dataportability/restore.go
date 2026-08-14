@@ -116,17 +116,9 @@ func (c *Coordinator) ExecuteRestore(ctx context.Context, ticket *DataRestoreTic
 		return err
 	}
 
-	hasSQLite := false
 	for _, comp := range manifest.Components {
-		if comp.Kind == string(KindSQLite) {
-			hasSQLite = true
-			break
-		}
-	}
-
-	if hasSQLite {
-		if err := RestoreSQLiteSnapshot(reader, dbPath, stagingFromTicket(ticket)); err != nil {
-			return ErrRestoreAtomicReplaceFailed
+		if comp.Kind == string(KindDataset) || comp.Kind == string(KindNDJSON) {
+			continue
 		}
 	}
 

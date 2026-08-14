@@ -9,29 +9,29 @@ import (
 )
 
 type elementRecord struct {
-	stableID          string
-	sessionID         BrowserSessionID
-	tabID             BrowserTabID
+	stableID           string
+	sessionID          BrowserSessionID
+	tabID              BrowserTabID
 	runtimeGeneration  uint64
 	documentGeneration uint64
-	targetID          TargetID
-	cdpSessionID      CDPSessionID
-	frameID           FrameID
-	backendNodeID     BackendNodeID
-	selector          string
-	isFileInput       bool
-	disabled          bool
-	accept            string
-	createdAt         time.Time
-	lastResolvedAt    time.Time
+	targetID           TargetID
+	cdpSessionID       CDPSessionID
+	frameID            FrameID
+	backendNodeID      BackendNodeID
+	selector           string
+	isFileInput        bool
+	disabled           bool
+	accept             string
+	createdAt          time.Time
+	lastResolvedAt     time.Time
 }
 
 type elementStore struct {
-	mu         sync.RWMutex
-	refs       map[string]*elementRecord
-	lru        *list.List
-	lruMap     map[string]*list.Element
-	maxPerTab  int
+	mu        sync.RWMutex
+	refs      map[string]*elementRecord
+	lru       *list.List
+	lruMap    map[string]*list.Element
+	maxPerTab int
 }
 
 func newElementStore(maxPerTab int) *elementStore {

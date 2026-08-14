@@ -7,13 +7,13 @@ import (
 )
 
 type BackupOperation struct {
-	ID        string       `json:"id"`
-	Status    string       `json:"status"`
-	Profile   string       `json:"profile"`
-	Scope     string       `json:"scope"`
-	Error     string       `json:"error,omitempty"`
-	CreatedAt string       `json:"createdAt"`
-	UpdatedAt string       `json:"updatedAt"`
+	ID        string `json:"id"`
+	Status    string `json:"status"`
+	Profile   string `json:"profile"`
+	Scope     string `json:"scope"`
+	Error     string `json:"error,omitempty"`
+	CreatedAt string `json:"createdAt"`
+	UpdatedAt string `json:"updatedAt"`
 }
 
 type RestoreOperation struct {
@@ -25,28 +25,28 @@ type RestoreOperation struct {
 }
 
 type ImportOperation struct {
-	ID        string `json:"id"`
-	Status    string `json:"status"`
-	Scope     string `json:"scope"`
-	Error     string `json:"error,omitempty"`
+	ID        string           `json:"id"`
+	Status    string           `json:"status"`
+	Scope     string           `json:"scope"`
+	Error     string           `json:"error,omitempty"`
 	Stats     map[string]int64 `json:"stats,omitempty"`
-	CreatedAt string `json:"createdAt"`
-	UpdatedAt string `json:"updatedAt"`
+	CreatedAt string           `json:"createdAt"`
+	UpdatedAt string           `json:"updatedAt"`
 }
 
 type Coordinator struct {
-	DataDir       string
-	AppVersion    string
-	Platform      string
-	SchemaFinger  string
-	Contributors  []BackupContributor
-	Staging       *StagingManager
-	diskChecker   DiskSpaceChecker
+	DataDir      string
+	AppVersion   string
+	Platform     string
+	SchemaFinger string
+	Contributors []BackupContributor
+	Staging      *StagingManager
+	diskChecker  DiskSpaceChecker
 
-	mu        sync.RWMutex
-	backupOps map[string]*BackupOperation
+	mu         sync.RWMutex
+	backupOps  map[string]*BackupOperation
 	restoreOps map[string]*RestoreOperation
-	importOps map[string]*ImportOperation
+	importOps  map[string]*ImportOperation
 }
 
 type DiskSpaceChecker interface {

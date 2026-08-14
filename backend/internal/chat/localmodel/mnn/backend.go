@@ -13,13 +13,13 @@ import (
 )
 
 type mnnBackend struct {
-	config    MNNProviderConfig
-	mu        sync.Mutex
-	state     string
-	loadedAt  string
-	lastError string
-	runtime   *mnnRuntime
-	host      runtimehost.RuntimeHost
+	config     MNNProviderConfig
+	mu         sync.Mutex
+	state      string
+	loadedAt   string
+	lastError  string
+	runtime    *mnnRuntime
+	host       runtimehost.RuntimeHost
 	generateMu sync.Mutex
 }
 
@@ -58,13 +58,13 @@ func (b *mnnBackend) Capabilities(ctx context.Context) (localmodel.LocalModelCap
 	defer b.mu.Unlock()
 
 	caps := localmodel.LocalModelCapabilities{
-		Text:       true,
-		Vision:     b.config.Multimodal,
+		Text:        true,
+		Vision:      b.config.Multimodal,
 		ToolCalling: false,
-		JSONMode:   false,
-		Streaming:  true,
-		MaxContext: b.config.ContextSize,
-		Backends:   []string{b.config.Backend},
+		JSONMode:    false,
+		Streaming:   true,
+		MaxContext:  b.config.ContextSize,
+		Backends:    []string{b.config.Backend},
 	}
 
 	if b.runtime.baseURL != "" {
@@ -151,5 +151,7 @@ func (b *mnnBackend) shutdown() {
 }
 
 func init() {
-	localmodel.Register("mnn", NewMNNBackend)
+	if err := localmodel.Register("mnn", NewMNNBackend); err != nil {
+		panic(err)
+	}
 }

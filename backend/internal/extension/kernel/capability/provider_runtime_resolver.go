@@ -16,6 +16,32 @@ type ProviderExecutionLookup interface {
 	) (CapabilityProviderInstance, bool)
 }
 
+type ProviderRegistryExecutionLookup struct {
+	Registry *ProviderRegistry
+}
+
+func (l *ProviderRegistryExecutionLookup) GetProvider(
+	ctx context.Context,
+	id ProviderID,
+) (CapabilityProviderDefinition, bool) {
+	def, ok := l.Registry.GetByID(id)
+	if !ok || def == nil {
+		return CapabilityProviderDefinition{}, false
+	}
+	return *def, true
+}
+
+func (l *ProviderRegistryExecutionLookup) GetInstance(
+	ctx context.Context,
+	id ProviderInstanceID,
+) (CapabilityProviderInstance, bool) {
+	inst, ok := l.Registry.GetInstanceByID(id)
+	if !ok || inst == nil {
+		return CapabilityProviderInstance{}, false
+	}
+	return *inst, true
+}
+
 type LegacyRuntimeExecutionResolver struct{}
 
 func (r *LegacyRuntimeExecutionResolver) ResolveRuntimeExecution(

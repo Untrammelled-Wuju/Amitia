@@ -64,13 +64,13 @@ func SanitizeArchivePath(name string) error {
 }
 
 type DataRestoreTicket struct {
-	OperationID              string `json:"operationId"`
-	BackupID                 string `json:"backupId"`
-	StagingPath              string `json:"stagingPath"`
-	ManifestHash             string `json:"manifestHash"`
-	SourceSchemaFingerprint  string `json:"sourceSchemaFingerprint"`
+	OperationID                string `json:"operationId"`
+	BackupID                   string `json:"backupId"`
+	StagingPath                string `json:"stagingPath"`
+	ManifestHash               string `json:"manifestHash"`
+	SourceSchemaFingerprint    string `json:"sourceSchemaFingerprint"`
 	ExpectedCurrentFingerprint string `json:"expectedCurrentFingerprint"`
-	CreatedAt                string `json:"createdAt"`
+	CreatedAt                  string `json:"createdAt"`
 }
 
 func (s *StagingManager) WriteRestoreTicket(ticket *DataRestoreTicket) error {

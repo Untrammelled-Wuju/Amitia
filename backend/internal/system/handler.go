@@ -29,14 +29,14 @@ const SystemFormatInstruction = `【回复格式 - 系统固定规则】
 不要用句号连接多个意思。`
 
 type Handler struct {
-	service       Service
-	db            *gorm.DB
-	chatSvc       chat.Service
-	memorySvc     memory.Service
-	dataLifecycle *mindruntime.DataLifecycleCoordinator
-	unifiedEntry  *interaction.UnifiedEntry
+	service        Service
+	db             *gorm.DB
+	chatSvc        chat.Service
+	memorySvc      memory.Service
+	dataLifecycle  *mindruntime.DataLifecycleCoordinator
+	unifiedEntry   *interaction.UnifiedEntry
 	reconciliation *mindruntime.ReconciliationEngine
-	versionInfo   atomic.Value
+	versionInfo    atomic.Value
 }
 
 func NewHandler(srv Service, db *gorm.DB, chatSvc chat.Service, dataLifecycle *mindruntime.DataLifecycleCoordinator, unifiedEntry *interaction.UnifiedEntry, reconciliation *mindruntime.ReconciliationEngine, memorySvc memory.Service) *Handler {

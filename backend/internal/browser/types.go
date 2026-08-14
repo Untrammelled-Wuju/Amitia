@@ -23,12 +23,12 @@ const (
 type BrowserTabState string
 
 const (
-	TabStateCreated  BrowserTabState = "created"
-	TabStateReady    BrowserTabState = "ready"
-	TabStateLoading  BrowserTabState = "loading"
-	TabStateClosing  BrowserTabState = "closing"
-	TabStateClosed   BrowserTabState = "closed"
-	TabStateFailed   BrowserTabState = "failed"
+	TabStateCreated BrowserTabState = "created"
+	TabStateReady   BrowserTabState = "ready"
+	TabStateLoading BrowserTabState = "loading"
+	TabStateClosing BrowserTabState = "closing"
+	TabStateClosed  BrowserTabState = "closed"
+	TabStateFailed  BrowserTabState = "failed"
 )
 
 func (id BrowserContextID) String() string {
@@ -62,31 +62,31 @@ type BrowserTabInfo struct {
 }
 
 type NavigateRequest struct {
-	URL        string `json:"url"`
-	WaitUntil  string `json:"waitUntil,omitempty"`
-	TimeoutMS  int    `json:"timeoutMs,omitempty"`
-	Referer    string `json:"referer,omitempty"`
+	URL       string `json:"url"`
+	WaitUntil string `json:"waitUntil,omitempty"`
+	TimeoutMS int    `json:"timeoutMs,omitempty"`
+	Referer   string `json:"referer,omitempty"`
 }
 
 type NavigationResult struct {
-	SessionID     BrowserSessionID `json:"sessionId"`
-	TabID         BrowserTabID     `json:"tabId"`
-	RequestedURL  string           `json:"requestedUrl"`
-	FinalURL      string           `json:"finalUrl"`
-	Title         string           `json:"title,omitempty"`
-	Redirected    bool             `json:"redirected"`
-	HTTPStatus    *int             `json:"httpStatus,omitempty"`
-	WaitUntil     string           `json:"waitUntil"`
-	Loaded        bool             `json:"loaded"`
-	TimedOut      bool             `json:"timedOut"`
-	DurationMS    int64            `json:"durationMs"`
+	SessionID    BrowserSessionID `json:"sessionId"`
+	TabID        BrowserTabID     `json:"tabId"`
+	RequestedURL string           `json:"requestedUrl"`
+	FinalURL     string           `json:"finalUrl"`
+	Title        string           `json:"title,omitempty"`
+	Redirected   bool             `json:"redirected"`
+	HTTPStatus   *int             `json:"httpStatus,omitempty"`
+	WaitUntil    string           `json:"waitUntil"`
+	Loaded       bool             `json:"loaded"`
+	TimedOut     bool             `json:"timedOut"`
+	DurationMS   int64            `json:"durationMs"`
 }
 
 type ResolvedBrowserTab struct {
-	SessionID        BrowserSessionID
-	TabID            BrowserTabID
-	BrowserContextID BrowserContextID
-	TargetID         TargetID
+	SessionID         BrowserSessionID
+	TabID             BrowserTabID
+	BrowserContextID  BrowserContextID
+	TargetID          TargetID
 	RuntimeGeneration uint64
 }
 
@@ -99,13 +99,13 @@ type SessionTabCleaner interface {
 }
 
 type BrowserDownloadRequest struct {
-	SessionID      BrowserSessionID  `json:"sessionId"`
-	TabID          BrowserTabID      `json:"tabId"`
-	ResourceURI    string            `json:"resourceURI"`
-	Filename       string            `json:"filename,omitempty"`
+	SessionID      BrowserSessionID   `json:"sessionId"`
+	TabID          BrowserTabID       `json:"tabId"`
+	ResourceURI    string             `json:"resourceURI"`
+	Filename       string             `json:"filename,omitempty"`
 	TriggerElement *BrowserElementRef `json:"triggerElement,omitempty"`
-	WaitTimeoutMS  int64             `json:"waitTimeoutMs,omitempty"`
-	Overwrite      bool              `json:"overwrite,omitempty"`
+	WaitTimeoutMS  int64              `json:"waitTimeoutMs,omitempty"`
+	Overwrite      bool               `json:"overwrite,omitempty"`
 }
 
 type BrowserDownloadResult struct {
@@ -118,11 +118,11 @@ type BrowserDownloadResult struct {
 }
 
 type BrowserUploadRequest struct {
-	SessionID   BrowserSessionID  `json:"sessionId"`
-	TabID       BrowserTabID      `json:"tabId"`
-	ResourceURI string            `json:"resourceURI"`
+	SessionID   BrowserSessionID   `json:"sessionId"`
+	TabID       BrowserTabID       `json:"tabId"`
+	ResourceURI string             `json:"resourceURI"`
 	Element     *BrowserElementRef `json:"element,omitempty"`
-	TargetInput string            `json:"targetInput,omitempty"`
+	TargetInput string             `json:"targetInput,omitempty"`
 }
 
 type BrowserUploadResult struct {
@@ -258,9 +258,9 @@ type BrowserConfig struct {
 
 const (
 	DefaultMaxSessions          = 8
-	DefaultMaxTabsPerSession   = 8
-	DefaultMaxTabsTotal        = 32
-	DefaultNavigationTimeout   = 30 * time.Second
+	DefaultMaxTabsPerSession    = 8
+	DefaultMaxTabsTotal         = 32
+	DefaultNavigationTimeout    = 30 * time.Second
 	DefaultMaxNavigationTimeout = 120 * time.Second
 )
 
@@ -309,24 +309,24 @@ type downloadRecord struct {
 }
 
 type BrowserRecoveryPolicy struct {
-	Enabled             bool          `json:"enabled"`
-	AutoRestartRuntime  bool          `json:"autoRestartRuntime"`
-	RestoreSessions     bool          `json:"restoreSessions"`
-	RestoreTabs         bool          `json:"restoreTabs"`
-	RestoreLastSafeURL  bool          `json:"restoreLastSafeURL"`
-	MaxAttempts         int           `json:"maxAttempts"`
-	Backoff             time.Duration `json:"backoff"`
+	Enabled            bool          `json:"enabled"`
+	AutoRestartRuntime bool          `json:"autoRestartRuntime"`
+	RestoreSessions    bool          `json:"restoreSessions"`
+	RestoreTabs        bool          `json:"restoreTabs"`
+	RestoreLastSafeURL bool          `json:"restoreLastSafeURL"`
+	MaxAttempts        int           `json:"maxAttempts"`
+	Backoff            time.Duration `json:"backoff"`
 }
 
 type BrowserRecoveryResult struct {
-	RuntimeGeneration     uint64   `json:"runtimeGeneration"`
-	SessionsRecovered     int      `json:"sessionsRecovered"`
-	TabsRecovered         int      `json:"tabsRecovered"`
-	TabsFailed            int      `json:"tabsFailed"`
-	AuthStateRestored     bool     `json:"authStateRestored"`
-	ElementRefsInvalidated bool    `json:"elementRefsInvalidated"`
-	DownloadsInvalidated  bool     `json:"downloadsInvalidated"`
-	Warnings              []string `json:"warnings,omitempty"`
+	RuntimeGeneration      uint64   `json:"runtimeGeneration"`
+	SessionsRecovered      int      `json:"sessionsRecovered"`
+	TabsRecovered          int      `json:"tabsRecovered"`
+	TabsFailed             int      `json:"tabsFailed"`
+	AuthStateRestored      bool     `json:"authStateRestored"`
+	ElementRefsInvalidated bool     `json:"elementRefsInvalidated"`
+	DownloadsInvalidated   bool     `json:"downloadsInvalidated"`
+	Warnings               []string `json:"warnings,omitempty"`
 }
 
 type sessionRecoveryDescriptor struct {
@@ -337,10 +337,10 @@ type sessionRecoveryDescriptor struct {
 }
 
 type tabRecoveryState struct {
-	tabID             BrowserTabID
-	lastCommittedURL  string
-	active            bool
-	recoverable       bool
+	tabID              BrowserTabID
+	lastCommittedURL   string
+	active             bool
+	recoverable        bool
 	lastNavigationKind string
 }
 

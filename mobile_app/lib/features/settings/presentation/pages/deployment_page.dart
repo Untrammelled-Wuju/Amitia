@@ -10,6 +10,9 @@ import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/backend_connection/backend_connection_availability.dart';
 import '../../../../core/backend_connection/backend_uri_builder.dart';
 import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
+import '../../../../core/runtime/backend/mobile_deployment_mode.dart';
+import '../../../../core/runtime/backend/mobile_backend_lifecycle.dart';
+import '../../../../core/runtime/backend/mobile_backend_providers.dart';
 
 class DeploymentPage extends ConsumerStatefulWidget {
   const DeploymentPage({super.key});
@@ -19,15 +22,21 @@ class DeploymentPage extends ConsumerStatefulWidget {
 }
 
 class _DeploymentPageState extends ConsumerState<DeploymentPage> {
-  String _currentMode = '本地';
   bool _loading = true;
   bool _testState = false;
+  final _remoteUriController = TextEditingController();
 
-  static const _modes = <(String, IconData, String)>[
-    ('本地', Icons.dns_outlined, '完整功能本地运行，数据不离开设备'),
-    ('远程', Icons.cloud_outlined, '暂不可用'),
-    ('混合', Icons.sync_alt, '暂不可用'),
+  static const _modes = <(MobileDeploymentMode, IconData, String)>[
+    (MobileDeploymentMode.local, Icons.dns_outlined, '完整功能本地运行，数据不离开设备'),
+    (MobileDeploymentMode.cloud, Icons.cloud_outlined, '连接远程核心服务'),
+    (MobileDeploymentMode.hybrid, Icons.sync_alt, '本地设备代理 + 远程核心'),
   ];
+
+  @override
+  void dispose() {
+    _remoteUriController.dispose();
+    super.dispose();
+  }
 
   @override
   void initState() {
@@ -45,6 +54,8 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
   @override
   Widget build(BuildContext context) {
     final connectionAsync = ref.watch(backendConnectionProvider);
+    final currentConfig = ref.watch(mobileDeploymentConfigProvider);
+    final statusAsync = ref.watch(mobileBackendStatusProvider);
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '部署模式', showBackButton: true, fallbackRoute: AppRoutes.settings),
       body: _loading
@@ -60,10 +71,31 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
                         mode: m.$1,
                         icon: m.$2,
                         description: m.$3,
-                        isSelected: m.$1 == _currentMode,
-                        onTap: m.$1 == '本地' ? () => _confirmSwitch(m.$1) : null,
+                        isSelected: m.$1 == currentConfig.mode,
+                        onTap: () => _confirmSwitch(m.$1),
                       ),
                     )),
+                if (currentConfig.mode == MobileDeploymentMode.cloud ||
+                    currentConfig.mode == MobileDeploymentMode.hybrid) ...[
+                  const SizedBox(height: AppSpacing.sm),
+                  _SectionLabel(text: '远程核心地址'),
+                  const SizedBox(height: AppSpacing.sm),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                    child: TextField(
+                      controller: _remoteUriController,
+                      decoration: InputDecoration(
+                        hintText: 'https://example.com:18899',
+                        border: OutlineInputBorder(borderRadius: AppRadius.brSmall),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: AppSpacing.md,
+                          vertical: AppSpacing.sm,
+                        ),
+                      ),
+                      onChanged: _onRemoteUriChanged,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: AppSpacing.sm),
                 _SectionLabel(text: '当前配置'),
                 const SizedBox(height: AppSpacing.sm),
@@ -85,6 +117,7 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
   }
 
   Widget _buildConfigCard(AsyncValue<BackendConnectionAvailability> connectionAsync) {
+    final statusAsync = ref.watch(mobileBackendStatusProvider);
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       padding: const EdgeInsets.all(AppSpacing.cardPadding),
@@ -95,7 +128,7 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
       ),
       child: Column(
         children: [
-          _InfoRow(label: '当前模式', value: _currentMode),
+          _InfoRow(label: '当前模式', value: _modeDisplayName(ref.read(mobileDeploymentConfigProvider).mode)),
           connectionAsync.when(
             data: (avail) {
               if (avail is BackendConnectionAvailable) {
@@ -107,44 +140,97 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
             loading: () => const _InfoRow(label: '后端地址', value: '检查中...'),
             error: (_, __) => const _InfoRow(label: '后端地址', value: '运行环境未就绪'),
           ),
-          connectionAsync.when(
-            data: (avail) {
-              final ready = avail is BackendConnectionAvailable;
-              return _InfoRow(label: '运行状态', value: ready ? '后端就绪' : '运行环境未就绪');
-            },
+          statusAsync.when(
+            data: (status) => _InfoRow(
+              label: '运行状态',
+              value: _statusDisplayName(status),
+            ),
             loading: () => const _InfoRow(label: '运行状态', value: '检查中...'),
-            error: (_, __) => const _InfoRow(label: '运行状态', value: '运行环境未就绪'),
+            error: (_, __) => const _InfoRow(label: '运行状态', value: '检查失败'),
           ),
         ],
       ),
     );
   }
 
-  void _confirmSwitch(String newMode) {
-    if (newMode == _currentMode) return;
+  String _modeDisplayName(MobileDeploymentMode mode) {
+    switch (mode) {
+      case MobileDeploymentMode.local:
+        return '本地';
+      case MobileDeploymentMode.cloud:
+        return '远程';
+      case MobileDeploymentMode.hybrid:
+        return '混合';
+    }
+  }
+
+  String _statusDisplayName(MobileBackendStatus status) {
+    switch (status.state) {
+      case RuntimeConnectionState.unavailable:
+        return '未就绪';
+      case RuntimeConnectionState.starting:
+        return '启动中...';
+      case RuntimeConnectionState.ready:
+        return '已就绪';
+      case RuntimeConnectionState.stopping:
+        return '停止中...';
+      case RuntimeConnectionState.failed:
+        return '连接失败';
+    }
+  }
+
+  void _onRemoteUriChanged(String value) {
+    final current = ref.read(mobileDeploymentConfigProvider);
+    ref.read(mobileDeploymentConfigProvider.notifier).state = MobileDeploymentConfig(
+      mode: current.mode,
+      remoteCoreUri: value.trim().isEmpty ? null : value.trim(),
+    );
+  }
+
+  void _confirmSwitch(MobileDeploymentMode newMode) {
+    final current = ref.read(mobileDeploymentConfigProvider);
+    if (newMode == current.mode) return;
+
+    if ((newMode == MobileDeploymentMode.cloud || newMode == MobileDeploymentMode.hybrid) &&
+        (current.remoteCoreUri == null || current.remoteCoreUri!.trim().isEmpty)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('请先输入远程核心地址'), duration: Duration(seconds: 2)),
+      );
+      return;
+    }
+
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
         title: Text('切换部署模式', style: AppTypography.cardTitle(context)),
-        content: Text('确定要将部署模式切换为「$newMode」吗？切换后服务将重新连接。', style: AppTypography.body(context)),
+        content: Text('确定要将部署模式切换为「${_modeDisplayName(newMode)}」吗？切换后服务将重新连接。', style: AppTypography.body(context)),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
-              setState(() {
-                _currentMode = newMode;
-                _testState = false;
-              });
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('已切换为${newMode}模式'), duration: const Duration(seconds: 1)),
-              );
+              _applyModeChange(newMode);
             },
             child: Text('确定', style: TextStyle(color: context.accentPrimary)),
           ),
         ],
       ),
+    );
+  }
+
+  void _applyModeChange(MobileDeploymentMode newMode) {
+    final lifecycle = ref.read(mobileBackendLifecycleProvider);
+    final config = ref.read(mobileDeploymentConfigProvider);
+    final newConfig = MobileDeploymentConfig(
+      mode: newMode,
+      remoteCoreUri: config.remoteCoreUri,
+    );
+    ref.read(mobileDeploymentConfigProvider.notifier).state = newConfig;
+    lifecycle.reconcile(newConfig);
+    setState(() => _testState = false);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('已切换为${_modeDisplayName(newMode)}模式'), duration: const Duration(seconds: 1)),
     );
   }
 
@@ -157,7 +243,7 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
 }
 
 class _ModeCard extends StatelessWidget {
-  final String mode;
+  final MobileDeploymentMode mode;
   final IconData icon;
   final String description;
   final bool isSelected;

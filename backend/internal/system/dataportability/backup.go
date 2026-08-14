@@ -16,10 +16,10 @@ import (
 const batchSize = 1000
 
 type BackupResult struct {
-	BackupID  string `json:"backupId"`
-	Path      string `json:"path"`
-	SizeBytes int64  `json:"sizeBytes"`
-	Checksum  string `json:"checksum"`
+	BackupID  string          `json:"backupId"`
+	Path      string          `json:"path"`
+	SizeBytes int64           `json:"sizeBytes"`
+	Checksum  string          `json:"checksum"`
 	Manifest  *BackupManifest `json:"manifest"`
 }
 
@@ -87,11 +87,13 @@ func (c *Coordinator) CreateBackup(ctx context.Context, req BackupRequest, dbPat
 		}
 	}
 
-	if req.Profile == ProfileFull && dbPath != "" {
+	if req.Profile == ProfileFull && req.Purpose == PurposeMigration && dbPath != "" {
 		snapComp, err := c.snapshotSQLite(runner, writer)
 		if err != nil {
 			return nil, c.failBackup(opID, err)
 		}
+		snapComp.SourceOfTruth = false
+		snapComp.Rebuildable = false
 		manifest.Components = append(manifest.Components, *snapComp)
 	}
 
@@ -156,15 +158,15 @@ func (c *Coordinator) snapshotSQLite(runner SnapshotRunner, writer *ArchiveWrite
 	}
 
 	comp := &BackupComponentManifest{
-		ID:             "sqlite-main",
-		Kind:           string(KindSQLite),
-		LogicalName:    "database/sqlite",
-		Path:           "database/sqlite",
-		Required:       true,
-		SourceOfTruth:  true,
-		Rebuildable:    false,
-		SizeBytes:      totalSize,
-		SHA256:         "",
+		ID:            "sqlite-main",
+		Kind:          string(KindSQLite),
+		LogicalName:   "database/sqlite",
+		Path:          "database/sqlite",
+		Required:      true,
+		SourceOfTruth: true,
+		Rebuildable:   false,
+		SizeBytes:     totalSize,
+		SHA256:        "",
 	}
 
 	for _, f := range dbFiles {

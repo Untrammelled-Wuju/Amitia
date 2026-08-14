@@ -7,16 +7,16 @@ import (
 )
 
 type productionRecovery struct {
-	runtime   BrowserRuntime
-	sessions  *productionSessionManager
-	tabs      *productionTabManager
-	elements  *elementStore
-	resources *productionResourceTransfer
-	store     *RecoveryStore
-	detector  *CrashDetector
-	policy    BrowserRecoveryPolicy
-	mu        sync.RWMutex
-	attempts  int
+	runtime    BrowserRuntime
+	sessions   *productionSessionManager
+	tabs       *productionTabManager
+	elements   *elementStore
+	resources  *productionResourceTransfer
+	store      *RecoveryStore
+	detector   *CrashDetector
+	policy     BrowserRecoveryPolicy
+	mu         sync.RWMutex
+	attempts   int
 	lastResult *BrowserRecoveryResult
 }
 
@@ -203,10 +203,10 @@ func (r *productionRecovery) RemoveSessionDescriptor(sessionID BrowserSessionID)
 
 func (r *productionRecovery) StoreTabState(tabID BrowserTabID, lastCommittedURL string, active bool, recoverable bool) {
 	state := &tabRecoveryState{
-		tabID:             tabID,
-		lastCommittedURL:  lastCommittedURL,
-		active:            active,
-		recoverable:       recoverable,
+		tabID:              tabID,
+		lastCommittedURL:   lastCommittedURL,
+		active:             active,
+		recoverable:        recoverable,
 		lastNavigationKind: "GET",
 	}
 	r.store.SaveTab(state)

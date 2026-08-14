@@ -19,17 +19,17 @@ type DOMBackend interface {
 }
 
 type domNode struct {
-	NodeID          string
-	BackendNodeID   BackendNodeID
-	NodeType        int
-	NodeName        string
-	NodeValue       string
-	LocalName       string
-	Attributes      map[string]string
-	ChildNodeCount  int
-	Children        []*domNode
-	FrameID         string
-	DocumentURL     string
+	NodeID         string
+	BackendNodeID  BackendNodeID
+	NodeType       int
+	NodeName       string
+	NodeValue      string
+	LocalName      string
+	Attributes     map[string]string
+	ChildNodeCount int
+	Children       []*domNode
+	FrameID        string
+	DocumentURL    string
 }
 
 type chromiumDOMBackend struct {
@@ -49,7 +49,7 @@ func (b *chromiumDOMBackend) GetDocument(ctx context.Context, targetID TargetID,
 		BackendNodeID:  1,
 		NodeType:       9,
 		NodeName:       "#document",
-		LocalName:       "",
+		LocalName:      "",
 		Attributes:     map[string]string{},
 		ChildNodeCount: 1,
 		Children:       []*domNode{},

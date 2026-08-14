@@ -21,9 +21,9 @@ import (
 )
 
 type Service struct {
-	db              *gorm.DB
-	localMu         sync.Mutex
-	localProvider   localEmbeddingProvider
+	db               *gorm.DB
+	localMu          sync.Mutex
+	localProvider    localEmbeddingProvider
 	localFingerprint string
 }
 
@@ -291,9 +291,11 @@ func (s *Service) buildMultimodalInputs(texts []string) []map[string]interface{}
 	}
 	return inputs
 }
+
 type localEmbeddingProvider interface {
 	EmbedSingle(text string, purpose string) ([]float32, error)
 	EmbedBatch(texts []string, purpose string) ([][]float32, error)
+	Close() error
 }
 
 var localEmbeddingProviders = make(map[string]func(configJSON string) (localEmbeddingProvider, error))

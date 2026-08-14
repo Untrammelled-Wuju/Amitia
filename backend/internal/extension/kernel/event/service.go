@@ -375,6 +375,10 @@ func (s *Service) GetDispatcher() *Dispatcher {
 	return s.dispatcher
 }
 
+func (s *Service) EventTypeRegistry() EventTypeRegistry {
+	return s.schemaRegistry
+}
+
 func (s *Service) Start(ctx context.Context) error {
 	s.mu.Lock()
 	if s.started {

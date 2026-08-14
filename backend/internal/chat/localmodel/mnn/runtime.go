@@ -38,8 +38,8 @@ type mnnRuntime struct {
 }
 
 var (
-	mnnDefaultPort = 19999
-	mnnPortMutex   sync.Mutex
+	mnnDefaultPort    = 19999
+	mnnPortMutex      sync.Mutex
 	mnnAllocatedPorts = make(map[int]bool)
 )
 
@@ -191,6 +191,7 @@ func (r *mnnRuntime) stopServer() {
 		releaseMNNPort(r.port)
 		r.port = 0
 	}
+	r.baseURL = ""
 }
 
 func (r *mnnRuntime) findMNNServerExecutable() string {

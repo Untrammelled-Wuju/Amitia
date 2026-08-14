@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet/plugin_boundary"
+	"github.com/u-ai/backend/internal/deviceruntime"
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/canary"
@@ -20,11 +21,13 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/enablement"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
+	"github.com/u-ai/backend/internal/extension/kernel/eventbridge"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
 	"github.com/u-ai/backend/internal/extension/kernel/hook"
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
+	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/internal/extension/kernel/javascript_main"
 	"github.com/u-ai/backend/internal/extension/kernel/lifecycle_manager"
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
@@ -46,6 +49,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
 	"github.com/u-ai/backend/internal/gamehost"
+	"github.com/u-ai/backend/internal/runtimeprofile"
 )
 
 type MCPDuplicateDetail struct {
@@ -204,6 +208,16 @@ type Container struct {
 	CandidateRepository   *CandidateRepository
 
 	GameHost *gamehost.GameHostContainer
+
+	RuntimeProfile            runtimeprofile.Profile
+	RuntimePolicy             runtimeprofile.Policy
+	DeviceRegistry            *host_registry.Registry
+	DeviceRuntimePresence     *host_registry.DeviceRuntimePresenceAdapter
+	DeviceRuntimeSessions     *deviceruntime.Service
+	CapabilityProviders       *capability.ProviderRegistry
+	ProviderLifecycle         *capability.ProviderLifecycleService
+	ProviderExecutionResolver *capability.ProviderRuntimeExecutionResolver
+	EventBridgePublisher      *eventbridge.Publisher
 }
 
 func (c *Container) Close() error {

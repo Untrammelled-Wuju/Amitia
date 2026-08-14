@@ -8,10 +8,10 @@ import (
 )
 
 type RecoveryStore struct {
-	mu        sync.RWMutex
-	sessions  map[BrowserSessionID]*sessionRecoveryDescriptor
-	tabs      map[BrowserTabID]*tabRecoveryState
-	maxTabs   int
+	mu       sync.RWMutex
+	sessions map[BrowserSessionID]*sessionRecoveryDescriptor
+	tabs     map[BrowserTabID]*tabRecoveryState
+	maxTabs  int
 }
 
 func NewRecoveryStore(maxTabs int) *RecoveryStore {
@@ -119,9 +119,9 @@ func (s *RecoveryStore) InvalidateAll() {
 }
 
 type CrashDetector struct {
-	mu          sync.RWMutex
-	tabCrashes  map[BrowserTabID]time.Time
-	runtimeOK   bool
+	mu         sync.RWMutex
+	tabCrashes map[BrowserTabID]time.Time
+	runtimeOK  bool
 }
 
 func NewCrashDetector() *CrashDetector {

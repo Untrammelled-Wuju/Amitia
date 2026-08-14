@@ -178,7 +178,7 @@ func main() {
 	}
 
 	productionCutover := initCutoverGate(db, services)
-	checkResult, err := productionCutover.cutoverPlan.computeCutoverCheck(appCtx)
+	checkResult, err := productionCutover.cutoverPlan.ComputeCutoverCheck(appCtx)
 	if err != nil {
 		log.Error("检查生产切换状态失败:", err)
 		_ = bootstrap.StopAll(context.Background())

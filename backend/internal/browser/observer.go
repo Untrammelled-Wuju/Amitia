@@ -97,13 +97,13 @@ func (o *productionObserver) GetDOMSnapshot(ctx context.Context, sessionID Brows
 	}
 
 	return &BrowserDOMSnapshot{
-		SessionID:          sessionID,
-		TabID:              tabID,
-		Content:            content,
-		Truncated:          truncated,
-		MaxDepth:           maxDepth,
-		RuntimeGeneration:  resolved.RuntimeGeneration,
-		NodeCount:          nodeCount,
+		SessionID:         sessionID,
+		TabID:             tabID,
+		Content:           content,
+		Truncated:         truncated,
+		MaxDepth:          maxDepth,
+		RuntimeGeneration: resolved.RuntimeGeneration,
+		NodeCount:         nodeCount,
 	}, nil
 }
 

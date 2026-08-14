@@ -10,12 +10,12 @@ import (
 )
 
 type VerificationResult struct {
-	Format            string   `json:"format"`
-	FormatVersion     int      `json:"formatVersion"`
-	PackageIntegrity  bool     `json:"packageIntegrity"`
-	ComponentsVerified int     `json:"componentsVerified"`
-	ComponentsFailed  int     `json:"componentsFailed"`
-	Errors            []string `json:"errors,omitempty"`
+	Format             string   `json:"format"`
+	FormatVersion      int      `json:"formatVersion"`
+	PackageIntegrity   bool     `json:"packageIntegrity"`
+	ComponentsVerified int      `json:"componentsVerified"`
+	ComponentsFailed   int      `json:"componentsFailed"`
+	Errors             []string `json:"errors,omitempty"`
 }
 
 func VerifyArchive(archivePath string) (*VerificationResult, error) {

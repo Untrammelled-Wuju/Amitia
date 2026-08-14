@@ -24,6 +24,10 @@ func NewWorldbookBackupContributor(db *gorm.DB) *WorldbookBackupContributor {
 func (w *WorldbookBackupContributor) ID() string   { return "worldbook" }
 func (w *WorldbookBackupContributor) Name() string { return "Worldbook" }
 
+func (w *WorldbookBackupContributor) Dependencies() []string {
+	return []string{"character"}
+}
+
 type worldbookRecordV1 struct {
 	ID            string `json:"id"`
 	MatchType     string `json:"matchType"`

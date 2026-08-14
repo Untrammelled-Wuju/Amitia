@@ -212,10 +212,10 @@ func (e *chromiumEngine) snapshotLocked() BrowserRuntimeInfo {
 func (e *chromiumEngine) snapshotLockedWithTime(_ time.Time) BrowserRuntimeInfo {
 	state, generation := e.state.current()
 	info := BrowserRuntimeInfo{
-		State:     state,
+		State:      state,
 		Generation: generation,
-		Engine:    "chromium",
-		Headless:  e.config.Headless,
+		Engine:     "chromium",
+		Headless:   e.config.Headless,
 	}
 
 	if e.process != nil {

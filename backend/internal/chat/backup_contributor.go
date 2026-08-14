@@ -24,8 +24,8 @@ func NewChatBackupContributor(db *gorm.DB) *ChatBackupContributor {
 	return &ChatBackupContributor{DB: db}
 }
 
-func (c *ChatBackupContributor) ID() string   { return "chat" }
-func (c *ChatBackupContributor) Name() string { return "Chat" }
+func (c *ChatBackupContributor) ID() string             { return "chat" }
+func (c *ChatBackupContributor) Name() string           { return "Chat" }
 func (c *ChatBackupContributor) Dependencies() []string { return []string{"character"} }
 
 type chatConversationV1 struct {

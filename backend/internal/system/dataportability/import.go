@@ -9,10 +9,10 @@ import (
 )
 
 type ImportPreviewResult struct {
-	Manifest       *BackupManifest       `json:"manifest"`
-	Components     []ImportComponentPreview `json:"components"`
-	CanImport      bool                  `json:"canImport"`
-	RequiresReindex bool               `json:"requiresReindex"`
+	Manifest        *BackupManifest          `json:"manifest"`
+	Components      []ImportComponentPreview `json:"components"`
+	CanImport       bool                     `json:"canImport"`
+	RequiresReindex bool                     `json:"requiresReindex"`
 }
 
 func (c *Coordinator) PreviewImport(ctx context.Context, archivePath string) (*ImportPreviewResult, error) {

@@ -159,9 +159,9 @@ func (r *llamaRuntime) startServer(ctx context.Context) error {
 	workDir := filepath.Dir(executable)
 
 	spec := runtimehost.ProcessSpec{
-		ID: r.processID,
+		ID:         r.processID,
 		Executable: executable,
-		Args: args,
+		Args:       args,
 		WorkingDir: workDir,
 		Environment: runtimehost.EnvironmentSpec{
 			Policy: runtimehost.EnvPolicyMinimal,
@@ -170,7 +170,7 @@ func (r *llamaRuntime) startServer(ctx context.Context) error {
 			URL:     r.baseURL + "/health",
 			Timeout: 2 * time.Second,
 		},
-		StartupTimeout: 60 * time.Second,
+		StartupTimeout:  60 * time.Second,
 		StopGracePeriod: 10 * time.Second,
 		RestartPolicy: runtimehost.RestartPolicy{
 			Mode: runtimehost.RestartNever,
@@ -210,6 +210,7 @@ func (r *llamaRuntime) stopServer() {
 		releasePort(r.port)
 		r.port = 0
 	}
+	r.baseURL = ""
 }
 
 func (r *llamaRuntime) findLlamaServerExecutable() string {

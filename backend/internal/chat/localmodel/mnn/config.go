@@ -5,19 +5,19 @@ package mnn
 import "encoding/json"
 
 type MNNProviderConfig struct {
-	ModelResourceURI string             `json:"modelResourceUri"`
-	Backend          string             `json:"backend,omitempty"`
-	ThreadNum        int                `json:"threadNum,omitempty"`
-	Precision        string             `json:"precision,omitempty"`
-	Memory           string             `json:"memory,omitempty"`
-	UseMMap          bool               `json:"useMmap,omitempty"`
-	KVCacheMMap      bool               `json:"kvCacheMmap,omitempty"`
-	AttentionMode    int                `json:"attentionMode,omitempty"`
-	ReuseKV          bool               `json:"reuseKv,omitempty"`
+	ModelResourceURI string              `json:"modelResourceUri"`
+	Backend          string              `json:"backend,omitempty"`
+	ThreadNum        int                 `json:"threadNum,omitempty"`
+	Precision        string              `json:"precision,omitempty"`
+	Memory           string              `json:"memory,omitempty"`
+	UseMMap          bool                `json:"useMmap,omitempty"`
+	KVCacheMMap      bool                `json:"kvCacheMmap,omitempty"`
+	AttentionMode    int                 `json:"attentionMode,omitempty"`
+	ReuseKV          bool                `json:"reuseKv,omitempty"`
 	Sampler          MNNGenerationConfig `json:"sampler,omitempty"`
-	Multimodal       bool               `json:"multimodal,omitempty"`
-	LocalModelID     string             `json:"localModelId,omitempty"`
-	ContextSize      int                `json:"contextSize,omitempty"`
+	Multimodal       bool                `json:"multimodal,omitempty"`
+	LocalModelID     string              `json:"localModelId,omitempty"`
+	ContextSize      int                 `json:"contextSize,omitempty"`
 }
 
 type MNNGenerationConfig struct {
@@ -33,12 +33,12 @@ type MNNGenerationConfig struct {
 }
 
 type MNNModelManifest struct {
-	Schema        int                    `json:"schema"`
-	Engine        string                 `json:"engine"`
-	DisplayName   string                 `json:"displayName"`
-	ContentHash   string                 `json:"contentHash"`
-	Capabilities  MNNModelCapabilities   `json:"capabilities"`
-	EngineConfig  string                 `json:"engineConfig"`
+	Schema       int                  `json:"schema"`
+	Engine       string               `json:"engine"`
+	DisplayName  string               `json:"displayName"`
+	ContentHash  string               `json:"contentHash"`
+	Capabilities MNNModelCapabilities `json:"capabilities"`
+	EngineConfig string               `json:"engineConfig"`
 }
 
 type MNNModelCapabilities struct {

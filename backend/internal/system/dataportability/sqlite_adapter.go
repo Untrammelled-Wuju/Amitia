@@ -20,8 +20,8 @@ func NewSQLiteAdapter(db *gorm.DB, backupDir string) *SQLiteAdapter {
 		DB:        db,
 		BackupDir: backupDir,
 		runner: &migration.Runner{
-			DB:        db,
-			BackupDir: backupDir,
+			DB:         db,
+			BackupDir:  backupDir,
 			SkipBackup: false,
 		},
 	}

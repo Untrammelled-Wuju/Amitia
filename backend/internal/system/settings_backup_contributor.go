@@ -24,6 +24,10 @@ func NewSettingsBackupContributor(db *gorm.DB) *SettingsBackupContributor {
 func (c *SettingsBackupContributor) ID() string   { return "settings" }
 func (c *SettingsBackupContributor) Name() string { return "Settings" }
 
+func (c *SettingsBackupContributor) Dependencies() []string {
+	return nil
+}
+
 type settingsRecordV1 struct {
 	Key       string `json:"key"`
 	Value     string `json:"value"`

@@ -15,16 +15,16 @@ type BrowserPageController interface {
 }
 
 type pageNavigateResult struct {
-	FrameID      string
-	LoaderID     string
-	ErrorText    string
-	FinalURL     string
-	Title        string
-	HTTPStatus   *int
-	Redirected   bool
-	Loaded       bool
-	TimedOut     bool
-	DurationMS   int64
+	FrameID    string
+	LoaderID   string
+	ErrorText  string
+	FinalURL   string
+	Title      string
+	HTTPStatus *int
+	Redirected bool
+	Loaded     bool
+	TimedOut   bool
+	DurationMS int64
 }
 
 type productionNavigator struct {
@@ -99,16 +99,16 @@ func (n *productionNavigator) Navigate(ctx context.Context, sessionID BrowserSes
 
 	if navigateErr != nil {
 		return NavigationResult{
-			SessionID:    sessionID,
-			TabID:        tabID,
-			RequestedURL: rawURL,
-			WaitUntil:    waitUntil,
-			DurationMS:   time.Since(startTime).Milliseconds(),
-		}, &BrowserError{
-			Code:    ErrCodeNavigationFailed,
-			Message: "navigation failed: " + navigateErr.Error(),
-			Cause:   navigateErr,
-		}
+				SessionID:    sessionID,
+				TabID:        tabID,
+				RequestedURL: rawURL,
+				WaitUntil:    waitUntil,
+				DurationMS:   time.Since(startTime).Milliseconds(),
+			}, &BrowserError{
+				Code:    ErrCodeNavigationFailed,
+				Message: "navigation failed: " + navigateErr.Error(),
+				Cause:   navigateErr,
+			}
 	}
 
 	n.bumpDocumentGeneration(tabID, resolved.RuntimeGeneration)
@@ -157,15 +157,15 @@ func (n *productionNavigator) Reload(ctx context.Context, sessionID BrowserSessi
 	result, navigateErr := n.pageCtrl.Reload(ctx, resolved.TargetID, ignoreCache, timeout)
 	if navigateErr != nil {
 		return NavigationResult{
-			SessionID:  sessionID,
-			TabID:      tabID,
-			WaitUntil:  waitUntil,
-			DurationMS: time.Since(startTime).Milliseconds(),
-		}, &BrowserError{
-			Code:    ErrCodeNavigationFailed,
-			Message: "reload failed: " + navigateErr.Error(),
-			Cause:   navigateErr,
-		}
+				SessionID:  sessionID,
+				TabID:      tabID,
+				WaitUntil:  waitUntil,
+				DurationMS: time.Since(startTime).Milliseconds(),
+			}, &BrowserError{
+				Code:    ErrCodeNavigationFailed,
+				Message: "reload failed: " + navigateErr.Error(),
+				Cause:   navigateErr,
+			}
 	}
 
 	n.bumpDocumentGeneration(tabID, resolved.RuntimeGeneration)
@@ -204,13 +204,13 @@ func (n *productionNavigator) GoBack(ctx context.Context, sessionID BrowserSessi
 	result, navigateErr := n.pageCtrl.GoBack(ctx, resolved.TargetID)
 	if navigateErr != nil {
 		return NavigationResult{
-			SessionID: sessionID,
-			TabID:     tabID,
-		}, &BrowserError{
-			Code:    ErrCodeNavigationFailed,
-			Message: "go back failed: " + navigateErr.Error(),
-			Cause:   navigateErr,
-		}
+				SessionID: sessionID,
+				TabID:     tabID,
+			}, &BrowserError{
+				Code:    ErrCodeNavigationFailed,
+				Message: "go back failed: " + navigateErr.Error(),
+				Cause:   navigateErr,
+			}
 	}
 
 	return NavigationResult{
@@ -247,13 +247,13 @@ func (n *productionNavigator) GoForward(ctx context.Context, sessionID BrowserSe
 	result, navigateErr := n.pageCtrl.GoForward(ctx, resolved.TargetID)
 	if navigateErr != nil {
 		return NavigationResult{
-			SessionID: sessionID,
-			TabID:     tabID,
-		}, &BrowserError{
-			Code:    ErrCodeNavigationFailed,
-			Message: "go forward failed: " + navigateErr.Error(),
-			Cause:   navigateErr,
-		}
+				SessionID: sessionID,
+				TabID:     tabID,
+			}, &BrowserError{
+				Code:    ErrCodeNavigationFailed,
+				Message: "go forward failed: " + navigateErr.Error(),
+				Cause:   navigateErr,
+			}
 	}
 
 	return NavigationResult{

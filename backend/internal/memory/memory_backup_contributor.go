@@ -14,14 +14,14 @@ import (
 )
 
 const (
-	ComponentIDMemoryRecords      = "memory.records"
-	ComponentIDMemoryEvents       = "memory.events"
-	ComponentIDMemoryTemporal     = "memory.temporal"
-	ComponentIDMemoryDerivations  = "memory.derivations"
-	ComponentIDMemoryCandidates   = "memory.candidates"
-	ComponentIDMemoryVectorIndex  = "memory-vector-index"
-	CurrentDatasetVersion         = "v1"
-	RecordSizeLimit               = 1 << 20
+	ComponentIDMemoryRecords     = "memory.records"
+	ComponentIDMemoryEvents      = "memory.events"
+	ComponentIDMemoryTemporal    = "memory.temporal"
+	ComponentIDMemoryDerivations = "memory.derivations"
+	ComponentIDMemoryCandidates  = "memory.candidates"
+	ComponentIDMemoryVectorIndex = "memory-vector-index"
+	CurrentDatasetVersion        = "v1"
+	RecordSizeLimit              = 1 << 20
 )
 
 type MemoryBackupContributor struct {
@@ -158,14 +158,14 @@ func (c *MemoryBackupContributor) doExport(ctx context.Context, req MemoryExport
 	derComp.Close()
 
 	meta := map[string]interface{}{
-		"recordCount":      totalRecords,
-		"eventCount":       totalEvents,
-		"temporalCount":    totalTemporal,
-		"derivationCount":  totalDerivations,
-		"scope":            string(req.Scope),
-		"historyMode":      string(req.HistoryMode),
-		"generatedAt":      time.Now().UTC().Format(time.RFC3339),
-		"datasetVersion":   CurrentDatasetVersion,
+		"recordCount":     totalRecords,
+		"eventCount":      totalEvents,
+		"temporalCount":   totalTemporal,
+		"derivationCount": totalDerivations,
+		"scope":           string(req.Scope),
+		"historyMode":     string(req.HistoryMode),
+		"generatedAt":     time.Now().UTC().Format(time.RFC3339),
+		"datasetVersion":  CurrentDatasetVersion,
 	}
 	if err := out.WriteJSON(ComponentIDMemoryVectorIndex, meta); err != nil {
 		return fmt.Errorf("export: write metadata: %w", err)
@@ -357,11 +357,11 @@ func (c *MemoryBackupContributor) streamDerivations(w io.Writer, characterID str
 
 func (c *MemoryBackupContributor) PreviewImport(ctx context.Context, req dataportability.ImportPreviewRequest, in dataportability.BackupReader) ([]dataportability.ImportComponentPreview, error) {
 	preview := dataportability.ImportComponentPreview{
-		ComponentID:  ComponentIDMemoryRecords,
-		Kind:         dataportability.KindNDJSON,
-		LogicalName:  "memory.records.v1",
-		Collisions:   make([]dataportability.ComponentCollision, 0),
-		Warnings:     make([]string, 0),
+		ComponentID: ComponentIDMemoryRecords,
+		Kind:        dataportability.KindNDJSON,
+		LogicalName: "memory.records.v1",
+		Collisions:  make([]dataportability.ComponentCollision, 0),
+		Warnings:    make([]string, 0),
 	}
 
 	rc, err := in.ReadComponent(ComponentIDMemoryRecords + ".v1")
@@ -371,9 +371,9 @@ func (c *MemoryBackupContributor) PreviewImport(ctx context.Context, req datapor
 	defer rc.Close()
 
 	type identityStats struct {
-		seenIDs      map[string]bool
-		characters   map[string]int
-		types        map[string]int
+		seenIDs       map[string]bool
+		characters    map[string]int
+		types         map[string]int
 		sensitivities map[string]int
 	}
 	stats := identityStats{
@@ -463,10 +463,10 @@ func (c *MemoryBackupContributor) Import(ctx context.Context, req dataportabilit
 	defer recRC.Close()
 
 	type importStats struct {
-		imported      int
-		deduped       int
-		remapped      int
-		collisions    int
+		imported   int
+		deduped    int
+		remapped   int
+		collisions int
 	}
 	stats := importStats{}
 
@@ -604,7 +604,8 @@ func sameMemorySnapshot(m *Memory, rec *MemoryRecordV1) bool {
 	if m == nil || rec == nil {
 		return false
 	}
-	return computeMemorySnapshotHashCanonical(m) == computeMemorySnapshotHashCanonical(rec.toMemory())
+	recMemory := rec.toMemory()
+	return computeMemorySnapshotHashCanonical(m) == computeMemorySnapshotHashCanonical(&recMemory)
 }
 
 func (m *Memory) toV1() MemoryRecordV1 {

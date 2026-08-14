@@ -555,14 +555,14 @@ type CutoverCheck struct {
 }
 
 func (p *CutoverPlan) CheckCutoverState(ctx context.Context) (committed bool, incomplete bool, err error) {
-	check, err := p.computeCutoverCheck(ctx)
+	check, err := p.ComputeCutoverCheck(ctx)
 	if err != nil {
 		return false, false, err
 	}
 	return check.Committed, check.Incomplete, nil
 }
 
-func (p *CutoverPlan) computeCutoverCheck(ctx context.Context) (*CutoverCheck, error) {
+func (p *CutoverPlan) ComputeCutoverCheck(ctx context.Context) (*CutoverCheck, error) {
 	store := p.getStateStore()
 	state, err := store.LoadLatestState(ctx)
 	if err != nil {

@@ -25,6 +25,10 @@ func NewWorkspaceBackupContributor(db *gorm.DB) *WorkspaceBackupContributor {
 func (c *WorkspaceBackupContributor) ID() string   { return "workspace" }
 func (c *WorkspaceBackupContributor) Name() string { return "Workspace" }
 
+func (c *WorkspaceBackupContributor) Dependencies() []string {
+	return nil
+}
+
 type workspaceExportRecord struct {
 	ID            string `json:"id"`
 	Name          string `json:"name"`

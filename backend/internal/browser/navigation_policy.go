@@ -10,22 +10,22 @@ import (
 type NavigationSecurityClass string
 
 const (
-	NavClassPublic   NavigationSecurityClass = "public"
-	NavClassPrivate  NavigationSecurityClass = "private"
-	NavClassLoopback NavigationSecurityClass = "loopback"
-	NavClassMetadata NavigationSecurityClass = "metadata"
+	NavClassPublic    NavigationSecurityClass = "public"
+	NavClassPrivate   NavigationSecurityClass = "private"
+	NavClassLoopback  NavigationSecurityClass = "loopback"
+	NavClassMetadata  NavigationSecurityClass = "metadata"
 	NavClassLinkLocal NavigationSecurityClass = "link_local"
-	NavClassUnknown  NavigationSecurityClass = "unknown"
+	NavClassUnknown   NavigationSecurityClass = "unknown"
 )
 
 type NavigationPolicy struct {
-	AllowedSchemes   map[string]struct{}
-	AllowPublic      bool
-	AllowPrivate     bool
-	AllowLoopback    bool
-	MaxURLBytes      int
-	DefaultTimeout   time.Duration
-	MaxTimeout       time.Duration
+	AllowedSchemes map[string]struct{}
+	AllowPublic    bool
+	AllowPrivate   bool
+	AllowLoopback  bool
+	MaxURLBytes    int
+	DefaultTimeout time.Duration
+	MaxTimeout     time.Duration
 }
 
 func NewNavigationPolicy(config BrowserConfig) *NavigationPolicy {

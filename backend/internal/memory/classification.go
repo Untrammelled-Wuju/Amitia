@@ -82,35 +82,35 @@ var validTimeBasis = map[MemoryTimeBasis]bool{
 type TemporalPrecision string
 
 const (
-	TemporalPrecisionExact      TemporalPrecision = "exact"
-	TemporalPrecisionMinute     TemporalPrecision = "minute"
-	TemporalPrecisionHour       TemporalPrecision = "hour"
-	TemporalPrecisionDay        TemporalPrecision = "day"
-	TemporalPrecisionWeek       TemporalPrecision = "week"
-	TemporalPrecisionMonth      TemporalPrecision = "month"
-	TemporalPrecisionYear       TemporalPrecision = "year"
+	TemporalPrecisionExact       TemporalPrecision = "exact"
+	TemporalPrecisionMinute      TemporalPrecision = "minute"
+	TemporalPrecisionHour        TemporalPrecision = "hour"
+	TemporalPrecisionDay         TemporalPrecision = "day"
+	TemporalPrecisionWeek        TemporalPrecision = "week"
+	TemporalPrecisionMonth       TemporalPrecision = "month"
+	TemporalPrecisionYear        TemporalPrecision = "year"
 	TemporalPrecisionApproximate TemporalPrecision = "approximate"
-	TemporalPrecisionRange      TemporalPrecision = "range"
-	TemporalPrecisionUnknown    TemporalPrecision = "unknown"
+	TemporalPrecisionRange       TemporalPrecision = "range"
+	TemporalPrecisionUnknown     TemporalPrecision = "unknown"
 )
 
 var validPrecisions = map[TemporalPrecision]bool{
-	TemporalPrecisionExact:      true,
-	TemporalPrecisionMinute:     true,
-	TemporalPrecisionHour:       true,
-	TemporalPrecisionDay:        true,
-	TemporalPrecisionWeek:       true,
-	TemporalPrecisionMonth:      true,
-	TemporalPrecisionYear:       true,
+	TemporalPrecisionExact:       true,
+	TemporalPrecisionMinute:      true,
+	TemporalPrecisionHour:        true,
+	TemporalPrecisionDay:         true,
+	TemporalPrecisionWeek:        true,
+	TemporalPrecisionMonth:       true,
+	TemporalPrecisionYear:        true,
 	TemporalPrecisionApproximate: true,
-	TemporalPrecisionRange:      true,
-	TemporalPrecisionUnknown:    true,
+	TemporalPrecisionRange:       true,
+	TemporalPrecisionUnknown:     true,
 }
 
 type MemoryClassification struct {
-	Layer          MemoryLayer `json:"layer"`
-	Type           string      `json:"type"`
-	CanonicalType  string      `json:"canonicalType,omitempty"`
+	Layer         MemoryLayer `json:"layer"`
+	Type          string      `json:"type"`
+	CanonicalType string      `json:"canonicalType,omitempty"`
 }
 
 func NormalizeMemoryType(raw string) (MemoryType, bool) {

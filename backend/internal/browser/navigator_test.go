@@ -8,8 +8,8 @@ import (
 )
 
 type fakeTabResolver struct {
-	tabID    BrowserTabID
-	targetID TargetID
+	tabID      BrowserTabID
+	targetID   TargetID
 	resolveErr *BrowserError
 }
 
@@ -18,24 +18,24 @@ func (r *fakeTabResolver) ResolveTab(_ context.Context, sessionID BrowserSession
 		return ResolvedBrowserTab{}, r.resolveErr
 	}
 	return ResolvedBrowserTab{
-		SessionID:        sessionID,
-		TabID:            tabID,
-		BrowserContextID: "ctx_1",
-		TargetID:         r.targetID,
+		SessionID:         sessionID,
+		TabID:             tabID,
+		BrowserContextID:  "ctx_1",
+		TargetID:          r.targetID,
 		RuntimeGeneration: 1,
 	}, nil
 }
 
 type fakePageController struct {
-	navigateResult *pageNavigateResult
-	navigateErr    error
-	reloadResult   *pageNavigateResult
-	reloadErr      error
-	goBackResult   *pageNavigateResult
-	goBackErr      error
+	navigateResult  *pageNavigateResult
+	navigateErr     error
+	reloadResult    *pageNavigateResult
+	reloadErr       error
+	goBackResult    *pageNavigateResult
+	goBackErr       error
 	goForwardResult *pageNavigateResult
-	goForwardErr   error
-	stopErr        error
+	goForwardErr    error
+	stopErr         error
 }
 
 func (c *fakePageController) Navigate(_ context.Context, _ TargetID, _ string, _ string, _ time.Duration) (*pageNavigateResult, error) {

@@ -28,6 +28,10 @@ func NewEmbeddingBackupContributor(db *gorm.DB) *EmbeddingBackupContributor {
 func (c *EmbeddingBackupContributor) ID() string   { return "embedding" }
 func (c *EmbeddingBackupContributor) Name() string { return "Embedding Config" }
 
+func (c *EmbeddingBackupContributor) Dependencies() []string {
+	return nil
+}
+
 type embeddingConfigV1 struct {
 	ID                 int    `json:"id"`
 	Name               string `json:"name"`

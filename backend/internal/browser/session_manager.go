@@ -9,8 +9,8 @@ import (
 )
 
 type ResolvedBrowserSession struct {
-	SessionID        BrowserSessionID
-	BrowserContextID BrowserContextID
+	SessionID         BrowserSessionID
+	BrowserContextID  BrowserContextID
 	RuntimeGeneration uint64
 }
 
@@ -19,12 +19,12 @@ type SessionResolver interface {
 }
 
 type productionSessionManager struct {
-	runtime       BrowserRuntime
-	backend       BrowserSessionBackend
-	store         *sessionStore
-	maxSessions   int
-	tabCleaner    SessionTabCleaner
-	mu            sync.RWMutex
+	runtime     BrowserRuntime
+	backend     BrowserSessionBackend
+	store       *sessionStore
+	maxSessions int
+	tabCleaner  SessionTabCleaner
+	mu          sync.RWMutex
 }
 
 func NewProductionSessionManager(runtime BrowserRuntime, backend BrowserSessionBackend, maxSessions int) BrowserSessionManager {

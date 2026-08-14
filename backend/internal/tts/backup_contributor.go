@@ -8,9 +8,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"gorm.io/gorm"
+	"io"
 )
 
 type VoiceBackupContributor struct {
@@ -23,6 +23,10 @@ func NewVoiceBackupContributor(db *gorm.DB) *VoiceBackupContributor {
 
 func (c *VoiceBackupContributor) ID() string   { return "voice" }
 func (c *VoiceBackupContributor) Name() string { return "Voice Config" }
+
+func (c *VoiceBackupContributor) Dependencies() []string {
+	return []string{"character"}
+}
 
 type ttsExportRecord struct {
 	ID                  int     `json:"id"`
@@ -40,8 +44,10 @@ type ttsExportRecord struct {
 	CustomVoiceID       string  `json:"customVoiceId"`
 	CloneResourceId     string  `json:"cloneResourceId"`
 	RealtimeAppId       string  `json:"realtimeAppId"`
-	RealtimeAccessToken string  `json:"realtimeAccessToken"`
-	RealtimeSecretKey   string  `json:"realtimeSecretKey"`
+	RealtimeAccessToken string  `json:"realtimeAccessToken,omitempty"`
+	RealtimeSecretKey   string  `json:"realtimeSecretKey,omitempty"`
+	SecretRef           string  `json:"secretRef"`
+	RebindRequired      bool    `json:"rebindRequired"`
 	CreatedAt           string  `json:"createdAt"`
 	UpdatedAt           string  `json:"updatedAt"`
 }
@@ -107,6 +113,12 @@ func (c *VoiceBackupContributor) Export(ctx context.Context, req dataportability
 		var rec ttsExportRecord
 		if err := c.DB.ScanRows(rows, &rec); err != nil {
 			continue
+		}
+		if rec.RealtimeAccessToken != "" || rec.RealtimeSecretKey != "" {
+			rec.SecretRef = fmt.Sprintf("tts:%d", rec.ID)
+			rec.RebindRequired = true
+			rec.RealtimeAccessToken = ""
+			rec.RealtimeSecretKey = ""
 		}
 		data, err := json.Marshal(rec)
 		if err != nil {
@@ -288,8 +300,8 @@ func (c *VoiceBackupContributor) importTTS(ctx context.Context, req dataportabil
 					"custom_voice_id":       rec.CustomVoiceID,
 					"clone_resource_id":     rec.CloneResourceId,
 					"realtime_app_id":       rec.RealtimeAppId,
-					"realtime_access_token": rec.RealtimeAccessToken,
-					"realtime_secret_key":   rec.RealtimeSecretKey,
+					"realtime_access_token": "",
+					"realtime_secret_key":   "",
 					"updated_at":            rec.UpdatedAt,
 				}
 				c.DB.WithContext(ctx).Table("tts_configs").Where("id = ?", existing.ID).Updates(updates)
@@ -318,8 +330,8 @@ func (c *VoiceBackupContributor) importTTS(ctx context.Context, req dataportabil
 				"custom_voice_id":       rec.CustomVoiceID,
 				"clone_resource_id":     rec.CloneResourceId,
 				"realtime_app_id":       rec.RealtimeAppId,
-				"realtime_access_token": rec.RealtimeAccessToken,
-				"realtime_secret_key":   rec.RealtimeSecretKey,
+				"realtime_access_token": "",
+				"realtime_secret_key":   "",
 				"created_at":            now,
 				"updated_at":            now,
 			})

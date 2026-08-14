@@ -27,6 +27,10 @@ func NewEpisodicBackupContributor(db *gorm.DB) *EpisodicBackupContributor {
 func (c *EpisodicBackupContributor) ID() string   { return "episodic" }
 func (c *EpisodicBackupContributor) Name() string { return "Episodic Memory" }
 
+func (c *EpisodicBackupContributor) Dependencies() []string {
+	return []string{"character", "chat"}
+}
+
 type episodicRecordV1 struct {
 	ID               string `json:"id"`
 	UserID           string `json:"userId"`

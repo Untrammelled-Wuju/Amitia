@@ -458,9 +458,9 @@ func TestProductionProviderSessionManagerIsProduction(t *testing.T) {
 	engine := &fakeEngine{state: BrowserRuntimeReady, stopped: false}
 	factory := &fakeEngineFactory{engine: engine}
 	config := BrowserConfig{
-		Enabled:      true,
-		MaxSessions:  8,
-		Headless:     true,
+		Enabled:     true,
+		MaxSessions: 8,
+		Headless:    true,
 	}
 
 	provider, err := NewProductionProvider(config, factory)
@@ -483,9 +483,9 @@ func TestProductionProviderOtherManagersStillUnsupported(t *testing.T) {
 	engine := &fakeEngine{state: BrowserRuntimeReady, stopped: false}
 	factory := &fakeEngineFactory{engine: engine}
 	config := BrowserConfig{
-		Enabled:      true,
-		MaxSessions:  8,
-		Headless:     true,
+		Enabled:     true,
+		MaxSessions: 8,
+		Headless:    true,
 	}
 
 	provider, err := NewProductionProvider(config, factory)

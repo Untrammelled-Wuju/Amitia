@@ -7,10 +7,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"gorm.io/gorm"
+	"io"
 )
 
 const ComponentIDModelConfigs = "model.configs"
@@ -25,6 +25,10 @@ func NewModelConfigBackupContributor(db *gorm.DB) *ModelConfigBackupContributor 
 
 func (c *ModelConfigBackupContributor) ID() string   { return "model" }
 func (c *ModelConfigBackupContributor) Name() string { return "Model Config" }
+
+func (c *ModelConfigBackupContributor) Dependencies() []string {
+	return nil
+}
 
 type modelConfigExportRecord struct {
 	ID                 int     `json:"id"`

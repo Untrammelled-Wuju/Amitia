@@ -29,6 +29,10 @@ func NewResourceBackupContributor(db *gorm.DB, dataDir string) *ResourceBackupCo
 func (c *ResourceBackupContributor) ID() string   { return "resource" }
 func (c *ResourceBackupContributor) Name() string { return "Resource" }
 
+func (c *ResourceBackupContributor) Dependencies() []string {
+	return nil
+}
+
 type resourceFileV1 struct {
 	RelativePath string `json:"relative_path"`
 	SizeBytes    int64  `json:"size_bytes"`

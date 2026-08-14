@@ -18,14 +18,17 @@ type localEmbeddingProvider interface {
 
 var (
 	localEmbeddingFactories = make(map[string]func(configJSON string) (localEmbeddingProvider, error))
-	localEmbeddingRegMu      sync.RWMutex
-	globalEmbeddingHost      runtimehost.RuntimeHost
-	globalEmbeddingHostMu    sync.RWMutex
+	localEmbeddingRegMu     sync.RWMutex
+	globalEmbeddingHost     runtimehost.RuntimeHost
+	globalEmbeddingHostMu   sync.RWMutex
 )
 
 func RegisterLocalEmbeddingFactory(providerType string, factory func(configJSON string) (localEmbeddingProvider, error)) {
 	localEmbeddingRegMu.Lock()
 	defer localEmbeddingRegMu.Unlock()
+	if _, exists := localEmbeddingFactories[providerType]; exists {
+		panic(fmt.Sprintf("local embedding provider %q already registered", providerType))
+	}
 	localEmbeddingFactories[providerType] = factory
 }
 

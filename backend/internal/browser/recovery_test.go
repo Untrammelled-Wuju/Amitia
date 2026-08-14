@@ -154,4 +154,3 @@ func TestDefaultBrowserRecoveryPolicy(t *testing.T) {
 		t.Fatalf("Expected MaxAttempts=2, got %d", policy.MaxAttempts)
 	}
 }
-

@@ -5,19 +5,19 @@ import "context"
 type ReconcileScope string
 
 const (
-	ReconcileAll       ReconcileScope = "all"
-	ReconcileVectors   ReconcileScope = "vectors"
-	ReconcileGraph     ReconcileScope = "graph"
-	ReconcileMessages  ReconcileScope = "messages"
-	ReconcileMemories  ReconcileScope = "memories"
+	ReconcileAll      ReconcileScope = "all"
+	ReconcileVectors  ReconcileScope = "vectors"
+	ReconcileGraph    ReconcileScope = "graph"
+	ReconcileMessages ReconcileScope = "messages"
+	ReconcileMemories ReconcileScope = "memories"
 )
 
 type ReconcileCheck struct {
-	Scope     ReconcileScope `json:"scope"`
-	Healthy   bool           `json:"healthy"`
-	Pending   bool           `json:"pending"`
-	Details   string         `json:"details,omitempty"`
-	IssueCount int64         `json:"issueCount"`
+	Scope      ReconcileScope `json:"scope"`
+	Healthy    bool           `json:"healthy"`
+	Pending    bool           `json:"pending"`
+	Details    string         `json:"details,omitempty"`
+	IssueCount int64          `json:"issueCount"`
 }
 
 type Reconciler interface {

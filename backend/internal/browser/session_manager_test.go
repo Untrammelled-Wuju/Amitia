@@ -51,9 +51,9 @@ func (r *fakeSessionManagerRuntime) setFailed() {
 }
 
 type fakeSessionManagerBackend struct {
-	mu        sync.Mutex
-	contexts  []BrowserContextID
-	createErr error
+	mu         sync.Mutex
+	contexts   []BrowserContextID
+	createErr  error
 	disposeErr error
 }
 

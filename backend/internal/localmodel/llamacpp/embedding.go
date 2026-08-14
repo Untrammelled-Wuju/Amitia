@@ -21,14 +21,14 @@ import (
 )
 
 type llamaCppEmbeddingBackend struct {
-	config     LlamaCppEmbeddingConfig
-	mu         sync.Mutex
-	state      string
-	loadedAt   string
-	lastError  string
-	manifest   *gguf.GGUFModelManifest
-	runtime    *llamaEmbeddingRuntime
-	host       runtimehost.RuntimeHost
+	config    LlamaCppEmbeddingConfig
+	mu        sync.Mutex
+	state     string
+	loadedAt  string
+	lastError string
+	manifest  *gguf.GGUFModelManifest
+	runtime   *llamaEmbeddingRuntime
+	host      runtimehost.RuntimeHost
 }
 
 type llamaEmbeddingRuntime struct {
@@ -175,6 +175,7 @@ func (r *llamaEmbeddingRuntime) stopServer() {
 		releasePort(r.port)
 		r.port = 0
 	}
+	r.baseURL = ""
 }
 
 func (r *llamaEmbeddingRuntime) findEmbeddingServerExecutable() string {
@@ -211,9 +212,9 @@ func (r *llamaEmbeddingRuntime) findEmbeddingServerExecutable() string {
 
 func NewLlamaCppEmbeddingBackend(config LlamaCppEmbeddingConfig) (*llamaCppEmbeddingBackend, error) {
 	b := &llamaCppEmbeddingBackend{
-		config:   config,
-		state:    "unloaded",
-		runtime:  newLlamaEmbeddingRuntime(config),
+		config:  config,
+		state:   "unloaded",
+		runtime: newLlamaEmbeddingRuntime(config),
 	}
 	return b, nil
 }
@@ -226,13 +227,13 @@ func (b *llamaCppEmbeddingBackend) AttachHost(host runtimehost.RuntimeHost) {
 }
 
 type EmbeddingResult struct {
-	Vectors           [][]float32
-	Dimension         int
-	Normalized        bool
-	Pooling           string
-	ModelFingerprint  string
-	Truncated         []bool
-	TokenCounts       []int
+	Vectors          [][]float32
+	Dimension        int
+	Normalized       bool
+	Pooling          string
+	ModelFingerprint string
+	Truncated        []bool
+	TokenCounts      []int
 }
 
 type EmbeddingCapabilities struct {
@@ -309,7 +310,7 @@ func (b *llamaCppEmbeddingBackend) Embed(ctx context.Context, inputs []string, p
 
 		truncated := make([]bool, len(inputs))
 		tokenCounts := make([]int, len(inputs))
-		for i, text := range inputs {
+		for i := range inputs {
 			if b.config.Truncate && b.manifest != nil && b.manifest.ContextLength > 0 {
 				tokenCounts[i] = 0
 			}

@@ -181,5 +181,7 @@ func (b *llamaCppBackend) shutdown() {
 }
 
 func init() {
-	localmodel.Register("llama_cpp", NewLlamaCppBackend)
+	if err := localmodel.Register("llama_cpp", NewLlamaCppBackend); err != nil {
+		panic(err)
+	}
 }

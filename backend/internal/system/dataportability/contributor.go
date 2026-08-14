@@ -6,12 +6,12 @@ import (
 )
 
 type BackupRequest struct {
-	Scope        BackupScope
-	Profile      BackupProfile
-	CharacterID  string
-	IncludeSecrets bool
+	Scope              BackupScope
+	Profile            BackupProfile
+	CharacterID        string
+	IncludeSecrets     bool
 	IncludeModelAssets bool
-	Purpose      BackupPurpose
+	Purpose            BackupPurpose
 }
 
 type BackupComponentPlan struct {
@@ -27,17 +27,17 @@ type BackupComponentPlan struct {
 }
 
 type ImportPreviewRequest struct {
-	StagingPath   string
-	Manifest      *BackupManifest
+	StagingPath string
+	Manifest    *BackupManifest
 }
 
 type ImportComponentPreview struct {
-	ComponentID    string
-	Kind           ComponentKind
-	LogicalName   string
-	ItemCount      int64
-	Collisions     []ComponentCollision
-	Warnings       []string
+	ComponentID string
+	Kind        ComponentKind
+	LogicalName string
+	ItemCount   int64
+	Collisions  []ComponentCollision
+	Warnings    []string
 }
 
 type ComponentCollision struct {

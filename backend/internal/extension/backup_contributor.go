@@ -24,6 +24,10 @@ func NewExtensionBackupContributor(db *gorm.DB) *ExtensionBackupContributor {
 func (c *ExtensionBackupContributor) ID() string   { return "extension" }
 func (c *ExtensionBackupContributor) Name() string { return "Extension" }
 
+func (c *ExtensionBackupContributor) Dependencies() []string {
+	return nil
+}
+
 type extensionSkillExportRecord struct {
 	ID                   string `json:"id"`
 	ExtensionID          string `json:"extension_id"`

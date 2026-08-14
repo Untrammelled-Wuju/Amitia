@@ -3,8 +3,7 @@ package migration
 import (
 	"context"
 	"testing"
-
-	"gorm.io/gorm"
+	"time"
 )
 
 type testAuthorityProvider struct {
@@ -24,13 +23,16 @@ func (p *testAuthorityProvider) TaskRuntimeService() interface{} { return p.task
 func (p *testAuthorityProvider) HookService() interface{}        { return p.hookService }
 
 func TestCutoverPlan_Preflight(t *testing.T) {
-	plan := NewCutoverPlan(&gorm.DB{}, &testAuthorityProvider{
-		toolFacade:         struct{}{},
-		permissionBroker:   struct{}{},
-		eventService:       struct{}{},
-		scheduleService:    struct{}{},
-		taskRuntimeService: struct{}{},
-		hookService:        struct{}{},
+	plan := NewCutoverPlan(CutoverDependencies{
+		Container: &testAuthorityProvider{
+			toolFacade:         struct{}{},
+			permissionBroker:   struct{}{},
+			eventService:       struct{}{},
+			scheduleService:    struct{}{},
+			taskRuntimeService: struct{}{},
+			hookService:        struct{}{},
+		},
+		Now: time.Now,
 	})
 	if err := plan.Preflight(context.Background()); err != nil {
 		t.Fatalf("expected preflight to pass, got: %v", err)
@@ -38,7 +40,10 @@ func TestCutoverPlan_Preflight(t *testing.T) {
 }
 
 func TestCutoverPlan_Preflight_MissingAuthorities(t *testing.T) {
-	plan := NewCutoverPlan(&gorm.DB{}, &testAuthorityProvider{})
+	plan := NewCutoverPlan(CutoverDependencies{
+		Container: &testAuthorityProvider{},
+		Now:       time.Now,
+	})
 	err := plan.Preflight(context.Background())
 	if err == nil {
 		t.Fatal("expected preflight to fail with missing authorities")
@@ -46,13 +51,16 @@ func TestCutoverPlan_Preflight_MissingAuthorities(t *testing.T) {
 }
 
 func TestCutoverPlan_VerifyCanonicalAuthorities(t *testing.T) {
-	plan := NewCutoverPlan(&gorm.DB{}, &testAuthorityProvider{
-		toolFacade:         struct{}{},
-		permissionBroker:   struct{}{},
-		eventService:       struct{}{},
-		scheduleService:    struct{}{},
-		taskRuntimeService: struct{}{},
-		hookService:        struct{}{},
+	plan := NewCutoverPlan(CutoverDependencies{
+		Container: &testAuthorityProvider{
+			toolFacade:         struct{}{},
+			permissionBroker:   struct{}{},
+			eventService:       struct{}{},
+			scheduleService:    struct{}{},
+			taskRuntimeService: struct{}{},
+			hookService:        struct{}{},
+		},
+		Now: time.Now,
 	})
 	failures := plan.VerifyCanonicalAuthorities()
 	if len(failures) != 0 {
@@ -61,7 +69,10 @@ func TestCutoverPlan_VerifyCanonicalAuthorities(t *testing.T) {
 }
 
 func TestCutoverPlan_VerifyCanonicalAuthorities_Missing(t *testing.T) {
-	plan := NewCutoverPlan(&gorm.DB{}, &testAuthorityProvider{})
+	plan := NewCutoverPlan(CutoverDependencies{
+		Container: &testAuthorityProvider{},
+		Now:       time.Now,
+	})
 	failures := plan.VerifyCanonicalAuthorities()
 	if len(failures) == 0 {
 		t.Fatal("expected failures with missing authorities, got none")

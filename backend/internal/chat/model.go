@@ -4,8 +4,8 @@ package chat
 
 import (
 	"github.com/google/uuid"
-	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/chat/modelprotocol"
+	"github.com/u-ai/backend/internal/interaction"
 	newoutbox "github.com/u-ai/backend/internal/outbox"
 	"gorm.io/gorm"
 	"time"
@@ -176,19 +176,19 @@ type ModelConfig struct {
 }
 
 type MessageAttachment struct {
-	ID           string `gorm:"column:id;primaryKey" json:"id"`
-	MessageID    string `gorm:"column:message_id;not null;index" json:"messageId"`
-	Sequence     int    `gorm:"column:sequence;not null;default:0" json:"sequence"`
-	Type         string `gorm:"column:type;not null" json:"type"`
-	ResourceURI  string `gorm:"column:resource_uri;not null" json:"resourceUri"`
-	MIMEType     string `gorm:"column:mime_type" json:"mimeType"`
-	Filename     string `gorm:"column:filename" json:"filename"`
-	SizeBytes    int64  `gorm:"column:size_bytes;default:0" json:"sizeBytes"`
-	ContentHash  string `gorm:"column:content_hash" json:"contentHash"`
-	Width        int    `gorm:"column:width;default:0" json:"width"`
-	Height       int    `gorm:"column:height;default:0" json:"height"`
-	DurationMS   int64  `gorm:"column:duration_ms;default:0" json:"durationMs"`
-	CreatedAt    string `gorm:"column:created_at" json:"createdAt"`
+	ID          string `gorm:"column:id;primaryKey" json:"id"`
+	MessageID   string `gorm:"column:message_id;not null;index" json:"messageId"`
+	Sequence    int    `gorm:"column:sequence;not null;default:0" json:"sequence"`
+	Type        string `gorm:"column:type;not null" json:"type"`
+	ResourceURI string `gorm:"column:resource_uri;not null" json:"resourceUri"`
+	MIMEType    string `gorm:"column:mime_type" json:"mimeType"`
+	Filename    string `gorm:"column:filename" json:"filename"`
+	SizeBytes   int64  `gorm:"column:size_bytes;default:0" json:"sizeBytes"`
+	ContentHash string `gorm:"column:content_hash" json:"contentHash"`
+	Width       int    `gorm:"column:width;default:0" json:"width"`
+	Height      int    `gorm:"column:height;default:0" json:"height"`
+	DurationMS  int64  `gorm:"column:duration_ms;default:0" json:"durationMs"`
+	CreatedAt   string `gorm:"column:created_at" json:"createdAt"`
 }
 
 func (MessageAttachment) TableName() string { return "message_attachments" }

@@ -58,15 +58,15 @@ func (r *defaultConfigResolver) Resolve() BrowserConfig {
 
 func BrowserConfigFromMap(m map[string]any) BrowserConfig {
 	config := BrowserConfig{
-		Enabled:        false,
-		Headless:       true,
-		StartupTimeout: defaultBrowserStartupTimeout,
-		ShutdownTimeout: defaultBrowserShutdownTimeout,
-		AllowedSchemes: []string{"http", "https", "about"},
-		MaxSessions:    DefaultMaxSessions,
-		MaxTabsPerSession: DefaultMaxTabsPerSession,
-		MaxTabsTotal:   DefaultMaxTabsTotal,
-		NavigationTimeout: DefaultNavigationTimeout,
+		Enabled:              false,
+		Headless:             true,
+		StartupTimeout:       defaultBrowserStartupTimeout,
+		ShutdownTimeout:      defaultBrowserShutdownTimeout,
+		AllowedSchemes:       []string{"http", "https", "about"},
+		MaxSessions:          DefaultMaxSessions,
+		MaxTabsPerSession:    DefaultMaxTabsPerSession,
+		MaxTabsTotal:         DefaultMaxTabsTotal,
+		NavigationTimeout:    DefaultNavigationTimeout,
 		MaxNavigationTimeout: DefaultMaxNavigationTimeout,
 	}
 

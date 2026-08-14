@@ -77,6 +77,7 @@ import (
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval"
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval/local"
 	"github.com/u-ai/backend/internal/interaction"
+	"github.com/u-ai/backend/internal/localmodel/llamacpp"
 	"github.com/u-ai/backend/internal/mcp"
 	"github.com/u-ai/backend/internal/media"
 	"github.com/u-ai/backend/internal/memory"
@@ -362,7 +363,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithResourceResolver(resourceResolver).
 		WithMediaService(mediaService).
 		WithWorkspaceService(workspaceService).
-		WithBrowserProvider(browserProvider)
+		WithBrowserProvider(browserProvider).
+		WithRuntimeProfile(runtimeProfile)
 
 	if bootstrap != nil {
 		kernelBuilder.WithRuntimeHost(bootstrap.RuntimeHost())

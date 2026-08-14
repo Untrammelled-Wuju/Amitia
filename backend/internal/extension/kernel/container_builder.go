@@ -14,6 +14,7 @@ import (
 	"github.com/u-ai/backend/internal/deepsearch"
 	"github.com/u-ai/backend/internal/desktoppet/integration"
 	"github.com/u-ai/backend/internal/desktoppet/plugin_boundary"
+	"github.com/u-ai/backend/internal/deviceruntime"
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/authority"
@@ -29,6 +30,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/enablement"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
+	"github.com/u-ai/backend/internal/extension/kernel/eventbridge"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
@@ -66,6 +68,7 @@ import (
 	"github.com/u-ai/backend/internal/media"
 	"github.com/u-ai/backend/internal/platform/process"
 	"github.com/u-ai/backend/internal/runtimehost"
+	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/search"
 	"github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/workspace"
@@ -97,6 +100,8 @@ type ContainerBuilder struct {
 	workspaceService             *workspace.Service
 	browserProvider              browser.BrowserProvider
 	desktopPetPluginCapabilities *integration.DesktopPetPluginCapabilities
+	runtimeProfile               runtimeprofile.Profile
+	runtimePolicy                runtimeprofile.Policy
 }
 
 func NewContainerBuilder() *ContainerBuilder {
@@ -223,6 +228,12 @@ func (b *ContainerBuilder) WithWorkspaceService(svc *workspace.Service) *Contain
 
 func (b *ContainerBuilder) WithBrowserProvider(provider browser.BrowserProvider) *ContainerBuilder {
 	b.browserProvider = provider
+	return b
+}
+
+func (b *ContainerBuilder) WithRuntimeProfile(profile runtimeprofile.Profile) *ContainerBuilder {
+	b.runtimeProfile = profile
+	b.runtimePolicy = runtimeprofile.PolicyFor(profile)
 	return b
 }
 
@@ -579,8 +590,61 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if memQuerySvc == nil {
 		memQuerySvc = NewDefaultMemoryQueryService()
 	}
-	uiHostNotifier := NewSSEUIHostNotifier(sse.Global)
-	bridgeClipboardHost := NewBridgeClipboardHost(sse.Global)
+
+	eventBridgePublisher, err := eventbridge.NewPublisher(eventSvc)
+	if err != nil {
+		return nil, fmt.Errorf("kernel: create eventbridge publisher: %w", err)
+	}
+	if b.runtimePolicy.DurableEvents {
+		if err := eventbridge.RegisterCloudFoundationEventTypes(ctx, eventSvc.EventTypeRegistry()); err != nil {
+			return nil, fmt.Errorf("kernel: register cloud foundation event types: %w", err)
+		}
+	}
+
+	deviceRegistry := host_registry.NewRegistry(db)
+	if err := deviceRegistry.LoadFromStore(ctx); err != nil {
+		return nil, fmt.Errorf("kernel: load device registry: %w", err)
+	}
+
+	deviceRuntimePresence := host_registry.NewDeviceRuntimePresenceAdapter(deviceRegistry)
+
+	var sessionStore *deviceruntime.SQLiteSessionStore
+	var sessionService *deviceruntime.Service
+	if b.runtimeProfile == runtimeprofile.ProfileLocal || b.runtimeProfile == runtimeprofile.ProfileCloudCore {
+		sessionStore = deviceruntime.NewSQLiteSessionStore(db)
+		if err := sessionStore.EnsureSchema(ctx); err != nil {
+			return nil, fmt.Errorf("kernel: ensure session store schema: %w", err)
+		}
+		sessionEvents := eventbridge.NewRuntimeSessionEventPublisher(eventBridgePublisher)
+		sessionService, err = deviceruntime.NewService(sessionStore, deviceruntime.ServiceOptions{
+			PresencePort: deviceRuntimePresence,
+			Events:       sessionEvents,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("kernel: create device runtime session service: %w", err)
+		}
+	}
+
+	providerRegistry := capability.NewProviderRegistry()
+	var providerEventSink capability.ProviderEventSink
+	if b.runtimePolicy.DurableEvents {
+		providerEventSink = eventbridge.NewProviderEventEmitter(eventBridgePublisher)
+	}
+	providerLifecycle := capability.NewProviderLifecycleService(providerRegistry, providerEventSink)
+	providerExecutionResolver := capability.NewProviderRuntimeExecutionResolver(&capability.ProviderRegistryExecutionLookup{Registry: providerRegistry})
+
+	startupAt := time.Now().UTC()
+	if sessionService != nil {
+		if err := sessionService.RecoverStartup(ctx, startupAt); err != nil {
+			return nil, fmt.Errorf("kernel: session startup recovery: %w", err)
+		}
+	}
+	if err := deviceRegistry.MarkRuntimeEntriesDisconnectedOnStartup(ctx, startupAt); err != nil {
+		return nil, fmt.Errorf("kernel: registry startup recovery: %w", err)
+	}
+
+	uiHostNotifier := NewSSEUIHostNotifierWithRegistry(sse.Global, deviceRegistry)
+	bridgeClipboardHost := NewBridgeClipboardHostWithRegistry(sse.Global, deviceRegistry)
 	if err := setupDefaultHostAPIRoutes(hostAPIGateway, HostAPIRouteDeps{
 		StateStore:          extensionStateStore,
 		CharacterReader:     charReader,
@@ -1130,6 +1194,16 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		CanaryDualWriteManager:  canaryDualWriteMgr,
 		CanaryShadowManager:     canaryShadowMgr,
 		CanaryOwnershipResolver: canaryOwnershipResolver,
+
+		RuntimeProfile:            b.runtimeProfile,
+		RuntimePolicy:             b.runtimePolicy,
+		DeviceRegistry:            deviceRegistry,
+		DeviceRuntimePresence:     deviceRuntimePresence,
+		DeviceRuntimeSessions:     sessionService,
+		CapabilityProviders:       providerRegistry,
+		ProviderLifecycle:         providerLifecycle,
+		ProviderExecutionResolver: providerExecutionResolver,
+		EventBridgePublisher:      eventBridgePublisher,
 	}
 
 	if b.iosNativeProvider != nil {
