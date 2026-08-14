@@ -151,7 +151,7 @@ func (r *memoryAuthorityRepo) ListDerivationsByMemoryIDs(memoryIDs []string) ([]
 
 func (r *memoryAuthorityRepo) IsNewID(id string) (bool, error) { return true, nil }
 
-func (r *memoryAuthorityRepo) BatchUpsert(records []MemoryEventV1) error { return nil }
+func (r *memoryAuthorityRepo) AppendRestoredEvents(events []MemoryEventV1) error { return nil }
 
 func TestMemorySearchFiltersDeletedInvalidatedAndTombstone(t *testing.T) {
 	repo := &memoryAuthorityRepo{items: []Memory{

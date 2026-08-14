@@ -131,6 +131,7 @@ func main() {
 
 	sqlDB, _ := db.DB()
 	agenttool.SetDB(sqlDB)
+	freshInstall := isNewDatabase(db)
 	if err := applyDatabaseStartupMigrations(db, paths.DataDir); err != nil {
 		log.Error("数据库启动迁移失败:", err)
 		os.Exit(1)
@@ -177,14 +178,20 @@ func main() {
 	}
 
 	productionCutover := initCutoverGate(db, services)
-	committed, incomplete, err := productionCutover.CheckCutoverState(appCtx)
+	checkResult, err := productionCutover.cutoverPlan.computeCutoverCheck(appCtx)
 	if err != nil {
 		log.Error("检查生产切换状态失败:", err)
 		_ = bootstrap.StopAll(context.Background())
 		os.Exit(1)
 	}
 
-	if incomplete {
+	if checkResult.Failed {
+		log.Error("检测到生产切换失败状态，进入recovery模式")
+		_ = bootstrap.StopAll(context.Background())
+		os.Exit(1)
+	}
+
+	if checkResult.Incomplete {
 		log.Info("检测到未完成的生产切换，正在恢复执行...")
 		if err := productionCutover.RunCutover(appCtx); err != nil {
 			log.Error("生产切换执行失败:", err)
@@ -192,8 +199,8 @@ func main() {
 			os.Exit(1)
 		}
 		log.Info("生产切换完成")
-	} else if !committed {
-		if !isNewDatabase(db) {
+	} else if !checkResult.Committed {
+		if !freshInstall {
 			log.Info("执行生产切换...")
 			if err := productionCutover.RunCutover(appCtx); err != nil {
 				log.Error("生产切换执行失败:", err)
@@ -203,12 +210,18 @@ func main() {
 			log.Info("生产切换完成")
 		} else {
 			log.Info("新安装数据库，初始化canonical已提交状态...")
-			if err := initializeCommittedCutoverState(db); err != nil {
+			if err := initializeCommittedCutoverState(db, services); err != nil {
 				log.Error("初始化canonical切换状态失败:", err)
 				_ = bootstrap.StopAll(context.Background())
 				os.Exit(1)
 			}
 		}
+	}
+
+	if err := runCanonicalRuntimeAssertions(services); err != nil {
+		log.Error("Post-cutover canonical assertions failed:", err)
+		_ = bootstrap.StopAll(context.Background())
+		os.Exit(1)
 	}
 
 	services.ProductionCutover = productionCutover
@@ -476,29 +489,45 @@ func isNewDatabase(db *gorm.DB) bool {
 		return false
 	}
 	var count int64
-	if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table'").Count(&count).Error; err != nil {
+	if err := db.Raw("SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").Count(&count).Error; err != nil {
 		return false
 	}
 	return count == 0
 }
 
-func initializeCommittedCutoverState(db *gorm.DB) error {
+func initializeCommittedCutoverState(db *gorm.DB, services *AppServices) error {
 	if db == nil {
 		return fmt.Errorf("database is nil")
 	}
+	existing := &migrationcore.CutoverState{}
+	if err := db.Order("started_at DESC").First(existing).Error; err == nil && existing.OperationID != "" {
+		return nil
+	}
+
+	var canonicalGeneration int64 = 1
+	if services != nil && services.KernelContainer != nil {
+		container := services.KernelContainer
+		if container.ToolFacade != nil || container.PermissionBroker != nil ||
+			container.EventService != nil || container.ScheduleService != nil ||
+			container.TaskRuntimeService != nil || container.HookService != nil {
+			canonicalGeneration = 2
+		}
+	}
+
 	now := time.Now().UTC().Format(time.RFC3339)
-	return db.Exec(`INSERT OR REPLACE INTO production_cutover_state
-		(operation_id, phase, status, snapshot_id, error_message, started_at, updated_at, completed_at, canonical_generation, plan_version)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	return db.Exec(`INSERT INTO production_cutover_state
+	(operation_id, phase, status, phase_status, snapshot_id, error_message, started_at, updated_at, completed_at, canonical_generation, plan_version)
+	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		"baseline-"+time.Now().Format("20060102"),
 		"commit",
 		"committed",
+		"completed",
 		"",
 		"",
 		now,
 		now,
 		now,
-		1,
+		canonicalGeneration,
 		1,
 	).Error
 }

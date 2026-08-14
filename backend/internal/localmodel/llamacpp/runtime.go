@@ -6,6 +6,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -68,11 +70,21 @@ func releasePort(p int) {
 
 func newLlamaRuntime(config LlamaCppProviderConfig) *llamaRuntime {
 	return &llamaRuntime{
-		config:   config,
-		state:    "unloaded",
-		port:     0,
-		processID: runtimehost.ProcessID("llama-cpp-" + config.LocalModelID),
+		config:    config,
+		state:     "unloaded",
+		port:      0,
+		processID: runtimehost.ProcessID("llama-cpp-" + config.LocalModelID + "-" + llamaConfigFingerprint(config)),
 	}
+}
+
+func llamaConfigFingerprint(config LlamaCppProviderConfig) string {
+	h := sha256.New()
+	h.Write([]byte(config.ResourceURI))
+	h.Write([]byte(config.Backend))
+	h.Write([]byte(strconv.Itoa(config.ContextSize)))
+	h.Write([]byte(strconv.Itoa(config.Threads)))
+	h.Write([]byte(strconv.Itoa(config.GPULayers)))
+	return hex.EncodeToString(h.Sum(nil))[:8]
 }
 
 func (r *llamaRuntime) attachHost(host runtimehost.RuntimeHost) {

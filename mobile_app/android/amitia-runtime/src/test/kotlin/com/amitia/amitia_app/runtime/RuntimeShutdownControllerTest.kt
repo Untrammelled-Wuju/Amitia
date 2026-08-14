@@ -34,7 +34,7 @@ internal class FakeRuntimeServiceHost : RuntimeServiceHost {
     var stopCallCount = 0
     var activeSession: ProotSession? = null
 
-    override fun ensureStarted(generation: Long): RuntimeServiceResult {
+    override fun ensureStarted(generation: Long, profile: String): RuntimeServiceResult {
         ensureStartCount++
         return RuntimeServiceResult.Success
     }

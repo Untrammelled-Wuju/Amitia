@@ -63,6 +63,8 @@ type ImportRequest struct {
 	DefaultCharacterID string
 	ActivateImported   bool
 	SecretProvider     SecretProvider
+	IdentityMap        *ImportIdentityMap
+	Purpose            BackupPurpose
 }
 
 type SecretProvider interface {
@@ -90,6 +92,7 @@ type BackupReader interface {
 type BackupContributor interface {
 	ID() string
 	Name() string
+	Dependencies() []string
 	Plan(ctx context.Context, req BackupRequest) ([]BackupComponentPlan, error)
 	Export(ctx context.Context, req BackupRequest, out BackupWriter) error
 	PreviewImport(ctx context.Context, req ImportPreviewRequest, in BackupReader) ([]ImportComponentPreview, error)

@@ -6,6 +6,8 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -70,9 +72,20 @@ func newMNNRuntime(config MNNProviderConfig) *mnnRuntime {
 		config:    config,
 		state:     "unloaded",
 		port:      0,
-		processID: runtimehost.ProcessID("mnn-" + config.LocalModelID),
+		processID: runtimehost.ProcessID("mnn-" + config.LocalModelID + "-" + configFingerprint(config)),
 		modelPath: config.ModelResourceURI,
 	}
+}
+
+func configFingerprint(config MNNProviderConfig) string {
+	h := sha256.New()
+	h.Write([]byte(config.ModelResourceURI))
+	h.Write([]byte(config.Backend))
+	h.Write([]byte(strconv.Itoa(config.ContextSize)))
+	h.Write([]byte(strconv.Itoa(config.ThreadNum)))
+	h.Write([]byte(config.Precision))
+	h.Write([]byte(config.Memory))
+	return hex.EncodeToString(h.Sum(nil))[:8]
 }
 
 func (r *mnnRuntime) attachHost(host runtimehost.RuntimeHost) {

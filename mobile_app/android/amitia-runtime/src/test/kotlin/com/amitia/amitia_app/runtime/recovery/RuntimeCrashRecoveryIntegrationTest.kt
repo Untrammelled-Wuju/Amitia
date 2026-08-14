@@ -36,7 +36,7 @@ internal class FakeRecoveryTestHost : RuntimeServiceHost {
     val startReasons = CopyOnWriteArrayList<RuntimeStartReason>()
     var sessionOverride: ProotSession? = null
 
-    override fun ensureStarted(generation: Long): RuntimeServiceResult {
+    override fun ensureStarted(generation: Long, profile: String): RuntimeServiceResult {
         ensureStartedCalls.incrementAndGet()
         return RuntimeServiceResult.Success
     }

@@ -96,17 +96,24 @@ func (c *Coordinator) ExecuteImport(ctx context.Context, archivePath string, req
 	c.importOps[req.OperationID] = op
 	c.mu.Unlock()
 
-	idMap := NewImportIdentityMap()
+	if req.IdentityMap == nil {
+		req.IdentityMap = NewImportIdentityMap()
+	}
 	br := &archiveBackupReader{r: reader}
 
+	sortedContributors := c.sortedContributorsForImport()
+
 	op.Status = "importing"
-	for _, ct := range c.Contributors {
-		opCont := req
-		if err := ct.Import(ctx, opCont, br); err != nil {
+	for _, ct := range sortedContributors {
+		if err := ct.Import(ctx, req, br); err != nil {
 			op.Status = "failed"
 			op.Error = err.Error()
-			return idMap, ErrImportTransactionFailed
+			return req.IdentityMap, ErrImportTransactionFailed
 		}
+		if count, ok := op.Stats[ct.ID()]; ok {
+			_ = count
+		}
+		op.Stats[ct.ID()]++
 	}
 
 	if manifest.RequiresReindex {
@@ -118,7 +125,38 @@ func (c *Coordinator) ExecuteImport(ctx context.Context, archivePath string, req
 	op.UpdatedAt = now
 	_ = now
 
-	return idMap, nil
+	return req.IdentityMap, nil
+}
+
+func (c *Coordinator) sortedContributorsForImport() []BackupContributor {
+	contributorMap := make(map[string]BackupContributor)
+	for _, ct := range c.Contributors {
+		contributorMap[ct.ID()] = ct
+	}
+
+	visited := make(map[string]bool)
+	result := make([]BackupContributor, 0, len(c.Contributors))
+
+	var visit func(id string)
+	visit = func(id string) {
+		if visited[id] {
+			return
+		}
+		visited[id] = true
+		ct, ok := contributorMap[id]
+		if !ok {
+			return
+		}
+		for _, dep := range ct.Dependencies() {
+			visit(dep)
+		}
+		result = append(result, ct)
+	}
+
+	for _, ct := range c.Contributors {
+		visit(ct.ID())
+	}
+	return result
 }
 
 func (c *Coordinator) FailImport(opID string, err error) {

@@ -32,6 +32,12 @@ func NewLlamaCppBackend(params localmodel.CreateLocalModelParams) (localmodel.Lo
 	if err != nil {
 		return nil, localmodel.ErrConfigInvalid
 	}
+	if cfg.LocalModelID == "" {
+		cfg.LocalModelID = params.ModelName
+	}
+	if cfg.LocalModelID == "" {
+		return nil, localmodel.ErrConfigInvalid
+	}
 	return newLlamaCppBackend(cfg), nil
 }
 

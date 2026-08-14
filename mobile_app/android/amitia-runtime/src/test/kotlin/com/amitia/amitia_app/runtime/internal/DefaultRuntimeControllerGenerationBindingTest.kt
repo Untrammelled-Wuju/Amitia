@@ -24,7 +24,7 @@ internal class GenerationTrackingServiceHost : RuntimeServiceHost {
     var ensureStartCount = 0
     var activeGeneration = 0L
 
-    override fun ensureStarted(generation: Long): RuntimeServiceResult {
+    override fun ensureStarted(generation: Long, profile: String): RuntimeServiceResult {
         ensureStartCount++
         activeGeneration = generation
         return RuntimeServiceResult.Success
@@ -54,7 +54,7 @@ internal class FailingStopServiceHost : RuntimeServiceHost {
     val stopGenerations = mutableListOf<Long>()
     var ensureStartCount = 0
 
-    override fun ensureStarted(generation: Long): RuntimeServiceResult {
+    override fun ensureStarted(generation: Long, profile: String): RuntimeServiceResult {
         ensureStartCount++
         return RuntimeServiceResult.Success
     }

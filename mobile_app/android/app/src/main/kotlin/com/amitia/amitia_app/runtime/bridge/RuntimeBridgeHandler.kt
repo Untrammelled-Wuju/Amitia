@@ -36,6 +36,7 @@ internal class RuntimeBridgeHandler(
             when (call.method) {
                 RuntimeBridgeContract.METHOD_SNAPSHOT -> handleSnapshot(result)
                 RuntimeBridgeContract.METHOD_START -> handleStart(result)
+                RuntimeBridgeContract.METHOD_START_WITH_PROFILE -> handleStartWithProfile(call, result)
                 RuntimeBridgeContract.METHOD_STOP -> handleStop(result)
                 RuntimeBridgeContract.METHOD_INSTALL -> handleInstall(result)
                 RuntimeBridgeContract.METHOD_VERIFY -> handleVerify(result)
@@ -80,6 +81,19 @@ internal class RuntimeBridgeHandler(
 
     private fun handleStart(result: MethodChannel.Result) {
         val request = RuntimeStartRequest(reason = RuntimeStartReason.USER_REQUEST)
+        controller.start(request, object : RuntimeOperationCallback {
+            override fun onCompleted(operationResult: RuntimeOperationResult) {
+                handleOperationResult(operationResult, result)
+            }
+        })
+    }
+
+    private fun handleStartWithProfile(call: MethodCall, result: MethodChannel.Result) {
+        val profile = call.argument<String>("profile") ?: "local"
+        val request = RuntimeStartRequest(
+            reason = RuntimeStartReason.USER_REQUEST,
+            profile = profile
+        )
         controller.start(request, object : RuntimeOperationCallback {
             override fun onCompleted(operationResult: RuntimeOperationResult) {
                 handleOperationResult(operationResult, result)

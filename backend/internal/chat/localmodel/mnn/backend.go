@@ -28,6 +28,12 @@ func NewMNNBackend(params localmodel.CreateLocalModelParams) (localmodel.LocalMo
 	if err != nil {
 		return nil, localmodel.ErrConfigInvalid
 	}
+	if cfg.LocalModelID == "" {
+		cfg.LocalModelID = params.ModelName
+	}
+	if cfg.LocalModelID == "" {
+		return nil, localmodel.ErrConfigInvalid
+	}
 	return newMNnBackend(cfg), nil
 }
 
