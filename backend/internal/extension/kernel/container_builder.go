@@ -1162,6 +1162,25 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	var archiveUpdater upgrade.KernelArchiveUpdater
 	if b.gameHostArchiveUpdater != nil {
 		archiveUpdater = upgrade.NewKernelArchiveUpdaterAdapter(b.gameHostArchiveUpdater.UpdateArchive)
+	} else {
+		archiveUpdater = upgrade.NewKernelArchiveUpdaterAdapter(func(ctx context.Context, extensionID string, archivePath string) (*upgrade.KernelUpdateResult, error) {
+			if lifecycleMgr == nil {
+				return nil, fmt.Errorf("kernel lifecycle manager not available")
+			}
+			result, err := lifecycleMgr.Execute(ctx, lifecycle_manager.LifecycleCommand{
+				Kind:        lifecycle_manager.CmdUpdate,
+				ExtensionID: domain.ExtensionID(extensionID),
+				PackageID:   archivePath,
+			})
+			if err != nil {
+				return &upgrade.KernelUpdateResult{Success: false, Reason: err.Error()}, err
+			}
+			return &upgrade.KernelUpdateResult{
+				Success:    result.Status == "completed",
+				NewVersion: "",
+				Reason:     result.Error,
+			}, nil
+		})
 	}
 
 	gameHost, err := gamehost.ComposeGameHost(gamehost.GameHostComposeOptions{
