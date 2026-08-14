@@ -115,6 +115,15 @@ func (f *fakeRuntimeManager) ListRuntimes() []*runtime.RuntimeInstanceRef {
 	return result
 }
 
+func (f *fakeRuntimeManager) GetCurrentGeneration(runtimeID domain.RuntimeInstanceID) (int64, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.runtimes[runtimeID]; !ok {
+		return 0, errors.New("runtime not found")
+	}
+	return 1, nil
+}
+
 func (f *fakeRuntimeManager) setState(runtimeID domain.RuntimeInstanceID, state domain.RuntimeState) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

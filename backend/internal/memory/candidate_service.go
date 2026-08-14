@@ -39,11 +39,15 @@ func (s *service) SubmitCandidate(req *SubmitCandidateRequest) (*MemoryCandidate
 	if req.Importance > 10 {
 		req.Importance = 10
 	}
-	if req.MemoryType == "" {
-		req.MemoryType = "fact"
+	memoryType, ok := NormalizeMemoryType(req.MemoryType)
+	if !ok {
+		return nil, fmt.Errorf("invalid memory type: %s", req.MemoryType)
 	}
 	now := time.Now().Format("2006-01-02 15:04:05")
-	model := &MemoryCandidateModel{ID: uuid.New().String(), Key: strings.TrimSpace(req.Key), Value: strings.TrimSpace(req.Value), MemoryType: req.MemoryType, Importance: req.Importance, SourceText: strings.TrimSpace(req.SourceText), ConversationID: req.ConversationID, CharacterID: req.CharacterID, CreatedAt: now}
+	model := &MemoryCandidateModel{ID: uuid.New().String(), Key: strings.TrimSpace(req.Key), Value: strings.TrimSpace(req.Value), MemoryType: string(memoryType), Importance: req.Importance, SourceText: strings.TrimSpace(req.SourceText), ConversationID: req.ConversationID, CharacterID: req.CharacterID, CreatedAt: now, CandidateKind: req.CandidateKind, DerivationKey: req.DerivationKey, Reason: req.Reason}
+	if model.CandidateKind == "" {
+		model.CandidateKind = string(CandidateKindExtracted)
+	}
 	if err := s.repo.CreateCandidate(model); err != nil {
 		return nil, err
 	}
@@ -142,23 +146,61 @@ func (s *service) AcceptCandidate(id string) (*Memory, error) {
 	if err != nil || model == nil {
 		return nil, fmt.Errorf("候选记忆不存在")
 	}
-	m := &Memory{
-		CharacterID:  model.CharacterID,
-		MemoryType:   model.MemoryType,
-		Source:       "auto",
-		Key:          model.Key,
-		Value:        model.Value,
-		Importance:   model.Importance,
-		Confidence:   50,
-		SourceConvID: model.ConversationID,
+	candidateKey := "candidate_accept:" + id
+	if model.DerivationKey != "" {
+		candidateKey = model.DerivationKey
 	}
-	if err := s.repo.Create(m); err != nil {
+	if existing, _ := s.repo.FindByDerivationKey(candidateKey); existing != nil && existing.ID != "" {
+		s.repo.DeleteCandidate(id)
+		return existing, nil
+	}
+
+	operationID := uuid.New().String()
+	memoryType, ok := NormalizeMemoryType(model.MemoryType)
+	if !ok {
+		memoryType = MemoryTypeFact
+	}
+
+	var derivations []MemoryDerivationInput
+	for i, srcID := range parseSourceIDs(model.SourceMemoryIDsJSON) {
+		srcVersion := 1
+		if i < len(parseSourceInts(model.SourceVersionsJSON)) {
+			srcVersion = parseSourceInts(model.SourceVersionsJSON)[i]
+		}
+		inputSnapshotHash := ""
+		if srcMem, err := s.repo.FindByID(srcID); err == nil {
+			inputSnapshotHash = computeMemorySnapshotHashCanonical(srcMem)
+		}
+		derivations = append(derivations, MemoryDerivationInput{
+			InputMemoryID:     srcID,
+			InputVersion:      srcVersion,
+			InputSnapshotHash: inputSnapshotHash,
+			DerivationKind:    string(DerivationKindMerge),
+			Ordinal:           i,
+		})
+	}
+
+	m, err := s.createCanonicalMemory(canonicalCreateRequest{
+		CharacterID:    model.CharacterID,
+		MemoryType:     memoryType,
+		Source:         "auto",
+		Key:            model.Key,
+		Value:          model.Value,
+		Importance:    model.Importance,
+		Confidence:    50,
+		SourceConvID:  model.ConversationID,
+		DerivationKey: candidateKey,
+		OperationID:   operationID,
+		EventType:     "memory_created",
+		EventReason:   "candidate_accept",
+		Derivations:   derivations,
+	})
+	if err != nil {
 		return nil, err
 	}
 	s.repo.DeleteCandidate(id)
 	go s.SyncEmbedding(m.ID, m.Key, m.Value, m.CharacterID, m.MemoryType)
 	s.syncGraph(m)
-	s.logEvent(m.ID, "memory_created", m.Key, m.Value, m.MemoryType, m.Importance, m.Source, m.CharacterID)
 	return m, nil
 }
 
@@ -213,4 +255,28 @@ func (s *service) DeleteCandidate(id string) error {
 
 func (s *service) ExtractCandidates() ([]MemoryCandidate, error) {
 	return s.ListCandidates(), nil
+}
+
+func parseSourceInts(raw string) []int {
+	if strings.TrimSpace(raw) == "" {
+		return nil
+	}
+	var ints []int
+	raw = strings.TrimSpace(raw)
+	if strings.HasPrefix(raw, "[") {
+		_ = json.Unmarshal([]byte(raw), &ints)
+		return ints
+	}
+	parts := strings.Split(raw, ",")
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		var val int
+		if _, err := fmt.Sscanf(p, "%d", &val); err == nil {
+			ints = append(ints, val)
+		}
+	}
+	return ints
 }
