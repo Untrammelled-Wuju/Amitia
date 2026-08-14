@@ -16,6 +16,7 @@ const (
 	ComponentExtensionKernel ComponentID = "component.extension-kernel"
 	ComponentTaskRuntime     ComponentID = "component.task-runtime"
 	ComponentDesktopPet      ComponentID = "component.desktop-pet"
+	ComponentBrowser         ComponentID = "component.browser"
 )
 
 type ComponentPhase string

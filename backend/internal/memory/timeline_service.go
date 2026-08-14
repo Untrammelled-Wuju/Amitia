@@ -184,15 +184,3 @@ func (s *service) InferUserDimensions(characterID string) (map[string]interface{
 
 	return dimensions, nil
 }
-
-func (s *service) logEvent(memoryID, eventType, key, value, memoryType string, importance int, source, characterID string) {
-	if s.db == nil {
-		return
-	}
-	id := uuid.New().String()
-	now := time.Now().Format("2006-01-02 15:04:05")
-	s.db.Exec(
-		"INSERT INTO memory_events (id, memory_id, event_type, key, value, memory_type, importance, source, character_id, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		id, memoryID, eventType, key, value, memoryType, importance, source, characterID, now,
-	)
-}
