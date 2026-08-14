@@ -21,6 +21,7 @@ func NewCharacterContributor(db *gorm.DB) *CharacterContributor {
 
 func (c *CharacterContributor) ID() string   { return "character" }
 func (c *CharacterContributor) Name() string { return "Character Records" }
+func (c *CharacterContributor) Dependencies() []string { return nil }
 
 type characterExportRecord struct {
 	ID              string `json:"id"`
@@ -155,6 +156,7 @@ func (c *CharacterContributor) Import(ctx context.Context, req ImportRequest, in
 		return err
 	}
 
+	idMap := req.IdentityMap
 	lines := splitLines(data)
 	for _, line := range lines {
 		if len(line) == 0 {
@@ -171,6 +173,9 @@ func (c *CharacterContributor) Import(ctx context.Context, req ImportRequest, in
 		if existing.ID != "" {
 			switch req.CharacterPolicy {
 			case CollisionSkip:
+				if idMap != nil {
+					idMap.AddCharacter(rec.ID, existing.ID)
+				}
 				continue
 			case CollisionReplace:
 				newID = rec.ID
@@ -200,6 +205,10 @@ func (c *CharacterContributor) Import(ctx context.Context, req ImportRequest, in
 		} else {
 			updates["id"] = newID
 			c.DB.WithContext(ctx).Table("characters").Create(updates)
+		}
+
+		if idMap != nil && newID != rec.ID {
+			idMap.AddCharacter(rec.ID, newID)
 		}
 	}
 

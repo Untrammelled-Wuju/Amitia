@@ -20,7 +20,7 @@ internal class TeardownTrackingServiceHost : RuntimeServiceHost {
     val teardownRequestCount = AtomicInteger(0)
     val ensureStartedGenerations = CopyOnWriteArrayList<Long>()
 
-    override fun ensureStarted(generation: Long): RuntimeServiceResult {
+    override fun ensureStarted(generation: Long, profile: String): RuntimeServiceResult {
         ensureStartedGenerations.add(generation)
         return RuntimeServiceResult.Success
     }

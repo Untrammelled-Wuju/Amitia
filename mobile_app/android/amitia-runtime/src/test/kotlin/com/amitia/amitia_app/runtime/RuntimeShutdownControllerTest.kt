@@ -390,7 +390,7 @@ class RuntimeShutdownControllerTest {
         val stateStore = createStateStoreWith(RuntimeState.READY)
         val host = object : RuntimeServiceHost {
             private val listeners = mutableListOf<RuntimeServiceHostListener>()
-            override fun ensureStarted(generation: Long): RuntimeServiceResult = RuntimeServiceResult.Success
+            override fun ensureStarted(generation: Long, profile: String): RuntimeServiceResult = RuntimeServiceResult.Success
             override fun requestStop(targetGeneration: Long): RuntimeServiceResult = RuntimeServiceResult.Failure(
                 com.amitia.amitia_app.runtime.service.RuntimeServiceError(
                     com.amitia.amitia_app.runtime.service.RuntimeServiceErrorCode.SERVICE_STOP_FAILED,

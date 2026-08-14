@@ -499,7 +499,7 @@ func initializeCommittedCutoverState(db *gorm.DB, services *AppServices) error {
 	if db == nil {
 		return fmt.Errorf("database is nil")
 	}
-	existing := &migrationcore.CutoverState{}
+	existing := &migration.CutoverState{}
 	if err := db.Order("started_at DESC").First(existing).Error; err == nil && existing.OperationID != "" {
 		return nil
 	}

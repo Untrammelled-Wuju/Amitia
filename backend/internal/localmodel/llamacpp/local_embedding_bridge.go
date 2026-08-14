@@ -13,6 +13,7 @@ import (
 type localEmbeddingProvider interface {
 	EmbedSingle(text string, purpose string) ([]float32, error)
 	EmbedBatch(texts []string, purpose string) ([][]float32, error)
+	Close() error
 }
 
 var (
@@ -42,7 +43,9 @@ func GetLocalEmbeddingFactory(providerType string) (func(configJSON string) (loc
 }
 
 type llamaCppLocalEmbedding struct {
-	config LlamaCppEmbeddingConfig
+	config  LlamaCppEmbeddingConfig
+	mu      sync.Mutex
+	backend *llamaCppEmbeddingBackend
 }
 
 func newLlamaCppLocalEmbedding(configJSON string) (localEmbeddingProvider, error) {
@@ -57,11 +60,20 @@ func newLlamaCppLocalEmbedding(configJSON string) (localEmbeddingProvider, error
 	return &llamaCppLocalEmbedding{config: cfg}, nil
 }
 
-func (p *llamaCppLocalEmbedding) EmbedSingle(text string, purpose string) ([]float32, error) {
-	ctx := context.Background()
+func (p *llamaCppLocalEmbedding) ensureBackend() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if p.backend != nil {
+		state, _ := p.backend.Health(context.Background())
+		if state == "ready" {
+			return nil
+		}
+	}
+
 	backend, err := NewLlamaCppEmbeddingBackend(p.config)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	globalEmbeddingHostMu.RLock()
@@ -71,11 +83,31 @@ func (p *llamaCppLocalEmbedding) EmbedSingle(text string, purpose string) ([]flo
 		backend.AttachHost(host)
 	}
 
-	if err := backend.Load(ctx); err != nil {
+	if err := backend.Load(context.Background()); err != nil {
+		return err
+	}
+
+	p.backend = backend
+	return nil
+}
+
+func (p *llamaCppLocalEmbedding) Close() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.backend != nil {
+		err := p.backend.Unload(context.Background())
+		p.backend = nil
+		return err
+	}
+	return nil
+}
+
+func (p *llamaCppLocalEmbedding) EmbedSingle(text string, purpose string) ([]float32, error) {
+	if err := p.ensureBackend(); err != nil {
 		return nil, err
 	}
-	defer backend.Unload(ctx)
-	result, err := backend.Embed(ctx, []string{text}, purpose)
+
+	result, err := p.backend.Embed(context.Background(), []string{text}, purpose)
 	if err != nil {
 		return nil, err
 	}
@@ -86,24 +118,11 @@ func (p *llamaCppLocalEmbedding) EmbedSingle(text string, purpose string) ([]flo
 }
 
 func (p *llamaCppLocalEmbedding) EmbedBatch(texts []string, purpose string) ([][]float32, error) {
-	ctx := context.Background()
-	backend, err := NewLlamaCppEmbeddingBackend(p.config)
-	if err != nil {
+	if err := p.ensureBackend(); err != nil {
 		return nil, err
 	}
 
-	globalEmbeddingHostMu.RLock()
-	host := globalEmbeddingHost
-	globalEmbeddingHostMu.RUnlock()
-	if host != nil {
-		backend.AttachHost(host)
-	}
-
-	if err := backend.Load(ctx); err != nil {
-		return nil, err
-	}
-	defer backend.Unload(ctx)
-	result, err := backend.Embed(ctx, texts, purpose)
+	result, err := p.backend.Embed(context.Background(), texts, purpose)
 	if err != nil {
 		return nil, err
 	}
