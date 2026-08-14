@@ -12,7 +12,7 @@ type browserProcessExec struct {
 	engine BrowserEngine
 }
 
-func newBrowserProcessExec(engine BrowserEngine) runtimehost.ProcessExec {
+func NewBrowserProcessExec(engine BrowserEngine) runtimehost.ProcessExec {
 	return &browserProcessExec{engine: engine}
 }
 
