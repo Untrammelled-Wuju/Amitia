@@ -188,6 +188,10 @@ func NewRuntimeController(engine BrowserEngine) BrowserRuntime {
 	return &runtimeController{engine: engine}
 }
 
+func (c *runtimeController) Engine() BrowserEngine {
+	return c.engine
+}
+
 func (c *runtimeController) Start(ctx context.Context) (*BrowserRuntimeInfo, *BrowserError) {
 	info, err := c.engine.Start(ctx)
 	if err != nil {
@@ -253,6 +257,8 @@ func (r *disabledRuntime) Status(_ context.Context) BrowserRuntimeInfo {
 func (r *disabledRuntime) Health(_ context.Context) BrowserRuntimeHealth {
 	return BrowserHealthUnavailable
 }
+
+func (r *disabledRuntime) Engine() BrowserEngine { return nil }
 
 type unsupportedSessionManager struct{}
 

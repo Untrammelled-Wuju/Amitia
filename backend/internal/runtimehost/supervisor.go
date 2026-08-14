@@ -34,6 +34,7 @@ type managedProcess struct {
 	mu              sync.Mutex
 	state           ProcessState
 	pid             int
+	procHandle      process.ProcessTreeHandle
 	executable      string
 	startedAt       time.Time
 	readyAt         time.Time
@@ -45,6 +46,10 @@ type managedProcess struct {
 	stopRequested   bool
 	cancelMonitor   context.CancelFunc
 	cancelHealth    context.CancelFunc
+}
+
+type ProcessStopper interface {
+	Stop(handle process.ProcessTreeHandle, pid int, gracePeriod time.Duration) error
 }
 
 type defaultProcessSupervisor struct {
@@ -176,21 +181,36 @@ func (s *defaultProcessSupervisor) Start(ctx context.Context, id ProcessID) erro
 		envSlice = append(envSlice, k+"="+v)
 	}
 
-	managed, startErr := s.host.processManager.Start(ctx, process.ProcessConfig{
-		Executable: spec.Executable,
-		Args:       spec.Args,
-		WorkingDir: spec.WorkingDir,
-		Env:        envSlice,
-	})
-	if startErr != nil {
-		s.setState(id, StateFailed)
-		s.setLastError(id, startErr.Error())
-		return startErr
+	var managed *process.ManagedProcess
+	if spec.ExecutableProcess != nil {
+		pid, handle, execErr := spec.ExecutableProcess.Start()
+		if execErr != nil {
+			s.setState(id, StateFailed)
+			s.setLastError(id, execErr.Error())
+			return execErr
+		}
+		managed = process.NewExternalManagedProcess(pid, handle)
+		mp.mu.Lock()
+		mp.pid = pid
+		mp.procHandle = handle
+		mp.mu.Unlock()
+	} else {
+		var startErr error
+		managed, startErr = s.host.processManager.Start(ctx, process.ProcessConfig{
+			Executable: spec.Executable,
+			Args:       spec.Args,
+			WorkingDir: spec.WorkingDir,
+			Env:        envSlice,
+		})
+		if startErr != nil {
+			s.setState(id, StateFailed)
+			s.setLastError(id, startErr.Error())
+			return startErr
+		}
+		mp.mu.Lock()
+		mp.pid = managed.PID
+		mp.mu.Unlock()
 	}
-
-	mp.mu.Lock()
-	mp.pid = managed.PID
-	mp.mu.Unlock()
 
 	go func() {
 		code, _ := managed.Wait()
@@ -312,8 +332,10 @@ func (s *defaultProcessSupervisor) Stop(ctx context.Context, id ProcessID) error
 	if mp.cancelHealth != nil {
 		mp.cancelHealth()
 	}
+	spec := mp.spec
 	state := mp.state
 	pid := mp.pid
+	handle := mp.procHandle
 	mp.state = StateStopping
 	mp.mu.Unlock()
 	s.mu.Unlock()
@@ -327,11 +349,17 @@ func (s *defaultProcessSupervisor) Stop(ctx context.Context, id ProcessID) error
 		return nil
 	}
 
-	grace := mp.spec.StopGracePeriod
+	grace := spec.StopGracePeriod
 	if grace <= 0 {
 		grace = DefaultStopGracePeriod
 	}
-	s.host.processManager.Stop(pid, 0, grace)
+	if stopper, ok := spec.ExecutableProcess.(ProcessStopper); ok {
+		if err := stopper.Stop(handle, pid, grace); err != nil {
+			s.setLastError(id, err.Error())
+		}
+	} else {
+		s.host.processManager.Stop(pid, handle, grace)
+	}
 
 	s.setState(id, StateStopped)
 	s.updateStoppedAt(id, time.Now())

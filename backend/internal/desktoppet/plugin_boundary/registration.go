@@ -82,6 +82,14 @@ func isValidActionKey(key string) bool {
 	return true
 }
 
+// RuntimeCapabilityDescriptor is a DesktopPet domain projection of an AmitiaX
+// runtime-capability contribution. It is NOT the authoritative:
+//   - AI Capability Definition (owned by G11 providedCapabilities)
+//   - Provider Definition (owned by capability.ProviderRegistry)
+//   - Provider Instance (owned by capability.ProviderLifecycleService)
+//
+// This type is retained for DesktopPet plugin boundary compatibility. The actual
+// AI execution must go through the shared kernel Capability Provider registry.
 type RuntimeCapabilityDescriptor struct {
 	ContributionRefJSON ContributionRefJSON `json:"contributionRef"`
 	CapabilityID        string              `json:"capabilityId"`

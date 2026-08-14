@@ -43,6 +43,8 @@ func (r *fakeSessionManagerRuntime) Health(_ context.Context) BrowserRuntimeHeal
 	return r.health
 }
 
+func (r *fakeSessionManagerRuntime) Engine() BrowserEngine { return nil }
+
 func (r *fakeSessionManagerRuntime) setFailed() {
 	r.mu.Lock()
 	defer r.mu.Unlock()

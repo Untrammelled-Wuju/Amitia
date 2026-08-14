@@ -12,12 +12,13 @@ const (
 )
 
 type ScreenshotPolicy struct {
-	MaxPixels      int64
-	MaxBytes       int64
-	MaxDimension   int
-	AllowFullPage  bool
-	DefaultFormat  string
-	AllowedFormats []string
+	MaxPixels       int64
+	MaxBytes        int64
+	MaxDimension    int
+	AllowFullPage   bool
+	DefaultFormat   string
+	AllowedFormats  []string
+	StagingRootPath string
 }
 
 func DefaultScreenshotPolicy() ScreenshotPolicy {

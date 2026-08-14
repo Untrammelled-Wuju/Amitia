@@ -29,9 +29,10 @@ type cdpClient struct {
 }
 
 type cdpCommand struct {
-	ID     uint64          `json:"id"`
-	Method string          `json:"method"`
-	Params json.RawMessage `json:"params,omitempty"`
+	ID        uint64          `json:"id"`
+	Method    string          `json:"method"`
+	Params    json.RawMessage `json:"params,omitempty"`
+	SessionID string          `json:"sessionId,omitempty"`
 }
 
 type cdpResponse struct {
@@ -50,8 +51,9 @@ func (e *cdpError) Error() string {
 }
 
 type cdpEvent struct {
-	Method string          `json:"method"`
-	Params json.RawMessage `json:"params,omitempty"`
+	Method    string          `json:"method"`
+	Params    json.RawMessage `json:"params,omitempty"`
+	SessionID string          `json:"sessionId,omitempty"`
 }
 
 func newCDPClient(transport cdpTransport) *cdpClient {
@@ -70,7 +72,7 @@ func (c *cdpClient) OnDisconnect(fn func(error)) {
 	c.onDisconnect = fn
 }
 
-func (c *cdpClient) Call(ctx context.Context, domain, method string, params interface{}, result interface{}) error {
+func (c *cdpClient) Call(ctx context.Context, method string, sessionID string, params interface{}, result interface{}) error {
 	if atomic.LoadInt32(&c.closed) == 1 {
 		return fmt.Errorf("cdp client closed")
 	}
@@ -98,9 +100,10 @@ func (c *cdpClient) Call(ctx context.Context, domain, method string, params inte
 	}()
 
 	cmd := cdpCommand{
-		ID:     id,
-		Method: domain + "." + method,
-		Params: paramsJSON,
+		ID:        id,
+		Method:    method,
+		Params:    paramsJSON,
+		SessionID: sessionID,
 	}
 	data, err := json.Marshal(cmd)
 	if err != nil {
@@ -139,6 +142,14 @@ func (c *cdpClient) Call(ctx context.Context, domain, method string, params inte
 
 func (c *cdpClient) SubscribeEvent(method string, handler func(json.RawMessage)) func() {
 	return c.events.subscribe(method, handler)
+}
+
+func (c *cdpClient) SubscribeEventWithSession(method string, handler func(sessionID string, params json.RawMessage)) func() {
+	return c.events.subscribeAll(func(m string, p json.RawMessage) {
+		if m == method {
+			handler("", p)
+		}
+	})
 }
 
 func (c *cdpClient) Close() error {

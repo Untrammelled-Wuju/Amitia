@@ -92,6 +92,7 @@ type ProcessSpec struct {
 	OnStderr          func(line string) `json:"-"`
 	OnStreamError     func(error)       `json:"-"`
 	SensitiveArgIndexes []int           `json:"-"`
+	ExecutableProcess ProcessExec       `json:"-"`
 }
 
 func cloneSliceInt(in []int) []int {
@@ -152,6 +153,7 @@ func (s ProcessSpec) Clone() ProcessSpec {
 		OnStderr:          s.OnStderr,
 		OnStreamError:     s.OnStreamError,
 		SensitiveArgIndexes: cloneSliceInt(s.SensitiveArgIndexes),
+		ExecutableProcess: s.ExecutableProcess,
 	}
 }
 
@@ -159,11 +161,13 @@ func (s ProcessSpec) validate() error {
 	if err := ValidateProcessID(s.ID); err != nil {
 		return err
 	}
-	if s.Executable == "" || !filepath.IsAbs(s.Executable) {
-		return fmt.Errorf("%w: executable must be an absolute path", ErrInvalidProcessSpec)
-	}
-	if s.WorkingDir == "" || !filepath.IsAbs(s.WorkingDir) {
-		return fmt.Errorf("%w: working_dir must be an absolute path", ErrInvalidProcessSpec)
+	if s.ExecutableProcess == nil {
+		if s.Executable == "" || !filepath.IsAbs(s.Executable) {
+			return fmt.Errorf("%w: executable must be an absolute path", ErrInvalidProcessSpec)
+		}
+		if s.WorkingDir == "" || !filepath.IsAbs(s.WorkingDir) {
+			return fmt.Errorf("%w: working_dir must be an absolute path", ErrInvalidProcessSpec)
+		}
 	}
 	for _, arg := range s.Args {
 		if strings.ContainsAny(arg, "\x00") {

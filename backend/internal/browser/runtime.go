@@ -7,6 +7,7 @@ type BrowserRuntime interface {
 	Stop(ctx context.Context) *BrowserError
 	Status(ctx context.Context) BrowserRuntimeInfo
 	Health(ctx context.Context) BrowserRuntimeHealth
+	Engine() BrowserEngine
 }
 
 type BrowserEngine interface {

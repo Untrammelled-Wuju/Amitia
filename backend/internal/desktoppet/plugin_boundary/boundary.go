@@ -1,3 +1,18 @@
+// Package plugin_boundary defines the DesktopPet plugin contribution boundary.
+//
+// IMPORTANT: This boundary is a DesktopPet DOMAIN PROJECTION. Its source of truth
+// is the Extension Kernel contribution registry, not its own independent store.
+//
+// The boundary receives lifecycle events from the Extension Kernel and maintains
+// a local projection view for DesktopPet-specific consumption.
+//
+// It MUST NOT:
+//   - Register a second Capability Provider authority
+//   - Define AI Capability definitions
+//   - Generate ProviderInstance records
+//
+// Registration here only reflects the Extension Kernel contribution state for
+// DesktopPet runtime consumption. It does not create a parallel installation authority.
 package plugin_boundary
 
 import (
@@ -8,6 +23,8 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 )
 
+// DesktopPetPluginBoundary provides the DesktopPet view of Extension Kernel contributions.
+// It is a domain projection and MUST not become a parallel provider registry.
 type DesktopPetPluginBoundary struct {
 	reconciler ContributionReconciler
 }

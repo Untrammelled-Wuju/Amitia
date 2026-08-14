@@ -305,7 +305,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	imagegenRepo := imagegen.NewRepository(ctx.DB)
 	imagegenSvc := imagegen.NewService(imagegenRepo)
-	providerRegistry := desktoppet.NewProviderRegistry()
+	imageProviderRegistry := desktoppet.NewProviderRegistry()
 	var resourceResolver *resourceuri.PhysicalResolver
 	if config.AppCfg != nil && config.AppCfg.Storage.DataDir != "" {
 		paths := util.DetectRuntimePaths(config.AppCfg.Storage.DataDir)
@@ -359,7 +359,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithDeepSearchTaskEntry("tasks/deep-search/index.js").
 		WithVisionService(visionSvc).
 		WithImageGenService(imagegenSvc).
-		WithImageProviderRegistry(providerRegistry).
+		WithImageProviderRegistry(imageProviderRegistry).
 		WithResourceResolver(resourceResolver).
 		WithMediaService(mediaService).
 		WithWorkspaceService(workspaceService).
@@ -628,7 +628,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	canonicalMCPCaller := NewCanonicalMCPCaller(canonicalStdioRegistry, canonicalRemoteRegistry)
 	kernelContainer.WireMCPAdapter(makeKernelMCPCaller(canonicalMCPCaller), makeKernelMCPHealth(canonicalMCPCaller), nil)
 	desktopPetRepo := desktoppet.NewRepository(ctx.DB, ctx)
-	desktopPetWorker := worker.NewWorker(ctx.DB, desktopPetRepo, providerRegistry)
+	desktopPetWorker := worker.NewWorker(ctx.DB, desktopPetRepo, imageProviderRegistry)
 	processingRepo := processing.NewRepository(ctx.DB, ctx)
 	processingDataDir := mcpDataDirectory(ctx)
 

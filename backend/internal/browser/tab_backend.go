@@ -10,10 +10,14 @@ type BrowserTabBackend interface {
 }
 
 type chromiumTabBackend struct {
-	engine BrowserTargetController
+	engine       BrowserTargetController
+	nativeEngine *chromiumEngine
 }
 
 func NewChromiumTabBackend(engine BrowserTargetController) BrowserTabBackend {
+	if native, ok := engine.(*chromiumTargetController); ok {
+		return &chromiumTabBackend{engine: engine, nativeEngine: native.engine}
+	}
 	return &chromiumTabBackend{engine: engine}
 }
 

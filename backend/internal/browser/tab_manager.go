@@ -406,6 +406,16 @@ func (m *productionTabManager) ResolveTab(ctx context.Context, sessionID Browser
 	}, nil
 }
 
+func (m *productionTabManager) engine() *chromiumEngine {
+	if m.backend == nil {
+		return nil
+	}
+	if cb, ok := m.backend.(*chromiumTabBackend); ok {
+		return cb.nativeEngine
+	}
+	return nil
+}
+
 func (m *productionTabManager) targetID(tabID BrowserTabID) (TargetID, *BrowserError) {
 	m.mu.RLock()
 	defer m.mu.RUnlock()

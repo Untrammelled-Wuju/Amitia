@@ -1,3 +1,16 @@
+// Package v2 provides the DesktopPet runtime protocol v2 implementation.
+//
+// IMPORTANT: This package contains the DesktopPet domain session projection.
+// The authoritative Runtime Session is owned by deviceruntime.Service (G12).
+//
+// The desktop_pet_runtime_sessions table is retained as a COMPATIBILITY PROJECTION
+// for DesktopPet v2 runtime protocol. Production code MUST:
+//   - Use SyncFromDeviceRuntimeSession as the primary session creation path
+//   - NOT call CreateSession/AcquireSession for new production flows
+//   - Treat RuntimeSession rows as a read-only view of G12 session state
+//
+// Session IDs in this projection MUST match deviceruntime.RuntimeSession.ID exactly.
+// Do NOT generate a separate DesktopPet session ID namespace.
 package v2
 
 import (
@@ -11,6 +24,10 @@ import (
 	"gorm.io/gorm"
 )
 
+// SessionService is the DesktopPet domain session projection store interface.
+//
+// Production primary path: SyncFromDeviceRuntimeSession (sync from G12 authoritative session).
+// Deprecated compatibility paths: CreateSession, AcquireSession (retained for legacy callers).
 type SessionService interface {
 	CreateSession(userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, prevGen int64) (*RuntimeSession, error)
 	GetSession(id string) (*RuntimeSession, error)
@@ -30,12 +47,20 @@ type sessionService struct {
 	db *gorm.DB
 }
 
+// NewSessionService creates a new DesktopPet domain session projection store.
+// Production code should prefer syncing sessions from G12 deviceruntime.Service
+// via SyncFromDeviceRuntimeSession, NOT via direct CreateSession/AcquireSession.
 func NewSessionService(db *gorm.DB) SessionService {
 	return &sessionService{db: db}
 }
 
 func (s *sessionService) DB() *gorm.DB { return s.db }
 
+// CreateSession is a DEPRECATED compatibility path for DesktopPet v2 session creation.
+// Production code must use deviceruntime.Service session creation as the authority
+// and then sync the projection row via SyncFromDeviceRuntimeSession.
+//
+// Deprecated: Use SyncFromDeviceRuntimeSession with deviceruntime.Service instead.
 func (s *sessionService) CreateSession(userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, prevGen int64) (*RuntimeSession, error) {
 	now := time.Now().Format("2006-01-02 15:04:05")
 	session := &RuntimeSession{
@@ -81,6 +106,11 @@ func (s *sessionService) GetActiveSession(userID runtimeidentity.UserID, deviceI
 	return &session, nil
 }
 
+// AcquireSession is a DEPRECATED compatibility path for DesktopPet v2 session re-acquisition.
+// Production code must use deviceruntime.Service session management as the authority
+// and then sync the projection row via SyncFromDeviceRuntimeSession.
+//
+// Deprecated: Use SyncFromDeviceRuntimeSession with deviceruntime.Service instead.
 func (s *sessionService) AcquireSession(ctx *gorm.DB, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, caps []string, capsHash string, lastAppliedRev, lastCmdSeq, lastEvtSeq int64, contractVersion string) (*RuntimeSession, *RuntimeSession, error) {
 	db := s.db
 	if ctx != nil {

@@ -93,7 +93,7 @@ type ContainerBuilder struct {
 	deepSearchTaskEntry          string
 	visionSvc                    vision.Service
 	imagegenSvc                  imagegen.Service
-	providerRegistry             *imageprovider.Registry
+	imageProviderRegistry        *imageprovider.Registry
 	resourceResolver             *resourceuri.PhysicalResolver
 	gameHostArchiveUpdater       GameHostArchiveUpdater
 	mediaService                 *media.Service
@@ -186,7 +186,7 @@ func (b *ContainerBuilder) WithImageGenService(svc imagegen.Service) *ContainerB
 }
 
 func (b *ContainerBuilder) WithImageProviderRegistry(reg *imageprovider.Registry) *ContainerBuilder {
-	b.providerRegistry = reg
+	b.imageProviderRegistry = reg
 	return b
 }
 
@@ -625,13 +625,13 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		}
 	}
 
-	providerRegistry := capability.NewProviderRegistry()
+	capabilityProviderRegistry := capability.NewProviderRegistry()
 	var providerEventSink capability.ProviderEventSink
 	if b.runtimePolicy.DurableEvents {
 		providerEventSink = eventbridge.NewProviderEventEmitter(eventBridgePublisher)
 	}
-	providerLifecycle := capability.NewProviderLifecycleService(providerRegistry, providerEventSink)
-	providerExecutionResolver := capability.NewProviderRuntimeExecutionResolver(&capability.ProviderRegistryExecutionLookup{Registry: providerRegistry})
+	providerLifecycle := capability.NewProviderLifecycleService(capabilityProviderRegistry, providerEventSink)
+	providerExecutionResolver := capability.NewProviderRuntimeExecutionResolver(&capability.ProviderRegistryExecutionLookup{Registry: capabilityProviderRegistry})
 
 	startupAt := time.Now().UTC()
 	if sessionService != nil {
@@ -699,7 +699,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 	var imageIntelligenceHandler *imageintelligence.ToolHandler
 	if b.visionSvc != nil || b.imagegenSvc != nil {
-		imgIntFactory := imageintelligence.NewImageIntelligenceFactory(b.visionSvc, b.imagegenSvc, b.providerRegistry, b.resourceResolver)
+		imgIntFactory := imageintelligence.NewImageIntelligenceFactory(b.visionSvc, b.imagegenSvc, b.imageProviderRegistry, b.resourceResolver)
 		imgIntFacade := imgIntFactory.Build()
 		imageIntelligenceHandler = imageintelligence.NewToolHandler(imgIntFacade)
 	}
@@ -1200,7 +1200,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		DeviceRegistry:            deviceRegistry,
 		DeviceRuntimePresence:     deviceRuntimePresence,
 		DeviceRuntimeSessions:     sessionService,
-		CapabilityProviders:       providerRegistry,
+		CapabilityProviders:       capabilityProviderRegistry,
 		ProviderLifecycle:         providerLifecycle,
 		ProviderExecutionResolver: providerExecutionResolver,
 		EventBridgePublisher:      eventBridgePublisher,

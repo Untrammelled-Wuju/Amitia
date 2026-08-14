@@ -9,10 +9,10 @@ import (
 )
 
 type cdpPipeTransport struct {
-	reader   io.ReadCloser
-	writer   io.WriteCloser
-	writeMu  sync.Mutex
-	scanBuf  []byte
+	reader  io.ReadCloser
+	writer  io.WriteCloser
+	writeMu sync.Mutex
+	scanBuf []byte
 }
 
 func newCDPPipeTransport(reader io.ReadCloser, writer io.WriteCloser) *cdpPipeTransport {

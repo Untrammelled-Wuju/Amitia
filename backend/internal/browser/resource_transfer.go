@@ -2,9 +2,16 @@ package browser
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type productionResourceTransfer struct {
@@ -21,6 +28,8 @@ type productionResourceTransfer struct {
 
 	mu        sync.RWMutex
 	downloads map[BrowserDownloadID]*downloadRecord
+	guidMap   map[string]BrowserDownloadID
+	subscribed bool
 }
 
 func NewProductionResourceTransfer(
@@ -40,7 +49,94 @@ func NewProductionResourceTransfer(
 		screenshotPolicy: DefaultScreenshotPolicy(),
 		uploadPolicy:     DefaultUploadPolicy(),
 		downloads:        make(map[BrowserDownloadID]*downloadRecord),
+		guidMap:          make(map[string]BrowserDownloadID),
 	}
+}
+
+func (r *productionResourceTransfer) ensureDownloadSubscription() {
+	r.mu.Lock()
+	if r.subscribed {
+		r.mu.Unlock()
+		return
+	}
+	r.subscribed = true
+	r.mu.Unlock()
+
+	client := r.dom.GetClient()
+	if client == nil {
+		return
+	}
+
+	client.SubscribeEvent("Browser.downloadWillBegin", func(params json.RawMessage) {
+		var evt struct {
+			FrameID           string `json:"frameId"`
+			GUID              string `json:"guid"`
+			URL               string `json:"url"`
+			SuggestedFilename string `json:"suggestedFilename"`
+		}
+		if err := json.Unmarshal(params, &evt); err != nil || evt.GUID == "" {
+			return
+		}
+		r.mu.Lock()
+		defer r.mu.Unlock()
+		for id, rec := range r.downloads {
+			if rec.state == DownloadStatePending {
+				if rec.suggestedFilename == "" || rec.suggestedFilename == evt.SuggestedFilename {
+					r.guidMap[evt.GUID] = id
+					break
+				}
+			}
+		}
+	})
+
+	client.SubscribeEvent("Browser.downloadProgress", func(params json.RawMessage) {
+		var evt struct {
+			GUID         string  `json:"guid"`
+			TotalBytes   float64 `json:"totalBytes"`
+			ReceivedBytes float64 `json:"receivedBytes"`
+			State        string  `json:"state"`
+		}
+		if err := json.Unmarshal(params, &evt); err != nil || evt.GUID == "" {
+			return
+		}
+		if evt.State != "completed" {
+			return
+		}
+		r.mu.Lock()
+		downloadID, ok := r.guidMap[evt.GUID]
+		if !ok {
+			r.mu.Unlock()
+			return
+		}
+		rec, ok := r.downloads[downloadID]
+		if !ok {
+			r.mu.Unlock()
+			return
+		}
+		rec.state = DownloadStateCompleted
+		rec.receivedBytes = int64(evt.ReceivedBytes)
+		now := time.Now()
+		rec.completedAt = &now
+		rec.stagedPath = filepath.Join(r.downloadPolicy.StagingRootPath, rec.suggestedFilename)
+		delete(r.guidMap, evt.GUID)
+		r.mu.Unlock()
+	})
+}
+
+func (r *productionResourceTransfer) configureDownloadBehavior(ctx context.Context, targetID TargetID) error {
+	client := r.dom.GetClient()
+	if client == nil {
+		return fmt.Errorf("CDP client not available")
+	}
+	sessionID := r.dom.GetSession(targetID)
+	if sessionID == "" {
+		return fmt.Errorf("no session for target")
+	}
+	params := map[string]interface{}{
+		"behavior":     r.downloadPolicy.Behavior,
+		"downloadPath": r.downloadPolicy.StagingRootPath,
+	}
+	return client.Call(ctx, "Page.setDownloadBehavior", sessionID, params, nil)
 }
 
 func (r *productionResourceTransfer) Download(ctx context.Context, request BrowserDownloadRequest) (*BrowserDownloadResult, *BrowserError) {
@@ -79,6 +175,17 @@ func (r *productionResourceTransfer) Download(ctx context.Context, request Brows
 	resolved, err := r.tabs.ResolveTab(ctx, request.SessionID, request.TabID)
 	if err != nil {
 		return nil, err
+	}
+
+	r.ensureDownloadSubscription()
+	if r.downloadPolicy.StagingRootPath != "" {
+		if err := r.configureDownloadBehavior(ctx, resolved.TargetID); err != nil {
+			return nil, &BrowserError{
+				Code:    ErrCodeDownloadFailed,
+				Message: "failed to configure download behavior",
+				Cause:   err,
+			}
+		}
 	}
 
 	if request.TriggerElement != nil && request.TriggerElement.StableID != "" {
@@ -135,7 +242,7 @@ func (r *productionResourceTransfer) Download(ctx context.Context, request Brows
 		filename = SanitizeFilename(request.Filename)
 	}
 
-	downloadID := BrowserDownloadID("bd_" + generateID())
+	downloadID := BrowserDownloadID("bd_" + uuid.New().String())
 	rec := &downloadRecord{
 		id:                downloadID,
 		sessionID:         request.SessionID,
@@ -257,6 +364,19 @@ func (r *productionResourceTransfer) Upload(ctx context.Context, request Browser
 		}
 	}
 
+	sourcePath := request.ResourceURI
+	if strings.HasPrefix(sourcePath, "file://") {
+		sourcePath = strings.TrimPrefix(sourcePath, "file://")
+	}
+
+	if err := r.dom.SetFileInputFiles(ctx, resolved.TargetID, record.backendNodeID, []string{sourcePath}); err != nil {
+		return nil, &BrowserError{
+			Code:    ErrCodeUploadFailed,
+			Message: "failed to set file input files",
+			Cause:   err,
+		}
+	}
+
 	return &BrowserUploadResult{
 		ResourceURI:    request.ResourceURI,
 		Success:        true,
@@ -323,13 +443,6 @@ func (r *productionResourceTransfer) Screenshot(ctx context.Context, request Bro
 		return nil, err
 	}
 
-	var docGen uint64
-	if r.tabMgr != nil {
-		if rec, ok := r.tabMgr.store.get(request.TabID); ok {
-			docGen = rec.documentGeneration
-		}
-	}
-
 	if err := r.dom.EnableDOM(ctx, resolved.TargetID); err != nil {
 		return nil, &BrowserError{
 			Code:    ErrCodeScreenshotFailed,
@@ -338,17 +451,93 @@ func (r *productionResourceTransfer) Screenshot(ctx context.Context, request Bro
 		}
 	}
 
-	width := 1280
-	height := 720
+	client := r.dom.GetClient()
+	if client == nil {
+		return nil, &BrowserError{
+			Code:    ErrCodeScreenshotFailed,
+			Message: "CDP client not available",
+		}
+	}
+
+	sessionID := r.dom.GetSession(resolved.TargetID)
+	if sessionID == "" {
+		if engine := r.tabMgr.engine(); engine != nil {
+			pc := engine.Pages().(*chromiumPageController)
+			sessionID = pc.ensureSession(ctx, client, resolved.TargetID)
+		}
+	}
+	if sessionID == "" {
+		return nil, &BrowserError{
+			Code:    ErrCodeScreenshotFailed,
+			Message: "failed to get CDP session",
+		}
+	}
+
+	params := map[string]interface{}{
+		"format": format,
+	}
+	if format != ScreenshotFormatPNG {
+		if request.Quality > 0 {
+			params["quality"] = request.Quality
+		} else {
+			params["quality"] = 80
+		}
+	}
 	if request.FullPage {
-		height = 1080
+		params["captureBeyondViewport"] = true
+	}
+
+	var result struct {
+		Data string `json:"data"`
+	}
+	if err := client.Call(ctx, "Page.captureScreenshot", sessionID, params, &result); err != nil {
+		return nil, &BrowserError{
+			Code:    ErrCodeScreenshotFailed,
+			Message: "Page.captureScreenshot failed",
+			Cause:   err,
+		}
+	}
+
+	if result.Data == "" {
+		return nil, &BrowserError{
+			Code:    ErrCodeScreenshotFailed,
+			Message: "empty screenshot data",
+		}
+	}
+
+	imgData, decodeErr := base64.StdEncoding.DecodeString(result.Data)
+	if decodeErr != nil {
+		return nil, &BrowserError{
+			Code:    ErrCodeScreenshotFailed,
+			Message: "failed to decode screenshot data",
+			Cause:   decodeErr,
+		}
+	}
+
+	var docGen uint64
+	if r.tabMgr != nil {
+		if rec, ok := r.tabMgr.store.get(request.TabID); ok {
+			docGen = rec.documentGeneration
+		}
+	}
+
+	stagedPath := ""
+	if r.screenshotPolicy.StagingRootPath != "" {
+		targetDir := filepath.Join(r.screenshotPolicy.StagingRootPath, "screenshots")
+		if err := os.MkdirAll(targetDir, 0700); err == nil {
+			stagedPath = filepath.Join(targetDir, fmt.Sprintf("screenshot_%s.%s", uuid.New().String()[:8], format))
+			if err := os.WriteFile(stagedPath, imgData, 0600); err == nil {
+				stagedPath = "file://" + stagedPath
+			} else {
+				stagedPath = ""
+			}
+		}
 	}
 
 	return &BrowserScreenshotResult{
+		ResourceURI:        stagedPath,
 		Format:             format,
-		Width:              width,
-		Height:             height,
-		SizeBytes:          int64(width * height * 3),
+		SizeBytes:          int64(len(imgData)),
 		RuntimeGeneration:  resolved.RuntimeGeneration,
 		DocumentGeneration: docGen,
 	}, nil
@@ -432,8 +621,4 @@ func (r *productionResourceTransfer) FindPendingDownload(sessionID BrowserSessio
 	}
 
 	return found, nil
-}
-
-func generateID() string {
-	return strings.Replace(time.Now().Format("20060102150405.000000"), ".", "", 1)
 }

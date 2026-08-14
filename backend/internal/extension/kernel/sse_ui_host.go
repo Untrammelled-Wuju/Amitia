@@ -22,6 +22,15 @@ type pendingDialog struct {
 	hostSessionID string
 }
 
+// SSEUIHostNotifier sends UI notifications/dialogs/navigate actions to connected
+// UI endpoints via SSE transport.
+//
+// Production wiring MUST use NewSSEUIHostNotifierWithRegistry (the With-Registry variant).
+// The no-registry fallback (NewSSEUIHostNotifier) is for test/standalone use only.
+//
+// The notifier uses G6 host_registry.Registry (the authoritative connected-device registry)
+// to determine the target UI endpoint. Hub verifies transport connection existence only;
+// it does NOT replace Registry for target selection.
 type SSEUIHostNotifier struct {
 	hub            *sse.Hub
 	hostRegistry   *host_registry.HostRegistry
@@ -29,6 +38,12 @@ type SSEUIHostNotifier struct {
 	pendingDialogs map[string]*pendingDialog
 }
 
+// NewSSEUIHostNotifier creates an SSE UI notifier WITHOUT G6 registry injection.
+// Using this constructor in production causes broadcast fallback, which is NOT allowed.
+// Production wiring MUST use NewSSEUIHostNotifierWithRegistry.
+//
+// Deprecated: Production wiring must inject the shared host_registry.Registry.
+// This constructor is retained only for test/standalone composition.
 func NewSSEUIHostNotifier(hub *sse.Hub) *SSEUIHostNotifier {
 	return &SSEUIHostNotifier{
 		hub:            hub,
@@ -36,6 +51,9 @@ func NewSSEUIHostNotifier(hub *sse.Hub) *SSEUIHostNotifier {
 	}
 }
 
+// NewSSEUIHostNotifierWithRegistry creates an SSE UI notifier with the G6
+// host_registry.Registry for target endpoint selection.
+// This is the production constructor. The registry must be the G18-shared instance.
 func NewSSEUIHostNotifierWithRegistry(hub *sse.Hub, registry *host_registry.HostRegistry) *SSEUIHostNotifier {
 	return &SSEUIHostNotifier{
 		hub:            hub,
@@ -61,7 +79,7 @@ func (n *SSEUIHostNotifier) Notify(ctx context.Context, extensionID string, titl
 			"body":     body,
 			"severity": severity,
 		}
-		envelope := NewEventEnvelope("ui_notify", extensionID, payload, defaultEventTTL)
+		envelope := NewSSEEventEnvelope("ui_notify", extensionID, payload, defaultEventTTL)
 		envelopeMap := envelope.ToMap()
 		envelopeMap["hostClientId"] = target.HostClientID
 		envelopeMap["hostSessionId"] = target.HostSessionID
@@ -77,7 +95,7 @@ func (n *SSEUIHostNotifier) Notify(ctx context.Context, extensionID string, titl
 		"body":     body,
 		"severity": severity,
 	}
-	envelope := NewEventEnvelope("ui_notify", extensionID, payload, defaultEventTTL)
+	envelope := NewSSEEventEnvelope("ui_notify", extensionID, payload, defaultEventTTL)
 	n.hub.Broadcast("ui_notify", envelope.ToMap())
 	return nil
 }
@@ -115,7 +133,7 @@ func (n *SSEUIHostNotifier) Dialog(ctx context.Context, extensionID string, dial
 			"message":  message,
 			"buttons":  buttons,
 		}
-		envelope := NewEventEnvelope("ui_dialog", extensionID, payload, dialogEventTTL)
+		envelope := NewSSEEventEnvelope("ui_dialog", extensionID, payload, dialogEventTTL)
 		envelopeMap := envelope.ToMap()
 		envelopeMap["hostClientId"] = target.HostClientID
 		envelopeMap["hostSessionId"] = target.HostSessionID
@@ -133,7 +151,7 @@ func (n *SSEUIHostNotifier) Dialog(ctx context.Context, extensionID string, dial
 			"message":  message,
 			"buttons":  buttons,
 		}
-		envelope := NewEventEnvelope("ui_dialog", extensionID, payload, dialogEventTTL)
+		envelope := NewSSEEventEnvelope("ui_dialog", extensionID, payload, dialogEventTTL)
 		n.hub.Broadcast("ui_dialog", envelope.ToMap())
 	}
 
@@ -170,7 +188,7 @@ func (n *SSEUIHostNotifier) Navigate(ctx context.Context, extensionID string, ta
 		payload := map[string]interface{}{
 			"target": target,
 		}
-		envelope := NewEventEnvelope("ui_navigate", extensionID, payload, defaultEventTTL)
+		envelope := NewSSEEventEnvelope("ui_navigate", extensionID, payload, defaultEventTTL)
 		envelopeMap := envelope.ToMap()
 		envelopeMap["hostClientId"] = host.HostClientID
 		envelopeMap["hostSessionId"] = host.HostSessionID
@@ -184,7 +202,7 @@ func (n *SSEUIHostNotifier) Navigate(ctx context.Context, extensionID string, ta
 	payload := map[string]interface{}{
 		"target": target,
 	}
-	envelope := NewEventEnvelope("ui_navigate", extensionID, payload, defaultEventTTL)
+	envelope := NewSSEEventEnvelope("ui_navigate", extensionID, payload, defaultEventTTL)
 	n.hub.Broadcast("ui_navigate", envelope.ToMap())
 	return nil
 }

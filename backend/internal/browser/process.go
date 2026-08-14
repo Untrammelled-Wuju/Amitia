@@ -3,24 +3,26 @@ package browser
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
-	"os/exec"
-	"path/filepath"
-	"runtime"
 	"sync"
-	"syscall"
 	"time"
+
+	proc "github.com/u-ai/backend/internal/platform/process"
 )
 
 type browserProcess struct {
-	execInfo    BrowserExecutable
-	config      BrowserConfig
-	profileDir  string
-	cmd         *exec.Cmd
-	mu          sync.Mutex
-	alive       bool
-	cdpEndpoint string
-	connected   bool
+	execInfo   BrowserExecutable
+	config     BrowserConfig
+	profileDir string
+	cdpClient  *cdpClient
+	mu         sync.Mutex
+	alive      bool
+	connected  bool
+	pid        int
+	procHandle proc.ProcessTreeHandle
+	reader     io.ReadCloser
+	writer     io.WriteCloser
 }
 
 func newBrowserProcess(execInfo BrowserExecutable, config BrowserConfig, profileDir string) *browserProcess {
@@ -44,12 +46,8 @@ func (p *browserProcess) start(ctx context.Context) error {
 	}
 
 	args := p.buildArgs()
-	cmd := exec.CommandContext(ctx, p.execInfo.Path, args...)
 
-	cmd.Env = p.sanitizeEnv(cmd.Env)
-	cmd.Dir = p.profileDir
-
-	if err := cmd.Start(); err != nil {
+	if err := launchPlatformProcess(p, args); err != nil {
 		return &BrowserError{
 			Code:    ErrCodeBrowserStartFailed,
 			Message: "failed to start browser process",
@@ -57,88 +55,126 @@ func (p *browserProcess) start(ctx context.Context) error {
 		}
 	}
 
-	p.cmd = cmd
 	p.alive = true
-	p.cdpEndpoint = ""
 	p.connected = false
-
 	return nil
 }
 
 func (p *browserProcess) connectCDP(ctx context.Context) error {
 	p.mu.Lock()
-	endpoint := p.cdpEndpoint
+	reader := p.reader
+	writer := p.writer
 	p.mu.Unlock()
 
-	if endpoint == "" {
-		return fmt.Errorf("browser CDP endpoint not available")
+	if reader == nil || writer == nil {
+		return fmt.Errorf("browser CDP pipes not available")
 	}
 
-	deadline, ok := ctx.Deadline()
-	if !ok {
-		deadline = time.Now().Add(10 * time.Second)
-	}
+	transport := newCDPPipeTransport(reader, writer)
+	client := newCDPClient(transport)
 
-	if time.Now().After(deadline) {
-		return fmt.Errorf("CDP connection deadline exceeded")
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		if time.Now().After(deadline) {
+			client.Close()
+			return fmt.Errorf("CDP health check timed out")
+		}
+
+		var versionResult struct {
+			UserAgent string `json:"userAgent"`
+			Version   string `json:"version"`
+		}
+		hctx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		err := client.Call(hctx, "Browser.getVersion", "", nil, &versionResult)
+		cancel()
+
+		if err == nil {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			client.Close()
+			return ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
 	}
 
 	p.mu.Lock()
+	p.cdpClient = client
 	p.connected = true
+	p.mu.Unlock()
+
+	client.OnDisconnect(func(err error) {
+		p.mu.Lock()
+		p.connected = false
+		p.alive = false
+		p.mu.Unlock()
+	})
+
+	return nil
+}
+
+func (p *browserProcess) cdp() *cdpClient {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	return p.cdpClient
+}
+
+func (p *browserProcess) gracefulClose(ctx context.Context) error {
+	p.mu.Lock()
+	client := p.cdpClient
+	alive := p.alive
+	reader := p.reader
+	writer := p.writer
+	p.mu.Unlock()
+
+	if !alive {
+		return nil
+	}
+
+	if client != nil {
+		client.Close()
+	}
+	if reader != nil {
+		reader.Close()
+	}
+	if writer != nil {
+		writer.Close()
+	}
+
+	p.mu.Lock()
+	p.alive = false
+	p.connected = false
 	p.mu.Unlock()
 
 	return nil
 }
 
-func (p *browserProcess) gracefulClose(ctx context.Context) error {
-	p.mu.Lock()
-	cmd := p.cmd
-	alive := p.alive
-	p.mu.Unlock()
-
-	if cmd == nil || !alive {
-		return nil
-	}
-
-	if runtime.GOOS == "windows" {
-		if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
-			return cmd.Process.Kill()
-		}
-	} else {
-		if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
-			return cmd.Process.Kill()
-		}
-	}
-
-	done := make(chan error, 1)
-	go func() {
-		done <- cmd.Wait()
-	}()
-
-	select {
-	case <-ctx.Done():
-		return cmd.Process.Kill()
-	case <-done:
-		p.mu.Lock()
-		p.alive = false
-		p.connected = false
-		p.mu.Unlock()
-		return nil
-	}
-}
-
 func (p *browserProcess) kill() {
 	p.mu.Lock()
-	cmd := p.cmd
+	client := p.cdpClient
+	reader := p.reader
+	writer := p.writer
+	handle := p.procHandle
 	alive := p.alive
 	p.mu.Unlock()
 
-	if cmd == nil || !alive {
+	if !alive {
 		return
 	}
 
-	if cmd.Process != nil {
-		killProcessTree(cmd.Process)
+	if client != nil {
+		client.Close()
+	}
+	if reader != nil {
+		reader.Close()
+	}
+	if writer != nil {
+		writer.Close()
+	}
+
+	if handle != 0 {
+		killProcessTreeHandle(handle)
 	}
 
 	p.mu.Lock()
@@ -151,13 +187,10 @@ func (p *browserProcess) isAlive() bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	if p.cmd == nil || !p.alive {
+	if !p.alive || p.pid == 0 {
 		return false
 	}
-	if p.cmd.Process == nil {
-		return false
-	}
-	return isProcessAlive(p.cmd.Process)
+	return isProcessAliveByPID(p.pid)
 }
 
 func (p *browserProcess) cdpConnected() bool {
@@ -167,7 +200,22 @@ func (p *browserProcess) cdpConnected() bool {
 }
 
 func (p *browserProcess) ping() bool {
-	return p.isAlive() && p.cdpConnected()
+	p.mu.Lock()
+	client := p.cdpClient
+	connected := p.connected
+	p.mu.Unlock()
+
+	if !connected || client == nil {
+		return false
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	var result struct {
+		UserAgent string `json:"userAgent"`
+	}
+	return client.Call(ctx, "Browser.getVersion", "", nil, &result) == nil
 }
 
 func (p *browserProcess) browserName() string {
@@ -185,14 +233,14 @@ func (p *browserProcess) cleanupProfile() {
 	if !isAmitiaOwnedPath(p.profileDir, p.config.UserDataRoot) {
 		return
 	}
-	os.RemoveAll(p.profileDir)
+	removeProfileDir(p.profileDir)
 }
 
 func (p *browserProcess) ensureProfileDir() error {
 	if p.profileDir == "" {
 		return nil
 	}
-	return os.MkdirAll(p.profileDir, 0700)
+	return makeProfileDir(p.profileDir)
 }
 
 func (p *browserProcess) buildArgs() []string {
@@ -258,7 +306,7 @@ func isForbiddenEnvVar(env string) bool {
 		"http_proxy=", "https_proxy=", "no_proxy=",
 	}
 	for _, prefix := range forbidden {
-		if len(env) >= len(prefix) && env[:len(prefix)+1] == prefix {
+		if len(env) >= len(prefix) && env[:len(prefix)] == prefix {
 			return true
 		}
 	}
@@ -266,5 +314,5 @@ func isForbiddenEnvVar(env string) bool {
 }
 
 func profilePathFor(root string, generation uint64) string {
-	return filepath.Join(root, fmt.Sprintf("runtime-%d", generation))
+	return fmt.Sprintf("%s%cruntime-%d", root, os.PathSeparator, generation)
 }

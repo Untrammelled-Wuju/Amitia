@@ -1,5 +1,17 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
+// Package device provides the DesktopPet domain-specific device ownership/binding projection.
+//
+// NOTE: This repository is a COMPATIBILITY PROJECTION retained for DesktopPet installation
+// and security ownership checks. It is NOT the authoritative device/runtime presence registry.
+// Current device/runtime presence is owned by the shared kernel (host_registry.Registry).
+//
+// Callers must NOT use this repository for:
+//   - Provider routing decisions
+//   - Device selection for runtime operations
+//   - Runtime session selection
+//
+// DesktopPet device ownership facts should be derived from the Extension Kernel when possible.
 package device
 
 import (
@@ -15,6 +27,11 @@ import (
 	"gorm.io/gorm/clause"
 )
 
+// Identity represents a DesktopPet device ownership record.
+// It is a domain-specific projection used for compatibility with DesktopPet installation
+// and ownership verification. It does not represent current online/offline presence.
+//
+// For current device/runtime presence, use host_registry.Registry instead.
 type Identity struct {
 	ID                string
 	UserID            runtimeidentity.UserID
@@ -39,6 +56,9 @@ func (i Identity) RuntimeIdentity() runtimeidentity.Identity {
 	}
 }
 
+// Repository provides access to DesktopPet device ownership records.
+// This is a domain-specific repository for DesktopPet compatibility only.
+// The authoritative device/runtime presence registry is host_registry.Registry.
 type Repository struct {
 	db *gorm.DB
 }
@@ -49,6 +69,9 @@ func NewRepository(
 	return &Repository{db: db}
 }
 
+// RegisterOrTouch updates the DesktopPet device ownership record for compatibility.
+// This is a domain projection operation only. It does NOT update the shared kernel
+// device/runtime presence registry (host_registry.Registry).
 func (
 	r *Repository,
 ) RegisterOrTouch(
@@ -121,6 +144,10 @@ func (
 	return nil
 }
 
+// RequireOwned verifies DesktopPet domain device ownership for security compatibility.
+// This check does NOT indicate whether the device is currently online or whether
+// a runtime session is available. Use host_registry.Registry for presence checks
+// and deviceruntime.Service for runtime session status.
 func (
 	r *Repository,
 ) RequireOwned(

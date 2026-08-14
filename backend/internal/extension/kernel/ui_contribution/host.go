@@ -1,3 +1,17 @@
+// Package ui_contribution provides UI contribution lifecycle management for the Extension Kernel.
+//
+// IMPORTANT: UIHost (sometimes called ContributionHost) represents in-process UI contribution
+// slots, definitions, and lifecycle projections. It does NOT represent connected
+// desktop/mobile UI hosts. Connected UI endpoint presence is owned by
+// host_registry.Registry, not by UIHost.
+//
+// Boundaries:
+//   - UIHost manages: UI contributions, their definitions, instances, bridge sessions
+//   - host_registry.Registry manages: connected device/host transport endpoints
+//
+// BridgeSession is a UI sandbox capability session and is NOT:
+//   - The Device Runtime protocol session (deviceruntime.Service)
+//   - The host_registry Host Session (host_registry.Registry)
 package ui_contribution
 
 import (
@@ -11,6 +25,13 @@ import (
 	"time"
 )
 
+// UIHost owns in-process UI contribution slots, definitions, and lifecycle projections.
+//
+// It does NOT represent connected desktop/mobile UI hosts; connected endpoint presence
+// is owned by host_registry.Registry.
+//
+// Use this type for UI contribution registration, mounting, and UI bridge session management.
+// Use host_registry.Registry for finding and communicating with connected UI endpoints.
 type UIHost struct {
 	mu            sync.RWMutex
 	slots         map[string]*UISlotContract
@@ -20,6 +41,10 @@ type UIHost struct {
 	logger        func(level, msg string, fields map[string]any)
 }
 
+// UIInstance represents the lifecycle state of a registered UI contribution.
+// It is a domain-specific lifecycle model and should NOT be confused with:
+//   - capability.ProviderInstance (kernel provider instance)
+//   - runtimeorchestrator provider/infrastructure instance
 type UIInstance struct {
 	Definition   *UIContributionDefinition
 	State        UILifecycleState
@@ -236,6 +261,11 @@ func (h *UIHost) DisableExtension(extensionID ExtensionID) {
 	}
 }
 
+// BridgeSession represents a UI sandbox/bridge capability session.
+//
+// It is NOT a Device Runtime protocol session (deviceruntime.Service) and
+// NOT a host_registry Host/Transport session. It is a UI bridge security boundary
+// for a single contribution.
 type BridgeSession struct {
 	SessionID            string
 	ContributionID       string

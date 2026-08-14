@@ -1,3 +1,19 @@
+// Package registry provides the GameHost runtime projection of enabled game_plugin contributions.
+//
+// IMPORTANT: This registry is a DOMAIN PROJECTION, not an authoritative registry.
+//
+// It is NOT:
+//   - The authoritative Extension installation/enable state (owned by Extension Kernel)
+//   - The authoritative Capability Provider Registry (owned by capability.ProviderRegistry)
+//   - The authoritative Device Registry (owned by host_registry.Registry)
+//
+// This registry reflects the current set of enabled game_plugin contributions as known
+// to the GameHost runtime. Management mutations (install/uninstall/enable/disable) must
+// go through the Extension Kernel; this registry only syncs from those upstream changes.
+//
+// The flow is strictly ONE-WAY:
+//
+//	Extension Kernel (authoritative) -> GamePluginSyncService -> GameHost Registry (projection)
 package registry
 
 import (
@@ -9,13 +25,21 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/domain"
 )
 
+// Registry is the GameHost runtime projection of enabled game_plugin contributions.
+// It provides a local cache of plugin descriptors that GameHost has synced from the Extension Kernel.
+//
+// This is NOT the Extension Registry itself. Extension installation/enabled state
+// remains owned by the Extension Kernel.
 type Registry struct {
 	mu sync.RWMutex
 
-	plugins      map[domain.PluginID]domain.PluginDescriptor
-	byExtension  map[string]map[domain.PluginID]struct{}
+	plugins     map[domain.PluginID]domain.PluginDescriptor
+	byExtension map[string]map[domain.PluginID]struct{}
 }
 
+// NewRegistry creates a new GameHost projection registry.
+// This is NOT the authoritative Extension Registry. Extensions must be installed
+// through the Extension Kernel; this registry only maintains the GameHost-side projection.
 func NewRegistry() *Registry {
 	return &Registry{
 		plugins:     make(map[domain.PluginID]domain.PluginDescriptor),
@@ -23,6 +47,9 @@ func NewRegistry() *Registry {
 	}
 }
 
+// Register adds a plugin descriptor to the GameHost projection.
+// This is a projection-local operation and does NOT install the extension.
+// Extension installation must go through the Extension Kernel.
 func (r *Registry) Register(ctx context.Context, descriptor domain.PluginDescriptor) error {
 	if err := ctx.Err(); err != nil {
 		return err

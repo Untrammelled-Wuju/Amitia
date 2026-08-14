@@ -492,14 +492,16 @@ func logWorkerPanic(name string, r any) {
 
 type browserComponent struct {
 	services *AppServices
+	host     runtimehost.RuntimeHost
 	mu       sync.Mutex
 	started  bool
 	enabled  bool
 }
 
-func newBrowserComponent(services *AppServices) *browserComponent {
+func newBrowserComponent(services *AppServices, host runtimehost.RuntimeHost) *browserComponent {
 	return &browserComponent{
 		services: services,
+		host:     host,
 		enabled:  config.AppCfg != nil && config.AppCfg.Providers.Browser.Enabled,
 	}
 }
@@ -526,11 +528,18 @@ func (c *browserComponent) Start(ctx context.Context) error {
 	if svc == nil || svc.Browser == nil {
 		return nil
 	}
-	info, err := svc.Browser.Runtime().Start(ctx)
-	if err != nil {
-		return fmt.Errorf("browser runtime start: %w", err)
+	engine := svc.Browser.Runtime().Engine()
+	if engine == nil {
+		return nil
 	}
-	_ = info
+	spec := buildBrowserProcessSpec(engine)
+	supervisor := c.host.Processes()
+	if err := supervisor.Register(spec); err != nil {
+		return fmt.Errorf("register browser: %w", err)
+	}
+	if err := supervisor.Start(ctx, spec.ID); err != nil {
+		return fmt.Errorf("start browser: %w", err)
+	}
 	c.started = true
 	return nil
 }
@@ -546,8 +555,8 @@ func (c *browserComponent) Ready(ctx context.Context) error {
 		return nil
 	}
 	health := svc.Browser.Runtime().Health(ctx)
-	if health == browser.BrowserHealthUnhealthy || health == browser.BrowserHealthUnavailable {
-		return fmt.Errorf("browser runtime unhealthy: %s", string(health))
+	if health != browser.BrowserHealthHealthy {
+		return fmt.Errorf("browser runtime not healthy: %s", string(health))
 	}
 	return nil
 }

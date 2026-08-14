@@ -63,6 +63,8 @@ func (r *fakeRuntime) Health(_ context.Context) BrowserRuntimeHealth {
 	return BrowserHealthHealthy
 }
 
+func (r *fakeRuntime) Engine() BrowserEngine { return nil }
+
 type fakeSessionManager struct{}
 
 func (m *fakeSessionManager) CreateSession(_ context.Context) (BrowserSessionInfo, *BrowserError) {

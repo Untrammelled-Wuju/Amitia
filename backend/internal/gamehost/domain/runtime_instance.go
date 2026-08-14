@@ -1,3 +1,16 @@
+// Package domain provides GameHost domain types.
+//
+// IMPORTANT: This package contains domain-specific projections for the GameHost runtime.
+// It does NOT define authoritative kernel types.
+//
+// Key boundaries:
+//
+//   - RuntimeInstance is the GameHost plugin domain runtime lifecycle state.
+//     It is NOT the Device Runtime protocol session (owned by deviceruntime.Service).
+//     Process ownership remains in the trusted runtime/process supervisor.
+//
+//   - RuntimeInstanceID is the GameHost domain instance identifier.
+//     It is NOT the same as runtimeidentity.RuntimeID (shared device/runtime identity).
 package domain
 
 import (
@@ -5,8 +18,12 @@ import (
 	"time"
 )
 
+// RuntimeInstanceID identifies a GameHost domain runtime instance.
+// This is a GameHost-specific identifier and is NOT the same as
+// runtimeidentity.RuntimeID from the shared kernel.
 type RuntimeInstanceID string
 
+// RuntimeState represents a state in the GameHost plugin runtime lifecycle.
 type RuntimeState string
 
 const (
@@ -20,6 +37,33 @@ const (
 	RuntimeStateStopped    RuntimeState = "stopped"
 	RuntimeStateFailed     RuntimeState = "failed"
 )
+
+// RuntimeInstance represents the GameHost plugin runtime lifecycle state.
+//
+// This is a domain-specific projection for GameHost plugin management. It is NOT:
+//   - The Device Runtime protocol session (owned by deviceruntime.Service)
+//   - The Runtime_orchestrator ProviderInstance (owned by runtimeorchestrator)
+//
+// Process start/stop operations must go through the trusted Process Supervisor.
+// This model tracks state only; it does not directly own physical processes.
+type RuntimeInstance struct {
+	ID       RuntimeInstanceID
+	PluginID PluginID
+
+	State       RuntimeState
+	StateReason string
+
+	Health HealthState
+
+	CreatedAt   time.Time
+	UpdatedAt   time.Time
+	StartedAt   *time.Time
+	StoppedAt   *time.Time
+	SuspendedAt *time.Time
+	FailedAt    *time.Time
+
+	Metadata map[string]string
+}
 
 var validRuntimeTransitions = map[RuntimeState]map[RuntimeState]struct{}{
 	RuntimeStateCreated: {
@@ -110,25 +154,6 @@ func IsValidRuntimeState(state RuntimeState) bool {
 		}
 	}
 	return false
-}
-
-type RuntimeInstance struct {
-	ID       RuntimeInstanceID
-	PluginID PluginID
-
-	State       RuntimeState
-	StateReason string
-
-	Health HealthState
-
-	CreatedAt   time.Time
-	UpdatedAt   time.Time
-	StartedAt   *time.Time
-	StoppedAt   *time.Time
-	SuspendedAt *time.Time
-	FailedAt    *time.Time
-
-	Metadata map[string]string
 }
 
 func NewRuntimeInstance(id RuntimeInstanceID, pluginID PluginID, now time.Time) (*RuntimeInstance, error) {

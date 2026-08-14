@@ -228,6 +228,7 @@ type BrowserRuntimeInfo struct {
 	BrowserName    string              `json:"browserName,omitempty"`
 	BrowserVersion string              `json:"browserVersion,omitempty"`
 	Headless       bool                `json:"headless"`
+	PID            int                 `json:"pid"`
 	StartedAt      *time.Time          `json:"startedAt,omitempty"`
 	ProcessAlive   bool                `json:"processAlive"`
 	CDPConnected   bool                `json:"cdpConnected"`

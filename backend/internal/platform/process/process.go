@@ -88,6 +88,29 @@ func (p *ManagedProcess) markExited(code int, err error) bool {
 	return true
 }
 
+func NewExternalManagedProcess(pid int, handle ProcessTreeHandle) *ManagedProcess {
+	p := &ManagedProcess{
+		PID:       pid,
+		Handle:    handle,
+		done:      make(chan struct{}),
+		startedAt: time.Now(),
+	}
+	go func() {
+		for {
+			if !isProcessAlive(pid) {
+				p.markExited(0, nil)
+				return
+			}
+			select {
+			case <-p.done:
+				return
+			case <-time.After(500 * time.Millisecond):
+			}
+		}
+	}()
+	return p
+}
+
 var (
 	ErrProcessAlreadyExited = errors.New("process: already exited")
 	ErrStartTimeout         = errors.New("process: start timeout")
