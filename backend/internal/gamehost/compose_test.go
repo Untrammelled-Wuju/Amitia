@@ -8,9 +8,16 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/integration"
+	"github.com/u-ai/backend/internal/gamehost/integration/service_definition"
 	"github.com/u-ai/backend/internal/gamehost/rpc"
 	"github.com/u-ai/backend/internal/gamehost/storage"
 )
+
+type fakeDefinitionReconcile struct{}
+
+func (fakeDefinitionReconcile) ReconcileExtension(extensionID string) *service_definition.ReconcileReport {
+	return &service_definition.ReconcileReport{ExtensionID: extensionID}
+}
 
 type fakeKernelSource struct{}
 
