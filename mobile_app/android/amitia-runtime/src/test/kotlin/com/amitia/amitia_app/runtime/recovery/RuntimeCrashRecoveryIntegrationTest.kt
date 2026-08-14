@@ -304,6 +304,8 @@ class RuntimeCrashRecoveryIntegrationTest {
             override fun stop(graceMillis: Long) =
                 com.amitia.amitia_app.runtime.proot.ProotStopResult.AlreadyStopped(sessionId, null)
             override fun close() {}
+            override fun requestStop() {}
+            override val exit: com.amitia.amitia_app.runtime.proot.ProotExit? = null
         }
         host.sessionOverride = session
 

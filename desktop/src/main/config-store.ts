@@ -1,6 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { validateDeploymentConfig } from "../shared/deployment";
+import { validateDeploymentConfig, validateDeploymentConfigForSave } from "../shared/deployment";
 import type { DeploymentModeConfig } from "../shared/types";
 import { getAmitiaDataDir } from "./path-manager";
 
@@ -30,7 +30,7 @@ export class ConfigStore {
   async saveDeploymentConfig(
     config: DeploymentModeConfig,
   ): Promise<DeploymentModeConfig> {
-    const next = validateDeploymentConfig(config);
+    const next = validateDeploymentConfigForSave(config);
     await mkdir(dirname(this.filePath), { recursive: true });
     await writeFile(this.filePath, JSON.stringify(next, null, 2), "utf8");
     return next;

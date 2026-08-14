@@ -20,6 +20,8 @@ class RuntimeStartupDetectorTest {
         override fun stop(graceMillis: Long): com.amitia.amitia_app.runtime.proot.ProotStopResult =
             com.amitia.amitia_app.runtime.proot.ProotStopResult.AlreadyStopped(sessionId, null)
         override fun close() {}
+        override fun requestStop() {}
+        override val exit: com.amitia.amitia_app.runtime.proot.ProotExit? = null
     }
 
     private fun createLiveThenDeadSession(aliveForProbes: Int): ProotSession {
@@ -31,6 +33,8 @@ class RuntimeStartupDetectorTest {
             override fun stop(graceMillis: Long): com.amitia.amitia_app.runtime.proot.ProotStopResult =
                 com.amitia.amitia_app.runtime.proot.ProotStopResult.AlreadyStopped(sessionId, 137)
             override fun close() {}
+            override fun requestStop() {}
+            override val exit: com.amitia.amitia_app.runtime.proot.ProotExit? = null
         }
     }
 
@@ -41,6 +45,8 @@ class RuntimeStartupDetectorTest {
         override fun stop(graceMillis: Long): com.amitia.amitia_app.runtime.proot.ProotStopResult =
             com.amitia.amitia_app.runtime.proot.ProotStopResult.AlreadyStopped(sessionId, exitCode)
         override fun close() {}
+        override fun requestStop() {}
+        override val exit: com.amitia.amitia_app.runtime.proot.ProotExit? = null
     }
 
     private fun createFakeReadinessProbe(responses: List<RuntimeHealthProbeResult>): RuntimeHealthProbe {
