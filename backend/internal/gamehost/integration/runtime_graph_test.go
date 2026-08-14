@@ -48,6 +48,12 @@ func makeTestPlugin(extensionID, pluginID string, entryPoint string) KernelGameP
 		Extension: domain.ExtensionDefinition{
 			ID:   domain.ExtensionID(extensionID),
 			Name: domain.LocalizedText{Default: "Test Ext"},
+			Modules: []domain.ModuleDefinition{{
+				ID:          domain.ModuleID("runtime-module"),
+				ExtensionID: domain.ExtensionID(extensionID),
+				Type:        domain.ModuleTypeService,
+				Runtime:     &domain.RuntimeDefinition{Type: domain.RuntimeTypeService, EntryPoint: entryPoint},
+			}},
 		},
 		Contribution: domain.ContributionDefinition{
 			ID:          domain.ContributionID(pluginID),
@@ -56,7 +62,7 @@ func makeTestPlugin(extensionID, pluginID string, entryPoint string) KernelGameP
 			Kind:        domain.ContributionKindGamePlugin,
 			Name:        domain.LocalizedText{Default: "Test Plugin"},
 			Definition: map[string]any{
-				"entryPoint": entryPoint,
+				"runtimeModuleId": "runtime-module",
 			},
 		},
 	}
@@ -164,7 +170,7 @@ func TestRuntimeGraphProvisioner_Reconcile_RegistersDefinition(t *testing.T) {
 
 	view := service_definition.ServiceRuntimeView{
 		ExtensionID: "ext-a",
-		ModuleID:    "game",
+		ModuleID:    "runtime-module",
 		RuntimeType: "service",
 		EntryPoint:  "C:/test/game.exe",
 	}
@@ -180,12 +186,19 @@ func TestRuntimeGraphProvisioner_Reconcile_NoEntryPoint_FailClosed(t *testing.T)
 		Extension: domain.ExtensionDefinition{
 			ID:   domain.ExtensionID("ext-a"),
 			Name: domain.LocalizedText{Default: "Test"},
+			Modules: []domain.ModuleDefinition{{
+				ID:          domain.ModuleID("runtime-module"),
+				ExtensionID: domain.ExtensionID("ext-a"),
+				Type:        domain.ModuleTypeService,
+				Runtime:     &domain.RuntimeDefinition{Type: domain.RuntimeTypeService},
+			}},
 		},
 		Contribution: domain.ContributionDefinition{
 			ID:          domain.ContributionID("game"),
 			ModuleID:    domain.ModuleID("game"),
 			ExtensionID: domain.ExtensionID("ext-a"),
 			Kind:        domain.ContributionKindGamePlugin,
+			Definition:  map[string]any{"runtimeModuleId": "runtime-module"},
 		},
 	}
 

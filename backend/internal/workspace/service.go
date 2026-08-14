@@ -57,6 +57,10 @@ func (s *Service) ListMounts(ctx context.Context) ([]WorkspaceMount, error) {
 	return s.registry.ListMounts(), nil
 }
 
+func (s *Service) HasBackend(kind WorkspaceKind) bool {
+	return s.registry != nil && s.registry.HasBackend(kind)
+}
+
 func (s *Service) RegisterSAFMount(ctx context.Context, name string, grantID string, readOnly bool) (WorkspaceMount, error) {
 	if s.safGrantResolver != nil {
 		status, err := s.safGrantResolver.ResolveGrant(grantID)
@@ -269,6 +273,14 @@ func (s *Service) LoadAndRestoreMounts(ctx context.Context) error {
 			if _, err := s.registry.RegisterLocalMount(ctx, rec.name, rec.localRoot, rec.readOnly); err == nil {
 			}
 		case WorkspaceKindSAF:
+			mount.Available = false
+			mount.Status = WorkspaceStatusUnavailable
+			if s.safGrantResolver != nil {
+				status, statusErr := s.safGrantResolver.ResolveGrant(rec.nativeGrant)
+				if statusErr == nil {
+					mount.Status, mount.Available = GrantStatusToMountUpdate(rec.nativeGrant, status)
+				}
+			}
 			if err := s.registry.RestoreMount(mount); err != nil {
 				continue
 			}
@@ -331,6 +343,34 @@ func (s *Service) Read(ctx context.Context, uriStr string, opts ReadOptions) (Re
 		return ReadResult{}, fmt.Errorf("%w: no backend for kind %q", ErrMountUnavailable, mount.Kind)
 	}
 	return backend.Read(ctx, mount, rel, opts)
+}
+
+func (s *Service) CopyTo(ctx context.Context, uriStr string, dst io.Writer) error {
+	if dst == nil {
+		return fmt.Errorf("destination writer is nil")
+	}
+	const chunkSize int64 = 1024 * 1024
+	var offset int64
+	for {
+		result, err := s.Read(ctx, uriStr, ReadOptions{Offset: offset, MaxBytes: chunkSize})
+		if err != nil {
+			return err
+		}
+		if len(result.Content) == 0 {
+			return nil
+		}
+		written, err := dst.Write(result.Content)
+		if err != nil {
+			return err
+		}
+		if written != len(result.Content) {
+			return io.ErrShortWrite
+		}
+		offset += int64(written)
+		if int64(len(result.Content)) < chunkSize {
+			return nil
+		}
+	}
 }
 
 func (s *Service) Write(ctx context.Context, uriStr string, src io.Reader, opts WriteOptions) (WorkspaceEntry, error) {
@@ -467,11 +507,11 @@ func (s *Service) resolveURIToMount(uriStr string) (WorkspaceMount, string, erro
 
 func (s *Service) defaultMount() WorkspaceMount {
 	return WorkspaceMount{
-		ID:       "default",
-		Name:     "Default",
-		Kind:     WorkspaceKindLocal,
-		RootURI:  "amitia://workspace/",
-		Status:   WorkspaceStatusReady,
+		ID:        "default",
+		Name:      "Default",
+		Kind:      WorkspaceKindLocal,
+		RootURI:   "amitia://workspace/",
+		Status:    WorkspaceStatusReady,
 		Available: true,
 	}
 }

@@ -57,11 +57,11 @@ func (d *ConnectionCommandDispatcher) dispatchOnce(conn *Connection, send func(*
 	now := time.Now().Format("2006-01-02 15:04:05")
 
 	for _, cmd := range cmds {
-		if cmd.UserID != conn.UserID || cmd.DeviceID != conn.DeviceID {
+		if cmd.UserID != string(conn.UserID) || cmd.DeviceID != string(conn.DeviceID) {
 			continue
 		}
 
-		if err := d.commands.MarkDispatching(cmd.ID, conn.RuntimeID, time.Now()); err != nil {
+		if err := d.commands.MarkDispatching(cmd.ID, string(conn.RuntimeID), time.Now()); err != nil {
 			continue
 		}
 
@@ -103,7 +103,7 @@ func (d *ConnectionCommandDispatcher) dispatchOnce(conn *Connection, send func(*
 			continue
 		}
 
-		_ = d.commands.MarkTransportDispatched(cmd.ID, conn.RuntimeID, time.Now())
+		_ = d.commands.MarkTransportDispatched(cmd.ID, string(conn.RuntimeID), time.Now())
 	}
 }
 

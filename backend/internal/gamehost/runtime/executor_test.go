@@ -130,10 +130,10 @@ func (s *fakeTopologyStore) UpdateServiceState(serviceID domain.ServiceID, next 
 }
 
 type fakeServiceExecutorWithDefs struct {
-	startFn      func(ctx context.Context, entry ServicePlanEntry, resolveFn DefinitionResolverFunc) (*ServiceExecutionHandle, error)
-	stopFn       func(ctx context.Context, handle ServiceExecutionHandle, force bool) error
-	startedSvcs  []domain.ServiceID
-	stoppedSvcs  []domain.ServiceID
+	startFn     func(ctx context.Context, entry ServicePlanEntry, resolveFn DefinitionResolverFunc) (*ServiceExecutionHandle, error)
+	stopFn      func(ctx context.Context, handle ServiceExecutionHandle, force bool) error
+	startedSvcs []domain.ServiceID
+	stoppedSvcs []domain.ServiceID
 }
 
 func (f *fakeServiceExecutorWithDefs) Start(ctx context.Context, entry ServicePlanEntry, resolveFn DefinitionResolverFunc) (*ServiceExecutionHandle, error) {
@@ -219,9 +219,9 @@ func TestRuntimeExecutor_StartRuntime_Success(t *testing.T) {
 
 	resolveFn := func(definitionID string) (*trusted_service.ServiceRuntimeDefinition, error) {
 		return &trusted_service.ServiceRuntimeDefinition{
-			ServiceID:  definitionID,
+			ServiceID:   definitionID,
 			ExtensionID: "ext-1",
-			ModuleID:   "mod-1",
+			ModuleID:    "mod-1",
 		}, nil
 	}
 	exec.SetResolveDefinition(resolveFn)
@@ -527,8 +527,8 @@ func TestRuntimeExecutor_RestartRuntime_Success(t *testing.T) {
 	}
 
 	genBefore, _ := rtManager.GetCurrentGeneration("rt-1")
-	if genBefore != 0 {
-		t.Errorf("expected generation 0 before restart, got %d", genBefore)
+	if genBefore != 1 {
+		t.Errorf("expected generation 1 before restart, got %d", genBefore)
 	}
 
 	err = exec.RestartRuntime(ctx, "rt-1", "test restart")
@@ -537,8 +537,8 @@ func TestRuntimeExecutor_RestartRuntime_Success(t *testing.T) {
 	}
 
 	genAfter, _ := rtManager.GetCurrentGeneration("rt-1")
-	if genAfter != 1 {
-		t.Errorf("expected generation 1 after restart, got %d", genAfter)
+	if genAfter != 2 {
+		t.Errorf("expected generation 2 after restart, got %d", genAfter)
 	}
 
 	if len(svcExecutor.stoppedSvcs) != 2 {
@@ -705,8 +705,8 @@ func TestRuntimeExecutor_RestartRuntime_DoubleRestart(t *testing.T) {
 	}
 
 	gen, _ := rtManager.GetCurrentGeneration("rt-1")
-	if gen > 2 {
-		t.Errorf("expected at most generation 2 after double restart, got %d", gen)
+	if gen > 3 {
+		t.Errorf("expected at most generation 3 after double restart, got %d", gen)
 	}
 
 	if successCount == 0 {

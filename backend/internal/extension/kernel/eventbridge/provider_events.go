@@ -2,8 +2,6 @@ package eventbridge
 
 import (
 	"context"
-	"fmt"
-	"strings"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
@@ -22,11 +20,11 @@ func NewProviderEventEmitter(publisher *Publisher) *ProviderEventEmitter {
 }
 
 func (e *ProviderEventEmitter) ProviderRegistered(ctx context.Context, payload capability.ProviderRegisteredPayload) error {
-	return e.publish(ctx, providerRegistered, payload.Revision, payload, definitionOptions(payload.ProviderID, payload.Revision, partitionKeyForProvider(payload.UserID)))
+	return e.publish(ctx, providerRegistered, payload.Revision, payload, definitionOptions(payload.ProviderID, payload.Revision))
 }
 
 func (e *ProviderEventEmitter) ProviderUpdated(ctx context.Context, payload capability.ProviderUpdatedPayload) error {
-	return e.publish(ctx, providerUpdated, payload.Revision, payload, definitionOptions(payload.ProviderID, payload.Revision, partitionKeyForProvider(payload.UserID)))
+	return e.publish(ctx, providerUpdated, payload.Revision, payload, definitionOptions(payload.ProviderID, payload.Revision))
 }
 
 func (e *ProviderEventEmitter) ProviderUnregistered(ctx context.Context, payload capability.ProviderUnregisteredPayload) error {
@@ -65,7 +63,7 @@ func (e *ProviderEventEmitter) publish(ctx context.Context, typeID event.EventTy
 	return err
 }
 
-func definitionOptions(providerID capability.ProviderID, revision int64, partitionKey string) event.PublishOptions {
+func definitionOptions(providerID capability.ProviderID, revision int64) event.PublishOptions {
 	var rev *int64
 	if revision > 0 {
 		r := revision
@@ -78,9 +76,8 @@ func definitionOptions(providerID capability.ProviderID, revision int64, partiti
 		AggregateType:    "capability_provider",
 		AggregateID:      providerID.String(),
 		AggregateVersion: rev,
-		PartitionKey:     partitionKey,
+		PartitionKey:     "system",
 		OrderingKey:      providerID.String(),
-		IdempotencyKey:   buildIdempotency("provider", providerID.String(), revision),
 	}
 }
 
@@ -99,7 +96,6 @@ func instanceOptions(payload capability.ProviderInstanceEventPayload) event.Publ
 		AggregateVersion: rev,
 		PartitionKey:     partitionKeyForProvider(payload.UserID),
 		OrderingKey:      payload.ProviderInstanceID.String(),
-		IdempotencyKey:   buildIdempotency("provider_instance", payload.ProviderInstanceID.String(), payload.Revision),
 	}
 }
 
@@ -108,20 +104,4 @@ func partitionKeyForProvider(userID interface{ String() string }) string {
 		return userID.String()
 	}
 	return "system"
-}
-
-func buildIdempotency(parts ...interface{}) string {
-	var sb strings.Builder
-	for i, p := range parts {
-		if i > 0 {
-			sb.WriteString(":")
-		}
-		switch v := p.(type) {
-		case string:
-			sb.WriteString(v)
-		case int64:
-			sb.WriteString(fmt.Sprintf("%d", v))
-		}
-	}
-	return sb.String()
 }

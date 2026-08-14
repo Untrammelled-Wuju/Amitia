@@ -15,19 +15,19 @@ import (
 var _ ipc.Dispatcher = (*RPCDispatcher)(nil)
 
 type RPCDispatcher struct {
-	mu             sync.RWMutex
-	controlPlane   ipc.ControlPlane
-	namespaces     NamespaceRegistry
-	hostHandlers   HandlerRegistry
-	idGenerator    func() string
-	lifecycle      *RequestLifecycleManager
+	mu           sync.RWMutex
+	controlPlane ipc.ControlPlane
+	namespaces   NamespaceRegistry
+	hostHandlers HandlerRegistry
+	idGenerator  func() string
+	lifecycle    *RequestLifecycleManager
 }
 
 type DispatcherConfig struct {
-	Namespaces     NamespaceRegistry
-	HostHandlers   HandlerRegistry
-	IDGenerator    func() string
-	Lifecycle      *RequestLifecycleManager
+	Namespaces   NamespaceRegistry
+	HostHandlers HandlerRegistry
+	IDGenerator  func() string
+	Lifecycle    *RequestLifecycleManager
 }
 
 func NewRPCDispatcher(config DispatcherConfig) *RPCDispatcher {
@@ -154,6 +154,7 @@ func (d *RPCDispatcher) dispatchReserved(ctx context.Context, source ipc.Dispatc
 		PluginID:     domain.PluginID(source.Peer.PluginID),
 		RuntimeID:    domain.RuntimeInstanceID(source.Peer.RuntimeID),
 		ServiceID:    domain.ServiceID(source.Peer.ServiceID),
+		Generation:   source.Peer.Generation,
 		Namespace:    namespace,
 		Method:       Method(envelope.Method),
 		Payload:      cloneRawMessage(envelope.Payload),
@@ -211,9 +212,10 @@ func (d *RPCDispatcher) dispatchCustom(ctx context.Context, source ipc.DispatchS
 	forwardEnv.ServiceID = string(route.ServiceID)
 
 	targetPeer := ipc.Peer{
-		PluginID:  route.PluginID,
-		RuntimeID: route.RuntimeID,
-		ServiceID: route.ServiceID,
+		PluginID:   route.PluginID,
+		RuntimeID:  route.RuntimeID,
+		ServiceID:  route.ServiceID,
+		Generation: source.Peer.Generation,
 	}
 
 	return cp.Send(ctx, targetPeer, forwardEnv)

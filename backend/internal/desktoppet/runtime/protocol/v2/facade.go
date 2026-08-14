@@ -202,7 +202,7 @@ func (f *RuntimeFacade) ListConnections(userID string) []*Connection {
 	defer f.handler.mu.RUnlock()
 	var result []*Connection
 	for _, conn := range f.handler.connections {
-		if conn != nil && conn.UserID == userID {
+		if conn != nil && string(conn.UserID) == userID {
 			result = append(result, conn)
 		}
 	}

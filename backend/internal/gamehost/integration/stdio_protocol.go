@@ -56,11 +56,22 @@ func (h *GameHostStdioProtocolHandler) Attach(
 	if err := h.validatePluginExtension(rt.PluginID, meta.ExtensionID); err != nil {
 		return nil, fmt.Errorf("gamehost stdio: plugin validation failed: %w", err)
 	}
+	generationReader, ok := h.runtimes.(interface {
+		GetCurrentGeneration(domain.RuntimeInstanceID) (int64, error)
+	})
+	if !ok {
+		return nil, fmt.Errorf("gamehost stdio: runtime generation reader is unavailable")
+	}
+	generation, err := generationReader.GetCurrentGeneration(runtimeID)
+	if err != nil || generation <= 0 {
+		return nil, fmt.Errorf("gamehost stdio: runtime generation is unavailable")
+	}
 
 	peer := ipc.Peer{
-		PluginID:  rt.PluginID,
-		RuntimeID: rt.ID,
-		ServiceID: serviceID,
+		PluginID:   rt.PluginID,
+		RuntimeID:  rt.ID,
+		ServiceID:  serviceID,
+		Generation: generation,
 	}
 
 	transport := ipc.NewStdioTransport(ipc.StdioTransportConfig{

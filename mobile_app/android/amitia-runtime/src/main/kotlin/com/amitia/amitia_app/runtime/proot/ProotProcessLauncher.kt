@@ -1,3 +1,5 @@
-﻿package com.amitia.amitia_app.runtime.proot
+package com.amitia.amitia_app.runtime.proot
 
-interface ProotProcessLauncher { fun launch(command: ProotCommand, observer: ProotObserver): ProotSession }
+interface ProotProcessLauncher {
+    fun launch(command: ProotCommand, observer: ProotObserver, generation: Long): ProotSession
+}

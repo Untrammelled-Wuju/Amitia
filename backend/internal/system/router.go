@@ -4,6 +4,10 @@ package system
 
 import (
 	"fmt"
+	"os"
+	"runtime"
+	"time"
+
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/embedding_config"
@@ -18,6 +22,7 @@ import (
 	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/psyche"
 	"github.com/u-ai/backend/internal/relationship"
+	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"github.com/u-ai/backend/internal/temporal"
 	"github.com/u-ai/backend/internal/tts"
@@ -25,13 +30,10 @@ import (
 	"github.com/u-ai/backend/internal/worldbook"
 	"github.com/u-ai/backend/pkg/app"
 	"github.com/u-ai/backend/pkg/sse"
-	"os"
-	"runtime"
-	"time"
 )
 
 func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.Service, unifiedEntry *interaction.UnifiedEntry, dataLifecycle *mindruntime.DataLifecycleCoordinator, reconciliation *mindruntime.ReconciliationEngine, memSvc memory.Service, profSvc profile.Service, epiSvc episodic.Service, graphSvc graph.Service, temporalSvc *temporal.Service) {
-	svc := NewService(ctx)
+	svc := NewService(ctx, runtimeprofile.Profile(""))
 	handler := NewHandler(svc, ctx.DB, chatSvc, dataLifecycle, unifiedEntry, reconciliation, memSvc)
 	svc.AttachTemporalService(temporalSvc)
 

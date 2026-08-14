@@ -18,11 +18,11 @@ const (
 type EmergencyStopReason string
 
 const (
-	EmergencyReasonUserRequested      EmergencyStopReason = "user_requested"
-	EmergencyReasonSafetyPolicy       EmergencyStopReason = "safety_policy"
-	EmergencyReasonResourceViolation  EmergencyStopReason = "resource_violation"
+	EmergencyReasonUserRequested       EmergencyStopReason = "user_requested"
+	EmergencyReasonSafetyPolicy        EmergencyStopReason = "safety_policy"
+	EmergencyReasonResourceViolation   EmergencyStopReason = "resource_violation"
 	EmergencyReasonRuntimeUnresponsive EmergencyStopReason = "runtime_unresponsive"
-	EmergencyReasonManualAdminAction  EmergencyStopReason = "manual_admin_action"
+	EmergencyReasonManualAdminAction   EmergencyStopReason = "manual_admin_action"
 )
 
 type EmergencyStopState string
@@ -59,7 +59,7 @@ func (s EmergencyStopState) Before(other EmergencyStopState) bool {
 		EmergencyStateCleaningResources:  8,
 		EmergencyStateVerifying:          9,
 		EmergencyStateCompleted:          10,
-		EmergencyStateFailed:            -1,
+		EmergencyStateFailed:             -1,
 	}
 	return order[s] < order[other]
 }
@@ -80,6 +80,7 @@ type VerificationResult struct {
 	ConnectionsClosed       bool
 	LeasesRevoked           bool
 	PendingCleared          bool
+	HostAPIInflightCleared  bool
 	ReadyCleared            bool
 	ChannelsCleared         bool
 	StreamsCleared          bool
@@ -125,6 +126,18 @@ type EmergencyIntentStore interface {
 	IsEmergencyLatched(ctx context.Context, runtimeID domain.RuntimeInstanceID) bool
 	GetEmergencyOperationID(ctx context.Context, runtimeID domain.RuntimeInstanceID) (string, bool)
 	ClearEmergencyLatch(ctx context.Context, runtimeID domain.RuntimeInstanceID, actor string) error
+}
+
+type LifecycleIntentWriter interface {
+	SetLifecycleIntent(runtimeID domain.RuntimeInstanceID, intent string) error
+}
+
+type ReadyVerifier interface {
+	CountRuntimeReady(runtimeID domain.RuntimeInstanceID) int
+}
+
+type HostAPIWorkVerifier interface {
+	CountRuntimeHostAPIWork(runtimeID domain.RuntimeInstanceID) int
 }
 
 type PendingVerifier interface {

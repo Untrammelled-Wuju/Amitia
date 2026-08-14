@@ -103,6 +103,7 @@ import (
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
 	"github.com/u-ai/backend/pkg/resourceuri"
+	"github.com/u-ai/backend/pkg/util"
 	"gorm.io/gorm"
 )
 
@@ -220,7 +221,7 @@ func (a reflectionMemoryServiceAdapter) SubmitReflectionCandidate(req interactio
 	return err
 }
 
-func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runtimeBootstrap, profile runtimeprofile.Profile, policy runtimeprofile.Policy) (*AppServices, error) {
+func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runtimeBootstrap, runtimeProfile runtimeprofile.Profile, policy runtimeprofile.Policy) (*AppServices, error) {
 	if config.AppCfg == nil {
 		config.AppCfg = &config.Config{}
 	}
@@ -301,9 +302,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	providerRegistry := desktoppet.NewProviderRegistry()
 	var resourceResolver *resourceuri.PhysicalResolver
 	if config.AppCfg != nil && config.AppCfg.Storage.DataDir != "" {
-		resolver, resolverErr := resourceuri.NewPhysicalResolver(resourceuri.PhysicalRoots{
-			Data: config.AppCfg.Storage.DataDir,
-		})
+		paths := util.DetectRuntimePaths(config.AppCfg.Storage.DataDir)
+		resolver, resolverErr := resourceuri.NewPhysicalResolver(resourceuri.PhysicalRootsFromRuntimePaths(paths))
 		if resolverErr != nil {
 			log.Warn("failed to create resource resolver for image intelligence:", resolverErr)
 		} else {
@@ -314,7 +314,13 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	var workspaceRegistry *workspace.Registry
 	var workspaceService *workspace.Service
 	if config.AppCfg != nil && config.AppCfg.Storage.DataDir != "" {
-		workspaceRegistry, workspaceService, err = buildWorkspaceServices(config.AppCfg.Storage.DataDir)
+		var safBridge workspace.SAFBridge
+		if bootstrap != nil {
+			safBridge = newWorkspaceSAFBridge(bootstrap.AndroidNativeBridge())
+		} else {
+			safBridge = newWorkspaceSAFBridge(nil)
+		}
+		workspaceRegistry, workspaceService, err = buildWorkspaceServices(config.AppCfg.Storage.DataDir, resourceResolver, ctx.DB, safBridge, unavailableWorkspaceCredentialResolver{})
 		if err != nil {
 			return nil, fmt.Errorf("initialize workspace services: %w", err)
 		}
@@ -322,7 +328,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	var mediaService *media.Service
 	if bootstrap != nil {
-		mediaService = buildMediaService(bootstrap.RuntimeHost(), config.AppCfg.Storage.DataDir)
+		mediaService = buildMediaService(bootstrap.RuntimeHost(), config.AppCfg.Storage.DataDir, resourceResolver, workspaceService)
 	}
 
 	var browserProvider browser.BrowserProvider
@@ -921,7 +927,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	maintenanceHandler := maintenance.NewHandler(migrationRunner, nil, nil, nil)
 
 	services := &AppServices{
-		RuntimeProfile:               profile,
+		RuntimeProfile:               runtimeProfile,
 		RuntimePolicy:                policy,
 		Graph:                        graphSvc,
 		ChatDeliveryAdapter:          deliveryAdapter,

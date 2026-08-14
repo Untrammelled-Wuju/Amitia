@@ -69,8 +69,8 @@ func NewSnapshot(actor *auth.ActorContext) ActorSnapshot {
 	}
 	return ActorSnapshot{
 		ActorType:     string(actor.ActorType),
-		UserID:        actor.UserID,
-		DeviceID:      actor.DeviceID,
+		UserID:        string(actor.UserID),
+		DeviceID:      string(actor.DeviceID),
 		Roles:         actor.Roles,
 		Permissions:   actor.Permissions,
 		AuthMethod:    actor.AuthMethod,

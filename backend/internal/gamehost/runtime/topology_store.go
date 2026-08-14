@@ -7,10 +7,11 @@ import (
 )
 
 type TopologyStore struct {
-	mu       sync.RWMutex
-	topologies map[domain.RuntimeInstanceID]*RuntimeTopology
-	graphs     map[domain.RuntimeInstanceID]*DependencyGraph
+	mu            sync.RWMutex
+	topologies    map[domain.RuntimeInstanceID]*RuntimeTopology
+	graphs        map[domain.RuntimeInstanceID]*DependencyGraph
 	definitionIDs map[domain.RuntimeInstanceID]map[domain.ServiceID]string
+	moduleIDs     map[domain.RuntimeInstanceID]map[domain.ServiceID]string
 }
 
 func NewTopologyStore() *TopologyStore {
@@ -18,6 +19,7 @@ func NewTopologyStore() *TopologyStore {
 		topologies:    make(map[domain.RuntimeInstanceID]*RuntimeTopology),
 		graphs:        make(map[domain.RuntimeInstanceID]*DependencyGraph),
 		definitionIDs: make(map[domain.RuntimeInstanceID]map[domain.ServiceID]string),
+		moduleIDs:     make(map[domain.RuntimeInstanceID]map[domain.ServiceID]string),
 	}
 }
 
@@ -118,7 +120,38 @@ func (s *TopologyStore) RemoveRuntime(runtimeID domain.RuntimeInstanceID) error 
 	delete(s.topologies, runtimeID)
 	delete(s.graphs, runtimeID)
 	delete(s.definitionIDs, runtimeID)
+	delete(s.moduleIDs, runtimeID)
 	return nil
+}
+
+func (s *TopologyStore) BindModuleID(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID, moduleID string) error {
+	if moduleID == "" {
+		return &TopologyError{Code: ErrInvalidArgument, Message: "module id must not be empty", RuntimeID: string(runtimeID), ServiceID: string(serviceID)}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.topologies[runtimeID]; !ok {
+		return &TopologyError{Code: ErrNotFound, Message: "runtime not found: " + string(runtimeID), RuntimeID: string(runtimeID)}
+	}
+	if s.moduleIDs[runtimeID] == nil {
+		s.moduleIDs[runtimeID] = make(map[domain.ServiceID]string)
+	}
+	s.moduleIDs[runtimeID][serviceID] = moduleID
+	return nil
+}
+
+func (s *TopologyStore) ResolveModuleID(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID) (string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	moduleIDs, ok := s.moduleIDs[runtimeID]
+	if !ok {
+		return "", &TopologyError{Code: ErrNotFound, Message: "runtime module bindings not found", RuntimeID: string(runtimeID)}
+	}
+	moduleID, ok := moduleIDs[serviceID]
+	if !ok {
+		return "", &TopologyError{Code: ErrNotFound, Message: "module not found for service: " + string(serviceID), RuntimeID: string(runtimeID), ServiceID: string(serviceID)}
+	}
+	return moduleID, nil
 }
 
 func (s *TopologyStore) ResolveDefinitionID(

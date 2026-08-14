@@ -55,6 +55,11 @@ func (r *Registry) GetBackend(kind WorkspaceKind) (WorkspaceBackend, bool) {
 	return b, ok
 }
 
+func (r *Registry) HasBackend(kind WorkspaceKind) bool {
+	_, ok := r.GetBackend(kind)
+	return ok
+}
+
 func (r *Registry) RegisterLocalMount(ctx context.Context, name string, localRoot string, readOnly bool) (WorkspaceMount, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -205,6 +210,9 @@ func (r *Registry) RemoveMount(ctx context.Context, id WorkspaceID) error {
 func (r *Registry) RestoreMount(mount WorkspaceMount) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if _, exists := r.mounts[mount.ID]; exists {
+		return fmt.Errorf("workspace mount %q already exists", mount.ID)
+	}
 	r.mounts[mount.ID] = mount
 	return nil
 }

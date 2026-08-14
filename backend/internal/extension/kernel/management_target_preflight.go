@@ -37,7 +37,10 @@ func (g *TargetMutationGuard) ValidateArchiveTarget(ctx context.Context, archive
 	if !preview.Installable {
 		return nil, fmt.Errorf("target mutation guard: archive is not installable")
 	}
-	contributions := preview.Manifest.AllContributions()
+	contributions := make([]manifest_v2.ContributionMeta, 0)
+	for _, module := range preview.Manifest.Modules {
+		contributions = append(contributions, module.Contributions...)
+	}
 	target, err := resolveManagementTarget(contributions)
 	if err != nil {
 		return nil, fmt.Errorf("target mutation guard: cannot determine management target: %w", err)
@@ -57,11 +60,11 @@ func resolveManagementTarget(contributions []manifest_v2.ContributionMeta) (doma
 	for _, c := range contributions {
 		kinds = append(kinds, domain.ContributionKind(c.Kind))
 	}
-	domain, err := domain.ResolveDomainFromKinds(kinds)
+	extensionDomain, err := domain.ResolveDomainFromKinds(kinds)
 	if err != nil {
 		return "", err
 	}
-	target, err := domain.ManagementTargetForDomain(domain)
+	target, err := domain.ManagementTargetForDomain(extensionDomain)
 	if err != nil {
 		return "", err
 	}

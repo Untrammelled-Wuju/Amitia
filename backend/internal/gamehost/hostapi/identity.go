@@ -16,6 +16,7 @@ type RuntimeResolver interface {
 	RuntimeInfo(
 		ctx context.Context,
 		runtimeID string,
+		serviceID string,
 	) (extensionID string, moduleID string, runtimeType string, generation int64, err error)
 }
 
@@ -78,9 +79,12 @@ func (m *defaultIdentityMapper) MapIdentity(ctx context.Context, peer Peer) (run
 		return runtime_supervisor.RuntimeIdentity{}, fmt.Errorf("service %q does not belong to runtime %q: %w", peer.ServiceID, peer.RuntimeID, err)
 	}
 
-	extID, modID, rtType, gen, err := m.runtimeResolver.RuntimeInfo(ctx, string(peer.RuntimeID))
+	extID, modID, rtType, gen, err := m.runtimeResolver.RuntimeInfo(ctx, string(peer.RuntimeID), string(peer.ServiceID))
 	if err != nil {
 		return runtime_supervisor.RuntimeIdentity{}, fmt.Errorf("resolve runtime kernel info: %w", err)
+	}
+	if peer.Generation != gen {
+		return runtime_supervisor.RuntimeIdentity{}, fmt.Errorf("peer generation %d does not match current runtime generation %d", peer.Generation, gen)
 	}
 
 	return runtime_supervisor.RuntimeIdentity{

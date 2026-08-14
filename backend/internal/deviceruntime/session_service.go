@@ -463,6 +463,8 @@ func (s *Service) Close(
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	uow, txOn := s.txEnabled()
+
 	session, err := s.store.Get(ctx, sessionID)
 	if err != nil {
 		return err
@@ -476,8 +478,30 @@ func (s *Service) Close(
 		return nil
 	}
 
-	if err := s.store.Close(ctx, sessionID, generation, reason, now); err != nil {
-		return err
+	if txOn {
+		if err := uow.WithinTx(ctx, func(tx SessionTx) error {
+			if err := tx.Close(ctx, sessionID, generation, reason, now); err != nil {
+				return err
+			}
+			session.Status = protocol.SessionStatusClosed
+			session.CloseReason = reason
+			session.Revision++
+			closedAt := now
+			session.ClosedAt = &closedAt
+			session.UpdatedAt = now
+			return s.events.PublishTx(ctx, tx.RawTx(), SessionDomainEvent{
+				Type:       SessionEventClosed,
+				Session:    session,
+				Reason:     reason,
+				OccurredAt: now,
+			})
+		}); err != nil {
+			return err
+		}
+	} else {
+		if err := s.store.Close(ctx, sessionID, generation, reason, now); err != nil {
+			return err
+		}
 	}
 
 	presenceErr := s.presence.SessionDisconnected(ctx, PresenceSnapshot{

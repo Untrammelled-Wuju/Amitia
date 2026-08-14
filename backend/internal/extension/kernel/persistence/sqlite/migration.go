@@ -271,7 +271,8 @@ var schemaMigrations = []string{
 		cancel_requested_at DATETIME,
 		error_code TEXT,
 		error_message TEXT,
-		generation INTEGER NOT NULL DEFAULT 1
+		generation INTEGER NOT NULL DEFAULT 1,
+		revision INTEGER NOT NULL DEFAULT 1
 	)`,
 	`CREATE INDEX IF NOT EXISTS idx_ext_task_runs_ext_id ON extension_task_runs(extension_id)`,
 	`CREATE INDEX IF NOT EXISTS idx_ext_task_runs_status ON extension_task_runs(status)`,
@@ -2369,6 +2370,7 @@ var schemaColumnAdditions = []columnAddition{
 	{"extension_task_runs", "execution_attempt_id", "TEXT NOT NULL DEFAULT ''"},
 	{"extension_task_runs", "execution_resolved_at", "DATETIME"},
 	{"extension_task_runs", "execution_resolved_by", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_task_runs", "revision", "INTEGER NOT NULL DEFAULT 1"},
 }
 
 func ensureSchemaColumns(ctx context.Context, db dbExecutor) error {

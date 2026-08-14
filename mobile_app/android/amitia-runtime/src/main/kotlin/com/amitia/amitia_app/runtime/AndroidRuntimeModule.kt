@@ -9,9 +9,11 @@ import com.amitia.amitia_app.runtime.install.ActiveRuntimeManager
 import com.amitia.amitia_app.runtime.install.ActiveRuntimeResult
 import com.amitia.amitia_app.runtime.install.RuntimeInstaller
 import com.amitia.amitia_app.runtime.install.internal.DefaultActiveRuntimeManager
+import com.amitia.amitia_app.runtime.install.internal.DefaultInstalledRuntimeVerifier
 import com.amitia.amitia_app.runtime.install.internal.DefaultPackageVerifier
 import com.amitia.amitia_app.runtime.install.internal.DefaultRuntimeHostLayout
 import com.amitia.amitia_app.runtime.install.internal.DefaultRuntimeInstaller
+import com.amitia.amitia_app.runtime.internal.DefaultRuntimeBootstrapper
 import com.amitia.amitia_app.runtime.internal.DefaultRuntimeController
 import com.amitia.amitia_app.runtime.internal.DefaultRuntimeModule
 import com.amitia.amitia_app.runtime.internal.RuntimeStateStore
@@ -116,11 +118,22 @@ object AndroidRuntimeModule {
         )
         cachedRuntimeInstaller = installer
 
+        val bootstrapper = DefaultRuntimeBootstrapper(
+            manifestStore = manifestStore,
+            activeRuntimeManager = activeRuntimeManager,
+            hostLayout = layout,
+        )
+        val treeHasher = com.amitia.amitia_app.runtime.manifest.internal.InstalledTreeHasher
+        val installedVerifier = DefaultInstalledRuntimeVerifier(treeHasher::computeTreeSha256)
+
         val controller = DefaultRuntimeController(
             stateStore = stateStore,
             serviceHost = serviceHost,
             installer = installer,
             abiGate = abiGate,
+            bootstrapper = bootstrapper,
+            installedVerifier = installedVerifier,
+            hostLayout = layout,
             recoveryPolicy = recoveryPolicy,
             recoveryScheduler = recoveryScheduler,
             installedRuntimeSource = installedRuntimeSource,

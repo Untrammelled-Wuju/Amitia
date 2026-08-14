@@ -24,9 +24,10 @@ func NewHostAPIHandler(adapter *HostAPIAdapter) rpc.Handler {
 
 func (h *hostAPIHandler) Handle(ctx context.Context, req rpc.RPCRequest) (rpc.RPCResponse, error) {
 	peer := ipc.Peer{
-		PluginID:  req.PluginID,
-		RuntimeID: req.RuntimeID,
-		ServiceID: req.ServiceID,
+		PluginID:   req.PluginID,
+		RuntimeID:  req.RuntimeID,
+		ServiceID:  req.ServiceID,
+		Generation: req.Generation,
 	}
 
 	resp, err := h.adapter.Call(ctx, Request{

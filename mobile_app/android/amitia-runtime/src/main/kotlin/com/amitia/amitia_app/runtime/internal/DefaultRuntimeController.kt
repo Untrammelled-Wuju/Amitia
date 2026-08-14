@@ -20,6 +20,9 @@ import com.amitia.amitia_app.runtime.api.RuntimeVerifyRequest
 import com.amitia.amitia_app.runtime.abi.RuntimeAbiGate
 import com.amitia.amitia_app.runtime.connection.BackendEndpointPolicy
 import com.amitia.amitia_app.runtime.connection.embeddedAndroidBackendPolicy
+import com.amitia.amitia_app.runtime.install.InstalledRuntimeVerifier
+import com.amitia.amitia_app.runtime.install.RuntimeHostLayout
+import com.amitia.amitia_app.runtime.install.RuntimeInstallResult
 import com.amitia.amitia_app.runtime.install.RuntimeInstaller
 import com.amitia.amitia_app.runtime.proot.ProotSession
 import com.amitia.amitia_app.runtime.recovery.AlwaysInstalledRuntimeSource
@@ -48,6 +51,9 @@ internal class DefaultRuntimeController(
     private val serviceHost: RuntimeServiceHost,
     private val installer: RuntimeInstaller? = null,
     private val abiGate: RuntimeAbiGate? = null,
+    private val bootstrapper: RuntimeBootstrapper? = null,
+    private val installedVerifier: InstalledRuntimeVerifier? = null,
+    private val hostLayout: RuntimeHostLayout? = null,
     private val idGenerator: RuntimeIdGenerator = UuidRuntimeIdGenerator,
     private val startupDetector: RuntimeStartupDetector = DefaultRuntimeStartupDetector(),
     private val endpointPolicy: BackendEndpointPolicy = embeddedAndroidBackendPolicy(),
@@ -76,6 +82,24 @@ internal class DefaultRuntimeController(
 
     init {
         serviceHost.addListener(serviceHostListener)
+        runBootstrap()
+    }
+
+    private fun runBootstrap() {
+        val bootstrapper = bootstrapper ?: return
+        if (stateStore.isInitialized()) return
+
+        when (val result = bootstrapper.bootstrap()) {
+            is RuntimeBootstrapResult.NotInstalled -> {
+                stateStore.initialize(RuntimeState.NOT_INSTALLED)
+            }
+            is RuntimeBootstrapResult.InstalledStopped -> {
+                stateStore.initialize(RuntimeState.STOPPED, result.runtimeVersion)
+            }
+            is RuntimeBootstrapResult.Failed -> {
+                stateStore.initialize(RuntimeState.FAILED)
+            }
+        }
     }
 
     private fun currentGeneration(): Long = stateStore.snapshot().generation
@@ -779,19 +803,60 @@ internal class DefaultRuntimeController(
         val operationId = idGenerator.nextOperationId()
         val handle = CompletedOperationHandle(operationId, RuntimeOperationType.INSTALL)
         try {
-            val result = installer.install(
+            val installResult = installer.install(
                 com.amitia.amitia_app.runtime.install.RuntimeInstallRequest(
                     packageFile = java.io.File(request.packageUri),
                     expectedRuntimeVersion = request.expectedVersion
                 )
             )
-            callback.onCompleted(
-                RuntimeOperationResult.Success(
-                    operationId = operationId,
-                    type = RuntimeOperationType.INSTALL,
-                    snapshot = stateStore.snapshot()
-                )
-            )
+            when (installResult) {
+                is RuntimeInstallResult.Success,
+                is RuntimeInstallResult.AlreadyInstalled -> {
+                    val bootstrapResult = bootstrapper?.bootstrap()
+                    if (bootstrapResult !is RuntimeBootstrapResult.InstalledStopped) {
+                        callback.onCompleted(
+                            RuntimeOperationResult.Failure(
+                                operationId = operationId,
+                                type = RuntimeOperationType.INSTALL,
+                                error = RuntimeError(
+                                    code = RuntimeErrorCode.INSTALL_FAILED,
+                                    message = "install succeeded but runtime authority not consistent",
+                                    recoverable = true
+                                ),
+                                snapshot = stateStore.snapshot()
+                            )
+                        )
+                        return handle
+                    }
+                    stateStore.update {
+                        it.copy(
+                            state = RuntimeState.STOPPED,
+                            runtimeVersion = bootstrapResult.runtimeVersion
+                        )
+                    }
+                    callback.onCompleted(
+                        RuntimeOperationResult.Success(
+                            operationId = operationId,
+                            type = RuntimeOperationType.INSTALL,
+                            snapshot = stateStore.snapshot()
+                        )
+                    )
+                }
+                is RuntimeInstallResult.Failure -> {
+                    callback.onCompleted(
+                        RuntimeOperationResult.Failure(
+                            operationId = operationId,
+                            type = RuntimeOperationType.INSTALL,
+                            error = RuntimeError(
+                                code = RuntimeErrorCode.INSTALL_FAILED,
+                                message = installResult.message,
+                                recoverable = true
+                            ),
+                            snapshot = stateStore.snapshot()
+                        )
+                    )
+                }
+            }
         } catch (e: Exception) {
             callback.onCompleted(
                 RuntimeOperationResult.Failure(
@@ -816,13 +881,92 @@ internal class DefaultRuntimeController(
     ): RuntimeOperationHandle {
         val operationId = idGenerator.nextOperationId()
         val handle = CompletedOperationHandle(operationId, RuntimeOperationType.VERIFY)
-        callback.onCompleted(
-            RuntimeOperationResult.Success(
-                operationId = operationId,
-                type = RuntimeOperationType.VERIFY,
-                snapshot = stateStore.snapshot()
+
+        val verifier = installedVerifier
+        if (verifier == null) {
+            callback.onCompleted(
+                RuntimeOperationResult.Failure(
+                    operationId = operationId,
+                    type = RuntimeOperationType.VERIFY,
+                    error = RuntimeError(
+                        code = RuntimeErrorCode.NOT_IMPLEMENTED,
+                        message = "installed runtime verifier not available",
+                        recoverable = false
+                    ),
+                    snapshot = stateStore.snapshot()
+                )
             )
-        )
+            return handle
+        }
+
+        val bootstrap = bootstrapper?.bootstrap()
+        val runtimeVersion = when (bootstrap) {
+            is RuntimeBootstrapResult.InstalledStopped -> bootstrap.runtimeVersion
+            else -> stateStore.snapshot().runtimeVersion
+        }
+
+        if (runtimeVersion == null) {
+            callback.onCompleted(
+                RuntimeOperationResult.Failure(
+                    operationId = operationId,
+                    type = RuntimeOperationType.VERIFY,
+                    error = RuntimeError(
+                        code = RuntimeErrorCode.INVALID_STATE,
+                        message = "no runtime version available to verify",
+                        recoverable = true
+                    ),
+                    snapshot = stateStore.snapshot()
+                )
+            )
+            return handle
+        }
+
+        val layout = hostLayout
+        if (layout == null) {
+            callback.onCompleted(
+                RuntimeOperationResult.Failure(
+                    operationId = operationId,
+                    type = RuntimeOperationType.VERIFY,
+                    error = RuntimeError(
+                        code = RuntimeErrorCode.NOT_IMPLEMENTED,
+                        message = "host layout not available for verify",
+                        recoverable = false
+                    ),
+                    snapshot = stateStore.snapshot()
+                )
+            )
+            return handle
+        }
+
+        val versionDir = layout.runtimeVersionRoot(runtimeVersion)
+        val verifyResult = verifier.verify(versionDir)
+
+        when (verifyResult) {
+            is com.amitia.amitia_app.runtime.install.InstalledRuntimeVerificationResult.Success -> {
+                callback.onCompleted(
+                    RuntimeOperationResult.Success(
+                        operationId = operationId,
+                        type = RuntimeOperationType.VERIFY,
+                        snapshot = stateStore.snapshot()
+                    )
+                )
+            }
+            is com.amitia.amitia_app.runtime.install.InstalledRuntimeVerificationResult.Failure -> {
+                stateStore.update { it.copy(state = RuntimeState.FAILED) }
+                callback.onCompleted(
+                    RuntimeOperationResult.Failure(
+                        operationId = operationId,
+                        type = RuntimeOperationType.VERIFY,
+                        error = RuntimeError(
+                            code = RuntimeErrorCode.RUNTIME_VERIFY_FAILED,
+                            message = verifyResult.message,
+                            recoverable = true
+                        ),
+                        snapshot = stateStore.snapshot()
+                    )
+                )
+            }
+        }
         return handle
     }
 
@@ -836,20 +980,74 @@ internal class DefaultRuntimeController(
         try {
             val packageFile = request.packageUri?.let { java.io.File(it) }
             if (packageFile != null) {
-                val result = installer.install(
+                val installResult = installer.install(
                     com.amitia.amitia_app.runtime.install.RuntimeInstallRequest(
                         packageFile = packageFile,
                         expectedRuntimeVersion = null
                     )
                 )
-            }
-            callback.onCompleted(
-                RuntimeOperationResult.Success(
-                    operationId = operationId,
-                    type = RuntimeOperationType.REPAIR,
-                    snapshot = stateStore.snapshot()
+                when (installResult) {
+                    is RuntimeInstallResult.Success,
+                    is RuntimeInstallResult.AlreadyInstalled -> {
+                        val bootstrapResult = bootstrapper?.bootstrap()
+                        if (bootstrapResult !is RuntimeBootstrapResult.InstalledStopped) {
+                            callback.onCompleted(
+                                RuntimeOperationResult.Failure(
+                                    operationId = operationId,
+                                    type = RuntimeOperationType.REPAIR,
+                                    error = RuntimeError(
+                                        code = RuntimeErrorCode.REPAIR_FAILED,
+                                        message = "repair succeeded but runtime authority not consistent",
+                                        recoverable = true
+                                    ),
+                                    snapshot = stateStore.snapshot()
+                                )
+                            )
+                            return handle
+                        }
+                        stateStore.update {
+                            it.copy(
+                                state = RuntimeState.STOPPED,
+                                runtimeVersion = bootstrapResult.runtimeVersion
+                            )
+                        }
+                        callback.onCompleted(
+                            RuntimeOperationResult.Success(
+                                operationId = operationId,
+                                type = RuntimeOperationType.REPAIR,
+                                snapshot = stateStore.snapshot()
+                            )
+                        )
+                    }
+                    is RuntimeInstallResult.Failure -> {
+                        callback.onCompleted(
+                            RuntimeOperationResult.Failure(
+                                operationId = operationId,
+                                type = RuntimeOperationType.REPAIR,
+                                error = RuntimeError(
+                                    code = RuntimeErrorCode.REPAIR_FAILED,
+                                    message = installResult.message,
+                                    recoverable = true
+                                ),
+                                snapshot = stateStore.snapshot()
+                            )
+                        )
+                    }
+                }
+            } else {
+                callback.onCompleted(
+                    RuntimeOperationResult.Failure(
+                        operationId = operationId,
+                        type = RuntimeOperationType.REPAIR,
+                        error = RuntimeError(
+                            code = RuntimeErrorCode.REPAIR_FAILED,
+                            message = "repair requires a package Uri",
+                            recoverable = false
+                        ),
+                        snapshot = stateStore.snapshot()
+                    )
                 )
-            )
+            }
         } catch (e: Exception) {
             callback.onCompleted(
                 RuntimeOperationResult.Failure(

@@ -42,14 +42,14 @@ type RuntimeTopologyStore interface {
 }
 
 type runtimeExecutor struct {
-	mu               sync.Mutex
-	runtimeLocks     map[domain.RuntimeInstanceID]*sync.Mutex
-	topology         RuntimeTopologyStore
-	runtimeManager   RuntimeManager
-	planner          *LifecyclePlanner
-	executor         ServiceExecutor
-	handleStore      *RuntimeHandleStore
-	rollbackExecutor RollbackExecutor
+	mu                sync.Mutex
+	runtimeLocks      map[domain.RuntimeInstanceID]*sync.Mutex
+	topology          RuntimeTopologyStore
+	runtimeManager    RuntimeManager
+	planner           *LifecyclePlanner
+	executor          ServiceExecutor
+	handleStore       *RuntimeHandleStore
+	rollbackExecutor  RollbackExecutor
 	resolveDefinition DefinitionResolverFunc
 }
 
@@ -134,6 +134,12 @@ func (e *runtimeExecutor) RestartRuntime(ctx context.Context, runtimeID domain.R
 	if err := e.runtimeManager.SetLifecycleIntent(runtimeID, "restart"); err != nil {
 		return err
 	}
+	defer func() {
+		intent, intentErr := e.runtimeManager.GetLifecycleIntent(runtimeID)
+		if intentErr == nil && intent == "restart" {
+			_ = e.runtimeManager.SetLifecycleIntent(runtimeID, "")
+		}
+	}()
 
 	oldGeneration, err := e.runtimeManager.GetCurrentGeneration(runtimeID)
 	if err != nil {
@@ -154,6 +160,15 @@ func (e *runtimeExecutor) RestartRuntime(ctx context.Context, runtimeID domain.R
 			Cause:         stopErr,
 		}
 	}
+	if err := e.CleanupRuntime(ctx, runtimeID); err != nil {
+		e.runtimeManager.UpdateRuntimeState(runtimeID, domain.RuntimeStateFailed, "restart cleanup phase failed", time.Now())
+		return &RuntimeRestartError{
+			Code:          ErrRestartFailed,
+			RuntimeID:     string(runtimeID),
+			OldGeneration: oldGeneration,
+			Cause:         err,
+		}
+	}
 
 	currentIntent, err := e.runtimeManager.GetLifecycleIntent(runtimeID)
 	if err != nil {
@@ -168,13 +183,9 @@ func (e *runtimeExecutor) RestartRuntime(ctx context.Context, runtimeID domain.R
 		}
 	}
 
-	newGeneration, err := e.runtimeManager.AllocateGeneration(runtimeID)
-	if err != nil {
-		return err
-	}
-
 	startErr := e.startRuntimeLocked(ctx, runtimeID)
 	if startErr != nil {
+		newGeneration, _ := e.runtimeManager.GetCurrentGeneration(runtimeID)
 		e.runtimeManager.UpdateRuntimeState(runtimeID, domain.RuntimeStateFailed, "restart start phase failed", time.Now())
 		return &RuntimeRestartError{
 			Code:          ErrRestartFailed,
@@ -184,8 +195,6 @@ func (e *runtimeExecutor) RestartRuntime(ctx context.Context, runtimeID domain.R
 			Cause:         startErr,
 		}
 	}
-
-	e.runtimeManager.SetLifecycleIntent(runtimeID, "")
 
 	return nil
 }
@@ -223,6 +232,12 @@ func (e *runtimeExecutor) startRuntimeLocked(ctx context.Context, runtimeID doma
 	if err != nil {
 		return err
 	}
+
+	generation, err := e.runtimeManager.AllocateGeneration(runtimeID)
+	if err != nil {
+		return err
+	}
+	ctx = WithExecutionGeneration(ctx, generation)
 
 	now := time.Now()
 	if err := e.runtimeManager.UpdateRuntimeState(runtimeID, domain.RuntimeStateStarting, "", now); err != nil {
@@ -431,6 +446,11 @@ func (e *runtimeExecutor) StartServices(ctx context.Context, runtimeID domain.Ru
 			Message:   "runtime not in a state to start additional services",
 		}
 	}
+	generation, err := e.runtimeManager.GetCurrentGeneration(runtimeID)
+	if err != nil {
+		return err
+	}
+	ctx = WithExecutionGeneration(ctx, generation)
 
 	topologySnapshot, err := e.topology.GetTopologySnapshot(runtimeID)
 	if err != nil {

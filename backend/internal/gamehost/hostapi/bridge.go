@@ -5,9 +5,9 @@ import (
 	"fmt"
 
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
-	"github.com/u-ai/backend/internal/gamehost/handshake"
 	"github.com/u-ai/backend/internal/gamehost/contracts"
 	"github.com/u-ai/backend/internal/gamehost/domain"
+	"github.com/u-ai/backend/internal/gamehost/handshake"
 )
 
 type ProductionHostAPIAdapterDeps struct {
@@ -21,6 +21,7 @@ type ProductionHostAPIAdapterDeps struct {
 	RuntimeResolver    RuntimeResolver
 	GenerationReader   RuntimeGenerationReader
 	ConnectionRegistry ConnectionReadyChecker
+	InvocationTracker  InvocationTracker
 }
 
 type RuntimeGenerationReader interface {
@@ -77,5 +78,6 @@ func NewProductionHostAPIAdapter(deps ProductionHostAPIAdapterDeps) (*HostAPIAda
 		ScopeProvider:      deps.ScopeProvider,
 		ReadyVerifier:      deps.ConnectionRegistry,
 		IDGenerator:        DefaultIDGenerator(),
+		InvocationTracker:  deps.InvocationTracker,
 	})
 }

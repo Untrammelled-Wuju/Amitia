@@ -15,13 +15,15 @@ type ControlAuthorityManager struct {
 	states     map[domain.RuntimeInstanceID]*ControlAuthorityState
 	perRuntime map[domain.RuntimeInstanceID]*sync.Mutex
 
-	clock Clock
-	audit AuthorityAuditSink
+	clock         Clock
+	audit         AuthorityAuditSink
+	commitBarrier ControlCommitBarrier
 }
 
 type ControlAuthorityManagerOptions struct {
-	Clock Clock
-	Audit AuthorityAuditSink
+	Clock         Clock
+	Audit         AuthorityAuditSink
+	CommitBarrier ControlCommitBarrier
 }
 
 func NewControlAuthorityManager(opts ControlAuthorityManagerOptions) *ControlAuthorityManager {
@@ -34,10 +36,11 @@ func NewControlAuthorityManager(opts ControlAuthorityManagerOptions) *ControlAut
 		audit = NewInMemoryAuthorityAuditSink()
 	}
 	return &ControlAuthorityManager{
-		states:     make(map[domain.RuntimeInstanceID]*ControlAuthorityState),
-		perRuntime: make(map[domain.RuntimeInstanceID]*sync.Mutex),
-		clock:      clock,
-		audit:      audit,
+		states:        make(map[domain.RuntimeInstanceID]*ControlAuthorityState),
+		perRuntime:    make(map[domain.RuntimeInstanceID]*sync.Mutex),
+		clock:         clock,
+		audit:         audit,
+		commitBarrier: opts.CommitBarrier,
 	}
 }
 
@@ -52,7 +55,7 @@ func (m *ControlAuthorityManager) getRuntimeLock(runtimeID domain.RuntimeInstanc
 	return lock
 }
 
-func (m *ControlAuthorityManager) Create(ctx context.Context, runtimeID domain.RuntimeInstanceID, pluginID domain.PluginID) (ControlAuthoritySnapshot, error) {
+func (m *ControlAuthorityManager) create(ctx context.Context, runtimeID domain.RuntimeInstanceID, pluginID domain.PluginID) (ControlAuthoritySnapshot, error) {
 	if err := ctx.Err(); err != nil {
 		return ControlAuthoritySnapshot{}, err
 	}
@@ -120,7 +123,7 @@ func (m *ControlAuthorityManager) Get(ctx context.Context, runtimeID domain.Runt
 	return state.Snapshot(), nil
 }
 
-func (m *ControlAuthorityManager) Transition(
+func (m *ControlAuthorityManager) transition(
 	ctx context.Context,
 	runtimeID domain.RuntimeInstanceID,
 	request TransitionRequest,
@@ -188,7 +191,7 @@ func (m *ControlAuthorityManager) Transition(
 	return state.Snapshot(), nil
 }
 
-func (m *ControlAuthorityManager) Remove(ctx context.Context, runtimeID domain.RuntimeInstanceID) error {
+func (m *ControlAuthorityManager) remove(ctx context.Context, runtimeID domain.RuntimeInstanceID) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -208,6 +211,47 @@ func (m *ControlAuthorityManager) Remove(ctx context.Context, runtimeID domain.R
 	m.mu.Unlock()
 
 	return nil
+}
+
+func (m *ControlAuthorityManager) Create(ctx context.Context, runtimeID domain.RuntimeInstanceID, pluginID domain.PluginID) (ControlAuthoritySnapshot, error) {
+	if m.commitBarrier == nil {
+		return m.create(ctx, runtimeID, pluginID)
+	}
+	var snapshot ControlAuthoritySnapshot
+	var createErr error
+	if err := m.commitBarrier.WithExclusiveMutation(runtimeID, func() {
+		snapshot, createErr = m.create(ctx, runtimeID, pluginID)
+	}); err != nil {
+		return ControlAuthoritySnapshot{}, err
+	}
+	return snapshot, createErr
+}
+
+func (m *ControlAuthorityManager) Transition(ctx context.Context, runtimeID domain.RuntimeInstanceID, request TransitionRequest) (ControlAuthoritySnapshot, error) {
+	if m.commitBarrier == nil {
+		return m.transition(ctx, runtimeID, request)
+	}
+	var snapshot ControlAuthoritySnapshot
+	var transitionErr error
+	if err := m.commitBarrier.WithExclusiveMutation(runtimeID, func() {
+		snapshot, transitionErr = m.transition(ctx, runtimeID, request)
+	}); err != nil {
+		return ControlAuthoritySnapshot{}, err
+	}
+	return snapshot, transitionErr
+}
+
+func (m *ControlAuthorityManager) Remove(ctx context.Context, runtimeID domain.RuntimeInstanceID) error {
+	if m.commitBarrier == nil {
+		return m.remove(ctx, runtimeID)
+	}
+	var removeErr error
+	if err := m.commitBarrier.WithExclusiveMutation(runtimeID, func() {
+		removeErr = m.remove(ctx, runtimeID)
+	}); err != nil {
+		return err
+	}
+	return removeErr
 }
 
 func (m *ControlAuthorityManager) List(ctx context.Context) ([]ControlAuthoritySnapshot, error) {

@@ -88,6 +88,15 @@ android {
 
 val frozenRuntimePackagePath: String? = System.getenv("FROZEN_RUNTIME_PACKAGE_PATH")
 val frozenRuntimePackageSha256: String? = System.getenv("FROZEN_RUNTIME_PACKAGE_SHA256")
+val amitiaRuntimeCandidateBuild: String? = System.getenv("AMITIA_RUNTIME_CANDIDATE_BUILD")
+val isCandidateBuild = amitiaRuntimeCandidateBuild == "1"
+
+if (isCandidateBuild && frozenRuntimePackagePath == null) {
+    throw GradleException("Candidate build requires FROZEN_RUNTIME_PACKAGE_PATH environment variable")
+}
+if (isCandidateBuild && frozenRuntimePackageSha256 == null) {
+    throw GradleException("Candidate build requires FROZEN_RUNTIME_PACKAGE_SHA256 environment variable")
+}
 
 tasks.register<Delete>("cleanFrozenRuntimePackage") {
     group = "candidate"
@@ -124,6 +133,8 @@ tasks.register<Copy>("copyFrozenRuntimePackage") {
         into(layout.projectDirectory.dir("src/main/assets/runtime-package"))
     } else if (frozenRuntimePackagePath != null || frozenRuntimePackageSha256 != null) {
         throw GradleException("copyFrozenRuntimePackage: Both FROZEN_RUNTIME_PACKAGE_PATH and FROZEN_RUNTIME_PACKAGE_SHA256 must be set for Candidate build")
+    } else if (isCandidateBuild) {
+        throw GradleException("copyFrozenRuntimePackage: Candidate build requires FROZEN_RUNTIME_PACKAGE_PATH and FROZEN_RUNTIME_PACKAGE_SHA256")
     } else {
         doLast {
             logger.lifecycle("copyFrozenRuntimePackage: Candidate environment not set, skipping asset embed")

@@ -16,13 +16,24 @@ type ProcessExitBridge interface {
 	UnregisterObserver()
 }
 
+type RuntimeGenerationLeaseRevoker interface {
+	RevokeRuntimeGenerationLeases(runtimeID string, generation int64, reason string)
+}
+
 type processExitBridgeImpl struct {
-	mu              sync.Mutex
-	supervisor      *trusted_service.ProcessSupervisor
-	recovery        *recovery.RecoveryCoordinator
-	topologyStore   *TopologyStore
-	registry        *Manager
-	registered      bool
+	mu            sync.Mutex
+	supervisor    *trusted_service.ProcessSupervisor
+	recovery      *recovery.RecoveryCoordinator
+	topologyStore *TopologyStore
+	registry      *Manager
+	registered    bool
+	leaseRevoker  RuntimeGenerationLeaseRevoker
+}
+
+func (b *processExitBridgeImpl) SetRuntimeGenerationLeaseRevoker(revoker RuntimeGenerationLeaseRevoker) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.leaseRevoker = revoker
 }
 
 func NewProcessExitBridge(
@@ -79,6 +90,17 @@ func (b *processExitBridgeImpl) OnProcessExit(event trusted_service.ProcessExitE
 	if !ok {
 		log.Printf("[process-exit-bridge] could not resolve runtime ID for service %s", event.ServiceID)
 		return
+	}
+	state, err := b.registry.GetRuntimeState(runtimeID)
+	if err == nil && (state == domain.RuntimeStateRestarting || state == domain.RuntimeStateStopping || state == domain.RuntimeStateStopped) {
+		return
+	}
+	generation, generationErr := b.registry.GetCurrentGeneration(runtimeID)
+	b.mu.Lock()
+	revoker := b.leaseRevoker
+	b.mu.Unlock()
+	if generationErr == nil && revoker != nil && generation > 0 {
+		revoker.RevokeRuntimeGenerationLeases(string(runtimeID), generation, "unexpected process exit")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)

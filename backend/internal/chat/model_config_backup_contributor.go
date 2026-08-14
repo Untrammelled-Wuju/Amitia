@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"gorm.io/gorm"

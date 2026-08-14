@@ -45,7 +45,7 @@ type fakeRuntimeResolver struct {
 	gen int64
 }
 
-func (f *fakeRuntimeResolver) RuntimeInfo(ctx context.Context, runtimeID string) (string, string, string, int64, error) {
+func (f *fakeRuntimeResolver) RuntimeInfo(ctx context.Context, runtimeID string, serviceID string) (string, string, string, int64, error) {
 	if f.err != nil {
 		return "", "", "", 0, f.err
 	}
@@ -59,7 +59,7 @@ func TestIdentityMapper_NormalMapping(t *testing.T) {
 		&fakeRuntimeResolver{ext: "test.example/app", mod: "core", rtt: "service", gen: 7},
 	)
 	identity, err := mapper.MapIdentity(context.Background(), ipc.Peer{
-		PluginID: "p1", RuntimeID: "r1", ServiceID: "s1",
+		PluginID: "p1", RuntimeID: "r1", ServiceID: "s1", Generation: 7,
 	})
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -75,6 +75,20 @@ func TestIdentityMapper_NormalMapping(t *testing.T) {
 	}
 	if identity.Generation != 7 {
 		t.Fatalf("expected Generation 7, got %d", identity.Generation)
+	}
+}
+
+func TestIdentityMapper_RejectsStaleGeneration(t *testing.T) {
+	mapper := NewIdentityMapper(
+		&fakeRuntimeStateReader{pluginExists: true, runtimeExists: true, runtimeOwnedBy: true},
+		&fakeTopologyReader{belongs: true},
+		&fakeRuntimeResolver{ext: "test.example/app", mod: "core", rtt: "service", gen: 7},
+	)
+	_, err := mapper.MapIdentity(context.Background(), ipc.Peer{
+		PluginID: "p1", RuntimeID: "r1", ServiceID: "s1", Generation: 6,
+	})
+	if err == nil {
+		t.Fatal("expected rejection for stale generation")
 	}
 }
 

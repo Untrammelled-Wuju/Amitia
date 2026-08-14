@@ -25,6 +25,7 @@ type TaskRuntimeService struct {
 	config  TaskRuntimeConfig
 
 	eventEmitter event.HostEventEmitter
+	events       TaskEventSink
 
 	mu          sync.RWMutex
 	activeHosts map[string]*TaskProcessHost
@@ -69,6 +70,24 @@ func NewTaskRuntimeService(store TaskStore, config TaskRuntimeConfig) *TaskRunti
 
 func (s *TaskRuntimeService) SetEventEmitter(emitter event.HostEventEmitter) {
 	s.eventEmitter = emitter
+}
+
+func (s *TaskRuntimeService) SetEventSink(sink TaskEventSink) {
+	s.events = sink
+}
+
+func (s *TaskRuntimeService) publishTaskEvent(ctx context.Context, eventType TaskDomainEventType, run *TaskRun, reason, errorCode string) {
+	if s.events == nil {
+		return
+	}
+	event := TaskDomainEvent{
+		Type:       eventType,
+		Run:        *run,
+		Reason:     reason,
+		ErrorCode:  errorCode,
+		OccurredAt: time.Now().UTC(),
+	}
+	_ = s.events.TaskEvent(ctx, event)
 }
 
 func (s *TaskRuntimeService) GetTaskDefinition(ctx context.Context, defID string) (*TaskDefinition, error) {
@@ -176,6 +195,7 @@ func (s *TaskRuntimeService) Enqueue(ctx context.Context, req EnqueueTaskRequest
 		QueuedAt:             &now,
 		DeadlineAt:           &deadline,
 		Generation:           1,
+		Revision:             1,
 	}
 
 	if err := s.store.PutTaskRun(ctx, run); err != nil {
@@ -185,6 +205,8 @@ func (s *TaskRuntimeService) Enqueue(ctx context.Context, req EnqueueTaskRequest
 	if err := s.queue.Enqueue(ctx, run); err != nil {
 		return nil, fmt.Errorf("task_runtime: enqueue: %w", err)
 	}
+
+	s.publishTaskEvent(ctx, TaskEventQueued, run, "", "")
 
 	result := &EnqueueTaskResult{
 		TaskRunID: runID,
@@ -580,9 +602,11 @@ func (s *TaskRuntimeService) handleFinished(ctx context.Context, run *TaskRun, s
 	now := time.Now().UTC()
 	run.FinishedAt = &now
 
+	var eventType TaskDomainEventType
 	switch status {
 	case "succeeded":
 		run.Status = RunStatusSucceeded
+		eventType = TaskEventSucceeded
 		resultType := ResultInlineJSON
 		if artifactID != "" || len(result) > s.config.MaxInlineResultBytes {
 			resultType = ResultArtifact
@@ -601,6 +625,7 @@ func (s *TaskRuntimeService) handleFinished(ctx context.Context, run *TaskRun, s
 		}
 	case "failed":
 		run.Status = RunStatusFailed
+		eventType = TaskEventFailed
 		if errCode != "" {
 			run.ErrorCode = &errCode
 		}
@@ -609,13 +634,19 @@ func (s *TaskRuntimeService) handleFinished(ctx context.Context, run *TaskRun, s
 		}
 	case "cancelled":
 		run.Status = RunStatusCancelled
+		eventType = TaskEventCancelled
 		if errMsg != "" {
 			run.ErrorMessage = &errMsg
 		}
+	default:
+		eventType = TaskEventFailed
 	}
 
+	run.Revision++
 	_ = s.store.PutTaskRun(ctx, run)
 	_ = s.queue.Remove(ctx, run.TaskRunID)
+
+	s.publishTaskEvent(ctx, eventType, run, "", errCode)
 
 	if s.eventEmitter != nil {
 		taskPayload, _ := json.Marshal(map[string]interface{}{
@@ -666,34 +697,44 @@ func (s *TaskRuntimeService) handleCrash(ctx context.Context, run *TaskRun, def 
 		}
 	}
 
+	var eventType TaskDomainEventType
 	switch recoverability {
 	case CheckpointRecoverable:
 		cp, _ := s.store.GetLatestCheckpoint(ctx, run.TaskRunID)
 		if cp != nil {
 			run.Status = RunStatusRecoveryRequired
+			eventType = TaskEventRecoveryRequired
 		} else {
 			run.Status = RunStatusFailed
+			eventType = TaskEventFailed
 		}
 	case RestartableFromBeginning:
 		if idempotency == Idempotent && run.Attempt < run.MaxAttempts {
 			run.Status = RunStatusRecoveryRequired
+			eventType = TaskEventRecoveryRequired
 		} else {
 			run.Status = RunStatusFailed
+			eventType = TaskEventFailed
 		}
 	case ManualRecovery:
 		run.Status = RunStatusManualIntervention
+		eventType = TaskEventFailed
 	default:
 		if idempotency == NonIdempotent {
 			run.Status = RunStatusManualIntervention
+			eventType = TaskEventFailed
 		} else {
 			run.Status = RunStatusFailed
+			eventType = TaskEventFailed
 		}
 	}
 
 	code := string(ErrTaskRuntimeCrashed)
 	run.ErrorCode = &code
+	run.Revision++
 	_ = s.store.PutTaskRun(ctx, run)
 	_ = s.queue.Remove(ctx, run.TaskRunID)
+	s.publishTaskEvent(ctx, eventType, run, errMsg, code)
 }
 
 func (s *TaskRuntimeService) failRun(ctx context.Context, run *TaskRun, code TaskErrorCode, message string) {
@@ -703,8 +744,10 @@ func (s *TaskRuntimeService) failRun(ctx context.Context, run *TaskRun, code Tas
 	c := string(code)
 	run.ErrorCode = &c
 	run.ErrorMessage = &message
+	run.Revision++
 	_ = s.store.PutTaskRun(ctx, run)
 	_ = s.queue.Remove(ctx, run.TaskRunID)
+	s.publishTaskEvent(ctx, TaskEventFailed, run, message, string(code))
 }
 
 func (s *TaskRuntimeService) Cancel(ctx context.Context, taskRunID, reason string) error {
@@ -738,12 +781,15 @@ func (s *TaskRuntimeService) Cancel(ctx context.Context, taskRunID, reason strin
 		} else if !ok {
 			return NewTaskError(ErrTaskPauseInProgress, "concurrent state change, retry cancel")
 		}
+		run.Revision++
 
 		_ = s.queue.Remove(ctx, taskRunID)
 		now := time.Now().UTC()
 		run.Status = RunStatusCancelled
 		run.FinishedAt = &now
+		run.Revision++
 		_ = s.store.PutTaskRun(ctx, run)
+		s.publishTaskEvent(ctx, TaskEventCancelled, run, "", "")
 		return nil
 	}
 
@@ -755,14 +801,19 @@ func (s *TaskRuntimeService) Cancel(ctx context.Context, taskRunID, reason strin
 		} else if !ok {
 			return NewTaskError(ErrTaskPauseInProgress, "concurrent state change, retry cancel")
 		}
+		run.Revision++
+
 		run.Status = RunStatusCancelled
 		now := time.Now().UTC()
 		run.FinishedAt = &now
+		run.Revision++
 		_ = s.store.PutTaskRun(ctx, run)
+		s.publishTaskEvent(ctx, TaskEventCancelled, run, "", "")
 		return nil
 	}
 
 	run.Status = RunStatusCancelling
+	run.Revision++
 	_ = s.store.PutTaskRun(ctx, run)
 
 	s.mu.RLock()

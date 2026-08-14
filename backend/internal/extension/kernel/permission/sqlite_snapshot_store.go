@@ -144,6 +144,32 @@ func (s *SQLitePermissionSnapshotStore) GetSnapshot(ctx context.Context, snapsho
 	return snap, nil
 }
 
+func (s *SQLitePermissionSnapshotStore) FindActiveSnapshot(ctx context.Context, extensionID string, moduleID string, generation int64) (PermissionSnapshot, bool, error) {
+	row := s.db.QueryRowContext(ctx, `
+		SELECT snapshot_id
+		FROM kernel_permission_snapshots
+		WHERE extension_id = ? AND module_id = ? AND generation = ?
+			AND revoked_at IS NULL
+			AND (expires_at IS NULL OR expires_at > ?)
+		ORDER BY created_at DESC
+		LIMIT 1
+	`, extensionID, moduleID, generation, time.Now().UTC())
+
+	var snapshotID string
+	if err := row.Scan(&snapshotID); err != nil {
+		if err == sql.ErrNoRows {
+			return PermissionSnapshot{}, false, nil
+		}
+		return PermissionSnapshot{}, false, fmt.Errorf("sqlite: find active permission snapshot: %w", err)
+	}
+
+	snap, err := s.GetSnapshot(ctx, snapshotID)
+	if err != nil {
+		return PermissionSnapshot{}, false, err
+	}
+	return snap, true, nil
+}
+
 func (s *SQLitePermissionSnapshotStore) DeleteSnapshot(ctx context.Context, snapshotID string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM kernel_permission_snapshots WHERE snapshot_id = ?`, snapshotID)
 	if err != nil {

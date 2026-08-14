@@ -11,8 +11,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/config"
+	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/integration"
 	"github.com/u-ai/backend/internal/gamehost/integration/service_definition"
 	"github.com/u-ai/backend/internal/gamehost/runtime"
@@ -45,6 +45,11 @@ type RuntimeManagerReader interface {
 	GetCurrentGeneration(runtimeID domain.RuntimeInstanceID) (int64, error)
 }
 
+type RuntimeLifecycleIntentManager interface {
+	GetLifecycleIntent(runtimeID domain.RuntimeInstanceID) (string, error)
+	SetLifecycleIntent(runtimeID domain.RuntimeInstanceID, intent string) error
+}
+
 type DefinitionReconciler interface {
 	ReconcileExtension(extensionID string) *service_definition.ReconcileReport
 }
@@ -62,18 +67,19 @@ type ConfigValidator interface {
 }
 
 type UpgradeCoordinator struct {
-	mu                      sync.Mutex
-	gate                    *UpgradeGate
-	pluginReg               PluginRegistryReader
-	runtimeManager          RuntimeManagerReader
-	runtimeExecutor         runtime.RuntimeExecutor
-	definitionReconcile     DefinitionReconciler
-	runtimeGraphReconcile   RuntimeGraphReconciler
-	contributionReconcile   ContributionReconciler
-	configValidator         ConfigValidator
-	migrationHooks          *MigrationHookRegistry
-	kernelLifecycle         KernelExtensionLifecycle
-	archiveUpdater          KernelArchiveUpdater
+	mu                    sync.Mutex
+	gate                  *UpgradeGate
+	pluginReg             PluginRegistryReader
+	runtimeManager        RuntimeManagerReader
+	lifecycleIntents      RuntimeLifecycleIntentManager
+	runtimeExecutor       runtime.RuntimeExecutor
+	definitionReconcile   DefinitionReconciler
+	runtimeGraphReconcile RuntimeGraphReconciler
+	contributionReconcile ContributionReconciler
+	configValidator       ConfigValidator
+	migrationHooks        *MigrationHookRegistry
+	kernelLifecycle       KernelExtensionLifecycle
+	archiveUpdater        KernelArchiveUpdater
 }
 
 func NewUpgradeCoordinator(
@@ -99,6 +105,9 @@ func NewUpgradeCoordinator(
 	if definitionReconcile == nil {
 		return nil, fmt.Errorf("upgrade coordinator: definitionReconcile is required")
 	}
+	if runtimeGraphReconcile == nil {
+		return nil, fmt.Errorf("upgrade coordinator: runtimeGraphReconcile is required")
+	}
 	if contributionReconcile == nil {
 		return nil, fmt.Errorf("upgrade coordinator: contributionReconcile is required")
 	}
@@ -108,11 +117,16 @@ func NewUpgradeCoordinator(
 	if archiveUpdater == nil {
 		return nil, fmt.Errorf("upgrade coordinator: archiveUpdater is required")
 	}
+	intents, ok := runtimeManager.(RuntimeLifecycleIntentManager)
+	if !ok {
+		return nil, fmt.Errorf("upgrade coordinator: runtimeManager must manage lifecycle intents")
+	}
 
 	return &UpgradeCoordinator{
 		gate:                  NewUpgradeGate(),
 		pluginReg:             pluginReg,
 		runtimeManager:        runtimeManager,
+		lifecycleIntents:      intents,
 		runtimeExecutor:       runtimeExecutor,
 		definitionReconcile:   definitionReconcile,
 		runtimeGraphReconcile: runtimeGraphReconcile,
@@ -139,6 +153,7 @@ func (c *UpgradeCoordinator) ExecuteUpgrade(ctx context.Context, req UpgradeRequ
 		ExtensionID: req.ExtensionID,
 		Stage:       UpgradeStatePreparing,
 	}
+	c.logStage(operationID, req.ExtensionID, UpgradeStatePreparing, "start")
 
 	if err := c.gate.Acquire(req.ExtensionID, operationID); err != nil {
 		result.Error = err
@@ -216,13 +231,11 @@ func (c *UpgradeCoordinator) ExecuteUpgrade(ctx context.Context, req UpgradeRequ
 		return result, result.Error
 	}
 
-	if c.runtimeGraphReconcile != nil {
-		if err := c.runtimeGraphReconcile.ReconcileExtension(ctx, req.ExtensionID); err != nil {
-			result.Error = fmt.Errorf("runtime graph reconcile failed: %w", err)
-			result.Stage = UpgradeStateFailed
-			c.recordAudit(operationID, req, result, result.Error)
-			return result, result.Error
-		}
+	if err := c.runtimeGraphReconcile.ReconcileExtension(ctx, req.ExtensionID); err != nil {
+		result.Error = fmt.Errorf("runtime graph reconcile failed: %w", err)
+		result.Stage = UpgradeStateFailed
+		c.recordAudit(operationID, req, result, result.Error)
+		return result, result.Error
 	}
 
 	defReport := c.definitionReconcile.ReconcileExtension(req.ExtensionID)
@@ -233,7 +246,15 @@ func (c *UpgradeCoordinator) ExecuteUpgrade(ctx context.Context, req UpgradeRequ
 		return result, result.Error
 	}
 
-	configErrors := c.reconcileConfigs(ctx, runtimeSnapshots)
+	currentSnapshots, err := c.rediscoverCurrentRuntimes(ctx, req.ExtensionID, runtimeSnapshots)
+	if err != nil {
+		result.Error = fmt.Errorf("current runtime rediscovery failed: %w", err)
+		result.Stage = UpgradeStateFailed
+		c.recordAudit(operationID, req, result, result.Error)
+		return result, result.Error
+	}
+
+	configErrors := c.reconcileConfigs(ctx, currentSnapshots)
 	if len(configErrors) > 0 {
 		result.Error = fmt.Errorf("config validation failed: %v", configErrors)
 		result.Stage = UpgradeStateFailed
@@ -243,10 +264,10 @@ func (c *UpgradeCoordinator) ExecuteUpgrade(ctx context.Context, req UpgradeRequ
 
 	result.Stage = UpgradeStateResuming
 	c.logStage(operationID, req.ExtensionID, UpgradeStateResuming, fmt.Sprintf("runtimes=%d", len(runtimeSnapshots)))
-	resumeFailures := c.resumeRuntimes(ctx, runtimeSnapshots)
+	resumeFailures := c.resumeRuntimes(ctx, currentSnapshots)
 	result.ResumedRuntimes = make([]domain.RuntimeInstanceID, 0)
 	result.FailedRuntimes = make([]domain.RuntimeInstanceID, 0)
-	for _, snap := range runtimeSnapshots {
+	for _, snap := range currentSnapshots {
 		if snap.WasRunning || snap.WasSuspended {
 			if _, failed := resumeFailures[snap.RuntimeID]; failed {
 				result.FailedRuntimes = append(result.FailedRuntimes, snap.RuntimeID)
@@ -266,6 +287,7 @@ func (c *UpgradeCoordinator) ExecuteUpgrade(ctx context.Context, req UpgradeRequ
 
 	result.Stage = UpgradeStateCompleted
 	result.Success = true
+	c.clearUpgradeIntent(runtimeSnapshots)
 	c.logStage(operationID, req.ExtensionID, UpgradeStateCompleted, fmt.Sprintf("resumed=%d", len(result.ResumedRuntimes)))
 	c.recordAudit(operationID, req, result, nil)
 	return result, nil
@@ -278,6 +300,7 @@ func (c *UpgradeCoordinator) ExecuteUpgradeByArchive(ctx context.Context, extens
 		ExtensionID: extensionID,
 		Stage:       UpgradeStatePreparing,
 	}
+	c.logStage(operationID, extensionID, UpgradeStatePreparing, "start")
 
 	if err := c.gate.Acquire(extensionID, result.OperationID); err != nil {
 		return err
@@ -332,10 +355,8 @@ func (c *UpgradeCoordinator) ExecuteUpgradeByArchive(ctx context.Context, extens
 		return fmt.Errorf("contribution sync failed: %v", descSync.Errors)
 	}
 
-	if c.runtimeGraphReconcile != nil {
-		if err := c.runtimeGraphReconcile.ReconcileExtension(ctx, extensionID); err != nil {
-			return fmt.Errorf("runtime graph reconcile failed: %w", err)
-		}
+	if err := c.runtimeGraphReconcile.ReconcileExtension(ctx, extensionID); err != nil {
+		return fmt.Errorf("runtime graph reconcile failed: %w", err)
 	}
 
 	defReport := c.definitionReconcile.ReconcileExtension(extensionID)
@@ -343,15 +364,20 @@ func (c *UpgradeCoordinator) ExecuteUpgradeByArchive(ctx context.Context, extens
 		return fmt.Errorf("definition reconcile failed: %v", defReport.Errors)
 	}
 
-	configErrors := c.reconcileConfigs(ctx, runtimeSnapshots)
+	currentSnapshots, err := c.rediscoverCurrentRuntimes(ctx, extensionID, runtimeSnapshots)
+	if err != nil {
+		return fmt.Errorf("current runtime rediscovery failed: %w", err)
+	}
+
+	configErrors := c.reconcileConfigs(ctx, currentSnapshots)
 	if len(configErrors) > 0 {
 		return fmt.Errorf("config validation failed: %v", configErrors)
 	}
 
 	result.Stage = UpgradeStateResuming
 	c.logStage(result.OperationID, extensionID, UpgradeStateResuming, fmt.Sprintf("runtimes=%d", len(runtimeSnapshots)))
-	resumeFailures := c.resumeRuntimes(ctx, runtimeSnapshots)
-	for _, snap := range runtimeSnapshots {
+	resumeFailures := c.resumeRuntimes(ctx, currentSnapshots)
+	for _, snap := range currentSnapshots {
 		if snap.WasRunning || snap.WasSuspended {
 			if _, failed := resumeFailures[snap.RuntimeID]; failed {
 				return fmt.Errorf("partial resume failure: runtime=%s", snap.RuntimeID)
@@ -361,6 +387,7 @@ func (c *UpgradeCoordinator) ExecuteUpgradeByArchive(ctx context.Context, extens
 
 	result.Stage = UpgradeStateCompleted
 	result.Success = true
+	c.clearUpgradeIntent(runtimeSnapshots)
 	c.logStage(result.OperationID, extensionID, UpgradeStateCompleted, "")
 	c.recordAudit(result.OperationID, UpgradeRequest{ExtensionID: extensionID}, result, nil)
 	return nil
@@ -424,10 +451,20 @@ func (c *UpgradeCoordinator) quiesceRuntimes(ctx context.Context, snapshots []Ru
 		if domain.IsTerminalRuntimeState(rtInfo.State) {
 			continue
 		}
+		if err := c.lifecycleIntents.SetLifecycleIntent(snap.RuntimeID, "upgrade"); err != nil {
+			return fmt.Errorf("set upgrade intent for runtime %s: %w", snap.RuntimeID, err)
+		}
 
 		if rtInfo.State == domain.RuntimeStateRunning || rtInfo.State == domain.RuntimeStateDegraded || rtInfo.State == domain.RuntimeStateSuspended {
 			if err := c.runtimeExecutor.StopRuntime(ctx, snap.RuntimeID); err != nil {
 				return fmt.Errorf("stop runtime %s: %w", snap.RuntimeID, err)
+			}
+			stopped, err := c.runtimeManager.GetRuntime(snap.RuntimeID)
+			if err != nil {
+				return fmt.Errorf("verify quiesced runtime %s: %w", snap.RuntimeID, err)
+			}
+			if stopped.State != domain.RuntimeStateStopped {
+				return fmt.Errorf("verify quiesced runtime %s: state=%s", snap.RuntimeID, stopped.State)
 			}
 		}
 	}
@@ -481,12 +518,55 @@ func (c *UpgradeCoordinator) resumeRuntimes(ctx context.Context, snapshots []Run
 		if !snap.WasRunning && !snap.WasSuspended {
 			continue
 		}
+		intent, err := c.lifecycleIntents.GetLifecycleIntent(snap.RuntimeID)
+		if err != nil || intent != "upgrade" {
+			log.Printf("[upgrade-coordinator] runtime %s resume suppressed by lifecycle intent=%q err=%v", snap.RuntimeID, intent, err)
+			failures[snap.RuntimeID] = struct{}{}
+			continue
+		}
 		if err := c.runtimeExecutor.StartRuntime(ctx, snap.RuntimeID); err != nil {
 			log.Printf("[upgrade-coordinator] failed to resume runtime %s: %v", snap.RuntimeID, err)
 			failures[snap.RuntimeID] = struct{}{}
 		}
 	}
 	return failures
+}
+
+func (c *UpgradeCoordinator) rediscoverCurrentRuntimes(ctx context.Context, extensionID string, previous []RuntimeUpgradeSnapshot) ([]RuntimeUpgradeSnapshot, error) {
+	plugins, err := c.findAffectedPlugins(ctx, extensionID)
+	if err != nil {
+		return nil, err
+	}
+	current, err := c.discoverRuntimes(plugins)
+	if err != nil {
+		return nil, err
+	}
+	if len(current) == 0 {
+		return current, nil
+	}
+	previousByID := make(map[domain.RuntimeInstanceID]RuntimeUpgradeSnapshot, len(previous))
+	for _, snap := range previous {
+		previousByID[snap.RuntimeID] = snap
+	}
+	eligible := make([]RuntimeUpgradeSnapshot, 0, len(previous))
+	for _, currentSnap := range current {
+		if old, exists := previousByID[currentSnap.RuntimeID]; exists {
+			currentSnap.WasRunning = old.WasRunning
+			currentSnap.WasSuspended = old.WasSuspended
+			currentSnap.PreUpgradeGeneration = old.PreUpgradeGeneration
+			eligible = append(eligible, currentSnap)
+		}
+	}
+	return eligible, nil
+}
+
+func (c *UpgradeCoordinator) clearUpgradeIntent(snapshots []RuntimeUpgradeSnapshot) {
+	for _, snap := range snapshots {
+		intent, err := c.lifecycleIntents.GetLifecycleIntent(snap.RuntimeID)
+		if err == nil && intent == "upgrade" {
+			_ = c.lifecycleIntents.SetLifecycleIntent(snap.RuntimeID, "")
+		}
+	}
 }
 
 func (c *UpgradeCoordinator) logStage(operationID UpgradeOperationID, extensionID string, stage UpgradeOperationState, extra string) {

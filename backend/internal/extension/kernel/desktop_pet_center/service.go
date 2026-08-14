@@ -204,6 +204,9 @@ func (s *DesktopPetPluginManagementService) Install(ctx context.Context, archive
 	if archivePath == "" {
 		return nil, ErrInvalidInput
 	}
+	if s.preflight == nil {
+		return nil, ErrKernelUnavailable
+	}
 
 	preview, err := s.preflight.ValidateArchiveTarget(ctx, archivePath, domain.ManagementTargetDesktopPetCenter)
 	if err != nil {
@@ -239,6 +242,9 @@ func (s *DesktopPetPluginManagementService) Update(ctx context.Context, extensio
 	}
 	if archivePath == "" {
 		return nil, ErrInvalidInput
+	}
+	if s.preflight == nil {
+		return nil, ErrKernelUnavailable
 	}
 
 	if err := s.requireDesktopPetPlugin(ctx, extensionID); err != nil {

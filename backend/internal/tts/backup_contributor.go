@@ -8,6 +8,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"gorm.io/gorm"
 )

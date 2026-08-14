@@ -55,8 +55,8 @@ func NewProductionBoundary(source KernelContributionSource, caps integration.Des
 	return NewDesktopPetPluginBoundary(reconciler), nil
 }
 
-func NewBoundary(source KernelContributionSource) (*DesktopPetPluginBoundary, error) {
-	return NewBoundaryWith(source, DefaultAdapters())
+func NewBoundary(source KernelContributionSource) *DesktopPetPluginBoundary {
+	return NewDesktopPetPluginBoundary(NewReconciler(source, DefaultAdapters().toSlice()))
 }
 
 func DefaultAdapters() BoundaryAdapters {

@@ -2,7 +2,7 @@ package migration
 
 func KernelHostRegistryEntryKindMigration() Migration {
 	return Migration{
-		Version: "20260814001",
+		Version: "20260814002",
 		Name:    "add_kernel_host_registry_entry_kind",
 		Up: func(s *Step) error {
 			s.AddColumn("kernel_host_registry", "entry_kind", "TEXT NOT NULL DEFAULT 'ui_host'")

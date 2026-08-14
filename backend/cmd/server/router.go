@@ -39,6 +39,8 @@ import (
 	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
+	kernelruntime "github.com/u-ai/backend/internal/extension/kernel"
+	kerneldomain "github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_center"
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
 	"github.com/u-ai/backend/internal/feedback"
@@ -55,6 +57,7 @@ import (
 	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/qq"
 	"github.com/u-ai/backend/internal/realtime"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/safety"
 	"github.com/u-ai/backend/internal/system"
@@ -246,9 +249,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 				}
 				err := services.DeviceRepository.RegisterOrTouch(c.Request.Context(), device.Identity{
 					UserID:            actor.UserID,
-					DeviceID:          request.DeviceID,
+					DeviceID:          runtimeidentity.ParseDeviceID(request.DeviceID),
 					DesktopInstanceID: request.DesktopInstanceID,
-					Platform:          request.Platform,
+					Platform:          runtimeidentity.ParsePlatform(request.Platform),
 					AppVersion:        request.AppVersion,
 				})
 				if err != nil {
@@ -277,11 +280,11 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 					return
 				}
 				runtimeID := strings.TrimSpace(request.RuntimeID)
-				if err := services.DeviceRepository.RequireOwned(c.Request.Context(), actor.UserID, deviceID); err != nil {
+				if err := services.DeviceRepository.RequireOwned(c.Request.Context(), actor.UserID.String(), deviceID); err != nil {
 					c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": "device not found"})
 					return
 				}
-				rawTicket, ticket, err := bootstrapTicketRepo.Create(c.Request.Context(), actor.UserID, deviceID, runtimeID, 10*time.Minute)
+				rawTicket, ticket, err := bootstrapTicketRepo.Create(c.Request.Context(), actor.UserID.String(), deviceID, runtimeID, 10*time.Minute)
 				if err != nil {
 					log.Error("failed to create bootstrap ticket", "error", err)
 					c.JSON(500, gin.H{"code": 500, "msg": "failed to create bootstrap ticket"})
@@ -312,7 +315,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 					c.JSON(400, gin.H{"code": 400, "msg": "deviceId is required"})
 					return
 				}
-				affected, err := bootstrapTicketRepo.RevokeDeviceTickets(c.Request.Context(), actor.UserID, deviceID)
+				affected, err := bootstrapTicketRepo.RevokeDeviceTickets(c.Request.Context(), actor.UserID.String(), deviceID)
 				if err != nil {
 					log.Error("failed to revoke device bootstrap tickets", "error", err)
 					c.JSON(500, gin.H{"code": 500, "msg": "failed to revoke tickets"})
@@ -453,7 +456,8 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 				if services.KernelContainer.GameHost != nil && services.KernelContainer.GameHost.UpgradeCoordinator != nil {
 					upgradeCoordinator = &management.GameHostUpgradeCoordinatorAdapter{UC: services.KernelContainer.GameHost.UpgradeCoordinator}
 				}
-				packageSvc := management.NewProductionPackageMutationServiceFromKernelReader(kernelReader, management.NewGameHostPluginRegistryFromContainer(services.KernelContainer.GameHost), kernelMutation, upgradeCoordinator)
+				preflight := &gameCenterTargetPreflightAdapter{preflight: kernelruntime.NewTargetMutationGuard(services.Extension.Kernel.PreviewArchiveTarget)}
+				packageSvc := management.NewProductionPackageMutationServiceWithPreflight(kernelReader, management.NewGameHostPluginRegistryFromContainer(services.KernelContainer.GameHost), kernelMutation, upgradeCoordinator, preflight)
 				runtimeSvc := management.NewProductionRuntimeMutationService(services.KernelContainer.GameHost)
 				gameCenterMutationHandler := management.NewMutationHandler(packageSvc, runtimeSvc)
 				management.RegisterGameCenterMutationRouter(apiGroup, gameCenterMutationHandler)
@@ -523,12 +527,12 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		r,
 		services.DesktopPetRuntimeV2,
 		services.SafeMode,
-		func(ctx context.Context, rawTicket, runtimeID, deviceID string) (string, error) {
-			ticket, err := bootstrapTicketRepo.ConsumeWithValidation(ctx, rawTicket, runtimeID, deviceID)
+		func(ctx context.Context, rawTicket string, runtimeID runtimeidentity.RuntimeID, deviceID runtimeidentity.DeviceID) (runtimeidentity.UserID, error) {
+			ticket, err := bootstrapTicketRepo.ConsumeWithValidation(ctx, rawTicket, string(runtimeID), string(deviceID))
 			if err != nil {
-				return "", err
+				return runtimeidentity.UserID(""), err
 			}
-			return ticket.UserID, nil
+			return runtimeidentity.UserID(ticket.UserID), nil
 		},
 	)
 	runtimev2.RegisterUserRoutes(apiGroup, services.DesktopPetRuntimeV2)
@@ -545,6 +549,25 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 	maintenance.RegisterMaintenanceRouter(maintenanceAuthGroup, services.DesktopPetMaintenanceHandler)
 
 	return r, nil
+}
+
+type gameCenterTargetPreflightAdapter struct {
+	preflight kernelruntime.PackageTargetPreflight
+}
+
+func (a *gameCenterTargetPreflightAdapter) ValidateArchiveTarget(ctx context.Context, archivePath string, expected kerneldomain.ManagementTarget) (*management.PackageTargetPreview, error) {
+	if a == nil || a.preflight == nil {
+		return nil, fmt.Errorf("game center target preflight unavailable")
+	}
+	preview, err := a.preflight.ValidateArchiveTarget(ctx, archivePath, expected)
+	if err != nil {
+		return nil, err
+	}
+	return &management.PackageTargetPreview{
+		ExtensionID:      preview.ExtensionID,
+		ManagementTarget: preview.ManagementTarget,
+		Installable:      preview.Installable,
+	}, nil
 }
 
 type packageImportAdapter struct {

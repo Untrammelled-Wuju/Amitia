@@ -53,7 +53,7 @@ func (f *FakeEmergencyRuntimeStopper) IsStopped(runtimeID domain.RuntimeInstance
 }
 
 type FakePendingCanceller struct {
-	mu      sync.Mutex
+	mu        sync.Mutex
 	cancelled map[domain.RuntimeInstanceID]int
 }
 
@@ -79,6 +79,41 @@ type FakeLeaseRevoker struct {
 	revoked map[domain.RuntimeInstanceID]int
 }
 
+type FakeHostAPIWorkCanceller struct{}
+
+func (FakeHostAPIWorkCanceller) CancelRuntimeHostAPIWork(context.Context, domain.RuntimeInstanceID) (int, error) {
+	return 0, nil
+}
+
+type FakeChannelCleaner struct{}
+
+func (FakeChannelCleaner) CleanupRuntimeChannels(context.Context, domain.RuntimeInstanceID) error {
+	return nil
+}
+
+type FakeBinaryReleaser struct{}
+
+func (FakeBinaryReleaser) ReleaseRuntimeTransientBinary(context.Context, domain.RuntimeInstanceID) error {
+	return nil
+}
+
+type FakeSafetyVerifier struct{}
+
+func (FakeSafetyVerifier) CountRuntimePending(domain.RuntimeInstanceID) int     { return 0 }
+func (FakeSafetyVerifier) CountRuntimeConnections(domain.RuntimeInstanceID) int { return 0 }
+func (FakeSafetyVerifier) CountRuntimeLeases(domain.RuntimeInstanceID) int      { return 0 }
+func (FakeSafetyVerifier) CountRuntimeChannels(domain.RuntimeInstanceID) int    { return 0 }
+func (FakeSafetyVerifier) CountRuntimeStreams(domain.RuntimeInstanceID) int     { return 0 }
+func (FakeSafetyVerifier) CountRuntimeBinary(domain.RuntimeInstanceID) int      { return 0 }
+func (FakeSafetyVerifier) CountRuntimeReady(domain.RuntimeInstanceID) int       { return 0 }
+func (FakeSafetyVerifier) CountRuntimeHostAPIWork(domain.RuntimeInstanceID) int { return 0 }
+
+type FakeLifecycleIntentWriter struct{}
+
+func (FakeLifecycleIntentWriter) SetLifecycleIntent(domain.RuntimeInstanceID, string) error {
+	return nil
+}
+
 func NewFakeLeaseRevoker() *FakeLeaseRevoker {
 	return &FakeLeaseRevoker{revoked: make(map[domain.RuntimeInstanceID]int)}
 }
@@ -97,8 +132,8 @@ func (f *FakeLeaseRevoker) RevokeCount(runtimeID domain.RuntimeInstanceID) int {
 }
 
 type FakeConnectionCloser struct {
-	mu      sync.Mutex
-	closed  map[domain.RuntimeInstanceID]int
+	mu     sync.Mutex
+	closed map[domain.RuntimeInstanceID]int
 }
 
 func NewFakeConnectionCloser() *FakeConnectionCloser {
@@ -119,7 +154,7 @@ func (f *FakeConnectionCloser) CloseCount(runtimeID domain.RuntimeInstanceID) in
 }
 
 type FakeHandshakeResetter struct {
-	mu     sync.Mutex
+	mu      sync.Mutex
 	cleared map[domain.RuntimeInstanceID]int
 }
 
@@ -135,9 +170,9 @@ func (f *FakeHandshakeResetter) ClearRuntimeReady(ctx context.Context, runtimeID
 }
 
 type FakeEmergencyMetrics struct {
-	mu      sync.Mutex
-	stops   int
-	errors  int
+	mu     sync.Mutex
+	stops  int
+	errors int
 }
 
 func (m *FakeEmergencyMetrics) RecordEmergencyStop(runtimeID domain.RuntimeInstanceID, actor EmergencyStopActor, state EmergencyStopState, critical bool) {
@@ -153,9 +188,9 @@ func (m *FakeEmergencyMetrics) RecordEmergencyCleanupError(runtimeID domain.Runt
 }
 
 type FakeStreamStopper struct {
-	mu       sync.Mutex
-	stopped  map[domain.RuntimeInstanceID]int
-	err      error
+	mu      sync.Mutex
+	stopped map[domain.RuntimeInstanceID]int
+	err     error
 }
 
 func NewFakeStreamStopper() *FakeStreamStopper {
@@ -207,7 +242,8 @@ func (s *FakeIntentStore) ClearEmergencyLatch(ctx context.Context, runtimeID dom
 
 var _ EmergencyIntentStore = (*FakeIntentStore)(nil)
 
-func newTestEmergencyService(runtimeID domain.RuntimeInstanceID, mode domain.ControlMode, epoch uint64) (*EmergencyStopService, *ControlAuthorityManager, *PluginOutputGate, *FakeTopology, *FakeEmergencyRuntimeStopper) {
+func newTestEmergencyService(t *testing.T, runtimeID domain.RuntimeInstanceID, mode domain.ControlMode, epoch uint64) (*EmergencyStopService, *ControlAuthorityManager, *PluginOutputGate, *FakeTopology, *FakeEmergencyRuntimeStopper) {
+	t.Helper()
 	mgr := NewControlAuthorityManager(ControlAuthorityManagerOptions{})
 	_, _ = mgr.Create(context.Background(), runtimeID, "plugin-1")
 
@@ -275,19 +311,20 @@ func newTestEmergencyService(runtimeID domain.RuntimeInstanceID, mode domain.Con
 
 	topo := NewFakeTopology()
 	topo.RegisterRuntime(runtimeID, "plugin-1")
+	runtimeReader := NewFakeRuntimeReader()
+	runtimeReader.SetActive(runtimeID, true)
+	runtimeReader.SetReady(runtimeID, true)
+	generationReader := NewFakeGenerationReader()
+	generationReader.SetGeneration(runtimeID, 1)
 
 	authReader := mgr
 
-	gate, _ := NewPluginOutputGate(PluginOutputGateOptions{
-		Clock:    func() time.Time { return time.Now().UTC() },
-		Topology: topo,
-		Authority: authReader,
-	})
+	gate := newStrictEmergencyGate(t, topo, runtimeReader, generationReader, authReader)
 
 	rtStopper := NewFakeEmergencyRuntimeStopper()
 	rtStopper.SetActive(runtimeID, true)
 
-	svc, _ := NewEmergencyStopService(EmergencyStopServiceOptions{
+	svc := newStrictEmergencyStopService(t, EmergencyStopServiceOptions{
 		Clock:            func() time.Time { return time.Now().UTC() },
 		Authority:        mgr,
 		Gate:             gate,
@@ -304,9 +341,99 @@ func newTestEmergencyService(runtimeID domain.RuntimeInstanceID, mode domain.Con
 	return svc, mgr, gate, topo, rtStopper
 }
 
+func newStrictEmergencyGate(t testing.TB, topo *FakeTopology, runtimeReader *FakeRuntimeReader, generationReader RuntimeGenerationReader, authority ControlAuthoritySnapshotReader) *PluginOutputGate {
+	t.Helper()
+	if runtimeReader == nil {
+		runtimeReader = NewFakeRuntimeReader()
+	}
+	if generationReader == nil {
+		generationReader = NewFakeGenerationReader()
+	}
+	gate, err := NewPluginOutputGate(PluginOutputGateOptions{
+		Clock:            func() time.Time { return time.Now().UTC() },
+		Topology:         topo,
+		RuntimeReader:    runtimeReader,
+		GenerationReader: generationReader,
+		PermChecker:      NewFakeEffPermChecker(),
+		PolicyChecker:    NoopHostPolicyChecker{},
+		Authority:        authority,
+		Audit:            NewInMemoryAuthorityAuditSink(),
+		Metrics:          NewFakeMetrics(),
+		CommitBarrier:    NewControlCommitBarrier(),
+	})
+	if err != nil {
+		t.Fatalf("new plugin output gate: %v", err)
+	}
+	return gate
+}
+
+func newStrictEmergencyStopService(t testing.TB, opts EmergencyStopServiceOptions) *EmergencyStopService {
+	t.Helper()
+	if opts.RuntimeStopper == nil {
+		opts.RuntimeStopper = NewFakeEmergencyRuntimeStopper()
+	}
+	if opts.PendingCanceller == nil {
+		opts.PendingCanceller = NewFakePendingCanceller()
+	}
+	if opts.ConnectionCloser == nil {
+		opts.ConnectionCloser = NewFakeConnectionCloser()
+	}
+	if opts.HostAPICanceller == nil {
+		opts.HostAPICanceller = FakeHostAPIWorkCanceller{}
+	}
+	if opts.LeaseRevoker == nil {
+		opts.LeaseRevoker = NewFakeLeaseRevoker()
+	}
+	if opts.HandshakeReset == nil {
+		opts.HandshakeReset = NewFakeHandshakeResetter()
+	}
+	if opts.StreamStopper == nil {
+		opts.StreamStopper = NewFakeStreamStopper()
+	}
+	if opts.ChannelCleaner == nil {
+		opts.ChannelCleaner = FakeChannelCleaner{}
+	}
+	if opts.BinaryReleaser == nil {
+		opts.BinaryReleaser = FakeBinaryReleaser{}
+	}
+	if opts.LifecycleIntent == nil {
+		opts.LifecycleIntent = FakeLifecycleIntentWriter{}
+	}
+	verifier := FakeSafetyVerifier{}
+	if opts.PendingVerifier == nil {
+		opts.PendingVerifier = verifier
+	}
+	if opts.ConnectionVerifier == nil {
+		opts.ConnectionVerifier = verifier
+	}
+	if opts.LeaseVerifier == nil {
+		opts.LeaseVerifier = verifier
+	}
+	if opts.ChannelVerifier == nil {
+		opts.ChannelVerifier = verifier
+	}
+	if opts.StreamVerifier == nil {
+		opts.StreamVerifier = verifier
+	}
+	if opts.BinaryVerifier == nil {
+		opts.BinaryVerifier = verifier
+	}
+	if opts.ReadyVerifier == nil {
+		opts.ReadyVerifier = verifier
+	}
+	if opts.HostAPIVerifier == nil {
+		opts.HostAPIVerifier = verifier
+	}
+	svc, err := NewEmergencyStopService(opts)
+	if err != nil {
+		t.Fatalf("new emergency stop service: %v", err)
+	}
+	return svc
+}
+
 func TestEmergencyStop_BasicPluginRunning(t *testing.T) {
 	runtimeID := domain.RuntimeInstanceID("rt-emg-1")
-	svc, mgr, gate, _, rtStopper := newTestEmergencyService(runtimeID, domain.ControlModePluginControl, 10)
+	svc, mgr, gate, _, rtStopper := newTestEmergencyService(t, runtimeID, domain.ControlModePluginControl, 10)
 
 	beforeSnap, _ := mgr.Get(context.Background(), runtimeID)
 
@@ -350,7 +477,7 @@ func TestEmergencyStop_BasicPluginRunning(t *testing.T) {
 
 func TestEmergencyStop_SharedModeSuspended(t *testing.T) {
 	runtimeID := domain.RuntimeInstanceID("rt-emg-shared")
-	svc, mgr, _, _, _ := newTestEmergencyService(runtimeID, domain.ControlModeSharedControl, 5)
+	svc, mgr, _, _, _ := newTestEmergencyService(t, runtimeID, domain.ControlModeSharedControl, 5)
 
 	result, err := svc.EmergencyStop(context.Background(), EmergencyStopRequest{
 		RuntimeID: runtimeID,
@@ -372,7 +499,7 @@ func TestEmergencyStop_SharedModeSuspended(t *testing.T) {
 
 func TestEmergencyStop_UserModeStillStopsEverything(t *testing.T) {
 	runtimeID := domain.RuntimeInstanceID("rt-emg-user")
-	svc, _, _, _, rtStopper := newTestEmergencyService(runtimeID, domain.ControlModeUserControl, 20)
+	svc, _, _, _, rtStopper := newTestEmergencyService(t, runtimeID, domain.ControlModeUserControl, 20)
 
 	result, err := svc.EmergencyStop(context.Background(), EmergencyStopRequest{
 		RuntimeID: runtimeID,
@@ -392,7 +519,7 @@ func TestEmergencyStop_UserModeStillStopsEverything(t *testing.T) {
 
 func TestEmergencyStop_ObserveModeStillCleansUp(t *testing.T) {
 	runtimeID := domain.RuntimeInstanceID("rt-emg-observe")
-	svc, _, _, _, rtStopper := newTestEmergencyService(runtimeID, domain.ControlModeObserveOnly, 1)
+	svc, _, _, _, rtStopper := newTestEmergencyService(t, runtimeID, domain.ControlModeObserveOnly, 1)
 
 	result, err := svc.EmergencyStop(context.Background(), EmergencyStopRequest{
 		RuntimeID: runtimeID,
@@ -413,15 +540,16 @@ func TestEmergencyStop_ObserveModeStillCleansUp(t *testing.T) {
 func TestEmergencyStop_RuntimeNotFound(t *testing.T) {
 	mgr := NewControlAuthorityManager(ControlAuthorityManagerOptions{})
 
-	gate, _ := NewPluginOutputGate(PluginOutputGateOptions{
-		Clock: func() time.Time { return time.Now().UTC() },
-	})
+	gate := newStrictEmergencyGate(t, NewFakeTopology(), nil, nil, mgr)
 
-	svc, _ := NewEmergencyStopService(EmergencyStopServiceOptions{
-		Clock:     func() time.Time { return time.Now().UTC() },
-		Authority: mgr,
-		Gate:      gate,
-		Intent:    NewFakeIntentStore(),
+	svc := newStrictEmergencyStopService(t, EmergencyStopServiceOptions{
+		Clock:            func() time.Time { return time.Now().UTC() },
+		Authority:        mgr,
+		Gate:             gate,
+		Intent:           NewFakeIntentStore(),
+		RuntimeStopper:   NewFakeEmergencyRuntimeStopper(),
+		PendingCanceller: NewFakePendingCanceller(),
+		ConnectionCloser: NewFakeConnectionCloser(),
 	})
 
 	_, err := svc.EmergencyStop(context.Background(), EmergencyStopRequest{
@@ -446,16 +574,13 @@ func TestEmergencyStop_GateFirstBeforeRuntimeStop(t *testing.T) {
 	topo := NewFakeTopology()
 	topo.RegisterRuntime(runtimeID, "plugin-1")
 
-	gate, _ := NewPluginOutputGate(PluginOutputGateOptions{
-		Clock:    func() time.Time { return time.Now().UTC() },
-		Topology: topo,
-	})
+	gate := newStrictEmergencyGate(t, topo, nil, nil, mgr)
 
 	rtStopper := NewFakeEmergencyRuntimeStopper()
 	rtStopper.stopDelay = 20 * time.Millisecond
 	rtStopper.SetActive(runtimeID, true)
 
-	svc, _ := NewEmergencyStopService(EmergencyStopServiceOptions{
+	svc := newStrictEmergencyStopService(t, EmergencyStopServiceOptions{
 		Clock:          func() time.Time { return time.Now().UTC() },
 		Authority:      mgr,
 		Gate:           gate,
@@ -475,7 +600,7 @@ func TestEmergencyStop_GateFirstBeforeRuntimeStop(t *testing.T) {
 
 func TestEmergencyStop_AuthorityEpochIncremented(t *testing.T) {
 	runtimeID := domain.RuntimeInstanceID("rt-epoch")
-	svc, mgr, _, _, _ := newTestEmergencyService(runtimeID, domain.ControlModePluginControl, 50)
+	svc, mgr, _, _, _ := newTestEmergencyService(t, runtimeID, domain.ControlModePluginControl, 50)
 
 	beforeSnap, _ := mgr.Get(context.Background(), runtimeID)
 
@@ -499,7 +624,7 @@ func TestEmergencyStop_AuthorityEpochIncremented(t *testing.T) {
 
 func TestEmergencyStop_OutputDeniedAfterStop(t *testing.T) {
 	runtimeID := domain.RuntimeInstanceID("rt-block-after")
-	svc, _, gate, _, _ := newTestEmergencyService(runtimeID, domain.ControlModePluginControl, 10)
+	svc, _, gate, _, _ := newTestEmergencyService(t, runtimeID, domain.ControlModePluginControl, 10)
 
 	_, _ = svc.EmergencyStop(context.Background(), EmergencyStopRequest{
 		RuntimeID: runtimeID,
@@ -525,7 +650,7 @@ func TestEmergencyStop_OutputDeniedAfterStop(t *testing.T) {
 
 func TestEmergencyStop_IdempotentByRuntimeID(t *testing.T) {
 	runtimeID := domain.RuntimeInstanceID("rt-idem")
-	svc, _, _, _, _ := newTestEmergencyService(runtimeID, domain.ControlModePluginControl, 10)
+	svc, _, _, _, _ := newTestEmergencyService(t, runtimeID, domain.ControlModePluginControl, 10)
 
 	res1, err1 := svc.EmergencyStop(context.Background(), EmergencyStopRequest{
 		RuntimeID: runtimeID,
@@ -555,7 +680,7 @@ func TestEmergencyStop_IdempotentByRuntimeID(t *testing.T) {
 
 func TestEmergencyStop_IdempotentByKey(t *testing.T) {
 	runtimeID := domain.RuntimeInstanceID("rt-idem-key")
-	svc, _, _, _, _ := newTestEmergencyService(runtimeID, domain.ControlModePluginControl, 10)
+	svc, _, _, _, _ := newTestEmergencyService(t, runtimeID, domain.ControlModePluginControl, 10)
 
 	res1, _ := svc.EmergencyStop(context.Background(), EmergencyStopRequest{
 		RuntimeID:      runtimeID,
@@ -591,18 +716,12 @@ func TestEmergencyStop_TOCTOU_GateAllowThenStopBlocksOldOutput(t *testing.T) {
 	rt.SetActive(runtimeID, true)
 	rt.SetReady(runtimeID, true)
 
-	gate, _ := NewPluginOutputGate(PluginOutputGateOptions{
-		Clock:         func() time.Time { return time.Now().UTC() },
-		Topology:      topo,
-		RuntimeReader: rt,
-		PermChecker:   NewFakeEffPermChecker(),
-		Authority:     mgr,
-	})
+	gate := newStrictEmergencyGate(t, topo, rt, nil, mgr)
 
 	rtStopper := NewFakeEmergencyRuntimeStopper()
 	rtStopper.SetActive(runtimeID, true)
 
-	svc, _ := NewEmergencyStopService(EmergencyStopServiceOptions{
+	svc := newStrictEmergencyStopService(t, EmergencyStopServiceOptions{
 		Clock:          func() time.Time { return time.Now().UTC() },
 		Authority:      mgr,
 		Gate:           gate,
@@ -644,7 +763,7 @@ func TestEmergencyStop_TOCTOU_GateAllowThenStopBlocksOldOutput(t *testing.T) {
 
 func TestEmergencyStop_VerificationResult(t *testing.T) {
 	runtimeID := domain.RuntimeInstanceID("rt-verify")
-	svc, _, _, _, _ := newTestEmergencyService(runtimeID, domain.ControlModePluginControl, 10)
+	svc, _, _, _, _ := newTestEmergencyService(t, runtimeID, domain.ControlModePluginControl, 10)
 
 	result, err := svc.EmergencyStop(context.Background(), EmergencyStopRequest{
 		RuntimeID: runtimeID,
@@ -668,7 +787,7 @@ func TestEmergencyStop_VerificationResult(t *testing.T) {
 
 func TestEmergencyStop_RaceConcurrentCalls(t *testing.T) {
 	runtimeID := domain.RuntimeInstanceID("rt-race")
-	svc, _, _, _, _ := newTestEmergencyService(runtimeID, domain.ControlModePluginControl, 10)
+	svc, _, _, _, _ := newTestEmergencyService(t, runtimeID, domain.ControlModePluginControl, 10)
 
 	var wg sync.WaitGroup
 	const N = 20
@@ -709,18 +828,12 @@ func TestEmergencyStop_RaceStopVsOutput(t *testing.T) {
 	rt.SetActive("rt-race-mix", true)
 	rt.SetReady("rt-race-mix", true)
 
-	gate, _ := NewPluginOutputGate(PluginOutputGateOptions{
-		Clock:         func() time.Time { return time.Now().UTC() },
-		Topology:      topo,
-		RuntimeReader: rt,
-		PermChecker:   NewFakeEffPermChecker(),
-		Authority:     mgr,
-	})
+	gate := newStrictEmergencyGate(t, topo, rt, nil, mgr)
 
 	rtStopper := NewFakeEmergencyRuntimeStopper()
 	rtStopper.SetActive("rt-race-mix", true)
 
-	svc, _ := NewEmergencyStopService(EmergencyStopServiceOptions{
+	svc := newStrictEmergencyStopService(t, EmergencyStopServiceOptions{
 		Clock:          func() time.Time { return time.Now().UTC() },
 		Authority:      mgr,
 		Gate:           gate,
@@ -754,7 +867,7 @@ func TestEmergencyStop_RaceStopVsOutput(t *testing.T) {
 
 func TestEmergencyStop_PendingCancelled(t *testing.T) {
 	runtimeID := domain.RuntimeInstanceID("rt-pending")
-	svc, _, _, _, _ := newTestEmergencyService(runtimeID, domain.ControlModePluginControl, 10)
+	svc, _, _, _, _ := newTestEmergencyService(t, runtimeID, domain.ControlModePluginControl, 10)
 
 	pending := NewFakePendingCanceller()
 
@@ -774,7 +887,7 @@ func TestEmergencyStop_PendingCancelled(t *testing.T) {
 
 func TestEmergencyStop_LeaseRevoked(t *testing.T) {
 	runtimeID := domain.RuntimeInstanceID("rt-lease")
-	svc, _, _, _, _ := newTestEmergencyService(runtimeID, domain.ControlModePluginControl, 10)
+	svc, _, _, _, _ := newTestEmergencyService(t, runtimeID, domain.ControlModePluginControl, 10)
 
 	revoker := NewFakeLeaseRevoker()
 
@@ -794,7 +907,7 @@ func TestEmergencyStop_LeaseRevoked(t *testing.T) {
 
 func TestEmergencyStop_ConnectionsClosed(t *testing.T) {
 	runtimeID := domain.RuntimeInstanceID("rt-conn")
-	svc, _, _, _, _ := newTestEmergencyService(runtimeID, domain.ControlModePluginControl, 10)
+	svc, _, _, _, _ := newTestEmergencyService(t, runtimeID, domain.ControlModePluginControl, 10)
 
 	closer := NewFakeConnectionCloser()
 
@@ -826,17 +939,13 @@ func TestEmergencyStop_OtherRuntimeUnaffected(t *testing.T) {
 	topo.RegisterRuntime(runtimeA, "plugin-a")
 	topo.RegisterRuntime(runtimeB, "plugin-b")
 
-	gate, _ := NewPluginOutputGate(PluginOutputGateOptions{
-		Clock:    func() time.Time { return time.Now().UTC() },
-		Topology: topo,
-		Authority: mgr,
-	})
+	gate := newStrictEmergencyGate(t, topo, nil, nil, mgr)
 
 	rtStopper := NewFakeEmergencyRuntimeStopper()
 	rtStopper.SetActive(runtimeA, true)
 	rtStopper.SetActive(runtimeB, true)
 
-	svc, _ := NewEmergencyStopService(EmergencyStopServiceOptions{
+	svc := newStrictEmergencyStopService(t, EmergencyStopServiceOptions{
 		Clock:          func() time.Time { return time.Now().UTC() },
 		Authority:      mgr,
 		Gate:           gate,
@@ -873,16 +982,12 @@ func TestEmergencyStop_AlreadySuspendedAuthorityStillSucceeds(t *testing.T) {
 	topo := NewFakeTopology()
 	topo.RegisterRuntime(runtimeID, "plugin-1")
 
-	gate, _ := NewPluginOutputGate(PluginOutputGateOptions{
-		Clock:    func() time.Time { return time.Now().UTC() },
-		Topology: topo,
-		Authority: mgr,
-	})
+	gate := newStrictEmergencyGate(t, topo, nil, nil, mgr)
 
 	rtStopper := NewFakeEmergencyRuntimeStopper()
 	rtStopper.SetActive(runtimeID, true)
 
-	svc, _ := NewEmergencyStopService(EmergencyStopServiceOptions{
+	svc := newStrictEmergencyStopService(t, EmergencyStopServiceOptions{
 		Clock:          func() time.Time { return time.Now().UTC() },
 		Authority:      mgr,
 		Gate:           gate,

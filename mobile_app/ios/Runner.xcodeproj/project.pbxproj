@@ -14,6 +14,48 @@
 		97C146FC1CF9000F007C117D /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FA1CF9000F007C117D /* Main.storyboard */; };
 		97C146FE1CF9000F007C117D /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FD1CF9000F007C117D /* Assets.xcassets */; };
 		97C147011CF9000F007C117D /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 97C146FF1CF9000F007C117D /* LaunchScreen.storyboard */; };
+		A1B2C3D4E5F60001 /* libish.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60001 /* libish.a */; };
+		A1B2C3D4E5F60002 /* libish_emu.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60002 /* libish_emu.a */; };
+		A1B2C3D4E5F60003 /* libfakefs.a in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60003 /* libfakefs.a */; };
+		A1B2C3D4E5F60010 /* HealthKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60020 /* HealthKit.framework */; };
+		A1B2C3D4E5F60011 /* EventKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60021 /* EventKit.framework */; };
+		A1B2C3D4E5F60012 /* Contacts.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60022 /* Contacts.framework */; };
+		A1B2C3D4E5F60013 /* HomeKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60023 /* HomeKit.framework */; };
+		A1B2C3D4E5F60014 /* CoreBluetooth.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60024 /* CoreBluetooth.framework */; };
+		A1B2C3D4E5F60015 /* Photos.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60025 /* Photos.framework */; };
+		A1B2C3D4E5F60016 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60026 /* AVFoundation.framework */; };
+		A1B2C3D4E5F60017 /* BackgroundTasks.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60027 /* BackgroundTasks.framework */; };
+		A1B2C3D4E5F60018 /* AppIntents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60028 /* AppIntents.framework */; };
+		A1B2C3D4E5F60019 /* Intents.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60029 /* Intents.framework */; };
+		A1B2C3D4E5F6001A /* UniformTypeIdentifiers.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6002A /* UniformTypeIdentifiers.framework */; };
+		A1B2C3D4E5F6001B /* UserNotifications.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6002B /* UserNotifications.framework */; };
+		A1B2C3D4E5F60030 /* IOSNativeHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60040 /* IOSNativeHost.swift */; };
+		A1B2C3D4E5F60031 /* HealthKitNativeHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60041 /* HealthKitNativeHandler.swift */; };
+		A1B2C3D4E5F60032 /* CalendarNativeHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60042 /* CalendarNativeHandler.swift */; };
+		A1B2C3D4E5F60033 /* RemindersNativeHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60043 /* RemindersNativeHandler.swift */; };
+		A1B2C3D4E5F60034 /* ContactsNativeHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60044 /* ContactsNativeHandler.swift */; };
+		A1B2C3D4E5F60035 /* HomeKitNativeHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60045 /* HomeKitNativeHandler.swift */; };
+		A1B2C3D4E5F60036 /* BluetoothNativeHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60046 /* BluetoothNativeHandler.swift */; };
+		A1B2C3D4E5F60037 /* ClipboardNativeHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60047 /* ClipboardNativeHandler.swift */; };
+		A1B2C3D4E5F60038 /* MediaNativeHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60048 /* MediaNativeHandler.swift */; };
+		A1B2C3D4E5F60039 /* AlarmNativeHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60049 /* AlarmNativeHandler.swift */; };
+		A1B2C3D4E5F6003A /* ShareNativeHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6004A /* ShareNativeHandler.swift */; };
+		A1B2C3D4E5F6003B /* ShortcutNativeHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6004B /* ShortcutNativeHandler.swift */; };
+		A1B2C3D4E5F6003C /* BackgroundNativeHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6004C /* BackgroundNativeHandler.swift */; };
+		A1B2C3D4E5F6003D /* FileNativeHandler.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6004D /* FileNativeHandler.swift */; };
+		A1B2C3D4E5F6003E /* EventKitStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6004E /* EventKitStore.swift */; };
+		A1B2C3D4E5F6003F /* HomeKitStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6004F /* HomeKitStore.swift */; };
+		A1B2C3D4E5F60050 /* BluetoothCentralStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60051 /* BluetoothCentralStore.swift */; };
+		A1B2C3D4E5F60052 /* AudioRecorderAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60053 /* AudioRecorderAdapter.swift */; };
+		A1B2C3D4E5F60054 /* CameraAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60055 /* CameraAdapter.swift */; };
+		A1B2C3D4E5F60056 /* PhotoLibraryAdapter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60057 /* PhotoLibraryAdapter.swift */; };
+		A1B2C3D4E5F60058 /* SecurityScopedBookmarkStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60059 /* SecurityScopedBookmarkStore.swift */; };
+		A1B2C3D4E5F6005A /* CoordinatedFileAccess.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6005B /* CoordinatedFileAccess.swift */; };
+		A1B2C3D4E5F6005C /* BackgroundTaskBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6005D /* BackgroundTaskBridge.swift */; };
+		A1B2C3D4E5F6005E /* AmitiaAppIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6005F /* AmitiaAppIntents.swift */; };
+		A1B2C3D4E5F60060 /* AmitiaAppShortcutsProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60061 /* AmitiaAppShortcutsProvider.swift */; };
+		A1B2C3D4E5F60062 /* ShortcutActionGateway.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60063 /* ShortcutActionGateway.swift */; };
+		A1B2C3D4E5F60064 /* IOSNativeTransport.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60065 /* IOSNativeTransport.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -54,6 +96,45 @@
 		A1B2C3D4E5F60001 /* libish.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libish.a; sourceTree = "<group>"; };
 		A1B2C3D4E5F60002 /* libish_emu.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libish_emu.a; sourceTree = "<group>"; };
 		A1B2C3D4E5F60003 /* libfakefs.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libfakefs.a; sourceTree = "<group>"; };
+		A1B2C3D4E5F60020 /* HealthKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = HealthKit.framework; path = System/Library/Frameworks/HealthKit.framework; sourceTree = SDKROOT; };
+		A1B2C3D4E5F60021 /* EventKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = EventKit.framework; path = System/Library/Frameworks/EventKit.framework; sourceTree = SDKROOT; };
+		A1B2C3D4E5F60022 /* Contacts.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Contacts.framework; path = System/Library/Frameworks/Contacts.framework; sourceTree = SDKROOT; };
+		A1B2C3D4E5F60023 /* HomeKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = HomeKit.framework; path = System/Library/Frameworks/HomeKit.framework; sourceTree = SDKROOT; };
+		A1B2C3D4E5F60024 /* CoreBluetooth.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreBluetooth.framework; path = System/Library/Frameworks/CoreBluetooth.framework; sourceTree = SDKROOT; };
+		A1B2C3D4E5F60025 /* Photos.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Photos.framework; path = System/Library/Frameworks/Photos.framework; sourceTree = SDKROOT; };
+		A1B2C3D4E5F60026 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
+		A1B2C3D4E5F60027 /* BackgroundTasks.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = BackgroundTasks.framework; path = System/Library/Frameworks/BackgroundTasks.framework; sourceTree = SDKROOT; };
+		A1B2C3D4E5F60028 /* AppIntents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AppIntents.framework; path = System/Library/Frameworks/AppIntents.framework; sourceTree = SDKROOT; };
+		A1B2C3D4E5F60029 /* Intents.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Intents.framework; path = System/Library/Frameworks/Intents.framework; sourceTree = SDKROOT; };
+		A1B2C3D4E5F6002A /* UniformTypeIdentifiers.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UniformTypeIdentifiers.framework; path = System/Library/Frameworks/UniformTypeIdentifiers.framework; sourceTree = SDKROOT; };
+		A1B2C3D4E5F6002B /* UserNotifications.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UserNotifications.framework; path = System/Library/Frameworks/UserNotifications.framework; sourceTree = SDKROOT; };
+		A1B2C3D4E5F60040 /* IOSNativeHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSNativeHost.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60041 /* HealthKitNativeHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HealthKitNativeHandler.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60042 /* CalendarNativeHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarNativeHandler.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60043 /* RemindersNativeHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RemindersNativeHandler.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60044 /* ContactsNativeHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContactsNativeHandler.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60045 /* HomeKitNativeHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeKitNativeHandler.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60046 /* BluetoothNativeHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothNativeHandler.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60047 /* ClipboardNativeHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ClipboardNativeHandler.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60048 /* MediaNativeHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaNativeHandler.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60049 /* AlarmNativeHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AlarmNativeHandler.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6004A /* ShareNativeHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareNativeHandler.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6004B /* ShortcutNativeHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutNativeHandler.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6004C /* BackgroundNativeHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundNativeHandler.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6004D /* FileNativeHandler.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FileNativeHandler.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6004E /* EventKitStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EventKitStore.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6004F /* HomeKitStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HomeKitStore.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60051 /* BluetoothCentralStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BluetoothCentralStore.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60053 /* AudioRecorderAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AudioRecorderAdapter.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60055 /* CameraAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CameraAdapter.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60057 /* PhotoLibraryAdapter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhotoLibraryAdapter.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60059 /* SecurityScopedBookmarkStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SecurityScopedBookmarkStore.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6005B /* CoordinatedFileAccess.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CoordinatedFileAccess.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6005D /* BackgroundTaskBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = BackgroundTaskBridge.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F6005F /* AmitiaAppIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmitiaAppIntents.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60061 /* AmitiaAppShortcutsProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AmitiaAppShortcutsProvider.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60063 /* ShortcutActionGateway.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShortcutActionGateway.swift; sourceTree = "<group>"; };
+		A1B2C3D4E5F60065 /* IOSNativeTransport.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = IOSNativeTransport.swift; sourceTree = "<group>"; };
 		97C146FB1CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/Main.storyboard; sourceTree = "<group>"; };
 		97C146FD1CF9000F007C117D /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		97C147001CF9000F007C117D /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.storyboard; name = Base; path = Base.lproj/LaunchScreen.storyboard; sourceTree = "<group>"; };
@@ -68,6 +149,18 @@
 				A1B2C3D4E5F60001 /* libish.a in Frameworks */,
 				A1B2C3D4E5F60002 /* libish_emu.a in Frameworks */,
 				A1B2C3D4E5F60003 /* libfakefs.a in Frameworks */,
+				A1B2C3D4E5F60010 /* HealthKit.framework in Frameworks */,
+				A1B2C3D4E5F60011 /* EventKit.framework in Frameworks */,
+				A1B2C3D4E5F60012 /* Contacts.framework in Frameworks */,
+				A1B2C3D4E5F60013 /* HomeKit.framework in Frameworks */,
+				A1B2C3D4E5F60014 /* CoreBluetooth.framework in Frameworks */,
+				A1B2C3D4E5F60015 /* Photos.framework in Frameworks */,
+				A1B2C3D4E5F60016 /* AVFoundation.framework in Frameworks */,
+				A1B2C3D4E5F60017 /* BackgroundTasks.framework in Frameworks */,
+				A1B2C3D4E5F60018 /* AppIntents.framework in Frameworks */,
+				A1B2C3D4E5F60019 /* Intents.framework in Frameworks */,
+				A1B2C3D4E5F6001A /* UniformTypeIdentifiers.framework in Frameworks */,
+				A1B2C3D4E5F6001B /* UserNotifications.framework in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -126,8 +219,151 @@
 				A1B2C3D4E5F60001 /* libish.a */,
 				A1B2C3D4E5F60002 /* libish_emu.a */,
 				A1B2C3D4E5F60003 /* libfakefs.a */,
+				A1B2C3D4E5F60020 /* HealthKit.framework */,
+				A1B2C3D4E5F60021 /* EventKit.framework */,
+				A1B2C3D4E5F60022 /* Contacts.framework */,
+				A1B2C3D4E5F60023 /* HomeKit.framework */,
+				A1B2C3D4E5F60024 /* CoreBluetooth.framework */,
+				A1B2C3D4E5F60025 /* Photos.framework */,
+				A1B2C3D4E5F60026 /* AVFoundation.framework */,
+				A1B2C3D4E5F60027 /* BackgroundTasks.framework */,
+				A1B2C3D4E5F60028 /* AppIntents.framework */,
+				A1B2C3D4E5F60029 /* Intents.framework */,
+				A1B2C3D4E5F6002A /* UniformTypeIdentifiers.framework */,
+				A1B2C3D4E5F6002B /* UserNotifications.framework */,
+				A1B2C3D4E5F60070 /* NativeProvider */,
 			);
 			path = Runner;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F60070 /* NativeProvider */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F60040 /* IOSNativeHost.swift */,
+				A1B2C3D4E5F60065 /* IOSNativeTransport.swift */,
+				A1B2C3D4E5F60071 /* Health */,
+				A1B2C3D4E5F60072 /* EventKit */,
+				A1B2C3D4E5F60073 /* Contacts */,
+				A1B2C3D4E5F60074 /* HomeKit */,
+				A1B2C3D4E5F60075 /* Bluetooth */,
+				A1B2C3D4E5F60076 /* Clipboard */,
+				A1B2C3D4E5F60077 /* Media */,
+				A1B2C3D4E5F60078 /* Alarms */,
+				A1B2C3D4E5F60079 /* Share */,
+				A1B2C3D4E5F6007A /* Shortcuts */,
+				A1B2C3D4E5F6007B /* Background */,
+				A1B2C3D4E5F6007C /* File */,
+			);
+			path = NativeProvider;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F60071 /* Health */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F60041 /* HealthKitNativeHandler.swift */,
+			);
+			path = Health;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F60072 /* EventKit */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F60042 /* CalendarNativeHandler.swift */,
+				A1B2C3D4E5F60043 /* RemindersNativeHandler.swift */,
+				A1B2C3D4E5F6004E /* EventKitStore.swift */,
+			);
+			path = EventKit;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F60073 /* Contacts */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F60044 /* ContactsNativeHandler.swift */,
+			);
+			path = Contacts;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F60074 /* HomeKit */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F60045 /* HomeKitNativeHandler.swift */,
+				A1B2C3D4E5F6004F /* HomeKitStore.swift */,
+			);
+			path = HomeKit;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F60075 /* Bluetooth */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F60046 /* BluetoothNativeHandler.swift */,
+				A1B2C3D4E5F60051 /* BluetoothCentralStore.swift */,
+			);
+			path = Bluetooth;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F60076 /* Clipboard */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F60047 /* ClipboardNativeHandler.swift */,
+			);
+			path = Clipboard;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F60077 /* Media */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F60048 /* MediaNativeHandler.swift */,
+				A1B2C3D4E5F60053 /* AudioRecorderAdapter.swift */,
+				A1B2C3D4E5F60055 /* CameraAdapter.swift */,
+				A1B2C3D4E5F60057 /* PhotoLibraryAdapter.swift */,
+			);
+			path = Media;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F60078 /* Alarms */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F60049 /* AlarmNativeHandler.swift */,
+			);
+			path = Alarms;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F60079 /* Share */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F6004A /* ShareNativeHandler.swift */,
+			);
+			path = Share;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F6007A /* Shortcuts */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F6004B /* ShortcutNativeHandler.swift */,
+				A1B2C3D4E5F6005F /* AmitiaAppIntents.swift */,
+				A1B2C3D4E5F60061 /* AmitiaAppShortcutsProvider.swift */,
+				A1B2C3D4E5F60063 /* ShortcutActionGateway.swift */,
+			);
+			path = Shortcuts;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F6007B /* Background */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F6004C /* BackgroundNativeHandler.swift */,
+				A1B2C3D4E5F6005D /* BackgroundTaskBridge.swift */,
+			);
+			path = Background;
+			sourceTree = "<group>";
+		};
+		A1B2C3D4E5F6007C /* File */ = {
+			isa = PBXGroup;
+			children = (
+				A1B2C3D4E5F6004D /* FileNativeHandler.swift */,
+				A1B2C3D4E5F60059 /* SecurityScopedBookmarkStore.swift */,
+				A1B2C3D4E5F6005B /* CoordinatedFileAccess.swift */,
+			);
+			path = File;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -279,6 +515,33 @@
 			files = (
 				74858FAF1ED2DC5600515810 /* AppDelegate.swift in Sources */,
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
+				A1B2C3D4E5F60030 /* IOSNativeHost.swift in Sources */,
+				A1B2C3D4E5F60031 /* HealthKitNativeHandler.swift in Sources */,
+				A1B2C3D4E5F60032 /* CalendarNativeHandler.swift in Sources */,
+				A1B2C3D4E5F60033 /* RemindersNativeHandler.swift in Sources */,
+				A1B2C3D4E5F60034 /* ContactsNativeHandler.swift in Sources */,
+				A1B2C3D4E5F60035 /* HomeKitNativeHandler.swift in Sources */,
+				A1B2C3D4E5F60036 /* BluetoothNativeHandler.swift in Sources */,
+				A1B2C3D4E5F60037 /* ClipboardNativeHandler.swift in Sources */,
+				A1B2C3D4E5F60038 /* MediaNativeHandler.swift in Sources */,
+				A1B2C3D4E5F60039 /* AlarmNativeHandler.swift in Sources */,
+				A1B2C3D4E5F6003A /* ShareNativeHandler.swift in Sources */,
+				A1B2C3D4E5F6003B /* ShortcutNativeHandler.swift in Sources */,
+				A1B2C3D4E5F6003C /* BackgroundNativeHandler.swift in Sources */,
+				A1B2C3D4E5F6003D /* FileNativeHandler.swift in Sources */,
+				A1B2C3D4E5F6003E /* EventKitStore.swift in Sources */,
+				A1B2C3D4E5F6003F /* HomeKitStore.swift in Sources */,
+				A1B2C3D4E5F60050 /* BluetoothCentralStore.swift in Sources */,
+				A1B2C3D4E5F60052 /* AudioRecorderAdapter.swift in Sources */,
+				A1B2C3D4E5F60054 /* CameraAdapter.swift in Sources */,
+				A1B2C3D4E5F60056 /* PhotoLibraryAdapter.swift in Sources */,
+				A1B2C3D4E5F60058 /* SecurityScopedBookmarkStore.swift in Sources */,
+				A1B2C3D4E5F6005A /* CoordinatedFileAccess.swift in Sources */,
+				A1B2C3D4E5F6005C /* BackgroundTaskBridge.swift in Sources */,
+				A1B2C3D4E5F6005E /* AmitiaAppIntents.swift in Sources */,
+				A1B2C3D4E5F60060 /* AmitiaAppShortcutsProvider.swift in Sources */,
+				A1B2C3D4E5F60062 /* ShortcutActionGateway.swift in Sources */,
+				A1B2C3D4E5F60064 /* IOSNativeTransport.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -370,6 +633,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Runner/Info.plist;
@@ -498,7 +762,6 @@
 				CLANG_CXX_LANGUAGE_STANDARD = "gnu++0x";
 				CLANG_CXX_LIBRARY = "libc++";
 				CLANG_ENABLE_MODULES = YES;
-				CLANG_ENABLE_OBJC_ARC = YES;
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					"../ThirdParty/iSH/include",
@@ -557,6 +820,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				ENABLE_BITCODE = NO;
 				HEADER_SEARCH_PATHS = (
@@ -587,6 +851,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
 				CURRENT_PROJECT_VERSION = "$(FLUTTER_BUILD_NUMBER)";
 				ENABLE_BITCODE = NO;
 				INFOPLIST_FILE = Runner/Info.plist;

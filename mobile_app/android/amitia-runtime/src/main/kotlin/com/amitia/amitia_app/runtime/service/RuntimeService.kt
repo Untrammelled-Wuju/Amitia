@@ -178,7 +178,7 @@ class RuntimeService : Service() {
         }
 
         val observer = ProotObserver { event -> onProotEvent(event, generation) }
-        val session = component.launch(request, observer)
+        val session = component.launch(request, observer, generation)
         currentSessionRef.set(session)
         currentSessionIdRef.set(session.sessionId)
         currentSessionContextRef.set(
@@ -220,7 +220,10 @@ class RuntimeService : Service() {
     }
 
     private fun onProotEvent(event: ProotEvent, generation: Long) {
-        if (currentGenerationRef.get() != generation) return
+        val currentGen = currentGenerationRef.get()
+        if (currentGen != generation) return
+        val currentSid = currentSessionIdRef.get()
+        if (currentSid != null && event.sessionId != currentSid) return
         when (event) {
             is ProotEvent.Started -> {
                 if (currentGenerationRef.get() == generation) {
@@ -233,35 +236,40 @@ class RuntimeService : Service() {
                 }
             }
             is ProotEvent.Exited -> {
+                val exit = event.exit
+                if (exit.generation != currentGen) return
+                if (currentSid != null && exit.sessionId != currentSid) return
                 lock.withLock {
                     if (destroyed.get()) return
                     if (serviceState.get() == ServiceHostState.DESTROYED) return
                     val sessionContext = currentSessionContextRef.get()
                     if (sessionContext == null || sessionContext.generation != generation) return
                     if (sessionContext.terminalEvent != null) return
+                    sessionContext.terminalEvent = if (exit.stopRequested) TerminalEventKind.EXPECTED_STOPPED else TerminalEventKind.UNEXPECTED_TERMINATION
                     endpoint.notify(
                         RuntimeServiceHostEvent.SessionExited(
-                            generation = generation,
-                            sessionId = event.sessionId,
-                            exitCode = event.exitCode,
-                            forced = event.forced
+                            generation = exit.generation,
+                            sessionId = exit.sessionId,
+                            exitCode = exit.exitCode,
+                            forced = exit.stopRequested
                         )
                     )
                     if (serviceState.get() != ServiceHostState.FOREGROUND) return
-                    if (sessionContext.stopRequested) {
-                        sessionContext.terminalEvent = TerminalEventKind.EXPECTED_STOPPED
+                    if (exit.stopRequested) {
                         serviceState.set(ServiceHostState.DESTROYED)
-                        endpoint.notify(RuntimeServiceHostEvent.ExpectedStopped(generation = generation))
+                        endpoint.notify(RuntimeServiceHostEvent.ExpectedStopped(generation = exit.generation))
                     } else {
-                        sessionContext.terminalEvent = TerminalEventKind.UNEXPECTED_TERMINATION
                         serviceState.set(ServiceHostState.DESTROYED)
                         endpoint.notify(
                             RuntimeServiceHostEvent.UnexpectedTermination(
-                                generation = generation,
+                                generation = exit.generation,
                                 cause = RuntimeServiceTerminationCause.SESSION_EXITED
                             )
                         )
                     }
+                    currentSessionContextRef.set(null)
+                    currentSessionRef.set(null)
+                    currentSessionIdRef.set(null)
                     stopSelfSafely()
                 }
             }
@@ -270,11 +278,10 @@ class RuntimeService : Service() {
     }
 
     private fun handleStopHost() {
-        runCatching {
-            val session = currentSessionRef.get()
-            if (session != null && session.isAlive()) {
-                AndroidRuntimeModule.prootComponent?.stop()
-            }
+        val session = currentSessionRef.get()
+        if (session != null && session.isAlive()) {
+            session.requestStop()
+            session.stop(10_000L)
         }
         val sessionContext = currentSessionContextRef.get()
         if (sessionContext != null) {

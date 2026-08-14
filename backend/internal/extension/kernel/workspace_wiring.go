@@ -9,7 +9,7 @@ import (
 	"github.com/u-ai/backend/internal/workspace"
 )
 
-func registerWorkspaceTools(registry *capability.ToolRegistry, svc workspace.Service) error {
+func registerWorkspaceTools(registry *capability.ToolRegistry, svc *workspace.Service) error {
 	ctx := context.Background()
 	defs := workspace.BuildWorkspaceTools()
 	for _, def := range defs {
@@ -20,7 +20,7 @@ func registerWorkspaceTools(registry *capability.ToolRegistry, svc workspace.Ser
 	return nil
 }
 
-func makeWorkspaceCallFunc(svc workspace.Service) capability.WorkspaceCallFunc {
+func makeWorkspaceCallFunc(svc *workspace.Service) capability.WorkspaceCallFunc {
 	return func(ctx context.Context, handlerName string, invocation capability.ToolInvocationContext, input json.RawMessage) (json.RawMessage, error) {
 		if svc == nil {
 			return nil, fmt.Errorf("workspace service not configured")
@@ -30,10 +30,13 @@ func makeWorkspaceCallFunc(svc workspace.Service) capability.WorkspaceCallFunc {
 	}
 }
 
-func makeWorkspaceHealthFunc(svc workspace.Service) capability.WorkspaceHealthFunc {
+func makeWorkspaceHealthFunc(svc *workspace.Service) capability.WorkspaceHealthFunc {
 	return func(ctx context.Context) capability.HealthStatus {
 		if svc == nil {
 			return capability.HealthUnknown
+		}
+		if !svc.HasBackend(workspace.WorkspaceKindLocal) {
+			return capability.HealthUnhealthy
 		}
 		mounts, err := svc.ListMounts(ctx)
 		if err != nil {

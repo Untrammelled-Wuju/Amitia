@@ -6,6 +6,7 @@ import UIKit
   private var sandboxHandler: IOSSandboxMethodHandler?
   private var rootfsHandler: RootfsInstallMethodHandler?
   private var iosNativeHost: IOSNativeHost?
+  private var nativeTransport: IOSNativeTransport?
 
   override func application(
     _ application: UIApplication,
@@ -17,7 +18,7 @@ import UIKit
     self.sandboxHandler = IOSSandboxMethodHandler(bridge: bridge)
     self.sandboxHandler?.register(with: self.registrar(forPlugin: "IOSSandboxBridge")!)
 
-    self.iosNativeHost = IOSNativeHost(bridge: bridge)
+    self.iosNativeHost = IOSNativeHost()
     self.iosNativeHost?.registerHandler(HealthKitNativeHandler())
     self.iosNativeHost?.registerHandler(CalendarNativeHandler())
     self.iosNativeHost?.registerHandler(RemindersNativeHandler())

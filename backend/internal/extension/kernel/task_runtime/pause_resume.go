@@ -76,6 +76,7 @@ func (s *TaskRuntimeService) PauseTask(ctx context.Context, req PauseTaskRequest
 	} else if !ok {
 		return NewTaskError(ErrTaskPauseInProgress, "concurrent state change, retry pause")
 	}
+	run.Revision++
 
 	s.mu.RLock()
 	host, ok := s.activeHosts[req.TaskRunID]

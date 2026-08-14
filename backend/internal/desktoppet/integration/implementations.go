@@ -187,11 +187,7 @@ func (r *defaultActionTargetResolver) ResolveActionTarget(ctx context.Context, e
 	if extensionID == "" || contributionID == "" {
 		return ExistingPetActionTarget{}, fmt.Errorf("ResolveActionTarget: extensionID and contributionID required")
 	}
-	return ExistingPetActionTarget{
-		InstallationID: extensionID,
-		DeviceID:       "default",
-		UserID:         "default",
-	}, nil
+	return ExistingPetActionTarget{}, fmt.Errorf("ResolveActionTarget: fixture resolver has no desktop pet target")
 }
 
 func DefaultCapabilities() DesktopPetPluginCapabilities {
@@ -200,5 +196,6 @@ func DefaultCapabilities() DesktopPetPluginCapabilities {
 		Action:         NewDefaultActionCapability(),
 		Runtime:        NewDefaultRuntimeCapability(),
 		FloatingWindow: NewDefaultFloatingWindowCapability(),
+		ActionTarget:   NewDefaultActionTargetResolver(),
 	}
 }

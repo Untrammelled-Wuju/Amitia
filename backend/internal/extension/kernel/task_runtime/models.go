@@ -212,6 +212,7 @@ type TaskRun struct {
 	ErrorCode            *string                `json:"errorCode,omitempty"`
 	ErrorMessage         *string                `json:"errorMessage,omitempty"`
 	Generation           int64                  `json:"generation"`
+	Revision             int64                  `json:"revision"`
 }
 
 func (r *TaskRun) EffectiveExecutionPlacement() TaskExecutionPlacement {

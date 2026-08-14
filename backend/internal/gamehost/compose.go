@@ -4,12 +4,13 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 	kernelpermission "github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/scope"
 	"github.com/u-ai/backend/internal/extension/kernel/secret"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
-	gamehostsecret "github.com/u-ai/backend/internal/gamehost/secret"
+	ghTrustedService "github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	"github.com/u-ai/backend/internal/gamehost/channel"
 	"github.com/u-ai/backend/internal/gamehost/config"
 	"github.com/u-ai/backend/internal/gamehost/control"
@@ -21,20 +22,19 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/ipc"
 	"github.com/u-ai/backend/internal/gamehost/notification"
 	"github.com/u-ai/backend/internal/gamehost/permission"
+	"github.com/u-ai/backend/internal/gamehost/recovery"
 	"github.com/u-ai/backend/internal/gamehost/registry"
 	"github.com/u-ai/backend/internal/gamehost/resource"
 	"github.com/u-ai/backend/internal/gamehost/rpc"
 	"github.com/u-ai/backend/internal/gamehost/runtime"
 	"github.com/u-ai/backend/internal/gamehost/runtime/checkpoint"
-	"github.com/u-ai/backend/internal/gamehost/state"
+	gamehostsecret "github.com/u-ai/backend/internal/gamehost/secret"
 	"github.com/u-ai/backend/internal/gamehost/startup"
+	"github.com/u-ai/backend/internal/gamehost/state"
 	"github.com/u-ai/backend/internal/gamehost/storage"
 	"github.com/u-ai/backend/internal/gamehost/stream"
 	"github.com/u-ai/backend/internal/gamehost/stream/binary"
-	"github.com/u-ai/backend/internal/gamehost/recovery"
 	"github.com/u-ai/backend/internal/gamehost/upgrade"
-	ghTrustedService "github.com/u-ai/backend/internal/extension/kernel/trusted_service"
-	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
@@ -50,11 +50,11 @@ type GameHostComposeOptions struct {
 	SecretBroker        *secret.Broker
 
 	EffectivePermission *permission.EffectivePermissionAdapter
-	PermissionBroker  permission.Broker
+	PermissionBroker    permission.Broker
 
-	KernelPermissionBroker       kernelpermission.PermissionBroker
+	KernelPermissionBroker        kernelpermission.PermissionBroker
 	KernelPermissionSnapshotStore kernelpermission.PermissionSnapshotStore
-	KernelScopeManager           scope.ScopeManager
+	KernelScopeManager            scope.ScopeManager
 }
 
 func NewKernelContributionSource(
@@ -125,6 +125,8 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	configResolver := config.NewResolver(configStore, nil, nil)
 
 	pluginReg := registry.NewRegistry()
+	runtimeManager := runtime.NewManager(runtime.ManagerOptions{})
+	topologyStore := runtime.NewTopologyStore()
 
 	policyResolver := stream.NewPolicyResolver()
 	streamMgr := stream.NewStreamManager(policyResolver)
@@ -153,8 +155,12 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	nsAdapter := handshake.NewNamespaceAdapter(nsReg)
 	channelAdvertiser := handshake.NewChannelAdvertiser(pluginReg)
 	handshakeMgr := handshake.NewHandshakeManager(handshake.HandshakeManagerConfig{
-		NamespaceAdapter:  nsAdapter,
-		ChannelAdvertiser: channelAdvertiser,
+		HostSupportedProtocols: []string{protocol.ProtocolVersion},
+		HostCapabilities:       handshake.ProductionHostCapabilities(),
+		NamespaceAdapter:       nsAdapter,
+		ChannelAdvertiser:      channelAdvertiser,
+		RuntimeValidator:       integration.NewHandshakeRuntimeValidator(runtimeManager, topologyStore),
+		DescriptorProvider:     pluginReg,
 	})
 
 	hostHandlers := rpc.NewHostHandlerRegistry()
@@ -169,6 +175,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 
 	controlPlane, err := ipc.NewControlPlane(ipc.ControlPlaneConfig{
 		Registry:            connReg,
+		Resolver:            integration.NewRuntimePeerResolver(topologyStore),
 		Dispatcher:          rpcDispatcher,
 		HandshakeController: handshakeController,
 	})
@@ -197,9 +204,6 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		procAdapter = adapt
 	}
 
-	runtimeManager := runtime.NewManager(runtime.ManagerOptions{})
-	topologyStore := runtime.NewTopologyStore()
-
 	resourceMapper := newResourceSubjectMapper(pluginReg)
 	resourceGovernor := newRuntimeLimitGovernor()
 	resourceAdapter := resource.NewResourceAdmissionAdapter(resourceMapper, nil, binaryReg, resourceGovernor)
@@ -208,17 +212,17 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 
 	controlSinkRegistry := control.NewControlSinkRegistry()
 	commitBarrier := control.NewControlCommitBarrier()
+	metricsSink := control.MetricsSink(control.NewDiscardMetricsSink())
+	if opts.EventService != nil {
+		metricsSink = integration.NewControlMetricsAdapter(opts.EventService, pluginReg)
+	}
 
 	topologyAdapter := integration.NewControlTopologyAdapter(topologyStore)
 	runtimeAdapter := integration.NewControlRuntimeAdapter(runtimeManager)
 	hostPolicyAdapter := integration.NewControlHostPolicyAdapter(runtimeManager)
 
 	var auditSink control.AuthorityAuditSink
-	if opts.EventService != nil {
-		auditSink = integration.NewControlAuditAdapter(opts.EventService, pluginReg)
-	} else {
-		auditSink = control.NewInMemoryAuthorityAuditSink()
-	}
+	auditSink = integration.NewControlAuditAdapter(opts.EventService, pluginReg)
 
 	if opts.EffectivePermission == nil && opts.PermissionBroker != nil {
 		subjectResolver := integration.NewGameHostPermissionSubjectResolver(runtimeManager, pluginReg)
@@ -229,7 +233,8 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	permChecker := integration.NewControlPermissionAdapter(opts.EffectivePermission)
 
 	controlManager := control.NewControlAuthorityManager(control.ControlAuthorityManagerOptions{
-		Audit: auditSink,
+		Audit:         auditSink,
+		CommitBarrier: commitBarrier,
 	})
 
 	pluginOutputGate, err := control.NewPluginOutputGate(control.PluginOutputGateOptions{
@@ -240,7 +245,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		PolicyChecker:    hostPolicyAdapter,
 		Authority:        controlManager,
 		Audit:            auditSink,
-		Metrics:          nil,
+		Metrics:          metricsSink,
 		CommitBarrier:    commitBarrier,
 	})
 	if err != nil {
@@ -251,6 +256,9 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		Manager: controlManager,
 		Audit:   auditSink,
 	})
+	if err := control.NewControlHandler(pluginOutputGate, controlSinkRegistry).RegisterHandlers(hostHandlers); err != nil {
+		return nil, fmt.Errorf("register control RPC handlers: %w", err)
+	}
 
 	var runtimeProvisioner *integration.RuntimeGraphProvisioner
 	var serviceExecutor runtime.ServiceExecutor
@@ -286,7 +294,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		runtimeExecutor, err = runtime.NewRuntimeExecutor(
 			topologyStore,
 			runtimeManager,
-		serviceExecutor,
+			serviceExecutor,
 			lifecyclePlanner,
 		)
 		if err != nil {
@@ -309,7 +317,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		}
 	}
 
- emergencyIntentStore := integration.NewInMemoryEmergencyIntentStore()
+	emergencyIntentStore := integration.NewInMemoryEmergencyIntentStore()
 	emergencyRuntimeAdapter := integration.NewEmergencyRuntimeAdapter(runtimeExecutor, runtimeManager)
 	emergencyRPCAdapter := integration.NewEmergencyRPCAdapter(rpcLifecycle.Registry())
 	emergencyConnectionAdapter := integration.NewEmergencyConnectionAdapter(connReg, controlPlane)
@@ -322,27 +330,8 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	emergencyStreamVerifier := integration.NewEmergencyStreamVerifier(streamMgr)
 	emergencyChannelVerifier := integration.NewEmergencyChannelVerifier(channelReg)
 	emergencyBinaryVerifier := integration.NewEmergencyBinaryVerifier(binaryReg)
-
-	emergencyStopService, err := control.NewEmergencyStopService(control.EmergencyStopServiceOptions{
-		Authority:         controlManager,
-		Gate:              pluginOutputGate,
-		Intent:            emergencyIntentStore,
-		RuntimeStopper:    emergencyRuntimeAdapter,
-		PendingCanceller:  emergencyRPCAdapter,
-		ConnectionCloser:  emergencyConnectionAdapter,
-		HandshakeReset:    emergencyReadyAdapter,
-		StreamStopper:     emergencyStreamAdapter,
-		ChannelCleaner:    emergencyChannelAdapter,
-		BinaryReleaser:    emergencyBinaryAdapter,
-		PendingVerifier:   emergencyPendingVerifier,
-		ConnectionVerifier: emergencyConnectionVerifier,
-		StreamVerifier:    emergencyStreamVerifier,
-		ChannelVerifier:   emergencyChannelVerifier,
-		BinaryVerifier:    emergencyBinaryVerifier,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("compose emergency stop service: %w", err)
-	}
+	emergencyHostAPITracker := integration.NewHostAPIInvocationTracker()
+	var emergencyStopService *control.EmergencyStopService
 
 	var secretAdapter *gamehostsecret.SecretLeaseAdapter
 	var secretLifecycle *gamehostsecret.LifecycleOrchestrator
@@ -371,6 +360,43 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 
 		secretLifecycle = gamehostsecret.NewLifecycleOrchestrator(secretAdapter)
 		secretSubscriptions = gamehostsecret.NewSubscriptionAdapter(secretAdapter)
+		if leaseAwareExecutor, ok := serviceExecutor.(runtime.SecretLeaseAwareServiceExecutor); ok {
+			leaseAwareExecutor.SetServiceLeaseLifecycle(secretLifecycle)
+		}
+	}
+
+	if secretAdapter == nil {
+		return nil, fmt.Errorf("compose emergency stop service: SecretBroker is required")
+	}
+	emergencySecretAdapter := integration.NewEmergencySecretLeaseAdapter(secretAdapter)
+	emergencyStopService, err = control.NewEmergencyStopService(control.EmergencyStopServiceOptions{
+		Authority:          controlManager,
+		Gate:               pluginOutputGate,
+		Intent:             emergencyIntentStore,
+		LifecycleIntent:    runtimeManager,
+		RuntimeStopper:     emergencyRuntimeAdapter,
+		PendingCanceller:   emergencyRPCAdapter,
+		HostAPICanceller:   emergencyHostAPITracker,
+		LeaseRevoker:       emergencySecretAdapter,
+		ConnectionCloser:   emergencyConnectionAdapter,
+		HandshakeReset:     emergencyReadyAdapter,
+		StreamStopper:      emergencyStreamAdapter,
+		ChannelCleaner:     emergencyChannelAdapter,
+		BinaryReleaser:     emergencyBinaryAdapter,
+		PendingVerifier:    emergencyPendingVerifier,
+		ConnectionVerifier: emergencyConnectionVerifier,
+		LeaseVerifier:      emergencySecretAdapter,
+		ReadyVerifier:      emergencyReadyAdapter,
+		HostAPIVerifier:    emergencyHostAPITracker,
+		StreamVerifier:     emergencyStreamVerifier,
+		ChannelVerifier:    emergencyChannelVerifier,
+		BinaryVerifier:     emergencyBinaryVerifier,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("compose emergency stop service: %w", err)
+	}
+	if err := control.NewAuthorityRPCHandler(controlManager, takeoverService, emergencyStopService).RegisterHandlers(hostHandlers); err != nil {
+		return nil, fmt.Errorf("register authority RPC handlers: %w", err)
 	}
 
 	var storeReader recovery.CheckpointStoreReader
@@ -434,21 +460,22 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		)
 	}
 
-	if opts.ArchiveUpdater != nil {
-		kernelRollbackAdapter = recovery.NewKernelRollbackAdapter(
-			func(ctx context.Context, extensionID string, operationID recovery.RecoveryOperationID) (recovery.KernelRollbackResult, error) {
-				result, err := opts.ArchiveUpdater.UpdateArchive(ctx, extensionID, "")
-				if err != nil {
-					return recovery.KernelRollbackResult{Success: false, Error: err.Error()}, err
-				}
-				return recovery.KernelRollbackResult{
-					Success:           result.Success,
-					NewVersion:        result.NewVersion,
-					RequiresReconcile: true,
-				}, nil
-			},
-		)
-	}
+	kernelRollbackAdapter = recovery.NewKernelRollbackAdapter(
+		func(ctx context.Context, extensionID string, operationID recovery.RecoveryOperationID) (recovery.KernelRollbackResult, error) {
+			if opts.ArchiveUpdater == nil {
+				return recovery.KernelRollbackResult{Success: false, Error: "kernel rollback is unavailable"}, fmt.Errorf("kernel rollback is unavailable")
+			}
+			result, err := opts.ArchiveUpdater.UpdateArchive(ctx, extensionID, "")
+			if err != nil {
+				return recovery.KernelRollbackResult{Success: false, Error: err.Error()}, err
+			}
+			return recovery.KernelRollbackResult{
+				Success:           result.Success,
+				NewVersion:        result.NewVersion,
+				RequiresReconcile: true,
+			}, nil
+		},
+	)
 
 	if runtimeExecutor != nil {
 		rtExecutor = recovery.NewRuntimeExecutorAdapter(
@@ -467,7 +494,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 				return secretAdapter.RevokeRuntimeLeases(runtimeID, "recovery").RevokedCount
 			},
 			func(ctx context.Context, req recovery.SecretLeaseRequest) (recovery.SecretLeaseResult, error) {
-				return recovery.SecretLeaseResult{Success: true, LeaseID: "placeholder"}, nil
+				return recovery.SecretLeaseResult{Success: false, Error: "recovery lease issuance is unavailable"}, fmt.Errorf("recovery lease issuance is unavailable")
 			},
 		)
 	}
@@ -475,15 +502,28 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	if runtimeProvisioner != nil && runtimeManager != nil && pluginReg != nil {
 		structureBuilderAdapter = recovery.NewHostStructureBuilderAdapter(
 			func(ctx context.Context, pluginID domain.PluginID, extensionID string) (recovery.TopologyResult, error) {
-				desc, err := pluginReg.Get(ctx, pluginID)
+				if err := runtimeProvisioner.Reconcile(ctx); err != nil {
+					return recovery.TopologyResult{Valid: false}, err
+				}
+				runtimes, err := runtimeManager.List(ctx)
 				if err != nil {
 					return recovery.TopologyResult{Valid: false}, err
 				}
-				return recovery.TopologyResult{
-					TopologyID: desc.ID,
-					ServiceIDs: []string{desc.ID},
-					Valid:      true,
-				}, nil
+				for _, candidate := range runtimes {
+					if candidate.PluginID != pluginID {
+						continue
+					}
+					snapshot, snapshotErr := topologyStore.GetTopologySnapshot(candidate.ID)
+					if snapshotErr != nil {
+						return recovery.TopologyResult{Valid: false}, snapshotErr
+					}
+					serviceIDs := make([]string, 0, len(snapshot.Services))
+					for _, service := range snapshot.Services {
+						serviceIDs = append(serviceIDs, string(service.ID))
+					}
+					return recovery.TopologyResult{TopologyID: string(candidate.ID), ServiceIDs: serviceIDs, Valid: true}, nil
+				}
+				return recovery.TopologyResult{Valid: false}, fmt.Errorf("runtime not found for plugin %s", pluginID)
 			},
 			func(ctx context.Context, topology recovery.TopologyResult) (recovery.LifecycleResult, error) {
 				return recovery.LifecycleResult{
@@ -515,33 +555,29 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	if controlManager != nil {
 		authorityAdapter = &recovery.ControlAuthorityViewAdapter{
 			GetAuthorityFn: func(runtimeID domain.RuntimeInstanceID) (recovery.AuthoritySnapshot, error) {
+				snapshot, err := controlManager.Get(context.Background(), runtimeID)
+				if err != nil {
+					return recovery.AuthoritySnapshot{}, err
+				}
 				return recovery.AuthoritySnapshot{
 					RuntimeID: runtimeID,
-					Mode:      "standard",
-					Epoch:     1,
+					Mode:      string(snapshot.Mode),
+					Epoch:     snapshot.Epoch,
 				}, nil
 			},
 		}
 	}
 
 	var productionAuditSink recovery.AuditSink
-	if opts.EventService != nil {
-		productionAuditSink = recovery.NewAuditSinkAdapter(func(event recovery.RecoveryAuditEvent) {
-			opts.EventService.Emit(domain.Event{
-				Type:      "recovery",
-				Payload:   event,
-				Timestamp: time.Now(),
-			})
-		})
-	} else {
-		productionAuditSink = recovery.NewAuditSinkAdapter(func(event recovery.RecoveryAuditEvent) {})
-	}
+	productionAuditSink = recovery.NewAuditSinkAdapter(func(event recovery.RecoveryAuditEvent) {})
+
+	recoveryRuntimeManager := &recoveryRuntimeManagerAdapter{mgr: runtimeManager}
 
 	recoveryCoordinator, err := ComposeRecoveryCoordinator(recovery.RecoveryCoordinatorDeps{
 		Kernel:               kernelRollbackAdapter,
 		Supervisor:           supervisorViewAdapter,
 		PluginRegistry:       pluginReg,
-		RuntimeManager:       runtimeManager,
+		RuntimeManager:       recoveryRuntimeManager,
 		RuntimeExecutor:      rtExecutor,
 		SecretLease:          secretLeaseAdapter,
 		Permission:           permissionAdapter,
@@ -582,62 +618,62 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		procAdapter:          procAdapter,
 		HostAPIGateway:       opts.HostAPIGateway,
 
-		ResourceAdapter:    resourceAdapter,
-		ResourceViewer:     resourceViewer,
-		ResourceLifecycle:  resourceLifecycle,
+		ResourceAdapter:   resourceAdapter,
+		ResourceViewer:    resourceViewer,
+		ResourceLifecycle: resourceLifecycle,
 
-		AuthorityManager:      controlManager,
-		OutputGate:            pluginOutputGate,
-		TakeoverService:       takeoverService,
-		AuthorityAudit:        auditSink,
-		ControlSinkRegistry:   controlSinkRegistry,
-		CommitBarrier:         commitBarrier,
+		AuthorityManager:     controlManager,
+		OutputGate:           pluginOutputGate,
+		TakeoverService:      takeoverService,
+		AuthorityAudit:       auditSink,
+		ControlSinkRegistry:  controlSinkRegistry,
+		CommitBarrier:        commitBarrier,
 		EmergencyStopService: emergencyStopService,
 
 		SecretLeaseAdapter:  secretAdapter,
 		SecretLifecycle:     secretLifecycle,
 		SecretSubscriptions: secretSubscriptions,
 
-	StartupGate:         startupGate,
-	RecoveryCoordinator: recoveryCoordinator,
-}
+		StartupGate:         startupGate,
+		RecoveryCoordinator: recoveryCoordinator,
+	}
 
-var runtimeGraphReconcile upgrade.RuntimeGraphReconciler
-if runtimeProvisioner != nil {
-	runtimeGraphReconcile = upgrade.NewRuntimeGraphReconcilerAdapter(runtimeProvisioner)
-}
+	var runtimeGraphReconcile upgrade.RuntimeGraphReconciler
+	if runtimeProvisioner != nil {
+		runtimeGraphReconcile = upgrade.NewRuntimeGraphReconcilerAdapter(runtimeProvisioner)
+	}
 
-upgradeCoordinator, err := ComposeUpgradeCoordinator(
-	pluginReg,
-	runtimeManager,
-	runtimeExecutor,
-	contributionSync,
-	opts.DefinitionReconcile,
-	runtimeGraphReconcile,
-	configResolver,
-	opts.KernelLifecycle,
-	opts.ArchiveUpdater,
-)
-if err != nil {
-	return nil, fmt.Errorf("compose upgrade coordinator: %w", err)
-}
-container.UpgradeCoordinator = upgradeCoordinator
+	upgradeCoordinator, err := ComposeUpgradeCoordinator(
+		pluginReg,
+		runtimeManager,
+		runtimeExecutor,
+		contributionSync,
+		opts.DefinitionReconcile,
+		runtimeGraphReconcile,
+		configResolver,
+		opts.KernelLifecycle,
+		opts.ArchiveUpdater,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("compose upgrade coordinator: %w", err)
+	}
+	container.UpgradeCoordinator = upgradeCoordinator
 
-startupRecovery, err := ComposeStartupRecovery(startup.StartupRecoveryDeps{
-	HostIdentity:    startup.NewHostIdentity("", ""),
-	ProcessCleanup:  startup.NewProcessCleanupAdapter(),
-	TempCleanup:     startup.NewTempCleanupAdapter(),
-	BinaryCleanup:   startup.NewBinaryCleanupAdapter(),
-	EndpointCleanup: startup.NewEndpointCleanupAdapter(),
-	ShmCleanup:      startup.NewSharedMemoryCleanupAdapter(),
-	KernelRecon:     startup.NewKernelReconciliationAdapter(),
-	AuditSink:       startup.NewAuditSinkLoggerAdapter(),
-	Gate:            startupGate,
-})
-if err != nil {
-	return nil, fmt.Errorf("compose startup recovery: %w", err)
-}
-container.StartupRecovery = startupRecovery
+	startupRecovery, err := ComposeStartupRecovery(startup.StartupRecoveryDeps{
+		HostIdentity:    startup.NewHostIdentity("", ""),
+		ProcessCleanup:  startup.NewProcessCleanupAdapter(),
+		TempCleanup:     startup.NewTempCleanupAdapter(),
+		BinaryCleanup:   startup.NewBinaryCleanupAdapter(),
+		EndpointCleanup: startup.NewEndpointCleanupAdapter(),
+		ShmCleanup:      startup.NewSharedMemoryCleanupAdapter(),
+		KernelRecon:     startup.NewKernelReconciliationAdapter(),
+		AuditSink:       startup.NewAuditSinkLoggerAdapter(),
+		Gate:            startupGate,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("compose startup recovery: %w", err)
+	}
+	container.StartupRecovery = startupRecovery
 
 	if opts.HostAPIGateway != nil {
 		runtimeReader := integration.NewHostAPIRuntimeAdapter(runtimeManager, pluginReg)
@@ -646,8 +682,8 @@ container.StartupRecovery = startupRecovery
 		runtimeResolver := integration.NewHostAPIRuntimeIdentityResolver(runtimeManager, pluginReg, topologyStore)
 
 		var permProvider *integration.HostAPIPermissionProvider
-		if opts.KernelPermissionBroker != nil {
-			permProvider = integration.NewHostAPIPermissionProvider()
+		if opts.KernelPermissionSnapshotStore != nil {
+			permProvider = integration.NewHostAPIPermissionProvider(opts.KernelPermissionSnapshotStore)
 		}
 
 		var scopeProvider *integration.HostAPIScopeProvider
@@ -666,11 +702,15 @@ container.StartupRecovery = startupRecovery
 			RuntimeResolver:    runtimeResolver,
 			GenerationReader:   generationReader,
 			ConnectionRegistry: readyGate,
+			InvocationTracker:  emergencyHostAPITracker,
 		})
 		if err != nil {
 			return nil, err
 		}
 		container.HostAPIAdapter = adapter
+		if err := hostapi.RegisterHostAPIMethods(adapter, hostHandlers, opts.HostAPIGateway.ListMethods(context.Background())); err != nil {
+			return nil, fmt.Errorf("register host API RPC handlers: %w", err)
+		}
 	}
 
 	if opts.TrustedSupervisor != nil {
@@ -699,9 +739,37 @@ container.StartupRecovery = startupRecovery
 			topologyStore,
 			runtimeManager,
 		)
+		if secretLifecycle != nil {
+			if leaseAwareBridge, ok := exitBridge.(interface {
+				SetRuntimeGenerationLeaseRevoker(runtime.RuntimeGenerationLeaseRevoker)
+			}); ok {
+				leaseAwareBridge.SetRuntimeGenerationLeaseRevoker(secretLifecycle)
+			}
+		}
 		exitBridge.RegisterObserver()
 		container.ProcessExitBridge = exitBridge
 	}
 
 	return container, nil
+}
+
+type recoveryRuntimeManagerAdapter struct {
+	mgr runtime.RuntimeManager
+}
+
+func (a *recoveryRuntimeManagerAdapter) GetRuntime(runtimeID domain.RuntimeInstanceID) (*recovery.RuntimeInstanceRef, error) {
+	rt, err := a.mgr.GetRuntime(runtimeID)
+	if err != nil {
+		return nil, err
+	}
+	return &recovery.RuntimeInstanceRef{ID: rt.ID, PluginID: rt.PluginID, State: rt.State}, nil
+}
+
+func (a *recoveryRuntimeManagerAdapter) ListRuntimes() []*recovery.RuntimeInstanceRef {
+	rts := a.mgr.ListRuntimes()
+	out := make([]*recovery.RuntimeInstanceRef, 0, len(rts))
+	for _, rt := range rts {
+		out = append(out, &recovery.RuntimeInstanceRef{ID: rt.ID, PluginID: rt.PluginID, State: rt.State})
+	}
+	return out
 }

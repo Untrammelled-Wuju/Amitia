@@ -50,7 +50,7 @@ func (a *V2ActivePetAdapter) ResolveActivePet(ctx context.Context, userID, chara
 		for _, conn := range conns {
 			if conn != nil && conn.State == runtimev2.ConnStateConnected {
 				runtimeOnline = true
-				petInstanceID = conn.RuntimeID
+				petInstanceID = string(conn.RuntimeID)
 				break
 			}
 		}

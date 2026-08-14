@@ -170,11 +170,11 @@ class DesktopPetPluginController extends StateNotifier<DesktopPetPluginState> {
       }
       return false;
     } finally {
-      if (mounted) {
-        state = state.copyWith(installing: false);
-      }
       if (dispatched && mounted) {
         await _refetchAfterMutation();
+      }
+      if (mounted) {
+        state = state.copyWith(installing: false);
       }
     }
   }
@@ -219,11 +219,9 @@ class DesktopPetPluginController extends StateNotifier<DesktopPetPluginState> {
     );
 
     var dispatched = false;
-    var ok = false;
-
     try {
       dispatched = true;
-      ok = await op();
+      final ok = await op();
       return ok;
     } catch (e) {
       if (mounted) {

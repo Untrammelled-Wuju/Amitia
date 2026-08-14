@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
+	"github.com/u-ai/backend/internal/gamehost/domain"
 )
 
 type ReadyVerifier interface {
@@ -21,6 +22,12 @@ type HostAPIAdapter struct {
 	scopeProv ScopeSnapshotIDProvider
 	ready     ReadyVerifier
 	idGen     func() string
+	tracker   InvocationTracker
+}
+
+type InvocationTracker interface {
+	Begin(runtimeID domain.RuntimeInstanceID, callID string, cancel context.CancelFunc) bool
+	End(callID string, failed bool)
 }
 
 type HostAPIAdapterConfig struct {
@@ -30,6 +37,7 @@ type HostAPIAdapterConfig struct {
 	ScopeProvider      ScopeSnapshotIDProvider
 	ReadyVerifier      ReadyVerifier
 	IDGenerator        func() string
+	InvocationTracker  InvocationTracker
 }
 
 func NewHostAPIAdapter(cfg HostAPIAdapterConfig) (*HostAPIAdapter, error) {
@@ -55,6 +63,7 @@ func NewHostAPIAdapter(cfg HostAPIAdapterConfig) (*HostAPIAdapter, error) {
 		scopeProv: cfg.ScopeProvider,
 		ready:     cfg.ReadyVerifier,
 		idGen:     cfg.IDGenerator,
+		tracker:   cfg.InvocationTracker,
 	}, nil
 }
 
@@ -115,7 +124,16 @@ func (a *HostAPIAdapter) Call(ctx context.Context, req Request) (Response, error
 		callReq.Deadline = req.Deadline
 	}
 
-	result := a.gateway.Call(ctx, callReq)
+	callCtx, cancel := context.WithCancel(ctx)
+	if a.tracker != nil && !a.tracker.Begin(domain.RuntimeInstanceID(identity.InstanceID), callReq.CallID, cancel) {
+		cancel()
+		return Response{}, fmt.Errorf("hostapi: runtime is not accepting invocations")
+	}
+	defer cancel()
+	if a.tracker != nil {
+		defer func() { a.tracker.End(callReq.CallID, false) }()
+	}
+	result := a.gateway.Call(callCtx, callReq)
 	if result.Status == host_api.StatusSuccess {
 		return Response{Status: result.Status, Output: result.Output}, nil
 	}

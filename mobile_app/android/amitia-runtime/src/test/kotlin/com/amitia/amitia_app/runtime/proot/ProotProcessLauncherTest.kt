@@ -39,10 +39,12 @@ class ProotProcessLauncherTest {
         }
     }
 
+    private val testGeneration: Long = 99L
+
     @Test
     fun launch_returnsSessionWithId() {
         val launcher = DefaultProotProcessLauncher(fixedIdGen)
-        val session = launcher.launch(noopCommand(), ProotObserver {})
+        val session = launcher.launch(noopCommand(), ProotObserver {}, testGeneration)
         assertNotNull(session)
         assertTrue(session.sessionId.isNotEmpty())
         session.close()
@@ -52,8 +54,8 @@ class ProotProcessLauncherTest {
     fun launch_sessionIdUnique() {
         val launcher = DefaultProotProcessLauncher(fixedIdGen)
         val noop = noopCommand()
-        val s1 = launcher.launch(noop, ProotObserver {})
-        val s2 = launcher.launch(noop, ProotObserver {})
+        val s1 = launcher.launch(noop, ProotObserver {}, testGeneration)
+        val s2 = launcher.launch(noop, ProotObserver {}, testGeneration)
         assertTrue(s1.sessionId != s2.sessionId)
         s1.close()
         s2.close()
@@ -63,7 +65,7 @@ class ProotProcessLauncherTest {
     fun launch_observerReceivesStarted() {
         val launcher = DefaultProotProcessLauncher(fixedIdGen)
         val events = mutableListOf<ProotEvent>()
-        val session = launcher.launch(noopCommand(), ProotObserver { events.add(it) })
+        val session = launcher.launch(noopCommand(), ProotObserver { events.add(it) }, testGeneration)
         Thread.sleep(200)
         assertTrue(events.any { it is ProotEvent.Started })
         session.close()
@@ -75,7 +77,7 @@ class ProotProcessLauncherTest {
         val exitEvent = AtomicReference<ProotEvent.Exited?>(null)
         val session = launcher.launch(noopCommand(), ProotObserver {
             if (it is ProotEvent.Exited) exitEvent.set(it)
-        })
+        }, testGeneration)
         session.awaitExit(5000)
         Thread.sleep(50)
         assertNotNull(exitEvent.get())
@@ -87,7 +89,7 @@ class ProotProcessLauncherTest {
         val launcher = DefaultProotProcessLauncher(fixedIdGen)
         val command = ProotCommand("/nonexistent/binary/that/does/not/exist", emptyList(), emptyMap())
         try {
-            launcher.launch(command, ProotObserver {})
+            launcher.launch(command, ProotObserver {}, testGeneration)
             throw AssertionError("Expected ProotLaunchException")
         } catch (e: com.amitia.amitia_app.runtime.proot.internal.ProotLaunchException) {
             assertEquals(ProotErrorCode.PROCESS_START_FAILED, e.code)
@@ -103,7 +105,7 @@ class ProotProcessLauncherTest {
             if (event is ProotEvent.Stdout && event.data.contains("hello-output-test")) {
                 capturedStdout.set(event.data)
             }
-        })
+        }, testGeneration)
         Thread.sleep(500)
         assertTrue(capturedStdout.get().contains("hello-output-test"))
         session.close()
@@ -119,7 +121,7 @@ class ProotProcessLauncherTest {
             if (event is ProotEvent.Stdout && event.data.contains("PROOT_TEST_VAR=test-value-123")) {
                 captured.set(event.data)
             }
-        })
+        }, testGeneration)
         Thread.sleep(500)
         assertTrue(captured.get().contains("PROOT_TEST_VAR=test-value-123"))
         session.close()
@@ -131,7 +133,7 @@ class ProotProcessLauncherTest {
         val args = if (isWindows) listOf("/c", "echo no-shell-safe") else listOf("-c", "echo no-shell-safe")
         val binary = if (isWindows) "cmd.exe" else "/bin/sh"
         val command = ProotCommand(binary, args, emptyMap())
-        val session = launcher.launch(command, ProotObserver {})
+        val session = launcher.launch(command, ProotObserver {}, testGeneration)
         assertNotNull(session)
         session.close()
     }
@@ -140,8 +142,8 @@ class ProotProcessLauncherTest {
     fun launcherDoesNotHoldGlobalProcess() {
         val launcher = DefaultProotProcessLauncher(fixedIdGen)
         val command = noopCommand()
-        launcher.launch(command, ProotObserver {})
-        launcher.launch(command, ProotObserver {})
+        launcher.launch(command, ProotObserver {}, testGeneration)
+        launcher.launch(command, ProotObserver {}, testGeneration)
         assertEquals(0, getLauncherHeldProcessCount(launcher))
     }
 

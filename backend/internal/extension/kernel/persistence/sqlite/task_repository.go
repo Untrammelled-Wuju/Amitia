@@ -14,10 +14,15 @@ import (
 
 type TaskRepository struct {
 	db *sql.DB
+	tm *TransactionManager
 }
 
 func NewTaskRepository(db *sql.DB) *TaskRepository {
-	return &TaskRepository{db: db}
+	return &TaskRepository{db: db, tm: NewTransactionManager(db)}
+}
+
+func (r *TaskRepository) WithinTaskTx(ctx context.Context, fn func(ctx context.Context) error) error {
+	return r.tm.WithTransaction(ctx, fn)
 }
 
 func (r *TaskRepository) PutTaskDefinition(ctx context.Context, def *task_runtime.TaskDefinition) error {
@@ -121,8 +126,8 @@ func (r *TaskRepository) PutTaskRun(ctx context.Context, run *task_runtime.TaskR
 			 scope_snapshot_id, permission_snapshot_id, dependency_snapshot_id,
 			 runtime_instance_id, checkpoint_id, result_artifact_id,
 			 attempt, max_attempts, created_at, queued_at, started_at, finished_at,
-			 deadline_at, cancel_requested_at, error_code, error_message, generation)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			 deadline_at, cancel_requested_at, error_code, error_message, generation, revision)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(task_run_id) DO UPDATE SET
 			status = excluded.status, priority = excluded.priority,
 			input_json = excluded.input_json, input_hash = excluded.input_hash,
@@ -135,7 +140,7 @@ func (r *TaskRepository) PutTaskRun(ctx context.Context, run *task_runtime.TaskR
 			finished_at = excluded.finished_at, deadline_at = excluded.deadline_at,
 			cancel_requested_at = excluded.cancel_requested_at,
 			error_code = excluded.error_code, error_message = excluded.error_message,
-			generation = excluded.generation
+			generation = excluded.generation, revision = excluded.revision
 	`,
 		run.TaskRunID, run.OperationID, run.InvocationID, run.TaskDefinitionID,
 		run.ExtensionID, run.ModuleID, string(run.Status), run.Priority,
@@ -148,7 +153,7 @@ func (r *TaskRepository) PutTaskRun(ctx context.Context, run *task_runtime.TaskR
 		nullableTime(run.QueuedAt), nullableTime(run.StartedAt), nullableTime(run.FinishedAt),
 		nullableTime(run.DeadlineAt), nullableTime(run.CancelRequestedAt),
 		nullableString(run.ErrorCode), nullableString(run.ErrorMessage),
-		run.Generation,
+		run.Generation, run.Revision,
 	)
 	if err != nil {
 		return fmt.Errorf("sqlite: upsert task run: %w", err)
@@ -169,9 +174,10 @@ func (r *TaskRepository) UpdateTaskRunCAS(ctx context.Context, run *task_runtime
 		    deadline_at = ?, cancel_requested_at = ?,
 		    pause_reason = ?, pause_requested_at = ?, paused_at = ?, resumed_at = ?,
 		    error_code = ?, error_message = ?,
-		    generation = ?
+		    generation = ?,
+		    revision = revision + 1
 		WHERE task_run_id = ? AND status = ? AND generation = ?
-	`,
+`,
 		string(run.Status), run.Priority,
 		string(run.Input), run.InputHash,
 		nullableString(run.RuntimeInstanceID), nullableString(run.CheckpointID),
@@ -210,7 +216,7 @@ func (r *TaskRepository) GetTaskRun(ctx context.Context, runID string) (*task_ru
 		       scope_snapshot_id, permission_snapshot_id, dependency_snapshot_id,
 		       runtime_instance_id, checkpoint_id, result_artifact_id,
 		       attempt, max_attempts, created_at, queued_at, started_at, finished_at,
-		       deadline_at, cancel_requested_at, error_code, error_message, generation
+		       deadline_at, cancel_requested_at, error_code, error_message, generation, revision
 		FROM extension_task_runs WHERE task_run_id = ?
 	`, runID).Scan(
 		&run.TaskRunID, &run.OperationID, &invocationID, &run.TaskDefinitionID,
@@ -221,7 +227,7 @@ func (r *TaskRepository) GetTaskRun(ctx context.Context, runID string) (*task_ru
 		&runtimeInstanceID, &checkpointID, &resultArtifactID,
 		&run.Attempt, &run.MaxAttempts, &run.CreatedAt,
 		&queuedAt, &startedAt, &finishedAt, &deadlineAt, &cancelRequestedAt,
-		&errorCode, &errorMessage, &run.Generation,
+		&errorCode, &errorMessage, &run.Generation, &run.Revision,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -253,7 +259,7 @@ func (r *TaskRepository) ListTaskRuns(ctx context.Context, filter task_runtime.L
 		       scope_snapshot_id, permission_snapshot_id, dependency_snapshot_id,
 		       runtime_instance_id, checkpoint_id, result_artifact_id,
 		       attempt, max_attempts, created_at, queued_at, started_at, finished_at,
-		       deadline_at, cancel_requested_at, error_code, error_message, generation
+		       deadline_at, cancel_requested_at, error_code, error_message, generation, revision
 		FROM extension_task_runs`
 	var args []interface{}
 	where := ""
@@ -303,7 +309,7 @@ func (r *TaskRepository) ListTaskRuns(ctx context.Context, filter task_runtime.L
 			&runtimeInstanceID, &checkpointID, &resultArtifactID,
 			&run.Attempt, &run.MaxAttempts, &run.CreatedAt,
 			&queuedAt, &startedAt, &finishedAt, &deadlineAt, &cancelRequestedAt,
-			&errorCode, &errorMessage, &run.Generation,
+			&errorCode, &errorMessage, &run.Generation, &run.Revision,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("sqlite: scan task run: %w", err)

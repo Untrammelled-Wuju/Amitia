@@ -20,6 +20,18 @@ public class CalendarNativeHandler: NSObject, IOSNativeOperationHandler {
         super.init()
     }
 
+    public func capabilitySnapshot() -> IOSNativeCapability {
+        let status = EKEventStore.authorizationStatus(for: .event)
+        let authorized = status == .authorized || status == .fullAccess
+        return IOSNativeCapability(
+            available: true,
+            authorized: authorized,
+            hardwareAvailable: true,
+            platformSupported: true,
+            foregroundRequired: false
+        )
+    }
+
     public func execute(_ request: IOSNativeRequest) async -> IOSNativeResponse {
         switch request.operation {
         case "calendar.status":
@@ -31,15 +43,15 @@ public class CalendarNativeHandler: NSObject, IOSNativeOperationHandler {
         case "calendar.calendars.list":
             return handleCalendarsList(request)
         case "calendar.events.query":
-            return handleEventsQuery(request)
+            return await handleEventsQuery(request)
         case "calendar.events.get":
-            return handleEventsGet(request)
+            return await handleEventsGet(request)
         case "calendar.events.create":
-            return handleEventsCreate(request)
+            return await handleEventsCreate(request)
         case "calendar.events.update":
-            return handleEventsUpdate(request)
+            return await handleEventsUpdate(request)
         case "calendar.events.delete":
-            return handleEventsDelete(request)
+            return await handleEventsDelete(request)
         default:
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
@@ -56,7 +68,7 @@ public class CalendarNativeHandler: NSObject, IOSNativeOperationHandler {
             protocolVersion: request.protocolVersion,
             requestID: request.requestID,
             status: "ok",
-            result: ["available": true, "authorized": true, "message": "EventKit available"],
+            result: ["available": true, "message": "EventKit Calendar available"],
             error: nil
         )
     }
@@ -106,53 +118,216 @@ public class CalendarNativeHandler: NSObject, IOSNativeOperationHandler {
         )
     }
 
-    private func handleEventsQuery(_ request: IOSNativeRequest) -> IOSNativeResponse {
+    private func handleEventsQuery(_ request: IOSNativeRequest) async -> IOSNativeResponse {
+        let startDate = (request.payload?["startDate"] as? Date) ?? Date.distantPast
+        let endDate = (request.payload?["endDate"] as? Date) ?? Date()
+        let calendarId = request.payload?["calendarId"] as? String
+
+        var calendars: [EKCalendar] = []
+        if let calendarId = calendarId {
+            calendars = store.eventStore.calendars(for: .event).filter { $0.calendarIdentifier == calendarId }
+        } else {
+            calendars = store.eventStore.calendars(for: .event)
+        }
+
+        let predicate = store.eventStore.predicateForEvents(withStart: startDate, end: endDate, calendars: calendars.isEmpty ? nil : calendars)
+        let events = store.eventStore.events(matching: predicate)
+
+        let results = events.map { event in
+            [
+                "id": event.eventIdentifier,
+                "title": event.title ?? "",
+                "startDate": event.startDate.timeIntervalSince1970,
+                "endDate": event.endDate.timeIntervalSince1970,
+                "calendarId": event.calendar.calendarIdentifier
+            ]
+        }
+
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
             requestID: request.requestID,
             status: "ok",
-            result: ["events": []],
+            result: ["events": results, "count": results.count],
             error: nil
         )
     }
 
-    private func handleEventsGet(_ request: IOSNativeRequest) -> IOSNativeResponse {
+    private func handleEventsGet(_ request: IOSNativeRequest) async -> IOSNativeResponse {
+        guard let eventId = request.payload?["id"] as? String else {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing event id")
+            )
+        }
+
+        guard let event = store.eventStore.event(withIdentifier: eventId) else {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "NOT_FOUND", message: "event not found: \(eventId)")
+            )
+        }
+
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
             requestID: request.requestID,
             status: "ok",
-            result: ["event": [:]],
+            result: [
+                "event": [
+                    "id": event.eventIdentifier,
+                    "title": event.title ?? "",
+                    "startDate": event.startDate.timeIntervalSince1970,
+                    "endDate": event.endDate.timeIntervalSince1970,
+                    "calendarId": event.calendar.calendarIdentifier,
+                    "notes": event.notes ?? ""
+                ]
+            ],
             error: nil
         )
     }
 
-    private func handleEventsCreate(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
-            status: "ok",
-            result: ["created": true, "eventId": UUID().uuidString],
-            error: nil
-        )
+    private func handleEventsCreate(_ request: IOSNativeRequest) async -> IOSNativeResponse {
+        let event = EKEvent(eventStore: store.eventStore)
+
+        guard let title = request.payload?["title"] as? String else {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing title")
+            )
+        }
+
+        event.title = title
+        event.startDate = (request.payload?["startDate"] as? Date) ?? Date()
+        event.endDate = (request.payload?["endDate"] as? Date) ?? Date().addingTimeInterval(3600)
+        event.notes = request.payload?["notes"] as? String
+
+        if let calendarId = request.payload?["calendarId"] as? String,
+           let calendar = store.eventStore.calendars(for: .event).first(where: { $0.calendarIdentifier == calendarId }) {
+            event.calendar = calendar
+        } else {
+            event.calendar = store.eventStore.defaultCalendarForNewEvents
+        }
+
+        do {
+            try store.eventStore.save(event, span: .thisEvent)
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "ok",
+                result: ["created": true, "eventId": event.eventIdentifier],
+                error: nil
+            )
+        } catch {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "CREATE_FAILED", message: error.localizedDescription)
+            )
+        }
     }
 
-    private func handleEventsUpdate(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
-            status: "ok",
-            result: ["updated": true],
-            error: nil
-        )
+    private func handleEventsUpdate(_ request: IOSNativeRequest) async -> IOSNativeResponse {
+        guard let eventId = request.payload?["id"] as? String else {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing event id")
+            )
+        }
+
+        guard let event = store.eventStore.event(withIdentifier: eventId) else {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "NOT_FOUND", message: "event not found: \(eventId)")
+            )
+        }
+
+        if let title = request.payload?["title"] as? String {
+            event.title = title
+        }
+        if let startDate = request.payload?["startDate"] as? Date {
+            event.startDate = startDate
+        }
+        if let endDate = request.payload?["endDate"] as? Date {
+            event.endDate = endDate
+        }
+        if let notes = request.payload?["notes"] as? String {
+            event.notes = notes
+        }
+
+        do {
+            try store.eventStore.save(event, span: .thisEvent)
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "ok",
+                result: ["updated": true, "eventId": event.eventIdentifier],
+                error: nil
+            )
+        } catch {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "UPDATE_FAILED", message: error.localizedDescription)
+            )
+        }
     }
 
-    private func handleEventsDelete(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
-            status: "ok",
-            result: ["deleted": true],
-            error: nil
-        )
+    private func handleEventsDelete(_ request: IOSNativeRequest) async -> IOSNativeResponse {
+        guard let eventId = request.payload?["id"] as? String else {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing event id")
+            )
+        }
+
+        guard let event = store.eventStore.event(withIdentifier: eventId) else {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "NOT_FOUND", message: "event not found: \(eventId)")
+            )
+        }
+
+        do {
+            try store.eventStore.remove(event, span: .thisEvent)
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "ok",
+                result: ["deleted": true, "eventId": eventId],
+                error: nil
+            )
+        } catch {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "DELETE_FAILED", message: error.localizedDescription)
+            )
+        }
     }
 }

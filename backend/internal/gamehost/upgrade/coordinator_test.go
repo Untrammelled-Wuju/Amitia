@@ -77,12 +77,33 @@ type fakeRuntimeManager struct {
 	startCount int
 	failStop  domain.RuntimeInstanceID
 	failStart domain.RuntimeInstanceID
+	intents map[domain.RuntimeInstanceID]string
 }
 
 func newFakeRuntimeManager() *fakeRuntimeManager {
 	return &fakeRuntimeManager{
 		runtimes: make(map[domain.RuntimeInstanceID]*runtime.RuntimeInstanceRef),
+		intents: make(map[domain.RuntimeInstanceID]string),
 	}
+}
+
+func (f *fakeRuntimeManager) GetLifecycleIntent(runtimeID domain.RuntimeInstanceID) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.runtimes[runtimeID]; !ok {
+		return "", errors.New("runtime not found")
+	}
+	return f.intents[runtimeID], nil
+}
+
+func (f *fakeRuntimeManager) SetLifecycleIntent(runtimeID domain.RuntimeInstanceID, intent string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if _, ok := f.runtimes[runtimeID]; !ok {
+		return errors.New("runtime not found")
+	}
+	f.intents[runtimeID] = intent
+	return nil
 }
 
 func (f *fakeRuntimeManager) addRuntime(id domain.RuntimeInstanceID, pluginID domain.PluginID, state domain.RuntimeState) {
@@ -140,6 +161,7 @@ type fakeRuntimeExecutor struct {
 	failStart    error
 	beforeStopFn func(id domain.RuntimeInstanceID)
 	afterStartFn func(id domain.RuntimeInstanceID)
+	runtimeManager *fakeRuntimeManager
 }
 
 func newFakeRuntimeExecutor() *fakeRuntimeExecutor {
@@ -153,6 +175,9 @@ func (f *fakeRuntimeExecutor) StartRuntime(ctx context.Context, runtimeID domain
 		return f.failStart
 	}
 	f.started = append(f.started, runtimeID)
+	if f.runtimeManager != nil {
+		f.runtimeManager.setState(runtimeID, domain.RuntimeStateRunning)
+	}
 	if f.afterStartFn != nil {
 		f.afterStartFn(runtimeID)
 	}
@@ -166,6 +191,9 @@ func (f *fakeRuntimeExecutor) StopRuntime(ctx context.Context, runtimeID domain.
 		return f.failStop
 	}
 	f.stopped = append(f.stopped, runtimeID)
+	if f.runtimeManager != nil {
+		f.runtimeManager.setState(runtimeID, domain.RuntimeStateStopped)
+	}
 	if f.beforeStopFn != nil {
 		f.beforeStopFn(runtimeID)
 	}
@@ -314,6 +342,7 @@ func (f *fakeRuntimeGraphReconciler) ReconcileExtension(ctx context.Context, ext
 }
 
 func setupTestCoordinator(reg *fakePluginRegistry, rtMgr *fakeRuntimeManager, rtExec *fakeRuntimeExecutor) (*UpgradeCoordinator, *fakeDefinitionReconciler, *fakeContributionReconciler, *fakeConfigValidator, *fakeKernelLifecycle) {
+	rtExec.runtimeManager = rtMgr
 	defRec := &fakeDefinitionReconciler{}
 	contribRec := &fakeContributionReconciler{}
 	cfgVal := &fakeConfigValidator{}
@@ -329,7 +358,9 @@ func setupTestCoordinator(reg *fakePluginRegistry, rtMgr *fakeRuntimeManager, rt
 		contribRec,
 		cfgVal,
 		kernel,
-		nil,
+		NewKernelArchiveUpdaterAdapter(func(ctx context.Context, extensionID string, archivePath string) (*KernelUpdateResult, error) {
+			return &KernelUpdateResult{Success: true}, nil
+		}),
 	)
 	if err != nil {
 		panic(err)
@@ -613,6 +644,58 @@ func TestUpgrade_QuiesceFailure_BlocksUpdate(t *testing.T) {
 	}
 	if kernel.updateCalls != 0 {
 		t.Fatalf("expected 0 kernel update calls (quiesce failed), got %d", kernel.updateCalls)
+	}
+}
+
+func TestUpgrade_IntentSetBeforeKernelUpdate(t *testing.T) {
+	reg := newFakePluginRegistry()
+	reg.addPlugin("ext-1", domain.PluginDescriptor{ID: "plugin-a", ExtensionID: "ext-1", Name: "A", Version: "1.0.0"})
+	rtMgr := newFakeRuntimeManager()
+	rtMgr.addRuntime("rt-1", "plugin-a", domain.RuntimeStateRunning)
+	rtExec := newFakeRuntimeExecutor()
+	c, _, _, _, kernel := setupTestCoordinator(reg, rtMgr, rtExec)
+
+	intentAtUpdate := ""
+	kernel.beforeUpdate = func(extensionID string) {
+		intentAtUpdate, _ = rtMgr.GetLifecycleIntent("rt-1")
+	}
+
+	if _, err := c.ExecuteUpgrade(context.Background(), UpgradeRequest{ExtensionID: "ext-1", TargetVersion: "2.0.0"}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if intentAtUpdate != "upgrade" {
+		t.Fatalf("expected upgrade intent before package update, got %q", intentAtUpdate)
+	}
+	intent, _ := rtMgr.GetLifecycleIntent("rt-1")
+	if intent != "" {
+		t.Fatalf("expected completed upgrade to clear intent, got %q", intent)
+	}
+}
+
+func TestUpgrade_RemovedCurrentRuntimeIsNotResumed(t *testing.T) {
+	reg := newFakePluginRegistry()
+	reg.addPlugin("ext-1", domain.PluginDescriptor{ID: "plugin-a", ExtensionID: "ext-1", Name: "A", Version: "1.0.0"})
+	rtMgr := newFakeRuntimeManager()
+	rtMgr.addRuntime("rt-1", "plugin-a", domain.RuntimeStateRunning)
+	rtExec := newFakeRuntimeExecutor()
+	c, _, _, _, kernel := setupTestCoordinator(reg, rtMgr, rtExec)
+
+	kernel.beforeUpdate = func(extensionID string) {
+		reg.mu.Lock()
+		delete(reg.byExtension, extensionID)
+		delete(reg.plugins, "plugin-a")
+		reg.mu.Unlock()
+	}
+
+	result, err := c.ExecuteUpgrade(context.Background(), UpgradeRequest{ExtensionID: "ext-1", TargetVersion: "2.0.0"})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !result.Success {
+		t.Fatalf("expected success when current package removes the runtime")
+	}
+	if len(rtExec.started) != 0 {
+		t.Fatalf("expected removed runtime not to resume, got %v", rtExec.started)
 	}
 }
 

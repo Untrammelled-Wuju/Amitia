@@ -17,26 +17,9 @@ func NewResourceIO(tempDir string) *ResourceIO {
 	return &ResourceIO{tempDir: tempDir}
 }
 
-func (r *ResourceIO) MaterializeToLocal(inputPath string) (string, error) {
-	if inputPath == "" {
-		return "", fmt.Errorf("input path is empty")
-	}
-
-	info, err := os.Stat(inputPath)
-	if err != nil {
-		return "", fmt.Errorf("cannot stat input: %w", err)
-	}
-
-	if info.IsDir() {
-		return "", fmt.Errorf("input path is a directory")
-	}
-
-	return inputPath, nil
-}
-
 func (r *ResourceIO) CreateStagingPath(extension string) (string, error) {
 	if r.tempDir == "" {
-		r.tempDir = os.TempDir()
+		return "", fmt.Errorf("media temp directory is not configured")
 	}
 
 	if err := os.MkdirAll(r.tempDir, 0o755); err != nil {
@@ -138,8 +121,4 @@ func (r *ResourceIO) GetFileSize(path string) (int64, error) {
 		return 0, fmt.Errorf("failed to stat file: %w", err)
 	}
 	return info.Size(), nil
-}
-
-func (r *ResourceIO) CheckDiskSpace(path string, requiredBytes int64) error {
-	return nil
 }

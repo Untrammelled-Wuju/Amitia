@@ -74,28 +74,29 @@ import (
 )
 
 type ContainerBuilder struct {
-	dbPath                  string
-	extRoot                 string
-	db                      *sql.DB
-	characterReader         CharacterReader
-	conversationReader      ConversationReader
-	memoryQueryService      MemoryQueryService
-	nodeEnvironmentResolver script_host.NodeEnvironmentResolver
-	hostArtifactResolver    script_host.ArtifactResolver
-	androidLinuxProvider    interface{}
-	androidNativeProvider   capability.AndroidProvider
-	iosNativeProvider       capability.IOSProvider
-	host                    runtimehost.RuntimeHost
-	searchConfig            search.Config
-	deepSearchTaskEntry     string
-	visionSvc               vision.Service
-	imagegenSvc             imagegen.Service
-	providerRegistry        *imageprovider.Registry
-	resourceResolver        *resourceuri.PhysicalResolver
-	gameHostArchiveUpdater  GameHostArchiveUpdater
-	mediaService            media.Service
-	workspaceService        workspace.Service
-	browserProvider         browser.BrowserProvider
+	dbPath                       string
+	extRoot                      string
+	db                           *sql.DB
+	characterReader              CharacterReader
+	conversationReader           ConversationReader
+	memoryQueryService           MemoryQueryService
+	nodeEnvironmentResolver      script_host.NodeEnvironmentResolver
+	hostArtifactResolver         script_host.ArtifactResolver
+	androidLinuxProvider         interface{}
+	androidNativeProvider        capability.AndroidProvider
+	iosNativeProvider            capability.IOSProvider
+	host                         runtimehost.RuntimeHost
+	searchConfig                 search.Config
+	deepSearchTaskEntry          string
+	visionSvc                    vision.Service
+	imagegenSvc                  imagegen.Service
+	providerRegistry             *imageprovider.Registry
+	resourceResolver             *resourceuri.PhysicalResolver
+	gameHostArchiveUpdater       GameHostArchiveUpdater
+	mediaService                 *media.Service
+	workspaceService             *workspace.Service
+	browserProvider              browser.BrowserProvider
+	desktopPetPluginCapabilities *integration.DesktopPetPluginCapabilities
 }
 
 func NewContainerBuilder() *ContainerBuilder {
@@ -115,6 +116,11 @@ func (b *ContainerBuilder) WithExtensionRoot(root string) *ContainerBuilder {
 
 func (b *ContainerBuilder) WithDB(db *sql.DB) *ContainerBuilder {
 	b.db = db
+	return b
+}
+
+func (b *ContainerBuilder) WithDesktopPetPluginCapabilities(caps integration.DesktopPetPluginCapabilities) *ContainerBuilder {
+	b.desktopPetPluginCapabilities = &caps
 	return b
 }
 
@@ -198,23 +204,19 @@ type GameHostArchiveUpdater interface {
 	UpdateArchive(ctx context.Context, extensionID string, archivePath string) (*gamehostKernelUpdateResult, error)
 }
 
-type gamehostKernelUpdateResult struct {
-	Success    bool
-	NewVersion string
-	Reason     string
-}
+type gamehostKernelUpdateResult = upgrade.KernelUpdateResult
 
 func (b *ContainerBuilder) WithGameHostArchiveUpdater(updater GameHostArchiveUpdater) *ContainerBuilder {
 	b.gameHostArchiveUpdater = updater
 	return b
 }
 
-func (b *ContainerBuilder) WithMediaService(svc media.Service) *ContainerBuilder {
+func (b *ContainerBuilder) WithMediaService(svc *media.Service) *ContainerBuilder {
 	b.mediaService = svc
 	return b
 }
 
-func (b *ContainerBuilder) WithWorkspaceService(svc workspace.Service) *ContainerBuilder {
+func (b *ContainerBuilder) WithWorkspaceService(svc *workspace.Service) *ContainerBuilder {
 	b.workspaceService = svc
 	return b
 }
@@ -480,10 +482,10 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	taskCfg.NodeEnvironmentResolver = nodeResolver
 	taskCfg.HostArtifactResolver = artifactResolver
 	taskRuntimeService := task_runtime.NewTaskRuntimeService(taskRepo, taskCfg)
-	taskHandler := task_runtime.NewTaskHandler(taskRuntimeService)
+	taskHandler := task_runtime.NewTaskRuntimeHandler(taskRuntimeService)
 
-	taskSupervisorFactory := task_runtime.NewTaskSupervisorFactory(taskRuntimeService)
-	_ = supervisor.RegisterFactory(taskSupervisorFactory)
+	taskSupervisorAdapter := task_runtime.NewSupervisorAdapter(taskRuntimeService)
+	_ = taskSupervisorAdapter
 
 	scheduleRepo := sqlite.NewScheduleRepository(db)
 	scheduleSvc, err := schedule.NewScheduleService(schedule.ScheduleDeps{
@@ -541,9 +543,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		petPluginSource = plugin_boundary.NewContainerSource(contribRepo, instRepo)
 	}
 	var petPluginBoundary *plugin_boundary.DesktopPetPluginBoundary
-	if petPluginSource != nil {
-		prodCaps := integration.DefaultCapabilities()
-		boundary, err := plugin_boundary.NewProductionBoundary(petPluginSource, prodCaps)
+	if petPluginSource != nil && b.desktopPetPluginCapabilities != nil {
+		boundary, err := plugin_boundary.NewProductionBoundary(petPluginSource, *b.desktopPetPluginCapabilities)
 		if err != nil {
 			return nil, fmt.Errorf("kernel: create production pet plugin boundary: %w", err)
 		}
@@ -1211,11 +1212,11 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 type gameHostDefinitionReconcile struct {
 	instRepo    domain.InstallationRepository
 	defRepo     domain.DefinitionRepository
-	contribRepo domain.ContributionRepository
+	contribRepo sqlite.ContributionRepository
 	installer   *TypedContributionInstaller
 }
 
-func newGameHostDefinitionReconcile(instRepo domain.InstallationRepository, defRepo domain.DefinitionRepository, contribRepo domain.ContributionRepository, installer *TypedContributionInstaller) upgrade.DefinitionReconciler {
+func newGameHostDefinitionReconcile(instRepo domain.InstallationRepository, defRepo domain.DefinitionRepository, contribRepo sqlite.ContributionRepository, installer *TypedContributionInstaller) upgrade.DefinitionReconciler {
 	return &gameHostDefinitionReconcile{instRepo: instRepo, defRepo: defRepo, contribRepo: contribRepo, installer: installer}
 }
 

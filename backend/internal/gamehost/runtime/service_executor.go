@@ -22,11 +22,25 @@ type ServiceExecutor interface {
 
 type DefinitionResolverFunc func(definitionID string) (*trusted_service.ServiceRuntimeDefinition, error)
 
+type ServiceLeaseLifecycle interface {
+	PrepareServiceStart(ctx context.Context, execCtx ServiceExecutionContext) (string, error)
+	RevokeServiceLeases(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID, generation int64, reason string)
+}
+
+type SecretLeaseAwareServiceExecutor interface {
+	SetServiceLeaseLifecycle(lifecycle ServiceLeaseLifecycle)
+}
+
 type serviceExecutor struct {
 	processAdapter     ProcessSupervisorAdapter
 	externalAdapter    ExternalServiceAdapter
 	topologyStore      RuntimeTopologyStore
 	definitionResolver ServiceDefinitionBindingResolver
+	leaseLifecycle     ServiceLeaseLifecycle
+}
+
+func (e *serviceExecutor) SetServiceLeaseLifecycle(lifecycle ServiceLeaseLifecycle) {
+	e.leaseLifecycle = lifecycle
 }
 
 func NewServiceExecutor(
@@ -120,6 +134,21 @@ func (e *serviceExecutor) Start(ctx context.Context, entry ServicePlanEntry, res
 		DefinitionID: definitionID,
 		ServiceKind:  svc.ServiceKind,
 		Required:     svc.Required,
+		Generation:   executionGeneration(ctx),
+	}
+	if execCtx.Generation <= 0 {
+		return nil, &ExecutionError{Code: ErrInvalidArgument, RuntimeID: string(svc.RuntimeID), ServiceID: string(svc.ServiceID), Message: "execution generation is required"}
+	}
+	execCtx.SessionToken, err = newExecutionSessionToken()
+	if err != nil {
+		return nil, &ExecutionError{Code: ErrServiceLaunchFailed, RuntimeID: string(svc.RuntimeID), ServiceID: string(svc.ServiceID), Message: "create execution session token", Cause: err}
+	}
+	if e.leaseLifecycle != nil && svc.ServiceKind != domain.ServiceKindExternal {
+		execCtx.SecretLease, err = e.leaseLifecycle.PrepareServiceStart(ctx, execCtx)
+		if err != nil {
+			topology.UpdateServiceState(serviceID, ServiceStateFailed, time.Now())
+			return nil, &ExecutionError{Code: ErrServiceLaunchFailed, RuntimeID: string(svc.RuntimeID), ServiceID: string(svc.ServiceID), Message: "acquire service secret lease", Cause: err}
+		}
 	}
 
 	if svc.ServiceKind == domain.ServiceKindExternal {
@@ -143,7 +172,6 @@ func (e *serviceExecutor) Start(ctx context.Context, entry ServicePlanEntry, res
 			ServiceID: string(svc.ServiceID),
 		}, nil
 	}
-
 	def, err := resolveDefinition(definitionID)
 	if err != nil {
 		topology.UpdateServiceState(serviceID, ServiceStateFailed, time.Now())
@@ -221,6 +249,10 @@ func (e *serviceExecutor) Stop(ctx context.Context, handle ServiceExecutionHandl
 		PluginID:    svc.PluginID,
 		ServiceID:   svc.ServiceID,
 		ServiceKind: svc.ServiceKind,
+		Generation:  executionGeneration(ctx),
+	}
+	if e.leaseLifecycle != nil {
+		e.leaseLifecycle.RevokeServiceLeases(svc.RuntimeID, svc.ServiceID, execCtx.Generation, "service stopping")
 	}
 
 	if svc.ServiceKind == domain.ServiceKindExternal {

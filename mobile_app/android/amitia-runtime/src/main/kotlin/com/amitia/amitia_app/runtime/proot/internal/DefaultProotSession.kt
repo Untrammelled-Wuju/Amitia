@@ -1,60 +1,92 @@
-﻿package com.amitia.amitia_app.runtime.proot.internal
+package com.amitia.amitia_app.runtime.proot.internal
 
 import com.amitia.amitia_app.runtime.proot.ProotEvent
+import com.amitia.amitia_app.runtime.proot.ProotExit
 import com.amitia.amitia_app.runtime.proot.ProotObserver
 import com.amitia.amitia_app.runtime.proot.ProotSession
 import com.amitia.amitia_app.runtime.proot.ProotStopResult
+import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicBoolean
+import java.util.concurrent.atomic.AtomicReference
 
-internal class DefaultProotSession(override val sessionId: String, private val process: Process, private val observer: ProotObserver) : ProotSession {
+internal class DefaultProotSession(
+    override val sessionId: String,
+    private val process: Process,
+    private val observer: ProotObserver,
+    private val generation: Long,
+    private val watcherExecutor: java.util.concurrent.Executor = java.util.concurrent.Executors.newSingleThreadExecutor { r ->
+        Thread(r, "proot-exit-watcher-$sessionId").apply { isDaemon = true }
+    },
+) : ProotSession {
+
     private val closed = AtomicBoolean(false)
-    private var cachedExitCode: Int? = null
+    private val stopRequested = AtomicBoolean(false)
+    private val terminalPublished = AtomicBoolean(false)
+    private val exitDeferred = CompletableFuture<ProotExit>()
+    private val exitRef = AtomicReference<ProotExit?>(null)
     private val stdoutPump: StreamPump
     private val stderrPump: StreamPump
     private val started = AtomicBoolean(false)
+    private val watcherStarted = AtomicBoolean(false)
 
     init {
         stdoutPump = InputStreamPump(process.inputStream) { data, seq -> if (!closed.get()) safeNotify(ProotEvent.Stdout(sessionId, data, seq)) }
         stderrPump = InputStreamPump(process.errorStream) { data, seq -> if (!closed.get()) safeNotify(ProotEvent.Stderr(sessionId, data, seq)) }
+        startExitWatcher()
     }
 
     override fun isAlive(): Boolean {
         if (closed.get()) return false
-        return try { process.exitValue(); cachedExitCode = process.exitValue(); false } catch (e: IllegalThreadStateException) { true }
+        return try { process.exitValue(); false } catch (e: IllegalThreadStateException) { true }
     }
 
+    override fun requestStop() {
+        stopRequested.set(true)
+    }
+
+    override val exit: ProotExit?
+        get() = exitRef.get()
+
     override fun awaitExit(timeoutMillis: Long): Int? {
-        if (closed.get()) return cachedExitCode
-        val deadline = System.currentTimeMillis() + timeoutMillis
-        while (System.currentTimeMillis() < deadline) {
-            if (!isAlive()) {
-                val code = try { process.exitValue() } catch (e: Exception) { return cachedExitCode }
-                cachedExitCode = code; safeNotify(ProotEvent.Exited(sessionId, code, false)); close(); return code
-            }
-            Thread.sleep(50)
+        val existing = exitRef.get()
+        if (existing != null) return existing.exitCode
+        if (timeoutMillis <= 0L) {
+            if (closed.get()) return exitRef.get()?.exitCode
+            return try { process.exitValue() } catch (_: IllegalThreadStateException) { null }
         }
-        return null
+        return try {
+            exitDeferred.get(timeoutMillis, java.util.concurrent.TimeUnit.MILLISECONDS)?.exitCode
+        } catch (e: Exception) {
+            exitRef.get()?.exitCode
+        }
     }
 
     override fun stop(graceMillis: Long): ProotStopResult {
-        if (closed.get()) return ProotStopResult.AlreadyStopped(sessionId, cachedExitCode)
-        if (!isAlive()) { val code = cachedExitCode; close(); return ProotStopResult.AlreadyStopped(sessionId, code) }
+        if (closed.get()) {
+            val code = exitRef.get()?.exitCode
+            return ProotStopResult.AlreadyStopped(sessionId, code)
+        }
+        stopRequested.set(true)
         return try {
             process.destroy()
-            if (process.waitFor(graceMillis, java.util.concurrent.TimeUnit.MILLISECONDS)) {
-                val code = process.exitValue(); cachedExitCode = code; safeNotify(ProotEvent.Exited(sessionId, code, false)); close()
+            val graceful = process.waitFor(graceMillis, java.util.concurrent.TimeUnit.MILLISECONDS)
+            if (graceful) {
+                try { exitDeferred.get(5, java.util.concurrent.TimeUnit.MILLISECONDS) } catch (_: Exception) {}
+                val code = exitRef.get()?.exitCode ?: process.exitValue()
                 ProotStopResult.Graceful(sessionId, code)
             } else {
                 process.destroyForcibly()
-                val exited = process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
-                val code = if (exited) process.exitValue() else null; cachedExitCode = code; safeNotify(ProotEvent.Exited(sessionId, code ?: -1, true)); close()
+                try { exitDeferred.get(5, java.util.concurrent.TimeUnit.SECONDS) } catch (_: Exception) {}
+                val code = exitRef.get()?.exitCode
                 ProotStopResult.Forced(sessionId, code)
             }
         } catch (e: InterruptedException) {
-            Thread.currentThread().interrupt(); process.destroyForcibly(); close()
-            ProotStopResult.Failed(sessionId, com.amitia.amitia_app.runtime.proot.ProotErrorCode.PROCESS_STOP_FAILED, e.message ?: "interrupted")
+            Thread.currentThread().interrupt()
+            process.destroyForcibly()
+            try { exitDeferred.get(5, java.util.concurrent.TimeUnit.SECONDS) } catch (_: Exception) {}
+            val code = exitRef.get()?.exitCode
+            ProotStopResult.Forced(sessionId, code)
         } catch (e: Exception) {
-            close()
             ProotStopResult.Failed(sessionId, com.amitia.amitia_app.runtime.proot.ProotErrorCode.PROCESS_STOP_FAILED, e.message ?: "error")
         }
     }
@@ -64,30 +96,115 @@ internal class DefaultProotSession(override val sessionId: String, private val p
             try { stdoutPump.stop() } catch (_: Throwable) {}
             try { stderrPump.stop() } catch (_: Throwable) {}
             try { if (process.isAlive) process.destroyForcibly() } catch (_: Throwable) {}
+            try { exitDeferred.get(5, java.util.concurrent.TimeUnit.SECONDS) } catch (_: Exception) {}
         }
     }
 
     internal fun markStarted() {
         if (started.compareAndSet(false, true)) {
-            safeNotify(ProotEvent.Started(sessionId, System.currentTimeMillis())); stdoutPump.start(); stderrPump.start()
+            safeNotify(ProotEvent.Started(sessionId, System.currentTimeMillis()))
+            stdoutPump.start()
+            stderrPump.start()
         }
     }
 
-    private fun safeNotify(event: ProotEvent) { try { observer.onEvent(event) } catch (_: Throwable) {} }
+    private fun startExitWatcher() {
+        if (!watcherStarted.compareAndSet(false, true)) return
+        watcherExecutor.execute {
+            try {
+                val code = process.waitFor()
+                val exit = ProotExit(
+                    generation = generation,
+                    sessionId = sessionId,
+                    exitCode = code,
+                    stopRequested = stopRequested.get(),
+                )
+                exitRef.set(exit)
+                publishTerminalOnce(exit)
+            } catch (e: InterruptedException) {
+                Thread.currentThread().interrupt()
+                val code = try { process.exitValue() } catch (_: Exception) { -1 }
+                val exit = ProotExit(
+                    generation = generation,
+                    sessionId = sessionId,
+                    exitCode = code,
+                    stopRequested = stopRequested.get(),
+                )
+                exitRef.set(exit)
+                publishTerminalOnce(exit)
+            } catch (e: Exception) {
+                val code = try { process.exitValue() } catch (_: Exception) { -1 }
+                val exit = ProotExit(
+                    generation = generation,
+                    sessionId = sessionId,
+                    exitCode = code,
+                    stopRequested = stopRequested.get(),
+                )
+                exitRef.set(exit)
+                publishTerminalOnce(exit)
+            } finally {
+                val currentExit = exitRef.get()
+                if (currentExit != null) {
+                    exitDeferred.complete(currentExit)
+                } else {
+                    val fallback = ProotExit(
+                        generation = generation,
+                        sessionId = sessionId,
+                        exitCode = -1,
+                        stopRequested = stopRequested.get(),
+                    )
+                    exitRef.set(fallback)
+                    exitDeferred.complete(fallback)
+                }
+            }
+        }
+    }
+
+    private fun publishTerminalOnce(exit: ProotExit) {
+        if (terminalPublished.compareAndSet(false, true)) {
+            safeNotify(ProotEvent.Exited(exit))
+        }
+    }
+
+    private fun safeNotify(event: ProotEvent) {
+        try { observer.onEvent(event) } catch (_: Throwable) {}
+    }
 }
 
-internal interface StreamPump { fun start(); fun stop() }
-internal class InputStreamPump(private val inputStream: java.io.InputStream, private val onData: (String, Long) -> Unit) : StreamPump {
+internal interface StreamPump {
+    fun start()
+    fun stop()
+}
+
+internal class InputStreamPump(
+    private val inputStream: java.io.InputStream,
+    private val onData: (String, Long) -> Unit
+) : StreamPump {
     private val sequence = java.util.concurrent.atomic.AtomicLong(0)
     private var thread: Thread? = null
     private val running = AtomicBoolean(false)
+
     override fun start() {
         if (running.compareAndSet(false, true)) {
             thread = Thread {
                 val reader = inputStream.bufferedReader()
-                try { while (running.get()) { val line = reader.readLine() ?: break; onData(line, sequence.incrementAndGet()) } } catch (_: Throwable) {} finally { running.set(false) }
-            }.apply { isDaemon = true; name = "proot-stream-pump"; start() }
+                try {
+                    while (running.get()) {
+                        val line = reader.readLine() ?: break
+                        onData(line, sequence.incrementAndGet())
+                    }
+                } catch (_: Throwable) {}
+                finally { running.set(false) }
+            }.apply {
+                isDaemon = true
+                name = "proot-stream-pump"
+                start()
+            }
         }
     }
-    override fun stop() { running.set(false); thread?.interrupt() }
+
+    override fun stop() {
+        running.set(false)
+        thread?.interrupt()
+    }
 }

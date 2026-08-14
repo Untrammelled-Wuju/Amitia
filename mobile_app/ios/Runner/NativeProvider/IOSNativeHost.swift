@@ -1,9 +1,42 @@
 import Foundation
 import UIKit
+import HealthKit
+import EventKit
+import Contacts
+import CoreBluetooth
+import Photos
+import AVFoundation
+import BackgroundTasks
+import Intents
+import UserNotifications
 
 @objc public protocol IOSNativeOperationHandler: AnyObject {
     var operations: Set<String> { get }
+    func capabilitySnapshot() -> IOSNativeCapability
     func execute(_ request: IOSNativeRequest) async -> IOSNativeResponse
+}
+
+@objc public class IOSNativeCapability: NSObject {
+    public let available: Bool
+    public let authorized: Bool
+    public let hardwareAvailable: Bool
+    public let platformSupported: Bool
+    public let foregroundRequired: Bool
+
+    public init(
+        available: Bool,
+        authorized: Bool = false,
+        hardwareAvailable: Bool = true,
+        platformSupported: Bool = true,
+        foregroundRequired: Bool = false
+    ) {
+        self.available = available
+        self.authorized = authorized
+        self.hardwareAvailable = hardwareAvailable
+        self.platformSupported = platformSupported
+        self.foregroundRequired = foregroundRequired
+        super.init()
+    }
 }
 
 @objc public class IOSNativeRequest: NSObject {
@@ -53,6 +86,8 @@ import UIKit
     }
 }
 
+private let supportedProtocolVersions: Set<String> = ["1.0"]
+
 @objc public class IOSNativeHost: NSObject {
 
     private var handlers: [String: IOSNativeOperationHandler] = [:]
@@ -60,12 +95,9 @@ import UIKit
     private var isForeground: Bool = true
     private let queue = DispatchQueue(label: "com.amitia.iosnative.host", attributes: .concurrent)
 
-    public init(bridge: AnyObject) {
-        super.init()
-        setupNotifications()
-    }
+    public private(set) var capabilities: [String: IOSNativeCapability] = [:]
 
-    private override init() {
+    public override init() {
         super.init()
         setupNotifications()
     }
@@ -101,6 +133,7 @@ import UIKit
         queue.async(flags: .barrier) {
             self.isForeground = true
         }
+        refreshAuthorization()
     }
 
     @objc private func handleWillTerminate() {
@@ -108,13 +141,14 @@ import UIKit
     }
 
     public func registerHandler(_ handler: IOSNativeOperationHandler) {
-        queue.async(flags: .barrier) {
+        queue.sync(flags: .barrier) {
             for operation in handler.operations {
                 if self.handlers[operation] != nil {
                     preconditionFailure("IOSNativeHost: duplicate handler registration for operation \(operation)")
                 }
                 self.handlers[operation] = handler
             }
+            self.updateCapabilitiesLocked()
         }
     }
 
@@ -125,6 +159,40 @@ import UIKit
                     let error = IOSNativeError(
                         code: "INVALID_PLATFORM",
                         message: "unsupported platform: \(request.platform)",
+                        domainCode: nil
+                    )
+                    let response = IOSNativeResponse(
+                        protocolVersion: request.protocolVersion,
+                        requestID: request.requestID,
+                        status: "error",
+                        result: nil,
+                        error: error
+                    )
+                    continuation.resume(returning: response)
+                    return
+                }
+
+                guard supportedProtocolVersions.contains(request.protocolVersion) else {
+                    let error = IOSNativeError(
+                        code: "BRIDGE_PROTOCOL_MISMATCH",
+                        message: "unsupported protocol version: \(request.protocolVersion)",
+                        domainCode: nil
+                    )
+                    let response = IOSNativeResponse(
+                        protocolVersion: request.protocolVersion,
+                        requestID: request.requestID,
+                        status: "error",
+                        result: nil,
+                        error: error
+                    )
+                    continuation.resume(returning: response)
+                    return
+                }
+
+                guard !request.requestID.isEmpty else {
+                    let error = IOSNativeError(
+                        code: "INVALID_ARGUMENT",
+                        message: "requestID must not be empty",
                         domainCode: nil
                     )
                     let response = IOSNativeResponse(
@@ -165,34 +233,25 @@ import UIKit
 
     public func handshake() -> [String: Any] {
         return queue.sync {
-            let capabilities = [
-                "health": true,
-                "calendar": true,
-                "reminders": true,
-                "contacts": true,
-                "homekit": true,
-                "bluetooth": true,
-                "clipboard": true,
-                "media": true,
-                "alarms": true,
-                "share": true,
-                "shortcuts": true,
-                "background": true,
-                "file": true
-            ]
             return [
                 "platform": "ios",
                 "protocolVersion": "1.0",
                 "hostGeneration": hostGeneration,
                 "osVersion": UIDevice.current.systemVersion,
                 "deviceFamily": UIDevice.current.userInterfaceIdiom == .pad ? "ipad" : "iphone",
-                "capabilities": capabilities,
+                "capabilities": buildCapabilityDictionary(),
                 "foreground": isForeground
             ] as [String: Any]
         }
     }
 
     public func refreshAuthorization() {
+        queue.async(flags: .barrier) {
+            for (_, handler) in self.handlers {
+                _ = handler.capabilitySnapshot()
+            }
+            self.updateCapabilitiesLocked()
+        }
     }
 
     public func didEnterBackground() {
@@ -212,7 +271,7 @@ import UIKit
         invalidateTransientRefs()
     }
 
-    private func invalidateTransientRefs() {
+    public func invalidateTransientRefs() {
         queue.async(flags: .barrier) {
             self.hostGeneration += 1
         }
@@ -224,5 +283,39 @@ import UIKit
 
     public var foreground: Bool {
         return queue.sync { isForeground }
+    }
+
+    private func updateCapabilitiesLocked() {
+        var caps: [String: IOSNativeCapability] = [:]
+        for (_, handler) in handlers {
+            let snapshot = handler.capabilitySnapshot()
+            for operation in handler.operations {
+                let domain = operationDomain(operation)
+                caps[domain] = snapshot
+            }
+        }
+        capabilities = caps
+    }
+
+    private func buildCapabilityDictionary() -> [String: [String: Bool]] {
+        var result: [String: [String: Bool]] = [:]
+        for (domain, cap) in capabilities {
+            result[domain] = [
+                "available": cap.available,
+                "authorized": cap.authorized,
+                "hardwareAvailable": cap.hardwareAvailable,
+                "platformSupported": cap.platformSupported,
+                "foregroundRequired": cap.foregroundRequired
+            ]
+        }
+        return result
+    }
+
+    private func operationDomain(_ operation: String) -> String {
+        let parts = operation.split(separator: ".")
+        if parts.count >= 2 {
+            return "\(parts[0]).\(parts[1])"
+        }
+        return String(parts.first ?? "")
     }
 }

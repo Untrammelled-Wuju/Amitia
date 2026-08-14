@@ -112,7 +112,7 @@ type Container struct {
 
 	TaskRepository     *sqlite.TaskRepository
 	TaskRuntimeService *task_runtime.TaskRuntimeService
-	TaskHandler        *task_runtime.TaskHandler
+	TaskHandler        *task_runtime.TaskRuntimeHandler
 
 	ScheduleService    *schedule.ScheduleService
 	ScheduleRepository *sqlite.ScheduleRepository

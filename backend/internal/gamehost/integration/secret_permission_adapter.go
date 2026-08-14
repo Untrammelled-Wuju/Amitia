@@ -5,16 +5,12 @@ import (
 	"fmt"
 
 	"github.com/u-ai/backend/internal/gamehost/permission"
+	gamehostsecret "github.com/u-ai/backend/internal/gamehost/secret"
 )
 
 const ServiceSecretUsePermission = "service.secret.use"
 
-type SecretPermissionDecision struct {
-	Allowed              bool
-	Reason               string
-	PermissionSnapshotID string
-	ScopeSnapshotID      string
-}
+type SecretPermissionDecision = gamehostsecret.SecretPermissionDecision
 
 type SecretPermissionGate interface {
 	CheckSecretUse(

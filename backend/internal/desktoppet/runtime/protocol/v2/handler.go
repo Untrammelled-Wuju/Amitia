@@ -205,7 +205,7 @@ func (h *Handler) HandleHello(conn *Connection, payload *HelloPayload) (*HelloAc
 
 	return &HelloAckPayload{
 		Accepted:        true,
-		SessionID:       newSession.ID,
+		SessionID:       runtimeidentity.ParseRuntimeSessionID(newSession.ID),
 		ServerTime:      time.Now(),
 		DesiredRevision: newSession.LastAppliedDesiredRevision,
 		ResumeMode:      string(protocol.ResumeModeResumeOrFull),
@@ -246,15 +246,15 @@ func (h *Handler) HandleCommandAck(conn *Connection, env *Envelope, ack *Command
 	now := time.Now()
 	switch CommandStatus(ack.Status) {
 	case CommandStatusRuntimeReceived:
-		if err := h.commands.MarkRuntimeReceived(ackCmdID, conn.RuntimeID, conn.SessionID, now); err != nil {
+		if err := h.commands.MarkRuntimeReceived(ackCmdID, string(conn.RuntimeID), conn.SessionID, now); err != nil {
 			log.Warn("[v2] MarkRuntimeReceived failed: ", err)
 		}
 	case CommandStatusRuntimeAccepted:
-		if err := h.commands.MarkRuntimeAccepted(ackCmdID, conn.RuntimeID, conn.SessionID, now); err != nil {
+		if err := h.commands.MarkRuntimeAccepted(ackCmdID, string(conn.RuntimeID), conn.SessionID, now); err != nil {
 			log.Warn("[v2] MarkRuntimeAccepted failed: ", err)
 		}
 	case CommandStatusRendererAccepted:
-		if err := h.commands.MarkRendererAccepted(ackCmdID, conn.RuntimeID, conn.SessionID, now); err != nil {
+		if err := h.commands.MarkRendererAccepted(ackCmdID, string(conn.RuntimeID), conn.SessionID, now); err != nil {
 			log.Warn("[v2] MarkRendererAccepted failed: ", err)
 		}
 	case CommandStatusCompleted:

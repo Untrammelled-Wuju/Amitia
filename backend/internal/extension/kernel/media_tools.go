@@ -12,7 +12,7 @@ import (
 
 const mediaToolDomain = "media"
 
-func registerMediaTools(registry *capability.ToolRegistry, svc media.Service) error {
+func registerMediaTools(registry *capability.ToolRegistry, svc *media.Service) error {
 	ctx := context.Background()
 	defs := buildMediaTools(svc)
 	for _, def := range defs {
@@ -23,14 +23,14 @@ func registerMediaTools(registry *capability.ToolRegistry, svc media.Service) er
 	return nil
 }
 
-func buildMediaTools(svc media.Service) []capability.ToolDefinition {
+func buildMediaTools(svc *media.Service) []capability.ToolDefinition {
 	return []capability.ToolDefinition{
 		buildMediaMetadataTool(svc),
 		buildMediaConvertTool(svc),
 	}
 }
 
-func buildMediaMetadataTool(svc media.Service) capability.ToolDefinition {
+func buildMediaMetadataTool(_ *media.Service) capability.ToolDefinition {
 	inputSchema := json.RawMessage(`{
 		"type": "object",
 		"properties": {
@@ -77,11 +77,12 @@ func buildMediaMetadataTool(svc media.Service) capability.ToolDefinition {
 	}
 }
 
-func buildMediaConvertTool(svc media.Service) capability.ToolDefinition {
+func buildMediaConvertTool(_ *media.Service) capability.ToolDefinition {
 	inputSchema := json.RawMessage(`{
 		"type": "object",
 		"properties": {
 			"resource": {"type": "string"},
+			"target": {"type": "string"},
 			"targetContainer": {"type": "string"},
 			"videoCodec": {"type": "string"},
 			"audioCodec": {"type": "string"}

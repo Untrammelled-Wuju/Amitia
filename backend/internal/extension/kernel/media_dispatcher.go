@@ -11,10 +11,10 @@ import (
 )
 
 type MediaToolDispatcher struct {
-	service media.Service
+	service *media.Service
 }
 
-func NewMediaToolDispatcher(svc media.Service) *MediaToolDispatcher {
+func NewMediaToolDispatcher(svc *media.Service) *MediaToolDispatcher {
 	return &MediaToolDispatcher{service: svc}
 }
 
@@ -36,7 +36,7 @@ func (d *MediaToolDispatcher) handleMetadata(ctx context.Context, input json.Raw
 	if err := json.Unmarshal(input, &req); err != nil {
 		return nil, err
 	}
-	meta, err := d.service.GetMetadata(ctx, req.Resource, req.Resource, metadata.MetadataRequest{
+	meta, err := d.service.GetMetadata(ctx, req.Resource, metadata.MetadataRequest{
 		SourceURI:        req.Resource,
 		IncludeStreams:   true,
 		IncludeChapters:  true,
@@ -52,6 +52,7 @@ func (d *MediaToolDispatcher) handleMetadata(ctx context.Context, input json.Raw
 func (d *MediaToolDispatcher) handleConvert(ctx context.Context, input json.RawMessage) (json.RawMessage, error) {
 	var req struct {
 		Resource        string `json:"resource"`
+		Target          string `json:"target"`
 		TargetContainer string `json:"targetContainer"`
 		VideoCodec      string `json:"videoCodec"`
 		AudioCodec      string `json:"audioCodec"`
@@ -61,13 +62,18 @@ func (d *MediaToolDispatcher) handleConvert(ctx context.Context, input json.RawM
 	}
 	convertReq := conversion.ConvertRequest{
 		SourceURI: req.Resource,
-		Target: conversion.TargetSpec{
-			Container:  req.TargetContainer,
-			VideoCodec: req.VideoCodec,
-			AudioCodec: req.AudioCodec,
+		TargetURI: req.Target,
+		Output: conversion.MediaOutputSpec{
+			Container: req.TargetContainer,
+		},
+		Video: &conversion.VideoConversionSpec{
+			Codec: req.VideoCodec,
+		},
+		Audio: &conversion.AudioConversionSpec{
+			Codec: req.AudioCodec,
 		},
 	}
-	result, _, err := d.service.Convert(ctx, convertReq, req.Resource, conversion.ConvertOptions{})
+	result, err := d.service.Convert(ctx, convertReq, conversion.ConvertOptions{})
 	if err != nil {
 		return nil, err
 	}

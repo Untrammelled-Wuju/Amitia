@@ -1,14 +1,36 @@
 package runtime
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"github.com/u-ai/backend/internal/gamehost/domain"
 )
 
+type executionGenerationContextKey struct{}
+
+func WithExecutionGeneration(ctx context.Context, generation int64) context.Context {
+	return context.WithValue(ctx, executionGenerationContextKey{}, generation)
+}
+
+func executionGeneration(ctx context.Context) int64 {
+	generation, _ := ctx.Value(executionGenerationContextKey{}).(int64)
+	return generation
+}
+
+func newExecutionSessionToken() (string, error) {
+	buffer := make([]byte, 32)
+	if _, err := rand.Read(buffer); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(buffer), nil
+}
+
 type RuntimePaths struct {
-	Root    string
-	Data    string
-	Temp    string
-	Logs    string
+	Root string
+	Data string
+	Temp string
+	Logs string
 }
 
 type ServicePaths struct {

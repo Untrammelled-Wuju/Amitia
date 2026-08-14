@@ -12,27 +12,33 @@ import (
 )
 
 type Service struct {
-	backend    Backend
-	resourceIO *ResourceIO
-	tempDir    string
+	backend      Backend
+	resourceIO   *ResourceIO
+	materializer ResourceMaterializer
+	tempDir      string
 
 	mu     sync.Mutex
 	active int
 }
 
-func NewService(backend Backend, tempDir string) *Service {
+func NewService(backend Backend, tempDir string, materializer ResourceMaterializer) *Service {
 	return &Service{
-		backend:    backend,
-		resourceIO: NewResourceIO(tempDir),
-		tempDir:    tempDir,
+		backend:      backend,
+		resourceIO:   NewResourceIO(tempDir),
+		materializer: materializer,
+		tempDir:      tempDir,
 	}
 }
 
-func (s *Service) GetMetadata(ctx context.Context, resourceURI, localPath string, req metadata.MetadataRequest) (*metadata.MediaMetadata, error) {
-	materialized, err := s.resourceIO.MaterializeToLocal(localPath)
+func (s *Service) GetMetadata(ctx context.Context, resourceURI string, req metadata.MetadataRequest) (*metadata.MediaMetadata, error) {
+	if s.backend == nil || s.materializer == nil {
+		return nil, fmt.Errorf("media service unavailable")
+	}
+	materialized, cleanup, err := s.materializer.Materialize(ctx, resourceURI)
 	if err != nil {
 		return nil, err
 	}
+	defer cleanup()
 
 	probeResult, err := s.backend.GetMetadata(ctx, materialized, req)
 	if err != nil {
@@ -44,7 +50,10 @@ func (s *Service) GetMetadata(ctx context.Context, resourceURI, localPath string
 	return probeResult, nil
 }
 
-func (s *Service) Convert(ctx context.Context, request conversion.ConvertRequest, localInputPath string, opts conversion.ConvertOptions) (*conversion.ConversionResult, string, error) {
+func (s *Service) Convert(ctx context.Context, request conversion.ConvertRequest, opts conversion.ConvertOptions) (*conversion.ConversionResult, error) {
+	if s.backend == nil || s.materializer == nil {
+		return nil, fmt.Errorf("media service unavailable")
+	}
 	s.mu.Lock()
 	s.active++
 	s.mu.Unlock()
@@ -55,10 +64,11 @@ func (s *Service) Convert(ctx context.Context, request conversion.ConvertRequest
 		s.mu.Unlock()
 	}()
 
-	materialized, err := s.resourceIO.MaterializeToLocal(localInputPath)
+	materialized, cleanup, err := s.materializer.Materialize(ctx, request.SourceURI)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
+	defer cleanup()
 
 	metadataReq := metadata.MetadataRequest{
 		SourceURI:        request.SourceURI,
@@ -69,13 +79,13 @@ func (s *Service) Convert(ctx context.Context, request conversion.ConvertRequest
 	}
 	sourceMeta, err := s.backend.GetMetadata(ctx, materialized, metadataReq)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
 	planner := conversion.NewPlanner(nil)
 	plan, err := planner.Plan(sourceMeta, request)
 	if err != nil {
-		return nil, "", err
+		return nil, err
 	}
 
 	stagingExt := request.Output.Extension
@@ -88,13 +98,24 @@ func (s *Service) Convert(ctx context.Context, request conversion.ConvertRequest
 
 	stagingPath, err := s.resourceIO.CreateStagingPath(stagingExt)
 	if err != nil {
-		return nil, "", err
+		return nil, err
+	}
+	if request.TargetURI == "" {
+		request.TargetURI, err = s.materializer.URIForLocalPath(stagingPath)
+		if err != nil {
+			_ = s.resourceIO.CleanupStaging(stagingPath)
+			return nil, err
+		}
 	}
 
 	result, err := s.backend.Convert(ctx, request, plan, materialized, stagingPath, opts)
 	if err != nil {
 		_ = s.resourceIO.CleanupStaging(stagingPath)
-		return nil, "", err
+		return nil, err
+	}
+	if err := s.materializer.Publish(ctx, stagingPath, request.TargetURI); err != nil {
+		_ = s.resourceIO.CleanupStaging(stagingPath)
+		return nil, err
 	}
 
 	result.ResourceURI = request.TargetURI
@@ -103,15 +124,13 @@ func (s *Service) Convert(ctx context.Context, request conversion.ConvertRequest
 		result.MetadataMode = conversion.MetadataModeSafe
 	}
 
-	return result, stagingPath, nil
-}
-
-func (s *Service) FinalizeCommit(stagingPath, targetPath string) error {
-	return s.resourceIO.AtomicCommit(stagingPath, targetPath)
+	return result, nil
 }
 
 func (s *Service) CancelAll() {
-	s.backend.CancelAll()
+	if s.backend != nil {
+		s.backend.CancelAll()
+	}
 }
 
 func (s *Service) ActiveOperations() int {
@@ -121,6 +140,9 @@ func (s *Service) ActiveOperations() int {
 }
 
 func (s *Service) Capabilities(ctx context.Context) (*MediaBackendCapabilities, error) {
+	if s.backend == nil {
+		return &MediaBackendCapabilities{Available: false}, nil
+	}
 	caps, err := s.backend.Capabilities(ctx)
 	if err != nil {
 		return nil, err

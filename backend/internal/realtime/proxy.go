@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"sync"
 	"time"
 
@@ -46,12 +47,12 @@ func HandleSession(c *gin.Context) {
 	}
 	realtimeAppId := appId
 	realtimeAccessToken := apiKey
+	var ttsCfg struct {
+		RealtimeAppId       string `gorm:"column:realtime_app_id"`
+		RealtimeAccessToken string `gorm:"column:realtime_access_token"`
+		RealtimeSecretKey   string `gorm:"column:realtime_secret_key"`
+	}
 	if dbInstance != nil {
-		var ttsCfg struct {
-			RealtimeAppId       string `gorm:"column:realtime_app_id"`
-			RealtimeAccessToken string `gorm:"column:realtime_access_token"`
-			RealtimeSecretKey   string `gorm:"column:realtime_secret_key"`
-		}
 		dbInstance.Table("tts_configs").Where("is_active = 1").Select("realtime_app_id, realtime_access_token, realtime_secret_key").First(&ttsCfg)
 		if ttsCfg.RealtimeAppId != "" {
 			realtimeAppId = ttsCfg.RealtimeAppId
@@ -59,7 +60,6 @@ func HandleSession(c *gin.Context) {
 		if ttsCfg.RealtimeAccessToken != "" {
 			realtimeAccessToken = ttsCfg.RealtimeAccessToken
 		}
-
 	}
 
 	conversationId := c.Query("conversationId")

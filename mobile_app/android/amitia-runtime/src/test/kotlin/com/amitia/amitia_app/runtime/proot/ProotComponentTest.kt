@@ -1,4 +1,4 @@
-﻿package com.amitia.amitia_app.runtime.proot
+package com.amitia.amitia_app.runtime.proot
 
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertTrue
@@ -8,17 +8,19 @@ import org.junit.Test
 
 class ProotComponentTest {
 
+    private val testGeneration: Long = 1L
+
     @Test fun availability_returns_result() { val c = TestProotComponentFactory.create(); val r = c.availability(); assertNotNull(r) }
     @Test fun launch_returns_session() {
-        val c = TestProotComponentFactory.create(); val r = ProotLaunchRequest.create(rootfsPath = "/rootfs", workingDirectory = "/", command = listOf("/bin/echo"), bindMountsSource = emptyList(), environmentSource = ProotEnvironment.EMPTY); val s = c.launch(r, ProotObserver {}); assertNotNull(s); assertTrue(s.sessionId.isNotEmpty())
+        val c = TestProotComponentFactory.create(); val r = ProotLaunchRequest.create(rootfsPath = "/rootfs", workingDirectory = "/", command = listOf("/bin/echo"), bindMountsSource = emptyList(), environmentSource = ProotEnvironment.EMPTY); val s = c.launch(r, ProotObserver {}, testGeneration); assertNotNull(s); assertTrue(s.sessionId.isNotEmpty())
     }
     @Test fun close_idempotent() { val c = TestProotComponentFactory.create(); c.close(); c.close() }
     @Test fun availability_after_close_is_closed() { val c = TestProotComponentFactory.create(); c.close(); c.availability() }
-    @Test fun session_valid_until_close() { val c = TestProotComponentFactory.create(); val r = ProotLaunchRequest.create(rootfsPath = "/rootfs", workingDirectory = "/", command = listOf("/bin/echo"), bindMountsSource = emptyList(), environmentSource = ProotEnvironment.EMPTY); val s = c.launch(r, ProotObserver {}); assertNotNull(s) }
+    @Test fun session_valid_until_close() { val c = TestProotComponentFactory.create(); val r = ProotLaunchRequest.create(rootfsPath = "/rootfs", workingDirectory = "/", command = listOf("/bin/echo"), bindMountsSource = emptyList(), environmentSource = ProotEnvironment.EMPTY); val s = c.launch(r, ProotObserver {}, testGeneration); assertNotNull(s) }
     @Test fun current_session_initially_null() { val c = TestProotComponentFactory.create(); assertNull(c.currentSession()) }
     @Test fun stop_when_no_session_returns_already_stopped() { val c = TestProotComponentFactory.create(); val r = c.stop(); assertTrue(r is ProotStopResult.AlreadyStopped) }
     @Test fun probe_returns_session() {
-        val c = TestProotComponentFactory.create(); val r = ProotLaunchRequest.create(rootfsPath = "/rootfs", workingDirectory = "/", command = listOf("/bin/true"), bindMountsSource = emptyList(), environmentSource = ProotEnvironment.EMPTY); val s = c.launchProbe(r, ProotObserver {}); assertNotNull(s); assertTrue(s.sessionId.isNotEmpty())
+        val c = TestProotComponentFactory.create(); val r = ProotLaunchRequest.create(rootfsPath = "/rootfs", workingDirectory = "/", command = listOf("/bin/true"), bindMountsSource = emptyList(), environmentSource = ProotEnvironment.EMPTY); val s = c.launchProbe(r, ProotObserver {}, testGeneration); assertNotNull(s); assertTrue(s.sessionId.isNotEmpty())
     }
 }
 
@@ -33,7 +35,7 @@ object TestProotComponentFactory {
                 if (closed.get()) return ProotAvailability.Closed
                 return ProotAvailability.Unavailable(ProotErrorCode.NOT_PACKAGED, "proot.not_packaged")
             }
-            override fun launch(request: ProotLaunchRequest, observer: ProotObserver): ProotSession {
+            override fun launch(request: ProotLaunchRequest, observer: ProotObserver, generation: Long): ProotSession {
                 if (closed.get()) return ClosedTestSession
                 synchronized(lock) {
                     if (mainSession?.isAlive() == true) return AlreadyRunningTestSession
@@ -41,7 +43,7 @@ object TestProotComponentFactory {
                     mainSession = s; sessions.add(s); return s
                 }
             }
-            override fun launchProbe(request: ProotLaunchRequest, observer: ProotObserver): ProotSession {
+            override fun launchProbe(request: ProotLaunchRequest, observer: ProotObserver, generation: Long): ProotSession {
                 if (closed.get()) return ClosedTestSession
                 val s = AliveTestSession()
                 sessions.add(s); return s
@@ -51,7 +53,11 @@ object TestProotComponentFactory {
                 synchronized(lock) {
                     val s = mainSession
                     mainSession = null
-                    return if (s != null) ProotStopResult.Graceful(s.sessionId, 0) else ProotStopResult.AlreadyStopped("none", null)
+                    return if (s != null) {
+                        s.requestStop()
+                        val r = s.stop(1000)
+                        r
+                    } else ProotStopResult.AlreadyStopped("none", null)
                 }
             }
             override fun close() { if (closed.compareAndSet(false, true)) { sessions.forEach { it.close() }; sessions.clear(); mainSession = null } }
@@ -63,6 +69,8 @@ object TestProotComponentFactory {
         override fun awaitExit(timeoutMillis: Long): Int? = null
         override fun stop(graceMillis: Long) = ProotStopResult.AlreadyStopped("closed", null)
         override fun close() {}
+        override fun requestStop() {}
+        override val exit: ProotExit? = null
     }
     private object AlreadyRunningTestSession : ProotSession {
         override val sessionId: String = "already-running"
@@ -70,6 +78,8 @@ object TestProotComponentFactory {
         override fun awaitExit(timeoutMillis: Long): Int? = null
         override fun stop(graceMillis: Long) = ProotStopResult.AlreadyStopped("already-running", null)
         override fun close() {}
+        override fun requestStop() {}
+        override val exit: ProotExit? = null
     }
     private class AliveTestSession : ProotSession {
         override val sessionId: String = "test-alive"
@@ -77,6 +87,8 @@ object TestProotComponentFactory {
         override fun awaitExit(timeoutMillis: Long): Int? = 0
         override fun stop(graceMillis: Long) = ProotStopResult.Graceful(sessionId, 0)
         override fun close() {}
+        override fun requestStop() {}
+        override val exit: ProotExit? = null
     }
 }
 
@@ -86,4 +98,6 @@ class TestSession : ProotSession {
     override fun awaitExit(timeoutMillis: Long): Int? = null
     override fun stop(graceMillis: Long) = ProotStopResult.AlreadyStopped("test", null)
     override fun close() {}
+    override fun requestStop() {}
+    override val exit: ProotExit? = null
 }

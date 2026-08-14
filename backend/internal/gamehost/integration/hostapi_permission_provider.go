@@ -3,30 +3,17 @@ package integration
 import (
 	"context"
 	"fmt"
-	"sync"
-	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/gamehost/hostapi"
 )
 
 type HostAPIPermissionProvider struct {
-	mu        sync.RWMutex
-	snapshots map[string]*permission.PermissionSnapshot
-	ordered   []string
+	store permission.PermissionSnapshotStore
 }
 
-func NewHostAPIPermissionProvider() *HostAPIPermissionProvider {
-	return &HostAPIPermissionProvider{
-		snapshots: make(map[string]*permission.PermissionSnapshot),
-	}
-}
-
-func (p *HostAPIPermissionProvider) TrackSnapshot(snap permission.PermissionSnapshot) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	p.snapshots[snap.SnapshotID] = &snap
-	p.ordered = append(p.ordered, snap.SnapshotID)
+func NewHostAPIPermissionProvider(store permission.PermissionSnapshotStore) *HostAPIPermissionProvider {
+	return &HostAPIPermissionProvider{store: store}
 }
 
 func (p *HostAPIPermissionProvider) CurrentSnapshotID(
@@ -35,33 +22,21 @@ func (p *HostAPIPermissionProvider) CurrentSnapshotID(
 	moduleID string,
 	generation int64,
 ) (snapshotID string, ok bool, err error) {
-	p.mu.RLock()
-	defer p.mu.RUnlock()
-
-	now := time.Now().UTC()
-	for i := len(p.ordered) - 1; i >= 0; i-- {
-		snap, exists := p.snapshots[p.ordered[i]]
-		if !exists {
-			continue
-		}
-		if snap.ExtensionID != extensionID {
-			continue
-		}
-		if moduleID != "" && snap.ModuleID != "" && snap.ModuleID != moduleID {
-			continue
-		}
-		if generation > 0 && snap.Generation != 0 && snap.Generation != generation {
-			continue
-		}
-		if snap.ExpiresAt != nil && now.After(*snap.ExpiresAt) {
-			continue
-		}
-		if snap.RevokedAt != nil {
-			continue
-		}
-		return snap.SnapshotID, true, nil
+	if p == nil || p.store == nil {
+		return "", false, fmt.Errorf("hostapi permission: snapshot store not configured")
 	}
-	return "", false, nil
+	finder, ok := p.store.(permission.ActivePermissionSnapshotFinder)
+	if !ok {
+		return "", false, fmt.Errorf("hostapi permission: snapshot store does not support active snapshot lookup")
+	}
+	snap, ok, err := finder.FindActiveSnapshot(ctx, extensionID, moduleID, generation)
+	if err != nil {
+		return "", false, fmt.Errorf("find active snapshot: %w", err)
+	}
+	if !ok {
+		return "", false, nil
+	}
+	return snap.SnapshotID, true, nil
 }
 
 var _ hostapi.PermissionSnapshotIDProvider = (*HostAPIPermissionProvider)(nil)

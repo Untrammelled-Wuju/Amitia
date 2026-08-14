@@ -23,6 +23,10 @@ type HostAPIWorkCanceller interface {
 	CancelRuntimeHostAPIWork(ctx context.Context, runtimeID domain.RuntimeInstanceID) (int, error)
 }
 
+type HostAPIWorkRearm interface {
+	RearmRuntimeHostAPIWork(runtimeID domain.RuntimeInstanceID)
+}
+
 type SecretLeaseRevoker interface {
 	RevokeRuntimeLeases(ctx context.Context, runtimeID domain.RuntimeInstanceID) (int, error)
 }
@@ -53,10 +57,10 @@ type RuntimeStopper interface {
 }
 
 type EmergencyOperationStore struct {
-	mu                sync.RWMutex
-	operations        map[string]*EmergencyStopOperation
-	activeByRuntime   map[domain.RuntimeInstanceID]string
-	byIdempotencyKey  map[string]string
+	mu               sync.RWMutex
+	operations       map[string]*EmergencyStopOperation
+	activeByRuntime  map[domain.RuntimeInstanceID]string
+	byIdempotencyKey map[string]string
 }
 
 type EmergencyStopOperation struct {
@@ -103,6 +107,24 @@ func (s *EmergencyOperationStore) GetByRuntime(runtimeID domain.RuntimeInstanceI
 		return nil, false
 	}
 	return copyOperation(op), true
+}
+
+func (s *EmergencyOperationStore) GetLatestByRuntime(runtimeID domain.RuntimeInstanceID) (*EmergencyStopOperation, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var latest *EmergencyStopOperation
+	for _, op := range s.operations {
+		if op.RuntimeID != runtimeID {
+			continue
+		}
+		if latest == nil || op.StartedAt.After(latest.StartedAt) {
+			latest = op
+		}
+	}
+	if latest == nil {
+		return nil, false
+	}
+	return copyOperation(latest), true
 }
 
 func (s *EmergencyOperationStore) GetByIdempotencyKey(key string) (*EmergencyStopOperation, bool) {
@@ -208,11 +230,12 @@ func copyOperation(op *EmergencyStopOperation) *EmergencyStopOperation {
 }
 
 type EmergencyStopService struct {
-	clock     Clock
-	authority *ControlAuthorityManager
-	gate      *PluginOutputGate
-	store     *EmergencyOperationStore
-	intent    EmergencyIntentStore
+	clock           Clock
+	authority       *ControlAuthorityManager
+	gate            *PluginOutputGate
+	store           *EmergencyOperationStore
+	intent          EmergencyIntentStore
+	lifecycleIntent LifecycleIntentWriter
 
 	pendingCanceller PendingWorkCanceller
 	hostAPICanceller HostAPIWorkCanceller
@@ -227,12 +250,14 @@ type EmergencyStopService struct {
 	metrics          EmergencyMetrics
 	topology         TopologyReader
 
-	pendingVerifier   PendingVerifier
+	pendingVerifier    PendingVerifier
 	connectionVerifier ConnectionVerifier
-	leaseVerifier     SecretLeaseVerifier
-	channelVerifier   ChannelVerifier
-	streamVerifier    StreamVerifier
-	binaryVerifier    BinaryVerifier
+	leaseVerifier      SecretLeaseVerifier
+	channelVerifier    ChannelVerifier
+	streamVerifier     StreamVerifier
+	binaryVerifier     BinaryVerifier
+	readyVerifier      ReadyVerifier
+	hostAPIVerifier    HostAPIWorkVerifier
 
 	mu       sync.Mutex
 	routines map[domain.RuntimeInstanceID]*sync.Mutex
@@ -242,29 +267,32 @@ type EmergencyStopService struct {
 }
 
 type EmergencyStopServiceOptions struct {
-	Clock             Clock
-	Authority         *ControlAuthorityManager
-	Gate              *PluginOutputGate
-	Intent            EmergencyIntentStore
-	PendingCanceller  PendingWorkCanceller
-	HostAPICanceller  HostAPIWorkCanceller
-	LeaseRevoker      SecretLeaseRevoker
-	ConnectionCloser  ConnectionCloser
-	HandshakeReset    HandshakeResetter
-	StreamStopper     StreamStopper
-	ChannelCleaner    ChannelCleaner
-	BinaryReleaser    BinaryReleaser
-	RuntimeStopper    RuntimeStopper
-	Audit             AuthorityAuditSink
-	Metrics           EmergencyMetrics
-	Topology          TopologyReader
-	PendingVerifier   PendingVerifier
+	Clock              Clock
+	Authority          *ControlAuthorityManager
+	Gate               *PluginOutputGate
+	Intent             EmergencyIntentStore
+	LifecycleIntent    LifecycleIntentWriter
+	PendingCanceller   PendingWorkCanceller
+	HostAPICanceller   HostAPIWorkCanceller
+	LeaseRevoker       SecretLeaseRevoker
+	ConnectionCloser   ConnectionCloser
+	HandshakeReset     HandshakeResetter
+	StreamStopper      StreamStopper
+	ChannelCleaner     ChannelCleaner
+	BinaryReleaser     BinaryReleaser
+	RuntimeStopper     RuntimeStopper
+	Audit              AuthorityAuditSink
+	Metrics            EmergencyMetrics
+	Topology           TopologyReader
+	PendingVerifier    PendingVerifier
 	ConnectionVerifier ConnectionVerifier
-	LeaseVerifier     SecretLeaseVerifier
-	ChannelVerifier   ChannelVerifier
-	StreamVerifier    StreamVerifier
-	BinaryVerifier    BinaryVerifier
-	MaxDeadline       time.Duration
+	LeaseVerifier      SecretLeaseVerifier
+	ChannelVerifier    ChannelVerifier
+	StreamVerifier     StreamVerifier
+	BinaryVerifier     BinaryVerifier
+	ReadyVerifier      ReadyVerifier
+	HostAPIVerifier    HostAPIWorkVerifier
+	MaxDeadline        time.Duration
 }
 
 type EmergencyMetrics interface {
@@ -291,6 +319,15 @@ func NewEmergencyStopService(opts EmergencyStopServiceOptions) (*EmergencyStopSe
 	if opts.PendingCanceller == nil {
 		return nil, fmt.Errorf("emergency stop service: pending canceller is required")
 	}
+	if opts.HostAPICanceller == nil || opts.LeaseRevoker == nil || opts.HandshakeReset == nil || opts.StreamStopper == nil || opts.ChannelCleaner == nil || opts.BinaryReleaser == nil {
+		return nil, fmt.Errorf("emergency stop service: complete safety cleanup dependencies are required")
+	}
+	if opts.PendingVerifier == nil || opts.ConnectionVerifier == nil || opts.LeaseVerifier == nil || opts.ChannelVerifier == nil || opts.StreamVerifier == nil || opts.BinaryVerifier == nil || opts.ReadyVerifier == nil || opts.HostAPIVerifier == nil {
+		return nil, fmt.Errorf("emergency stop service: complete safety verification dependencies are required")
+	}
+	if opts.LifecycleIntent == nil {
+		return nil, fmt.Errorf("emergency stop service: lifecycle intent writer is required")
+	}
 
 	clock := opts.Clock
 	if clock == nil {
@@ -301,31 +338,34 @@ func NewEmergencyStopService(opts EmergencyStopServiceOptions) (*EmergencyStopSe
 		maxDL = DefaultEmergencyMaxDeadline
 	}
 	return &EmergencyStopService{
-		clock:             clock,
-		authority:         opts.Authority,
-		gate:              opts.Gate,
-		store:             NewEmergencyOperationStore(),
-		intent:            opts.Intent,
-		pendingCanceller:  opts.PendingCanceller,
-		hostAPICanceller:  opts.HostAPICanceller,
-		leaseRevoker:      opts.LeaseRevoker,
-		connectionCloser:  opts.ConnectionCloser,
-		handshakeReset:    opts.HandshakeReset,
-		streamStopper:     opts.StreamStopper,
-		channelCleaner:    opts.ChannelCleaner,
-		binaryReleaser:    opts.BinaryReleaser,
-		runtimeStopper:    opts.RuntimeStopper,
-		audit:             opts.Audit,
-		metrics:           opts.Metrics,
-		topology:          opts.Topology,
-		pendingVerifier:   opts.PendingVerifier,
+		clock:              clock,
+		authority:          opts.Authority,
+		gate:               opts.Gate,
+		store:              NewEmergencyOperationStore(),
+		intent:             opts.Intent,
+		lifecycleIntent:    opts.LifecycleIntent,
+		pendingCanceller:   opts.PendingCanceller,
+		hostAPICanceller:   opts.HostAPICanceller,
+		leaseRevoker:       opts.LeaseRevoker,
+		connectionCloser:   opts.ConnectionCloser,
+		handshakeReset:     opts.HandshakeReset,
+		streamStopper:      opts.StreamStopper,
+		channelCleaner:     opts.ChannelCleaner,
+		binaryReleaser:     opts.BinaryReleaser,
+		runtimeStopper:     opts.RuntimeStopper,
+		audit:              opts.Audit,
+		metrics:            opts.Metrics,
+		topology:           opts.Topology,
+		pendingVerifier:    opts.PendingVerifier,
 		connectionVerifier: opts.ConnectionVerifier,
-		leaseVerifier:     opts.LeaseVerifier,
-		channelVerifier:   opts.ChannelVerifier,
-		streamVerifier:    opts.StreamVerifier,
-		binaryVerifier:    opts.BinaryVerifier,
-		routines:          make(map[domain.RuntimeInstanceID]*sync.Mutex),
-		maxDeadline:       maxDL,
+		leaseVerifier:      opts.LeaseVerifier,
+		channelVerifier:    opts.ChannelVerifier,
+		streamVerifier:     opts.StreamVerifier,
+		binaryVerifier:     opts.BinaryVerifier,
+		readyVerifier:      opts.ReadyVerifier,
+		hostAPIVerifier:    opts.HostAPIVerifier,
+		routines:           make(map[domain.RuntimeInstanceID]*sync.Mutex),
+		maxDeadline:        maxDL,
 	}, nil
 }
 
@@ -372,6 +412,9 @@ func (s *EmergencyStopService) EmergencyStop(ctx context.Context, req EmergencyS
 			if latchedOp, exists := s.store.Get(latchedOpID); exists {
 				return s.buildResult(latchedOp), nil
 			}
+		}
+		if previousOp, exists := s.store.GetLatestByRuntime(runtimeID); exists {
+			return s.buildResult(previousOp), nil
 		}
 	}
 
@@ -449,6 +492,9 @@ func (s *EmergencyStopService) executeSafetyChain(ctx context.Context, op *Emerg
 	}
 
 	transitionTo(EmergencyStateCommittingIntent)
+	if err := s.lifecycleIntent.SetLifecycleIntent(op.RuntimeID, "emergency"); err != nil {
+		return fail(EmergencyStateCommittingIntent, err)
+	}
 	if s.intent != nil {
 		if err := s.intent.CommitEmergencyIntent(ctx, op.RuntimeID, op.OperationID); err != nil {
 			return fail(EmergencyStateCommittingIntent, err)
@@ -493,22 +539,17 @@ func (s *EmergencyStopService) executeSafetyChain(ctx context.Context, op *Emerg
 	transitionTo(EmergencyStateCancelling)
 	s.cancelPendingWork(ctx, op.RuntimeID, &cleanupErrors)
 
-	if s.leaseRevoker != nil {
-		if _, err := s.leaseRevoker.RevokeRuntimeLeases(ctx, op.RuntimeID); err != nil {
-			cleanupErrors = append(cleanupErrors, err)
-		}
+	transitionTo(EmergencyStateRevokingLeases)
+	if _, err := s.leaseRevoker.RevokeRuntimeLeases(ctx, op.RuntimeID); err != nil {
+		cleanupErrors = append(cleanupErrors, err)
 	}
 
 	transitionTo(EmergencyStateClosingConnections)
-	if s.connectionCloser != nil {
-		if _, err := s.connectionCloser.CloseRuntimeConnections(ctx, op.RuntimeID); err != nil {
-			cleanupErrors = append(cleanupErrors, err)
-		}
+	if _, err := s.connectionCloser.CloseRuntimeConnections(ctx, op.RuntimeID); err != nil {
+		cleanupErrors = append(cleanupErrors, err)
 	}
-	if s.handshakeReset != nil {
-		if err := s.handshakeReset.ClearRuntimeReady(ctx, op.RuntimeID); err != nil {
-			cleanupErrors = append(cleanupErrors, err)
-		}
+	if err := s.handshakeReset.ClearRuntimeReady(ctx, op.RuntimeID); err != nil {
+		cleanupErrors = append(cleanupErrors, err)
 	}
 
 	if err := ctx.Err(); err != nil {
@@ -517,28 +558,20 @@ func (s *EmergencyStopService) executeSafetyChain(ctx context.Context, op *Emerg
 	}
 
 	transitionTo(EmergencyStateStoppingRuntime)
-	if s.runtimeStopper != nil {
-		if err := s.runtimeStopper.StopRuntime(ctx, op.RuntimeID); err != nil {
-			cleanupErrors = append(cleanupErrors, err)
-			criticalFailure = true
-		}
+	if err := s.runtimeStopper.StopRuntime(ctx, op.RuntimeID); err != nil {
+		cleanupErrors = append(cleanupErrors, err)
+		criticalFailure = true
 	}
 
 	transitionTo(EmergencyStateCleaningResources)
-	if s.streamStopper != nil {
-		if err := s.streamStopper.StopRuntimeStreams(ctx, op.RuntimeID); err != nil {
-			cleanupErrors = append(cleanupErrors, err)
-		}
+	if err := s.streamStopper.StopRuntimeStreams(ctx, op.RuntimeID); err != nil {
+		cleanupErrors = append(cleanupErrors, err)
 	}
-	if s.channelCleaner != nil {
-		if err := s.channelCleaner.CleanupRuntimeChannels(ctx, op.RuntimeID); err != nil {
-			cleanupErrors = append(cleanupErrors, err)
-		}
+	if err := s.channelCleaner.CleanupRuntimeChannels(ctx, op.RuntimeID); err != nil {
+		cleanupErrors = append(cleanupErrors, err)
 	}
-	if s.binaryReleaser != nil {
-		if err := s.binaryReleaser.ReleaseRuntimeTransientBinary(ctx, op.RuntimeID); err != nil {
-			cleanupErrors = append(cleanupErrors, err)
-		}
+	if err := s.binaryReleaser.ReleaseRuntimeTransientBinary(ctx, op.RuntimeID); err != nil {
+		cleanupErrors = append(cleanupErrors, err)
 	}
 
 	transitionTo(EmergencyStateVerifying)
@@ -552,7 +585,14 @@ func (s *EmergencyStopService) executeSafetyChain(ctx context.Context, op *Emerg
 		verification.OutputGateClosed &&
 		verification.AuthoritySuspended &&
 		verification.RuntimeStopped &&
-		verification.ConnectionsClosed
+		verification.ConnectionsClosed &&
+		verification.PendingCleared &&
+		verification.HostAPIInflightCleared &&
+		verification.LeasesRevoked &&
+		verification.ReadyCleared &&
+		verification.ChannelsCleared &&
+		verification.StreamsCleared &&
+		verification.TransientBinaryReleased
 
 	if safetyGatesSatisfied && !criticalFailure {
 		s.store.UpdateState(op.OperationID, EmergencyStateCompleted, finishedAt)
@@ -603,41 +643,19 @@ func (s *EmergencyStopService) verifyCleanup(ctx context.Context, op *EmergencyS
 		result.RuntimeStopped = (err != nil || !active)
 	}
 
-	if s.connectionVerifier != nil {
-		result.ConnectionsClosed = s.connectionVerifier.CountRuntimeConnections(op.RuntimeID) == 0
-	} else if s.connectionCloser != nil {
-		result.ConnectionsClosed = true
-	}
+	result.ConnectionsClosed = s.connectionVerifier.CountRuntimeConnections(op.RuntimeID) == 0
 
-	if s.leaseVerifier != nil {
-		result.LeasesRevoked = s.leaseVerifier.CountRuntimeLeases(op.RuntimeID) == 0
-	} else if s.leaseRevoker != nil {
-		result.LeasesRevoked = true
-	}
+	result.LeasesRevoked = s.leaseVerifier.CountRuntimeLeases(op.RuntimeID) == 0
 
-	if s.pendingVerifier != nil {
-		result.PendingCleared = s.pendingVerifier.CountRuntimePending(op.RuntimeID) == 0
-	} else if s.pendingCanceller != nil {
-		result.PendingCleared = true
-	}
+	result.PendingCleared = s.pendingVerifier.CountRuntimePending(op.RuntimeID) == 0
+	result.HostAPIInflightCleared = s.hostAPIVerifier.CountRuntimeHostAPIWork(op.RuntimeID) == 0
+	result.ReadyCleared = s.readyVerifier.CountRuntimeReady(op.RuntimeID) == 0
 
-	if s.channelVerifier != nil {
-		result.ChannelsCleared = s.channelVerifier.CountRuntimeChannels(op.RuntimeID) == 0
-	} else if s.channelCleaner != nil {
-		result.ChannelsCleared = true
-	}
+	result.ChannelsCleared = s.channelVerifier.CountRuntimeChannels(op.RuntimeID) == 0
 
-	if s.streamVerifier != nil {
-		result.StreamsCleared = s.streamVerifier.CountRuntimeStreams(op.RuntimeID) == 0
-	} else if s.streamStopper != nil {
-		result.StreamsCleared = true
-	}
+	result.StreamsCleared = s.streamVerifier.CountRuntimeStreams(op.RuntimeID) == 0
 
-	if s.binaryVerifier != nil {
-		result.TransientBinaryReleased = s.binaryVerifier.CountRuntimeBinary(op.RuntimeID) == 0
-	} else if s.binaryReleaser != nil {
-		result.TransientBinaryReleased = true
-	}
+	result.TransientBinaryReleased = s.binaryVerifier.CountRuntimeBinary(op.RuntimeID) == 0
 
 	if s.intent != nil {
 		result.EmergencyLatched = s.intent.IsEmergencyLatched(ctx, op.RuntimeID)
@@ -658,6 +676,27 @@ func (s *EmergencyStopService) verifyCleanup(ctx context.Context, op *EmergencyS
 	}
 	if !result.EmergencyLatched {
 		result.ResidueErrors = append(result.ResidueErrors, "emergency_not_latched")
+	}
+	if !result.PendingCleared {
+		result.ResidueErrors = append(result.ResidueErrors, "pending_rpc_not_cleared")
+	}
+	if !result.HostAPIInflightCleared {
+		result.ResidueErrors = append(result.ResidueErrors, "hostapi_inflight_not_cleared")
+	}
+	if !result.LeasesRevoked {
+		result.ResidueErrors = append(result.ResidueErrors, "secret_leases_not_revoked")
+	}
+	if !result.ReadyCleared {
+		result.ResidueErrors = append(result.ResidueErrors, "ready_not_cleared")
+	}
+	if !result.ChannelsCleared {
+		result.ResidueErrors = append(result.ResidueErrors, "channels_not_cleared")
+	}
+	if !result.StreamsCleared {
+		result.ResidueErrors = append(result.ResidueErrors, "streams_not_cleared")
+	}
+	if !result.TransientBinaryReleased {
+		result.ResidueErrors = append(result.ResidueErrors, "transient_binary_not_released")
 	}
 
 	return result
@@ -730,7 +769,17 @@ func (s *EmergencyStopService) ClearEmergencyLatch(ctx context.Context, runtimeI
 	if s.intent == nil {
 		return fmt.Errorf("emergency stop service: intent store not available")
 	}
-	return s.intent.ClearEmergencyLatch(ctx, runtimeID, actor)
+	if err := s.intent.ClearEmergencyLatch(ctx, runtimeID, actor); err != nil {
+		return err
+	}
+	if err := s.lifecycleIntent.SetLifecycleIntent(runtimeID, ""); err != nil {
+		return err
+	}
+	s.gate.ReopenRuntimeOutputs(runtimeID)
+	if rearm, ok := s.hostAPICanceller.(HostAPIWorkRearm); ok {
+		rearm.RearmRuntimeHostAPIWork(runtimeID)
+	}
+	return nil
 }
 
 func (s *EmergencyStopService) IsEmergencyLatched(runtimeID domain.RuntimeInstanceID) bool {

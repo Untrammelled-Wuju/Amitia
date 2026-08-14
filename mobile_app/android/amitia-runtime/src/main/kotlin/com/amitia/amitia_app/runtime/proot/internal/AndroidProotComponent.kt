@@ -1,4 +1,4 @@
-﻿package com.amitia.amitia_app.runtime.proot.internal
+package com.amitia.amitia_app.runtime.proot.internal
 
 import com.amitia.amitia_app.runtime.abi.RuntimeAbiGate
 import com.amitia.amitia_app.runtime.abi.RuntimeAbiStatus
@@ -44,7 +44,7 @@ internal class AndroidProotComponent(
         return result
     }
 
-    override fun launch(request: ProotLaunchRequest, observer: ProotObserver): ProotSession {
+    override fun launch(request: ProotLaunchRequest, observer: ProotObserver, generation: Long): ProotSession {
         if (closed.get()) return ClosedSession
         val abiStatus = abiGate?.evaluate()
         if (abiStatus != null && abiStatus !is RuntimeAbiStatus.Supported) {
@@ -60,14 +60,14 @@ internal class AndroidProotComponent(
             }
             val spec = ProotLaunchSpec.from(request, avail.absoluteBinaryPath)
             val command = commandBuilder.build(spec)
-            val session = processLauncher.launch(command, observer)
+            val session = processLauncher.launch(command, observer, generation)
             mainSession.set(session)
             activeSessions[session.sessionId] = session
             return session
         }
     }
 
-    override fun launchProbe(request: ProotLaunchRequest, observer: ProotObserver): ProotSession {
+    override fun launchProbe(request: ProotLaunchRequest, observer: ProotObserver, generation: Long): ProotSession {
         if (closed.get()) return ClosedSession
         val abiStatus = abiGate?.evaluate()
         if (abiStatus != null && abiStatus !is RuntimeAbiStatus.Supported) {
@@ -77,7 +77,7 @@ internal class AndroidProotComponent(
         if (avail !is ProotAvailability.Available) return ClosedSession
         val spec = ProotLaunchSpec.from(request, avail.absoluteBinaryPath)
         val command = commandBuilder.build(spec)
-        val session = processLauncher.launch(command, observer)
+        val session = processLauncher.launch(command, observer, generation)
         activeSessions[session.sessionId] = session
         return session
     }
@@ -93,6 +93,7 @@ internal class AndroidProotComponent(
         synchronized(lock) {
             cleanupDeadSessions()
             val session = mainSession.getAndSet(null) ?: return ProotStopResult.AlreadyStopped("none", null)
+            session.requestStop()
             val result = session.stop(10_000L)
             activeSessions.remove(session.sessionId)
             return result
@@ -122,6 +123,8 @@ internal class AndroidProotComponent(
         override fun awaitExit(timeoutMillis: Long): Int? = null
         override fun stop(graceMillis: Long) = ProotStopResult.AlreadyStopped("closed", null)
         override fun close() {}
+        override fun requestStop() {}
+        override val exit: com.amitia.amitia_app.runtime.proot.ProotExit? = null
     }
 
     private class AlreadyRunningSession(private val existingId: String) : ProotSession {
@@ -130,5 +133,7 @@ internal class AndroidProotComponent(
         override fun awaitExit(timeoutMillis: Long): Int? = null
         override fun stop(graceMillis: Long) = ProotStopResult.AlreadyStopped(sessionId, null)
         override fun close() {}
+        override fun requestStop() {}
+        override val exit: com.amitia.amitia_app.runtime.proot.ProotExit? = null
     }
 }

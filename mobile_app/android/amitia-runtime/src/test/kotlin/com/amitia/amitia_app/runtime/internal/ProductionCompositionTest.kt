@@ -53,11 +53,18 @@ class ProductionCompositionTest {
         val host = FakeRuntimeServiceHost()
         val abiGate = createSupportedAbiGate()
         val layout = DefaultRuntimeHostLayout(File(baseDir, "control"), File(baseDir, "data"))
+        val activeRuntimeManager = com.amitia.amitia_app.runtime.install.internal.DefaultActiveRuntimeManager(layout, manifestStore)
+        val bootstrapper = DefaultRuntimeBootstrapper(
+            manifestStore = manifestStore,
+            activeRuntimeManager = activeRuntimeManager,
+            hostLayout = layout,
+        )
         return DefaultRuntimeController(
             stateStore = stateStore,
             serviceHost = host,
             installer = installer,
             abiGate = abiGate,
+            bootstrapper = bootstrapper,
             recoveryPolicy = noRecoveryPolicy,
             recoveryScheduler = immediateScheduler,
             installedRuntimeSource = installedSource,

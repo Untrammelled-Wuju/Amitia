@@ -13,6 +13,7 @@ type RPCRequest struct {
 	PluginID     domain.PluginID
 	RuntimeID    domain.RuntimeInstanceID
 	ServiceID    domain.ServiceID
+	Generation   int64
 	Namespace    Namespace
 	Method       Method
 	Payload      json.RawMessage

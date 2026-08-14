@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	kernelsecret "github.com/u-ai/backend/internal/extension/kernel/secret"
 	"github.com/u-ai/backend/internal/gamehost/rpc"
 )
 
@@ -51,8 +52,11 @@ func (h acquireHandler) Handle(ctx context.Context, request rpc.RPCRequest) (rpc
 	if !payload.Ref.Valid() {
 		return rpc.RPCResponse{Error: &rpc.RPCRoutedError{Code: "INVALID_REF", Message: "invalid secret ref"}}, nil
 	}
-	if payload.Generation <= 0 {
-		return rpc.RPCResponse{Error: &rpc.RPCRoutedError{Code: "INVALID_GENERATION", Message: "generation must be positive"}}, nil
+	if request.Generation <= 0 {
+		return rpc.RPCResponse{Error: &rpc.RPCRoutedError{Code: "INVALID_GENERATION", Message: "trusted generation must be positive"}}, nil
+	}
+	if payload.Generation != 0 && payload.Generation != request.Generation {
+		return rpc.RPCResponse{Error: &rpc.RPCRoutedError{Code: "IDENTITY_MISMATCH", Message: "generation does not match trusted identity"}}, nil
 	}
 
 	result, err := h.adapter.AcquireServiceLease(
@@ -63,7 +67,7 @@ func (h acquireHandler) Handle(ctx context.Context, request rpc.RPCRequest) (rpc
 		payload.Ref,
 		payload.Purpose,
 		payload.Required,
-		payload.Generation,
+		request.Generation,
 	)
 	if err != nil {
 		return rpc.RPCResponse{Error: &rpc.RPCRoutedError{Code: "LEASE_DENIED", Message: err.Error()}}, nil
@@ -86,7 +90,23 @@ type releaseHandler struct {
 }
 
 func (h releaseHandler) Handle(ctx context.Context, request rpc.RPCRequest) (rpc.RPCResponse, error) {
-	return rpc.RPCResponse{Error: &rpc.RPCRoutedError{Code: "NOT_IMPLEMENTED", Message: "use full release RPC"}}, nil
+	var payload struct {
+		LeaseID    string `json:"leaseId"`
+		ServiceID  string `json:"serviceId"`
+		Reason     string `json:"reason"`
+		Generation int64  `json:"generation"`
+	}
+	if err := json.Unmarshal(request.Payload, &payload); err != nil || payload.LeaseID == "" {
+		return rpc.RPCResponse{Error: &rpc.RPCRoutedError{Code: "INVALID_PAYLOAD", Message: "leaseId is required"}}, nil
+	}
+	if (payload.ServiceID != "" && payload.ServiceID != string(request.ServiceID)) || (payload.Generation != 0 && payload.Generation != request.Generation) || request.Generation <= 0 {
+		return rpc.RPCResponse{Error: &rpc.RPCRoutedError{Code: "IDENTITY_MISMATCH", Message: "release identity does not match trusted identity"}}, nil
+	}
+	if err := h.adapter.ReleaseServiceLease(string(request.RuntimeID), string(request.ServiceID), request.Generation, kernelsecret.LeaseID(payload.LeaseID), payload.Reason); err != nil {
+		return rpc.RPCResponse{Error: &rpc.RPCRoutedError{Code: "LEASE_DENIED", Message: err.Error()}}, nil
+	}
+	response, _ := json.Marshal(map[string]interface{}{"released": true, "reason": payload.Reason})
+	return rpc.RPCResponse{RequestID: request.ID, Payload: response}, nil
 }
 
 type queryHandler struct {
@@ -94,7 +114,23 @@ type queryHandler struct {
 }
 
 func (h queryHandler) Handle(ctx context.Context, request rpc.RPCRequest) (rpc.RPCResponse, error) {
-	return rpc.RPCResponse{Error: &rpc.RPCRoutedError{Code: "NOT_IMPLEMENTED", Message: "use full query RPC"}}, nil
+	var payload struct {
+		LeaseID    string `json:"leaseId"`
+		ServiceID  string `json:"serviceId"`
+		Generation int64  `json:"generation"`
+	}
+	if err := json.Unmarshal(request.Payload, &payload); err != nil || payload.LeaseID == "" {
+		return rpc.RPCResponse{Error: &rpc.RPCRoutedError{Code: "INVALID_PAYLOAD", Message: "leaseId is required"}}, nil
+	}
+	if (payload.ServiceID != "" && payload.ServiceID != string(request.ServiceID)) || (payload.Generation != 0 && payload.Generation != request.Generation) || request.Generation <= 0 {
+		return rpc.RPCResponse{Error: &rpc.RPCRoutedError{Code: "IDENTITY_MISMATCH", Message: "query identity does not match trusted identity"}}, nil
+	}
+	lease, valid, err := h.adapter.QueryServiceLease(string(request.RuntimeID), string(request.ServiceID), request.Generation, kernelsecret.LeaseID(payload.LeaseID))
+	if err != nil {
+		return rpc.RPCResponse{Error: &rpc.RPCRoutedError{Code: "LEASE_DENIED", Message: err.Error()}}, nil
+	}
+	response, _ := json.Marshal(map[string]interface{}{"leaseId": string(lease.ID), "ref": string(lease.Ref), "granted": valid, "valid": valid, "expiresAt": lease.ExpiresAt.UnixNano()})
+	return rpc.RPCResponse{RequestID: request.ID, Payload: response}, nil
 }
 
 var _ rpc.Handler = (*acquireHandler)(nil)

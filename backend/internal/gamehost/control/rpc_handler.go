@@ -10,7 +10,7 @@ import (
 )
 
 const (
-	ControlOutputMethod    = "control.output"
+	ControlOutputMethod       = "control.output"
 	ControlSinkRegisterMethod = "control.sink.register"
 )
 
@@ -23,9 +23,9 @@ type ControlOutputInput struct {
 }
 
 type ControlOutputResult struct {
-	Allowed   bool   `json:"allowed"`
-	Reason    string `json:"reason,omitempty"`
-	Epoch     uint64 `json:"epoch"`
+	Allowed    bool   `json:"allowed"`
+	Reason     string `json:"reason,omitempty"`
+	Epoch      uint64 `json:"epoch"`
 	Generation uint64 `json:"generation"`
 }
 
@@ -90,7 +90,7 @@ func (h *ControlHandler) handleControlOutput(ctx context.Context, request rpc.RP
 		}, nil
 	}
 
-	sinkDesc, found := h.sinkRegistry.Resolve(request.RuntimeID, domain.ServiceID(input.ServiceID), input.SinkID)
+	sinkDesc, sink, found := h.sinkRegistry.ResolveEffect(request.RuntimeID, domain.ServiceID(input.ServiceID), input.SinkID)
 	if !found {
 		result := ControlOutputResult{
 			Allowed: false,
@@ -101,6 +101,11 @@ func (h *ControlHandler) handleControlOutput(ctx context.Context, request rpc.RP
 			RequestID: request.ID,
 			Payload:   payload,
 		}, nil
+	}
+	if sinkDesc.PluginID != request.PluginID || sinkDesc.ServiceID != request.ServiceID || sinkDesc.Generation != uint64(request.Generation) {
+		result := ControlOutputResult{Allowed: false, Reason: "sink_identity_mismatch", Generation: uint64(request.Generation)}
+		payload, _ := json.Marshal(result)
+		return rpc.RPCResponse{RequestID: request.ID, Payload: payload}, nil
 	}
 
 	intent := ControlOutputIntent{
@@ -116,22 +121,26 @@ func (h *ControlHandler) handleControlOutput(ctx context.Context, request rpc.RP
 		PluginID:   request.PluginID,
 		RuntimeID:  request.RuntimeID,
 		ServiceID:  request.ServiceID,
-		Generation: sinkDesc.Generation,
+		Generation: uint64(request.Generation),
 	}
 
 	checkReq := OutputCheckRequest{
-		Intent: intent,
-		Peer:   peer,
+		Intent:  intent,
+		Peer:    peer,
 		Payload: input.Payload,
 	}
 
-	decision, _ := h.gate.Check(ctx, checkReq)
+	decision, err := h.gate.AuthorizeAndDispatch(ctx, checkReq, sink)
 
 	result := ControlOutputResult{
 		Allowed:    decision.Allowed,
 		Reason:     string(decision.Reason),
 		Epoch:      decision.CurrentEpoch,
-		Generation: sinkDesc.Generation,
+		Generation: uint64(request.Generation),
+	}
+	if err != nil && result.Reason == "" {
+		result.Allowed = false
+		result.Reason = "effect_commit_failed"
 	}
 	payload, _ := json.Marshal(result)
 
@@ -147,8 +156,8 @@ func (h *ControlHandler) handleSinkRegister(ctx context.Context, request rpc.RPC
 		return rpc.RPCResponse{
 			RequestID: request.ID,
 			Error: &rpc.RPCRoutedError{
-					Code:    string(domain.ErrInvalidArgument),
-					Message: fmt.Sprintf("invalid sink register input: %v", err),
+				Code:    string(domain.ErrInvalidArgument),
+				Message: fmt.Sprintf("invalid sink register input: %v", err),
 			},
 		}, nil
 	}
@@ -158,8 +167,17 @@ func (h *ControlHandler) handleSinkRegister(ctx context.Context, request rpc.RPC
 		return rpc.RPCResponse{
 			RequestID: request.ID,
 			Error: &rpc.RPCRoutedError{
-					Code:    string(domain.ErrInvalidArgument),
-					Message: fmt.Sprintf("invalid output kind: %s", input.Kind),
+				Code:    string(domain.ErrInvalidArgument),
+				Message: fmt.Sprintf("invalid output kind: %s", input.Kind),
+			},
+		}, nil
+	}
+	if domain.ServiceID(input.ServiceID) != request.ServiceID {
+		return rpc.RPCResponse{
+			RequestID: request.ID,
+			Error: &rpc.RPCRoutedError{
+				Code:    string(domain.ErrInvalidArgument),
+				Message: "sink service id must match trusted request identity",
 			},
 		}, nil
 	}
@@ -170,15 +188,15 @@ func (h *ControlHandler) handleSinkRegister(ctx context.Context, request rpc.RPC
 		PluginID:   request.PluginID,
 		ServiceID:  domain.ServiceID(input.ServiceID),
 		Kind:       kind,
-		Generation: 1,
+		Generation: uint64(request.Generation),
 	}
 
 	if err := h.sinkRegistry.Register(sink); err != nil {
 		return rpc.RPCResponse{
 			RequestID: request.ID,
 			Error: &rpc.RPCRoutedError{
-					Code:    string(domain.ErrInvalidArgument),
-					Message: fmt.Sprintf("sink registration failed: %v", err),
+				Code:    string(domain.ErrInvalidArgument),
+				Message: fmt.Sprintf("sink registration failed: %v", err),
 			},
 		}, nil
 	}

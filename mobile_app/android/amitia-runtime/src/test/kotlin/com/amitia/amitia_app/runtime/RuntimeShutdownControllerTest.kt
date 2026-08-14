@@ -100,6 +100,8 @@ internal class FakeProotSession(override val sessionId: String) : ProotSession {
         return com.amitia.amitia_app.runtime.proot.ProotStopResult.Graceful(sessionId, 0)
     }
     override fun close() { alive.set(false) }
+    override fun requestStop() {}
+    override val exit: com.amitia.amitia_app.runtime.proot.ProotExit? = null
 }
 
 class RuntimeShutdownControllerTest {

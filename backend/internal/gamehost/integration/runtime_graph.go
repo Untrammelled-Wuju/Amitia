@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	kerneldomain "github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	ghdomain "github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/integration/service_definition"
@@ -99,7 +100,7 @@ func (p *RuntimeGraphProvisioner) reconcilePlugin(ctx context.Context, kp Kernel
 
 	svcView := service_definition.ServiceRuntimeView{
 		ExtensionID: string(kp.Extension.ID),
-		ModuleID:    string(bootServiceID),
+		ModuleID:    bootService.ModuleID,
 		RuntimeType: "service",
 		Name:        bootService.Name,
 		Description: bootService.Name,
@@ -121,9 +122,9 @@ func (p *RuntimeGraphProvisioner) reconcilePlugin(ctx context.Context, kp Kernel
 	}
 
 	descriptor.Services = append(descriptor.Services, ghdomain.ServiceDescriptor{
-		ID:      bootServiceID,
-		Name:    bootService.Name,
-		Kind:    ghdomain.ServiceKindProcess,
+		ID:       bootServiceID,
+		Name:     bootService.Name,
+		Kind:     ghdomain.ServiceKindProcess,
 		Required: true,
 	})
 
@@ -134,22 +135,31 @@ func (p *RuntimeGraphProvisioner) reconcilePlugin(ctx context.Context, kp Kernel
 	if err := p.topologyStore.PutRuntimeGraph(runtime, descriptor, definitionIDs); err != nil {
 		return fmt.Errorf("put runtime graph: %w", err)
 	}
+	if err := p.topologyStore.BindModuleID(runtime.ID, bootServiceID, bootService.ModuleID); err != nil {
+		return fmt.Errorf("bind runtime module: %w", err)
+	}
 
 	return nil
 }
 
 type bootServiceInfo struct {
-	ID        ghdomain.ServiceID
-	Name      string
+	ID         ghdomain.ServiceID
+	ModuleID   string
+	Name       string
 	EntryPoint string
-	Env       map[string]string
+	Env        map[string]string
 }
 
 func (p *RuntimeGraphProvisioner) buildBootService(kp KernelGamePlugin) (bootServiceInfo, error) {
-	moduleID := ghdomain.ServiceID(kp.Contribution.ModuleID)
-
-	entryPoint := p.extractEntryPoint(kp)
-	if entryPoint == "" {
+	runtimeModuleID, ok := kp.Contribution.Definition["runtimeModuleId"].(string)
+	if !ok || runtimeModuleID == "" {
+		return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: runtimeModuleId is required", kp.Extension.ID, kp.Contribution.ID)
+	}
+	module, found := kp.Extension.FindModule(kerneldomain.ModuleID(runtimeModuleID))
+	if !found || module.Runtime == nil {
+		return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: runtime module %s is unavailable", kp.Extension.ID, kp.Contribution.ID, runtimeModuleID)
+	}
+	if module.Runtime.EntryPoint == "" {
 		return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: entry point is required", kp.Extension.ID, kp.Contribution.ID)
 	}
 
@@ -158,41 +168,14 @@ func (p *RuntimeGraphProvisioner) buildBootService(kp KernelGamePlugin) (bootSer
 		name = kp.Extension.Name.Default
 	}
 	if name == "" {
-		name = string(moduleID)
+		name = string(kp.Contribution.ID)
 	}
 
 	return bootServiceInfo{
-		ID:        moduleID,
-		Name:      name,
-		EntryPoint: entryPoint,
-		Env:       p.extractEnv(kp),
+		ID:         ghdomain.ServiceID(kp.Contribution.ID),
+		ModuleID:   runtimeModuleID,
+		Name:       name,
+		EntryPoint: module.Runtime.EntryPoint,
+		Env:        module.Runtime.Env,
 	}, nil
-}
-
-func (p *RuntimeGraphProvisioner) extractEntryPoint(kp KernelGamePlugin) string {
-	if kp.Contribution.Definition != nil {
-		if ep, ok := kp.Contribution.Definition["entryPoint"].(string); ok && ep != "" {
-			return ep
-		}
-	}
-	if kp.Contribution.RuntimeBinding != nil {
-		return string(kp.Contribution.RuntimeBinding.RuntimeID)
-	}
-	return ""
-}
-
-func (p *RuntimeGraphProvisioner) extractEnv(kp KernelGamePlugin) map[string]string {
-	if kp.Contribution.RuntimeBinding != nil {
-		return kp.Contribution.RuntimeBinding.Env
-	}
-	if kp.Contribution.Definition != nil {
-		if envRaw, ok := kp.Contribution.Definition["env"].(map[string]interface{}); ok {
-			env := make(map[string]string)
-			for k, v := range envRaw {
-				env[k] = fmt.Sprintf("%v", v)
-			}
-			return env
-		}
-	}
-	return nil
 }

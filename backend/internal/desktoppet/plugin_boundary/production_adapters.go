@@ -20,7 +20,7 @@ func newProductionAdapters(caps integration.DesktopPetPluginCapabilities) (*prod
 	}
 	return &productionAdapters{
 		resource:       integration.NewResourceProductionAdapter(caps.Resource),
-		action:         integration.NewActionProductionAdapter(caps.Action, integration.NewDefaultActionTargetResolver()),
+		action:         integration.NewActionProductionAdapter(caps.Action, caps.ActionTarget),
 		runtime:        integration.NewRuntimeProductionAdapter(caps.Runtime),
 		floatingWindow: integration.NewFloatingWindowProductionAdapter(caps.FloatingWindow),
 	}, nil

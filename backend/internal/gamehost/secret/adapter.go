@@ -290,6 +290,32 @@ func (a *SecretLeaseAdapter) RevokeLease(leaseID kernelsecret.LeaseID, reason st
 	return nil
 }
 
+func (a *SecretLeaseAdapter) ReleaseServiceLease(runtimeID, serviceID string, generation int64, leaseID kernelsecret.LeaseID, reason string) error {
+	if runtimeID == "" || serviceID == "" || generation <= 0 || leaseID == "" {
+		return ErrBindingInvalid
+	}
+	entry, ok := a.index.LookupByLease(leaseID)
+	if !ok || entry.RuntimeID != runtimeID || entry.ServiceID != serviceID || entry.Generation != generation {
+		return ErrBindingInvalid
+	}
+	return a.RevokeLease(leaseID, reason)
+}
+
+func (a *SecretLeaseAdapter) QueryServiceLease(runtimeID, serviceID string, generation int64, leaseID kernelsecret.LeaseID) (kernelsecret.Lease, bool, error) {
+	if runtimeID == "" || serviceID == "" || generation <= 0 || leaseID == "" {
+		return kernelsecret.Lease{}, false, ErrBindingInvalid
+	}
+	entry, ok := a.index.LookupByLease(leaseID)
+	if !ok || entry.RuntimeID != runtimeID || entry.ServiceID != serviceID || entry.Generation != generation {
+		return kernelsecret.Lease{}, false, ErrBindingInvalid
+	}
+	lease, found := a.broker.GetLease(leaseID)
+	if !found {
+		return kernelsecret.Lease{}, false, nil
+	}
+	return lease, lease.CanUse(), nil
+}
+
 func (a *SecretLeaseAdapter) RevokeRuntimeGenerationLeases(runtimeID string, generation int64, reason string) RevokeOutcome {
 	leases := a.index.ActiveLeasesByGeneration(runtimeID, generation)
 	revoked := 0

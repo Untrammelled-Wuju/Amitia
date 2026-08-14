@@ -11,9 +11,9 @@ import (
 )
 
 type HostAPIRuntimeIdentityResolver struct {
-	manager   *runtime.Manager
-	plugins   *registry.Registry
-	topology  *runtime.TopologyStore
+	manager  *runtime.Manager
+	plugins  *registry.Registry
+	topology *runtime.TopologyStore
 }
 
 func NewHostAPIRuntimeIdentityResolver(
@@ -31,6 +31,7 @@ func NewHostAPIRuntimeIdentityResolver(
 func (r *HostAPIRuntimeIdentityResolver) RuntimeInfo(
 	ctx context.Context,
 	runtimeID string,
+	serviceID string,
 ) (extensionID string, moduleID string, runtimeType string, generation int64, err error) {
 	if r.manager == nil {
 		return "", "", "", 0, fmt.Errorf("hostapi resolver: runtime manager not configured")
@@ -54,7 +55,7 @@ func (r *HostAPIRuntimeIdentityResolver) RuntimeInfo(
 		return "", "", "", 0, fmt.Errorf("resolve generation: %w", err)
 	}
 
-	modID, err := r.resolveModuleID(ctx, runtimeID)
+	modID, err := r.resolveModuleID(ctx, runtimeID, serviceID)
 	if err != nil {
 		return "", "", "", 0, err
 	}
@@ -62,25 +63,22 @@ func (r *HostAPIRuntimeIdentityResolver) RuntimeInfo(
 	return plugin.ExtensionID, modID, "gamehost", gen, nil
 }
 
-func (r *HostAPIRuntimeIdentityResolver) resolveModuleID(ctx context.Context, runtimeID string) (string, error) {
+func (r *HostAPIRuntimeIdentityResolver) resolveModuleID(ctx context.Context, runtimeID string, serviceID string) (string, error) {
 	if r.topology == nil {
-		return "", nil
+		return "", fmt.Errorf("hostapi resolver: topology store not configured")
+	}
+	if serviceID == "" {
+		return "", fmt.Errorf("hostapi resolver: service id is required")
 	}
 
-	snap, err := r.topology.GetTopologySnapshot(domain.RuntimeInstanceID(runtimeID))
+	moduleID, err := r.topology.ResolveModuleID(domain.RuntimeInstanceID(runtimeID), domain.ServiceID(serviceID))
 	if err != nil {
-		return "", fmt.Errorf("resolve topology: %w", err)
+		return "", fmt.Errorf("resolve module binding: %w", err)
 	}
-
-	if len(snap.Services) == 0 {
-		return "", nil
+	if moduleID == "" {
+		return "", fmt.Errorf("hostapi resolver: empty module binding for service %q", serviceID)
 	}
-
-	defID, err := r.topology.ResolveDefinitionID(domain.RuntimeInstanceID(runtimeID), snap.Services[0].ServiceID)
-	if err != nil {
-		return "", fmt.Errorf("resolve definition: %w", err)
-	}
-	return defID, nil
+	return moduleID, nil
 }
 
 var _ hostapi.RuntimeResolver = (*HostAPIRuntimeIdentityResolver)(nil)

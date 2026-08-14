@@ -5,12 +5,34 @@ import (
 	"fmt"
 
 	kernelsecret "github.com/u-ai/backend/internal/extension/kernel/secret"
+	"github.com/u-ai/backend/internal/gamehost/domain"
+	"github.com/u-ai/backend/internal/gamehost/runtime"
 )
 
 type ServiceSecretManifest struct {
 	Ref      kernelsecret.SecretRef
 	Purpose  Purpose
 	Required bool
+}
+
+func (o *LifecycleOrchestrator) PrepareServiceStart(ctx context.Context, execCtx runtime.ServiceExecutionContext) (string, error) {
+	leases := o.adapter.ActiveServiceLeases(string(execCtx.RuntimeID), string(execCtx.ServiceID))
+	for _, leaseID := range leases {
+		lease, valid, err := o.adapter.QueryServiceLease(string(execCtx.RuntimeID), string(execCtx.ServiceID), execCtx.Generation, leaseID)
+		if err != nil || !valid {
+			continue
+		}
+		return string(lease.ID), nil
+	}
+	return "", nil
+}
+
+func (o *LifecycleOrchestrator) RevokeServiceLeases(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID, generation int64, reason string) {
+	o.adapter.RevokeServiceLeases(string(runtimeID), string(serviceID), reason)
+}
+
+func (o *LifecycleOrchestrator) RevokeRuntimeGenerationLeases(runtimeID string, generation int64, reason string) {
+	o.adapter.RevokeRuntimeGenerationLeases(runtimeID, generation, reason)
 }
 
 type RuntimeSecretManifest struct {

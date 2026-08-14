@@ -7,6 +7,7 @@ import (
 
 	"github.com/glebarez/sqlite"
 	"github.com/u-ai/backend/internal/migration"
+	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -29,7 +30,8 @@ func TestNewAppServicesBuildsCoreServicesOnce(t *testing.T) {
 	if err := (migration.Runner{DB: db, SkipBackup: true}).Apply(migration.DefaultMigrations()); err != nil {
 		t.Fatal(err)
 	}
-	services, err := NewAppServices(app.NewAppContext(db, nil), nil, nil)
+	profile := runtimeprofile.ProfileLocal
+	services, err := NewAppServices(app.NewAppContext(db, nil), nil, nil, profile, runtimeprofile.PolicyFor(profile))
 	if err != nil {
 		t.Fatalf("new app services: %v", err)
 	}

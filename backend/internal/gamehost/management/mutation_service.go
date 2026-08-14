@@ -24,6 +24,16 @@ type KernelInstalledExtension struct {
 	Version string
 }
 
+type PackageTargetPreflight interface {
+	ValidateArchiveTarget(ctx context.Context, archivePath string, expected kerneldomain.ManagementTarget) (*PackageTargetPreview, error)
+}
+
+type PackageTargetPreview struct {
+	ExtensionID      string
+	ManagementTarget kerneldomain.ManagementTarget
+	Installable      bool
+}
+
 type KernelTargetReader interface {
 	ListGameCenterExtensions(ctx context.Context) ([]kerneldomain.ExtensionDefinition, []kerneldomain.ExtensionInstallation, error)
 	GetGameCenterExtension(ctx context.Context, extensionID string) (*kerneldomain.ExtensionDefinition, *kerneldomain.ExtensionInstallation, error)
@@ -82,7 +92,7 @@ func (s *PackageMutationService) Install(ctx context.Context, req PackageInstall
 		return nil, ErrPackageIdentityMismatch
 	}
 
-	if !s.requireGameCenterExtension(ctx, installed.ID) {
+	if err := s.requireGameCenterExtension(ctx, installed.ID); err != nil {
 		return nil, ErrNotGamePlugin
 	}
 
@@ -158,7 +168,7 @@ func (s *PackageMutationService) Update(ctx context.Context, req PackageUpdateRe
 		return nil, ErrPackageIdentityMismatch
 	}
 
-	if !s.requireGameCenterExtension(ctx, installed.ID) {
+	if err := s.requireGameCenterExtension(ctx, installed.ID); err != nil {
 		return nil, ErrNotGamePlugin
 	}
 
@@ -251,6 +261,14 @@ func (s *PackageMutationService) requireGameCenterExtension(ctx context.Context,
 		return ErrNotGamePlugin
 	}
 	return nil
+}
+
+func (s *PackageMutationService) isGameCenterExtension(ctx context.Context, extensionID string) bool {
+	if s.reader == nil {
+		return false
+	}
+	_, inst, _ := s.reader.GetGameCenterExtension(ctx, extensionID)
+	return inst != nil
 }
 
 type RuntimeMutationExecutor interface {

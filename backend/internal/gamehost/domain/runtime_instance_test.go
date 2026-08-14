@@ -29,6 +29,7 @@ func TestCanTransitionRuntimeState_ValidTransitions(t *testing.T) {
 		{RuntimeStateSuspended, RuntimeStateFailed},
 		{RuntimeStateStopping, RuntimeStateStopped},
 		{RuntimeStateStopping, RuntimeStateFailed},
+		{RuntimeStateStopped, RuntimeStateStarting},
 	}
 
 	for _, tc := range validCases {
@@ -49,7 +50,6 @@ func TestCanTransitionRuntimeState_InvalidTransitions(t *testing.T) {
 		{RuntimeStateCreated, RuntimeStateStopped},
 		{RuntimeStateCreated, RuntimeStateFailed},
 		{RuntimeStateStopped, RuntimeStateRunning},
-		{RuntimeStateStopped, RuntimeStateStarting},
 		{RuntimeStateStopped, RuntimeStateCreated},
 		{RuntimeStateFailed, RuntimeStateRunning},
 		{RuntimeStateFailed, RuntimeStateStarting},
@@ -71,8 +71,8 @@ func TestCanTransitionRuntimeState_InvalidTransitions(t *testing.T) {
 }
 
 func TestIsTerminalRuntimeState(t *testing.T) {
-	if !IsTerminalRuntimeState(RuntimeStateStopped) {
-		t.Error("expected stopped to be terminal")
+	if IsTerminalRuntimeState(RuntimeStateStopped) {
+		t.Error("expected stopped to not be terminal")
 	}
 	if !IsTerminalRuntimeState(RuntimeStateFailed) {
 		t.Error("expected failed to be terminal")
@@ -463,8 +463,8 @@ func TestTransitionToSameState(t *testing.T) {
 }
 
 func TestTerminalStateCheck(t *testing.T) {
-	if !IsTerminalRuntimeState(RuntimeStateStopped) {
-		t.Error("stopped should be terminal")
+	if IsTerminalRuntimeState(RuntimeStateStopped) {
+		t.Error("stopped should not be terminal")
 	}
 	if !IsTerminalRuntimeState(RuntimeStateFailed) {
 		t.Error("failed should be terminal")

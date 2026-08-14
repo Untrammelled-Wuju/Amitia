@@ -22,6 +22,10 @@ type PermissionSnapshotStore interface {
 	DeleteBySession(ctx context.Context, sessionID string) error
 }
 
+type ActivePermissionSnapshotFinder interface {
+	FindActiveSnapshot(ctx context.Context, extensionID string, moduleID string, generation int64) (PermissionSnapshot, bool, error)
+}
+
 type MemoryPermissionSnapshotStore struct {
 	mu        sync.RWMutex
 	snapshots map[string]PermissionSnapshot
@@ -48,6 +52,25 @@ func (s *MemoryPermissionSnapshotStore) GetSnapshot(_ context.Context, snapshotI
 		return PermissionSnapshot{}, ErrPermissionSnapshotNotFound
 	}
 	return snap, nil
+}
+
+func (s *MemoryPermissionSnapshotStore) FindActiveSnapshot(_ context.Context, extensionID string, moduleID string, generation int64) (PermissionSnapshot, bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+
+	var latest PermissionSnapshot
+	found := false
+	now := time.Now().UTC()
+	for _, snap := range s.snapshots {
+		if snap.ExtensionID != extensionID || snap.ModuleID != moduleID || snap.Generation != generation || !snap.IsValid(now) {
+			continue
+		}
+		if !found || snap.CreatedAt.After(latest.CreatedAt) {
+			latest = snap
+			found = true
+		}
+	}
+	return latest, found, nil
 }
 
 func (s *MemoryPermissionSnapshotStore) DeleteSnapshot(_ context.Context, snapshotID string) error {

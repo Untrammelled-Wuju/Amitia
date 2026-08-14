@@ -6,12 +6,13 @@ import (
 
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
+	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/pkg/util"
 )
 
 func TestNewRuntimeBootstrapCreatesOrchestrator(t *testing.T) {
 	paths := &util.RuntimePaths{}
-	b, err := newRuntimeBootstrap(paths)
+	b, err := newRuntimeBootstrap(paths, runtimeprofile.ProfileLocal)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -29,7 +30,7 @@ func TestNewRuntimeBootstrapCreatesOrchestrator(t *testing.T) {
 
 func TestRuntimeBootstrapSnapshotReady(t *testing.T) {
 	paths := &util.RuntimePaths{}
-	b, _ := newRuntimeBootstrap(paths)
+	b, _ := newRuntimeBootstrap(paths, runtimeprofile.ProfileLocal)
 	snap := b.Snapshot()
 	if snap.State == "" {
 		t.Fatal("expected non-empty initial state")
@@ -42,7 +43,7 @@ type fakeGraphService struct {
 
 func TestRuntimeBootstrapGraphServiceThreadSafe(t *testing.T) {
 	paths := &util.RuntimePaths{}
-	b, _ := newRuntimeBootstrap(paths)
+	b, _ := newRuntimeBootstrap(paths, runtimeprofile.ProfileLocal)
 	fakeSvc := &fakeGraphService{}
 	b.SetGraphService(fakeSvc)
 	got := b.GraphService()
@@ -53,7 +54,7 @@ func TestRuntimeBootstrapGraphServiceThreadSafe(t *testing.T) {
 
 func TestRuntimeBootstrapStopAllReturnsNilInitially(t *testing.T) {
 	paths := &util.RuntimePaths{}
-	b, _ := newRuntimeBootstrap(paths)
+	b, _ := newRuntimeBootstrap(paths, runtimeprofile.ProfileLocal)
 	ctx := context.Background()
 	err := b.StopAll(ctx)
 	if err != nil {
@@ -63,7 +64,7 @@ func TestRuntimeBootstrapStopAllReturnsNilInitially(t *testing.T) {
 
 func TestRuntimeBootstrapStartPhaseInfrastructureNoComponents(t *testing.T) {
 	paths := &util.RuntimePaths{}
-	b, _ := newRuntimeBootstrap(paths)
+	b, _ := newRuntimeBootstrap(paths, runtimeprofile.ProfileLocal)
 	ctx := context.Background()
 	err := b.StartPhase(ctx, runtimeorchestrator.PhaseInfrastructure)
 	if err != nil {
@@ -101,7 +102,7 @@ func TestGraphStoreProviderDescriptor(t *testing.T) {
 
 func TestRuntimeBootstrapCreatesNodeEnvironmentResolver(t *testing.T) {
 	paths := &util.RuntimePaths{}
-	b, err := newRuntimeBootstrap(paths)
+	b, err := newRuntimeBootstrap(paths, runtimeprofile.ProfileLocal)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -112,7 +113,7 @@ func TestRuntimeBootstrapCreatesNodeEnvironmentResolver(t *testing.T) {
 
 func TestRuntimeBootstrapDoesNotRequireInstalledNode(t *testing.T) {
 	paths := &util.RuntimePaths{}
-	b, err := newRuntimeBootstrap(paths)
+	b, err := newRuntimeBootstrap(paths, runtimeprofile.ProfileLocal)
 	if err != nil {
 		t.Fatalf("bootstrap should succeed without installed node: %v", err)
 	}

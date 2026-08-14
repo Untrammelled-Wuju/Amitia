@@ -16,8 +16,8 @@ const (
 )
 
 var workspaceRuntime = capability.RuntimeBinding{
-	RuntimeType: capability.RuntimeTypeInternal,
-	RuntimeID:   "workspace",
+	RuntimeType: capability.RuntimeTypeWorkspace,
+	RuntimeID:   "default",
 }
 
 func BuildWorkspaceTools() []capability.ToolDefinition {
@@ -54,11 +54,11 @@ func buildListTool() capability.ToolDefinition {
 		}
 	}`)
 	return capability.ToolDefinition{
-		ID:          "workspace.list",
-		ModelName:   "workspace.list",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Workspace List",
-		Description: "List entries in a workspace directory.",
+		ID:           "workspace.list",
+		ModelName:    "workspace.list",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Workspace List",
+		Description:  "List entries in a workspace directory.",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -109,11 +109,11 @@ func buildStatTool() capability.ToolDefinition {
 		}
 	}`)
 	return capability.ToolDefinition{
-		ID:          "workspace.stat",
-		ModelName:   "workspace.stat",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Workspace Stat",
-		Description: "Get metadata of a workspace entry.",
+		ID:           "workspace.stat",
+		ModelName:    "workspace.stat",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Workspace Stat",
+		Description:  "Get metadata of a workspace entry.",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -168,11 +168,11 @@ func buildReadTool() capability.ToolDefinition {
 		}
 	}`)
 	return capability.ToolDefinition{
-		ID:          "workspace.read",
-		ModelName:   "workspace.read",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Workspace Read",
-		Description: "Read content from a workspace file.",
+		ID:           "workspace.read",
+		ModelName:    "workspace.read",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Workspace Read",
+		Description:  "Read content from a workspace file.",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -226,11 +226,11 @@ func buildWriteTool() capability.ToolDefinition {
 		}
 	}`)
 	return capability.ToolDefinition{
-		ID:          "workspace.write",
-		ModelName:   "workspace.write",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Workspace Write",
-		Description: "Write content to a workspace file.",
+		ID:           "workspace.write",
+		ModelName:    "workspace.write",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Workspace Write",
+		Description:  "Write content to a workspace file.",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -281,11 +281,11 @@ func buildMkdirTool() capability.ToolDefinition {
 		}
 	}`)
 	return capability.ToolDefinition{
-		ID:          "workspace.mkdir",
-		ModelName:   "workspace.mkdir",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Workspace Mkdir",
-		Description: "Create a directory in the workspace.",
+		ID:           "workspace.mkdir",
+		ModelName:    "workspace.mkdir",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Workspace Mkdir",
+		Description:  "Create a directory in the workspace.",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -337,11 +337,11 @@ func buildRenameTool() capability.ToolDefinition {
 		}
 	}`)
 	return capability.ToolDefinition{
-		ID:          "workspace.rename",
-		ModelName:   "workspace.rename",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Workspace Rename",
-		Description: "Rename a workspace entry.",
+		ID:           "workspace.rename",
+		ModelName:    "workspace.rename",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Workspace Rename",
+		Description:  "Rename a workspace entry.",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -393,11 +393,11 @@ func buildMoveTool() capability.ToolDefinition {
 		}
 	}`)
 	return capability.ToolDefinition{
-		ID:          "workspace.move",
-		ModelName:   "workspace.move",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Workspace Move",
-		Description: "Move a workspace entry within the same mount.",
+		ID:           "workspace.move",
+		ModelName:    "workspace.move",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Workspace Move",
+		Description:  "Move a workspace entry within the same mount.",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -449,11 +449,11 @@ func buildCopyTool() capability.ToolDefinition {
 		}
 	}`)
 	return capability.ToolDefinition{
-		ID:          "workspace.copy",
-		ModelName:   "workspace.copy",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Workspace Copy",
-		Description: "Copy a workspace entry within the same mount.",
+		ID:           "workspace.copy",
+		ModelName:    "workspace.copy",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Workspace Copy",
+		Description:  "Copy a workspace entry within the same mount.",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -505,11 +505,11 @@ func buildDeleteTool() capability.ToolDefinition {
 		}
 	}`)
 	return capability.ToolDefinition{
-		ID:          "workspace.delete",
-		ModelName:   "workspace.delete",
-		Source:      capability.ToolSourceBuiltin,
-		Name:        "Workspace Delete",
-		Description: "Delete a workspace entry.",
+		ID:           "workspace.delete",
+		ModelName:    "workspace.delete",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Workspace Delete",
+		Description:  "Delete a workspace entry.",
 		InputSchema:  inputSchema,
 		OutputSchema: outputSchema,
 		Permissions: []capability.PermissionRequirement{
@@ -706,7 +706,7 @@ func (d *ToolDispatcher) handleRename(ctx context.Context, input json.RawMessage
 
 func (d *ToolDispatcher) handleMove(ctx context.Context, input json.RawMessage) (json.RawMessage, error) {
 	var req struct {
-		SourceURI string `json:"sourceUri"`
+		SourceURI  string `json:"sourceUri"`
 		DestDirURI string `json:"destinationDirUri"`
 	}
 	if err := json.Unmarshal(input, &req); err != nil {
@@ -721,7 +721,7 @@ func (d *ToolDispatcher) handleMove(ctx context.Context, input json.RawMessage) 
 
 func (d *ToolDispatcher) handleCopy(ctx context.Context, input json.RawMessage) (json.RawMessage, error) {
 	var req struct {
-		SourceURI string `json:"sourceUri"`
+		SourceURI  string `json:"sourceUri"`
 		DestDirURI string `json:"destinationDirUri"`
 	}
 	if err := json.Unmarshal(input, &req); err != nil {

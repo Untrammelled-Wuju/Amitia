@@ -8,9 +8,10 @@ import (
 )
 
 type Peer struct {
-	PluginID  domain.PluginID
-	RuntimeID domain.RuntimeInstanceID
-	ServiceID domain.ServiceID
+	PluginID   domain.PluginID
+	RuntimeID  domain.RuntimeInstanceID
+	ServiceID  domain.ServiceID
+	Generation int64
 }
 
 type PeerKey struct {

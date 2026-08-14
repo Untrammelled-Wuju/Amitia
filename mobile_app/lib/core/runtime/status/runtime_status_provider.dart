@@ -38,8 +38,8 @@ final runtimeStatusSnapshotProvider =
 });
 
 final runtimeStatusCurrentProvider = Provider<RuntimeStatusSnapshot>((ref) {
-  final projection = ref.watch(runtimeStatusProjectionProvider);
-  return projection.current;
+  final async = ref.watch(runtimeStatusSnapshotProvider);
+  return async.value ?? ref.read(runtimeStatusProjectionProvider).current;
 });
 
 class _TransportStateSourceImpl implements TransportStateSource {

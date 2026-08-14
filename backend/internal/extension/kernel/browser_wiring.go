@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
 	"github.com/u-ai/backend/internal/browser"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"

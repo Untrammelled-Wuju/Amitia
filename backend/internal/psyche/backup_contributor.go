@@ -7,6 +7,8 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"time"
+
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"gorm.io/gorm"
 )
@@ -176,6 +178,8 @@ func (p *PsycheBackupContributor) Import(ctx context.Context, req dataportabilit
 			}
 		}
 
+		createdAt, _ := time.Parse(time.RFC3339, rec.CreatedAt)
+		updatedAt, _ := time.Parse(time.RFC3339, rec.UpdatedAt)
 		record := psycheStateRecord{
 			CharacterID:  rec.CharacterID,
 			Version:      rec.Version,
@@ -184,8 +188,8 @@ func (p *PsycheBackupContributor) Import(ctx context.Context, req dataportabilit
 			Mood:         rec.Mood,
 			Stress:       rec.Stress,
 			Energy:       rec.Energy,
-			CreatedAt:    rec.CreatedAt,
-			UpdatedAt:    rec.UpdatedAt,
+			CreatedAt:    createdAt,
+			UpdatedAt:    updatedAt,
 		}
 		if err := p.DB.WithContext(ctx).Create(&record).Error; err != nil {
 			continue

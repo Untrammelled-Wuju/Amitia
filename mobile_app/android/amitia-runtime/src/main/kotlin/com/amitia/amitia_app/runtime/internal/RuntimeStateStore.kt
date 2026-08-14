@@ -16,6 +16,7 @@ class RuntimeStateStore(
     private var currentSnapshot: RuntimeSnapshot = RuntimeSnapshot.initial()
     private val listeners = CopyOnWriteArrayList<ListenerEntry>()
     private val closed = AtomicBoolean(false)
+    private val initialized = AtomicBoolean(false)
 
     fun snapshot(): RuntimeSnapshot {
         return lock.readLock().withLock {
@@ -24,6 +25,55 @@ class RuntimeStateStore(
             )
         }
     }
+
+    fun initialize(targetState: RuntimeState, runtimeVersion: String? = null): RuntimeSnapshot {
+        var resultSnapshot: RuntimeSnapshot
+        var snapshotToNotify: RuntimeSnapshot? = null
+
+        lock.writeLock().withLock {
+            if (closed.get()) {
+                throw IllegalStateException("state store is closed")
+            }
+            if (initialized.get()) {
+                throw IllegalStateException("state store already initialized")
+            }
+            if (currentSnapshot.state != RuntimeState.UNKNOWN) {
+                throw IllegalStateException("state store can only be initialized from UNKNOWN state")
+            }
+
+            val newSnapshot = currentSnapshot.copy(
+                state = targetState,
+                runtimeVersion = runtimeVersion,
+                updatedAtEpochMillis = clock.nowEpochMillis()
+            )
+
+            currentSnapshot = newSnapshot
+            initialized.set(true)
+            resultSnapshot = newSnapshot
+            snapshotToNotify = newSnapshot.copy(
+                components = newSnapshot.components.toList()
+            )
+        }
+
+        val snap = snapshotToNotify
+        if (snap != null) {
+            val snapshotListeners = ArrayList(listeners)
+            for (entry in snapshotListeners) {
+                try {
+                    if (!entry.cancelled.get()) {
+                        entry.listener.onRuntimeSnapshotChanged(snap)
+                    }
+                } catch (_: Throwable) {
+                }
+            }
+        }
+
+        return resultSnapshot.copy(
+            components = resultSnapshot.components.toList()
+        )
+    }
+
+    fun isInitialized(): Boolean = initialized.get()
 
     fun subscribe(listener: RuntimeListener): RuntimeSubscription {
         val entry = ListenerEntry(listener)

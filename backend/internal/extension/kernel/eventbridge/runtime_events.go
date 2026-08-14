@@ -4,7 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"strconv"
+	"time"
 
 	"github.com/u-ai/backend/internal/deviceruntime"
 	"github.com/u-ai/backend/internal/deviceruntime/protocol"
@@ -115,7 +115,6 @@ func runtimeOptions(e deviceruntime.SessionDomainEvent) event.PublishOptions {
 		AggregateVersion: &e.Session.Revision,
 		PartitionKey:     runtimePartitionKey(e),
 		OrderingKey:      e.Session.ID.String(),
-		IdempotencyKey:   runtimeIdempotencyKey(e),
 	}
 }
 
@@ -124,8 +123,4 @@ func runtimePartitionKey(e deviceruntime.SessionDomainEvent) string {
 		return e.Session.UserID.String()
 	}
 	return "system"
-}
-
-func runtimeIdempotencyKey(e deviceruntime.SessionDomainEvent) string {
-	return e.Session.ID.String() + ":" + string(e.Type) + ":" + strconv.FormatInt(e.Session.Revision, 10)
 }

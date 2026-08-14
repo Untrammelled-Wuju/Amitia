@@ -5,7 +5,6 @@ import (
 	"time"
 )
 
-
 type RuntimeInstanceID string
 
 type RuntimeState string
@@ -59,6 +58,9 @@ var validRuntimeTransitions = map[RuntimeState]map[RuntimeState]struct{}{
 		RuntimeStateStopped: {},
 		RuntimeStateFailed:  {},
 	},
+	RuntimeStateStopped: {
+		RuntimeStateStarting: {},
+	},
 }
 
 var activeRuntimeStates = map[RuntimeState]struct{}{
@@ -93,7 +95,7 @@ func AllRuntimeStates() []RuntimeState {
 }
 
 func IsTerminalRuntimeState(state RuntimeState) bool {
-	return state == RuntimeStateStopped || state == RuntimeStateFailed
+	return state == RuntimeStateFailed
 }
 
 func IsActiveRuntimeState(state RuntimeState) bool {

@@ -89,6 +89,7 @@ type DesktopPetPluginCapabilities struct {
 	Action         PetActionCapability
 	Runtime        PetRuntimeCapability
 	FloatingWindow PetFloatingWindowCapability
+	ActionTarget   ActionTargetResolver
 }
 
 func (c DesktopPetPluginCapabilities) Validate() error {
@@ -103,6 +104,9 @@ func (c DesktopPetPluginCapabilities) Validate() error {
 	}
 	if c.FloatingWindow == nil {
 		return fmt.Errorf("desktoppet integration: PetFloatingWindowCapability is required")
+	}
+	if c.ActionTarget == nil {
+		return fmt.Errorf("desktoppet integration: ActionTargetResolver is required")
 	}
 	return nil
 }

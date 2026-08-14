@@ -32,18 +32,19 @@ type MetricsSink interface {
 }
 
 type PluginOutputGate struct {
-	mu              sync.RWMutex
-	closedFlags     map[domain.RuntimeInstanceID]bool
+	mu          sync.RWMutex
+	closedFlags map[domain.RuntimeInstanceID]bool
 
-	clock           Clock
-	topology        TopologyReader
-	runtimeReader   RuntimeReader
+	clock            Clock
+	topology         TopologyReader
+	runtimeReader    RuntimeReader
 	generationReader RuntimeGenerationReader
-	permChecker     EffectivePermissionChecker
-	policyChecker   HostPolicyChecker
-	authority       ControlAuthoritySnapshotReader
-	audit           AuthorityAuditSink
-	metrics         MetricsSink
+	permChecker      EffectivePermissionChecker
+	policyChecker    HostPolicyChecker
+	authority        ControlAuthoritySnapshotReader
+	audit            AuthorityAuditSink
+	metrics          MetricsSink
+	commitBarrier    ControlCommitBarrier
 
 	perRuntime map[domain.RuntimeInstanceID]*sync.Mutex
 	opMu       sync.Mutex
@@ -105,17 +106,18 @@ func NewPluginOutputGate(opts PluginOutputGateOptions) (*PluginOutputGate, error
 		clock = func() time.Time { return time.Now().UTC() }
 	}
 	return &PluginOutputGate{
-		closedFlags:     make(map[domain.RuntimeInstanceID]bool),
-		clock:           clock,
-		topology:        opts.Topology,
-		runtimeReader:   opts.RuntimeReader,
+		closedFlags:      make(map[domain.RuntimeInstanceID]bool),
+		clock:            clock,
+		topology:         opts.Topology,
+		runtimeReader:    opts.RuntimeReader,
 		generationReader: opts.GenerationReader,
-		permChecker:     opts.PermChecker,
-		policyChecker:   opts.PolicyChecker,
-		authority:       opts.Authority,
-		audit:           opts.Audit,
-		metrics:         opts.Metrics,
-		perRuntime:      make(map[domain.RuntimeInstanceID]*sync.Mutex),
+		permChecker:      opts.PermChecker,
+		policyChecker:    opts.PolicyChecker,
+		authority:        opts.Authority,
+		audit:            opts.Audit,
+		metrics:          opts.Metrics,
+		commitBarrier:    opts.CommitBarrier,
+		perRuntime:       make(map[domain.RuntimeInstanceID]*sync.Mutex),
 	}, nil
 }
 
@@ -281,27 +283,23 @@ func (g *PluginOutputGate) AuthorizeAndDispatch(ctx context.Context, req OutputC
 		return denied, g.mapDecisionToError(denied)
 	}
 
-	var execErr error
-	execDone := make(chan struct{})
-
-	go func() {
-		defer close(execDone)
-		if revalidateDecision := g.revalidatePermit(ctx, req, *permit, now); revalidateDecision.Deny() {
-			g.recordAudit(req.Intent, req.Peer, revalidateDecision.Reason, false, now)
-			execErr = g.mapDecisionToError(revalidateDecision)
+	var dispatchErr error
+	if err := g.commitBarrier.WithReadCommit(req.Intent.RuntimeID, func() {
+		if revalidateDecision := g.revalidatePermit(ctx, req, *permit, g.clock()); revalidateDecision.Deny() {
+			g.recordAudit(req.Intent, req.Peer, revalidateDecision.Reason, false, g.clock())
+			dispatchErr = g.mapDecisionToError(revalidateDecision)
 			return
 		}
-		err := sink.ExecuteAuthorized(ctx, req.Intent.RuntimeID, req.Intent.ServiceID, req.Peer.PluginID, *permit, req.Payload)
-		if err != nil {
-			execErr = err
-			g.recordAudit(req.Intent, req.Peer, "", false, now)
+		if err := sink.ExecuteAuthorized(ctx, req.Intent.RuntimeID, req.Intent.ServiceID, req.Peer.PluginID, *permit, req.Payload); err != nil {
+			dispatchErr = err
+			g.recordAudit(req.Intent, req.Peer, "", false, g.clock())
 			return
 		}
-		g.recordAudit(req.Intent, req.Peer, "", true, now)
-	}()
-
-	<-execDone
-	return decision, execErr
+		g.recordAudit(req.Intent, req.Peer, "", true, g.clock())
+	}); err != nil {
+		return decision, err
+	}
+	return decision, dispatchErr
 }
 
 func (g *PluginOutputGate) revalidatePermit(ctx context.Context, req OutputCheckRequest, permit OutputPermit, now time.Time) OutputDecision {

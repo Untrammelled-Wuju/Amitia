@@ -99,6 +99,7 @@ type RuntimeEntry struct {
 
 	RuntimeSessionID     runtimeidentity.RuntimeSessionID
 	ConnectionGeneration int64
+	Revision             int64
 }
 
 type HostEntry = RuntimeEntry

@@ -227,20 +227,21 @@ class TestProotComponent : ProotComponent {
         com.amitia.amitia_app.runtime.proot.ProotErrorCode.NOT_PACKAGED, "test"
     )
 
-    override fun launch(request: ProotLaunchRequest, observer: ProotObserver): ProotSession {
+    override fun launch(request: ProotLaunchRequest, observer: ProotObserver, generation: Long): ProotSession {
         launchCount++
         val s = TestProotSession()
         session = s
         return s
     }
 
-    override fun launchProbe(request: ProotLaunchRequest, observer: ProotObserver): ProotSession {
+    override fun launchProbe(request: ProotLaunchRequest, observer: ProotObserver, generation: Long): ProotSession {
         return TestProotSession()
     }
 
     override fun currentSession(): ProotSession? = session
 
     override fun stop(): ProotStopResult {
+        session?.requestStop()
         session = null
         return ProotStopResult.AlreadyStopped("test", null)
     }
@@ -256,6 +257,8 @@ class TestProotSession : ProotSession {
     override fun awaitExit(timeoutMillis: Long): Int? = 0
     override fun stop(graceMillis: Long) = ProotStopResult.Graceful(sessionId, 0)
     override fun close() {}
+    override fun requestStop() {}
+    override val exit: com.amitia.amitia_app.runtime.proot.ProotExit? = null
 }
 
 class TestProotEnvironmentAssembler : ProotEnvironmentAssembler(
