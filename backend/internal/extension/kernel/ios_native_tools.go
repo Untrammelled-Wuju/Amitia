@@ -8,9 +8,7 @@ import (
 	"fmt"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
-	"github.com/u-ai/backend/internal/iosnative"
 	"github.com/u-ai/backend/internal/iosnative/alarms"
-	"github.com/u-ai/backend/internal/iosnative/background"
 	"github.com/u-ai/backend/internal/iosnative/bluetooth"
 	"github.com/u-ai/backend/internal/iosnative/calendar"
 	"github.com/u-ai/backend/internal/iosnative/clipboard"
@@ -237,5 +235,3 @@ func makeIOSNativeTool(rt capability.RuntimeBinding, toolID, modelName, operatio
 		Runtime:        rt,
 	}
 }
-
-var _ = iosnative.OpHealthAuthorizationStatus
