@@ -38,16 +38,11 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	handler := NewHandler(svc, ctx.DB, chatSvc, dataLifecycle, unifiedEntry, reconciliation, memSvc)
 	svc.AttachTemporalService(temporalSvc)
 
-	appVersion := os.Getenv("AMITIA_VERSION")
-	if appVersion == "" {
-		appVersion = "dev"
-	}
-	schemaFinger := fmt.Sprintf("mig-%d-%s", len(migration.DefaultMigrations()), runtime.GOOS)
 	if dpCoord == nil {
 		return fmt.Errorf("DataPortability Coordinator is nil")
 	}
 	svc.SetDataPortabilityCoordinator(dpCoord)
-	coord := dpCoord
+	_ = dpCoord
 
 	modelerror.SetReporter(handler.publishModelError)
 

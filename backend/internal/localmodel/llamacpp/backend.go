@@ -5,6 +5,7 @@ package llamacpp
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -55,14 +56,26 @@ func (b *llamaCppBackend) Capabilities(ctx context.Context) (localmodel.LocalMod
 	defer b.mu.Unlock()
 
 	caps := localmodel.LocalModelCapabilities{
-		Text:       true,
-		Streaming:  true,
-		MaxContext: b.config.ContextSize,
-		Backends:   []string{b.config.Backend},
+		Text:        true,
+		Streaming:   true,
+		MaxContext:  b.config.ContextSize,
+		Backends:    []string{b.config.Backend},
+		ToolCalling: false,
+		JSONMode:    false,
 	}
 
 	if manifest := b.manifest.Load(); manifest != nil {
 		caps.MaxContext = manifest.ContextLength
+		for _, c := range manifest.Capabilities {
+			switch strings.ToLower(c) {
+			case "tool_calling":
+				caps.ToolCalling = true
+			case "json_mode", "json":
+				caps.JSONMode = true
+			case "vision", "multimodal":
+				caps.Vision = true
+			}
+		}
 	}
 
 	return caps, nil

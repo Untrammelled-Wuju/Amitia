@@ -588,7 +588,7 @@ internal class DefaultRuntimeController(
 
         expectedStopRef.set(null)
 
-        val startResult = serviceHost.ensureStarted(allocatedGeneration)
+        val startResult = serviceHost.ensureStarted(allocatedGeneration, request.profile)
         if (startResult is RuntimeServiceResult.Failure) {
             val error = RuntimeError(
                 code = RuntimeErrorCode.START_FAILED,

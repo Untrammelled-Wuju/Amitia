@@ -207,6 +207,15 @@ func (s *service) SetDataLifecycleCoordinator(c *mindruntime.DataLifecycleCoordi
 	s.dataLifecycleCoordinator = c
 }
 
+func (s *service) WriteAuthoritySnapshot() WriteAuthoritySnapshot {
+	return WriteAuthoritySnapshot{
+		CanonicalMutationEnabled:   true,
+		LegacyRawWriterEnabled:     false,
+		LegacyHistoryWriterEnabled: false,
+		RawImportWriterEnabled:     false,
+	}
+}
+
 func extractJSONArray(s string) string {
 	s = strings.TrimSpace(s)
 	if idx := strings.Index(s, "["); idx >= 0 {

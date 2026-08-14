@@ -22,7 +22,8 @@ enum class RuntimeStartReason {
 }
 
 data class RuntimeStartRequest(
-    val reason: RuntimeStartReason
+    val reason: RuntimeStartReason,
+    val profile: String = "local"
 )
 
 enum class RuntimeStopReason {

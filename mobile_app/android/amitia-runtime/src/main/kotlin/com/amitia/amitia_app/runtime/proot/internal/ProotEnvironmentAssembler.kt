@@ -33,7 +33,7 @@ internal class ProotEnvironmentAssembler(
         )
     }
 
-    fun assembleBackendLaunch(activeProgramSource: File): ProotLaunchSpec {
+    fun assembleBackendLaunch(activeProgramSource: File, runtimeProfile: String): ProotLaunchSpec {
         val environment = buildEnvironment()
         val bindMounts = buildBindMounts(activeProgramSource)
 
@@ -41,7 +41,7 @@ internal class ProotEnvironmentAssembler(
             binaryPath = "",
             rootfsPath = layout.rootfsRoot.absolutePath,
             workingDirectory = GuestLayout.BACKEND_DIR,
-            command = listOf(GuestLayout.BACKEND_SERVER),
+            command = listOf(GuestLayout.BACKEND_SERVER, "--runtime-profile=$runtimeProfile"),
             bindMounts = bindMounts,
             environment = environment,
         )
