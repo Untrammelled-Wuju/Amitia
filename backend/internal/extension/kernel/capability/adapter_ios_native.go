@@ -245,6 +245,15 @@ func (a *iosRuntimeAdapter) mapIOSError(iosErr *IOSError) *ToolError {
 	case "BRIDGE_INVALID_RESPONSE":
 		toolErr.Code = ErrorCodeInternalError
 		toolErr.Retryable = false
+	case "FOREGROUND_REQUIRED":
+		toolErr.Code = ErrorCodePermissionDenied
+		toolErr.Retryable = false
+	case "PERMISSION_REQUIRED":
+		toolErr.Code = ErrorCodePermissionDenied
+		toolErr.Retryable = false
+	case "UNSUPPORTED":
+		toolErr.Code = ErrorCodeNotAvailable
+		toolErr.Retryable = false
 	}
 
 	return toolErr

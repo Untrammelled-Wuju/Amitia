@@ -1,106 +1,56 @@
-$ErrorActionPreference = "Stop"
+param([switch]$NoZip)
+$ErrorActionPreference = "SilentlyContinue"
+$repo = $PSScriptRoot | Split-Path -Parent
+$stage = "$env:TEMP\U-Ai-pkg"
+$zip  = Join-Path $repo "U-Ai-source.zip"
 
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
-$desktop = [Environment]::GetFolderPath("Desktop")
-$stageDir = Join-Path $desktop "U-Ai-source-archive"
-$outZip = Join-Path $desktop "U-Ai-source.zip"
+if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
+if (Test-Path $zip)   { Remove-Item $zip -Force }
+$null = New-Item -ItemType Directory -Path $stage -Force
 
-if (Test-Path $stageDir) { Remove-Item $stageDir -Recurse -Force }
-if (Test-Path $outZip) { Remove-Item $outZip -Force }
+$skipExt = @('.exe','.dll','.pdb','.zip','.tar','.tar.xz','.exe~','.bak','.bin','.dat','.db','.log','.so','.map','.node','.wasm','.lock')
+$skipName = @('.DS_Store','Thumbs.db','go.sum','.metadata')
 
-# Directory names to skip (matched against any path component)
-$skipDirs = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase, @(
-    "node_modules", ".git", "dist", "build", "dist-types", "release", "logs",
-    "AmitiaData", "data", "migration_backups", "migration_backups_prev",
-    "surrealdb", "dev", "tmp", "D:", "__pycache__", ".dart_tool",
-    ".github", ".workbuddy-ai", ".reasonix", ".trae-html-share-packages",
-    "build-installer", "installer", "installer-v2", "installer-v3",
-    "installer-v4", "installer-v5", "installer-out", "installer-final",
-    "release-dist", "dist-release", "out", "android"
-))
-
-# These specific subdirectory paths (relative to each source root) should also be skipped
-$skipSubPaths = @(
-    "cmd/data", "qdrant/storage", "qdrant/snapshots", "resources/core",
-    "resources/data", "resources/qdrant/storage", "resources/qdrant/snapshots",
-    "resources/surrealdb/data", "backend/qdrant", "backend/surrealdb"
-)
-
-# File extensions to skip
-$skipExts = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase, @(
-    ".exe", ".dll", ".pdb", ".log", ".db", ".db-shm", ".db-wal", ".db-journal",
-    ".zip", ".tar", ".orig", ".swp", ".swo", ".pyc", ".iml", ".py"
-))
-
-# Specific filenames to skip
-$skipNames = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase, @(
-    ".DS_Store", "Thumbs.db", "local-token", "mcp-secrets.key", "device.json",
-    "qrcode.png", "server", "server.exe", "backend.exe", "backend",
-    "amitia-ext.exe", "amitiax.exe", "extension.test.exe", "worker.test.exe",
-    "kernel.test.exe", "legacy-package-migrate.exe", "server_linux_amd64",
-    "server_linux_arm64", "qdrantprocess.test", "qdrantprocess.test.exe",
-    "tmp_check.js", "tmp_check_db.js", "TEMPgradle_out.txt", ":TEMPgradle_out.txt",
-    "test_output.txt", "test_nodeenv_race.txt", ".env", ".env.local",
-    ".qdrant-initialized", "desktop-instance-id", "raft_state.json"
-))
-
-function Test-ShouldSkipDir {
-    param([string]$FullPath, [string]$SourceRoot)
-    $relPath = $FullPath.Substring($SourceRoot.Length).TrimStart('\', '/')
-    $parts = $relPath -split '[\\/]'
-    foreach ($p in $parts) {
-        if ($skipDirs.Contains($p)) { return $true }
-    }
-    # Check sub-paths
-    $relForward = $relPath -replace '\\', '/'
-    foreach ($sp in $skipSubPaths) {
-        if ($relForward -like "$sp*" -or $relForward -like "*/$sp*") { return $true }
-    }
-    return $false
-}
-
-function Copy-SourceFiles {
-    param([string]$Source, [string]$Dest)
-    if (-not (Test-Path $Dest)) { $null = New-Item -ItemType Directory -Path $Dest -Force }
-
-    $dirs = Get-ChildItem -LiteralPath $Source -Directory -Force -ErrorAction SilentlyContinue |
-        Where-Object { -not (Test-ShouldSkipDir -FullPath $_.FullName -SourceRoot $Source) }
-
-    $files = Get-ChildItem -LiteralPath $Source -File -Force -ErrorAction SilentlyContinue |
-        Where-Object {
-            -not $skipExts.Contains($_.Extension) -and
-            -not $skipNames.Contains($_.Name)
+function Copy-Tree {
+    param($Src, $Dst, [string[]]$ExtraSkip = @())
+    if (-not (Test-Path $Dst)) { $null = New-Item -ItemType Directory -Path $Dst -Force }
+    foreach ($item in Get-ChildItem -LiteralPath $Src -Force -ErrorAction SilentlyContinue) {
+        if ($item.PSIsContainer) {
+            if ($item.Attributes -match 'ReparsePoint') { continue }
+            if ($item.Name -in @('node_modules','dist','build','.dart_tool','.gradle','.cxx','.kotlin') -or $item.Name -in $ExtraSkip) { continue }
+            Copy-Tree -Src $item.FullName -Dst (Join-Path $Dst $item.Name) -ExtraSkip $ExtraSkip
+        } else {
+            if ($item.Attributes -match 'ReparsePoint') { continue }
+            if ($skipExt -contains $item.Extension) { continue }
+            if ($skipName -contains $item.Name)     { continue }
+            Copy-Item -LiteralPath $item.FullName -Destination $Dst -Force
         }
-
-    foreach ($f in $files) {
-        try {
-            Copy-Item -LiteralPath $f.FullName -Destination $Dest -Force -ErrorAction Stop
-        } catch {
-            # Skip locked/inaccessible files
-        }
-    }
-
-    foreach ($d in $dirs) {
-        $subDest = Join-Path $Dest $d.Name
-        Copy-SourceFiles -Source $d.FullName -Dest $subDest
     }
 }
 
-Write-Host "=== Packing source ===" -ForegroundColor Cyan
-Write-Host "Front..." -ForegroundColor Yellow
-Copy-SourceFiles -Source (Join-Path $repoRoot "front") -Dest (Join-Path $stageDir "front")
-Write-Host "Backend..." -ForegroundColor Yellow
-Copy-SourceFiles -Source (Join-Path $repoRoot "backend") -Dest (Join-Path $stageDir "backend")
-Write-Host "Desktop..." -ForegroundColor Yellow
-Copy-SourceFiles -Source (Join-Path $repoRoot "desktop") -Dest (Join-Path $stageDir "desktop")
+Write-Host "Front..." -Fore Yellow
+Copy-Tree -Src (Join-Path $repo 'front') -Dst (Join-Path $stage 'front')
 
-Write-Host "Compressing..." -ForegroundColor Yellow
-Compress-Archive -Path "$stageDir\*" -DestinationPath $outZip -CompressionLevel Optimal -Force
+Write-Host "Flutter..." -Fore Yellow
+Copy-Tree -Src (Join-Path $repo 'mobile_app\lib')    -Dst (Join-Path $stage 'mobile_app\lib')
+Copy-Tree -Src (Join-Path $repo 'mobile_app\test')   -Dst (Join-Path $stage 'mobile_app\test')
+Copy-Tree -Src (Join-Path $repo 'mobile_app\android') -Dst (Join-Path $stage 'mobile_app\android') -ExtraSkip @('build','app/src/main/assets/runtime-package','intermediates','outputs')
 
-Remove-Item $stageDir -Recurse -Force
+Write-Host "Backend..." -Fore Yellow
+Copy-Tree -Src (Join-Path $repo 'backend\cmd')      -Dst (Join-Path $stage 'backend\cmd')
+Copy-Tree -Src (Join-Path $repo 'backend\internal') -Dst (Join-Path $stage 'backend\internal')
+Copy-Tree -Src (Join-Path $repo 'backend\pkg')      -Dst (Join-Path $stage 'backend\pkg') -ExtraSkip @('gameplugin/sdk/game-plugin/node_modules')
+Copy-Tree -Src (Join-Path $repo 'backend\scripts')  -Dst (Join-Path $stage 'backend\scripts') -ExtraSkip @('.sidecar-build')
+foreach ($f in @('go.mod','appsettings.json','check_quality_tables.go')) {
+    $s = Join-Path $repo "backend\$f"; if (Test-Path $s) { Copy-Item $s (Join-Path $stage 'backend') -Force }
+}
 
-$size = (Get-Item $outZip).Length
-Write-Host ""
-Write-Host "=== Done ===" -ForegroundColor Green
-Write-Host "Archive: $outZip" -ForegroundColor Cyan
-Write-Host "Size: $([math]::Round($size / 1MB, 2)) MB" -ForegroundColor Cyan
+Write-Host "Desktop..." -Fore Yellow
+Copy-Tree -Src (Join-Path $repo 'desktop') -Dst (Join-Path $stage 'desktop') -ExtraSkip @('dist-types','release','build')
+
+Write-Host "Zipping..." -Fore Yellow
+Compress-Archive -Path "$stage\*" -DestinationPath $zip -CompressionLevel Optimal -Force
+Remove-Item $stage -Recurse -Force
+$z = (Get-Item $zip).Length
+Write-Host "Done: $zip ($([math]::Round($z/1MB,2)) MB)" -Fore Green
+Start-Process explorer.exe $repo

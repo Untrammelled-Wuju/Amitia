@@ -155,7 +155,6 @@ func main() {
 	defer func() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		_ = services.MCPConnections.Close(shutdownCtx)
 		_ = services.Extension.Close(shutdownCtx)
 	}()
 	surrealdbDB.SetSurrealRestartCallback(func() {
@@ -294,7 +293,6 @@ func main() {
 			log.Error("Plugin Runtime 关闭失败:", err)
 		}
 		pluginCancel()
-		_ = services.MCPConnections.Close(pluginShutdownCtx)
 		bootstrap.StopAll(context.Background())
 		log.Info("已停止接收新请求，等待现有请求完成...")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)

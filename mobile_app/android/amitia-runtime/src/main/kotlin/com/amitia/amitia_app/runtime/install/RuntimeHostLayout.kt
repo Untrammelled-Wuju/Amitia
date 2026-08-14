@@ -2,7 +2,7 @@ package com.amitia.amitia_app.runtime.install
 
 import java.io.File
 
-internal interface RuntimeHostLayout {
+interface RuntimeHostLayout {
     val controlRoot: File
 
     val rootfsRoot: File

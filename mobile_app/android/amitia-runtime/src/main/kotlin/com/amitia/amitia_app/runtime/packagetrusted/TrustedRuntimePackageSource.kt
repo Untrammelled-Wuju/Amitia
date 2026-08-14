@@ -2,7 +2,7 @@ package com.amitia.amitia_app.runtime.packagetrusted
 
 import java.io.File
 
-internal data class RuntimePackageReference(
+data class RuntimePackageReference(
     val packageFile: File,
     val expectedRuntimeVersion: String,
     val expectedPackageSha256: String,
@@ -10,7 +10,7 @@ internal data class RuntimePackageReference(
     val expectedArchitecture: String,
 )
 
-internal object TrustedRuntimePackageSource {
+object TrustedRuntimePackageSource {
 
     const val RUNTIME_VERSION: String = "1.0.0"
     const val PACKAGE_SHA256: String = "3f061598a5c0b815cdb1d536694d9e251652be13f301fb215f1d1aae0c5f7f57"

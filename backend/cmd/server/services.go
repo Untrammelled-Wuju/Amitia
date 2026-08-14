@@ -76,15 +76,6 @@ import (
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval/local"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/mcp"
-	mcpauth "github.com/u-ai/backend/internal/mcp/auth"
-	mcpclient "github.com/u-ai/backend/internal/mcp/client"
-	mcpdependency "github.com/u-ai/backend/internal/mcp/dependency"
-	mcpdiscovery "github.com/u-ai/backend/internal/mcp/discovery"
-	mcpfeatures "github.com/u-ai/backend/internal/mcp/features"
-	mcphost "github.com/u-ai/backend/internal/mcp/host"
-	mcpmanager "github.com/u-ai/backend/internal/mcp/manager"
-	"github.com/u-ai/backend/internal/mcp/protocol"
-	mcpskill "github.com/u-ai/backend/internal/mcp/skill"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/middleware/security"
 	migrationcore "github.com/u-ai/backend/internal/migration"
@@ -158,16 +149,6 @@ type AppServices struct {
 	PackageImporter              *importer.PackageImporter
 	Readiness                    *readiness.ReadinessService
 	SafeMode                     *readiness.SafeModeController
-	MCPRepository                *mcp.Repository
-	MCPConnections               *mcpmanager.Manager
-	MCPAuth                      *mcpauth.Manager
-	MCPDiscovery                 *mcpdiscovery.Service
-	MCPSkills                    *mcpskill.Runtime
-	MCPSecrets                   mcpauth.SecretStore
-	MCPFeatures                  *mcpfeatures.Service
-	MCPHost                      *mcphost.Service
-	MCPInteractions              *mcphost.Broker
-	MCPDependencies              *mcpdependency.Service
 	CanonicalStdioFactory        *extensionmcp.CanonicalStdioFactory
 	CanonicalStdioRegistry       *extensionmcp.CanonicalStdioRegistry
 	CanonicalStdioCaller         *CanonicalStdioCaller
@@ -331,6 +312,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithResourceResolver(resourceResolver)
 
 	kernelBuilder = applyAndroidLinuxProvider(kernelBuilder, bootstrap.RuntimeHost())
+	kernelBuilder = applyIOSNativeProvider(kernelBuilder, bootstrap.IOSNativeProvider())
 
 kernelContainer, err := kernelBuilder.Build(context.Background())
 	if err != nil {
@@ -566,47 +548,8 @@ kernelContainer, err := kernelBuilder.Build(context.Background())
 		panic("failed to init delivery store schema")
 	}
 	configureWorkflowHost(extensionRuntime, chatSvc, memSvc, deliveryStore, kernelContainer.HostEventEmitter)
-	mcpRepository := mcp.NewRepository(ctx.DB)
 	mcpDuplicateStore := mcp.NewDuplicateStore(ctx.DB)
 	kernelContainer.MCPDuplicateProvider = &mcpDuplicateMetricAdapter{store: mcpDuplicateStore}
-	mcpStorageDir := mcpDataDirectory(ctx)
-	secretStore, err := mcpauth.NewEncryptedFileStore(filepath.Join(mcpStorageDir, "mcp-secrets.json"), filepath.Join(mcpStorageDir, "mcp-secrets.key"))
-	if err != nil {
-		panic("failed to initialize MCP secret store")
-	}
-	oauthManager := mcpauth.NewManager(nil, secretStore, mcpRepository)
-	connectionManager := mcpmanager.New(mcpRepository, mcpmanager.DefaultFactory{Repository: mcpRepository, Secrets: secretStore, OAuth: oauthManager, Commands: commandResolver}, mcpmanager.Config{Connection: mcpclient.Config{ClientInfo: protocol.Implementation{Name: "amitia", Title: "Amitia", Version: "1.0.0"}, Capabilities: protocol.ClientCapabilities{Roots: map[string]any{"listChanged": true}, Sampling: map[string]any{}, Elicitation: map[string]any{}, Tasks: map[string]any{}}}})
-	discoveryService := mcpdiscovery.New(mcpRepository, connectionManager)
-	skillRuntime := mcpskill.New(mcpRepository, extensionRuntime, mcpskill.WithDuplicateRecorder(mcpDuplicateStore))
-	featureService := mcpfeatures.New(mcpRepository, connectionManager)
-	interactionBroker := mcphost.NewBroker(chatSvc)
-	hostService := mcphost.New(mcpRepository, connectionManager, mcphost.NewConfiguredRoots(mcpRepository), interactionBroker, interactionBroker)
-	dependencyService := mcpdependency.New(mcpRepository, connectionManager, discoveryService, skillRuntime, commandResolver)
-	extensionRuntime.AgentSkills.SetAfterRemove(func(ctx context.Context, extensionID string) {
-		_, _ = dependencyService.Uninstall(ctx, extensionID)
-	})
-	connectionManager.RegisterReadyHandler(func(readyCtx context.Context, serverID string) {
-		hostService.Attach(serverID)
-		if discoverErr := discoveryService.Discover(readyCtx, serverID); discoverErr != nil {
-			log.Warn("MCP capability discovery failed server=", serverID, " error=", discoverErr)
-			return
-		}
-		mcpPayload, _ := json.Marshal(map[string]interface{}{
-			"serverId":    serverID,
-			"status":      "connected",
-			"connectedAt": time.Now().UTC().Format(time.RFC3339),
-		})
-		mcpOpts := event.PublishOptions{
-			AggregateType: "mcp_server",
-			AggregateID:   serverID,
-		}
-		if kernelContainer.HostEventEmitter != nil {
-			_, _ = kernelContainer.HostEventEmitter.EmitMCPConnectionChanged(readyCtx, mcpPayload, mcpOpts)
-		}
-		if registerErr := skillRuntime.RegisterServer(readyCtx, serverID); registerErr != nil {
-			log.Warn("MCP skill registration failed server=", serverID, " error=", registerErr)
-		}
-	})
 	canonicalStdioFactory := extensionmcp.NewCanonicalStdioFactory(commandResolver)
 	canonicalStdioRegistry := extensionmcp.NewCanonicalStdioRegistry(canonicalStdioFactory)
 	canonicalRemoteFactory := extensionmcp.NewCanonicalRemoteFactory()
@@ -926,7 +869,7 @@ kernelContainer, err := kernelBuilder.Build(context.Background())
 
 	maintenanceHandler := maintenance.NewHandler(migrationRunner, nil, nil, nil)
 
-	return &AppServices{
+	services := &AppServices{
 		Graph:                        graphSvc,
 		ChatDeliveryAdapter:          deliveryAdapter,
 		Memory:                       memSvc,
@@ -972,16 +915,6 @@ kernelContainer, err := kernelBuilder.Build(context.Background())
 		PackageImporter:              importer.NewPackageImporterWithJournal(releaseRepo, releaseStoragePort, importer.NewDefaultPackageValidator(pathRegistry, importStagingRepo), pathRegistry, importStagingRepo, releasebuild.NewPublishJournalManager(releaseRepo)),
 		Readiness:                    readinessSvc,
 		SafeMode:                     safeModeCtrl,
-		MCPRepository:                mcpRepository,
-		MCPConnections:               connectionManager,
-		MCPAuth:                      oauthManager,
-		MCPDiscovery:                 discoveryService,
-		MCPSkills:                    skillRuntime,
-		MCPSecrets:                   secretStore,
-		MCPFeatures:                  featureService,
-		MCPHost:                      hostService,
-		MCPInteractions:              interactionBroker,
-		MCPDependencies:              dependencyService,
 		DesktopInstanceStore:         desktopInstanceStore,
 		DeviceRepository:             deviceRepo,
 		RuntimeDomainEventConsumer:   runtimeDomainEventConsumer,
@@ -992,7 +925,9 @@ kernelContainer, err := kernelBuilder.Build(context.Background())
 		PauseResumeService:           pauseResumeService,
 		BackgroundTaskCoordinator:   backgroundTaskCoordinator,
 	MultiAgentCoordinator:       multiAgentCoordinator,
-	}, nil
+	}
+	verifyCanonicalStartupOrPanic(services)
+	return services, nil
 }
 
 func mcpDataDirectory(ctx *app.AppContext) string {

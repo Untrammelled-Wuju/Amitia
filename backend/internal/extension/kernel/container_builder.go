@@ -76,6 +76,7 @@ type ContainerBuilder struct {
 	nodeEnvironmentResolver script_host.NodeEnvironmentResolver
 	hostArtifactResolver    script_host.ArtifactResolver
 	androidLinuxProvider    interface{}
+	iosNativeProvider       capability.IOSProvider
 	host                    runtimehost.RuntimeHost
 	searchConfig            search.Config
 	deepSearchTaskEntry     string
@@ -167,6 +168,11 @@ func (b *ContainerBuilder) WithImageProviderRegistry(reg *imageprovider.Registry
 
 func (b *ContainerBuilder) WithResourceResolver(resolver *resourceuri.PhysicalResolver) *ContainerBuilder {
 	b.resourceResolver = resolver
+	return b
+}
+
+func (b *ContainerBuilder) WithIOSNativeProvider(provider capability.IOSProvider) *ContainerBuilder {
+	b.iosNativeProvider = provider
 	return b
 }
 
@@ -602,6 +608,10 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}); err != nil {
 		return nil, fmt.Errorf("kernel: register production adapters: %w", err)
 	}
+
+	if err := registerIOSToolsIfPresent(toolRegistry, b.iosNativeProvider); err != nil {
+		return nil, fmt.Errorf("kernel: register ios native tools: %w", err)
+	}
 	if err := registerSearchTools(toolRegistry, b.searchConfig, kernelSecretBroker); err != nil {
 		return nil, err
 	}
@@ -1033,6 +1043,10 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		CanaryDualWriteManager:  canaryDualWriteMgr,
 		CanaryShadowManager:     canaryShadowMgr,
 		CanaryOwnershipResolver: canaryOwnershipResolver,
+	}
+
+	if b.iosNativeProvider != nil {
+		container.WireIOSPlatformAdapter(b.iosNativeProvider)
 	}
 
 	typedInstaller.SetContainer(container)

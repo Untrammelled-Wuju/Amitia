@@ -47,7 +47,6 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/management"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/imagegen"
-	"github.com/u-ai/backend/internal/mcpapi"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/internal/middleware/security"
@@ -487,9 +486,8 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		}
 	}
 	emote.RegisterRouter(apiGroup, services.Emote)
-		mcpapi.RegisterRouter(apiGroup, ctx, mcpapi.Services{Repository: services.MCPRepository, Connections: services.MCPConnections, Auth: services.MCPAuth, Discovery: services.MCPDiscovery, Skills: services.MCPSkills, Secrets: services.MCPSecrets, Extensions: services.Extension, Features: services.MCPFeatures, Dependencies: services.MCPDependencies, Interactions: services.MCPInteractions})
-		temporal.RegisterRouter(apiGroup, services.Temporal, services.RelTimeCoordinator)
-		mood.RegisterMoodRouter(apiGroup, ctx)
+	temporal.RegisterRouter(apiGroup, services.Temporal, services.RelTimeCoordinator)
+	mood.RegisterMoodRouter(apiGroup, ctx)
 	}
 
 	desktopPetWriteGroup := r.Group("/api")

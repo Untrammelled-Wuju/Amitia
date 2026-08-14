@@ -15,8 +15,10 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
-    kotlinOptions {
-        jvmTarget = JavaVersion.VERSION_17.toString()
+    kotlin {
+        compilerOptions {
+            jvmTarget.set(org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17)
+        }
     }
 
     defaultConfig {
@@ -74,12 +76,13 @@ android {
     packaging {
         jniLibs {
             useLegacyPackaging = true
-            pickFirsts += ["**/libc++_shared.so"]
+            pickFirsts.add("**/libc++_shared.so")
+            keepDebugSymbols.add("**/libamitia_proot.so")
+            excludes.add("lib/armeabi-v7a/**")
+            excludes.add("lib/x86_64/**")
+            excludes.add("lib/x86/**")
+            excludes.add("lib/armeabi/**")
         }
-    }
-
-    aaptOptions {
-        noCompress += listOf("zip", "so", "xz")
     }
 }
 

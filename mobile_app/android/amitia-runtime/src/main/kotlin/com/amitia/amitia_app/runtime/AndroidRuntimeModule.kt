@@ -46,7 +46,7 @@ object AndroidRuntimeModule {
 
     val prootComponent: ProotComponent? get() = cachedProotComponent
     internal val prootEnvironmentAssembler: com.amitia.amitia_app.runtime.proot.internal.ProotEnvironmentAssembler? get() = cachedProotEnvironmentAssembler
-    internal val runtimeHostLayout: com.amitia.amitia_app.runtime.install.RuntimeHostLayout? get() = cachedRuntimeHostLayout
+    val runtimeHostLayout: com.amitia.amitia_app.runtime.install.RuntimeHostLayout? get() = cachedRuntimeHostLayout
     internal val activeRuntimeManager: ActiveRuntimeManager? get() = cachedActiveRuntimeManager
     val prootRootfsPath: String? get() = cachedRootfsPath
     internal val manifestStore: RuntimeManifestStore? get() = cachedManifestStore
