@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/browser"
 	"github.com/u-ai/backend/internal/desktoppet/readiness"
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
@@ -487,4 +488,83 @@ func (c *desktopPetComponent) stopAllLocked(ctx context.Context, svc *AppService
 
 func logWorkerPanic(name string, r any) {
 	fmt.Printf("[worker-panic] %s recovered: %v\n", name, r)
+}
+
+type browserComponent struct {
+	services *AppServices
+	mu       sync.Mutex
+	started  bool
+	enabled  bool
+}
+
+func newBrowserComponent(services *AppServices) *browserComponent {
+	return &browserComponent{
+		services: services,
+		enabled:  config.AppCfg != nil && config.AppCfg.Providers.Browser.Enabled,
+	}
+}
+
+func (c *browserComponent) Descriptor() runtimeorchestrator.ComponentDescriptor {
+	return runtimeorchestrator.ComponentDescriptor{
+		ID:           runtimeorchestrator.ComponentBrowser,
+		Phase:        runtimeorchestrator.PhaseApplication,
+		Enabled:      c.enabled,
+		Required:     false,
+		Dependencies: []runtimeorchestrator.ComponentID{runtimeorchestrator.ComponentExtensionKernel},
+		Capabilities: []string{"browser.runtime"},
+		Profiles:     profilesLocalOnly,
+	}
+}
+
+func (c *browserComponent) Start(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.started || !c.enabled {
+		return nil
+	}
+	svc := c.services
+	if svc == nil || svc.Browser == nil {
+		return nil
+	}
+	info, err := svc.Browser.Runtime().Start(ctx)
+	if err != nil {
+		return fmt.Errorf("browser runtime start: %w", err)
+	}
+	_ = info
+	c.started = true
+	return nil
+}
+
+func (c *browserComponent) Ready(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.enabled {
+		return nil
+	}
+	svc := c.services
+	if svc == nil || svc.Browser == nil {
+		return nil
+	}
+	health := svc.Browser.Runtime().Health(ctx)
+	if health == browser.BrowserHealthUnhealthy || health == browser.BrowserHealthUnavailable {
+		return fmt.Errorf("browser runtime unhealthy: %s", string(health))
+	}
+	return nil
+}
+
+func (c *browserComponent) Stop(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if !c.started {
+		return nil
+	}
+	svc := c.services
+	if svc == nil || svc.Browser == nil {
+		return nil
+	}
+	if err := svc.Browser.Runtime().Stop(ctx); err != nil {
+		return fmt.Errorf("browser runtime stop: %w", err)
+	}
+	c.started = false
+	return nil
 }
