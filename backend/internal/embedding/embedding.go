@@ -4,12 +4,15 @@ package embedding
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/u-ai/backend/config"
@@ -18,7 +21,10 @@ import (
 )
 
 type Service struct {
-	db *gorm.DB
+	db              *gorm.DB
+	localMu         sync.Mutex
+	localProvider   localEmbeddingProvider
+	localFingerprint string
 }
 
 type embeddingData struct {
@@ -27,6 +33,24 @@ type embeddingData struct {
 
 func NewService(db *gorm.DB) *Service {
 	return &Service{db: db}
+}
+
+func (s *Service) Close() error {
+	s.localMu.Lock()
+	defer s.localMu.Unlock()
+	if s.localProvider != nil {
+		err := s.localProvider.Close()
+		s.localProvider = nil
+		return err
+	}
+	return nil
+}
+
+func embeddingConfigFingerprint(modelName, configJSON string) string {
+	h := sha256.New()
+	h.Write([]byte(modelName))
+	h.Write([]byte(configJSON))
+	return hex.EncodeToString(h.Sum(nil))
 }
 
 func (s *Service) getConfig() (baseURL, apiKey, modelName, apiType, providerConfigJSON string) {
@@ -279,7 +303,7 @@ func registerLocalEmbeddingProvider(providerType string, factory func(configJSON
 }
 
 func (s *Service) embedLocal(text string, modelName string, configJSON string) ([]float32, string, error) {
-	provider, err := getLocalEmbeddingProvider("llama_cpp", configJSON)
+	provider, err := s.getLocalEmbeddingProvider(modelName, configJSON)
 	if err != nil {
 		return nil, err.Error(), err
 	}
@@ -291,7 +315,7 @@ func (s *Service) embedLocal(text string, modelName string, configJSON string) (
 }
 
 func (s *Service) batchEmbedLocal(texts []string, modelName string, configJSON string) ([][]float32, error) {
-	provider, err := getLocalEmbeddingProvider("llama_cpp", configJSON)
+	provider, err := s.getLocalEmbeddingProvider(modelName, configJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -302,10 +326,32 @@ func (s *Service) batchEmbedLocal(texts []string, modelName string, configJSON s
 	return vectors, nil
 }
 
-func getLocalEmbeddingProvider(providerType string, configJSON string) (localEmbeddingProvider, error) {
-	factory, exists := localEmbeddingProviders[providerType]
+func (s *Service) getLocalEmbeddingProvider(modelName, configJSON string) (localEmbeddingProvider, error) {
+	factory, exists := localEmbeddingProviders["llama_cpp"]
 	if !exists {
-		return nil, fmt.Errorf("local embedding provider %s not registered", providerType)
+		return nil, fmt.Errorf("local embedding provider llama_cpp not registered")
 	}
-	return factory(configJSON)
+
+	fingerprint := embeddingConfigFingerprint(modelName, configJSON)
+
+	s.localMu.Lock()
+	defer s.localMu.Unlock()
+
+	if s.localProvider != nil && s.localFingerprint == fingerprint {
+		return s.localProvider, nil
+	}
+
+	if s.localProvider != nil {
+		_ = s.localProvider.Close()
+		s.localProvider = nil
+	}
+
+	provider, err := factory(configJSON)
+	if err != nil {
+		return nil, err
+	}
+
+	s.localProvider = provider
+	s.localFingerprint = fingerprint
+	return provider, nil
 }

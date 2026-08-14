@@ -26,6 +26,7 @@ func NewChatBackupContributor(db *gorm.DB) *ChatBackupContributor {
 
 func (c *ChatBackupContributor) ID() string   { return "chat" }
 func (c *ChatBackupContributor) Name() string { return "Chat" }
+func (c *ChatBackupContributor) Dependencies() []string { return []string{"character"} }
 
 type chatConversationV1 struct {
 	ID           string `json:"id"`
@@ -215,7 +216,10 @@ func (c *ChatBackupContributor) PreviewImport(ctx context.Context, req dataporta
 }
 
 func (c *ChatBackupContributor) Import(ctx context.Context, req dataportability.ImportRequest, in dataportability.BackupReader) error {
-	idMap := dataportability.NewImportIdentityMap()
+	idMap := req.IdentityMap
+	if idMap == nil {
+		idMap = dataportability.NewImportIdentityMap()
+	}
 
 	convRC, err := in.ReadComponent(ComponentIDChatConversations + ".v1")
 	if err != nil {
@@ -252,9 +256,10 @@ func (c *ChatBackupContributor) Import(ctx context.Context, req dataportability.
 				newID = uuid.New().String()
 			}
 		}
+		newCharID := idMap.RemapCharacterRef(rec.CharacterID)
 		conv := Conversation{
 			ID:           newID,
-			CharacterID:  rec.CharacterID,
+			CharacterID:  newCharID,
 			Title:        rec.Title,
 			Channel:      rec.Channel,
 			Source:       rec.Source,
