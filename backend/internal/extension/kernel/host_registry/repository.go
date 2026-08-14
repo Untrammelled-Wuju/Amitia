@@ -10,6 +10,8 @@ import (
 	"fmt"
 	"regexp"
 	"time"
+
+	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 var hashedTokenRe = regexp.MustCompile(`^[0-9a-f]{64}$`)
@@ -41,13 +43,14 @@ func (r *hostRepository) SaveHost(ctx context.Context, entry *HostEntry) error {
 	}
 	_, err = r.db.ExecContext(ctx,
 		`INSERT OR REPLACE INTO kernel_host_registry
-		(host_client_id, host_session_id, user_id, platform, device_id, window_id, capabilities, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		(host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		entry.HostClientID,
 		entry.HostSessionID,
-		entry.UserID,
-		entry.Platform,
-		entry.DeviceID,
+		entry.UserID.String(),
+		entry.Platform.String(),
+		entry.DeviceID.String(),
+		entry.RuntimeID.String(),
 		entry.WindowID,
 		string(caps),
 		entry.AuthenticatedAt.Format(time.RFC3339Nano),

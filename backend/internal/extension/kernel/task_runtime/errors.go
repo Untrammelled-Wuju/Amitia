@@ -99,6 +99,12 @@ func HTTPStatusForErrorCode(code TaskErrorCode) int {
 		return 503
 	case ErrTaskManualIntervention:
 		return 422
+	case ErrTaskExecutionPlacementInvalid, ErrTaskExecutionTargetInvalid:
+		return 400
+	case ErrTaskExecutionTargetUnresolved:
+		return 422
+	case ErrTaskExecutionUnsupported:
+		return 503
 	case ErrTaskPauseUnsupported, ErrTaskNotPaused:
 		return 409
 	case ErrTaskPauseInProgress:
