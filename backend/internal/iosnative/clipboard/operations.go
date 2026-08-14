@@ -7,3 +7,13 @@ const (
 	OperationWrite  = "clipboard.write"
 	OperationClear  = "clipboard.clear"
 )
+
+func Operations() []string {
+	return []string{
+		OperationStatus,
+		OperationDetect,
+		OperationRead,
+		OperationWrite,
+		OperationClear,
+	}
+}

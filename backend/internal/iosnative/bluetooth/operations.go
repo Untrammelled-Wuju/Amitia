@@ -21,3 +21,27 @@ const (
 	OperationPeripheralRoleStart = "bluetooth.peripheral_role.start"
 	OperationPeripheralRoleStop  = "bluetooth.peripheral_role.stop"
 )
+
+func Operations() []string {
+	return []string{
+		OperationStatus,
+		OperationScanStart,
+		OperationScanStop,
+		OperationPeripheralGet,
+		OperationPeripheralConnected,
+		OperationConnect,
+		OperationDisconnect,
+		OperationServicesDiscover,
+		OperationCharacteristicsDiscover,
+		OperationDescriptorsDiscover,
+		OperationCharacteristicRead,
+		OperationCharacteristicWrite,
+		OperationCharacteristicSubscribe,
+		OperationCharacteristicUnsubscribe,
+		OperationDescriptorRead,
+		OperationDescriptorWrite,
+		OperationRSSIRead,
+		OperationPeripheralRoleStart,
+		OperationPeripheralRoleStop,
+	}
+}

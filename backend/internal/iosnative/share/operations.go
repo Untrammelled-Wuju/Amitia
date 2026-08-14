@@ -11,3 +11,17 @@ const (
 	OperationStagingCleanup = "share.staging.cleanup"
 	OperationLimitedDelete  = "share.limited.delete"
 )
+
+func Operations() []string {
+	return []string{
+		OperationStatus,
+		OperationSend,
+		OperationPreviewSupported,
+		OperationReceivePending,
+		OperationReceiveConsume,
+		OperationReceivePeek,
+		OperationReceiveDismiss,
+		OperationStagingCleanup,
+		OperationLimitedDelete,
+	}
+}

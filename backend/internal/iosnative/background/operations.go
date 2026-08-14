@@ -35,3 +35,41 @@ const (
 	OperationFileMountRemove    = "file.mount.remove"
 	OperationFileGetCapabilities = "file.get_capabilities"
 )
+
+func Operations() []string {
+	return []string{
+		OperationStatus,
+		OperationTaskRegister,
+		OperationTaskSubmit,
+		OperationTaskCancel,
+		OperationTaskCancelAll,
+		OperationTaskGetPending,
+		OperationTaskProgress,
+		OperationTaskExpire,
+		OperationTaskComplete,
+		OperationTaskReconcile,
+		OperationRuntimeReadiness,
+		OperationRuntimeEnsure,
+		OperationCheckpointGet,
+		OperationCheckpointSet,
+		OperationCheckpointClear,
+		OperationBindingGet,
+		OperationFilePickImport,
+		OperationFilePickDirectory,
+		OperationFileMountReauthorize,
+		OperationFileAccessStat,
+		OperationFileAccessList,
+		OperationFileAccessRead,
+		OperationFileAccessWrite,
+		OperationFileAccessMkdir,
+		OperationFileAccessRename,
+		OperationFileAccessMove,
+		OperationFileAccessCopy,
+		OperationFileAccessDelete,
+		OperationFileExport,
+		OperationFileMountGet,
+		OperationFileMountList,
+		OperationFileMountRemove,
+		OperationFileGetCapabilities,
+	}
+}

@@ -13,3 +13,19 @@ const (
 	OperationPause              = "media.alarms.pause"
 	OperationResume             = "media.alarms.resume"
 )
+
+func Operations() []string {
+	return []string{
+		OperationStatus,
+		OperationAuthorizationStatus,
+		OperationAuthorizationRequest,
+		OperationList,
+		OperationGet,
+		OperationSchedule,
+		OperationStop,
+		OperationCancel,
+		OperationCountdown,
+		OperationPause,
+		OperationResume,
+	}
+}

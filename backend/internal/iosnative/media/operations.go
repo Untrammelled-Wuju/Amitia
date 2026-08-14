@@ -17,3 +17,23 @@ const (
 	OperationAudioStatus      = "media.audio.status"
 	OperationAudioRecord      = "media.audio.record"
 )
+
+func Operations() []string {
+	return []string{
+		OperationStatus,
+		OperationPhotosPick,
+		OperationPhotosStatus,
+		OperationPhotosList,
+		OperationPhotosGet,
+		OperationPhotosExport,
+		OperationPhotosSave,
+		OperationPhotosDelete,
+		OperationPhotosManageLimited,
+		OperationCameraStatus,
+		OperationCameraDevices,
+		OperationCameraCapturePhoto,
+		OperationCameraRecordVideo,
+		OperationAudioStatus,
+		OperationAudioRecord,
+	}
+}

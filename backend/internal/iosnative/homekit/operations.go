@@ -35,3 +35,33 @@ const (
 	OperationSetupPresent = "homekit.setup.present"
 	OperationEnableHomeKit = "homekit.enable"
 )
+
+func Operations() []string {
+	return []string{
+		OperationStatus,
+		OperationHomesList,
+		OperationHomesGet,
+		OperationRoomsList,
+		OperationZonesList,
+		OperationAccessoriesList,
+		OperationAccessoriesGet,
+		OperationServicesList,
+		OperationCharacteristicsList,
+		OperationCharacteristicsRead,
+		OperationCharacteristicsWrite,
+		OperationScenesList,
+		OperationScenesGet,
+		OperationScenesExecute,
+		OperationScenesCreate,
+		OperationScenesUpdate,
+		OperationScenesDelete,
+		OperationAutomationsList,
+		OperationAutomationsGet,
+		OperationAutomationsCreate,
+		OperationAutomationsUpdate,
+		OperationAutomationsEnable,
+		OperationAutomationsDelete,
+		OperationSetupPresent,
+		OperationEnableHomeKit,
+	}
+}

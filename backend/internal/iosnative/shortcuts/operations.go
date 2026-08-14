@@ -26,3 +26,32 @@ const (
 	OperationSettingsGet         = "shortcuts.settings.get"
 	OperationSettingsUpdate      = "shortcuts.settings.update"
 )
+
+func Operations() []string {
+	return []string{
+		OperationStatus,
+		OperationIntentRegister,
+		OperationIntentRevoke,
+		OperationIntentDonate,
+		OperationEntitiesCharacters,
+		OperationEntitiesConversations,
+		OperationEntitiesAlarms,
+		OperationEntitiesReminders,
+		OperationEntitiesActions,
+		OperationEntityResolve,
+		OperationEntitySuggestions,
+		OperationActionsCatalog,
+		OperationActionDescribe,
+		OperationActionExecute,
+		OperationActionConfirm,
+		OperationRuntimeReadiness,
+		OperationRuntimeEnsure,
+		OperationSnapshotGet,
+		OperationSnapshotRefresh,
+		OperationShortcutsProvider,
+		OperationShortcutsPhrase,
+		OperationShortcutsUpdate,
+		OperationSettingsGet,
+		OperationSettingsUpdate,
+	}
+}
