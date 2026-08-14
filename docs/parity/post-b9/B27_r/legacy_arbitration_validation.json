@@ -1,8 +1,0 @@
-{
-  "schemaVersion": 1,
-  "taskId": "B27",
-  "generatedAt": "2026-08-08T19:00:00+08:00",
-  "legacySelectors": [],
-  "newLegacySelectionReferenceCount": 0,
-  "notes": "No legacy arbitration or selection systems found. All arbitration logic is consolidated in decision.ArbitrationLayer."
-}

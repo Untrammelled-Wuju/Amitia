@@ -3,6 +3,8 @@ package permission
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 type PermissionDecision string
@@ -29,9 +31,36 @@ type InputBinding struct {
 }
 
 type TargetBinding struct {
-	TargetType string `json:"targetType"`
-	TargetID   string `json:"targetId"`
-	TargetHash string `json:"targetHash,omitempty"`
+	TargetType          string                    `json:"targetType"`
+	TargetID            string                    `json:"targetId"`
+	TargetHash          string                    `json:"targetHash,omitempty"`
+	ExecutionBindingKey string                    `json:"executionBindingKey,omitempty"`
+	ProviderID          string                    `json:"providerId,omitempty"`
+	ProviderInstanceID  string                    `json:"providerInstanceId,omitempty"`
+	DeviceID            runtimeidentity.DeviceID  `json:"deviceId,omitempty"`
+	RuntimeID           runtimeidentity.RuntimeID `json:"runtimeId,omitempty"`
+}
+
+func (b *TargetBinding) MatchesExecutionContext(ctx PermissionExecutionContext) bool {
+	if b == nil {
+		return true
+	}
+	if b.ProviderID != "" && b.ProviderID != ctx.ProviderID {
+		return false
+	}
+	if b.ProviderInstanceID != "" && b.ProviderInstanceID != ctx.ProviderInstanceID {
+		return false
+	}
+	if b.DeviceID != "" && b.DeviceID != ctx.DeviceID {
+		return false
+	}
+	if b.RuntimeID != "" && b.RuntimeID != ctx.RuntimeID {
+		return false
+	}
+	if b.ExecutionBindingKey != "" && b.ExecutionBindingKey != ctx.StableBindingKey() {
+		return false
+	}
+	return true
 }
 
 type PermissionGrant struct {
@@ -118,4 +147,24 @@ type StoredGrant struct {
 	Reason        string          `json:"reason"`
 	RevokedAt     *time.Time      `json:"revokedAt,omitempty"`
 	ManifestVer   string          `json:"manifestVer,omitempty"`
+}
+
+func TargetBindingFromExecutionContext(ctx PermissionExecutionContext) *TargetBinding {
+	if ctx.IsEmpty() {
+		return nil
+	}
+	return &TargetBinding{
+		TargetType:          "execution_context",
+		TargetID:            ctx.StableBindingKey(),
+		TargetHash:          ctx.StableBindingKey(),
+		ExecutionBindingKey: ctx.StableBindingKey(),
+		ProviderID:          ctx.ProviderID,
+		ProviderInstanceID:  ctx.ProviderInstanceID,
+		DeviceID:            ctx.DeviceID,
+		RuntimeID:           ctx.RuntimeID,
+	}
+}
+
+func NewExecutionTargetBinding(ctx PermissionExecutionContext) *TargetBinding {
+	return TargetBindingFromExecutionContext(ctx)
 }

@@ -1,4 +1,0 @@
-{
-  "changes": [],
-  "summary": "PASS_NO_CODE_CHANGE - 现有Agent/decision主循环已经能够根据Goal Progress重新进入Canonical Candidate→Scoring→Arbitration→BehaviorPlan链，并具备终态、Supersession和No-Progress保护(RepeatPenalty+FatiguePenalty)，无需创建Replanner或第二Decision Loop。GenerateCandidatesWithExcludes已支持排除失败候选。"
-}

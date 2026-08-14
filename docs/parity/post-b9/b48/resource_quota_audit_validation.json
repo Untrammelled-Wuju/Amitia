@@ -1,6 +1,0 @@
-{
-  "usageFactsInAudit": false,
-  "note": "B47 Audit 当前不包含 Resource Usage facts; 但 Invocation.ResultPolicy.MaxOutputBytes enforce 关联 status=failed",
-  "projectionIsSafe": true,
-  "auditCanCarryResourceDecision": "future via B141"
-}

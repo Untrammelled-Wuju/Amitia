@@ -520,6 +520,8 @@ var schemaMigrations = []string{
 		producer_id TEXT NOT NULL,
 		producer_type TEXT NOT NULL,
 		producer_generation INTEGER NOT NULL DEFAULT 0,
+		event_domain TEXT NOT NULL DEFAULT '',
+		causation_id TEXT NOT NULL DEFAULT '',
 		aggregate_type TEXT,
 		aggregate_id TEXT,
 		aggregate_version INTEGER,
@@ -1535,7 +1537,14 @@ var schemaMigrations = []string{
 		granted_scopes TEXT NOT NULL DEFAULT '[]',
 		created_at DATETIME NOT NULL,
 		expires_at DATETIME,
-		revoked_at DATETIME
+		revoked_at DATETIME,
+		execution_placement TEXT NOT NULL DEFAULT '',
+		execution_user_id TEXT NOT NULL DEFAULT '',
+		execution_device_id TEXT NOT NULL DEFAULT '',
+		execution_runtime_id TEXT NOT NULL DEFAULT '',
+		provider_id TEXT NOT NULL DEFAULT '',
+		provider_instance_id TEXT NOT NULL DEFAULT '',
+		execution_binding_key TEXT NOT NULL DEFAULT ''
 	)`,
 	`CREATE INDEX IF NOT EXISTS idx_kernel_perm_snaps_session ON kernel_permission_snapshots(session_id)`,
 	`CREATE INDEX IF NOT EXISTS idx_kernel_perm_snaps_ext_id ON kernel_permission_snapshots(extension_id)`,
@@ -1693,8 +1702,10 @@ var schemaMigrations = []string{
 		user_id TEXT NOT NULL DEFAULT '',
 		platform TEXT NOT NULL DEFAULT '',
 		device_id TEXT NOT NULL DEFAULT '',
+		runtime_id TEXT NOT NULL DEFAULT '',
 		window_id TEXT NOT NULL DEFAULT '',
 		capabilities TEXT NOT NULL DEFAULT '[]',
+		entry_kind TEXT NOT NULL DEFAULT 'ui_host',
 		authenticated_at TEXT NOT NULL,
 		last_heartbeat TEXT NOT NULL,
 		connection_state TEXT NOT NULL DEFAULT 'disconnected',
@@ -1705,6 +1716,9 @@ var schemaMigrations = []string{
 	`CREATE INDEX IF NOT EXISTS idx_kernel_host_reg_user_id ON kernel_host_registry(user_id)`,
 	`CREATE INDEX IF NOT EXISTS idx_kernel_host_reg_session ON kernel_host_registry(host_session_id)`,
 	`CREATE INDEX IF NOT EXISTS idx_kernel_host_reg_state ON kernel_host_registry(connection_state)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_host_reg_device ON kernel_host_registry(user_id, device_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_host_reg_runtime ON kernel_host_registry(user_id, device_id, runtime_id)`,
+	`CREATE INDEX IF NOT EXISTS idx_kernel_host_reg_kind_state ON kernel_host_registry(entry_kind, connection_state)`,
 
 	`CREATE TABLE IF NOT EXISTS kernel_final_gate_metrics (
 		id TEXT PRIMARY KEY,
@@ -2101,6 +2115,13 @@ var schemaMigrations = []string{
 	)`,
 	`CREATE INDEX IF NOT EXISTS idx_ext_exec_idemp_state_expires ON extension_execution_idempotency(state, expires_at)`,
 	`CREATE INDEX IF NOT EXISTS idx_ext_exec_idemp_created ON extension_execution_idempotency(created_at)`,
+	`ALTER TABLE kernel_permission_snapshots ADD COLUMN execution_placement TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE kernel_permission_snapshots ADD COLUMN execution_user_id TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE kernel_permission_snapshots ADD COLUMN execution_device_id TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE kernel_permission_snapshots ADD COLUMN execution_runtime_id TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE kernel_permission_snapshots ADD COLUMN provider_id TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE kernel_permission_snapshots ADD COLUMN provider_instance_id TEXT NOT NULL DEFAULT ''`,
+	`ALTER TABLE kernel_permission_snapshots ADD COLUMN execution_binding_key TEXT NOT NULL DEFAULT ''`,
 }
 
 type dbExecutor interface {

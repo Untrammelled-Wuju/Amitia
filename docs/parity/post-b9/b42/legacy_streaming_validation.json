@@ -1,7 +1,0 @@
-{
-  "schemaVersion": 1,
-  "taskId": "B42",
-  "existingLegacyStream": "developer_console.ConsoleStreamEvent (当前唯一 streaming 路径，非 Tool 层)",
-  "newLegacyStreamPath": 0,
-  "productionFakeStreaming": 0
-}

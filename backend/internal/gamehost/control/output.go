@@ -12,9 +12,21 @@ const (
 	KindCustomRPC  ControlOutputKind = "custom_rpc"
 	KindChannel    ControlOutputKind = "channel"
 	KindBinary     ControlOutputKind = "binary"
+	KindEffect     ControlOutputKind = "effect"
 	KindInternal   ControlOutputKind = "internal"
 	KindHostAction ControlOutputKind = "host_action"
 )
+
+var validOutputKinds = map[ControlOutputKind]bool{
+	KindCustomRPC:  true,
+	KindChannel:    true,
+	KindBinary:     true,
+	KindEffect:     true,
+}
+
+func IsValidPublicOutputKind(kind ControlOutputKind) bool {
+	return validOutputKinds[kind]
+}
 
 type ControlOutputIntent struct {
 	OutputID       string

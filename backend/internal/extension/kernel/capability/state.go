@@ -10,6 +10,14 @@ const (
 	HealthShutdown  HealthStatus = "shutdown"
 )
 
+func (s HealthStatus) IsValid() bool {
+	switch s {
+	case HealthUnknown, HealthReady, HealthDegraded, HealthUnhealthy, HealthShutdown:
+		return true
+	}
+	return false
+}
+
 type ToolState struct {
 	Installed         bool         `json:"installed"`
 	ModuleEnabled     bool         `json:"moduleEnabled"`

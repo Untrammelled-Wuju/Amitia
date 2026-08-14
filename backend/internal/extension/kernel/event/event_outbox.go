@@ -27,8 +27,10 @@ type OutboxRecord struct {
 	EventTypeID          EventTypeID
 	EventVersion         int
 	ProducerID           string
-	ProducerType         string
+	ProducerType         EventProducerType
 	ProducerGeneration   int64
+	Domain               EventDomain
+	CausationID          string
 	AggregateType        string
 	AggregateID          string
 	AggregateVersion     *int64
@@ -131,15 +133,17 @@ func (r *OutboxRepository) EnqueueTx(ctx context.Context, tx OutboxTx, record Ou
 	_, err := tx.ExecContext(ctx, `
 		INSERT INTO extension_event_outbox
 		(outbox_id, event_id, event_type_id, event_version, producer_id, producer_type, producer_generation,
+		 event_domain, causation_id,
 		 aggregate_type, aggregate_id, aggregate_version, partition_key, ordering_key, idempotency_key,
 		 scope_snapshot_id, permission_snapshot_id, trace_id, operation_id, parent_event_id, depth,
 		 occurred_at, published_at, payload_json, metadata_json, payload_hash, definition_hash,
 		 status, available_at, created_at, updated_at, error_code, error_message, lease_owner, lease_expires_at, dispatched_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(idempotency_key) DO NOTHING
 	`,
 		record.OutboxID, record.EventID, string(record.EventTypeID), record.EventVersion,
-		record.ProducerID, record.ProducerType, record.ProducerGeneration,
+		record.ProducerID, record.ProducerType.String(), record.ProducerGeneration,
+		record.Domain.String(), record.CausationID,
 		record.AggregateType, record.AggregateID, aggVersion,
 		record.PartitionKey, record.OrderingKey, record.IdempotencyKey,
 		record.ScopeSnapshotID, record.PermissionSnapshotID, record.TraceID, record.OperationID, parentID, record.Depth,
@@ -362,6 +366,7 @@ func (r *OutboxRepository) DeleteOlderThan(ctx context.Context, before time.Time
 
 const outboxSelectQuery = `
 SELECT outbox_id, event_id, event_type_id, event_version, producer_id, producer_type, producer_generation,
+ event_domain, causation_id,
  aggregate_type, aggregate_id, aggregate_version, partition_key, ordering_key, idempotency_key,
  scope_snapshot_id, permission_snapshot_id, trace_id, operation_id, parent_event_id, depth,
  occurred_at, published_at, payload_json, metadata_json, payload_hash, definition_hash,
@@ -379,12 +384,15 @@ func scanOutboxRecord(rows *sql.Rows) (OutboxRecord, error) {
 	var payload, metadata, defHash string
 	var status string
 	var eventTypeID string
+	var producerTypeStr string
+	var domainStr string
 	var aggregateType, aggregateID, partitionKey, orderingKey sql.NullString
 	var scopeSnapshotID, permissionSnapshotID, traceID, operationID sql.NullString
 	var errorCode, errorMessage, leaseOwner sql.NullString
 	var err error
 	err = rows.Scan(
-		&rec.OutboxID, &rec.EventID, &eventTypeID, &rec.EventVersion, &rec.ProducerID, &rec.ProducerType, &rec.ProducerGeneration,
+		&rec.OutboxID, &rec.EventID, &eventTypeID, &rec.EventVersion, &rec.ProducerID, &producerTypeStr, &rec.ProducerGeneration,
+		&domainStr, &rec.CausationID,
 		&aggregateType, &aggregateID, &aggVersion, &partitionKey, &orderingKey, &rec.IdempotencyKey,
 		&scopeSnapshotID, &permissionSnapshotID, &traceID, &operationID, &parentID, &rec.Depth,
 		&rec.OccurredAt, &publishedAt, &payload, &metadata, &rec.PayloadHash, &defHash,
@@ -394,6 +402,8 @@ func scanOutboxRecord(rows *sql.Rows) (OutboxRecord, error) {
 		return rec, err
 	}
 	rec.EventTypeID = EventTypeID(eventTypeID)
+	rec.ProducerType = ParseEventProducerType(producerTypeStr)
+	rec.Domain = ParseEventDomain(domainStr)
 	rec.Payload = json.RawMessage(payload)
 	rec.Metadata = json.RawMessage(metadata)
 	rec.DefinitionHash = defHash
@@ -442,11 +452,14 @@ func scanOutboxRecordRow(row *sql.Row) (OutboxRecord, error) {
 	var payload, metadata, defHash string
 	var status string
 	var eventTypeID string
+	var producerTypeStr string
+	var domainStr string
 	var aggregateType, aggregateID, partitionKey, orderingKey sql.NullString
 	var scopeSnapshotID, permissionSnapshotID, traceID, operationID sql.NullString
 	var errorCode, errorMessage, leaseOwner sql.NullString
 	err := row.Scan(
-		&rec.OutboxID, &rec.EventID, &eventTypeID, &rec.EventVersion, &rec.ProducerID, &rec.ProducerType, &rec.ProducerGeneration,
+		&rec.OutboxID, &rec.EventID, &eventTypeID, &rec.EventVersion, &rec.ProducerID, &producerTypeStr, &rec.ProducerGeneration,
+		&domainStr, &rec.CausationID,
 		&aggregateType, &aggregateID, &aggVersion, &partitionKey, &orderingKey, &rec.IdempotencyKey,
 		&scopeSnapshotID, &permissionSnapshotID, &traceID, &operationID, &parentID, &rec.Depth,
 		&rec.OccurredAt, &publishedAt, &payload, &metadata, &rec.PayloadHash, &defHash,
@@ -456,6 +469,8 @@ func scanOutboxRecordRow(row *sql.Row) (OutboxRecord, error) {
 		return rec, fmt.Errorf("%w: %v", ErrDeliveryNotFound, err)
 	}
 	rec.EventTypeID = EventTypeID(eventTypeID)
+	rec.ProducerType = ParseEventProducerType(producerTypeStr)
+	rec.Domain = ParseEventDomain(domainStr)
 	rec.Payload = json.RawMessage(payload)
 	rec.Metadata = json.RawMessage(metadata)
 	rec.DefinitionHash = defHash

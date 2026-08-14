@@ -1,9 +1,0 @@
-{
-  "schemaVersion": 1,
-  "taskId": "B41",
-  "permissionAuthority": "PermissionBroker (permission.PermissionGate)",
-  "scopeAuthority": "ScopeGate (execution.ScopeGate)",
-  "contextSavesGrantAuthority": false,
-  "permissionBypass": false,
-  "note": "PermissionSnapshotID/ScopeSnapshotID in ToolInvocationContext are transparent references for audit, not authority."
-}

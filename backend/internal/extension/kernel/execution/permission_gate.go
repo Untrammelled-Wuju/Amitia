@@ -59,14 +59,16 @@ func (g *PermissionGate) evaluateWithBroker(ctx context.Context, tool capability
 
 	var input json.RawMessage
 	request := permission.PermissionEvaluationRequest{
-		Subject:        subject,
-		Requirements:   requirements,
-		InvocationID:   inv.InvocationID,
-		Input:          input,
-		RiskLevel:      string(tool.RiskLevel),
-		IsBackground:   inv.IsBackground,
-		ScopeSnapshotID: inv.ScopeSnapshotID,
-		ApprovalMode:   string(inv.ApprovalMode),
+		Subject:          subject,
+		Requirements:     requirements,
+		InvocationID:     inv.InvocationID,
+		Input:            input,
+		RiskLevel:        string(tool.RiskLevel),
+		IsBackground:     inv.IsBackground,
+		ScopeSnapshotID:  inv.ScopeSnapshotID,
+		ApprovalMode:     string(inv.ApprovalMode),
+		Generation:       inv.Generation,
+		ExecutionContext: permission.ExecutionContextFromInvocation(inv),
 	}
 
 	result := g.Broker.Evaluate(ctx, request)

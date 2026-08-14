@@ -237,6 +237,19 @@ func (sm *StreamManager) RemoveByRuntime(ctx context.Context, runtimeID domain.R
 	return count
 }
 
+func (sm *StreamManager) CountByRuntime(runtimeID domain.RuntimeInstanceID) int {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	count := 0
+	for _, ss := range sm.streams {
+		if ss.key.runtimeID == runtimeID {
+			count++
+		}
+	}
+	return count
+}
+
 func (sm *StreamManager) RemoveByService(ctx context.Context, runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID) int {
 	sm.mu.Lock()
 	defer sm.mu.Unlock()

@@ -5,6 +5,8 @@ package auth
 import (
 	"context"
 	"errors"
+
+	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 type ActorType string
@@ -22,17 +24,18 @@ const (
 )
 
 type ActorContext struct {
-	ActorType      ActorType
-	UserID         string
-	DeviceID       string
-	RuntimeID      string
-	Roles          []string
-	Permissions    []string
-	AuthMethod     string
-	SessionID      string
-	CorrelationID  string
-	RequestID      string
-	IsLocalTrusted bool
+	ActorType        ActorType
+	UserID           runtimeidentity.UserID
+	DeviceID         runtimeidentity.DeviceID
+	RuntimeID        runtimeidentity.RuntimeID
+	Roles            []string
+	Permissions      []string
+	AuthMethod       string
+	SessionID        string
+	RuntimeSessionID runtimeidentity.RuntimeSessionID
+	CorrelationID    string
+	RequestID        string
+	IsLocalTrusted   bool
 }
 
 type contextKey struct{}
@@ -94,4 +97,16 @@ func (a *ActorContext) Clone() *ActorContext {
 		clone.Permissions = append([]string(nil), a.Permissions...)
 	}
 	return &clone
+}
+
+func (a *ActorContext) RuntimeIdentity() runtimeidentity.Identity {
+	if a == nil {
+		return runtimeidentity.Identity{}
+	}
+	return runtimeidentity.Identity{
+		UserID:           a.UserID,
+		DeviceID:         a.DeviceID,
+		RuntimeID:        a.RuntimeID,
+		RuntimeSessionID: a.RuntimeSessionID,
+	}
 }

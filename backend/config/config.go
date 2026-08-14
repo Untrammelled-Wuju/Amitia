@@ -33,6 +33,23 @@ type ProvidersConfig struct {
 	ScriptRuntime ScriptRuntimeProviderConfig `mapstructure:"scriptRuntime"`
 	VectorStore   VectorStoreProviderConfig   `mapstructure:"vectorStore"`
 	GraphStore    GraphStoreProviderConfig    `mapstructure:"graphStore"`
+	Browser       BrowserRuntimeProviderConfig `mapstructure:"browser"`
+}
+
+type BrowserRuntimeProviderConfig struct {
+	Enabled                  bool     `mapstructure:"enabled"`
+	ExecutablePath           string   `mapstructure:"executablePath"`
+	Headless                 bool     `mapstructure:"headless"`
+	UserDataRoot             string   `mapstructure:"userDataRoot"`
+	StartupTimeoutSec        int      `mapstructure:"startupTimeoutSec"`
+	ShutdownTimeoutSec       int      `mapstructure:"shutdownTimeoutSec"`
+	MaxBrowserMemoryBytes    int64    `mapstructure:"maxBrowserMemoryBytes"`
+	AllowedSchemes           []string `mapstructure:"allowedSchemes"`
+	MaxSessions              int      `mapstructure:"maxSessions"`
+	MaxTabsPerSession        int      `mapstructure:"maxTabsPerSession"`
+	MaxTabsTotal             int      `mapstructure:"maxTabsTotal"`
+	NavigationTimeoutSec     int      `mapstructure:"navigationTimeoutSec"`
+	MaxNavigationTimeoutSec  int      `mapstructure:"maxNavigationTimeoutSec"`
 }
 
 type ScriptRuntimeProviderConfig struct {
@@ -273,6 +290,10 @@ func (c *Config) SurrealDBConfig() *SurrealConfig {
 	return &c.Providers.GraphStore.SurrealDB
 }
 
+func (c *Config) BrowserRuntimeConfig() *BrowserRuntimeProviderConfig {
+	return &c.Providers.Browser
+}
+
 var AppCfg *Config
 
 var providerIDRegex = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]{2,127}$`)
@@ -427,6 +448,19 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("providers.graphStore.surrealdb.dataPath", "data/graph.db")
 	v.SetDefault("providers.graphStore.surrealdb.enabled", true)
 	v.SetDefault("providers.graphStore.surrealdb.binaryPath", "")
+	v.SetDefault("providers.browser.enabled", false)
+	v.SetDefault("providers.browser.executablePath", "")
+	v.SetDefault("providers.browser.headless", true)
+	v.SetDefault("providers.browser.userDataRoot", "")
+	v.SetDefault("providers.browser.startupTimeoutSec", 30)
+	v.SetDefault("providers.browser.shutdownTimeoutSec", 5)
+	v.SetDefault("providers.browser.maxBrowserMemoryBytes", 0)
+	v.SetDefault("providers.browser.allowedSchemes", []string{"http", "https"})
+	v.SetDefault("providers.browser.maxSessions", 8)
+	v.SetDefault("providers.browser.maxTabsPerSession", 8)
+	v.SetDefault("providers.browser.maxTabsTotal", 32)
+	v.SetDefault("providers.browser.navigationTimeoutSec", 30)
+	v.SetDefault("providers.browser.maxNavigationTimeoutSec", 120)
 	v.SetDefault("components.pluginHost.enabled", true)
 	v.SetDefault("components.pluginHost.entryUri", "")
 	v.SetDefault("components.pluginHost.workUri", "")

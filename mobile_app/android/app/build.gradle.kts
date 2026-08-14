@@ -99,14 +99,34 @@ tasks.register<Copy>("copyFrozenRuntimePackage") {
     group = "candidate"
     description = "Copies the Step 7 frozen Runtime Package into APK assets"
     dependsOn("cleanFrozenRuntimePackage")
-    if (frozenRuntimePackagePath != null && file(frozenRuntimePackagePath).exists()) {
-        from(file(frozenRuntimePackagePath)) {
+    if (frozenRuntimePackagePath != null && frozenRuntimePackageSha256 != null) {
+        val sourceFile = file(frozenRuntimePackagePath)
+        if (!sourceFile.exists()) {
+            throw GradleException("copyFrozenRuntimePackage: FROZEN_RUNTIME_PACKAGE_PATH declared but file missing: $frozenRuntimePackagePath")
+        }
+        doFirst {
+            val actualSha = sourceFile.inputStream().use { input ->
+                val digest = java.security.MessageDigest.getInstance("SHA-256")
+                val buffer = ByteArray(8192)
+                var read: Int
+                while (input.read(buffer).also { read = it } != -1) {
+                    digest.update(buffer, 0, read)
+                }
+                digest.digest().joinToString("") { "%02x".format(it) }
+            }
+            if (!actualSha.equals(frozenRuntimePackageSha256, ignoreCase = true)) {
+                throw GradleException("copyFrozenRuntimePackage: SHA256 mismatch for $frozenRuntimePackagePath: expected=$frozenRuntimePackageSha256 actual=$actualSha")
+            }
+        }
+        from(sourceFile) {
             rename { "amitia-runtime-1.0.0.zip" }
         }
         into(layout.projectDirectory.dir("src/main/assets/runtime-package"))
+    } else if (frozenRuntimePackagePath != null || frozenRuntimePackageSha256 != null) {
+        throw GradleException("copyFrozenRuntimePackage: Both FROZEN_RUNTIME_PACKAGE_PATH and FROZEN_RUNTIME_PACKAGE_SHA256 must be set for Candidate build")
     } else {
         doLast {
-            logger.lifecycle("copyFrozenRuntimePackage: FROZEN_RUNTIME_PACKAGE_PATH not set or file missing, skipping asset embed")
+            logger.lifecycle("copyFrozenRuntimePackage: Candidate environment not set, skipping asset embed")
         }
     }
 }

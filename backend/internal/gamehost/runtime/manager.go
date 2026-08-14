@@ -27,6 +27,9 @@ type Manager struct {
 
 	idGenerator RuntimeIDGenerator
 	clock       func() time.Time
+
+	generations      map[domain.RuntimeInstanceID]int64
+	lifecycleIntents map[domain.RuntimeInstanceID]string
 }
 
 type ManagerOptions struct {
@@ -44,10 +47,12 @@ func NewManager(opts ManagerOptions) *Manager {
 		clock = time.Now
 	}
 	return &Manager{
-		runtimes:    make(map[domain.RuntimeInstanceID]*domain.RuntimeInstance),
-		byPlugin:    make(map[domain.PluginID]map[domain.RuntimeInstanceID]struct{}),
-		idGenerator: idGen,
-		clock:       clock,
+		runtimes:         make(map[domain.RuntimeInstanceID]*domain.RuntimeInstance),
+		byPlugin:         make(map[domain.PluginID]map[domain.RuntimeInstanceID]struct{}),
+		idGenerator:      idGen,
+		clock:            clock,
+		generations:      make(map[domain.RuntimeInstanceID]int64),
+		lifecycleIntents: make(map[domain.RuntimeInstanceID]string),
 	}
 }
 
@@ -227,6 +232,48 @@ func (m *Manager) RemoveRuntime(runtimeID domain.RuntimeInstanceID) error {
 			delete(m.byPlugin, pluginID)
 		}
 	}
+	return nil
+}
+
+func (m *Manager) GetCurrentGeneration(runtimeID domain.RuntimeInstanceID) (int64, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if _, ok := m.runtimes[runtimeID]; !ok {
+		return 0, &TopologyError{Code: ErrNotFound, Message: "runtime not found: " + string(runtimeID)}
+	}
+	return m.generations[runtimeID], nil
+}
+
+func (m *Manager) AllocateGeneration(runtimeID domain.RuntimeInstanceID) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, ok := m.runtimes[runtimeID]; !ok {
+		return 0, &TopologyError{Code: ErrNotFound, Message: "runtime not found: " + string(runtimeID)}
+	}
+	m.generations[runtimeID]++
+	return m.generations[runtimeID], nil
+}
+
+func (m *Manager) GetLifecycleIntent(runtimeID domain.RuntimeInstanceID) (string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	if _, ok := m.runtimes[runtimeID]; !ok {
+		return "", &TopologyError{Code: ErrNotFound, Message: "runtime not found: " + string(runtimeID)}
+	}
+	return m.lifecycleIntents[runtimeID], nil
+}
+
+func (m *Manager) SetLifecycleIntent(runtimeID domain.RuntimeInstanceID, intent string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, ok := m.runtimes[runtimeID]; !ok {
+		return &TopologyError{Code: ErrNotFound, Message: "runtime not found: " + string(runtimeID)}
+	}
+	m.lifecycleIntents[runtimeID] = intent
 	return nil
 }
 

@@ -1,8 +1,0 @@
-{
-  "separation": "Resource Quota (B48) ≠ Concurrency (B46 slot)",
-  "dimensions": {
-    "concurrencySlots": "B46 — parallel execution count, not bytes/ms",
-    "resourceQuota": "B48 — per-dimension usage bound (bytes/ms/%)"
-  },
-  "sharedLimits": "None — no cross-counting between resource bytes and concurrency slots"
-}

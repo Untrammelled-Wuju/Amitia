@@ -6,10 +6,63 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 )
+
+type EventProducerType string
+
+const (
+	EventProducerTypeSystem             EventProducerType = "system"
+	EventProducerTypeExtension          EventProducerType = "extension"
+	EventProducerTypeDevice             EventProducerType = "device"
+	EventProducerTypeRuntime            EventProducerType = "runtime"
+	EventProducerTypeTask               EventProducerType = "task"
+	EventProducerTypeCapabilityProvider EventProducerType = "capability_provider"
+	EventProducerTypeSync               EventProducerType = "sync"
+)
+
+func (t EventProducerType) String() string {
+	return string(t)
+}
+
+func (t EventProducerType) IsValid() bool {
+	switch t {
+	case EventProducerTypeSystem, EventProducerTypeExtension, EventProducerTypeDevice,
+		EventProducerTypeRuntime, EventProducerTypeTask, EventProducerTypeCapabilityProvider,
+		EventProducerTypeSync:
+		return true
+	}
+	return false
+}
+
+func ParseEventProducerType(raw string) EventProducerType {
+	switch strings.TrimSpace(strings.ToLower(raw)) {
+	case "host":
+		return EventProducerTypeSystem
+	case "system":
+		return EventProducerTypeSystem
+	case "extension":
+		return EventProducerTypeExtension
+	case "device":
+		return EventProducerTypeDevice
+	case "runtime":
+		return EventProducerTypeRuntime
+	case "task":
+		return EventProducerTypeTask
+	case "capability_provider":
+		return EventProducerTypeCapabilityProvider
+	case "sync":
+		return EventProducerTypeSync
+	}
+	return EventProducerTypeSystem
+}
+
+func ParseProducerType(raw string) EventProducerType {
+	return ParseEventProducerType(raw)
+}
 
 // EventEnvelope 是后续 Device/Task/Sync 可靠事件的公共 envelope 基线。
 // 后续不得另建独立的 envelope 类型作为跨设备事件权威结构。
@@ -18,8 +71,10 @@ type EventEnvelope struct {
 	EventTypeID          EventTypeID
 	EventVersion         int
 	ProducerID           string
-	ProducerType         string
+	ProducerType         EventProducerType
 	ProducerGeneration   int64
+	Domain               EventDomain
+	CausationID          string
 	AggregateType        string
 	AggregateID          string
 	AggregateVersion     *int64
@@ -44,7 +99,7 @@ type EventEnvelope struct {
 	DefinitionHash       string
 }
 
-func NewEventEnvelope(typeID EventTypeID, version int, producerID, producerType string, payload json.RawMessage) EventEnvelope {
+func NewEventEnvelope(typeID EventTypeID, version int, producerID string, producerType EventProducerType, payload json.RawMessage) EventEnvelope {
 	now := time.Now().UTC()
 	env := EventEnvelope{
 		EventID:      newEventID(),
@@ -76,9 +131,9 @@ func computePayloadHash(payload json.RawMessage) string {
 
 func (e EventEnvelope) computeDefaultIdempotencyKey() string {
 	if e.AggregateID != "" {
-		return fmt.Sprintf("%s:%s:%s:%d", e.EventTypeID, e.AggregateID, e.PayloadHash, e.AggregateVersionOrZero())
+		return BuildIdempotencyKey(string(e.EventTypeID), e.AggregateID, e.PayloadHash, fmt.Sprintf("%d", e.AggregateVersionOrZero()))
 	}
-	return fmt.Sprintf("%s:%s:%d", e.EventTypeID, e.PayloadHash, e.OccurredAt.UnixNano())
+	return BuildIdempotencyKey(string(e.EventTypeID), e.PayloadHash, fmt.Sprintf("%d", e.OccurredAt.UnixNano()))
 }
 
 func (e EventEnvelope) AggregateVersionOrZero() int64 {
@@ -88,11 +143,15 @@ func (e EventEnvelope) AggregateVersionOrZero() int64 {
 	return *e.AggregateVersion
 }
 
-func (e EventEnvelope) WithProducer(producerID, producerType string, generation int64) EventEnvelope {
+func (e EventEnvelope) WithProducer(producerID string, producerType EventProducerType, generation int64) EventEnvelope {
 	e.ProducerID = producerID
 	e.ProducerType = producerType
 	e.ProducerGeneration = generation
 	return e
+}
+
+func (e EventEnvelope) WithProducerString(producerID, producerType string, generation int64) EventEnvelope {
+	return e.WithProducer(producerID, ParseProducerType(producerType), generation)
 }
 
 func (e EventEnvelope) WithProducerDetail(extensionID, moduleID string, generation int64) EventEnvelope {
@@ -103,7 +162,7 @@ func (e EventEnvelope) WithProducerDetail(extensionID, moduleID string, generati
 		e.ProducerID = extensionID
 	}
 	if e.ProducerType == "" {
-		e.ProducerType = "extension"
+		e.ProducerType = EventProducerTypeExtension
 	}
 	return e
 }
@@ -151,9 +210,47 @@ func (e EventEnvelope) WithTrace(traceID, operationID string) EventEnvelope {
 }
 
 func (e EventEnvelope) WithParent(parentEventID string, parentDepth int) EventEnvelope {
-	e.ParentEventID = &parentEventID
-	e.Depth = parentDepth + 1
+	return e.WithCausation("", parentEventID, parentDepth)
+}
+
+func (e EventEnvelope) WithCausation(causationID, parentEventID string, parentDepth int) EventEnvelope {
+	e.CausationID = strings.TrimSpace(causationID)
+	if parentEventID != "" {
+		e.ParentEventID = &parentEventID
+		e.Depth = parentDepth + 1
+	}
 	return e
+}
+
+func (e EventEnvelope) WithDomain(domain EventDomain) EventEnvelope {
+	e.Domain = domain
+	return e
+}
+
+func (e EventEnvelope) EffectiveDomain() EventDomain {
+	if e.Domain != "" {
+		if e.Domain.IsValid() {
+			return e.Domain
+		}
+	}
+	if domain := e.EventTypeID.Domain(); domain != "" {
+		return domain
+	}
+	switch e.ProducerType {
+	case EventProducerTypeExtension:
+		return EventDomainExtension
+	case EventProducerTypeDevice:
+		return EventDomainDevice
+	case EventProducerTypeRuntime:
+		return EventDomainRuntime
+	case EventProducerTypeTask:
+		return EventDomainTask
+	case EventProducerTypeCapabilityProvider:
+		return EventDomainCapabilityProvider
+	case EventProducerTypeSync:
+		return EventDomainSync
+	}
+	return EventDomainSystem
 }
 
 func (e EventEnvelope) WithMetadata(metadata json.RawMessage) EventEnvelope {
@@ -177,6 +274,9 @@ func (e EventEnvelope) Validate(def EventTypeDefinition, maxDepth int) error {
 	if e.ProducerID == "" {
 		return errors.New("event: producer id required")
 	}
+	if e.ProducerType != "" && !e.ProducerType.IsValid() {
+		return fmt.Errorf("event: invalid producer type: %s", e.ProducerType)
+	}
 	if int64(len(e.Payload)) > def.MaxPayloadBytes {
 		return fmt.Errorf("event: payload exceeds %d bytes", def.MaxPayloadBytes)
 	}
@@ -189,15 +289,24 @@ func (e EventEnvelope) Validate(def EventTypeDefinition, maxDepth int) error {
 	if e.PayloadHash == "" {
 		return errors.New("event: payload hash required")
 	}
+	if e.Domain != "" && !e.Domain.IsValid() {
+		return fmt.Errorf("event: invalid domain: %s", e.Domain)
+	}
 	return nil
 }
 
 func (e EventEnvelope) IsFromExtension(extensionID string) bool {
-	return e.ProducerType == "extension" && e.ProducerID == extensionID
+	return e.ProducerType == EventProducerTypeExtension && e.ProducerID == extensionID
 }
 
 func (e EventEnvelope) IsFromHost() bool {
-	return e.ProducerType == "host" || e.ProducerType == "system"
+	normalized := ParseEventProducerType(e.ProducerType.String())
+	return normalized == EventProducerTypeSystem
+}
+
+func (e EventEnvelope) IsFromSystem() bool {
+	normalized := ParseEventProducerType(e.ProducerType.String())
+	return normalized == EventProducerTypeSystem
 }
 
 func (e EventEnvelope) ChainKey() string {

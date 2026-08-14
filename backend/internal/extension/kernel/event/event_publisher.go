@@ -13,10 +13,12 @@ import (
 
 type PublishOptions struct {
 	ProducerID           string
-	ProducerType         string
+	ProducerType         EventProducerType
 	ProducerGeneration   int64
 	ProducerExtensionID  string
 	ProducerModuleID     string
+	Domain               EventDomain
+	CausationID          string
 	AggregateType        string
 	AggregateID          string
 	AggregateVersion     *int64
@@ -81,6 +83,9 @@ func (p *EventPublisher) Publish(ctx context.Context, typeID EventTypeID, versio
 	if opts.ProducerExtensionID != "" {
 		envelope = envelope.WithProducerDetail(opts.ProducerExtensionID, opts.ProducerModuleID, opts.ProducerGeneration)
 	}
+	if opts.Domain != "" {
+		envelope = envelope.WithDomain(opts.Domain)
+	}
 	if opts.AggregateType != "" || opts.AggregateID != "" {
 		envelope = envelope.WithAggregate(opts.AggregateType, opts.AggregateID, opts.AggregateVersion)
 	}
@@ -92,7 +97,7 @@ func (p *EventPublisher) Publish(ctx context.Context, typeID EventTypeID, versio
 	}
 	envelope = envelope.WithTrace(opts.TraceID, opts.OperationID)
 	if opts.ParentEventID != "" {
-		envelope = envelope.WithParent(opts.ParentEventID, opts.ParentDepth)
+		envelope = envelope.WithCausation(opts.CausationID, opts.ParentEventID, opts.ParentDepth)
 	}
 	if len(opts.Metadata) > 0 {
 		envelope = envelope.WithMetadata(opts.Metadata)
@@ -127,6 +132,8 @@ func (p *EventPublisher) Publish(ctx context.Context, typeID EventTypeID, versio
 		ProducerID:           envelope.ProducerID,
 		ProducerType:         envelope.ProducerType,
 		ProducerGeneration:   envelope.ProducerGeneration,
+		Domain:               envelope.Domain,
+		CausationID:          envelope.CausationID,
 		AggregateType:        envelope.AggregateType,
 		AggregateID:          envelope.AggregateID,
 		AggregateVersion:     envelope.AggregateVersion,
@@ -179,6 +186,9 @@ func (p *EventPublisher) PublishTx(ctx context.Context, tx *sql.Tx, typeID Event
 	if opts.ProducerExtensionID != "" {
 		envelope = envelope.WithProducerDetail(opts.ProducerExtensionID, opts.ProducerModuleID, opts.ProducerGeneration)
 	}
+	if opts.Domain != "" {
+		envelope = envelope.WithDomain(opts.Domain)
+	}
 	if opts.AggregateType != "" || opts.AggregateID != "" {
 		envelope = envelope.WithAggregate(opts.AggregateType, opts.AggregateID, opts.AggregateVersion)
 	}
@@ -190,7 +200,7 @@ func (p *EventPublisher) PublishTx(ctx context.Context, tx *sql.Tx, typeID Event
 	}
 	envelope = envelope.WithTrace(opts.TraceID, opts.OperationID)
 	if opts.ParentEventID != "" {
-		envelope = envelope.WithParent(opts.ParentEventID, opts.ParentDepth)
+		envelope = envelope.WithCausation(opts.CausationID, opts.ParentEventID, opts.ParentDepth)
 	}
 	if len(opts.Metadata) > 0 {
 		envelope = envelope.WithMetadata(opts.Metadata)
@@ -222,6 +232,8 @@ func (p *EventPublisher) PublishTx(ctx context.Context, tx *sql.Tx, typeID Event
 		ProducerID:           envelope.ProducerID,
 		ProducerType:         envelope.ProducerType,
 		ProducerGeneration:   envelope.ProducerGeneration,
+		Domain:               envelope.Domain,
+		CausationID:          envelope.CausationID,
 		AggregateType:        envelope.AggregateType,
 		AggregateID:          envelope.AggregateID,
 		AggregateVersion:     envelope.AggregateVersion,
@@ -263,20 +275,20 @@ func (p *EventPublisher) validateProducer(ctx context.Context, def EventTypeDefi
 		return errors.New("event: producer type required")
 	}
 	if def.ProducerPolicy.RequireSystemTrust {
-		isSystem := opts.ProducerType == "host" || opts.ProducerType == "system"
-		if !isSystem {
+		normalizedType := ParseEventProducerType(opts.ProducerType.String())
+		if normalizedType != EventProducerTypeSystem {
 			return fmt.Errorf("%w: %s requires system trust", ErrProducerDenied, def.EventTypeID)
 		}
 	}
-	if def.ProducerPolicy.RequireNamespaceMatch && opts.ProducerType == "extension" {
+	if def.ProducerPolicy.RequireNamespaceMatch && opts.ProducerType == EventProducerTypeExtension {
 		if !def.EventTypeID.IsExtensionNamespace(opts.ProducerID) && !def.EventTypeID.IsHostNamespace() {
 			return fmt.Errorf("%w: extension %s cannot publish %s", ErrNamespaceDenied, opts.ProducerID, def.EventTypeID)
 		}
 	}
 	if len(def.ProducerPolicy.AllowedProducers) > 0 {
 		allowed := false
-		for _, p := range def.ProducerPolicy.AllowedProducers {
-			if p == opts.ProducerType || p == opts.ProducerID {
+		for _, ap := range def.ProducerPolicy.AllowedProducers {
+			if ap == opts.ProducerType.String() || ap == opts.ProducerID {
 				allowed = true
 				break
 			}

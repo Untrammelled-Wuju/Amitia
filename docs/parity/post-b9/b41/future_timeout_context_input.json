@@ -1,7 +1,0 @@
-{
-  "schemaVersion": 1,
-  "taskId": "B41",
-  "nextOwner": "B44 timeout step",
-  "contextContract": "ToolExecutionPolicy.Timeout in ToolDefinition; InvocationContext.ExpiresAt; CancellationController+TimeoutController in pipeline.",
-  "remainingGap": "Active timeout policy enforcement (dynamic timeout selection based on runtime health) is future timeout step scope."
-}

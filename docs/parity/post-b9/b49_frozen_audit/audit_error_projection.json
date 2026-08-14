@@ -1,5 +1,0 @@
-{
-  "fields": ["ErrorCode", "ErrorSummary", "Retryable", "Category"],
-  "forbidden": ["Raw provider object", "Stack trace", "Secret material", "Full internal error detail"],
-  "currentImplementation": "ExecutionPipeline includes error code; sanitizer truncates sensitive fields"
-}

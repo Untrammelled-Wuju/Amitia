@@ -17,6 +17,9 @@ func TestPluginOutputGate_RaceOutputVsTakeover(t *testing.T) {
 	rt.SetActive("rt-1", true)
 	rt.SetReady("rt-1", true)
 
+	gen := NewFakeGenerationReader()
+	gen.SetGeneration("rt-1", 1)
+
 	mgr := NewControlAuthorityManager(ControlAuthorityManagerOptions{})
 	_, _ = mgr.Create(context.Background(), "rt-1", "plugin-1")
 	_, _ = mgr.Transition(context.Background(), "rt-1", TransitionRequest{
@@ -25,13 +28,21 @@ func TestPluginOutputGate_RaceOutputVsTakeover(t *testing.T) {
 		Reason: ReasonRuntimeLifecycle,
 	})
 
-	gate := NewPluginOutputGate(PluginOutputGateOptions{
-		Clock:         func() time.Time { return time.Now().UTC() },
-		Topology:      topo,
-		RuntimeReader: rt,
-		PermChecker:   NewFakeEffPermChecker(),
-		Authority:     mgr,
+	gate, err := NewPluginOutputGate(PluginOutputGateOptions{
+		Clock:            func() time.Time { return time.Now().UTC() },
+		Topology:         topo,
+		RuntimeReader:    rt,
+		GenerationReader: gen,
+		PermChecker:      NewFakeEffPermChecker(),
+		PolicyChecker:    NoopHostPolicyChecker{},
+		Authority:        mgr,
+		Audit:            NewInMemoryAuthorityAuditSink(),
+		Metrics:          NewFakeMetrics(),
+		CommitBarrier:    NoopCommitBarrier{},
 	})
+	if err != nil {
+		t.Fatalf("failed to create gate: %v", err)
+	}
 
 	var wg sync.WaitGroup
 	const N = 200
@@ -71,19 +82,30 @@ func TestPluginOutputGate_RaceOutputVsPermissionRevoke(t *testing.T) {
 	rt.SetActive("rt-1", true)
 	rt.SetReady("rt-1", true)
 
+	gen := NewFakeGenerationReader()
+	gen.SetGeneration("rt-1", 1)
+
 	auth := NewFakeAuthorityReader()
 	auth.SetSnapshot("rt-1", domain.ControlModePluginControl, 5)
 
 	perm := NewFakeEffPermChecker()
 	perm.SetAllowed("rt-1//plugin-1", true)
 
-	gate := NewPluginOutputGate(PluginOutputGateOptions{
-		Clock:         func() time.Time { return time.Now().UTC() },
-		Topology:      topo,
-		RuntimeReader: rt,
-		PermChecker:   perm,
-		Authority:     auth,
+	gate, err := NewPluginOutputGate(PluginOutputGateOptions{
+		Clock:            func() time.Time { return time.Now().UTC() },
+		Topology:         topo,
+		RuntimeReader:    rt,
+		GenerationReader: gen,
+		PermChecker:      perm,
+		PolicyChecker:    NoopHostPolicyChecker{},
+		Authority:        auth,
+		Audit:            NewInMemoryAuthorityAuditSink(),
+		Metrics:          NewFakeMetrics(),
+		CommitBarrier:    NoopCommitBarrier{},
 	})
+	if err != nil {
+		t.Fatalf("failed to create gate: %v", err)
+	}
 
 	var wg sync.WaitGroup
 	const N = 100
@@ -115,16 +137,27 @@ func TestPluginOutputGate_RaceOutputVsRuntimeStop(t *testing.T) {
 	rt.SetReady("rt-1", true)
 	rt.SetStopping("rt-1", false)
 
+	gen := NewFakeGenerationReader()
+	gen.SetGeneration("rt-1", 1)
+
 	auth := NewFakeAuthorityReader()
 	auth.SetSnapshot("rt-1", domain.ControlModePluginControl, 5)
 
-	gate := NewPluginOutputGate(PluginOutputGateOptions{
-		Clock:         func() time.Time { return time.Now().UTC() },
-		Topology:      topo,
-		RuntimeReader: rt,
-		PermChecker:   NewFakeEffPermChecker(),
-		Authority:     auth,
+	gate, err := NewPluginOutputGate(PluginOutputGateOptions{
+		Clock:            func() time.Time { return time.Now().UTC() },
+		Topology:         topo,
+		RuntimeReader:    rt,
+		GenerationReader: gen,
+		PermChecker:      NewFakeEffPermChecker(),
+		PolicyChecker:    NoopHostPolicyChecker{},
+		Authority:        auth,
+		Audit:            NewInMemoryAuthorityAuditSink(),
+		Metrics:          NewFakeMetrics(),
+		CommitBarrier:    NoopCommitBarrier{},
 	})
+	if err != nil {
+		t.Fatalf("failed to create gate: %v", err)
+	}
 
 	var wg sync.WaitGroup
 	const N = 100
@@ -155,16 +188,27 @@ func TestPluginOutputGate_RaceGateCloseVsOutput(t *testing.T) {
 	rt.SetActive("rt-1", true)
 	rt.SetReady("rt-1", true)
 
+	gen := NewFakeGenerationReader()
+	gen.SetGeneration("rt-1", 1)
+
 	auth := NewFakeAuthorityReader()
 	auth.SetSnapshot("rt-1", domain.ControlModePluginControl, 5)
 
-	gate := NewPluginOutputGate(PluginOutputGateOptions{
-		Clock:         func() time.Time { return time.Now().UTC() },
-		Topology:      topo,
-		RuntimeReader: rt,
-		PermChecker:   NewFakeEffPermChecker(),
-		Authority:     auth,
+	gate, err := NewPluginOutputGate(PluginOutputGateOptions{
+		Clock:            func() time.Time { return time.Now().UTC() },
+		Topology:         topo,
+		RuntimeReader:    rt,
+		GenerationReader: gen,
+		PermChecker:      NewFakeEffPermChecker(),
+		PolicyChecker:    NoopHostPolicyChecker{},
+		Authority:        auth,
+		Audit:            NewInMemoryAuthorityAuditSink(),
+		Metrics:          NewFakeMetrics(),
+		CommitBarrier:    NoopCommitBarrier{},
 	})
+	if err != nil {
+		t.Fatalf("failed to create gate: %v", err)
+	}
 
 	var wg sync.WaitGroup
 	const N = 100

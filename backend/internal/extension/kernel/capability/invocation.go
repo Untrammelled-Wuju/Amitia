@@ -4,6 +4,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 type InvocationSource string
@@ -52,6 +54,33 @@ func (m ApprovalMode) Valid() bool {
 	}
 }
 
+type InvocationExecutionTarget struct {
+	Placement string `json:"placement,omitempty"`
+
+	UserID           runtimeidentity.UserID           `json:"userId,omitempty"`
+	DeviceID         runtimeidentity.DeviceID         `json:"deviceId,omitempty"`
+	RuntimeID        runtimeidentity.RuntimeID        `json:"runtimeId,omitempty"`
+	RuntimeSessionID runtimeidentity.RuntimeSessionID `json:"runtimeSessionId,omitempty"`
+
+	ProviderID         string `json:"providerId,omitempty"`
+	ProviderInstanceID string `json:"providerInstanceId,omitempty"`
+
+	ExtensionID string `json:"extensionId,omitempty"`
+	ModuleID    string `json:"moduleId,omitempty"`
+}
+
+func (t InvocationExecutionTarget) IsZero() bool {
+	return t.Placement == "" &&
+		t.UserID == "" &&
+		t.DeviceID == "" &&
+		t.RuntimeID == "" &&
+		t.RuntimeSessionID == "" &&
+		t.ProviderID == "" &&
+		t.ProviderInstanceID == "" &&
+		t.ExtensionID == "" &&
+		t.ModuleID == ""
+}
+
 type ToolInvocationContext struct {
 	InvocationID   string           `json:"invocationId"`
 	ParentID       string           `json:"parentId,omitempty"`
@@ -80,6 +109,8 @@ type ToolInvocationContext struct {
 	PermissionSnapshotID string `json:"permissionSnapshotId,omitempty"`
 
 	IsBackground bool `json:"isBackground,omitempty"`
+
+	ExecutionTarget InvocationExecutionTarget `json:"executionTarget,omitempty"`
 
 	Metadata map[string]any `json:"metadata,omitempty"`
 }
@@ -121,6 +152,8 @@ type ToolInvocationOptions struct {
 
 	IsBackground bool
 
+	ExecutionTarget InvocationExecutionTarget
+
 	Metadata map[string]any
 }
 
@@ -139,26 +172,27 @@ func NewOperationID() string {
 func NewToolInvocationContext(opts ToolInvocationOptions) ToolInvocationContext {
 	invocation := ToolInvocationContext{
 		InvocationID:         NewInvocationID(),
-		ExternalCallID:        opts.ExternalCallID,
-		UserID:                opts.UserID,
-		CharacterID:           opts.CharacterID,
-		ConversationID:        opts.ConversationID,
-		Channel:               opts.Channel,
-		SessionID:             opts.SessionID,
-		ExtensionID:           opts.ExtensionID,
-		ModuleID:              opts.ModuleID,
-		Generation:            opts.Generation,
-		Source:                opts.Source,
-		ApprovalMode:          opts.ApprovalMode,
-		ExpiresAt:             opts.ExpiresAt,
-		IdempotencyKey:        opts.IdempotencyKey,
-		CorrelationID:         opts.CorrelationID,
-		CausationID:           opts.CausationID,
-		ScheduleID:            opts.ScheduleID,
-		TriggerID:             opts.TriggerID,
-		ScopeSnapshotID:       opts.ScopeSnapshotID,
-		PermissionSnapshotID:  opts.PermissionSnapshotID,
-		IsBackground:          opts.IsBackground,
+		ExternalCallID:       opts.ExternalCallID,
+		UserID:               opts.UserID,
+		CharacterID:          opts.CharacterID,
+		ConversationID:       opts.ConversationID,
+		Channel:              opts.Channel,
+		SessionID:            opts.SessionID,
+		ExtensionID:          opts.ExtensionID,
+		ModuleID:             opts.ModuleID,
+		Generation:           opts.Generation,
+		Source:               opts.Source,
+		ApprovalMode:         opts.ApprovalMode,
+		ExpiresAt:            opts.ExpiresAt,
+		IdempotencyKey:       opts.IdempotencyKey,
+		CorrelationID:        opts.CorrelationID,
+		CausationID:          opts.CausationID,
+		ScheduleID:           opts.ScheduleID,
+		TriggerID:            opts.TriggerID,
+		ScopeSnapshotID:      opts.ScopeSnapshotID,
+		PermissionSnapshotID: opts.PermissionSnapshotID,
+		IsBackground:         opts.IsBackground,
+		ExecutionTarget:      opts.ExecutionTarget,
 	}
 
 	if opts.Metadata != nil {
@@ -171,6 +205,9 @@ func NewToolInvocationContext(opts ToolInvocationOptions) ToolInvocationContext 
 			invocation.RootID = opts.Parent.RootID
 		} else {
 			invocation.RootID = opts.Parent.InvocationID
+		}
+		if invocation.ExecutionTarget.IsZero() && !opts.Parent.ExecutionTarget.IsZero() {
+			invocation.ExecutionTarget = opts.Parent.ExecutionTarget
 		}
 		if opts.OperationID == "" && opts.Parent.OperationID != "" {
 			invocation.OperationID = opts.Parent.OperationID

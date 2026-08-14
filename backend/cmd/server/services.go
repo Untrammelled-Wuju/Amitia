@@ -1,4 +1,4 @@
-﻿// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
 package main
 
@@ -17,6 +17,7 @@ import (
 	"github.com/u-ai/backend/config"
 
 	"github.com/u-ai/backend/internal/belief"
+	"github.com/u-ai/backend/internal/browser"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/companion"
@@ -65,10 +66,10 @@ import (
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/extension/kernel"
-	"github.com/u-ai/backend/internal/extension/kernel/skill"
-	extensionmcp "github.com/u-ai/backend/internal/extension/kernel/mcp"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
+	extensionmcp "github.com/u-ai/backend/internal/extension/kernel/mcp"
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
+	"github.com/u-ai/backend/internal/extension/kernel/skill"
 	"github.com/u-ai/backend/internal/gamehost/management"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/imagegen"
@@ -76,6 +77,7 @@ import (
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval/local"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/mcp"
+	"github.com/u-ai/backend/internal/media"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/middleware/security"
 	migrationcore "github.com/u-ai/backend/internal/migration"
@@ -90,11 +92,13 @@ import (
 	"github.com/u-ai/backend/internal/qdrant"
 	"github.com/u-ai/backend/internal/queue"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
+	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/safety"
-	"github.com/u-ai/backend/internal/search"
 	"github.com/u-ai/backend/internal/scriptruntime/commandenv"
+	"github.com/u-ai/backend/internal/search"
 	"github.com/u-ai/backend/internal/temporal"
 	"github.com/u-ai/backend/internal/vision"
+	"github.com/u-ai/backend/internal/workspace"
 	"github.com/u-ai/backend/internal/worldbook"
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
@@ -103,9 +107,12 @@ import (
 )
 
 type AppServices struct {
+	RuntimeProfile               runtimeprofile.Profile
+	RuntimePolicy                runtimeprofile.Policy
 	DeliveryStore                *delivery.SQLiteDeliveryStore
 	ChatDeliveryAdapter          chat.DeliveryStore
 	DeliveryWorker               *delivery.Worker
+	Browser                      browser.BrowserProvider
 	Graph                        graph.Service
 	Memory                       memory.Service
 	Profile                      profile.Service
@@ -161,9 +168,12 @@ type AppServices struct {
 	MigrationLock                *migrationcore.PersistentLock
 	RecoveryDescriptor           *interaction.RecoveryDescriptorService
 	PauseResumeService           *interaction.PauseResumeService
-	BackgroundTaskCoordinator   *interaction.BackgroundTaskCoordinator
-	MultiAgentCoordinator       *interaction.MultiAgentCoordinator
+	BackgroundTaskCoordinator    *interaction.BackgroundTaskCoordinator
+	MultiAgentCoordinator        *interaction.MultiAgentCoordinator
 	GameCenterService            *management.GameCenterManagementService
+	MediaService                 *media.Service
+	WorkspaceRegistry            *workspace.Registry
+	WorkspaceService             *workspace.Service
 }
 
 type RuntimeOrchestrator interface {
@@ -204,7 +214,7 @@ func (a reflectionMemoryServiceAdapter) SubmitReflectionCandidate(req interactio
 	return err
 }
 
-func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runtimeBootstrap) (*AppServices, error) {
+func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runtimeBootstrap, profile runtimeprofile.Profile, policy runtimeprofile.Policy) (*AppServices, error) {
 	if config.AppCfg == nil {
 		config.AppCfg = &config.Config{}
 	}
@@ -295,6 +305,30 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		}
 	}
 
+	var workspaceRegistry *workspace.Registry
+	var workspaceService *workspace.Service
+	if config.AppCfg != nil && config.AppCfg.Storage.DataDir != "" {
+		workspaceRegistry, workspaceService, err = buildWorkspaceServices(config.AppCfg.Storage.DataDir)
+		if err != nil {
+			return nil, fmt.Errorf("initialize workspace services: %w", err)
+		}
+	}
+
+	var mediaService *media.Service
+	if bootstrap != nil {
+		mediaService = buildMediaService(bootstrap.RuntimeHost(), config.AppCfg.Storage.DataDir)
+	}
+
+	var browserProvider browser.BrowserProvider
+	if config.AppCfg != nil && config.AppCfg.Providers.Browser.Enabled {
+		browserProvider, err = buildProductionBrowserProvider(config.AppCfg)
+		if err != nil {
+			return nil, fmt.Errorf("browser provider init failed: %w", err)
+		}
+	} else {
+		browserProvider = browser.NewDisabledProvider()
+	}
+
 	kernelBuilder := kernel.NewContainerBuilder().
 		WithDBPath(kernelDBPath).
 		WithExtensionRoot(kernelRoot).
@@ -308,7 +342,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithVisionService(visionSvc).
 		WithImageGenService(imagegenSvc).
 		WithImageProviderRegistry(providerRegistry).
-		WithResourceResolver(resourceResolver)
+		WithResourceResolver(resourceResolver).
+		WithMediaService(mediaService).
+		WithWorkspaceService(workspaceService).
+		WithBrowserProvider(browserProvider)
 
 	if bootstrap != nil {
 		kernelBuilder.WithRuntimeHost(bootstrap.RuntimeHost())
@@ -316,7 +353,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		kernelBuilder = applyIOSNativeProvider(kernelBuilder, bootstrap.IOSNativeProvider())
 	}
 
-kernelContainer, err := kernelBuilder.Build(context.Background())
+	kernelContainer, err := kernelBuilder.Build(context.Background())
 	if err != nil {
 		log.Error("failed to initialize kernel container:", err)
 		panic("failed to initialize kernel container")
@@ -328,6 +365,12 @@ kernelContainer, err := kernelBuilder.Build(context.Background())
 	}
 	if err := kernelContainer.Recover(context.Background()); err != nil {
 		log.Warn("kernel recovery warning: ", err)
+	}
+	if kernelContainer.GameHost != nil {
+		if err := kernelContainer.GameHost.Start(context.Background()); err != nil {
+			log.Error("gamehost start failed: ", err)
+			panic("failed to start gamehost")
+		}
 	}
 	if kernelContainer.UpdateRecoveryManager != nil {
 		recoveryActions, err := kernelContainer.UpdateRecoveryManager.ScanOnStartup(context.Background())
@@ -872,6 +915,8 @@ kernelContainer, err := kernelBuilder.Build(context.Background())
 	maintenanceHandler := maintenance.NewHandler(migrationRunner, nil, nil, nil)
 
 	services := &AppServices{
+		RuntimeProfile:               profile,
+		RuntimePolicy:                policy,
 		Graph:                        graphSvc,
 		ChatDeliveryAdapter:          deliveryAdapter,
 		Memory:                       memSvc,
@@ -925,8 +970,12 @@ kernelContainer, err := kernelBuilder.Build(context.Background())
 		MigrationLock:                migrationLock,
 		RecoveryDescriptor:           recoveryDescriptor,
 		PauseResumeService:           pauseResumeService,
-		BackgroundTaskCoordinator:   backgroundTaskCoordinator,
-	MultiAgentCoordinator:       multiAgentCoordinator,
+		BackgroundTaskCoordinator:    backgroundTaskCoordinator,
+		MultiAgentCoordinator:        multiAgentCoordinator,
+		Browser:                      browserProvider,
+		MediaService:                 mediaService,
+		WorkspaceRegistry:            workspaceRegistry,
+		WorkspaceService:             workspaceService,
 	}
 	verifyCanonicalStartupOrPanic(services)
 	return services, nil

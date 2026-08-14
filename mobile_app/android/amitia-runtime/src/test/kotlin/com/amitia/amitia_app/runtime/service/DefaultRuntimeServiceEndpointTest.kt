@@ -25,12 +25,13 @@ class DefaultRuntimeServiceEndpointTest {
 
         endpoint.addListener(l1)
         endpoint.addListener(l2)
-        endpoint.notify(RuntimeServiceHostEvent.ExpectedStopped)
+        val event = RuntimeServiceHostEvent.ExpectedStopped(generation = 1L)
+        endpoint.notify(event)
 
         assertEquals(1, received1.size)
         assertEquals(1, received2.size)
-        assertEquals(RuntimeServiceHostEvent.ExpectedStopped, received1[0])
-        assertEquals(RuntimeServiceHostEvent.ExpectedStopped, received2[0])
+        assertEquals(event, received1[0])
+        assertEquals(event, received2[0])
     }
 
     @Test
@@ -40,7 +41,7 @@ class DefaultRuntimeServiceEndpointTest {
         val listener = RuntimeServiceHostListener { received.add(it) }
         endpoint.addListener(listener)
         endpoint.removeListener(listener)
-        endpoint.notify(RuntimeServiceHostEvent.ExpectedStopped)
+        endpoint.notify(RuntimeServiceHostEvent.ExpectedStopped(generation = 1L))
         assertEquals(0, received.size)
     }
 
@@ -54,7 +55,7 @@ class DefaultRuntimeServiceEndpointTest {
 
         endpoint.addListener(badListener)
         endpoint.addListener(goodListener)
-        endpoint.notify(RuntimeServiceHostEvent.ExpectedStopped)
+        endpoint.notify(RuntimeServiceHostEvent.ExpectedStopped(generation = 1L))
         assertEquals(1, received.size)
     }
 

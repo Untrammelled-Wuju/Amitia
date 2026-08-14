@@ -27,7 +27,7 @@ func (f *fakeCrashContext) IsRuntimeShutdown() bool {
 }
 
 func TestCrashHandler_ExpectedExit(t *testing.T) {
-	handler := NewCrashHandler(nil)
+	handler := NewCrashHandler(nil, nil, nil)
 
 	ctx := context.Background()
 	decision, err := handler.HandleProcessExit(ctx, ProcessExitEvent{
@@ -52,7 +52,7 @@ func TestCrashHandler_ExpectedExit(t *testing.T) {
 }
 
 func TestCrashHandler_UnexpectedExit(t *testing.T) {
-	handler := NewCrashHandler(nil)
+	handler := NewCrashHandler(nil, nil, nil)
 
 	ctx := context.Background()
 	decision, err := handler.HandleProcessExit(ctx, ProcessExitEvent{
@@ -75,7 +75,7 @@ func TestCrashHandler_UnexpectedExit(t *testing.T) {
 
 func TestCrashHandler_RuntimeStopping(t *testing.T) {
 	ctx := &fakeCrashContext{stopping: true}
-	handler := NewCrashHandler(ctx)
+	handler := NewCrashHandler(ctx, nil, nil)
 
 	bg := context.Background()
 	decision, err := handler.HandleProcessExit(bg, ProcessExitEvent{
@@ -98,7 +98,7 @@ func TestCrashHandler_RuntimeStopping(t *testing.T) {
 
 func TestCrashHandler_RuntimeTerminal(t *testing.T) {
 	ctx := &fakeCrashContext{terminal: true}
-	handler := NewCrashHandler(ctx)
+	handler := NewCrashHandler(ctx, nil, nil)
 
 	bg := context.Background()
 	decision, err := handler.HandleProcessExit(bg, ProcessExitEvent{
@@ -121,7 +121,7 @@ func TestCrashHandler_RuntimeTerminal(t *testing.T) {
 
 func TestCrashHandler_BackendShutdown(t *testing.T) {
 	ctx := &fakeCrashContext{shutdown: true}
-	handler := NewCrashHandler(ctx)
+	handler := NewCrashHandler(ctx, nil, nil)
 
 	bg := context.Background()
 	decision, err := handler.HandleProcessExit(bg, ProcessExitEvent{

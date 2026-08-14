@@ -1,5 +1,0 @@
-[
-  {"gap": "Full cancellation control propagation across all adapters", "reasonDeferred": "B41 focuses on context contract only.", "futureOwner": "B42/B43 streaming+cancellation step"},
-  {"gap": "Timeout policy enforcement beyond size/deadline", "reasonDeferred": "Timeout ctrl exists; full ownership at timeout step.", "futureOwner": "B44 timeout step"},
-  {"gap": "Attempt context (retry identity)", "reasonDeferred": "Retry ctrl exists; full retry semantics are retry-step scope.", "futureOwner": "B50 retry step"}
-]

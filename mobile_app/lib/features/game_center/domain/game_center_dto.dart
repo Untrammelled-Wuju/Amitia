@@ -417,44 +417,44 @@ class GameCenterServiceList {
 }
 
 class PackageMutationResult {
-  final String? extensionId;
-  final String? name;
-  final String? version;
-  final String? installState;
+  final String extensionId;
+  final String operation;
+  final String state;
+  final String? currentVersion;
+  final String? warnings;
 
   const PackageMutationResult({
-    this.extensionId,
-    this.name,
-    this.version,
-    this.installState,
+    required this.extensionId,
+    required this.operation,
+    required this.state,
+    this.currentVersion,
+    this.warnings,
   });
 
   factory PackageMutationResult.fromJson(Map<String, dynamic> json) {
     return PackageMutationResult(
-      extensionId: json['extensionId'] as String?,
-      name: json['name'] as String?,
-      version: json['version'] as String?,
-      installState: json['installState'] as String?,
+      extensionId: (json['extensionId'] ?? '').toString(),
+      operation: (json['operation'] ?? '').toString(),
+      state: (json['state'] ?? '').toString(),
+      currentVersion: json['currentVersion']?.toString(),
+      warnings: json['warnings']?.toString(),
     );
   }
 }
 
 class RuntimeMutationResult {
-  final String? runtimeId;
-  final String? state;
-  final String? desiredState;
+  final String runtimeId;
+  final String operation;
 
   const RuntimeMutationResult({
-    this.runtimeId,
-    this.state,
-    this.desiredState,
+    required this.runtimeId,
+    required this.operation,
   });
 
   factory RuntimeMutationResult.fromJson(Map<String, dynamic> json) {
     return RuntimeMutationResult(
-      runtimeId: json['runtimeId'] as String?,
-      state: json['state'] as String?,
-      desiredState: json['desiredState'] as String?,
+      runtimeId: (json['runtimeId'] ?? '').toString(),
+      operation: (json['operation'] ?? '').toString(),
     );
   }
 }

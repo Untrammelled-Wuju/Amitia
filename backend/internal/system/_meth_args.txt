@@ -112,13 +112,9 @@ SetupFinish|||
 SetupReset|||
 SetupStatus|||
 SetupStep|||body.Step
-StorageBackup|||
-StorageBackupEncrypted|||
-StorageExportUserData|||
+CreatePhysicalSafetySnapshot|||
+RestorePhysicalSafetySnapshot|||c.Param("name"
 StorageImportUserData|||body
-StorageRestore|||c.Param("name"
-StorageRestoreEncrypted|||body
-StorageRestoreVerify|||body
 ToolRoute|||body
 UpdateAppConfig|||body
 UpdateAuditSettings|||body

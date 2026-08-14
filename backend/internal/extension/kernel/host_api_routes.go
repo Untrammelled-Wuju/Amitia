@@ -939,7 +939,7 @@ func setupDefaultHostAPIRoutes(gateway *host_api.DefaultGateway, deps HostAPIRou
 				}
 				opts := event.PublishOptions{
 					ProducerID:    string(req.RuntimeIdentity.ExtensionID),
-					ProducerType:  "extension",
+					ProducerType:  event.EventProducerTypeExtension,
 					AggregateType: p.EventType,
 					AggregateID:   req.CallID,
 					TraceID:       req.TraceID,

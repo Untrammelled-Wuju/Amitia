@@ -1,8 +1,0 @@
-{
-  "schemaVersion": 1,
-  "taskId": "B42",
-  "nextOwner": "future quota step",
-  "bufferLimits": "NOT_APPLICABLE (无 Tool Stream)",
-  "eventSizes": "NOT_APPLICABLE",
-  "note": "Quota 步骤当前无可消费的 Tool Stream 限额对象。"
-}

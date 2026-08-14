@@ -81,12 +81,17 @@ func (h *HTTPHandler) update(c *gin.Context) {
 		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "desktop pet service unavailable", "data": nil})
 		return
 	}
+	extensionID := c.Param("extensionId")
+	if extensionID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "extensionId required", "data": nil})
+		return
+	}
 	var req InstallRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "invalid request body: " + err.Error(), "data": nil})
 		return
 	}
-	result, err := h.service.Update(c.Request.Context(), req.PackagePath)
+	result, err := h.service.Update(c.Request.Context(), extensionID, req.PackagePath)
 	if err != nil {
 		writeHandlerError(c, err)
 		return
@@ -152,6 +157,9 @@ func writeHandlerError(c *gin.Context, err error) {
 	case ErrInvalidInput:
 		status = http.StatusBadRequest
 		code = 400
+	case ErrManagementTargetMismatch, ErrPackageIdentityMismatch:
+		status = http.StatusConflict
+		code = 409
 	}
 	c.JSON(status, gin.H{"code": code, "msg": err.Error(), "data": nil})
 }

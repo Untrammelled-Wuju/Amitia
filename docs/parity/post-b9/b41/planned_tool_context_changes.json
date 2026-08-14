@@ -1,3 +1,0 @@
-[
-  {"semantic": "B41 PASS_NO_CODE_CHANGE — existing ToolInvocationContext already covers all required identity, caller, scope, runtime, resource, deadline and cancellation semantics. No separate context registry / cancellation manager /attempt store is required.", "changeType": "NO_CODE_CHANGE", "targetPath": "", "whyRequired": "Unified contract already exists.", "backwardCompatibility": "N/A"}
-]

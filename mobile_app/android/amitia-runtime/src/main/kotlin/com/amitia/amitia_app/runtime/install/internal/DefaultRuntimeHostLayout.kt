@@ -16,6 +16,7 @@ internal class DefaultRuntimeHostLayout(
     override val metadataRoot: File = File(controlRoot, RuntimeHostLayout.DIR_METADATA)
     override val transactionsRoot: File = File(controlRoot, RuntimeHostLayout.DIR_TRANSACTIONS)
     override val locksRoot: File = File(controlRoot, RuntimeHostLayout.DIR_LOCKS)
+    override val packagesRoot: File = File(controlRoot, RuntimeHostLayout.DIR_PACKAGES)
 
     private val dataDir = File(dataBaseDir, RuntimeHostLayout.DATA_DIR_NAME)
     override val configRoot: File = File(dataDir, RuntimeHostLayout.DIR_CONFIG)
@@ -78,6 +79,7 @@ internal class DefaultRuntimeHostLayout(
         metadataRoot,
         transactionsRoot,
         locksRoot,
+        packagesRoot,
     )
 
     fun allDataRoots(): List<File> = listOf(

@@ -1,9 +1,0 @@
-{
-  "schemaVersion": 1,
-  "taskId": "B125",
-  "status": "BLOCKED - NO_CHANGE",
-
-  "existingBehaviorPreserved": true,
-  "noBreakingChanges": true,
-  "note": "无任何代码变更"
-}

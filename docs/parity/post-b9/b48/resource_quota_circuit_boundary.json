@@ -1,6 +1,0 @@
-{
-  "circuitBreakerCoordinator": "B42 CircuitBreakerCoordinator",
-  "resourceDenialNotProviderFailure": true,
-  "resourceDenialDoesNotMutateCircuit": true,
-  "resourceDenialShouldNotRetry": true
-}

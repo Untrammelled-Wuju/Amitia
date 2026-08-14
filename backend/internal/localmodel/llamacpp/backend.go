@@ -4,20 +4,25 @@ package llamacpp
 
 import (
 	"context"
+	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/u-ai/backend/internal/chat/localmodel"
 	"github.com/u-ai/backend/internal/localmodel/gguf"
+	"github.com/u-ai/backend/internal/runtimehost"
 )
 
 type llamaCppBackend struct {
-	config    LlamaCppProviderConfig
-	mu        sync.Mutex
-	state     string
-	loadedAt  string
-	lastError string
-	manifest  *gguf.GGUFModelManifest
+	config     LlamaCppProviderConfig
+	mu         sync.Mutex
+	state      string
+	loadedAt   string
+	lastError  string
+	manifest   atomic.Pointer[gguf.GGUFModelManifest]
+	runtime    *llamaRuntime
+	host       runtimehost.RuntimeHost
 }
 
 func NewLlamaCppBackend(params localmodel.CreateLocalModelParams) (localmodel.LocalModelInference, error) {
@@ -25,10 +30,23 @@ func NewLlamaCppBackend(params localmodel.CreateLocalModelParams) (localmodel.Lo
 	if err != nil {
 		return nil, localmodel.ErrConfigInvalid
 	}
-	return &llamaCppBackend{
+	return newLlamaCppBackend(cfg), nil
+}
+
+func newLlamaCppBackend(cfg LlamaCppProviderConfig) *llamaCppBackend {
+	b := &llamaCppBackend{
 		config: cfg,
 		state:  "unloaded",
-	}, nil
+	}
+	b.runtime = newLlamaRuntime(cfg)
+	return b
+}
+
+func (b *llamaCppBackend) AttachHost(host runtimehost.RuntimeHost) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.host = host
+	b.runtime.attachHost(host)
 }
 
 func (b *llamaCppBackend) Capabilities(ctx context.Context) (localmodel.LocalModelCapabilities, error) {
@@ -36,17 +54,14 @@ func (b *llamaCppBackend) Capabilities(ctx context.Context) (localmodel.LocalMod
 	defer b.mu.Unlock()
 
 	caps := localmodel.LocalModelCapabilities{
-		Text:        true,
-		Streaming:   true,
-		MaxContext:  b.config.ContextSize,
-		Backends:    []string{b.config.Backend},
+		Text:       true,
+		Streaming:  true,
+		MaxContext: b.config.ContextSize,
+		Backends:   []string{b.config.Backend},
 	}
 
-	if b.manifest != nil {
-		caps.Vision = containsString(b.manifest.Capabilities, "vision")
-		caps.ToolCalling = containsString(b.manifest.Capabilities, "tool_calling")
-		caps.JSONMode = true
-		caps.MaxContext = b.manifest.ContextLength
+	if manifest := b.manifest.Load(); manifest != nil {
+		caps.MaxContext = manifest.ContextLength
 	}
 
 	return caps, nil
@@ -67,36 +82,42 @@ func (b *llamaCppBackend) Generate(ctx context.Context, request localmodel.Local
 		b.mu.Unlock()
 	}()
 
-	if sink != nil {
-		sink.OnTextDelta("")
-	}
-
-	return localmodel.LocalModelResult{
-		Text:         "",
-		FinishReason: "stop",
-		Usage:        localmodel.LocalModelUsage{},
-	}, nil
+	return b.runtime.chatRequest(ctx, request.Messages, sink)
 }
 
 func (b *llamaCppBackend) Load(ctx context.Context) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
-	if b.state == "ready" || b.state == "generating" {
+	if b.state == "ready" || b.state == "loading" {
 		return nil
 	}
 
-	if b.config.ResourceURI != "" {
-		inspector := gguf.NewInspector()
-		manifest, err := inspector.Inspect(b.config.ResourceURI)
-		if err != nil {
-			b.lastError = err.Error()
-			return localmodel.ErrLoadFailed
-		}
-		b.manifest = manifest
+	b.state = "loading"
+	b.lastError = ""
+
+	if err := b.runtime.validateModelArtifact(); err != nil {
+		b.lastError = err.Error()
+		b.state = "failed"
+		return wrapError(localmodel.ErrLoadFailed, err)
 	}
 
-	b.state = "loading"
+	manifest, err := b.runtime.inspectModel()
+	if err != nil {
+		b.lastError = err.Error()
+		b.state = "failed"
+		return wrapError(localmodel.ErrLoadFailed, err)
+	}
+	b.manifest.Store(manifest)
+
+	if b.host != nil {
+		if err := b.runtime.startServer(ctx); err != nil {
+			b.lastError = err.Error()
+			b.state = "failed"
+			return wrapError(localmodel.ErrLoadFailed, err)
+		}
+	}
+
 	b.loadedAt = time.Now().Format("2006-01-02 15:04:05")
 	b.state = "ready"
 	return nil
@@ -106,9 +127,10 @@ func (b *llamaCppBackend) Unload(ctx context.Context) error {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 
+	b.runtime.stopServer()
+	b.manifest.Store(nil)
 	b.state = "unloaded"
 	b.loadedAt = ""
-	b.manifest = nil
 	return nil
 }
 
@@ -123,13 +145,19 @@ func (b *llamaCppBackend) Health(ctx context.Context) localmodel.LocalModelHealt
 	}
 }
 
-func containsString(slice []string, s string) bool {
-	for _, v := range slice {
-		if v == s {
-			return true
-		}
+func wrapError(base error, err error) error {
+	if base == nil {
+		return err
 	}
-	return false
+	return fmt.Errorf("%w: %v", base, err)
+}
+
+func (b *llamaCppBackend) shutdown() {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.runtime.stopServer()
+	b.manifest.Store(nil)
+	b.state = "unloaded"
 }
 
 func init() {

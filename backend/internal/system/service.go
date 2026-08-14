@@ -4,6 +4,7 @@ package system
 
 import (
 	"encoding/json"
+	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"github.com/u-ai/backend/internal/temporal"
 	"os"
@@ -115,14 +116,10 @@ type Service interface {
 	SetupReset() map[string]interface{}
 	SetupStatus() map[string]interface{}
 	SetupStep(step string) map[string]interface{}
-	StorageBackup() map[string]interface{}
-	StorageBackupEncrypted() map[string]interface{}
-	StorageExportUserData() map[string]interface{}
+	CreatePhysicalSafetySnapshot() map[string]interface{}
+	RestorePhysicalSafetySnapshot(name string) map[string]interface{}
 	StorageExportAmitia(scope string, characterID string) map[string]interface{}
 	StorageImportUserData(body map[string]interface{}) map[string]interface{}
-	StorageRestore(name string) map[string]interface{}
-	StorageRestoreEncrypted(body map[string]interface{}) map[string]interface{}
-	StorageRestoreVerify(body map[string]interface{}) map[string]interface{}
 	ToolRoute(body map[string]interface{}) map[string]interface{}
 	UpdateAppConfig(body map[string]interface{}) map[string]interface{}
 	UpdateAuditSettings(body map[string]interface{}) map[string]interface{}
@@ -154,16 +151,17 @@ type Service interface {
 }
 
 type service struct {
-	db          *gorm.DB
-	startTime   time.Time
-	healthLog   []map[string]interface{}
-	dataDir     string
-	temporalSvc *temporal.Service
-	coordinator *dataportability.Coordinator
+	db             *gorm.DB
+	startTime      time.Time
+	healthLog      []map[string]interface{}
+	dataDir        string
+	temporalSvc    *temporal.Service
+	coordinator    *dataportability.Coordinator
+	runtimeProfile runtimeprofile.Profile
 }
 
-func NewService(ctx *app.AppContext) Service {
-	return &service{db: ctx.DB, startTime: time.Now(), dataDir: "data"}
+func NewService(ctx *app.AppContext, profile runtimeprofile.Profile) Service {
+	return &service{db: ctx.DB, startTime: time.Now(), dataDir: "data", runtimeProfile: profile}
 }
 
 func (s *service) AttachTemporalService(temporalSvc *temporal.Service) {

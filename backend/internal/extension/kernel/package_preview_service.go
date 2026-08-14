@@ -82,6 +82,12 @@ func (r *Runtime) PreviewPackage(ctx context.Context, request PackagePreviewRequ
 	for _, validationError := range validation.Errors {
 		preview.Issues = append(preview.Issues, PreviewIssue{Category: PreviewNotInstallable, Code: validationError.Code, Message: validationError.Message, Path: validationError.Path})
 	}
+	if r.container != nil && r.container.PermissionDefinitions != nil {
+		permIssues := validateManifestPermissions(pkg.Manifest, r.container.PermissionDefinitions)
+		for _, issue := range permIssues {
+			preview.Issues = append(preview.Issues, issue)
+		}
+	}
 	if len(pkg.V2Signature) > 0 {
 		doc, parseErr := trust.ParseSignatureDocument(pkg.V2Signature)
 		if parseErr != nil {

@@ -3,6 +3,7 @@ package workspace
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"time"
 
@@ -25,7 +26,7 @@ func IsKnownKind(kind WorkspaceKind) bool {
 }
 
 type Registry struct {
-	mu     sync.RWMutex
+	mu      sync.RWMutex
 	mounts  map[WorkspaceID]WorkspaceMount
 	backend map[WorkspaceKind]WorkspaceBackend
 }
@@ -37,10 +38,14 @@ func NewRegistry() *Registry {
 	}
 }
 
-func (r *Registry) RegisterBackend(kind WorkspaceKind, backend WorkspaceBackend) {
+func (r *Registry) RegisterBackend(kind WorkspaceKind, backend WorkspaceBackend) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
+	if _, exists := r.backend[kind]; exists {
+		return fmt.Errorf("workspace backend %q already registered", kind)
+	}
 	r.backend[kind] = backend
+	return nil
 }
 
 func (r *Registry) GetBackend(kind WorkspaceKind) (WorkspaceBackend, bool) {

@@ -344,6 +344,22 @@ func (f *fakeCheckpointStore) LoadCheckpoint(ctx context.Context, runtimeID doma
 	return c, nil
 }
 
+type fakePermission struct{}
+
+func newFakePermission() *fakePermission { return &fakePermission{} }
+
+func (f *fakePermission) ResolveRuntimePermissions(ctx context.Context, runtimeID, pluginID string) (PermissionView, error) {
+	return PermissionView{Revision: "v1", Permissions: []string{"run"}}, nil
+}
+
+type fakeAuthorityView struct{}
+
+func newFakeAuthorityView() *fakeAuthorityView { return &fakeAuthorityView{} }
+
+func (f *fakeAuthorityView) GetAuthority(runtimeID domain.RuntimeInstanceID) (AuthoritySnapshot, error) {
+	return AuthoritySnapshot{RuntimeID: runtimeID, Mode: "standard", Epoch: 1}, nil
+}
+
 // === Test Helpers ===
 
 func setupTestCoordinator() (
@@ -365,17 +381,39 @@ func setupTestCoordinator() (
 	secret := newFakeSecretLease()
 	audit := newFakeAuditSink()
 	builder := newFakeStructureBuilder()
+	perm := newFakePermission()
+	auth := newFakeAuthorityView()
 
-	c := NewRecoveryCoordinator(RecoveryCoordinatorDeps{
+	checkpointStore := newFakeCheckpointStore()
+	storeReader := NewCheckpointStoreAdapter(
+		func(ctx context.Context, runtimeID domain.RuntimeInstanceID) (bool, error) {
+			return checkpointStore.HasMetadata(ctx, runtimeID)
+		},
+		func(ctx context.Context, runtimeID domain.RuntimeInstanceID) (RuntimeMetadataView, error) {
+			return checkpointStore.LoadMetadata(ctx, runtimeID)
+		},
+		func(ctx context.Context, runtimeID domain.RuntimeInstanceID) (RuntimeCheckpointView, error) {
+			return checkpointStore.LoadCheckpoint(ctx, runtimeID)
+		},
+	)
+	checkpointClassifier := NewDefaultCheckpointClassifier(storeReader)
+
+	c, err := NewRecoveryCoordinator(RecoveryCoordinatorDeps{
 		Kernel:               kernel,
 		Supervisor:           supervisor,
 		PluginRegistry:       reg,
 		RuntimeManager:       rtMgr,
 		RuntimeExecutor:      rtExec,
 		SecretLease:          secret,
+		Permission:           perm,
+		AuthorityView:        auth,
 		AuditSink:            audit,
 		StructureBuilder:     builder,
+		CheckpointClassifier: checkpointClassifier,
 	})
+	if err != nil {
+		panic(err)
+	}
 
 	return c, kernel, supervisor, rtMgr, reg, rtExec, secret, audit, builder
 }

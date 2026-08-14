@@ -77,9 +77,8 @@ class _TransportStateSourceImpl implements TransportStateSource {
   }
 
   TransportStateSnapshot _mapTransportState(BackendTransportState state) {
-    final generation = _ref.read(backendTransportGenerationProvider);
     switch (state) {
-      case TransportAvailable():
+      case TransportAvailable(:final generation):
         return TransportStateSnapshot(
           generation: generation,
           httpState: BackendHttpState.available,

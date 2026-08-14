@@ -36,6 +36,14 @@ const (
 	ChildDeny       ChildInvocationPolicy = "deny"
 )
 
+type RemoteExecutionPolicy string
+
+const (
+	RemoteExecutionInherit         RemoteExecutionPolicy = "inherit"
+	RemoteExecutionRequireApproval RemoteExecutionPolicy = "require_approval"
+	RemoteExecutionDeny            RemoteExecutionPolicy = "deny"
+)
+
 type PermissionDefinition struct {
 	ID                  string                `json:"id"`
 	Name                string                `json:"name"`
@@ -49,6 +57,7 @@ type PermissionDefinition struct {
 	ChildInvocation     ChildInvocationPolicy `json:"childInvocation"`
 	TrustedOnly         bool                  `json:"trustedOnly"`
 	DefaultApproval     ApprovalMode          `json:"defaultApproval"`
+	RemoteExecution     RemoteExecutionPolicy `json:"remoteExecution,omitempty"`
 }
 
 type PermissionDefinitionRegistry struct {
@@ -70,6 +79,11 @@ func (r *PermissionDefinitionRegistry) Register(def PermissionDefinition) {
 func (r *PermissionDefinitionRegistry) Get(id string) (PermissionDefinition, bool) {
 	def, ok := r.definitions[id]
 	return def, ok
+}
+
+func (r *PermissionDefinitionRegistry) Known(id string) bool {
+	_, ok := r.definitions[id]
+	return ok
 }
 
 func (r *PermissionDefinitionRegistry) List() []PermissionDefinition {
@@ -141,11 +155,16 @@ func (r *PermissionDefinitionRegistry) registerBuiltin() {
 		{ID: "service.provider.register", Name: "Register Service Provider", Description: "Register capability providers from the service runtime", Category: CategoryService, RiskLevel: capability.RiskHigh, AllowedScopes: []ScopeType{ScopeExtension, ScopeModule, ScopeGlobal}, PersistentGrantable: false, BackgroundAllowed: false, ChildInvocation: ChildDeny, TrustedOnly: true, DefaultApproval: ApprovalManual},
 		{ID: "service.tool.execute", Name: "Execute Service Tool", Description: "Execute registered tools through the service runtime", Category: CategoryService, RiskLevel: capability.RiskMedium, AllowedScopes: []ScopeType{ScopeExtension, ScopeModule, ScopeGlobal}, PersistentGrantable: true, BackgroundAllowed: true, ChildInvocation: ChildReevaluate, TrustedOnly: true, DefaultApproval: ApprovalManual},
 		{ID: "service.background.run", Name: "Run Background Task", Description: "Run long-lived background tasks within the service runtime", Category: CategoryService, RiskLevel: capability.RiskHigh, AllowedScopes: []ScopeType{ScopeExtension, ScopeModule, ScopeGlobal}, PersistentGrantable: false, BackgroundAllowed: true, ChildInvocation: ChildDeny, TrustedOnly: true, DefaultApproval: ApprovalManual},
-		{ID: "gamehost.control", Name: "GameHost Control Output", Description: "Allow the plugin to participate in GameHost-managed control output flow", Category: CategoryGameHost, RiskLevel: capability.RiskHigh, AllowedScopes: []ScopeType{ScopeGlobal, ScopeExtension, ScopeModule, ScopeResource}, PersistentGrantable: false, RequiresPerUse: true, BackgroundAllowed: false, ChildInvocation: ChildDeny, DefaultApproval: ApprovalManual},
-		{ID: "gamehost.channel.use", Name: "GameHost Channel Use", Description: "Allow the runtime to use declared GameHost runtime channels (IPC streams)", Category: CategoryGameHost, RiskLevel: capability.RiskMedium, AllowedScopes: []ScopeType{ScopeGlobal, ScopeExtension, ScopeModule}, PersistentGrantable: true, BackgroundAllowed: false, ChildInvocation: ChildInherit, DefaultApproval: ApprovalManual},
-		{ID: "gamehost.host_api.invoke", Name: "GameHost Host API Invoke", Description: "Allow entering the GameHost Host API gateway; still requires route-specific permissions", Category: CategoryGameHost, RiskLevel: capability.RiskMedium, AllowedScopes: []ScopeType{ScopeGlobal, ScopeExtension, ScopeModule}, PersistentGrantable: true, BackgroundAllowed: false, ChildInvocation: ChildInherit, DefaultApproval: ApprovalManual},
+		{ID: PermissionGameHostControl, Name: "GameHost Control Output", Description: "Allow the plugin to participate in GameHost-managed control output flow", Category: CategoryGameHost, RiskLevel: capability.RiskHigh, AllowedScopes: []ScopeType{ScopeGlobal, ScopeExtension, ScopeModule, ScopeResource}, PersistentGrantable: false, RequiresPerUse: true, BackgroundAllowed: false, ChildInvocation: ChildDeny, DefaultApproval: ApprovalManual},
+		{ID: PermissionGameHostChannelUse, Name: "GameHost Channel Use", Description: "Allow the runtime to use declared GameHost runtime channels (IPC streams)", Category: CategoryGameHost, RiskLevel: capability.RiskMedium, AllowedScopes: []ScopeType{ScopeGlobal, ScopeExtension, ScopeModule}, PersistentGrantable: true, BackgroundAllowed: false, ChildInvocation: ChildInherit, DefaultApproval: ApprovalManual},
+		{ID: PermissionGameHostAPIInvoke, Name: "GameHost Host API Invoke", Description: "Allow entering the GameHost Host API gateway; still requires route-specific permissions", Category: CategoryGameHost, RiskLevel: capability.RiskMedium, AllowedScopes: []ScopeType{ScopeGlobal, ScopeExtension, ScopeModule}, PersistentGrantable: true, BackgroundAllowed: false, ChildInvocation: ChildInherit, DefaultApproval: ApprovalManual},
 		{ID: "media.image.read", Name: "Read Image", Description: "Read and analyze images, including OCR and visual understanding", Category: CategoryMedia, RiskLevel: capability.RiskLow, AllowedScopes: []ScopeType{ScopeGlobal, ScopeCharacter, ScopeConversation, ScopeResource}, PersistentGrantable: true, BackgroundAllowed: false, ChildInvocation: ChildInherit, DefaultApproval: ApprovalAuto},
 		{ID: "media.image.generate", Name: "Generate Image", Description: "Generate images using AI providers", Category: CategoryMedia, RiskLevel: capability.RiskMedium, AllowedScopes: []ScopeType{ScopeGlobal, ScopeCharacter, ScopeConversation}, PersistentGrantable: true, BackgroundAllowed: false, ChildInvocation: ChildInherit, DefaultApproval: ApprovalManual},
+		{ID: "media.metadata", Name: "Read Media Metadata", Description: "Extract metadata from audio and video files via ResourceURI", Category: CategoryMedia, RiskLevel: capability.RiskLow, AllowedScopes: []ScopeType{ScopeGlobal, ScopeCharacter, ScopeConversation, ScopeResource}, PersistentGrantable: true, BackgroundAllowed: false, ChildInvocation: ChildInherit, DefaultApproval: ApprovalAuto},
+		{ID: "media.convert", Name: "Convert Media", Description: "Convert audio and video files between formats via ResourceURI", Category: CategoryMedia, RiskLevel: capability.RiskMedium, AllowedScopes: []ScopeType{ScopeGlobal, ScopeCharacter, ScopeConversation, ScopeResource}, PersistentGrantable: true, BackgroundAllowed: true, ChildInvocation: ChildInherit, DefaultApproval: ApprovalAuto},
+		{ID: "workspace.read", Name: "Read Workspace", Description: "Read files from configured workspaces (local/remote/SAF/isolated)", Category: CategoryFilesystem, RiskLevel: capability.RiskLow, AllowedScopes: []ScopeType{ScopeGlobal, ScopeCharacter, ScopeConversation, ScopeResource}, PersistentGrantable: true, BackgroundAllowed: false, ChildInvocation: ChildInherit, DefaultApproval: ApprovalAuto},
+		{ID: "workspace.write", Name: "Write Workspace", Description: "Write or create files in configured workspaces", Category: CategoryFilesystem, RiskLevel: capability.RiskMedium, AllowedScopes: []ScopeType{ScopeGlobal, ScopeCharacter, ScopeConversation, ScopeResource}, PersistentGrantable: true, BackgroundAllowed: false, ChildInvocation: ChildInherit, DefaultApproval: ApprovalManual},
+		{ID: "workspace.manage", Name: "Manage Workspace", Description: "Register, update and remove workspace mounts and backends", Category: CategoryFilesystem, RiskLevel: capability.RiskHigh, AllowedScopes: []ScopeType{ScopeGlobal}, PersistentGrantable: false, RequiresPerUse: true, BackgroundAllowed: false, ChildInvocation: ChildDeny, DefaultApproval: ApprovalManual},
 		{ID: "ios.health.read", Name: "Read Health Data", Description: "Read HealthKit health and fitness data", Category: CategoryIOS, RiskLevel: capability.RiskMedium, AllowedScopes: []ScopeType{ScopeGlobal, ScopeCharacter, ScopeConversation}, PersistentGrantable: true, BackgroundAllowed: false, ChildInvocation: ChildInherit, DefaultApproval: ApprovalManual},
 		{ID: "ios.health.write", Name: "Write Health Data", Description: "Write data to HealthKit", Category: CategoryIOS, RiskLevel: capability.RiskHigh, AllowedScopes: []ScopeType{ScopeGlobal, ScopeCharacter}, PersistentGrantable: false, RequiresPerUse: true, BackgroundAllowed: false, ChildInvocation: ChildDeny, DefaultApproval: ApprovalManual},
 		{ID: "ios.calendar.read", Name: "Read Calendar", Description: "Read calendar events and calendars", Category: CategoryIOS, RiskLevel: capability.RiskLow, AllowedScopes: []ScopeType{ScopeGlobal, ScopeCharacter, ScopeConversation}, PersistentGrantable: true, BackgroundAllowed: false, ChildInvocation: ChildInherit, DefaultApproval: ApprovalManual},

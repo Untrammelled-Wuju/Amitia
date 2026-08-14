@@ -16,8 +16,10 @@ object TrustedRuntimePackageSource {
     const val PACKAGE_SHA256: String = "3f061598a5c0b815cdb1d536694d9e251652be13f301fb215f1d1aae0c5f7f57"
     const val GUEST_OS: String = "linux"
     const val ARCHITECTURE: String = "arm64"
+    const val FILE_NAME: String = "amitia-runtime-1.0.0.zip"
+    const val ASSET_PATH: String = "runtime-package/$FILE_NAME"
 
-    fun resolve(packageFile: File): RuntimePackageReference {
+    internal fun createReference(packageFile: File): RuntimePackageReference {
         return RuntimePackageReference(
             packageFile = packageFile,
             expectedRuntimeVersion = RUNTIME_VERSION,

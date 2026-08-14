@@ -20,6 +20,7 @@ class DesktopPetPluginState {
   final List<DesktopPetPluginSummaryRef> plugins;
   final bool loading;
   final bool refreshing;
+  final bool installing;
   final String? error;
   final Set<String> operationByPluginId;
   final int generation;
@@ -28,6 +29,7 @@ class DesktopPetPluginState {
     this.plugins = const [],
     this.loading = false,
     this.refreshing = false,
+    this.installing = false,
     this.error,
     this.operationByPluginId = const {},
     this.generation = 0,
@@ -37,6 +39,7 @@ class DesktopPetPluginState {
     List<DesktopPetPluginSummaryRef>? plugins,
     bool? loading,
     bool? refreshing,
+    bool? installing,
     String? error,
     bool clearError = false,
     Set<String>? operationByPluginId,
@@ -46,6 +49,7 @@ class DesktopPetPluginState {
       plugins: plugins ?? this.plugins,
       loading: loading ?? this.loading,
       refreshing: refreshing ?? this.refreshing,
+      installing: installing ?? this.installing,
       error: clearError ? null : (error ?? this.error),
       operationByPluginId: operationByPluginId ?? this.operationByPluginId,
       generation: generation ?? this.generation,
@@ -82,24 +86,11 @@ class DesktopPetPluginController extends StateNotifier<DesktopPetPluginState> {
     final gen = state.generation + 1;
     state = state.copyWith(loading: true, generation: gen, clearError: true);
     try {
-      final result = await api.list();
+      final ok = await _fetchCanonical(gen, initial: true);
       if (!mounted) return;
-      if (gen != state.generation) return;
-      state = state.copyWith(
-        plugins: result.plugins
-            .map((p) => DesktopPetPluginSummaryRef(
-                  pluginId: p.pluginId,
-                  extensionId: p.extensionId,
-                  name: p.name,
-                  description: p.description,
-                  version: p.version,
-                  enabled: p.enabled,
-                  installState: p.installState,
-                ))
-            .toList(),
-        loading: false,
-        clearError: true,
-      );
+      if (ok) {
+        state = state.copyWith(loading: false);
+      }
     } catch (e) {
       if (!mounted) return;
       if (gen != state.generation) return;
@@ -111,29 +102,37 @@ class DesktopPetPluginController extends StateNotifier<DesktopPetPluginState> {
     final gen = state.generation + 1;
     state = state.copyWith(refreshing: true, generation: gen, clearError: true);
     try {
-      final result = await api.list();
+      final ok = await _fetchCanonical(gen, initial: false);
       if (!mounted) return;
-      if (gen != state.generation) return;
-      state = state.copyWith(
-        plugins: result.plugins
-            .map((p) => DesktopPetPluginSummaryRef(
-                  pluginId: p.pluginId,
-                  extensionId: p.extensionId,
-                  name: p.name,
-                  description: p.description,
-                  version: p.version,
-                  enabled: p.enabled,
-                  installState: p.installState,
-                ))
-            .toList(),
-        refreshing: false,
-        clearError: true,
-      );
+      if (ok) {
+        state = state.copyWith(refreshing: false);
+      }
     } catch (e) {
       if (!mounted) return;
       if (gen != state.generation) return;
       state = state.copyWith(refreshing: false, error: safeErrorMessage(e));
     }
+  }
+
+  Future<bool> _fetchCanonical(int gen, {required bool initial}) async {
+    final result = await api.list();
+    if (!mounted) return false;
+    if (gen != state.generation) return false;
+    state = state.copyWith(
+      plugins: result.plugins
+          .map((p) => DesktopPetPluginSummaryRef(
+                pluginId: p.pluginId,
+                extensionId: p.extensionId,
+                name: p.name,
+                description: p.description,
+                version: p.version,
+                enabled: p.enabled,
+                installState: p.installState,
+              ))
+          .toList(),
+      clearError: true,
+    );
+    return true;
   }
 
   Future<DesktopPetPluginDetail?> detail(String pluginId) async {
@@ -144,39 +143,112 @@ class DesktopPetPluginController extends StateNotifier<DesktopPetPluginState> {
     }
   }
 
+  Future<bool> install(String packagePath) async {
+    if (state.installing) {
+      return false;
+    }
+    final trimmed = packagePath.trim();
+    if (trimmed.isEmpty) {
+      return false;
+    }
+
+    final gen = state.generation + 1;
+    state = state.copyWith(
+      installing: true,
+      generation: gen,
+      clearError: true,
+    );
+
+    var dispatched = false;
+    try {
+      dispatched = true;
+      final result = await api.install(trimmed);
+      return result.extensionId.isNotEmpty;
+    } catch (e) {
+      if (mounted) {
+        state = state.copyWith(error: safeErrorMessage(e));
+      }
+      return false;
+    } finally {
+      if (mounted) {
+        state = state.copyWith(installing: false);
+      }
+      if (dispatched && mounted) {
+        await _refetchAfterMutation();
+      }
+    }
+  }
+
+  Future<bool> update(String pluginId, String extensionId, String packagePath) async {
+    return _withPluginMutation(pluginId, () async {
+      final result = await api.update(extensionId, packagePath.trim());
+      return result.extensionId == extensionId;
+    });
+  }
+
   Future<bool> enable(String pluginId, String extensionId) async {
-    return _withOperation(pluginId, () async {
+    return _withPluginMutation(pluginId, () async {
       final r = await api.enable(extensionId);
-      return r.success;
+      return r.success && r.extensionId == extensionId;
     });
   }
 
   Future<bool> disable(String pluginId, String extensionId) async {
-    return _withOperation(pluginId, () async {
+    return _withPluginMutation(pluginId, () async {
       final r = await api.disable(extensionId);
-      return r.success;
+      return r.success && r.extensionId == extensionId;
     });
   }
 
   Future<bool> uninstall(String pluginId, String extensionId) async {
-    return _withOperation(pluginId, () async {
+    return _withPluginMutation(pluginId, () async {
       final r = await api.uninstall(extensionId);
-      return r.success;
+      return r.success && r.extensionId == extensionId;
     });
   }
 
-  Future<bool> _withOperation(String pluginId, Future<bool> Function() op) async {
+  Future<bool> _withPluginMutation(String pluginId, Future<bool> Function() op) async {
+    if (state.operationByPluginId.contains(pluginId)) {
+      return false;
+    }
+
     final ops = Set<String>.from(state.operationByPluginId)..add(pluginId);
-    state = state.copyWith(operationByPluginId: ops);
+    state = state.copyWith(
+      operationByPluginId: ops,
+      clearError: true,
+    );
+
+    var dispatched = false;
+    var ok = false;
+
     try {
-      final ok = await op();
+      dispatched = true;
+      ok = await op();
       return ok;
-    } catch (_) {
+    } catch (e) {
+      if (mounted) {
+        state = state.copyWith(error: safeErrorMessage(e));
+      }
       return false;
     } finally {
+      if (dispatched && mounted) {
+        await _refetchAfterMutation();
+      }
       if (mounted) {
-        final newOps = Set<String>.from(state.operationByPluginId)..remove(pluginId);
-        state = state.copyWith(operationByPluginId: newOps);
+        final next = Set<String>.from(state.operationByPluginId)..remove(pluginId);
+        state = state.copyWith(operationByPluginId: next);
+      }
+    }
+  }
+
+  Future<void> _refetchAfterMutation() async {
+    final gen = state.generation + 1;
+    state = state.copyWith(generation: gen, clearError: true);
+    try {
+      await _fetchCanonical(gen, initial: false);
+    } catch (e) {
+      if (mounted) {
+        state = state.copyWith(error: safeErrorMessage(e));
       }
     }
   }

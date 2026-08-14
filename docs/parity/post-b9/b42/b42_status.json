@@ -1,8 +1,0 @@
-{
-  "schemaVersion": 1,
-  "taskId": "B42",
-  "status": "PASS_NO_CODE_CHANGE",
-  "constructionMode": ["REUSE", "EXTEND"],
-  "summary": "Extension Kernel 层当前无任何 Tool Execution Streaming 实现。B42 在禁止创建 ToolStreamingRuntime2 / StreamingExecutionPipeline / ToolStreamRegistry / GlobalToolStreamBus / ToolResult2 等约束下，确认现有 ExecutionPipeline + ToolResult + InvocationContext 已经提供 Invocation ID / Final Result / Terminal State / Cancel-Propagation 的合同级保证；具体 Incremental Stream Transport 留待后续 streaming+dedicated 实现。",
-  "next": "B43"
-}

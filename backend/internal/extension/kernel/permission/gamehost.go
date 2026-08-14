@@ -19,3 +19,11 @@ func GameHostPermissions() GameHostPermissionSet {
 		APIInvoke:  PermissionGameHostAPIInvoke,
 	}
 }
+
+func GameHostPermissionIDs() []string {
+	return []string{
+		PermissionGameHostControl,
+		PermissionGameHostChannelUse,
+		PermissionGameHostAPIInvoke,
+	}
+}

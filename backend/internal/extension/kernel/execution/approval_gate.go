@@ -43,10 +43,12 @@ func (g *ApprovalGate) evaluateWithBroker(ctx context.Context, tool capability.T
 	}
 
 	explanation := g.Broker.Explain(ctx, permission.PermissionEvaluationRequest{
-		Subject:      subject,
-		Requirements: reqs,
-		InvocationID: inv.InvocationID,
-		RiskLevel:    string(tool.RiskLevel),
+		Subject:          subject,
+		Requirements:     reqs,
+		InvocationID:     inv.InvocationID,
+		RiskLevel:        string(tool.RiskLevel),
+		Generation:       inv.Generation,
+		ExecutionContext: permission.ExecutionContextFromInvocation(inv),
 	})
 
 	if explanation.RequiredAction == "manual_approval" {

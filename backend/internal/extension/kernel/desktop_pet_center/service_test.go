@@ -186,7 +186,7 @@ func TestList_OnlyReturnsDesktopPetPlugins(t *testing.T) {
 			makeToolContrib("com.example/tool-c", "useful-tool"),
 		},
 	}
-	svc := NewDesktopPetPluginManagementService(container, &fakeRuntime{})
+	svc := NewDesktopPetPluginManagementService(container, &fakeRuntime{}, nil)
 	resp, err := svc.List(context.Background(), 1, 20, "")
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -212,7 +212,7 @@ func TestList_MultiContributionInSingleExtension(t *testing.T) {
 			makePetPluginContrib("com.example/pet-multi", "pet-interaction"),
 		},
 	}
-	svc := NewDesktopPetPluginManagementService(container, &fakeRuntime{})
+	svc := NewDesktopPetPluginManagementService(container, &fakeRuntime{}, nil)
 	resp, err := svc.List(context.Background(), 1, 20, "")
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -239,7 +239,7 @@ func TestList_PaginationBeforeFilter(t *testing.T) {
 		contribs = append(contribs, makePetPluginContrib(extID, "plugin-"+string(rune('a'+i))))
 	}
 	container := &fakeContainer{installations: insts, contributions: contribs}
-	svc := NewDesktopPetPluginManagementService(container, &fakeRuntime{})
+	svc := NewDesktopPetPluginManagementService(container, &fakeRuntime{}, nil)
 	resp, err := svc.List(context.Background(), 1, 3, "")
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -277,7 +277,7 @@ func TestList_SearchFiltersByPluginName(t *testing.T) {
 			},
 		},
 	}
-	svc := NewDesktopPetPluginManagementService(container, &fakeRuntime{})
+	svc := NewDesktopPetPluginManagementService(container, &fakeRuntime{}, nil)
 	resp, err := svc.List(context.Background(), 1, 20, "Alpha")
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -299,7 +299,7 @@ func TestList_EmptyResultReturnsEmptySlice(t *testing.T) {
 			makeToolContrib("com.example/tool-only", "some-tool"),
 		},
 	}
-	svc := NewDesktopPetPluginManagementService(container, &fakeRuntime{})
+	svc := NewDesktopPetPluginManagementService(container, &fakeRuntime{}, nil)
 	resp, err := svc.List(context.Background(), 1, 20, "")
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -313,7 +313,7 @@ func TestList_EmptyResultReturnsEmptySlice(t *testing.T) {
 }
 
 func TestList_KernelUnavailable(t *testing.T) {
-	svc := NewDesktopPetPluginManagementService(nil, &fakeRuntime{})
+	svc := NewDesktopPetPluginManagementService(nil, &fakeRuntime{}, nil)
 	_, err := svc.List(context.Background(), 1, 20, "")
 	if err != ErrKernelUnavailable {
 		t.Errorf("expected ErrKernelUnavailable, got %v", err)
@@ -329,7 +329,7 @@ func TestGet_NotFoundForNonPetPlugin(t *testing.T) {
 			makeGamePluginContrib("com.example/game-only", "game-contrib"),
 		},
 	}
-	svc := NewDesktopPetPluginManagementService(container, &fakeRuntime{})
+	svc := NewDesktopPetPluginManagementService(container, &fakeRuntime{}, nil)
 	_, err := svc.Get(context.Background(), "game-contrib")
 	if err != ErrExtensionNotFound {
 		t.Errorf("expected ErrExtensionNotFound, got %v", err)
@@ -348,7 +348,7 @@ func TestGet_ReturnsPetPluginDetail(t *testing.T) {
 			{ExtensionID: "com.example/pet-detail", PermissionName: "display.window", State: "granted"},
 		},
 	}
-	svc := NewDesktopPetPluginManagementService(container, &fakeRuntime{})
+	svc := NewDesktopPetPluginManagementService(container, &fakeRuntime{}, nil)
 	detail, err := svc.Get(context.Background(), "overlay-1")
 	if err != nil {
 		t.Fatalf("Get: %v", err)
@@ -378,7 +378,7 @@ func TestGet_ReturnsPetPluginDetail(t *testing.T) {
 
 func TestGet_EmptyPluginIDReturnsInvalidInput(t *testing.T) {
 	container := &fakeContainer{}
-	svc := NewDesktopPetPluginManagementService(container, &fakeRuntime{})
+	svc := NewDesktopPetPluginManagementService(container, &fakeRuntime{}, nil)
 	_, err := svc.Get(context.Background(), "")
 	if err != ErrInvalidInput {
 		t.Errorf("expected ErrInvalidInput, got %v", err)
@@ -393,7 +393,7 @@ func TestInstall_CallsKernel(t *testing.T) {
 			return kernelInstalledExtension{ID: "com.example/new-pet", Name: "New Pet", Version: "1.0.0"}, nil
 		},
 	}
-	svc := NewDesktopPetPluginManagementService(&fakeContainer{}, rt)
+	svc := NewDesktopPetPluginManagementService(&fakeContainer{}, rt, nil)
 	result, err := svc.Install(context.Background(), "/tmp/pkg.zip")
 	if err != nil {
 		t.Fatalf("Install: %v", err)
@@ -410,7 +410,7 @@ func TestInstall_CallsKernel(t *testing.T) {
 }
 
 func TestInstall_EmptyPathReturnsInvalidInput(t *testing.T) {
-	svc := NewDesktopPetPluginManagementService(&fakeContainer{}, &fakeRuntime{})
+	svc := NewDesktopPetPluginManagementService(&fakeContainer{}, &fakeRuntime{}, nil)
 	_, err := svc.Install(context.Background(), "")
 	if err != ErrInvalidInput {
 		t.Errorf("expected ErrInvalidInput, got %v", err)
@@ -426,7 +426,7 @@ func TestEnable_RejectsNonPetExtension(t *testing.T) {
 			makeGamePluginContrib("com.example/game-only", "game-contrib"),
 		},
 	}
-	svc := NewDesktopPetPluginManagementService(container, &fakeRuntime{})
+	svc := NewDesktopPetPluginManagementService(container, &fakeRuntime{}, nil)
 	_, err := svc.Enable(context.Background(), "com.example/game-only")
 	if err != ErrNotDesktopPetPlugin {
 		t.Errorf("expected ErrNotDesktopPetPlugin, got %v", err)
@@ -449,7 +449,7 @@ func TestEnable_PetExtensionSucceeds(t *testing.T) {
 			makePetPluginContrib("com.example/pet-enable", "pet-1"),
 		},
 	}
-	svc := NewDesktopPetPluginManagementService(container, rt)
+	svc := NewDesktopPetPluginManagementService(container, rt, nil)
 	result, err := svc.Enable(context.Background(), "com.example/pet-enable")
 	if err != nil {
 		t.Fatalf("Enable: %v", err)
@@ -478,7 +478,7 @@ func TestDisable_PetExtensionSucceeds(t *testing.T) {
 			makePetPluginContrib("com.example/pet-disable", "pet-1"),
 		},
 	}
-	svc := NewDesktopPetPluginManagementService(container, rt)
+	svc := NewDesktopPetPluginManagementService(container, rt, nil)
 	_, err := svc.Disable(context.Background(), "com.example/pet-disable")
 	if err != nil {
 		t.Fatalf("Disable: %v", err)
@@ -497,7 +497,7 @@ func TestUninstall_RejectsNonPetExtension(t *testing.T) {
 			makeGamePluginContrib("com.example/game-only", "game-contrib"),
 		},
 	}
-	svc := NewDesktopPetPluginManagementService(container, &fakeRuntime{})
+	svc := NewDesktopPetPluginManagementService(container, &fakeRuntime{}, nil)
 	_, err := svc.Uninstall(context.Background(), "com.example/game-only")
 	if err != ErrNotDesktopPetPlugin {
 		t.Errorf("expected ErrNotDesktopPetPlugin, got %v", err)
@@ -520,7 +520,7 @@ func TestUninstall_PetExtensionSucceeds(t *testing.T) {
 			makePetPluginContrib("com.example/pet-uninstall", "pet-1"),
 		},
 	}
-	svc := NewDesktopPetPluginManagementService(container, rt)
+	svc := NewDesktopPetPluginManagementService(container, rt, nil)
 	_, err := svc.Uninstall(context.Background(), "com.example/pet-uninstall")
 	if err != nil {
 		t.Fatalf("Uninstall: %v", err)
@@ -539,7 +539,7 @@ func TestList_DoesNotExposeSecrets(t *testing.T) {
 			makePetPluginContrib("com.example/pet-safe", "pet-safe"),
 		},
 	}
-	svc := NewDesktopPetPluginManagementService(container, &fakeRuntime{})
+	svc := NewDesktopPetPluginManagementService(container, &fakeRuntime{}, nil)
 	resp, err := svc.List(context.Background(), 1, 20, "")
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -570,7 +570,7 @@ func TestList_CrossCenterIsolation(t *testing.T) {
 			makeToolContrib("com.example/general-z", "tool-contrib"),
 		},
 	}
-	svc := NewDesktopPetPluginManagementService(container, &fakeRuntime{})
+	svc := NewDesktopPetPluginManagementService(container, &fakeRuntime{}, nil)
 	resp, err := svc.List(context.Background(), 1, 20, "")
 	if err != nil {
 		t.Fatalf("List: %v", err)
@@ -591,7 +591,7 @@ func TestInstall_ErrorPropagation(t *testing.T) {
 			return kernelInstalledExtension{}, errors.New("manifest validation failed")
 		},
 	}
-	svc := NewDesktopPetPluginManagementService(&fakeContainer{}, rt)
+	svc := NewDesktopPetPluginManagementService(&fakeContainer{}, rt, nil)
 	_, err := svc.Install(context.Background(), "/tmp/bad.zip")
 	if err == nil {
 		t.Error("expected error from kernel Install")
@@ -612,7 +612,7 @@ func TestEnable_KernelErrorPropagation(t *testing.T) {
 			makePetPluginContrib("com.example/pet-err", "pet-err"),
 		},
 	}
-	svc := NewDesktopPetPluginManagementService(container, rt)
+	svc := NewDesktopPetPluginManagementService(container, rt, nil)
 	_, err := svc.Enable(context.Background(), "com.example/pet-err")
 	if err == nil {
 		t.Error("expected error from kernel Enable")
@@ -627,7 +627,7 @@ func TestUpdate_CallsKernel(t *testing.T) {
 			return kernelInstalledExtension{ID: "com.example/pet-upd", Name: "Pet Updated", Version: "2.0.0"}, nil
 		},
 	}
-	svc := NewDesktopPetPluginManagementService(&fakeContainer{}, rt)
+	svc := NewDesktopPetPluginManagementService(&fakeContainer{}, rt, nil)
 	result, err := svc.Update(context.Background(), "/tmp/pkg-v2.zip")
 	if err != nil {
 		t.Fatalf("Update: %v", err)
@@ -647,7 +647,7 @@ func TestUpdate_CallsKernel(t *testing.T) {
 }
 
 func TestUpdate_EmptyPathReturnsInvalidInput(t *testing.T) {
-	svc := NewDesktopPetPluginManagementService(&fakeContainer{}, &fakeRuntime{})
+	svc := NewDesktopPetPluginManagementService(&fakeContainer{}, &fakeRuntime{}, nil)
 	_, err := svc.Update(context.Background(), "")
 	if err != ErrInvalidInput {
 		t.Errorf("expected ErrInvalidInput, got %v", err)
@@ -660,7 +660,7 @@ func TestUpdate_ErrorPropagation(t *testing.T) {
 			return kernelInstalledExtension{}, errors.New("update failed: version conflict")
 		},
 	}
-	svc := NewDesktopPetPluginManagementService(&fakeContainer{}, rt)
+	svc := NewDesktopPetPluginManagementService(&fakeContainer{}, rt, nil)
 	_, err := svc.Update(context.Background(), "/tmp/bad.zip")
 	if err == nil {
 		t.Error("expected error from kernel Update")
@@ -668,7 +668,7 @@ func TestUpdate_ErrorPropagation(t *testing.T) {
 }
 
 func TestUpdate_KernelUnavailable(t *testing.T) {
-	svc := NewDesktopPetPluginManagementService(&fakeContainer{}, nil)
+	svc := NewDesktopPetPluginManagementService(&fakeContainer{}, nil, nil)
 	_, err := svc.Update(context.Background(), "/tmp/pkg.zip")
 	if err != ErrKernelUnavailable {
 		t.Errorf("expected ErrKernelUnavailable, got %v", err)

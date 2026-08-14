@@ -16,14 +16,19 @@ func (s *service) GetRuntimeStatus() map[string]interface{} {
 	runtime.ReadMemStats(&memStats)
 	pid := os.Getpid()
 	return map[string]interface{}{
-		"status": "running", "pid": pid,
-		"memory": map[string]interface{}{"rssMB": memStats.Alloc / 1024 / 1024},
-		"cpu":    runtime.NumCPU(), "uptime": int(time.Since(s.startTime).Seconds()),
+		"status":         "running",
+		"pid":            pid,
+		"runtimeProfile": s.runtimeProfile.String(),
+		"memory":         map[string]interface{}{"rssMB": memStats.Alloc / 1024 / 1024},
+		"cpu":            runtime.NumCPU(),
+		"uptime":         int(time.Since(s.startTime).Seconds()),
 	}
 }
 
 func (s *service) GetRuntimeHealth() map[string]interface{} {
-	return s.Health()
+	result := s.Health()
+	result["runtimeProfile"] = s.runtimeProfile.String()
+	return result
 }
 
 func (s *service) GetRuntimeHealthHistory() map[string]interface{} {
@@ -39,10 +44,20 @@ func (s *service) GetRuntimeMode() map[string]interface{} {
 	if mode == "" {
 		mode = "desktop-local"
 	}
-	return map[string]interface{}{"mode": mode}
+	return map[string]interface{}{
+		"mode":           mode,
+		"runtimeProfile": s.runtimeProfile.String(),
+	}
 }
 
 func (s *service) UpdateRuntimeMode(body map[string]interface{}) map[string]interface{} {
+	if _, ok := body["runtimeProfile"]; ok {
+		return map[string]interface{}{
+			"mode":            s.getAppSetting("runtime_mode"),
+			"runtimeProfile":  s.runtimeProfile.String(),
+			"requiresRestart": true,
+		}
+	}
 	if v, ok := body["mode"].(string); ok {
 		s.setAppSetting("runtime_mode", v)
 	}

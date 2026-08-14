@@ -16,22 +16,22 @@ import (
 
 var hashedTokenRe = regexp.MustCompile(`^[0-9a-f]{64}$`)
 
-var (
-	ErrInvalidHostEntry = errors.New("host_registry: invalid host entry")
-	ErrHostNotFound     = errors.New("host_registry: host not found")
-)
+func hashSessionToken(token string) string {
+	h := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(h[:])
+}
 
-type hostRepository struct {
+type registryRepository struct {
 	db *sql.DB
 }
 
-func (r *hostRepository) SaveHost(ctx context.Context, entry *HostEntry) error {
+func (r *registryRepository) SaveEntry(ctx context.Context, entry *RuntimeEntry) error {
 	if r.db == nil {
 		return nil
 	}
-	caps, err := json.Marshal(entry.Capabilities)
+	features, err := json.Marshal(entry.Features)
 	if err != nil {
-		return fmt.Errorf("host_registry: marshal capabilities: %w", err)
+		return fmt.Errorf("host_registry: marshal features: %w", err)
 	}
 	expiresAt := ""
 	if !entry.ExpiresAt.IsZero() {
@@ -39,12 +39,12 @@ func (r *hostRepository) SaveHost(ctx context.Context, entry *HostEntry) error {
 	}
 	tokenHash := ""
 	if entry.SessionToken != "" {
-		tokenHash = entry.SessionTokenHash()
+		tokenHash = hashSessionToken(entry.SessionToken)
 	}
 	_, err = r.db.ExecContext(ctx,
 		`INSERT OR REPLACE INTO kernel_host_registry
-		(host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		(host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		entry.HostClientID,
 		entry.HostSessionID,
 		entry.UserID.String(),
@@ -52,10 +52,11 @@ func (r *hostRepository) SaveHost(ctx context.Context, entry *HostEntry) error {
 		entry.DeviceID.String(),
 		entry.RuntimeID.String(),
 		entry.WindowID,
-		string(caps),
+		string(features),
+		entry.Kind.String(),
 		entry.AuthenticatedAt.Format(time.RFC3339Nano),
 		entry.LastHeartbeat.Format(time.RFC3339Nano),
-		string(entry.ConnectionState),
+		string(entry.PresenceState),
 		tokenHash,
 		entry.CreatedAt.Format(time.RFC3339Nano),
 		expiresAt,
@@ -63,24 +64,24 @@ func (r *hostRepository) SaveHost(ctx context.Context, entry *HostEntry) error {
 	return err
 }
 
-func (r *hostRepository) GetHost(ctx context.Context, hostClientID string) (*HostEntry, error) {
+func (r *registryRepository) GetEntry(ctx context.Context, entryID string) (*RuntimeEntry, error) {
 	if r.db == nil {
-		return nil, ErrHostNotFound
+		return nil, ErrRegistryEntryNotFound
 	}
 	row := r.db.QueryRowContext(ctx,
-		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at
+		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at
 		FROM kernel_host_registry WHERE host_client_id = ?`,
-		hostClientID,
+		entryID,
 	)
-	return scanHostEntry(row)
+	return scanEntry(row)
 }
 
-func (r *hostRepository) ListHostsByUser(ctx context.Context, userID runtimeidentity.UserID) ([]*HostEntry, error) {
+func (r *registryRepository) ListEntriesByUser(ctx context.Context, userID runtimeidentity.UserID) ([]*RuntimeEntry, error) {
 	if r.db == nil {
 		return nil, nil
 	}
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at
+		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at
 		FROM kernel_host_registry WHERE user_id = ?`,
 		userID.String(),
 	)
@@ -88,66 +89,101 @@ func (r *hostRepository) ListHostsByUser(ctx context.Context, userID runtimeiden
 		return nil, err
 	}
 	defer rows.Close()
-	return scanHostEntries(rows)
+	return scanEntries(rows)
 }
 
-func (r *hostRepository) ListAllHosts(ctx context.Context) ([]*HostEntry, error) {
+func (r *registryRepository) ListEntriesByDevice(ctx context.Context, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID) ([]*RuntimeEntry, error) {
 	if r.db == nil {
 		return nil, nil
 	}
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at
+		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at
+		FROM kernel_host_registry WHERE user_id = ? AND device_id = ?`,
+		userID.String(),
+		deviceID.String(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanEntries(rows)
+}
+
+func (r *registryRepository) ListEntriesByRuntime(ctx context.Context, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) ([]*RuntimeEntry, error) {
+	if r.db == nil {
+		return nil, nil
+	}
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at
+		FROM kernel_host_registry WHERE user_id = ? AND device_id = ? AND runtime_id = ?`,
+		userID.String(),
+		deviceID.String(),
+		runtimeID.String(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanEntries(rows)
+}
+
+func (r *registryRepository) ListAllEntries(ctx context.Context) ([]*RuntimeEntry, error) {
+	if r.db == nil {
+		return nil, nil
+	}
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at
 		FROM kernel_host_registry`,
 	)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	return scanHostEntries(rows)
+	return scanEntries(rows)
 }
 
-func (r *hostRepository) DeleteHost(ctx context.Context, hostClientID string) error {
+func (r *registryRepository) DeleteEntry(ctx context.Context, entryID string) error {
 	if r.db == nil {
 		return nil
 	}
 	_, err := r.db.ExecContext(ctx,
 		`DELETE FROM kernel_host_registry WHERE host_client_id = ?`,
-		hostClientID,
+		entryID,
 	)
 	return err
 }
 
-func (r *hostRepository) UpdateConnectionState(ctx context.Context, hostClientID string, state ConnectionState) error {
+func (r *registryRepository) UpdateEntryState(ctx context.Context, entryID string, state PresenceState) error {
 	if r.db == nil {
 		return nil
 	}
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE kernel_host_registry SET connection_state = ? WHERE host_client_id = ?`,
 		string(state),
-		hostClientID,
+		entryID,
 	)
 	return err
 }
 
-func (r *hostRepository) UpdateHeartbeat(ctx context.Context, hostClientID string, heartbeat time.Time) error {
+func (r *registryRepository) UpdateEntryHeartbeat(ctx context.Context, entryID string, heartbeat time.Time) error {
 	if r.db == nil {
 		return nil
 	}
 	_, err := r.db.ExecContext(ctx,
 		`UPDATE kernel_host_registry SET last_heartbeat = ? WHERE host_client_id = ?`,
 		heartbeat.Format(time.RFC3339Nano),
-		hostClientID,
+		entryID,
 	)
 	return err
 }
 
-func (r *hostRepository) ListExpired(ctx context.Context) ([]*HostEntry, error) {
+func (r *registryRepository) ListExpiredEntries(ctx context.Context) ([]*RuntimeEntry, error) {
 	if r.db == nil {
 		return nil, nil
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at
+		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, entry_kind, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at
 		FROM kernel_host_registry WHERE expires_at != '' AND expires_at < ?`,
 		now,
 	)
@@ -155,20 +191,21 @@ func (r *hostRepository) ListExpired(ctx context.Context) ([]*HostEntry, error) 
 		return nil, err
 	}
 	defer rows.Close()
-	return scanHostEntries(rows)
+	return scanEntries(rows)
 }
 
 type rowScanner interface {
 	Scan(dest ...interface{}) error
 }
 
-func scanHostEntry(row rowScanner) (*HostEntry, error) {
-	var entry HostEntry
-	var capsStr string
+func scanEntry(row rowScanner) (*RuntimeEntry, error) {
+	var entry RuntimeEntry
+	var featuresStr string
 	var authenticatedAt, lastHeartbeat, createdAt string
 	var expiresAt string
-	var connState string
+	var presenceState string
 	var userID, platform, deviceID, runtimeID string
+	var kind string
 
 	err := row.Scan(
 		&entry.HostClientID,
@@ -178,17 +215,18 @@ func scanHostEntry(row rowScanner) (*HostEntry, error) {
 		&deviceID,
 		&runtimeID,
 		&entry.WindowID,
-		&capsStr,
+		&featuresStr,
+		&kind,
 		&authenticatedAt,
 		&lastHeartbeat,
-		&connState,
+		&presenceState,
 		&entry.SessionToken,
 		&createdAt,
 		&expiresAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrHostNotFound
+			return nil, ErrRegistryEntryNotFound
 		}
 		return nil, err
 	}
@@ -197,36 +235,38 @@ func scanHostEntry(row rowScanner) (*HostEntry, error) {
 	entry.Platform = runtimeidentity.ParsePlatform(platform)
 	entry.DeviceID = runtimeidentity.ParseDeviceID(deviceID)
 	entry.RuntimeID = runtimeidentity.ParseRuntimeID(runtimeID)
+	entry.Kind = ParseRegistryEntryKind(kind)
 
-	if capsStr != "" {
-		if err := json.Unmarshal([]byte(capsStr), &entry.Capabilities); err != nil {
-			return nil, fmt.Errorf("host_registry: unmarshal capabilities: %w", err)
+	if featuresStr != "" {
+		var rawFeatures []string
+		if err := json.Unmarshal([]byte(featuresStr), &rawFeatures); err != nil {
+			return nil, fmt.Errorf("host_registry: unmarshal features: %w", err)
+		}
+		entry.Features = make([]EndpointFeature, 0, len(rawFeatures))
+		for _, f := range rawFeatures {
+			entry.Features = append(entry.Features, EndpointFeature(f))
 		}
 	}
 
-	entry.ConnectionState = ConnectionState(connState)
+	entry.PresenceState = PresenceState(presenceState)
 
 	if authenticatedAt != "" {
-		t, err := time.Parse(time.RFC3339Nano, authenticatedAt)
-		if err == nil {
+		if t, err := time.Parse(time.RFC3339Nano, authenticatedAt); err == nil {
 			entry.AuthenticatedAt = t
 		}
 	}
 	if lastHeartbeat != "" {
-		t, err := time.Parse(time.RFC3339Nano, lastHeartbeat)
-		if err == nil {
+		if t, err := time.Parse(time.RFC3339Nano, lastHeartbeat); err == nil {
 			entry.LastHeartbeat = t
 		}
 	}
 	if createdAt != "" {
-		t, err := time.Parse(time.RFC3339Nano, createdAt)
-		if err == nil {
+		if t, err := time.Parse(time.RFC3339Nano, createdAt); err == nil {
 			entry.CreatedAt = t
 		}
 	}
 	if expiresAt != "" {
-		t, err := time.Parse(time.RFC3339Nano, expiresAt)
-		if err == nil {
+		if t, err := time.Parse(time.RFC3339Nano, expiresAt); err == nil {
 			entry.ExpiresAt = t
 		}
 	}
@@ -234,10 +274,10 @@ func scanHostEntry(row rowScanner) (*HostEntry, error) {
 	return &entry, nil
 }
 
-func scanHostEntries(rows *sql.Rows) ([]*HostEntry, error) {
-	var result []*HostEntry
+func scanEntries(rows *sql.Rows) ([]*RuntimeEntry, error) {
+	var result []*RuntimeEntry
 	for rows.Next() {
-		entry, err := scanHostEntry(rows)
+		entry, err := scanEntry(rows)
 		if err != nil {
 			return nil, err
 		}
@@ -246,7 +286,7 @@ func scanHostEntries(rows *sql.Rows) ([]*HostEntry, error) {
 	return result, rows.Err()
 }
 
-func (r *hostRepository) MigrateSessionTokens(ctx context.Context) error {
+func (r *registryRepository) MigrateSessionTokens(ctx context.Context) error {
 	if r.db == nil {
 		return nil
 	}
@@ -260,19 +300,19 @@ func (r *hostRepository) MigrateSessionTokens(ctx context.Context) error {
 	defer rows.Close()
 
 	type migrationRow struct {
-		hostClientID string
-		token        string
+		entryID string
+		token   string
 	}
 	var pending []migrationRow
 	for rows.Next() {
-		var hostClientID, token string
-		if err := rows.Scan(&hostClientID, &token); err != nil {
+		var entryID, token string
+		if err := rows.Scan(&entryID, &token); err != nil {
 			return fmt.Errorf("host_registry: scan session token: %w", err)
 		}
 		if token == "" || hashedTokenRe.MatchString(token) {
 			continue
 		}
-		pending = append(pending, migrationRow{hostClientID: hostClientID, token: token})
+		pending = append(pending, migrationRow{entryID: entryID, token: token})
 	}
 	if err := rows.Err(); err != nil {
 		return fmt.Errorf("host_registry: iterate session tokens: %w", err)
@@ -281,8 +321,8 @@ func (r *hostRepository) MigrateSessionTokens(ctx context.Context) error {
 	for _, row := range pending {
 		tokenHash := sha256.Sum256([]byte(row.token))
 		hexHash := hex.EncodeToString(tokenHash[:])
-		if _, err := r.db.ExecContext(ctx, `UPDATE kernel_host_registry SET session_token = ? WHERE host_client_id = ?`, hexHash, row.hostClientID); err != nil {
-			return fmt.Errorf("host_registry: hash session token for %s: %w", row.hostClientID, err)
+		if _, err := r.db.ExecContext(ctx, `UPDATE kernel_host_registry SET session_token = ? WHERE host_client_id = ?`, hexHash, row.entryID); err != nil {
+			return fmt.Errorf("host_registry: hash session token for %s: %w", row.entryID, err)
 		}
 	}
 	return nil

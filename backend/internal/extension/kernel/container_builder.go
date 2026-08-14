@@ -10,7 +10,9 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/agent/tool"
+	"github.com/u-ai/backend/internal/browser"
 	"github.com/u-ai/backend/internal/deepsearch"
+	"github.com/u-ai/backend/internal/desktoppet/integration"
 	"github.com/u-ai/backend/internal/desktoppet/plugin_boundary"
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
@@ -56,13 +58,16 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
 	"github.com/u-ai/backend/internal/gamehost"
+	"github.com/u-ai/backend/internal/gamehost/upgrade"
 	"github.com/u-ai/backend/internal/imagegen"
 	"github.com/u-ai/backend/internal/imageintelligence"
 	"github.com/u-ai/backend/internal/imageprovider"
+	"github.com/u-ai/backend/internal/media"
 	"github.com/u-ai/backend/internal/platform/process"
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/internal/search"
 	"github.com/u-ai/backend/internal/vision"
+	"github.com/u-ai/backend/internal/workspace"
 	"github.com/u-ai/backend/pkg/resourceuri"
 	"github.com/u-ai/backend/pkg/sse"
 )
@@ -77,6 +82,7 @@ type ContainerBuilder struct {
 	nodeEnvironmentResolver script_host.NodeEnvironmentResolver
 	hostArtifactResolver    script_host.ArtifactResolver
 	androidLinuxProvider    interface{}
+	androidNativeProvider   capability.AndroidProvider
 	iosNativeProvider       capability.IOSProvider
 	host                    runtimehost.RuntimeHost
 	searchConfig            search.Config
@@ -85,6 +91,10 @@ type ContainerBuilder struct {
 	imagegenSvc             imagegen.Service
 	providerRegistry        *imageprovider.Registry
 	resourceResolver        *resourceuri.PhysicalResolver
+	gameHostArchiveUpdater  GameHostArchiveUpdater
+	mediaService            media.Service
+	workspaceService        workspace.Service
+	browserProvider         browser.BrowserProvider
 }
 
 func NewContainerBuilder() *ContainerBuilder {
@@ -173,8 +183,43 @@ func (b *ContainerBuilder) WithResourceResolver(resolver *resourceuri.PhysicalRe
 	return b
 }
 
+func (b *ContainerBuilder) WithAndroidNativeProvider(provider capability.AndroidProvider) *ContainerBuilder {
+	b.androidNativeProvider = provider
+	return b
+}
+
 func (b *ContainerBuilder) WithIOSNativeProvider(provider capability.IOSProvider) *ContainerBuilder {
 	b.iosNativeProvider = provider
+	return b
+}
+
+type GameHostArchiveUpdater interface {
+	UpdateArchive(ctx context.Context, extensionID string, archivePath string) (*gamehostKernelUpdateResult, error)
+}
+
+type gamehostKernelUpdateResult struct {
+	Success    bool
+	NewVersion string
+	Reason     string
+}
+
+func (b *ContainerBuilder) WithGameHostArchiveUpdater(updater GameHostArchiveUpdater) *ContainerBuilder {
+	b.gameHostArchiveUpdater = updater
+	return b
+}
+
+func (b *ContainerBuilder) WithMediaService(svc media.Service) *ContainerBuilder {
+	b.mediaService = svc
+	return b
+}
+
+func (b *ContainerBuilder) WithWorkspaceService(svc workspace.Service) *ContainerBuilder {
+	b.workspaceService = svc
+	return b
+}
+
+func (b *ContainerBuilder) WithBrowserProvider(provider browser.BrowserProvider) *ContainerBuilder {
+	b.browserProvider = provider
 	return b
 }
 
@@ -322,13 +367,14 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	adapterRegistry := capability.NewRuntimeAdapterRegistry()
 	toolRegistry := capability.NewToolRegistry()
 
-	kernelSecretBroker := buildKernelSecretBroker(b.extRoot)
+	kernelSecretBroker, err := buildKernelSecretBroker(b.extRoot)
+	if err != nil {
+		return nil, fmt.Errorf("kernel: build secret broker: %w", err)
+	}
 	observabilityStore := observability.NewSQLiteStorage(db)
 	observabilityWriter := observability.NewRecordWriter(observabilityStore, observability.DefaultWriterConfig())
 	observabilitySanitizer := observability.NewRecordSanitizer()
-	if kernelSecretBroker != nil {
-		observabilitySanitizer.SetRedactor(kernelSecretBroker.Redactor())
-	}
+	observabilitySanitizer.SetRedactor(kernelSecretBroker.Redactor())
 	executionAuditHook := observability.NewExecutionHook(observabilityWriter, observabilitySanitizer)
 	concurrencyCtrl, err := execution.NewConcurrencyController(execution.ConcurrencyPolicy{
 		GlobalLimit:          100,
@@ -495,7 +541,12 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 	var petPluginBoundary *plugin_boundary.DesktopPetPluginBoundary
 	if petPluginSource != nil {
-		petPluginBoundary = plugin_boundary.NewBoundary(petPluginSource)
+		prodCaps := integration.DefaultCapabilities()
+		boundary, err := plugin_boundary.NewProductionBoundary(petPluginSource, prodCaps)
+		if err != nil {
+			return nil, fmt.Errorf("kernel: create production pet plugin boundary: %w", err)
+		}
+		petPluginBoundary = boundary
 	}
 
 	jsFactory := javascript_main.NewRuntimeFactory()
@@ -594,28 +645,59 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return imageIntelligenceHandler.Dispatch(ctx, handlerName, input)
 	}
 
+	mediaCaller := makeMediaCallFunc(b.mediaService)
+	mediaHealth := makeMediaHealthFunc(b.mediaService)
+	workspaceCaller := makeWorkspaceCallFunc(b.workspaceService)
+	workspaceHealth := makeWorkspaceHealthFunc(b.workspaceService)
+
 	if err := RegisterProductionAdapters(adapterRegistry, AdapterRegistrationDeps{
-		JSGlobalFactory:      jsFactory,
-		WASMFactory:          wasmFactory,
-		WASMModuleMgr:        wasmModuleMgr,
-		Supervisor:           supervisor,
-		TaskService:          taskRuntimeService,
-		WorkflowCaller:       makeWorkflowCallFunc(workflowExecutor),
-		WorkflowCancel:       makeWorkflowCancelFunc(workflowExecutor),
-		BuiltinDispatcher:    builtinDispatcher,
-		AndroidLinuxProvider: b.androidLinuxProvider,
-		SearchCaller:         makeSearchCallFunc(b.searchConfig, kernelSecretBroker),
-		SearchHealth:         makeSearchHealthFunc(b.searchConfig, kernelSecretBroker),
-		InternalDispatcher:   internalDispatcher,
+		JSGlobalFactory:       jsFactory,
+		WASMFactory:           wasmFactory,
+		WASMModuleMgr:         wasmModuleMgr,
+		Supervisor:            supervisor,
+		TaskService:           taskRuntimeService,
+		WorkflowCaller:        makeWorkflowCallFunc(workflowExecutor),
+		WorkflowCancel:        makeWorkflowCancelFunc(workflowExecutor),
+		BuiltinDispatcher:     builtinDispatcher,
+		AndroidLinuxProvider:  b.androidLinuxProvider,
+		AndroidNativeProvider: b.androidNativeProvider,
+		SearchCaller:          makeSearchCallFunc(b.searchConfig, kernelSecretBroker),
+		SearchHealth:          makeSearchHealthFunc(b.searchConfig, kernelSecretBroker),
+		InternalDispatcher:    internalDispatcher,
+		MediaCaller:           mediaCaller,
+		MediaHealth:           mediaHealth,
+		WorkspaceCaller:       workspaceCaller,
+		WorkspaceHealth:       workspaceHealth,
+		BrowserCaller:         makeBrowserCallFunc(b.browserProvider),
+		BrowserHealth:         makeBrowserHealthFunc(b.browserProvider),
 	}); err != nil {
 		return nil, fmt.Errorf("kernel: register production adapters: %w", err)
+	}
+
+	if b.browserProvider != nil {
+		if err := registerBrowserTools(toolRegistry, b.browserProvider); err != nil {
+			return nil, fmt.Errorf("kernel: register browser tools: %w", err)
+		}
 	}
 
 	if err := registerIOSToolsIfPresent(toolRegistry, b.iosNativeProvider); err != nil {
 		return nil, fmt.Errorf("kernel: register ios native tools: %w", err)
 	}
+	if err := registerAndroidNativeToolsIfPresent(ctx, toolRegistry, b.androidNativeProvider); err != nil {
+		return nil, fmt.Errorf("kernel: register android native tools: %w", err)
+	}
 	if err := registerSearchTools(toolRegistry, b.searchConfig, kernelSecretBroker); err != nil {
 		return nil, err
+	}
+	if b.mediaService != nil {
+		if err := registerMediaTools(toolRegistry, b.mediaService); err != nil {
+			return nil, fmt.Errorf("kernel: register media tools: %w", err)
+		}
+	}
+	if b.workspaceService != nil {
+		if err := registerWorkspaceTools(toolRegistry, b.workspaceService); err != nil {
+			return nil, fmt.Errorf("kernel: register workspace tools: %w", err)
+		}
 	}
 	if err := registerDeepSearchSystemTask(ctx, taskRuntimeService, b.deepSearchTaskEntry); err != nil {
 		return nil, fmt.Errorf("kernel: register deep search system task: %w", err)
@@ -926,6 +1008,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		ExecutionKernel:        executionKernel,
 		HostAPIGateway:         hostAPIGateway,
 		PermissionBroker:       permBroker,
+		PermissionDefinitions:  permDefRegistry,
 		ScopeManager:           scopeManager,
 		ScopeSnapshotCreator: func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error) {
 			invocationID := fmt.Sprintf("ui-sess-%d", time.Now().UnixNano())
@@ -1075,11 +1158,24 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	devModeReloader.SetCleanupFailureStore(NewSQLiteCleanupFailureStore(db))
 
 	kernelSource := gamehost.NewKernelContributionSource(instRepo, defRepo, contribRepo)
+
+	var archiveUpdater upgrade.KernelArchiveUpdater
+	if b.gameHostArchiveUpdater != nil {
+		archiveUpdater = upgrade.NewKernelArchiveUpdaterAdapter(b.gameHostArchiveUpdater.UpdateArchive)
+	}
+
 	gameHost, err := gamehost.ComposeGameHost(gamehost.GameHostComposeOptions{
 		DataRoot:          b.extRoot,
 		KernelSource:      kernelSource,
 		TrustedSupervisor: trustedSupervisor,
 		HostAPIGateway:    hostAPIGateway,
+		SecretBroker:      kernelSecretBroker,
+		PermissionBroker:  permBroker,
+		ArchiveUpdater:    archiveUpdater,
+
+		KernelPermissionBroker:        permBroker,
+		KernelPermissionSnapshotStore: permSnapshotStore,
+		KernelScopeManager:            scopeManager,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("kernel: compose gamehost: %w", err)
@@ -1115,18 +1211,18 @@ func (b *ContainerBuilder) buildStore(ctx context.Context) (*sqlite.Store, error
 	return store, nil
 }
 
-func buildKernelSecretBroker(extRoot string) *secret.Broker {
+func buildKernelSecretBroker(extRoot string) (*secret.Broker, error) {
 	secretsPath := filepath.Join(extRoot, "kernel-secrets.json")
 	keyPath := filepath.Join(extRoot, "kernel-secrets.key")
 	store, err := secret.NewEncryptedFileStore(secretsPath, keyPath)
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("create encrypted file store: %w", err)
 	}
 	broker, err := secret.NewBroker(secret.BrokerConfig{Store: store})
 	if err != nil {
-		return nil
+		return nil, fmt.Errorf("create secret broker: %w", err)
 	}
-	return broker
+	return broker, nil
 }
 
 func validateExecutionWiring(kernel *execution.ExecutionPipeline, adapters *capability.RuntimeAdapterRegistry, tools *capability.ToolRegistry) error {

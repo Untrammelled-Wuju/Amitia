@@ -16,23 +16,29 @@ const (
 )
 
 type PermissionApprovalRecordRequest struct {
-	InvocationID    string
-	PermissionIDs   []string
-	ScopeSnapshotID string
-	Decision        ApprovalDecision
-	ApprovedBy      string
-	ExpiresAt       *time.Time
+	InvocationID        string
+	PermissionIDs       []string
+	ScopeSnapshotID     string
+	Decision            ApprovalDecision
+	ApprovedBy          string
+	ExpiresAt           *time.Time
+	ExecutionContext    PermissionExecutionContext
+	ExecutionBindingKey string
+	RiskLevel           string
 }
 
 type PermissionApprovalRecord struct {
-	RecordID        string
-	InvocationID    string
-	PermissionIDs   []string
-	ScopeSnapshotID string
-	Decision        ApprovalDecision
-	ApprovedBy      string
-	CreatedAt       time.Time
-	ExpiresAt       *time.Time
+	RecordID            string
+	InvocationID        string
+	PermissionIDs       []string
+	ScopeSnapshotID     string
+	Decision            ApprovalDecision
+	ApprovedBy          string
+	CreatedAt           time.Time
+	ExpiresAt           *time.Time
+	ExecutionContext    PermissionExecutionContext
+	ExecutionBindingKey string
+	RiskLevel           string
 }
 
 func (b *DefaultPermissionBroker) RecordApproval(ctx context.Context, request PermissionApprovalRecordRequest) (PermissionApprovalRecord, error) {
@@ -40,17 +46,25 @@ func (b *DefaultPermissionBroker) RecordApproval(ctx context.Context, request Pe
 		return PermissionApprovalRecord{}, fmt.Errorf("invalid approval decision: %s", request.Decision)
 	}
 
-	recordID := generateApprovalRecordID(request)
+	bindingKey := request.ExecutionBindingKey
+	if bindingKey == "" && !request.ExecutionContext.IsEmpty() {
+		bindingKey = request.ExecutionContext.BindingKey()
+	}
+
+	recordID := generateApprovalRecordID(request, bindingKey)
 
 	record := PermissionApprovalRecord{
-		RecordID:        recordID,
-		InvocationID:    request.InvocationID,
-		PermissionIDs:   append([]string{}, request.PermissionIDs...),
-		ScopeSnapshotID: request.ScopeSnapshotID,
-		Decision:        request.Decision,
-		ApprovedBy:      request.ApprovedBy,
-		CreatedAt:       time.Now().UTC(),
-		ExpiresAt:       request.ExpiresAt,
+		RecordID:            recordID,
+		InvocationID:        request.InvocationID,
+		PermissionIDs:       append([]string{}, request.PermissionIDs...),
+		ScopeSnapshotID:     request.ScopeSnapshotID,
+		Decision:            request.Decision,
+		ApprovedBy:          request.ApprovedBy,
+		CreatedAt:           time.Now().UTC(),
+		ExpiresAt:           request.ExpiresAt,
+		ExecutionContext:    request.ExecutionContext,
+		ExecutionBindingKey: bindingKey,
+		RiskLevel:           request.RiskLevel,
 	}
 
 	b.mu.Lock()
@@ -59,6 +73,10 @@ func (b *DefaultPermissionBroker) RecordApproval(ctx context.Context, request Pe
 	}
 	b.approvalRecords[recordID] = record
 	b.mu.Unlock()
+
+	if b.auditRec != nil {
+		b.auditRec.RecordApproval(ctx, record)
+	}
 
 	return record, nil
 }
@@ -73,8 +91,8 @@ func (b *DefaultPermissionBroker) getApprovalRecord(recordID string) (Permission
 	return r, ok
 }
 
-func generateApprovalRecordID(request PermissionApprovalRecordRequest) string {
-	input := fmt.Sprintf("%s:%s:%d", request.InvocationID, request.Decision, time.Now().UnixNano())
+func generateApprovalRecordID(request PermissionApprovalRecordRequest, bindingKey string) string {
+	input := fmt.Sprintf("%s:%s:%s:%d", request.InvocationID, request.Decision, bindingKey, time.Now().UnixNano())
 	h := sha256.Sum256([]byte(input))
 	return "apr_" + hex.EncodeToString(h[:16])
 }

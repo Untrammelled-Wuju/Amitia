@@ -93,7 +93,7 @@ type Reconciler struct {
 type ContributionAdapter interface {
 	Kind() ContributionKind
 	Register(ctx context.Context, ref ContributionRef, def map[string]any, rev int, enabled bool) (ContributionRegistration, error)
-	Detach(ctx context.Context, ref ContributionRef) error
+	Detach(ctx context.Context, reg ContributionRegistration) error
 	Validate(ctx context.Context, ref ContributionRef, def map[string]any) error
 }
 
@@ -327,7 +327,7 @@ func (r *Reconciler) detachSingleLocked(ctx context.Context, ref ContributionRef
 	}
 	adapter := r.adapterForKind(reg.Kind)
 	if adapter != nil {
-		if err := adapter.Detach(ctx, ref); err != nil {
+		if err := adapter.Detach(ctx, reg); err != nil {
 			return fmt.Errorf("detach %s: %w", ref.Key(), err)
 		}
 	}

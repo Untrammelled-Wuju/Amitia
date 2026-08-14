@@ -12,12 +12,6 @@ import (
 	"github.com/u-ai/backend/pkg/util"
 )
 
-func (h *Handler) StorageBackup(c *gin.Context) { util.SuccessResponse(c, h.service.StorageBackup()) }
-
-func (h *Handler) StorageBackupEncrypted(c *gin.Context) {
-	util.SuccessResponse(c, h.service.StorageBackupEncrypted())
-}
-
 func (h *Handler) StorageBackups(c *gin.Context) {
 	util.SuccessResponse(c, h.service.GetStorageBackups())
 }
@@ -28,26 +22,6 @@ func (h *Handler) StorageDeleteBackup(c *gin.Context) {
 
 func (h *Handler) StorageDeleteAll(c *gin.Context) {
 	util.SuccessResponse(c, h.service.DeleteAllStorage())
-}
-
-func (h *Handler) StorageRestore(c *gin.Context) {
-	util.SuccessResponse(c, h.service.StorageRestore(c.Param("name")))
-}
-
-func (h *Handler) StorageRestoreEncrypted(c *gin.Context) {
-	var body map[string]interface{}
-	c.ShouldBindJSON(&body)
-	util.SuccessResponse(c, h.service.StorageRestoreEncrypted(body))
-}
-
-func (h *Handler) StorageRestoreVerify(c *gin.Context) {
-	var body map[string]interface{}
-	c.ShouldBindJSON(&body)
-	util.SuccessResponse(c, h.service.StorageRestoreVerify(body))
-}
-
-func (h *Handler) StorageExportUserData(c *gin.Context) {
-	util.SuccessResponse(c, h.service.StorageExportUserData())
 }
 
 func (h *Handler) StorageExportAmitia(c *gin.Context) {

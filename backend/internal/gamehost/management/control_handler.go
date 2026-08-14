@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
+
+	"github.com/u-ai/backend/internal/gamehost/control"
 )
 
 var (
@@ -26,7 +28,7 @@ type ReleaseResult struct {
 
 type TakeoverFunc func(ctx context.Context, runtimeID string) (TakeoverResult, error)
 type ReleaseFunc func(ctx context.Context, runtimeID string, targetMode string, expectedEpoch uint64) (ReleaseResult, error)
-type EmergencyStopFunc func(ctx context.Context, runtimeID string) error
+type EmergencyStopFunc func(ctx context.Context, runtimeID string) (control.EmergencyStopResult, error)
 
 type ControlHandler struct {
 	takeoverFn      TakeoverFunc
@@ -129,11 +131,11 @@ func (h *ControlHandler) EmergencyStop(c *gin.Context) {
 		return
 	}
 
-	err := h.emergencyStopFn(c.Request.Context(), runtimeID)
+	result, err := h.emergencyStopFn(c.Request.Context(), runtimeID)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": ControlMutationResult{Success: true, Mode: "suspended"}})
+	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": result})
 }

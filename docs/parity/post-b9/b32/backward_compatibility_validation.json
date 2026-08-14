@@ -1,8 +1,0 @@
-{
-  "backwardCompatibility": {
-    "decisionPipelineUnchanged": true,
-    "agentLoopUnchanged": true,
-    "noBreakingChanges": true
-  },
-  "detail": "PASS_NO_CODE_CHANGE - 未修改任何现有代码。"
-}

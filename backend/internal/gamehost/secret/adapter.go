@@ -17,36 +17,88 @@ type KernelLeaseBroker interface {
 }
 
 type RuntimeIdentityReader interface {
-	ResolveRuntime(runtimeID string) (pluginID string, extensionID string, state string, err error)
-	ResolveService(runtimeID, serviceID string) (pluginID string, extensionID string, state string, err error)
-	ExtensionEnabled(extensionID string) bool
+	ResolveRuntime(
+		ctx context.Context,
+		runtimeID string,
+	) (
+		pluginID string,
+		extensionID string,
+		state string,
+		generation int64,
+		err error,
+	)
+
+	ResolveService(
+		ctx context.Context,
+		runtimeID string,
+		serviceID string,
+	) (
+		pluginID string,
+		extensionID string,
+		state string,
+		err error,
+	)
+
+	ExtensionEnabled(
+		ctx context.Context,
+		extensionID string,
+	) (bool, error)
+}
+
+type SecretPermissionDecision struct {
+	Allowed              bool
+	Reason               string
+	PermissionSnapshotID string
+	ScopeSnapshotID      string
 }
 
 type PermissionGate interface {
-	CanAcquireSecret(ctx context.Context, extensionID, pluginID, runtimeID, serviceID, ref string) bool
+	CheckSecretUse(
+		ctx context.Context,
+		extensionID string,
+		pluginID string,
+		runtimeID string,
+		serviceID string,
+		ref string,
+	) (SecretPermissionDecision, error)
 }
 
 type SecretLeaseAdapter struct {
-	broker    KernelLeaseBroker
-	index     *LeaseBindingIndex
-	reader    RuntimeIdentityReader
-	gate      PermissionGate
-	mu        sync.Mutex
-	acquiring map[string]bool
+	broker   KernelLeaseBroker
+	index    *LeaseBindingIndex
+	reader   RuntimeIdentityReader
+	gate     PermissionGate
+	mu       sync.RWMutex
+	stopping map[serviceBinding]bool
+	shutdown bool
+}
+
+type serviceBinding struct {
+	runtimeID string
+	serviceID string
 }
 
 func NewSecretLeaseAdapter(
 	broker KernelLeaseBroker,
 	reader RuntimeIdentityReader,
 	gate PermissionGate,
-) *SecretLeaseAdapter {
-	return &SecretLeaseAdapter{
-		broker:    broker,
-		index:     NewLeaseBindingIndex(nil),
-		reader:    reader,
-		gate:      gate,
-		acquiring: make(map[string]bool),
+) (*SecretLeaseAdapter, error) {
+	if broker == nil {
+		return nil, fmt.Errorf("broker is required")
 	}
+	if reader == nil {
+		return nil, fmt.Errorf("identity reader is required")
+	}
+	if gate == nil {
+		return nil, fmt.Errorf("permission gate is required")
+	}
+	return &SecretLeaseAdapter{
+		broker:   broker,
+		index:    NewLeaseBindingIndex(nil),
+		reader:   reader,
+		gate:     gate,
+		stopping: make(map[serviceBinding]bool),
+	}, nil
 }
 
 func NewSecretLeaseAdapterWithClock(
@@ -54,14 +106,23 @@ func NewSecretLeaseAdapterWithClock(
 	reader RuntimeIdentityReader,
 	gate PermissionGate,
 	indexClock func() int64,
-) *SecretLeaseAdapter {
-	return &SecretLeaseAdapter{
-		broker:    broker,
-		index:     NewLeaseBindingIndex(indexClock),
-		reader:    reader,
-		gate:      gate,
-		acquiring: make(map[string]bool),
+) (*SecretLeaseAdapter, error) {
+	if broker == nil {
+		return nil, fmt.Errorf("broker is required")
 	}
+	if reader == nil {
+		return nil, fmt.Errorf("identity reader is required")
+	}
+	if gate == nil {
+		return nil, fmt.Errorf("permission gate is required")
+	}
+	return &SecretLeaseAdapter{
+		broker:   broker,
+		index:    NewLeaseBindingIndex(indexClock),
+		reader:   reader,
+		gate:     gate,
+		stopping: make(map[serviceBinding]bool),
+	}, nil
 }
 
 func (a *SecretLeaseAdapter) AcquireServiceLease(
@@ -90,8 +151,12 @@ func (a *SecretLeaseAdapter) AcquireServiceLease(
 		result.Reason = "invalid secret ref"
 		return result, ErrSecretRefInvalid
 	}
+	if generation <= 0 {
+		result.Reason = "generation must be positive"
+		return result, ErrGenerationMismatch
+	}
 
-	pluginOK, extID, _, err := a.reader.ResolveRuntime(runtimeID)
+	pluginOK, extID, _, currentGen, err := a.reader.ResolveRuntime(ctx, runtimeID)
 	if err != nil {
 		result.Reason = fmt.Sprintf("runtime not found: %v", err)
 		return result, ErrRuntimeInvalid
@@ -100,8 +165,12 @@ func (a *SecretLeaseAdapter) AcquireServiceLease(
 		result.Reason = "runtime/plugin mismatch"
 		return result, ErrBindingInvalid
 	}
+	if generation != currentGen {
+		result.Reason = fmt.Sprintf("generation mismatch: expected %d, current %d", generation, currentGen)
+		return result, ErrGenerationMismatch
+	}
 
-	svcPluginID, svcExtID, _, err := a.reader.ResolveService(runtimeID, serviceID)
+	svcPluginID, svcExtID, _, err := a.reader.ResolveService(ctx, runtimeID, serviceID)
 	if err != nil {
 		result.Reason = fmt.Sprintf("service not found: %v", err)
 		return result, ErrServiceInvalid
@@ -115,15 +184,20 @@ func (a *SecretLeaseAdapter) AcquireServiceLease(
 		return result, ErrBindingInvalid
 	}
 
-	if !a.reader.ExtensionEnabled(extID) {
+	extEnabled, err := a.reader.ExtensionEnabled(ctx, extID)
+	if err != nil {
+		result.Reason = fmt.Sprintf("extension state check failed: %v", err)
+		return result, ErrExtensionDisabled
+	}
+	if !extEnabled {
 		result.Reason = "extension disabled or uninstalled"
 		return result, ErrExtensionDisabled
 	}
 
-	a.mu.Lock()
-	stopped := a.acquiring["__stop_"+runtimeID+"/"+serviceID]
-	shutdown := a.acquiring["__shutdown"]
-	a.mu.Unlock()
+	a.mu.RLock()
+	stopped := a.stopping[serviceBinding{runtimeID: runtimeID, serviceID: serviceID}]
+	shutdown := a.shutdown
+	a.mu.RUnlock()
 	if shutdown {
 		result.Reason = "host shutting down"
 		return result, ErrHostShutdown
@@ -133,8 +207,13 @@ func (a *SecretLeaseAdapter) AcquireServiceLease(
 		return result, ErrServiceStopped
 	}
 
-	if a.gate != nil && !a.gate.CanAcquireSecret(ctx, extID, pluginID, runtimeID, serviceID, string(ref)) {
-		result.Reason = "permission denied"
+	decision, err := a.gate.CheckSecretUse(ctx, extID, pluginID, runtimeID, serviceID, string(ref))
+	if err != nil {
+		result.Reason = fmt.Sprintf("permission check error: %v", err)
+		return result, ErrPermissionDenied
+	}
+	if !decision.Allowed {
+		result.Reason = fmt.Sprintf("permission denied: %s", decision.Reason)
 		return result, ErrPermissionDenied
 	}
 
@@ -146,6 +225,12 @@ func (a *SecretLeaseAdapter) AcquireServiceLease(
 		ModuleID:          serviceID,
 		Generation:        generation,
 		MaxUses:           1,
+	}
+	if decision.PermissionSnapshotID != "" {
+		kernelReq.PermissionSnapshotID = decision.PermissionSnapshotID
+	}
+	if decision.ScopeSnapshotID != "" {
+		kernelReq.ScopeSnapshotID = decision.ScopeSnapshotID
 	}
 
 	kernelLease, err := a.broker.Issue(ctx, kernelReq)
@@ -167,13 +252,10 @@ func (a *SecretLeaseAdapter) RevokeServiceLeases(runtimeID, serviceID string, re
 	leases := a.index.ActiveLeasesByService(runtimeID, serviceID)
 	revoked := 0
 	for _, l := range leases {
-		if a.broker.RevokeLease(l) == nil {
-			a.index.MarkRevoked(l)
+		if err := a.RevokeLease(l, reason); err == nil {
 			revoked++
 		}
 	}
-	// Direct kernel bypass — kernel tracks by RuntimeInstanceID, so if a ServiceID does not
-	// appear at the kernel level, we still ensure local index cleanliness.
 	return RevokeOutcome{RevokedCount: revoked, RequestedBy: runtimeID + "/" + serviceID, Reason: reason}
 }
 
@@ -193,12 +275,30 @@ func (a *SecretLeaseAdapter) RevokeExtensionLeases(extensionID string, reason st
 	leases := a.index.ActiveLeasesByExtension(extensionID)
 	revoked := 0
 	for _, l := range leases {
-		if a.broker.RevokeLease(l) == nil {
-			a.index.MarkRevoked(l)
+		if err := a.RevokeLease(l, reason); err == nil {
 			revoked++
 		}
 	}
 	return RevokeOutcome{RevokedCount: revoked, RequestedBy: extensionID, Reason: reason}
+}
+
+func (a *SecretLeaseAdapter) RevokeLease(leaseID kernelsecret.LeaseID, reason string) error {
+	if err := a.broker.RevokeLease(leaseID); err != nil {
+		return err
+	}
+	a.index.MarkRevoked(leaseID)
+	return nil
+}
+
+func (a *SecretLeaseAdapter) RevokeRuntimeGenerationLeases(runtimeID string, generation int64, reason string) RevokeOutcome {
+	leases := a.index.ActiveLeasesByGeneration(runtimeID, generation)
+	revoked := 0
+	for _, l := range leases {
+		if err := a.RevokeLease(l, reason); err == nil {
+			revoked++
+		}
+	}
+	return RevokeOutcome{RevokedCount: revoked, RequestedBy: fmt.Sprintf("%s/gen%d", runtimeID, generation), Reason: reason}
 }
 
 func (a *SecretLeaseAdapter) ActiveServiceLeases(runtimeID, serviceID string) []kernelsecret.LeaseID {
@@ -216,19 +316,20 @@ func (a *SecretLeaseAdapter) ActiveExtensionLeases(extensionID string) []kernels
 func (a *SecretLeaseAdapter) MarkServiceStopping(runtimeID, serviceID string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.acquiring["__stop_"+runtimeID+"/"+serviceID] = true
+	a.stopping[serviceBinding{runtimeID: runtimeID, serviceID: serviceID}] = true
 }
 
 func (a *SecretLeaseAdapter) ClearServiceStopping(runtimeID, serviceID string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.acquiring["__stop_"+runtimeID+"/"+serviceID] = false
+	a.stopping[serviceBinding{runtimeID: runtimeID, serviceID: serviceID}] = false
 }
 
 func (a *SecretLeaseAdapter) Shutdown() {
 	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.acquiring["__shutdown"] = true
+	a.shutdown = true
+	a.mu.Unlock()
+	a.RevokeAll()
 }
 
 func (a *SecretLeaseAdapter) RevokeAll() RevokeOutcome {
@@ -240,6 +341,7 @@ func (a *SecretLeaseAdapter) RevokeAll() RevokeOutcome {
 func (a *SecretLeaseAdapter) Reset() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.acquiring = make(map[string]bool)
+	a.stopping = make(map[serviceBinding]bool)
+	a.shutdown = false
 	a.index.Clear()
 }

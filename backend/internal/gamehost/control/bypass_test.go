@@ -40,16 +40,27 @@ func newCustomTestGate() (*PluginOutputGate, *FakeTopology, *FakeAuthorityReader
 	rt.SetActive("rt-1", true)
 	rt.SetReady("rt-1", true)
 
+	gen := NewFakeGenerationReader()
+	gen.SetGeneration("rt-1", 1)
+
 	auth := NewFakeAuthorityReader()
 	auth.SetSnapshot("rt-1", domain.ControlModePluginControl, 10)
 
-	gate := NewPluginOutputGate(PluginOutputGateOptions{
-		Clock:         func() time.Time { return time.Now().UTC() },
-		Topology:      topo,
-		RuntimeReader: rt,
-		PermChecker:   NewFakeEffPermChecker(),
-		Authority:     auth,
+	gate, err := NewPluginOutputGate(PluginOutputGateOptions{
+		Clock:            func() time.Time { return time.Now().UTC() },
+		Topology:         topo,
+		RuntimeReader:    rt,
+		GenerationReader: gen,
+		PermChecker:      NewFakeEffPermChecker(),
+		PolicyChecker:    NoopHostPolicyChecker{},
+		Authority:        auth,
+		Audit:            NewInMemoryAuthorityAuditSink(),
+		Metrics:          NewFakeMetrics(),
+		CommitBarrier:    NoopCommitBarrier{},
 	})
+	if err != nil {
+		panic(err)
+	}
 
 	return gate, topo, auth
 }
@@ -127,7 +138,7 @@ func TestPluginOutputGate_GateDeny_SinkMustNotExecute(t *testing.T) {
 }
 
 func TestPluginOutputGate_PayloadOpaque_NotParsed(t *testing.T) {
-	gate, _, auth := newCustomTestGate()
+	gate, auth := newCustomTestGateWithAuth(t)
 
 	sink := ControlEffectSinkFunc(func(ctx context.Context, runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID, pluginID domain.PluginID, permit OutputPermit, payload []byte) error {
 		return nil
@@ -158,6 +169,40 @@ func TestPluginOutputGate_PayloadOpaque_NotParsed(t *testing.T) {
 	_ = sink.ExecuteAuthorized(context.Background(), "rt-1", "", "plugin-1", OutputPermit{}, req.Payload)
 }
 
+func newCustomTestGateWithAuth(t *testing.T) (*PluginOutputGate, *FakeAuthorityReader) {
+	t.Helper()
+	topo := NewFakeTopology()
+	topo.RegisterRuntime("rt-1", "plugin-1")
+
+	rt := NewFakeRuntimeReader()
+	rt.SetActive("rt-1", true)
+	rt.SetReady("rt-1", true)
+
+	gen := NewFakeGenerationReader()
+	gen.SetGeneration("rt-1", 1)
+
+	auth := NewFakeAuthorityReader()
+	auth.SetSnapshot("rt-1", domain.ControlModePluginControl, 10)
+
+	gate, err := NewPluginOutputGate(PluginOutputGateOptions{
+		Clock:            func() time.Time { return time.Now().UTC() },
+		Topology:         topo,
+		RuntimeReader:    rt,
+		GenerationReader: gen,
+		PermChecker:      NewFakeEffPermChecker(),
+		PolicyChecker:    NoopHostPolicyChecker{},
+		Authority:        auth,
+		Audit:            NewInMemoryAuthorityAuditSink(),
+		Metrics:          NewFakeMetrics(),
+		CommitBarrier:    NoopCommitBarrier{},
+	})
+	if err != nil {
+		t.Fatalf("failed to create gate: %v", err)
+	}
+
+	return gate, auth
+}
+
 func TestPluginOutputGate_UserModeSinkMustNotExecute(t *testing.T) {
 	topo := NewFakeTopology()
 	topo.RegisterRuntime("rt-1", "plugin-1")
@@ -165,6 +210,9 @@ func TestPluginOutputGate_UserModeSinkMustNotExecute(t *testing.T) {
 	rt := NewFakeRuntimeReader()
 	rt.SetActive("rt-1", true)
 	rt.SetReady("rt-1", true)
+
+	gen := NewFakeGenerationReader()
+	gen.SetGeneration("rt-1", 1)
 
 	mgr := NewControlAuthorityManager(ControlAuthorityManagerOptions{})
 	_, _ = mgr.Create(context.Background(), "rt-1", "plugin-1")
@@ -174,13 +222,21 @@ func TestPluginOutputGate_UserModeSinkMustNotExecute(t *testing.T) {
 		Reason: ReasonRuntimeLifecycle,
 	})
 
-	gate := NewPluginOutputGate(PluginOutputGateOptions{
-		Clock:         func() time.Time { return time.Now().UTC() },
-		Topology:      topo,
-		RuntimeReader: rt,
-		PermChecker:   NewFakeEffPermChecker(),
-		Authority:     mgr,
+	gate, err := NewPluginOutputGate(PluginOutputGateOptions{
+		Clock:            func() time.Time { return time.Now().UTC() },
+		Topology:         topo,
+		RuntimeReader:    rt,
+		GenerationReader: gen,
+		PermChecker:      NewFakeEffPermChecker(),
+		PolicyChecker:    NoopHostPolicyChecker{},
+		Authority:        mgr,
+		Audit:            NewInMemoryAuthorityAuditSink(),
+		Metrics:          NewFakeMetrics(),
+		CommitBarrier:    NoopCommitBarrier{},
 	})
+	if err != nil {
+		t.Fatalf("failed to create gate: %v", err)
+	}
 
 	sink := NewRecordingControlEffectSink()
 
@@ -197,7 +253,7 @@ func TestPluginOutputGate_UserModeSinkMustNotExecute(t *testing.T) {
 		Peer:   newTestPeer("rt-1", "", "plugin-1"),
 	}
 
-	_, err := gate.AuthorizeAndDispatch(context.Background(), req, sink)
+	_, err = gate.AuthorizeAndDispatch(context.Background(), req, sink)
 	if err == nil {
 		t.Fatal("expected error for user mode output")
 	}

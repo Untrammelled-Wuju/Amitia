@@ -1,7 +1,0 @@
-{
-  "unknownUsageRepresentedAsZeroCount": 0,
-  "estimatedUsageRepresentedAsMeasuredCount": 0,
-  "crossInvocationUsageLeakCount": 0,
-  "postTerminalUsageMutationCount": 0,
-  "note": "无主动 usage collection — 所有统计项不存在, 不伪造零值"
-}

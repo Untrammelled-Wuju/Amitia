@@ -113,7 +113,8 @@ class DefaultRuntimeControllerEventTest {
         val controller = defaultTestController(stateStore = stateStore, host = host)
         host.emit(
             RuntimeServiceHostEvent.UnexpectedTermination(
-                RuntimeServiceTerminationCause.FOREGROUND_FAILED
+                generation = controller.snapshot().generation,
+                cause = RuntimeServiceTerminationCause.FOREGROUND_FAILED
             )
         )
         assertEquals(RuntimeState.FAILED, controller.snapshot().state)
@@ -126,7 +127,8 @@ class DefaultRuntimeControllerEventTest {
         val controller = defaultTestController(stateStore = stateStore, host = host)
         host.emit(
             RuntimeServiceHostEvent.UnexpectedTermination(
-                RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
+                generation = controller.snapshot().generation,
+                cause = RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
             )
         )
         assertEquals(RuntimeState.FAILED, controller.snapshot().state)
@@ -137,7 +139,7 @@ class DefaultRuntimeControllerEventTest {
         val stateStore = stateStoreWith(RuntimeState.STOPPING)
         val host = FakeRuntimeServiceHost()
         val controller = defaultTestController(stateStore = stateStore, host = host)
-        host.emit(RuntimeServiceHostEvent.ExpectedStopped)
+        host.emit(RuntimeServiceHostEvent.ExpectedStopped(generation = controller.snapshot().generation))
         assertEquals(RuntimeState.STOPPED, controller.snapshot().state)
     }
 
@@ -148,7 +150,8 @@ class DefaultRuntimeControllerEventTest {
         val controller = defaultTestController(stateStore = stateStore, host = host)
         host.emit(
             RuntimeServiceHostEvent.UnexpectedTermination(
-                RuntimeServiceTerminationCause.NOTIFICATION_FAILED
+                generation = controller.snapshot().generation,
+                cause = RuntimeServiceTerminationCause.NOTIFICATION_FAILED
             )
         )
         assertTrue(controller.snapshot().lastError != null)

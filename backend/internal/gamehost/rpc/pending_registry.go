@@ -17,7 +17,10 @@ type PendingRequestRegistry interface {
 	Cancel(key RequestKey) (bool, error)
 	Remove(key RequestKey) bool
 	ListByPeer(runtimeID, serviceID string) []*PendingRequest
+	ListByRuntime(runtimeID domain.RuntimeInstanceID) []*PendingRequest
+	CancelByRuntime(runtimeID domain.RuntimeInstanceID) int
 	Count() int
+	CountByRuntime(runtimeID domain.RuntimeInstanceID) int
 }
 
 type pendingRequestRegistry struct {
@@ -211,10 +214,60 @@ func (r *pendingRequestRegistry) ListByPeer(runtimeID, serviceID string) []*Pend
 	return result
 }
 
+func (r *pendingRequestRegistry) ListByRuntime(runtimeID domain.RuntimeInstanceID) []*PendingRequest {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	result := make([]*PendingRequest, 0)
+	for k, req := range r.requests {
+		if k.RuntimeID == runtimeID {
+			result = append(result, req)
+		}
+	}
+	return result
+}
+
+func (r *pendingRequestRegistry) CancelByRuntime(runtimeID domain.RuntimeInstanceID) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	count := 0
+	for k, req := range r.requests {
+		if k.RuntimeID == runtimeID && !req.State.IsTerminal() {
+			req.State = RequestStateCancelled
+			if req.CancelFunc != nil {
+				req.CancelFunc()
+			}
+			if req.Done != nil {
+				select {
+				case <-req.Done:
+				default:
+					close(req.Done)
+				}
+			}
+			count++
+		}
+	}
+	return count
+}
+
 func (r *pendingRequestRegistry) Count() int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return len(r.requests)
+}
+
+func (r *pendingRequestRegistry) CountByRuntime(runtimeID domain.RuntimeInstanceID) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	count := 0
+	for k, req := range r.requests {
+		if k.RuntimeID == runtimeID && !req.State.IsTerminal() {
+			count++
+		}
+	}
+	return count
 }
 
 func (r *pendingRequestRegistry) get(key RequestKey) *PendingRequest {

@@ -93,7 +93,7 @@ func (h *BridgeClipboardHost) sendClipboardRequest(ctx context.Context, operatio
 	}
 
 	if h.hostRegistry != nil {
-		target, err := h.hostRegistry.FindTargetHost(ctx, "", capability, "", "")
+		target, err := h.hostRegistry.FindTargetHostString(ctx, "", capability, "", "")
 		if err != nil {
 			return "", nil, err
 		}
@@ -240,8 +240,8 @@ func (h *BridgeClipboardHost) HasPendingRequest(requestID string) bool {
 
 func (h *BridgeClipboardHost) IsAvailable() bool {
 	if h.hostRegistry != nil {
-		return h.hostRegistry.HasReadyHost(context.Background(), "", host_registry.CapClipboardWrite) ||
-			h.hostRegistry.HasReadyHost(context.Background(), "", host_registry.CapClipboardRead)
+		return h.hostRegistry.HasReadyHostString(context.Background(), "", host_registry.CapClipboardWrite) ||
+			h.hostRegistry.HasReadyHostString(context.Background(), "", host_registry.CapClipboardRead)
 	}
 	return h.hub != nil && h.hub.HasClients()
 }

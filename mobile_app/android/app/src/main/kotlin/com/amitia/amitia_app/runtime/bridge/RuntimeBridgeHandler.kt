@@ -19,7 +19,8 @@ import com.amitia.amitia_app.runtime.bridge.RuntimeBridgeErrorMapper
 import com.amitia.amitia_app.runtime.bridge.RuntimeBridgeSnapshotMapper
 import com.amitia.amitia_app.runtime.manifest.RuntimeManifestResult
 import com.amitia.amitia_app.runtime.manifest.RuntimeManifestStore
-import com.amitia.amitia_app.runtime.packagetrusted.TrustedRuntimePackageSource
+import com.amitia.amitia_app.runtime.packagetrusted.RuntimePackageSource
+import com.amitia.amitia_app.runtime.packagetrusted.RuntimePackageSourceResult
 import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 
@@ -27,6 +28,7 @@ internal class RuntimeBridgeHandler(
     private val controller: RuntimeController,
     private val backendConnectionProvider: BackendConnectionProvider,
     private val manifestStore: RuntimeManifestStore?,
+    private val runtimePackageSource: RuntimePackageSource,
 ) : MethodChannel.MethodCallHandler {
 
     override fun onMethodCall(call: MethodCall, result: MethodChannel.Result) {
@@ -98,22 +100,28 @@ internal class RuntimeBridgeHandler(
     }
 
     private fun handleInstall(result: MethodChannel.Result) {
-        val trustedRef = TrustedRuntimePackageSource.resolve(
-            packageFile = java.io.File(
-                java.io.File(com.amitia.amitia_app.runtime.AndroidRuntimeModule.runtimeHostLayout?.dataRoot ?: java.io.File("/data/local/tmp"), "packages"),
-                "amitia-runtime-${TrustedRuntimePackageSource.RUNTIME_VERSION}.zip"
-            )
-        )
-        val request = RuntimeInstallRequest(
-            packageUri = trustedRef.packageFile.absolutePath,
-            expectedVersion = trustedRef.expectedRuntimeVersion,
-            allowRepairExisting = false
-        )
-        controller.install(request, object : RuntimeOperationCallback {
-            override fun onCompleted(operationResult: RuntimeOperationResult) {
-                handleOperationResult(operationResult, result)
+        when (val source = runtimePackageSource.materialize()) {
+            is RuntimePackageSourceResult.Failed -> {
+                result.error(
+                    source.code.name,
+                    source.message,
+                    null,
+                )
             }
-        })
+            is RuntimePackageSourceResult.Ready -> {
+                val trustedRef = source.reference
+                val request = RuntimeInstallRequest(
+                    packageUri = trustedRef.packageFile.absolutePath,
+                    expectedVersion = trustedRef.expectedRuntimeVersion,
+                    allowRepairExisting = false,
+                )
+                controller.install(request, object : RuntimeOperationCallback {
+                    override fun onCompleted(operationResult: RuntimeOperationResult) {
+                        handleOperationResult(operationResult, result)
+                    }
+                })
+            }
+        }
     }
 
     private fun handleVerify(result: MethodChannel.Result) {
@@ -126,21 +134,27 @@ internal class RuntimeBridgeHandler(
     }
 
     private fun handleRepair(result: MethodChannel.Result) {
-        val trustedRef = TrustedRuntimePackageSource.resolve(
-            packageFile = java.io.File(
-                java.io.File(com.amitia.amitia_app.runtime.AndroidRuntimeModule.runtimeHostLayout?.dataRoot ?: java.io.File("/data/local/tmp"), "packages"),
-                "amitia-runtime-${TrustedRuntimePackageSource.RUNTIME_VERSION}.zip"
-            )
-        )
-        val request = RuntimeRepairRequest(
-            packageUri = trustedRef.packageFile.absolutePath,
-            preserveUserData = true
-        )
-        controller.repair(request, object : RuntimeOperationCallback {
-            override fun onCompleted(operationResult: RuntimeOperationResult) {
-                handleOperationResult(operationResult, result)
+        when (val source = runtimePackageSource.materialize()) {
+            is RuntimePackageSourceResult.Failed -> {
+                result.error(
+                    source.code.name,
+                    source.message,
+                    null,
+                )
             }
-        })
+            is RuntimePackageSourceResult.Ready -> {
+                val trustedRef = source.reference
+                val request = RuntimeRepairRequest(
+                    packageUri = trustedRef.packageFile.absolutePath,
+                    preserveUserData = true,
+                )
+                controller.repair(request, object : RuntimeOperationCallback {
+                    override fun onCompleted(operationResult: RuntimeOperationResult) {
+                        handleOperationResult(operationResult, result)
+                    }
+                })
+            }
+        }
     }
 
     private fun handleManifestSummary(result: MethodChannel.Result) {

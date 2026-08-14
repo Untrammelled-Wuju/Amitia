@@ -6,6 +6,8 @@ import (
 	"context"
 	"fmt"
 	"sync"
+
+	"github.com/u-ai/backend/internal/runtimehost"
 )
 
 type localEmbeddingProvider interface {
@@ -16,12 +18,20 @@ type localEmbeddingProvider interface {
 var (
 	localEmbeddingFactories = make(map[string]func(configJSON string) (localEmbeddingProvider, error))
 	localEmbeddingRegMu      sync.RWMutex
+	globalEmbeddingHost      runtimehost.RuntimeHost
+	globalEmbeddingHostMu    sync.RWMutex
 )
 
 func RegisterLocalEmbeddingFactory(providerType string, factory func(configJSON string) (localEmbeddingProvider, error)) {
 	localEmbeddingRegMu.Lock()
 	defer localEmbeddingRegMu.Unlock()
 	localEmbeddingFactories[providerType] = factory
+}
+
+func SetGlobalEmbeddingHost(host runtimehost.RuntimeHost) {
+	globalEmbeddingHostMu.Lock()
+	defer globalEmbeddingHostMu.Unlock()
+	globalEmbeddingHost = host
 }
 
 func GetLocalEmbeddingFactory(providerType string) (func(configJSON string) (localEmbeddingProvider, error), bool) {
@@ -53,6 +63,14 @@ func (p *llamaCppLocalEmbedding) EmbedSingle(text string, purpose string) ([]flo
 	if err != nil {
 		return nil, err
 	}
+
+	globalEmbeddingHostMu.RLock()
+	host := globalEmbeddingHost
+	globalEmbeddingHostMu.RUnlock()
+	if host != nil {
+		backend.AttachHost(host)
+	}
+
 	if err := backend.Load(ctx); err != nil {
 		return nil, err
 	}
@@ -73,6 +91,14 @@ func (p *llamaCppLocalEmbedding) EmbedBatch(texts []string, purpose string) ([][
 	if err != nil {
 		return nil, err
 	}
+
+	globalEmbeddingHostMu.RLock()
+	host := globalEmbeddingHost
+	globalEmbeddingHostMu.RUnlock()
+	if host != nil {
+		backend.AttachHost(host)
+	}
+
 	if err := backend.Load(ctx); err != nil {
 		return nil, err
 	}

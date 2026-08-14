@@ -38,6 +38,10 @@ type ServiceExecutionContext struct {
 	ConfigSnapshot map[string]string
 
 	Env map[string]string
+
+	Generation   int64
+	SessionToken string
+	SecretLease  string
 }
 
 func (c ServiceExecutionContext) DirectoryIdentifier() string {

@@ -5,6 +5,8 @@ package localmodel
 import (
 	"context"
 	"time"
+
+	"github.com/u-ai/backend/internal/runtimehost"
 )
 
 type LocalModelCapabilities struct {
@@ -126,5 +128,23 @@ func Create(params CreateLocalModelParams) (LocalModelInference, error) {
 	if !ok {
 		return nil, ErrLocalProviderNotFound
 	}
-	return factory(params)
+	backend, err := factory(params)
+	if err != nil {
+		return nil, err
+	}
+	return attachHost(backend), nil
+}
+
+func attachHost(backend LocalModelInference) LocalModelInference {
+	host := GetGlobalRuntimeHost()
+	if host == nil {
+		return backend
+	}
+	type hostAttacher interface {
+		AttachHost(host runtimehost.RuntimeHost)
+	}
+	if a, ok := backend.(hostAttacher); ok {
+		a.AttachHost(host)
+	}
+	return backend
 }

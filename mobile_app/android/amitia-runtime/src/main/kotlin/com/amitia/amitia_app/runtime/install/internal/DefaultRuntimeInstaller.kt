@@ -25,6 +25,11 @@ import com.amitia.amitia_app.runtime.install.RuntimeInstallReceipt
 import com.amitia.amitia_app.runtime.install.SafeExtractResult
 import com.amitia.amitia_app.runtime.install.TransactionStage
 import com.amitia.amitia_app.runtime.install.VerifiedPackage
+import com.amitia.amitia_app.runtime.manifest.RuntimeManifestBuilder
+import com.amitia.amitia_app.runtime.manifest.RuntimeManifestComponent
+import com.amitia.amitia_app.runtime.manifest.RuntimeManifestPayload
+import com.amitia.amitia_app.runtime.manifest.RuntimeManifestResult
+import com.amitia.amitia_app.runtime.manifest.RuntimeManifestStore
 import com.amitia.amitia_app.runtime.manifest.internal.InstalledTreeHasher
 import java.io.File
 
@@ -41,7 +46,9 @@ internal class DefaultRuntimeInstaller(
         treeHasher = { InstalledTreeHasher.computeTreeSha256(it) }
     ),
     private val receiptStore: com.amitia.amitia_app.runtime.install.InstallReceiptStore = DefaultInstallReceiptStore(layout),
-    private val activeRuntimeManager: ActiveRuntimeManager? = null,
+    private val manifestStore: RuntimeManifestStore,
+    private val manifestBuilder: RuntimeManifestBuilder,
+    private val activeRuntimeManager: ActiveRuntimeManager,
 ) : RuntimeInstaller {
 
     override fun install(request: RuntimeInstallRequest): RuntimeInstallResult {
@@ -77,13 +84,16 @@ internal class DefaultRuntimeInstaller(
         }
 
         try {
-            return performInstall(request)
+            return performInstall(request, abiStatus)
         } finally {
             lock.close()
         }
     }
 
-    private fun performInstall(request: RuntimeInstallRequest): RuntimeInstallResult {
+    private fun performInstall(
+        request: RuntimeInstallRequest,
+        abiStatus: com.amitia.amitia_app.runtime.abi.RuntimeAbiStatus.Supported,
+    ): RuntimeInstallResult {
         val transaction = createTransaction()
         try {
             transaction.updateStage(com.amitia.amitia_app.runtime.install.TransactionStage.CREATED)
@@ -198,7 +208,6 @@ internal class DefaultRuntimeInstaller(
                 )
             }
 
-            val verification = (verifyResult as InstalledRuntimeVerificationResult.Success).verification
             transaction.updateStage(com.amitia.amitia_app.runtime.install.TransactionStage.RUNTIME_VERIFIED)
 
             val versionDir = layout.runtimeVersionRoot(verifiedPackage.packageIndex.runtimeVersion)
@@ -221,6 +230,121 @@ internal class DefaultRuntimeInstaller(
             transaction.setTargetVersionDir(versionDir.absolutePath)
             transaction.updateStage(com.amitia.amitia_app.runtime.install.TransactionStage.PUBLISHED)
 
+            val finalVerifyResult = runtimeVerifier.verify(versionDir)
+            if (finalVerifyResult is InstalledRuntimeVerificationResult.Failure) {
+                cleanupVersionDir(versionDir)
+                return RuntimeInstallResult.Failure(
+                    code = finalVerifyResult.code,
+                    message = finalVerifyResult.message,
+                    phase = RuntimeInstallPhase.INSTALLED_VERIFY,
+                    transactionId = transaction.transactionId,
+                )
+            }
+
+            val finalVerification = (finalVerifyResult as InstalledRuntimeVerificationResult.Success).verification
+            transaction.updateStage(com.amitia.amitia_app.runtime.install.TransactionStage.VERIFYING_INSTALLED)
+
+            val manifestPayloads = buildManifestPayloads(verifiedPackage)
+            val manifestComponents = buildManifestComponents(verifiedPackage)
+
+            val manifestResult = manifestBuilder.buildFromInstalledTree(
+                runtimeVersion = verifiedPackage.packageIndex.runtimeVersion,
+                sourceCommit = verifiedPackage.packageSha256.take(40),
+                packageId = verifiedPackage.packageIndex.packageId,
+                packageSha256 = verifiedPackage.packageSha256,
+                rootfsId = rootfsInfo.rootfsId,
+                runtimeRootTreeSha256 = finalVerification.runtimeRootTreeSha256,
+                payloads = manifestPayloads,
+                components = manifestComponents,
+            )
+
+            val manifest = when (manifestResult) {
+                is RuntimeManifestResult.Success -> manifestResult.manifest
+                is RuntimeManifestResult.Failure -> {
+                    cleanupVersionDir(versionDir)
+                    return RuntimeInstallResult.Failure(
+                        code = RuntimeInstallErrorCode.RUNTIME_VERIFY_FAILED,
+                        message = "failed to build manifest: ${manifestResult.error.manifestMessage}",
+                        phase = RuntimeInstallPhase.INSTALLED_VERIFY,
+                        transactionId = transaction.transactionId,
+                    )
+                }
+            }
+
+            val manifestWriteResult = manifestStore.write(manifest)
+            if (manifestWriteResult is RuntimeManifestResult.Failure) {
+                cleanupVersionDir(versionDir)
+                return RuntimeInstallResult.Failure(
+                    code = RuntimeInstallErrorCode.RUNTIME_VERIFY_FAILED,
+                    message = "failed to write manifest: ${manifestWriteResult.error.manifestMessage}",
+                    phase = RuntimeInstallPhase.INSTALLED_VERIFY,
+                    transactionId = transaction.transactionId,
+                )
+            }
+
+            transaction.updateStage(com.amitia.amitia_app.runtime.install.TransactionStage.MANIFEST_COMMITTING)
+
+            val manifestReadBack = manifestStore.read()
+            if (manifestReadBack is RuntimeManifestResult.Failure) {
+                cleanupVersionDir(versionDir)
+                return RuntimeInstallResult.Failure(
+                    code = RuntimeInstallErrorCode.RUNTIME_VERIFY_FAILED,
+                    message = "manifest read-back failed: ${manifestReadBack.error.manifestMessage}",
+                    phase = RuntimeInstallPhase.INSTALLED_VERIFY,
+                    transactionId = transaction.transactionId,
+                )
+            }
+
+            val readBackManifest = (manifestReadBack as RuntimeManifestResult.Success).manifest
+            if (readBackManifest.runtimeVersion != manifest.runtimeVersion ||
+                readBackManifest.packageSha256 != manifest.packageSha256
+            ) {
+                cleanupVersionDir(versionDir)
+                return RuntimeInstallResult.Failure(
+                    code = RuntimeInstallErrorCode.RUNTIME_VERIFY_FAILED,
+                    message = "manifest read-back mismatch",
+                    phase = RuntimeInstallPhase.INSTALLED_VERIFY,
+                    transactionId = transaction.transactionId,
+                )
+            }
+
+            transaction.updateStage(com.amitia.amitia_app.runtime.install.TransactionStage.ACTIVATING)
+
+            val activateResult = activeRuntimeManager.activate(manifest.runtimeVersion)
+            if (activateResult is ActiveRuntimeResult.Failure) {
+                cleanupVersionDir(versionDir)
+                return RuntimeInstallResult.Failure(
+                    code = RuntimeInstallErrorCode.ACTIVE_RUNTIME_UPDATE_FAILED,
+                    message = activateResult.message,
+                    phase = RuntimeInstallPhase.ACTIVATE,
+                    transactionId = transaction.transactionId,
+                )
+            }
+
+            val activationReadBack = activeRuntimeManager.current()
+            if (activationReadBack is ActiveRuntimeResult.Failure) {
+                cleanupVersionDir(versionDir)
+                return RuntimeInstallResult.Failure(
+                    code = RuntimeInstallErrorCode.ACTIVE_RUNTIME_UPDATE_FAILED,
+                    message = "activation read-back failed: ${activationReadBack.message}",
+                    phase = RuntimeInstallPhase.ACTIVATE,
+                    transactionId = transaction.transactionId,
+                )
+            }
+
+            val activeInfo = (activationReadBack as ActiveRuntimeResult.Active).info
+            if (activeInfo.version != manifest.runtimeVersion) {
+                cleanupVersionDir(versionDir)
+                return RuntimeInstallResult.Failure(
+                    code = RuntimeInstallErrorCode.ACTIVE_RUNTIME_UPDATE_FAILED,
+                    message = "activation read-back mismatch: expected=${manifest.runtimeVersion} actual=${activeInfo.version}",
+                    phase = RuntimeInstallPhase.ACTIVATE,
+                    transactionId = transaction.transactionId,
+                )
+            }
+
+            transaction.updateStage(com.amitia.amitia_app.runtime.install.TransactionStage.ACTIVATED)
+
             val receipt = RuntimeInstallReceipt(
                 schemaVersion = RuntimeInstallReceipt.SCHEMA_VERSION,
                 runtimeVersion = verifiedPackage.packageIndex.runtimeVersion,
@@ -229,7 +353,7 @@ internal class DefaultRuntimeInstaller(
                 rootfsId = rootfsInfo.rootfsId,
                 rootfsPayloadSha256 = rootfsInfo.payloadSha256,
                 runtimePayloadSha256 = verifiedPackage.packageIndex.runtimePayload.sha256,
-                runtimeRootTreeSha256 = verification.runtimeRootTreeSha256,
+                runtimeRootTreeSha256 = finalVerification.runtimeRootTreeSha256,
             )
 
             val receiptSaveResult = receiptStore.save(receipt)
@@ -240,20 +364,6 @@ internal class DefaultRuntimeInstaller(
                     phase = RuntimeInstallPhase.RECEIPT,
                     transactionId = transaction.transactionId,
                 )
-            }
-
-            transaction.updateStage(com.amitia.amitia_app.runtime.install.TransactionStage.ACTIVATED)
-
-            if (activeRuntimeManager != null) {
-                val activateResult = activeRuntimeManager.activate(receipt.runtimeVersion)
-                if (activateResult is ActiveRuntimeResult.Failure) {
-                    return RuntimeInstallResult.Failure(
-                        code = RuntimeInstallErrorCode.ACTIVE_RUNTIME_UPDATE_FAILED,
-                        message = activateResult.message,
-                        phase = RuntimeInstallPhase.ACTIVATE,
-                        transactionId = transaction.transactionId,
-                    )
-                }
             }
 
             transaction.updateStage(com.amitia.amitia_app.runtime.install.TransactionStage.COMPLETED)
@@ -322,6 +432,70 @@ internal class DefaultRuntimeInstaller(
         try {
             if (stagingDir.exists()) {
                 stagingDir.deleteRecursively()
+            }
+        } catch (_: Exception) {
+        }
+    }
+
+    private fun buildManifestPayloads(pkg: VerifiedPackage): List<RuntimeManifestPayload> {
+        val index = pkg.packageIndex
+        val payloads = mutableListOf<RuntimeManifestPayload>()
+        payloads.add(
+            RuntimeManifestPayload(
+                id = "rootfs",
+                role = "rootfs",
+                sha256 = index.rootfsPayload.sha256,
+                size = index.rootfsPayload.size,
+            )
+        )
+        payloads.add(
+            RuntimeManifestPayload(
+                id = "runtime",
+                role = "runtime",
+                sha256 = index.runtimePayload.sha256,
+                size = index.runtimePayload.size,
+            )
+        )
+        payloads.add(
+            RuntimeManifestPayload(
+                id = "sha256sums",
+                role = "integrity",
+                sha256 = index.sha256sums.sha256,
+                size = index.sha256sums.size,
+            )
+        )
+        index.licenses?.let { lic ->
+            payloads.add(
+                RuntimeManifestPayload(
+                    id = "licenses",
+                    role = "licenses",
+                    sha256 = lic.sha256,
+                    size = lic.size,
+                )
+            )
+        }
+        return payloads
+    }
+
+    private fun buildManifestComponents(pkg: VerifiedPackage): List<RuntimeManifestComponent> {
+        return pkg.componentLock.components.map { comp ->
+            RuntimeManifestComponent(
+                id = comp.id,
+                version = comp.version,
+                architecture = comp.architecture,
+                root = comp.path,
+                entry = null,
+                sha256 = comp.sha256,
+                treeSha256 = null,
+                source = RuntimeManifestComponent.SOURCE_PACKAGE,
+            )
+        }
+    }
+
+    private fun cleanupVersionDir(versionDir: File) {
+        try {
+            if (versionDir.exists()) {
+                versionDir.deleteRecursively()
             }
         } catch (_: Exception) {
         }

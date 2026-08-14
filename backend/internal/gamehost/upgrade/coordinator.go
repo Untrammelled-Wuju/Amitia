@@ -42,10 +42,15 @@ type PluginRegistryReader interface {
 type RuntimeManagerReader interface {
 	GetRuntime(runtimeID domain.RuntimeInstanceID) (*runtime.RuntimeInstanceRef, error)
 	ListRuntimes() []*runtime.RuntimeInstanceRef
+	GetCurrentGeneration(runtimeID domain.RuntimeInstanceID) (int64, error)
 }
 
 type DefinitionReconciler interface {
 	ReconcileExtension(extensionID string) *service_definition.ReconcileReport
+}
+
+type RuntimeGraphReconciler interface {
+	ReconcileExtension(ctx context.Context, extensionID string) error
 }
 
 type ContributionReconciler interface {
@@ -57,17 +62,18 @@ type ConfigValidator interface {
 }
 
 type UpgradeCoordinator struct {
-	mu                    sync.Mutex
-	gate                  *UpgradeGate
-	pluginReg             PluginRegistryReader
-	runtimeManager        RuntimeManagerReader
-	runtimeExecutor       runtime.RuntimeExecutor
-	definitionReconcile   DefinitionReconciler
-	contributionReconcile ContributionReconciler
-	configValidator       ConfigValidator
-	migrationHooks        *MigrationHookRegistry
-	kernelLifecycle       KernelExtensionLifecycle
-	archiveUpdater        KernelArchiveUpdater
+	mu                      sync.Mutex
+	gate                    *UpgradeGate
+	pluginReg               PluginRegistryReader
+	runtimeManager          RuntimeManagerReader
+	runtimeExecutor         runtime.RuntimeExecutor
+	definitionReconcile     DefinitionReconciler
+	runtimeGraphReconcile   RuntimeGraphReconciler
+	contributionReconcile   ContributionReconciler
+	configValidator         ConfigValidator
+	migrationHooks          *MigrationHookRegistry
+	kernelLifecycle         KernelExtensionLifecycle
+	archiveUpdater          KernelArchiveUpdater
 }
 
 func NewUpgradeCoordinator(
@@ -75,23 +81,47 @@ func NewUpgradeCoordinator(
 	runtimeManager RuntimeManagerReader,
 	runtimeExecutor runtime.RuntimeExecutor,
 	definitionReconcile DefinitionReconciler,
+	runtimeGraphReconcile RuntimeGraphReconciler,
 	contributionReconcile ContributionReconciler,
 	configValidator ConfigValidator,
 	kernelLifecycle KernelExtensionLifecycle,
 	archiveUpdater KernelArchiveUpdater,
-) *UpgradeCoordinator {
+) (*UpgradeCoordinator, error) {
+	if pluginReg == nil {
+		return nil, fmt.Errorf("upgrade coordinator: pluginReg is required")
+	}
+	if runtimeManager == nil {
+		return nil, fmt.Errorf("upgrade coordinator: runtimeManager is required")
+	}
+	if runtimeExecutor == nil {
+		return nil, fmt.Errorf("upgrade coordinator: runtimeExecutor is required")
+	}
+	if definitionReconcile == nil {
+		return nil, fmt.Errorf("upgrade coordinator: definitionReconcile is required")
+	}
+	if contributionReconcile == nil {
+		return nil, fmt.Errorf("upgrade coordinator: contributionReconcile is required")
+	}
+	if configValidator == nil {
+		return nil, fmt.Errorf("upgrade coordinator: configValidator is required")
+	}
+	if archiveUpdater == nil {
+		return nil, fmt.Errorf("upgrade coordinator: archiveUpdater is required")
+	}
+
 	return &UpgradeCoordinator{
 		gate:                  NewUpgradeGate(),
 		pluginReg:             pluginReg,
 		runtimeManager:        runtimeManager,
 		runtimeExecutor:       runtimeExecutor,
 		definitionReconcile:   definitionReconcile,
+		runtimeGraphReconcile: runtimeGraphReconcile,
 		contributionReconcile: contributionReconcile,
 		configValidator:       configValidator,
 		migrationHooks:        NewMigrationHookRegistry(),
 		kernelLifecycle:       kernelLifecycle,
 		archiveUpdater:        archiveUpdater,
-	}
+	}, nil
 }
 
 func (c *UpgradeCoordinator) RegisterMigrationHook(extensionID string, hook MigrationHook) {
@@ -178,17 +208,26 @@ func (c *UpgradeCoordinator) ExecuteUpgrade(ctx context.Context, req UpgradeRequ
 	result.Stage = UpgradeStateReconciling
 	c.logStage(operationID, req.ExtensionID, UpgradeStateReconciling, "")
 
-	defReport := c.definitionReconcile.ReconcileExtension(req.ExtensionID)
-	if len(defReport.Errors) > 0 {
-		result.Error = fmt.Errorf("definition reconcile failed: %v", defReport.Errors)
+	descSync := c.contributionReconcile.SyncExtension(ctx, req.ExtensionID)
+	if descSync.HasError() {
+		result.Error = fmt.Errorf("contribution sync failed: %v", descSync.Errors)
 		result.Stage = UpgradeStateFailed
 		c.recordAudit(operationID, req, result, result.Error)
 		return result, result.Error
 	}
 
-	descSync := c.contributionReconcile.SyncExtension(ctx, req.ExtensionID)
-	if descSync.HasError() {
-		result.Error = fmt.Errorf("descriptor sync failed: %v", descSync.Errors)
+	if c.runtimeGraphReconcile != nil {
+		if err := c.runtimeGraphReconcile.ReconcileExtension(ctx, req.ExtensionID); err != nil {
+			result.Error = fmt.Errorf("runtime graph reconcile failed: %w", err)
+			result.Stage = UpgradeStateFailed
+			c.recordAudit(operationID, req, result, result.Error)
+			return result, result.Error
+		}
+	}
+
+	defReport := c.definitionReconcile.ReconcileExtension(req.ExtensionID)
+	if len(defReport.Errors) > 0 {
+		result.Error = fmt.Errorf("definition reconcile failed: %v", defReport.Errors)
 		result.Stage = UpgradeStateFailed
 		c.recordAudit(operationID, req, result, result.Error)
 		return result, result.Error
@@ -208,9 +247,6 @@ func (c *UpgradeCoordinator) ExecuteUpgrade(ctx context.Context, req UpgradeRequ
 	result.ResumedRuntimes = make([]domain.RuntimeInstanceID, 0)
 	result.FailedRuntimes = make([]domain.RuntimeInstanceID, 0)
 	for _, snap := range runtimeSnapshots {
-		if snap.UserStopped {
-			continue
-		}
 		if snap.WasRunning || snap.WasSuspended {
 			if _, failed := resumeFailures[snap.RuntimeID]; failed {
 				result.FailedRuntimes = append(result.FailedRuntimes, snap.RuntimeID)
@@ -236,12 +272,9 @@ func (c *UpgradeCoordinator) ExecuteUpgrade(ctx context.Context, req UpgradeRequ
 }
 
 func (c *UpgradeCoordinator) ExecuteUpgradeByArchive(ctx context.Context, extensionID, archivePath string) error {
-	if c.archiveUpdater == nil {
-		return fmt.Errorf("archive updater not wired in upgrade coordinator")
-	}
-
+	operationID := generateUpgradeOperationID(extensionID)
 	result := &UpgradeResult{
-		OperationID: generateUpgradeOperationID(extensionID),
+		OperationID: operationID,
 		ExtensionID: extensionID,
 		Stage:       UpgradeStatePreparing,
 	}
@@ -293,14 +326,21 @@ func (c *UpgradeCoordinator) ExecuteUpgradeByArchive(ctx context.Context, extens
 
 	result.Stage = UpgradeStateReconciling
 	c.logStage(result.OperationID, extensionID, UpgradeStateReconciling, "")
-	defReport := c.definitionReconcile.ReconcileExtension(extensionID)
-	if len(defReport.Errors) > 0 {
-		return fmt.Errorf("definition reconcile failed: %v", defReport.Errors)
-	}
 
 	descSync := c.contributionReconcile.SyncExtension(ctx, extensionID)
 	if descSync.HasError() {
-		return fmt.Errorf("descriptor sync failed: %v", descSync.Errors)
+		return fmt.Errorf("contribution sync failed: %v", descSync.Errors)
+	}
+
+	if c.runtimeGraphReconcile != nil {
+		if err := c.runtimeGraphReconcile.ReconcileExtension(ctx, extensionID); err != nil {
+			return fmt.Errorf("runtime graph reconcile failed: %w", err)
+		}
+	}
+
+	defReport := c.definitionReconcile.ReconcileExtension(extensionID)
+	if len(defReport.Errors) > 0 {
+		return fmt.Errorf("definition reconcile failed: %v", defReport.Errors)
 	}
 
 	configErrors := c.reconcileConfigs(ctx, runtimeSnapshots)
@@ -312,9 +352,6 @@ func (c *UpgradeCoordinator) ExecuteUpgradeByArchive(ctx context.Context, extens
 	c.logStage(result.OperationID, extensionID, UpgradeStateResuming, fmt.Sprintf("runtimes=%d", len(runtimeSnapshots)))
 	resumeFailures := c.resumeRuntimes(ctx, runtimeSnapshots)
 	for _, snap := range runtimeSnapshots {
-		if snap.UserStopped {
-			continue
-		}
 		if snap.WasRunning || snap.WasSuspended {
 			if _, failed := resumeFailures[snap.RuntimeID]; failed {
 				return fmt.Errorf("partial resume failure: runtime=%s", snap.RuntimeID)
@@ -356,6 +393,7 @@ func (c *UpgradeCoordinator) discoverRuntimes(pluginIDs []domain.PluginID) ([]Ru
 		if _, affected := affectedSet[rt.PluginID]; !affected {
 			continue
 		}
+
 		snap := RuntimeUpgradeSnapshot{
 			RuntimeID:    rt.ID,
 			PluginID:     rt.PluginID,
@@ -363,6 +401,11 @@ func (c *UpgradeCoordinator) discoverRuntimes(pluginIDs []domain.PluginID) ([]Ru
 			WasRunning:   domain.IsActiveRuntimeState(rt.State),
 			WasSuspended: rt.State == domain.RuntimeStateSuspended,
 		}
+
+		if gen, err := c.runtimeManager.GetCurrentGeneration(rt.ID); err == nil {
+			snap.PreUpgradeGeneration = gen
+		}
+
 		snapshots = append(snapshots, snap)
 	}
 	sort.Slice(snapshots, func(i, j int) bool {
@@ -424,9 +467,6 @@ func (c *UpgradeCoordinator) executeMigrationHooks(ctx context.Context, req Upgr
 func (c *UpgradeCoordinator) reconcileConfigs(ctx context.Context, snapshots []RuntimeUpgradeSnapshot) []config.ValidationError {
 	var allErrors []config.ValidationError
 	for _, snap := range snapshots {
-		if c.configValidator == nil {
-			continue
-		}
 		_, errs := c.configValidator.Resolve(ctx, string(snap.PluginID), string(snap.RuntimeID), "")
 		if len(errs) > 0 {
 			allErrors = append(allErrors, errs...)
@@ -438,9 +478,6 @@ func (c *UpgradeCoordinator) reconcileConfigs(ctx context.Context, snapshots []R
 func (c *UpgradeCoordinator) resumeRuntimes(ctx context.Context, snapshots []RuntimeUpgradeSnapshot) map[domain.RuntimeInstanceID]struct{} {
 	failures := make(map[domain.RuntimeInstanceID]struct{})
 	for _, snap := range snapshots {
-		if snap.UserStopped {
-			continue
-		}
 		if !snap.WasRunning && !snap.WasSuspended {
 			continue
 		}

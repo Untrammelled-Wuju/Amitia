@@ -30,6 +30,12 @@ const (
 	ErrShutdownFailed         ErrorCode = "shutdown_failed"
 	ErrExecutionTimeout       ErrorCode = "execution_timeout"
 	ErrDependencyNotSatisfied ErrorCode = "dependency_not_satisfied"
+	ErrRestartFailed          ErrorCode = "restart_failed"
+	ErrLifecycleConflict      ErrorCode = "lifecycle_conflict"
+	ErrSupersededByEmergency  ErrorCode = "superseded_by_emergency"
+	ErrSupersededByDisable    ErrorCode = "superseded_by_disable"
+	ErrSupersededByUninstall  ErrorCode = "superseded_by_uninstall"
+	ErrRevisionChanged        ErrorCode = "revision_changed"
 )
 
 type TopologyError struct {
@@ -104,6 +110,26 @@ func (e *RuntimeStopError) Error() string {
 		e.RuntimeID, len(e.StopErrors), len(e.CleanupErrors))
 }
 
+type RuntimeRestartError struct {
+	Code           ErrorCode
+	RuntimeID      string
+	OldGeneration  int64
+	NewGeneration  int64
+	Cause          error
+	StopErrors     []error
+	StartErrors    []error
+	RollbackErrors []error
+}
+
+func (e *RuntimeRestartError) Error() string {
+	return fmt.Sprintf("runtime_restart_failed: runtime=%s code=%s old_gen=%d new_gen=%d cause=%v",
+		e.RuntimeID, e.Code, e.OldGeneration, e.NewGeneration, e.Cause)
+}
+
+func (e *RuntimeRestartError) Unwrap() error {
+	return e.Cause
+}
+
 func NewTopologyError(code ErrorCode, message string) *TopologyError {
 	return &TopologyError{
 		Code:    code,
@@ -156,4 +182,12 @@ func IsExecutionError(err error, code ErrorCode) bool {
 		return false
 	}
 	return te.Code == code
+}
+
+func IsRuntimeRestartError(err error, code ErrorCode) bool {
+	re, ok := err.(*RuntimeRestartError)
+	if !ok {
+		return false
+	}
+	return re.Code == code
 }

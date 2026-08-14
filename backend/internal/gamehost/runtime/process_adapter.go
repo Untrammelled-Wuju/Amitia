@@ -48,9 +48,12 @@ func (a *processSupervisorAdapter) StartProcess(ctx context.Context, def *truste
 	startReq := trusted_service.StartRequest{
 		ServiceID:      supervisorKey,
 		InstanceID:     instanceID,
+		Generation:     execCtx.Generation,
 		PublisherTrust: a.resolveTrustLevel(def),
 		BasePath:       execCtx.BasePath,
 		WorkingDir:     execCtx.ServicePaths.Data,
+		SessionToken:   execCtx.SessionToken,
+		SecretLease:    execCtx.SecretLease,
 		LogLevel:       "info",
 		Args:           env,
 	}

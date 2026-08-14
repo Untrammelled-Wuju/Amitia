@@ -10,9 +10,6 @@ import (
 	"time"
 )
 
-// PermissionBroker 是插件、本地工具、Cloud Provider、Device Provider 执行权限的唯一决策入口。
-// 后续远程执行仍必须经过这里。
-// 禁止创建 CloudPermissionManager / DevicePermissionManager 绕过 Broker。
 type PermissionBroker interface {
 	Evaluate(ctx context.Context, request PermissionEvaluationRequest) PermissionEvaluationResult
 	Grant(ctx context.Context, request PermissionGrantRequest) (PermissionGrant, error)
@@ -40,7 +37,8 @@ type DefaultPermissionBroker struct {
 	approvalRecords map[string]PermissionApprovalRecord
 	snapshotStore   PermissionSnapshotStore
 
-	SystemPolicy func(ctx context.Context, subject PermissionSubject, permissionID string, scope PermissionScope) (PermissionDecision, bool)
+	SystemPolicy    func(ctx context.Context, subject PermissionSubject, permissionID string, scope PermissionScope) (PermissionDecision, bool)
+	ExecutionPolicy func(ctx context.Context, request PermissionEvaluationRequest, requirement PermissionRequirement, definition PermissionDefinition) (PermissionDecision, bool)
 }
 
 func NewDefaultPermissionBroker(registry *PermissionDefinitionRegistry, storage PermissionStorage) *DefaultPermissionBroker {
@@ -80,6 +78,20 @@ func (b *DefaultPermissionBroker) GetTrustLevelChecker() TrustLevelChecker {
 }
 
 func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request PermissionEvaluationRequest) PermissionEvaluationResult {
+	request.ExecutionContext = request.ExecutionContext.Normalize()
+	if !request.ExecutionContext.IsEmpty() {
+		if err := request.ExecutionContext.Validate(); err != nil {
+			b.auditRec.RecordEvaluation(ctx, request, PermissionEvaluationResult{
+				Decision: DecisionDeny,
+				Reasons:  []PermissionReason{{Code: "execution_context_invalid", Detail: err.Error()}},
+			})
+			return PermissionEvaluationResult{
+				Decision: DecisionDeny,
+				Reasons:  []PermissionReason{{Code: "execution_context_invalid", Detail: err.Error()}},
+			}
+		}
+	}
+
 	if len(request.Requirements) == 0 {
 		return PermissionEvaluationResult{
 			Decision: DecisionAllow,
@@ -146,6 +158,30 @@ func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request Permissi
 			}
 		}
 
+		if b.ExecutionPolicy != nil {
+			if decision, handled := b.ExecutionPolicy(ctx, request, req, def); handled {
+				if decision == DecisionDeny {
+					result.Missing = append(result.Missing, req)
+					result.Reasons = append(result.Reasons, PermissionReason{
+						Code:       "execution_policy_deny",
+						Permission: req.PermissionID,
+					})
+				}
+				continue
+			}
+		}
+
+		if decision := b.applyRemoteExecutionPolicy(def, request.ExecutionContext); decision != "" {
+			if decision == DecisionDeny {
+				result.Missing = append(result.Missing, req)
+				result.Reasons = append(result.Reasons, PermissionReason{
+					Code:       "remote_execution_denied",
+					Permission: req.PermissionID,
+				})
+				continue
+			}
+		}
+
 		grants := b.cache.GetOrLoad(ctx, request.Subject, req.PermissionID, func() []PermissionGrant {
 			filter := PermissionGrantFilter{
 				Subject:      &request.Subject,
@@ -160,11 +196,17 @@ func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request Permissi
 			return result
 		})
 
-		matched := b.matchGrants(grants, effectiveScope, req)
+		matched := b.matchGrants(grants, effectiveScope, req, request.ExecutionContext)
 		if len(matched) > 0 {
 			result.MatchedGrants = append(result.MatchedGrants, matched...)
 			result.Reasons = append(result.Reasons, PermissionReason{
 				Code:       "grant_matched",
+				Permission: req.PermissionID,
+			})
+		} else if b.requiresBoundGrant(def, request.ExecutionContext) {
+			result.Missing = append(result.Missing, req)
+			result.Reasons = append(result.Reasons, PermissionReason{
+				Code:       "remote_bound_grant_required",
 				Permission: req.PermissionID,
 			})
 		} else {
@@ -185,6 +227,30 @@ func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request Permissi
 	b.auditRec.RecordEvaluation(ctx, request, result)
 
 	return result
+}
+
+func (b *DefaultPermissionBroker) applyRemoteExecutionPolicy(def PermissionDefinition, execCtx PermissionExecutionContext) PermissionDecision {
+	if !execCtx.IsDeviceExecution() {
+		return ""
+	}
+	switch def.RemoteExecution {
+	case RemoteExecutionDeny:
+		return DecisionDeny
+	case RemoteExecutionRequireApproval:
+		return ""
+	}
+	return ""
+}
+
+func (b *DefaultPermissionBroker) requiresBoundGrant(def PermissionDefinition, execCtx PermissionExecutionContext) bool {
+	if !execCtx.IsDeviceExecution() {
+		return false
+	}
+	switch def.RiskLevel {
+	case "high", "critical":
+		return true
+	}
+	return false
 }
 
 func (b *DefaultPermissionBroker) Grant(ctx context.Context, request PermissionGrantRequest) (PermissionGrant, error) {
@@ -345,6 +411,12 @@ func (b *DefaultPermissionBroker) ValidateSnapshot(ctx context.Context, snapshot
 		}
 	}
 
+	if !inv.ExecutionContext.IsEmpty() {
+		if err := snap.VerifyExecutionContext(inv.ExecutionContext); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
@@ -375,13 +447,20 @@ func (b *DefaultPermissionBroker) isScopeAllowed(def PermissionDefinition, scope
 	return false
 }
 
-func (b *DefaultPermissionBroker) matchGrants(grants []PermissionGrant, scope PermissionScope, req PermissionRequirement) []PermissionGrant {
+func (b *DefaultPermissionBroker) matchGrants(grants []PermissionGrant, scope PermissionScope, req PermissionRequirement, execCtx PermissionExecutionContext) []PermissionGrant {
+	def, _ := b.registry.Get(req.PermissionID)
 	matched := make([]PermissionGrant, 0)
 	for _, g := range grants {
 		if !g.IsValid() {
 			continue
 		}
 		if scope.Type != ScopeGlobal && !g.Scope.Contains(scope) {
+			continue
+		}
+		if !g.TargetBinding.MatchesExecutionContext(execCtx) {
+			continue
+		}
+		if b.requiresBoundGrant(def, execCtx) && g.TargetBinding == nil {
 			continue
 		}
 		if g.IsPersistent() || g.Decision == DecisionAllowSession || g.Decision == DecisionAllow {
@@ -416,6 +495,22 @@ func (b *DefaultPermissionBroker) determineDenyOrApproval(result *PermissionEval
 	} else {
 		result.Decision = DecisionDeny
 	}
+
+	if result.Decision == DecisionRequireApproval || result.Decision == DecisionDeny {
+		result.ApprovalRequest = b.buildApprovalRequest(request, result.Missing)
+	}
+}
+
+func (b *DefaultPermissionBroker) buildApprovalRequest(request PermissionEvaluationRequest, missing []PermissionRequirement) *ApprovalRequest {
+	approval := &ApprovalRequest{
+		Source:           request.ExecutionContext.Source,
+		RiskLevel:        request.RiskLevel,
+		SideEffects:      request.SideEffects,
+		Target:           request.Target,
+		ExecutionContext: request.ExecutionContext,
+		RemoteExecution:  request.ExecutionContext.IsDeviceExecution(),
+	}
+	return approval
 }
 
 func (b *DefaultPermissionBroker) isNotTrusted(subject PermissionSubject) bool {

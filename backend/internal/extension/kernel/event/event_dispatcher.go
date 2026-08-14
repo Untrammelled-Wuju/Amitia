@@ -168,6 +168,8 @@ func outboxToEnvelope(record OutboxRecord) EventEnvelope {
 		ProducerID:           record.ProducerID,
 		ProducerType:         record.ProducerType,
 		ProducerGeneration:   record.ProducerGeneration,
+		Domain:               record.Domain,
+		CausationID:          record.CausationID,
 		AggregateType:        record.AggregateType,
 		AggregateID:          record.AggregateID,
 		AggregateVersion:     record.AggregateVersion,

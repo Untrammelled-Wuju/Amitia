@@ -1,8 +1,0 @@
-{
-  "schemaVersion": 1,
-  "taskId": "B43",
-  "status": "PASS_NO_CODE_CHANGE",
-  "constructionMode": ["REUSE", "EXTEND"],
-  "summary": "Amitia 生产链路的取消传播机制已完整：CancellationController 容器注入、所有 RuntimeAdapter select ctx.Done() 并返回 ToolResultStatusCancelled、task_runtime / clipboard_host / process_host 全链路保护、context.Background 仅见于测试文件、无 CancellationManager2 第二套系统。",
-  "next": "B44"
-}

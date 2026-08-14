@@ -70,6 +70,14 @@ func (r *Runtime) PreviewInstall(ctx context.Context, archivePath string) (Insta
 
 	installable := preview.SecurityPassed && !report.HasErrors()
 
+	if r.container != nil && r.container.PermissionDefinitions != nil {
+		permIssues := validateManifestPermissions(manifest, r.container.PermissionDefinitions)
+		for _, issue := range permIssues {
+			preview.Issues = append(preview.Issues, issue)
+			installable = false
+		}
+	}
+
 	for _, e := range report.Errors {
 		category := PreviewNotInstallable
 		if e.Code == "unsupported_runtime" || e.Code == "unsupported_contribution" {

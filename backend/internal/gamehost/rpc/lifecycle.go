@@ -66,6 +66,12 @@ func NewLifecycleManager(config LifecycleManagerConfig) *RequestLifecycleManager
 	}
 }
 
+func (m *RequestLifecycleManager) Registry() PendingRequestRegistry {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.pending
+}
+
 func (m *RequestLifecycleManager) SetControlPlane(cp ipc.ControlPlane) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

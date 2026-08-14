@@ -141,7 +141,7 @@ func (api *EventAPI) publishEvent(c *gin.Context) {
 	}
 	opts := event.PublishOptions{
 		ProducerID:    body.ProducerID,
-		ProducerType:  body.ProducerType,
+		ProducerType:  event.ParseProducerType(body.ProducerType),
 		AggregateType: body.AggregateType,
 		AggregateID:   body.AggregateID,
 		PartitionKey:  body.PartitionKey,
@@ -194,7 +194,7 @@ func (api *EventAPI) publishEventTx(c *gin.Context) {
 	defer tx.Rollback()
 	opts := event.PublishOptions{
 		ProducerID:    body.ProducerID,
-		ProducerType:  body.ProducerType,
+		ProducerType:  event.ParseProducerType(body.ProducerType),
 		AggregateType: body.AggregateType,
 		AggregateID:   body.AggregateID,
 		PartitionKey:  body.PartitionKey,

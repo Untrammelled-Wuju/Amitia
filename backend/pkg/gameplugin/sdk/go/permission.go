@@ -12,11 +12,9 @@ const (
 )
 
 const (
-	PermGameHostControlRequest = "gamehost.control.request"
-	PermGameHostControlOutput  = "gamehost.control.output"
-	PermGameHostChannelUse     = "gamehost.channel.use"
-	PermGameHostChannelRegister = "gamehost.channel.register"
-	PermGameHostHostAPIInvoke  = "gamehost.host_api.invoke"
+	PermGameHostControl     = "gamehost.control"
+	PermGameHostChannelUse  = "gamehost.channel.use"
+	PermGameHostHostAPIInvoke = "gamehost.host_api.invoke"
 
 	DecisionAllowed = "allowed"
 	DecisionDenied  = "denied"

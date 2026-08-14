@@ -8,6 +8,15 @@ class DesktopPetPluginApi {
 
   DesktopPetPluginApi(this._api);
 
+  String _id(String value) => Uri.encodeComponent(value.trim());
+
+  T _requireData<T>(T? value, String operation) {
+    if (value == null) {
+      throw StateError('Desktop Pet Plugin $operation returned empty data');
+    }
+    return value;
+  }
+
   Future<DesktopPetPluginList> list({
     int page = 1,
     int pageSize = 20,
@@ -17,33 +26,20 @@ class DesktopPetPluginApi {
       'page': '$page',
       'pageSize': '$pageSize',
     };
-    if (search != null && search.isNotEmpty) {
-      query['search'] = search;
+    final normalized = search?.trim();
+    if (normalized != null && normalized.isNotEmpty) {
+      query['search'] = normalized;
     }
     final resp = await _api.get<Map<String, dynamic>>(
       _basePath,
       queryParameters: query,
     );
-    if (resp == null) {
-      return const DesktopPetPluginList(plugins: [], total: 0, page: 1, pageSize: 20);
-    }
-    return DesktopPetPluginList.fromJson(resp);
+    return DesktopPetPluginList.fromJson(_requireData(resp, 'list'));
   }
 
   Future<DesktopPetPluginDetail> detail(String pluginId) async {
-    final resp = await _api.get<Map<String, dynamic>>('$_basePath/$pluginId');
-    if (resp == null) {
-      return const DesktopPetPluginDetail(
-        extensionId: '',
-        pluginId: '',
-        name: '',
-        description: '',
-        version: '',
-        enabled: false,
-        installState: '',
-      );
-    }
-    return DesktopPetPluginDetail.fromJson(resp);
+    final resp = await _api.get<Map<String, dynamic>>('$_basePath/${_id(pluginId)}');
+    return DesktopPetPluginDetail.fromJson(_requireData(resp, 'detail'));
   }
 
   Future<DesktopPetPluginInstallResult> install(String packagePath) async {
@@ -51,53 +47,35 @@ class DesktopPetPluginApi {
       '$_basePath/install',
       data: {'packagePath': packagePath},
     );
-    if (resp == null) {
-      return const DesktopPetPluginInstallResult(
-        extensionId: '',
-        version: '',
-        installState: '',
-      );
-    }
-    return DesktopPetPluginInstallResult.fromJson(resp);
+    return DesktopPetPluginInstallResult.fromJson(_requireData(resp, 'install'));
   }
 
   Future<DesktopPetPluginInstallResult> update(String extensionId, String packagePath) async {
     final resp = await _api.post<Map<String, dynamic>>(
-      '$_basePath/$extensionId/update',
+      '$_basePath/${_id(extensionId)}/update',
       data: {'packagePath': packagePath},
     );
-    if (resp == null) {
-      return const DesktopPetPluginInstallResult(
-        extensionId: '',
-        version: '',
-        installState: '',
-      );
-    }
-    return DesktopPetPluginInstallResult.fromJson(resp);
+    return DesktopPetPluginInstallResult.fromJson(_requireData(resp, 'update'));
   }
 
   Future<DesktopPetPluginMutationResult> enable(String extensionId) async {
     final resp = await _api.post<Map<String, dynamic>>(
-      '$_basePath/$extensionId/enable',
+      '$_basePath/${_id(extensionId)}/enable',
     );
-    if (resp == null) {
-      return const DesktopPetPluginMutationResult(extensionId: '', success: false);
-    }
-    return DesktopPetPluginMutationResult.fromJson(resp);
+    return DesktopPetPluginMutationResult.fromJson(_requireData(resp, 'enable'));
   }
 
   Future<DesktopPetPluginMutationResult> disable(String extensionId) async {
     final resp = await _api.post<Map<String, dynamic>>(
-      '$_basePath/$extensionId/disable',
+      '$_basePath/${_id(extensionId)}/disable',
     );
-    if (resp == null) {
-      return const DesktopPetPluginMutationResult(extensionId: '', success: false);
-    }
-    return DesktopPetPluginMutationResult.fromJson(resp);
+    return DesktopPetPluginMutationResult.fromJson(_requireData(resp, 'disable'));
   }
 
   Future<DesktopPetPluginMutationResult> uninstall(String extensionId) async {
-    await _api.delete('$_basePath/$extensionId');
-    return DesktopPetPluginMutationResult(extensionId: extensionId, success: true);
+    final resp = await _api.deleteWithResponse<Map<String, dynamic>>(
+      '$_basePath/${_id(extensionId)}',
+    );
+    return DesktopPetPluginMutationResult.fromJson(_requireData(resp, 'uninstall'));
   }
 }

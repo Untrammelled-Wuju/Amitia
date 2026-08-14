@@ -1,6 +1,0 @@
-{
-  "taskRuntimeOwnsBudget": true,
-  "toolInvocationQuotaSeparation": "Tool Invocation 在调用侧仍走 Canonical ExecutionPipeline.Resource Gate; Task 自身 budget 由 TaskRuntime 持有",
-  "noDoubleAccounting": "Rule: 任务 budget 与 tool invocations usage 采用不同的 accounting scope, 避免重复统计",
-  "extensionCannotExpandTaskBudget": true
-}

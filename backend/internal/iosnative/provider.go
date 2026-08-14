@@ -2,6 +2,7 @@ package iosnative
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/u-ai/backend/internal/nativebridge"
@@ -20,10 +21,24 @@ func NewProvider(bridge nativebridge.Bridge) *Provider {
 	}
 }
 
-func (p *Provider) RegisterHandler(operation string, handler Handler) {
+func (p *Provider) RegisterHandler(operation string, handler Handler) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	if operation == "" {
+		return fmt.Errorf("iosnative: operation is required")
+	}
+
+	if handler == nil {
+		return fmt.Errorf("iosnative: nil handler for %q", operation)
+	}
+
+	if _, exists := p.handlers[operation]; exists {
+		return fmt.Errorf("iosnative: duplicate handler registration for operation %q", operation)
+	}
+
 	p.handlers[operation] = handler
+	return nil
 }
 
 func (p *Provider) Execute(ctx context.Context, request nativebridge.Request) nativebridge.Response {

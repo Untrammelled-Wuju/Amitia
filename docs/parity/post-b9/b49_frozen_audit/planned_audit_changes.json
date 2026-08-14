@@ -1,4 +1,0 @@
-{
-  "changes": [],
-  "note": "B49 is analysis-only (frozen mustReuse=[Observability, AuditLog], mustExtend=[Audit Parity Gap 补全]). No source modifications. Fixes deferred to B141 cutover."
-}

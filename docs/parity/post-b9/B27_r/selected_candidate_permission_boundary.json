@@ -1,9 +1,0 @@
-{
-  "schemaVersion": 1,
-  "taskId": "B27",
-  "generatedAt": "2026-08-08T19:00:00+08:00",
-  "selectionMayReferenceRequirements": true,
-  "selectionDoesNotGrant": true,
-  "selectionDoesNotDeny": true,
-  "permissionBrokerBypass": false
-}

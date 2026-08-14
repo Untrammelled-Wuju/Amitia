@@ -45,7 +45,7 @@ func (b *RuntimeBridge) PublishFromRuntime(ctx context.Context, extensionID stri
 		return PublishResult{}, fmt.Errorf("%w: extension %s can only publish own namespace, got %s", ErrNamespaceDenied, extensionID, typeID)
 	}
 	opts.ProducerID = extensionID
-	opts.ProducerType = "extension"
+	opts.ProducerType = EventProducerTypeExtension
 	opts.ProducerExtensionID = extensionID
 	result, err := b.service.Publish(ctx, typeID, version, payload, opts)
 	if err != nil {
@@ -189,7 +189,7 @@ func (e *hostEventEmitter) Emit(ctx context.Context, typeID EventTypeID, version
 		opts.ProducerID = "host"
 	}
 	if opts.ProducerType == "" {
-		opts.ProducerType = "host"
+		opts.ProducerType = EventProducerTypeSystem
 	}
 	result, err := e.service.Publish(ctx, typeID, version, payload, opts)
 	if err != nil {

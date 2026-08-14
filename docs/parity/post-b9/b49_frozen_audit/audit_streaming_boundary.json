@@ -1,4 +1,0 @@
-{
-  "policy": "Streaming Audit records stream lifecycle events only (started/completed/cancelled/timed_out, event/byte count); does NOT persist each chunk payload",
-  "currentImplementation": "ExecutionPipeline does not persist streaming chunks to audit; streaming sink is separate from audit"
-}

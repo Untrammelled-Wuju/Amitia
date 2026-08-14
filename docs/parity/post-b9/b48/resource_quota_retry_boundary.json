@@ -1,6 +1,0 @@
-{
-  "retryAuthority": "RetryController (B42)",
-  "quotaExceededNotAutoRetry": true,
-  "quotaTriggeredRetryCount": 0,
-  "retryRequiresNewLegitimateDecision": true
-}

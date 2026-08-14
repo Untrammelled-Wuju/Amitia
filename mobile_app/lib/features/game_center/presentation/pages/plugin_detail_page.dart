@@ -11,12 +11,12 @@ import 'runtime_detail_page.dart';
 
 class PluginDetailPage extends ConsumerWidget {
   final String pluginId;
-  final String? extensionId;
+  final String extensionId;
 
   const PluginDetailPage({
     super.key,
     required this.pluginId,
-    this.extensionId,
+    required this.extensionId,
   });
 
   @override
@@ -27,7 +27,7 @@ class PluginDetailPage extends ConsumerWidget {
     final detail = state.pluginDetail;
     final isLoading = state.pluginDetailLoading;
     final error = state.pluginDetailError;
-    final hasOp = controller.hasPackageOp(extensionId ?? '');
+    final hasOp = controller.hasPackageOp(extensionId);
 
     return AmitiaScaffold(
       appBar: AmitiaAppBar(

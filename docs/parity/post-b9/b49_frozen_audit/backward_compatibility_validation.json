@@ -1,8 +1,0 @@
-{
-  "sourceChanges": [],
-  "note": "B49 Audit Parity Gap is analysis-only (REUSE). No source modifications. Backward compatibility maintained.",
-  "pendingFixes": [
-    "ExecutionPipeline → observability.RecordWriter wiring (B141)",
-    "Flush loop + shutdown drain (B141)"
-  ]
-}

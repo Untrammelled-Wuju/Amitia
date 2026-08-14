@@ -1,7 +1,0 @@
-{
-  "streamingAuthority": "B42 Streaming",
-  "outputBytesQuotaForStreaming": "maxOutputBytes applies to both immediate + streamed output",
-  "stopAtHardQuota": "B43 cancel propagation + B44 deadline -> stop stream",
-  "streamBytesAfterHardQuota": 0,
-  "singleStreamAuthority": true
-}

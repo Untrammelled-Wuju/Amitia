@@ -17,7 +17,10 @@ func TestLifecycleOrchestrator_AcquireRuntimeStartup_AllRequiredGranted(t *testi
 	id.AddRuntime("rt-1", "p", "ext", "created")
 	id.AddService("rt-1", "svc-1", "p", "ext", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 	o := secret.NewLifecycleOrchestrator(a)
 
 	h := o.AcquireRuntimeStartup(context.Background(), secret.RuntimeSecretManifest{
@@ -48,7 +51,10 @@ func TestLifecycleOrchestrator_AcquireRuntimeStartup_RequiredFails_RevokesAcquir
 	id.AddRuntime("rt-1", "p", "ext", "created")
 	id.AddService("rt-1", "svc-1", "p", "ext", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 	o := secret.NewLifecycleOrchestrator(a)
 
 	b.issueErr = errors.New("store unavailable")
@@ -75,7 +81,10 @@ func TestLifecycleOrchestrator_AcquireRuntimeStartup_NoSecrets_Success(t *testin
 	b := newFakeBroker()
 	id := newFakeIdentity()
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 	o := secret.NewLifecycleOrchestrator(a)
 
 	h := o.AcquireRuntimeStartup(context.Background(), secret.RuntimeSecretManifest{
@@ -100,7 +109,10 @@ func TestLifecycleOrchestrator_AcquireRuntimeStartup_AllRequiredFail_NoLeaseLeak
 	id.AddRuntime("rt-1", "p", "ext", "created")
 	id.AddService("rt-1", "svc-1", "p", "ext", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 
 	b.issueErr = errors.New("store unavailable")
 	o := secret.NewLifecycleOrchestrator(a)
@@ -130,7 +142,10 @@ func TestLifecycleOrchestrator_Stop_TriggersRevoke(t *testing.T) {
 	id.AddRuntime("rt-1", "p", "ext", "created")
 	id.AddService("rt-1", "svc-1", "p", "ext", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 	o := secret.NewLifecycleOrchestrator(a)
 
 	_, _ = a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
@@ -152,7 +167,10 @@ func TestLifecycleOrchestrator_RuntimeStop_TriggersRevoke(t *testing.T) {
 	id.AddRuntime("rt-1", "p", "ext", "created")
 	id.AddService("rt-1", "svc-1", "p", "ext", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 	o := secret.NewLifecycleOrchestrator(a)
 
 	_, _ = a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
@@ -174,7 +192,10 @@ func TestLifecycleOrchestrator_Disable_TriggersRevoke(t *testing.T) {
 	id.AddRuntime("rt-1", "p", "ext-d", "created")
 	id.AddService("rt-1", "svc-1", "p", "ext-d", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 	o := secret.NewLifecycleOrchestrator(a)
 
 	_, _ = a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
@@ -196,7 +217,10 @@ func TestLifecycleOrchestrator_Uninstall_TriggersRevoke(t *testing.T) {
 	id.AddRuntime("rt-1", "p", "ext", "created")
 	id.AddService("rt-1", "svc-1", "p", "ext", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 	o := secret.NewLifecycleOrchestrator(a)
 
 	_, _ = a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
@@ -216,7 +240,10 @@ func TestLifecycleOrchestrator_ConcurrentAcquireAndStop(t *testing.T) {
 	id.AddRuntime("rt-1", "p", "ext", "created")
 	id.AddService("rt-1", "svc-1", "p", "ext", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 
 	var wg sync.WaitGroup
 	for i := 0; i < 50; i++ {

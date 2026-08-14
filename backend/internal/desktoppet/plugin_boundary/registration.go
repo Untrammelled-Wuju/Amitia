@@ -110,18 +110,19 @@ type FloatingWindowCapabilityDescriptor struct {
 }
 
 type ContributionRegistration struct {
-	Ref          ContributionRef
-	Kind         ContributionKind
-	Revision     int
-	Status       ContributionStatus
-	Definition   map[string]any
-	RegisteredAt string
-	UpdatedAt    string
-	Resource     *ResourceDescriptor
-	Action       *ActionDescriptor
-	Runtime      *RuntimeCapabilityDescriptor
-	Window       *FloatingWindowCapabilityDescriptor
-	ErrorMessage string
+	Ref             ContributionRef
+	Kind            ContributionKind
+	Revision        int
+	Status          ContributionStatus
+	Definition      map[string]any
+	RegisteredAt    string
+	UpdatedAt       string
+	Resource        *ResourceDescriptor
+	Action          *ActionDescriptor
+	Runtime         *RuntimeCapabilityDescriptor
+	Window          *FloatingWindowCapabilityDescriptor
+	ErrorMessage    string
+	CanonicalHandle string
 }
 
 func (r ContributionRegistration) IsExecutable() bool {

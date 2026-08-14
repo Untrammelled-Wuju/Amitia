@@ -1,9 +1,0 @@
-{
-  "schemaVersion": 1,
-  "taskId": "B40",
-  "nextOwner": "future-streaming-step",
-  "currentSupport": "ToolContentType.Stream exists in result.go but no project code emits it.",
-  "streamSchema": "NOT_REQUIRED at B40. No streaming payload schema is enacted.",
-  "finalResultSchema": "UnifiedToolResult already accommodates final payloads.",
-  "gap": "Actual stream payload schemas are deferred to the dedicated streaming step."
-}

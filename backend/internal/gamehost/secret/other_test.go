@@ -18,7 +18,7 @@ func TestBindingIndex_RecordLookup(t *testing.T) {
 
 	idx.Record(k, "rt-1", "svc-1", "ref-1", "ext-1", 1, secret.PurposeStartup)
 
-	entry, ok := idx.LookupByService("rt-1", "svc-1", "ref-1")
+	entry, ok := idx.LookupByService("rt-1", "svc-1", "ref-1", 1)
 	if !ok || entry.KernelLease != k {
 		t.Fatalf("expected lookup success")
 	}
@@ -94,7 +94,10 @@ func TestSubscriptionAdapter_OnPermissionRevoked(t *testing.T) {
 	id.AddRuntime("rt-1", "p", "ext", "created")
 	id.AddService("rt-1", "svc-1", "p", "ext", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 	s := secret.NewSubscriptionAdapter(a)
 
 	_, _ = a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
@@ -109,11 +112,14 @@ func TestSubscriptionAdapter_OnPermissionRevoked(t *testing.T) {
 func TestSubscriptionAdapter_OnPermissionRevoked_EmptyIDs(t *testing.T) {
 	b := newFakeBroker()
 	id := newFakeIdentity()
-	a := secret.NewSecretLeaseAdapter(b, id, nil)
+	g := &fakeGate{allow: true}
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 	s := secret.NewSubscriptionAdapter(a)
 
 	s.OnPermissionRevoked("", "")
-	// no panic
 }
 
 func TestSubscriptionAdapter_OnExtensionDisabled(t *testing.T) {
@@ -123,7 +129,10 @@ func TestSubscriptionAdapter_OnExtensionDisabled(t *testing.T) {
 	id.AddRuntime("rt-1", "p", "ext-d", "created")
 	id.AddService("rt-1", "svc-1", "p", "ext-d", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 	s := secret.NewSubscriptionAdapter(a)
 
 	_, _ = a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
@@ -142,7 +151,10 @@ func TestSubscriptionAdapter_OnExtensionUninstalled(t *testing.T) {
 	id.AddRuntime("rt-1", "p", "ext", "created")
 	id.AddService("rt-1", "svc-1", "p", "ext", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 	s := secret.NewSubscriptionAdapter(a)
 
 	_, _ = a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
@@ -160,7 +172,10 @@ func TestSubscriptionAdapter_OnServiceStopped(t *testing.T) {
 	id.AddRuntime("rt-1", "p", "ext", "created")
 	id.AddService("rt-1", "svc-1", "p", "ext", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 	s := secret.NewSubscriptionAdapter(a)
 
 	_, _ = a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
@@ -178,7 +193,10 @@ func TestSubscriptionAdapter_OnRuntimeStopped(t *testing.T) {
 	id.AddRuntime("rt-1", "p", "ext", "created")
 	id.AddService("rt-1", "svc-1", "p", "ext", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 	s := secret.NewSubscriptionAdapter(a)
 
 	_, _ = a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
@@ -196,7 +214,10 @@ func TestSubscriptionAdapter_OnRuntimeRestarted(t *testing.T) {
 	id.AddRuntime("rt-1", "p", "ext", "created")
 	id.AddService("rt-1", "svc-1", "p", "ext", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 	s := secret.NewSubscriptionAdapter(a)
 
 	_, _ = a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
@@ -216,7 +237,10 @@ func TestRace_AcquireAndStop(t *testing.T) {
 	id.AddRuntime("rt-1", "p", "ext", "created")
 	id.AddService("rt-1", "svc-1", "p", "ext", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 
 	var wg sync.WaitGroup
 	for i := 0; i < 50; i++ {
@@ -235,7 +259,10 @@ func TestRace_AcquireParallelDifferentRuntimes(t *testing.T) {
 	b.SeedSecret(refOpenAI, "v")
 	id := newFakeIdentity()
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 
 	var wg sync.WaitGroup
 	for i := 0; i < 20; i++ {
@@ -262,7 +289,10 @@ func TestRace_AcquireVsRevoke(t *testing.T) {
 	id.AddRuntime("rt-1", "p", "ext", "created")
 	id.AddService("rt-1", "svc-1", "p", "ext", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 
 	done := make(chan struct{})
 

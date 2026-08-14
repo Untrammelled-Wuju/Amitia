@@ -149,6 +149,12 @@ var reservedNamespaces = []string{
 	"permission.",
 	"scope.",
 	"secret.",
+	"device.",
+	"runtime.",
+	"task.",
+	"capability_provider.",
+	"sync.",
+	"interaction.",
 }
 
 func (d EventTypeDefinition) Validate() error {
@@ -183,6 +189,32 @@ func (t EventTypeID) IsReservedNamespace() bool {
 
 func (t EventTypeID) IsHostNamespace() bool {
 	return !strings.HasPrefix(string(t), "extension.")
+}
+
+func (t EventTypeID) Domain() EventDomain {
+	switch {
+	case strings.HasPrefix(string(t), "extension."):
+		return EventDomainExtension
+	case strings.HasPrefix(string(t), "interaction."):
+		return EventDomainInteraction
+	case strings.HasPrefix(string(t), "device."):
+		return EventDomainDevice
+	case strings.HasPrefix(string(t), "runtime."):
+		return EventDomainRuntime
+	case strings.HasPrefix(string(t), "task."):
+		return EventDomainTask
+	case strings.HasPrefix(string(t), "capability_provider."):
+		return EventDomainCapabilityProvider
+	case strings.HasPrefix(string(t), "sync."):
+		return EventDomainSync
+	case strings.HasPrefix(string(t), "system."),
+		strings.HasPrefix(string(t), "security."),
+		strings.HasPrefix(string(t), "permission."),
+		strings.HasPrefix(string(t), "scope."),
+		strings.HasPrefix(string(t), "secret."):
+		return EventDomainSystem
+	}
+	return EventDomainSystem
 }
 
 type EventTypeRegistry interface {

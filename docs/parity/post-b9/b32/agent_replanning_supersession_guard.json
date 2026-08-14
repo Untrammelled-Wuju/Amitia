@@ -1,6 +1,0 @@
-{
-  "candidateGeneratedAfterSupersessionCount": 0,
-  "continuationCommittedAfterSupersessionCount": 0,
-  "oldDecisionCycleResurrectionCount": 0,
-  "existingBehavior": "Goal supersession通过GoalRegistry更新旧Goal为abandoned。后续Continuation调用GoalRegistry.Get将观察到终态，不会为新Superseded Goal生成候选。"
-}

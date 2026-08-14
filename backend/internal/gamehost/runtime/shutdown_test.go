@@ -141,6 +141,10 @@ func (f *fakeRuntimeExecutor) StopRuntime(ctx context.Context, runtimeID domain.
 	return nil
 }
 
+func (f *fakeRuntimeExecutor) RestartRuntime(ctx context.Context, runtimeID domain.RuntimeInstanceID, reason string) error {
+	return nil
+}
+
 func (f *fakeRuntimeExecutor) StartServices(ctx context.Context, runtimeID domain.RuntimeInstanceID, serviceIDs []domain.ServiceID) error {
 	return nil
 }

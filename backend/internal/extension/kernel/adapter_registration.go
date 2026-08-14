@@ -14,23 +14,28 @@ import (
 )
 
 type AdapterRegistrationDeps struct {
-	JSGlobalFactory     *javascript_main.RuntimeFactory
-	WASMFactory         *wasm_runtime.WASMRuntimeFactory
-	WASMModuleMgr       *wasm_runtime.ModuleManager
-	Supervisor          runtime_supervisor.Supervisor
-	TaskService         *task_runtime.TaskRuntimeService
-	MCPCaller           capability.MCPCallFunc
-	MCPHealth           capability.MCPHealthFunc
-	WorkflowCaller      capability.WorkflowCallFunc
-	WorkflowCancel      capability.WorkflowCancelFunc
-	BuiltinDispatcher   capability.DispatchFunc
-	DesktopProvider     capability.DesktopProvider
+	JSGlobalFactory      *javascript_main.RuntimeFactory
+	WASMFactory          *wasm_runtime.WASMRuntimeFactory
+	WASMModuleMgr        *wasm_runtime.ModuleManager
+	Supervisor           runtime_supervisor.Supervisor
+	TaskService          *task_runtime.TaskRuntimeService
+	MCPCaller            capability.MCPCallFunc
+	MCPHealth            capability.MCPHealthFunc
+	WorkflowCaller       capability.WorkflowCallFunc
+	WorkflowCancel       capability.WorkflowCancelFunc
+	BuiltinDispatcher    capability.DispatchFunc
+	DesktopProvider      capability.DesktopProvider
 	AndroidLinuxProvider interface{}
-	SearchCaller        capability.SearchCallFunc
-	SearchHealth        capability.SearchHealthFunc
-	BrowserCaller       capability.BrowserCallFunc
-	BrowserHealth       capability.BrowserHealthFunc
-	InternalDispatcher  capability.InternalCallFunc
+	AndroidNativeProvider capability.AndroidProvider
+	SearchCaller         capability.SearchCallFunc
+	SearchHealth         capability.SearchHealthFunc
+	BrowserCaller        capability.BrowserCallFunc
+	BrowserHealth        capability.BrowserHealthFunc
+	InternalDispatcher   capability.InternalCallFunc
+	MediaCaller          capability.MediaCallFunc
+	MediaHealth          capability.MediaHealthFunc
+	WorkspaceCaller      capability.WorkspaceCallFunc
+	WorkspaceHealth      capability.WorkspaceHealthFunc
 }
 
 func RegisterProductionAdapters(registry *capability.RuntimeAdapterRegistry, deps AdapterRegistrationDeps) error {
@@ -105,6 +110,13 @@ func RegisterProductionAdapters(registry *capability.RuntimeAdapterRegistry, dep
 		registerAndroidLinuxAdapter(registry, deps.AndroidLinuxProvider)
 	}
 
+	if deps.AndroidNativeProvider != nil {
+		registry.Register(
+			capability.RuntimeTypeAndroid_Native,
+			capability.NewAndroidRuntimeAdapter(deps.AndroidNativeProvider),
+		)
+	}
+
 	if deps.SearchCaller != nil {
 		searchAdapter := capability.NewSearchRuntimeAdapter(deps.SearchCaller, deps.SearchHealth)
 		registry.Register(capability.RuntimeTypeSearch, searchAdapter)
@@ -118,6 +130,16 @@ func RegisterProductionAdapters(registry *capability.RuntimeAdapterRegistry, dep
 	if deps.InternalDispatcher != nil {
 		internalAdapter := capability.NewInternalRuntimeAdapter(deps.InternalDispatcher)
 		registry.Register(capability.RuntimeTypeInternal, internalAdapter)
+	}
+
+	if deps.MediaCaller != nil {
+		mediaAdapter := capability.NewMediaRuntimeAdapter(deps.MediaCaller, deps.MediaHealth)
+		registry.Register(capability.RuntimeTypeMedia, mediaAdapter)
+	}
+
+	if deps.WorkspaceCaller != nil {
+		workspaceAdapter := capability.NewWorkspaceRuntimeAdapter(deps.WorkspaceCaller, deps.WorkspaceHealth)
+		registry.Register(capability.RuntimeTypeWorkspace, workspaceAdapter)
 	}
 
 	return nil

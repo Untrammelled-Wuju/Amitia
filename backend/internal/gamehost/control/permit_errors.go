@@ -28,6 +28,13 @@ func errPermitStale(permitEpoch uint64, currentEpoch uint64) *AuthorityError {
 	}
 }
 
+func errPermitStaleGeneration(permitGeneration uint64, currentGeneration uint64) *AuthorityError {
+	return &AuthorityError{
+		Code:    domain.ErrInvalidState,
+		Message: fmt.Sprintf("permit stale generation: permit=%d current=%d", permitGeneration, currentGeneration),
+	}
+}
+
 func errPermitExpired(permitID string, expiresAt time.Time, now time.Time) *AuthorityError {
 	return &AuthorityError{
 		Code:    domain.ErrInvalidState,

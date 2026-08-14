@@ -1,6 +1,0 @@
-{
-  "authority": "B45 PermissionBroker (permission.DefaultPermissionBroker)",
-  "projection": "InvocationRecord.ApprovalMode, PermissionSnapshot, Status=denied",
-  "permissionBrokerAuthorityCount": 1,
-  "auditDoesNotDecidePermission": true
-}

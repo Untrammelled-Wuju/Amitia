@@ -25,6 +25,8 @@ const (
 	RuntimeTypeAndroidLinux       RuntimeType = "android_linux"
 	RuntimeTypeIOS_Native         RuntimeType = "ios_native"
 	RuntimeTypeDesktop_Extension  RuntimeType = "desktop_extension"
+	RuntimeTypeMedia              RuntimeType = "media"
+	RuntimeTypeWorkspace          RuntimeType = "workspace"
 )
 
 type RuntimeBinding struct {

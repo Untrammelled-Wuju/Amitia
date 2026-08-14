@@ -1,8 +1,0 @@
-{
-  "schemaVersion": 1,
-  "taskId": "B124",
-  "generatedAt": "2026-08-08T17:30:00+08:00",
-  "description": "B124 Planned Changes - 全部BLOCKED",
-  "summary": { "totalChanges": 0, "blockedChanges": 8, "executedChanges": 0 },
-  "changes": []
-}

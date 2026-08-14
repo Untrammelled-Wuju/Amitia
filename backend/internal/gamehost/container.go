@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
+	gamehostsecret "github.com/u-ai/backend/internal/gamehost/secret"
 	"github.com/u-ai/backend/internal/gamehost/channel"
 	"github.com/u-ai/backend/internal/gamehost/config"
 	"github.com/u-ai/backend/internal/gamehost/control"
@@ -64,17 +65,25 @@ type GameHostContainer struct {
 	ResourceViewer    *resource.ResourcePolicyViewer
 	ResourceLifecycle *resource.LifecycleCoordinator
 
-	AuthorityManager *control.ControlAuthorityManager
-	OutputGate       *control.PluginOutputGate
-	TakeoverService  *control.TakeoverService
-	AuthorityAudit   *control.InMemoryAuthorityAuditSink
+	AuthorityManager      *control.ControlAuthorityManager
+	OutputGate            *control.PluginOutputGate
+	TakeoverService       *control.TakeoverService
+	AuthorityAudit        control.AuthorityAuditSink
+	EmergencyStopService  *control.EmergencyStopService
+	ControlSinkRegistry   *control.ControlSinkRegistry
+	CommitBarrier         *control.ControlCommitBarrierImpl
 
 	procAdapter runtime.ProcessSupervisorAdapter
+
+	SecretLeaseAdapter  *gamehostsecret.SecretLeaseAdapter
+	SecretLifecycle     *gamehostsecret.LifecycleOrchestrator
+	SecretSubscriptions *gamehostsecret.SubscriptionAdapter
 
 	UpgradeCoordinator  *upgrade.UpgradeCoordinator
 	RecoveryCoordinator *recovery.RecoveryCoordinator
 	StartupRecovery     *startup.StartupRecoveryCoordinator
 	StartupGate         *startup.StartupGate
+	ProcessExitBridge   runtime.ProcessExitBridge
 }
 
 func (c *GameHostContainer) Start(ctx context.Context) error {
@@ -109,6 +118,9 @@ func (c *GameHostContainer) Shutdown(ctx context.Context) error {
 	}
 	if c.StartupGate != nil {
 		c.StartupGate.Close()
+	}
+	if c.SecretLeaseAdapter != nil {
+		c.SecretLeaseAdapter.Shutdown()
 	}
 	if c.RPCLifecycle != nil {
 		c.RPCLifecycle.Shutdown(ctx)

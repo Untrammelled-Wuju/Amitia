@@ -46,6 +46,20 @@ func (f NotifyFunc) Notify(ctx context.Context, extensionID, instanceID, service
 	f(ctx, extensionID, instanceID, serviceID, method, params)
 }
 
+type ProcessExitEvent struct {
+	ServiceID    string
+	InstanceID   string
+	ExtensionID  string
+	ExitCode     int
+	Expected     bool
+	OccurredAt   time.Time
+	RestartCount int
+}
+
+type ProcessExitObserver interface {
+	OnProcessExit(event ProcessExitEvent)
+}
+
 type ProcessSupervisor struct {
 	mu                sync.Mutex
 	instances         map[string]*ServiceInstance
@@ -60,6 +74,7 @@ type ProcessSupervisor struct {
 	procMgr           *process.DefaultProcessManager
 	gameHostNotifier  GameHostNotifier
 	protocolHandlers  map[string]StdioProtocolHandler
+	exitObservers     []ProcessExitObserver
 }
 
 func NewProcessSupervisor(rootDir string) *ProcessSupervisor {
@@ -105,6 +120,33 @@ func (s *ProcessSupervisor) SetGameHostNotifier(n GameHostNotifier) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.gameHostNotifier = n
+}
+
+func (s *ProcessSupervisor) RegisterProcessExitObserver(observer ProcessExitObserver) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.exitObservers = append(s.exitObservers, observer)
+}
+
+func (s *ProcessSupervisor) UnregisterProcessExitObserver(observer ProcessExitObserver) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for i, o := range s.exitObservers {
+		if o == observer {
+			s.exitObservers = append(s.exitObservers[:i], s.exitObservers[i+1:]...)
+			return
+		}
+	}
+}
+
+func (s *ProcessSupervisor) notifyProcessExit(event ProcessExitEvent) {
+	s.mu.Lock()
+	observers := make([]ProcessExitObserver, len(s.exitObservers))
+	copy(observers, s.exitObservers)
+	s.mu.Unlock()
+	for _, o := range observers {
+		o.OnProcessExit(event)
+	}
 }
 
 func (s *ProcessSupervisor) RegisterStdioProtocolHandler(protocol string, handler StdioProtocolHandler) error {
@@ -668,7 +710,19 @@ func (s *ProcessSupervisor) watchProcess(inst *ServiceInstance, cmd *exec.Cmd) {
 	}
 
 	stopped := inst.State_()
-	if stopped == ServiceStateStopping || stopped == ServiceStateStopped {
+	expected := stopped == ServiceStateStopping || stopped == ServiceStateStopped
+
+	s.notifyProcessExit(ProcessExitEvent{
+		ServiceID:    inst.ServiceID,
+		InstanceID:   inst.InstanceID,
+		ExtensionID:  inst.Definition.ExtensionID,
+		ExitCode:     exitCode,
+		Expected:     expected,
+		OccurredAt:   time.Now(),
+		RestartCount: inst.RestartCount,
+	})
+
+	if expected {
 		return
 	}
 

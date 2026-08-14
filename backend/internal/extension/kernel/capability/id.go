@@ -8,6 +8,14 @@ import (
 
 var asciiOnlyPattern = regexp.MustCompile(`[^a-z0-9/._-]`)
 
+func ParseCapabilityID(raw string) CapabilityID {
+	return CapabilityID(strings.TrimSpace(raw))
+}
+
+func (id CapabilityID) IsEmpty() bool {
+	return strings.TrimSpace(string(id)) == ""
+}
+
 func BuildCapabilityID(source CapabilitySource, namespace, name string) string {
 	raw := strings.ToLower(string(source) + "/" + namespace + "/" + name)
 	raw = asciiOnlyPattern.ReplaceAllString(raw, "-")

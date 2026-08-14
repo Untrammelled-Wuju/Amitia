@@ -1,9 +1,11 @@
 package v2
 
+import "github.com/u-ai/backend/internal/deviceruntime/protocol"
+
 const (
-	EventRuntimeConnected    = "runtime.connected"
-	EventRuntimeDisconnected = "runtime.disconnected"
-	EventRuntimeHeartbeat    = "runtime.heartbeat"
+	EventRuntimeConnected    = protocol.RuntimeEventConnected
+	EventRuntimeDisconnected = protocol.RuntimeEventDisconnected
+	EventRuntimeHeartbeat    = protocol.RuntimeEventHeartbeat
 
 	EventPointerClicked       = "runtime.pointer.clicked"
 	EventPointerDoubleClicked = "runtime.pointer.double_clicked"

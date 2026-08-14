@@ -1,9 +1,0 @@
-{
-  "schemaVersion": 1,
-  "taskId": "B41",
-  "cancellationSource": "context.Context + CancellationController.Wrap(ctx, inv)",
-  "propagationStages": "Caller -> ToolFacade -> ExecutionPipeline.CancellationCtrl -> TimeoutCtrl -> RuntimeAdapter -> Provider",
-  "runtimeAdapterBoundary": "context.Context cancellation is observed by each adapter",
-  "providerBoundary": "context.Context cancellation is observed by each provider",
-  "knownGaps": "B40/B41 do not implement a full cancellation control loop (out of scope — deferred to dedicated cancellation step)."
-}

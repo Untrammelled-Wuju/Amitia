@@ -23,31 +23,37 @@ type PermissionTarget struct {
 }
 
 type PermissionEvaluationRequest struct {
-	Subject         PermissionSubject       `json:"subject"`
-	Requirements    []PermissionRequirement `json:"requirements"`
-	InvocationID    string                  `json:"invocationId,omitempty"`
-	Input           json.RawMessage         `json:"input,omitempty"`
-	Target          PermissionTarget        `json:"target,omitempty"`
-	RiskLevel       string                  `json:"riskLevel,omitempty"`
-	SideEffects     []ExpectedSideEffect    `json:"sideEffects,omitempty"`
-	IsBackground    bool                    `json:"isBackground"`
-	ParentGrants    []PermissionGrant       `json:"parentGrants,omitempty"`
-	ScopeSnapshotID string                  `json:"scopeSnapshotId,omitempty"`
-	ApprovalMode    string                  `json:"approvalMode,omitempty"`
+	Subject          PermissionSubject          `json:"subject"`
+	Requirements     []PermissionRequirement    `json:"requirements"`
+	InvocationID     string                     `json:"invocationId,omitempty"`
+	Input            json.RawMessage            `json:"input,omitempty"`
+	Target           PermissionTarget           `json:"target,omitempty"`
+	RiskLevel        string                     `json:"riskLevel,omitempty"`
+	SideEffects      []ExpectedSideEffect       `json:"sideEffects,omitempty"`
+	IsBackground     bool                       `json:"isBackground"`
+	ParentGrants     []PermissionGrant          `json:"parentGrants,omitempty"`
+	ScopeSnapshotID  string                     `json:"scopeSnapshotId,omitempty"`
+	ApprovalMode     string                     `json:"approvalMode,omitempty"`
+	Generation       int64                      `json:"generation,omitempty"`
+	ExecutionContext PermissionExecutionContext `json:"executionContext,omitempty"`
 }
 
 type ApprovalRequest struct {
-	ToolName      string               `json:"toolName"`
-	ExtensionName string               `json:"extensionName"`
-	Source        string               `json:"source"`
-	InputSummary  string               `json:"inputSummary"`
-	RiskLevel     string               `json:"riskLevel"`
-	SideEffects   []ExpectedSideEffect `json:"sideEffects"`
-	Target        PermissionTarget     `json:"target"`
-	Reversible    bool                 `json:"reversible"`
-	Repeatable    bool                 `json:"repeatable"`
-	LongTerm      bool                 `json:"longTerm"`
-	TimeoutMS     int64                `json:"timeoutMs"`
+	ToolName         string                     `json:"toolName"`
+	ExtensionName    string                     `json:"extensionName"`
+	Source           string                     `json:"source"`
+	InputSummary     string                     `json:"inputSummary"`
+	RiskLevel        string                     `json:"riskLevel"`
+	SideEffects      []ExpectedSideEffect       `json:"sideEffects"`
+	Target           PermissionTarget           `json:"target"`
+	Reversible       bool                       `json:"reversible"`
+	Repeatable       bool                       `json:"repeatable"`
+	LongTerm         bool                       `json:"longTerm"`
+	TimeoutMS        int64                      `json:"timeoutMs"`
+	ExecutionContext PermissionExecutionContext `json:"executionContext,omitempty"`
+	RemoteExecution  bool                       `json:"remoteExecution,omitempty"`
+	ProviderName     string                     `json:"providerName,omitempty"`
+	DeviceLabel      string                     `json:"deviceLabel,omitempty"`
 }
 
 type PermissionReason struct {

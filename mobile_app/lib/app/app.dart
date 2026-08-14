@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/runtime/runtime_bootstrap_provider.dart';
 import '../core/runtime/runtime_bootstrap_phase.dart';
+import '../core/runtime/runtime_bridge_provider.dart';
 import '../core/widgets/amitia_drawer.dart';
 import 'theme/app_theme.dart';
 import 'router.dart';
@@ -92,15 +93,78 @@ class _BootstrapInitializingWidget extends StatelessWidget {
   }
 }
 
-class _BootstrapInstallRequiredWidget extends StatelessWidget {
+class _BootstrapInstallRequiredWidget extends ConsumerStatefulWidget {
   const _BootstrapInstallRequiredWidget();
 
   @override
+  ConsumerState<_BootstrapInstallRequiredWidget> createState() =>
+      _BootstrapInstallRequiredWidgetState();
+}
+
+class _BootstrapInstallRequiredWidgetState
+    extends ConsumerState<_BootstrapInstallRequiredWidget> {
+  bool _installing = false;
+  String? _errorMessage;
+
+  Future<void> _installRuntime() async {
+    if (_installing) return;
+
+    setState(() {
+      _installing = true;
+      _errorMessage = null;
+    });
+
+    try {
+      final bridge = ref.read(runtimeBridgeProvider);
+      final result = await bridge.install();
+      if (!mounted) return;
+
+      if (result.error != null) {
+        setState(() => _errorMessage = result.error!.message);
+      } else if (!result.accepted) {
+        setState(() => _errorMessage = '安装命令未被接受');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _errorMessage = '安装失败: $e');
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _installing = false);
+      }
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
+    return MaterialApp(
       home: Scaffold(
         body: Center(
-          child: Text('Runtime installation required'),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Text('运行环境尚未安装'),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: _installing ? null : _installRuntime,
+                child: _installing
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Text('安装运行环境'),
+              ),
+              if (_errorMessage != null) ...[
+                const SizedBox(height: 16),
+                Text(
+                  _errorMessage!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ],
+          ),
         ),
       ),
     );

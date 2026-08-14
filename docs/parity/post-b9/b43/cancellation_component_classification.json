@@ -1,9 +1,0 @@
-[
-  {"component": "context.Context", "classification": "CANONICAL_INVOCATION_CANCEL"},
-  {"component": "execution.CancellationController", "classification": "EXECUTION_PIPELINE_CANCEL"},
-  {"component": "adapter_android_native / ios_native / desktop", "classification": "RUNTIME_PROPAGATION"},
-  {"component": "adapter_javascript", "classification": "PROVIDER_LOCAL_CANCEL"},
-  {"component": "adapter_task (taskRuntime)", "classification": "TASK_DOMAIN_CANCEL"},
-  {"component": "clipboard_host", "classification": "RUNTIME_PROPAGATION"},
-  {"component": "task_runtime.process_host", "classification": "TASK_DOMAIN_CANCEL"}
-]

@@ -56,7 +56,12 @@ internal class DefaultRuntimeController(
     private val installedRuntimeSource: InstalledRuntimeSource = AlwaysInstalledRuntimeSource()
 ) : RuntimeController {
 
-    private val expectedStopRequested = AtomicBoolean(false)
+    private data class ExpectedStopContext(
+        val generation: Long,
+    )
+
+    private val expectedStopRef =
+        AtomicReference<ExpectedStopContext?>(null)
     private val serviceHostListener = RuntimeServiceHostListener { event ->
         onServiceHostEvent(event)
     }
@@ -79,6 +84,14 @@ internal class DefaultRuntimeController(
         return generation > 0 && generation == stateStore.snapshot().generation
     }
 
+    private fun clearExpectedStop(generation: Long) {
+        while (true) {
+            val current = expectedStopRef.get() ?: return
+            if (current.generation != generation) return
+            if (expectedStopRef.compareAndSet(current, null)) return
+        }
+    }
+
     private fun onServiceHostEvent(event: RuntimeServiceHostEvent) {
         when (event) {
             is RuntimeServiceHostEvent.ForegroundStarted -> {
@@ -93,17 +106,35 @@ internal class DefaultRuntimeController(
                 cancelPendingRecovery()
                 cancelStartupDetector()
                 val current = stateStore.snapshot()
+                if (current.generation != event.generation) return
                 val target = RuntimeStateMachine.expectedStopTarget(current.state)
                 if (target != null && target != current.state) {
                     stateStore.update { it.copy(state = target) }
                 }
+                clearExpectedStop(event.generation)
             }
             is RuntimeServiceHostEvent.UnexpectedTermination -> {
                 cancelStartupDetector()
                 val current = stateStore.snapshot()
+                if (current.generation != event.generation) return
                 val target = RuntimeStateMachine.unexpectedTerminationTarget(current.state)
                 if (target != null && target != current.state) {
                     val error = mapTerminationCauseToError(event.cause)
+                    stateStore.update { it.copy(state = target, lastError = error) }
+                    clearExpectedStop(event.generation)
+                    if (target == RuntimeState.FAILED) {
+                        lastFailedGeneration.set(stateStore.snapshot().generation)
+                        evaluateRecovery(error, requestedStop = false)
+                    }
+                }
+            }
+            is RuntimeServiceHostEvent.LaunchFailed -> {
+                cancelStartupDetector()
+                if (!isCurrentGeneration(event.generation)) return
+                val current = stateStore.snapshot()
+                val target = RuntimeStateMachine.unexpectedTerminationTarget(current.state)
+                if (target != null && target != current.state) {
+                    val error = mapTerminationCauseToError(event.cause, event.message)
                     stateStore.update { it.copy(state = target, lastError = error) }
                     if (target == RuntimeState.FAILED) {
                         lastFailedGeneration.set(stateStore.snapshot().generation)
@@ -352,11 +383,13 @@ internal class DefaultRuntimeController(
         val current = stateStore.snapshot()
         if (current.state != RuntimeState.FAILED) return
         cancelPendingRecovery()
+        val currentExpectedStop = expectedStopRef.get()
+        val isExpectedStop = currentExpectedStop != null && currentExpectedStop.generation == current.generation
         val request = RuntimeRecoveryRequest(
             failedGeneration = current.generation,
             currentState = current.state,
             error = error,
-            requestedStop = requestedStop || expectedStopRequested.get()
+            requestedStop = requestedStop || isExpectedStop
         )
         when (val decision = recoveryPolicy.evaluate(request)) {
             is RuntimeRecoveryDecision.DoNotRecover -> {
@@ -428,7 +461,7 @@ internal class DefaultRuntimeController(
         }
     }
 
-    private fun mapTerminationCauseToError(cause: RuntimeServiceTerminationCause): RuntimeError {
+    private fun mapTerminationCauseToError(cause: RuntimeServiceTerminationCause, detail: String? = null): RuntimeError {
         return when (cause) {
             RuntimeServiceTerminationCause.FOREGROUND_FAILED -> RuntimeError(
                 code = RuntimeErrorCode.START_FAILED,
@@ -448,6 +481,46 @@ internal class DefaultRuntimeController(
             RuntimeServiceTerminationCause.SESSION_EXITED -> RuntimeError(
                 code = RuntimeErrorCode.RUNTIME_EXECUTION_NOT_AVAILABLE,
                 message = "outer proot session exited unexpectedly",
+                recoverable = true
+            )
+            RuntimeServiceTerminationCause.PROOT_COMPONENT_MISSING -> RuntimeError(
+                code = RuntimeErrorCode.START_FAILED,
+                message = detail ?: "proot component is not available",
+                recoverable = true
+            )
+            RuntimeServiceTerminationCause.ROOTFS_MISSING -> RuntimeError(
+                code = RuntimeErrorCode.START_FAILED,
+                message = detail ?: "rootfs path is not available",
+                recoverable = true
+            )
+            RuntimeServiceTerminationCause.ASSEMBLER_MISSING -> RuntimeError(
+                code = RuntimeErrorCode.START_FAILED,
+                message = detail ?: "launch assembler is not available",
+                recoverable = true
+            )
+            RuntimeServiceTerminationCause.NO_ACTIVE_RUNTIME -> RuntimeError(
+                code = RuntimeErrorCode.START_FAILED,
+                message = detail ?: "no active runtime",
+                recoverable = true
+            )
+            RuntimeServiceTerminationCause.ACTIVE_PROGRAM_ROOT_MISSING -> RuntimeError(
+                code = RuntimeErrorCode.START_FAILED,
+                message = detail ?: "active program root is missing",
+                recoverable = true
+            )
+            RuntimeServiceTerminationCause.ACTIVE_PROGRAM_ROOT_INVALID -> RuntimeError(
+                code = RuntimeErrorCode.START_FAILED,
+                message = detail ?: "active program root is invalid",
+                recoverable = true
+            )
+            RuntimeServiceTerminationCause.ENVIRONMENT_BUILD_FAILED -> RuntimeError(
+                code = RuntimeErrorCode.START_FAILED,
+                message = detail ?: "environment build failed",
+                recoverable = true
+            )
+            RuntimeServiceTerminationCause.MOUNT_CONTRACT_INVALID -> RuntimeError(
+                code = RuntimeErrorCode.START_FAILED,
+                message = detail ?: "mount contract is invalid",
                 recoverable = true
             )
         }
@@ -526,6 +599,8 @@ internal class DefaultRuntimeController(
 
         val newSnapshot = stateStore.transitionToStarting()
         val allocatedGeneration = newSnapshot.generation
+
+        expectedStopRef.set(null)
 
         val startResult = serviceHost.ensureStarted(allocatedGeneration)
         if (startResult is RuntimeServiceResult.Failure) {
@@ -608,11 +683,12 @@ internal class DefaultRuntimeController(
                 return handle
             }
 
-            expectedStopRequested.set(true)
+            val generationToStop = current.generation
+            expectedStopRef.set(ExpectedStopContext(generation = generationToStop))
             cancelPendingRecovery()
             cancelStartupDetector()
 
-            stateStore.update { it.copy(state = RuntimeState.STOPPING, generation = it.generation + 1) }
+            stateStore.update { it.copy(state = RuntimeState.STOPPING) }
 
             val stopResult = serviceHost.requestStop()
             if (stopResult is RuntimeServiceResult.Failure) {

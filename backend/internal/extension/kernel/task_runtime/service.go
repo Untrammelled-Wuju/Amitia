@@ -130,6 +130,11 @@ func (s *TaskRuntimeService) Enqueue(ctx context.Context, req EnqueueTaskRequest
 	runID := "tr-" + uuid.NewString()
 	now := time.Now().UTC()
 
+	placement, err := ResolveRequestedPlacement(req.ExecutionPlacement, def.ExecutionPlacement)
+	if err != nil {
+		return nil, err
+	}
+
 	deadline := now.Add(s.config.DefaultTimeout)
 	if def.TimeoutPolicy.DefaultTimeout > 0 {
 		deadline = now.Add(def.TimeoutPolicy.DefaultTimeout)
@@ -149,6 +154,7 @@ func (s *TaskRuntimeService) Enqueue(ctx context.Context, req EnqueueTaskRequest
 		ModuleID:             def.ModuleID,
 		Status:               RunStatusQueued,
 		Priority:             req.Priority,
+		ExecutionPlacement:   placement,
 		Input:                req.Input,
 		InputHash:            inputHash,
 		TraceID:              req.TraceID,
@@ -246,6 +252,12 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 	def, err := s.store.GetTaskDefinition(ctx, run.TaskDefinitionID)
 	if err != nil {
 		s.failRun(ctx, run, ErrTaskDefinitionInvalid, fmt.Sprintf("definition not found: %v", err))
+		return
+	}
+
+	if run.EffectiveExecutionPlacement() != TaskExecutionPlacementLocal {
+		s.failRun(ctx, run, ErrTaskExecutionUnsupported,
+			"remote execution placement is not wired in stage G4")
 		return
 	}
 
@@ -648,21 +660,23 @@ func (s *TaskRuntimeService) Retry(ctx context.Context, taskRunID string) (*Task
 	}
 
 	newRun := &TaskRun{
-		TaskRunID:        "tr-" + uuid.NewString(),
-		OperationID:      run.OperationID,
-		TaskDefinitionID: run.TaskDefinitionID,
-		ExtensionID:      run.ExtensionID,
-		ModuleID:         run.ModuleID,
-		Status:           RunStatusQueued,
-		Priority:         run.Priority,
-		Input:            run.Input,
-		InputHash:        run.InputHash,
-		Attempt:          run.Attempt + 1,
-		MaxAttempts:      run.MaxAttempts,
-		CreatedAt:        time.Now().UTC(),
-		QueuedAt:         ptrTime(time.Now().UTC()),
-		DeadlineAt:       run.DeadlineAt,
-		Generation:       run.Generation + 1,
+		TaskRunID:          "tr-" + uuid.NewString(),
+		OperationID:        run.OperationID,
+		TaskDefinitionID:   run.TaskDefinitionID,
+		ExtensionID:        run.ExtensionID,
+		ModuleID:           run.ModuleID,
+		Status:             RunStatusQueued,
+		Priority:           run.Priority,
+		ExecutionPlacement: run.ExecutionPlacement,
+		ExecutionTarget:    run.ExecutionTarget,
+		Input:              run.Input,
+		InputHash:          run.InputHash,
+		Attempt:            run.Attempt + 1,
+		MaxAttempts:        run.MaxAttempts,
+		CreatedAt:          time.Now().UTC(),
+		QueuedAt:           ptrTime(time.Now().UTC()),
+		DeadlineAt:         run.DeadlineAt,
+		Generation:         run.Generation + 1,
 	}
 
 	if err := s.store.PutTaskRun(ctx, newRun); err != nil {

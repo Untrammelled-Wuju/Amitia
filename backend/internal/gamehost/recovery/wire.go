@@ -160,6 +160,28 @@ func (a *RuntimeExecutorAdapter) StopRuntime(ctx context.Context, runtimeID doma
 	return nil
 }
 
+type PermissionServiceAdapter struct {
+	ResolveFn func(ctx context.Context, runtimeID, pluginID string) (PermissionView, error)
+}
+
+func (a *PermissionServiceAdapter) ResolveRuntimePermissions(ctx context.Context, runtimeID, pluginID string) (PermissionView, error) {
+	if a.ResolveFn != nil {
+		return a.ResolveFn(ctx, runtimeID, pluginID)
+	}
+	return PermissionView{}, fmt.Errorf("permission service not configured")
+}
+
+type ControlAuthorityViewAdapter struct {
+	GetAuthorityFn func(runtimeID domain.RuntimeInstanceID) (AuthoritySnapshot, error)
+}
+
+func (a *ControlAuthorityViewAdapter) GetAuthority(runtimeID domain.RuntimeInstanceID) (AuthoritySnapshot, error) {
+	if a.GetAuthorityFn != nil {
+		return a.GetAuthorityFn(runtimeID)
+	}
+	return AuthoritySnapshot{RuntimeID: runtimeID, Mode: "standard", Epoch: 1}, nil
+}
+
 type CheckpointStoreAdapter struct {
 	hasMetadataFn func(ctx context.Context, runtimeID domain.RuntimeInstanceID) (bool, error)
 	loadMetadataFn func(ctx context.Context, runtimeID domain.RuntimeInstanceID) (RuntimeMetadataView, error)

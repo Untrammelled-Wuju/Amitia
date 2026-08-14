@@ -141,7 +141,7 @@ func setupTestCoordinator() (*StartupRecoveryCoordinator, *fakeProcessCleanup, *
 	audit := &fakeAuditSink{}
 	gate := NewStartupGate()
 
-	c := NewStartupRecoveryCoordinator(StartupRecoveryDeps{
+	c, err := NewStartupRecoveryCoordinator(StartupRecoveryDeps{
 		HostIdentity:    &fakeHostIdentity{instanceID: "host-abc"},
 		ProcessCleanup:  proc,
 		TempCleanup:     temp,
@@ -152,6 +152,9 @@ func setupTestCoordinator() (*StartupRecoveryCoordinator, *fakeProcessCleanup, *
 		AuditSink:       audit,
 		Gate:            gate,
 	})
+	if err != nil {
+		panic(err)
+	}
 
 	return c, proc, temp, bin, ep, shm, kernel, audit, gate
 }

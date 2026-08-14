@@ -145,6 +145,7 @@ func DefaultMigrations() []Migration {
 		DesktopPetMigrationControlMigration(),
 		DesktopPetDevicesMigration(),
 		DesktopPetLocalSessionFixMigration(),
+		ExtensionEventOutboxDomainCausationMigration(),
 		DesktopPetImportSagaFieldsMigration(),
 		WorkspaceMountsMigration(),
 		WorkspaceMountsRemoteMigration(),
@@ -154,5 +155,6 @@ func DefaultMigrations() []Migration {
 		VoiceProfileMigration(),
 		MemoryTimeQueryIndexesMigration(),
 		MemorySummaryConsolidationMigration(),
+		KernelHostRegistryEntryKindMigration(),
 	}
 }

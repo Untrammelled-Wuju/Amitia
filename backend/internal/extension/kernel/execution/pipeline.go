@@ -10,8 +10,8 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/observability"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
-	"github.com/u-ai/backend/internal/extension/kernel/secret"
 	"github.com/u-ai/backend/internal/extension/kernel/scope"
+	"github.com/u-ai/backend/internal/extension/kernel/secret"
 )
 
 type ExecutionPipeline struct {
@@ -262,9 +262,9 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 		quotaDec := p.ResourceQuotaCtrl.Evaluate(timeoutCtx, tool, inv)
 		if quotaDec.Blocked {
 			return p.finalizeCancellation(timeoutCtx, inv, p.failWithAudit(timeoutCtx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
-				Code:     quotaDec.ErrorCode,
-				Category: capability.ToolErrorCategoryResource,
-				Message:  quotaDec.Error.Error(),
+				Code:      quotaDec.ErrorCode,
+				Category:  capability.ToolErrorCategoryResource,
+				Message:   quotaDec.Error.Error(),
 				Retryable: false,
 			}))), nil
 		}
@@ -1013,11 +1013,15 @@ func (p *ExecutionPipeline) runApprovalWithReEvaluate(ctx context.Context, tool 
 
 	permissionIDs := collectGrantedPermissionIDs(tool)
 
+	execCtx := permission.ExecutionContextFromInvocation(inv)
 	recordReq := permission.PermissionApprovalRecordRequest{
-		InvocationID:    inv.InvocationID,
-		PermissionIDs:   permissionIDs,
-		ScopeSnapshotID: inv.ScopeSnapshotID,
-		Decision:        permission.ApprovalDecisionApproved,
+		InvocationID:        inv.InvocationID,
+		PermissionIDs:       permissionIDs,
+		ScopeSnapshotID:     inv.ScopeSnapshotID,
+		Decision:            permission.ApprovalDecisionApproved,
+		ExecutionContext:    execCtx,
+		ExecutionBindingKey: execCtx.BindingKey(),
+		RiskLevel:           string(tool.RiskLevel),
 	}
 
 	if _, err := broker.RecordApproval(ctx, recordReq); err != nil {
@@ -1025,12 +1029,14 @@ func (p *ExecutionPipeline) runApprovalWithReEvaluate(ctx context.Context, tool 
 	}
 
 	reEvalReq := permission.PermissionEvaluationRequest{
-		Subject:         permission.SubjectForTool(tool.ExtensionID, tool.ID),
-		Requirements:    buildPermissionRequirements(tool, inv),
-		InvocationID:    inv.InvocationID,
-		RiskLevel:       string(tool.RiskLevel),
-		ScopeSnapshotID: inv.ScopeSnapshotID,
-		ApprovalMode:    string(inv.ApprovalMode),
+		Subject:          permission.SubjectForTool(tool.ExtensionID, tool.ID),
+		Requirements:     buildPermissionRequirements(tool, inv),
+		InvocationID:     inv.InvocationID,
+		RiskLevel:        string(tool.RiskLevel),
+		ScopeSnapshotID:  inv.ScopeSnapshotID,
+		ApprovalMode:     string(inv.ApprovalMode),
+		Generation:       inv.Generation,
+		ExecutionContext: execCtx,
 	}
 
 	reEvalResult := broker.Evaluate(ctx, reEvalReq)
@@ -1048,14 +1054,16 @@ func (p *ExecutionPipeline) createPermissionSnapshot(ctx context.Context, inv ca
 		return
 	}
 
+	execCtx := permission.ExecutionContextFromInvocation(inv)
 	snap := permission.NewPermissionSnapshot(permission.PermissionSnapshotRequest{
-		ExtensionID:    inv.ExtensionID,
-		ModuleID:       inv.ModuleID,
-		Generation:     inv.Generation,
-		CharacterID:    inv.CharacterID,
-		ConversationID: inv.ConversationID,
-		GrantedPerms:   grantedPerms,
-		GrantedScopes:  grantedScopes,
+		ExtensionID:      inv.ExtensionID,
+		ModuleID:         inv.ModuleID,
+		Generation:       inv.Generation,
+		CharacterID:      inv.CharacterID,
+		ConversationID:   inv.ConversationID,
+		GrantedPerms:     grantedPerms,
+		GrantedScopes:    grantedScopes,
+		ExecutionContext: execCtx,
 	})
 
 	snap.SessionID = scopeSnapshotID
@@ -1067,8 +1075,10 @@ func (p *ExecutionPipeline) createPermissionSnapshot(ctx context.Context, inv ca
 
 func (p *ExecutionPipeline) revalidateSnapshots(ctx context.Context, inv capability.ToolInvocationContext) error {
 	if inv.PermissionSnapshotID != "" && p.PermissionGate != nil && p.PermissionGate.Broker != nil {
+		execCtx := permission.ExecutionContextFromInvocation(inv)
 		if err := p.PermissionGate.Broker.ValidateSnapshot(ctx, inv.PermissionSnapshotID, permission.PermissionEvaluationRequest{
-			InvocationID: inv.InvocationID,
+			InvocationID:     inv.InvocationID,
+			ExecutionContext: execCtx,
 		}); err != nil {
 			return fmt.Errorf("permission snapshot invalid: %w", err)
 		}

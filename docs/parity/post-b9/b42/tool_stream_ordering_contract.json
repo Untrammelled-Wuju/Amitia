@@ -1,6 +1,0 @@
-{
-  "schemaVersion": 1,
-  "taskId": "B42",
-  "ordering": "NOT_APPLICABLE",
-  "note": "当前没有 Tool Stream Event，故不存在排序合同；Final ToolResult 为唯一结果即天然有序。"
-}

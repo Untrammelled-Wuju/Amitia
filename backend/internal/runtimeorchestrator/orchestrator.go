@@ -5,12 +5,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/pkg/platform"
 )
 
 type RuntimeOrchestrator struct {
 	mu         sync.RWMutex
 	descriptor platform.RuntimeDescriptor
+	profile    runtimeprofile.Profile
 	components map[ComponentID]ManagedComponent
 	statuses   map[ComponentID]*componentRuntimeState
 	startOrder []ComponentID
@@ -21,10 +23,10 @@ type RuntimeOrchestrator struct {
 }
 
 type componentRuntimeState struct {
-	status     ComponentStatus
-	started    bool
-	stopped    bool
-	startErr   error
+	status   ComponentStatus
+	started  bool
+	stopped  bool
+	startErr error
 }
 
 type RestartableComponent interface {
@@ -36,8 +38,13 @@ type ShutdownAwareComponent interface {
 }
 
 func New(descriptor platform.RuntimeDescriptor) *RuntimeOrchestrator {
+	return NewWithProfile(descriptor, runtimeprofile.ProfileLocal)
+}
+
+func NewWithProfile(descriptor platform.RuntimeDescriptor, profile runtimeprofile.Profile) *RuntimeOrchestrator {
 	return &RuntimeOrchestrator{
 		descriptor: descriptor,
+		profile:    profile,
 		components: make(map[ComponentID]ManagedComponent),
 		statuses:   make(map[ComponentID]*componentRuntimeState),
 		state:      OrchestratorCreated,
@@ -45,17 +52,29 @@ func New(descriptor platform.RuntimeDescriptor) *RuntimeOrchestrator {
 	}
 }
 
+func (o *RuntimeOrchestrator) RuntimeProfile() runtimeprofile.Profile {
+	if o == nil {
+		return runtimeprofile.ProfileLocal
+	}
+	return o.profile
+}
+
+func descriptorEnabledForProfile(desc ComponentDescriptor, profile runtimeprofile.Profile) bool {
+	return desc.Enabled && desc.SupportsProfile(profile)
+}
+
 func (o *RuntimeOrchestrator) Register(component ManagedComponent) error {
 	if component == nil {
 		return invalidDescriptorErr("nil component")
 	}
 	desc := component.Descriptor()
-	if err := validateDescriptor(desc); err != nil {
-		return err
-	}
 
 	o.mu.Lock()
 	defer o.mu.Unlock()
+
+	if err := validateDescriptor(desc, o.profile); err != nil {
+		return err
+	}
 
 	if o.state == OrchestratorStopping || o.state == OrchestratorStopped {
 		return newErrOrchestratorStopped()
@@ -64,19 +83,21 @@ func (o *RuntimeOrchestrator) Register(component ManagedComponent) error {
 		return duplicateComponentErr(desc.ID)
 	}
 
+	enabled := descriptorEnabledForProfile(desc, o.profile)
+
 	o.components[desc.ID] = component
 	o.statuses[desc.ID] = &componentRuntimeState{
 		status: ComponentStatus{
 			ID:           desc.ID,
 			Phase:        desc.Phase,
-			Enabled:      desc.Enabled,
+			Enabled:      enabled,
 			Required:     desc.Required,
 			Capabilities: cloneCapabilities(desc.Capabilities),
 			Dependencies: cloneDependencies(desc.Dependencies),
 			State:        StateRegistered,
 		},
 	}
-	if !desc.Enabled {
+	if !enabled {
 		o.statuses[desc.ID].status.State = StateDisabled
 	}
 	return nil
@@ -106,11 +127,11 @@ func (o *RuntimeOrchestrator) StartPhase(ctx context.Context, phase ComponentPha
 	var batch []ComponentID
 	for id, comp := range o.components {
 		desc := comp.Descriptor()
-		if desc.Phase != phase || !desc.Enabled {
+		if desc.Phase != phase {
 			continue
 		}
 		st := o.statuses[id]
-		if st.status.State == StateReady {
+		if !st.status.Enabled || st.status.State == StateReady {
 			continue
 		}
 		batch = append(batch, id)
@@ -334,6 +355,7 @@ func (o *RuntimeOrchestrator) Snapshot() RuntimeSnapshot {
 	return RuntimeSnapshot{
 		State:         o.state,
 		Runtime:       o.descriptor,
+		Profile:       o.profile,
 		Components:    components,
 		ReadyCount:    readyCount,
 		DisabledCount: disabledCount,
@@ -408,9 +430,9 @@ func (o *RuntimeOrchestrator) topologicalSort(batch []ComponentID) ([]ComponentI
 }
 
 type phaseRuntime struct {
-	owner  *RuntimeOrchestrator
-	phase  ComponentPhase
-	batch  []ComponentID
+	owner *RuntimeOrchestrator
+	phase ComponentPhase
+	batch []ComponentID
 }
 
 func newPhaseRuntime(o *RuntimeOrchestrator, phase ComponentPhase, batch []ComponentID) *phaseRuntime {

@@ -19,13 +19,24 @@ func TestPluginOutputGate_CloseBlocksNewOutput(t *testing.T) {
 	rt.SetActive(domain.RuntimeInstanceID("rt-1"), true)
 	rt.SetReady(domain.RuntimeInstanceID("rt-1"), true)
 
-	gate := NewPluginOutputGate(PluginOutputGateOptions{
-		Clock:         func() time.Time { return time.Now().UTC() },
-		Topology:      topo,
-		RuntimeReader: rt,
-		PermChecker:   NewFakeEffPermChecker(),
-		Authority:     auth,
+	gen := NewFakeGenerationReader()
+	gen.SetGeneration("rt-1", 1)
+
+	gate, err := NewPluginOutputGate(PluginOutputGateOptions{
+		Clock:            func() time.Time { return time.Now().UTC() },
+		Topology:         topo,
+		RuntimeReader:    rt,
+		GenerationReader: gen,
+		PermChecker:      NewFakeEffPermChecker(),
+		PolicyChecker:    NoopHostPolicyChecker{},
+		Authority:        auth,
+		Audit:            NewInMemoryAuthorityAuditSink(),
+		Metrics:          NewFakeMetrics(),
+		CommitBarrier:    NoopCommitBarrier{},
 	})
+	if err != nil {
+		t.Fatalf("failed to create gate: %v", err)
+	}
 
 	gate.CloseRuntimeOutputs("rt-1")
 
@@ -53,13 +64,24 @@ func TestPluginOutputGate_ReopenRestoresOutput(t *testing.T) {
 	rt.SetActive(domain.RuntimeInstanceID("rt-1"), true)
 	rt.SetReady(domain.RuntimeInstanceID("rt-1"), true)
 
-	gate := NewPluginOutputGate(PluginOutputGateOptions{
-		Clock:         func() time.Time { return time.Now().UTC() },
-		Topology:      topo,
-		RuntimeReader: rt,
-		PermChecker:   NewFakeEffPermChecker(),
-		Authority:     auth,
+	gen := NewFakeGenerationReader()
+	gen.SetGeneration("rt-1", 1)
+
+	gate, err := NewPluginOutputGate(PluginOutputGateOptions{
+		Clock:            func() time.Time { return time.Now().UTC() },
+		Topology:         topo,
+		RuntimeReader:    rt,
+		GenerationReader: gen,
+		PermChecker:      NewFakeEffPermChecker(),
+		PolicyChecker:    NoopHostPolicyChecker{},
+		Authority:        auth,
+		Audit:            NewInMemoryAuthorityAuditSink(),
+		Metrics:          NewFakeMetrics(),
+		CommitBarrier:    NoopCommitBarrier{},
 	})
+	if err != nil {
+		t.Fatalf("failed to create gate: %v", err)
+	}
 
 	gate.CloseRuntimeOutputs("rt-1")
 	gate.ReopenRuntimeOutputs("rt-1")
@@ -92,13 +114,25 @@ func TestPluginOutputGate_CloseOneRuntimeDoesNotAffectOther(t *testing.T) {
 	rt.SetActive("rt-2", true)
 	rt.SetReady("rt-2", true)
 
-	gate := NewPluginOutputGate(PluginOutputGateOptions{
-		Clock:         func() time.Time { return time.Now().UTC() },
-		Topology:      topo,
-		RuntimeReader: rt,
-		PermChecker:   NewFakeEffPermChecker(),
-		Authority:     auth,
+	gen := NewFakeGenerationReader()
+	gen.SetGeneration("rt-1", 1)
+	gen.SetGeneration("rt-2", 1)
+
+	gate, err := NewPluginOutputGate(PluginOutputGateOptions{
+		Clock:            func() time.Time { return time.Now().UTC() },
+		Topology:         topo,
+		RuntimeReader:    rt,
+		GenerationReader: gen,
+		PermChecker:      NewFakeEffPermChecker(),
+		PolicyChecker:    NoopHostPolicyChecker{},
+		Authority:        auth,
+		Audit:            NewInMemoryAuthorityAuditSink(),
+		Metrics:          NewFakeMetrics(),
+		CommitBarrier:    NoopCommitBarrier{},
 	})
+	if err != nil {
+		t.Fatalf("failed to create gate: %v", err)
+	}
 
 	gate.CloseRuntimeOutputs("rt-1")
 
@@ -117,9 +151,24 @@ func TestPluginOutputGate_CloseOneRuntimeDoesNotAffectOther(t *testing.T) {
 }
 
 func TestPluginOutputGate_IsRuntimeClosed(t *testing.T) {
-	gate := NewPluginOutputGate(PluginOutputGateOptions{
-		Clock: func() time.Time { return time.Now().UTC() },
+	mgr := NewControlAuthorityManager(ControlAuthorityManagerOptions{})
+	gen := NewFakeGenerationReader()
+
+	gate, err := NewPluginOutputGate(PluginOutputGateOptions{
+		Clock:            func() time.Time { return time.Now().UTC() },
+		Topology:         NewFakeTopology(),
+		RuntimeReader:    NewFakeRuntimeReader(),
+		GenerationReader: gen,
+		PermChecker:      NewFakeEffPermChecker(),
+		PolicyChecker:    NoopHostPolicyChecker{},
+		Authority:        mgr,
+		Audit:            NewInMemoryAuthorityAuditSink(),
+		Metrics:          NewFakeMetrics(),
+		CommitBarrier:    NoopCommitBarrier{},
 	})
+	if err != nil {
+		t.Fatalf("failed to create gate: %v", err)
+	}
 
 	if gate.IsRuntimeClosed("rt-1") {
 		t.Fatal("expected false for fresh runtime")

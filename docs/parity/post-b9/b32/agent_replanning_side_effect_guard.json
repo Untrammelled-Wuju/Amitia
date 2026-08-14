@@ -1,6 +1,0 @@
-{
-  "automaticRetryAfterIndeterminateEffect": 0,
-  "duplicateSideEffectCandidateWithoutVerification": 0,
-  "sideEffectUncertaintyIgnoredCount": 0,
-  "existingBehavior": "B30 Observation已标记INDETERMINATE侧效应。B31 GoalEvaluation对此类Observation保守处理。B32不会自动重试具有INDETERMINATE side effect的工具。"
-}

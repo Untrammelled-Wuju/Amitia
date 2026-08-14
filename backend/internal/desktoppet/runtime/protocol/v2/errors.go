@@ -1,6 +1,10 @@
 package v2
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/u-ai/backend/internal/deviceruntime/protocol"
+)
 
 var (
 	ErrCommandDuplication = errors.New("command_duplication")
@@ -8,21 +12,21 @@ var (
 )
 
 const (
-	ErrCodeProtocolUnsupported        = "RUNTIME_PROTOCOL_UNSUPPORTED"
-	ErrCodeEnvelopeInvalid            = "RUNTIME_ENVELOPE_INVALID"
-	ErrCodePayloadHashMismatch        = "RUNTIME_PAYLOAD_HASH_MISMATCH"
-	ErrCodePayloadSchemaUnsupported   = "RUNTIME_PAYLOAD_SCHEMA_UNSUPPORTED"
-	ErrCodeSessionStale               = "RUNTIME_SESSION_STALE"
-	ErrCodeConnectionSuperseded       = "RUNTIME_CONNECTION_SUPERSEDED"
-	ErrCodeSequenceStale              = "RUNTIME_SEQUENCE_STALE"
+	ErrCodeProtocolUnsupported        = protocol.ErrCodeProtocolUnsupported
+	ErrCodeEnvelopeInvalid            = protocol.ErrCodeEnvelopeInvalid
+	ErrCodePayloadHashMismatch        = protocol.ErrCodePayloadHashMismatch
+	ErrCodePayloadSchemaUnsupported   = protocol.ErrCodePayloadSchemaUnsupported
+	ErrCodeSessionStale               = protocol.ErrCodeSessionStale
+	ErrCodeConnectionSuperseded       = protocol.ErrCodeConnectionSuperseded
+	ErrCodeSequenceStale              = protocol.ErrCodeSequenceStale
+	ErrCodeRuntimeOffline             = protocol.ErrCodeRuntimeOffline
+	ErrCodeRuntimeNotReady            = protocol.ErrCodeRuntimeNotReady
+	ErrCodeRuntimeUnauthorized        = protocol.ErrCodeRuntimeUnauthorized
 	ErrCodeCommandUnsupported         = "RUNTIME_COMMAND_UNSUPPORTED"
 	ErrCodeCommandIdempotencyConflict = "RUNTIME_COMMAND_IDEMPOTENCY_CONFLICT"
 	ErrCodeCommandExpired             = "RUNTIME_COMMAND_EXPIRED"
 	ErrCodeCommandSuperseded          = "RUNTIME_COMMAND_SUPERSEDED"
 	ErrCodeCommandCapabilityMissing   = "RUNTIME_COMMAND_CAPABILITY_MISSING"
-	ErrCodeRuntimeOffline             = "RUNTIME_OFFLINE"
-	ErrCodeRuntimeNotReady            = "RUNTIME_NOT_READY"
-	ErrCodeRuntimeUnauthorized        = "RUNTIME_UNAUTHORIZED"
 	ErrCodeAcceptTimeout              = "RUNTIME_ACCEPT_TIMEOUT"
 	ErrCodeRendererAcceptTimeout      = "RENDERER_ACCEPT_TIMEOUT"
 	ErrCodePlaybackStartTimeout       = "PLAYBACK_START_TIMEOUT"
@@ -39,18 +43,8 @@ const (
 	ErrCodeSyncRejected               = "RUNTIME_SYNC_REJECTED"
 )
 
-type ProtocolError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-}
-
-func (e *ProtocolError) Error() string {
-	return e.Code + ": " + e.Message
-}
+type ProtocolError = protocol.ProtocolError
 
 func NewProtocolError(code, message string) *ProtocolError {
-	return &ProtocolError{
-		Code:    code,
-		Message: message,
-	}
+	return protocol.NewProtocolError(code, message)
 }

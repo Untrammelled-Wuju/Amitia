@@ -191,7 +191,7 @@ class RuntimeShutdownControllerTest {
         assertTrue(r2 is RuntimeOperationResult.Success)
         assertTrue(r3 is RuntimeOperationResult.Success)
         assertEquals(1, host.stopCallCount)
-        host.emit(RuntimeServiceHostEvent.ExpectedStopped)
+        host.emit(RuntimeServiceHostEvent.ExpectedStopped(generation = controller.snapshot().generation))
         assertEquals(RuntimeState.STOPPED, controller.snapshot().state)
     }
 
@@ -206,7 +206,7 @@ class RuntimeShutdownControllerTest {
         val result = stopAndCapture(controller)
         assertTrue(result is RuntimeOperationResult.Success)
         assertEquals(RuntimeState.STOPPING, controller.snapshot().state)
-        host.emit(RuntimeServiceHostEvent.ExpectedStopped)
+        host.emit(RuntimeServiceHostEvent.ExpectedStopped(generation = controller.snapshot().generation))
         assertEquals(RuntimeState.STOPPED, controller.snapshot().state)
     }
 
@@ -273,9 +273,9 @@ class RuntimeShutdownControllerTest {
         val result = stopAndCapture(controller)
         assertTrue(result is RuntimeOperationResult.Success)
         assertEquals(RuntimeState.STOPPING, controller.snapshot().state)
-        host.emit(RuntimeServiceHostEvent.ExpectedStopped)
+        host.emit(RuntimeServiceHostEvent.ExpectedStopped(generation = controller.snapshot().generation))
         assertEquals(RuntimeState.STOPPED, controller.snapshot().state)
-        host.emit(RuntimeServiceHostEvent.ExpectedStopped)
+        host.emit(RuntimeServiceHostEvent.ExpectedStopped(generation = controller.snapshot().generation))
         assertEquals(RuntimeState.STOPPED, controller.snapshot().state)
     }
 
@@ -289,7 +289,8 @@ class RuntimeShutdownControllerTest {
         )
         host.emit(
             RuntimeServiceHostEvent.UnexpectedTermination(
-                com.amitia.amitia_app.runtime.service.RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
+                generation = controller.snapshot().generation,
+                cause = com.amitia.amitia_app.runtime.service.RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
             )
         )
         assertEquals(RuntimeState.STOPPED, controller.snapshot().state)
@@ -376,7 +377,7 @@ class RuntimeShutdownControllerTest {
         )
         val genBefore = controller.snapshot().generation
         stopAndCapture(controller)
-        host.emit(RuntimeServiceHostEvent.ExpectedStopped)
+        host.emit(RuntimeServiceHostEvent.ExpectedStopped(generation = controller.snapshot().generation))
         assertEquals(RuntimeState.STOPPED, controller.snapshot().state)
         assertTrue(controller.snapshot().generation > genBefore)
     }

@@ -21,3 +21,22 @@ const (
 	OperationPhotoSet    = "contacts.photo.set"
 	OperationPhotoRemove = "contacts.photo.remove"
 )
+
+func Operations() []string {
+	return []string{
+		OperationStatus,
+		OperationAuthorizationStatus,
+		OperationAuthorizationRequest,
+		OperationSearch,
+		OperationList,
+		OperationGet,
+		OperationCreate,
+		OperationUpdate,
+		OperationDelete,
+		OperationContainersList,
+		OperationGroupsList,
+		OperationPhotoGet,
+		OperationPhotoSet,
+		OperationPhotoRemove,
+	}
+}

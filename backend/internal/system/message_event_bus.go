@@ -1,6 +1,7 @@
 package system
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -42,6 +43,14 @@ type MessageEventSubscriber struct {
 type MessageEventBus struct {
 	mu          sync.RWMutex
 	subscribers map[string]*MessageEventSubscriber
+	durable     MessageDurablePublisher
+}
+
+type MessageDurablePublisher interface {
+	PublishMessageEvent(
+		ctx context.Context,
+		event MessageEvent,
+	) error
 }
 
 var globalMessageEventBus *MessageEventBus
@@ -54,6 +63,12 @@ func GetMessageEventBus() *MessageEventBus {
 		}
 	})
 	return globalMessageEventBus
+}
+
+func (bus *MessageEventBus) SetDurablePublisher(publisher MessageDurablePublisher) {
+	bus.mu.Lock()
+	defer bus.mu.Unlock()
+	bus.durable = publisher
 }
 
 func (bus *MessageEventBus) Subscribe(id string, channels []string) *MessageEventSubscriber {

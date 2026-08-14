@@ -1,7 +1,0 @@
-{
-  "schemaVersion": 1,
-  "taskId": "B43",
-  "acceptancePoint": "ctx.Err() != nil 即触发取消；RuntimeAdapter 立刻返回 Cancelled ToolResult",
-  "lateCancel": "Terminal state 已确定后 late cancel 不改变最终状态",
-  "note": "Amitia 通过 context.Context Done channel 的单一 atomic observation 作为取消接受点；一旦读取到 Err() 即 commit。"
-}

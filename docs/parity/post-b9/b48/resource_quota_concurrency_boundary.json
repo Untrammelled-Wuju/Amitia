@@ -1,6 +1,0 @@
-{
-  "concurrencyAuthority": "ConcurrencyController + ToolExecutionPolicy.MaxConcurrency",
-  "concurrencyIsNotResourceQuota": true,
-  "differentiation": "并发槽是 parallel slots 计数; quota 是资源消耗量 (bytes/ms)",
-  "separationOfErrorCodes": true
-}

@@ -169,7 +169,8 @@ class RuntimeCrashRecoveryIntegrationTest {
 
         val genBefore = controller.snapshot().generation
         host.emit(RuntimeServiceHostEvent.UnexpectedTermination(
-            RuntimeServiceTerminationCause.SESSION_EXITED
+            generation = controller.snapshot().generation,
+            cause = RuntimeServiceTerminationCause.SESSION_EXITED
         ))
 
         assertEquals(RuntimeState.FAILED, controller.snapshot().state)
@@ -185,7 +186,8 @@ class RuntimeCrashRecoveryIntegrationTest {
         val (controller, host) = makeController(RuntimeState.READY, policy, scheduler)
 
         host.emit(RuntimeServiceHostEvent.UnexpectedTermination(
-            RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
+            generation = controller.snapshot().generation,
+            cause = RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
         ))
 
         assertEquals(RuntimeState.FAILED, controller.snapshot().state)
@@ -201,7 +203,8 @@ class RuntimeCrashRecoveryIntegrationTest {
         val (controller, host) = makeController(RuntimeState.READY, policy, scheduler)
 
         host.emit(RuntimeServiceHostEvent.UnexpectedTermination(
-            RuntimeServiceTerminationCause.FOREGROUND_FAILED
+            generation = controller.snapshot().generation,
+            cause = RuntimeServiceTerminationCause.FOREGROUND_FAILED
         ))
 
         assertEquals(1, policy.evaluateCalls.get())
@@ -218,7 +221,7 @@ class RuntimeCrashRecoveryIntegrationTest {
         val scheduler = ControllableScheduler()
         val (controller, host) = makeController(RuntimeState.STOPPING, policy, scheduler)
 
-        host.emit(RuntimeServiceHostEvent.ExpectedStopped)
+        host.emit(RuntimeServiceHostEvent.ExpectedStopped(generation = controller.snapshot().generation))
 
         assertEquals(RuntimeState.STOPPED, controller.snapshot().state)
         assertEquals(0, policy.evaluateCalls.get())
@@ -236,7 +239,8 @@ class RuntimeCrashRecoveryIntegrationTest {
         val (controller, host) = makeController(RuntimeState.READY, policy, scheduler)
 
         host.emit(RuntimeServiceHostEvent.UnexpectedTermination(
-            RuntimeServiceTerminationCause.SESSION_EXITED
+            generation = controller.snapshot().generation,
+            cause = RuntimeServiceTerminationCause.SESSION_EXITED
         ))
         assertEquals(1, scheduler.scheduledJobs.size)
 
@@ -259,7 +263,8 @@ class RuntimeCrashRecoveryIntegrationTest {
         val (controller, host) = makeController(RuntimeState.READY, policy, scheduler)
 
         host.emit(RuntimeServiceHostEvent.UnexpectedTermination(
-            RuntimeServiceTerminationCause.SESSION_EXITED
+            generation = controller.snapshot().generation,
+            cause = RuntimeServiceTerminationCause.SESSION_EXITED
         ))
         assertEquals(1, scheduler.scheduledJobs.size)
 
@@ -278,7 +283,8 @@ class RuntimeCrashRecoveryIntegrationTest {
         val (controller, host) = makeController(RuntimeState.STARTING, policy, scheduler)
 
         host.emit(RuntimeServiceHostEvent.UnexpectedTermination(
-            RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
+            generation = controller.snapshot().generation,
+            cause = RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
         ))
 
         assertEquals(RuntimeState.FAILED, controller.snapshot().state)
@@ -342,7 +348,8 @@ class RuntimeCrashRecoveryIntegrationTest {
         val scheduler = ControllableScheduler()
         val (controller, host) = makeController(RuntimeState.READY, policy, scheduler)
         host.emit(RuntimeServiceHostEvent.UnexpectedTermination(
-            RuntimeServiceTerminationCause.SESSION_EXITED
+            generation = controller.snapshot().generation,
+            cause = RuntimeServiceTerminationCause.SESSION_EXITED
         ))
         val failedGen = controller.snapshot().generation
 
@@ -358,7 +365,8 @@ class RuntimeCrashRecoveryIntegrationTest {
         val ensureCallsBeforeSecondDrain = host.ensureStartedCalls.get()
 
         host.emit(RuntimeServiceHostEvent.UnexpectedTermination(
-            RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
+            generation = controller.snapshot().generation,
+            cause = RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
         ))
         assertEquals(RuntimeState.FAILED, controller.snapshot().state)
         assertEquals(1, scheduler.scheduledJobs.size)
@@ -379,7 +387,8 @@ class RuntimeCrashRecoveryIntegrationTest {
         val (controller, host) = makeController(RuntimeState.READY, policy, scheduler)
 
         host.emit(RuntimeServiceHostEvent.UnexpectedTermination(
-            RuntimeServiceTerminationCause.SESSION_EXITED
+            generation = controller.snapshot().generation,
+            cause = RuntimeServiceTerminationCause.SESSION_EXITED
         ))
         val failedGen = controller.snapshot().generation
         assertEquals(1, scheduler.scheduledJobs.size)
@@ -414,7 +423,8 @@ class RuntimeCrashRecoveryIntegrationTest {
         val (controller, host) = makeController(RuntimeState.READY, policy, scheduler)
 
         host.emit(RuntimeServiceHostEvent.UnexpectedTermination(
-            RuntimeServiceTerminationCause.SESSION_EXITED
+            generation = controller.snapshot().generation,
+            cause = RuntimeServiceTerminationCause.SESSION_EXITED
         ))
         assertEquals(1, policy.evaluateCalls.get())
         assertEquals(1, scheduler.scheduledJobs.size)
@@ -427,7 +437,8 @@ class RuntimeCrashRecoveryIntegrationTest {
         assertEquals(RuntimeState.STARTING, controller.snapshot().state)
 
         host.emit(RuntimeServiceHostEvent.UnexpectedTermination(
-            RuntimeServiceTerminationCause.SESSION_EXITED
+            generation = controller.snapshot().generation,
+            cause = RuntimeServiceTerminationCause.SESSION_EXITED
         ))
         assertEquals(2, policy.evaluateCalls.get())
         assertEquals(1, scheduler.scheduledJobs.size)
@@ -439,7 +450,8 @@ class RuntimeCrashRecoveryIntegrationTest {
         }
 
         host.emit(RuntimeServiceHostEvent.UnexpectedTermination(
-            RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
+            generation = controller.snapshot().generation,
+            cause = RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
         ))
         assertEquals(3, policy.evaluateCalls.get())
         assertEquals(0, scheduler.scheduledJobs.size)
@@ -455,7 +467,8 @@ class RuntimeCrashRecoveryIntegrationTest {
         )
 
         host.emit(RuntimeServiceHostEvent.UnexpectedTermination(
-            RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
+            generation = controller.snapshot().generation,
+            cause = RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
         ))
 
         assertEquals(RuntimeState.FAILED, controller.snapshot().state)
@@ -471,7 +484,8 @@ class RuntimeCrashRecoveryIntegrationTest {
         val (controller, host) = makeController(RuntimeState.READY, policy, scheduler)
 
         host.emit(RuntimeServiceHostEvent.UnexpectedTermination(
-            RuntimeServiceTerminationCause.SESSION_EXITED
+            generation = controller.snapshot().generation,
+            cause = RuntimeServiceTerminationCause.SESSION_EXITED
         ))
         assertEquals(1, scheduler.scheduledJobs.size)
 

@@ -35,7 +35,7 @@ class _RecordingServer {
           'total': 1, 'page': 1, 'pageSize': 20,
         },
       }));
-    } else if (request.uri.path == '/api/extensions/desktop-pet/plugins/plg-1') {
+    } else if (request.uri.path == '/api/extensions/desktop-pet/plugins/plg-1' && request.method == 'GET') {
       request.response.write(jsonEncode({
         'code': 200, 'message': 'ok',
         'data': {
@@ -54,7 +54,17 @@ class _RecordingServer {
         'code': 200, 'message': 'ok',
         'data': {'extensionId': 'ext-1', 'version': '1.1.0', 'installState': 'installed'},
       }));
-    } else if (request.uri.path.endsWith('/enable') || request.uri.path.endsWith('/disable')) {
+    } else if (request.uri.path.endsWith('/enable') && request.method == 'POST') {
+      request.response.write(jsonEncode({
+        'code': 200, 'message': 'ok',
+        'data': {'extensionId': 'ext-1', 'success': true},
+      }));
+    } else if (request.uri.path.endsWith('/disable') && request.method == 'POST') {
+      request.response.write(jsonEncode({
+        'code': 200, 'message': 'ok',
+        'data': {'extensionId': 'ext-1', 'success': true},
+      }));
+    } else if (request.uri.path.endsWith('/ext-1') && request.method == 'DELETE') {
       request.response.write(jsonEncode({
         'code': 200, 'message': 'ok',
         'data': {'extensionId': 'ext-1', 'success': true},
@@ -127,6 +137,11 @@ void main() {
       expect(s.requests.first.query['search'], 'pet');
     });
 
+    test('list trims search before sending', () async {
+      await api.list(search: '  pet  ');
+      expect(s.requests.first.query['search'], 'pet');
+    });
+
     test('detail GET and parses result', () async {
       final d = await api.detail('plg-1');
       expect(d.pluginId, 'plg-1');
@@ -159,12 +174,69 @@ void main() {
       expect(s.requests.first.path, '/api/extensions/desktop-pet/plugins/ext-1/disable');
     });
 
-    test('uninstall DELETE with extensionId', () async {
+    test('uninstall DELETE with extensionId and parses response', () async {
       final r = await api.uninstall('ext-1');
       expect(r.extensionId, 'ext-1');
+      expect(r.success, true);
       final req = s.requests.first;
       expect(req.method, 'DELETE');
       expect(req.path, '/api/extensions/desktop-pet/plugins/ext-1');
     });
+
+    test('list throws when data is null', () async {
+      await s.stop();
+      final nullServer = _NullDataRecordingServer();
+      await nullServer.start();
+      final nullApi = DesktopPetPluginApi(BackendServiceApi(BackendHttpClient(_cfg(nullServer.port)), 1));
+      await expectLater(() => nullApi.list(), throwsA(isA<StateError>()));
+      await nullServer.stop();
+    });
+
+    test('install throws when data is null', () async {
+      await s.stop();
+      final nullServer = _NullDataRecordingServer();
+      await nullServer.start();
+      final nullApi = DesktopPetPluginApi(BackendServiceApi(BackendHttpClient(_cfg(nullServer.port)), 1));
+      await expectLater(() => nullApi.install('/pkgs/x.zip'), throwsA(isA<StateError>()));
+      await nullServer.stop();
+    });
+
+    test('extensionId with special chars is URL encoded', () async {
+      await s.stop();
+      final nullServer = _NullDataRecordingServer();
+      await nullServer.start();
+      final nullApi = DesktopPetPluginApi(BackendServiceApi(BackendHttpClient(_cfg(nullServer.port)), 1));
+      await expectLater(() => nullApi.detail('plg/1+2'), throwsA(isA<StateError>()));
+      expect(nullServer.path, '/api/extensions/desktop-pet/plugins/plg%2F1%2B2');
+      await nullServer.stop();
+    });
   });
+}
+
+class _NullDataRecordingServer {
+  HttpServer? _server;
+  int port = 0;
+  String path = '';
+
+  Future<void> start() async {
+    _server = await HttpServer.bind('127.0.0.1', 0);
+    port = _server!.port;
+    _server!.listen(_handle);
+  }
+
+  Future<void> _handle(HttpRequest request) async {
+    path = request.uri.path;
+    request.response.headers.contentType = ContentType.json;
+    request.response.statusCode = 200;
+    request.response.write(jsonEncode({
+      'code': 200, 'message': 'ok',
+      'data': null,
+    }));
+    await request.response.close();
+  }
+
+  Future<void> stop() async {
+    await _server?.close(force: true);
+    path = '';
+  }
 }

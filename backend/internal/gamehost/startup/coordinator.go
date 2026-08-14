@@ -119,8 +119,35 @@ type StartupRecoveryCoordinator struct {
 	running bool
 }
 
-func NewStartupRecoveryCoordinator(deps StartupRecoveryDeps) *StartupRecoveryCoordinator {
-	return &StartupRecoveryCoordinator{deps: deps}
+func NewStartupRecoveryCoordinator(deps StartupRecoveryDeps) (*StartupRecoveryCoordinator, error) {
+	if deps.Gate == nil {
+		return nil, fmt.Errorf("startup recovery: Gate is required")
+	}
+	if deps.ProcessCleanup == nil {
+		return nil, fmt.Errorf("startup recovery: ProcessCleanup is required")
+	}
+	if deps.TempCleanup == nil {
+		return nil, fmt.Errorf("startup recovery: TempCleanup is required")
+	}
+	if deps.BinaryCleanup == nil {
+		return nil, fmt.Errorf("startup recovery: BinaryCleanup is required")
+	}
+	if deps.EndpointCleanup == nil {
+		return nil, fmt.Errorf("startup recovery: EndpointCleanup is required")
+	}
+	if deps.ShmCleanup == nil {
+		return nil, fmt.Errorf("startup recovery: ShmCleanup is required")
+	}
+	if deps.KernelRecon == nil {
+		return nil, fmt.Errorf("startup recovery: KernelRecon is required")
+	}
+	if deps.HostIdentity == nil {
+		return nil, fmt.Errorf("startup recovery: HostIdentity is required")
+	}
+	if deps.AuditSink == nil {
+		return nil, fmt.Errorf("startup recovery: AuditSink is required")
+	}
+	return &StartupRecoveryCoordinator{deps: deps}, nil
 }
 
 func (c *StartupRecoveryCoordinator) RunStartupRecovery(ctx context.Context) StartupRecoveryReport {
@@ -203,6 +230,7 @@ func (c *StartupRecoveryCoordinator) runStage(ctx context.Context, report *Start
 	report.Stage = stage
 	err := fn()
 	if err != nil {
+		report.Degraded = true
 		report.Errors = append(report.Errors, fmt.Sprintf("%s: %v", stage, err))
 		log.Printf("[startup-recovery] stage error: %s: %v", stage, err)
 	}
@@ -415,6 +443,19 @@ func (c *StartupRecoveryCoordinator) cleanupProcessCandidate(ctx context.Context
 }
 
 func (c *StartupRecoveryCoordinator) reconstructRuntimes(ctx context.Context, report *StartupRecoveryReport) error {
+	if c.deps.KernelRecon == nil {
+		return nil
+	}
+	runtimeIDs, err := c.deps.KernelRecon.CurrentRuntimeIDs(ctx)
+	if err != nil {
+		return fmt.Errorf("list current runtime IDs: %w", err)
+	}
+	for _, runtimeID := range runtimeIDs {
+		if c.deps.ProcessCleanup != nil {
+			_ = c.deps.ProcessCleanup.CleanupOwnedProcess(ctx, runtimeID, 0)
+		}
+	}
+	report.ReconstructedRuntimes = runtimeIDs
 	return nil
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -12,16 +13,23 @@ import (
 )
 
 type fakeRuntimeManager struct {
-	runtimes map[domain.RuntimeInstanceID]*RuntimeInstanceRef
+	mu               sync.Mutex
+	runtimes         map[domain.RuntimeInstanceID]*RuntimeInstanceRef
+	generations      map[domain.RuntimeInstanceID]int64
+	lifecycleIntents map[domain.RuntimeInstanceID]string
 }
 
 func newFakeRuntimeManager() *fakeRuntimeManager {
 	return &fakeRuntimeManager{
-		runtimes: make(map[domain.RuntimeInstanceID]*RuntimeInstanceRef),
+		runtimes:         make(map[domain.RuntimeInstanceID]*RuntimeInstanceRef),
+		generations:      make(map[domain.RuntimeInstanceID]int64),
+		lifecycleIntents: make(map[domain.RuntimeInstanceID]string),
 	}
 }
 
 func (m *fakeRuntimeManager) AddRuntime(runtimeID domain.RuntimeInstanceID, pluginID domain.PluginID, state domain.RuntimeState) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	m.runtimes[runtimeID] = &RuntimeInstanceRef{
 		ID:       runtimeID,
 		PluginID: pluginID,
@@ -30,6 +38,8 @@ func (m *fakeRuntimeManager) AddRuntime(runtimeID domain.RuntimeInstanceID, plug
 }
 
 func (m *fakeRuntimeManager) GetRuntime(runtimeID domain.RuntimeInstanceID) (*RuntimeInstanceRef, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	rt, ok := m.runtimes[runtimeID]
 	if !ok {
 		return nil, &ExecutionError{Code: ErrRuntimeUnavailable, RuntimeID: string(runtimeID), Message: "runtime not found"}
@@ -38,6 +48,8 @@ func (m *fakeRuntimeManager) GetRuntime(runtimeID domain.RuntimeInstanceID) (*Ru
 }
 
 func (m *fakeRuntimeManager) UpdateRuntimeState(runtimeID domain.RuntimeInstanceID, next domain.RuntimeState, reason string, nowTime time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	rt, ok := m.runtimes[runtimeID]
 	if !ok {
 		return &ExecutionError{Code: ErrRuntimeUnavailable, RuntimeID: string(runtimeID), Message: "runtime not found"}
@@ -47,11 +59,39 @@ func (m *fakeRuntimeManager) UpdateRuntimeState(runtimeID domain.RuntimeInstance
 }
 
 func (m *fakeRuntimeManager) ListRuntimes() []*RuntimeInstanceRef {
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	result := make([]*RuntimeInstanceRef, 0, len(m.runtimes))
 	for _, rt := range m.runtimes {
 		result = append(result, rt)
 	}
 	return result
+}
+
+func (m *fakeRuntimeManager) GetCurrentGeneration(runtimeID domain.RuntimeInstanceID) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.generations[runtimeID], nil
+}
+
+func (m *fakeRuntimeManager) AllocateGeneration(runtimeID domain.RuntimeInstanceID) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.generations[runtimeID]++
+	return m.generations[runtimeID], nil
+}
+
+func (m *fakeRuntimeManager) GetLifecycleIntent(runtimeID domain.RuntimeInstanceID) (string, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.lifecycleIntents[runtimeID], nil
+}
+
+func (m *fakeRuntimeManager) SetLifecycleIntent(runtimeID domain.RuntimeInstanceID, intent string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.lifecycleIntents[runtimeID] = intent
+	return nil
 }
 
 type fakeTopologyStore struct {
@@ -406,5 +446,317 @@ func TestExecutionError(t *testing.T) {
 	wrapped := NewExecutionErrorWithCause(ErrServiceLaunchFailed, "rt", "p", "s", "d", "msg", err)
 	if wrapped.Unwrap() != err {
 		t.Error("expected Unwrap to return wrapped cause")
+	}
+}
+
+func TestRuntimeRestartError(t *testing.T) {
+	cause := errors.New("stop phase failed")
+	err := &RuntimeRestartError{
+		Code:          ErrRestartFailed,
+		RuntimeID:     "rt-1",
+		OldGeneration: 1,
+		NewGeneration: 2,
+		Cause:         cause,
+	}
+
+	if err.Error() == "" {
+		t.Error("expected non-empty error message")
+	}
+
+	if err.Unwrap() != cause {
+		t.Error("expected Unwrap to return cause")
+	}
+
+	if !IsRuntimeRestartError(err, ErrRestartFailed) {
+		t.Error("expected IsRuntimeRestartError to match code")
+	}
+	if IsRuntimeRestartError(err, ErrLifecycleConflict) {
+		t.Error("expected IsRuntimeRestartError to NOT match different code")
+	}
+}
+
+func TestRuntimeExecutor_RestartRuntime_Success(t *testing.T) {
+	rtManager := newFakeRuntimeManager()
+	rtManager.AddRuntime("rt-1", "plugin-1", domain.RuntimeStateCreated)
+
+	topoStore := newFakeTopologyStore()
+	topoStore.SetTopology(RuntimeTopologySnapshot{
+		RuntimeID: "rt-1",
+		PluginID:  "plugin-1",
+		Services: []ServiceInstanceSnapshot{
+			{
+				ID:        "rt-1/bridge",
+				RuntimeID: "rt-1",
+				PluginID:  "plugin-1",
+				ServiceID: "bridge",
+				State:     ServiceStateCreated,
+				Required:  true,
+			},
+			{
+				ID:           "rt-1/agent",
+				RuntimeID:    "rt-1",
+				PluginID:     "plugin-1",
+				ServiceID:    "agent",
+				State:        ServiceStateCreated,
+				Required:     true,
+				Dependencies: []domain.ServiceID{"bridge"},
+			},
+		},
+	})
+	topoStore.SetGraph(DependencyGraphSnapshot{
+		RuntimeID: "rt-1",
+		Nodes: []DependencyNodeSnapshot{
+			{ServiceID: "bridge", Dependents: []domain.ServiceID{"agent"}},
+			{ServiceID: "agent", Dependencies: []domain.ServiceID{"bridge"}},
+		},
+	})
+
+	svcExecutor := &fakeServiceExecutorWithDefs{}
+	exec, err := NewRuntimeExecutor(topoStore, rtManager, svcExecutor, NewLifecyclePlanner())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	exec.SetResolveDefinition(func(definitionID string) (*trusted_service.ServiceRuntimeDefinition, error) {
+		return &trusted_service.ServiceRuntimeDefinition{ServiceID: definitionID}, nil
+	})
+
+	ctx := context.Background()
+	if err := exec.StartRuntime(ctx, "rt-1"); err != nil {
+		t.Fatalf("unexpected start error: %v", err)
+	}
+
+	genBefore, _ := rtManager.GetCurrentGeneration("rt-1")
+	if genBefore != 0 {
+		t.Errorf("expected generation 0 before restart, got %d", genBefore)
+	}
+
+	err = exec.RestartRuntime(ctx, "rt-1", "test restart")
+	if err != nil {
+		t.Fatalf("unexpected restart error: %v", err)
+	}
+
+	genAfter, _ := rtManager.GetCurrentGeneration("rt-1")
+	if genAfter != 1 {
+		t.Errorf("expected generation 1 after restart, got %d", genAfter)
+	}
+
+	if len(svcExecutor.stoppedSvcs) != 2 {
+		t.Errorf("expected 2 services stopped during restart, got %d: %v", len(svcExecutor.stoppedSvcs), svcExecutor.stoppedSvcs)
+	}
+
+	if len(svcExecutor.startedSvcs) != 4 {
+		t.Errorf("expected 4 services started (2 initial + 2 restart), got %d: %v", len(svcExecutor.startedSvcs), svcExecutor.startedSvcs)
+	}
+}
+
+func TestRuntimeExecutor_RestartRuntime_InvalidState(t *testing.T) {
+	rtManager := newFakeRuntimeManager()
+	rtManager.AddRuntime("rt-1", "plugin-1", domain.RuntimeStateCreated)
+
+	topoStore := newFakeTopologyStore()
+	svcExecutor := &fakeServiceExecutorWithDefs{}
+	exec, err := NewRuntimeExecutor(topoStore, rtManager, svcExecutor, NewLifecyclePlanner())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	ctx := context.Background()
+	err = exec.RestartRuntime(ctx, "rt-1", "test restart")
+	if err == nil {
+		t.Fatal("expected error for restarting non-running runtime")
+	}
+
+	if !IsRuntimeRestartError(err, ErrLifecycleConflict) {
+		t.Errorf("expected lifecycle_conflict error, got %v", err)
+	}
+}
+
+func TestRuntimeExecutor_RestartRuntime_StopPhaseFailure(t *testing.T) {
+	rtManager := newFakeRuntimeManager()
+	rtManager.AddRuntime("rt-1", "plugin-1", domain.RuntimeStateCreated)
+
+	topoStore := newFakeTopologyStore()
+	topoStore.SetTopology(RuntimeTopologySnapshot{
+		RuntimeID: "rt-1",
+		PluginID:  "plugin-1",
+		Services: []ServiceInstanceSnapshot{
+			{ServiceID: "bridge", State: ServiceStateCreated, Required: true},
+			{ServiceID: "agent", State: ServiceStateCreated, Required: true, Dependencies: []domain.ServiceID{"bridge"}},
+		},
+	})
+	topoStore.SetGraph(DependencyGraphSnapshot{
+		RuntimeID: "rt-1",
+		Nodes: []DependencyNodeSnapshot{
+			{ServiceID: "bridge", Dependents: []domain.ServiceID{"agent"}},
+			{ServiceID: "agent", Dependencies: []domain.ServiceID{"bridge"}},
+		},
+	})
+
+	svcExecutor := &fakeServiceExecutorWithDefs{
+		stopFn: func(ctx context.Context, handle ServiceExecutionHandle, force bool) error {
+			return errors.New("stop failed forcefully")
+		},
+	}
+	exec, err := NewRuntimeExecutor(topoStore, rtManager, svcExecutor, NewLifecyclePlanner())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	exec.SetResolveDefinition(func(definitionID string) (*trusted_service.ServiceRuntimeDefinition, error) {
+		return &trusted_service.ServiceRuntimeDefinition{ServiceID: definitionID}, nil
+	})
+
+	ctx := context.Background()
+	if err := exec.StartRuntime(ctx, "rt-1"); err != nil {
+		t.Fatalf("unexpected start error: %v", err)
+	}
+
+	rtManager.runtimes["rt-1"].State = domain.RuntimeStateRunning
+
+	err = exec.RestartRuntime(ctx, "rt-1", "test restart")
+	if err == nil {
+		t.Fatal("expected restart to fail when stop phase fails")
+	}
+
+	if !IsRuntimeRestartError(err, ErrRestartFailed) {
+		t.Errorf("expected restart_failed error, got %v", err)
+	}
+}
+
+func TestRuntimeExecutor_RestartRuntime_DoubleRestart(t *testing.T) {
+	rtManager := newFakeRuntimeManager()
+	rtManager.AddRuntime("rt-1", "plugin-1", domain.RuntimeStateCreated)
+
+	topoStore := newFakeTopologyStore()
+	topoStore.SetTopology(RuntimeTopologySnapshot{
+		RuntimeID: "rt-1",
+		PluginID:  "plugin-1",
+		Services: []ServiceInstanceSnapshot{
+			{ServiceID: "bridge", State: ServiceStateCreated, Required: true},
+		},
+	})
+	topoStore.SetGraph(DependencyGraphSnapshot{
+		RuntimeID: "rt-1",
+		Nodes: []DependencyNodeSnapshot{
+			{ServiceID: "bridge"},
+		},
+	})
+
+	startedCount := int32(0)
+	stoppedCount := int32(0)
+	svcExecutor := &fakeServiceExecutorWithDefs{
+		startFn: func(ctx context.Context, entry ServicePlanEntry, resolveFn DefinitionResolverFunc) (*ServiceExecutionHandle, error) {
+			atomic.AddInt32(&startedCount, 1)
+			return &ServiceExecutionHandle{
+				RuntimeID:  "rt-1",
+				ServiceID:  string(entry.ServiceID),
+				InstanceID: "rt-1/" + string(entry.ServiceID),
+			}, nil
+		},
+		stopFn: func(ctx context.Context, handle ServiceExecutionHandle, force bool) error {
+			atomic.AddInt32(&stoppedCount, 1)
+			return nil
+		},
+	}
+
+	exec, err := NewRuntimeExecutor(topoStore, rtManager, svcExecutor, NewLifecyclePlanner())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	exec.SetResolveDefinition(func(definitionID string) (*trusted_service.ServiceRuntimeDefinition, error) {
+		return &trusted_service.ServiceRuntimeDefinition{ServiceID: definitionID}, nil
+	})
+
+	ctx := context.Background()
+	if err := exec.StartRuntime(ctx, "rt-1"); err != nil {
+		t.Fatalf("unexpected start error: %v", err)
+	}
+
+	rtManager.runtimes["rt-1"].State = domain.RuntimeStateRunning
+
+	startBarrier := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(2)
+	var err1, err2 error
+
+	go func() {
+		defer wg.Done()
+		<-startBarrier
+		err1 = exec.RestartRuntime(ctx, "rt-1", "first restart")
+	}()
+
+	go func() {
+		defer wg.Done()
+		<-startBarrier
+		err2 = exec.RestartRuntime(ctx, "rt-1", "second restart")
+	}()
+
+	close(startBarrier)
+	wg.Wait()
+
+	successCount := 0
+	if err1 == nil {
+		successCount++
+	}
+	if err2 == nil {
+		successCount++
+	}
+
+	gen, _ := rtManager.GetCurrentGeneration("rt-1")
+	if gen > 2 {
+		t.Errorf("expected at most generation 2 after double restart, got %d", gen)
+	}
+
+	if successCount == 0 {
+		t.Error("expected at least one restart to succeed")
+	}
+}
+
+func TestRuntimeExecutor_RestartRuntime_IntentCommitted(t *testing.T) {
+	rtManager := newFakeRuntimeManager()
+	rtManager.AddRuntime("rt-1", "plugin-1", domain.RuntimeStateCreated)
+
+	topoStore := newFakeTopologyStore()
+	topoStore.SetTopology(RuntimeTopologySnapshot{
+		RuntimeID: "rt-1",
+		PluginID:  "plugin-1",
+		Services: []ServiceInstanceSnapshot{
+			{ServiceID: "bridge", State: ServiceStateCreated, Required: true},
+		},
+	})
+	topoStore.SetGraph(DependencyGraphSnapshot{
+		RuntimeID: "rt-1",
+		Nodes: []DependencyNodeSnapshot{
+			{ServiceID: "bridge"},
+		},
+	})
+
+	svcExecutor := &fakeServiceExecutorWithDefs{}
+	exec, err := NewRuntimeExecutor(topoStore, rtManager, svcExecutor, NewLifecyclePlanner())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	exec.SetResolveDefinition(func(definitionID string) (*trusted_service.ServiceRuntimeDefinition, error) {
+		return &trusted_service.ServiceRuntimeDefinition{ServiceID: definitionID}, nil
+	})
+
+	ctx := context.Background()
+	if err := exec.StartRuntime(ctx, "rt-1"); err != nil {
+		t.Fatalf("unexpected start error: %v", err)
+	}
+
+	rtManager.runtimes["rt-1"].State = domain.RuntimeStateRunning
+
+	err = exec.RestartRuntime(ctx, "rt-1", "test restart")
+	if err != nil {
+		t.Fatalf("unexpected restart error: %v", err)
+	}
+
+	intent, _ := rtManager.GetLifecycleIntent("rt-1")
+	if intent != "" {
+		t.Errorf("expected empty intent after restart completion, got %q", intent)
 	}
 }

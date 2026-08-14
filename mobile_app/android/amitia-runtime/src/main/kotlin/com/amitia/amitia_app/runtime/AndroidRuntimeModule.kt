@@ -16,7 +16,10 @@ import com.amitia.amitia_app.runtime.internal.DefaultRuntimeController
 import com.amitia.amitia_app.runtime.internal.DefaultRuntimeModule
 import com.amitia.amitia_app.runtime.internal.RuntimeStateStore
 import com.amitia.amitia_app.runtime.manifest.RuntimeManifestStore
+import com.amitia.amitia_app.runtime.manifest.internal.DefaultRuntimeManifestBuilder
 import com.amitia.amitia_app.runtime.manifest.internal.DefaultRuntimeManifestStore
+import com.amitia.amitia_app.runtime.packagetrusted.AndroidBundledRuntimePackageSource
+import com.amitia.amitia_app.runtime.packagetrusted.RuntimePackageSource
 import com.amitia.amitia_app.runtime.packagetrusted.TrustedRuntimePackageSource
 import com.amitia.amitia_app.runtime.proot.ProotComponent
 import com.amitia.amitia_app.runtime.proot.internal.AndroidProotBinaryLocator
@@ -43,6 +46,7 @@ object AndroidRuntimeModule {
     @Volatile private var cachedRootfsPath: String? = null
     @Volatile private var cachedManifestStore: RuntimeManifestStore? = null
     @Volatile private var cachedRuntimeInstaller: RuntimeInstaller? = null
+    @Volatile private var cachedRuntimePackageSource: RuntimePackageSource? = null
 
     val prootComponent: ProotComponent? get() = cachedProotComponent
     internal val prootEnvironmentAssembler: com.amitia.amitia_app.runtime.proot.internal.ProotEnvironmentAssembler? get() = cachedProotEnvironmentAssembler
@@ -50,7 +54,8 @@ object AndroidRuntimeModule {
     internal val activeRuntimeManager: ActiveRuntimeManager? get() = cachedActiveRuntimeManager
     val prootRootfsPath: String? get() = cachedRootfsPath
     internal val manifestStore: RuntimeManifestStore? get() = cachedManifestStore
-    internal val runtimeInstaller: RuntimeInstaller? get() = cachedRuntimeInstaller
+    val runtimeInstaller: RuntimeInstaller? get() = cachedRuntimeInstaller
+    val runtimePackageSource: RuntimePackageSource? get() = cachedRuntimePackageSource
 
     fun create(context: Context): RuntimeModule {
         return cachedModule ?: synchronized(this) {
@@ -74,6 +79,12 @@ object AndroidRuntimeModule {
         cachedRootfsPath = layout.rootfsRoot.absolutePath
         cachedRuntimeHostLayout = layout
 
+        val runtimePackageSource = AndroidBundledRuntimePackageSource(
+            context = appContext,
+            layout = layout,
+        )
+        cachedRuntimePackageSource = runtimePackageSource
+
         val environmentBuilder = com.amitia.amitia_app.runtime.proot.internal.DefaultRuntimeEnvironmentBuilder()
         val prootEnvironmentAssembler = com.amitia.amitia_app.runtime.proot.internal.ProotEnvironmentAssembler(
             layout = layout,
@@ -86,13 +97,23 @@ object AndroidRuntimeModule {
 
         val activeRuntimeManager = DefaultActiveRuntimeManager(layout, manifestStore)
         cachedActiveRuntimeManager = activeRuntimeManager
+        val manifestBuilder = DefaultRuntimeManifestBuilder(
+            layout = layout,
+            abiStatus = abiGate.evaluate() as com.amitia.amitia_app.runtime.abi.RuntimeAbiStatus.Supported,
+        )
         val installedRuntimeSource = ActiveRuntimeBackedInstalledRuntimeSource(activeRuntimeManager)
         val recoveryPolicy: RuntimeCrashRecoveryPolicy = DefaultRuntimeCrashRecoveryPolicy(
             installedRuntimeSource = installedRuntimeSource
         )
         val recoveryScheduler: RuntimeRecoveryScheduler = ExecutorRuntimeRecoveryScheduler()
 
-        val installer = createRuntimeInstaller(appContext)
+        val installer = createRuntimeInstaller(
+            layout = layout,
+            abiGate = abiGate,
+            manifestStore = manifestStore,
+            manifestBuilder = manifestBuilder,
+            activeRuntimeManager = activeRuntimeManager,
+        )
         cachedRuntimeInstaller = installer
 
         val controller = DefaultRuntimeController(
@@ -142,17 +163,20 @@ object AndroidRuntimeModule {
         )
     }
 
-    private fun createRuntimeInstaller(context: Context): RuntimeInstaller {
-        val layout = DefaultRuntimeHostLayout.fromContext(
-            noBackupFilesDir = context.noBackupFilesDir ?: File(context.filesDir, "nobackup"),
-            filesDir = context.filesDir,
-        )
-        val abiProvider = BuildAndroidAbiProvider()
-        val abiGate = DefaultRuntimeAbiGate(provider = abiProvider)
+    private fun createRuntimeInstaller(
+        layout: com.amitia.amitia_app.runtime.install.RuntimeHostLayout,
+        abiGate: com.amitia.amitia_app.runtime.abi.RuntimeAbiGate,
+        manifestStore: RuntimeManifestStore,
+        manifestBuilder: com.amitia.amitia_app.runtime.manifest.RuntimeManifestBuilder,
+        activeRuntimeManager: ActiveRuntimeManager,
+    ): RuntimeInstaller {
         return DefaultRuntimeInstaller(
             layout = layout,
             abiGate = abiGate,
             packageVerifier = DefaultPackageVerifier(),
+            manifestStore = manifestStore,
+            manifestBuilder = manifestBuilder,
+            activeRuntimeManager = activeRuntimeManager,
         )
     }
 
@@ -173,5 +197,6 @@ object AndroidRuntimeModule {
         cachedRootfsPath = null
         cachedManifestStore = null
         cachedRuntimeInstaller = null
+        cachedRuntimePackageSource = null
     }
 }

@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/log"
 	"gorm.io/gorm"
 )
@@ -41,12 +42,12 @@ func DefaultFacadeConfig() *FacadeConfig {
 }
 
 type RuntimeFacade struct {
-	db          *gorm.DB
-	config      *FacadeConfig
-	services    *Services
-	handler     *Handler
-	states      ActualStateService
-	reconciler  *Reconciler
+	db         *gorm.DB
+	config     *FacadeConfig
+	services   *Services
+	handler    *Handler
+	states     ActualStateService
+	reconciler *Reconciler
 
 	started     atomic.Bool
 	cancel      context.CancelFunc
@@ -194,7 +195,11 @@ func (f *RuntimeFacade) ListConnections(userID string) []*Connection {
 }
 
 func (f *RuntimeFacade) GetConnection(userID, deviceID, runtimeID string) *Connection {
-	return f.handler.GetConnection(userID, deviceID, runtimeID)
+	return f.handler.GetConnection(
+		runtimeidentity.ParseUserID(userID),
+		runtimeidentity.ParseDeviceID(deviceID),
+		runtimeidentity.ParseRuntimeID(runtimeID),
+	)
 }
 
 type V2RuntimeNotifier struct {

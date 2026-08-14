@@ -13,6 +13,7 @@ import (
 	"github.com/u-ai/backend/internal/nativebridge"
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
+	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/scriptruntime/nodeenv"
 	"github.com/u-ai/backend/internal/scriptruntime/sidecar"
 	qdrantDB "github.com/u-ai/backend/pkg/database/qdrant"
@@ -33,12 +34,15 @@ type runtimeBootstrap struct {
 	nodeEnvironment  nodeenv.Resolver
 	artifactResolver sidecar.ArtifactResolver
 
+	profile runtimeprofile.Profile
+	policy  runtimeprofile.Policy
+
 	iosSandboxProvider runtimeorchestrator.ProviderInstance
 	iosNativeProvider  runtimeorchestrator.ProviderInstance
 	iosNativeBridge    nativebridge.Bridge
 }
 
-func newRuntimeBootstrap(paths *util.RuntimePaths) (*runtimeBootstrap, error) {
+func newRuntimeBootstrap(paths *util.RuntimePaths, profile runtimeprofile.Profile) (*runtimeBootstrap, error) {
 	descriptor := platform.Get().Descriptor()
 	host, err := runtimehost.NewRuntimeHost(runtimehost.HostBuildContext{
 		Descriptor: descriptor,
@@ -48,7 +52,9 @@ func newRuntimeBootstrap(paths *util.RuntimePaths) (*runtimeBootstrap, error) {
 		return nil, fmt.Errorf("create runtime host: %w", err)
 	}
 
-	orch := runtimeorchestrator.New(descriptor)
+	policy := runtimeprofile.PolicyFor(profile)
+
+	orch := runtimeorchestrator.NewWithProfile(descriptor, profile)
 
 	providerRegistry := runtimeorchestrator.NewProviderRegistry()
 
@@ -74,6 +80,8 @@ func newRuntimeBootstrap(paths *util.RuntimePaths) (*runtimeBootstrap, error) {
 		resources:        paths,
 		nodeEnvironment:  nodeResolver,
 		artifactResolver: artifactResolver,
+		profile:          profile,
+		policy:           policy,
 	}
 
 	if err := bootstrap.registerProviderFactories(); err != nil {
@@ -89,6 +97,20 @@ func newRuntimeBootstrap(paths *util.RuntimePaths) (*runtimeBootstrap, error) {
 
 func (b *runtimeBootstrap) RuntimeHost() runtimehost.RuntimeHost {
 	return b.host
+}
+
+func (b *runtimeBootstrap) RuntimeProfile() runtimeprofile.Profile {
+	if b == nil {
+		return runtimeprofile.ProfileLocal
+	}
+	return b.profile
+}
+
+func (b *runtimeBootstrap) RuntimePolicy() runtimeprofile.Policy {
+	if b == nil {
+		return runtimeprofile.PolicyFor(runtimeprofile.ProfileLocal)
+	}
+	return b.policy
 }
 
 func (b *runtimeBootstrap) ProcessSupervisor() runtimehost.ProcessSupervisor {
@@ -205,6 +227,7 @@ func (a *vectorStoreProviderAdapter) Descriptor() runtimeorchestrator.ComponentD
 		Required:     false,
 		Capabilities: []string{"storage.vector"},
 		Dependencies: []runtimeorchestrator.ComponentID{runtimeorchestrator.ComponentSQLite},
+		Profiles:     profilesCore,
 	}
 }
 
@@ -257,6 +280,7 @@ func (a *graphStoreProviderAdapter) Descriptor() runtimeorchestrator.ComponentDe
 		Required:     false,
 		Capabilities: []string{"storage.graph"},
 		Dependencies: []runtimeorchestrator.ComponentID{runtimeorchestrator.ComponentSQLite},
+		Profiles:     profilesCore,
 	}
 }
 

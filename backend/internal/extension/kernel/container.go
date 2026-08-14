@@ -92,6 +92,7 @@ type Container struct {
 	ExecutionKernel        *execution.ExecutionPipeline
 	HostAPIGateway         *host_api.DefaultGateway
 	PermissionBroker       permission.PermissionBroker
+	PermissionDefinitions  *permission.PermissionDefinitionRegistry
 	ScopeManager           scope.ScopeManager
 	ScopeSnapshotCreator   func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error)
 	AgentSkillCatalog      *agent_skill.AgentSkillCatalog

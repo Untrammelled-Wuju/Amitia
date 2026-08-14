@@ -10,6 +10,7 @@ class GameCenterState {
   final int generation;
 
   final String? selectedPluginId;
+  final String? selectedExtensionId;
   final GamePluginDetail? pluginDetail;
   final bool pluginDetailLoading;
   final String? pluginDetailError;
@@ -29,6 +30,7 @@ class GameCenterState {
     this.pluginsError,
     this.generation = 0,
     this.selectedPluginId,
+    this.selectedExtensionId,
     this.pluginDetail,
     this.pluginDetailLoading = false,
     this.pluginDetailError,
@@ -49,6 +51,8 @@ class GameCenterState {
     int? generation,
     String? selectedPluginId,
     bool clearSelectedPlugin = false,
+    String? selectedExtensionId,
+    bool clearSelectedExtension = false,
     GamePluginDetail? pluginDetail,
     bool? pluginDetailLoading,
     String? pluginDetailError,
@@ -69,6 +73,7 @@ class GameCenterState {
       pluginsError: clearPluginsError ? null : (pluginsError ?? this.pluginsError),
       generation: generation ?? this.generation,
       selectedPluginId: clearSelectedPlugin ? null : (selectedPluginId ?? this.selectedPluginId),
+      selectedExtensionId: clearSelectedExtension ? null : (selectedExtensionId ?? this.selectedExtensionId),
       pluginDetail: pluginDetail ?? this.pluginDetail,
       pluginDetailLoading: pluginDetailLoading ?? this.pluginDetailLoading,
       pluginDetailError: clearPluginDetailError ? null : (pluginDetailError ?? this.pluginDetailError),
@@ -117,10 +122,14 @@ class GameCenterController extends StateNotifier<GameCenterState> {
     }
   }
 
-  Future<void> selectPlugin(String pluginId, {String? extensionId}) async {
+  Future<void> selectPlugin(
+    String pluginId, {
+    required String extensionId,
+  }) async {
     final gen = state.generation + 1;
     state = state.copyWith(
       selectedPluginId: pluginId,
+      selectedExtensionId: extensionId,
       pluginDetailLoading: true,
       generation: gen,
       clearPluginDetailError: true,
@@ -160,6 +169,7 @@ class GameCenterController extends StateNotifier<GameCenterState> {
   void clearSelection() {
     state = state.copyWith(
       clearSelectedPlugin: true,
+      clearSelectedExtension: true,
       clearSelectedRuntime: true,
     );
   }
@@ -178,8 +188,10 @@ class GameCenterController extends StateNotifier<GameCenterState> {
     return _withPackageOp(extensionId, () async {
       await api.updatePlugin(extensionId, archivePath);
       await refreshPlugins();
-      if (state.selectedPluginId != null) {
-        await selectPlugin(state.selectedPluginId!);
+      final pluginId = state.selectedPluginId;
+      final extId = state.selectedExtensionId;
+      if (pluginId != null && extId != null) {
+        await selectPlugin(pluginId, extensionId: extId);
       }
       return true;
     });
@@ -190,8 +202,10 @@ class GameCenterController extends StateNotifier<GameCenterState> {
       final ok = await api.enablePlugin(extensionId);
       if (ok) {
         await refreshPlugins();
-        if (state.selectedPluginId != null) {
-          await selectPlugin(state.selectedPluginId!);
+        final pluginId = state.selectedPluginId;
+        final extId = state.selectedExtensionId;
+        if (pluginId != null && extId != null) {
+          await selectPlugin(pluginId, extensionId: extId);
         }
       }
       return ok;
@@ -203,8 +217,10 @@ class GameCenterController extends StateNotifier<GameCenterState> {
       final ok = await api.disablePlugin(extensionId);
       if (ok) {
         await refreshPlugins();
-        if (state.selectedPluginId != null) {
-          await selectPlugin(state.selectedPluginId!);
+        final pluginId = state.selectedPluginId;
+        final extId = state.selectedExtensionId;
+        if (pluginId != null && extId != null) {
+          await selectPlugin(pluginId, extensionId: extId);
         }
       }
       return ok;
@@ -276,7 +292,11 @@ class GameCenterController extends StateNotifier<GameCenterState> {
   Future<bool> release(String runtimeId, {String targetMode = 'observe'}) async {
     return _withRuntimeOp(runtimeId, () async {
       final epoch = state.runtimeDetail?.controlAuthority?.epoch ?? 0;
-      final result = await api.release(runtimeId, targetMode: targetMode, expectedEpoch: epoch);
+      final result = await api.release(
+        runtimeId,
+        targetMode: targetMode,
+        expectedEpoch: epoch,
+      );
       if (result.success) {
         await selectRuntime(runtimeId);
       }

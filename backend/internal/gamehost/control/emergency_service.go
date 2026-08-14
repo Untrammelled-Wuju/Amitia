@@ -13,7 +13,6 @@ import (
 
 const (
 	DefaultEmergencyMaxDeadline = 30 * time.Second
-	EmergencyRestartWindow       = 30 * time.Second
 )
 
 type PendingWorkCanceller interface {
@@ -49,23 +48,15 @@ type BinaryReleaser interface {
 }
 
 type RuntimeStopper interface {
-	StopRuntime(ctx context.Context, runtimeID domain.RuntimeInstanceID, force bool) error
-	SuppressAutoRestart(runtimeID domain.RuntimeInstanceID, duration time.Duration)
+	StopRuntime(ctx context.Context, runtimeID domain.RuntimeInstanceID) error
 	IsRuntimeActive(ctx context.Context, runtimeID domain.RuntimeInstanceID) (bool, error)
 }
 
-type ProcessTreeCleaner interface {
-	CleanupProcessTree(ctx context.Context, runtimeID domain.RuntimeInstanceID) error
-}
-
-type RestartSuppressor interface {
-	SuppressRestart(runtimeID domain.RuntimeInstanceID, duration time.Duration)
-	IsRestartSuppressed(runtimeID domain.RuntimeInstanceID) bool
-}
-
 type EmergencyOperationStore struct {
-	mu         sync.RWMutex
-	operations map[string]*EmergencyStopOperation
+	mu                sync.RWMutex
+	operations        map[string]*EmergencyStopOperation
+	activeByRuntime   map[domain.RuntimeInstanceID]string
+	byIdempotencyKey  map[string]string
 }
 
 type EmergencyStopOperation struct {
@@ -84,7 +75,9 @@ type EmergencyStopOperation struct {
 
 func NewEmergencyOperationStore() *EmergencyOperationStore {
 	return &EmergencyOperationStore{
-		operations: make(map[string]*EmergencyStopOperation),
+		operations:       make(map[string]*EmergencyStopOperation),
+		activeByRuntime:  make(map[domain.RuntimeInstanceID]string),
+		byIdempotencyKey: make(map[string]string),
 	}
 }
 
@@ -92,27 +85,50 @@ func (s *EmergencyOperationStore) Get(operationID string) (*EmergencyStopOperati
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	op, ok := s.operations[operationID]
-	return op, ok
+	if !ok {
+		return nil, false
+	}
+	return copyOperation(op), true
 }
 
 func (s *EmergencyOperationStore) GetByRuntime(runtimeID domain.RuntimeInstanceID) (*EmergencyStopOperation, bool) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	for _, op := range s.operations {
-		if op.RuntimeID == runtimeID && !op.State.IsTerminal() {
-			return copyOperation(op), true
-		}
+	opID, ok := s.activeByRuntime[runtimeID]
+	if !ok {
+		return nil, false
 	}
-	return nil, false
+	op, exists := s.operations[opID]
+	if !exists || op.State.IsTerminal() {
+		return nil, false
+	}
+	return copyOperation(op), true
+}
+
+func (s *EmergencyOperationStore) GetByIdempotencyKey(key string) (*EmergencyStopOperation, bool) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	opID, ok := s.byIdempotencyKey[key]
+	if !ok {
+		return nil, false
+	}
+	op, exists := s.operations[opID]
+	if !exists {
+		return nil, false
+	}
+	return copyOperation(op), true
 }
 
 func (s *EmergencyOperationStore) Put(op *EmergencyStopOperation) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.operations[op.OperationID] = op
+	if !op.State.IsTerminal() {
+		s.activeByRuntime[op.RuntimeID] = op.OperationID
+	}
 }
 
-func (s *EmergencyOperationStore) UpdateState(operationID string, state EmergencyStopState, errs ...error) {
+func (s *EmergencyOperationStore) UpdateState(operationID string, state EmergencyStopState, finishedAt time.Time, errs ...error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if op, ok := s.operations[operationID]; ok {
@@ -121,7 +137,12 @@ func (s *EmergencyOperationStore) UpdateState(operationID string, state Emergenc
 			op.Errors = append(op.Errors, errs...)
 		}
 		if state.IsTerminal() {
-			op.FinishedAt = time.Now().UTC()
+			op.FinishedAt = finishedAt
+			if op.RuntimeID != "" {
+				if activeID, exists := s.activeByRuntime[op.RuntimeID]; exists && activeID == operationID {
+					delete(s.activeByRuntime, op.RuntimeID)
+				}
+			}
 		}
 	}
 }
@@ -134,39 +155,32 @@ func (s *EmergencyOperationStore) UpdateEpoch(operationID string, epoch uint64) 
 	}
 }
 
+func (s *EmergencyOperationStore) MarkActive(op *EmergencyStopOperation) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.activeByRuntime[op.RuntimeID] = op.OperationID
+}
+
+func (s *EmergencyOperationStore) RegisterIdempotencyKey(key string, operationID string) {
+	if key == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.byIdempotencyKey[key] = operationID
+}
+
 func (s *EmergencyOperationStore) Clear(operationID string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	delete(s.operations, operationID)
-}
-
-func (s *EmergencyOperationStore) GetLastByRuntime(runtimeID domain.RuntimeInstanceID) (*EmergencyStopOperation, bool) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	var latest *EmergencyStopOperation
-	for _, op := range s.operations {
-		if op.RuntimeID == runtimeID {
-			if latest == nil || op.StartedAt.After(latest.StartedAt) {
-				latest = op
+	if op, ok := s.operations[operationID]; ok {
+		if op.RuntimeID != "" {
+			if activeID, exists := s.activeByRuntime[op.RuntimeID]; exists && activeID == operationID {
+				delete(s.activeByRuntime, op.RuntimeID)
 			}
 		}
 	}
-	if latest == nil {
-		return nil, false
-	}
-	return copyOperation(latest), true
-}
-
-func copyOperation(op *EmergencyStopOperation) *EmergencyStopOperation {
-	if op == nil {
-		return nil
-	}
-	c := *op
-	if op.Errors != nil {
-		c.Errors = make([]error, len(op.Errors))
-		copy(c.Errors, op.Errors)
-	}
-	return &c
+	delete(s.operations, operationID)
 }
 
 func (s *EmergencyOperationStore) ListActive() []*EmergencyStopOperation {
@@ -181,11 +195,24 @@ func (s *EmergencyOperationStore) ListActive() []*EmergencyStopOperation {
 	return active
 }
 
+func copyOperation(op *EmergencyStopOperation) *EmergencyStopOperation {
+	if op == nil {
+		return nil
+	}
+	c := *op
+	if op.Errors != nil {
+		c.Errors = make([]error, len(op.Errors))
+		copy(c.Errors, op.Errors)
+	}
+	return &c
+}
+
 type EmergencyStopService struct {
 	clock     Clock
 	authority *ControlAuthorityManager
 	gate      *PluginOutputGate
 	store     *EmergencyOperationStore
+	intent    EmergencyIntentStore
 
 	pendingCanceller PendingWorkCanceller
 	hostAPICanceller HostAPIWorkCanceller
@@ -196,11 +223,16 @@ type EmergencyStopService struct {
 	channelCleaner   ChannelCleaner
 	binaryReleaser   BinaryReleaser
 	runtimeStopper   RuntimeStopper
-	processCleaner   ProcessTreeCleaner
-	restartSuppress  RestartSuppressor
 	audit            AuthorityAuditSink
 	metrics          EmergencyMetrics
 	topology         TopologyReader
+
+	pendingVerifier   PendingVerifier
+	connectionVerifier ConnectionVerifier
+	leaseVerifier     SecretLeaseVerifier
+	channelVerifier   ChannelVerifier
+	streamVerifier    StreamVerifier
+	binaryVerifier    BinaryVerifier
 
 	mu       sync.Mutex
 	routines map[domain.RuntimeInstanceID]*sync.Mutex
@@ -210,24 +242,29 @@ type EmergencyStopService struct {
 }
 
 type EmergencyStopServiceOptions struct {
-	Clock            Clock
-	Authority        *ControlAuthorityManager
-	Gate             *PluginOutputGate
-	PendingCanceller PendingWorkCanceller
-	HostAPICanceller HostAPIWorkCanceller
-	LeaseRevoker     SecretLeaseRevoker
-	ConnectionCloser ConnectionCloser
-	HandshakeReset   HandshakeResetter
-	StreamStopper    StreamStopper
-	ChannelCleaner   ChannelCleaner
-	BinaryReleaser   BinaryReleaser
-	RuntimeStopper   RuntimeStopper
-	ProcessCleaner   ProcessTreeCleaner
-	RestartSuppress  RestartSuppressor
-	Audit            AuthorityAuditSink
-	Metrics          EmergencyMetrics
-	Topology         TopologyReader
-	MaxDeadline      time.Duration
+	Clock             Clock
+	Authority         *ControlAuthorityManager
+	Gate              *PluginOutputGate
+	Intent            EmergencyIntentStore
+	PendingCanceller  PendingWorkCanceller
+	HostAPICanceller  HostAPIWorkCanceller
+	LeaseRevoker      SecretLeaseRevoker
+	ConnectionCloser  ConnectionCloser
+	HandshakeReset    HandshakeResetter
+	StreamStopper     StreamStopper
+	ChannelCleaner    ChannelCleaner
+	BinaryReleaser    BinaryReleaser
+	RuntimeStopper    RuntimeStopper
+	Audit             AuthorityAuditSink
+	Metrics           EmergencyMetrics
+	Topology          TopologyReader
+	PendingVerifier   PendingVerifier
+	ConnectionVerifier ConnectionVerifier
+	LeaseVerifier     SecretLeaseVerifier
+	ChannelVerifier   ChannelVerifier
+	StreamVerifier    StreamVerifier
+	BinaryVerifier    BinaryVerifier
+	MaxDeadline       time.Duration
 }
 
 type EmergencyMetrics interface {
@@ -235,7 +272,26 @@ type EmergencyMetrics interface {
 	RecordEmergencyCleanupError(runtimeID domain.RuntimeInstanceID, stage EmergencyStopState)
 }
 
-func NewEmergencyStopService(opts EmergencyStopServiceOptions) *EmergencyStopService {
+func NewEmergencyStopService(opts EmergencyStopServiceOptions) (*EmergencyStopService, error) {
+	if opts.Authority == nil {
+		return nil, fmt.Errorf("emergency stop service: authority is required")
+	}
+	if opts.Gate == nil {
+		return nil, fmt.Errorf("emergency stop service: gate is required")
+	}
+	if opts.RuntimeStopper == nil {
+		return nil, fmt.Errorf("emergency stop service: runtime stopper is required")
+	}
+	if opts.Intent == nil {
+		return nil, fmt.Errorf("emergency stop service: emergency intent store is required")
+	}
+	if opts.ConnectionCloser == nil {
+		return nil, fmt.Errorf("emergency stop service: connection closer is required")
+	}
+	if opts.PendingCanceller == nil {
+		return nil, fmt.Errorf("emergency stop service: pending canceller is required")
+	}
+
 	clock := opts.Clock
 	if clock == nil {
 		clock = func() time.Time { return time.Now().UTC() }
@@ -245,27 +301,32 @@ func NewEmergencyStopService(opts EmergencyStopServiceOptions) *EmergencyStopSer
 		maxDL = DefaultEmergencyMaxDeadline
 	}
 	return &EmergencyStopService{
-		clock:            clock,
-		authority:        opts.Authority,
-		gate:             opts.Gate,
-		store:            NewEmergencyOperationStore(),
-		pendingCanceller: opts.PendingCanceller,
-		hostAPICanceller: opts.HostAPICanceller,
-		leaseRevoker:     opts.LeaseRevoker,
-		connectionCloser: opts.ConnectionCloser,
-		handshakeReset:   opts.HandshakeReset,
-		streamStopper:    opts.StreamStopper,
-		channelCleaner:   opts.ChannelCleaner,
-		binaryReleaser:   opts.BinaryReleaser,
-		runtimeStopper:   opts.RuntimeStopper,
-		processCleaner:   opts.ProcessCleaner,
-		restartSuppress:  opts.RestartSuppress,
-		audit:            opts.Audit,
-		metrics:          opts.Metrics,
-		topology:         opts.Topology,
-		routines:         make(map[domain.RuntimeInstanceID]*sync.Mutex),
-		maxDeadline:      maxDL,
-	}
+		clock:             clock,
+		authority:         opts.Authority,
+		gate:              opts.Gate,
+		store:             NewEmergencyOperationStore(),
+		intent:            opts.Intent,
+		pendingCanceller:  opts.PendingCanceller,
+		hostAPICanceller:  opts.HostAPICanceller,
+		leaseRevoker:      opts.LeaseRevoker,
+		connectionCloser:  opts.ConnectionCloser,
+		handshakeReset:    opts.HandshakeReset,
+		streamStopper:     opts.StreamStopper,
+		channelCleaner:    opts.ChannelCleaner,
+		binaryReleaser:    opts.BinaryReleaser,
+		runtimeStopper:    opts.RuntimeStopper,
+		audit:             opts.Audit,
+		metrics:           opts.Metrics,
+		topology:          opts.Topology,
+		pendingVerifier:   opts.PendingVerifier,
+		connectionVerifier: opts.ConnectionVerifier,
+		leaseVerifier:     opts.LeaseVerifier,
+		channelVerifier:   opts.ChannelVerifier,
+		streamVerifier:    opts.StreamVerifier,
+		binaryVerifier:    opts.BinaryVerifier,
+		routines:          make(map[domain.RuntimeInstanceID]*sync.Mutex),
+		maxDeadline:       maxDL,
+	}, nil
 }
 
 func (s *EmergencyStopService) getRuntimeLock(runtimeID domain.RuntimeInstanceID) *sync.Mutex {
@@ -296,13 +357,22 @@ func (s *EmergencyStopService) EmergencyStop(ctx context.Context, req EmergencyS
 		operationID = generateEmergencyOperationID()
 	}
 
-	activeOp, exists := s.store.GetByRuntime(runtimeID)
-	if exists {
+	if activeOp, exists := s.store.GetByRuntime(runtimeID); exists {
 		return s.buildResult(activeOp), nil
 	}
 
-	if lastOp, ok := s.store.GetLastByRuntime(runtimeID); ok {
-		return s.buildResult(lastOp), nil
+	if req.IdempotencyKey != "" {
+		if existingOp, ok := s.store.GetByIdempotencyKey(req.IdempotencyKey); ok {
+			return s.buildResult(existingOp), nil
+		}
+	}
+
+	if s.intent != nil && s.intent.IsEmergencyLatched(ctx, runtimeID) {
+		if latchedOpID, ok := s.intent.GetEmergencyOperationID(ctx, runtimeID); ok {
+			if latchedOp, exists := s.store.Get(latchedOpID); exists {
+				return s.buildResult(latchedOp), nil
+			}
+		}
 	}
 
 	if s.authority != nil {
@@ -333,6 +403,9 @@ func (s *EmergencyStopService) EmergencyStop(ctx context.Context, req EmergencyS
 		StartedAt:     now,
 	}
 	s.store.Put(op)
+	if req.IdempotencyKey != "" {
+		s.store.RegisterIdempotencyKey(req.IdempotencyKey, operationID)
+	}
 
 	lock := s.getRuntimeLock(runtimeID)
 	if !lock.TryLock() {
@@ -363,36 +436,32 @@ func (s *EmergencyStopService) executeSafetyChain(ctx context.Context, op *Emerg
 	criticalFailure := false
 
 	transitionTo := func(state EmergencyStopState, errs ...error) {
-		s.store.UpdateState(op.OperationID, state, errs...)
+		s.store.UpdateState(op.OperationID, state, s.clock(), errs...)
 		if len(errs) > 0 {
 			cleanupErrors = append(cleanupErrors, errs...)
 		}
 	}
 
 	fail := func(state EmergencyStopState, cause error) EmergencyStopResult {
-		transitionTo(EmergencyStateFailed, cause)
-		return s.buildFailedResult(op.OperationID, op.RuntimeID, op.Actor, op.Reason, previousMode, previousEpoch, op.StartedAt, append(cleanupErrors, cause))
+		finishedAt := s.clock()
+		s.store.UpdateState(op.OperationID, EmergencyStateFailed, finishedAt, cause)
+		return s.buildFailedResult(op.OperationID, op.RuntimeID, op.Actor, op.Reason, previousMode, previousEpoch, op.StartedAt, finishedAt, append(cleanupErrors, cause))
 	}
 
-	// SAFETY DOOR 1: Close G9 Plugin Output Gate
-	transitionTo(EmergencyStateClosingGate)
-	if s.gate != nil {
-		s.gate.CloseRuntimeOutputs(op.RuntimeID)
+	transitionTo(EmergencyStateCommittingIntent)
+	if s.intent != nil {
+		if err := s.intent.CommitEmergencyIntent(ctx, op.RuntimeID, op.OperationID); err != nil {
+			return fail(EmergencyStateCommittingIntent, err)
+		}
 	}
+
+	transitionTo(EmergencyStateClosingGate)
+	s.gate.CloseRuntimeOutputs(op.RuntimeID)
 
 	if err := ctx.Err(); err != nil {
 		return fail(EmergencyStateClosingGate, errEmergencyDeadlineExceeded(op.OperationID))
 	}
 
-	// Restart Suppression BEFORE Runtime Stop
-	if s.restartSuppress != nil {
-		s.restartSuppress.SuppressRestart(op.RuntimeID, EmergencyRestartWindow)
-	}
-	if s.runtimeStopper != nil {
-		s.runtimeStopper.SuppressAutoRestart(op.RuntimeID, EmergencyRestartWindow)
-	}
-
-	// SAFETY DOOR 2: Authority -> suspended + Epoch++
 	transitionTo(EmergencyStateRevokingAuthority)
 	var newEpoch uint64
 	if s.authority != nil {
@@ -404,10 +473,11 @@ func (s *EmergencyStopService) executeSafetyChain(ctx context.Context, op *Emerg
 				Reason: ReasonSystemRecovery,
 			})
 			if err != nil {
-				transitionTo(EmergencyStateRevokingAuthority, &AuthorityError{
+				cleanupErrors = append(cleanupErrors, &AuthorityError{
 					Code:    domain.ErrInvalidState,
 					Message: "emergency stop: authority transition failed: " + err.Error(),
 				})
+				criticalFailure = true
 			}
 		}
 		afterSnap, _ := s.authority.Get(ctx, op.RuntimeID)
@@ -420,29 +490,15 @@ func (s *EmergencyStopService) executeSafetyChain(ctx context.Context, op *Emerg
 		cleanupErrors = append(cleanupErrors, errEmergencyDeadlineExceeded(op.OperationID))
 	}
 
-	// SAFETY DOOR 3: Mark intent / Cancel pending work (parallel where safe)
 	transitionTo(EmergencyStateCancelling)
 	s.cancelPendingWork(ctx, op.RuntimeID, &cleanupErrors)
 
-	// Stop Runtime
-	transitionTo(EmergencyStateStoppingRuntime)
-	if s.runtimeStopper != nil {
-		force := false
-		if s.gate != nil && s.gate.IsRuntimeClosed(op.RuntimeID) {
-			force = false
-		}
-		if err := s.runtimeStopper.StopRuntime(ctx, op.RuntimeID, force); err != nil {
+	if s.leaseRevoker != nil {
+		if _, err := s.leaseRevoker.RevokeRuntimeLeases(ctx, op.RuntimeID); err != nil {
 			cleanupErrors = append(cleanupErrors, err)
 		}
 	}
 
-	if s.processCleaner != nil {
-		if err := s.processCleaner.CleanupProcessTree(ctx, op.RuntimeID); err != nil {
-			cleanupErrors = append(cleanupErrors, err)
-		}
-	}
-
-	// Close Connections
 	transitionTo(EmergencyStateClosingConnections)
 	if s.connectionCloser != nil {
 		if _, err := s.connectionCloser.CloseRuntimeConnections(ctx, op.RuntimeID); err != nil {
@@ -455,15 +511,19 @@ func (s *EmergencyStopService) executeSafetyChain(ctx context.Context, op *Emerg
 		}
 	}
 
-	// Revoke SecretLease
-	transitionTo(EmergencyStateRevokingLeases)
-	if s.leaseRevoker != nil {
-		if _, err := s.leaseRevoker.RevokeRuntimeLeases(ctx, op.RuntimeID); err != nil {
+	if err := ctx.Err(); err != nil {
+		criticalFailure = true
+		cleanupErrors = append(cleanupErrors, errEmergencyDeadlineExceeded(op.OperationID))
+	}
+
+	transitionTo(EmergencyStateStoppingRuntime)
+	if s.runtimeStopper != nil {
+		if err := s.runtimeStopper.StopRuntime(ctx, op.RuntimeID); err != nil {
 			cleanupErrors = append(cleanupErrors, err)
+			criticalFailure = true
 		}
 	}
 
-	// Clean transient resources
 	transitionTo(EmergencyStateCleaningResources)
 	if s.streamStopper != nil {
 		if err := s.streamStopper.StopRuntimeStreams(ctx, op.RuntimeID); err != nil {
@@ -481,42 +541,34 @@ func (s *EmergencyStopService) executeSafetyChain(ctx context.Context, op *Emerg
 		}
 	}
 
-	// Final Verification
 	transitionTo(EmergencyStateVerifying)
 	verification := s.verifyCleanup(ctx, op, newEpoch)
-	if verification.ResidueErrors != nil {
+	if len(verification.ResidueErrors) > 0 {
 		cleanupErrors = append(cleanupErrors, verificationErrors(verification.ResidueErrors)...)
 	}
 
-	s.store.UpdateState(op.OperationID, EmergencyStateCompleted)
-
-	finalOp, _ := s.store.Get(op.OperationID)
 	finishedAt := s.clock()
-	startedAt := finishedAt
-	if finalOp != nil {
-		finishedAt = finalOp.FinishedAt
-		startedAt = finalOp.StartedAt
+	safetyGatesSatisfied := verification.EmergencyLatched &&
+		verification.OutputGateClosed &&
+		verification.AuthoritySuspended &&
+		verification.RuntimeStopped &&
+		verification.ConnectionsClosed
+
+	if safetyGatesSatisfied && !criticalFailure {
+		s.store.UpdateState(op.OperationID, EmergencyStateCompleted, finishedAt)
+	} else {
+		s.store.UpdateState(op.OperationID, EmergencyStateFailed, finishedAt)
+		criticalFailure = true
 	}
 
-	result := EmergencyStopResult{
-		OperationID:     op.OperationID,
-		RuntimeID:       op.RuntimeID,
-		State:           EmergencyStateCompleted,
-		Actor:           op.Actor,
-		Reason:          op.Reason,
-		PreviousMode:    previousMode,
-		PreviousEpoch:   previousEpoch,
-		NewEpoch:        newEpoch,
-		StartedAt:       startedAt,
-		FinishedAt:      finishedAt,
-		Duration:        finishedAt.Sub(startedAt),
-		Verification:    verification,
-		CleanupErrors:   cleanupErrors,
-		CriticalFailure: criticalFailure,
-	}
+	result := s.buildResultFromVerification(op, previousMode, previousEpoch, newEpoch, finishedAt, verification, cleanupErrors, criticalFailure)
 
 	if s.metrics != nil {
-		s.metrics.RecordEmergencyStop(op.RuntimeID, op.Actor, EmergencyStateCompleted, criticalFailure)
+		state := EmergencyStateCompleted
+		if criticalFailure {
+			state = EmergencyStateFailed
+		}
+		s.metrics.RecordEmergencyStop(op.RuntimeID, op.Actor, state, criticalFailure)
 	}
 	return result
 }
@@ -537,9 +589,7 @@ func (s *EmergencyStopService) cancelPendingWork(ctx context.Context, runtimeID 
 func (s *EmergencyStopService) verifyCleanup(ctx context.Context, op *EmergencyStopOperation, newEpoch uint64) VerificationResult {
 	result := VerificationResult{}
 
-	if s.gate != nil {
-		result.OutputGateClosed = s.gate.IsRuntimeClosed(op.RuntimeID)
-	}
+	result.OutputGateClosed = s.gate.IsRuntimeClosed(op.RuntimeID)
 
 	if s.authority != nil {
 		snap, err := s.authority.Get(ctx, op.RuntimeID)
@@ -553,17 +603,45 @@ func (s *EmergencyStopService) verifyCleanup(ctx context.Context, op *EmergencyS
 		result.RuntimeStopped = (err != nil || !active)
 	}
 
-	if s.connectionCloser != nil {
+	if s.connectionVerifier != nil {
+		result.ConnectionsClosed = s.connectionVerifier.CountRuntimeConnections(op.RuntimeID) == 0
+	} else if s.connectionCloser != nil {
 		result.ConnectionsClosed = true
 	}
-	if s.leaseRevoker != nil {
+
+	if s.leaseVerifier != nil {
+		result.LeasesRevoked = s.leaseVerifier.CountRuntimeLeases(op.RuntimeID) == 0
+	} else if s.leaseRevoker != nil {
 		result.LeasesRevoked = true
 	}
-	if s.pendingCanceller != nil {
+
+	if s.pendingVerifier != nil {
+		result.PendingCleared = s.pendingVerifier.CountRuntimePending(op.RuntimeID) == 0
+	} else if s.pendingCanceller != nil {
 		result.PendingCleared = true
 	}
-	if s.processCleaner != nil {
-		result.ProcessCleanedUp = true
+
+	if s.channelVerifier != nil {
+		result.ChannelsCleared = s.channelVerifier.CountRuntimeChannels(op.RuntimeID) == 0
+	} else if s.channelCleaner != nil {
+		result.ChannelsCleared = true
+	}
+
+	if s.streamVerifier != nil {
+		result.StreamsCleared = s.streamVerifier.CountRuntimeStreams(op.RuntimeID) == 0
+	} else if s.streamStopper != nil {
+		result.StreamsCleared = true
+	}
+
+	if s.binaryVerifier != nil {
+		result.TransientBinaryReleased = s.binaryVerifier.CountRuntimeBinary(op.RuntimeID) == 0
+	} else if s.binaryReleaser != nil {
+		result.TransientBinaryReleased = true
+	}
+
+	if s.intent != nil {
+		result.EmergencyLatched = s.intent.IsEmergencyLatched(ctx, op.RuntimeID)
+		result.RecoverySuppressed = result.EmergencyLatched
 	}
 
 	if !result.OutputGateClosed {
@@ -575,6 +653,12 @@ func (s *EmergencyStopService) verifyCleanup(ctx context.Context, op *EmergencyS
 	if !result.RuntimeStopped {
 		result.ResidueErrors = append(result.ResidueErrors, "runtime_not_stopped")
 	}
+	if !result.ConnectionsClosed {
+		result.ResidueErrors = append(result.ResidueErrors, "connections_not_closed")
+	}
+	if !result.EmergencyLatched {
+		result.ResidueErrors = append(result.ResidueErrors, "emergency_not_latched")
+	}
 
 	return result
 }
@@ -585,23 +669,47 @@ func (s *EmergencyStopService) buildResult(op *EmergencyStopOperation) Emergency
 		finished = s.clock()
 	}
 	return EmergencyStopResult{
-		OperationID:   op.OperationID,
-		RuntimeID:     op.RuntimeID,
-		State:         op.State,
-		Actor:         op.Actor,
-		Reason:        op.Reason,
-		PreviousMode:  op.PreviousMode,
-		PreviousEpoch: op.PreviousEpoch,
-		NewEpoch:      op.NewEpoch,
-		StartedAt:     op.StartedAt,
-		FinishedAt:    finished,
-		Duration:      finished.Sub(op.StartedAt),
-		CleanupErrors: op.Errors,
+		OperationID:     op.OperationID,
+		RuntimeID:       op.RuntimeID,
+		State:           op.State,
+		Actor:           op.Actor,
+		Reason:          op.Reason,
+		PreviousMode:    op.PreviousMode,
+		PreviousEpoch:   op.PreviousEpoch,
+		NewEpoch:        op.NewEpoch,
+		StartedAt:       op.StartedAt,
+		FinishedAt:      finished,
+		Duration:        finished.Sub(op.StartedAt),
+		CleanupErrors:   op.Errors,
+		CriticalFailure: op.State == EmergencyStateFailed,
 	}
 }
 
-func (s *EmergencyStopService) buildFailedResult(operationID string, runtimeID domain.RuntimeInstanceID, actor EmergencyStopActor, reason EmergencyStopReason, previousMode domain.ControlMode, previousEpoch uint64, startedAt time.Time, errs []error) EmergencyStopResult {
-	finished := s.clock()
+func (s *EmergencyStopService) buildResultFromVerification(op *EmergencyStopOperation, previousMode domain.ControlMode, previousEpoch uint64, newEpoch uint64, finishedAt time.Time, verification VerificationResult, errs []error, criticalFailure bool) EmergencyStopResult {
+	state := EmergencyStateCompleted
+	if criticalFailure {
+		state = EmergencyStateFailed
+	}
+	return EmergencyStopResult{
+		OperationID:     op.OperationID,
+		RuntimeID:       op.RuntimeID,
+		State:           state,
+		Actor:           op.Actor,
+		Reason:          op.Reason,
+		PreviousMode:    previousMode,
+		PreviousEpoch:   previousEpoch,
+		NewEpoch:        newEpoch,
+		StartedAt:       op.StartedAt,
+		FinishedAt:      finishedAt,
+		Duration:        finishedAt.Sub(op.StartedAt),
+		Verification:    verification,
+		CleanupErrors:   errs,
+		CriticalFailure: criticalFailure,
+		Residue:         verification.ResidueErrors,
+	}
+}
+
+func (s *EmergencyStopService) buildFailedResult(operationID string, runtimeID domain.RuntimeInstanceID, actor EmergencyStopActor, reason EmergencyStopReason, previousMode domain.ControlMode, previousEpoch uint64, startedAt time.Time, finishedAt time.Time, errs []error) EmergencyStopResult {
 	return EmergencyStopResult{
 		OperationID:     operationID,
 		RuntimeID:       runtimeID,
@@ -611,18 +719,33 @@ func (s *EmergencyStopService) buildFailedResult(operationID string, runtimeID d
 		PreviousMode:    previousMode,
 		PreviousEpoch:   previousEpoch,
 		StartedAt:       startedAt,
-		FinishedAt:      finished,
-		Duration:        finished.Sub(startedAt),
+		FinishedAt:      finishedAt,
+		Duration:        finishedAt.Sub(startedAt),
 		CleanupErrors:   errs,
 		CriticalFailure: true,
 	}
 }
 
-func (s *EmergencyStopService) IsRestartSuppressed(runtimeID domain.RuntimeInstanceID) bool {
-	if s.restartSuppress != nil {
-		return s.restartSuppress.IsRestartSuppressed(runtimeID)
+func (s *EmergencyStopService) ClearEmergencyLatch(ctx context.Context, runtimeID domain.RuntimeInstanceID, actor string) error {
+	if s.intent == nil {
+		return fmt.Errorf("emergency stop service: intent store not available")
 	}
-	return false
+	return s.intent.ClearEmergencyLatch(ctx, runtimeID, actor)
+}
+
+func (s *EmergencyStopService) IsEmergencyLatched(runtimeID domain.RuntimeInstanceID) bool {
+	if s.intent == nil {
+		return false
+	}
+	return s.intent.IsEmergencyLatched(context.Background(), runtimeID)
+}
+
+func (s *EmergencyStopService) Execute(ctx context.Context, runtimeID domain.RuntimeInstanceID) (EmergencyStopResult, error) {
+	return s.EmergencyStop(ctx, EmergencyStopRequest{
+		RuntimeID: runtimeID,
+		Actor:     EmergencyActorUser,
+		Reason:    EmergencyReasonUserRequested,
+	})
 }
 
 func (s *EmergencyStopService) GetOperation(operationID string) (*EmergencyStopOperation, bool) {

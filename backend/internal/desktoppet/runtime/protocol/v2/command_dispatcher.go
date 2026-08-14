@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/log"
 )
 
@@ -74,17 +75,17 @@ func (d *ConnectionCommandDispatcher) dispatchOnce(conn *Connection, send func(*
 			MessageTypeCommand,
 			cmd.CommandType,
 			conn.RuntimeID,
-			conn.SessionID,
-			map[string]interface{}{
-				"commandId":          cmd.ID,
-				"commandType":        cmd.CommandType,
-				"commandSequence":    cmd.DeviceSequence,
-				"desiredRevision":    cmd.DesiredRevision,
-				"settingsRevision":   cmd.SettingsRevision,
-				"installationId":     cmd.InstallationID,
-				"petId":              cmd.PetID,
-				"releaseId":          cmd.ReleaseID,
-				"payload":            payload,
+			runtimeidentity.ParseRuntimeSessionID(conn.SessionID),
+			CommandDispatchPayload{
+				CommandID:        cmd.ID,
+				CommandType:      cmd.CommandType,
+				CommandSequence:  cmd.DeviceSequence,
+				DesiredRevision:  cmd.DesiredRevision,
+				SettingsRevision: cmd.SettingsRevision,
+				InstallationID:   cmd.InstallationID,
+				PetID:            cmd.PetID,
+				ReleaseID:        cmd.ReleaseID,
+				Payload:          valueToRawMessage(payload),
 			},
 			conn.UserID,
 			conn.DeviceID,
@@ -104,4 +105,12 @@ func (d *ConnectionCommandDispatcher) dispatchOnce(conn *Connection, send func(*
 
 		_ = d.commands.MarkTransportDispatched(cmd.ID, conn.RuntimeID, time.Now())
 	}
+}
+
+func valueToRawMessage(v interface{}) json.RawMessage {
+	if raw, ok := v.(json.RawMessage); ok {
+		return raw
+	}
+	b, _ := json.Marshal(v)
+	return b
 }

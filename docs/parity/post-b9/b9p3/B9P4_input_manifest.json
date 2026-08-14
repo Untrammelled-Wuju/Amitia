@@ -1,9 +1,0 @@
-{
-  "correctedCapabilityRegistry": "corrected_capability_registry.json",
-  "capabilityAliasRegistry": "capability_alias_registry.json",
-  "capabilityNumericRegistry": "capability_numeric_registry.json",
-  "supportingComponentIdRegistry": "supporting_component_id_registry.json",
-  "kernelIdContract": "kernel_id_contract.json",
-  "b9p4CapabilityInput": "b9p4_capability_input.json",
-  "protocolCorrectionAddendum": "protocol_correction_addendum.json"
-}

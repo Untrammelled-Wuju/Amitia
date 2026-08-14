@@ -3,6 +3,8 @@ package ipc
 import (
 	"fmt"
 	"sync"
+
+	"github.com/u-ai/backend/internal/gamehost/domain"
 )
 
 type ConnectionRegistry struct {
@@ -112,6 +114,32 @@ func (r *ConnectionRegistry) List() []*Connection {
 	return result
 }
 
+func (r *ConnectionRegistry) ListByRuntime(runtimeID domain.RuntimeInstanceID) []*Connection {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	result := make([]*Connection, 0)
+	for _, conn := range r.byID {
+		if conn.Peer.RuntimeID == runtimeID {
+			result = append(result, conn)
+		}
+	}
+	return result
+}
+
+func (r *ConnectionRegistry) CountByRuntime(runtimeID domain.RuntimeInstanceID) int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	count := 0
+	for _, conn := range r.byID {
+		if conn.Peer.RuntimeID == runtimeID {
+			count++
+		}
+	}
+	return count
+}
+
 func (r *ConnectionRegistry) ActiveCount() int {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
@@ -138,4 +166,33 @@ func (r *ConnectionRegistry) PeerExists(key PeerKey) bool {
 		return false
 	}
 	return conn.IsActive()
+}
+
+func (r *ConnectionRegistry) FindByPeer(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID) (*Connection, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	key := PeerKey{RuntimeID: runtimeID, ServiceID: serviceID}
+	id, ok := r.byPeer[key]
+	if !ok {
+		return nil, false
+	}
+	conn, ok := r.byID[id]
+	if !ok || !conn.IsActive() {
+		return nil, false
+	}
+	return conn, true
+}
+
+func (r *ConnectionRegistry) ActiveCountByRuntime(runtimeID domain.RuntimeInstanceID) int {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	count := 0
+	for _, conn := range r.byID {
+		if conn.Peer.RuntimeID == runtimeID && conn.IsActive() {
+			count++
+		}
+	}
+	return count
 }

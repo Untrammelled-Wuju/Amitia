@@ -10,16 +10,17 @@ import (
 type OutputDecisionReason string
 
 const (
-	OutputDeniedInvalidPeer     OutputDecisionReason = "invalid_peer"
-	OutputDeniedRuntimeNotFound OutputDecisionReason = "runtime_not_found"
-	OutputDeniedServiceNotFound OutputDecisionReason = "service_not_found"
-	OutputDeniedNotEligible     OutputDecisionReason = "runtime_not_eligible"
-	OutputDeniedNotReady        OutputDecisionReason = "not_ready"
-	OutputDeniedPermission      OutputDecisionReason = "permission_denied"
-	OutputDeniedAuthorityMode   OutputDecisionReason = "authority_mode_denied"
-	OutputDeniedStaleEpoch      OutputDecisionReason = "stale_epoch"
-	OutputDeniedHostPolicy      OutputDecisionReason = "host_policy_denied"
-	OutputDeniedGateClosed      OutputDecisionReason = "gate_closed"
+	OutputDeniedInvalidPeer       OutputDecisionReason = "invalid_peer"
+	OutputDeniedRuntimeNotFound   OutputDecisionReason = "runtime_not_found"
+	OutputDeniedServiceNotFound   OutputDecisionReason = "service_not_found"
+	OutputDeniedNotEligible       OutputDecisionReason = "runtime_not_eligible"
+	OutputDeniedNotReady          OutputDecisionReason = "not_ready"
+	OutputDeniedPermission        OutputDecisionReason = "permission_denied"
+	OutputDeniedAuthorityMode     OutputDecisionReason = "authority_mode_denied"
+	OutputDeniedStaleEpoch        OutputDecisionReason = "stale_epoch"
+	OutputDeniedStaleGeneration   OutputDecisionReason = "stale_generation"
+	OutputDeniedHostPolicy        OutputDecisionReason = "host_policy_denied"
+	OutputDeniedGateClosed        OutputDecisionReason = "gate_closed"
 )
 
 type OutputDecision struct {

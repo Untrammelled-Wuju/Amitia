@@ -216,6 +216,8 @@ func migrateTestDB(db *sql.DB) error {
 			producer_id TEXT NOT NULL,
 			producer_type TEXT NOT NULL,
 			producer_generation INTEGER NOT NULL DEFAULT 0,
+			event_domain TEXT NOT NULL DEFAULT '',
+			causation_id TEXT NOT NULL DEFAULT '',
 			aggregate_type TEXT,
 			aggregate_id TEXT,
 			aggregate_version INTEGER,

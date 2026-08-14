@@ -30,9 +30,10 @@ func (h *hostAPIHandler) Handle(ctx context.Context, req rpc.RPCRequest) (rpc.RP
 	}
 
 	resp, err := h.adapter.Call(ctx, Request{
-		Peer:  peer,
-		Route: string(req.Method),
-		Input: req.Payload,
+		Peer:    peer,
+		Route:   string(req.Method),
+		Input:   req.Payload,
+		ConnKey: req.ConnectionID,
 	})
 	if err != nil {
 		return rpc.RPCResponse{

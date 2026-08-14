@@ -13,17 +13,19 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"github.com/u-ai/backend/internal/desktoppet/readiness"
+	"github.com/u-ai/backend/internal/deviceruntime/protocol"
 	"github.com/u-ai/backend/internal/middleware"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/log"
 )
 
 type BootstrapTicketConsumer func(
 	ctx context.Context,
 	rawTicket string,
-	runtimeID string,
-	deviceID string,
+	runtimeID runtimeidentity.RuntimeID,
+	deviceID runtimeidentity.DeviceID,
 ) (
-	userID string,
+	userID runtimeidentity.UserID,
 	err error,
 )
 
@@ -66,7 +68,7 @@ func RegisterUserRoutes(apiGroup *gin.RouterGroup, facade *RuntimeFacade) {
 			}
 			views = append(views, gin.H{
 				"runtimeId": conn.RuntimeID,
-				"deviceId":   conn.DeviceID,
+				"deviceId":  conn.DeviceID,
 				"state":     conn.State,
 				"sessionId": conn.SessionID,
 				"lastSeq":   conn.LastSeq,
@@ -93,7 +95,7 @@ func RegisterUserRoutes(apiGroup *gin.RouterGroup, facade *RuntimeFacade) {
 		}
 		c.JSON(http.StatusOK, gin.H{"success": true, "data": gin.H{
 			"runtimeId": conn.RuntimeID,
-			"deviceId":   conn.DeviceID,
+			"deviceId":  conn.DeviceID,
 			"state":     conn.State,
 			"sessionId": conn.SessionID,
 			"lastSeq":   conn.LastSeq,
@@ -178,8 +180,8 @@ func (h *v2WSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rawTicket := strings.TrimSpace(r.URL.Query().Get("ticket"))
-	deviceID := strings.TrimSpace(r.URL.Query().Get("deviceId"))
-	runtimeID := strings.TrimSpace(r.URL.Query().Get("runtimeId"))
+	deviceID := runtimeidentity.ParseDeviceID(r.URL.Query().Get("deviceId"))
+	runtimeID := runtimeidentity.ParseRuntimeID(r.URL.Query().Get("runtimeId"))
 
 	if rawTicket == "" || deviceID == "" || runtimeID == "" {
 		http.Error(w, "runtime bootstrap credentials required", http.StatusUnauthorized)
@@ -302,7 +304,7 @@ func (ctx *wsConnContext) readLoop() {
 			return
 		}
 
-		if env.MessageType != MessageTypeHello && env.RuntimeSessionID != ctx.conn.SessionID {
+		if env.MessageType != MessageTypeHello && env.RuntimeSessionID != runtimeidentity.RuntimeSessionID(ctx.conn.SessionID) {
 			return
 		}
 
@@ -316,7 +318,7 @@ func (ctx *wsConnContext) readLoop() {
 			if err := json.Unmarshal(env.Payload, &payload); err == nil {
 				ack, err := ctx.handler.HandleHello(ctx.conn, &payload)
 				if err == nil && ack != nil {
-					ackEnv, _ := ctx.handler.CreateEnvelope(MessageTypeHelloAck, "hello_ack", ctx.conn.RuntimeID, ctx.conn.SessionID, ack, ctx.conn.UserID, ctx.conn.DeviceID)
+					ackEnv, _ := ctx.handler.CreateEnvelope(MessageTypeHelloAck, "hello_ack", ctx.conn.RuntimeID, runtimeidentity.ParseRuntimeSessionID(ctx.conn.SessionID), ack, ctx.conn.UserID, ctx.conn.DeviceID)
 					if ackEnv != nil {
 						if ackData, err := json.Marshal(ackEnv); err == nil {
 							select {
@@ -333,7 +335,7 @@ func (ctx *wsConnContext) readLoop() {
 				_ = ctx.handler.HandleCommandAck(ctx.conn, &env, &ackPayload)
 			}
 		case MessageTypePing:
-			pongEnv, _ := ctx.handler.CreateEnvelope(MessageTypePong, "pong", ctx.conn.RuntimeID, ctx.conn.SessionID, map[string]interface{}{"time": time.Now()}, ctx.conn.UserID, ctx.conn.DeviceID)
+			pongEnv, _ := ctx.handler.CreateEnvelope(MessageTypePong, "pong", ctx.conn.RuntimeID, runtimeidentity.ParseRuntimeSessionID(ctx.conn.SessionID), protocol.PongPayload{Time: time.Now()}, ctx.conn.UserID, ctx.conn.DeviceID)
 			if pongEnv != nil {
 				if pongData, err := json.Marshal(pongEnv); err == nil {
 					select {

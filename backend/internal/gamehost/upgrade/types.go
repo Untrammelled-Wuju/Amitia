@@ -20,16 +20,12 @@ const (
 type UpgradeOperationID string
 
 type RuntimeUpgradeSnapshot struct {
-	RuntimeID          domain.RuntimeInstanceID
-	PluginID           domain.PluginID
-	RuntimeState       domain.RuntimeState
-	Health             domain.HealthState
-	DescriptorRevision string
-	DefinitionRevision string
-	ConfigRevision     string
-	WasRunning         bool
-	WasSuspended       bool
-	UserStopped        bool
+	RuntimeID            domain.RuntimeInstanceID
+	PluginID             domain.PluginID
+	RuntimeState         domain.RuntimeState
+	WasRunning           bool
+	WasSuspended         bool
+	PreUpgradeGeneration int64
 }
 
 type UpgradeRequest struct {

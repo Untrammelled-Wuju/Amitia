@@ -11,8 +11,24 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/readiness"
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
+	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/scriptruntime/nodeenv"
 	"github.com/u-ai/backend/internal/scriptruntime/sidecar"
+)
+
+var (
+	profilesAll = []runtimeprofile.Profile{
+		runtimeprofile.ProfileLocal,
+		runtimeprofile.ProfileCloudCore,
+		runtimeprofile.ProfileDeviceAgent,
+	}
+	profilesCore = []runtimeprofile.Profile{
+		runtimeprofile.ProfileLocal,
+		runtimeprofile.ProfileCloudCore,
+	}
+	profilesLocalOnly = []runtimeprofile.Profile{
+		runtimeprofile.ProfileLocal,
+	}
 )
 
 type sqliteComponent struct {
@@ -26,6 +42,7 @@ func (c *sqliteComponent) Descriptor() runtimeorchestrator.ComponentDescriptor {
 		Enabled:      true,
 		Required:     true,
 		Capabilities: []string{"storage.relational"},
+		Profiles:     profilesAll,
 	}
 }
 
@@ -64,6 +81,7 @@ func (s *sidecarComponent) Descriptor() runtimeorchestrator.ComponentDescriptor 
 		Enabled:      enabled,
 		Required:     false,
 		Capabilities: []string{"channel.sidecar"},
+		Profiles:     profilesCore,
 	}
 }
 
@@ -162,6 +180,7 @@ func (c *extensionKernelComponent) Descriptor() runtimeorchestrator.ComponentDes
 		Required:     true,
 		Dependencies: []runtimeorchestrator.ComponentID{runtimeorchestrator.ComponentSQLite},
 		Capabilities: []string{"extension.kernel"},
+		Profiles:     profilesAll,
 	}
 }
 
@@ -265,6 +284,7 @@ func (c *taskRuntimeComponent) Descriptor() runtimeorchestrator.ComponentDescrip
 		Required:     false,
 		Dependencies: []runtimeorchestrator.ComponentID{runtimeorchestrator.ComponentExtensionKernel},
 		Capabilities: []string{"task.runtime"},
+		Profiles:     profilesCore,
 	}
 }
 
@@ -334,6 +354,7 @@ func (c *desktopPetComponent) Descriptor() runtimeorchestrator.ComponentDescript
 			runtimeorchestrator.ComponentExtensionKernel,
 		},
 		Capabilities: []string{"desktop-pet.runtime"},
+		Profiles:     profilesLocalOnly,
 	}
 }
 

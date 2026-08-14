@@ -1,6 +1,0 @@
-{
-  "cancellationAuthority": "B43 CancellationController",
-  "resourceTriggerCancellation": "硬资源超限 -> 通过 B43 通用取消传播终止 Provider",
-  "noSecondKillInterface": true,
-  "singleSource": "B43 single cancellation propagation"
-}

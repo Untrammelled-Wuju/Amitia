@@ -15,10 +15,12 @@ import (
 const managementTarget = "desktop_pet_center"
 
 var (
-	ErrKernelUnavailable   = errors.New("desktop_pet_center: extension kernel unavailable")
-	ErrExtensionNotFound   = errors.New("desktop_pet_center: extension not found")
-	ErrNotDesktopPetPlugin = errors.New("desktop_pet_center: extension is not a desktop_pet_plugin")
-	ErrInvalidInput        = errors.New("desktop_pet_center: invalid input")
+	ErrKernelUnavailable         = errors.New("desktop_pet_center: extension kernel unavailable")
+	ErrExtensionNotFound         = errors.New("desktop_pet_center: extension not found")
+	ErrNotDesktopPetPlugin       = errors.New("desktop_pet_center: extension is not a desktop_pet_plugin")
+	ErrInvalidInput              = errors.New("desktop_pet_center: invalid input")
+	ErrManagementTargetMismatch  = errors.New("desktop_pet_center: package management target mismatch")
+	ErrPackageIdentityMismatch   = errors.New("desktop_pet_center: package identity mismatch")
 )
 
 type kernelContainer interface {
@@ -46,12 +48,24 @@ type kernelInstalledExtension struct {
 type DesktopPetPluginManagementService struct {
 	container kernelContainer
 	runtime   kernelRuntime
+	preflight PackageTargetPreflight
 }
 
-func NewDesktopPetPluginManagementService(container kernelContainer, runtime kernelRuntime) *DesktopPetPluginManagementService {
+type PackageTargetPreflight interface {
+	ValidateArchiveTarget(ctx context.Context, archivePath string, expected domain.ManagementTarget) (*PackageTargetPreview, error)
+}
+
+type PackageTargetPreview struct {
+	ExtensionID      string
+	ManagementTarget domain.ManagementTarget
+	Installable      bool
+}
+
+func NewDesktopPetPluginManagementService(container kernelContainer, runtime kernelRuntime, preflight PackageTargetPreflight) *DesktopPetPluginManagementService {
 	return &DesktopPetPluginManagementService{
 		container: container,
 		runtime:   runtime,
+		preflight: preflight,
 	}
 }
 
@@ -190,10 +204,25 @@ func (s *DesktopPetPluginManagementService) Install(ctx context.Context, archive
 	if archivePath == "" {
 		return nil, ErrInvalidInput
 	}
+
+	preview, err := s.preflight.ValidateArchiveTarget(ctx, archivePath, domain.ManagementTargetDesktopPetCenter)
+	if err != nil {
+		return nil, err
+	}
+
 	installed, err := s.runtime.Install(ctx, archivePath)
 	if err != nil {
 		return nil, err
 	}
+
+	if installed.ID != preview.ExtensionID {
+		return nil, ErrPackageIdentityMismatch
+	}
+
+	if err := s.requireDesktopPetPlugin(ctx, installed.ID); err != nil {
+		return nil, err
+	}
+
 	return &InstallResult{
 		ExtensionID:  installed.ID,
 		Version:      installed.Version,
@@ -201,17 +230,43 @@ func (s *DesktopPetPluginManagementService) Install(ctx context.Context, archive
 	}, nil
 }
 
-func (s *DesktopPetPluginManagementService) Update(ctx context.Context, archivePath string) (*InstallResult, error) {
+func (s *DesktopPetPluginManagementService) Update(ctx context.Context, extensionID string, archivePath string) (*InstallResult, error) {
 	if s.runtime == nil {
 		return nil, ErrKernelUnavailable
+	}
+	if extensionID == "" {
+		return nil, ErrInvalidInput
 	}
 	if archivePath == "" {
 		return nil, ErrInvalidInput
 	}
+
+	if err := s.requireDesktopPetPlugin(ctx, extensionID); err != nil {
+		return nil, err
+	}
+
+	preview, err := s.preflight.ValidateArchiveTarget(ctx, archivePath, domain.ManagementTargetDesktopPetCenter)
+	if err != nil {
+		return nil, err
+	}
+
+	if preview.ExtensionID != extensionID {
+		return nil, ErrPackageIdentityMismatch
+	}
+
 	installed, err := s.runtime.Update(ctx, archivePath)
 	if err != nil {
 		return nil, err
 	}
+
+	if installed.ID != extensionID {
+		return nil, ErrPackageIdentityMismatch
+	}
+
+	if err := s.requireDesktopPetPlugin(ctx, installed.ID); err != nil {
+		return nil, err
+	}
+
 	return &InstallResult{
 		ExtensionID:  installed.ID,
 		Version:      installed.Version,
@@ -226,8 +281,8 @@ func (s *DesktopPetPluginManagementService) Enable(ctx context.Context, extensio
 	if extensionID == "" {
 		return nil, ErrInvalidInput
 	}
-	if !s.hasDesktopPetPlugin(ctx, extensionID) {
-		return nil, ErrNotDesktopPetPlugin
+	if err := s.requireDesktopPetPlugin(ctx, extensionID); err != nil {
+		return nil, err
 	}
 	if err := s.runtime.Enable(ctx, extensionID); err != nil {
 		return nil, err
@@ -242,8 +297,8 @@ func (s *DesktopPetPluginManagementService) Disable(ctx context.Context, extensi
 	if extensionID == "" {
 		return nil, ErrInvalidInput
 	}
-	if !s.hasDesktopPetPlugin(ctx, extensionID) {
-		return nil, ErrNotDesktopPetPlugin
+	if err := s.requireDesktopPetPlugin(ctx, extensionID); err != nil {
+		return nil, err
 	}
 	if err := s.runtime.Disable(ctx, extensionID); err != nil {
 		return nil, err
@@ -258,8 +313,8 @@ func (s *DesktopPetPluginManagementService) Uninstall(ctx context.Context, exten
 	if extensionID == "" {
 		return nil, ErrInvalidInput
 	}
-	if !s.hasDesktopPetPlugin(ctx, extensionID) {
-		return nil, ErrNotDesktopPetPlugin
+	if err := s.requireDesktopPetPlugin(ctx, extensionID); err != nil {
+		return nil, err
 	}
 	if err := s.runtime.Uninstall(ctx, extensionID); err != nil {
 		return nil, err
@@ -267,20 +322,20 @@ func (s *DesktopPetPluginManagementService) Uninstall(ctx context.Context, exten
 	return &MutationResult{ExtensionID: extensionID, Success: true}, nil
 }
 
-func (s *DesktopPetPluginManagementService) hasDesktopPetPlugin(ctx context.Context, extID string) bool {
+func (s *DesktopPetPluginManagementService) requireDesktopPetPlugin(ctx context.Context, extID string) error {
 	if s.container == nil {
-		return false
+		return ErrKernelUnavailable
 	}
 	contribs, err := s.container.ListContributions(ctx, domain.ExtensionID(extID))
 	if err != nil {
-		return false
+		return err
 	}
 	for _, c := range contribs {
 		if c.Kind == domain.ContributionKindDesktopPetPlugin {
-			return true
+			return nil
 		}
 	}
-	return false
+	return ErrNotDesktopPetPlugin
 }
 
 func (s *DesktopPetPluginManagementService) buildSummary(inst domain.ExtensionInstallation, c domain.ContributionDefinition) DesktopPetPluginSummary {

@@ -1,15 +1,17 @@
 package secret
 
 import (
+	"fmt"
 	"sync"
 
 	kernelsecret "github.com/u-ai/backend/internal/extension/kernel/secret"
 )
 
 type bindingKey struct {
-	runtimeID string
-	serviceID string
-	ref       string
+	runtimeID  string
+	serviceID  string
+	generation int64
+	ref        string
 }
 
 type bindingEntry struct {
@@ -25,12 +27,13 @@ type bindingEntry struct {
 }
 
 type LeaseBindingIndex struct {
-	mu       sync.RWMutex
-	byKey    map[bindingKey]*bindingEntry
-	byLease  map[kernelsecret.LeaseID]*bindingEntry
-	byRuntime map[string]map[bindingKey]struct{}
-	byService map[string]map[kernelsecret.LeaseID]struct{}
-	clock    func() int64
+	mu           sync.RWMutex
+	byKey        map[bindingKey]*bindingEntry
+	byLease      map[kernelsecret.LeaseID]*bindingEntry
+	byRuntime    map[string]map[bindingKey]struct{}
+	byService    map[string]map[kernelsecret.LeaseID]struct{}
+	byGeneration map[string]map[kernelsecret.LeaseID]struct{}
+	clock        func() int64
 }
 
 func NewLeaseBindingIndex(clock func() int64) *LeaseBindingIndex {
@@ -38,11 +41,12 @@ func NewLeaseBindingIndex(clock func() int64) *LeaseBindingIndex {
 		clock = defaultClock
 	}
 	return &LeaseBindingIndex{
-		byKey:     make(map[bindingKey]*bindingEntry),
-		byLease:   make(map[kernelsecret.LeaseID]*bindingEntry),
-		byRuntime: make(map[string]map[bindingKey]struct{}),
-		byService: make(map[string]map[kernelsecret.LeaseID]struct{}),
-		clock:     clock,
+		byKey:        make(map[bindingKey]*bindingEntry),
+		byLease:      make(map[kernelsecret.LeaseID]*bindingEntry),
+		byRuntime:    make(map[string]map[bindingKey]struct{}),
+		byService:    make(map[string]map[kernelsecret.LeaseID]struct{}),
+		byGeneration: make(map[string]map[kernelsecret.LeaseID]struct{}),
+		clock:        clock,
 	}
 }
 
@@ -50,7 +54,7 @@ func (i *LeaseBindingIndex) Record(kernelLease kernelsecret.LeaseID, runtimeID, 
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
-	key := bindingKey{runtimeID: runtimeID, serviceID: serviceID, ref: ref}
+	key := bindingKey{runtimeID: runtimeID, serviceID: serviceID, generation: generation, ref: ref}
 	entry := &bindingEntry{
 		KernelLease: kernelLease,
 		RuntimeID:   runtimeID,
@@ -74,16 +78,25 @@ func (i *LeaseBindingIndex) Record(kernelLease kernelsecret.LeaseID, runtimeID, 
 	}
 	i.byService[svcKey][kernelLease] = struct{}{}
 
+	genKey := fmt.Sprintf("%s/%d", runtimeID, generation)
+	if i.byGeneration[genKey] == nil {
+		i.byGeneration[genKey] = make(map[kernelsecret.LeaseID]struct{})
+	}
+	i.byGeneration[genKey][kernelLease] = struct{}{}
+
 	return entry
 }
 
-func (i *LeaseBindingIndex) LookupByService(runtimeID, serviceID, ref string) (*bindingEntry, bool) {
+func (i *LeaseBindingIndex) LookupByService(runtimeID, serviceID, ref string, generation int64) (*bindingEntry, bool) {
 	i.mu.RLock()
 	defer i.mu.RUnlock()
 
-	key := bindingKey{runtimeID: runtimeID, serviceID: serviceID, ref: ref}
+	key := bindingKey{runtimeID: runtimeID, serviceID: serviceID, generation: generation, ref: ref}
 	entry, ok := i.byKey[key]
-	return entry, ok
+	if !ok {
+		return nil, false
+	}
+	return entry, true
 }
 
 func (i *LeaseBindingIndex) LookupByLease(leaseID kernelsecret.LeaseID) (*bindingEntry, bool) {
@@ -142,6 +155,20 @@ func (i *LeaseBindingIndex) ActiveLeasesByExtension(extensionID string) []kernel
 	return leases
 }
 
+func (i *LeaseBindingIndex) ActiveLeasesByGeneration(runtimeID string, generation int64) []kernelsecret.LeaseID {
+	i.mu.RLock()
+	defer i.mu.RUnlock()
+
+	genKey := fmt.Sprintf("%s/%d", runtimeID, generation)
+	leases := make([]kernelsecret.LeaseID, 0, len(i.byGeneration[genKey]))
+	for l := range i.byGeneration[genKey] {
+		if entry, ok := i.byLease[l]; ok && !entry.Revoked {
+			leases = append(leases, l)
+		}
+	}
+	return leases
+}
+
 func (i *LeaseBindingIndex) MarkRevoked(leaseID kernelsecret.LeaseID) bool {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -163,6 +190,7 @@ func (i *LeaseBindingIndex) Clear() {
 	i.byLease = make(map[kernelsecret.LeaseID]*bindingEntry)
 	i.byRuntime = make(map[string]map[bindingKey]struct{})
 	i.byService = make(map[string]map[kernelsecret.LeaseID]struct{})
+	i.byGeneration = make(map[string]map[kernelsecret.LeaseID]struct{})
 }
 
 func defaultClock() int64 {

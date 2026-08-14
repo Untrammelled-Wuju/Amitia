@@ -1,8 +1,0 @@
-{
-  "schemaVersion": 1,
-  "taskId": "B43",
-  "lateSuccessAfterCancelAccepted": 0,
-  "lateFailureOverridesCancelled": 0,
-  "lateStreamEventAfterCancelled": 0,
-  "lateResultSideEffectReclassification": 0
-}

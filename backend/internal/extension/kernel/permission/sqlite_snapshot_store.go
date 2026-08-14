@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 type SQLitePermissionSnapshotStore struct {
@@ -53,8 +55,10 @@ func (s *SQLitePermissionSnapshotStore) SaveSnapshot(ctx context.Context, snap P
 		INSERT INTO kernel_permission_snapshots
 		(snapshot_id, session_id, extension_id, module_id, generation,
 		 character_id, conversation_id, resource_ids, granted_perms, granted_scopes,
-		 created_at, expires_at, revoked_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		 created_at, expires_at, revoked_at,
+		 execution_placement, execution_user_id, execution_device_id, execution_runtime_id,
+		 provider_id, provider_instance_id, execution_binding_key)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(snapshot_id) DO UPDATE SET
 		 session_id = excluded.session_id,
 		 extension_id = excluded.extension_id,
@@ -67,11 +71,20 @@ func (s *SQLitePermissionSnapshotStore) SaveSnapshot(ctx context.Context, snap P
 		 granted_scopes = excluded.granted_scopes,
 		 created_at = excluded.created_at,
 		 expires_at = excluded.expires_at,
-		 revoked_at = excluded.revoked_at
+		 revoked_at = excluded.revoked_at,
+		 execution_placement = excluded.execution_placement,
+		 execution_user_id = excluded.execution_user_id,
+		 execution_device_id = excluded.execution_device_id,
+		 execution_runtime_id = excluded.execution_runtime_id,
+		 provider_id = excluded.provider_id,
+		 provider_instance_id = excluded.provider_instance_id,
+		 execution_binding_key = excluded.execution_binding_key
 	`,
 		snap.SnapshotID, snap.SessionID, snap.ExtensionID, snap.ModuleID, snap.Generation,
 		snap.CharacterID, snap.ConversationID, resourceIDs, grantedPerms, grantedScopes,
 		snap.CreatedAt, expiresAt, revokedAt,
+		snap.ExecutionPlacement.String(), snap.UserID.String(), snap.DeviceID.String(), snap.RuntimeID.String(),
+		snap.ProviderID, snap.ProviderInstanceID, snap.ExecutionBindingKey,
 	)
 	if err != nil {
 		return fmt.Errorf("sqlite: save permission snapshot: %w", err)
@@ -84,13 +97,19 @@ func (s *SQLitePermissionSnapshotStore) GetSnapshot(ctx context.Context, snapsho
 		SELECT snapshot_id, session_id, extension_id, module_id, generation,
 		 COALESCE(character_id, ''), COALESCE(conversation_id, ''),
 		 COALESCE(resource_ids, ''), COALESCE(granted_perms, ''), COALESCE(granted_scopes, ''),
-		 created_at, expires_at, revoked_at
+		 created_at, expires_at, revoked_at,
+		 COALESCE(execution_placement, ''), COALESCE(execution_user_id, ''),
+		 COALESCE(execution_device_id, ''), COALESCE(execution_runtime_id, ''),
+		 COALESCE(provider_id, ''), COALESCE(provider_instance_id, ''),
+		 COALESCE(execution_binding_key, '')
 		FROM kernel_permission_snapshots
 		WHERE snapshot_id = ?
 	`, snapshotID)
 
 	var snap PermissionSnapshot
 	var resourceIDs, grantedPerms, grantedScopes string
+	var executionPlacement, executionUserID, executionDeviceID, executionRuntimeID string
+	var providerID, providerInstanceID, executionBindingKey string
 	var expiresAt, revokedAt sql.NullTime
 
 	err := row.Scan(
@@ -98,6 +117,8 @@ func (s *SQLitePermissionSnapshotStore) GetSnapshot(ctx context.Context, snapsho
 		&snap.CharacterID, &snap.ConversationID,
 		&resourceIDs, &grantedPerms, &grantedScopes,
 		&snap.CreatedAt, &expiresAt, &revokedAt,
+		&executionPlacement, &executionUserID, &executionDeviceID, &executionRuntimeID,
+		&providerID, &providerInstanceID, &executionBindingKey,
 	)
 	if err != nil {
 		return PermissionSnapshot{}, fmt.Errorf("%w: %v", ErrPermissionSnapshotNotFound, err)
@@ -105,6 +126,13 @@ func (s *SQLitePermissionSnapshotStore) GetSnapshot(ctx context.Context, snapsho
 	snap.ResourceIDs = unmarshalStringList(resourceIDs)
 	snap.GrantedPerms = unmarshalStringList(grantedPerms)
 	snap.GrantedScopes = unmarshalStringList(grantedScopes)
+	snap.ExecutionPlacement = ParseExecutionPlacement(executionPlacement)
+	snap.UserID = runtimeidentity.ParseUserID(executionUserID)
+	snap.DeviceID = runtimeidentity.ParseDeviceID(executionDeviceID)
+	snap.RuntimeID = runtimeidentity.ParseRuntimeID(executionRuntimeID)
+	snap.ProviderID = providerID
+	snap.ProviderInstanceID = providerInstanceID
+	snap.ExecutionBindingKey = executionBindingKey
 	if expiresAt.Valid {
 		t := expiresAt.Time
 		snap.ExpiresAt = &t

@@ -29,63 +29,63 @@ import '../models/worldbook.dart';
 import '../models/reminder.dart';
 import '../models/model_config.dart';
 
-BackendServiceApi _getServiceApi(Ref ref) {
+BackendServiceApi _getDynamicServiceApi(Ref ref) {
   return ref.read(backendServiceProvider);
 }
 
-final authServiceProvider = Provider<AuthService>((ref) => AuthService(_getServiceApi(ref)));
+final authServiceProvider = Provider<AuthService>((ref) => AuthService(_getDynamicServiceApi(ref)));
 
-final characterServiceProvider = Provider<CharacterService>((ref) => CharacterService(_getServiceApi(ref)));
+final characterServiceProvider = Provider<CharacterService>((ref) => CharacterService(_getDynamicServiceApi(ref)));
 
-final characterDetailServiceProvider = Provider<CharacterDetailService>((ref) => CharacterDetailService(_getServiceApi(ref)));
+final characterDetailServiceProvider = Provider<CharacterDetailService>((ref) => CharacterDetailService(_getDynamicServiceApi(ref)));
 
-final chatServiceProvider = Provider<ChatService>((ref) => ChatService(_getServiceApi(ref)));
+final chatServiceProvider = Provider<ChatService>((ref) => ChatService(_getDynamicServiceApi(ref)));
 
-final memoryServiceProvider = Provider<MemoryService>((ref) => MemoryService(_getServiceApi(ref)));
+final memoryServiceProvider = Provider<MemoryService>((ref) => MemoryService(_getDynamicServiceApi(ref)));
 
-final profileServiceProvider = Provider<ProfileService>((ref) => ProfileService(_getServiceApi(ref)));
+final profileServiceProvider = Provider<ProfileService>((ref) => ProfileService(_getDynamicServiceApi(ref)));
 
-final episodicServiceProvider = Provider<EpisodicService>((ref) => EpisodicService(_getServiceApi(ref)));
+final episodicServiceProvider = Provider<EpisodicService>((ref) => EpisodicService(_getDynamicServiceApi(ref)));
 
-final worldBookServiceProvider = Provider<WorldBookService>((ref) => WorldBookService(_getServiceApi(ref)));
+final worldBookServiceProvider = Provider<WorldBookService>((ref) => WorldBookService(_getDynamicServiceApi(ref)));
 
-final reminderServiceProvider = Provider<ReminderService>((ref) => ReminderService(_getServiceApi(ref)));
+final reminderServiceProvider = Provider<ReminderService>((ref) => ReminderService(_getDynamicServiceApi(ref)));
 
-final companionServiceProvider = Provider<CompanionService>((ref) => CompanionService(_getServiceApi(ref)));
+final companionServiceProvider = Provider<CompanionService>((ref) => CompanionService(_getDynamicServiceApi(ref)));
 
-final modelConfigServiceProvider = Provider<ModelConfigService>((ref) => ModelConfigService(_getServiceApi(ref)));
+final modelConfigServiceProvider = Provider<ModelConfigService>((ref) => ModelConfigService(_getDynamicServiceApi(ref)));
 
-final feedbackServiceProvider = Provider<FeedbackService>((ref) => FeedbackService(_getServiceApi(ref)));
+final feedbackServiceProvider = Provider<FeedbackService>((ref) => FeedbackService(_getDynamicServiceApi(ref)));
 
-final ttsServiceProvider = Provider<TTSService>((ref) => TTSService(_getServiceApi(ref)));
+final ttsServiceProvider = Provider<TTSService>((ref) => TTSService(_getDynamicServiceApi(ref)));
 
-final asrServiceProvider = Provider<ASRService>((ref) => ASRService(_getServiceApi(ref)));
+final asrServiceProvider = Provider<ASRService>((ref) => ASRService(_getDynamicServiceApi(ref)));
 
-final extensionServiceProvider = Provider<ExtensionService>((ref) => ExtensionService(_getServiceApi(ref)));
+final extensionServiceProvider = Provider<ExtensionService>((ref) => ExtensionService(_getDynamicServiceApi(ref)));
 
-final systemServiceProvider = Provider<SystemService>((ref) => SystemService(_getServiceApi(ref)));
+final systemServiceProvider = Provider<SystemService>((ref) => SystemService(_getDynamicServiceApi(ref)));
 
-final safetyServiceProvider = Provider<SafetyService>((ref) => SafetyService(_getServiceApi(ref)));
+final safetyServiceProvider = Provider<SafetyService>((ref) => SafetyService(_getDynamicServiceApi(ref)));
 
-final mcpServiceProvider = Provider<MCPService>((ref) => MCPService(_getServiceApi(ref)));
+final mcpServiceProvider = Provider<MCPService>((ref) => MCPService(_getDynamicServiceApi(ref)));
 
-final qqServiceProvider = Provider<QQService>((ref) => QQService(_getServiceApi(ref)));
+final qqServiceProvider = Provider<QQService>((ref) => QQService(_getDynamicServiceApi(ref)));
 
-final imageGenServiceProvider = Provider<ImageGenService>((ref) => ImageGenService(_getServiceApi(ref)));
+final imageGenServiceProvider = Provider<ImageGenService>((ref) => ImageGenService(_getDynamicServiceApi(ref)));
 
-final visionServiceProvider = Provider<VisionService>((ref) => VisionService(_getServiceApi(ref)));
+final visionServiceProvider = Provider<VisionService>((ref) => VisionService(_getDynamicServiceApi(ref)));
 
-final embeddingServiceProvider = Provider<EmbeddingService>((ref) => EmbeddingService(_getServiceApi(ref)));
+final embeddingServiceProvider = Provider<EmbeddingService>((ref) => EmbeddingService(_getDynamicServiceApi(ref)));
 
-final emoteServiceProvider = Provider<EmoteService>((ref) => EmoteService(_getServiceApi(ref)));
+final emoteServiceProvider = Provider<EmoteService>((ref) => EmoteService(_getDynamicServiceApi(ref)));
 
-final proactiveServiceProvider = Provider<ProactiveService>((ref) => ProactiveService(_getServiceApi(ref)));
+final proactiveServiceProvider = Provider<ProactiveService>((ref) => ProactiveService(_getDynamicServiceApi(ref)));
 
-final temporalServiceProvider = Provider<temporal_config.TemporalService>((ref) => temporal_config.TemporalService(_getServiceApi(ref)));
+final temporalServiceProvider = Provider<temporal_config.TemporalService>((ref) => temporal_config.TemporalService(_getDynamicServiceApi(ref)));
 
-final workspaceServiceProvider = Provider<WorkspaceService>((ref) => WorkspaceService(_getServiceApi(ref)));
+final workspaceServiceProvider = Provider<WorkspaceService>((ref) => WorkspaceService(_getDynamicServiceApi(ref)));
 
-final moodServiceProvider = Provider<MoodService>((ref) => MoodService(_getServiceApi(ref)));
+final moodServiceProvider = Provider<MoodService>((ref) => MoodService(_getDynamicServiceApi(ref)));
 
 final authStateProvider = FutureProvider<bool>((ref) async {
   final auth = ref.read(authServiceProvider);

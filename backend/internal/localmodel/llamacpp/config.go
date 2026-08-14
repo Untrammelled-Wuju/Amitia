@@ -41,6 +41,7 @@ type LlamaCppEmbeddingConfig struct {
 	DocumentPrefix   string `json:"documentPrefix,omitempty"`
 	Truncate         bool   `json:"truncate,omitempty"`
 	ResourceURI      string `json:"resourceUri,omitempty"`
+	MMap             bool   `json:"mmap,omitempty"`
 }
 
 func ParseProviderConfig(rawJSON string) (LlamaCppProviderConfig, error) {

@@ -10,16 +10,17 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/middleware/security"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 )
 
 type Identity struct {
 	ID                string
-	UserID            string
-	DeviceID          string
+	UserID            runtimeidentity.UserID
+	DeviceID          runtimeidentity.DeviceID
 	DesktopInstanceID string
-	Platform          string
+	Platform          runtimeidentity.Platform
 	AppVersion        string
 	Status            string
 	FirstSeenAt       string
@@ -29,6 +30,13 @@ type Identity struct {
 
 func (Identity) TableName() string {
 	return "desktop_pet_devices"
+}
+
+func (i Identity) RuntimeIdentity() runtimeidentity.Identity {
+	return runtimeidentity.Identity{
+		UserID:   i.UserID,
+		DeviceID: i.DeviceID,
+	}
 }
 
 type Repository struct {
@@ -93,34 +101,24 @@ func (
 	result := r.db.WithContext(ctx).
 		Clauses(
 			clause.OnConflict{
-				Columns:
-					[]clause.Column{
-						{
-							Name:
-								"user_id",
-						},
-						{
-							Name:
-								"device_id",
-						},
+				Columns: []clause.Column{
+					{
+						Name: "user_id",
 					},
-				DoUpdates:
-					clause.Assignments(
-						map[string]any{
-							"desktop_instance_id":
-								identity.DesktopInstanceID,
-							"platform":
-								identity.Platform,
-							"app_version":
-								identity.AppVersion,
-							"status":
-								"active",
-							"last_seen_at":
-								now,
-							"revoked_at":
-								"",
-						},
-					),
+					{
+						Name: "device_id",
+					},
+				},
+				DoUpdates: clause.Assignments(
+					map[string]any{
+						"desktop_instance_id": identity.DesktopInstanceID,
+						"platform":            identity.Platform,
+						"app_version":         identity.AppVersion,
+						"status":              "active",
+						"last_seen_at":        now,
+						"revoked_at":          "",
+					},
+				),
 			},
 		).
 		Create(&identity)

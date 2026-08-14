@@ -1,7 +1,0 @@
-{
-  "schemaVersion": 1,
-  "taskId": "B39",
-  "nextStep": "B54",
-  "b39Baseline": "Register rejects duplicates; Replace allows only same-owner update; Batch* guarantees atomicity.",
-  "observationForB54": "B39 already guarantees no duplicate active definition. B54 should extend idempotency semantics at the invocation layer (e.g. same idempotency key -> cached result) which is outside registry identity scope."
-}

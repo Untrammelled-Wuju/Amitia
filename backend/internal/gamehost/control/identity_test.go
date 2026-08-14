@@ -12,10 +12,24 @@ func TestPluginOutputGate_RuntimeSpoofDenied(t *testing.T) {
 	topo := NewFakeTopology()
 	topo.RegisterRuntime("rt-victim", "plugin-victim")
 
-	gate := NewPluginOutputGate(PluginOutputGateOptions{
-		Clock:    func() time.Time { return time.Now().UTC() },
-		Topology: topo,
+	gen := NewFakeGenerationReader()
+	mgr := NewControlAuthorityManager(ControlAuthorityManagerOptions{})
+
+	gate, err := NewPluginOutputGate(PluginOutputGateOptions{
+		Clock:            func() time.Time { return time.Now().UTC() },
+		Topology:         topo,
+		RuntimeReader:    NewFakeRuntimeReader(),
+		GenerationReader: gen,
+		PermChecker:      NewFakeEffPermChecker(),
+		PolicyChecker:    NoopHostPolicyChecker{},
+		Authority:        mgr,
+		Audit:            NewInMemoryAuthorityAuditSink(),
+		Metrics:          NewFakeMetrics(),
+		CommitBarrier:    NoopCommitBarrier{},
 	})
+	if err != nil {
+		t.Fatalf("failed to create gate: %v", err)
+	}
 
 	req := OutputCheckRequest{
 		Intent: ControlOutputIntent{
@@ -25,8 +39,9 @@ func TestPluginOutputGate_RuntimeSpoofDenied(t *testing.T) {
 			Kind:           KindCustomRPC,
 		},
 		Peer: TrustedPluginIdentity{
-			PluginID:  "plugin-evil",
-			RuntimeID: "rt-victim",
+			PluginID:   "plugin-evil",
+			RuntimeID:  "rt-victim",
+			Generation: 1,
 		},
 	}
 
@@ -44,10 +59,24 @@ func TestPluginOutputGate_ServiceSpoofDenied(t *testing.T) {
 	topo.RegisterRuntime("rt-1", "plugin-1")
 	topo.RegisterService("rt-1", "svc-real")
 
-	gate := NewPluginOutputGate(PluginOutputGateOptions{
-		Clock:    func() time.Time { return time.Now().UTC() },
-		Topology: topo,
+	gen := NewFakeGenerationReader()
+	mgr := NewControlAuthorityManager(ControlAuthorityManagerOptions{})
+
+	gate, err := NewPluginOutputGate(PluginOutputGateOptions{
+		Clock:            func() time.Time { return time.Now().UTC() },
+		Topology:         topo,
+		RuntimeReader:    NewFakeRuntimeReader(),
+		GenerationReader: gen,
+		PermChecker:      NewFakeEffPermChecker(),
+		PolicyChecker:    NoopHostPolicyChecker{},
+		Authority:        mgr,
+		Audit:            NewInMemoryAuthorityAuditSink(),
+		Metrics:          NewFakeMetrics(),
+		CommitBarrier:    NoopCommitBarrier{},
 	})
+	if err != nil {
+		t.Fatalf("failed to create gate: %v", err)
+	}
 
 	req := OutputCheckRequest{
 		Intent: ControlOutputIntent{
@@ -58,9 +87,10 @@ func TestPluginOutputGate_ServiceSpoofDenied(t *testing.T) {
 			Kind:           KindCustomRPC,
 		},
 		Peer: TrustedPluginIdentity{
-			PluginID:  "plugin-1",
-			RuntimeID: "rt-1",
-			ServiceID: "svc-real",
+			PluginID:   "plugin-1",
+			RuntimeID:  "rt-1",
+			ServiceID:  "svc-real",
+			Generation: 1,
 		},
 	}
 
@@ -71,9 +101,24 @@ func TestPluginOutputGate_ServiceSpoofDenied(t *testing.T) {
 }
 
 func TestPluginOutputGate_EmptyPeerIdentityDenied(t *testing.T) {
-	gate := NewPluginOutputGate(PluginOutputGateOptions{
-		Clock: func() time.Time { return time.Now().UTC() },
+	gen := NewFakeGenerationReader()
+	mgr := NewControlAuthorityManager(ControlAuthorityManagerOptions{})
+
+	gate, err := NewPluginOutputGate(PluginOutputGateOptions{
+		Clock:            func() time.Time { return time.Now().UTC() },
+		Topology:         NewFakeTopology(),
+		RuntimeReader:    NewFakeRuntimeReader(),
+		GenerationReader: gen,
+		PermChecker:      NewFakeEffPermChecker(),
+		PolicyChecker:    NoopHostPolicyChecker{},
+		Authority:        mgr,
+		Audit:            NewInMemoryAuthorityAuditSink(),
+		Metrics:          NewFakeMetrics(),
+		CommitBarrier:    NoopCommitBarrier{},
 	})
+	if err != nil {
+		t.Fatalf("failed to create gate: %v", err)
+	}
 
 	req := OutputCheckRequest{
 		Intent: ControlOutputIntent{
@@ -102,16 +147,27 @@ func TestPluginOutputGate_WrongPluginID(t *testing.T) {
 	topo := NewFakeTopology()
 	topo.RegisterRuntime("rt-1", "plugin-real")
 
+	gen := NewFakeGenerationReader()
+	gen.SetGeneration("rt-1", 1)
+
 	auth := NewFakeAuthorityReader()
 	auth.SetSnapshot("rt-1", domain.ControlModePluginControl, 5)
 
-	gate := NewPluginOutputGate(PluginOutputGateOptions{
-		Clock:         func() time.Time { return time.Now().UTC() },
-		Topology:      topo,
-		RuntimeReader: rt,
-		PermChecker:   NewFakeEffPermChecker(),
-		Authority:     auth,
+	gate, err := NewPluginOutputGate(PluginOutputGateOptions{
+		Clock:            func() time.Time { return time.Now().UTC() },
+		Topology:         topo,
+		RuntimeReader:    rt,
+		GenerationReader: gen,
+		PermChecker:      NewFakeEffPermChecker(),
+		PolicyChecker:    NoopHostPolicyChecker{},
+		Authority:        auth,
+		Audit:            NewInMemoryAuthorityAuditSink(),
+		Metrics:          NewFakeMetrics(),
+		CommitBarrier:    NoopCommitBarrier{},
 	})
+	if err != nil {
+		t.Fatalf("failed to create gate: %v", err)
+	}
 
 	req := OutputCheckRequest{
 		Intent: newTestOutputIntent("rt-1", "", 5),

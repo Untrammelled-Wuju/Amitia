@@ -4,10 +4,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/deviceruntime/protocol"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/log"
 )
 
@@ -15,21 +18,21 @@ var (
 	ErrConnectionClosed = errors.New("connection closed")
 )
 
-type ConnectionState string
+type ConnectionState = protocol.ConnectionState
 
 const (
-	ConnStateHandshake ConnectionState = "handshake"
-	ConnStateConnected ConnectionState = "connected"
-	ConnStateDegraded  ConnectionState = "degraded"
-	ConnStateClosing   ConnectionState = "closing"
-	ConnStateClosed    ConnectionState = "closed"
+	ConnStateHandshake = protocol.ConnectionStateHandshake
+	ConnStateConnected = protocol.ConnectionStateConnected
+	ConnStateDegraded  = protocol.ConnectionStateDegraded
+	ConnStateClosing   = protocol.ConnectionStateClosing
+	ConnStateClosed    = protocol.ConnectionStateClosed
 )
 
 type Connection struct {
 	ID        string
-	UserID    string
-	DeviceID  string
-	RuntimeID string
+	UserID    runtimeidentity.UserID
+	DeviceID  runtimeidentity.DeviceID
+	RuntimeID runtimeidentity.RuntimeID
 	SessionID string
 	State     ConnectionState
 	LastSeq   int64
@@ -49,6 +52,21 @@ func (c *Connection) SetState(s ConnectionState) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.State = s
+}
+
+func (c *Connection) SessionIdentity() protocol.SessionIdentity {
+	return protocol.SessionIdentity{
+		UserID:           c.UserID,
+		DeviceID:         c.DeviceID,
+		RuntimeID:        c.RuntimeID,
+		RuntimeSessionID: runtimeidentity.ParseRuntimeSessionID(c.SessionID),
+	}
+}
+
+func (c *Connection) TouchHeartbeat(now time.Time) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.LastBeat = now
 }
 
 type Handler struct {
@@ -71,11 +89,24 @@ func NewHandler(services *Services) *Handler {
 	}
 }
 
-func (h *Handler) HandleConnect(userID, deviceID, runtimeID string) (*Connection, error) {
+func RuntimeConnectionKey(
+	userID runtimeidentity.UserID,
+	deviceID runtimeidentity.DeviceID,
+	runtimeID runtimeidentity.RuntimeID,
+) string {
+	parts := []string{
+		strings.TrimSpace(userID.String()),
+		strings.TrimSpace(deviceID.String()),
+		strings.TrimSpace(runtimeID.String()),
+	}
+	return strings.Join(parts, "\x00")
+}
+
+func (h *Handler) HandleConnect(userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (*Connection, error) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 
-	key := userID + ":" + deviceID + ":" + runtimeID
+	key := RuntimeConnectionKey(userID, deviceID, runtimeID)
 	if existing, ok := h.connections[key]; ok && existing.GetState() == ConnStateConnected {
 		_ = h.sessions.SupersedeSession(existing.SessionID, "new_connection")
 	}
@@ -130,7 +161,7 @@ func (h *Handler) HandleHello(conn *Connection, payload *HelloPayload) (*HelloAc
 		SessionID:       newSession.ID,
 		ServerTime:      time.Now(),
 		DesiredRevision: newSession.LastAppliedDesiredRevision,
-		ResumeMode:      "resume_or_full",
+		ResumeMode:      string(protocol.ResumeModeResumeOrFull),
 	}, nil
 }
 
@@ -223,42 +254,38 @@ func (h *Handler) HandleHeartbeat(conn *Connection) error {
 		return ErrConnectionClosed
 	}
 
-	now := time.Now()
-	conn.LastBeat = now
-
+	conn.TouchHeartbeat(time.Now())
 	return h.sessions.UpdateLastHeartbeat(conn.SessionID)
 }
 
-func (h *Handler) CreateEnvelope(msgType MessageType, msgName, runtimeID, sessionID string, payload interface{}, userID, deviceID string) (*Envelope, error) {
+func (h *Handler) CreateEnvelope(msgType MessageType, msgName string, runtimeID runtimeidentity.RuntimeID, sessionID runtimeidentity.RuntimeSessionID, payload interface{}, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID) (*Envelope, error) {
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return nil, fmt.Errorf("marshal payload failed: %v", err)
 	}
 
-	env := &Envelope{
-		EnvelopeVersion:      EnvelopeVersion,
-		Protocol:             ProtocolName,
+	coreEnv, err := protocol.BuildEnvelope(protocol.EnvelopeInput{
+		Descriptor:           Descriptor,
 		MessageType:          msgType,
 		MessageName:          msgName,
 		MessageID:            "msg_" + uuid.NewString(),
-		UserID:               userID,
-		DeviceID:             deviceID,
-		RuntimeID:            runtimeID,
-		RuntimeSessionID:     sessionID,
+		Identity:             protocol.SessionIdentity{UserID: userID, DeviceID: deviceID, RuntimeID: runtimeID, RuntimeSessionID: sessionID},
 		ConnectionGeneration: 1,
 		Sequence:             0,
 		PayloadSchemaVersion: 1,
-		PayloadHash:          ComputePayloadHash(payloadBytes),
 		SentAt:               time.Now(),
 		Payload:              payloadBytes,
+	})
+	if err != nil {
+		return nil, err
 	}
 
-	return env, nil
+	return (*Envelope)(coreEnv), nil
 }
 
-func (h *Handler) GetConnection(userID, deviceID, runtimeID string) *Connection {
+func (h *Handler) GetConnection(userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) *Connection {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
-	key := userID + ":" + deviceID + ":" + runtimeID
+	key := RuntimeConnectionKey(userID, deviceID, runtimeID)
 	return h.connections[key]
 }

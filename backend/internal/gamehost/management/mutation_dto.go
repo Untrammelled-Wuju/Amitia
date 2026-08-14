@@ -4,9 +4,13 @@ type PackageInstallRequest struct {
 	ArchivePath string `json:"archivePath" binding:"required"`
 }
 
+type PackageUpdateBody struct {
+	ArchivePath string `json:"archivePath"`
+}
+
 type PackageUpdateRequest struct {
-	ExtensionID string `json:"extensionId" binding:"required"`
-	ArchivePath string `json:"archivePath" binding:"required"`
+	ExtensionID string `json:"-"`
+	ArchivePath string `json:"archivePath"`
 }
 
 type PackageEnableRequest struct {

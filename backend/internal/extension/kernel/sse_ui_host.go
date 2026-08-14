@@ -46,7 +46,7 @@ func NewSSEUIHostNotifierWithRegistry(hub *sse.Hub, registry *host_registry.Host
 
 func (n *SSEUIHostNotifier) Notify(ctx context.Context, extensionID string, title string, body string, severity string) error {
 	if n.hostRegistry != nil {
-		target, err := n.hostRegistry.FindTargetHost(ctx, "", host_registry.CapUINotify, "", "")
+		target, err := n.hostRegistry.FindTargetHostString(ctx, "", host_registry.CapUINotify, "", "")
 		if err != nil {
 			return err
 		}
@@ -93,7 +93,7 @@ func (n *SSEUIHostNotifier) Dialog(ctx context.Context, extensionID string, dial
 	}
 
 	if n.hostRegistry != nil {
-		target, err := n.hostRegistry.FindTargetHost(ctx, "", host_registry.CapUIDialog, "", "")
+		target, err := n.hostRegistry.FindTargetHostString(ctx, "", host_registry.CapUIDialog, "", "")
 		if err != nil {
 			return "", err
 		}
@@ -157,7 +157,7 @@ func (n *SSEUIHostNotifier) Dialog(ctx context.Context, extensionID string, dial
 
 func (n *SSEUIHostNotifier) Navigate(ctx context.Context, extensionID string, target string) error {
 	if n.hostRegistry != nil {
-		host, err := n.hostRegistry.FindTargetHost(ctx, "", host_registry.CapUINavigate, "", "")
+		host, err := n.hostRegistry.FindTargetHostString(ctx, "", host_registry.CapUINavigate, "", "")
 		if err != nil {
 			return err
 		}

@@ -1,5 +1,0 @@
-{
-  "changes": [],
-  "note": "Frozen Mode = REUSE + EXTEND. B48 未做源码修改: 现有 ResourceLimits/ResultValidator/JS 资源投影已构成部分满足; 缺失项 (pre-dispatch gate, central resolution, usage collection, B47 projection) 递延到 B141 cutover.",
-  "createsNewResourceRuntime": false
-}

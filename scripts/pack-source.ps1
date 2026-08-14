@@ -1,56 +1,89 @@
-param([switch]$NoZip)
-$ErrorActionPreference = "SilentlyContinue"
-$repo = $PSScriptRoot | Split-Path -Parent
-$stage = "$env:TEMP\U-Ai-pkg"
-$zip  = Join-Path $repo "U-Ai-source.zip"
+param(
+    [string]$OutputName = "U-Ai-source"
+)
 
-if (Test-Path $stage) { Remove-Item $stage -Recurse -Force }
-if (Test-Path $zip)   { Remove-Item $zip -Force }
-$null = New-Item -ItemType Directory -Path $stage -Force
+$scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $PSCommandPath }
+$workspace = Split-Path -Parent $scriptDir
+$parentDir = Split-Path $workspace -Parent
+$folderName = Split-Path $workspace -Leaf
+$outputFile = Join-Path $workspace "$OutputName.tar.gz"
 
-$skipExt = @('.exe','.dll','.pdb','.zip','.tar','.tar.xz','.exe~','.bak','.bin','.dat','.db','.log','.so','.map','.node','.wasm','.lock')
-$skipName = @('.DS_Store','Thumbs.db','go.sum','.metadata')
+if (Test-Path $outputFile) { Remove-Item $outputFile -Force }
 
-function Copy-Tree {
-    param($Src, $Dst, [string[]]$ExtraSkip = @())
-    if (-not (Test-Path $Dst)) { $null = New-Item -ItemType Directory -Path $Dst -Force }
-    foreach ($item in Get-ChildItem -LiteralPath $Src -Force -ErrorAction SilentlyContinue) {
-        if ($item.PSIsContainer) {
-            if ($item.Attributes -match 'ReparsePoint') { continue }
-            if ($item.Name -in @('node_modules','dist','build','.dart_tool','.gradle','.cxx','.kotlin') -or $item.Name -in $ExtraSkip) { continue }
-            Copy-Tree -Src $item.FullName -Dst (Join-Path $Dst $item.Name) -ExtraSkip $ExtraSkip
-        } else {
-            if ($item.Attributes -match 'ReparsePoint') { continue }
-            if ($skipExt -contains $item.Extension) { continue }
-            if ($skipName -contains $item.Name)     { continue }
-            Copy-Item -LiteralPath $item.FullName -Destination $Dst -Force
-        }
-    }
-}
+$excludes = @(
+    "--exclude=node_modules"
+    "--exclude=.git"
+    "--exclude=*.exe"
+    "--exclude=*.log"
+    "--exclude=dist"
+    "--exclude=build"
+    "--exclude=release"
+    "--exclude=*.db"
+    "--exclude=*.db-shm"
+    "--exclude=*.db-wal"
+    "--exclude=*.db-journal"
+    "--exclude=qdrant/storage"
+    "--exclude=surrealdb/surreal.exe"
+    "--exclude=desktop/release"
+    "--exclude=desktop/build"
+    "--exclude=desktop/dist-types"
+    "--exclude=desktop/resources/core"
+    "--exclude=sdk/plugin-sdk/dist"
+    "--exclude=sdk/plugin-sdk/node_modules"
+    "--exclude=*.pyc"
+    "--exclude=__pycache__"
+    "--exclude=.DS_Store"
+    "--exclude=Thumbs.db"
+    "--exclude=*.bak"
+    "--exclude=*.tmp"
+    "--exclude=*.orig"
+    "--exclude=.vscode"
+    "--exclude=.idea"
+    "--exclude=.env"
+    "--exclude=.env.local"
+    "--exclude=.publish-config.json"
+    "--exclude=backend/data"
+    "--exclude=backend/cmd/data"
+    "--exclude=data"
+    "--exclude=logs"
+    "--exclude=runtime/out"
+    "--exclude=backend/server_linux_amd64"
+    "--exclude=backend/server_linux_arm64"
+    "--exclude=backend/server"
+    "--exclude=backend/surrealdb/surreal.zip"
+    "--exclude=backend/qdrant/qdrant.zip"
+    "--exclude=backend/node/node.exe.zip"
+    "--exclude=desktop/resources/qdrant/qdrant.zip"
+    "--exclude=desktop/resources/surrealdb/surrealdb/surreal.zip"
+    "--exclude=desktop/resources/surrealdb/surreal.zip"
+    "--exclude=desktop/resources/core/node/node.zip"
+    "--exclude=mobile_app/android/app/src/main/assets/runtime-package"
+    "--exclude=backend/server.exe"
+    "--exclude=backend/server.exe~"
+    "--exclude=backend/cmd/server/server.exe"
+    "--exclude=backend/cmd/server/backend.exe"
+    "--exclude=backend/cmd/server/backend"
+    "--exclude=backend/amitia-ext.exe"
+    "--exclude=backend/amitiax.exe"
+    "--exclude=backend/extension.test.exe"
+    "--exclude=backend/kernel.test.exe"
+    "--exclude=backend/legacy-package-migrate.exe"
+    "--exclude=backend/worker.test.exe"
+    "--exclude=backend/server_*.exe"
+    "--exclude=*.tar"
+    "--exclude=AmitiaData"
+)
 
-Write-Host "Front..." -Fore Yellow
-Copy-Tree -Src (Join-Path $repo 'front') -Dst (Join-Path $stage 'front')
+Set-Location $parentDir
 
-Write-Host "Flutter..." -Fore Yellow
-Copy-Tree -Src (Join-Path $repo 'mobile_app\lib')    -Dst (Join-Path $stage 'mobile_app\lib')
-Copy-Tree -Src (Join-Path $repo 'mobile_app\test')   -Dst (Join-Path $stage 'mobile_app\test')
-Copy-Tree -Src (Join-Path $repo 'mobile_app\android') -Dst (Join-Path $stage 'mobile_app\android') -ExtraSkip @('build','app/src/main/assets/runtime-package','intermediates','outputs')
+Write-Host "Packing source: $folderName -> $outputFile"
+$startTime = Get-Date
 
-Write-Host "Backend..." -Fore Yellow
-Copy-Tree -Src (Join-Path $repo 'backend\cmd')      -Dst (Join-Path $stage 'backend\cmd')
-Copy-Tree -Src (Join-Path $repo 'backend\internal') -Dst (Join-Path $stage 'backend\internal')
-Copy-Tree -Src (Join-Path $repo 'backend\pkg')      -Dst (Join-Path $stage 'backend\pkg') -ExtraSkip @('gameplugin/sdk/game-plugin/node_modules')
-Copy-Tree -Src (Join-Path $repo 'backend\scripts')  -Dst (Join-Path $stage 'backend\scripts') -ExtraSkip @('.sidecar-build')
-foreach ($f in @('go.mod','appsettings.json','check_quality_tables.go')) {
-    $s = Join-Path $repo "backend\$f"; if (Test-Path $s) { Copy-Item $s (Join-Path $stage 'backend') -Force }
-}
+& tar -czf $outputFile @excludes $folderName
 
-Write-Host "Desktop..." -Fore Yellow
-Copy-Tree -Src (Join-Path $repo 'desktop') -Dst (Join-Path $stage 'desktop') -ExtraSkip @('dist-types','release','build')
+$elapsed = (Get-Date) - $startTime
+$size = (Get-Item $outputFile).Length
 
-Write-Host "Zipping..." -Fore Yellow
-Compress-Archive -Path "$stage\*" -DestinationPath $zip -CompressionLevel Optimal -Force
-Remove-Item $stage -Recurse -Force
-$z = (Get-Item $zip).Length
-Write-Host "Done: $zip ($([math]::Round($z/1MB,2)) MB)" -Fore Green
-Start-Process explorer.exe $repo
+Write-Host "Done in $($elapsed.ToString('mm\:ss'))"
+Write-Host "Output: $outputFile"
+Write-Host "Size: $([math]::Round($size / 1MB, 2)) MB"

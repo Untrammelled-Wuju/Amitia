@@ -8,15 +8,72 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../core/services/providers.dart';
+import '../../../../core/runtime/runtime_bridge_provider.dart';
+import '../../../../core/runtime/runtime_bridge.dart';
+import '../../../../core/runtime/status/runtime_status_provider.dart';
+import '../../../../core/runtime/status/runtime_status_snapshot.dart';
 import '../../../../shared/models/models.dart';
-import '../../../../core/backend_connection/backend_connection_availability.dart';
-import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
 
-final _runtimeHealthProvider = FutureProvider<Map<String, dynamic>?>((ref) async {
-  final svc = ref.read(systemServiceProvider);
-  return svc.health();
-});
+String _runtimeStateLabel(RuntimeStatusSnapshot status) {
+  if (status.runtimeReady) return '运行中';
+  if (!status.runtimeInstalled) return '未安装';
+  switch (status.runtimeState) {
+    case RuntimeBridgeState.unavailable:
+      return '不可用';
+    case RuntimeBridgeState.notInstalled:
+      return '未安装';
+    case RuntimeBridgeState.stopped:
+      return '已停止';
+    case RuntimeBridgeState.installing:
+      return '安装中';
+    case RuntimeBridgeState.starting:
+      return '正在启动';
+    case RuntimeBridgeState.ready:
+      return '运行中';
+    case RuntimeBridgeState.stopping:
+      return '正在停止';
+    case RuntimeBridgeState.failed:
+      return '运行失败';
+  }
+}
+
+String _backendStateLabel(RuntimeStatusSnapshot status) {
+  if (status.businessAvailable) return '后端可用';
+  if (status.runtimeReady) return '业务连接建立中';
+  if (status.backendConfigured) return '后端已配置';
+  return '后端未就绪';
+}
+
+bool _canStart(RuntimeStatusSnapshot status) {
+  return status.runtimeInstalled &&
+      !status.runtimeReady &&
+      status.runtimeState != RuntimeBridgeState.starting &&
+      status.runtimeState != RuntimeBridgeState.stopping &&
+      status.runtimeState != RuntimeBridgeState.installing &&
+      status.runtimeState != RuntimeBridgeState.failed;
+}
+
+bool _canStop(RuntimeStatusSnapshot status) {
+  return status.runtimeReady || status.runtimeState == RuntimeBridgeState.starting;
+}
+
+bool _canInstall(RuntimeStatusSnapshot status) {
+  return !status.runtimeInstalled &&
+      status.runtimeState != RuntimeBridgeState.installing &&
+      status.runtimeState != RuntimeBridgeState.starting &&
+      status.runtimeState != RuntimeBridgeState.stopping;
+}
+
+bool _canRepair(RuntimeStatusSnapshot status) {
+  return status.runtimeInstalled &&
+      !status.runtimeReady &&
+      status.runtimeState != RuntimeBridgeState.starting &&
+      status.runtimeState != RuntimeBridgeState.stopping &&
+      status.runtimeState != RuntimeBridgeState.installing &&
+      (status.runtimeState == RuntimeBridgeState.failed ||
+          status.runtimeState == RuntimeBridgeState.stopped ||
+          status.phase == RuntimeStatusPhase.degraded);
+}
 
 class RuntimePage extends ConsumerStatefulWidget {
   const RuntimePage({super.key});
@@ -26,80 +83,41 @@ class RuntimePage extends ConsumerStatefulWidget {
 }
 
 class _RuntimePageState extends ConsumerState<RuntimePage> {
-  late String _status;
-  late String _backendStatus;
-  late String _version;
-  late String _storageUsage;
-  late List<RuntimeComponent> _components;
-  bool _initialized = false;
+  bool _commandInFlight = false;
 
-  @override
-  void initState() {
-    super.initState();
-    _status = '';
-    _backendStatus = '';
-    _version = '';
-    _storageUsage = '';
-    _components = [];
-    _loadHealth();
-  }
+  Future<void> _runCommand(
+    Future<RuntimeBridgeCommandResult> Function() action,
+  ) async {
+    if (_commandInFlight) return;
 
-  Future<void> _loadHealth() async {
+    setState(() => _commandInFlight = true);
+
     try {
-      final data = await ref.read(systemServiceProvider).health();
+      final result = await action();
       if (!mounted) return;
-      if (data != null) {
-        setState(() {
-          _status = data['status'] as String? ?? data['runtime_status'] as String? ?? '';
-          _version = data['version'] as String? ?? data['runtime_version'] as String? ?? '';
-          _backendStatus = data['backend'] as String? ?? data['backend_status'] as String? ?? '';
-          _storageUsage = data['storage'] as String? ?? data['storage_usage'] as String? ?? '';
-          final comps = data['components'] as List<dynamic>?;
-          if (comps != null) {
-            _components = comps.map((c) {
-              if (c is Map<String, dynamic>) {
-                return RuntimeComponent(
-                  name: c['name'] as String? ?? '',
-                  status: c['status'] as String? ?? '',
-                );
-              }
-              return RuntimeComponent(name: '', status: '');
-            }).toList().cast<RuntimeComponent>();
-          }
-          _initialized = true;
-        });
-      } else {
-        setState(() => _initialized = true);
+      _showOperationResult(result);
+    } finally {
+      if (mounted) {
+        setState(() => _commandInFlight = false);
       }
-    } catch (_) {
-      if (mounted) setState(() => _initialized = true);
     }
   }
 
-  bool get _isRunning => _status == '运行中' || _status == 'ok' || _status == 'healthy' || _status == '已安装';
-
-  void _start() {
-    setState(() {
-      _status = '运行中';
-      _backendStatus = '后端就绪';
-      _components = _components
-          .map((c) => RuntimeComponent(name: c.name, status: '运行中'))
-          .toList();
-    });
+  void _showOperationResult(RuntimeBridgeCommandResult result) {
+    if (result.error != null) {
+      _showError(result.error!.message);
+    } else if (!result.accepted) {
+      _showError('命令未被接受');
+    }
   }
 
-  void _stop() {
-    setState(() {
-      _status = '已停止';
-      _backendStatus = '后端未就绪';
-      _components = _components
-          .map((c) => RuntimeComponent(name: c.name, status: '已停止'))
-          .toList();
-    });
-    ref.read(backendConnectionRepositoryProvider).invalidate();
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), duration: const Duration(seconds: 2)),
+    );
   }
 
-  void _snack(String message) {
+  void _showInfo(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text(message), duration: const Duration(seconds: 1)),
     );
@@ -107,25 +125,22 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
 
   @override
   Widget build(BuildContext context) {
-    final connectionAsync = ref.watch(backendConnectionProvider);
-    final effectiveBackendStatus = connectionAsync.when(
-      data: (avail) => avail is BackendConnectionAvailable ? '后端就绪' : '后端未就绪',
-      loading: () => '检查中...',
-      error: (_, __) => '后端未就绪',
-    );
-    _backendStatus = effectiveBackendStatus;
+    final statusAsync = ref.watch(runtimeStatusSnapshotProvider);
 
+    return statusAsync.when(
+      data: (status) => _buildContent(context, status),
+      loading: () => const _RuntimeLoadingWidget(),
+      error: (_, __) => const _RuntimeErrorWidget(),
+    );
+  }
+
+  Widget _buildContent(BuildContext context, RuntimeStatusSnapshot status) {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: 'Ubuntu Runtime', showBackButton: true, fallbackRoute: AppRoutes.settings),
       body: ListView(
         padding: const EdgeInsets.all(AppSpacing.pagePadding),
         children: [
-          _StatusCard(
-            status: _status,
-            version: _version,
-            backendStatus: _backendStatus,
-            storageUsage: _storageUsage,
-          ),
+          _StatusCard(status: status),
           const SizedBox(height: AppSpacing.sectionGap),
           Text('运行组件', style: AppTypography.sectionTitle(context)),
           const SizedBox(height: AppSpacing.md),
@@ -135,24 +150,13 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
               borderRadius: AppRadius.brMedium,
               border: Border.all(color: context.borderPrimary, width: 0.5),
             ),
-            child: _components.isEmpty
-                ? Padding(
-                    padding: const EdgeInsets.all(AppSpacing.cardPadding),
-                    child: Text('暂无组件信息', style: AppTypography.caption(context)),
-                  )
-                : Column(
-                    children: [
-                      for (int i = 0; i < _components.length; i++) ...[
-                        _ComponentTile(component: _components[i]),
-                        if (i < _components.length - 1)
-                          Divider(
-                            height: 1,
-                            indent: AppSpacing.lg,
-                            color: context.borderSecondary,
-                          ),
-                      ],
-                    ],
-                  ),
+            child: Padding(
+              padding: const EdgeInsets.all(AppSpacing.cardPadding),
+              child: Text(
+                'Runtime 版本: ${status.runtimeVersion.isEmpty ? '未知' : status.runtimeVersion}',
+                style: AppTypography.caption(context),
+              ),
+            ),
           ),
           const SizedBox(height: AppSpacing.sectionGap),
           Text('操作', style: AppTypography.sectionTitle(context)),
@@ -161,35 +165,55 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
             spacing: AppSpacing.md,
             runSpacing: AppSpacing.md,
             children: [
-              AmitiaButton(
-                label: '安装环境',
-                icon: Icons.download_outlined,
-                isSecondary: true,
-                onPressed: () => _snack('环境已是最新版本'),
-              ),
-              AmitiaButton(
-                label: '启动',
-                icon: Icons.play_arrow,
-                onPressed: _isRunning ? null : _start,
-              ),
-              AmitiaButton(
-                label: '停止',
-                icon: Icons.stop,
-                isSecondary: true,
-                onPressed: _isRunning ? _stop : null,
-              ),
+              if (!status.runtimeInstalled)
+                AmitiaButton(
+                  label: '安装环境',
+                  icon: Icons.download_outlined,
+                  isSecondary: true,
+                  onPressed: _canInstall(status) && !_commandInFlight
+                      ? () => _runCommand(
+                            () => ref.read(runtimeBridgeProvider).install(),
+                          )
+                      : null,
+                ),
+              if (status.runtimeInstalled)
+                AmitiaButton(
+                  label: '启动',
+                  icon: Icons.play_arrow,
+                  onPressed: _canStart(status) && !_commandInFlight
+                      ? () => _runCommand(
+                            () => ref.read(runtimeBridgeProvider).start(),
+                          )
+                      : null,
+                ),
+              if (status.runtimeReady || status.runtimeState == RuntimeBridgeState.starting)
+                AmitiaButton(
+                  label: '停止',
+                  icon: Icons.stop,
+                  isSecondary: true,
+                  onPressed: _canStop(status) && !_commandInFlight
+                      ? () => _runCommand(
+                            () => ref.read(runtimeBridgeProvider).stop(),
+                          )
+                      : null,
+                ),
               AmitiaButton(
                 label: '查看日志',
                 icon: Icons.description_outlined,
                 isSecondary: true,
-                onPressed: () => _snack('暂无运行日志'),
+                onPressed: () => _showInfo('暂无运行日志'),
               ),
-              AmitiaButton(
-                label: '修复环境',
-                icon: Icons.build_outlined,
-                isSecondary: true,
-                onPressed: () => _snack('环境检查完成，无需修复'),
-              ),
+              if (status.runtimeInstalled)
+                AmitiaButton(
+                  label: '修复环境',
+                  icon: Icons.build_outlined,
+                  isSecondary: true,
+                  onPressed: _canRepair(status) && !_commandInFlight
+                      ? () => _runCommand(
+                            () => ref.read(runtimeBridgeProvider).repair(),
+                          )
+                      : null,
+                ),
             ],
           ),
         ],
@@ -199,20 +223,15 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
 }
 
 class _StatusCard extends StatelessWidget {
-  final String status;
-  final String version;
-  final String backendStatus;
-  final String storageUsage;
+  final RuntimeStatusSnapshot status;
 
-  const _StatusCard({
-    required this.status,
-    required this.version,
-    required this.backendStatus,
-    required this.storageUsage,
-  });
+  const _StatusCard({required this.status});
 
   @override
   Widget build(BuildContext context) {
+    final stateLabel = _runtimeStateLabel(status);
+    final backendLabel = _backendStateLabel(status);
+
     return Container(
       padding: const EdgeInsets.all(AppSpacing.cardPadding),
       decoration: BoxDecoration(
@@ -224,18 +243,18 @@ class _StatusCard extends StatelessWidget {
         children: [
           _InfoLine(
             label: '运行状态',
-            value: status,
-            type: status == '运行中' ? BadgeType.success : BadgeType.neutral,
+            value: stateLabel,
+            type: status.runtimeReady ? BadgeType.success : BadgeType.neutral,
           ),
-          _InfoLine(label: 'Runtime 版本', value: version),
+          _InfoLine(label: 'Runtime 版本', value: status.runtimeVersion.isEmpty ? '未知' : status.runtimeVersion),
           _InfoLine(
             label: '后端状态',
-            value: backendStatus,
-            type: backendStatus == '后端就绪' || backendStatus == '后端已就绪'
+            value: backendLabel,
+            type: status.businessAvailable
                 ? BadgeType.success
                 : BadgeType.neutral,
           ),
-          _InfoLine(label: '存储占用', value: storageUsage),
+          _InfoLine(label: '已安装', value: status.runtimeInstalled ? '是' : '否'),
         ],
       ),
     );
@@ -267,37 +286,22 @@ class _InfoLine extends StatelessWidget {
   }
 }
 
-class _ComponentTile extends StatelessWidget {
-  final RuntimeComponent component;
-
-  const _ComponentTile({required this.component});
+class _RuntimeLoadingWidget extends StatelessWidget {
+  const _RuntimeLoadingWidget();
 
   @override
   Widget build(BuildContext context) {
-    final isRunning = component.status == '运行中';
-    return Padding(
-      padding: const EdgeInsets.symmetric(
-        horizontal: AppSpacing.lg,
-        vertical: 13,
-      ),
-      child: Row(
-        children: [
-          Container(
-            width: 8,
-            height: 8,
-            decoration: BoxDecoration(
-              color: isRunning ? context.success : context.textTertiary,
-              shape: BoxShape.circle,
-            ),
-          ),
-          const SizedBox(width: AppSpacing.md),
-          Expanded(child: Text(component.name, style: AppTypography.body(context))),
-          AmitiaStatusBadge(
-            label: component.status,
-            type: isRunning ? BadgeType.success : BadgeType.neutral,
-          ),
-        ],
-      ),
+    return const Center(child: CircularProgressIndicator());
+  }
+}
+
+class _RuntimeErrorWidget extends StatelessWidget {
+  const _RuntimeErrorWidget();
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: Text('Runtime 状态加载失败', style: AppTypography.body(context)),
     );
   }
 }

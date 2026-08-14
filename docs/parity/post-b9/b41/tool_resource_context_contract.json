@@ -1,9 +1,0 @@
-{
-  "schemaVersion": 1,
-  "taskId": "B41",
-  "resourceURI": "ToolInvocationContext does not directly embed a ResourceURI field; resources are carried as Tool.Input fields, to be parsed by the B13 ResourceURI resolver.",
-  "workspace": "NOT_APPLICABLE",
-  "rawPhysicalPath": false,
-  "workspaceContext2": false,
-  "resourceContext2": false
-}

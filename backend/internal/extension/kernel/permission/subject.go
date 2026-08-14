@@ -1,5 +1,11 @@
 package permission
 
+import (
+	"strings"
+
+	"github.com/u-ai/backend/internal/runtimeidentity"
+)
+
 type SubjectType string
 
 const (
@@ -36,4 +42,18 @@ func SubjectForUser(userID string) PermissionSubject {
 
 func SubjectForMCPServer(serverID string) PermissionSubject {
 	return PermissionSubject{Type: SubjectMCPServer, ID: serverID}
+}
+
+func SubjectForProvider(providerID string) PermissionSubject {
+	return PermissionSubject{
+		Type: SubjectProvider,
+		ID:   strings.TrimSpace(providerID),
+	}
+}
+
+func SubjectForRuntime(runtimeID runtimeidentity.RuntimeID) PermissionSubject {
+	return PermissionSubject{
+		Type: SubjectRuntime,
+		ID:   runtimeID.String(),
+	}
 }

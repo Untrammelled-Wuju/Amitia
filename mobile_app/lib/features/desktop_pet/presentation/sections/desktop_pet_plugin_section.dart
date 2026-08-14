@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../app/center_navigation.dart';
+import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
-import '../../../../app/theme/app_colors.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../controllers/desktop_pet_plugin_controller_provider.dart';
@@ -33,7 +32,19 @@ class _DesktopPetPluginSectionState extends ConsumerState<DesktopPetPluginSectio
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const AmitiaSectionHeader(title: '已安装桌宠插件'),
+        Row(
+          children: [
+            const Expanded(child: AmitiaSectionHeader(title: '已安装桌宠插件')),
+            if (!state.loading)
+              TextButton.icon(
+                onPressed: state.installing
+                    ? null
+                    : () => _showInstallDialog(context, controller),
+                icon: const Icon(Icons.add, size: 16),
+                label: Text(state.installing ? '安装中...' : '安装'),
+              ),
+          ],
+        ),
         const SizedBox(height: AppSpacing.sm),
         _buildContent(context, state, controller),
       ],
@@ -83,7 +94,7 @@ class _DesktopPetPluginSectionState extends ConsumerState<DesktopPetPluginSectio
             title: '尚未安装桌宠插件',
             subtitle: '安装后即可在此管理',
             actionText: '安装插件',
-            onAction: () => CenterNavigation.openExtensionCenter(context),
+            onAction: () => _showInstallDialog(context, controller),
           ),
         ),
       );
@@ -211,6 +222,51 @@ class _DesktopPetPluginSectionState extends ConsumerState<DesktopPetPluginSectio
               Icon(Icons.chevron_right, size: 18, color: context.textTertiary),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showInstallDialog(
+    BuildContext context,
+    DesktopPetPluginController controller,
+  ) {
+    final textController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('安装插件'),
+        content: TextField(
+          controller: textController,
+          decoration: const InputDecoration(
+            labelText: '安装包路径',
+            hintText: '输入或粘贴包路径',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text('取消'),
+          ),
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: textController,
+            builder: (context, value, _) => TextButton(
+              onPressed: value.text.trim().isEmpty || controller.state.installing
+                  ? null
+                  : () {
+                      Navigator.pop(dialogCtx);
+                      final path = textController.text.trim();
+                      controller.install(path).then((ok) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(ok ? '安装成功' : '安装失败')),
+                          );
+                        }
+                      });
+                    },
+              child: Text(controller.state.installing ? '安装中...' : '安装'),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -384,6 +440,22 @@ class _PluginDetailSheetState extends State<_PluginDetailSheet> {
                 const SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: AmitiaButtonOutline(
+                    label: hasOp ? '处理中...' : '更新',
+                    onPressed: hasOp
+                        ? null
+                        : () {
+                            Navigator.pop(context);
+                            _showUpdateDialog(context);
+                          },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: AppSpacing.sm),
+            Row(
+              children: [
+                Expanded(
+                  child: AmitiaButtonOutline(
                     label: hasOp ? '处理中...' : '卸载插件',
                     onPressed: hasOp
                         ? null
@@ -397,6 +469,50 @@ class _PluginDetailSheetState extends State<_PluginDetailSheet> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showUpdateDialog(BuildContext context) {
+    final textController = TextEditingController();
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        title: const Text('更新插件'),
+        content: TextField(
+          controller: textController,
+          decoration: const InputDecoration(
+            labelText: '安装包路径',
+            hintText: '输入或粘贴新版本包路径',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx),
+            child: const Text('取消'),
+          ),
+          ValueListenableBuilder<TextEditingValue>(
+            valueListenable: textController,
+            builder: (context, value, _) => TextButton(
+              onPressed: value.text.trim().isEmpty || widget.controller.hasOperation(widget.pluginId)
+                  ? null
+                  : () {
+                      Navigator.pop(dialogCtx);
+                      final path = textController.text.trim();
+                      widget.controller
+                          .update(widget.pluginId, widget.extensionId, path)
+                          .then((ok) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(content: Text(ok ? '更新成功' : '更新失败')),
+                          );
+                        }
+                      });
+                    },
+              child: Text('更新'),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -425,10 +541,9 @@ class _PluginDetailSheetState extends State<_PluginDetailSheet> {
                 widget.pluginId,
                 widget.extensionId,
               );
-              if (mounted) {
-                _showSnackBar(
-                  context,
-                  ok ? '卸载成功' : '卸载失败',
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(ok ? '卸载成功' : '卸载失败')),
                 );
               }
             },

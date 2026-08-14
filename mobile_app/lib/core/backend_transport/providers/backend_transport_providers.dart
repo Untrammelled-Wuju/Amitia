@@ -3,15 +3,14 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:logger/logger.dart';
 
-import '../../backend_access/business_backend_access.dart';
-import '../../backend_access/business_backend_access_provider.dart';
 import '../../backend_access/business_backend_unavailable.dart';
 import '../../backend_connection/backend_connection_availability.dart';
 import '../../backend_connection/backend_connection_config.dart';
 import '../../backend_connection/providers/backend_connection_providers.dart';
-import '../../runtime/status/runtime_status_phase.dart';
+import '../../runtime/status/runtime_status_provider.dart';
 import '../backend_service_api.dart';
 import '../backend_transport.dart';
+import '../dynamic_backend_service_api.dart';
 import '../default_backend_transport.dart';
 import '../http/backend_http_method.dart';
 import '../http/backend_http_request.dart';
@@ -30,9 +29,12 @@ class BackendTransportNotifier
     extends AsyncNotifier<BackendTransportState> {
   BackendTransport? _current;
   int _currentGeneration = 0;
+  bool _disposeRegistered = false;
 
   @override
   Future<BackendTransportState> build() async {
+    _ensureDisposeRegistered();
+
     final connectionAsync = ref.watch(backendConnectionProvider);
 
     return connectionAsync.when(
@@ -45,14 +47,25 @@ class BackendTransportNotifier
         if (config.generation != _currentGeneration || _current == null) {
           _recreateTransport(config);
         }
-        return const TransportAvailable();
+        return TransportAvailable(
+          generation: config.generation,
+        );
       },
-      loading: () => const TransportIdle(),
+      loading: () {
+        _closeCurrentIfNeeded();
+        return const TransportIdle();
+      },
       error: (error, stack) {
         _closeCurrentIfNeeded();
         return const TransportUnavailable();
       },
     );
+  }
+
+  void _ensureDisposeRegistered() {
+    if (_disposeRegistered) return;
+    _disposeRegistered = true;
+    ref.onDispose(_closeCurrentIfNeeded);
   }
 
   void _recreateTransport(BackendConnectionConfig config) {
@@ -87,13 +100,39 @@ class BackendTransportNotifier
 
 final backendCurrentTransportProvider =
     Provider<BackendTransport?>((ref) {
-  final notifier = ref.watch(backendTransportProvider.notifier);
-  return notifier.currentTransport;
+  final transportAsync =
+      ref.watch(backendTransportProvider);
+
+  final state = transportAsync.asData?.value;
+
+  if (state is! TransportAvailable) {
+    return null;
+  }
+
+  final notifier =
+      ref.read(backendTransportProvider.notifier);
+
+  final transport = notifier.currentTransport;
+
+  if (transport == null ||
+      notifier.currentGeneration != state.generation) {
+    return null;
+  }
+
+  return transport;
 });
 
 final backendTransportGenerationProvider = Provider<int>((ref) {
-  final notifier = ref.watch(backendTransportProvider.notifier);
-  return notifier.currentGeneration;
+  final transportAsync =
+      ref.watch(backendTransportProvider);
+
+  final state = transportAsync.asData?.value;
+
+  if (state is TransportAvailable) {
+    return state.generation;
+  }
+
+  return 0;
 });
 
 final backendTransportApiProvider = Provider<BackendTransportApi?>((ref) {
@@ -186,80 +225,15 @@ class BackendTransportApi {
   }
 }
 
-final backendServiceProvider = Provider<BackendServiceApi>((ref) {
-  final gate = ref.watch(businessBackendAccessProvider);
+final rawBackendServiceApiProvider = Provider<BackendServiceApi?>((ref) {
   final transport = ref.watch(backendCurrentTransportProvider);
-  final rawApi = transport != null
-      ? BackendServiceApi(transport.http, transport.generation)
-      : null;
-  return _GatedBackendServiceApi(gate, rawApi);
+  if (transport == null) return null;
+  return BackendServiceApi(transport.http, transport.generation);
 });
 
-class _GatedBackendServiceApi implements BackendServiceApi {
-  final BusinessBackendAccess _gate;
-  final BackendServiceApi? _raw;
-
-  _GatedBackendServiceApi(this._gate, this._raw);
-
-  @override
-  int get generation => _gate.businessGeneration;
-
-  void _check() {
-    _gate.requireBusinessAvailable();
-    final raw = _raw;
-    if (raw == null || raw.generation != _gate.businessGeneration) {
-      throw const BusinessBackendUnavailable(
-        phase: RuntimeStatusPhase.degraded,
-        generation: 0,
-        primaryError: null,
-      );
-    }
-  }
-
-  @override
-  Future<T?> get<T>(
-    String path, {
-    Map<String, dynamic>? queryParameters,
-    T Function(dynamic)? fromJson,
-  }) {
-    _check();
-    return _raw!.get<T>(path,
-        queryParameters: queryParameters, fromJson: fromJson);
-  }
-
-  @override
-  Future<T?> post<T>(
-    String path, {
-    Object? data,
-    T Function(dynamic)? fromJson,
-  }) {
-    _check();
-    return _raw!.post<T>(path, data: data, fromJson: fromJson);
-  }
-
-  @override
-  Future<T?> put<T>(
-    String path, {
-    Object? data,
-    T Function(dynamic)? fromJson,
-  }) {
-    _check();
-    return _raw!.put<T>(path, data: data, fromJson: fromJson);
-  }
-
-  @override
-  Future<void> delete(String path) {
-    _check();
-    return _raw!.delete(path);
-  }
-
-  @override
-  Future<T?> deleteWithResponse<T>(
-    String path, {
-    Object? data,
-    T Function(dynamic)? fromJson,
-  }) {
-    _check();
-    return _raw!.deleteWithResponse<T>(path, data: data, fromJson: fromJson);
-  }
-}
+final backendServiceProvider = Provider<BackendServiceApi>((ref) {
+  return DynamicBackendServiceApiProxy(
+    currentApi: () => ref.read(rawBackendServiceApiProvider),
+    currentStatus: () => ref.read(runtimeStatusCurrentProvider),
+  );
+});

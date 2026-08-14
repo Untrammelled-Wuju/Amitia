@@ -9,7 +9,11 @@ class TransportIdle extends BackendTransportState {
 }
 
 class TransportAvailable extends BackendTransportState {
-  const TransportAvailable();
+  final int generation;
+
+  const TransportAvailable({
+    required this.generation,
+  }) : assert(generation > 0);
 }
 
 class TransportUnavailable extends BackendTransportState {

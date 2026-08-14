@@ -33,6 +33,19 @@ type RuntimeTopologyReader interface {
 	GetTopologySnapshot(runtimeID string) (runtime.RuntimeTopologySnapshot, error)
 }
 
+type ConnectionRegistryReader interface {
+	ListByRuntime(runtimeID string) []*ConnectionSnapshot
+	FindByPeer(runtimeID, serviceID string) (*ConnectionSnapshot, bool)
+}
+
+type ConnectionSnapshot struct {
+	ConnectionID string
+	RuntimeID    string
+	ServiceID    string
+	Connected    bool
+	Protocol     string
+}
+
 type HandshakeReader interface {
 	GetState(connectionID string) (handshake.HandshakeState, bool)
 	GetSnapshot(connectionID string) *handshake.HandshakeSnapshot
@@ -50,34 +63,37 @@ type HealthReader interface {
 }
 
 type GameCenterManagementService struct {
-	kernel    KernelManagementReader
-	registry  PluginRegistryReader
-	runtimes  RuntimeManagerReader
-	topology  RuntimeTopologyReader
-	handshake HandshakeReader
-	authority ControlAuthorityReader
-	health    HealthReader
+	kernel      KernelManagementReader
+	registry    PluginRegistryReader
+	runtimes    RuntimeManagerReader
+	topology    RuntimeTopologyReader
+	connections ConnectionRegistryReader
+	handshake   HandshakeReader
+	authority   ControlAuthorityReader
+	health      HealthReader
 }
 
 type GameCenterManagementServiceOptions struct {
-	Kernel    KernelManagementReader
-	Registry  PluginRegistryReader
-	Runtimes  RuntimeManagerReader
-	Topology  RuntimeTopologyReader
-	Handshake HandshakeReader
-	Authority ControlAuthorityReader
-	Health    HealthReader
+	Kernel      KernelManagementReader
+	Registry    PluginRegistryReader
+	Runtimes    RuntimeManagerReader
+	Topology    RuntimeTopologyReader
+	Connections ConnectionRegistryReader
+	Handshake   HandshakeReader
+	Authority   ControlAuthorityReader
+	Health      HealthReader
 }
 
 func NewGameCenterManagementService(opts GameCenterManagementServiceOptions) *GameCenterManagementService {
 	return &GameCenterManagementService{
-		kernel:    opts.Kernel,
-		registry:  opts.Registry,
-		runtimes:  opts.Runtimes,
-		topology:  opts.Topology,
-		handshake: opts.Handshake,
-		authority: opts.Authority,
-		health:    opts.Health,
+		kernel:      opts.Kernel,
+		registry:    opts.Registry,
+		runtimes:    opts.Runtimes,
+		topology:    opts.Topology,
+		connections: opts.Connections,
+		handshake:   opts.Handshake,
+		authority:   opts.Authority,
+		health:      opts.Health,
 	}
 }
 
@@ -545,42 +561,43 @@ func (s *GameCenterManagementService) serviceHealth(runtimeID, serviceID string)
 }
 
 func (s *GameCenterManagementService) serviceConnected(runtimeID, serviceID string) bool {
-	if s.handshake == nil {
+	if s.connections == nil {
 		return false
 	}
-	runtimeState, found := s.handshake.GetState(runtimeID + "/" + serviceID)
-	if !found {
-		return false
-	}
-	return runtimeState != handshake.HandshakeStateClosed
+	_, found := s.connections.FindByPeer(runtimeID, serviceID)
+	return found
 }
 
 func (s *GameCenterManagementService) serviceReady(runtimeID, serviceID string) bool {
-	if s.handshake == nil {
+	if s.connections == nil || s.handshake == nil {
 		return false
 	}
-	state, found := s.handshake.GetState(runtimeID + "/" + serviceID)
+	conn, found := s.connections.FindByPeer(runtimeID, serviceID)
 	if !found {
 		return false
 	}
-	return state == handshake.HandshakeStateReady
+	return s.handshake.IsReady(conn.ConnectionID)
 }
 
 func (s *GameCenterManagementService) runtimeConnectionState(runtimeID string) (connected, ready bool) {
-	if s.handshake == nil {
+	if s.connections == nil {
 		return false, false
 	}
-	state, found := s.handshake.GetState(runtimeID)
-	if !found {
+	conns := s.connections.ListByRuntime(runtimeID)
+	if len(conns) == 0 {
 		return false, false
 	}
-	if state == handshake.HandshakeStateClosed {
-		return false, false
+	connected = true
+	ready = true
+	for _, conn := range conns {
+		if s.handshake != nil {
+			if s.handshake.IsReady(conn.ConnectionID) {
+				continue
+			}
+		}
+		ready = false
 	}
-	if state == handshake.HandshakeStateReady {
-		return true, true
-	}
-	return true, false
+	return connected, ready
 }
 
 func (s *GameCenterManagementService) runtimeAuthority(ctx context.Context, runtimeID string) (mode string, epoch uint64) {
@@ -623,18 +640,19 @@ func (s *GameCenterManagementService) matchesRuntimeFilter(summary GameRuntimeSu
 }
 
 func (s *GameCenterManagementService) getConnectionSummary(runtimeID string) *ConnectionSummaryDTO {
-	if s.handshake == nil {
+	if s.connections == nil {
 		return &ConnectionSummaryDTO{Connected: false}
 	}
-	state, found := s.handshake.GetState(runtimeID)
-	if !found {
+	conns := s.connections.ListByRuntime(runtimeID)
+	if len(conns) == 0 {
 		return &ConnectionSummaryDTO{Connected: false}
 	}
-	connected := state != handshake.HandshakeStateClosed
-	snap := s.handshake.GetSnapshot(runtimeID)
-	result := &ConnectionSummaryDTO{Connected: connected}
-	if snap != nil {
-		result.ProtocolVersion = snap.Protocol
+	result := &ConnectionSummaryDTO{Connected: true}
+	if s.handshake != nil && len(conns) > 0 {
+		snap := s.handshake.GetSnapshot(conns[0].ConnectionID)
+		if snap != nil {
+			result.ProtocolVersion = snap.Protocol
+		}
 	}
 	return result
 }

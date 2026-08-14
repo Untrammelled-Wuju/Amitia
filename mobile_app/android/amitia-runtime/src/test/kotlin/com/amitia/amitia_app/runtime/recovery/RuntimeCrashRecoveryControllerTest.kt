@@ -64,7 +64,8 @@ class RuntimeCrashRecoveryControllerTest {
             serviceHost = host,
         )
         host.emit(RuntimeServiceHostEvent.UnexpectedTermination(
-            RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
+            generation = controller.snapshot().generation,
+            cause = RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
         ))
         assertEquals(RuntimeState.FAILED, controller.snapshot().state)
     }
@@ -110,7 +111,7 @@ class RuntimeCrashRecoveryControllerTest {
             stateStore = stateStore,
             serviceHost = host,
         )
-        host.emit(RuntimeServiceHostEvent.ExpectedStopped)
+        host.emit(RuntimeServiceHostEvent.ExpectedStopped(generation = controller.snapshot().generation))
         assertEquals(RuntimeState.STOPPED, controller.snapshot().state)
         assertNull(controller.snapshot().lastError)
     }

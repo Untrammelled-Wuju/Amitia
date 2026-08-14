@@ -1,0 +1,33 @@
+package protocol
+
+type MessageType string
+
+const (
+	MessageTypeHello         MessageType = "hello"
+	MessageTypeHelloAck      MessageType = "hello_ack"
+	MessageTypeCommand       MessageType = "command"
+	MessageTypeCommandAck    MessageType = "command_ack"
+	MessageTypeRuntimeEvent  MessageType = "runtime_event"
+	MessageTypeStateSnapshot MessageType = "state_snapshot"
+	MessageTypeError         MessageType = "error"
+	MessageTypePing          MessageType = "ping"
+	MessageTypePong          MessageType = "pong"
+)
+
+func (t MessageType) String() string {
+	return string(t)
+}
+
+func (t MessageType) IsValid() bool {
+	switch t {
+	case MessageTypeHello, MessageTypeHelloAck, MessageTypeCommand,
+		MessageTypeCommandAck, MessageTypeRuntimeEvent, MessageTypeStateSnapshot,
+		MessageTypeError, MessageTypePing, MessageTypePong:
+		return true
+	}
+	return false
+}
+
+func ParseMessageType(raw string) MessageType {
+	return MessageType(raw)
+}

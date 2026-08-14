@@ -17,20 +17,23 @@ type OutputPermit struct {
 	RuntimeID     domain.RuntimeInstanceID
 	ServiceID     domain.ServiceID
 	PluginID      domain.PluginID
+	SinkID        string
 	OutputEpoch   uint64
+	Generation    uint64
 	OutputKind    ControlOutputKind
 	IssuedAt      time.Time
 	ExpiresAt     time.Time
 	ControlMode   domain.ControlMode
 }
 
-func NewOutputPermit(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID, pluginID domain.PluginID, epoch uint64, kind ControlOutputKind, mode domain.ControlMode, ttl time.Duration, now time.Time) OutputPermit {
+func NewOutputPermit(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID, pluginID domain.PluginID, epoch uint64, generation uint64, kind ControlOutputKind, mode domain.ControlMode, ttl time.Duration, now time.Time) OutputPermit {
 	return OutputPermit{
 		PermitID:    generatePermitID(),
 		RuntimeID:   runtimeID,
 		ServiceID:   serviceID,
 		PluginID:    pluginID,
 		OutputEpoch: epoch,
+		Generation:  generation,
 		OutputKind:  kind,
 		IssuedAt:    now,
 		ExpiresAt:   now.Add(ttl),
@@ -46,7 +49,7 @@ func (p OutputPermit) IsCurrent(epoch uint64) bool {
 	return p.OutputEpoch == epoch
 }
 
-func (p OutputPermit) Validate(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID, epoch uint64, now time.Time) error {
+func (p OutputPermit) Validate(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID, epoch uint64, generation uint64, now time.Time) error {
 	if p.RuntimeID != runtimeID {
 		return errPermitRuntimeMismatch(p.RuntimeID, runtimeID)
 	}
@@ -56,10 +59,17 @@ func (p OutputPermit) Validate(runtimeID domain.RuntimeInstanceID, serviceID dom
 	if !p.IsCurrent(epoch) {
 		return errPermitStale(p.OutputEpoch, epoch)
 	}
+	if p.Generation != generation {
+		return errPermitStaleGeneration(p.Generation, generation)
+	}
 	if p.IsExpired(now) {
 		return errPermitExpired(p.PermitID, p.ExpiresAt, now)
 	}
 	return nil
+}
+
+func (p OutputPermit) IsGenerationCurrent(generation uint64) bool {
+	return p.Generation == generation
 }
 
 func generatePermitID() string {

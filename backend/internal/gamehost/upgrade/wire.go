@@ -4,11 +4,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/u-ai/backend/internal/gamehost/config"
 	ghintegration "github.com/u-ai/backend/internal/gamehost/integration"
 	ghintegrationdefs "github.com/u-ai/backend/internal/gamehost/integration/service_definition"
-	"github.com/u-ai/backend/internal/gamehost/config"
+	"github.com/u-ai/backend/internal/gamehost/registry"
 	ghruntime "github.com/u-ai/backend/internal/gamehost/runtime"
-	ghregistry "github.com/u-ai/backend/internal/gamehost/registry"
 	ghdomain "github.com/u-ai/backend/internal/gamehost/domain"
 )
 
@@ -42,33 +42,90 @@ func (a *KernelArchiveUpdaterAdapter) UpdateArchive(ctx context.Context, extensi
 	return nil, fmt.Errorf("kernel archive updater not wired")
 }
 
-type UpgradeCoordinatorDeps struct {
-	PluginRegistry   *ghregistry.Registry
-	RuntimeManager   ghruntime.RuntimeManager
-	RuntimeExecutor  ghruntime.RuntimeExecutor
-	DefinitionSync   *ghintegrationdefs.DefinitionSyncService
-	ContributionSync *ghintegration.GamePluginSyncService
-	ConfigResolver   *config.Resolver
-	KernelLifecycle  KernelExtensionLifecycle
-	ArchiveUpdater   KernelArchiveUpdater
+type RuntimeGraphReconcilerAdapter struct {
+	provisioner *ghintegration.RuntimeGraphProvisioner
 }
 
-func BuildUpgradeCoordinator(deps UpgradeCoordinatorDeps) *UpgradeCoordinator {
+func NewRuntimeGraphReconcilerAdapter(provisioner *ghintegration.RuntimeGraphProvisioner) RuntimeGraphReconciler {
+	return &RuntimeGraphReconcilerAdapter{provisioner: provisioner}
+}
+
+func (a *RuntimeGraphReconcilerAdapter) ReconcileExtension(ctx context.Context, extensionID string) error {
+	if a.provisioner == nil {
+		return fmt.Errorf("runtime graph provisioner not wired")
+	}
+	return a.provisioner.Reconcile(ctx)
+}
+
+type DefinitionReconcilerAdapter struct {
+	sync *ghintegrationdefs.DefinitionSyncService
+}
+
+func NewDefinitionReconcilerAdapter(sync *ghintegrationdefs.DefinitionSyncService) DefinitionReconciler {
+	return &DefinitionReconcilerAdapter{sync: sync}
+}
+
+func (a *DefinitionReconcilerAdapter) ReconcileExtension(extensionID string) *ghintegrationdefs.ReconcileReport {
+	if a.sync == nil {
+		return &ghintegrationdefs.ReconcileReport{ExtensionID: extensionID, Errors: []error{fmt.Errorf("definition sync not wired")}}
+	}
+	return a.sync.ReconcileExtension(extensionID)
+}
+
+type UpgradeCoordinatorDeps struct {
+	PluginRegistry      *registry.Registry
+	RuntimeManager      ghruntime.RuntimeManager
+	RuntimeExecutor     ghruntime.RuntimeExecutor
+	DefinitionReconcile DefinitionReconciler
+	RuntimeGraphReconcile RuntimeGraphReconciler
+	ContributionSync    *ghintegration.GamePluginSyncService
+	ConfigResolver      *config.Resolver
+	KernelLifecycle     KernelExtensionLifecycle
+	ArchiveUpdater      KernelArchiveUpdater
+}
+
+func BuildUpgradeCoordinator(deps UpgradeCoordinatorDeps) (*UpgradeCoordinator, error) {
+	if deps.PluginRegistry == nil {
+		return nil, fmt.Errorf("upgrade coordinator: PluginRegistry is required")
+	}
+	if deps.RuntimeManager == nil {
+		return nil, fmt.Errorf("upgrade coordinator: RuntimeManager is required")
+	}
+	if deps.RuntimeExecutor == nil {
+		return nil, fmt.Errorf("upgrade coordinator: RuntimeExecutor is required")
+	}
+	if deps.DefinitionReconcile == nil {
+		return nil, fmt.Errorf("upgrade coordinator: DefinitionReconciler is required")
+	}
+	if deps.ContributionSync == nil {
+		return nil, fmt.Errorf("upgrade coordinator: ContributionSync is required")
+	}
+	if deps.ConfigResolver == nil {
+		return nil, fmt.Errorf("upgrade coordinator: ConfigResolver is required")
+	}
+	if deps.ArchiveUpdater == nil {
+		return nil, fmt.Errorf("upgrade coordinator: ArchiveUpdater is required")
+	}
+
 	c := NewUpgradeCoordinator(
 		registryReaderAdapter{deps.PluginRegistry},
 		deps.RuntimeManager,
 		deps.RuntimeExecutor,
-		deps.DefinitionSync,
+		deps.DefinitionReconcile,
+		deps.RuntimeGraphReconcile,
 		contributionReconcilerAdapter{deps.ContributionSync},
 		deps.ConfigResolver,
 		deps.KernelLifecycle,
 		deps.ArchiveUpdater,
 	)
-	return c
+	if c == nil {
+		return nil, fmt.Errorf("upgrade coordinator: construction failed")
+	}
+	return c, nil
 }
 
 type registryReaderAdapter struct {
-	registry *ghregistry.Registry
+	registry *registry.Registry
 }
 
 func (a registryReaderAdapter) ListByExtension(ctx context.Context, extensionID string) ([]ghdomain.PluginDescriptor, error) {

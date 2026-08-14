@@ -35,6 +35,10 @@ func NewProductionService(container *gamehost.GameHostContainer, kernel KernelMa
 		opts.Health = NewGameHostHealthAdapter(container.RuntimeHealth)
 	}
 
+	if container.ConnectionRegistry != nil {
+		opts.Connections = NewGameHostConnectionRegistry(container.ConnectionRegistry)
+	}
+
 	if container.HandshakeManager != nil {
 		opts.Handshake = NewGameHostHandshakeManager(container.HandshakeManager)
 	}
@@ -117,6 +121,21 @@ func NewProductionPackageMutationServiceFromKernelReader(kernelReader *KernelRea
 		Reader:             reader,
 		Registry:           pluginReg,
 		UpgradeCoordinator: uc,
+	})
+}
+
+func NewProductionPackageMutationServiceWithPreflight(kernelReader *KernelReader, pluginReg PluginRegistryReader, kernelMutation KernelMutation, upgradeCoordinator PackageUpgradeCoordinator, preflight PackageTargetPreflight) *PackageMutationService {
+	var reader KernelTargetReader
+	if kernelReader != nil {
+		reader = kernelReader
+	}
+	var uc PackageUpgradeCoordinator = upgradeCoordinator
+	return NewPackageMutationService(PackageMutationServiceOptions{
+		Kernel:             kernelMutation,
+		Reader:             reader,
+		Registry:           pluginReg,
+		UpgradeCoordinator: uc,
+		Preflight:          preflight,
 	})
 }
 

@@ -40,7 +40,7 @@ func (l *LifecycleEventEmitter) EmitExtensionInstalled(ctx context.Context, exte
 	}
 	_, err = l.emitter.Emit(ctx, "extension.installed", 1, data, PublishOptions{
 		ProducerID:    "host",
-		ProducerType:  "host",
+		ProducerType:  EventProducerTypeSystem,
 		OperationID:   operationID,
 		AggregateType: "extension",
 		AggregateID:   extensionID,
@@ -62,7 +62,7 @@ func (l *LifecycleEventEmitter) EmitExtensionEnabled(ctx context.Context, extens
 	}
 	_, err = l.emitter.Emit(ctx, "extension.enabled", 1, data, PublishOptions{
 		ProducerID:    "host",
-		ProducerType:  "host",
+		ProducerType:  EventProducerTypeSystem,
 		OperationID:   operationID,
 		AggregateType: "extension",
 		AggregateID:   extensionID,
@@ -85,7 +85,7 @@ func (l *LifecycleEventEmitter) EmitExtensionDisabled(ctx context.Context, exten
 	}
 	_, err = l.emitter.Emit(ctx, "extension.disabled", 1, data, PublishOptions{
 		ProducerID:    "host",
-		ProducerType:  "host",
+		ProducerType:  EventProducerTypeSystem,
 		OperationID:   operationID,
 		AggregateType: "extension",
 		AggregateID:   extensionID,
@@ -108,7 +108,7 @@ func (l *LifecycleEventEmitter) EmitExtensionUninstalled(ctx context.Context, ex
 	}
 	_, err = l.emitter.Emit(ctx, "extension.uninstalled", 1, data, PublishOptions{
 		ProducerID:    "host",
-		ProducerType:  "host",
+		ProducerType:  EventProducerTypeSystem,
 		OperationID:   operationID,
 		AggregateType: "extension",
 		AggregateID:   extensionID,
@@ -131,7 +131,7 @@ func (l *LifecycleEventEmitter) EmitExtensionUpgraded(ctx context.Context, exten
 	}
 	_, err = l.emitter.Emit(ctx, "extension.upgraded", 1, data, PublishOptions{
 		ProducerID:    "host",
-		ProducerType:  "host",
+		ProducerType:  EventProducerTypeSystem,
 		OperationID:   operationID,
 		AggregateType: "extension",
 		AggregateID:   extensionID,

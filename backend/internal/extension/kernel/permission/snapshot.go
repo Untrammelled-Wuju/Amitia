@@ -5,22 +5,31 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 type PermissionSnapshot struct {
-	SnapshotID     string     `json:"snapshotId"`
-	SessionID      string     `json:"sessionId"`
-	ExtensionID    string     `json:"extensionId"`
-	ModuleID       string     `json:"moduleId"`
-	Generation     int64      `json:"generation"`
-	CharacterID    string     `json:"characterId"`
-	ConversationID string     `json:"conversationId"`
-	ResourceIDs    []string   `json:"resourceIds,omitempty"`
-	GrantedPerms   []string   `json:"grantedPerms,omitempty"`
-	GrantedScopes  []string   `json:"grantedScopes,omitempty"`
-	CreatedAt      time.Time  `json:"createdAt"`
-	ExpiresAt      *time.Time `json:"expiresAt,omitempty"`
-	RevokedAt      *time.Time `json:"revokedAt,omitempty"`
+	SnapshotID          string                    `json:"snapshotId"`
+	SessionID           string                    `json:"sessionId"`
+	ExtensionID         string                    `json:"extensionId"`
+	ModuleID            string                    `json:"moduleId"`
+	Generation          int64                     `json:"generation"`
+	CharacterID         string                    `json:"characterId"`
+	ConversationID      string                    `json:"conversationId"`
+	ResourceIDs         []string                  `json:"resourceIds,omitempty"`
+	GrantedPerms        []string                  `json:"grantedPerms,omitempty"`
+	GrantedScopes       []string                  `json:"grantedScopes,omitempty"`
+	CreatedAt           time.Time                 `json:"createdAt"`
+	ExpiresAt           *time.Time                `json:"expiresAt,omitempty"`
+	RevokedAt           *time.Time                `json:"revokedAt,omitempty"`
+	ExecutionPlacement  ExecutionPlacement        `json:"executionPlacement,omitempty"`
+	UserID              runtimeidentity.UserID    `json:"userId,omitempty"`
+	DeviceID            runtimeidentity.DeviceID  `json:"deviceId,omitempty"`
+	RuntimeID           runtimeidentity.RuntimeID `json:"runtimeId,omitempty"`
+	ProviderID          string                    `json:"providerId,omitempty"`
+	ProviderInstanceID  string                    `json:"providerInstanceId,omitempty"`
+	ExecutionBindingKey string                    `json:"executionBindingKey,omitempty"`
 }
 
 type PermissionIDValidator struct {
@@ -50,16 +59,17 @@ func (v *PermissionIDValidator) ValidateAll(ids []string) []string {
 }
 
 type PermissionSnapshotRequest struct {
-	SessionID      string
-	ExtensionID    string
-	ModuleID       string
-	Generation     int64
-	CharacterID    string
-	ConversationID string
-	ResourceIDs    []string
-	GrantedPerms   []string
-	GrantedScopes  []string
-	Lifetime       time.Duration
+	SessionID        string
+	ExtensionID      string
+	ModuleID         string
+	Generation       int64
+	CharacterID      string
+	ConversationID   string
+	ResourceIDs      []string
+	GrantedPerms     []string
+	GrantedScopes    []string
+	Lifetime         time.Duration
+	ExecutionContext PermissionExecutionContext
 }
 
 func NewPermissionSnapshot(req PermissionSnapshotRequest) PermissionSnapshot {
@@ -76,6 +86,15 @@ func NewPermissionSnapshot(req PermissionSnapshotRequest) PermissionSnapshot {
 		GrantedPerms:   req.GrantedPerms,
 		GrantedScopes:  req.GrantedScopes,
 		CreatedAt:      now,
+	}
+	if req.ExecutionContext != (PermissionExecutionContext{}) {
+		snap.ExecutionPlacement = req.ExecutionContext.Placement
+		snap.UserID = req.ExecutionContext.UserID
+		snap.DeviceID = req.ExecutionContext.DeviceID
+		snap.RuntimeID = req.ExecutionContext.RuntimeID
+		snap.ProviderID = req.ExecutionContext.ProviderID
+		snap.ProviderInstanceID = req.ExecutionContext.ProviderInstanceID
+		snap.ExecutionBindingKey = req.ExecutionContext.StableBindingKey()
 	}
 	if req.Lifetime > 0 {
 		exp := now.Add(req.Lifetime)
@@ -117,6 +136,25 @@ func (s PermissionSnapshot) VerifyIdentity(extID, modID string, generation int64
 	}
 	if generation > 0 && s.Generation != generation {
 		return fmt.Errorf("permission snapshot generation %d does not match caller generation %d", s.Generation, generation)
+	}
+	return nil
+}
+
+func (s PermissionSnapshot) VerifyExecutionContext(ctx PermissionExecutionContext) error {
+	if s.ExecutionBindingKey != "" {
+		if s.ExecutionBindingKey != ctx.StableBindingKey() {
+			return ErrPermissionExecutionBindingMismatch
+		}
+		return nil
+	}
+	if s.ProviderID != "" && s.ProviderID != ctx.ProviderID {
+		return ErrPermissionProviderBindingMismatch
+	}
+	if s.DeviceID != "" && s.DeviceID != ctx.DeviceID {
+		return ErrPermissionDeviceBindingMismatch
+	}
+	if s.RuntimeID != "" && s.RuntimeID != ctx.RuntimeID {
+		return ErrPermissionRuntimeBindingMismatch
 	}
 	return nil
 }

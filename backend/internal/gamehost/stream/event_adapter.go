@@ -152,14 +152,14 @@ func validateEventEnvelope(ev EventEnvelope) error {
 	return nil
 }
 
-func pickProducerType(cfgType, pluginID string) string {
+func pickProducerType(cfgType, pluginID string) event.EventProducerType {
 	if cfgType != "" {
-		return cfgType
+		return event.EventProducerType(cfgType)
 	}
 	if pluginID == "" {
-		return "host"
+		return event.EventProducerTypeSystem
 	}
-	return "gamehost_plugin"
+	return event.EventProducerType("gamehost_plugin")
 }
 
 func pickTraceID(traceID, eventID string) string {

@@ -1,8 +1,0 @@
-{
-  "schemaVersion": 1,
-  "taskId": "B42",
-  "nextOwner": "future audit step",
-  "auditableEvents": "Tool start / Tool result / Tool error (existing AuditRecorder)",
-  "mustNotPersist": "Tool stdout chunks / 模型 token chunks",
-  "note": "无 Tool Stream 事件需要特别审计策略。"
-}

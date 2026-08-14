@@ -1,6 +1,0 @@
-{
-  "rateLimitAuthority": "RateLimiter (controllers.go:107) + B45 Scope RateLimit",
-  "rateLimitIsNotResourceQuota": true,
-  "differentiation": "rate 是调用频率限制 (requests/time); quota 是单次/累计消耗资源上限 (bytes/ms/...)",
-  "separationOfErrorCodes": true
-}

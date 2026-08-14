@@ -1,8 +1,0 @@
-{
-  "schemaVersion": 1,
-  "taskId": "B28",
-  "generatedAt": "2026-08-08T19:30:00+08:00",
-  "planMayExpressRequirement": true,
-  "planDoesNotBindConcreteProvider": true,
-  "planDoesNotStartRuntime": true
-}

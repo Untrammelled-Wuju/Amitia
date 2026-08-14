@@ -24,7 +24,7 @@ func (a *noopAdapter) Register(ctx context.Context, ref ContributionRef, def map
 		Definition: cloneMap(def),
 	}, nil
 }
-func (a *noopAdapter) Detach(ctx context.Context, ref ContributionRef) error  { return nil }
+func (a *noopAdapter) Detach(ctx context.Context, reg ContributionRegistration) error  { return nil }
 func (a *noopAdapter) Validate(ctx context.Context, ref ContributionRef, def map[string]any) error {
 	return nil
 }
@@ -82,7 +82,7 @@ func (a *resourceContributionAdapter) Register(ctx context.Context, ref Contribu
 	}, nil
 }
 
-func (a *resourceContributionAdapter) Detach(ctx context.Context, ref ContributionRef) error {
+func (a *resourceContributionAdapter) Detach(ctx context.Context, reg ContributionRegistration) error {
 	return nil
 }
 
@@ -161,11 +161,11 @@ func (a *actionContributionAdapter) Register(ctx context.Context, ref Contributi
 	}, nil
 }
 
-func (a *actionContributionAdapter) Detach(ctx context.Context, ref ContributionRef) error {
+func (a *actionContributionAdapter) Detach(ctx context.Context, reg ContributionRegistration) error {
 	if a.resolveTarget == nil {
 		return nil
 	}
-	return a.resolveTarget.InvalidateAction(ctx, ref)
+	return a.resolveTarget.InvalidateAction(ctx, reg.Ref)
 }
 
 type runtimeCapabilityContributionAdapter struct {
@@ -213,7 +213,7 @@ func (a *runtimeCapabilityContributionAdapter) Register(ctx context.Context, ref
 	}, nil
 }
 
-func (a *runtimeCapabilityContributionAdapter) Detach(ctx context.Context, ref ContributionRef) error {
+func (a *runtimeCapabilityContributionAdapter) Detach(ctx context.Context, reg ContributionRegistration) error {
 	return nil
 }
 
@@ -254,7 +254,7 @@ func (a *floatingWindowCapabilityContributionAdapter) Register(ctx context.Conte
 	}, nil
 }
 
-func (a *floatingWindowCapabilityContributionAdapter) Detach(ctx context.Context, ref ContributionRef) error {
+func (a *floatingWindowCapabilityContributionAdapter) Detach(ctx context.Context, reg ContributionRegistration) error {
 	return nil
 }
 

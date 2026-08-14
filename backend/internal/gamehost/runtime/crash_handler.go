@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/gamehost/domain"
+	"github.com/u-ai/backend/internal/gamehost/recovery"
 )
 
 type CrashResolution string
@@ -13,13 +14,15 @@ type CrashResolution string
 const (
 	CrashDeferToSupervisor CrashResolution = "defer_to_supervisor"
 	CrashUnrecoverable     CrashResolution = "unrecoverable"
+	CrashRecovered         CrashResolution = "recovered"
 )
 
 type CrashDecision struct {
-	Resolution CrashResolution
+	Resolution   CrashResolution
 	UpdateHealth bool
-	Health    domain.HealthStatus
-	Reason    string
+	Health       domain.HealthStatus
+	Reason       string
+	RecoveryOpID recovery.RecoveryOperationID
 }
 
 type CrashContextAccessor interface {
@@ -33,13 +36,21 @@ type CrashHandler interface {
 }
 
 type crashHandler struct {
-	mu      sync.RWMutex
-	context CrashContextAccessor
+	mu              sync.RWMutex
+	context         CrashContextAccessor
+	recovery        *recovery.RecoveryCoordinator
+	runtimeIdentity runtimeIdentityResolver
 }
 
-func NewCrashHandler(ctx CrashContextAccessor) CrashHandler {
+type runtimeIdentityResolver interface {
+	ResolveRuntimeID(serviceID string) (domain.RuntimeInstanceID, bool)
+}
+
+func NewCrashHandler(ctx CrashContextAccessor, recoveryCoordinator *recovery.RecoveryCoordinator, identityResolver runtimeIdentityResolver) CrashHandler {
 	return &crashHandler{
-		context: ctx,
+		context:         ctx,
+		recovery:        recoveryCoordinator,
+		runtimeIdentity: identityResolver,
 	}
 }
 
@@ -81,6 +92,39 @@ func (h *crashHandler) HandleProcessExit(ctx context.Context, event ProcessExitE
 				Resolution:  CrashDeferToSupervisor,
 				UpdateHealth: false,
 				Reason:      "runtime_terminal",
+			}, nil
+		}
+	}
+
+	h.mu.RLock()
+	recoveryCoord := h.recovery
+	resolver := h.runtimeIdentity
+	h.mu.RUnlock()
+
+	if recoveryCoord != nil && resolver != nil {
+		runtimeID, ok := resolver.ResolveRuntimeID(string(event.ServiceID))
+		if ok {
+			req := recovery.RecoveryRequest{
+				RuntimeID:    runtimeID,
+				FailureClass: recovery.FailureProcessCrash,
+				TriggeredBy:  "crash_handler",
+				MaxAttempts:  3,
+			}
+			resp, err := recoveryCoord.ExecuteRecovery(ctx, req)
+			if err != nil {
+				return CrashDecision{
+					Resolution:   CrashUnrecoverable,
+					UpdateHealth: true,
+					Health:       domain.HealthUnhealthy,
+					Reason:       "recovery_failed: " + err.Error(),
+				}, nil
+			}
+			return CrashDecision{
+				Resolution:   CrashRecovered,
+				UpdateHealth: true,
+				Health:       domain.HealthHealthy,
+				Reason:       "recovery_initiated",
+				RecoveryOpID: resp.OperationID,
 			}, nil
 		}
 	}

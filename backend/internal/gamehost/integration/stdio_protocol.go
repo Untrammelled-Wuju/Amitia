@@ -12,23 +12,15 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/runtime"
 )
 
-type RuntimeReader interface {
-	GetRuntime(runtimeID domain.RuntimeInstanceID) (*runtime.RuntimeInstanceRef, error)
-}
-
-type RuntimeTopologyReader interface {
-	GetTopologySnapshot(runtimeID domain.RuntimeInstanceID) (runtime.RuntimeTopologySnapshot, error)
-}
-
 type GameHostStdioProtocolHandler struct {
-	controlPlane *ipc.ControlPlane
+	controlPlane ipc.ControlPlane
 	runtimes     RuntimeReader
 	topology     RuntimeTopologyReader
 	plugins      contracts.PluginRegistry
 }
 
 func NewGameHostStdioProtocolHandler(
-	controlPlane *ipc.ControlPlane,
+	controlPlane ipc.ControlPlane,
 	runtimes RuntimeReader,
 	topology RuntimeTopologyReader,
 	plugins contracts.PluginRegistry,
@@ -74,7 +66,7 @@ func (h *GameHostStdioProtocolHandler) Attach(
 	transport := ipc.NewStdioTransport(ipc.StdioTransportConfig{
 		Reader: stdout,
 		Writer: stdin,
-		Closer: io.NopCloser(stdin),
+		Closer: &multiCloser{readCloser: stdout, writeCloser: stdin},
 	})
 
 	conn, err := h.controlPlane.Attach(ctx, peer, transport)
@@ -99,7 +91,7 @@ func (h *GameHostStdioProtocolHandler) validateServiceBelongsToRuntime(
 	}
 
 	for _, svc := range snapshot.Services {
-		if svc.ID == serviceID {
+		if svc.ID == runtime.ServiceInstanceID(serviceID) {
 			if svc.PluginID != pluginID {
 				return fmt.Errorf("service %q does not belong to plugin %q", serviceID, pluginID)
 			}
@@ -123,8 +115,26 @@ func (h *GameHostStdioProtocolHandler) validatePluginExtension(
 	return nil
 }
 
+type multiCloser struct {
+	readCloser  io.ReadCloser
+	writeCloser io.WriteCloser
+}
+
+func (m *multiCloser) Close() error {
+	var err error
+	if m.readCloser != nil {
+		err = m.readCloser.Close()
+	}
+	if m.writeCloser != nil {
+		if werr := m.writeCloser.Close(); werr != nil && err == nil {
+			err = werr
+		}
+	}
+	return err
+}
+
 type attachedConnectionCloser struct {
-	plane *ipc.ControlPlane
+	plane ipc.ControlPlane
 	id    ipc.ConnectionID
 }
 

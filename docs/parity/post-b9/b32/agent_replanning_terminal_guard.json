@@ -1,8 +1,0 @@
-{
-  "completedGoalReplanCount": 0,
-  "failedTerminalGoalReplanCount": 0,
-  "cancelledGoalReplanCount": 0,
-  "supersededGoalReplanCount": 0,
-  "terminalGoalCandidateGenerationCount": 0,
-  "existingBehavior": "achieved/abandoned是GoalRegistry终态，无代码会从终态重新触发CandidateGeneration。UnifiedEntry对终态Goal直接返回STOP。"
-}

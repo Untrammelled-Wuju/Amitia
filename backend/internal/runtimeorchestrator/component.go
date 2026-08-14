@@ -1,6 +1,10 @@
 package runtimeorchestrator
 
-import "context"
+import (
+	"context"
+
+	"github.com/u-ai/backend/internal/runtimeprofile"
+)
 
 type ComponentID string
 
@@ -28,6 +32,19 @@ type ComponentDescriptor struct {
 	Required     bool
 	Dependencies []ComponentID
 	Capabilities []string
+	Profiles     []runtimeprofile.Profile
+}
+
+func (d ComponentDescriptor) SupportsProfile(profile runtimeprofile.Profile) bool {
+	if len(d.Profiles) == 0 {
+		return true
+	}
+	for _, p := range d.Profiles {
+		if p == profile {
+			return true
+		}
+	}
+	return false
 }
 
 type ManagedComponent interface {
@@ -37,7 +54,7 @@ type ManagedComponent interface {
 	Stop(context.Context) error
 }
 
-func validateDescriptor(desc ComponentDescriptor) error {
+func validateDescriptor(desc ComponentDescriptor, profile runtimeprofile.Profile) error {
 	if desc.ID == "" {
 		return invalidDescriptorErr("component ID is empty")
 	}
@@ -46,6 +63,9 @@ func validateDescriptor(desc ComponentDescriptor) error {
 	}
 	if desc.Required && !desc.Enabled {
 		return invalidDescriptorErr("required component must be enabled")
+	}
+	if desc.Required && desc.Enabled && !desc.SupportsProfile(profile) {
+		return invalidDescriptorErr("required component not supported by profile: " + string(profile))
 	}
 	for i, dep := range desc.Dependencies {
 		if dep == desc.ID {

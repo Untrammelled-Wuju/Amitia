@@ -79,12 +79,13 @@ func (o *LifecycleOrchestrator) AcquireRuntimeStartup(
 		handle.Results = append(handle.Results, outcome)
 
 		if err != nil {
-			if sec.Required || result.Granted == false {
+			if sec.Required {
 				o.revokeAcquired(handle, manifest, sec.Ref)
 				handle.Failed = true
 				handle.LastError = fmt.Errorf("%w: ref=%s err=%v", ErrPartialAcquisition, sec.Ref, err)
 				return handle
 			}
+			continue
 		}
 	}
 
@@ -94,8 +95,9 @@ func (o *LifecycleOrchestrator) AcquireRuntimeStartup(
 func (o *LifecycleOrchestrator) revokeAcquired(handle StartupHandle, manifest RuntimeSecretManifest, excludeRef kernelsecret.SecretRef) {
 	for _, r := range handle.Results {
 		if r.Result.Granted && r.Result.LeaseID != "" && r.Result.Ref != excludeRef {
-			o.adapter.broker.RevokeLease(r.Result.LeaseID)
-			handle.Revoked = append(handle.Revoked, r.Result.LeaseID)
+			if err := o.adapter.RevokeLease(r.Result.LeaseID, "startup rollback"); err == nil {
+				handle.Revoked = append(handle.Revoked, r.Result.LeaseID)
+			}
 		}
 	}
 }
@@ -106,6 +108,10 @@ func (o *LifecycleOrchestrator) RevokeServiceOnStop(runtimeID, serviceID, reason
 
 func (o *LifecycleOrchestrator) RevokeRuntimeOnStop(runtimeID, reason string) RevokeOutcome {
 	return o.adapter.RevokeRuntimeLeases(runtimeID, reason)
+}
+
+func (o *LifecycleOrchestrator) RevokeRuntimeGeneration(runtimeID string, generation int64, reason string) RevokeOutcome {
+	return o.adapter.RevokeRuntimeGenerationLeases(runtimeID, generation, reason)
 }
 
 func (o *LifecycleOrchestrator) RevokeOnDisable(extensionID, reason string) RevokeOutcome {

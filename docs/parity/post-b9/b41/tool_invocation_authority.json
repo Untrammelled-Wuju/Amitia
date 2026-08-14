@@ -1,8 +1,0 @@
-{
-  "schemaVersion": 1,
-  "taskId": "B41",
-  "canonicalInvocationType": "capability.ToolInvocationContext",
-  "constructionAuthority": "Callers (chat, agent, service) assemble ToolInvocationContext literals; ToolFacade is the canonical entry.",
-  "executionConsumer": "ExecutionPipeline.Execute (pipeline.go) receives ToolExecutionRequest.Invocation as the authoritative context.",
-  "resultCorrelation": "UnifiedToolResult.InvocationID preserved across the pipeline (every failWithAudit / Dispatch / retry / result path carries invocation.InvocationID)."
-}

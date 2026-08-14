@@ -15,11 +15,18 @@ type ChannelAdvertisement struct {
 	ID string `json:"id"`
 }
 
+type SinkAdvertisement struct {
+	SinkID    string `json:"sinkId"`
+	Kind      string `json:"kind"`
+	ServiceID string `json:"serviceId,omitempty"`
+}
+
 type HelloRequest struct {
 	SupportedProtocols []string              `json:"supportedProtocols"`
 	Capabilities       []string              `json:"capabilities,omitempty"`
 	RPCNamespaces      []string              `json:"rpcNamespaces,omitempty"`
 	Channels           []ChannelAdvertisement `json:"channels,omitempty"`
+	Sinks              []SinkAdvertisement   `json:"sinks,omitempty"`
 	SDK                *SDKInfo              `json:"sdk,omitempty"`
 	Metadata           map[string]json.RawMessage `json:"metadata,omitempty"`
 }

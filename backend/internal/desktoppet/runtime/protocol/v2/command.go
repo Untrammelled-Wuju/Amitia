@@ -3,6 +3,9 @@ package v2
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/u-ai/backend/internal/deviceruntime/protocol"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 type CommandType string
@@ -175,4 +178,39 @@ type CommandAckPayload struct {
 	EstimatedStartMs int64     `json:"estimatedStartMs,omitempty"`
 	RuntimeSessionID string    `json:"runtimeSessionId"`
 	ReceivedAt       time.Time `json:"receivedAt"`
+}
+
+func (p CommandAckPayload) ToDeviceRuntimeCommandAck() protocol.CommandAckPayload {
+	return protocol.CommandAckPayload{
+		CommandID:        p.CommandID,
+		CommandSequence:  p.CommandSequence,
+		Status:           p.Status,
+		PayloadHash:      p.PayloadHash,
+		RejectReason:     p.RejectReason,
+		RejectErrorCode:  p.RejectErrorCode,
+		EstimatedStartMs: p.EstimatedStartMs,
+		RuntimeSessionID: runtimeidentity.ParseRuntimeSessionID(p.RuntimeSessionID),
+		ReceivedAt:       p.ReceivedAt,
+	}
+}
+
+type CommandDispatchPayload struct {
+	CommandID        string          `json:"commandId"`
+	CommandType      string          `json:"commandType"`
+	CommandSequence  int64           `json:"commandSequence"`
+	DesiredRevision  int64           `json:"desiredRevision"`
+	SettingsRevision int64           `json:"settingsRevision"`
+	InstallationID   string          `json:"installationId"`
+	PetID            string          `json:"petId"`
+	ReleaseID        string          `json:"releaseId"`
+	Payload          json.RawMessage `json:"payload,omitempty"`
+}
+
+func (p CommandDispatchPayload) ToDeviceRuntimeCommand() protocol.CommandPayload {
+	return protocol.CommandPayload{
+		CommandID:       p.CommandID,
+		CommandName:     p.CommandType,
+		CommandSequence: p.CommandSequence,
+		Payload:         p.Payload,
+	}
 }

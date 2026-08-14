@@ -12,6 +12,7 @@ import (
 type RuntimeExecutor interface {
 	StartRuntime(ctx context.Context, runtimeID domain.RuntimeInstanceID) error
 	StopRuntime(ctx context.Context, runtimeID domain.RuntimeInstanceID) error
+	RestartRuntime(ctx context.Context, runtimeID domain.RuntimeInstanceID, reason string) error
 	StartServices(ctx context.Context, runtimeID domain.RuntimeInstanceID, serviceIDs []domain.ServiceID) error
 	StopServices(ctx context.Context, runtimeID domain.RuntimeInstanceID, serviceIDs []domain.ServiceID) error
 	CleanupRuntime(ctx context.Context, runtimeID domain.RuntimeInstanceID) error
@@ -28,6 +29,10 @@ type RuntimeManager interface {
 	GetRuntime(runtimeID domain.RuntimeInstanceID) (*RuntimeInstanceRef, error)
 	UpdateRuntimeState(runtimeID domain.RuntimeInstanceID, next domain.RuntimeState, reason string, now time.Time) error
 	ListRuntimes() []*RuntimeInstanceRef
+	GetCurrentGeneration(runtimeID domain.RuntimeInstanceID) (int64, error)
+	AllocateGeneration(runtimeID domain.RuntimeInstanceID) (int64, error)
+	GetLifecycleIntent(runtimeID domain.RuntimeInstanceID) (string, error)
+	SetLifecycleIntent(runtimeID domain.RuntimeInstanceID, intent string) error
 }
 
 type RuntimeTopologyStore interface {
@@ -96,7 +101,96 @@ func (e *runtimeExecutor) StartRuntime(ctx context.Context, runtimeID domain.Run
 	lock := e.getRuntimeLock(runtimeID)
 	lock.Lock()
 	defer lock.Unlock()
+	return e.startRuntimeLocked(ctx, runtimeID)
+}
 
+func (e *runtimeExecutor) StopRuntime(ctx context.Context, runtimeID domain.RuntimeInstanceID) error {
+	lock := e.getRuntimeLock(runtimeID)
+	lock.Lock()
+	defer lock.Unlock()
+	return e.stopRuntimeLocked(ctx, runtimeID)
+}
+
+func (e *runtimeExecutor) RestartRuntime(ctx context.Context, runtimeID domain.RuntimeInstanceID, reason string) error {
+	lock := e.getRuntimeLock(runtimeID)
+	lock.Lock()
+	defer lock.Unlock()
+
+	now := time.Now()
+
+	runtimeInfo, err := e.runtimeManager.GetRuntime(runtimeID)
+	if err != nil {
+		return err
+	}
+
+	if runtimeInfo.State != domain.RuntimeStateRunning && runtimeInfo.State != domain.RuntimeStateDegraded {
+		return &RuntimeRestartError{
+			Code:      ErrLifecycleConflict,
+			RuntimeID: string(runtimeID),
+			Cause:     &ExecutionError{Code: ErrInvalidState, RuntimeID: string(runtimeID), Message: "runtime not in restartable state: " + string(runtimeInfo.State)},
+		}
+	}
+
+	if err := e.runtimeManager.SetLifecycleIntent(runtimeID, "restart"); err != nil {
+		return err
+	}
+
+	oldGeneration, err := e.runtimeManager.GetCurrentGeneration(runtimeID)
+	if err != nil {
+		return err
+	}
+
+	if err := e.runtimeManager.UpdateRuntimeState(runtimeID, domain.RuntimeStateRestarting, reason, now); err != nil {
+		return err
+	}
+
+	stopErr := e.stopRuntimeLocked(ctx, runtimeID)
+	if stopErr != nil {
+		e.runtimeManager.UpdateRuntimeState(runtimeID, domain.RuntimeStateFailed, "restart stop phase failed", time.Now())
+		return &RuntimeRestartError{
+			Code:          ErrRestartFailed,
+			RuntimeID:     string(runtimeID),
+			OldGeneration: oldGeneration,
+			Cause:         stopErr,
+		}
+	}
+
+	currentIntent, err := e.runtimeManager.GetLifecycleIntent(runtimeID)
+	if err != nil {
+		return err
+	}
+	if currentIntent != "restart" {
+		return &RuntimeRestartError{
+			Code:          ErrRestartFailed,
+			RuntimeID:     string(runtimeID),
+			OldGeneration: oldGeneration,
+			Cause:         &ExecutionError{Code: ErrLifecycleConflict, RuntimeID: string(runtimeID), Message: "restart superseded by another operation"},
+		}
+	}
+
+	newGeneration, err := e.runtimeManager.AllocateGeneration(runtimeID)
+	if err != nil {
+		return err
+	}
+
+	startErr := e.startRuntimeLocked(ctx, runtimeID)
+	if startErr != nil {
+		e.runtimeManager.UpdateRuntimeState(runtimeID, domain.RuntimeStateFailed, "restart start phase failed", time.Now())
+		return &RuntimeRestartError{
+			Code:          ErrRestartFailed,
+			RuntimeID:     string(runtimeID),
+			OldGeneration: oldGeneration,
+			NewGeneration: newGeneration,
+			Cause:         startErr,
+		}
+	}
+
+	e.runtimeManager.SetLifecycleIntent(runtimeID, "")
+
+	return nil
+}
+
+func (e *runtimeExecutor) startRuntimeLocked(ctx context.Context, runtimeID domain.RuntimeInstanceID) error {
 	runtimeInfo, err := e.runtimeManager.GetRuntime(runtimeID)
 	if err != nil {
 		return err
@@ -247,11 +341,7 @@ func (e *runtimeExecutor) StartRuntime(ctx context.Context, runtimeID domain.Run
 	return nil
 }
 
-func (e *runtimeExecutor) StopRuntime(ctx context.Context, runtimeID domain.RuntimeInstanceID) error {
-	lock := e.getRuntimeLock(runtimeID)
-	lock.Lock()
-	defer lock.Unlock()
-
+func (e *runtimeExecutor) stopRuntimeLocked(ctx context.Context, runtimeID domain.RuntimeInstanceID) error {
 	runtimeInfo, err := e.runtimeManager.GetRuntime(runtimeID)
 	if err != nil {
 		return err

@@ -1,7 +1,0 @@
-{
-  "schemaVersion": 1,
-  "taskId": "B27",
-  "generatedAt": "2026-08-08T19:00:00+08:00",
-  "changes": [],
-  "notes": "No code changes required. Existing decision.ArbitrationLayer satisfies all B27 requirements."
-}

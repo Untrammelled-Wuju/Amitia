@@ -11,14 +11,15 @@ type RuntimeInstanceID string
 type RuntimeState string
 
 const (
-	RuntimeStateCreated   RuntimeState = "created"
-	RuntimeStateStarting  RuntimeState = "starting"
-	RuntimeStateRunning   RuntimeState = "running"
-	RuntimeStateDegraded  RuntimeState = "degraded"
-	RuntimeStateSuspended RuntimeState = "suspended"
-	RuntimeStateStopping  RuntimeState = "stopping"
-	RuntimeStateStopped   RuntimeState = "stopped"
-	RuntimeStateFailed    RuntimeState = "failed"
+	RuntimeStateCreated    RuntimeState = "created"
+	RuntimeStateStarting   RuntimeState = "starting"
+	RuntimeStateRunning    RuntimeState = "running"
+	RuntimeStateDegraded   RuntimeState = "degraded"
+	RuntimeStateSuspended  RuntimeState = "suspended"
+	RuntimeStateRestarting RuntimeState = "restarting"
+	RuntimeStateStopping   RuntimeState = "stopping"
+	RuntimeStateStopped    RuntimeState = "stopped"
+	RuntimeStateFailed     RuntimeState = "failed"
 )
 
 var validRuntimeTransitions = map[RuntimeState]map[RuntimeState]struct{}{
@@ -32,10 +33,11 @@ var validRuntimeTransitions = map[RuntimeState]map[RuntimeState]struct{}{
 		RuntimeStateFailed:   {},
 	},
 	RuntimeStateRunning: {
-		RuntimeStateDegraded:  {},
-		RuntimeStateSuspended: {},
-		RuntimeStateStopping:  {},
-		RuntimeStateFailed:    {},
+		RuntimeStateDegraded:   {},
+		RuntimeStateSuspended:  {},
+		RuntimeStateRestarting: {},
+		RuntimeStateStopping:   {},
+		RuntimeStateFailed:     {},
 	},
 	RuntimeStateDegraded: {
 		RuntimeStateRunning:   {},
@@ -49,6 +51,10 @@ var validRuntimeTransitions = map[RuntimeState]map[RuntimeState]struct{}{
 		RuntimeStateStopping: {},
 		RuntimeStateFailed:   {},
 	},
+	RuntimeStateRestarting: {
+		RuntimeStateStopping: {},
+		RuntimeStateFailed:   {},
+	},
 	RuntimeStateStopping: {
 		RuntimeStateStopped: {},
 		RuntimeStateFailed:  {},
@@ -56,11 +62,12 @@ var validRuntimeTransitions = map[RuntimeState]map[RuntimeState]struct{}{
 }
 
 var activeRuntimeStates = map[RuntimeState]struct{}{
-	RuntimeStateStarting:  {},
-	RuntimeStateRunning:   {},
-	RuntimeStateDegraded:  {},
-	RuntimeStateSuspended: {},
-	RuntimeStateStopping:  {},
+	RuntimeStateStarting:   {},
+	RuntimeStateRunning:    {},
+	RuntimeStateDegraded:   {},
+	RuntimeStateSuspended:  {},
+	RuntimeStateRestarting: {},
+	RuntimeStateStopping:   {},
 }
 
 func CanTransitionRuntimeState(from RuntimeState, to RuntimeState) bool {
@@ -78,6 +85,7 @@ func AllRuntimeStates() []RuntimeState {
 		RuntimeStateRunning,
 		RuntimeStateDegraded,
 		RuntimeStateSuspended,
+		RuntimeStateRestarting,
 		RuntimeStateStopping,
 		RuntimeStateStopped,
 		RuntimeStateFailed,

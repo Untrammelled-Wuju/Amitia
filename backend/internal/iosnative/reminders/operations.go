@@ -19,3 +19,19 @@ const (
 
 	OperationDelete = "reminders.delete"
 )
+
+func Operations() []string {
+	return []string{
+		OperationStatus,
+		OperationAuthorizationStatus,
+		OperationAuthorizationRequest,
+		OperationListsList,
+		OperationQuery,
+		OperationGet,
+		OperationCreate,
+		OperationUpdate,
+		OperationComplete,
+		OperationUncomplete,
+		OperationDelete,
+	}
+}

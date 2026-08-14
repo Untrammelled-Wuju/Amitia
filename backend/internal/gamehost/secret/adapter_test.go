@@ -3,6 +3,7 @@ package secret_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strconv"
 	"sync"
 	"testing"
@@ -116,6 +117,7 @@ type identityEntry struct {
 	pluginID    string
 	extensionID string
 	state       string
+	generation  int64
 }
 
 func newFakeIdentity() *fakeIdentity {
@@ -129,7 +131,7 @@ func newFakeIdentity() *fakeIdentity {
 func (f *fakeIdentity) AddRuntime(rtID, pluginID, extID, state string) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	f.runtimes[rtID] = identityEntry{pluginID: pluginID, extensionID: extID, state: state}
+	f.runtimes[rtID] = identityEntry{pluginID: pluginID, extensionID: extID, state: state, generation: 1}
 	f.enabled[extID] = true
 }
 
@@ -139,17 +141,17 @@ func (f *fakeIdentity) AddService(rtID, svcID, pluginID, extID, state string) {
 	f.services[rtID+"/"+svcID] = identityEntry{pluginID: pluginID, extensionID: extID, state: state}
 }
 
-func (f *fakeIdentity) ResolveRuntime(rtID string) (string, string, string, error) {
+func (f *fakeIdentity) ResolveRuntime(ctx context.Context, rtID string) (string, string, string, int64, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	e, ok := f.runtimes[rtID]
 	if !ok {
-		return "", "", "", errors.New("runtime not found")
+		return "", "", "", 0, errors.New("runtime not found")
 	}
-	return e.pluginID, e.extensionID, e.state, nil
+	return e.pluginID, e.extensionID, e.state, e.generation, nil
 }
 
-func (f *fakeIdentity) ResolveService(rtID, svcID string) (string, string, string, error) {
+func (f *fakeIdentity) ResolveService(ctx context.Context, rtID, svcID string) (string, string, string, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
 	e, ok := f.services[rtID+"/"+svcID]
@@ -159,10 +161,10 @@ func (f *fakeIdentity) ResolveService(rtID, svcID string) (string, string, strin
 	return e.pluginID, e.extensionID, e.state, nil
 }
 
-func (f *fakeIdentity) ExtensionEnabled(extID string) bool {
+func (f *fakeIdentity) ExtensionEnabled(ctx context.Context, extID string) (bool, error) {
 	f.mu.RLock()
 	defer f.mu.RUnlock()
-	return f.enabled[extID]
+	return f.enabled[extID], nil
 }
 
 func (f *fakeIdentity) DisableExtension(extID string) {
@@ -177,11 +179,14 @@ type fakeGate struct {
 	calls int
 }
 
-func (g *fakeGate) CanAcquireSecret(ctx context.Context, extID, pluginID, rtID, svcID, ref string) bool {
+func (g *fakeGate) CheckSecretUse(ctx context.Context, extID, pluginID, rtID, svcID, ref string) (secret.SecretPermissionDecision, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	g.calls++
-	return g.allow
+	if g.allow {
+		return secret.SecretPermissionDecision{Allowed: true}, nil
+	}
+	return secret.SecretPermissionDecision{Allowed: false, Reason: "denied"}, fmt.Errorf("permission denied")
 }
 
 func (g *fakeGate) Calls() int {
@@ -204,7 +209,10 @@ func TestAcquireServiceLease_ValidService_Granted(t *testing.T) {
 	id.AddRuntime("rt-1", "plugin-x", "ext-x", "created")
 	id.AddService("rt-1", "svc-1", "plugin-x", "ext-x", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 
 	res, err := a.AcquireServiceLease(context.Background(), "rt-1", "plugin-x", "svc-1",
 		kernelsecret.SecretRef(refOpenAI), secret.PurposeStartup, true, 1)
@@ -226,9 +234,12 @@ func TestAcquireServiceLease_UnknownRuntime_Deny(t *testing.T) {
 	b := newFakeBroker()
 	id := newFakeIdentity()
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 
-	_, err := a.AcquireServiceLease(context.Background(), "rt-unknown", "p", "s",
+	_, err = a.AcquireServiceLease(context.Background(), "rt-unknown", "p", "s",
 		kernelsecret.SecretRef(refOpenAI), secret.PurposeRuntime, true, 1)
 	if !errors.Is(err, secret.ErrRuntimeInvalid) {
 		t.Fatalf("expected ErrRuntimeInvalid, got %v", err)
@@ -240,9 +251,12 @@ func TestAcquireServiceLease_UnknownService_Deny(t *testing.T) {
 	id := newFakeIdentity()
 	id.AddRuntime("rt-1", "p", "ext", "created")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 
-	_, err := a.AcquireServiceLease(context.Background(), "rt-1", "p", "s-unknown",
+	_, err = a.AcquireServiceLease(context.Background(), "rt-1", "p", "s-unknown",
 		kernelsecret.SecretRef(refOpenAI), secret.PurposeRuntime, true, 1)
 	if !errors.Is(err, secret.ErrServiceInvalid) {
 		t.Fatalf("expected ErrServiceInvalid, got %v", err)
@@ -255,9 +269,12 @@ func TestAcquireServiceLease_PluginMismatch_Deny(t *testing.T) {
 	id.AddRuntime("rt-1", "p1", "ext", "created")
 	id.AddService("rt-1", "svc-1", "p2", "ext", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 
-	_, err := a.AcquireServiceLease(context.Background(), "rt-1", "p1", "svc-1",
+	_, err = a.AcquireServiceLease(context.Background(), "rt-1", "p1", "svc-1",
 		kernelsecret.SecretRef(refOpenAI), secret.PurposeRuntime, true, 1)
 	if !errors.Is(err, secret.ErrBindingInvalid) {
 		t.Fatalf("expected ErrBindingInvalid, got %v", err)
@@ -270,9 +287,12 @@ func TestAcquireServiceLease_ExtensionExtMismatch_Deny(t *testing.T) {
 	id.AddRuntime("rt-1", "p", "ext-a", "created")
 	id.AddService("rt-1", "svc-1", "p", "ext-b", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 
-	_, err := a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
+	_, err = a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
 		kernelsecret.SecretRef(refOpenAI), secret.PurposeRuntime, true, 1)
 	if !errors.Is(err, secret.ErrBindingInvalid) {
 		t.Fatalf("expected ErrBindingInvalid, got %v", err)
@@ -288,9 +308,12 @@ func TestAcquireServiceLease_PermissionDenied(t *testing.T) {
 	id.AddRuntime("rt-1", "p", "ext", "created")
 	id.AddService("rt-1", "svc-1", "p", "ext", "running")
 	g := &fakeGate{allow: false}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 
-	_, err := a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
+	_, err = a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
 		kernelsecret.SecretRef(refOpenAI), secret.PurposeRuntime, true, 1)
 	if !errors.Is(err, secret.ErrPermissionDenied) {
 		t.Fatalf("expected ErrPermissionDenied, got %v", err)
@@ -305,9 +328,12 @@ func TestAcquireServiceLease_ExtensionDisabled_Deny(t *testing.T) {
 	id.AddService("rt-1", "svc-1", "p", "ext-d", "running")
 	id.DisableExtension("ext-d")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 
-	_, err := a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
+	_, err = a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
 		kernelsecret.SecretRef(refOpenAI), secret.PurposeRuntime, true, 1)
 	if !errors.Is(err, secret.ErrExtensionDisabled) {
 		t.Fatalf("expected ErrExtensionDisabled, got %v", err)
@@ -323,9 +349,12 @@ func TestAcquireServiceLease_CrossRuntime_Deny(t *testing.T) {
 	id.AddRuntime("rt-2", "p", "ext", "created")
 	id.AddService("rt-1", "svc-1", "p", "ext", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 
-	_, err := a.AcquireServiceLease(context.Background(), "rt-2", "p", "svc-1",
+	_, err = a.AcquireServiceLease(context.Background(), "rt-2", "p", "svc-1",
 		kernelsecret.SecretRef(refOpenAI), secret.PurposeRuntime, true, 1)
 	if !errors.Is(err, secret.ErrServiceInvalid) {
 		t.Fatalf("expected ErrServiceInvalid for cross-runtime, got %v", err)
@@ -338,9 +367,12 @@ func TestAcquireServiceLease_CrossPlugin_Deny(t *testing.T) {
 	id.AddRuntime("rt-1", "p1", "ext", "created")
 	id.AddService("rt-1", "svc-1", "p1", "ext", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 
-	_, err := a.AcquireServiceLease(context.Background(), "rt-1", "p2", "svc-1",
+	_, err = a.AcquireServiceLease(context.Background(), "rt-1", "p2", "svc-1",
 		kernelsecret.SecretRef(refOpenAI), secret.PurposeRuntime, true, 1)
 	if !errors.Is(err, secret.ErrBindingInvalid) {
 		t.Fatalf("expected ErrBindingInvalid for cross-plugin, got %v", err)
@@ -356,7 +388,10 @@ func TestRevokeServiceLeases_ClearsService(t *testing.T) {
 	id.AddRuntime("rt-1", "p", "ext", "created")
 	id.AddService("rt-1", "svc-1", "p", "ext", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 
 	res, err := a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
 		kernelsecret.SecretRef(refOpenAI), secret.PurposeStartup, true, 1)
@@ -387,7 +422,10 @@ func TestRevokeRuntimeLeases_ClearsAll(t *testing.T) {
 	id.AddService("rt-1", "svc-1", "p", "ext", "running")
 	id.AddService("rt-1", "svc-2", "p", "ext", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 
 	_, _ = a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
 		kernelsecret.SecretRef(refOpenAI), secret.PurposeStartup, true, 1)
@@ -412,7 +450,10 @@ func TestRevokeExtensionLeases_ClearsExtension(t *testing.T) {
 	id.AddService("rt-1", "svc-1", "p", "ext-a", "running")
 	id.AddService("rt-2", "svc-1", "p", "ext-a", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 
 	_, _ = a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
 		kernelsecret.SecretRef(refOpenAI), secret.PurposeStartup, true, 1)
@@ -437,7 +478,10 @@ func TestRevokeServiceLeavesOtherServicesUnaffected(t *testing.T) {
 	id.AddService("rt-1", "svc-1", "p", "ext", "running")
 	id.AddService("rt-1", "svc-2", "p", "ext", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 
 	_, _ = a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
 		kernelsecret.SecretRef(refOpenAI), secret.PurposeStartup, true, 1)
@@ -464,10 +508,13 @@ func TestAcquireServiceLease_WhenServiceStopping_Deny(t *testing.T) {
 	id.AddRuntime("rt-1", "p", "ext", "created")
 	id.AddService("rt-1", "svc-1", "p", "ext", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 
 	a.MarkServiceStopping("rt-1", "svc-1")
-	_, err := a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
+	_, err = a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
 		kernelsecret.SecretRef(refOpenAI), secret.PurposeRuntime, true, 1)
 	if !errors.Is(err, secret.ErrServiceStopped) {
 		t.Fatalf("expected ErrServiceStopped, got %v", err)
@@ -481,10 +528,13 @@ func TestAcquireServiceLease_WhenShutdown_Deny(t *testing.T) {
 	id.AddRuntime("rt-1", "p", "ext", "created")
 	id.AddService("rt-1", "svc-1", "p", "ext", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 
 	a.Shutdown()
-	_, err := a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
+	_, err = a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
 		kernelsecret.SecretRef(refOpenAI), secret.PurposeRuntime, true, 1)
 	if !errors.Is(err, secret.ErrHostShutdown) {
 		t.Fatalf("expected ErrHostShutdown, got %v", err)
@@ -501,7 +551,10 @@ func TestRevokeAll_Clears(t *testing.T) {
 	id.AddService("rt-1", "svc-1", "p", "ext", "running")
 	id.AddService("rt-2", "svc-1", "p2", "ext2", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 
 	_, _ = a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
 		kernelsecret.SecretRef(refOpenAI), secret.PurposeStartup, true, 1)
@@ -523,7 +576,10 @@ func TestRevokeServiceLeases_Idempotent(t *testing.T) {
 	id.AddRuntime("rt-1", "p", "ext", "created")
 	id.AddService("rt-1", "svc-1", "p", "ext", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 
 	_, _ = a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
 		kernelsecret.SecretRef(refOpenAI), secret.PurposeStartup, true, 1)
@@ -544,9 +600,12 @@ func TestAcquireServiceLease_InvalidEmptyFields(t *testing.T) {
 	b := newFakeBroker()
 	id := newFakeIdentity()
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 
-	_, err := a.AcquireServiceLease(context.Background(), "", "p", "s",
+	_, err = a.AcquireServiceLease(context.Background(), "", "p", "s",
 		kernelsecret.SecretRef(refOpenAI), secret.PurposeRuntime, true, 1)
 	if !errors.Is(err, secret.ErrRuntimeInvalid) {
 		t.Fatalf("expected ErrRuntimeInvalid for empty runtime, got %v", err)
@@ -577,9 +636,12 @@ func TestAcquireServiceLease_SecretNotFound_FailsStore(t *testing.T) {
 	id.AddRuntime("rt-1", "p", "ext", "created")
 	id.AddService("rt-1", "svc-1", "p", "ext", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 
-	_, err := a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
+	_, err = a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
 		kernelsecret.SecretRef("secret://nonexistent/key"), secret.PurposeStartup, true, 1)
 	if !errors.Is(err, secret.ErrSecretStoreFailure) {
 		t.Fatalf("expected ErrSecretStoreFailure for missing secret, got %v", err)
@@ -592,7 +654,10 @@ func TestActiveLeases_EmptyWhenNoLeases(t *testing.T) {
 	b := newFakeBroker()
 	id := newFakeIdentity()
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 
 	if len(a.ActiveServiceLeases("rt-1", "svc-1")) != 0 {
 		t.Error("expected no active service leases")
@@ -609,7 +674,10 @@ func TestRevokeRuntimeLeases_EmptyRuntime(t *testing.T) {
 	b := newFakeBroker()
 	id := newFakeIdentity()
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 
 	o := a.RevokeRuntimeLeases("", "test")
 	if o.RevokedCount != 0 {
@@ -626,12 +694,15 @@ func TestClearServiceStopping_AllowsAcquireAfterClear(t *testing.T) {
 	id.AddRuntime("rt-1", "p", "ext", "created")
 	id.AddService("rt-1", "svc-1", "p", "ext", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 
 	a.MarkServiceStopping("rt-1", "svc-1")
 	a.ClearServiceStopping("rt-1", "svc-1")
 
-	_, err := a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
+	_, err = a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
 		kernelsecret.SecretRef(refOpenAI), secret.PurposeStartup, true, 1)
 	if err != nil {
 		t.Fatalf("expected grant after clear, got err=%v", err)
@@ -647,14 +718,17 @@ func TestReset_ClearsAllState(t *testing.T) {
 	id.AddRuntime("rt-1", "p", "ext", "created")
 	id.AddService("rt-1", "svc-1", "p", "ext", "running")
 	g := &fakeGate{allow: true}
-	a := secret.NewSecretLeaseAdapter(b, id, g)
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
 
 	_, _ = a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
 		kernelsecret.SecretRef(refOpenAI), secret.PurposeStartup, true, 1)
 	a.Shutdown()
 	a.Reset()
 
-	_, err := a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
+	_, err = a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
 		kernelsecret.SecretRef(refOpenAI), secret.PurposeStartup, true, 1)
 	if err != nil {
 		t.Fatalf("expected grant after reset, got err=%v", err)
@@ -666,17 +740,15 @@ func TestReset_ClearsAllState(t *testing.T) {
 
 // ===== Nil gate =====
 
-func TestNilGate_AllowsAcquire(t *testing.T) {
+func TestNilGate_ConstructorFails(t *testing.T) {
 	b := newFakeBroker()
 	b.SeedSecret(refOpenAI, "v")
 	id := newFakeIdentity()
 	id.AddRuntime("rt-1", "p", "ext", "created")
 	id.AddService("rt-1", "svc-1", "p", "ext", "running")
-	a := secret.NewSecretLeaseAdapter(b, id, nil)
 
-	_, err := a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
-		kernelsecret.SecretRef(refOpenAI), secret.PurposeStartup, true, 1)
-	if err != nil {
-		t.Fatalf("expected grant with nil gate, got err=%v", err)
+	_, err := secret.NewSecretLeaseAdapter(b, id, nil)
+	if err == nil {
+		t.Fatal("expected constructor to fail with nil gate, got success")
 	}
 }

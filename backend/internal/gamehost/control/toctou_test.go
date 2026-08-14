@@ -17,6 +17,9 @@ func TestPluginOutputGate_TOCTOU_TakeoverBlocksOldEffect(t *testing.T) {
 	topo := NewFakeTopology()
 	topo.RegisterRuntime("rt-1", "plugin-1")
 
+	gen := NewFakeGenerationReader()
+	gen.SetGeneration("rt-1", 1)
+
 	mgr := NewControlAuthorityManager(ControlAuthorityManagerOptions{})
 	_, _ = mgr.Create(context.Background(), "rt-1", "plugin-1")
 	_, _ = mgr.Transition(context.Background(), "rt-1", TransitionRequest{
@@ -25,13 +28,21 @@ func TestPluginOutputGate_TOCTOU_TakeoverBlocksOldEffect(t *testing.T) {
 		Reason: ReasonRuntimeLifecycle,
 	})
 
-	gate := NewPluginOutputGate(PluginOutputGateOptions{
-		Clock:         func() time.Time { return time.Now().UTC() },
-		Topology:      topo,
-		RuntimeReader: rt,
-		PermChecker:   NewFakeEffPermChecker(),
-		Authority:     mgr,
+	gate, err := NewPluginOutputGate(PluginOutputGateOptions{
+		Clock:            func() time.Time { return time.Now().UTC() },
+		Topology:         topo,
+		RuntimeReader:    rt,
+		GenerationReader: gen,
+		PermChecker:      NewFakeEffPermChecker(),
+		PolicyChecker:    NoopHostPolicyChecker{},
+		Authority:        mgr,
+		Audit:            NewInMemoryAuthorityAuditSink(),
+		Metrics:          NewFakeMetrics(),
+		CommitBarrier:    NoopCommitBarrier{},
 	})
+	if err != nil {
+		t.Fatalf("failed to create gate: %v", err)
+	}
 
 	snap, _ := mgr.Get(context.Background(), "rt-1")
 
@@ -90,6 +101,9 @@ func TestPluginOutputGate_TOCTOU_BlockingSinkNotCalledAfterTakeover(t *testing.T
 	topo := NewFakeTopology()
 	topo.RegisterRuntime("rt-1", "plugin-1")
 
+	gen := NewFakeGenerationReader()
+	gen.SetGeneration("rt-1", 1)
+
 	mgr := NewControlAuthorityManager(ControlAuthorityManagerOptions{})
 	_, _ = mgr.Create(context.Background(), "rt-1", "plugin-1")
 	_, _ = mgr.Transition(context.Background(), "rt-1", TransitionRequest{
@@ -98,13 +112,21 @@ func TestPluginOutputGate_TOCTOU_BlockingSinkNotCalledAfterTakeover(t *testing.T
 		Reason: ReasonRuntimeLifecycle,
 	})
 
-	gate := NewPluginOutputGate(PluginOutputGateOptions{
-		Clock:         func() time.Time { return time.Now().UTC() },
-		Topology:      topo,
-		RuntimeReader: rt,
-		PermChecker:   NewFakeEffPermChecker(),
-		Authority:     mgr,
+	gate, err := NewPluginOutputGate(PluginOutputGateOptions{
+		Clock:            func() time.Time { return time.Now().UTC() },
+		Topology:         topo,
+		RuntimeReader:    rt,
+		GenerationReader: gen,
+		PermChecker:      NewFakeEffPermChecker(),
+		PolicyChecker:    NoopHostPolicyChecker{},
+		Authority:        mgr,
+		Audit:            NewInMemoryAuthorityAuditSink(),
+		Metrics:          NewFakeMetrics(),
+		CommitBarrier:    NoopCommitBarrier{},
 	})
+	if err != nil {
+		t.Fatalf("failed to create gate: %v", err)
+	}
 
 	var sinkCalls int
 	var sinkMu sync.Mutex
@@ -156,6 +178,9 @@ func TestPluginOutputGate_AuthorizeAndDispatch_PermitTimeReCheck(t *testing.T) {
 	topo := NewFakeTopology()
 	topo.RegisterRuntime("rt-1", "plugin-1")
 
+	gen := NewFakeGenerationReader()
+	gen.SetGeneration("rt-1", 1)
+
 	mgr := NewControlAuthorityManager(ControlAuthorityManagerOptions{})
 	_, _ = mgr.Create(context.Background(), "rt-1", "plugin-1")
 	_, _ = mgr.Transition(context.Background(), "rt-1", TransitionRequest{
@@ -164,7 +189,6 @@ func TestPluginOutputGate_AuthorizeAndDispatch_PermitTimeReCheck(t *testing.T) {
 		Reason: ReasonRuntimeLifecycle,
 	})
 
-	var gate *PluginOutputGate
 	var sinkCalls int
 	sink := ControlEffectSinkFunc(func(ctx context.Context, runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID, pluginID domain.PluginID, permit OutputPermit, payload []byte) error {
 		currentSnap, _ := mgr.Get(ctx, runtimeID)
@@ -175,13 +199,21 @@ func TestPluginOutputGate_AuthorizeAndDispatch_PermitTimeReCheck(t *testing.T) {
 		return nil
 	})
 
-	gate = NewPluginOutputGate(PluginOutputGateOptions{
-		Clock:         func() time.Time { return time.Now().UTC() },
-		Topology:      topo,
-		RuntimeReader: rt,
-		PermChecker:   NewFakeEffPermChecker(),
-		Authority:     mgr,
+	gate, err := NewPluginOutputGate(PluginOutputGateOptions{
+		Clock:            func() time.Time { return time.Now().UTC() },
+		Topology:         topo,
+		RuntimeReader:    rt,
+		GenerationReader: gen,
+		PermChecker:      NewFakeEffPermChecker(),
+		PolicyChecker:    NoopHostPolicyChecker{},
+		Authority:        mgr,
+		Audit:            NewInMemoryAuthorityAuditSink(),
+		Metrics:          NewFakeMetrics(),
+		CommitBarrier:    NoopCommitBarrier{},
 	})
+	if err != nil {
+		t.Fatalf("failed to create gate: %v", err)
+	}
 
 	snap, _ := mgr.Get(context.Background(), "rt-1")
 	req := OutputCheckRequest{
@@ -189,7 +221,7 @@ func TestPluginOutputGate_AuthorizeAndDispatch_PermitTimeReCheck(t *testing.T) {
 		Peer:   newTestPeer("rt-1", "", "plugin-1"),
 	}
 
-	_, err := gate.AuthorizeAndDispatch(context.Background(), req, sink)
+	_, err = gate.AuthorizeAndDispatch(context.Background(), req, sink)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}

@@ -14,3 +14,17 @@ const (
 	OperationEventsUpdate = "calendar.events.update"
 	OperationEventsDelete = "calendar.events.delete"
 )
+
+func Operations() []string {
+	return []string{
+		OperationStatus,
+		OperationAuthorizationStatus,
+		OperationAuthorizationRequest,
+		OperationCalendarsList,
+		OperationEventsQuery,
+		OperationEventsGet,
+		OperationEventsCreate,
+		OperationEventsUpdate,
+		OperationEventsDelete,
+	}
+}

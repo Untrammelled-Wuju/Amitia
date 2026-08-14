@@ -21,6 +21,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/security"
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
@@ -55,6 +56,22 @@ func main() {
 	configDir := util.RuntimeConfigDir(runtimeRoot)
 	config.InitConfig(configDir)
 
+	profileResolution, err := runtimeprofile.Resolve(runtimeprofile.ResolveInput{
+		Args:             os.Args[1:],
+		Env:              nil,
+		LegacyDeployMode: config.AppCfg.App.DeployMode,
+	})
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	if !profileResolution.Profile.IsValid() {
+		fmt.Fprintf(os.Stderr, "error: invalid runtime profile: %q\n", string(profileResolution.Profile))
+		os.Exit(1)
+	}
+	profile := profileResolution.Profile
+	policy := runtimeprofile.PolicyFor(profile)
+
 	resolvedToken := config.AppCfg.Security.LocalToken
 	if resolvedToken == "" && config.AppCfg.Security.LocalTokenFile != "" {
 		if data, rerr := os.ReadFile(config.AppCfg.Security.LocalTokenFile); rerr == nil {
@@ -82,6 +99,11 @@ func main() {
 			fmt.Fprintln(os.Stderr, "网络模式要求有效的JWT Secret，长度至少32字节")
 			os.Exit(1)
 		}
+	}
+
+	if err := validateProfileSecurity(profile, secCfg); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
 	}
 
 	config.AppCfg.Storage.DataDir = util.RuntimeDataDir(runtimeRoot, config.AppCfg.Storage.DataDir)
@@ -115,7 +137,7 @@ func main() {
 	}
 	ctx := app.NewAppContext(db, nil)
 
-	bootstrap, bootErr := newRuntimeBootstrap(&paths)
+	bootstrap, bootErr := newRuntimeBootstrap(&paths, profile)
 	if bootErr != nil {
 		log.Error("创建运行时宿主失败:", bootErr)
 		os.Exit(1)
@@ -130,7 +152,7 @@ func main() {
 		os.Exit(1)
 	}
 	bootstrap.SetGraphService(graphSvc)
-	services, err := NewAppServices(ctx, graphSvc, bootstrap)
+	services, err := NewAppServices(ctx, graphSvc, bootstrap, profile, policy)
 	if err != nil {
 		log.Error("应用服务初始化失败:", err)
 		_ = bootstrap.StopAll(context.Background())
@@ -174,12 +196,14 @@ func main() {
 	serverAddr := config.AppCfg.Server.Addr()
 	fmt.Printf("\n  ========================================\n")
 	fmt.Printf("    %s Backend Server\n", config.AppCfg.App.Name)
-	fmt.Printf("    Version:     %s\n", config.AppCfg.App.Version)
-	fmt.Printf("    Listen:      http://%s\n", serverAddr)
-	fmt.Printf("    Deploy Mode: %s\n", config.AppCfg.App.DeployMode)
-	fmt.Printf("    Database:    %s/app.db\n", config.AppCfg.Storage.DataDir)
-	fmt.Printf("    Qdrant:      %s:%d\n", config.AppCfg.Providers.VectorStore.Qdrant.Host, config.AppCfg.Providers.VectorStore.Qdrant.Port)
-	fmt.Printf("    SurrealDB:   %s:%d\n", config.AppCfg.Providers.GraphStore.SurrealDB.Host, config.AppCfg.Providers.GraphStore.SurrealDB.Port)
+	fmt.Printf("    Version:        %s\n", config.AppCfg.App.Version)
+	fmt.Printf("    Listen:         http://%s\n", serverAddr)
+	fmt.Printf("    Runtime Profile: %s\n", profile.String())
+	fmt.Printf("    Profile Source: %s\n", profileResolution.Source)
+	fmt.Printf("    Deploy Mode:    %s\n", config.AppCfg.App.DeployMode)
+	fmt.Printf("    Database:       %s/app.db\n", config.AppCfg.Storage.DataDir)
+	fmt.Printf("    Qdrant:         %s:%d\n", config.AppCfg.Providers.VectorStore.Qdrant.Host, config.AppCfg.Providers.VectorStore.Qdrant.Port)
+	fmt.Printf("    SurrealDB:      %s:%d\n", config.AppCfg.Providers.GraphStore.SurrealDB.Host, config.AppCfg.Providers.GraphStore.SurrealDB.Port)
 	fmt.Printf("  ========================================\n\n")
 
 	qqMgr := qq.NewManager("http://127.0.0.1:19877")
@@ -223,6 +247,13 @@ func main() {
 	log.Info("今日主动消息任务已生成")
 
 	killExistingServer(serverAddr)
+
+	if !policy.VectorStore {
+		log.Info("Qdrant: disabled by runtime profile")
+	}
+	if !policy.GraphStore {
+		log.Info("SurrealDB: disabled by runtime profile")
+	}
 
 	r, errSetup := setupRouter(ctx, services)
 	if errSetup != nil {
@@ -309,6 +340,34 @@ func main() {
 		cleanup()
 		os.Exit(1)
 	}
+}
+
+func validateProfileSecurity(profile runtimeprofile.Profile, secCfg *security.SecurityConfig) error {
+	switch profile {
+	case runtimeprofile.ProfileCloudCore:
+		if secCfg.Mode != security.SecurityModeNetwork {
+			return &runtimeprofile.ProfileSecurityConflictError{
+				Profile: profile,
+				Detail:  "cloud-core requires network security mode",
+			}
+		}
+		if !secCfg.AllowRemoteAccess {
+			return &runtimeprofile.ProfileSecurityConflictError{
+				Profile: profile,
+				Detail:  "cloud-core requires allowRemoteAccess=true",
+			}
+		}
+	case runtimeprofile.ProfileDeviceAgent:
+		if secCfg.Mode == security.SecurityModeNetwork && secCfg.AllowRemoteAccess {
+			return &runtimeprofile.ProfileSecurityConflictError{
+				Profile: profile,
+				Detail:  "device-agent must not expose public inbound by default",
+			}
+		}
+	case runtimeprofile.ProfileLocal:
+		return nil
+	}
+	return nil
 }
 
 func applyDatabaseStartupMigrations(db *gorm.DB, dataDir string) error {

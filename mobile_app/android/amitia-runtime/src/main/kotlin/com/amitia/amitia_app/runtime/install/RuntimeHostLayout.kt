@@ -11,6 +11,7 @@ interface RuntimeHostLayout {
     val metadataRoot: File
     val transactionsRoot: File
     val locksRoot: File
+    val packagesRoot: File
 
     val configRoot: File
     val dataRoot: File
@@ -41,6 +42,7 @@ interface RuntimeHostLayout {
         const val DIR_METADATA = "metadata"
         const val DIR_TRANSACTIONS = "transactions"
         const val DIR_LOCKS = "locks"
+        const val DIR_PACKAGES = "packages"
 
         const val DIR_CONFIG = "config"
         const val DIR_DATA = "data"

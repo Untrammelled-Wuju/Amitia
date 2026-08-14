@@ -10,9 +10,7 @@ import com.amitia.amitia_app.runtime.AndroidRuntimeModule
 import com.amitia.amitia_app.runtime.service.internal.DefaultRuntimeServiceEndpoint
 import com.amitia.amitia_app.runtime.service.internal.RuntimeForegroundNotification
 import com.amitia.amitia_app.runtime.service.internal.RuntimeForegroundNotificationResult
-import com.amitia.amitia_app.runtime.proot.ProotEnvironment
 import com.amitia.amitia_app.runtime.proot.ProotEvent
-import com.amitia.amitia_app.runtime.proot.ProotLaunchRequest
 import com.amitia.amitia_app.runtime.proot.ProotObserver
 import com.amitia.amitia_app.runtime.proot.ProotSession
 import java.util.concurrent.atomic.AtomicBoolean
@@ -24,13 +22,24 @@ class RuntimeService : Service() {
     private val lock = ReentrantLock()
     private val destroyed = AtomicBoolean(false)
     private val serviceState = AtomicReference(ServiceHostState.CREATED)
-    private val expectedStopRequested = AtomicBoolean(false)
-    private val terminalEventEmitted = AtomicBoolean(false)
     private val notificationManager by lazy { RuntimeForegroundNotification(this) }
 
     private val endpoint by lazy { DefaultRuntimeServiceEndpoint { this@RuntimeService } }
     private val binder by lazy { RuntimeServiceBinder(endpoint) }
 
+    private enum class TerminalEventKind {
+        EXPECTED_STOPPED,
+        UNEXPECTED_TERMINATION,
+    }
+
+    private data class ServiceSessionContext(
+        val generation: Long,
+        val session: ProotSession,
+        var stopRequested: Boolean = false,
+        var terminalEvent: TerminalEventKind? = null,
+    )
+
+    private val currentSessionContextRef: AtomicReference<ServiceSessionContext?> = AtomicReference(null)
     private val currentSessionRef: AtomicReference<ProotSession?> = AtomicReference(null)
     private val currentSessionIdRef: AtomicReference<String?> = AtomicReference(null)
     private val currentGenerationRef: AtomicReference<Long> = AtomicReference(0L)
@@ -45,6 +54,7 @@ class RuntimeService : Service() {
         lock.withLock {
             destroyed.set(false)
             serviceState.set(ServiceHostState.CREATED)
+            currentSessionContextRef.set(null)
             currentSessionRef.set(null)
             currentSessionIdRef.set(null)
             currentGenerationRef.set(0L)
@@ -78,11 +88,11 @@ class RuntimeService : Service() {
 
     private fun handleStartHost(generation: Long) {
         if (generation <= 0L) {
-            terminalEventEmitted.compareAndSet(false, true)
             serviceState.set(ServiceHostState.DESTROYED)
             endpoint.notify(
                 RuntimeServiceHostEvent.UnexpectedTermination(
-                    RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
+                    generation = generation,
+                    cause = RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
                 )
             )
             stopSelfSafely()
@@ -104,22 +114,22 @@ class RuntimeService : Service() {
                     )
                     startProotSessionLocked(generation)
                 } catch (e: Exception) {
-                    terminalEventEmitted.compareAndSet(false, true)
                     serviceState.set(ServiceHostState.DESTROYED)
                     endpoint.notify(
                         RuntimeServiceHostEvent.UnexpectedTermination(
-                            RuntimeServiceTerminationCause.FOREGROUND_FAILED
+                            generation = generation,
+                            cause = RuntimeServiceTerminationCause.FOREGROUND_FAILED
                         )
                     )
                     stopSelfSafely()
                 }
             }
             is RuntimeForegroundNotificationResult.Failure -> {
-                terminalEventEmitted.compareAndSet(false, true)
                 serviceState.set(ServiceHostState.DESTROYED)
                 endpoint.notify(
                     RuntimeServiceHostEvent.UnexpectedTermination(
-                        RuntimeServiceTerminationCause.NOTIFICATION_FAILED
+                        generation = generation,
+                        cause = RuntimeServiceTerminationCause.NOTIFICATION_FAILED
                     )
                 )
                 stopSelfSafely()
@@ -128,38 +138,85 @@ class RuntimeService : Service() {
     }
 
     private fun startProotSessionLocked(generation: Long) {
-        val component = AndroidRuntimeModule.prootComponent ?: return
-        val rootfsPath = AndroidRuntimeModule.prootRootfsPath ?: return
-        val assembler = AndroidRuntimeModule.prootEnvironmentAssembler
-        val activeProgramSource = resolveActiveProgramSource()
-
         currentGenerationRef.set(generation)
 
-        val request = if (assembler != null && activeProgramSource != null) {
+        val component = AndroidRuntimeModule.prootComponent
+        if (component == null) {
+            emitLaunchFailed(generation, RuntimeServiceTerminationCause.PROOT_COMPONENT_MISSING, "proot component is not available")
+            return
+        }
+
+        val rootfsPath = AndroidRuntimeModule.prootRootfsPath
+        if (rootfsPath == null) {
+            emitLaunchFailed(generation, RuntimeServiceTerminationCause.ROOTFS_MISSING, "rootfs path is not available")
+            return
+        }
+
+        val assembler = AndroidRuntimeModule.prootEnvironmentAssembler
+        if (assembler == null) {
+            emitLaunchFailed(generation, RuntimeServiceTerminationCause.ASSEMBLER_MISSING, "launch assembler is not available")
+            return
+        }
+
+        val activeProgramSource = resolveActiveProgramSource(generation)
+        if (activeProgramSource == null) {
+            return
+        }
+
+        val request = try {
             val spec = assembler.assembleBackendLaunch(activeProgramSource)
             assembler.toProotLaunchRequest(spec, "")
-        } else {
-            ProotLaunchRequest.create(
-                rootfsPath = rootfsPath,
-                workingDirectory = WORKING_DIRECTORY,
-                command = listOf(GUEST_SERVER_COMMAND),
-                bindMountsSource = emptyList(),
-                environmentSource = ProotEnvironment.EMPTY
-            )
+        } catch (e: com.amitia.amitia_app.runtime.proot.internal.ProotEnvironmentException) {
+            emitLaunchFailed(generation, RuntimeServiceTerminationCause.ENVIRONMENT_BUILD_FAILED, "environment build failed: ${e.message}")
+            return
+        } catch (e: java.lang.IllegalArgumentException) {
+            emitLaunchFailed(generation, RuntimeServiceTerminationCause.MOUNT_CONTRACT_INVALID, "mount contract invalid: ${e.message}")
+            return
+        } catch (e: java.lang.IllegalStateException) {
+            emitLaunchFailed(generation, RuntimeServiceTerminationCause.MOUNT_CONTRACT_INVALID, "mount contract invalid: ${e.message}")
+            return
         }
+
         val observer = ProotObserver { event -> onProotEvent(event, generation) }
         val session = component.launch(request, observer)
         currentSessionRef.set(session)
         currentSessionIdRef.set(session.sessionId)
+        currentSessionContextRef.set(
+            ServiceSessionContext(
+                generation = generation,
+                session = session,
+            )
+        )
     }
 
-    private fun resolveActiveProgramSource(): java.io.File? {
-        val manager = AndroidRuntimeModule.activeRuntimeManager ?: return null
+    private fun resolveActiveProgramSource(generation: Long): java.io.File? {
+        val manager = AndroidRuntimeModule.activeRuntimeManager
+        if (manager == null) {
+            emitLaunchFailed(generation, RuntimeServiceTerminationCause.NO_ACTIVE_RUNTIME, "active runtime manager is not available")
+            return null
+        }
         return when (val result = manager.resolveActiveProgramRoot()) {
             is com.amitia.amitia_app.runtime.install.ActiveProgramRootResult.Ready ->
                 result.root.hostDirectory
-            else -> null
+            is com.amitia.amitia_app.runtime.install.ActiveProgramRootResult.NoActiveRuntime -> {
+                emitLaunchFailed(generation, RuntimeServiceTerminationCause.NO_ACTIVE_RUNTIME, "no active runtime")
+                null
+            }
+            is com.amitia.amitia_app.runtime.install.ActiveProgramRootResult.Failure -> {
+                emitLaunchFailed(generation, RuntimeServiceTerminationCause.ACTIVE_PROGRAM_ROOT_INVALID, "active program root failure: ${result.message}")
+                null
+            }
         }
+    }
+
+    private fun emitLaunchFailed(generation: Long, cause: RuntimeServiceTerminationCause, message: String) {
+        endpoint.notify(
+            RuntimeServiceHostEvent.LaunchFailed(
+                generation = generation,
+                cause = cause,
+                message = message,
+            )
+        )
     }
 
     private fun onProotEvent(event: ProotEvent, generation: Long) {
@@ -179,6 +236,9 @@ class RuntimeService : Service() {
                 lock.withLock {
                     if (destroyed.get()) return
                     if (serviceState.get() == ServiceHostState.DESTROYED) return
+                    val sessionContext = currentSessionContextRef.get()
+                    if (sessionContext == null || sessionContext.generation != generation) return
+                    if (sessionContext.terminalEvent != null) return
                     endpoint.notify(
                         RuntimeServiceHostEvent.SessionExited(
                             generation = generation,
@@ -188,14 +248,20 @@ class RuntimeService : Service() {
                         )
                     )
                     if (serviceState.get() != ServiceHostState.FOREGROUND) return
-                    expectedStopRequested.set(true)
-                    terminalEventEmitted.compareAndSet(false, true)
-                    serviceState.set(ServiceHostState.DESTROYED)
-                    endpoint.notify(
-                        RuntimeServiceHostEvent.UnexpectedTermination(
-                            RuntimeServiceTerminationCause.SESSION_EXITED
+                    if (sessionContext.stopRequested) {
+                        sessionContext.terminalEvent = TerminalEventKind.EXPECTED_STOPPED
+                        serviceState.set(ServiceHostState.DESTROYED)
+                        endpoint.notify(RuntimeServiceHostEvent.ExpectedStopped(generation = generation))
+                    } else {
+                        sessionContext.terminalEvent = TerminalEventKind.UNEXPECTED_TERMINATION
+                        serviceState.set(ServiceHostState.DESTROYED)
+                        endpoint.notify(
+                            RuntimeServiceHostEvent.UnexpectedTermination(
+                                generation = generation,
+                                cause = RuntimeServiceTerminationCause.SESSION_EXITED
+                            )
                         )
-                    )
+                    }
                     stopSelfSafely()
                 }
             }
@@ -210,8 +276,10 @@ class RuntimeService : Service() {
                 AndroidRuntimeModule.prootComponent?.stop()
             }
         }
-        expectedStopRequested.set(true)
-        terminalEventEmitted.compareAndSet(false, true)
+        val sessionContext = currentSessionContextRef.get()
+        if (sessionContext != null) {
+            sessionContext.stopRequested = true
+        }
         stopForegroundSafely()
         stopSelfSafely()
     }
@@ -231,24 +299,35 @@ class RuntimeService : Service() {
     }
 
     override fun onDestroy() {
-        val wasTerminalAlreadyEmitted = terminalEventEmitted.get()
-        val wasExpected = expectedStopRequested.get()
+        var expectedStoppedGeneration: Long? = null
+        var unexpectedTerminationCause: RuntimeServiceTerminationCause? = null
         lock.withLock {
             destroyed.set(true)
             serviceState.set(ServiceHostState.DESTROYED)
+            val sessionContext = currentSessionContextRef.get()
+            if (sessionContext != null && sessionContext.terminalEvent == null) {
+                if (sessionContext.stopRequested) {
+                    sessionContext.terminalEvent = TerminalEventKind.EXPECTED_STOPPED
+                    expectedStoppedGeneration = sessionContext.generation
+                } else {
+                    sessionContext.terminalEvent = TerminalEventKind.UNEXPECTED_TERMINATION
+                    unexpectedTerminationCause = RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
+                }
+            }
+            currentSessionContextRef.set(null)
             currentSessionRef.set(null)
             currentSessionIdRef.set(null)
         }
-        if (!wasTerminalAlreadyEmitted) {
-            if (wasExpected) {
-                endpoint.notify(RuntimeServiceHostEvent.ExpectedStopped)
-            } else {
-                endpoint.notify(
-                    RuntimeServiceHostEvent.UnexpectedTermination(
-                        RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
-                    )
+        if (expectedStoppedGeneration != null) {
+            endpoint.notify(RuntimeServiceHostEvent.ExpectedStopped(generation = expectedStoppedGeneration!!))
+        }
+        if (unexpectedTerminationCause != null) {
+            endpoint.notify(
+                RuntimeServiceHostEvent.UnexpectedTermination(
+                    generation = currentGenerationRef.get(),
+                    cause = unexpectedTerminationCause!!
                 )
-            }
+            )
         }
         instanceRef.compareAndSet(this, null)
         super.onDestroy()
@@ -319,8 +398,10 @@ class RuntimeService : Service() {
             val svc = instanceRef.get()
             if (svc != null) {
                 svc.lock.withLock {
-                    svc.expectedStopRequested.set(true)
-                    svc.terminalEventEmitted.compareAndSet(false, true)
+                    val sessionContext = svc.currentSessionContextRef.get()
+                    if (sessionContext != null) {
+                        sessionContext.stopRequested = true
+                    }
                 }
             }
             return try {

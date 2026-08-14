@@ -34,8 +34,11 @@ func (c ServiceConfig) WithDB(db *sql.DB) ServiceConfig {
 	return c
 }
 
-// Service 是 Extension Kernel durable event 发布/投递基础。
-// 后续不得另建 CloudEventBus / RemoteEventBus 作为另一套 durable authority。
+// Service is Amitia's durable event infrastructure service.
+// Extension events are one consumer of this service.
+// It provides durable event publishing, outbox, delivery, retry,
+// dead letter, replay, ordering, and idempotency for unified use by
+// Extension, Device, Capability Provider, Task, Sync and other domains.
 type Service struct {
 	mu                 sync.RWMutex
 	config             ServiceConfig
@@ -56,6 +59,12 @@ type Service struct {
 	stopCancel         context.CancelFunc
 	wg                 sync.WaitGroup
 }
+
+var (
+	_ DurableEventPublisher = (*Service)(nil)
+	_ DurableEventReader    = (*Service)(nil)
+	_ DurableReplayPort     = (*Service)(nil)
+)
 
 func NewService(cfg ServiceConfig) (*Service, error) {
 	if cfg.DB == nil {

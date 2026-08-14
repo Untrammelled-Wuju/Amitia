@@ -4,14 +4,15 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 	"gorm.io/gorm"
 )
 
 type SessionService interface {
-	CreateSession(userID, deviceID, runtimeID string, prevGen int64) (*RuntimeSession, error)
+	CreateSession(userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, prevGen int64) (*RuntimeSession, error)
 	GetSession(id string) (*RuntimeSession, error)
-	GetActiveSession(userID, deviceID, runtimeID string) (*RuntimeSession, error)
-	AcquireSession(ctx *gorm.DB, userID, deviceID, runtimeID string, caps []string, capsHash string, lastAppliedRev, lastCmdSeq, lastEvtSeq int64, contractVersion string) (*RuntimeSession, *RuntimeSession, error)
+	GetActiveSession(userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (*RuntimeSession, error)
+	AcquireSession(ctx *gorm.DB, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, caps []string, capsHash string, lastAppliedRev, lastCmdSeq, lastEvtSeq int64, contractVersion string) (*RuntimeSession, *RuntimeSession, error)
 	UpdateLastAppliedRevision(id string, revision int64) error
 	UpdateLastProcessedCommandSequence(id string, seq int64) error
 	UpdateLastEventSequence(id string, seq int64) error
@@ -31,10 +32,10 @@ func NewSessionService(db *gorm.DB) SessionService {
 
 func (s *sessionService) DB() *gorm.DB { return s.db }
 
-func (s *sessionService) CreateSession(userID, deviceID, runtimeID string, prevGen int64) (*RuntimeSession, error) {
+func (s *sessionService) CreateSession(userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, prevGen int64) (*RuntimeSession, error) {
 	now := time.Now().Format("2006-01-02 15:04:05")
 	session := &RuntimeSession{
-		ID:                           "rtsessv2_" + uuid.NewString(),
+		ID:                           string(runtimeidentity.RuntimeSessionID("rtsessv2_" + uuid.NewString())),
 		UserID:                       userID,
 		DeviceID:                     deviceID,
 		RuntimeID:                    runtimeID,
@@ -63,11 +64,11 @@ func (s *sessionService) GetSession(id string) (*RuntimeSession, error) {
 	return &session, nil
 }
 
-func (s *sessionService) GetActiveSession(userID, deviceID, runtimeID string) (*RuntimeSession, error) {
+func (s *sessionService) GetActiveSession(userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (*RuntimeSession, error) {
 	var session RuntimeSession
 	err := s.db.Where(
 		"user_id = ? AND device_id = ? AND runtime_id = ? AND status IN (?, ?, ?, ?)",
-		userID, deviceID, runtimeID,
+		userID.String(), deviceID.String(), runtimeID.String(),
 		SessionStatusRegistering, SessionStatusSyncing, SessionStatusReady, SessionStatusDegraded,
 	).Order("connection_generation DESC").First(&session).Error
 	if err != nil {
@@ -76,7 +77,7 @@ func (s *sessionService) GetActiveSession(userID, deviceID, runtimeID string) (*
 	return &session, nil
 }
 
-func (s *sessionService) AcquireSession(ctx *gorm.DB, userID, deviceID, runtimeID string, caps []string, capsHash string, lastAppliedRev, lastCmdSeq, lastEvtSeq int64, contractVersion string) (*RuntimeSession, *RuntimeSession, error) {
+func (s *sessionService) AcquireSession(ctx *gorm.DB, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, caps []string, capsHash string, lastAppliedRev, lastCmdSeq, lastEvtSeq int64, contractVersion string) (*RuntimeSession, *RuntimeSession, error) {
 	db := s.db
 	if ctx != nil {
 		db = ctx
@@ -85,7 +86,7 @@ func (s *sessionService) AcquireSession(ctx *gorm.DB, userID, deviceID, runtimeI
 	var existing RuntimeSession
 	err := db.Where(
 		"user_id = ? AND device_id = ? AND runtime_id = ? AND status IN (?, ?, ?, ?)",
-		userID, deviceID, runtimeID,
+		userID.String(), deviceID.String(), runtimeID.String(),
 		SessionStatusRegistering, SessionStatusSyncing, SessionStatusReady, SessionStatusDegraded,
 	).Order("connection_generation DESC").First(&existing).Error
 
@@ -105,7 +106,7 @@ func (s *sessionService) AcquireSession(ctx *gorm.DB, userID, deviceID, runtimeI
 
 	now := time.Now().Format("2006-01-02 15:04:05")
 	newSession := &RuntimeSession{
-		ID:                           "rtsessv2_" + uuid.NewString(),
+		ID:                           string(runtimeidentity.RuntimeSessionID("rtsessv2_" + uuid.NewString())),
 		UserID:                       userID,
 		DeviceID:                     deviceID,
 		RuntimeID:                    runtimeID,

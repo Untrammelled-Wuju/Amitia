@@ -7,9 +7,9 @@ import java.io.File
 class TrustedRuntimePackageSourceTest {
 
     @Test
-    fun resolve_returnsStep7FrozenIdentity() {
+    fun createReference_returnsStep7FrozenIdentity() {
         val packageFile = File("/data/local/tmp/packages/amitia-runtime-1.0.0.zip")
-        val ref = TrustedRuntimePackageSource.resolve(packageFile)
+        val ref = TrustedRuntimePackageSource.createReference(packageFile)
 
         assertEquals("1.0.0", ref.expectedRuntimeVersion)
         assertEquals("3f061598a5c0b815cdb1d536694d9e251652be13f301fb215f1d1aae0c5f7f57", ref.expectedPackageSha256)
@@ -53,12 +53,12 @@ class TrustedRuntimePackageSourceTest {
     }
 
     @Test
-    fun resolve_withDifferentFile_returnsSameExpectedIdentity() {
+    fun createReference_withDifferentFile_returnsSameExpectedIdentity() {
         val packageFile1 = File("/tmp/test1.zip")
         val packageFile2 = File("/tmp/test2.zip")
 
-        val ref1 = TrustedRuntimePackageSource.resolve(packageFile1)
-        val ref2 = TrustedRuntimePackageSource.resolve(packageFile2)
+        val ref1 = TrustedRuntimePackageSource.createReference(packageFile1)
+        val ref2 = TrustedRuntimePackageSource.createReference(packageFile2)
 
         assertEquals(ref1.expectedRuntimeVersion, ref2.expectedRuntimeVersion)
         assertEquals(ref1.expectedPackageSha256, ref2.expectedPackageSha256)

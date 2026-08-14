@@ -152,7 +152,41 @@ type RecoveryCoordinatorDeps struct {
 	AuditSink            AuditSink
 }
 
-func NewRecoveryCoordinator(deps RecoveryCoordinatorDeps) *RecoveryCoordinator {
+func NewRecoveryCoordinator(deps RecoveryCoordinatorDeps) (*RecoveryCoordinator, error) {
+	if deps.Kernel == nil {
+		return nil, fmt.Errorf("recovery: Kernel rollback is required")
+	}
+	if deps.Supervisor == nil {
+		return nil, fmt.Errorf("recovery: Supervisor view is required")
+	}
+	if deps.PluginRegistry == nil {
+		return nil, fmt.Errorf("recovery: PluginRegistry is required")
+	}
+	if deps.RuntimeManager == nil {
+		return nil, fmt.Errorf("recovery: RuntimeManager is required")
+	}
+	if deps.RuntimeExecutor == nil {
+		return nil, fmt.Errorf("recovery: RuntimeExecutor is required")
+	}
+	if deps.SecretLease == nil {
+		return nil, fmt.Errorf("recovery: SecretLease is required")
+	}
+	if deps.Permission == nil {
+		return nil, fmt.Errorf("recovery: Permission is required")
+	}
+	if deps.AuthorityView == nil {
+		return nil, fmt.Errorf("recovery: AuthorityView is required")
+	}
+	if deps.CheckpointClassifier == nil {
+		return nil, fmt.Errorf("recovery: CheckpointClassifier is required")
+	}
+	if deps.StructureBuilder == nil {
+		return nil, fmt.Errorf("recovery: StructureBuilder is required")
+	}
+	if deps.AuditSink == nil {
+		return nil, fmt.Errorf("recovery: AuditSink is required")
+	}
+
 	c := &RecoveryCoordinator{
 		gate:           NewRecoveryGate(),
 		classifier:     NewFailureClassifier(),
@@ -166,11 +200,9 @@ func NewRecoveryCoordinator(deps RecoveryCoordinatorDeps) *RecoveryCoordinator {
 		authority:      deps.AuthorityView,
 		structureBuilder: deps.StructureBuilder,
 		audit:          deps.AuditSink,
+		checkpoint:     deps.CheckpointClassifier,
 	}
-	if deps.CheckpointClassifier != nil {
-		c.checkpoint = deps.CheckpointClassifier
-	}
-	return c
+	return c, nil
 }
 
 func (c *RecoveryCoordinator) ExecuteRecovery(ctx context.Context, req RecoveryRequest) (*RecoveryResponse, error) {

@@ -1,9 +1,0 @@
-{
-  "boundary": {
-    "decisionLayer": "B32 Agent Replanning",
-    "kernelTaskLayer": "TaskRuntime.Retry"
-  },
-  "taskRetryOwner": "Extension Kernel task_runtime",
-  "b32DoesNotDuplicate": true,
-  "note": "B32只通过Observation消费Task状态，不直接执行Task Retry。Task失败可通过B32 CONTINUE → 新Decision Cycle → 选择不同Task/Workflow候选。"
-}

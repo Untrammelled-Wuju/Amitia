@@ -1,9 +1,0 @@
-{
-  "schemaVersion": 1,
-  "taskId": "B43",
-  "input_context_cancel_propagation": {"status": "ALREADY_SUPPORTED", "b43Action": "NO_CODE_CHANGE"},
-  "select_ctx_done_in_adapters": {"status": "ALREADY_SUPPORTED", "b43Action": "NO_CODE_CHANGE"},
-  "status_cancelled_mapping": {"status": "ALREADY_SUPPORTED", "b43Action": "NO_CODE_CHANGE"},
-  "late_result_guard": {"status": "ALREADY_SUPPORTED (phantom select 保证)", "b43Action": "NO_CODE_CHANGE"},
-  "cross_invocation_isolation": {"status": "ALREADY_SUPPORTED (per-invocation ctx)", "b43Action": "NO_CODE_CHANGE"}
-}

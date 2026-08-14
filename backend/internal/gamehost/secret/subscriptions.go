@@ -53,3 +53,10 @@ func (s *SubscriptionAdapter) OnRuntimeRestarted(runtimeID string) {
 	}
 	s.inner.RevokeRuntimeLeases(runtimeID, "runtime restarted")
 }
+
+func (s *SubscriptionAdapter) OnRuntimeGenerationChanged(runtimeID string, oldGeneration int64) {
+	if runtimeID == "" || oldGeneration <= 0 {
+		return
+	}
+	s.inner.RevokeRuntimeGenerationLeases(runtimeID, oldGeneration, "generation changed")
+}

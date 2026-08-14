@@ -4,6 +4,7 @@ import com.amitia.amitia_app.runtime.AndroidRuntimeModule
 import com.amitia.amitia_app.runtime.api.RuntimeController
 import com.amitia.amitia_app.runtime.internal.DefaultRuntimeModule
 import com.amitia.amitia_app.runtime.manifest.RuntimeManifestStore
+import com.amitia.amitia_app.runtime.packagetrusted.RuntimePackageSource
 import com.amitia.amitia_app.runtime.bridge.RuntimeBridgeContract
 import android.content.Context
 import io.flutter.embedding.engine.plugins.FlutterPlugin
@@ -23,12 +24,15 @@ class RuntimeBridgePlugin : FlutterPlugin {
         val controller = module.controller
         val backendConnectionProvider = (module as DefaultRuntimeModule).backendConnectionProvider
         val manifestStore = (module as DefaultRuntimeModule).manifestStore
+        val runtimePackageSource = AndroidRuntimeModule.runtimePackageSource
+            ?: error("RuntimePackageSource is not initialized")
 
         val methodChannel = MethodChannel(binding.binaryMessenger, RuntimeBridgeContract.METHOD_CHANNEL)
         val methodHandler = RuntimeBridgeHandler(
             controller = controller,
             backendConnectionProvider = backendConnectionProvider,
             manifestStore = manifestStore,
+            runtimePackageSource = runtimePackageSource,
         )
         methodChannel.setMethodCallHandler(methodHandler)
         this.methodChannel = methodChannel

@@ -38,7 +38,7 @@ func (h *MutationHandler) Install(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 			return
 		}
-		if errors.Is(err, ErrNotGamePlugin) {
+		if errors.Is(err, ErrNotGamePlugin) || errors.Is(err, ErrManagementTargetMismatch) || errors.Is(err, ErrPackageIdentityMismatch) {
 			c.JSON(http.StatusConflict, gin.H{"code": 409, "msg": err.Error()})
 			return
 		}
@@ -55,10 +55,21 @@ func (h *MutationHandler) Update(c *gin.Context) {
 		return
 	}
 
-	var req PackageUpdateRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
+	extensionID := strings.TrimSpace(c.Param("extensionId"))
+	if extensionID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "extensionId required"})
+		return
+	}
+
+	var body PackageUpdateBody
+	if err := c.ShouldBindJSON(&body); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "invalid request body"})
 		return
+	}
+
+	req := PackageUpdateRequest{
+		ExtensionID: extensionID,
+		ArchivePath: body.ArchivePath,
 	}
 
 	result, err := h.packageSvc.Update(c.Request.Context(), req)
@@ -67,7 +78,7 @@ func (h *MutationHandler) Update(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
 			return
 		}
-		if errors.Is(err, ErrNotGamePlugin) {
+		if errors.Is(err, ErrNotGamePlugin) || errors.Is(err, ErrManagementTargetMismatch) || errors.Is(err, ErrPackageIdentityMismatch) {
 			c.JSON(http.StatusConflict, gin.H{"code": 409, "msg": err.Error()})
 			return
 		}

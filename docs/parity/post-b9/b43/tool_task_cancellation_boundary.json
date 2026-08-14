@@ -1,9 +1,0 @@
-{
-  "schemaVersion": 1,
-  "taskId": "B43",
-  "toolInvocationCancel": "通过 context.Context 父子树传播到 Tool Invocation",
-  "taskCancel": "task_runtime 自身状态机 (Cancelling -> Cancelled)",
-  "workflowCancel": "NOT_APPLICABLE",
-  "durableTaskClientDisconnect": "NOT_APPLICABLE (当前无 detach durable task)",
-  "note": "Task 与 Tool 取消边界清晰：Context 树为唯一控制信号源"
-}

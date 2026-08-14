@@ -1,0 +1,7 @@
+{
+  "gameHostPermissions": [
+    "gamehost.control",
+    "gamehost.channel.use",
+    "gamehost.host_api.invoke"
+  ]
+}
