@@ -40,8 +40,8 @@ internal class AndroidRuntimeServiceHost(
         return result
     }
 
-    override fun requestStop(): RuntimeServiceResult {
-        return RuntimeService.stopHost(context)
+    override fun requestStop(targetGeneration: Long): RuntimeServiceResult {
+        return RuntimeService.stopHost(context, targetGeneration)
     }
 
     override fun addListener(listener: RuntimeServiceHostListener) {

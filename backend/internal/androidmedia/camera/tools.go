@@ -350,3 +350,19 @@ func BuildPermissionDefinition() PermissionDefinition {
 		Risk:        "high",
 	}
 }
+
+func BuildCameraTools() ([]capability.ToolDefinition, error) {
+	status, err := BuildStatusToolDefinition()
+	if err != nil {
+		return nil, err
+	}
+	list, err := BuildListToolDefinition()
+	if err != nil {
+		return nil, err
+	}
+	capture, err := BuildCaptureToolDefinition()
+	if err != nil {
+		return nil, err
+	}
+	return []capability.ToolDefinition{status, list, capture}, nil
+}

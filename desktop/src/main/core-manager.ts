@@ -9,13 +9,17 @@ import {
   getInstallDir,
   isDevMode,
 } from "./path-manager";
-import { validateCorePrerequisites } from "./core-prereq";
+import { validateCorePrerequisites, validateDeviceAgentPrerequisites } from "./core-prereq";
 import type { CorePrerequisiteResult } from "./core-prereq";
 import { getLocalAdminHeaders } from "./backend-session-client";
 
 export type { CorePrerequisiteResult };
 
+export type BundledCoreProfile = "local" | "device-agent";
+
 let coreProcess: ChildProcessWithoutNullStreams | null = null;
+let runningCoreProfile: BundledCoreProfile | null = null;
+let coreGeneration = 0;
 
 export function getCorePath(): string {
   if (!isDevMode()) {
@@ -31,6 +35,10 @@ export function getCoreResourcesPath(): string {
   return path.join(getInstallDir(), "resources");
 }
 
+export function getRunningCoreProfile(): BundledCoreProfile | null {
+  return runningCoreProfile;
+}
+
 export function ensureDataAndConfig(): { ok: boolean; errors: string[] } {
   const dataDir = ensureAmitiaDataDir();
   ensureDefaultConfig(dataDir);
@@ -38,6 +46,22 @@ export function ensureDataAndConfig(): { ok: boolean; errors: string[] } {
   ensureInitialSQL(dataDir);
   ensureCoreBinaries(dataDir);
   const validation = validateCorePrerequisites(dataDir, getCorePath());
+  return { ok: validation.ok, errors: validation.missing };
+}
+
+export function ensureCorePrerequisites(profile: BundledCoreProfile): { ok: boolean; errors: string[] } {
+  const dataDir = ensureAmitiaDataDir();
+  ensureDefaultConfig(dataDir);
+  ensureLocalToken(dataDir);
+
+  if (profile === "local") {
+    ensureInitialSQL(dataDir);
+    ensureCoreBinaries(dataDir);
+    const validation = validateCorePrerequisites(dataDir, getCorePath());
+    return { ok: validation.ok, errors: validation.missing };
+  }
+
+  const validation = validateDeviceAgentPrerequisites(dataDir, getCorePath());
   return { ok: validation.ok, errors: validation.missing };
 }
 
@@ -202,10 +226,15 @@ function ensureCoreBinaries(dataDir: string): void {
   }
 }
 
-export function startCore(): void {
-  if (coreProcess) {
-    console.log("[CoreManager] 核心进程已在运行, 跳过");
+export function startCore(profile: BundledCoreProfile): void {
+  if (coreProcess && runningCoreProfile === profile) {
+    console.log("[CoreManager] 核心进程已在运行且Profile相同, 跳过");
     return;
+  }
+
+  if (coreProcess) {
+    console.log("[CoreManager] 当前Profile与请求不同, 需要先停止当前进程");
+    throw new Error("需要先停止当前Profile才能启动新Profile");
   }
 
   lastHealthyAt = 0;
@@ -216,13 +245,16 @@ export function startCore(): void {
 
   console.log("[CoreManager] 核心路径:", corePath);
   console.log("[CoreManager] 数据目录:", dataDir);
+  console.log(`[CoreManager] Runtime Profile: ${profile}`);
   console.log("[CoreManager] 核心文件存在:", fs.existsSync(corePath));
   console.log(
     "[CoreManager] 核心文件大小:",
     fs.existsSync(corePath) ? fs.statSync(corePath).size : 0,
   );
 
-  const prereq = validateCorePrerequisites(dataDir, corePath);
+  const prereq = profile === "local"
+    ? validateCorePrerequisites(dataDir, corePath)
+    : validateDeviceAgentPrerequisites(dataDir, corePath);
   if (!prereq.ok) {
     const msg = `Amitia Core启动前置条件不满足，缺失以下文件:\n${prereq.missing.map((m) => `  - ${m}`).join("\n")}`;
     console.error("[CoreManager]", msg);
@@ -240,13 +272,15 @@ export function startCore(): void {
   console.log("[CoreManager] CONFIG_PATH:", configPath);
   console.log("[CoreManager] cwd:", dataDir);
 
-  coreProcess = spawn(corePath, [], {
+  const currentGeneration = ++coreGeneration;
+  coreProcess = spawn(corePath, [`--runtime-profile=${profile}`], {
     cwd: dataDir,
     env,
     windowsHide: true,
   });
+  runningCoreProfile = profile;
 
-  console.log("[CoreManager] 核心进程已启动, PID:", coreProcess.pid);
+  console.log(`[CoreManager] 核心进程已启动, PID: ${coreProcess.pid}, generation: ${currentGeneration}`);
 
   coreProcess.stdout.on("data", (data) => {
     console.log(`[AmitiaCore] ${data.toString().trim()}`);
@@ -257,18 +291,25 @@ export function startCore(): void {
   });
 
   coreProcess.on("exit", (code, signal) => {
-    console.log(`[AmitiaCore] 进程退出, code=${code}, signal=${signal}`);
-    coreProcess = null;
+    console.log(`[AmitiaCore] 进程退出, code=${code}, signal=${signal}, generation=${currentGeneration}`);
+    if (currentGeneration === coreGeneration) {
+      coreProcess = null;
+      runningCoreProfile = null;
+    }
   });
 
   coreProcess.on("error", (error) => {
     console.error("[AmitiaCore] 启动失败:", error.message);
-    coreProcess = null;
+    if (currentGeneration === coreGeneration) {
+      coreProcess = null;
+      runningCoreProfile = null;
+    }
   });
 }
 
 export async function stopCore(): Promise<void> {
   if (coreProcess && !coreProcess.killed) {
+    const currentGeneration = coreGeneration;
     console.log("[CoreManager] 正在停止核心进程, PID:", coreProcess.pid);
     const pid = coreProcess.pid ?? 0;
 
@@ -283,11 +324,49 @@ export async function stopCore(): Promise<void> {
       forceKillProcessTree(pid);
     }
     cleanupRemainingProcesses();
-    coreProcess = null;
+    if (currentGeneration === coreGeneration) {
+      coreProcess = null;
+      runningCoreProfile = null;
+    }
     return;
   }
   cleanupRemainingProcesses();
   coreProcess = null;
+  runningCoreProfile = null;
+}
+
+export async function ensureCoreProfile(profile: BundledCoreProfile): Promise<void> {
+  if (coreProcess && runningCoreProfile === profile) {
+    console.log("[CoreManager] 核心进程已是目标Profile, 等待就绪");
+    await waitForCoreReady(profile);
+    return;
+  }
+
+  if (coreProcess) {
+    console.log(`[CoreManager] 切换Profile: ${runningCoreProfile} -> ${profile}`);
+    await stopCore();
+    await waitForProcessExit();
+  }
+
+  console.log(`[CoreManager] 启动核心进程, Profile: ${profile}`);
+  startCore(profile);
+  await waitForCoreReady(profile);
+}
+
+async function waitForProcessExit(): Promise<void> {
+  const deadline = Date.now() + 10000;
+  while (Date.now() < deadline && coreProcess !== null) {
+    const healthUrl = "http://127.0.0.1:18899/livez";
+    const alive = await httpHealthCheck(healthUrl, 500);
+    if (!alive) {
+      console.log("[CoreManager] 核心服务已停止响应");
+      break;
+    }
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  if (coreProcess) {
+    console.warn("[CoreManager] 等待进程退出超时");
+  }
 }
 
 function forceKillProcessTree(pid: number): void {
@@ -340,8 +419,8 @@ async function gracefulShutdown(pid: number): Promise<boolean> {
     return false;
   }
 
-console.log("[CoreManager] 尝试优雅关闭核心服务...");
-const shutdownOk = await httpShutdown("http://127.0.0.1:18899/api/local/admin/shutdown", 3000, getLocalAdminHeaders());
+  console.log("[CoreManager] 尝试优雅关闭核心服务...");
+  const shutdownOk = await httpShutdown("http://127.0.0.1:18899/api/local/admin/shutdown", 3000, getLocalAdminHeaders());
   if (!shutdownOk) {
     console.warn("[CoreManager] 优雅关闭请求失败");
     return false;
@@ -370,33 +449,33 @@ const shutdownOk = await httpShutdown("http://127.0.0.1:18899/api/local/admin/sh
 }
 
 function httpShutdown(
-url: string,
-timeoutMs: number,
-headers: Record<string, string>,
+  url: string,
+  timeoutMs: number,
+  headers: Record<string, string>,
 ): Promise<boolean> {
-return new Promise((resolve) => {
-const req = http.request(
-url,
-{
-method: "POST",
-timeout: timeoutMs,
-headers: {
-Accept: "application/json",
-...headers,
-},
-},
-(res) => {
-res.resume();
-resolve(res.statusCode === 200 || res.statusCode === 202);
-},
-);
-req.on("error", () => resolve(false));
-req.on("timeout", () => {
-req.destroy();
-resolve(false);
-});
-req.end();
-});
+  return new Promise((resolve) => {
+    const req = http.request(
+      url,
+      {
+        method: "POST",
+        timeout: timeoutMs,
+        headers: {
+          Accept: "application/json",
+          ...headers,
+        },
+      },
+      (res) => {
+        res.resume();
+        resolve(res.statusCode === 200 || res.statusCode === 202);
+      },
+    );
+    req.on("error", () => resolve(false));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve(false);
+    });
+    req.end();
+  });
 }
 
 let lastHealthyAt = 0;
@@ -439,11 +518,18 @@ function httpHealthCheck(url: string, timeoutMs: number): Promise<boolean> {
   });
 }
 
-export async function waitForCoreReady(timeoutMs = 60000): Promise<void> {
+export async function waitForCoreReady(profile: BundledCoreProfile, timeoutMs = 60000): Promise<void> {
   const startedAt = Date.now();
+  const expectedGeneration = coreGeneration;
   const healthUrl = "http://127.0.0.1:18899/livez";
 
   while (Date.now() - startedAt < timeoutMs) {
+    if (coreGeneration !== expectedGeneration) {
+      throw new Error("核心进程已被替换, 等待取消");
+    }
+    if (runningCoreProfile !== profile) {
+      throw new Error(`Profile已变更: 期望${profile}, 当前${runningCoreProfile}`);
+    }
     if (!isCoreRunning() && Date.now() - startedAt > 2000) {
       console.error(
         "[CoreManager] 核心进程已退出, 退出码:",
@@ -454,7 +540,7 @@ export async function waitForCoreReady(timeoutMs = 60000): Promise<void> {
 
     const ok = await httpHealthCheck(healthUrl, 2000);
     if (ok) {
-      console.log("[CoreManager] 健康检查通过");
+      console.log(`[CoreManager] 健康检查通过, Profile: ${profile}`);
       return;
     }
 

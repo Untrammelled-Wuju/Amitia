@@ -1,7 +1,6 @@
-import http from "node:http";
 import { Notification, BrowserWindow, dialog } from "electron";
 import { IPC_CHANNELS } from "../shared/ipc";
-import { getAuthToken } from "./auth-token-store";
+import type { BusinessCoreClient } from "./business-core-client";
 
 interface SSEEventEnvelope {
   eventType: string;
@@ -14,13 +13,10 @@ interface SSEEventEnvelope {
 }
 
 export interface UIHostSSEOptions {
-  coreHost?: string;
-  corePort?: number;
+  businessCore: BusinessCoreClient;
   mainWindow: () => BrowserWindow | null;
 }
 
-const DEFAULT_CORE_HOST = "127.0.0.1";
-const DEFAULT_CORE_PORT = 18899;
 const MAX_RETRIES = 10;
 const BASE_RECONNECT_MS = 2000;
 const MAX_RECONNECT_MS = 30000;
@@ -35,18 +31,16 @@ const severityMap: Record<string, "info" | "error" | "warning" | "none"> = {
 };
 
 export class UIHostSSE {
-  private readonly coreHost: string;
-  private readonly corePort: number;
+  private readonly businessCore: BusinessCoreClient;
   private readonly mainWindow: () => BrowserWindow | null;
-  private req: http.ClientRequest | null = null;
+  private abortController: AbortController | null = null;
   private stopped = true;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectAttempts = 0;
   private readonly processedRequestIds = new Set<string>();
 
   constructor(options: UIHostSSEOptions) {
-    this.coreHost = options.coreHost ?? DEFAULT_CORE_HOST;
-    this.corePort = options.corePort ?? DEFAULT_CORE_PORT;
+    this.businessCore = options.businessCore;
     this.mainWindow = options.mainWindow;
   }
 
@@ -61,63 +55,67 @@ export class UIHostSSE {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
     }
-    if (this.req) {
-      this.req.destroy();
-      this.req = null;
+    if (this.abortController) {
+      this.abortController.abort();
+      this.abortController = null;
     }
   }
 
-  private connect(): void {
+  private async connect(): Promise<void> {
     if (this.stopped) return;
-    const token = getAuthToken();
+
+    const token = this.businessCore.authHeaders().Authorization;
     if (!token) {
       this.scheduleReconnect();
       return;
     }
 
-    const path = `/api/proactive-sse?clientId=electron-ui-host`;
+    this.abortController = new AbortController();
+    const path = "/api/proactive-sse?clientId=electron-ui-host";
 
-    this.req = http.request(
-      {
-        hostname: this.coreHost,
-        port: this.corePort,
-        path,
+    try {
+      const response = await this.businessCore.fetch(path, {
         method: "GET",
         headers: {
           Accept: "text/event-stream",
           "Cache-Control": "no-cache",
         },
-        timeout: 0,
-      },
-      (res) => {
-        if (res.statusCode !== 200) {
-          res.resume();
-          this.scheduleReconnect();
-          return;
-        }
-        this.reconnectAttempts = 0;
-        let buffer = "";
-        res.setEncoding("utf8");
-        res.on("data", (chunk: string) => {
-          buffer += chunk;
+        signal: this.abortController.signal,
+      });
+
+      if (response.status !== 200 || !response.body) {
+        this.scheduleReconnect();
+        return;
+      }
+
+      this.reconnectAttempts = 0;
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
           const events = buffer.split("\n\n");
           buffer = events.pop() || "";
           for (const raw of events) {
             this.parseAndDispatch(raw);
           }
-        });
-        res.on("end", () => {
-          this.scheduleReconnect();
-        });
-        res.on("error", () => {
-          this.scheduleReconnect();
-        });
-      },
-    );
-    this.req.on("error", () => {
-      this.scheduleReconnect();
-    });
-    this.req.end();
+        }
+      } finally {
+        reader.releaseLock();
+      }
+
+      if (!this.stopped) {
+        this.scheduleReconnect();
+      }
+    } catch {
+      if (!this.stopped) {
+        this.scheduleReconnect();
+      }
+    }
   }
 
   private parseAndDispatch(raw: string): void {
@@ -218,36 +216,13 @@ export class UIHostSSE {
   }
 
   private async sendDialogResponse(dialogId: string, result: string): Promise<void> {
-    const token = getAuthToken();
-    if (!token) return;
-    const body = JSON.stringify({ dialogId, result });
-    return new Promise((resolve) => {
-      const req = http.request(
-        {
-          hostname: this.coreHost,
-          port: this.corePort,
-          path: "/api/extensions/ui/dialog-response",
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
-            "Content-Length": Buffer.byteLength(body),
-          },
-          timeout: 5000,
-        },
-        (res) => {
-          res.resume();
-          res.on("end", () => resolve());
-        },
-      );
-      req.on("error", () => resolve());
-      req.on("timeout", () => {
-        req.destroy();
-        resolve();
-      });
-      req.write(body);
-      req.end();
-    });
+    await this.businessCore.fetch(
+      "/api/extensions/ui/dialog-response",
+      {
+        method: "POST",
+        body: JSON.stringify({ dialogId, result }),
+      },
+    ).catch(() => {});
   }
 
   private getReconnectDelay(): number {

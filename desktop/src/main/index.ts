@@ -9,10 +9,6 @@ import { DesktopRuntimeManager } from "../runtime/runtime-manager";
 import type { DeploymentModeConfig } from "../shared/types";
 import type { RuntimeStatus } from "../shared/types";
 import {
-  startCore,
-  stopCore,
-  waitForCoreReady,
-  isCoreRunning,
   ensureDataAndConfig,
 } from "./core-manager";
 import { ensureAmitiaDataDir, getAmitiaDataDir } from "./path-manager";
@@ -23,12 +19,9 @@ import { ipcMain } from "electron";
 import { IPC_CHANNELS } from "../shared/ipc";
 import { applyBrandTheme } from "./branding";
 import { DesktopPetManager } from "./pet/manager";
-import { ChatStateSubscriber } from "./pet/chat-state-subscriber";
-import { CharacterWatcher } from "./pet/character-watcher";
 import { registerPetIpcHandlers } from "./pet-ipc";
-import { DesktopHostManager, DesktopSnapshotSync } from "./desktop-host";
-import { UIHostSSE } from "./ui-host-sse";
 import { ClipboardBridge } from "./clipboard-bridge";
+import { DesktopDeploymentLifecycle } from "./deployment-lifecycle";
 
 let mainWindow: BrowserWindow | null = null;
 let tray: Tray | null = null;
@@ -36,13 +29,8 @@ let currentConfig: DeploymentModeConfig = { mode: "local" };
 let quitting = false;
 let coreStopped = false;
 let shutdownInProgress = false;
-let desktopPetManager: DesktopPetManager | null = null;
-let chatStateSubscriber: ChatStateSubscriber | null = null;
-let characterWatcher: CharacterWatcher | null = null;
-let desktopHostManager: DesktopHostManager | null = null;
-let desktopSnapshotSync: DesktopSnapshotSync | null = null;
-let uiHostSSE: UIHostSSE | null = null;
 let clipboardBridge: ClipboardBridge | null = null;
+let deploymentLifecycle: DesktopDeploymentLifecycle | null = null;
 
 function syncSystemBrandTheme() {
   applyBrandTheme(
@@ -117,33 +105,8 @@ async function enterMainApp(): Promise<void> {
   const runtimeManager = new DesktopRuntimeManager(currentConfig);
   await runtimeManager.initialize();
 
-  registerIpcHandlers(configStore, runtimeManager, (config) => {
-    if (currentConfig.mode !== config.mode) {
-      if (config.mode === "local") {
-        if (!isCoreRunning()) {
-          notifyStatus(runtimeManager, "starting");
-          try {
-            startCore();
-            void waitForCoreReady()
-              .then(() => {
-                notifyStatus(runtimeManager, "ready");
-              })
-              .catch((err) => {
-                console.error("[AmitiaDesktop] 模式切换后核心启动失败", err);
-                notifyStatus(runtimeManager, "failed", String(err));
-              });
-          } catch (err) {
-            console.error("[AmitiaDesktop] 模式切换startCore异常:", err);
-            notifyStatus(runtimeManager, "failed", String(err));
-          }
-        }
-      } else {
-        void stopCore();
-        notifyStatus(runtimeManager, "ready");
-      }
-    }
-    currentConfig = config;
-  });
+  const desktopPetManager = new DesktopPetManager();
+  registerPetIpcHandlers(desktopPetManager);
 
   const ensureResult = ensureDataAndConfig();
   if (!ensureResult.ok) {
@@ -154,13 +117,7 @@ async function enterMainApp(): Promise<void> {
   }
 
   try {
-    const desktopInstanceID =
-      ensureDesktopInstanceID();
-
-    console.log(
-      "[AmitiaDesktop] Desktop Instance:",
-      desktopInstanceID,
-    );
+    ensureDesktopInstanceID();
   } catch (error) {
     console.error(
       "[AmitiaDesktop] 创建Desktop Instance失败:",
@@ -170,25 +127,6 @@ async function enterMainApp(): Promise<void> {
     return;
   }
 
-  if (currentConfig.mode === "local") {
-    notifyStatus(runtimeManager, "starting");
-    try {
-      console.log("[AmitiaDesktop] 启动本地核心...");
-      ensureDesktopInstanceID();
-      startCore();
-      await waitForCoreReady();
-      console.log("[AmitiaDesktop] 核心就绪");
-      notifyStatus(runtimeManager, "ready");
-    } catch (err) {
-      console.error("[AmitiaDesktop] 核心启动失败:", err);
-      notifyStatus(runtimeManager, "failed", String(err));
-    }
-  } else {
-    notifyStatus(runtimeManager, "ready");
-  }
-
-  registerExtensionProtocol(join(getAmitiaDataDir(), "data", "extensions-v2"));
-
   mainWindow = createMainWindow();
   const trayResult = createAppTray(
     mainWindow,
@@ -196,64 +134,64 @@ async function enterMainApp(): Promise<void> {
     configStore,
   );
   tray = trayResult.tray;
-  desktopHostManager = new DesktopHostManager(
-    mainWindow,
-    trayResult.setExtensionItems,
-  );
-  desktopSnapshotSync = new DesktopSnapshotSync(mainWindow, desktopHostManager);
-  desktopSnapshotSync.start();
   clipboardBridge = new ClipboardBridge(mainWindow);
   clipboardBridge.start();
   syncSystemBrandTheme();
+
+  deploymentLifecycle = new DesktopDeploymentLifecycle(
+    {
+      configStore,
+      runtimeManager,
+      getMainWindow: () => mainWindow,
+      setExtensionTrayItems: trayResult.setExtensionItems,
+      desktopPetManager,
+    },
+    currentConfig,
+  );
+
+  registerIpcHandlers(configStore, runtimeManager, async (config) => {
+    currentConfig = config;
+    notifyStatus(runtimeManager, "starting");
+    try {
+      await deploymentLifecycle?.reconcile(config);
+      const status = runtimeManager.getStatus();
+      if (status.state === "failed") {
+        notifyStatus(runtimeManager, "failed", status.message);
+      } else {
+        notifyStatus(runtimeManager, status.state, status.message);
+      }
+    } catch (err) {
+      console.error("[AmitiaDesktop] reconcile失败:", err);
+      notifyStatus(runtimeManager, "failed", String(err));
+    }
+  });
 
   const autoLaunch = await configStore.getAutoLaunch();
   app.setLoginItemSettings({ openAtLogin: autoLaunch });
   registerUpdateManager(mainWindow);
   await waitForStartupCheck();
 
-  desktopPetManager = new DesktopPetManager();
-  chatStateSubscriber = new ChatStateSubscriber({
-    coreHost: "127.0.0.1",
-    corePort: 18899,
-    onPayload: (payload) => {
-      if (!desktopPetManager) return;
-      try {
-        desktopPetManager.handleChatStatePayload(payload);
-      } catch (err) {
-        console.warn("[AmitiaDesktop] 转发聊天状态失败:", err);
-      }
-    },
-  });
-  characterWatcher = new CharacterWatcher({
-    coreHost: "127.0.0.1",
-    corePort: 18899,
-    onActiveCharacterChanged: async (characterId) => {
-      if (!desktopPetManager) return;
-      try {
-        await desktopPetManager.handleCharacterSwitched(characterId);
-      } catch (err) {
-        console.warn("[AmitiaDesktop] 角色切换处理失败:", err);
-      }
-    },
-  });
-  registerPetIpcHandlers(desktopPetManager);
+  registerExtensionProtocol(join(getAmitiaDataDir(), "data", "extensions-v2"));
 
-  uiHostSSE = new UIHostSSE({
-    coreHost: "127.0.0.1",
-    corePort: 18899,
-    mainWindow: () => mainWindow,
-  });
-  uiHostSSE.start();
+  console.log(`[AmitiaDesktop] Deployment Mode: ${currentConfig.mode}`);
+  if (currentConfig.mode === "cloud") {
+    console.log(`[AmitiaDesktop] Business Core: ${currentConfig.serverURL}`);
+    console.log("[AmitiaDesktop] Bundled Core Profile: device-agent");
+    console.log("[AmitiaDesktop] Local Runtime: http://127.0.0.1:18899");
+  } else {
+    console.log("[AmitiaDesktop] Bundled Core Profile: local");
+    console.log("[AmitiaDesktop] Local Runtime: http://127.0.0.1:18899");
+  }
 
-  void desktopPetManager.initialize().catch((err) => {
-    console.warn("[AmitiaDesktop] DesktopPetManager 初始化失败:", err);
-  });
-  void chatStateSubscriber.start().catch((err) => {
-    console.warn("[AmitiaDesktop] 聊天状态订阅启动失败:", err);
-  });
-  void characterWatcher.start().catch((err) => {
-    console.warn("[AmitiaDesktop] 角色监听启动失败:", err);
-  });
+  notifyStatus(runtimeManager, "starting");
+  try {
+    await deploymentLifecycle.reconcile(currentConfig);
+    const status = runtimeManager.getStatus();
+    notifyStatus(runtimeManager, status.state, status.message);
+  } catch (err) {
+    console.error("[AmitiaDesktop] 初始reconcile失败:", err);
+    notifyStatus(runtimeManager, "failed", String(err));
+  }
 
   mainWindow.on("close", (event) => {
     if (!quitting) {
@@ -268,20 +206,7 @@ async function enterMainApp(): Promise<void> {
       event.preventDefault();
       if (!shutdownInProgress) {
         shutdownInProgress = true;
-        void desktopPetManager?.shutdown().catch((err) => {
-          console.warn("[AmitiaDesktop] DesktopPetManager shutdown 失败:", err);
-        });
-        chatStateSubscriber?.stop();
-        characterWatcher?.stop();
-        uiHostSSE?.stop();
-        uiHostSSE = null;
-        desktopSnapshotSync?.stop();
-        desktopSnapshotSync = null;
-        clipboardBridge?.stop();
-        clipboardBridge = null;
-        desktopHostManager?.cleanup();
-        desktopHostManager = null;
-        void stopCore().finally(() => {
+        void deploymentLifecycle?.shutdown().finally(() => {
           coreStopped = true;
           closeLogger();
           app.quit();

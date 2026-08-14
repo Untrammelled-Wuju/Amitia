@@ -714,8 +714,9 @@ internal class DefaultRuntimeController(
 
             stateStore.update { it.copy(state = RuntimeState.STOPPING) }
 
-            val stopResult = serviceHost.requestStop()
+            val stopResult = serviceHost.requestStop(generationToStop)
             if (stopResult is RuntimeServiceResult.Failure) {
+                clearExpectedStop(generationToStop)
                 val error = RuntimeError(
                     code = RuntimeErrorCode.STOP_SERVICE_TEARDOWN_FAILED,
                     message = "failed to request service stop: ${stopResult.error.message}",

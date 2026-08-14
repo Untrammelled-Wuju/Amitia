@@ -5,6 +5,17 @@ let cachedConfig: DeploymentModeConfig | null = null;
 
 const TOKEN_KEY = "ai-companion-token";
 
+function normalizeHTTPBaseURL(raw: string): string {
+  const url = new URL(raw);
+  return url.toString().replace(/\/+$/, "");
+}
+
+function toWebSocketBaseURL(httpBaseURL: string): string {
+  const url = new URL(httpBaseURL);
+  url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
+  return url.toString().replace(/\/+$/, "");
+}
+
 export async function getRuntimeConnection(): Promise<RuntimeConnection> {
   if (cachedConnection) return cachedConnection;
 
@@ -14,7 +25,7 @@ export async function getRuntimeConnection(): Promise<RuntimeConnection> {
       (import.meta as any).env?.VITE_API_URL || window.location.origin;
     cachedConnection = {
       apiBaseURL: base,
-      websocketBaseURL: base.replace(/^http/, "ws"),
+      websocketBaseURL: toWebSocketBaseURL(base),
     };
     return cachedConnection;
   }
@@ -23,9 +34,10 @@ export async function getRuntimeConnection(): Promise<RuntimeConnection> {
   cachedConfig = config;
 
   if (config.mode === "cloud" && config.serverURL) {
+    const normalizedURL = normalizeHTTPBaseURL(config.serverURL);
     cachedConnection = {
-      apiBaseURL: config.serverURL,
-      websocketBaseURL: config.serverURL.replace(/^http/, "ws"),
+      apiBaseURL: normalizedURL,
+      websocketBaseURL: toWebSocketBaseURL(normalizedURL),
     };
     return cachedConnection;
   }
@@ -35,7 +47,7 @@ export async function getRuntimeConnection(): Promise<RuntimeConnection> {
   if (isDev && devOrigin) {
     cachedConnection = {
       apiBaseURL: devOrigin,
-      websocketBaseURL: devOrigin.replace(/^http/, "ws"),
+      websocketBaseURL: toWebSocketBaseURL(devOrigin),
     };
   } else {
     cachedConnection = {

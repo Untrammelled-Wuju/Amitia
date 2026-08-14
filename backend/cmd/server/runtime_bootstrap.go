@@ -86,6 +86,9 @@ func newRuntimeBootstrap(paths *util.RuntimePaths, profile runtimeprofile.Profil
 		policy:           policy,
 	}
 
+	androidBridge := nativebridge.NewAndroidTransportBridge()
+	bootstrap.SetAndroidNativeBridge(androidBridge)
+
 	if err := bootstrap.registerProviderFactories(); err != nil {
 		return nil, err
 	}

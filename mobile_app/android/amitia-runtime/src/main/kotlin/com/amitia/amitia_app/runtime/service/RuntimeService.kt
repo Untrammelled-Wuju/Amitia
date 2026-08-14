@@ -43,6 +43,7 @@ class RuntimeService : Service() {
     private val currentSessionRef: AtomicReference<ProotSession?> = AtomicReference(null)
     private val currentSessionIdRef: AtomicReference<String?> = AtomicReference(null)
     private val currentGenerationRef: AtomicReference<Long> = AtomicReference(0L)
+    private val currentIntent: AtomicReference<Intent?> = AtomicReference(null)
 
     init {
         instanceRef.set(this)
@@ -70,6 +71,8 @@ class RuntimeService : Service() {
             stopSelfSafely()
             return START_NOT_STICKY
         }
+
+        currentIntent.set(intent)
 
         when (intent.action) {
             RuntimeServiceContract.ACTION_START_HOST -> {
@@ -278,15 +281,30 @@ class RuntimeService : Service() {
     }
 
     private fun handleStopHost() {
+        val intent = currentIntent.get() ?: return
+        val targetGeneration = intent.getLongExtra(RuntimeServiceContract.EXTRA_TARGET_GENERATION, Long.MIN_VALUE)
+        if (targetGeneration == Long.MIN_VALUE || targetGeneration <= 0L) {
+            stopForegroundSafely()
+            stopSelfSafely()
+            return
+        }
+        val sessionContext = currentSessionContextRef.get()
+        if (sessionContext == null) {
+            stopForegroundSafely()
+            stopSelfSafely()
+            return
+        }
+        if (sessionContext.generation != targetGeneration) {
+            stopForegroundSafely()
+            stopSelfSafely()
+            return
+        }
         val session = currentSessionRef.get()
         if (session != null && session.isAlive()) {
             session.requestStop()
             session.stop(10_000L)
         }
-        val sessionContext = currentSessionContextRef.get()
-        if (sessionContext != null) {
-            sessionContext.stopRequested = true
-        }
+        sessionContext.stopRequested = true
         stopForegroundSafely()
         stopSelfSafely()
     }
@@ -401,19 +419,11 @@ class RuntimeService : Service() {
             }
         }
 
-        internal fun stopHost(context: Context): RuntimeServiceResult {
-            val svc = instanceRef.get()
-            if (svc != null) {
-                svc.lock.withLock {
-                    val sessionContext = svc.currentSessionContextRef.get()
-                    if (sessionContext != null) {
-                        sessionContext.stopRequested = true
-                    }
-                }
-            }
+        internal fun stopHost(context: Context, targetGeneration: Long): RuntimeServiceResult {
             return try {
                 val intent = Intent(context, RuntimeService::class.java).apply {
                     action = RuntimeServiceContract.ACTION_STOP_HOST
+                    putExtra(RuntimeServiceContract.EXTRA_TARGET_GENERATION, targetGeneration)
                 }
                 context.startService(intent)
                 RuntimeServiceResult.Success

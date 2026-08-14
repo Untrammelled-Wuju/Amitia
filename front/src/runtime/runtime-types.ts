@@ -12,11 +12,21 @@ export type RuntimeState =
   | "ready"
   | "failed";
 
+export interface RuntimeEndpointStatus {
+  state: RuntimeState;
+  baseURL: string;
+  profile?: "local" | "device-agent";
+  message?: string;
+}
+
 export interface RuntimeStatus {
   state: RuntimeState;
   mode: DeploymentMode;
   message?: string;
   updatedAt: string;
+
+  businessCore?: RuntimeEndpointStatus;
+  localRuntime?: RuntimeEndpointStatus;
 }
 
 export interface DesktopEnvironment {

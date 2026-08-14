@@ -62,7 +62,7 @@ class RuntimeStartupControllerIntegrationTest {
         val stateStore = createStoppedStateStore()
         val serviceHost = object : RuntimeServiceHost {
             override fun ensureStarted(generation: Long): RuntimeServiceResult = RuntimeServiceResult.Success
-            override fun requestStop(): RuntimeServiceResult = RuntimeServiceResult.Success
+            override fun requestStop(targetGeneration: Long): RuntimeServiceResult = RuntimeServiceResult.Success
             override fun addListener(listener: RuntimeServiceHostListener) {}
             override fun removeListener(listener: RuntimeServiceHostListener) {}
             override fun currentSession(): ProotSession? = createAlwaysAliveSession()
@@ -99,7 +99,7 @@ class RuntimeStartupControllerIntegrationTest {
                     "service start unavailable"
                 )
             )
-            override fun requestStop(): RuntimeServiceResult = RuntimeServiceResult.Success
+            override fun requestStop(targetGeneration: Long): RuntimeServiceResult = RuntimeServiceResult.Success
             override fun addListener(listener: RuntimeServiceHostListener) {}
             override fun removeListener(listener: RuntimeServiceHostListener) {}
             override fun currentSession(): ProotSession? = null
@@ -132,7 +132,7 @@ class RuntimeStartupControllerIntegrationTest {
         stateStore.update { it.copy(state = RuntimeState.STARTING) }
         val serviceHost = object : RuntimeServiceHost {
             override fun ensureStarted(generation: Long): RuntimeServiceResult = RuntimeServiceResult.Success
-            override fun requestStop(): RuntimeServiceResult = RuntimeServiceResult.Success
+            override fun requestStop(targetGeneration: Long): RuntimeServiceResult = RuntimeServiceResult.Success
             override fun addListener(listener: RuntimeServiceHostListener) {}
             override fun removeListener(listener: RuntimeServiceHostListener) {}
             override fun currentSession(): ProotSession? = null
@@ -166,7 +166,7 @@ class RuntimeStartupControllerIntegrationTest {
         store.update { it.copy(state = RuntimeState.CORRUPTED) }
         val serviceHost = object : RuntimeServiceHost {
             override fun ensureStarted(generation: Long): RuntimeServiceResult = RuntimeServiceResult.Success
-            override fun requestStop(): RuntimeServiceResult = RuntimeServiceResult.Success
+            override fun requestStop(targetGeneration: Long): RuntimeServiceResult = RuntimeServiceResult.Success
             override fun addListener(listener: RuntimeServiceHostListener) {}
             override fun removeListener(listener: RuntimeServiceHostListener) {}
             override fun currentSession(): ProotSession? = null

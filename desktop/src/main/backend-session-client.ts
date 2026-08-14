@@ -216,6 +216,16 @@ export async function getDesktopAuthHeaders(): Promise<
   return getBackendSessionClient().getRendererAuthHeaders();
 }
 
+export async function getLocalBackendAuthHeaders(): Promise<
+  Record<string, string>
+> {
+  return getDesktopAuthHeaders();
+}
+
+export function getLocalRuntimeSessionClient(): BackendSessionClient {
+  return getBackendSessionClient();
+}
+
 export function getLocalRootTokenForMainProcess(): string {
   return readLocalRootToken();
 }

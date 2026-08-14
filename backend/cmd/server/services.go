@@ -362,6 +362,13 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	if bootstrap != nil {
 		kernelBuilder.WithRuntimeHost(bootstrap.RuntimeHost())
 		kernelBuilder = applyAndroidLinuxProvider(kernelBuilder, bootstrap.RuntimeHost())
+
+		var err error
+		kernelBuilder, err = applyAndroidNativeProvider(kernelBuilder, bootstrap)
+		if err != nil {
+			return nil, fmt.Errorf("android native provider init failed: %w", err)
+		}
+
 		kernelBuilder = applyIOSNativeProvider(kernelBuilder, bootstrap.IOSNativeProvider())
 	}
 

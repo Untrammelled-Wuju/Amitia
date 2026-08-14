@@ -1,12 +1,15 @@
 import { BrowserWindow } from "electron";
+import type { BusinessCoreClient } from "../business-core-client";
 import type { ActionInvokeRequest, ActionInvokeResult } from "./types";
 
 export class DesktopActionBridge {
   private readonly mainWindow: BrowserWindow;
+  private readonly businessCoreClient: BusinessCoreClient;
   private readonly timeoutMs: number;
 
-  constructor(mainWindow: BrowserWindow, timeoutMs = 30000) {
+  constructor(mainWindow: BrowserWindow, businessCoreClient: BusinessCoreClient, timeoutMs = 30000) {
     this.mainWindow = mainWindow;
+    this.businessCoreClient = businessCoreClient;
     this.timeoutMs = timeoutMs;
   }
 
@@ -17,23 +20,12 @@ export class DesktopActionBridge {
       return { success: false, error: "Main window is destroyed" };
     }
     try {
-      const token = await this.mainWindow.webContents.executeJavaScript(
-        'localStorage.getItem("ai-companion-token")',
-        true,
-      );
-      if (typeof token !== "string" || token.length === 0) {
-        return { success: false, error: "Authentication required" };
-      }
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), this.timeoutMs);
-      const response = await fetch(
-        `http://127.0.0.1:18899/api/extensions/desktop/contributions/${encodeURIComponent(request.contributionId)}/invoke`,
+      const response = await this.businessCoreClient.fetch(
+        `/api/extensions/desktop/contributions/${encodeURIComponent(request.contributionId)}/invoke`,
         {
           method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
           body: JSON.stringify({
             extensionId: request.extensionId,
             characterId: request.scope?.characterId,

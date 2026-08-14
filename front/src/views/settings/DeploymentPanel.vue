@@ -68,6 +68,19 @@ SPDX-License-Identifier: AGPL-3.0-only
         <el-descriptions-item label="运行状态">
           <el-tag :type="statusType" size="small">{{ statusLabel }}</el-tag>
         </el-descriptions-item>
+        <el-descriptions-item v-if="runtimeStatus?.businessCore" label="业务 Core">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 12px; color: var(--ac-color-text-muted);">{{ runtimeStatus.businessCore.baseURL }}</span>
+            <el-tag :type="endpointStatusType(runtimeStatus.businessCore.state)" size="small">{{ endpointStatusLabel(runtimeStatus.businessCore.state) }}</el-tag>
+          </div>
+        </el-descriptions-item>
+        <el-descriptions-item v-if="runtimeStatus?.localRuntime" label="本机执行节点">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span style="font-size: 12px; color: var(--ac-color-text-muted);">{{ runtimeStatus.localRuntime.baseURL }}</span>
+            <el-tag :type="endpointStatusType(runtimeStatus.localRuntime.state)" size="small">{{ endpointStatusLabel(runtimeStatus.localRuntime.state) }}</el-tag>
+            <span v-if="runtimeStatus.localRuntime.profile" style="font-size: 11px; color: var(--ac-color-text-muted);">({{ runtimeStatus.localRuntime.profile }})</span>
+          </div>
+        </el-descriptions-item>
       </el-descriptions>
     </el-card>
   </div>
@@ -143,6 +156,28 @@ const statusLabel = computed(() => {
   };
   return map[runtimeStatus.value.state] || runtimeStatus.value.state;
 });
+
+function endpointStatusType(state: string): string {
+  const map: Record<string, string> = {
+    ready: "success",
+    starting: "warning",
+    "not-ready": "warning",
+    "not-installed": "info",
+    failed: "danger",
+  };
+  return map[state] || "info";
+}
+
+function endpointStatusLabel(state: string): string {
+  const map: Record<string, string> = {
+    ready: "就绪",
+    starting: "启动中",
+    "not-ready": "未就绪",
+    "not-installed": "未安装",
+    failed: "失败",
+  };
+  return map[state] || state;
+}
 
 async function loadConfig() {
   try {

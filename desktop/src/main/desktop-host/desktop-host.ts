@@ -5,6 +5,7 @@ import { ShortcutHost } from "./shortcut-host";
 import { GlobalShortcutHost } from "./global-shortcut-host";
 import { DesktopActionBridge } from "./action-bridge";
 import { SnapshotApplier } from "./snapshot-applier";
+import type { BusinessCoreClient } from "../business-core-client";
 import type {
   ActionInvokeRequest,
   ActionInvokeResult,
@@ -25,8 +26,9 @@ export class DesktopHostManager {
     setExtensionTrayItems: (
       items: MenuItemConstructorOptions[],
     ) => Promise<void>,
+    businessCoreClient: BusinessCoreClient,
   ) {
-    this.actionBridge = new DesktopActionBridge(mainWindow);
+    this.actionBridge = new DesktopActionBridge(mainWindow, businessCoreClient);
     this.menuHost = new MenuHost(mainWindow, this.actionBridge);
     this.trayHost = new TrayHost(
       this.actionBridge,

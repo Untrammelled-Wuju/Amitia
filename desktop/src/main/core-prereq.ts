@@ -30,3 +30,19 @@ export function validateCorePrerequisites(
 
   return { ok: missing.length === 0, missing };
 }
+
+export function validateDeviceAgentPrerequisites(
+  dataDir: string,
+  corePath: string,
+): CorePrerequisiteResult {
+  const required = [
+    { label: "Core可执行文件", file: corePath },
+    { label: "配置文件", file: path.join(dataDir, "config", "config.yml") },
+  ];
+
+  const missing = required
+    .filter((r) => !fs.existsSync(r.file))
+    .map((r) => `${r.label} (${r.file})`);
+
+  return { ok: missing.length === 0, missing };
+}

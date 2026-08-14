@@ -13,7 +13,7 @@ import { getDesktopAuthHeaders } from "./backend-session-client";
 export function registerIpcHandlers(
   configStore: ConfigStore,
   runtimeManager: DesktopRuntimeManager,
-  onDeploymentConfigSaved?: (config: DeploymentModeConfig) => void,
+  onDeploymentConfigSaved?: (config: DeploymentModeConfig) => void | Promise<void>,
 ): void {
   ipcMain.handle(IPC_CHANNELS.getEnvironment, () => ({
     platform: process.platform,
@@ -31,7 +31,7 @@ export function registerIpcHandlers(
     async (_event, config: DeploymentModeConfig) => {
       const next = await configStore.saveDeploymentConfig(config);
       runtimeManager.setDeploymentConfig(next);
-      onDeploymentConfigSaved?.(next);
+      await onDeploymentConfigSaved?.(next);
       return next;
     },
   );
