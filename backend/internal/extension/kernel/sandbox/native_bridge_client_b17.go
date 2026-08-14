@@ -6,8 +6,8 @@
 package sandbox
 
 /*
-#cgo CFLAGS: -I${SRCDIR}/../../../../../third_party/ish/amitia
-#cgo LDFLAGS: -L${SRCDIR}/../../../../../third_party/ish/amitia -lamitia_ish
+#cgo CFLAGS: -I${SRCDIR}/../../../../third_party/ish/amitia
+#cgo LDFLAGS: -L${SRCDIR}/../../../../third_party/ish/amitia -lamitia_ish
 
 #include "amitia_ish_embed.h"
 #include <stdlib.h>

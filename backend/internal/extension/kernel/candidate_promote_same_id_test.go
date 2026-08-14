@@ -3,6 +3,7 @@ package kernel
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -40,12 +41,14 @@ func setupSameIDTestContainer(t *testing.T, db *sql.DB) *Container {
 func seedStableTool(t *testing.T, ctx context.Context, container *Container, extID string, toolID string, modelSuffix string) {
 	t.Helper()
 	stableTool := capability.ToolDefinition{
-		ID:          toolID,
-		ModelName:   "stable-" + modelSuffix,
-		ExtensionID: extID,
-		Source:      capability.ToolSourcePlugin,
-		Name:        "Stable " + modelSuffix,
-		Enabled:     true,
+		ID:           toolID,
+		ModelName:    "stable-" + modelSuffix,
+		ExtensionID:  extID,
+		Source:       capability.ToolSourcePlugin,
+		Name:         "Stable " + modelSuffix,
+		Enabled:      true,
+		InputSchema:  json.RawMessage(`{"type":"object"}`),
+		OutputSchema: json.RawMessage(`{"type":"object"}`),
 	}
 	if err := container.ToolRegistry.Register(ctx, stableTool); err != nil {
 		t.Fatalf("register stable tool: %v", err)

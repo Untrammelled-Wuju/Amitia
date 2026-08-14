@@ -1,0 +1,271 @@
+package runtime
+
+import (
+	"context"
+	"sync"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/gamehost/contracts"
+	"github.com/u-ai/backend/internal/gamehost/domain"
+)
+
+type RuntimeIDGenerator interface {
+	NewRuntimeID() domain.RuntimeInstanceID
+}
+
+type uuidRuntimeIDGenerator struct{}
+
+func (g uuidRuntimeIDGenerator) NewRuntimeID() domain.RuntimeInstanceID {
+	return domain.RuntimeInstanceID("rt_" + uuid.NewString())
+}
+
+type Manager struct {
+	mu       sync.RWMutex
+	runtimes map[domain.RuntimeInstanceID]*domain.RuntimeInstance
+	byPlugin map[domain.PluginID]map[domain.RuntimeInstanceID]struct{}
+
+	idGenerator RuntimeIDGenerator
+	clock       func() time.Time
+}
+
+type ManagerOptions struct {
+	IDGenerator RuntimeIDGenerator
+	Clock       func() time.Time
+}
+
+func NewManager(opts ManagerOptions) *Manager {
+	idGen := opts.IDGenerator
+	if idGen == nil {
+		idGen = uuidRuntimeIDGenerator{}
+	}
+	clock := opts.Clock
+	if clock == nil {
+		clock = time.Now
+	}
+	return &Manager{
+		runtimes:    make(map[domain.RuntimeInstanceID]*domain.RuntimeInstance),
+		byPlugin:    make(map[domain.PluginID]map[domain.RuntimeInstanceID]struct{}),
+		idGenerator: idGen,
+		clock:       clock,
+	}
+}
+
+func (m *Manager) Create(ctx context.Context, pluginID domain.PluginID) (*domain.RuntimeInstance, error) {
+	if pluginID == "" {
+		return nil, &TopologyError{Code: ErrInvalidArgument, Message: "plugin id must not be empty"}
+	}
+
+	now := m.clock()
+	id := m.idGenerator.NewRuntimeID()
+
+	rt, err := domain.NewRuntimeInstance(id, pluginID, now)
+	if err != nil {
+		return nil, err
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	m.runtimes[id] = rt
+	if m.byPlugin[pluginID] == nil {
+		m.byPlugin[pluginID] = make(map[domain.RuntimeInstanceID]struct{})
+	}
+	m.byPlugin[pluginID][id] = struct{}{}
+
+	return cloneRuntimeInstance(rt), nil
+}
+
+func (m *Manager) EnsurePrimaryRuntime(ctx context.Context, pluginID domain.PluginID) (*domain.RuntimeInstance, bool, error) {
+	if pluginID == "" {
+		return nil, false, &TopologyError{Code: ErrInvalidArgument, Message: "plugin id must not be empty"}
+	}
+
+	m.mu.RLock()
+	if ids, ok := m.byPlugin[pluginID]; ok && len(ids) > 0 {
+		var primaryID domain.RuntimeInstanceID
+		for id := range ids {
+			primaryID = id
+			break
+		}
+		rt := m.runtimes[primaryID]
+		m.mu.RUnlock()
+		return cloneRuntimeInstance(rt), false, nil
+	}
+	m.mu.RUnlock()
+
+	now := m.clock()
+	id := m.idGenerator.NewRuntimeID()
+
+	rt, err := domain.NewRuntimeInstance(id, pluginID, now)
+	if err != nil {
+		return nil, false, err
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if existingIDs, ok := m.byPlugin[pluginID]; ok && len(existingIDs) > 0 {
+		for existingID := range existingIDs {
+			return cloneRuntimeInstance(m.runtimes[existingID]), false, nil
+		}
+	}
+
+	m.runtimes[id] = rt
+	if m.byPlugin[pluginID] == nil {
+		m.byPlugin[pluginID] = make(map[domain.RuntimeInstanceID]struct{})
+	}
+	m.byPlugin[pluginID][id] = struct{}{}
+
+	return cloneRuntimeInstance(rt), true, nil
+}
+
+func (m *Manager) Get(ctx context.Context, runtimeID domain.RuntimeInstanceID) (*domain.RuntimeInstance, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	rt, ok := m.runtimes[runtimeID]
+	if !ok {
+		return nil, &TopologyError{Code: ErrNotFound, Message: "runtime not found: " + string(runtimeID)}
+	}
+	return cloneRuntimeInstance(rt), nil
+}
+
+func (m *Manager) List(ctx context.Context) ([]domain.RuntimeInstance, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	result := make([]domain.RuntimeInstance, 0, len(m.runtimes))
+	for _, rt := range m.runtimes {
+		result = append(result, *cloneRuntimeInstance(rt))
+	}
+	return result, nil
+}
+
+func (m *Manager) GetRuntime(runtimeID domain.RuntimeInstanceID) (*RuntimeInstanceRef, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	rt, ok := m.runtimes[runtimeID]
+	if !ok {
+		return nil, &TopologyError{Code: ErrNotFound, Message: "runtime not found: " + string(runtimeID)}
+	}
+	return &RuntimeInstanceRef{
+		ID:       rt.ID,
+		PluginID: rt.PluginID,
+		State:    rt.State,
+	}, nil
+}
+
+func (m *Manager) UpdateRuntimeState(runtimeID domain.RuntimeInstanceID, next domain.RuntimeState, reason string, now time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	rt, ok := m.runtimes[runtimeID]
+	if !ok {
+		return &TopologyError{Code: ErrNotFound, Message: "runtime not found: " + string(runtimeID)}
+	}
+
+	return rt.Transition(next, reason, now)
+}
+
+func (m *Manager) ListRuntimes() []*RuntimeInstanceRef {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	result := make([]*RuntimeInstanceRef, 0, len(m.runtimes))
+	for _, rt := range m.runtimes {
+		result = append(result, &RuntimeInstanceRef{
+			ID:       rt.ID,
+			PluginID: rt.PluginID,
+			State:    rt.State,
+		})
+	}
+	return result
+}
+
+func (m *Manager) GetRuntimeState(runtimeID domain.RuntimeInstanceID) (domain.RuntimeState, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+
+	rt, ok := m.runtimes[runtimeID]
+	if !ok {
+		return "", &TopologyError{Code: ErrNotFound, Message: "runtime not found: " + string(runtimeID)}
+	}
+	return rt.State, nil
+}
+
+func (m *Manager) UpdateRuntimeHealth(runtimeID domain.RuntimeInstanceID, health domain.HealthStatus, reason string, now time.Time) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	rt, ok := m.runtimes[runtimeID]
+	if !ok {
+		return &TopologyError{Code: ErrNotFound, Message: "runtime not found: " + string(runtimeID)}
+	}
+
+	hs := rt.Health
+	hs.Status = health
+	hs.Message = reason
+	return rt.UpdateHealth(hs, now)
+}
+
+func (m *Manager) RemoveRuntime(runtimeID domain.RuntimeInstanceID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	rt, ok := m.runtimes[runtimeID]
+	if !ok {
+		return &TopologyError{Code: ErrNotFound, Message: "runtime not found: " + string(runtimeID)}
+	}
+
+	pluginID := rt.PluginID
+	delete(m.runtimes, runtimeID)
+	if ids, ok := m.byPlugin[pluginID]; ok {
+		delete(ids, runtimeID)
+		if len(ids) == 0 {
+			delete(m.byPlugin, pluginID)
+		}
+	}
+	return nil
+}
+
+func cloneRuntimeInstance(rt *domain.RuntimeInstance) *domain.RuntimeInstance {
+	if rt == nil {
+		return nil
+	}
+	copy := &domain.RuntimeInstance{
+		ID:          rt.ID,
+		PluginID:    rt.PluginID,
+		State:       rt.State,
+		StateReason: rt.StateReason,
+		Health:      rt.Health,
+		CreatedAt:   rt.CreatedAt,
+		UpdatedAt:   rt.UpdatedAt,
+		Metadata:    make(map[string]string, len(rt.Metadata)),
+	}
+	if rt.StartedAt != nil {
+		t := *rt.StartedAt
+		copy.StartedAt = &t
+	}
+	if rt.StoppedAt != nil {
+		t := *rt.StoppedAt
+		copy.StoppedAt = &t
+	}
+	if rt.SuspendedAt != nil {
+		t := *rt.SuspendedAt
+		copy.SuspendedAt = &t
+	}
+	if rt.FailedAt != nil {
+		t := *rt.FailedAt
+		copy.FailedAt = &t
+	}
+	for k, v := range rt.Metadata {
+		copy.Metadata[k] = v
+	}
+	return copy
+}
+
+var _ contracts.RuntimeManager = (*Manager)(nil)
+var _ RuntimeManager = (*Manager)(nil)
+var _ RuntimeHealthAccessor = (*Manager)(nil)

@@ -303,7 +303,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithMemoryQueryService(kernelMemQuerySvc).
 		WithNodeEnvironmentResolver(nodeResolver).
 		WithHostArtifactResolver(artifactResolver).
-		WithRuntimeHost(bootstrap.RuntimeHost()).
 		WithSearchConfig(search.DefaultConfig()).
 		WithDeepSearchTaskEntry("tasks/deep-search/index.js").
 		WithVisionService(visionSvc).
@@ -311,8 +310,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithImageProviderRegistry(providerRegistry).
 		WithResourceResolver(resourceResolver)
 
-	kernelBuilder = applyAndroidLinuxProvider(kernelBuilder, bootstrap.RuntimeHost())
-	kernelBuilder = applyIOSNativeProvider(kernelBuilder, bootstrap.IOSNativeProvider())
+	if bootstrap != nil {
+		kernelBuilder.WithRuntimeHost(bootstrap.RuntimeHost())
+		kernelBuilder = applyAndroidLinuxProvider(kernelBuilder, bootstrap.RuntimeHost())
+		kernelBuilder = applyIOSNativeProvider(kernelBuilder, bootstrap.IOSNativeProvider())
+	}
 
 kernelContainer, err := kernelBuilder.Build(context.Background())
 	if err != nil {

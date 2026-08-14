@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-ISH_SRC="$ROOT_DIR/third_party/ish"
+ISH_SRC="$ROOT_DIR/backend/third_party/ish"
 DEPS_DIR="$ROOT_DIR/mobile_app/ios/ThirdParty/iSH"
 OUTPUT_DIR="$ROOT_DIR/mobile_app/ios/Resources/Rootfs"
 ROOTFS_ZIP="$OUTPUT_DIR/alpine-rootfs.zip"

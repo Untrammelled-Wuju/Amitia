@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -9,6 +10,17 @@ import (
 	"github.com/u-ai/backend/internal/migration"
 	"gorm.io/gorm"
 )
+
+func TestMain(m *testing.M) {
+	tmpDir, _ := os.MkdirTemp("", "amitia-test-*")
+	if tmpDir == "" {
+		tmpDir = "./test-data"
+	}
+	config.AppCfg = &config.Config{
+		Storage: config.StorageConfig{DataDir: tmpDir},
+	}
+	os.Exit(m.Run())
+}
 
 func TestApplyDatabaseStartupMigrationsCreatesRetrievalLogsWithAllColumns(t *testing.T) {
 	dataDir := t.TempDir()

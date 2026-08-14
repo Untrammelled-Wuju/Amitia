@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
@@ -13,11 +14,13 @@ func TestDiscardCandidateContributions_PreservesStableTool(t *testing.T) {
 	ctx := context.Background()
 
 	stableTool := capability.ToolDefinition{
-		ID:          "ext-a/tool-stable",
-		ModelName:   "stable",
-		ExtensionID: "ext-a",
-		Source:      capability.ToolSourcePlugin,
-		Enabled:     true,
+		ID:           "ext-a/tool-stable",
+		ModelName:    "stable",
+		ExtensionID:  "ext-a",
+		Source:       capability.ToolSourcePlugin,
+		Enabled:      true,
+		InputSchema:  json.RawMessage(`{"type":"object"}`),
+		OutputSchema: json.RawMessage(`{"type":"object"}`),
 	}
 	if err := registry.Register(ctx, stableTool); err != nil {
 		t.Fatalf("register stable tool: %v", err)
@@ -115,20 +118,24 @@ func TestDiscardCandidateContributions_MultipleTypes(t *testing.T) {
 	ctx := context.Background()
 
 	stableTool := capability.ToolDefinition{
-		ID:          "ext-b/stable",
-		ModelName:   "stable",
-		ExtensionID: "ext-b",
-		Source:      capability.ToolSourcePlugin,
-		Enabled:     true,
+		ID:           "ext-b/stable",
+		ModelName:    "stable",
+		ExtensionID:  "ext-b",
+		Source:       capability.ToolSourcePlugin,
+		Enabled:      true,
+		InputSchema:  json.RawMessage(`{"type":"object"}`),
+		OutputSchema: json.RawMessage(`{"type":"object"}`),
 	}
 	_ = registry.Register(ctx, stableTool)
 
 	candidateTool := capability.ToolDefinition{
-		ID:          "ext-b/candidate",
-		ModelName:   "candidate",
-		ExtensionID: "ext-b",
-		Source:      capability.ToolSourcePlugin,
-		Enabled:     false,
+		ID:           "ext-b/candidate",
+		ModelName:    "candidate",
+		ExtensionID:  "ext-b",
+		Source:       capability.ToolSourcePlugin,
+		Enabled:      false,
+		InputSchema:  json.RawMessage(`{"type":"object"}`),
+		OutputSchema: json.RawMessage(`{"type":"object"}`),
 	}
 	_ = registry.Register(ctx, candidateTool)
 
@@ -224,11 +231,13 @@ func TestDiscardCandidateContributions_HookNilService(t *testing.T) {
 	ctx := context.Background()
 
 	stableTool := capability.ToolDefinition{
-		ID:          "ext-d/stable",
-		ModelName:   "stable",
-		ExtensionID: "ext-d",
-		Source:      capability.ToolSourcePlugin,
-		Enabled:     true,
+		ID:           "ext-d/stable",
+		ModelName:    "stable",
+		ExtensionID:  "ext-d",
+		Source:       capability.ToolSourcePlugin,
+		Enabled:      true,
+		InputSchema:  json.RawMessage(`{"type":"object"}`),
+		OutputSchema: json.RawMessage(`{"type":"object"}`),
 	}
 	_ = registry.Register(ctx, stableTool)
 

@@ -2,6 +2,7 @@ package kernel
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
@@ -29,8 +30,10 @@ func makeToolContrib(id, extID string) domain.ContributionDefinition {
 		Name:        domain.LocalizedText{Default: id},
 		Description: domain.LocalizedText{Default: "test tool"},
 		Definition: map[string]any{
-			"toolId":    id,
-			"modelName": id,
+			"toolId":       id,
+			"modelName":    id,
+			"inputSchema":  map[string]any{"type": "object"},
+			"outputSchema": map[string]any{"type": "object"},
 		},
 	}
 }
@@ -162,11 +165,13 @@ func TestCandidateNamespace_DiscardPreservesProduction(t *testing.T) {
 	ctx := context.Background()
 
 	stableTool := capability.ToolDefinition{
-		ID:          "ext-a/stable-tool",
-		ModelName:   "stable",
-		ExtensionID: "ext-a",
-		Source:      capability.ToolSourcePlugin,
-		Enabled:     true,
+		ID:           "ext-a/stable-tool",
+		ModelName:    "stable",
+		ExtensionID:  "ext-a",
+		Source:       capability.ToolSourcePlugin,
+		Enabled:      true,
+		InputSchema:  json.RawMessage(`{"type":"object"}`),
+		OutputSchema: json.RawMessage(`{"type":"object"}`),
 	}
 	if err := registry.Register(ctx, stableTool); err != nil {
 		t.Fatalf("register stable tool: %v", err)
@@ -290,11 +295,13 @@ func TestCandidateNamespace_StableGenerationPreservedOnPromoteFailure(t *testing
 	ns := NewCandidateNamespace()
 
 	stableTool := capability.ToolDefinition{
-		ID:          "ext-a/stable",
-		ModelName:   "stable",
-		ExtensionID: "ext-a",
-		Source:      capability.ToolSourcePlugin,
-		Enabled:     true,
+		ID:           "ext-a/stable",
+		ModelName:    "stable",
+		ExtensionID:  "ext-a",
+		Source:       capability.ToolSourcePlugin,
+		Enabled:      true,
+		InputSchema:  json.RawMessage(`{"type":"object"}`),
+		OutputSchema: json.RawMessage(`{"type":"object"}`),
 	}
 	if err := registry.Register(ctx, stableTool); err != nil {
 		t.Fatalf("register stable tool: %v", err)

@@ -3,7 +3,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 ROOT_DIR="$(cd "$SCRIPT_DIR/../../.." && pwd)"
-ISH_SRC="$ROOT_DIR/third_party/ish"
+ISH_SRC="$ROOT_DIR/backend/third_party/ish"
 OUTPUT_DIR="$ROOT_DIR/mobile_app/ios/ThirdParty/iSH"
 
 if [ "$(uname)" != "Darwin" ]; then
@@ -25,7 +25,7 @@ cd "$ROOT_DIR"
 
 if [ ! -f "$ISH_SRC/meson.build" ]; then
     echo "[build_ish] Initializing iSH submodule..." >&2
-    git submodule update --init --recursive third_party/ish
+    git submodule update --init --recursive backend/third_party/ish
 fi
 
 cd "$ISH_SRC"

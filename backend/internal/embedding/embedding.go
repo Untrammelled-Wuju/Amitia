@@ -4,6 +4,7 @@ package embedding
 
 import (
 	"bytes"
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -29,23 +30,24 @@ func NewService(db *gorm.DB) *Service {
 }
 
 func (s *Service) getConfig() (baseURL, apiKey, modelName, apiType, providerConfigJSON string) {
-	var dbURL, dbKey, dbModel, dbApiType, dbProviderConfigJSON string
+	var dbURL, dbKey, dbModel, dbApiType sql.NullString
+	var dbProviderConfigJSON sql.NullString
 	err := s.db.Table("embedding_configs").
 		Select("base_url, api_key, model_name, api_type, provider_config_json").
 		Where("is_active = 1").Limit(1).Row().
 		Scan(&dbURL, &dbKey, &dbModel, &dbApiType, &dbProviderConfigJSON)
-	if err == nil && dbURL != "" {
-		baseURL = dbURL
-		apiKey = dbKey
-		modelName = dbModel
-		apiType = dbApiType
-		providerConfigJSON = dbProviderConfigJSON
+	if err == nil && dbURL.Valid && dbURL.String != "" {
+		baseURL = dbURL.String
+		apiKey = dbKey.String
+		modelName = dbModel.String
+		apiType = dbApiType.String
+		providerConfigJSON = dbProviderConfigJSON.String
 		return
 	}
-	if err == nil && dbApiType == "llama_cpp" {
-		apiType = dbApiType
-		modelName = dbModel
-		providerConfigJSON = dbProviderConfigJSON
+	if err == nil && dbApiType.Valid && dbApiType.String == "llama_cpp" {
+		apiType = dbApiType.String
+		modelName = dbModel.String
+		providerConfigJSON = dbProviderConfigJSON.String
 		return
 	}
 	if config.AppCfg != nil {
@@ -110,7 +112,7 @@ func (s *Service) EmbedWithRawError(text string) ([]float32, string, error) {
 
 	body, _ := io.ReadAll(resp.Body)
 	if resp.StatusCode != 200 {
-		rawError := fmt.Sprintf("嵌入API返回 %d: %s", resp.StatusCode, truncateStr(string(body), 300))
+		rawError := fmt.Sprintf("嵌入API返回 %d: %s", resp.StatusCode, string(body))
 		return nil, rawError, fmt.Errorf("%s", rawError)
 	}
 
