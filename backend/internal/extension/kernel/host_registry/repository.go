@@ -68,21 +68,21 @@ func (r *hostRepository) GetHost(ctx context.Context, hostClientID string) (*Hos
 		return nil, ErrHostNotFound
 	}
 	row := r.db.QueryRowContext(ctx,
-		`SELECT host_client_id, host_session_id, user_id, platform, device_id, window_id, capabilities, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at
+		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at
 		FROM kernel_host_registry WHERE host_client_id = ?`,
 		hostClientID,
 	)
 	return scanHostEntry(row)
 }
 
-func (r *hostRepository) ListHostsByUser(ctx context.Context, userID string) ([]*HostEntry, error) {
+func (r *hostRepository) ListHostsByUser(ctx context.Context, userID runtimeidentity.UserID) ([]*HostEntry, error) {
 	if r.db == nil {
 		return nil, nil
 	}
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT host_client_id, host_session_id, user_id, platform, device_id, window_id, capabilities, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at
+		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at
 		FROM kernel_host_registry WHERE user_id = ?`,
-		userID,
+		userID.String(),
 	)
 	if err != nil {
 		return nil, err
@@ -96,7 +96,7 @@ func (r *hostRepository) ListAllHosts(ctx context.Context) ([]*HostEntry, error)
 		return nil, nil
 	}
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT host_client_id, host_session_id, user_id, platform, device_id, window_id, capabilities, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at
+		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at
 		FROM kernel_host_registry`,
 	)
 	if err != nil {
@@ -147,7 +147,7 @@ func (r *hostRepository) ListExpired(ctx context.Context) ([]*HostEntry, error) 
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	rows, err := r.db.QueryContext(ctx,
-		`SELECT host_client_id, host_session_id, user_id, platform, device_id, window_id, capabilities, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at
+		`SELECT host_client_id, host_session_id, user_id, platform, device_id, runtime_id, window_id, capabilities, authenticated_at, last_heartbeat, connection_state, session_token, created_at, expires_at
 		FROM kernel_host_registry WHERE expires_at != '' AND expires_at < ?`,
 		now,
 	)
@@ -168,13 +168,15 @@ func scanHostEntry(row rowScanner) (*HostEntry, error) {
 	var authenticatedAt, lastHeartbeat, createdAt string
 	var expiresAt string
 	var connState string
+	var userID, platform, deviceID, runtimeID string
 
 	err := row.Scan(
 		&entry.HostClientID,
 		&entry.HostSessionID,
-		&entry.UserID,
-		&entry.Platform,
-		&entry.DeviceID,
+		&userID,
+		&platform,
+		&deviceID,
+		&runtimeID,
 		&entry.WindowID,
 		&capsStr,
 		&authenticatedAt,
@@ -190,6 +192,11 @@ func scanHostEntry(row rowScanner) (*HostEntry, error) {
 		}
 		return nil, err
 	}
+
+	entry.UserID = runtimeidentity.ParseUserID(userID)
+	entry.Platform = runtimeidentity.ParsePlatform(platform)
+	entry.DeviceID = runtimeidentity.ParseDeviceID(deviceID)
+	entry.RuntimeID = runtimeidentity.ParseRuntimeID(runtimeID)
 
 	if capsStr != "" {
 		if err := json.Unmarshal([]byte(capsStr), &entry.Capabilities); err != nil {

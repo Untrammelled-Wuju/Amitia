@@ -60,6 +60,7 @@ type TaskDefinition struct {
 	DefinitionHash               string                  `json:"definitionHash,omitempty"`
 	Version                      string                  `json:"version,omitempty"`
 	MaxDuration                  time.Duration           `json:"maxDuration,omitempty"`
+	ExecutionPlacement           TaskExecutionPlacement  `json:"executionPlacement,omitempty"`
 }
 
 type TaskResourceLimits struct {

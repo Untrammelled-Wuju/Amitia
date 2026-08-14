@@ -177,12 +177,14 @@ type TaskRun struct {
 	TaskDefinitionID     string          `json:"taskDefinitionId"`
 	ExtensionID          string          `json:"extensionId"`
 	ModuleID             string          `json:"moduleId"`
-	Status               TaskRunStatus   `json:"status"`
-	Priority             int             `json:"priority"`
-	Input                json.RawMessage `json:"input"`
-	InputHash            string          `json:"inputHash"`
-	InputArtifactID      *string         `json:"inputArtifactId,omitempty"`
-	TraceID              string          `json:"traceId,omitempty"`
+	Status               TaskRunStatus           `json:"status"`
+	Priority             int                     `json:"priority"`
+	ExecutionPlacement   TaskExecutionPlacement  `json:"executionPlacement,omitempty"`
+	ExecutionTarget      TaskExecutionTarget     `json:"executionTarget,omitempty"`
+	Input                json.RawMessage         `json:"input"`
+	InputHash            string                  `json:"inputHash"`
+	InputArtifactID      *string                 `json:"inputArtifactId,omitempty"`
+	TraceID              string                  `json:"traceId,omitempty"`
 	CorrelationID        string          `json:"correlationId,omitempty"`
 	CausationID          string          `json:"causationId,omitempty"`
 	Source               string          `json:"source,omitempty"`
@@ -207,6 +209,33 @@ type TaskRun struct {
 	ErrorCode            *string         `json:"errorCode,omitempty"`
 	ErrorMessage         *string         `json:"errorMessage,omitempty"`
 	Generation           int64           `json:"generation"`
+}
+
+func (r *TaskRun) EffectiveExecutionPlacement() TaskExecutionPlacement {
+	if r == nil {
+		return TaskExecutionPlacementLocal
+	}
+	return r.ExecutionPlacement.Normalize()
+}
+
+func (r *TaskRun) IsRemoteExecution() bool {
+	return r.EffectiveExecutionPlacement().IsRemote()
+}
+
+func (r *TaskRun) HasResolvedExecutionTarget() bool {
+	if r == nil {
+		return false
+	}
+	placement := r.EffectiveExecutionPlacement()
+	switch placement {
+	case TaskExecutionPlacementLocal:
+		return true
+	case TaskExecutionPlacementCloud:
+		return r.ExecutionTarget.HasProvider() || r.ExecutionTarget.HasRuntime()
+	case TaskExecutionPlacementDevice:
+		return r.ExecutionTarget.HasDevice()
+	}
+	return false
 }
 
 type TaskRunProgress struct {
@@ -285,19 +314,20 @@ func DefaultTaskRuntimeConfig() TaskRuntimeConfig {
 }
 
 type EnqueueTaskRequest struct {
-	TaskDefinitionID     string          `json:"taskDefinitionId"`
-	ExtensionID          string          `json:"extensionId"`
-	ModuleID             string          `json:"moduleId"`
-	Input                json.RawMessage `json:"input"`
-	Priority             int             `json:"priority"`
-	OperationID          string          `json:"operationId"`
-	InvocationID         string          `json:"invocationId,omitempty"`
-	TraceID              string          `json:"traceId,omitempty"`
-	CorrelationID        string          `json:"correlationId,omitempty"`
-	CausationID          string          `json:"causationId,omitempty"`
-	Source               string          `json:"source,omitempty"`
-	ScopeSnapshotID      string          `json:"scopeSnapshotId"`
-	PermissionSnapshotID string          `json:"permissionSnapshotId"`
+	TaskDefinitionID     string                 `json:"taskDefinitionId"`
+	ExtensionID          string                 `json:"extensionId"`
+	ModuleID             string                 `json:"moduleId"`
+	Input                json.RawMessage        `json:"input"`
+	Priority             int                    `json:"priority"`
+	ExecutionPlacement   TaskExecutionPlacement `json:"executionPlacement,omitempty"`
+	OperationID          string                 `json:"operationId"`
+	InvocationID         string                 `json:"invocationId,omitempty"`
+	TraceID              string                 `json:"traceId,omitempty"`
+	CorrelationID        string                 `json:"correlationId,omitempty"`
+	CausationID          string                 `json:"causationId,omitempty"`
+	Source               string                 `json:"source,omitempty"`
+	ScopeSnapshotID      string                 `json:"scopeSnapshotId"`
+	PermissionSnapshotID string                 `json:"permissionSnapshotId"`
 }
 
 type EnqueueTaskResult struct {
