@@ -101,7 +101,7 @@ func (b *processExitBridgeImpl) OnProcessExit(event trusted_service.ProcessExitE
 		return
 	}
 	intent, err := b.registry.GetLifecycleIntent(runtimeID)
-	if err == nil && (intent == "disable" || intent == "uninstall") {
+	if err == nil && (intent == "emergency" || intent == "disable" || intent == "uninstall") {
 		log.Printf("[process-exit-bridge] recovery suppressed: runtime %s lifecycle intent=%q", runtimeID, intent)
 		return
 	}

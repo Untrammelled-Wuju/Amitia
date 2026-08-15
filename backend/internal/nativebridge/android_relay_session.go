@@ -26,27 +26,21 @@ type productionRelaySession struct {
 
 type RelayEnvelope struct {
 	Type       string          `json:"type"`
+	Platform   string          `json:"platform,omitempty"`
+	Generation uint64          `json:"generation"`
 	RequestID  string          `json:"requestId,omitempty"`
 	Payload    json.RawMessage `json:"payload,omitempty"`
-	Response   *Response       `json:"response,omitempty"`
-	Attach     *RelayAttach    `json:"attach,omitempty"`
-	Detach     *RelayDetach    `json:"detach,omitempty"`
-	Health     *RelayHealth    `json:"health,omitempty"`
 }
 
-type RelayAttach struct {
-	SessionID  string `json:"sessionId"`
-	Generation uint64 `json:"generation"`
+type NativeBridgeEvent struct {
+	Domain    string         `json:"domain"`
+	Event     string         `json:"event"`
+	Timestamp string         `json:"timestamp"`
+	Data      map[string]any `json:"data"`
 }
 
-type RelayDetach struct {
-	SessionID string `json:"sessionId"`
-	Reason    string `json:"reason,omitempty"`
-}
-
-type RelayHealth struct {
-	Generation uint64 `json:"generation"`
-	Health     string `json:"health"`
+type NativeEventSink interface {
+	PublishNativeEvent(ctx context.Context, platform string, generation uint64, payload json.RawMessage) error
 }
 
 func newRelaySession(transport RelayTransport) *productionRelaySession {
@@ -85,9 +79,10 @@ func (s *productionRelaySession) SendRequest(ctx context.Context, req Request) (
 	}
 
 	env := RelayEnvelope{
-		Type:      "native_bridge.request",
-		RequestID: req.RequestID,
-		Payload:   payload,
+		Type:       "native_bridge.request",
+		Generation: s.generation,
+		RequestID:  req.RequestID,
+		Payload:    payload,
 	}
 
 	envData, err := json.Marshal(env)
@@ -141,7 +136,7 @@ func (s *productionRelaySession) SendRequest(ctx context.Context, req Request) (
 			},
 		}, sendCtx.Err()
 	case resp, ok := <-respChan:
-		if !ok || resp.Response == nil {
+		if !ok || len(resp.Payload) == 0 {
 			return Response{
 				ProtocolVersion: req.ProtocolVersion,
 				RequestID:       req.RequestID,
@@ -152,7 +147,19 @@ func (s *productionRelaySession) SendRequest(ctx context.Context, req Request) (
 				},
 			}, fmt.Errorf("empty or invalid relay response")
 		}
-		return *resp.Response, nil
+		var response Response
+		if err := json.Unmarshal(resp.Payload, &response); err != nil {
+			return Response{
+				ProtocolVersion: req.ProtocolVersion,
+				RequestID:       req.RequestID,
+				Status:          "error",
+				Error: &Error{
+					Code:    "INVALID_RESPONSE",
+					Message: "failed to decode response: " + err.Error(),
+				},
+			}, fmt.Errorf("failed to decode response: %w", err)
+		}
+		return response, nil
 	}
 }
 
