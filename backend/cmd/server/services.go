@@ -32,6 +32,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/device"
 	"github.com/u-ai/backend/internal/desktoppet/editing"
 	"github.com/u-ai/backend/internal/devicemesh"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/desktoppet/editing/baseline"
 	"github.com/u-ai/backend/internal/desktoppet/editing/revisioncommit"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
@@ -468,17 +469,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	if err := extensionRuntime.AttachKernelFacade(extensionRuntime.Kernel); err != nil {
 		log.Error("extension kernel facade attach failed: ", err)
 		panic("failed to attach extension kernel facade")
-	}
-	if bootstrap != nil && kernelContainer.TaskRuntimeService != nil {
-		iosProv := bootstrap.IOSNativeProvider()
-		if iosProv != nil {
-			if setter, ok := iosProv.(interface {
-				SetTaskRuntimePort(port iosnative_background.TaskRuntimePort)
-			}); ok {
-				setter.SetTaskRuntimePort(iosnative_background.NewTaskRuntimeServiceAdapter(kernelContainer.TaskRuntimeService))
-				services.BackgroundTaskRuntimeWired = true
-			}
-		}
 	}
 	artifactMaintenance, err := kernel.NewPackageArtifactMaintenanceForStore(kernelContainer.PackageRepository, kernelContainer.PackageArtifactStore, kernel.DefaultPackageArtifactMaintenanceConfig())
 	if err != nil {
@@ -1085,6 +1075,17 @@ services := &AppServices{
 		adapter := nativebridge.NewNativeEventSinkAdapter(services.KernelContainer.EventService)
 		services.NativeBridgeRelay.Handler().SetEventSink("android", adapter)
 		services.NativeBridgeRelay.Handler().SetEventSink("ios", adapter)
+	}
+	if bootstrap != nil && kernelContainer != nil && kernelContainer.TaskRuntimeService != nil {
+		iosProv := bootstrap.IOSNativeProvider()
+		if iosProv != nil {
+			if setter, ok := iosProv.(interface {
+				SetTaskRuntimePort(port iosnative_background.TaskRuntimePort)
+			}); ok {
+				setter.SetTaskRuntimePort(iosnative_background.NewTaskRuntimeServiceAdapter(kernelContainer.TaskRuntimeService))
+				services.BackgroundTaskRuntimeWired = true
+			}
+		}
 	}
 	if err := runCanonicalBuildAssertions(services); err != nil {
 		return nil, fmt.Errorf("canonical build assertion failed: %w", err)
