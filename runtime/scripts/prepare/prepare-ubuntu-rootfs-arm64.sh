@@ -7,9 +7,9 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../../.." && pwd)"
-LOCK_FILE="$PROJECT_ROOT/runtime/artifacts/ubuntu-rootfs/linux-arm64/ubuntu-rootfs-lock.json"
-POLICY_FILE="$PROJECT_ROOT/runtime/artifacts/ubuntu-rootfs/linux-arm64/rootfs-policy.json"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+LOCK_FILE="$REPO_ROOT/runtime/artifacts/ubuntu-rootfs/linux-arm64/ubuntu-rootfs-lock.json"
+POLICY_FILE="$REPO_ROOT/runtime/artifacts/ubuntu-rootfs/linux-arm64/rootfs-policy.json"
 
 RELEASE_MODE=true
 OFFLINE=false

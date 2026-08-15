@@ -111,45 +111,7 @@ fi
 
 echo "[ELF] Checking node binary ELF header..."
 STATIC_VALIDATION_STATUS="NOT_EXECUTED"
-if ! command -v file &> /dev/null; then
-    echo "[WARN] 'file' command not available, static validation will be NOT_EXECUTED"
-else
-    ELF_INFO=$(file "$NODE_BIN")
-    echo "  $ELF_INFO"
-    if ! echo "$ELF_INFO" | grep -q "ELF 64-bit"; then
-        echo "[FATAL] node is not ELF 64-bit" >&2
-        rm -rf "$STAGING_ROOT"
-        exit 1
-    fi
-    if ! echo "$ELF_INFO" | grep -q "ARM aarch64"; then
-        echo "[FATAL] node is not ARM aarch64" >&2
-        rm -rf "$STAGING_ROOT"
-        exit 1
-    fi
-    if ! echo "$ELF_INFO" | grep -q "Linux"; then
-        echo "[FATAL] node is not for Linux" >&2
-        rm -rf "$STAGING_ROOT"
-        exit 1
-    fi
-    STATIC_VALIDATION_STATUS="PASS"
-    echo "[PASS] ELF verification passed"
-fi
-
-echo "[VALIDATOR] Running node_artifact_validator.py..."
-VALIDATOR_PATH="$RUNTIME_ROOT/validation/linux-arm64/node_artifact_validator.py"
-VALIDATOR_PASSED=false
-if [[ -f "$VALIDATOR_PATH" ]]; then
-    if python "$VALIDATOR_PATH" --artifact "$EXTRACTED_ROOT" --lock "$LOCK_FILE"; then
-        VALIDATOR_PASSED=true
-        echo "[PASS] node_artifact_validator.py passed"
-    else
-        echo "[FATAL] node_artifact_validator.py failed" >&2
-        rm -rf "$STAGING_ROOT"
-        exit 1
-    fi
-else
-    echo "[SKIP] Validator not found: $VALIDATOR_PATH (static validation status remains $STATIC_VALIDATION_STATUS)"
-fi
+EXECUTION_STATUS="NOT_EXECUTED"
 
 NODE_DEST="$OUTPUT_DIR/$INSTALL_SUBDIR"
 TEMP_DEST="${NODE_DEST}.tmp.$$"
@@ -166,6 +128,21 @@ if [[ -d "$NODE_DEST" ]]; then
 fi
 mv "$TEMP_DEST" "$NODE_DEST"
 echo "[FREEZE] Node runtime atomically published to: $NODE_DEST"
+
+echo "[VALIDATOR] Running node_artifact_validator.py..."
+VALIDATOR_PATH="$RUNTIME_ROOT/validation/linux-arm64/node_artifact_validator.py"
+if [[ -f "$VALIDATOR_PATH" ]]; then
+    if python "$VALIDATOR_PATH" --output-dir "$OUTPUT_DIR" --lock-file "$LOCK_FILE"; then
+        STATIC_VALIDATION_STATUS="PASS"
+        echo "[PASS] node_artifact_validator.py passed"
+    else
+        echo "[FATAL] node_artifact_validator.py failed" >&2
+        rm -rf "$STAGING_ROOT"
+        exit 1
+    fi
+else
+    echo "[SKIP] Validator not found: $VALIDATOR_PATH (static validation status remains $STATIC_VALIDATION_STATUS)"
+fi
 
 echo "[MANIFEST] Generating node-files.sha256..."
 (cd "$OUTPUT_DIR" && find "$INSTALL_SUBDIR" -type f | sort | xargs sha256sum) > "$OUTPUT_DIR/node-files.sha256"
