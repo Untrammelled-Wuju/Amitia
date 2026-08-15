@@ -3,6 +3,7 @@ package preview
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/u-ai/backend/internal/uiagent"
 )
@@ -14,6 +15,8 @@ type RefineRequest struct {
 	Target        *uiagent.UITarget  `json:"target"`
 	ChangedPaths  []string           `json:"changedPaths,omitempty"`
 	MaxIterations int                `json:"maxIterations"`
+	PreviousTxID  string             `json:"previousTxId,omitempty"`
+	Revision      string             `json:"revision,omitempty"`
 }
 
 type RefineResult struct {
@@ -23,9 +26,12 @@ type RefineResult struct {
 	Iterations         int                `json:"iterations"`
 	Converged          bool               `json:"converged"`
 	NoopSinceLastCycle bool               `json:"noopSinceLastCycle"`
+	Revision           string             `json:"revision,omitempty"`
+	TransactionID      string             `json:"transactionId,omitempty"`
+	RollbackToken      string             `json:"rollbackToken,omitempty"`
 }
 
-const MaxRefineIterations = 5
+const MaxRefineIterations = 2
 
 type AutoRefiner interface {
 	Refine(ctx context.Context, req RefineRequest) (*RefineResult, error)
@@ -36,10 +42,10 @@ type defaultAutoRefiner struct {
 	observer       Observer
 }
 
-func NewAutoRefiner(mgr SessionManager) AutoRefiner {
+func NewAutoRefiner(mgr SessionManager, obs Observer) AutoRefiner {
 	return &defaultAutoRefiner{
 		sessionManager: mgr,
-		observer:       NewObserver(),
+		observer:       obs,
 	}
 }
 
@@ -53,48 +59,75 @@ func (r *defaultAutoRefiner) Refine(ctx context.Context, req RefineRequest) (*Re
 	if req.MaxIterations <= 0 {
 		req.MaxIterations = MaxRefineIterations
 	}
+	if req.MaxIterations > MaxRefineIterations {
+		req.MaxIterations = MaxRefineIterations
+	}
 
-	iterations := 0
-	var noopSinceLastCycle bool
+	prevObservation := req.Observation
+	var lastObservation *ObservationResult
 
 	for i := 0; i < req.MaxIterations; i++ {
 		obs, err := r.observer.Capture(ctx, req.SessionID)
 		if err != nil {
-			return &RefineResult{State: "error", Iterations: iterations}, err
+			return &RefineResult{State: "error", Iterations: i}, err
 		}
 
-		// If observation has not changed since last cycle, mark noop.
-		if req.Observation != nil && sameObservationPaths(obs, req.Observation) {
-			noopSinceLastCycle = true
-			break
+		if prevObservation != nil && sameObservationErrors(obs, prevObservation) {
+			return &RefineResult{
+				State:              "converged",
+				Observation:        obs,
+				Iterations:         i,
+				Converged:          true,
+				NoopSinceLastCycle: true,
+				RollbackToken:      generateRollbackToken(req.SessionID, i),
+			}, nil
 		}
-		iterations++
-		req.Observation = obs
-		// Actual source modification requires sourceEditor support;
-		// this implementation returns the observation for upstream handling.
+
+		lastObservation = obs
+		prevObservation = obs
+
+		if len(obs.Errors) == 0 {
+			return &RefineResult{
+				State:         "refined",
+				Observation:   obs,
+				Iterations:    i + 1,
+				Converged:     true,
+				RollbackToken: generateRollbackToken(req.SessionID, i+1),
+			}, nil
+		}
+	}
+
+	if lastObservation == nil {
+		return &RefineResult{State: "no_change", Iterations: 0}, nil
 	}
 
 	return &RefineResult{
-		State:              "refined",
-		Iterations:         iterations,
-		Converged:          noopSinceLastCycle,
-		NoopSinceLastCycle: noopSinceLastCycle,
+		State:         "needs_manual",
+		Observation:   lastObservation,
+		Iterations:    req.MaxIterations,
+		Converged:     false,
+		ChangedPaths:  lastObservation.ChangedPaths,
+		RollbackToken: generateRollbackToken(req.SessionID, req.MaxIterations),
 	}, nil
 }
 
-func sameObservationPaths(a, b *ObservationResult) bool {
+func sameObservationErrors(a, b *ObservationResult) bool {
 	if a == nil || b == nil {
 		return false
 	}
-	if len(a.ChangedPaths) != len(b.ChangedPaths) {
+	if len(a.Errors) != len(b.Errors) {
 		return false
 	}
-	for i := range a.ChangedPaths {
-		if a.ChangedPaths[i] != b.ChangedPaths[i] {
+	for i := range a.Errors {
+		if a.Errors[i] != b.Errors[i] {
 			return false
 		}
 	}
 	return true
+}
+
+func generateRollbackToken(sessionID string, iteration int) string {
+	return fmt.Sprintf("%s_r%d", sessionID, iteration)
 }
 
 var (

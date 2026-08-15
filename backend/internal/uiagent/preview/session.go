@@ -13,27 +13,40 @@ type SessionState string
 const (
 	PreviewSessionRunning    SessionState = "running"
 	PreviewSessionIdle       SessionState = "idle"
-	PreviewSessionPaused     SessionState = "paused"
+	PreviewSessionReady      SessionState = "ready"
 	PreviewSessionError      SessionState = "error"
 	PreviewSessionTerminated SessionState = "terminated"
 )
 
+type PreviewTarget struct {
+	WorkspaceID string `json:"workspaceId,omitempty"`
+	Platform    string `json:"platform,omitempty"`
+	SourceType  string `json:"sourceType,omitempty"`
+}
+
 type PreviewSession struct {
-	ID           string                    `json:"id"`
-	WorkspaceID  string                    `json:"workspaceId,omitempty"`
-	Schema       *schema.SchemaUIDocument  `json:"schema,omitempty"`
-	State        SessionState              `json:"state"`
-	LastActivity time.Time                 `json:"lastActivity"`
-	mu           sync.Mutex
+	ID             string                    `json:"id"`
+	WorkspaceID    string                    `json:"workspaceId,omitempty"`
+	Schema         *schema.SchemaUIDocument  `json:"schema,omitempty"`
+	State          SessionState              `json:"state"`
+	Target         *PreviewTarget            `json:"target,omitempty"`
+	Revision       string                    `json:"revision,omitempty"`
+	TransactionID  string                    `json:"transactionId,omitempty"`
+	RootExecution  string                    `json:"rootExecution,omitempty"`
+	LastActivity   time.Time                 `json:"lastActivity"`
+	SchemaWarnings []string                  `json:"schemaWarnings,omitempty"`
+	SchemaErrors   []string                  `json:"schemaErrors,omitempty"`
+	mu             sync.Mutex
 }
 
 func (s *PreviewSession) IsActive() bool {
-	return s.State == PreviewSessionRunning || s.State == PreviewSessionIdle
+	return s.State == PreviewSessionRunning || s.State == PreviewSessionIdle || s.State == PreviewSessionReady
 }
 
 type SessionManager interface {
 	Create(workspaceID string, doc *schema.SchemaUIDocument) (*PreviewSession, error)
 	Get(id string) (*PreviewSession, error)
+	UpdateRevision(sessionID, revision, transactionID string) error
 	Terminate(id string) error
 }
 
@@ -68,6 +81,21 @@ func (m *defaultSessionManager) Get(id string) (*PreviewSession, error) {
 		return nil, ErrSessionNotFound
 	}
 	return session, nil
+}
+
+func (m *defaultSessionManager) UpdateRevision(sessionID, revision, transactionID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	session, ok := m.sessions[sessionID]
+	if !ok {
+		return ErrSessionNotFound
+	}
+	session.Revision = revision
+	if transactionID != "" {
+		session.TransactionID = transactionID
+	}
+	session.LastActivity = time.Now()
+	return nil
 }
 
 func (m *defaultSessionManager) Terminate(id string) error {
