@@ -1,104 +1,71 @@
 package delivery
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
-
-	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	"sync"
 )
 
-type ChannelProvider interface {
-	Channel() string
-	Deliver(ctx context.Context, intent DeliveryIntent) error
-}
-
 type ChannelResolver interface {
-	Resolve(ctx context.Context, channel string) (ChannelProvider, error)
+	Resolve(channelName string) ChannelAdapter
+	Register(adapter ChannelAdapter)
+	Channels() []string
 }
 
-type CapabilityChannelResolver struct {
-	capabilityService     *capability.CapabilityService
-	invocationService     *capability.ProviderInvocationService
+type MapChannelResolver struct {
+	mu       sync.RWMutex
+	adapters map[string]ChannelAdapter
 }
 
-func NewCapabilityChannelResolver(
-	capabilityService *capability.CapabilityService,
-	invocationService *capability.ProviderInvocationService,
-) *CapabilityChannelResolver {
-	return &CapabilityChannelResolver{
-		capabilityService: capabilityService,
-		invocationService: invocationService,
+func NewMapChannelResolver() *MapChannelResolver {
+	return &MapChannelResolver{
+		adapters: make(map[string]ChannelAdapter),
 	}
 }
 
-func (r *CapabilityChannelResolver) Resolve(ctx context.Context, channel string) (ChannelProvider, error) {
-	if channel == "" {
-		return nil, fmt.Errorf("channel resolver: channel name is empty")
+func NewMapChannelResolverWith(adapters []ChannelAdapter) *MapChannelResolver {
+	r := NewMapChannelResolver()
+	for _, a := range adapters {
+		r.Register(a)
 	}
-
-	capID := capability.CapabilityID("channel.deliver." + channel)
-
-	if r.capabilityService != nil && !r.capabilityService.HasExecutableProvider(capID) {
-		return nil, fmt.Errorf("channel resolver: no executable provider for capability %s", capID)
-	}
-
-	return &capabilityChannelProvider{
-		channel:          channel,
-		capabilityID:     capID,
-		invocationService: r.invocationService,
-	}, nil
+	return r
 }
 
-type capabilityChannelProvider struct {
-	channel          string
-	capabilityID     capability.CapabilityID
-	invocationService *capability.ProviderInvocationService
+func (r *MapChannelResolver) Register(adapter ChannelAdapter) {
+	if adapter == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.adapters[adapter.Name()] = adapter
 }
 
-func (p *capabilityChannelProvider) Channel() string {
-	return p.channel
+func (r *MapChannelResolver) Resolve(channelName string) ChannelAdapter {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.adapters[channelName]
 }
 
-func (p *capabilityChannelProvider) Deliver(ctx context.Context, intent DeliveryIntent) error {
-	if p.invocationService == nil {
-		return fmt.Errorf("channel provider %q: invocation service not configured", p.channel)
+func (r *MapChannelResolver) Channels() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	channels := make([]string, 0, len(r.adapters))
+	for name := range r.adapters {
+		channels = append(channels, name)
 	}
-
-	input := channelDeliverInput{
-		InteractionID:   intent.InteractionID,
-		ResponseGroupID: intent.ResponseGroupID,
-		PeerID:          intent.PeerID,
-		ContentType:     intent.ContentType,
-		Payload:         intent.Payload,
-	}
-
-	payload, err := json.Marshal(input)
-	if err != nil {
-		return fmt.Errorf("channel provider %q: marshal deliver input: %w", p.channel, err)
-	}
-
-	req := capability.ProviderInvocationRequest{
-		CapabilityID:       p.capabilityID,
-		Input:              payload,
-		PreferredPlacement: capability.ProviderPlacementCore,
-		RequiredPlacement:  capability.ProviderPlacementCore,
-		AllowCore:          true,
-		AllowDevice:        false,
-	}
-
-	_, err = p.invocationService.Invoke(ctx, req)
-	if err != nil {
-		return fmt.Errorf("channel provider %q: invoke capability %s: %w", p.channel, p.capabilityID, err)
-	}
-
-	return nil
+	return channels
 }
 
-type channelDeliverInput struct {
-	InteractionID   string          `json:"interactionId"`
-	ResponseGroupID string          `json:"responseGroupId"`
-	PeerID          string          `json:"peerId"`
-	ContentType     string          `json:"contentType"`
-	Payload         json.RawMessage `json:"payload"`
+func (r *MapChannelResolver) Unregister(channelName string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	delete(r.adapters, channelName)
 }
+
+func (r *MapChannelResolver) Has(channelName string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	_, ok := r.adapters[channelName]
+	return ok
+}
+
+var ErrChannelNotResolved = fmt.Errorf("channel adapter not resolved")
