@@ -20,7 +20,7 @@ func NewNativeBridgeNotificationProvider(bridge nativebridge.Bridge) androidsyst
 func (p *nativeBridgeNotificationProvider) Execute(ctx context.Context, request androidsystem.SystemRequest) androidsystem.SystemResponse {
 	bridgeReq := nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       request.RequestID,
+		RequestId:       request.RequestID,
 		Platform:        "android",
 		Operation:       request.Operation,
 		Payload:         request.Payload,
@@ -37,7 +37,7 @@ func (p *nativeBridgeNotificationProvider) Execute(ctx context.Context, request 
 		}
 	}
 	return androidsystem.SystemResponse{
-		RequestID: resp.RequestID,
+		RequestID: resp.RequestId,
 		Status:    resp.Status,
 		Result:    resp.Result,
 		Error:     convertBridgeError(resp.Error),
@@ -47,7 +47,7 @@ func (p *nativeBridgeNotificationProvider) Execute(ctx context.Context, request 
 func (p *nativeBridgeNotificationProvider) Health(ctx context.Context) androidsystem.NotificationHealthStatus {
 	req := nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       generateRequestID(),
+		RequestId:       generateRequestID(),
 		Platform:        "android",
 		Operation:       OperationStatus,
 		Payload:         map[string]any{},

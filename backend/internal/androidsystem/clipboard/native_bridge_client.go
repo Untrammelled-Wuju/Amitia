@@ -25,7 +25,7 @@ func (c *nativeBridgeClipboardClient) ReadText(ctx context.Context) (ClipboardRe
 
 	req := nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       generateRequestID(),
+		RequestId:       generateRequestID(),
 		Platform:        "android",
 		Operation:       OperationReadText,
 		Payload:         map[string]any{},
@@ -60,7 +60,7 @@ func (c *nativeBridgeClipboardClient) WriteText(ctx context.Context, req Clipboa
 	}
 	bridgeReq := nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       generateRequestID(),
+		RequestId:       generateRequestID(),
 		Platform:        "android",
 		Operation:       OperationWriteText,
 		Payload:         payload,
@@ -92,7 +92,7 @@ func (c *nativeBridgeClipboardClient) Status(ctx context.Context) (ClipboardCapa
 
 	req := nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       generateRequestID(),
+		RequestId:       generateRequestID(),
 		Platform:        "android",
 		Operation:       OperationStatus,
 		Payload:         map[string]any{},
@@ -126,7 +126,7 @@ func (c *nativeBridgeClipboardClient) Clear(ctx context.Context) error {
 
 	req := nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       generateRequestID(),
+		RequestId:       generateRequestID(),
 		Platform:        "android",
 		Operation:       OperationClear,
 		Payload:         map[string]any{},

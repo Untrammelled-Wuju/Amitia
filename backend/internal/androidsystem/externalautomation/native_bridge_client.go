@@ -20,7 +20,7 @@ func NewNativeBridgeExternalAutomationClient(bridge nativebridge.Bridge) Externa
 func (c *nativeBridgeExternalAutomationClient) Status(ctx context.Context) (CapabilityState, error) {
 	req := nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       generateRequestID(),
+		RequestId:       generateRequestID(),
 		Platform:        "android",
 		Operation:       OperationStatus,
 		Payload:         map[string]any{},
@@ -38,7 +38,7 @@ func (c *nativeBridgeExternalAutomationClient) Status(ctx context.Context) (Capa
 func (c *nativeBridgeExternalAutomationClient) ResolveApp(ctx context.Context, req ResolveAppRequest) ([]ResolvedApp, error) {
 	bridgeReq := nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       generateRequestID(),
+		RequestId:       generateRequestID(),
 		Platform:        "android",
 		Operation:       OperationResolveApp,
 		Payload:         map[string]any{"query": req.Query},
@@ -87,7 +87,7 @@ func (c *nativeBridgeExternalAutomationClient) OpenApp(ctx context.Context, req 
 	}
 	bridgeReq := nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       generateRequestID(),
+		RequestId:       generateRequestID(),
 		Platform:        "android",
 		Operation:       OperationOpenApp,
 		Payload:         payload,
@@ -109,7 +109,7 @@ func (c *nativeBridgeExternalAutomationClient) ResolveURI(ctx context.Context, r
 	}
 	bridgeReq := nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       generateRequestID(),
+		RequestId:       generateRequestID(),
 		Platform:        "android",
 		Operation:       OperationResolveURI,
 		Payload:         payload,
@@ -140,7 +140,7 @@ func (c *nativeBridgeExternalAutomationClient) OpenURI(ctx context.Context, req 
 	}
 	bridgeReq := nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       generateRequestID(),
+		RequestId:       generateRequestID(),
 		Platform:        "android",
 		Operation:       OperationOpenURI,
 		Payload:         payload,
@@ -162,7 +162,7 @@ func (c *nativeBridgeExternalAutomationClient) OpenSettings(ctx context.Context,
 	}
 	bridgeReq := nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       generateRequestID(),
+		RequestId:       generateRequestID(),
 		Platform:        "android",
 		Operation:       OperationOpenSettings,
 		Payload:         payload,
@@ -199,7 +199,7 @@ func (c *nativeBridgeExternalAutomationClient) InvokeIntent(ctx context.Context,
 	}
 	bridgeReq := nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       generateRequestID(),
+		RequestId:       generateRequestID(),
 		Platform:        "android",
 		Operation:       OperationInvokeIntent,
 		Payload:         payload,
@@ -217,7 +217,7 @@ func (c *nativeBridgeExternalAutomationClient) InvokeIntent(ctx context.Context,
 func (c *nativeBridgeExternalAutomationClient) Foreground(ctx context.Context) (ForegroundState, error) {
 	req := nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       generateRequestID(),
+		RequestId:       generateRequestID(),
 		Platform:        "android",
 		Operation:       OperationForeground,
 		Payload:         map[string]any{},
@@ -255,7 +255,7 @@ func (c *nativeBridgeExternalAutomationClient) WaitForeground(ctx context.Contex
 	}
 	bridgeReq := nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       generateRequestID(),
+		RequestId:       generateRequestID(),
 		Platform:        "android",
 		Operation:       OperationWaitForeground,
 		Payload:         payload,

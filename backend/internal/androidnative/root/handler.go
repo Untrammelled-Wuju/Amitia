@@ -64,7 +64,7 @@ func (h *RootHandler) handleStatus(ctx context.Context, request capability.Andro
 
 	bridgeReq := androidnative.NativeBridgeRequest{
 		ProtocolVersion: request.ProtocolVersion,
-		RequestID:       request.RequestID,
+		RequestId:       request.RequestID,
 		Operation:       OperationStatus,
 		Payload:         map[string]any{},
 	}
@@ -102,7 +102,7 @@ func (h *RootHandler) handleRequest(ctx context.Context, request capability.Andr
 
 	bridgeReq := androidnative.NativeBridgeRequest{
 		ProtocolVersion: request.ProtocolVersion,
-		RequestID:       request.RequestID,
+		RequestId:       request.RequestID,
 		Operation:       OperationRequest,
 		Payload:         map[string]any{},
 	}
@@ -218,7 +218,7 @@ func (h *RootHandler) handleExecute(ctx context.Context, request capability.Andr
 
 	bridgeReq := androidnative.NativeBridgeRequest{
 		ProtocolVersion: request.ProtocolVersion,
-		RequestID:       request.RequestID,
+		RequestId:       request.RequestID,
 		Operation:       OperationExecute,
 		Payload:         bridgePayload,
 	}
@@ -283,7 +283,7 @@ func (h *RootHandler) ExecuteRoot(
 
 	bridgeReq := androidnative.NativeBridgeRequest{
 		ProtocolVersion: androidBridgeProtocolVersion,
-		RequestID:       "",
+		RequestId:       "",
 		Operation:       OperationExecute,
 		Payload:         bridgePayload,
 	}
@@ -327,11 +327,11 @@ const androidBridgeProtocolVersion = 1
 func mapNativeBridgeResponse(resp androidnative.NativeBridgeResponse, requestID string) capability.AndroidBridgeResponse {
 	result := capability.AndroidBridgeResponse{
 		ProtocolVersion: resp.ProtocolVersion,
-		RequestID:       resp.RequestID,
+		RequestID:       resp.RequestId,
 		Status:          resp.Status,
 	}
 
-	if resp.RequestID != requestID {
+	if resp.RequestId != requestID {
 		result.Status = "error"
 		result.Error = &capability.AndroidError{
 			Code:       "BRIDGE_INVALID_RESPONSE",

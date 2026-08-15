@@ -37,7 +37,7 @@ func (c *nativeBridgeShareClient) Send(ctx context.Context, req ShareSendRequest
 
 	bridgeReq := nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       generateRequestID(),
+		RequestId:       generateRequestID(),
 		Platform:        "android",
 		Operation:       OperationSend,
 		Payload:         payload,
@@ -62,7 +62,7 @@ func (c *nativeBridgeShareClient) Send(ctx context.Context, req ShareSendRequest
 func (c *nativeBridgeShareClient) Status(ctx context.Context) (ShareCapabilityState, error) {
 	req := nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       generateRequestID(),
+		RequestId:       generateRequestID(),
 		Platform:        "android",
 		Operation:       OperationStatus,
 		Payload:         map[string]any{},

@@ -43,7 +43,7 @@ func (e *BridgeAccessibilityExecutor) PerformNodeAction(
 
 	bridgeReq := androidnative.NativeBridgeRequest{
 		ProtocolVersion: 1,
-		RequestID:       "",
+		RequestId:       "",
 		Operation:       "interaction.perform_node_action",
 		Payload: map[string]any{
 			"nativeRef": node.NativeRef,
