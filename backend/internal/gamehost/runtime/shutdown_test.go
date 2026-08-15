@@ -166,6 +166,9 @@ func (f *fakeRuntimeExecutor) CleanupRuntime(ctx context.Context, runtimeID doma
 func (f *fakeRuntimeExecutor) SetResolveDefinition(fn DefinitionResolverFunc) {
 }
 
+func (f *fakeRuntimeExecutor) SetRuntimeSubscriptionWatcher(watcher RuntimeSubscriptionWatcher) {
+}
+
 func TestRuntimeHandleStore(t *testing.T) {
 	store := NewRuntimeHandleStore()
 	store.Put("rt-1", "svc-1", &ServiceExecutionHandle{
