@@ -1,0 +1,24 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://amitia.untrammelled.top/contracts/native_bridge/native-event.schema.json",
+  "title": "NativeBridgeEvent",
+  "description": "Native Bridge v1 事件载荷",
+  "type": "object",
+  "required": ["domain", "event", "timestamp"],
+  "properties": {
+    "domain": {
+      "type": "string"
+    },
+    "event": {
+      "type": "string"
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "data": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}

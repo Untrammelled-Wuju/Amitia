@@ -1,0 +1,15 @@
+{
+  "type": "native_bridge.event",
+  "platform": "ios",
+  "generation": 2,
+  "payload": {
+    "domain": "homekit",
+    "event": "characteristic.changed",
+    "timestamp": "2026-08-15T12:00:00Z",
+    "data": {
+      "accessoryId": "acc-001",
+      "characteristic": "powerState",
+      "value": true
+    }
+  }
+}

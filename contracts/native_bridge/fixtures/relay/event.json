@@ -1,0 +1,10 @@
+{
+  "domain": "bluetooth",
+  "event": "device.discovered",
+  "timestamp": "2026-08-15T12:00:00Z",
+  "data": {
+    "deviceId": "bt-001",
+    "name": "Test Device",
+    "rssi": -45
+  }
+}

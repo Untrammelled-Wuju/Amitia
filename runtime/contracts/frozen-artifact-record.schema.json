@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "FrozenArtifactRecord",
+  "type": "object",
+  "required": [
+    "schemaVersion",
+    "componentId",
+    "version",
+    "platform",
+    "architecture",
+    "artifactType",
+    "artifactRelativePath",
+    "artifactSha256",
+    "treeSha256",
+    "sourceRevision",
+    "buildMode"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "componentId": {
+      "type": "string"
+    },
+    "version": {
+      "type": "string"
+    },
+    "platform": {
+      "type": "string",
+      "enum": ["linux", "android"]
+    },
+    "architecture": {
+      "type": "string",
+      "enum": ["arm64", "arm64-v8a", "x86_64"]
+    },
+    "artifactType": {
+      "type": "string",
+      "enum": ["executable", "archive", "tree"]
+    },
+    "artifactRelativePath": {
+      "type": "string"
+    },
+    "artifactSha256": {
+      "type": "string",
+      "pattern": "^[a-fA-F0-9]{64}$"
+    },
+    "treeSha256": {
+      "type": "string",
+      "pattern": "^[a-fA-F0-9]{64}$"
+    },
+    "sourceRevision": {
+      "type": "string"
+    },
+    "buildMode": {
+      "type": "string",
+      "enum": ["release", "debug", "offline"]
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    }
+  },
+  "additionalProperties": false
+}

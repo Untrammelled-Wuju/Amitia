@@ -1,0 +1,9 @@
+{
+  "protocolVersion": 1,
+  "requestId": "req-test-001",
+  "status": "ok",
+  "result": {
+    "resourceURI": "amitia://resource/res-test-001",
+    "size": 1024
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "type": "native_bridge.request",
+  "platform": "android",
+  "generation": 1,
+  "requestId": "req-test-001",
+  "payload": {
+    "protocolVersion": 1,
+    "requestId": "req-test-001",
+    "platform": "android",
+    "operation": "media.capture",
+    "payload": {}
+  }
+}
