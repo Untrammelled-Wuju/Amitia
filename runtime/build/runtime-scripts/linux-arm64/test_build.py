@@ -12,6 +12,9 @@ from unittest import mock
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
+BUILD_ROOT = SCRIPT_DIR.parents[3]
+if str(BUILD_ROOT) not in sys.path:
+    sys.path.insert(0, str(BUILD_ROOT))
 
 import build
 
