@@ -56,7 +56,7 @@ internal class AndroidProotComponent(
             cleanupDeadSessions()
             val existing = mainSession.get()
             if (existing != null && existing.isAlive()) {
-                return AlreadyRunningSession(existing.sessionId)
+                return ClosedSession
             }
             val spec = ProotLaunchSpec.from(request, avail.absoluteBinaryPath)
             val command = commandBuilder.build(spec)
@@ -79,7 +79,7 @@ internal class AndroidProotComponent(
             cleanupDeadSessions()
             val existing = mainSession.get()
             if (existing != null && existing.isAlive()) {
-                return AlreadyRunningSession(existing.sessionId)
+                return ClosedSession
             }
             val spec = ProotLaunchSpec.from(request, avail.absoluteBinaryPath)
             val command = commandBuilder.build(spec)
@@ -130,16 +130,6 @@ internal class AndroidProotComponent(
         override fun isAlive(): Boolean = false
         override fun awaitExit(timeoutMillis: Long): Int? = null
         override fun stop(graceMillis: Long) = ProotStopResult.AlreadyStopped("closed", null)
-        override fun close() {}
-        override fun requestStop() {}
-        override val exit: com.amitia.amitia_app.runtime.proot.ProotExit? = null
-    }
-
-    private class AlreadyRunningSession(private val existingId: String) : ProotSession {
-        override val sessionId: String = "already-running-$existingId"
-        override fun isAlive(): Boolean = false
-        override fun awaitExit(timeoutMillis: Long): Int? = null
-        override fun stop(graceMillis: Long) = ProotStopResult.AlreadyStopped(sessionId, null)
         override fun close() {}
         override fun requestStop() {}
         override val exit: com.amitia.amitia_app.runtime.proot.ProotExit? = null

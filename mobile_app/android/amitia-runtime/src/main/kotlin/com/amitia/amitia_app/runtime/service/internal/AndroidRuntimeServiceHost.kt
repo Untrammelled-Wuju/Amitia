@@ -19,6 +19,7 @@ internal class AndroidRuntimeServiceHost(
     private val serviceConnection = RuntimeServiceConnection(
         onConnected = { endpoint ->
             endpoint.addListener(internalEndpointListener)
+            replaySnapshot(endpoint)
         },
         onDisconnected = { }
     )
@@ -70,5 +71,17 @@ internal class AndroidRuntimeServiceHost(
 
     override fun currentGeneration(): Long {
         return RuntimeService.currentGeneration(context)
+    }
+
+    private fun replaySnapshot(endpoint: RuntimeServiceEndpoint) {
+        if (endpoint !is DefaultRuntimeServiceEndpoint) return
+        val last = endpoint.lastEvent() ?: return
+        val snapshot = ArrayList(listeners)
+        for (listener in snapshot) {
+            try {
+                listener.onServiceHostEvent(last)
+            } catch (_: Throwable) {
+            }
+        }
     }
 }

@@ -273,18 +273,27 @@ class RuntimeService : Service() {
             )
             return
         }
-        val realSession = if (!session.isAlive()) component.currentSession() else session
-        currentSessionRef.set(realSession)
-        currentSessionIdRef.set(realSession.sessionId)
+        if (!session.isAlive()) {
+            teardownAfterStartupFailure(
+                generation = generation,
+                sessionId = currentSessionIdRef.get(),
+                launchStartId = startId,
+                cause = RuntimeServiceTerminationCause.ENVIRONMENT_BUILD_FAILED,
+                phase = "proot_launch_failed_session"
+            )
+            return
+        }
+        currentSessionRef.set(session)
+        currentSessionIdRef.set(session.sessionId)
         currentSessionContextRef.set(
             ServiceSessionContext(
                 generation = generation,
-                session = realSession,
+                session = session,
                 launchStartId = startId,
                 latestStartId = startId,
             )
         )
-        realSession.markStarted()
+        session.markStarted()
     }
 
     private fun resolveActiveProgramSource(generation: Long, startId: Int): java.io.File? {
@@ -605,7 +614,7 @@ class RuntimeService : Service() {
                 sessionContext.terminalEvent = TerminalEventKind.UNEXPECTED_TERMINATION
                 unexpectedTerminationCause = RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
                 unexpectedTerminationGeneration = sessionContext.generation
-                serviceTeardownCompleted.set(true)
+                serviceTeardownCompleted.compareAndSet(false, true)
                 try {
                     stopForeground(STOP_FOREGROUND_REMOVE)
                 } catch (_: Exception) {
