@@ -27,7 +27,7 @@ func parseBuiltinVersion(version string) domain.SemanticVersion {
 //
 //	Extension ID: com.amitia.builtin.ai.{protocolFamily}
 //	Provider Capability: ai.chat.generate
-func BuildAIExtension(protocolFamily, version string) builtin.Definition {
+func BuildAIExtension(protocolFamily, version string) Definition {
 	extID := domain.ExtensionID(fmt.Sprintf("com.amitia.builtin.ai.%s", protocolFamily))
 	moduleID := domain.ModuleID(fmt.Sprintf("com.amitia.builtin.ai.%s/main", protocolFamily))
 	contributionID := domain.ContributionID(fmt.Sprintf("com.amitia.builtin.ai.%s/chat.generate", protocolFamily))

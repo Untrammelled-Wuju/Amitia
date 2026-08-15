@@ -89,9 +89,7 @@ func BuildWorkspaceExtension(version string) Definition {
 		Compatibility: domain.ExtensionCompatibility{
 			Platforms: []string{"windows", "linux", "darwin"},
 		},
-		Policies: domain.ExtensionPolicies{
-			FileSystemAccess: true,
-		},
+		Policies: domain.ExtensionPolicies{},
 	}
 
 	return Definition{

@@ -31,7 +31,7 @@ func BuildWebChannelExtension(version string) Definition {
 			},
 			Version:         ver,
 			ManifestVersion: 1,
-			Domain:          domain.ExtensionDomainSystem,
+			Domain:          domain.ExtensionDomainGeneral,
 			Placement:       domain.ExtensionPlacementCloud,
 			Publisher: domain.PublisherReference{
 				PublisherID: "com.amitia",
@@ -44,8 +44,9 @@ func BuildWebChannelExtension(version string) Definition {
 			Compatibility: domain.ExtensionCompatibility{
 				Platforms: []string{"web"},
 			},
-			Modules: []ModuleDefinition{
+			Modules: []domain.ModuleDefinition{
 				buildChannelModule(
+					domain.ExtensionID(PrefixBuiltin + "channel.web"),
 					moduleIDWebChannel,
 					providerIDWebChannel,
 					capabilityDeliverWeb,
@@ -70,7 +71,7 @@ func BuildQQChannelExtension(version string) Definition {
 			},
 			Version:         ver,
 			ManifestVersion: 1,
-			Domain:          domain.ExtensionDomainSystem,
+			Domain:          domain.ExtensionDomainGeneral,
 			Placement:       domain.ExtensionPlacementCloud,
 			Publisher: domain.PublisherReference{
 				PublisherID: "com.amitia",
@@ -83,8 +84,9 @@ func BuildQQChannelExtension(version string) Definition {
 			Compatibility: domain.ExtensionCompatibility{
 				Platforms: []string{"qq"},
 			},
-			Modules: []ModuleDefinition{
+			Modules: []domain.ModuleDefinition{
 				buildChannelModule(
+					domain.ExtensionID(PrefixBuiltin + "channel.qq"),
 					moduleIDQQChannel,
 					providerIDQQChannel,
 					capabilityDeliverQQ,
@@ -109,7 +111,7 @@ func BuildWechatChannelExtension(version string) Definition {
 			},
 			Version:         ver,
 			ManifestVersion: 1,
-			Domain:          domain.ExtensionDomainSystem,
+			Domain:          domain.ExtensionDomainGeneral,
 			Placement:       domain.ExtensionPlacementCloud,
 			Publisher: domain.PublisherReference{
 				PublisherID: "com.amitia",
@@ -122,8 +124,9 @@ func BuildWechatChannelExtension(version string) Definition {
 			Compatibility: domain.ExtensionCompatibility{
 				Platforms: []string{"wechat"},
 			},
-			Modules: []ModuleDefinition{
+			Modules: []domain.ModuleDefinition{
 				buildChannelModule(
+					domain.ExtensionID(PrefixBuiltin + "channel.wechat"),
 					moduleIDWechatChannel,
 					providerIDWechatChannel,
 					capabilityDeliverWechat,
@@ -136,11 +139,8 @@ func BuildWechatChannelExtension(version string) Definition {
 	}
 }
 
-func buildChannelModule(id domain.ModuleID, providerName string, capID capability.CapabilityID) ModuleDefinition {
-	extID := domain.ExtensionID(PrefixBuiltin + "channel." + providerName)
-	modID := "channel-" + domain.ModuleID(providerName)
-
-	return ModuleDefinition{
+func buildChannelModule(extID domain.ExtensionID, modID domain.ModuleID, providerName string, capID capability.CapabilityID) domain.ModuleDefinition {
+	return domain.ModuleDefinition{
 		ID:          modID,
 		ExtensionID: extID,
 		Name: domain.LocalizedText{
@@ -149,24 +149,24 @@ func buildChannelModule(id domain.ModuleID, providerName string, capID capabilit
 		Description: domain.LocalizedText{
 			Default: "Provides channel delivery capability for " + providerName,
 		},
-		Type:    ModuleTypeBuiltin,
+		Type:    domain.ModuleTypeBuiltin,
 		Version: "1.0.0",
-		Runtime: &RuntimeDefinition{
+		Runtime: &domain.RuntimeDefinition{
 			Type:       domain.RuntimeTypeBuiltin,
 			EntryPoint: "deliver",
 		},
-		Contributions: []ContributionDefinition{
+		Contributions: []domain.ContributionDefinition{
 			{
-				ID:          ContributionID(capID),
+				ID:          domain.ContributionID(capID),
 				ModuleID:    modID,
 				ExtensionID: extID,
-				Kind:        ContributionKindProvider,
+				Kind:        domain.ContributionKindProvider,
 				Name: domain.LocalizedText{
 					Default: "Channel Provider - " + providerName,
 				},
 			},
 		},
-		Placement: ModulePlacementCloud,
+		Placement: domain.ModulePlacementCloud,
 		ProvidedCapabilities: []domain.ProvidedCapability{
 			{
 				ID:      string(capID),

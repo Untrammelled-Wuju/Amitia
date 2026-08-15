@@ -26,7 +26,7 @@ func BuildBrowserExtension(version string) Definition {
 		},
 		Version:         ver,
 		ManifestVersion: 1,
-		Domain:          domain.ExtensionPlacementDevice,
+		Domain:          domain.ExtensionDomainGeneral,
 		Placement:       domain.ExtensionPlacementDevice,
 		Publisher: domain.PublisherReference{
 			PublisherID: "com.amitia",
