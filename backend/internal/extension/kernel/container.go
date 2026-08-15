@@ -398,7 +398,26 @@ func (c *Container) Recover(ctx context.Context) error {
 	if len(recoverErrs) > 0 {
 		return fmt.Errorf("kernel: recover encountered %d error(s): %v", len(recoverErrs), recoverErrs)
 	}
+	c.assertNoDuplicateOwnerSource(ctx)
 	return nil
+}
+
+func (c *Container) assertNoDuplicateOwnerSource(ctx context.Context) {
+	if c.MCPDuplicateProvider != nil {
+		if count, err := c.MCPDuplicateProvider.CountUnresolved(ctx); err == nil && count > 0 {
+			if details, listErr := c.MCPDuplicateProvider.ListUnresolved(ctx); listErr == nil {
+				for _, d := range details {
+					fmt.Printf("[kernel-startup-assert] duplicate_mcp_tool_registration: toolID=%s serverID=%s owner=%s generation=%d detectedAt=%s\n", d.ToolID, d.ServerID, d.Owner, d.Generation, d.DetectedAt)
+				}
+			}
+			fmt.Printf("[kernel-startup-assert] WARNING: %d unresolved duplicate MCP tool registration(s) detected\n", count)
+		}
+	}
+	if GlobalLegacyCallCounter() != nil {
+		if dupContrib := GlobalLegacyCallCounter().DuplicateContributionRegistrations(); dupContrib > 0 {
+			fmt.Printf("[kernel-startup-assert] WARNING: %d duplicate contribution registration(s) detected\n", dupContrib)
+		}
+	}
 }
 
 func (c *Container) markRequiresRecovery(ctx context.Context, inst domain.ExtensionInstallation) {
