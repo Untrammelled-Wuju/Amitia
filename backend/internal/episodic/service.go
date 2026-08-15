@@ -20,6 +20,8 @@ import (
 )
 
 type Service interface {
+	Name() string
+	Process(ctx context.Context, convID string, messages []map[string]string, newReply string) error
 	List(q EpisodicListQuery) (*EpisodicListResponse, error)
 	Create(req *CreateEpisodicRequest) (*EpisodicMemory, error)
 	Delete(id string) error

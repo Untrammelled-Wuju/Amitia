@@ -20,6 +20,8 @@ import (
 )
 
 type Service interface {
+	Name() string
+	Process(ctx context.Context, convID string, messages []map[string]string, newReply string) error
 	List(q ProfileListQuery) (*ProfileListResponse, error)
 	Create(req *CreateProfileRequest) (*UserProfile, error)
 	Update(id string, req *UpdateProfileRequest) (*UserProfile, error)
