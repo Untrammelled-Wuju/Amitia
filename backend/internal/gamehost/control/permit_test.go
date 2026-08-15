@@ -9,7 +9,7 @@ import (
 
 func TestOutputPermit_CurrentEpochNotStale(t *testing.T) {
 	now := time.Now().UTC()
-	p := NewOutputPermit("rt-1", "svc-1", "plugin-1", 1, 1, KindCustomRPC, domain.ControlModePluginControl, DefaultPermitTTL, now)
+	p := NewOutputPermit("out-1", "rt-1", "svc-1", "plugin-1", 1, 1, KindCustomRPC, domain.ControlModePluginControl, DefaultPermitTTL, now)
 	if !p.IsCurrent(1) {
 		t.Fatal("permit should be current for epoch 1")
 	}
@@ -20,7 +20,7 @@ func TestOutputPermit_CurrentEpochNotStale(t *testing.T) {
 
 func TestOutputPermit_TTLEnforced(t *testing.T) {
 	now := time.Now().UTC()
-	p := NewOutputPermit("rt-1", "svc-1", "plugin-1", 1, 1, KindCustomRPC, domain.ControlModePluginControl, 1*time.Millisecond, now)
+	p := NewOutputPermit("out-1", "rt-1", "svc-1", "plugin-1", 1, 1, KindCustomRPC, domain.ControlModePluginControl, 1*time.Millisecond, now)
 	if p.IsExpired(now) {
 		t.Fatal("permit should not be expired immediately at issue time")
 	}
@@ -32,7 +32,7 @@ func TestOutputPermit_TTLEnforced(t *testing.T) {
 
 func TestOutputPermit_ValidateBinding(t *testing.T) {
 	now := time.Now().UTC()
-	p := NewOutputPermit("rt-1", "svc-1", "plugin-1", 1, 1, KindCustomRPC, domain.ControlModePluginControl, DefaultPermitTTL, now)
+	p := NewOutputPermit("out-1", "rt-1", "svc-1", "plugin-1", 1, 1, KindCustomRPC, domain.ControlModePluginControl, DefaultPermitTTL, now)
 
 	if err := p.Validate("rt-1", "svc-1", 1, 1, now.Add(1*time.Millisecond)); err != nil {
 		t.Fatalf("valid case got error: %v", err)
@@ -53,7 +53,7 @@ func TestOutputPermit_ValidateBinding(t *testing.T) {
 
 func TestOutputPermit_CrossEpochNotUsable(t *testing.T) {
 	now := time.Now().UTC()
-	p := NewOutputPermit("rt-1", "svc-1", "plugin-1", 1, 1, KindCustomRPC, domain.ControlModePluginControl, DefaultPermitTTL, now)
+	p := NewOutputPermit("out-1", "rt-1", "svc-1", "plugin-1", 1, 1, KindCustomRPC, domain.ControlModePluginControl, DefaultPermitTTL, now)
 	if p.IsCurrent(2) {
 		t.Fatal("permit should not be usable across epochs")
 	}
@@ -61,8 +61,8 @@ func TestOutputPermit_CrossEpochNotUsable(t *testing.T) {
 
 func TestOutputPermit_PermitIDIsUnique(t *testing.T) {
 	now := time.Now().UTC()
-	p1 := NewOutputPermit("rt-1", "svc-1", "plugin-1", 1, 1, KindCustomRPC, domain.ControlModePluginControl, DefaultPermitTTL, now)
-	p2 := NewOutputPermit("rt-1", "svc-1", "plugin-1", 1, 1, KindCustomRPC, domain.ControlModePluginControl, DefaultPermitTTL, now)
+	p1 := NewOutputPermit("out-1", "rt-1", "svc-1", "plugin-1", 1, 1, KindCustomRPC, domain.ControlModePluginControl, DefaultPermitTTL, now)
+	p2 := NewOutputPermit("out-2", "rt-1", "svc-1", "plugin-1", 1, 1, KindCustomRPC, domain.ControlModePluginControl, DefaultPermitTTL, now)
 	if p1.PermitID == p2.PermitID {
 		t.Fatal("permit IDs should be unique")
 	}
