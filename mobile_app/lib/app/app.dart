@@ -4,6 +4,7 @@ import '../core/runtime/runtime_bootstrap_provider.dart';
 import '../core/runtime/runtime_bootstrap_phase.dart';
 import '../core/runtime/runtime_bridge_provider.dart';
 import '../core/runtime/backend/mobile_backend_providers.dart';
+import '../core/runtime/backend/mobile_deployment_mode.dart';
 import '../core/widgets/amitia_drawer.dart';
 import 'theme/app_theme.dart';
 import 'router.dart';
@@ -27,8 +28,14 @@ class _AmitiaAppRootState extends ConsumerState<AmitiaAppRoot> {
   Future<void> _initializeBootstrap() async {
     final deploymentNotifier = ref.read(mobileDeploymentConfigProvider.notifier);
     await deploymentNotifier.init();
-    final bootstrap = ref.read(runtimeBootstrapProvider);
-    await bootstrap.initialize();
+
+    final runtimeBootstrap = ref.read(runtimeBootstrapProvider);
+    await runtimeBootstrap.initialize();
+
+    final config = ref.read(mobileDeploymentConfigProvider);
+    final lifecycle = ref.read(mobileBackendLifecycleProvider);
+    await lifecycle.reconcile(config);
+
     if (mounted) {
       setState(() => _bootstrapInitialized = true);
     }
@@ -49,6 +56,17 @@ class _BootstrapGate extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    if (!bootstrapInitialized) {
+      return const _BootstrapInitializingWidget();
+    }
+
+    final deployment = ref.watch(mobileDeploymentConfigProvider);
+
+    if (deployment.mode == MobileDeploymentMode.cloud ||
+        deployment.mode == MobileDeploymentMode.hybrid) {
+      return const AmitiaApp();
+    }
+
     final bootstrapAsync = ref.watch(runtimeBootstrapSnapshotProvider);
 
     return bootstrapAsync.when(

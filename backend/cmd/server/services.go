@@ -1085,13 +1085,13 @@ func newDeviceAgentServices(ctx *app.AppContext, graphSvc graph.Service, bootstr
 	if err := kernelContainer.Recover(context.Background()); err != nil {
 		log.Warn("kernel recovery warning: ", err)
 	}
-	chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, nil, nil, nil, nil, nil, nil, graphSvc, nil)
+
 	services := &AppServices{
-		DB:              ctx.DB,
+		DB:               ctx.DB,
 		RuntimeProfile:   runtimeProfile,
 		RuntimePolicy:    policy,
-		Graph:            graphSvc,
-		Chat:             chatSvc,
+		Graph:            nil,
+		Chat:             nil,
 		Extension:        extensionRuntime,
 		KernelContainer:  kernelContainer,
 	}

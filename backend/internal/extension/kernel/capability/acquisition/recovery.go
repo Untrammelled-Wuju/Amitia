@@ -136,11 +136,7 @@ func (s *RecoveryService) recoverFromResolution(
 // their zero value; the AcquisitionService handles that gracefully.
 func (s *RecoveryService) reconstructRequest(resumeCtx CapabilityResumeContext) AcquisitionRequest {
 	return AcquisitionRequest{
-		CapabilityID: resumeCtx.CapabilityID,
-		Context: AcquisitionContext{
-			ConversationID: resumeCtx.ConversationID,
-			TaskID:         resumeCtx.TaskID,
-		},
+		CapabilityID:       resumeCtx.CapabilityID,
 		AutoInstallAllowed: true,
 	}
 }

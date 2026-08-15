@@ -4,8 +4,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-
-	"github.com/u-ai/backend/internal/extension/kernel/capability"
 )
 
 type ResumeType string
@@ -41,7 +39,7 @@ type ResumeContext struct {
 
 	CheckpointRef string `json:"checkpointRef,omitempty"`
 
-	RequiredCapabilityID capability.CapabilityID `json:"requiredCapabilityId,omitempty"`
+	RequiredCapabilityID string `json:"requiredCapabilityId,omitempty"`
 
 	AcquisitionTransactionID string `json:"acquisitionTransactionId,omitempty"`
 	TaskID                  string `json:"taskId,omitempty"`

@@ -1078,8 +1078,10 @@ func (p *ExecutionPipeline) createPermissionSnapshot(ctx context.Context, inv ca
 func (p *ExecutionPipeline) revalidateSnapshots(ctx context.Context, inv capability.ToolInvocationContext, tool capability.ToolDefinition) error {
 	if inv.PermissionSnapshotID != "" && p.PermissionGate != nil && p.PermissionGate.Broker != nil {
 		execCtx := permission.ExecutionContextFromInvocation(inv)
+		subject := permission.SubjectForTool(tool.ExtensionID, tool.ID)
+		subject.ModuleID = inv.ModuleID
 		if err := p.PermissionGate.Broker.ValidateSnapshot(ctx, inv.PermissionSnapshotID, permission.PermissionEvaluationRequest{
-			Subject:          permission.SubjectForTool(tool.ExtensionID, tool.ID),
+			Subject:          subject,
 			Requirements:     buildPermissionRequirements(tool, inv),
 			InvocationID:     inv.InvocationID,
 			Generation:       inv.Generation,

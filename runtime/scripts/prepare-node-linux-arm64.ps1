@@ -142,6 +142,27 @@ if (Test-Path $NodeDest) { Remove-Item $NodeDest -Recurse -Force }
 Move-Item -Path $TempDest -Destination $NodeDest -Force
 Write-Host "[FREEZE] Node runtime atomically published to: $NodeDest"
 
+$StaticValidationStatus = "NOT_EXECUTED"
+$ValidatorPath = Join-Path $RuntimeRoot "validation\linux-arm64\node_artifact_validator.py"
+if (Test-Path $ValidatorPath) {
+    Write-Host "[VALIDATOR] Running node_artifact_validator.py..."
+    try {
+        & python $ValidatorPath --output-dir $OutputDir --lock-file $LockFile
+        if ($LASTEXITCODE -eq 0) {
+            $StaticValidationStatus = "PASS"
+            Write-Host "[PASS] node_artifact_validator.py passed"
+        } else {
+            Write-Error "[FATAL] node_artifact_validator.py failed"
+            exit 1
+        }
+    } catch {
+        Write-Error "[FATAL] node_artifact_validator.py execution error: $_"
+        exit 1
+    }
+} else {
+    Write-Host "[SKIP] Validator not found: $ValidatorPath (static validation status remains NOT_EXECUTED)"
+}
+
 $TreeManifest = @()
 Get-ChildItem -Path $NodeDest -Recurse -File | Sort-Object { $_.FullName.Substring($NodeDest.Length + 1) } | ForEach-Object {
     $RelPath = $_.FullName.Substring($NodeDest.Length + 1)

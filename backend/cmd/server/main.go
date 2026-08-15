@@ -240,19 +240,23 @@ func main() {
 		defer cancel()
 		_ = services.Extension.Close(shutdownCtx)
 	}()
-	surrealdbDB.SetSurrealRestartCallback(func() {
-		newGraphSvc := initGraph()
-		if newGraphSvc != nil {
-			services.Graph = newGraphSvc
-			bootstrap.SetGraphService(newGraphSvc)
-			log.Info("SurrealDB恢复后图谱服务已重新连接")
-		}
-	})
-	agenttool.SetMemoryService(services.Memory)
-	agenttool.SetTemporalService(services.Temporal)
-	temporalScheduler := temporal.NewScheduler(services.Temporal)
-	_ = temporalScheduler
-	defer temporalScheduler.Stop()
+	if policy.GraphStore {
+		surrealdbDB.SetSurrealRestartCallback(func() {
+			newGraphSvc := initGraph()
+			if newGraphSvc != nil {
+				services.Graph = newGraphSvc
+				bootstrap.SetGraphService(newGraphSvc)
+				log.Info("SurrealDB恢复后图谱服务已重新连接")
+			}
+		})
+	}
+	if policy.CoreBusinessServices {
+		agenttool.SetMemoryService(services.Memory)
+		agenttool.SetTemporalService(services.Temporal)
+		temporalScheduler := temporal.NewScheduler(services.Temporal)
+		_ = temporalScheduler
+		defer temporalScheduler.Stop()
+	}
 
 	serverAddr := config.AppCfg.Server.Addr()
 	fmt.Printf("\n  ========================================\n")
