@@ -1121,7 +1121,7 @@ func newDeviceAgentServices(ctx *app.AppContext, graphSvc graph.Service, bootstr
 		WithNodeEnvironmentResolver(nodeResolver).
 		WithHostArtifactResolver(artifactResolver).
 		WithRuntimeProfile(runtimeProfile).
-		WithBackgroundBootstrapFunc(func() (*backgroundremoval.Registry, error) {
+		WithBackgroundBootstrapFunc(func() (backgroundremoval.Registry, error) {
 			reg := backgroundremoval.NewRegistry()
 			if err := reg.Register(local.NewLocalProvider(), local.LocalCapabilities()); err != nil {
 				return nil, fmt.Errorf("register local background provider: %w", err)

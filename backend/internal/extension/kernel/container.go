@@ -239,7 +239,7 @@ type Container struct {
 
 	AcquisitionService *acquisition.AcquisitionService
 
-	BackgroundRemovalRegistry *backgroundremoval.Registry
+	BackgroundRemovalRegistry backgroundremoval.Registry
 }
 
 func (c *Container) Close() error {
