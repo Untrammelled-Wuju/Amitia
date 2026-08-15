@@ -1,7 +1,7 @@
 import hashlib
 import os
 from pathlib import Path
-from typing import Dict
+from typing import Dict, List
 
 
 def sha256_file(path: str) -> str:
@@ -16,8 +16,15 @@ def sha256_bytes(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def sha256_tree_manifest(root_dir: str) -> str:
-    """Generate a deterministic SHA-256 over all files in a directory tree."""
+def sha256_tree_manifest(manifest_lines: List[str]) -> str:
+    digest = hashlib.sha256()
+    for line in manifest_lines:
+        digest.update(line.encode("utf-8"))
+        digest.update(b"\n")
+    return digest.hexdigest()
+
+
+def sha256_tree_manifest_from_dir(root_dir: str) -> str:
     root_path = Path(root_dir)
     if not root_path.exists():
         raise FileNotFoundError(f"Directory not found: {root_dir}")
@@ -35,7 +42,6 @@ def sha256_tree_manifest(root_dir: str) -> str:
 
 
 def compute_tree_file_manifest(root_dir: str) -> Dict[str, str]:
-    """Compute individual SHA-256 for each file in the tree."""
     root_path = Path(root_dir)
     if not root_path.exists():
         raise FileNotFoundError(f"Directory not found: {root_dir}")
