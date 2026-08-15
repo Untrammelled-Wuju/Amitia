@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 )
 
 type ResumeHandler interface {
@@ -61,14 +63,14 @@ func (s *ExecutionService) CreateChildExecution(parent ExecutionContext, source 
 	return child
 }
 
-func (s *ExecutionService) CreateResume(execCtx ExecutionContext, resumeType ResumeType, capabilityID string) (*ResumeContext, error) {
+func (s *ExecutionService) CreateResume(execCtx ExecutionContext, resumeType ResumeType, capabilityID capability.CapabilityID) (*ResumeContext, error) {
 	if !execCtx.Budget.CanAcquireCapability() && resumeType == ResumeTypeCapabilityAcquisition {
 		return nil, ErrBudgetExhausted
 	}
 
 	resume := NewResumeContext(execCtx, resumeType)
 	if capabilityID != "" {
-		resume.RequiredCapabilityID = fakeCapabilityID(capabilityID)
+		resume.RequiredCapabilityID = capabilityID
 	}
 	resume.RootExecutionID = execCtx.RootExecutionID
 	resume.ParentExecutionID = execCtx.ExecutionID
@@ -158,7 +160,11 @@ func (s *ExecutionService) reconstructExecutionContext(resume ResumeContext) Exe
 
 func (s *ExecutionService) CompleteExecution(execCtx ExecutionContext, summary string) {
 	s.mu.Lock()
-	execCtx.Metadata = map[string]any{"completed": true, "summary": summary}
+	if execCtx.Metadata == nil {
+		execCtx.Metadata = make(map[string]any)
+	}
+	execCtx.Metadata["completed"] = true
+	execCtx.Metadata["summary"] = summary
 	s.activeContexts[execCtx.ExecutionID] = execCtx
 	s.mu.Unlock()
 	s.journal.Record(JournalEntry{
@@ -186,13 +192,6 @@ func (s *ExecutionService) FailExecution(execCtx ExecutionContext, err error) {
 func (s *ExecutionService) GetJournal() *InMemoryJournal {
 	return s.journal
 }
-
-func fakeCapabilityID(s string) FakeCapabilityID {
-	return FakeCapabilityID(s)
-}
-
-type FakeCapabilityID = fakeCapabilityIDType
-type fakeCapabilityIDType string
 
 var (
 	ErrBudgetExhausted = errors.New("execution service: budget exhausted")
