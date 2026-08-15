@@ -58,7 +58,7 @@ func (s *ExecutionService) CreateChildExecution(parent ExecutionContext, source 
 		ExecutionID:     child.ExecutionID,
 		Kind:            JournalEntryExecutionStarted,
 		TraceID:         child.TraceID,
-		Source:          source,
+		Summary:         source,
 	})
 	return child
 }
@@ -75,8 +75,9 @@ func (s *ExecutionService) CreateResume(execCtx ExecutionContext, resumeType Res
 	resume.RootExecutionID = execCtx.RootExecutionID
 	resume.ParentExecutionID = execCtx.ExecutionID
 
+	resumeCopy := resume
 	s.mu.Lock()
-	s.resumeContexts[resume.ResumeID] = *resume
+	s.resumeContexts[resume.ResumeID] = resumeCopy
 	s.mu.Unlock()
 
 	s.journal.Record(JournalEntry{
@@ -93,7 +94,7 @@ func (s *ExecutionService) CreateResume(execCtx ExecutionContext, resumeType Res
 		s.mu.Unlock()
 	}
 
-	return resume, nil
+	return &resume, nil
 }
 
 func (s *ExecutionService) ResumeExecution(ctx context.Context, resumeID string) (*ExecutionContext, error) {
