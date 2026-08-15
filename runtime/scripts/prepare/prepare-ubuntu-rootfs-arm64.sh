@@ -57,6 +57,9 @@ done
 
 if [[ ! -f "$LOCK_FILE" ]]; then
     echo "[FATAL] Lock file not found: $LOCK_FILE"
+    resolved_root="$(cd "$(dirname "$LOCK_FILE")" && pwd)"
+    echo "[DIAG] Resolved REPO_ROOT: $REPO_ROOT"
+    echo "[DIAG] Expected lock directory: $resolved_root/runtime/artifacts/ubuntu-rootfs/linux-arm64"
     exit 1
 fi
 
@@ -72,23 +75,24 @@ echo " Release:        $RELEASE"
 echo " Archive:        $ARCHIVE_FILE_NAME"
 echo " Expected SHA256: $EXPECTED_SHA"
 echo " Source:         $SOURCE_URL"
+echo " REPO_ROOT:      $REPO_ROOT"
 echo "============================================"
 
 if [[ -n "$CACHE_DIR" ]]; then
     CACHE_PATH="$CACHE_DIR"
 else
-    CACHE_PATH="$PROJECT_ROOT/runtime/.cache/ubuntu-rootfs"
+    CACHE_PATH="$REPO_ROOT/runtime/.cache/ubuntu-rootfs"
 fi
 if [[ -n "$STAGING_DIR" ]]; then
     STAGING_PATH="$STAGING_DIR"
 else
     BUILD_ID="$(date +%Y%m%d%H%M%S)"
-    STAGING_PATH="$PROJECT_ROOT/runtime/build/staging/ubuntu-rootfs-arm64/$BUILD_ID"
+    STAGING_PATH="$REPO_ROOT/runtime/build/staging/ubuntu-rootfs-arm64/$BUILD_ID"
 fi
 if [[ -n "$OUTPUT_DIR" ]]; then
     OUTPUT_PATH="$OUTPUT_DIR"
 else
-    OUTPUT_PATH="$PROJECT_ROOT/runtime/build/out/rootfs/linux-arm64"
+    OUTPUT_PATH="$REPO_ROOT/runtime/build/out/rootfs/linux-arm64"
 fi
 
 mkdir -p "$CACHE_PATH"
@@ -171,7 +175,7 @@ echo "[CLEAN] Rootfs cleaned"
 
 if [[ "$SKIP_VERIFY" == "false" ]]; then
     echo "[VERIFY] Running static validation on final rootfs tree..."
-    VALIDATOR_PATH="$PROJECT_ROOT/runtime/validation/linux-arm64/rootfs_validator.py"
+    VALIDATOR_PATH="$REPO_ROOT/runtime/validation/linux-arm64/rootfs_validator.py"
     if [[ -f "$VALIDATOR_PATH" ]]; then
         if ! python "$VALIDATOR_PATH" --rootfs "$EXTRACT_DIR" --lock "$LOCK_FILE" --policy "$POLICY_FILE"; then
             echo "[FATAL] Validation failed"
@@ -219,11 +223,11 @@ generate_tree_manifest() {
 generate_tree_manifest "$EXTRACT_DIR" "$OUTPUT_PATH/rootfs-files.sha256"
 echo "[PASS] rootfs-files.sha256 generated"
 
-FROZEN_TAR_NAME="ubuntu-rootfs-arm64.tar"
+FROZEN_TAR_NAME="ubuntu-rootfs-arm64.tar.xz"
 FROZEN_TAR_PATH="$OUTPUT_PATH/$FROZEN_TAR_NAME"
 TEMP_TAR_PATH="$FROZEN_TAR_PATH.tmp.$$"
 
-echo "[FREEZE] Creating deterministic frozen tar archive (preserving symlinks/dirs/modes)..."
+echo "[FREEZE] Creating deterministic frozen tar.xz archive (preserving symlinks/dirs/modes)..."
 (
     cd "$EXTRACT_DIR"
     tar --sort=name \
@@ -232,7 +236,7 @@ echo "[FREEZE] Creating deterministic frozen tar archive (preserving symlinks/di
         --group=0 \
         --numeric-owner \
         --format=posix \
-        -cf "$TEMP_TAR_PATH" \
+        -cJf "$TEMP_TAR_PATH" \
         .
 )
 FROZEN_SHA=$(sha256sum "$TEMP_TAR_PATH" | awk '{print $1}')
