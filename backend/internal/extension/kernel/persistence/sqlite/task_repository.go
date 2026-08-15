@@ -100,7 +100,7 @@ func (r *TaskRepository) ListTaskDefinitions(ctx context.Context, extensionID st
 
 func (r *TaskRepository) DeleteTaskDefinition(ctx context.Context, defID string) error {
 	ex := getExecutor(ctx, r.db)
-	_, err := ex.ExecContext(ctx, `DELETE FROM extension_task_definitions WHERE task_id = ?`, defID)
+	_, err := ex.ExecContext(ctx, `DELETE FROM extension_task_definitions WHERE task_definition_id = ?`, defID)
 	if err != nil {
 		return fmt.Errorf("sqlite: delete task definition: %w", err)
 	}
@@ -118,6 +118,7 @@ func (r *TaskRepository) DeleteByExtension(ctx context.Context, extensionID stri
 
 func (r *TaskRepository) PutTaskRun(ctx context.Context, run *task_runtime.TaskRun) error {
 	ex := getExecutor(ctx, r.db)
+	now := time.Now().UTC()
 	_, err := ex.ExecContext(ctx, `
 		INSERT INTO extension_task_runs
 			(task_run_id, operation_id, invocation_id, task_definition_id, extension_id, module_id,
@@ -127,9 +128,11 @@ func (r *TaskRepository) PutTaskRun(ctx context.Context, run *task_runtime.TaskR
 			 runtime_instance_id, checkpoint_id, result_artifact_id,
 			 execution_placement, execution_target_json, execution_attempt_id,
 			 execution_resolved_at, execution_resolved_by,
-			 attempt, max_attempts, created_at, queued_at, started_at, finished_at,
-			 deadline_at, cancel_requested_at, error_code, error_message, generation, revision)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+			 attempt, max_attempts, created_at, queued_at, started_at,
+			 updated_at, finished_at, deadline_at, cancel_requested_at,
+			 pause_reason, pause_requested_at, paused_at, resumed_at,
+			 error_code, error_message, generation, revision)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
 		ON CONFLICT(task_run_id) DO UPDATE SET
 			status = excluded.status, priority = excluded.priority,
 			input_json = excluded.input_json, input_hash = excluded.input_hash,
@@ -144,8 +147,13 @@ func (r *TaskRepository) PutTaskRun(ctx context.Context, run *task_runtime.TaskR
 			execution_resolved_by = excluded.execution_resolved_by,
 			attempt = excluded.attempt, max_attempts = excluded.max_attempts,
 			queued_at = excluded.queued_at, started_at = excluded.started_at,
+			updated_at = excluded.updated_at,
 			finished_at = excluded.finished_at, deadline_at = excluded.deadline_at,
 			cancel_requested_at = excluded.cancel_requested_at,
+			pause_reason = excluded.pause_reason,
+			pause_requested_at = excluded.pause_requested_at,
+			paused_at = excluded.paused_at,
+			resumed_at = excluded.resumed_at,
 			error_code = excluded.error_code, error_message = excluded.error_message,
 			generation = excluded.generation, revision = excluded.revision
 	`,
@@ -160,8 +168,13 @@ func (r *TaskRepository) PutTaskRun(ctx context.Context, run *task_runtime.TaskR
 		string(run.ExecutionAttemptID), nullableTime(run.ExecutionResolvedAt),
 		run.ExecutionResolvedBy,
 		run.Attempt, run.MaxAttempts, run.CreatedAt,
-		nullableTime(run.QueuedAt), nullableTime(run.StartedAt), nullableTime(run.FinishedAt),
+		nullableTime(run.QueuedAt), nullableTime(run.StartedAt), now,
+		nullableTime(run.FinishedAt),
 		nullableTime(run.DeadlineAt), nullableTime(run.CancelRequestedAt),
+		nullableString(run.PauseReason),
+		nullableTime(run.PauseRequestedAt),
+		nullableTime(run.PausedAt),
+		nullableTime(run.ResumedAt),
 		nullableString(run.ErrorCode), nullableString(run.ErrorMessage),
 		run.Generation, run.Revision,
 	)
@@ -212,16 +225,7 @@ func (r *TaskRepository) UpdateTaskRunCAS(ctx context.Context, run *task_runtime
 
 func (r *TaskRepository) GetTaskRun(ctx context.Context, runID string) (*task_runtime.TaskRun, error) {
 	ex := getExecutor(ctx, r.db)
-	var run task_runtime.TaskRun
-	var inputJSON sql.NullString
-	var inputArtifactID, runtimeInstanceID, checkpointID, resultArtifactID sql.NullString
-	var executionTargetJSON sql.NullString
-	var executionResolvedAt sql.NullTime
-	var queuedAt, startedAt, finishedAt, deadlineAt, cancelRequestedAt sql.NullTime
-	var errorCode, errorMessage sql.NullString
-	var invocationID, executionPlacement, executionAttemptID, executionResolvedBy sql.NullString
-
-	err := ex.QueryRowContext(ctx, `
+	run, err := scanTaskRun(ex.QueryRowContext(ctx, `
 		SELECT task_run_id, operation_id, invocation_id, task_definition_id, extension_id, module_id,
 		       status, priority, input_json, input_hash, input_artifact_id,
 		       trace_id, correlation_id, causation_id, source,
@@ -229,10 +233,37 @@ func (r *TaskRepository) GetTaskRun(ctx context.Context, runID string) (*task_ru
 		       runtime_instance_id, checkpoint_id, result_artifact_id,
 		       execution_placement, execution_target_json, execution_attempt_id,
 		       execution_resolved_at, execution_resolved_by,
-		       attempt, max_attempts, created_at, queued_at, started_at, finished_at,
-		       deadline_at, cancel_requested_at, error_code, error_message, generation, revision
+		       attempt, max_attempts, created_at, queued_at, started_at,
+		       updated_at, finished_at, deadline_at, cancel_requested_at,
+		       pause_reason, pause_requested_at, paused_at, resumed_at,
+		       error_code, error_message, generation, revision
 		FROM extension_task_runs WHERE task_run_id = ?
-	`, runID).Scan(
+	`, runID))
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("sqlite: task run not found: %s", runID)
+		}
+		return nil, fmt.Errorf("sqlite: query task run: %w", err)
+	}
+	return run, nil
+}
+
+func scanTaskRow(scanner interface {
+	Scan(dest ...any) error
+}) (*task_runtime.TaskRun, error) {
+	var run task_runtime.TaskRun
+	var inputJSON sql.NullString
+	var inputArtifactID, runtimeInstanceID, checkpointID, resultArtifactID sql.NullString
+	var executionTargetJSON sql.NullString
+	var executionResolvedAt sql.NullTime
+	var queuedAt, startedAt, finishedAt, deadlineAt, cancelRequestedAt sql.NullTime
+	var updatedAt sql.NullTime
+	var pauseReason sql.NullString
+	var pauseRequestedAt, pausedAt, resumedAt sql.NullTime
+	var errorCode, errorMessage sql.NullString
+	var invocationID, executionPlacement, executionAttemptID, executionResolvedBy sql.NullString
+
+	err := scanner.Scan(
 		&run.TaskRunID, &run.OperationID, &invocationID, &run.TaskDefinitionID,
 		&run.ExtensionID, &run.ModuleID, &run.Status, &run.Priority,
 		&inputJSON, &run.InputHash, &inputArtifactID,
@@ -242,7 +273,8 @@ func (r *TaskRepository) GetTaskRun(ctx context.Context, runID string) (*task_ru
 		&executionPlacement, &executionTargetJSON, &executionAttemptID,
 		&executionResolvedAt, &executionResolvedBy,
 		&run.Attempt, &run.MaxAttempts, &run.CreatedAt,
-		&queuedAt, &startedAt, &finishedAt, &deadlineAt, &cancelRequestedAt,
+		&queuedAt, &startedAt, &updatedAt, &finishedAt, &deadlineAt, &cancelRequestedAt,
+		&pauseReason, &pauseRequestedAt, &pausedAt, &resumedAt,
 		&errorCode, &errorMessage, &run.Generation, &run.Revision,
 	)
 	if err != nil {
@@ -250,6 +282,9 @@ func (r *TaskRepository) GetTaskRun(ctx context.Context, runID string) (*task_ru
 			return nil, fmt.Errorf("sqlite: task run not found: %s", runID)
 		}
 		return nil, fmt.Errorf("sqlite: query task run: %w", err)
+	}
+	if err != nil {
+		return nil, err
 	}
 	run.Input = json.RawMessage(inputJSON.String)
 	run.InvocationID = invocationID.String
@@ -264,9 +299,14 @@ func (r *TaskRepository) GetTaskRun(ctx context.Context, runID string) (*task_ru
 	run.ExecutionResolvedBy = executionResolvedBy.String
 	run.QueuedAt = timePtr(queuedAt)
 	run.StartedAt = timePtr(startedAt)
+	run.UpdatedAt = &updatedAt.Time
 	run.FinishedAt = timePtr(finishedAt)
 	run.DeadlineAt = timePtr(deadlineAt)
 	run.CancelRequestedAt = timePtr(cancelRequestedAt)
+	run.PauseReason = stringPtr(pauseReason)
+	run.PauseRequestedAt = timePtr(pauseRequestedAt)
+	run.PausedAt = timePtr(pausedAt)
+	run.ResumedAt = timePtr(resumedAt)
 	run.ErrorCode = stringPtr(errorCode)
 	run.ErrorMessage = stringPtr(errorMessage)
 	return &run, nil
@@ -640,18 +680,22 @@ func (r *TaskRepository) UpdateExecutionTarget(
 	resolvedBy string,
 ) error {
 	ex := getExecutor(ctx, r.db)
+	now := time.Now().UTC()
 	_, err := ex.ExecContext(ctx, `
 		UPDATE extension_task_runs
 		SET execution_placement = ?,
 		    execution_target_json = ?,
 		    execution_resolved_at = ?,
-		    execution_resolved_by = ?
+		    execution_resolved_by = ?,
+		    revision = revision + 1,
+		    updated_at = ?
 		WHERE task_run_id = ?
 	`,
 		string(placement),
 		serializeExecutionTarget(target),
 		resolvedAt,
 		resolvedBy,
+		now,
 		taskRunID,
 	)
 	if err != nil {
@@ -668,17 +712,21 @@ func (r *TaskRepository) UpdateExecutionConnectionBinding(
 	at time.Time,
 ) error {
 	ex := getExecutor(ctx, r.db)
+	now := time.Now().UTC()
 	_, err := ex.ExecContext(ctx, `
 		UPDATE extension_task_runs
 		SET execution_target_json = json_set(
 			COALESCE(execution_target_json, '{} '),
 			'$.runtimeSessionId', ?,
 			'$.connectionGeneration', ?
-		)
+		),
+		    revision = revision + 1,
+		    updated_at = ?
 		WHERE task_run_id = ?
 	`,
 		runtimeSessionID.String(),
 		generation,
+		now,
 		taskRunID,
 	)
 	if err != nil {
@@ -695,14 +743,18 @@ func (r *TaskRepository) UpdateExecutionAttempt(
 	at time.Time,
 ) error {
 	ex := getExecutor(ctx, r.db)
+	now := time.Now().UTC()
 	_, err := ex.ExecContext(ctx, `
 		UPDATE extension_task_runs
 		SET execution_attempt_id = ?,
-		    runtime_instance_id = COALESCE(?, runtime_instance_id)
+		    runtime_instance_id = COALESCE(?, runtime_instance_id),
+		    revision = revision + 1,
+		    updated_at = ?
 		WHERE task_run_id = ?
 	`,
 		string(attemptID),
 		runtimeInstanceID,
+		now,
 		taskRunID,
 	)
 	if err != nil {
