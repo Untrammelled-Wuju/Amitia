@@ -5,9 +5,10 @@ import (
 )
 
 type CapabilityService struct {
-	registry *ProviderRegistry
-	catalog  ProviderCatalog
-	resolver *Resolver
+	registry    *ProviderRegistry
+	catalog     ProviderCatalog
+	resolver    *Resolver
+	toolRegistry *ToolRegistry
 }
 
 func NewCapabilityService(registry *ProviderRegistry) *CapabilityService {
@@ -17,6 +18,10 @@ func NewCapabilityService(registry *ProviderRegistry) *CapabilityService {
 		catalog:  catalog,
 		resolver: NewResolver(catalog),
 	}
+}
+
+func (s *CapabilityService) SetToolRegistry(reg *ToolRegistry) {
+	s.toolRegistry = reg
 }
 
 func (s *CapabilityService) Catalog() ProviderCatalog {
@@ -46,30 +51,41 @@ const (
 	AvailabilityAvailable              AvailabilityState = "AVAILABLE"
 )
 
+// GetCapability is deprecated. Use GetCapabilityDescriptor for capability queries
+// and ToolRegistry/ToolFacade for tool definitions.
 func (s *CapabilityService) GetCapability(ctx context.Context, toolID string) (ToolDefinition, bool) {
 	return ToolDefinition{}, false
 }
 
+// ListCapabilities is deprecated. Use ListCapabilityDescriptors instead.
 func (s *CapabilityService) ListCapabilities(ctx context.Context) []ToolDefinition {
 	return nil
 }
 
-func (s *CapabilityService) GetCapabilityDescriptor(toolID CapabilityID) (CapabilityDescriptor, bool) {
+func (s *CapabilityService) GetCapabilityDescriptor(capID CapabilityID) (CapabilityDescriptor, bool) {
 	if s.registry == nil {
 		return CapabilityDescriptor{}, false
 	}
-	defs := s.registry.ListByCapability(toolID)
+	defs := s.registry.ListByCapability(capID)
 	if len(defs) == 0 {
 		return CapabilityDescriptor{}, false
 	}
 	desc := CapabilityDescriptor{
-		ID:                      toolID,
+		ID:                      capID,
 		ProviderCount:           len(defs),
-		ProviderInstanceCount:   s.registry.CountInstancesByCapability(toolID),
-		ExecutableProviderCount: s.registry.CountExecutableInstances(toolID),
+		ProviderInstanceCount:   s.registry.CountInstancesByCapability(capID),
+		ExecutableProviderCount: s.registry.CountExecutableInstances(capID),
 		Placements:              collectPlacements(defs),
+		ToolIDs:                 s.toolIDsForCapability(capID),
 	}
 	return desc, true
+}
+
+func (s *CapabilityService) toolIDsForCapability(capID CapabilityID) []string {
+	if s.toolRegistry == nil {
+		return nil
+	}
+	return s.toolRegistry.ListToolIDsByCapabilityID(string(capID))
 }
 
 func (s *CapabilityService) ListCapabilityDescriptors() []CapabilityDescriptor {

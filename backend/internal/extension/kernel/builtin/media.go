@@ -219,9 +219,6 @@ ProvidedCapabilities: []domain.ProvidedCapability{
 //
 //	Extension ID: com.amitia.builtin.media
 //	Provider Capabilities: media.metadata, media.convert
-//
-// Note: Existing Tool IDs (e.g. "media.metadata", "media.convert") are preserved
-// via contribution and runtime binding for backward compatibility.
 func BuildMediaExtension(version string) Definition {
 	extID := domain.ExtensionID(PrefixBuiltin + "media")
 	moduleID := domain.ModuleID(PrefixBuiltin + "media/main")
@@ -259,38 +256,7 @@ func BuildMediaExtension(version string) Definition {
 					Runtime: &domain.RuntimeDefinition{
 						Type: domain.RuntimeTypeBuiltin,
 					},
-					Contributions: []domain.ContributionDefinition{
-						{
-							ID:          domain.ContributionID("media.metadata"),
-							ModuleID:    moduleID,
-							ExtensionID: extID,
-							Kind:        domain.ContributionKindTool,
-							Name: domain.LocalizedText{
-								Default: "Media Metadata",
-							},
-							Description: domain.LocalizedText{
-								Default: "Get metadata of a media file",
-							},
-							Metadata: map[string]any{
-								"legacyToolId": "media.metadata",
-							},
-						},
-						{
-							ID:          domain.ContributionID("media.convert"),
-							ModuleID:    moduleID,
-							ExtensionID: extID,
-							Kind:        domain.ContributionKindTool,
-							Name: domain.LocalizedText{
-								Default: "Media Convert",
-							},
-							Description: domain.LocalizedText{
-								Default: "Convert media to another format",
-							},
-							Metadata: map[string]any{
-								"legacyToolId": "media.convert",
-							},
-						},
-					},
+					Contributions: buildMediaContributions(extID, moduleID),
 					ProvidedCapabilities: []domain.ProvidedCapability{
 						{ID: "media.metadata", Version: "1.0.0"},
 						{ID: "media.convert", Version: "1.0.0"},
@@ -310,6 +276,67 @@ func BuildMediaExtension(version string) Definition {
 		Required:        false,
 		DisableAllowed:  true,
 		BootstrapRevision: 1,
+	}
+}
+
+func buildMediaContributions(extID domain.ExtensionID, modID domain.ModuleID) []domain.ContributionDefinition {
+	return []domain.ContributionDefinition{
+		{
+			ID:          domain.ContributionID("media.metadata"),
+			ModuleID:    modID,
+			ExtensionID: extID,
+			Kind:        domain.ContributionKindTool,
+			Name:        domain.LocalizedText{Default: "Media Metadata"},
+			Description: domain.LocalizedText{Default: "Get metadata of a media file"},
+			Definition: map[string]any{
+				"capabilityId": "media.metadata",
+				"modelName":    "media.metadata",
+				"inputSchema":  `{"type":"object","properties":{"resource":{"type":"string"}},"required":["resource"],"additionalProperties":false}`,
+				"outputSchema": `{"type":"object","properties":{"metadata":{"type":"object"}}}`,
+				"riskLevel":    "low",
+				"sideEffect":   "read_only",
+				"permissions":  []map[string]any{{"capability": "media.metadata", "risk": "low"}},
+				"timeoutMs":    int64(30000),
+				"idempotent":   true,
+				"retryable":    true,
+				"runtime": map[string]any{
+					"runtimeType": "media",
+					"runtimeId":   "default",
+					"handlerName": "media.metadata",
+				},
+			},
+			Metadata: map[string]any{
+				"system.builtin": true,
+			},
+		},
+		{
+			ID:          domain.ContributionID("media.convert"),
+			ModuleID:    modID,
+			ExtensionID: extID,
+			Kind:        domain.ContributionKindTool,
+			Name:        domain.LocalizedText{Default: "Media Convert"},
+			Description: domain.LocalizedText{Default: "Convert media to another format"},
+			Definition: map[string]any{
+				"capabilityId": "media.convert",
+				"modelName":    "media.convert",
+				"inputSchema":  `{"type":"object","properties":{"resource":{"type":"string"},"target":{"type":"string"},"targetContainer":{"type":"string"},"videoCodec":{"type":"string"},"audioCodec":{"type":"string"}},"required":["resource"],"additionalProperties":false}`,
+				"outputSchema": `{"type":"object","properties":{"resource":{"type":"string"},"entry":{"type":"object"}}}`,
+				"riskLevel":    "medium",
+				"sideEffect":   "write",
+				"permissions":  []map[string]any{{"capability": "media.convert", "risk": "medium"}},
+				"timeoutMs":    int64(120000),
+				"idempotent":   false,
+				"retryable":    false,
+				"runtime": map[string]any{
+					"runtimeType": "media",
+					"runtimeId":   "default",
+					"handlerName": "media.convert",
+				},
+			},
+			Metadata: map[string]any{
+				"system.builtin": true,
+			},
+		},
 	}
 }
 
