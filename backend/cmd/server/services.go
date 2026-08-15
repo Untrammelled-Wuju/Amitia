@@ -697,9 +697,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	desktopPetWorker := worker.NewWorker(ctx.DB, desktopPetRepo, imageProviderRegistry)
 	processingRepo := processing.NewRepository(ctx.DB, ctx)
 
-	bgRegistry := backgroundremoval.NewRegistry()
-	if err := bgRegistry.Register(local.NewLocalProvider(), local.LocalCapabilities()); err != nil {
-		log.Error("register local background provider failed: ", err)
+	bgRegistry := kernelContainer.BackgroundRemovalRegistry
+	if bgRegistry == nil {
+		log.Error("background removal registry not initialized from kernel bootstrap")
+		panic("background removal registry not initialized from kernel bootstrap")
 	}
 
 	processingPipeline := application.NewPipeline(bgRegistry, processingDataDir)
@@ -1119,7 +1120,14 @@ func newDeviceAgentServices(ctx *app.AppContext, graphSvc graph.Service, bootstr
 		WithExtensionRoot(kernelRoot).
 		WithNodeEnvironmentResolver(nodeResolver).
 		WithHostArtifactResolver(artifactResolver).
-		WithRuntimeProfile(runtimeProfile)
+		WithRuntimeProfile(runtimeProfile).
+		WithBackgroundBootstrapFunc(func() (*backgroundremoval.Registry, error) {
+			reg := backgroundremoval.NewRegistry()
+			if err := reg.Register(local.NewLocalProvider(), local.LocalCapabilities()); err != nil {
+				return nil, fmt.Errorf("register local background provider: %w", err)
+			}
+			return reg, nil
+		})
 	if bootstrap != nil {
 		kernelBuilder.WithRuntimeHost(bootstrap.RuntimeHost())
 	}
