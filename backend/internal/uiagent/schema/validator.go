@@ -1,9 +1,12 @@
 package schema
 
 import (
+	"encoding/json"
 	"fmt"
 	"regexp"
 	"strings"
+
+	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
 )
 
 // ValidationResult contains the outcome of a schema validation.
@@ -28,23 +31,13 @@ func NewSchemaValidator(catalog *ComponentCatalog) SchemaValidator {
 	return &defaultSchemaValidator{catalog: catalog}
 }
 
-// allowedActions is the whitelist of permitted action types.
-var allowedActions = map[string]bool{
-	"navigate":           true,
-	"invoke_tool":        true,
-	"invoke_capability":  true,
-	"open_resource":      true,
-	"set_state":          true,
-	"submit_form":        true,
-}
-
 // interactiveComponentTypes identifies component types that require accessibility labels.
 var interactiveComponentTypes = map[string]bool{
-	string(CompButton):  true,
-	string(CompField):   true,
-	string(CompSelect):  true,
-	string(CompSwitch):  true,
-	string(CompSlider):  true,
+	string(CompButton): true,
+	string(CompField):  true,
+	string(CompSelect): true,
+	string(CompSwitch): true,
+	string(CompSlider): true,
 }
 
 // dangerousPatterns matches strings that may indicate injection of executable code.
@@ -74,17 +67,19 @@ func (v *defaultSchemaValidator) Validate(doc *SchemaUIDocument) ValidationResul
 		return result
 	}
 
-	// Validate the root node recursively.
-	validateNode(&result, v.catalog, doc.Root, true, "")
+	for i := range doc.Children {
+		validateSchemaNode(&result, v.catalog, &doc.Children[i], "")
+	}
 
 	return result
 }
 
-// validateNode recursively validates a schema node.
-func validateNode(result *ValidationResult, catalog *ComponentCatalog, node SchemaNode, isRoot bool, parentType string) {
-	nodeType := node.Type
+func validateSchemaNode(result *ValidationResult, catalog *ComponentCatalog, node *schema_ui.SchemaUINode, parentType string) {
+	if node == nil {
+		return
+	}
+	nodeType := string(node.Type)
 
-	// Rule 1: Node type must exist in catalog.
 	schema, ok := catalog.Get(SchemaComponentType(nodeType))
 	if !ok {
 		result.Valid = false
@@ -92,26 +87,23 @@ func validateNode(result *ValidationResult, catalog *ComponentCatalog, node Sche
 		return
 	}
 
-	// Rule 2: Required properties must exist.
+	var props map[string]any
+	if len(node.Props) > 0 {
+		_ = json.Unmarshal(node.Props, &props)
+	}
+
 	for _, reqProp := range schema.RequiredProps {
-		if node.Properties == nil {
+		if props == nil {
 			result.Valid = false
 			result.Errors = append(result.Errors, fmt.Sprintf("node %q missing required property: %q", nodeType, reqProp))
 			continue
 		}
-		if _, exists := node.Properties[reqProp]; !exists {
+		if _, exists := props[reqProp]; !exists {
 			result.Valid = false
 			result.Errors = append(result.Errors, fmt.Sprintf("node %q missing required property: %q", nodeType, reqProp))
 		}
 	}
 
-	// Rule 3: If this is a root node, it must be a page type.
-	if isRoot && nodeType != string(CompPage) {
-		result.Valid = false
-		result.Errors = append(result.Errors, fmt.Sprintf("root node must be %q, got %q", CompPage, nodeType))
-	}
-
-	// Rule 3 (children): Children types must be in parent's AllowedChildren.
 	if len(node.Children) > 0 && len(schema.AllowedChildren) > 0 {
 		allowedChildSet := make(map[SchemaComponentType]bool)
 		for _, ac := range schema.AllowedChildren {
@@ -125,29 +117,26 @@ func validateNode(result *ValidationResult, catalog *ComponentCatalog, node Sche
 		}
 	}
 
-	// Rule 4: Actions must be in the whitelist and component must support them.
 	if len(node.Actions) > 0 {
-		// Build set of actions this component supports.
 		supportedActions := make(map[string]bool)
 		for _, a := range schema.Actions {
 			supportedActions[a] = true
 		}
 
 		for _, action := range node.Actions {
-			if !allowedActions[action.Type] {
+			if action.Target == "" {
 				result.Valid = false
-				result.Errors = append(result.Errors, fmt.Sprintf("action type %q is not allowed (node: %q)", action.Type, nodeType))
+				result.Errors = append(result.Errors, fmt.Sprintf("action in node %q has empty target", nodeType))
 			}
-			if len(supportedActions) > 0 && !supportedActions[action.Type] {
+			if len(supportedActions) > 0 && !supportedActions[action.Target] {
 				result.Valid = false
-				result.Errors = append(result.Errors, fmt.Sprintf("component %q does not support action %q", nodeType, action.Type))
+				result.Errors = append(result.Errors, fmt.Sprintf("component %q does not support action target %q", nodeType, action.Target))
 			}
 		}
 	}
 
-	// Rule 5: Scan all string properties for dangerous patterns.
-	if node.Properties != nil {
-		for key, val := range node.Properties {
+	if props != nil {
+		for key, val := range props {
 			if strVal, ok := val.(string); ok {
 				if containsDangerousContent(strVal) {
 					result.Valid = false
@@ -157,9 +146,8 @@ func validateNode(result *ValidationResult, catalog *ComponentCatalog, node Sche
 		}
 	}
 
-	// Also scan bindings and actions for dangerous content.
 	for _, binding := range node.Bindings {
-		if containsDangerousContent(binding.Source) {
+		if containsDangerousContent(string(binding.Source)) {
 			result.Valid = false
 			result.Errors = append(result.Errors, fmt.Sprintf("binding source in node %q contains potentially dangerous content", nodeType))
 		}
@@ -169,23 +157,12 @@ func validateNode(result *ValidationResult, catalog *ComponentCatalog, node Sche
 			result.Valid = false
 			result.Errors = append(result.Errors, fmt.Sprintf("action target in node %q contains potentially dangerous content", nodeType))
 		}
-		if action.Payload != nil {
-			for k, v := range action.Payload {
-				if strVal, ok := v.(string); ok {
-					if containsDangerousContent(strVal) {
-						result.Valid = false
-						result.Errors = append(result.Errors, fmt.Sprintf("action payload key %q in node %q contains potentially dangerous content", k, nodeType))
-					}
-				}
-			}
-		}
 	}
 
-	// Rule 6: Interactive elements need a label for accessibility.
 	if interactiveComponentTypes[nodeType] {
 		hasLabel := false
-		if node.Properties != nil {
-			if label, exists := node.Properties["label"]; exists {
+		if props != nil {
+			if label, exists := props["label"]; exists {
 				if strLabel, ok := label.(string); ok && strings.TrimSpace(strLabel) != "" {
 					hasLabel = true
 				}
@@ -196,9 +173,8 @@ func validateNode(result *ValidationResult, catalog *ComponentCatalog, node Sche
 		}
 	}
 
-	// Recurse into children.
 	for i := range node.Children {
-		validateNode(result, catalog, node.Children[i], false, nodeType)
+		validateSchemaNode(result, catalog, &node.Children[i], nodeType)
 	}
 }
 

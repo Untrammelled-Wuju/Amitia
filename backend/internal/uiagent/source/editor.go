@@ -22,6 +22,7 @@ type SourceEditOperation struct {
 	OldText       string `json:"oldText,omitempty"`
 	NewText       string `json:"newText,omitempty"`
 	Patch         string `json:"patch,omitempty"`
+	BaseSHA256    string `json:"baseSha256,omitempty"`
 	SearchMode    string `json:"searchMode"`
 	ReplaceAll    bool   `json:"replaceAll"`
 	ExpectedCount int    `json:"expectedCount"`
@@ -129,6 +130,7 @@ func (e *defaultSourceEditor) applyOperationTx(ctx context.Context, tx *workspac
 		_, err := e.precise.ApplyPatchTx(ctx, tx, workspace.PatchRequest{
 			WorkspaceID: tx.WorkspaceID,
 			FilePath:    op.Path,
+			BaseSHA256:  op.BaseSHA256,
 			Patch:       op.Patch,
 		})
 		return err

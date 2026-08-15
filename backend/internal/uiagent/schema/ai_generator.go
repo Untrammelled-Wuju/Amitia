@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+
+	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
 )
 
 // LLMSchemaCallFunc invokes an LLM to generate a schema from a description.
@@ -13,8 +15,8 @@ type LLMSchemaCallFunc func(ctx interface{}, promptJSON []byte) ([]byte, error)
 // AISchemaGenerator produces SchemaUIDocuments using an LLM,
 // falling back to heuristic generation when no LLM is available.
 type AISchemaGenerator struct {
-	catalog  *ComponentCatalog
-	llmCall  LLMSchemaCallFunc
+	catalog *ComponentCatalog
+	llmCall LLMSchemaCallFunc
 }
 
 // NewAISchemaGenerator creates an AI-backed generator.
@@ -60,17 +62,17 @@ func (g *AISchemaGenerator) generateWithLLM(description string, availableComps [
 		return nil, fmt.Errorf("unmarshal llm output: %w", err)
 	}
 
-	if doc.Root.Type == "" {
-		return nil, fmt.Errorf("llm output has no root node")
+	if len(doc.Children) == 0 {
+		return nil, fmt.Errorf("llm output has no children")
 	}
-	if doc.SchemaID == "" {
-		doc.SchemaID = generateSchemaID()
+	if doc.SchemaVersion == "" {
+		doc.SchemaVersion = schema_ui.SchemaUIVersion
 	}
-	if doc.Version == "" {
-		doc.Version = "1.0"
+	if doc.Type == "" {
+		doc.Type = "document"
 	}
-	if doc.State == "" {
-		doc.State = DraftStateDraft
+	if doc.Title == "" {
+		doc.Title = extractTitle(description)
 	}
 	return &doc, nil
 }
@@ -81,10 +83,10 @@ func (g *AISchemaGenerator) generateHeuristic(description string, availableComps
 }
 
 type aiPrompt struct {
-	Task         string   `json:"task"`
-	Description  string   `json:"description"`
+	Task          string   `json:"task"`
+	Description   string   `json:"description"`
 	AvailableComp []string `json:"availableComponents"`
-	Instructions string   `json:"instructions"`
+	Instructions  string   `json:"instructions"`
 }
 
 func buildAIPrompt(description string, availableComps []SchemaComponentType) aiPrompt {
@@ -97,9 +99,9 @@ func buildAIPrompt(description string, availableComps []SchemaComponentType) aiP
 	}
 
 	return aiPrompt{
-		Task:         "generate_schema_ui",
-		Description:  description,
+		Task:          "generate_schema_ui",
+		Description:   description,
 		AvailableComp: comps,
-		Instructions: "Generate a SchemaUIDocument in JSON format with a root page node. Each node must have 'type' and optionally 'id', 'properties', 'children', 'bindings', 'actions'. The document must have schemaId, version, state, title, and root fields.",
+		Instructions:  "Generate a SchemaUIDocument in JSON format with children nodes. Each node must have 'type' and optionally 'id', 'props', 'children', 'bindings', 'actions'. The document must have schemaVersion, type, title, and children fields.",
 	}
 }

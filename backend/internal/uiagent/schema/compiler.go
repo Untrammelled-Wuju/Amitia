@@ -28,16 +28,20 @@ func (c *schemaCompiler) Compile(ctx context.Context, doc *SchemaUIDocument) (*C
 	if doc == nil {
 		return nil, ErrDocumentRequired
 	}
-	return &CompiledSchema{WidgetCount: countNodes(&doc.Root)}, nil
+	count := 0
+	for i := range doc.Children {
+		count += countNode(&doc.Children[i])
+	}
+	return &CompiledSchema{WidgetCount: count}, nil
 }
 
-func countNodes(node *SchemaNode) int {
+func countNode(node *SchemaUINode) int {
 	if node == nil {
 		return 0
 	}
 	count := 1
 	for i := range node.Children {
-		count += countNodes(&node.Children[i])
+		count += countNode(&node.Children[i])
 	}
 	return count
 }

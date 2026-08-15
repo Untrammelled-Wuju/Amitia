@@ -2,6 +2,7 @@ package uiagent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 
 	"github.com/u-ai/backend/internal/uiagent/schema"
@@ -13,6 +14,7 @@ type SourceEditOperation struct {
 	OldText       string `json:"oldText,omitempty"`
 	NewText       string `json:"newText,omitempty"`
 	Patch         string `json:"patch,omitempty"`
+	BaseSHA256    string `json:"baseSha256,omitempty"`
 	SearchMode    string `json:"searchMode"`
 	ReplaceAll    bool   `json:"replaceAll"`
 	ExpectedCount int    `json:"expectedCount"`
@@ -58,7 +60,7 @@ type PreviewSessionRef struct {
 type UIExecutor struct {
 	sourceEditor sourceEditorAdapter
 	schemaGen    *schema.AISchemaGenerator
-	renderer     *schema.FlutterRenderer
+	renderer     *schema.FlutterSchemaProjection
 	validator    schema.SchemaValidator
 	previewMgr   PreviewManager
 	policy       Policy
@@ -88,8 +90,8 @@ func WithSchemaGenerator(gen *schema.AISchemaGenerator) UIExecutorOption {
 	return func(e *UIExecutor) { e.schemaGen = gen }
 }
 
-// WithRenderer sets the Flutter renderer.
-func WithRenderer(r *schema.FlutterRenderer) UIExecutorOption {
+// WithRenderer sets the Flutter schema projection.
+func WithRenderer(r *schema.FlutterSchemaProjection) UIExecutorOption {
 	return func(e *UIExecutor) { e.renderer = r }
 }
 
@@ -132,9 +134,34 @@ func (e *UIExecutor) ApplySourceEdits(ctx context.Context, plan UIChangePlan) (*
 	}
 
 	for _, op := range plan.Operations {
-		srcReq.Operations = append(srcReq.Operations, SourceEditOperation{
+		srcOp := SourceEditOperation{
 			Path: op.Target,
-		})
+		}
+		if len(op.Payload) > 0 {
+			var payload struct {
+				Patch      string `json:"patch"`
+				OldText    string `json:"oldText"`
+				NewText    string `json:"newText"`
+				BaseSHA256 string `json:"baseSha256"`
+				SearchMode string `json:"searchMode"`
+				ReplaceAll bool   `json:"replaceAll"`
+				ExpectCount int   `json:"expectCount"`
+			}
+			if err := json.Unmarshal(op.Payload, &payload); err == nil {
+				srcOp.Patch = payload.Patch
+				srcOp.OldText = payload.OldText
+				srcOp.NewText = payload.NewText
+				srcOp.BaseSHA256 = payload.BaseSHA256
+				srcOp.SearchMode = payload.SearchMode
+				srcOp.ReplaceAll = payload.ReplaceAll
+				srcOp.ExpectedCount = payload.ExpectCount
+			}
+		}
+		srcReq.Operations = append(srcReq.Operations, srcOp)
+	}
+
+	if len(srcReq.Operations) == 0 {
+		return nil, fmt.Errorf("no source operations to apply")
 	}
 
 	result, err := e.sourceEditor.call(ctx, srcReq)
@@ -164,7 +191,7 @@ func (e *UIExecutor) ApplySchema(ctx context.Context, plan UIChangePlan) (*Schem
 	}
 
 	if e.renderer != nil {
-		_, renderErr := e.renderer.Render(ctx, doc, schema.RenderSchemaRequest{
+		_, renderErr := e.renderer.Project(ctx, doc, schema.RenderSchemaRequest{
 			Document: doc,
 			Platform: plan.Intent.Target.Platform,
 		})
@@ -174,8 +201,8 @@ func (e *UIExecutor) ApplySchema(ctx context.Context, plan UIChangePlan) (*Schem
 	}
 
 	return &SchemaEditResult{
-		ChangedFiles: []string{"schema://" + doc.SchemaID},
-		SchemaID:     doc.SchemaID,
+		ChangedFiles: []string{"schema://" + doc.Title},
+		SchemaID:     doc.Title,
 	}, nil
 }
 
