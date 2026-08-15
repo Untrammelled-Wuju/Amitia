@@ -112,50 +112,48 @@ internal class DefaultProotSession(
     private fun startExitWatcher() {
         if (!watcherStarted.compareAndSet(false, true)) return
         watcherExecutor.execute {
-            try {
-                val code = process.waitFor()
-                val exit = ProotExit(
-                    generation = generation,
-                    sessionId = sessionId,
-                    exitCode = code,
-                    stopRequested = stopRequested.get(),
-                )
-                exitRef.set(exit)
-                publishTerminalOnce(exit)
-            } catch (e: InterruptedException) {
-                Thread.currentThread().interrupt()
-                val code = try { process.exitValue() } catch (_: Exception) { -1 }
-                val exit = ProotExit(
-                    generation = generation,
-                    sessionId = sessionId,
-                    exitCode = code,
-                    stopRequested = stopRequested.get(),
-                )
-                exitRef.set(exit)
-                publishTerminalOnce(exit)
-            } catch (e: Exception) {
-                val code = try { process.exitValue() } catch (_: Exception) { -1 }
-                val exit = ProotExit(
-                    generation = generation,
-                    sessionId = sessionId,
-                    exitCode = code,
-                    stopRequested = stopRequested.get(),
-                )
-                exitRef.set(exit)
-                publishTerminalOnce(exit)
-            } finally {
-                val currentExit = exitRef.get()
-                if (currentExit != null) {
-                    exitDeferred.complete(currentExit)
-                } else {
-                    val fallback = ProotExit(
+            while (true) {
+                try {
+                    val code = process.waitFor()
+                    val exit = ProotExit(
                         generation = generation,
                         sessionId = sessionId,
-                        exitCode = -1,
+                        exitCode = code,
                         stopRequested = stopRequested.get(),
                     )
-                    exitRef.set(fallback)
-                    exitDeferred.complete(fallback)
+                    exitRef.set(exit)
+                    publishTerminalOnce(exit)
+                    exitDeferred.complete(exit)
+                    return
+                } catch (e: InterruptedException) {
+                    Thread.currentThread().interrupt()
+                    if (!process.isAlive) {
+                        val exitCode = process.exitValue()
+                        val exit = ProotExit(
+                            generation = generation,
+                            sessionId = sessionId,
+                            exitCode = exitCode,
+                            stopRequested = stopRequested.get(),
+                        )
+                        exitRef.set(exit)
+                        publishTerminalOnce(exit)
+                        exitDeferred.complete(exit)
+                        return
+                    }
+                } catch (e: Exception) {
+                    if (!process.isAlive) {
+                        val exitCode = process.exitValue()
+                        val exit = ProotExit(
+                            generation = generation,
+                            sessionId = sessionId,
+                            exitCode = exitCode,
+                            stopRequested = stopRequested.get(),
+                        )
+                        exitRef.set(exit)
+                        publishTerminalOnce(exit)
+                        exitDeferred.complete(exit)
+                        return
+                    }
                 }
             }
         }

@@ -1,5 +1,5 @@
 import Foundation
-import UserNotifications
+import EventKit
 
 public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
     public let operations: Set<String> = [
@@ -16,12 +16,16 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         "media.alarms.resume"
     ]
 
+    private let eventStore = EKEventStore()
+
     public override init() {
         super.init()
     }
 
     public func capabilitySnapshot() -> IOSNativeCapability {
-        if #available(iOS 10.0, *) {
+        let availability = AlarmKitAdapter.shared.checkAvailability()
+        switch availability {
+        case .available:
             return IOSNativeCapability(
                 available: true,
                 authorized: false,
@@ -29,14 +33,21 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
                 platformSupported: true,
                 foregroundRequired: false
             )
+        case .unsupported:
+            return IOSNativeCapability(
+                available: false,
+                authorized: false,
+                hardwareAvailable: true,
+                platformSupported: false,
+                foregroundRequired: false
+            )
         }
-        return IOSNativeCapability(
-            available: false,
-            authorized: false,
-            hardwareAvailable: false,
-            platformSupported: false,
-            foregroundRequired: false
-        )
+    }
+
+    @available(iOS, deprecated: 16.0, renamed: "iOS_alarm_unsupported_message")
+    private static var unsupportedMessage: String {
+        let majorVersion = Int((UIDevice.current.systemVersion).split(separator: ".").first ?? "25") ?? 25
+        return "system clock alarm API requires iOS 26.0+ AlarmKit. Current iOS \(majorVersion) does not expose alarm alarm management."
     }
 
     public func execute(_ request: IOSNativeRequest) async -> IOSNativeResponse {
@@ -44,7 +55,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         case "media.alarms.status":
             return handleStatus(request)
         case "media.alarms.authorization.status":
-            return await handleAuthorizationStatus(request)
+            return handleAuthorizationStatus(request)
         case "media.alarms.authorization.request":
             return await handleAuthorizationRequest(request)
         case "media.alarms.list":
@@ -60,9 +71,9 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         case "media.alarms.countdown":
             return await handleCountdown(request)
         case "media.alarms.pause":
-            return await handlePause(request)
+            return handlePause(request)
         case "media.alarms.resume":
-            return await handleResume(request)
+            return handleResume(request)
         default:
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
@@ -75,41 +86,66 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleStatus(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        if #available(iOS 10.0, *) {
+        let availability = AlarmKitAdapter.shared.checkAvailability()
+        switch availability {
+        case .available:
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
                 status: "ok",
-                result: ["available": true, "message": "Alarm scheduling available via UNUserNotificationCenter"],
+                result: [
+                    "available": true,
+                    "message": "AlarmKit available on iOS 26+",
+                    "platformVersion": UIDevice.current.systemVersion
+                ],
                 error: nil
             )
+        case .unsupported(let reason):
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: reason)
+            )
         }
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
-            status: "error",
-            result: nil,
-            error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "iOS 10.0+ required for alarm functionality")
-        )
     }
 
-    private func handleAuthorizationStatus(_ request: IOSNativeRequest) async -> IOSNativeResponse {
-        let center = UNUserNotificationCenter.current()
-        let settings = await center.getNotificationSettings()
-        let authorized = settings.authorizationStatus == .authorized
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
-            status: "ok",
-            result: ["authorized": authorized, "status": "\(settings.authorizationStatus.rawValue)"],
-            error: nil
-        )
+    private func handleAuthorizationStatus(_ request: IOSNativeRequest) -> IOSNativeResponse {
+        let availability = AlarmKitAdapter.shared.checkAvailability()
+        switch availability {
+        case .available:
+            let status = AlarmKitAdapter.shared.authorizationStatus()
+            let authString: String
+            switch status {
+            case .authorized: authString = "authorized"
+            case .denied: authString = "denied"
+            case .notDetermined: authString = "notDetermined"
+            case .restricted: authString = "restricted"
+            }
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "ok",
+                result: ["authorized": status == .authorized, "status": authString],
+                error: nil
+            )
+        case .unsupported(let reason):
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: reason)
+            )
+        }
     }
 
     private func handleAuthorizationRequest(_ request: IOSNativeRequest) async -> IOSNativeResponse {
-        do {
-            let center = UNUserNotificationCenter.current()
-            let granted = try await center.requestAuthorization(options: [.alert, .sound, .badge])
+        let availability = AlarmKitAdapter.shared.checkAvailability()
+        switch availability {
+        case .available:
+            let granted = await AlarmKitAdapter.shared.requestAuthorization()
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
@@ -117,177 +153,253 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
                 result: ["granted": granted],
                 error: nil
             )
-        } catch {
+        case .unsupported(let reason):
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "AUTHORIZATION_FAILED", message: error.localizedDescription)
+                error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: reason)
             )
         }
     }
 
     private func handleList(_ request: IOSNativeRequest) async -> IOSNativeResponse {
-        let center = UNUserNotificationCenter.current()
-        let requests = await center.pendingNotificationRequests()
-        let alarms = requests.map { req in
-            ["id": req.identifier, "title": req.content.title, "body": req.content.body]
+        let availability = AlarmKitAdapter.shared.checkAvailability()
+        switch availability {
+        case .available:
+            let alarms = await AlarmKitAdapter.shared.listAlarms()
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "ok",
+                result: alarms,
+                error: nil
+            )
+        case .unsupported(let reason):
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: reason)
+            )
         }
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
-            status: "ok",
-            result: ["alarms": alarms],
-            error: nil
-        )
     }
 
     private func handleGet(_ request: IOSNativeRequest) async -> IOSNativeResponse {
-        guard let alarmId = request.payload?["id"] as? String else {
+        guard let alarmId = request.payload?["alarmId"] as? String ?? request.payload?["id"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing alarm id")
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing alarmId")
             )
         }
-        let center = UNUserNotificationCenter.current()
-        let requests = await center.pendingNotificationRequests()
-        guard let req = requests.first(where: { $0.identifier == alarmId }) else {
+
+        let availability = AlarmKitAdapter.shared.checkAvailability()
+        switch availability {
+        case .available:
+            if let alarm = await AlarmKitAdapter.shared.getAlarm(id: alarmId) {
+                return IOSNativeResponse(
+                    protocolVersion: request.protocolVersion,
+                    requestID: request.requestID,
+                    status: "ok",
+                    result: ["alarm": alarm],
+                    error: nil
+                )
+            } else {
+                return IOSNativeResponse(
+                    protocolVersion: request.protocolVersion,
+                    requestID: request.requestID,
+                    status: "error",
+                    result: nil,
+                    error: IOSNativeError(code: "NOT_FOUND", message: "alarm not found: \(alarmId)")
+                )
+            }
+        case .unsupported(let reason):
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "NOT_FOUND", message: "alarm not found: \(alarmId)")
+                error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: reason)
             )
         }
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
-            status: "ok",
-            result: ["alarm": ["id": req.identifier, "title": req.content.title, "body": req.content.body]],
-            error: nil
-        )
     }
 
     private func handleSchedule(_ request: IOSNativeRequest) async -> IOSNativeResponse {
-        guard let alarmId = request.payload?["id"] as? String,
+        guard let alarmId = request.payload?["alarmId"] as? String ?? request.payload?["id"] as? String,
               let title = request.payload?["title"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing id or title")
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing alarmId or title")
             )
         }
 
-        let center = UNUserNotificationCenter.current()
-        let settings = await center.getNotificationSettings()
-        guard settings.authorizationStatus == .authorized else {
+        let availability = AlarmKitAdapter.shared.checkAvailability()
+        switch availability {
+        case .available:
+            var schedule = AlarmSchedule()
+            if let scheduleRaw = request.payload?["schedule"] as? [String: Any] {
+                if let fireAt = scheduleRaw["fireAt"] as? String { schedule.fireAt = fireAt }
+                if let hour = scheduleRaw["hour"] as? Int { schedule.hour = hour }
+                if let minute = scheduleRaw["minute"] as? Int { schedule.minute = minute }
+                if let recurrence = scheduleRaw["recurrence"] as? String { schedule.recurrence = recurrence }
+                if let weekdays = scheduleRaw["weekdays"] as? [String] { schedule.weekdays = weekdays }
+            }
+
+            var presentation = AlarmPresentation()
+            if let presRaw = request.payload?["presentation"] as? [String: Any] {
+                if let alertTitle = presRaw["alertTitle"] as? String { presentation.alertTitle = alertTitle }
+                if let countdownTitle = presRaw["countdownTitle"] as? String { presentation.countdownTitle = countdownTitle }
+                if let pausedTitle = presRaw["pausedTitle"] as? String { presentation.pausedTitle = pausedTitle }
+                if let tintColor = presRaw["tintColor"] as? String { presentation.tintColor = tintColor }
+                if let secondaryAction = presRaw["secondaryAction"] as? String { presentation.secondaryAction = secondaryAction }
+            } else {
+                presentation.alertTitle = title
+            }
+
+            var sound: AlarmSound?
+            if let soundRaw = request.payload?["sound"] as? [String: Any] {
+                sound = AlarmSound()
+                if let kind = soundRaw["kind"] as? String { sound?.kind = kind }
+                if let soundId = soundRaw["soundId"] as? String { sound?.soundId = soundId }
+            }
+
+            var metadata: AlarmMetadata?
+            if let metaRaw = request.payload?["metadata"] as? [String: Any] {
+                metadata = AlarmMetadata()
+                if let kind = metaRaw["kind"] as? String { metadata?.kind = kind }
+                if let icon = metaRaw["icon"] as? String { metadata?.icon = icon }
+                if let ownerRef = metaRaw["ownerRef"] as? String { metadata?.ownerRef = ownerRef }
+            }
+
+            let success = await AlarmKitAdapter.shared.createAlarm(
+                id: alarmId,
+                title: title,
+                schedule: schedule,
+                presentation: presentation,
+                sound: sound,
+                metadata: metadata
+            )
+
+            if success {
+                return IOSNativeResponse(
+                    protocolVersion: request.protocolVersion,
+                    requestID: request.requestID,
+                    status: "ok",
+                    result: ["scheduled": true, "alarmId": alarmId],
+                    error: nil
+                )
+            } else {
+                return IOSNativeResponse(
+                    protocolVersion: request.protocolVersion,
+                    requestID: request.requestID,
+                    status: "error",
+                    result: nil,
+                    error: IOSNativeError(code: "SCHEDULE_FAILED", message: "failed to schedule alarm \(alarmId)")
+                )
+            }
+        case .unsupported(let reason):
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "AUTHORIZATION_DENIED", message: "notification authorization required")
-            )
-        }
-
-        let content = UNMutableNotificationContent()
-        content.title = title
-        if let body = request.payload?["body"] as? String {
-            content.body = body
-        }
-        content.sound = .default
-
-        let trigger: UNNotificationTrigger
-        if let timeInterval = request.payload?["timeInterval"] as? Double {
-            trigger = UNTimeIntervalNotificationTrigger(timeInterval: max(timeInterval, 1), repeats: false)
-        } else if let dateComponents = request.payload?["dateComponents"] as? [String: Int] {
-            let dc = DateComponents(
-                year: dateComponents["year"],
-                month: dateComponents["month"],
-                day: dateComponents["day"],
-                hour: dateComponents["hour"],
-                minute: dateComponents["minute"]
-            )
-            trigger = UNCalendarNotificationTrigger(dateMatching: dc, repeats: false)
-        } else {
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
-                status: "error",
-                result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing timeInterval or dateComponents")
-            )
-        }
-
-        let request_notif = UNNotificationRequest(identifier: alarmId, content: content, trigger: trigger)
-
-        do {
-            try await center.add(request_notif)
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
-                status: "ok",
-                result: ["scheduled": true, "alarmId": alarmId],
-                error: nil
-            )
-        } catch {
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
-                status: "error",
-                result: nil,
-                error: IOSNativeError(code: "SCHEDULE_FAILED", message: error.localizedDescription)
+                error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: reason)
             )
         }
     }
 
     private func handleStop(_ request: IOSNativeRequest) async -> IOSNativeResponse {
-        guard let alarmId = request.payload?["id"] as? String else {
+        guard let alarmId = request.payload?["alarmId"] as? String ?? request.payload?["id"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing alarm id")
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing alarmId")
             )
         }
-        let center = UNUserNotificationCenter.current()
-        center.removePendingNotificationRequests(withIdentifiers: [alarmId])
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
-            status: "ok",
-            result: ["stopped": true, "alarmId": alarmId],
-            error: nil
-        )
+
+        let availability = AlarmKitAdapter.shared.checkAvailability()
+        switch availability {
+        case .available:
+            let success = await AlarmKitAdapter.shared.cancelAlarm(id: alarmId)
+            if success {
+                return IOSNativeResponse(
+                    protocolVersion: request.protocolVersion,
+                    requestID: request.requestID,
+                    status: "ok",
+                    result: ["stopped": true, "alarmId": alarmId],
+                    error: nil
+                )
+            } else {
+                return IOSNativeResponse(
+                    protocolVersion: request.protocolVersion,
+                    requestID: request.requestID,
+                    status: "error",
+                    result: nil,
+                    error: IOSNativeError(code: "NOT_FOUND", message: "alarm not found: \(alarmId)")
+                )
+            }
+        case .unsupported(let reason):
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: reason)
+            )
+        }
     }
 
     private func handleCancel(_ request: IOSNativeRequest) async -> IOSNativeResponse {
-        guard let alarmId = request.payload?["id"] as? String else {
+        guard let alarmId = request.payload?["alarmId"] as? String ?? request.payload?["id"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing alarm id")
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing alarmId")
             )
         }
-        let center = UNUserNotificationCenter.current()
-        center.removePendingNotificationRequests(withIdentifiers: [alarmId])
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
-            status: "ok",
-            result: ["cancelled": true, "alarmId": alarmId],
-            error: nil
-        )
+
+        let availability = AlarmKitAdapter.shared.checkAvailability()
+        switch availability {
+        case .available:
+            let success = await AlarmKitAdapter.shared.cancelAlarm(id: alarmId)
+            if success {
+                return IOSNativeResponse(
+                    protocolVersion: request.protocolVersion,
+                    requestID: request.requestID,
+                    status: "ok",
+                    result: ["cancelled": true, "alarmId": alarmId],
+                    error: nil
+                )
+            } else {
+                return IOSNativeResponse(
+                    protocolVersion: request.protocolVersion,
+                    requestID: request.requestID,
+                    status: "error",
+                    result: nil,
+                    error: IOSNativeError(code: "NOT_FOUND", message: "alarm not found: \(alarmId)")
+                )
+            }
+        case .unsupported(let reason):
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: reason)
+            )
+        }
     }
 
     private func handleCountdown(_ request: IOSNativeRequest) async -> IOSNativeResponse {
@@ -300,11 +412,22 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing seconds")
             )
         }
+
         let alarmId = "countdown-\(UUID().uuidString)"
         var countdownPayload = request.payload ?? [:]
-        countdownPayload["id"] = alarmId
-        countdownPayload["title"] = countdownPayload["title"] ?? "Countdown"
-        countdownPayload["timeInterval"] = seconds
+        if countdownPayload["alarmId"] == nil && countdownPayload["id"] == nil {
+            countdownPayload["id"] = alarmId
+        }
+        let title = (countdownPayload["title"] as? String) ?? "Countdown"
+        countdownPayload["title"] = title
+
+        var schedule = AlarmSchedule()
+        let futureDate = Date().addingTimeInterval(seconds)
+        let formatter = ISO8601DateFormatter()
+        schedule.fireAt = formatter.string(from: futureDate)
+        countdownPayload["schedule"] = ["fireAt": formatter.string(from: futureDate)]
+
+        countdownPayload["presentation"] = ["alertTitle": title]
 
         let countdownRequest = IOSNativeRequest(
             protocolVersion: request.protocolVersion,
@@ -316,23 +439,23 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         return await handleSchedule(countdownRequest)
     }
 
-    private func handlePause(_ request: IOSNativeRequest) async -> IOSNativeResponse {
+    private func handlePause(_ request: IOSNativeRequest) -> IOSNativeResponse {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
             requestID: request.requestID,
             status: "error",
             result: nil,
-            error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "pause not supported by UNUserNotificationCenter")
+            error: IOSNativeError(code: "CAPABILITY_UNAVAILABLE", message: "Alarm pause is not supported in current iOS version")
         )
     }
 
-    private func handleResume(_ request: IOSNativeRequest) async -> IOSNativeResponse {
+    private func handleResume(_ request: IOSNativeRequest) -> IOSNativeResponse {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
             requestID: request.requestID,
             status: "error",
             result: nil,
-            error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "resume not supported by UNUserNotificationCenter")
+            error: IOSNativeError(code: "CAPABILITY_UNAVAILABLE", message: "Alarm resume is not supported in current iOS version")
         )
     }
 }

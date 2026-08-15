@@ -22,11 +22,11 @@ public class SecurityScopedBookmarkStore: NSObject {
             includingResourceValuesForKeys: nil,
             relativeTo: nil
         )
-        let grantId = UUID().uuidString
+        let mountId = UUID().uuidString
         queue.async(flags: .barrier) {
-            self.bookmarks[grantId] = bookmarkData
+            self.bookmarks[mountId] = bookmarkData
         }
-        return grantId
+        return mountId
     }
 
     public func store(identifier: String, bookmark: Data) {
@@ -57,9 +57,9 @@ public class SecurityScopedBookmarkStore: NSObject {
         return result
     }
 
-    public func reauthorize(grantId: String) -> Bool {
-        _ = stopAccessing(identifier: grantId)
-        return startAccessing(identifier: grantId)
+    public func reauthorize(mountId: String) -> Bool {
+        _ = stopAccessing(identifier: mountId)
+        return startAccessing(identifier: mountId)
     }
 
     public func startAccessing(identifier: String) -> Bool {
@@ -105,8 +105,8 @@ public class SecurityScopedBookmarkStore: NSObject {
         return stale
     }
 
-    public func stat(grantId: String) -> [String: Any]? {
-        guard let url = resolve(identifier: grantId) else {
+    public func stat(mountId: String) -> [String: Any]? {
+        guard let url = resolve(identifier: mountId) else {
             return nil
         }
         _ = url.startAccessingSecurityScopedResource()
@@ -120,7 +120,6 @@ public class SecurityScopedBookmarkStore: NSObject {
             result["modificationDate"] = (attributes[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
             result["isDirectory"] = attributes[.type] as? FileAttributeType == .typeDirectory
             result["isFile"] = attributes[.type] as? FileAttributeType == .typeRegular
-            result["path"] = url.path
             result["name"] = url.lastPathComponent
             return result
         } catch {
@@ -128,8 +127,8 @@ public class SecurityScopedBookmarkStore: NSObject {
         }
     }
 
-    public func list(grantId: String) -> [[String: Any]]? {
-        guard let url = resolve(identifier: grantId) else {
+    public func list(mountId: String) -> [[String: Any]]? {
+        guard let url = resolve(identifier: mountId) else {
             return nil
         }
         _ = url.startAccessingSecurityScopedResource()
@@ -140,7 +139,6 @@ public class SecurityScopedBookmarkStore: NSObject {
             return contents.map { item in
                 var info: [String: Any] = [:]
                 info["name"] = item.lastPathComponent
-                info["path"] = item.path
                 if let values = try? item.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey, .contentModificationDateKey]) {
                     info["isDirectory"] = values.isDirectory ?? false
                     info["size"] = values.fileSize ?? 0
@@ -153,37 +151,61 @@ public class SecurityScopedBookmarkStore: NSObject {
         }
     }
 
-    public func read(grantId: String) -> Data? {
-        guard let url = resolve(identifier: grantId) else {
+    public func read(mountId: String, offset: Int64 = 0, length: Int64 = 0) -> Data? {
+        guard let url = resolve(identifier: mountId) else {
             return nil
         }
         _ = url.startAccessingSecurityScopedResource()
         defer { url.stopAccessingSecurityScopedResource() }
 
         do {
-            return try Data(contentsOf: url)
+            let handle = try FileHandle(forReadingFrom: url)
+            if offset > 0 {
+                handle.seek(toOffset: UInt64(offset))
+            }
+            let data: Data
+            if length > 0 {
+                data = handle.readData(ofLength: Int(length))
+            } else {
+                data = handle.readDataToEndOfFile()
+            }
+            handle.closeFile()
+            return data
         } catch {
             return nil
         }
     }
 
-    public func write(grantId: String, data: Data) -> Bool {
-        guard let url = resolve(identifier: grantId) else {
+    public func write(mountId: String, data: Data, offset: Int64 = 0) -> Bool {
+        guard let url = resolve(identifier: mountId) else {
             return false
         }
         _ = url.startAccessingSecurityScopedResource()
         defer { url.stopAccessingSecurityScopedResource() }
 
         do {
-            try data.write(to: url, options: .atomic)
+            let handle = try FileHandle(forWritingTo: url)
+            if offset > 0 {
+                handle.seek(toOffset: UInt64(offset))
+            }
+            handle.write(data)
+            handle.closeFile()
             return true
         } catch {
+            if offset == 0 {
+                do {
+                    try data.write(to: url, options: .atomic)
+                    return true
+                } catch {
+                    return false
+                }
+            }
             return false
         }
     }
 
-    public func mkdir(parentGrantId: String, name: String) -> String? {
-        guard let parentUrl = resolve(identifier: parentGrantId) else {
+    public func mkdir(parentMountId: String, name: String) -> String? {
+        guard let parentUrl = resolve(identifier: parentMountId) else {
             return nil
         }
         _ = parentUrl.startAccessingSecurityScopedResource()
@@ -197,18 +219,18 @@ public class SecurityScopedBookmarkStore: NSObject {
                 includingResourceValuesForKeys: nil,
                 relativeTo: nil
             )
-            let newGrantId = UUID().uuidString
+            let newMountId = UUID().uuidString
             queue.async(flags: .barrier) {
-                self.bookmarks[newGrantId] = bookmarkData
+                self.bookmarks[newMountId] = bookmarkData
             }
-            return newGrantId
+            return newMountId
         } catch {
             return nil
         }
     }
 
-    public func rename(grantId: String, newName: String) -> Bool {
-        guard let url = resolve(identifier: grantId) else {
+    public func rename(mountId: String, newName: String) -> Bool {
+        guard let url = resolve(identifier: mountId) else {
             return false
         }
         _ = url.startAccessingSecurityScopedResource()
@@ -224,7 +246,7 @@ public class SecurityScopedBookmarkStore: NSObject {
                 relativeTo: nil
             )
             queue.async(flags: .barrier) {
-                self.bookmarks[grantId] = bookmarkData
+                self.bookmarks[mountId] = bookmarkData
             }
             return true
         } catch {
@@ -232,9 +254,9 @@ public class SecurityScopedBookmarkStore: NSObject {
         }
     }
 
-    public func move(sourceGrantId: String, destGrantId: String) -> Bool {
-        guard let sourceUrl = resolve(identifier: sourceGrantId),
-              let destDirUrl = resolve(identifier: destGrantId) else {
+    public func move(sourceMountId: String, destMountId: String) -> Bool {
+        guard let sourceUrl = resolve(identifier: sourceMountId),
+              let destDirUrl = resolve(identifier: destMountId) else {
             return false
         }
         _ = sourceUrl.startAccessingSecurityScopedResource()
@@ -253,7 +275,7 @@ public class SecurityScopedBookmarkStore: NSObject {
                 relativeTo: nil
             )
             queue.async(flags: .barrier) {
-                self.bookmarks[sourceGrantId] = bookmarkData
+                self.bookmarks[sourceMountId] = bookmarkData
             }
             return true
         } catch {
@@ -261,9 +283,9 @@ public class SecurityScopedBookmarkStore: NSObject {
         }
     }
 
-    public func copy(sourceGrantId: String, destGrantId: String) -> String? {
-        guard let sourceUrl = resolve(identifier: sourceGrantId),
-              let destDirUrl = resolve(identifier: destGrantId) else {
+    public func copy(sourceMountId: String, destMountId: String) -> String? {
+        guard let sourceUrl = resolve(identifier: sourceMountId),
+              let destDirUrl = resolve(identifier: destMountId) else {
             return nil
         }
         _ = sourceUrl.startAccessingSecurityScopedResource()
@@ -281,18 +303,18 @@ public class SecurityScopedBookmarkStore: NSObject {
                 includingResourceValuesForKeys: nil,
                 relativeTo: nil
             )
-            let newGrantId = UUID().uuidString
+            let newMountId = UUID().uuidString
             queue.async(flags: .barrier) {
-                self.bookmarks[newGrantId] = bookmarkData
+                self.bookmarks[newMountId] = bookmarkData
             }
-            return newGrantId
+            return newMountId
         } catch {
             return nil
         }
     }
 
-    public func delete(grantId: String) -> Bool {
-        guard let url = resolve(identifier: grantId) else {
+    public func delete(mountId: String) -> Bool {
+        guard let url = resolve(identifier: mountId) else {
             return false
         }
         _ = url.startAccessingSecurityScopedResource()
@@ -300,7 +322,7 @@ public class SecurityScopedBookmarkStore: NSObject {
 
         do {
             try FileManager.default.removeItem(at: url)
-            remove(identifier: grantId)
+            remove(identifier: mountId)
             return true
         } catch {
             return false

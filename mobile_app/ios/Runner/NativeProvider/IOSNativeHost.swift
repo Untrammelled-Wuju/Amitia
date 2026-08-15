@@ -233,6 +233,16 @@ private let supportedProtocolVersions: Set<String> = ["1.0"]
 
     public func handshake() -> [String: Any] {
         return queue.sync {
+            var domains = Set<String>()
+            for op in handlers.keys {
+                let parts = op.split(separator: ".")
+                if parts.count >= 2 {
+                    domains.insert("\(parts[0]).\(parts[1])")
+                } else if let first = parts.first {
+                    domains.insert(String(first))
+                }
+            }
+
             return [
                 "platform": "ios",
                 "protocolVersion": "1.0",
@@ -240,7 +250,9 @@ private let supportedProtocolVersions: Set<String> = ["1.0"]
                 "osVersion": UIDevice.current.systemVersion,
                 "deviceFamily": UIDevice.current.userInterfaceIdiom == .pad ? "ipad" : "iphone",
                 "capabilities": buildCapabilityDictionary(),
-                "foreground": isForeground
+                "foreground": isForeground,
+                "health": isForeground ? "ready" : "degraded",
+                "registeredDomains": Array(domains)
             ] as [String: Any]
         }
     }

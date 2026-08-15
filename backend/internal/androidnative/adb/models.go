@@ -68,3 +68,15 @@ type InternalADBExecutor interface {
 		opts InternalADBExecuteOptions,
 	) (ADBExecuteResult, error)
 }
+
+func DefaultConfig() *ADBConfig {
+	return &ADBConfig{
+		Enabled:        true,
+		Backend:        "cli",
+		ExecutablePath: "adb",
+		Timeout:        defaultTimeoutSeconds * time.Second,
+		MaxOutputBytes: maxCombinedBytes,
+		MaxCommandArgs: maxArgCount,
+		MaxArgBytes:    maxTotalArgBytes,
+	}
+}

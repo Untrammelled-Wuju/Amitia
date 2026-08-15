@@ -15,6 +15,7 @@ import com.amitia.amitia_app.nativeprovider.overlay.OverlayNativeHandler
 import com.amitia.amitia_app.nativeprovider.root.RootNativeHandler
 import com.amitia.amitia_app.nativeprovider.share.ShareNativeHandler
 import com.amitia.amitia_app.nativeprovider.share.ShareNativeHandlerAdapter
+import com.amitia.amitia_app.nativeprovider.shizuku.ShizukuNativeHandler
 import com.amitia.amitia_app.nativeprovider.uitree.UITreeNativeHandler
 import com.amitia.amitia_app.nativeprovider.virtualdisplay.VirtualDisplayNativeHandler
 import kotlinx.coroutines.runBlocking
@@ -49,6 +50,7 @@ internal object AndroidNativeCompositionRoot {
             buildShareHandler(context),
             buildNotificationHandler(context),
             RootNativeHandler(context),
+            ShizukuNativeHandler(context),
             UITreeNativeHandler(context),
             InteractionNativeHandler(context),
             DisplayNativeHandler(context),

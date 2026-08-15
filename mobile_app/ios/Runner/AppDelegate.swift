@@ -2,7 +2,7 @@ import Flutter
 import UIKit
 
 @main
-@objc class AppDelegate: FlutterAppDelegate {
+@objc class AppDelegate: FlutterAppDelegate, IOSNativeTransportDelegate {
   private var sandboxHandler: IOSSandboxMethodHandler?
   private var rootfsHandler: RootfsInstallMethodHandler?
   private var iosNativeHost: IOSNativeHost?
@@ -33,12 +33,24 @@ import UIKit
     self.iosNativeHost?.registerHandler(BackgroundNativeHandler())
     self.iosNativeHost?.registerHandler(FileNativeHandler())
 
+    if let host = self.iosNativeHost {
+      self.nativeTransport = IOSNativeTransport(host: host, delegate: self)
+      self.nativeTransport?.attach()
+    }
+
     let resolver = RootfsResolver()
     let installer = RootfsInstaller(resolver: resolver)
     self.rootfsHandler = RootfsInstallMethodHandler(installer: installer, resolver: resolver)
     self.rootfsHandler?.register(with: self.registrar(forPlugin: "RootfsInstallBridge")!)
 
     return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+  }
+
+  func transportDidBecomeReady(_ transport: IOSNativeTransport) {
+    iosNativeHost?.refreshAuthorization()
+  }
+
+  func transportDidBecomeUnready(_ transport: IOSNativeTransport) {
   }
 
   override func applicationDidEnterBackground(_ application: UIApplication) {

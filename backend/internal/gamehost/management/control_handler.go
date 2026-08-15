@@ -29,11 +29,13 @@ type ReleaseResult struct {
 type TakeoverFunc func(ctx context.Context, runtimeID string) (TakeoverResult, error)
 type ReleaseFunc func(ctx context.Context, runtimeID string, targetMode string, expectedEpoch uint64) (ReleaseResult, error)
 type EmergencyStopFunc func(ctx context.Context, runtimeID string) (control.EmergencyStopResult, error)
+type RearmFunc func(ctx context.Context, runtimeID string) error
 
 type ControlHandler struct {
 	takeoverFn      TakeoverFunc
 	releaseFn       ReleaseFunc
 	emergencyStopFn EmergencyStopFunc
+	rearmFn         RearmFunc
 }
 
 func NewControlHandler(takeoverFn TakeoverFunc, releaseFn ReleaseFunc, emergencyStopFn EmergencyStopFunc) *ControlHandler {
@@ -41,6 +43,15 @@ func NewControlHandler(takeoverFn TakeoverFunc, releaseFn ReleaseFunc, emergency
 		takeoverFn:      takeoverFn,
 		releaseFn:       releaseFn,
 		emergencyStopFn: emergencyStopFn,
+	}
+}
+
+func NewControlHandlerWithRearm(takeoverFn TakeoverFunc, releaseFn ReleaseFunc, emergencyStopFn EmergencyStopFunc, rearmFn RearmFunc) *ControlHandler {
+	return &ControlHandler{
+		takeoverFn:      takeoverFn,
+		releaseFn:       releaseFn,
+		emergencyStopFn: emergencyStopFn,
+		rearmFn:         rearmFn,
 	}
 }
 
@@ -138,4 +149,24 @@ func (h *ControlHandler) EmergencyStop(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": result})
+}
+
+func (h *ControlHandler) Rearm(c *gin.Context) {
+	if h.rearmFn == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "rearm service unavailable"})
+		return
+	}
+
+	runtimeID := strings.TrimSpace(c.Param("runtimeId"))
+	if runtimeID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "runtimeId required"})
+		return
+	}
+
+	if err := h.rearmFn(c.Request.Context(), runtimeID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok"})
 }

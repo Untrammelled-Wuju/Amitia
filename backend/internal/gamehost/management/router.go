@@ -46,5 +46,6 @@ func RegisterGameCenterControlRouter(group *gin.RouterGroup, controlHandler *Con
 		gameCenter.POST("/runtimes/:runtimeId/takeover", controlHandler.Takeover)
 		gameCenter.POST("/runtimes/:runtimeId/release", controlHandler.Release)
 		gameCenter.POST("/runtimes/:runtimeId/emergency-stop", controlHandler.EmergencyStop)
+		gameCenter.POST("/runtimes/:runtimeId/rearm", controlHandler.Rearm)
 	}
 }

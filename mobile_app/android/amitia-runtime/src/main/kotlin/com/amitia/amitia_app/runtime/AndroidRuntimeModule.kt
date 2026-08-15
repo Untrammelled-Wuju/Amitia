@@ -7,9 +7,9 @@ import com.amitia.amitia_app.runtime.api.RuntimeModule
 import com.amitia.amitia_app.runtime.connection.internal.DefaultBackendConnectionProvider
 import com.amitia.amitia_app.runtime.install.ActiveRuntimeManager
 import com.amitia.amitia_app.runtime.install.ActiveRuntimeResult
+import com.amitia.amitia_app.runtime.install.DefaultInstalledRuntimeVerifier
 import com.amitia.amitia_app.runtime.install.RuntimeInstaller
 import com.amitia.amitia_app.runtime.install.internal.DefaultActiveRuntimeManager
-import com.amitia.amitia_app.runtime.install.internal.DefaultInstalledRuntimeVerifier
 import com.amitia.amitia_app.runtime.install.internal.DefaultPackageVerifier
 import com.amitia.amitia_app.runtime.install.internal.DefaultRuntimeHostLayout
 import com.amitia.amitia_app.runtime.install.internal.DefaultRuntimeInstaller
@@ -118,13 +118,15 @@ object AndroidRuntimeModule {
         )
         cachedRuntimeInstaller = installer
 
+        val treeHasher = com.amitia.amitia_app.runtime.manifest.internal.InstalledTreeHasher
+        val installedVerifier = DefaultInstalledRuntimeVerifier(treeHasher::computeTreeSha256)
+
         val bootstrapper = DefaultRuntimeBootstrapper(
             manifestStore = manifestStore,
             activeRuntimeManager = activeRuntimeManager,
             hostLayout = layout,
+            installedRuntimeVerifier = installedVerifier,
         )
-        val treeHasher = com.amitia.amitia_app.runtime.manifest.internal.InstalledTreeHasher
-        val installedVerifier = DefaultInstalledRuntimeVerifier(treeHasher::computeTreeSha256)
 
         val controller = DefaultRuntimeController(
             stateStore = stateStore,

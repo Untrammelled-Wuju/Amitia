@@ -172,8 +172,12 @@ type ControlServiceOptions struct {
 	TakeoverFn      TakeoverFunc
 	ReleaseFn       ReleaseFunc
 	EmergencyStopFn EmergencyStopFunc
+	RearmFn         RearmFunc
 }
 
 func NewControlHandlerFromFuncs(opts ControlServiceOptions) *ControlHandler {
+	if opts.RearmFn != nil {
+		return NewControlHandlerWithRearm(opts.TakeoverFn, opts.ReleaseFn, opts.EmergencyStopFn, opts.RearmFn)
+	}
 	return NewControlHandler(opts.TakeoverFn, opts.ReleaseFn, opts.EmergencyStopFn)
 }

@@ -23,9 +23,9 @@ echo "Runtime Version: $RUNTIME_VERSION"
 echo "Package Format:  $PACKAGE_FORMAT_VERSION"
 echo "============================================"
 
-REQUIRED_RECORDS=("node" "rootfs")
+REQUIRED_RECORDS=("node" "rootfs" "backend" "qdrant" "plugin-host" "task-host")
 for component in "${REQUIRED_RECORDS[@]}"; do
-    RECORD_PATH="$Runtime_ROOT/build/out/$component/linux-arm64/$component-build-record.json"
+    RECORD_PATH="$RUNTIME_ROOT/build/out/$component/linux-arm64/$component-build-record.json"
     if [[ ! -f "$RECORD_PATH" ]]; then
         echo "[FATAL] Missing build record for $component : $RECORD_PATH" >&2
         echo "[FATAL] All frozen input build records are required. Cannot auto-build missing components." >&2
@@ -63,6 +63,18 @@ if [[ ! -f "$ROOTFS_TAR" ]]; then
 fi
 echo "[INPUT] Rootfs archive: $ROOTFS_TAR"
 
+BACKEND_TAR="$RUNTIME_ROOT/build/out/backend/linux-arm64/amitia-backend-linux-arm64.tar.xz"
+if [[ ! -f "$BACKEND_TAR" ]]; then
+    echo "[FATAL] Backend frozen archive not found." >&2
+    exit 1
+fi
+
+QDRANT_TAR="$RUNTIME_ROOT/build/out/qdrant/linux-arm64/qdrant-linux-arm64.tar.xz"
+if [[ ! -f "$QDRANT_TAR" ]]; then
+    echo "[FATAL] Qdrant frozen archive not found." >&2
+    exit 1
+fi
+
 mkdir -p "$OUTPUT_DIR"
 
 BUILD_ID="$(date +%Y%m%d%H%M%S)-$$"
@@ -74,9 +86,12 @@ trap 'rm -rf "$STAGING_PATH"' EXIT
 
 PAYLOAD_DIR="$STAGING_PATH/payload"
 METADATA_DIR="$STAGING_PATH/metadata"
-mkdir -p "$PAYLOAD_DIR/program" "$PAYLOAD_DIR/rootfs" "$METADATA_DIR/component-build-records"
+mkdir -p "$PAYLOAD_DIR/runtime" "$PAYLOAD_DIR/rootfs" "$METADATA_DIR/component-build-records"
 
-cp -a "$NODE_ARTIFACTS" "$PAYLOAD_DIR/program/node"
+cp -a "$NODE_ARTIFACTS" "$PAYLOAD_DIR/runtime/node"
+cp "$BACKEND_TAR" "$PAYLOAD_DIR/runtime/backend.tar.xz"
+cp "$QDRANT_TAR" "$PAYLOAD_DIR/runtime/qdrant.tar.xz"
+cp "$ROOTFS_TAR" "$PAYLOAD_DIR/rootfs/rootfs.tar"
 cp "$NODE_FILES_SHA" "$METADATA_DIR/component-build-records/node-files.sha256"
 
 for component in "${REQUIRED_RECORDS[@]}"; do
@@ -86,9 +101,7 @@ for component in "${REQUIRED_RECORDS[@]}"; do
     fi
 done
 
-TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
-cat > "$METADATA_DIR/package-manifest.json" << MANIFESTEOF
+cat > "$METADATA_DIR/package-index.json" << MANIFESTEOF
 {
   "schemaVersion": 1,
   "runtimeVersion": "$RUNTIME_VERSION",
@@ -96,7 +109,6 @@ cat > "$METADATA_DIR/package-manifest.json" << MANIFESTEOF
   "guestOs": "linux",
   "guestArchitecture": "arm64",
   "buildMode": "release",
-  "createdAt": "$TIMESTAMP",
   "components": {
     "node": {
       "version": "$NODE_VERSION",
@@ -106,12 +118,25 @@ cat > "$METADATA_DIR/package-manifest.json" << MANIFESTEOF
 }
 MANIFESTEOF
 
+cat > "$METADATA_DIR/component-lock.json" << LOCKEOF
+{
+  "schemaVersion": 1,
+  "runtimeVersion": "$RUNTIME_VERSION",
+  "requiredComponents": ["backend", "node", "qdrant", "rootfs", "plugin-host", "task-host"]
+}
+LOCKEOF
+
+PAYLOAD_SHA=$( (cd "$PAYLOAD_DIR" && find . -type f | sort | xargs sha256sum) | sha256sum | awk '{print $1}' )
+echo "[VERIFY] Payload tree SHA: $PAYLOAD_SHA"
+
+(cd "$PAYLOAD_DIR" && find . -type f | sort | xargs sha256sum) > "$METADATA_DIR/SHA256SUMS"
+
 PACKAGE_FILE_NAME="amitia-runtime-${RUNTIME_VERSION}-linux-arm64.zip"
 PACKAGE_PATH="$OUTPUT_DIR/$PACKAGE_FILE_NAME"
 TEMP_PACKAGE_PATH="$PACKAGE_PATH.tmp.$$"
 
 echo "[PACK] creating package archive..."
-(cd "$STAGING_PATH" && zip -rq "$TEMP_PACKAGE_PATH" .)
+(cd "$STAGING_PATH" && find . -type f | sort | zip -q -@ "$TEMP_PACKAGE_PATH")
 
 PACKAGE_SHA=$(sha256sum "$TEMP_PACKAGE_PATH" | awk '{print $1}')
 PACKAGE_SIZE=$(stat -c %s "$TEMP_PACKAGE_PATH" 2>/dev/null || stat -f %z "$TEMP_PACKAGE_PATH" 2>/dev/null || wc -c < "$TEMP_PACKAGE_PATH")
@@ -122,6 +147,8 @@ mv "$TEMP_PACKAGE_PATH" "$PACKAGE_PATH"
 echo "[PACK] Package created: $PACKAGE_PATH"
 echo "[PACK] SHA256: $PACKAGE_SHA"
 echo "[PACK] Size: $PACKAGE_SIZE bytes"
+
+TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 cat > "$OUTPUT_DIR/runtime-package-build-record.json" << RECORDEOF
 {

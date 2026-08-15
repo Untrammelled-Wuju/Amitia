@@ -5,12 +5,20 @@ import (
 	"fmt"
 
 	kerneldomain "github.com/u-ai/backend/internal/extension/kernel/domain"
+	kernelsecret "github.com/u-ai/backend/internal/extension/kernel/secret"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	ghdomain "github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/integration/service_definition"
 	"github.com/u-ai/backend/internal/gamehost/registry"
 	ghruntime "github.com/u-ai/backend/internal/gamehost/runtime"
+	gamehostsecret "github.com/u-ai/backend/internal/gamehost/secret"
 )
+
+type StartupSecretManifestRegistrar interface {
+	RegisterStartupManifest(runtimeID, serviceID string, startup []gamehostsecret.ServiceSecretManifest)
+	UnregisterStartupManifest(runtimeID, serviceID string)
+	RemoveRuntimeStartupManifests(runtimeID string)
+}
 
 type RuntimeGraphProvisioner struct {
 	source           KernelContributionSource
@@ -20,6 +28,7 @@ type RuntimeGraphProvisioner struct {
 	topologyStore    *ghruntime.TopologyStore
 	supervisor       *trusted_service.ProcessSupervisor
 	definitionMapper *service_definition.DefinitionMapper
+	secretRegistrar  StartupSecretManifestRegistrar
 }
 
 type RuntimeGraphProvisionerOptions struct {
@@ -30,6 +39,7 @@ type RuntimeGraphProvisionerOptions struct {
 	TopologyStore    *ghruntime.TopologyStore
 	Supervisor       *trusted_service.ProcessSupervisor
 	DefinitionMapper *service_definition.DefinitionMapper
+	SecretRegistrar  StartupSecretManifestRegistrar
 }
 
 func NewRuntimeGraphProvisioner(opts RuntimeGraphProvisionerOptions) (*RuntimeGraphProvisioner, error) {
@@ -62,6 +72,7 @@ func NewRuntimeGraphProvisioner(opts RuntimeGraphProvisionerOptions) (*RuntimeGr
 		topologyStore:    opts.TopologyStore,
 		supervisor:       opts.Supervisor,
 		definitionMapper: opts.DefinitionMapper,
+		secretRegistrar:  opts.SecretRegistrar,
 	}, nil
 }
 
@@ -139,7 +150,42 @@ func (p *RuntimeGraphProvisioner) reconcilePlugin(ctx context.Context, kp Kernel
 		return fmt.Errorf("bind runtime module: %w", err)
 	}
 
+	if p.secretRegistrar != nil {
+		manifest := p.extractSecretManifest(kp)
+		p.secretRegistrar.RegisterStartupManifest(string(runtime.ID), string(bootServiceID), manifest)
+	}
+
 	return nil
+}
+
+func (p *RuntimeGraphProvisioner) extractSecretManifest(kp KernelGamePlugin) []gamehostsecret.ServiceSecretManifest {
+	rawSecrets, ok := kp.Contribution.Definition["secrets"]
+	if !ok || rawSecrets == nil {
+		return nil
+	}
+	arr, ok := rawSecrets.([]any)
+	if !ok {
+		return nil
+	}
+	var manifests []gamehostsecret.ServiceSecretManifest
+	for _, item := range arr {
+		m, ok := item.(map[string]any)
+		if !ok {
+			continue
+		}
+		ref, _ := m["ref"].(string)
+		if ref == "" {
+			continue
+		}
+		purpose, _ := m["purpose"].(string)
+		required, _ := m["required"].(bool)
+		manifests = append(manifests, gamehostsecret.ServiceSecretManifest{
+			Ref:      kernelsecret.SecretRef(ref),
+			Purpose:  gamehostsecret.Purpose(purpose),
+			Required: required,
+		})
+	}
+	return manifests
 }
 
 type bootServiceInfo struct {

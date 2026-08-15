@@ -256,7 +256,9 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		Manager: controlManager,
 		Audit:   auditSink,
 	})
-	if err := control.NewControlHandler(pluginOutputGate, controlSinkRegistry).RegisterHandlers(hostHandlers); err != nil {
+
+	effectSinkFactory := integration.NewProtocolControlEffectSinkFactory(connReg, controlPlane)
+	if err := control.NewControlHandlerWithEffectFactory(pluginOutputGate, controlSinkRegistry, effectSinkFactory).RegisterHandlers(hostHandlers); err != nil {
 		return nil, fmt.Errorf("register control RPC handlers: %w", err)
 	}
 
@@ -275,6 +277,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 			TopologyStore:    topologyStore,
 			Supervisor:       opts.TrustedSupervisor,
 			DefinitionMapper: service_definition.NewDefinitionMapper(),
+			SecretRegistrar:  secretLifecycle,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("compose runtime graph provisioner: %w", err)
@@ -317,7 +320,8 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		}
 	}
 
-	emergencyIntentStore := integration.NewInMemoryEmergencyIntentStore()
+	baseEmergencyStore := integration.NewInMemoryEmergencyIntentStore()
+	emergencyIntentStore := integration.NewManagerEmergencyLatchBridge(runtimeManager, baseEmergencyStore)
 	emergencyRuntimeAdapter := integration.NewEmergencyRuntimeAdapter(runtimeExecutor, runtimeManager)
 	emergencyRPCAdapter := integration.NewEmergencyRPCAdapter(rpcLifecycle.Registry())
 	emergencyConnectionAdapter := integration.NewEmergencyConnectionAdapter(connReg, controlPlane)

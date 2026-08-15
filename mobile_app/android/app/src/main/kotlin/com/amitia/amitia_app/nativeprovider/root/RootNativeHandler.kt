@@ -119,14 +119,21 @@ internal class RootNativeHandler(
             if (workDir != null) {
                 processBuilder.directory(File(workDir))
             }
-            processBuilder.redirectErrorStream(true)
 
             val process = processBuilder.start()
-            val output = process.inputStream.bufferedReader().readText()
+
+            val stdoutReader = process.inputStream.bufferedReader()
+            val stderrReader = process.errorStream.bufferedReader()
+
+            val stdoutBuilder = StringBuilder()
+            val stderrBuilder = StringBuilder()
+            val maxOutputBytes = 1024 * 1024
 
             val completed = process.waitFor(timeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)
             if (!completed) {
                 process.destroyForcibly()
+                stdoutReader.close()
+                stderrReader.close()
                 return NativeBridgeResponse(
                     protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
                     requestId = request.requestId,
@@ -138,6 +145,24 @@ internal class RootNativeHandler(
                 )
             }
 
+            var stdoutBytes = 0
+            var stderrBytes = 0
+            while (true) {
+                val line = stdoutReader.readLine() ?: break
+                if (stdoutBytes + line.length > maxOutputBytes) break
+                stdoutBuilder.appendLine(line)
+                stdoutBytes += line.length + 1
+            }
+            while (true) {
+                val line = stderrReader.readLine() ?: break
+                if (stderrBytes + line.length > maxOutputBytes) break
+                stderrBuilder.appendLine(line)
+                stderrBytes += line.length + 1
+            }
+
+            stdoutReader.close()
+            stderrReader.close()
+
             val exitCode = process.exitValue()
             NativeBridgeResponse(
                 protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
@@ -145,7 +170,10 @@ internal class RootNativeHandler(
                 status = if (exitCode == 0) NativeBridgeProtocol.STATUS_SUCCESS else NativeBridgeProtocol.STATUS_ERROR,
                 result = mapOf(
                     "exitCode" to exitCode,
-                    "output" to output,
+                    "exitCodeAvailable" to true,
+                    "stdout" to stdoutBuilder.toString(),
+                    "stderr" to stderrBuilder.toString(),
+                    "timedOut" to false,
                     "completed" to true,
                 ),
             )
@@ -171,27 +199,65 @@ internal class RootNativeHandler(
             }
         }
 
-        if (suPath != null) {
+        if (suPath == null) {
             return RootCapabilityState(
                 supported = true,
-                frameworkDetected = "su",
-                authorizationState = "authorized",
-                suAvailable = true,
+                frameworkDetected = null,
+                authorizationState = "not_available",
+                suAvailable = false,
                 userActionRequired = false,
-                state = "available",
-                reason = "su binary detected at $suPath",
+                state = "not_available",
+                reason = "no su binary detected",
             )
         }
 
+        val authorized = probeRootAuthorization()
+        val framework = detectRootFramework()
+
         return RootCapabilityState(
             supported = true,
-            frameworkDetected = null,
-            authorizationState = "unavailable",
-            suAvailable = false,
-            userActionRequired = true,
-            state = "unavailable",
-            reason = "no su binary detected",
+            frameworkDetected = framework,
+            authorizationState = if (authorized) "authorized" else "required",
+            suAvailable = authorized,
+            userActionRequired = !authorized,
+            state = if (authorized) "authorized" else "required",
+            reason = if (authorized) "root access verified" else "su binary detected at $suPath but authorization not granted",
         )
+    }
+
+    private fun probeRootAuthorization(): Boolean {
+        return try {
+            val process = ProcessBuilder("su", "-c", "id")
+                .redirectErrorStream(true)
+                .start()
+            val completed = process.waitFor(5, java.util.concurrent.TimeUnit.SECONDS)
+            if (!completed) {
+                process.destroyForcibly()
+                return false
+            }
+            val output = process.inputStream.bufferedReader().readText()
+            process.exitValue() == 0 && output.contains("uid=0")
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    private fun detectRootFramework(): String? {
+        val magiskPaths = listOf("/data/adb/magisk", "/sbin/.magisk")
+        val kernelSUPaths = listOf("/data/adb/kernelsu", "/data/adb/ksu")
+        val aPatchPaths = listOf("/data/adb/apatch", "/data/adb/ap")
+
+        for (path in magiskPaths) {
+            if (File(path).exists()) return "Magisk"
+        }
+        for (path in kernelSUPaths) {
+            if (File(path).exists()) return "KernelSU"
+        }
+        for (path in aPatchPaths) {
+            if (File(path).exists()) return "APatch"
+        }
+        if (suPaths.any { File(it).exists() }) return "generic-su"
+        return null
     }
 
     private fun unsupportedOperation(request: NativeBridgeRequest): NativeBridgeResponse {

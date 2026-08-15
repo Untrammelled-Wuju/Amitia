@@ -3,10 +3,12 @@ package com.amitia.amitia_app.runtime.internal
 import com.amitia.amitia_app.runtime.api.RuntimeState
 import com.amitia.amitia_app.runtime.install.ActiveRuntimeManager
 import com.amitia.amitia_app.runtime.install.ActiveRuntimeResult
+import com.amitia.amitia_app.runtime.install.InstalledRuntimeVerifier
 import com.amitia.amitia_app.runtime.install.RuntimeHostLayout
 import com.amitia.amitia_app.runtime.manifest.RuntimeManifestErrorCode
 import com.amitia.amitia_app.runtime.manifest.RuntimeManifestResult
 import com.amitia.amitia_app.runtime.manifest.RuntimeManifestStore
+import java.io.File
 
 internal sealed interface RuntimeBootstrapResult {
     data object NotInstalled : RuntimeBootstrapResult
@@ -29,13 +31,16 @@ internal enum class RuntimeBootstrapErrorCode {
     ACTIVE_VERSION_MISSING,
     INSTALLED_VERSION_MISSING,
     PROGRAM_ROOT_INVALID,
+    INSTALLED_RUNTIME_CORRUPT,
     PACKAGE_IDENTITY_MISMATCH,
+    RUNTIME_TREE_DRIFT,
 }
 
 internal class DefaultRuntimeBootstrapper(
     private val manifestStore: RuntimeManifestStore,
     private val activeRuntimeManager: ActiveRuntimeManager,
     private val hostLayout: RuntimeHostLayout,
+    private val installedRuntimeVerifier: InstalledRuntimeVerifier,
 ) : RuntimeBootstrapper {
 
     override fun bootstrap(): RuntimeBootstrapResult {
@@ -104,9 +109,25 @@ internal class DefaultRuntimeBootstrapper(
             )
         }
 
-        return RuntimeBootstrapResult.InstalledStopped(
-            runtimeVersion = manifest.runtimeVersion
-        )
+        return when (val verifyResult = installedRuntimeVerifier.verify(versionDir)) {
+            is com.amitia.amitia_app.runtime.install.InstalledRuntimeVerificationResult.Success ->
+                RuntimeBootstrapResult.InstalledStopped(
+                    runtimeVersion = manifest.runtimeVersion
+                )
+            is com.amitia.amitia_app.runtime.install.InstalledRuntimeVerificationResult.Failure ->
+                RuntimeBootstrapResult.Failed(
+                    code = mapVerifyFailureToErrorCode(verifyResult.code),
+                    message = verifyResult.message
+                )
+        }
+    }
+
+    private fun mapVerifyFailureToErrorCode(code: com.amitia.amitia_app.runtime.install.RuntimeInstallErrorCode): RuntimeBootstrapErrorCode {
+        return when (code) {
+            com.amitia.amitia_app.runtime.install.RuntimeInstallErrorCode.RUNTIME_VERIFY_FAILED ->
+                RuntimeBootstrapErrorCode.INSTALLED_RUNTIME_CORRUPT
+            else -> RuntimeBootstrapErrorCode.PROGRAM_ROOT_INVALID
+        }
     }
 }
 

@@ -61,13 +61,13 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         case "media.camera.devices":
             return handleCameraDevices(request)
         case "media.camera.capture_photo":
-            return await handleCameraCapturePhoto(request)
+            return handleCameraCapturePhoto(request)
         case "media.camera.record_video":
-            return await handleCameraRecordVideo(request)
+            return handleCameraRecordVideo(request)
         case "media.audio.status":
             return handleAudioStatus(request)
         case "media.audio.record":
-            return await handleAudioRecord(request)
+            return handleAudioRecord(request)
         default:
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
@@ -237,8 +237,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
             )
         }
 
-        let asset = PHAsset.fetchAssets(withLocalIdentifiers: [localId], options: nil).firstObject
-        guard let asset = asset else {
+        guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [localId], options: nil).firstObject else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
@@ -248,60 +247,88 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
             )
         }
 
-        let imageManager = PHImageManager.default()
-        let targetSize = CGSize(width: asset.pixelWidth, height: asset.pixelHeight)
-        let options = PHImageRequestOptions()
-        options.isSynchronous = false
-        options.deliveryMode = .highQualityFormat
-        options.isNetworkAccessAllowed = true
-
-        return await withCheckedContinuation { continuation in
-            imageManager.requestImage(for: asset, targetSize: targetSize, contentMode: .aspectFit, options: options) { image, info in
-                if let image = image, let data = image.jpegData(compressionQuality: 0.9) {
-                    continuation.resume(returning: IOSNativeResponse(
-                        protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
-                        status: "ok",
-                        result: ["photo": data, "localIdentifier": localId],
-                        error: nil
-                    ))
-                } else {
-                    continuation.resume(returning: IOSNativeResponse(
-                        protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
-                        status: "error",
-                        result: nil,
-                        error: IOSNativeError(code: "QUERY_FAILED", message: "failed to load image")
-                    ))
-                }
-            }
-        }
+        let representation = request.payload?["representation"] as? String ?? "current"
+        return await MediaStaging.exportAsset(asset: asset, representation: representation, localId: localId, request: request)
     }
 
     private func handlePhotosExport(_ request: IOSNativeRequest) async -> IOSNativeResponse {
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
-            status: "ok",
-            result: ["exported": true],
-            error: nil
-        )
+        guard let localId = request.payload?["localIdentifier"] as? String else {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing localIdentifier")
+            )
+        }
+
+        let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        guard status == .authorized || status == .limited else {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "PERMISSION_DENIED", message: "photo library access denied")
+            )
+        }
+
+        guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [localId], options: nil).firstObject else {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "NOT_FOUND", message: "photo not found: \(localId)")
+            )
+        }
+
+        let representation = request.payload?["representation"] as? String ?? "current"
+        return await MediaStaging.exportAsset(asset: asset, representation: representation, localId: localId, request: request)
     }
 
     private func handlePhotosSave(_ request: IOSNativeRequest) async -> IOSNativeResponse {
-        guard let imageData = request.payload?["imageData"] as? Data,
+        guard let resourceUri = request.payload?["resourceUri"] as? String else {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing resourceUri")
+            )
+        }
+
+        let fileURL = MediaStaging.urlForStagedResource(resourceUri)
+        guard fileURL != nil || resourceUri.hasPrefix("file://") else {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "resource not staged: \(resourceUri)")
+            )
+        }
+
+        let sourceURL: URL
+        if let staged = fileURL {
+            sourceURL = staged
+        } else {
+            sourceURL = URL(string: resourceUri)!
+        }
+
+        guard let imageData = try? Data(contentsOf: sourceURL),
               let image = UIImage(data: imageData) else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing or invalid image data")
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "failed to load image data from \(sourceURL.path)")
             )
         }
 
-        let status = PHPhotoLibrary.authorizationStatus(for: .readWrite)
-        if status == .notDetermined {
+        let authStatus = PHPhotoLibrary.authorizationStatus(for: .readWrite)
+        if authStatus == .notDetermined {
             let newStatus = await PHPhotoLibrary.requestAuthorization(for: .readWrite)
             if newStatus == .denied || newStatus == .restricted {
                 return IOSNativeResponse(
@@ -312,7 +339,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
                     error: IOSNativeError(code: "PERMISSION_DENIED", message: "photo library access denied")
                 )
             }
-        } else if status == .denied || status == .restricted {
+        } else if authStatus == .denied || authStatus == .restricted {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
@@ -327,6 +354,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
                 let creationRequest = PHAssetCreationRequest.forAsset()
                 creationRequest.addResource(with: .photo, data: imageData, options: nil)
             }
+            MediaStaging.deleteStagedResource(resourceUri)
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
@@ -450,20 +478,25 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         )
     }
 
-    private func handleCameraCapturePhoto(_ request: IOSNativeRequest) async -> IOSNativeResponse {
+    private func handleCameraCapturePhoto(_ request: IOSNativeRequest) -> IOSNativeResponse {
         let authStatus = AVCaptureDevice.authorizationStatus(for: .video)
+        var authorized = authStatus == .authorized
+
         if authStatus == .notDetermined {
-            let granted = await AVCaptureDevice.requestAccess(for: .video)
-            if !granted {
+            if #available(iOS 16.0, *) {
+                authorized = await AVCaptureDevice.requestAccess(for: .video)
+            } else {
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
                     requestID: request.requestID,
                     status: "error",
                     result: nil,
-                    error: IOSNativeError(code: "PERMISSION_DENIED", message: "camera access denied")
+                    error: IOSNativeError(code: "FOREGROUND_REQUIRED", message: "camera capture requires explicit user authorization prompt in foreground")
                 )
             }
-        } else if authStatus != .authorized {
+        }
+
+        if !authorized {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
@@ -476,19 +509,31 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
             requestID: request.requestID,
-            status: "ok",
-            result: ["captured": true, "requiresUI": true],
-            error: nil
+            status: "error",
+            result: nil,
+            error: IOSNativeError(code: "FOREGROUND_REQUIRED", message: "photo capture requires presenting system camera UI in foreground scene")
         )
     }
 
-    private func handleCameraRecordVideo(_ request: IOSNativeRequest) async -> IOSNativeResponse {
+    private func handleCameraRecordVideo(_ request: IOSNativeRequest) -> IOSNativeResponse {
         let videoAuth = AVCaptureDevice.authorizationStatus(for: .video)
-        let micAuth = AVCaptureDevice.authorizationStatus(for: .audio)
+        var videoAuthorized = videoAuth == .authorized
 
         if videoAuth == .notDetermined {
-            _ = await AVCaptureDevice.requestAccess(for: .video)
-        } else if videoAuth != .authorized {
+            if #available(iOS 16.0, *) {
+                videoAuthorized = await AVCaptureDevice.requestAccess(for: .video)
+            } else {
+                return IOSNativeResponse(
+                    protocolVersion: request.protocolVersion,
+                    requestID: request.requestID,
+                    status: "error",
+                    result: nil,
+                    error: IOSNativeError(code: "FOREGROUND_REQUIRED", message: "video recording requires explicit user authorization prompt in foreground")
+                )
+            }
+        }
+
+        if !videoAuthorized {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
@@ -498,16 +543,19 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
             )
         }
 
+        let micAuth = AVCaptureDevice.authorizationStatus(for: .audio)
         if micAuth == .notDetermined {
-            _ = await AVCaptureDevice.requestAccess(for: .audio)
+            if #available(iOS 16.0, *) {
+                _ = await AVCaptureDevice.requestAccess(for: .audio)
+            }
         }
 
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
             requestID: request.requestID,
-            status: "ok",
-            result: ["recording": true, "requiresUI": true],
-            error: nil
+            status: "error",
+            result: nil,
+            error: IOSNativeError(code: "FOREGROUND_REQUIRED", message: "video recording requires presenting system camera UI in foreground scene")
         )
     }
 
@@ -524,20 +572,25 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         )
     }
 
-    private func handleAudioRecord(_ request: IOSNativeRequest) async -> IOSNativeResponse {
+    private func handleAudioRecord(_ request: IOSNativeRequest) -> IOSNativeResponse {
         let authStatus = AVCaptureDevice.authorizationStatus(for: .audio)
+        var authorized = authStatus == .authorized
+
         if authStatus == .notDetermined {
-            let granted = await AVCaptureDevice.requestAccess(for: .audio)
-            if !granted {
+            if #available(iOS 16.0, *) {
+                authorized = await AVCaptureDevice.requestAccess(for: .audio)
+            } else {
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
                     requestID: request.requestID,
                     status: "error",
                     result: nil,
-                    error: IOSNativeError(code: "PERMISSION_DENIED", message: "microphone access denied")
+                    error: IOSNativeError(code: "FOREGROUND_REQUIRED", message: "audio recording requires explicit user authorization prompt in foreground")
                 )
             }
-        } else if authStatus != .authorized {
+        }
+
+        if !authorized {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
@@ -550,9 +603,9 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
             requestID: request.requestID,
-            status: "ok",
-            result: ["recording": true, "requiresUI": true],
-            error: nil
+            status: "error",
+            result: nil,
+            error: IOSNativeError(code: "FOREGROUND_REQUIRED", message: "audio recording requires presenting recording UI in foreground scene")
         )
     }
 }

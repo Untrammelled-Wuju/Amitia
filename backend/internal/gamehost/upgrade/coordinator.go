@@ -473,6 +473,18 @@ func (c *UpgradeCoordinator) discoverRuntimes(pluginIDs []domain.PluginID) ([]Ru
 }
 
 func (c *UpgradeCoordinator) quiesceRuntimes(ctx context.Context, snapshots []RuntimeUpgradeSnapshot) error {
+	committed := make([]domain.RuntimeInstanceID, 0, len(snapshots))
+	defer func() {
+		if len(committed) > 0 {
+			for _, rid := range committed {
+				intent, err := c.lifecycleIntents.GetLifecycleIntent(rid)
+				if err == nil && intent == "upgrade" {
+					_ = c.lifecycleIntents.SetLifecycleIntent(rid, "")
+				}
+			}
+		}
+	}()
+
 	for i := range snapshots {
 		snap := &snapshots[i]
 		rtInfo, err := c.runtimeManager.GetRuntime(snap.RuntimeID)
@@ -485,6 +497,7 @@ func (c *UpgradeCoordinator) quiesceRuntimes(ctx context.Context, snapshots []Ru
 		if err := c.lifecycleIntents.SetLifecycleIntent(snap.RuntimeID, "upgrade"); err != nil {
 			return fmt.Errorf("set upgrade intent for runtime %s: %w", snap.RuntimeID, err)
 		}
+		committed = append(committed, snap.RuntimeID)
 
 		if rtInfo.State == domain.RuntimeStateRunning || rtInfo.State == domain.RuntimeStateDegraded || rtInfo.State == domain.RuntimeStateSuspended {
 			if err := c.runtimeExecutor.StopRuntime(ctx, snap.RuntimeID); err != nil {
@@ -605,6 +618,12 @@ func (c *UpgradeCoordinator) rediscoverCurrentRuntimes(ctx context.Context, exte
 			currentSnap.WasSuspended = best.WasSuspended
 			currentSnap.PreUpgradeGeneration = best.PreUpgradeGeneration
 			usedRuntimeIDs[string(best.RuntimeID)] = true
+			if (currentSnap.WasRunning || currentSnap.WasSuspended) && currentSnap.RuntimeID != best.RuntimeID {
+				currentIntent, err := c.lifecycleIntents.GetLifecycleIntent(currentSnap.RuntimeID)
+				if err != nil || (currentIntent == "" || currentIntent == "upgrade") {
+					_ = c.lifecycleIntents.SetLifecycleIntent(currentSnap.RuntimeID, "upgrade")
+				}
+			}
 		}
 		eligible = append(eligible, currentSnap)
 	}

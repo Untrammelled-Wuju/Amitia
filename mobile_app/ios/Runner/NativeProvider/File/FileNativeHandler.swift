@@ -103,12 +103,12 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
 
             let delegate = DocumentPickerDelegate { result in
                 switch result {
-                case .success(let grantId):
+                case .success(let mountId):
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
                         requestID: request.requestID,
                         status: "ok",
-                        result: ["grantId": grantId, "picked": true],
+                        result: ["mountId": mountId, "picked": true],
                         error: nil
                     ))
                 case .failure(let error):
@@ -148,12 +148,12 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
 
                 let delegate = DocumentPickerDelegate { result in
                     switch result {
-                    case .success(let grantId):
+                    case .success(let mountId):
                         continuation.resume(returning: IOSNativeResponse(
                             protocolVersion: request.protocolVersion,
                             requestID: request.requestID,
                             status: "ok",
-                            result: ["grantId": grantId, "picked": true],
+                            result: ["mountId": mountId, "picked": true],
                             error: nil
                         ))
                     case .failure(let error):
@@ -183,42 +183,51 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleMountReauthorize(_ request: IOSNativeRequest) async -> IOSNativeResponse {
-        guard let grantId = request.payload?["grantId"] as? String else {
+        guard let mountId = request.payload?["mountId"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing grantId")
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing mountId")
             )
         }
-        let reauthorized = SecurityScopedBookmarkStore.shared.reauthorize(grantId: grantId)
+        let reauthorized = SecurityScopedBookmarkStore.shared.reauthorize(mountId: mountId)
+        if !reauthorized {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "REAUTHORIZE_FAILED", message: "failed to reauthorize mount: \(mountId)")
+            )
+        }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
             requestID: request.requestID,
             status: "ok",
-            result: ["reauthorized": reauthorized, "grantId": grantId],
+            result: ["reauthorized": reauthorized, "mountId": mountId],
             error: nil
         )
     }
 
     private func handleAccessStat(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        guard let grantId = request.payload?["grantId"] as? String else {
+        guard let mountId = request.payload?["mountId"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing grantId")
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing mountId")
             )
         }
-        guard let attributes = SecurityScopedBookmarkStore.shared.stat(grantId: grantId) else {
+        guard let attributes = SecurityScopedBookmarkStore.shared.stat(mountId: mountId) else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "NOT_FOUND", message: "file not found for grant: \(grantId)")
+                error: IOSNativeError(code: "NOT_FOUND", message: "file not found for mount: \(mountId)")
             )
         }
         return IOSNativeResponse(
@@ -231,22 +240,22 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleAccessList(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        guard let grantId = request.payload?["grantId"] as? String else {
+        guard let mountId = request.payload?["mountId"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing grantId")
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing mountId")
             )
         }
-        guard let items = SecurityScopedBookmarkStore.shared.list(grantId: grantId) else {
+        guard let items = SecurityScopedBookmarkStore.shared.list(mountId: mountId) else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "NOT_FOUND", message: "directory not found for grant: \(grantId)")
+                error: IOSNativeError(code: "NOT_FOUND", message: "directory not found for mount: \(mountId)")
             )
         }
         return IOSNativeResponse(
@@ -259,87 +268,116 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleAccessRead(_ request: IOSNativeRequest) async -> IOSNativeResponse {
-        guard let grantId = request.payload?["grantId"] as? String else {
+        guard let mountId = request.payload?["mountId"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing grantId")
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing mountId")
             )
         }
-        guard let data = SecurityScopedBookmarkStore.shared.read(grantId: grantId) else {
+        let offset = Int64(request.payload?["offset"] as? Int ?? 0)
+        let length = Int64(request.payload?["length"] as? Int ?? 0)
+        guard let data = SecurityScopedBookmarkStore.shared.read(mountId: mountId, offset: offset, length: length) else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "READ_FAILED", message: "failed to read file for grant: \(grantId)")
+                error: IOSNativeError(code: "READ_FAILED", message: "failed to read file for mount: \(mountId)")
             )
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
             requestID: request.requestID,
             status: "ok",
-            result: ["size": data.count, "grantId": grantId],
+            result: ["size": data.count, "mountId": mountId],
             error: nil
         )
     }
 
     private func handleAccessWrite(_ request: IOSNativeRequest) async -> IOSNativeResponse {
-        guard let grantId = request.payload?["grantId"] as? String else {
+        guard let mountId = request.payload?["mountId"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing grantId")
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing mountId")
             )
         }
         let data = request.payload?["data"] as? Data ?? Data()
-        let success = SecurityScopedBookmarkStore.shared.write(grantId: grantId, data: data)
+        let offset = Int64(request.payload?["offset"] as? Int ?? 0)
+        let success = SecurityScopedBookmarkStore.shared.write(mountId: mountId, data: data, offset: offset)
+        if !success {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "WRITE_FAILED", message: "failed to write file for mount: \(mountId)")
+            )
+        }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
             requestID: request.requestID,
             status: "ok",
-            result: ["written": success, "grantId": grantId],
+            result: ["written": success, "mountId": mountId],
             error: nil
         )
     }
 
     private func handleAccessMkdir(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        guard let grantId = request.payload?["grantId"] as? String,
+        guard let mountId = request.payload?["mountId"] as? String,
               let name = request.payload?["name"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing grantId or name")
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing mountId or name")
             )
         }
-        let newGrantId = SecurityScopedBookmarkStore.shared.mkdir(parentGrantId: grantId, name: name)
+        guard let newMountId = SecurityScopedBookmarkStore.shared.mkdir(parentMountId: mountId, name: name) else {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "MKDIR_FAILED", message: "failed to create directory")
+            )
+        }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
             requestID: request.requestID,
             status: "ok",
-            result: ["grantId": newGrantId ?? ""],
+            result: ["mountId": newMountId],
             error: nil
         )
     }
 
     private func handleAccessRename(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        guard let grantId = request.payload?["grantId"] as? String,
+        guard let mountId = request.payload?["mountId"] as? String,
               let newName = request.payload?["newName"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing grantId or newName")
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing mountId or newName")
             )
         }
-        let success = SecurityScopedBookmarkStore.shared.rename(grantId: grantId, newName: newName)
+        let success = SecurityScopedBookmarkStore.shared.rename(mountId: mountId, newName: newName)
+        if !success {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "RENAME_FAILED", message: "failed to rename")
+            )
+        }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
             requestID: request.requestID,
@@ -350,17 +388,26 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleAccessMove(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        guard let sourceGrantId = request.payload?["sourceGrantId"] as? String,
-              let destGrantId = request.payload?["destGrantId"] as? String else {
+        guard let sourceMountId = request.payload?["sourceMountId"] as? String,
+              let destMountId = request.payload?["destMountId"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing sourceGrantId or destGrantId")
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing sourceMountId or destMountId")
             )
         }
-        let success = SecurityScopedBookmarkStore.shared.move(sourceGrantId: sourceGrantId, destGrantId: destGrantId)
+        let success = SecurityScopedBookmarkStore.shared.move(sourceMountId: sourceMountId, destMountId: destMountId)
+        if !success {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "MOVE_FAILED", message: "failed to move")
+            )
+        }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
             requestID: request.requestID,
@@ -371,37 +418,54 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleAccessCopy(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        guard let sourceGrantId = request.payload?["sourceGrantId"] as? String,
-              let destGrantId = request.payload?["destGrantId"] as? String else {
+        guard let sourceMountId = request.payload?["sourceMountId"] as? String,
+              let destMountId = request.payload?["destMountId"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing sourceGrantId or destGrantId")
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing sourceMountId or destMountId")
             )
         }
-        let newGrantId = SecurityScopedBookmarkStore.shared.copy(sourceGrantId: sourceGrantId, destGrantId: destGrantId)
+        guard let newMountId = SecurityScopedBookmarkStore.shared.copy(sourceMountId: sourceMountId, destMountId: destMountId) else {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "COPY_FAILED", message: "failed to copy")
+            )
+        }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
             requestID: request.requestID,
             status: "ok",
-            result: ["grantId": newGrantId ?? ""],
+            result: ["mountId": newMountId],
             error: nil
         )
     }
 
     private func handleAccessDelete(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        guard let grantId = request.payload?["grantId"] as? String else {
+        guard let mountId = request.payload?["mountId"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing grantId")
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing mountId")
             )
         }
-        let success = SecurityScopedBookmarkStore.shared.delete(grantId: grantId)
+        let success = SecurityScopedBookmarkStore.shared.delete(mountId: mountId)
+        if !success {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "DELETE_FAILED", message: "failed to delete")
+            )
+        }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
             requestID: request.requestID,
@@ -412,13 +476,67 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleExport(_ request: IOSNativeRequest) async -> IOSNativeResponse {
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
-            status: "ok",
-            result: ["exported": true],
-            error: nil
-        )
+        guard let mountId = request.payload?["mountId"] as? String else {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing mountId")
+            )
+        }
+        guard let url = SecurityScopedBookmarkStore.shared.resolve(identifier: mountId) else {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "NOT_FOUND", message: "mount not found: \(mountId)")
+            )
+        }
+
+        guard let scene = UIApplication.shared.connectedScenes.first as? UIWindowScene,
+              let window = scene.windows.first,
+              let rootViewController = window.rootViewController else {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "FOREGROUND_REQUIRED", message: "No active foreground UIWindowScene for export")
+            )
+        }
+
+        return await withCheckedContinuation { continuation in
+            let documentPicker = UIDocumentPickerViewController(forExporting: [url], asCopy: true)
+            documentPicker.allowsMultipleSelection = false
+
+            let delegate = ExportPickerDelegate { result in
+                switch result {
+                case .success:
+                    continuation.resume(returning: IOSNativeResponse(
+                        protocolVersion: request.protocolVersion,
+                        requestID: request.requestID,
+                        status: "ok",
+                        result: ["exported": true, "mountId": mountId],
+                        error: nil
+                    ))
+                case .failure(let error):
+                    continuation.resume(returning: IOSNativeResponse(
+                        protocolVersion: request.protocolVersion,
+                        requestID: request.requestID,
+                        status: "error",
+                        result: nil,
+                        error: IOSNativeError(code: "EXPORT_FAILED", message: error)
+                    ))
+                }
+            }
+
+            documentPicker.delegate = delegate
+            objc_setAssociatedObject(documentPicker, &exportDelegateKey, delegate, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
+
+            rootViewController.present(documentPicker, animated: true)
+        }
     }
 
     private func handleMountGet(_ request: IOSNativeRequest) -> IOSNativeResponse {
@@ -492,6 +610,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
 }
 
 private var delegateKey: UInt8 = 0
+private var exportDelegateKey: UInt8 = 0
 
 private class DocumentPickerDelegate: NSObject, UIDocumentPickerDelegate {
     private let completion: (Result<String, String>) -> Void
@@ -507,11 +626,28 @@ private class DocumentPickerDelegate: NSObject, UIDocumentPickerDelegate {
             return
         }
         do {
-            let grantId = try SecurityScopedBookmarkStore.shared.createBookmark(for: url)
-            completion(.success(grantId))
+            let mountId = try SecurityScopedBookmarkStore.shared.createBookmark(for: url)
+            completion(.success(mountId))
         } catch {
             completion(.failure(error.localizedDescription))
         }
+    }
+
+    func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        completion(.failure("user cancelled"))
+    }
+}
+
+private class ExportPickerDelegate: NSObject, UIDocumentPickerDelegate {
+    private let completion: (Result<Void, String>) -> Void
+
+    init(completion: @escaping (Result<Void, String>) -> Void) {
+        self.completion = completion
+        super.init()
+    }
+
+    func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        completion(.success(()))
     }
 
     func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {

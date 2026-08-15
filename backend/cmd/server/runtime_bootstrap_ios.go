@@ -45,6 +45,19 @@ func (b *runtimeBootstrap) registerProviderFactoriesIOS() error {
 	return nil
 }
 
+func (b *runtimeBootstrap) buildIOSNativeBridge() nativebridge.Bridge {
+	bridge := nativebridge.NewIOSBridge()
+	b.SetIOSNativeBridge(bridge)
+	return bridge
+}
+
+func (b *runtimeBootstrap) IOSNativeBridge() nativebridge.Bridge {
+	if b == nil {
+		return nil
+	}
+	return b.iosNativeBridge
+}
+
 func (b *runtimeBootstrap) SetIOSNativeBridge(bridge nativebridge.Bridge) error {
 	if b == nil {
 		return nil

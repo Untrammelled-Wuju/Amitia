@@ -7,7 +7,7 @@ public class CoordinatedFileAccess: NSObject {
         super.init()
     }
 
-    public func read(from url: URL, completion: @escaping (Data?, Error?) -> Void) {
+    public func read(from url: URL, offset: Int64 = 0, length: Int64 = 0, completion: @escaping (Data?, Error?) -> Void) {
         let coordinator = NSFileCoordinator(filePresenter: nil)
         var coordinatorError: NSError?
         var readError: NSError?
@@ -15,7 +15,16 @@ public class CoordinatedFileAccess: NSObject {
 
         coordinator.coordinate(readingItemAt: url, options: .withoutChanges, error: &coordinatorError) { url in
             do {
-                resultData = try Data(contentsOf: url)
+                let handle = try FileHandle(forReadingFrom: url)
+                if offset > 0 {
+                    handle.seek(toOffset: UInt64(offset))
+                }
+                if length > 0 {
+                    resultData = handle.readData(ofLength: Int(length))
+                } else {
+                    resultData = handle.readDataToEndOfFile()
+                }
+                handle.closeFile()
             } catch {
                 readError = error as NSError
             }
@@ -28,16 +37,29 @@ public class CoordinatedFileAccess: NSObject {
         }
     }
 
-    public func write(_ data: Data, to url: URL, completion: @escaping (Bool, Error?) -> Void) {
+    public func write(_ data: Data, to url: URL, offset: Int64 = 0, completion: @escaping (Bool, Error?) -> Void) {
         let coordinator = NSFileCoordinator(filePresenter: nil)
         var coordinatorError: NSError?
         var writeError: NSError?
 
         coordinator.coordinate(writingItemAt: url, options: .forReplacing, error: &coordinatorError) { url in
             do {
-                try data.write(to: url, options: .atomic)
+                let handle = try FileHandle(forWritingTo: url)
+                if offset > 0 {
+                    handle.seek(toOffset: UInt64(offset))
+                }
+                handle.write(data)
+                handle.closeFile()
             } catch {
-                writeError = error as NSError
+                if offset == 0 {
+                    do {
+                        try data.write(to: url, options: .atomic)
+                    } catch {
+                        writeError = error as NSError
+                    }
+                } else {
+                    writeError = error as NSError
+                }
             }
         }
 

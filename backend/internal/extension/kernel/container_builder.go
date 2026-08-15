@@ -1264,6 +1264,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		DataRoot:          b.extRoot,
 		KernelSource:      kernelSource,
 		TrustedSupervisor: trustedSupervisor,
+		EventService:      eventSvc,
 		HostAPIGateway:    hostAPIGateway,
 		SecretBroker:      kernelSecretBroker,
 		PermissionBroker:  permBroker,

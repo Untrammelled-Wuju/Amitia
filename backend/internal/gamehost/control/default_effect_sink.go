@@ -2,10 +2,13 @@ package control
 
 import (
 	"context"
+	"errors"
 	"log"
 
 	"github.com/u-ai/backend/internal/gamehost/domain"
 )
+
+var ErrEffectSinkUnavailable = errors.New("effect sink unavailable: no commit function registered")
 
 type DefaultControlEffectSink struct {
 	runtimeID domain.RuntimeInstanceID
@@ -24,11 +27,10 @@ func NewDefaultControlEffectSink(runtimeID domain.RuntimeInstanceID, pluginID do
 }
 
 func (s *DefaultControlEffectSink) ExecuteAuthorized(ctx context.Context, runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID, pluginID domain.PluginID, permit OutputPermit, payload []byte) error {
-	if s.commitFn != nil {
-		return s.commitFn(ctx, runtimeID, serviceID, pluginID, payload)
+	if s.commitFn == nil {
+		return ErrEffectSinkUnavailable
 	}
-	log.Printf("[default-effect-sink] output authorized: runtime=%s service=%s plugin=%s sink=%s", runtimeID, serviceID, pluginID, s.sinkID)
-	return nil
+	return s.commitFn(ctx, runtimeID, serviceID, pluginID, payload)
 }
 
 func ExtractControlEffectSink(sink ControlEffectSink) (*DefaultControlEffectSink, bool) {

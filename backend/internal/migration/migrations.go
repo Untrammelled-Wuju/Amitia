@@ -156,5 +156,21 @@ func DefaultMigrations() []Migration {
 		MemoryTimeQueryIndexesMigration(),
 		MemorySummaryConsolidationMigration(),
 		ProductionCutoverMigration(),
+		TaskRunPauseColumnsMigration(),
+	}
+}
+
+func TaskRunPauseColumnsMigration() Migration {
+	return Migration{
+		Version: "20260815001",
+		Name:    "add_task_run_pause_and_updated_columns",
+		Up: func(s *Step) error {
+			s.AddColumn("extension_task_runs", "updated_at", "DATETIME NOT NULL DEFAULT (datetime('now'))")
+			s.AddColumn("extension_task_runs", "pause_reason", "TEXT")
+			s.AddColumn("extension_task_runs", "pause_requested_at", "DATETIME")
+			s.AddColumn("extension_task_runs", "paused_at", "DATETIME")
+			s.AddColumn("extension_task_runs", "resumed_at", "DATETIME")
+			return nil
+		},
 	}
 }

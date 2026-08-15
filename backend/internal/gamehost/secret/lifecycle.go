@@ -30,6 +30,22 @@ func (o *LifecycleOrchestrator) RegisterStartupManifest(runtimeID, serviceID str
 	o.startupManifests[runtimeStartupKey{runtimeID: runtimeID, serviceID: serviceID}] = startup
 }
 
+func (o *LifecycleOrchestrator) UnregisterStartupManifest(runtimeID, serviceID string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	delete(o.startupManifests, runtimeStartupKey{runtimeID: runtimeID, serviceID: serviceID})
+}
+
+func (o *LifecycleOrchestrator) RemoveRuntimeStartupManifests(runtimeID string) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	for key := range o.startupManifests {
+		if key.runtimeID == runtimeID {
+			delete(o.startupManifests, key)
+		}
+	}
+}
+
 func (o *LifecycleOrchestrator) PrepareServiceStart(ctx context.Context, execCtx runtime.ServiceExecutionContext) (string, error) {
 	leases := o.adapter.ActiveServiceLeases(string(execCtx.RuntimeID), string(execCtx.ServiceID))
 	for _, leaseID := range leases {

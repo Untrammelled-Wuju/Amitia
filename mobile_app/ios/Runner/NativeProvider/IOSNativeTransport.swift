@@ -10,6 +10,7 @@ import Foundation
     private weak var delegate: IOSNativeTransportDelegate?
     private var host: IOSNativeHost?
     private var isReady: Bool = false
+    private var transportGeneration: UInt64 = 0
     private let queue = DispatchQueue(label: "com.amitia.iosnative.transport")
 
     public init(host: IOSNativeHost, delegate: IOSNativeTransportDelegate?) {
@@ -59,8 +60,16 @@ import Foundation
         return queue.sync { isReady }
     }
 
+    public var currentGeneration: UInt64 {
+        return queue.sync { transportGeneration }
+    }
+
     private func performHandshake() {
-        guard let host = host else { return }
+        guard let host = host else {
+            isReady = false
+            delegate?.transportDidBecomeUnready(self)
+            return
+        }
 
         let handshake = host.handshake()
         guard let platform = handshake["platform"] as? String, platform == "ios" else {
@@ -75,7 +84,19 @@ import Foundation
             return
         }
 
-        isReady = true
+        queue.async(flags: .barrier) { [weak self] in
+            self?.isReady = true
+            self?.transportGeneration += 1
+        }
         delegate?.transportDidBecomeReady(self)
+    }
+
+    public func reconnect() {
+        queue.async { [weak self] in
+            guard let self = self else { return }
+            self.isReady = false
+            self.host?.invalidateTransientRefs()
+            self.performHandshake()
+        }
     }
 }

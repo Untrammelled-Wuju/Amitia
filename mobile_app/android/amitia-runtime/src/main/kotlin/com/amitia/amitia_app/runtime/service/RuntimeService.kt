@@ -34,9 +34,18 @@ class RuntimeService : Service() {
         STARTUP_FAILURE_CLEANUP,
     }
 
+    private data class StartupFailureCleanupContext(
+        val generation: Long,
+        val startId: Int,
+        val cause: RuntimeServiceTerminationCause,
+        val message: String,
+        var processConfirmedDead: Boolean = false,
+    )
+
     private data class ServiceSessionContext(
         val generation: Long,
         val session: ProotSession,
+        val startId: Int,
         var stopRequested: Boolean = false,
         var terminalEvent: TerminalEventKind? = null,
     )
@@ -47,8 +56,7 @@ class RuntimeService : Service() {
     private val currentGenerationRef: AtomicReference<Long> = AtomicReference(0L)
     private val currentIntent: AtomicReference<Intent?> = AtomicReference(null)
     private val currentStartIdRef = AtomicReference(0)
-    private val startupFailureCleanupRef = AtomicLong(0L)
-    private val startupFailureCleanupInProgress = AtomicBoolean(false)
+    private val startupFailureCleanupContextRef = AtomicReference<StartupFailureCleanupContext?>(null)
 
     init {
         instanceRef.set(this)
@@ -64,8 +72,7 @@ class RuntimeService : Service() {
             currentSessionRef.set(null)
             currentSessionIdRef.set(null)
             currentGenerationRef.set(0L)
-            startupFailureCleanupRef.set(0L)
-            startupFailureCleanupInProgress.set(false)
+            startupFailureCleanupContextRef.set(null)
         }
     }
 
@@ -186,6 +193,7 @@ class RuntimeService : Service() {
             ServiceSessionContext(
                 generation = generation,
                 session = session,
+                startId = startId,
             )
         )
     }
@@ -216,10 +224,15 @@ class RuntimeService : Service() {
         cause: RuntimeServiceTerminationCause,
         message: String,
     ) {
-        if (!startupFailureCleanupInProgress.compareAndSet(false, true)) {
+        val cleanupContext = StartupFailureCleanupContext(
+            generation = generation,
+            startId = startId,
+            cause = cause,
+            message = message,
+        )
+        if (!startupFailureCleanupContextRef.compareAndSet(null, cleanupContext)) {
             return
         }
-        startupFailureCleanupRef.set(generation)
 
         val session = currentSessionRef.get()
         if (session != null) {
@@ -227,65 +240,11 @@ class RuntimeService : Service() {
                 session.requestStop()
             } catch (_: Throwable) {
             }
-            try {
-                session.awaitExit(GRACEFUL_SHUTDOWN_TIMEOUT_MS)
-            } catch (_: Throwable) {
-            }
-            if (session.isAlive()) {
-                try {
-                    session.stop(FORCE_SHUTDOWN_TIMEOUT_MS)
-                } catch (_: Throwable) {
-                }
-                try {
-                    session.awaitExit(FORCE_SHUTDOWN_TIMEOUT_MS)
-                } catch (_: Throwable) {
-                }
-            }
         }
-
-        var shouldEmitFailure = false
-        lock.withLock {
-            if (serviceState.get() == ServiceHostState.DESTROYED) {
-                startupFailureCleanupInProgress.set(false)
-                startupFailureCleanupRef.set(0L)
-                return
-            }
-            val sessionContext = currentSessionContextRef.get()
-            if (sessionContext != null && sessionContext.terminalEvent == null) {
-                sessionContext.terminalEvent = TerminalEventKind.STARTUP_FAILURE_CLEANUP
-            }
-            currentSessionContextRef.set(null)
-            currentSessionRef.set(null)
-            currentSessionIdRef.set(null)
-            currentGenerationRef.set(0L)
-            serviceState.set(ServiceHostState.CREATED)
-            shouldEmitFailure = true
-            try {
-                stopForeground(STOP_FOREGROUND_REMOVE)
-            } catch (_: Exception) {
-            }
-            try {
-                stopSelfResult(startId)
-            } catch (_: Exception) {
-                try {
-                    stopSelf()
-                } catch (_: Exception) {
-                }
-            }
+        val sessionContext = currentSessionContextRef.get()
+        if (sessionContext != null && sessionContext.terminalEvent == null) {
+            sessionContext.terminalEvent = TerminalEventKind.STARTUP_FAILURE_CLEANUP
         }
-
-        if (shouldEmitFailure) {
-            endpoint.notify(
-                RuntimeServiceHostEvent.LaunchFailed(
-                    generation = generation,
-                    cause = cause,
-                    message = message,
-                )
-            )
-        }
-
-        startupFailureCleanupInProgress.set(false)
-        startupFailureCleanupRef.set(0L)
     }
 
     private fun onProotEvent(event: ProotEvent, generation: Long) {
@@ -295,7 +254,7 @@ class RuntimeService : Service() {
         if (currentSid != null && event.sessionId != currentSid) return
         when (event) {
             is ProotEvent.Started -> {
-                if (startupFailureCleanupInProgress.get()) return
+                if (startupFailureCleanupContextRef.get() != null) return
                 if (currentGenerationRef.get() == generation) {
                     endpoint.notify(
                         RuntimeServiceHostEvent.SessionReady(
@@ -309,81 +268,92 @@ class RuntimeService : Service() {
                 val exit = event.exit
                 if (exit.generation != currentGen) return
                 if (currentSid != null && exit.sessionId != currentSid) return
-                lock.withLock {
-                    if (destroyed.get()) return
-                    if (serviceState.get() == ServiceHostState.DESTROYED) return
-                    val sessionContext = currentSessionContextRef.get()
-                    if (sessionContext == null || sessionContext.generation != generation) return
-                    if (sessionContext.terminalEvent != null) return
-                    val isStartupFailureCleanup = startupFailureCleanupRef.get() == generation && exit.stopRequested
-                    sessionContext.terminalEvent = when {
-                        isStartupFailureCleanup -> TerminalEventKind.STARTUP_FAILURE_CLEANUP
-                        exit.stopRequested -> TerminalEventKind.EXPECTED_STOPPED
-                        else -> TerminalEventKind.UNEXPECTED_TERMINATION
-                    }
-                    endpoint.notify(
-                        RuntimeServiceHostEvent.SessionExited(
-                            generation = exit.generation,
-                            sessionId = exit.sessionId,
-                            exitCode = exit.exitCode,
-                            forced = exit.stopRequested
-                        )
-                    )
-                    if (serviceState.get() != ServiceHostState.FOREGROUND) return
-                    if (sessionContext.terminalEvent == TerminalEventKind.STARTUP_FAILURE_CLEANUP) {
-                        serviceState.set(ServiceHostState.CREATED)
-                        currentSessionContextRef.set(null)
-                        currentSessionRef.set(null)
-                        currentSessionIdRef.set(null)
-                        currentGenerationRef.set(0L)
-                        try {
-                            stopForeground(STOP_FOREGROUND_REMOVE)
-                        } catch (_: Exception) {
-                        }
-                        try {
-                            stopSelfResult(currentStartIdRef.get())
-                        } catch (_: Exception) {
-                            try {
-                                stopSelf()
-                            } catch (_: Exception) {
-                            }
-                        }
-                        startupFailureCleanupInProgress.set(false)
-                        startupFailureCleanupRef.set(0L)
-                        return
-                    }
-                    if (exit.stopRequested) {
-                        serviceState.set(ServiceHostState.DESTROYED)
-                        endpoint.notify(RuntimeServiceHostEvent.ExpectedStopped(generation = exit.generation))
-                    } else {
-                        serviceState.set(ServiceHostState.DESTROYED)
-                        endpoint.notify(
-                            RuntimeServiceHostEvent.UnexpectedTermination(
-                                generation = exit.generation,
-                                cause = RuntimeServiceTerminationCause.SESSION_EXITED
-                            )
-                        )
-                    }
-                    currentSessionContextRef.set(null)
-                    currentSessionRef.set(null)
-                    currentSessionIdRef.set(null)
-                    currentGenerationRef.set(0L)
-                    try {
-                        stopForeground(STOP_FOREGROUND_REMOVE)
-                    } catch (_: Exception) {
-                    }
-                    try {
-                        stopSelfResult(currentStartIdRef.get())
-                    } catch (_: Exception) {
-                        try {
-                            stopSelf()
-                        } catch (_: Exception) {
-                        }
-                    }
-                }
+                handleSessionExited(exit)
             }
             else -> {}
         }
+    }
+
+    private fun handleSessionExited(exit: com.amitia.amitia_app.runtime.proot.ProotExit) {
+        lock.withLock {
+            if (destroyed.get()) return
+            if (serviceState.get() == ServiceHostState.DESTROYED) return
+            val sessionContext = currentSessionContextRef.get()
+            if (sessionContext == null || sessionContext.generation != exit.generation) return
+            if (sessionContext.terminalEvent != null) return
+
+            val cleanupContext = startupFailureCleanupContextRef.get()
+            val isStartupFailureCleanup = cleanupContext != null && cleanupContext.generation == exit.generation
+
+            sessionContext.terminalEvent = when {
+                isStartupFailureCleanup -> TerminalEventKind.STARTUP_FAILURE_CLEANUP
+                exit.stopRequested -> TerminalEventKind.EXPECTED_STOPPED
+                else -> TerminalEventKind.UNEXPECTED_TERMINATION
+            }
+
+            if (isStartupFailureCleanup) {
+                cleanupContext!!.processConfirmedDead = true
+                performStartupFailureCleanup(cleanupContext)
+                return
+            }
+
+            endpoint.notify(
+                RuntimeServiceHostEvent.SessionExited(
+                    generation = exit.generation,
+                    sessionId = exit.sessionId,
+                    exitCode = exit.exitCode,
+                    forced = exit.stopRequested
+                )
+            )
+
+            if (serviceState.get() != ServiceHostState.FOREGROUND) return
+
+            if (exit.stopRequested) {
+                serviceState.set(ServiceHostState.DESTROYED)
+                endpoint.notify(RuntimeServiceHostEvent.ExpectedStopped(generation = exit.generation))
+            } else {
+                serviceState.set(ServiceHostState.DESTROYED)
+                endpoint.notify(
+                    RuntimeServiceHostEvent.UnexpectedTermination(
+                        generation = exit.generation,
+                        cause = RuntimeServiceTerminationCause.SESSION_EXITED
+                    )
+                )
+            }
+            clearSessionState()
+        }
+    }
+
+    private fun performStartupFailureCleanup(cleanupContext: StartupFailureCleanupContext) {
+        serviceState.set(ServiceHostState.CREATED)
+        endpoint.notify(
+            RuntimeServiceHostEvent.LaunchFailed(
+                generation = cleanupContext.generation,
+                cause = cleanupContext.cause,
+                message = cleanupContext.message,
+            )
+        )
+        clearSessionState()
+        startupFailureCleanupContextRef.set(null)
+        try {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } catch (_: Exception) {
+        }
+        try {
+            stopSelfResult(cleanupContext.startId)
+        } catch (_: Exception) {
+            try {
+                stopSelf()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
+    private fun clearSessionState() {
+        currentSessionContextRef.set(null)
+        currentSessionRef.set(null)
+        currentSessionIdRef.set(null)
+        currentGenerationRef.set(0L)
     }
 
     private fun handleStopHost() {
@@ -399,14 +369,11 @@ class RuntimeService : Service() {
         if (sessionContext.generation != targetGeneration) {
             return
         }
+        sessionContext.stopRequested = true
         val session = currentSessionRef.get()
         if (session != null && session.isAlive()) {
             session.requestStop()
-            session.stop(10_000L)
         }
-        sessionContext.stopRequested = true
-        stopForegroundSafely()
-        stopSelfSafely()
     }
 
     private fun stopForegroundSafely() {
@@ -426,6 +393,7 @@ class RuntimeService : Service() {
     override fun onDestroy() {
         var expectedStoppedGeneration: Long? = null
         var unexpectedTerminationCause: RuntimeServiceTerminationCause? = null
+        var unexpectedTerminationGeneration: Long? = null
         lock.withLock {
             destroyed.set(true)
             serviceState.set(ServiceHostState.DESTROYED)
@@ -437,22 +405,19 @@ class RuntimeService : Service() {
                 } else {
                     sessionContext.terminalEvent = TerminalEventKind.UNEXPECTED_TERMINATION
                     unexpectedTerminationCause = RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
+                    unexpectedTerminationGeneration = sessionContext.generation
                 }
             }
-            currentSessionContextRef.set(null)
-            currentSessionRef.set(null)
-            currentSessionIdRef.set(null)
-            currentGenerationRef.set(0L)
-            startupFailureCleanupInProgress.set(false)
-            startupFailureCleanupRef.set(0L)
+            clearSessionState()
+            startupFailureCleanupContextRef.set(null)
         }
         if (expectedStoppedGeneration != null) {
             endpoint.notify(RuntimeServiceHostEvent.ExpectedStopped(generation = expectedStoppedGeneration!!))
         }
-        if (unexpectedTerminationCause != null) {
+        if (unexpectedTerminationCause != null && unexpectedTerminationGeneration != null) {
             endpoint.notify(
                 RuntimeServiceHostEvent.UnexpectedTermination(
-                    generation = currentGenerationRef.get(),
+                    generation = unexpectedTerminationGeneration!!,
                     cause = unexpectedTerminationCause!!
                 )
             )

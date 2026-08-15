@@ -157,35 +157,20 @@ fi
 
 echo "[EXTRACT] Extraction complete: $EXTRACT_DIR"
 
-TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-
-cat > "$STAGING_PATH/rootfs-build-record.json" << ENDOFJSON
-{
-  "schemaVersion": 1,
-  "component": "ubuntu-rootfs",
-  "distribution": "$(jq -r '.distribution' "$LOCK_FILE")",
-  "flavor": "$(jq -r '.flavor' "$LOCK_FILE")",
-  "release": "$RELEASE",
-  "codename": "$(jq -r '.codename' "$LOCK_FILE")",
-  "architecture": "$(jq -r '.architecture' "$LOCK_FILE")",
-  "guestPlatform": "$(jq -r '.guestPlatform' "$LOCK_FILE")",
-  "runtimeKind": "$(jq -r '.runtimeKind' "$LOCK_FILE")",
-  "source": {
-    "url": "$SOURCE_URL",
-    "archiveFileName": "$ARCHIVE_FILE_NAME",
-    "expectedSha256": "$EXPECTED_SHA",
-    "actualSha256": "$ACTUAL_SHA"
-  },
-  "stagingPath": "$EXTRACT_DIR",
-  "timestamp": "$TIMESTAMP",
-  "offline": $OFFLINE
-}
-ENDOFJSON
-
-echo "[RECORD] Build record written: $STAGING_PATH/rootfs-build-record.json"
+echo "[CLEAN] Cleaning rootfs before freeze..."
+rm -rf "$EXTRACT_DIR/tmp"/* 2>/dev/null || true
+rm -rf "$EXTRACT_DIR/var/tmp"/* 2>/dev/null || true
+rm -rf "$EXTRACT_DIR/var/cache/apt"/* 2>/dev/null || true
+rm -f "$EXTRACT_DIR/etc/machine-id" 2>/dev/null || true
+rm -f "$EXTRACT_DIR/etc/ssh/ssh_host_"* 2>/dev/null || true
+rm -rf "$EXTRACT_DIR/root/.bash_history" 2>/dev/null || true
+rm -rf "$EXTRACT_DIR/root/.cache" 2>/dev/null || true
+find "$EXTRACT_DIR" -name "*.log" -delete 2>/dev/null || true
+find "$EXTRACT_DIR/var/log" -type f -delete 2>/dev/null || true
+echo "[CLEAN] Rootfs cleaned"
 
 if [[ "$SKIP_VERIFY" == "false" ]]; then
-    echo "[VERIFY] Running static validation..."
+    echo "[VERIFY] Running static validation on final rootfs tree..."
     VALIDATOR_PATH="$PROJECT_ROOT/runtime/validation/linux-arm64/rootfs_validator.py"
     if [[ -f "$VALIDATOR_PATH" ]]; then
         if ! python "$VALIDATOR_PATH" --rootfs "$EXTRACT_DIR" --lock "$LOCK_FILE" --policy "$POLICY_FILE"; then
@@ -202,37 +187,30 @@ echo "============================================"
 echo " Ubuntu ARM64 Rootfs Prepare Complete"
 echo "============================================"
 echo " Staging: $EXTRACT_DIR"
-echo " Build Record: $STAGING_PATH/rootfs-build-record.json"
 echo "============================================"
 
-echo "[FREEZE] Cleaning staging before freeze..."
-rm -rf "$EXTRACT_DIR/tmp"/* 2>/dev/null || true
-rm -rf "$EXTRACT_DIR/var/tmp"/* 2>/dev/null || true
-rm -rf "$EXTRACT_DIR/var/cache/apt"/* 2>/dev/null || true
-rm -f "$EXTRACT_DIR/etc/machine-id" 2>/dev/null || true
-rm -f "$EXTRACT_DIR/etc/ssh/ssh_host_"* 2>/dev/null || true
-rm -rf "$EXTRACT_DIR/root/.bash_history" 2>/dev/null || true
-rm -rf "$EXTRACT_DIR/root/.cache" 2>/dev/null || true
-find "$EXTRACT_DIR" -name "*.log" -delete 2>/dev/null || true
-find "$EXTRACT_DIR/var/log" -type f -delete 2>/dev/null || true
+echo "[FREEZE] Generating tree manifest..."
+(cd "$EXTRACT_DIR" && find . -type f -print0 | sort -z | xargs -0 sha256sum) > "$OUTPUT_PATH/rootfs-files.sha256"
+echo "[PASS] rootfs-files.sha256 generated"
 
 FROZEN_TAR_NAME="ubuntu-rootfs-arm64.tar"
 FROZEN_TAR_PATH="$OUTPUT_PATH/$FROZEN_TAR_NAME"
 TEMP_TAR_PATH="$FROZEN_TAR_PATH.tmp.$$"
 
-echo "[FREEZE] Creating frozen tar archive..."
-(cd "$EXTRACT_DIR" && tar cf "$TEMP_TAR_PATH" .)
+echo "[FREEZE] Creating deterministic frozen tar archive..."
+(cd "$EXTRACT_DIR" && find . -type f -print0 | sort -z | tar --null -T - --mtime=@0 --owner=0 --group=0 --numeric-owner -cf "$TEMP_TAR_PATH")
 FROZEN_SHA=$(sha256sum "$TEMP_TAR_PATH" | awk '{print $1}')
+
+[[ -f "$FROZEN_TAR_PATH" ]] && rm -f "$FROZEN_TAR_PATH"
 mv "$TEMP_TAR_PATH" "$FROZEN_TAR_PATH"
 echo "[FREEZE] Frozen archive created: $FROZEN_TAR_PATH"
 echo "[FREEZE] Frozen SHA256: $FROZEN_SHA"
 
-echo "[FREEZE] Generating tree SHA..."
-TREE_SHA=$( (cd "$EXTRACT_DIR" && find . -type f | sort | xargs sha256sum) | sha256sum | awk '{print $1}')
-echo "[FREEZE] Tree SHA256: $TREE_SHA"
+echo "[TREE SHA] Computing tree hash..."
+TREE_SHA=$(sha256sum "$OUTPUT_PATH/rootfs-files.sha256" | awk '{print $1}')
+echo "[TREE SHA] $TREE_SHA"
 
-echo "[FREEZE] Generating rootfs-files.sha256..."
-(cd "$EXTRACT_DIR" && find . -type f | sort | xargs sha256sum) > "$OUTPUT_PATH/rootfs-files.sha256"
+TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
 FINAL_RECORD="$OUTPUT_PATH/rootfs-build-record.json"
 cat > "$FINAL_RECORD" << ENDOFJSON
