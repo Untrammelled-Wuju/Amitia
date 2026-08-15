@@ -44,7 +44,7 @@ public class MediaStaging {
                 guard let image = image else {
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
+                        requestId: request.requestId,
                         status: "error",
                         result: nil,
                         error: IOSNativeError(code: "QUERY_FAILED", message: "failed to load image")
@@ -55,7 +55,7 @@ public class MediaStaging {
                 guard let data = image.jpegData(compressionQuality: 0.9) else {
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
+                        requestId: request.requestId,
                         status: "error",
                         result: nil,
                         error: IOSNativeError(code: "QUERY_FAILED", message: "failed to encode image")
@@ -69,7 +69,7 @@ public class MediaStaging {
                     let resourceUri = targetURL.absoluteString.hasPrefix("file://") ? targetURL.absoluteString : "file://" + targetURL.absoluteString
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
+                        requestId: request.requestId,
                         status: "ok",
                         result: [
                             "resourceUri": resourceUri,
@@ -84,7 +84,7 @@ public class MediaStaging {
                 } catch {
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
+                        requestId: request.requestId,
                         status: "error",
                         result: nil,
                         error: IOSNativeError(code: "WRITE_FAILED", message: error.localizedDescription)

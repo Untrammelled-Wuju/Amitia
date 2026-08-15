@@ -94,7 +94,7 @@ public class BluetoothNativeHandler: NSObject, IOSNativeOperationHandler {
         default:
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "OPERATION_NOT_SUPPORTED", message: "unsupported operation: \(request.operation)")
@@ -108,7 +108,7 @@ public class BluetoothNativeHandler: NSObject, IOSNativeOperationHandler {
         let authorization = store.authorizationStatus()
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: [
                 "available": state == .poweredOn,
@@ -126,7 +126,7 @@ public class BluetoothNativeHandler: NSObject, IOSNativeOperationHandler {
         guard state == .poweredOn else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "ADAPTER_NOT_AVAILABLE", message: "Bluetooth adapter not powered on: \(adapterStateString(state))")
@@ -145,7 +145,7 @@ public class BluetoothNativeHandler: NSObject, IOSNativeOperationHandler {
         if started {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["scanning": true, "duration": boundedDuration],
                 error: nil
@@ -153,7 +153,7 @@ public class BluetoothNativeHandler: NSObject, IOSNativeOperationHandler {
         } else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "SCAN_FAILED", message: "Failed to start scan")
@@ -168,7 +168,7 @@ public class BluetoothNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["scanning": false, "peripherals": peripherals, "count": peripherals.count],
             error: nil
@@ -184,7 +184,7 @@ public class BluetoothNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: [
                 "peripheral": [
@@ -205,7 +205,7 @@ public class BluetoothNativeHandler: NSObject, IOSNativeOperationHandler {
         let connected = store.isPeripheralConnected(peripheralId)
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["connected": connected, "id": peripheralId],
             error: nil
@@ -218,7 +218,7 @@ public class BluetoothNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["peripherals": peripherals, "count": peripherals.count, "generation": store.currentGeneration],
             error: nil
@@ -233,7 +233,7 @@ public class BluetoothNativeHandler: NSObject, IOSNativeOperationHandler {
             try await store.connectPeripheral(withID: peripheralId)
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["connected": true, "id": peripheralId],
                 error: nil
@@ -251,7 +251,7 @@ public class BluetoothNativeHandler: NSObject, IOSNativeOperationHandler {
             try await store.disconnectPeripheral(withID: peripheralId)
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["disconnected": true, "id": peripheralId],
                 error: nil
@@ -279,7 +279,7 @@ public class BluetoothNativeHandler: NSObject, IOSNativeOperationHandler {
             }
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["services": result, "count": result.count],
                 error: nil
@@ -320,7 +320,7 @@ public class BluetoothNativeHandler: NSObject, IOSNativeOperationHandler {
             }
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["characteristics": result, "count": result.count],
                 error: nil
@@ -362,7 +362,7 @@ public class BluetoothNativeHandler: NSObject, IOSNativeOperationHandler {
             }
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["descriptors": result, "count": result.count],
                 error: nil
@@ -393,7 +393,7 @@ public class BluetoothNativeHandler: NSObject, IOSNativeOperationHandler {
             let data = try await store.readCharacteristic(forPeripheralID: peripheralId, characteristic: characteristic)
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: [
                     "value": data.base64EncodedString(),
@@ -434,7 +434,7 @@ public class BluetoothNativeHandler: NSObject, IOSNativeOperationHandler {
             try await store.writeCharacteristic(forPeripheralID: peripheralId, characteristic: characteristic, data: data, writeType: writeType)
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: [
                     "written": true,
@@ -470,7 +470,7 @@ public class BluetoothNativeHandler: NSObject, IOSNativeOperationHandler {
             try await store.setNotify(forPeripheralID: peripheralId, characteristic: characteristic, enabled: true)
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: [
                     "subscribed": true,
@@ -507,7 +507,7 @@ public class BluetoothNativeHandler: NSObject, IOSNativeOperationHandler {
             try await store.setNotify(forPeripheralID: peripheralId, characteristic: characteristic, enabled: false)
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: [
                     "unsubscribed": true,
@@ -550,7 +550,7 @@ public class BluetoothNativeHandler: NSObject, IOSNativeOperationHandler {
             let value = try await store.readDescriptor(forPeripheralID: peripheralId, descriptor: descriptor)
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: [
                     "value": descriptorValueString(value),
@@ -597,7 +597,7 @@ public class BluetoothNativeHandler: NSObject, IOSNativeOperationHandler {
             try await store.writeDescriptor(forPeripheralID: peripheralId, descriptor: descriptor, data: data)
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: [
                     "written": true,
@@ -621,7 +621,7 @@ public class BluetoothNativeHandler: NSObject, IOSNativeOperationHandler {
             let rssi = try await store.readRSSI(forPeripheralID: peripheralId)
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["rssi": rssi.intValue, "id": peripheralId],
                 error: nil
@@ -634,7 +634,7 @@ public class BluetoothNativeHandler: NSObject, IOSNativeOperationHandler {
     private func handlePeripheralRoleStart(_ request: IOSNativeRequest) -> IOSNativeResponse {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "peripheral role not supported in this version")
@@ -644,7 +644,7 @@ public class BluetoothNativeHandler: NSObject, IOSNativeOperationHandler {
     private func handlePeripheralRoleStop(_ request: IOSNativeRequest) -> IOSNativeResponse {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "peripheral role not supported in this version")
@@ -693,7 +693,7 @@ public class BluetoothNativeHandler: NSObject, IOSNativeOperationHandler {
     private func errorResponse(_ request: IOSNativeRequest, code: String, message: String) -> IOSNativeResponse {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: code, message: message)

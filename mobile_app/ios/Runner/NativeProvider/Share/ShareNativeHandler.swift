@@ -59,7 +59,7 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
         default:
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "OPERATION_NOT_SUPPORTED", message: "unsupported operation: \(request.operation)")
@@ -71,7 +71,7 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
         let backgroundCapable = UIApplication.shared.backgroundRefreshStatus == .available
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: [
                 "available": true,
@@ -94,7 +94,7 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
         guard isAppInForeground() else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "FOREGROUND_REQUIRED", message: "Share Sheet requires app to be in foreground")
@@ -106,7 +106,7 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
               let rootViewController = window.rootViewController else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "FOREGROUND_REQUIRED", message: "No active foreground UIWindowScene available")
@@ -117,20 +117,20 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
         guard !items.isEmpty else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "No valid share items provided")
             )
         }
 
-        return await presentShareSheet(activityItems: items, on: rootViewController, requestID: request.requestID)
+        return await presentShareSheet(activityItems: items, on: rootViewController, requestId: request.requestId)
     }
 
     private func handlePreviewSupported(_ request: IOSNativeRequest) -> IOSNativeResponse {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["supported": true],
             error: nil
@@ -141,7 +141,7 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let files = try? FileManager.default.contentsOfDirectory(atPath: stagingDir.path) else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: [
                     "pendingShares": [],
@@ -176,7 +176,7 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
 
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: [
                 "pendingShares": pendingShares,
@@ -190,7 +190,7 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let shareId = request.payload?["shareId"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing shareId")
@@ -201,7 +201,7 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "NOT_FOUND", message: "share not found: \(shareId)")
@@ -217,7 +217,7 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
         let resourceUri = "share:staging:\(shareId)"
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: [
                 "consumed": true,
@@ -234,7 +234,7 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let shareId = request.payload?["shareId"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing shareId")
@@ -245,7 +245,7 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
         let exists = FileManager.default.fileExists(atPath: fileURL.path)
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: [
                 "found": exists,
@@ -260,7 +260,7 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let shareId = request.payload?["shareId"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing shareId")
@@ -273,7 +273,7 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
                 try FileManager.default.removeItem(at: fileURL)
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "ok",
                     result: ["dismissed": true, "shareId": shareId, "removed": true],
                     error: nil
@@ -281,7 +281,7 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
             } catch {
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "error",
                     result: nil,
                     error: IOSNativeError(code: "DISMISS_FAILED", message: error.localizedDescription)
@@ -291,7 +291,7 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
 
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["dismissed": true, "shareId": shareId, "removed": false],
             error: nil
@@ -307,7 +307,7 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let enumerator = FileManager.default.enumerator(at: stagingDir, includingPropertiesForKeys: [.contentModificationDateKey, .isRegularFileKey]) else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["removed": 0, "scanned": 0],
                 error: nil
@@ -331,7 +331,7 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
 
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["removed": removed, "scanned": scanned],
             error: nil
@@ -342,7 +342,7 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let photoIds = request.payload?["photoIds"] as? [String], !photoIds.isEmpty else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing photoIds")
@@ -353,7 +353,7 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
         if !confirm {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "USER_CONFIRMATION_REQUIRED", message: "confirm must be true for limited delete")
@@ -364,7 +364,7 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
         guard status == .authorized else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "PERMISSION_DENIED", message: "photo library access denied")
@@ -375,7 +375,7 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
         guard assets.count > 0 else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "NOT_FOUND", message: "no matching photos found")
@@ -388,7 +388,7 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
             }
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["deleted": true, "count": photoIds.count],
                 error: nil
@@ -396,7 +396,7 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
         } catch {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "DELETE_FAILED", message: error.localizedDescription)
@@ -480,7 +480,7 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
         return URL(string: uri)
     }
 
-    private func presentShareSheet(activityItems: [Any], on viewController: UIViewController, requestID: String) async -> IOSNativeResponse {
+    private func presentShareSheet(activityItems: [Any], on viewController: UIViewController, requestId: String) async -> IOSNativeResponse {
         return await withCheckedContinuation { continuation in
             let activityVC = UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
 
@@ -488,8 +488,8 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
                 DispatchQueue.main.async {
                     if let error = error {
                         continuation.resume(returning: IOSNativeResponse(
-                            protocolVersion: "1.0",
-                            requestID: requestID,
+                            protocolVersion: 1,
+                            requestId: requestId,
                             status: "error",
                             result: nil,
                             error: IOSNativeError(code: "SHARE_FAILED", message: error.localizedDescription)
@@ -500,8 +500,8 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
                     if completed {
                         let activityName = activityType?.rawValue ?? "unknown"
                         continuation.resume(returning: IOSNativeResponse(
-                            protocolVersion: "1.0",
-                            requestID: requestID,
+                            protocolVersion: 1,
+                            requestId: requestId,
                             status: "ok",
                             result: [
                                 "shared": true,
@@ -514,8 +514,8 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
                         ))
                     } else {
                         continuation.resume(returning: IOSNativeResponse(
-                            protocolVersion: "1.0",
-                            requestID: requestID,
+                            protocolVersion: 1,
+                            requestId: requestId,
                             status: "ok",
                             result: [
                                 "shared": false,

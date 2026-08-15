@@ -54,7 +54,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
         default:
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "OPERATION_NOT_SUPPORTED", message: "unsupported operation: \(request.operation)")
@@ -66,7 +66,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
         guard HKHealthStore.isHealthDataAvailable() else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["available": false, "authorized": false, "message": "HealthKit not available"],
                 error: nil
@@ -88,7 +88,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
 
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["available": true, "authorized": allAuthorized, "types": authorizationResults],
             error: nil
@@ -99,7 +99,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
         guard HKHealthStore.isHealthDataAvailable() else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "HealthKit not available")
@@ -116,7 +116,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
             try await healthStore.requestAuthorization(toShare: writeSet, read: readSet)
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["requested": true],
                 error: nil
@@ -124,7 +124,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
         } catch {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "AUTHORIZATION_FAILED", message: error.localizedDescription)
@@ -136,7 +136,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
         guard HKHealthStore.isHealthDataAvailable() else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "HealthKit not available")
@@ -157,7 +157,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
 
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["profile": profile],
                 error: nil
@@ -165,7 +165,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
         } catch {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "READ_FAILED", message: error.localizedDescription)
@@ -177,7 +177,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
         guard HKHealthStore.isHealthDataAvailable() else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "HealthKit not available")
@@ -189,7 +189,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
               let hkType = HKQuantityType.quantityType(forIdentifier: sampleType) else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "invalid sample type")
@@ -208,7 +208,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
                 if let error = error {
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
+                        requestId: request.requestId,
                         status: "error",
                         result: nil,
                         error: IOSNativeError(code: "QUERY_FAILED", message: error.localizedDescription)
@@ -229,7 +229,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
 
                 continuation.resume(returning: IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "ok",
                     result: ["samples": results, "count": results.count],
                     error: nil
@@ -243,7 +243,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
         guard HKHealthStore.isHealthDataAvailable() else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "HealthKit not available")
@@ -255,7 +255,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
               let hkType = HKQuantityType.quantityType(forIdentifier: sampleType) else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "invalid quantity type")
@@ -273,7 +273,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
                 if let error = error {
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
+                        requestId: request.requestId,
                         status: "error",
                         result: nil,
                         error: IOSNativeError(code: "QUERY_FAILED", message: error.localizedDescription)
@@ -299,7 +299,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
 
                 continuation.resume(returning: IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "ok",
                     result: ["statistics": result],
                     error: nil
@@ -313,7 +313,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
         guard HKHealthStore.isHealthDataAvailable() else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "HealthKit not available")
@@ -332,7 +332,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
                 if let error = error {
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
+                        requestId: request.requestId,
                         status: "error",
                         result: nil,
                         error: IOSNativeError(code: "QUERY_FAILED", message: error.localizedDescription)
@@ -353,7 +353,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
 
                 continuation.resume(returning: IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "ok",
                     result: ["workouts": results, "count": results.count],
                     error: nil
@@ -367,7 +367,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let workoutId = request.payload?["id"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing workout id")
@@ -376,7 +376,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
 
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["workout": ["id": workoutId]],
             error: nil
@@ -387,7 +387,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
         guard HKHealthStore.isHealthDataAvailable() else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "HealthKit not available")
@@ -397,7 +397,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let sleepType = HKSampleType.categoryType(forIdentifier: .sleepAnalysis) else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "sleep analysis not available")
@@ -416,7 +416,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
                 if let error = error {
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
+                        requestId: request.requestId,
                         status: "error",
                         result: nil,
                         error: IOSNativeError(code: "QUERY_FAILED", message: error.localizedDescription)
@@ -436,7 +436,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
 
                 continuation.resume(returning: IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "ok",
                     result: ["sleep": results, "count": results.count],
                     error: nil
@@ -450,7 +450,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let activityType = HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned) else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "activity type not available")
@@ -468,7 +468,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
                 if let error = error {
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
+                        requestId: request.requestId,
                         status: "error",
                         result: nil,
                         error: IOSNativeError(code: "QUERY_FAILED", message: error.localizedDescription)
@@ -483,7 +483,7 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
 
                 continuation.resume(returning: IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "ok",
                     result: ["activity": result],
                     error: nil

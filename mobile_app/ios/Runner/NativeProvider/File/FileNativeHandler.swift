@@ -76,7 +76,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         default:
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "OPERATION_NOT_SUPPORTED", message: "unsupported operation: \(request.operation)")
@@ -90,7 +90,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
               let rootViewController = window.rootViewController else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "FOREGROUND_REQUIRED", message: "No active foreground UIWindowScene")
@@ -106,7 +106,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
                 case .success(let mountId):
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
+                        requestId: request.requestId,
                         status: "ok",
                         result: ["mountId": mountId, "picked": true],
                         error: nil
@@ -114,7 +114,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
                 case .failure(let error):
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
+                        requestId: request.requestId,
                         status: "error",
                         result: nil,
                         error: IOSNativeError(code: "PICK_FAILED", message: error)
@@ -135,7 +135,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
               let rootViewController = window.rootViewController else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "FOREGROUND_REQUIRED", message: "No active foreground UIWindowScene")
@@ -151,7 +151,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
                     case .success(let mountId):
                         continuation.resume(returning: IOSNativeResponse(
                             protocolVersion: request.protocolVersion,
-                            requestID: request.requestID,
+                            requestId: request.requestId,
                             status: "ok",
                             result: ["mountId": mountId, "picked": true],
                             error: nil
@@ -159,7 +159,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
                     case .failure(let error):
                         continuation.resume(returning: IOSNativeResponse(
                             protocolVersion: request.protocolVersion,
-                            requestID: request.requestID,
+                            requestId: request.requestId,
                             status: "error",
                             result: nil,
                             error: IOSNativeError(code: "PICK_FAILED", message: error)
@@ -175,7 +175,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "iOS 14.0+ required")
@@ -186,7 +186,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let mountId = request.payload?["mountId"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing mountId")
@@ -196,7 +196,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         if !reauthorized {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "REAUTHORIZE_FAILED", message: "failed to reauthorize mount: \(mountId)")
@@ -204,7 +204,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["reauthorized": reauthorized, "mountId": mountId],
             error: nil
@@ -215,7 +215,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let mountId = request.payload?["mountId"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing mountId")
@@ -224,7 +224,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let attributes = SecurityScopedBookmarkStore.shared.stat(mountId: mountId) else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "NOT_FOUND", message: "file not found for mount: \(mountId)")
@@ -232,7 +232,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["stat": attributes],
             error: nil
@@ -243,7 +243,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let mountId = request.payload?["mountId"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing mountId")
@@ -252,7 +252,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let items = SecurityScopedBookmarkStore.shared.list(mountId: mountId) else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "NOT_FOUND", message: "directory not found for mount: \(mountId)")
@@ -260,7 +260,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["items": items],
             error: nil
@@ -271,7 +271,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let mountId = request.payload?["mountId"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing mountId")
@@ -282,7 +282,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let data = SecurityScopedBookmarkStore.shared.read(mountId: mountId, offset: offset, length: length) else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "READ_FAILED", message: "failed to read file for mount: \(mountId)")
@@ -290,7 +290,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["size": data.count, "mountId": mountId, "contentBase64": data.base64EncodedString()],
             error: nil
@@ -301,7 +301,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let mountId = request.payload?["mountId"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing mountId")
@@ -313,7 +313,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         if !success {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "WRITE_FAILED", message: "failed to write file for mount: \(mountId)")
@@ -321,7 +321,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["written": success, "mountId": mountId],
             error: nil
@@ -333,7 +333,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
               let name = request.payload?["name"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing mountId or name")
@@ -342,7 +342,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let newMountId = SecurityScopedBookmarkStore.shared.mkdir(parentMountId: mountId, name: name) else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "MKDIR_FAILED", message: "failed to create directory")
@@ -350,7 +350,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["mountId": newMountId],
             error: nil
@@ -362,7 +362,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
               let newName = request.payload?["newName"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing mountId or newName")
@@ -372,7 +372,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         if !success {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "RENAME_FAILED", message: "failed to rename")
@@ -380,7 +380,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["renamed": success],
             error: nil
@@ -392,7 +392,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
               let destPath = request.payload?["destPath"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing sourcePath or destPath")
@@ -409,7 +409,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let src = sourceUrl, let dst = destUrl else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "NOT_FOUND", message: "failed to resolve source or destination path")
@@ -420,7 +420,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         } catch {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "MOVE_FAILED", message: error.localizedDescription)
@@ -428,7 +428,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["moved": true, "destPath": destPath],
             error: nil
@@ -440,7 +440,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
               let destPath = request.payload?["destPath"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing sourcePath or destPath")
@@ -457,7 +457,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let src = sourceUrl, let dst = destUrl else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "NOT_FOUND", message: "failed to resolve source or destination path")
@@ -468,7 +468,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         } catch {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "COPY_FAILED", message: error.localizedDescription)
@@ -476,7 +476,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["copied": true, "destPath": destPath],
             error: nil
@@ -487,7 +487,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let mountId = request.payload?["mountId"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing mountId")
@@ -497,7 +497,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         if !success {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "DELETE_FAILED", message: "failed to delete")
@@ -505,7 +505,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["deleted": success],
             error: nil
@@ -516,7 +516,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let mountId = request.payload?["mountId"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing mountId")
@@ -525,7 +525,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let url = SecurityScopedBookmarkStore.shared.resolve(identifier: mountId) else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "NOT_FOUND", message: "mount not found: \(mountId)")
@@ -537,7 +537,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
               let rootViewController = window.rootViewController else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "FOREGROUND_REQUIRED", message: "No active foreground UIWindowScene for export")
@@ -553,7 +553,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
                 case .success:
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
+                        requestId: request.requestId,
                         status: "ok",
                         result: ["exported": true, "mountId": mountId],
                         error: nil
@@ -561,7 +561,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
                 case .failure(let error):
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
+                        requestId: request.requestId,
                         status: "error",
                         result: nil,
                         error: IOSNativeError(code: "EXPORT_FAILED", message: error)
@@ -580,7 +580,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let mountId = request.payload?["mountId"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing mountId")
@@ -589,7 +589,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         let info = SecurityScopedBookmarkStore.shared.getMount(mountId: mountId)
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["mount": info ?? [:]],
             error: nil
@@ -600,7 +600,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         let mounts = SecurityScopedBookmarkStore.shared.listMounts()
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["mounts": mounts],
             error: nil
@@ -611,7 +611,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let mountId = request.payload?["mountId"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing mountId")
@@ -620,7 +620,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         let success = SecurityScopedBookmarkStore.shared.removeMount(mountId: mountId)
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["removed": success],
             error: nil
@@ -630,7 +630,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
     private func handleGetCapabilities(_ request: IOSNativeRequest) -> IOSNativeResponse {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: [
                 "canPickFiles": true,

@@ -74,7 +74,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         default:
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "OPERATION_NOT_SUPPORTED", message: "unsupported operation: \(request.operation)")
@@ -88,7 +88,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         case .available:
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: [
                     "available": true,
@@ -100,7 +100,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         case .unsupported(let reason):
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: reason)
@@ -122,7 +122,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
             }
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["authorized": status == .authorized, "status": authString],
                 error: nil
@@ -130,7 +130,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         case .unsupported(let reason):
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: reason)
@@ -145,7 +145,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
             let granted = await AlarmKitAdapter.shared.requestAuthorization()
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["granted": granted],
                 error: nil
@@ -153,7 +153,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         case .unsupported(let reason):
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: reason)
@@ -168,7 +168,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
             let alarms = await AlarmKitAdapter.shared.listAlarms()
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: alarms,
                 error: nil
@@ -176,7 +176,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         case .unsupported(let reason):
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: reason)
@@ -188,7 +188,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let alarmId = request.payload?["alarmId"] as? String ?? request.payload?["id"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing alarmId")
@@ -201,7 +201,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
             if let alarm = await AlarmKitAdapter.shared.getAlarm(id: alarmId) {
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "ok",
                     result: ["alarm": alarm],
                     error: nil
@@ -209,7 +209,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
             } else {
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "error",
                     result: nil,
                     error: IOSNativeError(code: "NOT_FOUND", message: "alarm not found: \(alarmId)")
@@ -218,7 +218,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         case .unsupported(let reason):
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: reason)
@@ -231,7 +231,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
               let title = request.payload?["title"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing alarmId or title")
@@ -288,7 +288,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
             if success {
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "ok",
                     result: ["scheduled": true, "alarmId": alarmId],
                     error: nil
@@ -296,7 +296,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
             } else {
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "error",
                     result: nil,
                     error: IOSNativeError(code: "SCHEDULE_FAILED", message: "failed to schedule alarm \(alarmId)")
@@ -305,7 +305,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         case .unsupported(let reason):
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: reason)
@@ -317,7 +317,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let alarmId = request.payload?["alarmId"] as? String ?? request.payload?["id"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing alarmId")
@@ -331,7 +331,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
             if success {
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "ok",
                     result: ["stopped": true, "alarmId": alarmId],
                     error: nil
@@ -339,7 +339,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
             } else {
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "error",
                     result: nil,
                     error: IOSNativeError(code: "NOT_FOUND", message: "alarm not found: \(alarmId)")
@@ -348,7 +348,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         case .unsupported(let reason):
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: reason)
@@ -360,7 +360,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let alarmId = request.payload?["alarmId"] as? String ?? request.payload?["id"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing alarmId")
@@ -374,7 +374,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
             if success {
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "ok",
                     result: ["cancelled": true, "alarmId": alarmId],
                     error: nil
@@ -382,7 +382,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
             } else {
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "error",
                     result: nil,
                     error: IOSNativeError(code: "NOT_FOUND", message: "alarm not found: \(alarmId)")
@@ -391,7 +391,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         case .unsupported(let reason):
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: reason)
@@ -403,7 +403,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let seconds = request.payload?["seconds"] as? Double else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing seconds")
@@ -428,7 +428,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
 
         let countdownRequest = IOSNativeRequest(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             platform: request.platform,
             operation: "media.alarms.schedule",
             payload: countdownPayload
@@ -439,7 +439,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
     private func handlePause(_ request: IOSNativeRequest) -> IOSNativeResponse {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: "CAPABILITY_UNAVAILABLE", message: "Alarm pause is not supported in current iOS version")
@@ -449,7 +449,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
     private func handleResume(_ request: IOSNativeRequest) -> IOSNativeResponse {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: "CAPABILITY_UNAVAILABLE", message: "Alarm resume is not supported in current iOS version")

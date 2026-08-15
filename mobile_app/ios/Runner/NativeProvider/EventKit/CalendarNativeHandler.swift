@@ -55,7 +55,7 @@ public class CalendarNativeHandler: NSObject, IOSNativeOperationHandler {
         default:
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "OPERATION_NOT_SUPPORTED", message: "unsupported operation: \(request.operation)")
@@ -66,7 +66,7 @@ public class CalendarNativeHandler: NSObject, IOSNativeOperationHandler {
     private func handleStatus(_ request: IOSNativeRequest) -> IOSNativeResponse {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["available": true, "message": "EventKit Calendar available"],
             error: nil
@@ -86,7 +86,7 @@ public class CalendarNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["authorized": authorized, "status": "\(status.rawValue)"],
             error: nil
@@ -97,7 +97,7 @@ public class CalendarNativeHandler: NSObject, IOSNativeOperationHandler {
         let granted = await store.requestCalendarAccess()
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["granted": granted],
             error: nil
@@ -111,7 +111,7 @@ public class CalendarNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["calendars": list],
             error: nil
@@ -145,7 +145,7 @@ public class CalendarNativeHandler: NSObject, IOSNativeOperationHandler {
 
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["events": results, "count": results.count],
             error: nil
@@ -156,7 +156,7 @@ public class CalendarNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let eventId = request.payload?["id"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing event id")
@@ -166,7 +166,7 @@ public class CalendarNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let event = store.eventStore.event(withIdentifier: eventId) else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "NOT_FOUND", message: "event not found: \(eventId)")
@@ -175,7 +175,7 @@ public class CalendarNativeHandler: NSObject, IOSNativeOperationHandler {
 
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: [
                 "event": [
@@ -197,7 +197,7 @@ public class CalendarNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let title = request.payload?["title"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing title")
@@ -220,7 +220,7 @@ public class CalendarNativeHandler: NSObject, IOSNativeOperationHandler {
             try store.eventStore.save(event, span: .thisEvent)
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["created": true, "eventId": event.eventIdentifier],
                 error: nil
@@ -228,7 +228,7 @@ public class CalendarNativeHandler: NSObject, IOSNativeOperationHandler {
         } catch {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "CREATE_FAILED", message: error.localizedDescription)
@@ -240,7 +240,7 @@ public class CalendarNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let eventId = request.payload?["id"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing event id")
@@ -250,7 +250,7 @@ public class CalendarNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let event = store.eventStore.event(withIdentifier: eventId) else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "NOT_FOUND", message: "event not found: \(eventId)")
@@ -274,7 +274,7 @@ public class CalendarNativeHandler: NSObject, IOSNativeOperationHandler {
             try store.eventStore.save(event, span: .thisEvent)
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["updated": true, "eventId": event.eventIdentifier],
                 error: nil
@@ -282,7 +282,7 @@ public class CalendarNativeHandler: NSObject, IOSNativeOperationHandler {
         } catch {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "UPDATE_FAILED", message: error.localizedDescription)
@@ -294,7 +294,7 @@ public class CalendarNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let eventId = request.payload?["id"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing event id")
@@ -304,7 +304,7 @@ public class CalendarNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let event = store.eventStore.event(withIdentifier: eventId) else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "NOT_FOUND", message: "event not found: \(eventId)")
@@ -315,7 +315,7 @@ public class CalendarNativeHandler: NSObject, IOSNativeOperationHandler {
             try store.eventStore.remove(event, span: .thisEvent)
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["deleted": true, "eventId": eventId],
                 error: nil
@@ -323,7 +323,7 @@ public class CalendarNativeHandler: NSObject, IOSNativeOperationHandler {
         } catch {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "DELETE_FAILED", message: error.localizedDescription)

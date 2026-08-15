@@ -76,7 +76,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
         default:
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "OPERATION_NOT_SUPPORTED", message: "unsupported operation: \(request.operation)")
@@ -89,7 +89,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
         let pendingCount = pendingTaskCount()
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: [
                 "available": available,
@@ -105,7 +105,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let identifier = request.payload?["identifier"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing identifier")
@@ -120,7 +120,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
                 markTaskActive(identifier)
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "ok",
                     result: ["registered": success, "identifier": identifier],
                     error: nil
@@ -128,7 +128,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
             } else {
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "error",
                     result: nil,
                     error: IOSNativeError(code: "REGISTRATION_FAILED", message: "failed to register background task: \(identifier)")
@@ -137,7 +137,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "iOS 13.0+ required")
@@ -148,7 +148,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let identifier = request.payload?["identifier"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing identifier")
@@ -179,7 +179,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
                 try BGTaskScheduler.shared.submit(request_bg)
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "ok",
                     result: ["submitted": true, "identifier": identifier, "taskType": taskType],
                     error: nil
@@ -187,7 +187,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
             } catch {
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "error",
                     result: nil,
                     error: IOSNativeError(code: "SUBMIT_FAILED", message: error.localizedDescription)
@@ -196,7 +196,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "iOS 13.0+ required")
@@ -207,7 +207,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let identifier = request.payload?["identifier"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing identifier")
@@ -219,7 +219,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
             markTaskInactive(identifier)
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["cancelled": true, "identifier": identifier],
                 error: nil
@@ -227,7 +227,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "iOS 13.0+ required")
@@ -240,7 +240,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
             clearAllActiveTasks()
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["cancelled": true],
                 error: nil
@@ -248,7 +248,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "iOS 13.0+ required")
@@ -263,7 +263,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
             }
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["pending": pending],
                 error: nil
@@ -271,7 +271,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "iOS 13.0+ required")
@@ -284,7 +284,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
               let totalUnits = request.payload?["totalUnits"] as? Int else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing required progress parameters")
@@ -293,7 +293,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
         let phase = request.payload?["phase"] as? String ?? ""
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: [
                 "identifier": identifier,
@@ -310,7 +310,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let identifier = request.payload?["identifier"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing identifier")
@@ -320,7 +320,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
         BackgroundTaskBridge.shared.markTaskCompleted(identifier, success: false)
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["expired": true, "identifier": identifier, "success": false],
             error: nil
@@ -332,7 +332,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
               let success = request.payload?["success"] as? Bool else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing identifier or success flag")
@@ -342,7 +342,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
         BackgroundTaskBridge.shared.markTaskCompleted(identifier, success: success)
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["completed": true, "identifier": identifier, "success": success],
             error: nil
@@ -353,7 +353,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let identifier = request.payload?["identifier"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing identifier")
@@ -362,7 +362,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
         let stillPending = BackgroundTaskBridge.shared.hasPendingTask(identifier)
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["identifier": identifier, "stillPending": stillPending],
             error: nil
@@ -374,7 +374,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
         let activeCount = activeTaskCount()
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: [
                 "ready": available,
@@ -389,7 +389,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
         let available = #available(iOS 13.0, *)
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: [
                 "ensured": available,
@@ -403,7 +403,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let identifier = request.payload?["identifier"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing identifier")
@@ -412,7 +412,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
         let isActive = isTaskActive(identifier)
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["identifier": identifier, "active": isActive],
             error: nil
