@@ -4,7 +4,7 @@ import "context"
 
 type Request struct {
 	ProtocolVersion int            `json:"protocolVersion"`
-	RequestID       string         `json:"requestId"`
+	RequestId       string         `json:"requestId"`
 	Platform        string         `json:"platform"`
 	Operation       string         `json:"operation"`
 	Payload         map[string]any `json:"payload,omitempty"`
@@ -12,7 +12,7 @@ type Request struct {
 
 type Response struct {
 	ProtocolVersion int            `json:"protocolVersion"`
-	RequestID       string         `json:"requestId"`
+	RequestId       string         `json:"requestId"`
 	Status          string         `json:"status"`
 	Result          map[string]any `json:"result,omitempty"`
 	Error           *Error         `json:"error,omitempty"`

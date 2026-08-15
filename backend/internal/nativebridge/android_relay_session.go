@@ -28,7 +28,7 @@ type RelayEnvelope struct {
 	Type       string          `json:"type"`
 	Platform   string          `json:"platform,omitempty"`
 	Generation uint64          `json:"generation"`
-	RequestID  string          `json:"requestId,omitempty"`
+	RequestId  string          `json:"requestId,omitempty"`
 	Payload    json.RawMessage `json:"payload,omitempty"`
 }
 
@@ -56,7 +56,7 @@ func (s *productionRelaySession) SendRequest(ctx context.Context, req Request) (
 	if s.transport == nil {
 		return Response{
 			ProtocolVersion: req.ProtocolVersion,
-			RequestID:       req.RequestID,
+			RequestId:       req.RequestId,
 			Status:          "error",
 			Error: &Error{
 				Code:    ErrBridgeDisconnected,
@@ -69,7 +69,7 @@ func (s *productionRelaySession) SendRequest(ctx context.Context, req Request) (
 	if err != nil {
 		return Response{
 			ProtocolVersion: req.ProtocolVersion,
-			RequestID:       req.RequestID,
+			RequestId:       req.RequestId,
 			Status:          "error",
 			Error: &Error{
 				Code:    "ENCODE_ERROR",
@@ -81,7 +81,7 @@ func (s *productionRelaySession) SendRequest(ctx context.Context, req Request) (
 	env := RelayEnvelope{
 		Type:       "native_bridge.request",
 		Generation: s.generation,
-		RequestID:  req.RequestID,
+		RequestId:  req.RequestId,
 		Payload:    payload,
 	}
 
@@ -89,7 +89,7 @@ func (s *productionRelaySession) SendRequest(ctx context.Context, req Request) (
 	if err != nil {
 		return Response{
 			ProtocolVersion: req.ProtocolVersion,
-			RequestID:       req.RequestID,
+			RequestId:       req.RequestId,
 			Status:          "error",
 			Error: &Error{
 				Code:    "ENCODE_ERROR",
@@ -100,19 +100,19 @@ func (s *productionRelaySession) SendRequest(ctx context.Context, req Request) (
 
 	respChan := make(chan RelayEnvelope, 1)
 	s.mu.Lock()
-	s.pending[req.RequestID] = respChan
+	s.pending[req.RequestId] = respChan
 	s.mu.Unlock()
 
 	defer func() {
 		s.mu.Lock()
-		delete(s.pending, req.RequestID)
+		delete(s.pending, req.RequestId)
 		s.mu.Unlock()
 	}()
 
 	if err := s.transport.Send(envData); err != nil {
 		return Response{
 			ProtocolVersion: req.ProtocolVersion,
-			RequestID:       req.RequestID,
+			RequestId:       req.RequestId,
 			Status:          "error",
 			Error: &Error{
 				Code:    ErrBridgeDisconnected,
@@ -128,7 +128,7 @@ func (s *productionRelaySession) SendRequest(ctx context.Context, req Request) (
 	case <-sendCtx.Done():
 		return Response{
 			ProtocolVersion: req.ProtocolVersion,
-			RequestID:       req.RequestID,
+			RequestId:       req.RequestId,
 			Status:          "error",
 			Error: &Error{
 				Code:    "TIMEOUT",
@@ -139,7 +139,7 @@ func (s *productionRelaySession) SendRequest(ctx context.Context, req Request) (
 		if !ok || len(resp.Payload) == 0 {
 			return Response{
 				ProtocolVersion: req.ProtocolVersion,
-				RequestID:       req.RequestID,
+				RequestId:       req.RequestId,
 				Status:          "error",
 				Error: &Error{
 					Code:    "INVALID_RESPONSE",
@@ -151,7 +151,7 @@ func (s *productionRelaySession) SendRequest(ctx context.Context, req Request) (
 		if err := json.Unmarshal(resp.Payload, &response); err != nil {
 			return Response{
 				ProtocolVersion: req.ProtocolVersion,
-				RequestID:       req.RequestID,
+				RequestId:       req.RequestId,
 				Status:          "error",
 				Error: &Error{
 					Code:    "INVALID_RESPONSE",
@@ -166,11 +166,11 @@ func (s *productionRelaySession) SendRequest(ctx context.Context, req Request) (
 func (s *productionRelaySession) handleIncomingEnvelope(env RelayEnvelope) {
 	switch env.Type {
 	case "native_bridge.response", "native_bridge.request":
-		if env.RequestID == "" {
+		if env.RequestId == "" {
 			return
 		}
 		s.mu.Lock()
-		ch, ok := s.pending[env.RequestID]
+		ch, ok := s.pending[env.RequestId]
 		s.mu.Unlock()
 		if ok {
 			select {
