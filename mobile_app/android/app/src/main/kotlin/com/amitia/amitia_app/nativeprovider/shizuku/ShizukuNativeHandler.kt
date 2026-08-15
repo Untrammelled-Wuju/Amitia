@@ -11,6 +11,8 @@ import com.amitia.amitia_app.nativeprovider.model.NativeBridgeProtocol
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeRequest
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeResponse
 import rikka.shizuku.Shizuku
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -35,9 +37,14 @@ internal class ShizukuNativeHandler(
         Shizuku.addBinderDeadListener {
             permissionWaiters.values.forEach { it.complete(-1) }
             permissionWaiters.clear()
-            ShizukuCommandServiceHolder.onServiceDestroyed(
-                ShizukuCommandServiceHolder.currentService() ?: return@addBinderDeadListener
-            )
+        }
+
+        Shizuku.addBinderReceivedListener {
+            mainHandler.post {
+                if (ShizukuCommandServiceHolder.currentState() == ShizukuServiceState.DEAD) {
+                    ShizukuCommandServiceHolder.unbindService()
+                }
+            }
         }
     }
 
@@ -54,6 +61,7 @@ internal class ShizukuNativeHandler(
 
     private fun handleStatus(request: NativeBridgeRequest): NativeBridgeResponse {
         val state = detectShizukuState()
+        val holderState = ShizukuCommandServiceHolder.currentState()
         return NativeBridgeResponse(
             protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
             requestId = request.requestId,
@@ -63,13 +71,13 @@ internal class ShizukuNativeHandler(
                 "installed" to state.installed,
                 "binderAvailable" to state.binderAvailable,
                 "permissionState" to state.permissionState,
-                "state" to state.state,
+                "state" to holderState.name.lowercase(),
                 "reason" to state.reason,
             ),
         )
     }
 
-    private fun handleRequestPermission(request: NativeBridgeRequest): NativeBridgeResponse {
+    private suspend fun handleRequestPermission(request: NativeBridgeRequest): NativeBridgeResponse {
         val state = detectShizukuState()
         if (!state.installed) {
             return NativeBridgeResponse(
@@ -95,6 +103,7 @@ internal class ShizukuNativeHandler(
         }
 
         if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
+            ensureServiceReady(10000L)
             return NativeBridgeResponse(
                 protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
                 requestId = request.requestId,
@@ -132,7 +141,7 @@ internal class ShizukuNativeHandler(
 
         return when (result) {
             PackageManager.PERMISSION_GRANTED -> {
-                ShizukuCommandServiceHolder.bindService()
+                ensureServiceReady(10000L)
                 NativeBridgeResponse(
                     protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
                     requestId = request.requestId,
@@ -169,6 +178,12 @@ internal class ShizukuNativeHandler(
         val code = requestCode++
         permissionWaiters[code] = future
 
+        if (!Shizuku.pingBinder()) {
+            future.complete(-1)
+            permissionWaiters.remove(code)
+            return future
+        }
+
         if (Shizuku.isPreV11) {
             future.complete(-1)
             permissionWaiters.remove(code)
@@ -184,7 +199,7 @@ internal class ShizukuNativeHandler(
         return future
     }
 
-    private fun handleExecute(request: NativeBridgeRequest): NativeBridgeResponse {
+    private suspend fun handleExecute(request: NativeBridgeRequest): NativeBridgeResponse {
         val payload = request.payload
         val executable = payload["executable"] as? String
         val args = payload["args"] as? List<*>
@@ -217,47 +232,6 @@ internal class ShizukuNativeHandler(
             )
         }
 
-        return executeViaUserService(request, executable, args, stdin, timeoutMs, maxOutputBytes)
-    }
-
-    private suspend fun ensureServiceReady(timeoutMs: Long): ShizukuCommandService {
-        if (!Shizuku.pingBinder()) throw BinderUnavailable
-        if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
-            throw PermissionRequired
-        }
-
-        ShizukuCommandServiceHolder.currentService()?.let { return it }
-
-        val latch = CountDownLatch(1)
-        ShizukuCommandServiceHolder.setServiceConnectedListener {
-            latch.countDown()
-        }
-
-        val bound = ShizukuCommandServiceHolder.bindService()
-        if (!bound) {
-            ShizukuCommandServiceHolder.setServiceConnectedListener(null)
-            throw ServiceBindFailed
-        }
-
-        val awaited = latch.await(timeoutMs, TimeUnit.MILLISECONDS)
-        ShizukuCommandServiceHolder.setServiceConnectedListener(null)
-
-        if (!awaited) {
-            throw ServiceBindTimeout
-        }
-
-        return ShizukuCommandServiceHolder.currentService()
-            ?: throw ServiceBindFailed
-    }
-
-    private fun executeViaUserService(
-        request: NativeBridgeRequest,
-        executable: String,
-        args: List<*>?,
-        stdin: String?,
-        timeoutMs: Long,
-        maxOutputBytes: Long,
-    ): NativeBridgeResponse {
         val service = try {
             ensureServiceReady(10000L)
         } catch (e: BinderUnavailable) {
@@ -312,21 +286,13 @@ internal class ShizukuNativeHandler(
             )
         }
 
+        val requestJson = buildRequestJson(executable, args, stdin, timeoutMs, maxOutputBytes)
+
         return try {
-            val result = service.executeCommand(executable, args ?: emptyList(), stdin, timeoutMs, maxOutputBytes)
-            NativeBridgeResponse(
-                protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
-                requestId = request.requestId,
-                status = NativeBridgeProtocol.STATUS_SUCCESS,
-                result = mapOf(
-                    "exitCode" to result.exitCode,
-                    "exitCodeAvailable" to result.exitCodeAvailable,
-                    "stdout" to result.stdout,
-                    "stderr" to result.stderr,
-                    "durationMs" to result.durationMs,
-                    "timedOut" to result.timedOut,
-                ),
-            )
+            val resultJson = withContext(Dispatchers.IO) {
+                service.executeCommand(requestJson)
+            }
+            parseAndBuildResponse(request.requestId, resultJson)
         } catch (e: Exception) {
             NativeBridgeResponse(
                 protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
@@ -338,6 +304,145 @@ internal class ShizukuNativeHandler(
                 ),
             )
         }
+    }
+
+    private fun buildRequestJson(
+        executable: String,
+        args: List<*>?,
+        stdin: String?,
+        timeoutMs: Long,
+        maxOutputBytes: Long,
+    ): String {
+        val argsJson = (args ?: emptyList<Any>).joinToString(",") { "\"${it.toString().replace("\"", "\\\"")}\"" }
+        val stdinJson = stdin?.let { "\"${it.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")}\"" } ?: "null"
+        return """{"executable":"${executable.replace("\"", "\\\"")}","args":[$argsJson],"stdin":$stdinJson,"timeoutMs":$timeoutMs,"maxOutputBytes":$maxOutputBytes}"""
+    }
+
+    private fun parseAndBuildResponse(requestId: String, resultJson: String): NativeBridgeResponse {
+        return try {
+            val map = mutableMapOf<String, Any>()
+            val cleaned = resultJson.trim().removePrefix("{").removeSuffix("}").trim()
+            if (cleaned.isNotEmpty()) {
+                var i = 0
+                while (i < cleaned.length) {
+                    while (i < cleaned.length && cleaned[i] in " \t\r\n") i++
+                    if (i >= cleaned.length || cleaned[i] != '"') break
+                    i++
+                    val keyStart = i
+                    while (i < cleaned.length && cleaned[i] != '"') i++
+                    val key = cleaned.substring(keyStart, i)
+                    i++
+                    while (i < cleaned.length && cleaned[i] != ':') i++
+                    i++
+                    while (i < cleaned.length && cleaned[i] in " \t\r\n") i++
+                    if (i >= cleaned.length) break
+                    when {
+                        cleaned[i] == '"' -> {
+                            i++
+                            val sb = StringBuilder()
+                            while (i < cleaned.length && cleaned[i] != '"') {
+                                if (cleaned[i] == '\\' && i + 1 < cleaned.length) {
+                                    when (cleaned[i + 1]) {
+                                        'n' -> sb.append('\n')
+                                        'r' -> sb.append('\r')
+                                        't' -> sb.append('\t')
+                                        else -> sb.append(cleaned[i + 1])
+                                    }
+                                    i += 2
+                                } else {
+                                    sb.append(cleaned[i])
+                                    i++
+                                }
+                            }
+                            map[key] = sb.toString()
+                            i++
+                        }
+                        cleaned[i] == '[' -> {
+                            i++
+                            while (i < cleaned.length && cleaned[i] != ']') i++
+                            i++
+                            map[key] = emptyList<String>()
+                        }
+                        cleaned[i].isDigit() || cleaned[i] == '-' -> {
+                            val numStart = i
+                            while (i < cleaned.length && cleaned[i] in "-0123456789.") i++
+                            val numStr = cleaned.substring(numStart, i)
+                            map[key] = numStr.toLongOrNull() ?: numStr.toDoubleOrNull() ?: 0L
+                        }
+                        cleaned.startsWith("true", i) -> {
+                            map[key] = true
+                            i += 4
+                        }
+                        cleaned.startsWith("false", i) -> {
+                            map[key] = false
+                            i += 5
+                        }
+                        else -> break
+                    }
+                    while (i < cleaned.length && cleaned[i] in " \t\r\n,") i++
+                }
+            }
+
+            if (map.containsKey("error")) {
+                val errorMap = map["error"] as? Map<*, *>
+                NativeBridgeResponse(
+                    protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+                    requestId = requestId,
+                    status = NativeBridgeProtocol.STATUS_ERROR,
+                    error = NativeBridgeError(
+                        code = errorMap?.get("code") as? String ?: "SHIZUKU_EXECUTION_ERROR",
+                        message = errorMap?.get("message") as? String ?: "execution failed",
+                    ),
+                )
+            } else {
+                NativeBridgeResponse(
+                    protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+                    requestId = requestId,
+                    status = NativeBridgeProtocol.STATUS_SUCCESS,
+                    result = map,
+                )
+            }
+        } catch (e: Exception) {
+            NativeBridgeResponse(
+                protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+                requestId = requestId,
+                status = NativeBridgeProtocol.STATUS_ERROR,
+                error = NativeBridgeError(
+                    code = "SHIZUKU_RESPONSE_PARSE_ERROR",
+                    message = "failed to parse execution result: ${e.message}",
+                ),
+            )
+        }
+    }
+
+    private suspend fun ensureServiceReady(timeoutMs: Long): IPrivilegedCommandService {
+        if (!Shizuku.pingBinder()) throw BinderUnavailable
+        if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
+            throw PermissionRequired
+        }
+
+        ShizukuCommandServiceHolder.currentService()?.let { return it }
+
+        val latch = CountDownLatch(1)
+        ShizukuCommandServiceHolder.setServiceConnectedListener {
+            latch.countDown()
+        }
+
+        val bound = ShizukuCommandServiceHolder.bindService()
+        if (!bound) {
+            ShizukuCommandServiceHolder.setServiceConnectedListener(null)
+            throw ServiceBindFailed
+        }
+
+        val awaited = latch.await(timeoutMs, TimeUnit.MILLISECONDS)
+        ShizukuCommandServiceHolder.setServiceConnectedListener(null)
+
+        if (!awaited) {
+            throw ServiceBindTimeout
+        }
+
+        return ShizukuCommandServiceHolder.currentService()
+            ?: throw ServiceBindFailed
     }
 
     private fun detectShizukuState(): ShizukuCapabilityState {
@@ -401,6 +506,10 @@ internal class ShizukuNativeHandler(
                 message = "unknown shizuku operation: ${request.operation}",
             ),
         )
+    }
+
+    fun cleanup() {
+        ShizukuCommandServiceHolder.unbindService()
     }
 
     companion object {

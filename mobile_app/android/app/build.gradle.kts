@@ -84,6 +84,12 @@ android {
             excludes.add("lib/armeabi/**")
         }
     }
+
+    sourceSets {
+        getByName("main") {
+            aidl.srcDirs("src/main/aidl")
+        }
+    }
 }
 
 val frozenRuntimePackagePath: String? = System.getenv("FROZEN_RUNTIME_PACKAGE_PATH")
