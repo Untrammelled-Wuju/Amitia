@@ -112,6 +112,7 @@ type CapabilityID string
 type ToolDefinition struct {
 	ID               string                  `json:"id"`
 	ModelName        string                  `json:"modelName"`
+	CapabilityID     CapabilityID            `json:"capabilityId"`
 	ExtensionID      string                  `json:"extensionId,omitempty"`
 	ModuleID         string                  `json:"moduleId,omitempty"`
 	Source           ToolSource              `json:"source"`

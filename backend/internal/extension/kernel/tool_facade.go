@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/agent/tool"
+	"github.com/u-ai/backend/internal/extension/kernel/capability/acquisition"
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
@@ -26,7 +27,7 @@ func DefaultToolFacadeConfig() ToolFacadeConfig {
 	}
 }
 
-	type ToolFacade struct {
+type ToolFacade struct {
 	toolRegistry          *capability.ToolRegistry
 	executionKernel       *execution.ExecutionPipeline
 	capabilityResolver    capability.CapabilityResolver
@@ -36,9 +37,10 @@ func DefaultToolFacadeConfig() ToolFacadeConfig {
 	agentSkillBackend     AgentSkillBackend
 	runSkillScriptHandler RunSkillScriptHandler
 	skillResourceHandler  SkillResourceHandler
+	acquisitionBridge     *acquisition.AgentCapabilityBridge
 	counters              *ToolFacadeCounters
 	config                ToolFacadeConfig
-	}
+}
 
 func NewToolFacade(toolRegistry *capability.ToolRegistry, executionKernel *execution.ExecutionPipeline, args ...any) *ToolFacade {
 	config := DefaultToolFacadeConfig()
@@ -80,6 +82,10 @@ func (f *ToolFacade) SetRunSkillScriptHandler(handler RunSkillScriptHandler) {
 
 func (f *ToolFacade) SetSkillResourceHandler(handler SkillResourceHandler) {
 	f.skillResourceHandler = handler
+}
+
+func (f *ToolFacade) SetAcquisitionBridge(bridge *acquisition.AgentCapabilityBridge) {
+	f.acquisitionBridge = bridge
 }
 
 func (f *ToolFacade) SetCapabilityResolver(resolver capability.CapabilityResolver) {
@@ -276,6 +282,14 @@ func (f *ToolFacade) ExecuteModelTool(ctx context.Context, modelName string, inp
 		result, _ := f.handleMaterializeSkillResource(ctx, input, scope)
 		return result, true
 	}
+	if modelName == acquisition.FindCapabilitiesToolID && f.acquisitionBridge != nil {
+		result, _ := f.handleFindCapability(ctx, input, scope)
+		return result, true
+	}
+	if modelName == acquisition.AcquireCapabilityToolID && f.acquisitionBridge != nil {
+		result, _ := f.handleAcquireCapability(ctx, input, scope)
+		return result, true
+	}
 	if f.toolRegistry == nil {
 		return LegacyToolResult{Status: "FAILED", VisibleText: "tool registry not configured", Error: &LegacyToolError{Code: "TOOL_REGISTRY_UNAVAILABLE"}}, false
 	}
@@ -299,6 +313,60 @@ func (f *ToolFacade) AfterReply(scope LegacyScope, reply LegacyReplyView) bool {
 		return !blocked
 	}
 	return false
+}
+
+func (f *ToolFacade) handleFindCapability(ctx context.Context, input json.RawMessage, scope LegacyScope) (LegacyToolResult, error) {
+	var req acquisition.FindCapabilitiesInput
+	if err := json.Unmarshal(input, &req); err != nil {
+		return LegacyToolResult{
+			Status:      "FAILED",
+			VisibleText: fmt.Sprintf("invalid find_capability input: %v", err),
+			Error:       &LegacyToolError{Code: "INVALID_INPUT", Message: err.Error()},
+		}, err
+	}
+	output, err := f.acquisitionBridge.FindCapabilities(ctx, req, scope.UserID)
+	if err != nil {
+		return LegacyToolResult{
+			Status:      "FAILED",
+			VisibleText: fmt.Sprintf("find_capability failed: %v", err),
+			Error:       &LegacyToolError{Code: "FIND_CAPABILITY_FAILED", Message: err.Error()},
+		}, err
+	}
+	resultJSON, _ := json.Marshal(output)
+	return LegacyToolResult{
+		Status:      "SUCCESS",
+		Output:      resultJSON,
+		VisibleText: fmt.Sprintf("Found %d candidate(s) for capability %s", output.TotalFound, req.CapabilityID),
+	}, nil
+}
+
+func (f *ToolFacade) handleAcquireCapability(ctx context.Context, input json.RawMessage, scope LegacyScope) (LegacyToolResult, error) {
+	var req acquisition.AcquireInput
+	if err := json.Unmarshal(input, &req); err != nil {
+		return LegacyToolResult{
+			Status:      "FAILED",
+			VisibleText: fmt.Sprintf("invalid acquire_capability input: %v", err),
+			Error:       &LegacyToolError{Code: "INVALID_INPUT", Message: err.Error()},
+		}, err
+	}
+	output, err := f.acquisitionBridge.AcquireCapability(ctx, req, scope.UserID)
+	if err != nil {
+		return LegacyToolResult{
+			Status:      "FAILED",
+			VisibleText: fmt.Sprintf("acquire_capability failed: %v", err),
+			Error:       &LegacyToolError{Code: "ACQUIRE_CAPABILITY_FAILED", Message: err.Error()},
+		}, err
+	}
+	resultJSON, _ := json.Marshal(output)
+	visibleText := fmt.Sprintf("Capability acquisition state: %s", output.State)
+	if output.Success {
+		visibleText = fmt.Sprintf("Capability %s acquired successfully", output.CapabilityID)
+	}
+	return LegacyToolResult{
+		Status:      "SUCCESS",
+		Output:      resultJSON,
+		VisibleText: visibleText,
+	}, nil
 }
 
 func (f *ToolFacade) buildHookContext(scope LegacyScope) hook.HookContextSnapshot {
@@ -431,8 +499,12 @@ func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.
 	if f.capabilityResolver == nil {
 		return resolvedExecution{legacyUnresolved: true}
 	}
+	capID := def.CapabilityID
+	if capID == "" {
+		capID = capability.CapabilityID(def.ID)
+	}
 	req := capability.CapabilityResolutionRequest{
-		CapabilityID:       capability.CapabilityID(def.ID),
+		CapabilityID:       capID,
 		ExtensionID:        def.ExtensionID,
 		ModuleID:           def.ModuleID,
 		AllowCore:          true,

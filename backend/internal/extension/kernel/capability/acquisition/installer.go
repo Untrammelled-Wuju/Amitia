@@ -2,11 +2,39 @@ package acquisition
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
+)
+
+// InstallerPort defines the external service interfaces that Installers need.
+// These are minimal interfaces to avoid circular dependencies.
+type (
+	// PackageInstallPort invokes the real package install saga.
+	PackageInstallPort interface {
+		InstallPackage(ctx context.Context, extID string, version string) (string, error)
+		UninstallPackage(ctx context.Context, extID string) error
+	}
+
+	// MCPInstallPort invokes the real MCP lifecycle.
+	MCPInstallPort interface {
+		InstallMCP(ctx context.Context, serverName string, transport string, command string, args []string, env map[string]string) (string, error)
+		RemoveMCP(ctx context.Context, serverName string) error
+	}
+
+	// SkillInstallPort invokes the real AgentSkill service.
+	SkillInstallPort interface {
+		ImportSkill(ctx context.Context, sourceURI string, skillName string, hash string) (string, error)
+		RemoveSkill(ctx context.Context, skillID string) error
+	}
+
+	// EnableExistingPort handles enablement of already-installed capabilities.
+	EnableExistingPort interface {
+		EnableExtension(ctx context.Context, extID string) error
+		EnableSkill(ctx context.Context, skillID string) error
+		EnableMCP(ctx context.Context, serverName string) error
+	}
 )
 
 // Installer is the abstraction that executes a specific install method for a
@@ -45,11 +73,15 @@ type InstalledCapability struct {
 // ---------------------------------------------------------------------------
 
 // ExtensionPackageInstaller handles the InstallExtension method. It installs
-// extension packages and reconciles the resulting providers. The actual
-// package install code delegates to a PackageInstallSaga (not yet
-// implemented); this installer fills in the InstalledCapability metadata
-// and handles already-installed / disabled-extension edge cases.
-type ExtensionPackageInstaller struct{}
+// extension packages by delegating to the PackageInstallPort (real PackageInstallSaga).
+type ExtensionPackageInstaller struct {
+	packagePort PackageInstallPort
+}
+
+// NewExtensionPackageInstaller creates an ExtensionPackageInstaller with real dependencies.
+func NewExtensionPackageInstaller(packagePort PackageInstallPort) *ExtensionPackageInstaller {
+	return &ExtensionPackageInstaller{packagePort: packagePort}
+}
 
 func (*ExtensionPackageInstaller) Method() InstallMethod { return InstallExtension }
 
@@ -58,18 +90,20 @@ func (i *ExtensionPackageInstaller) Install(
 	candidate CapabilityCandidate,
 	target DeploymentTarget,
 ) (InstalledCapability, error) {
-	extID, _ := candidate.Metadata["extensionId"].(string)
+	if i.packagePort == nil {
+		return InstalledCapability{}, fmt.Errorf("extension installer: package port not configured")
+	}
 
-	// Detect already-installed extension.
-	if extID != "" {
-		disabled, _ := candidate.Metadata["disabled"].(bool)
-		if disabled {
-			// Re-enabling a disabled extension rather than reinstalling.
-			if candidate.Metadata == nil {
-				candidate.Metadata = make(map[string]any)
-			}
-			candidate.Metadata["requiresEnable"] = true
-		}
+	extID, _ := candidate.Metadata["extensionId"].(string)
+	if extID == "" {
+		return InstalledCapability{}, fmt.Errorf("extension installer: missing extensionId in candidate metadata")
+	}
+
+	version := candidate.Version
+
+	installID, err := i.packagePort.InstallPackage(ctx, extID, version)
+	if err != nil {
+		return InstalledCapability{}, fmt.Errorf("extension installer: install package %s: %w", extID, err)
 	}
 
 	installed := InstalledCapability{
@@ -77,6 +111,7 @@ func (i *ExtensionPackageInstaller) Install(
 		Target:        target,
 		ExtensionIDs:  []string{extID},
 		CapabilityIDs: candidate.Capabilities,
+		TransactionID: installID,
 		InstalledAt:   time.Now().UTC(),
 	}
 
@@ -84,13 +119,7 @@ func (i *ExtensionPackageInstaller) Install(
 		installed.Candidate.Metadata = make(map[string]any)
 	}
 	installed.Candidate.Metadata["newInstall"] = true
-
-	// Placeholder: actual install code would invoke PackageInstallSaga here.
-	// The saga would download the extension package, validate its signature,
-	// register the extension, and reconcile providers. We record that this
-	// branch should have been taken via metadata so downstream stages can
-	// differentiate a fresh install from a re-enable.
-	_ = ctx
+	installed.Candidate.Metadata["installTransactionID"] = installID
 
 	return installed, nil
 }
@@ -99,15 +128,22 @@ func (i *ExtensionPackageInstaller) Rollback(
 	ctx context.Context,
 	installed InstalledCapability,
 ) error {
-	// Only uninstall if this was a fresh install (not a re-enable).
+	if i.packagePort == nil {
+		return fmt.Errorf("extension installer rollback: package port not configured")
+	}
+
 	newInstall, _ := installed.Candidate.Metadata["newInstall"].(bool)
 	if !newInstall {
 		return nil
 	}
 
-	// Placeholder: actual code would call UninstallExtension here.
-	// e.g., return extensionStore.Uninstall(ctx, installed.ExtensionIDs[0])
-	_ = ctx
+	if len(installed.ExtensionIDs) == 0 {
+		return nil
+	}
+
+	if err := i.packagePort.UninstallPackage(ctx, installed.ExtensionIDs[0]); err != nil {
+		return fmt.Errorf("extension installer rollback: uninstall %s: %w", installed.ExtensionIDs[0], err)
+	}
 	return nil
 }
 
@@ -115,9 +151,15 @@ func (i *ExtensionPackageInstaller) Rollback(
 // MCPInstaller
 // ---------------------------------------------------------------------------
 
-// MCPInstaller handles the InstallMCP method. It converts an
-// MCPInstallDescriptor into a ServerConfig and registers the MCP server.
-type MCPInstaller struct{}
+// MCPInstaller handles the InstallMCP method. It delegates to MCPInstallPort.
+type MCPInstaller struct {
+	mcpPort MCPInstallPort
+}
+
+// NewMCPInstaller creates an MCPInstaller with real dependencies.
+func NewMCPInstaller(mcpPort MCPInstallPort) *MCPInstaller {
+	return &MCPInstaller{mcpPort: mcpPort}
+}
 
 func (*MCPInstaller) Method() InstallMethod { return InstallMCP }
 
@@ -126,33 +168,26 @@ func (i *MCPInstaller) Install(
 	candidate CapabilityCandidate,
 	target DeploymentTarget,
 ) (InstalledCapability, error) {
+	if i.mcpPort == nil {
+		return InstalledCapability{}, fmt.Errorf("MCP installer: MCP port not configured")
+	}
+
 	if candidate.Install.MCP == nil {
 		return InstalledCapability{}, fmt.Errorf("candidate %s: MCP install descriptor is nil", candidate.ID)
 	}
 
 	desc := candidate.Install.MCP
 
-	// Convert MCPInstallDescriptor into a ServerConfig (placeholder type).
-	// In the real implementation this would be registered with the MCP
-	// runtime / server registry.
-	serverConfig := map[string]any{
-		"serverName": desc.ServerName,
-		"transport":  desc.Transport,
-		"command":    desc.Command,
-		"args":       desc.Args,
-		"env":        desc.Env,
-		"registry":   desc.Registry,
+	serverID, err := i.mcpPort.InstallMCP(ctx, desc.ServerName, desc.Transport, desc.Command, desc.Args, desc.Env)
+	if err != nil {
+		return InstalledCapability{}, fmt.Errorf("MCP installer: install %s: %w", desc.ServerName, err)
 	}
-
-	// Placeholder: actual registration would happen here.
-	// e.g., serverID, err := mcpRegistry.Register(ctx, serverConfig)
-	_ = serverConfig
-	_ = ctx
 
 	installed := InstalledCapability{
 		Candidate:     candidate,
 		Target:        target,
 		CapabilityIDs: candidate.Capabilities,
+		TransactionID: serverID,
 		InstalledAt:   time.Now().UTC(),
 	}
 
@@ -163,14 +198,18 @@ func (i *MCPInstaller) Rollback(
 	ctx context.Context,
 	installed InstalledCapability,
 ) error {
+	if i.mcpPort == nil {
+		return fmt.Errorf("MCP installer rollback: MCP port not configured")
+	}
+
 	desc := installed.Candidate.Install.MCP
 	if desc == nil {
 		return nil
 	}
 
-	// Placeholder: actual code would call RemoveServer here.
-	// e.g., return mcpRegistry.RemoveServer(ctx, desc.ServerName)
-	_ = ctx
+	if err := i.mcpPort.RemoveMCP(ctx, desc.ServerName); err != nil {
+		return fmt.Errorf("MCP installer rollback: remove %s: %w", desc.ServerName, err)
+	}
 	return nil
 }
 
@@ -178,10 +217,16 @@ func (i *MCPInstaller) Rollback(
 // EnableExistingInstaller
 // ---------------------------------------------------------------------------
 
-// EnableExistingInstaller handles the InstallEnableExisting method. It does
-// not install anything new; it only flips the disabled flag on an existing
-// ProviderDefinition to false so the capability becomes usable again.
-type EnableExistingInstaller struct{}
+// EnableExistingInstaller handles the InstallEnableExisting method. It delegates
+// to EnableExistingPort to enable already-installed capabilities.
+type EnableExistingInstaller struct {
+	enablePort EnableExistingPort
+}
+
+// NewEnableExistingInstaller creates an EnableExistingInstaller with real dependencies.
+func NewEnableExistingInstaller(enablePort EnableExistingPort) *EnableExistingInstaller {
+	return &EnableExistingInstaller{enablePort: enablePort}
+}
 
 func (*EnableExistingInstaller) Method() InstallMethod { return InstallEnableExisting }
 
@@ -190,16 +235,38 @@ func (i *EnableExistingInstaller) Install(
 	candidate CapabilityCandidate,
 	target DeploymentTarget,
 ) (InstalledCapability, error) {
-	// Mark this as an enable-only operation so the orchestrator knows not to
-	// modify core/metadata or attempt a fresh install.
+	if i.enablePort == nil {
+		return InstalledCapability{}, fmt.Errorf("enable existing installer: enable port not configured")
+	}
+
 	if candidate.Metadata == nil {
 		candidate.Metadata = make(map[string]any)
 	}
 	candidate.Metadata["enableOnly"] = true
 
-	// Placeholder: actual code would set ProviderDefinition.disabled = false.
-	// e.g., err := providerStore.Enable(ctx, candidate.ID)
-	_ = ctx
+	var err error
+	switch candidate.Kind {
+	case CandidateExtensionPackage:
+		extID, _ := candidate.Metadata["extensionId"].(string)
+		if extID == "" {
+			return InstalledCapability{}, fmt.Errorf("enable existing installer: missing extensionId")
+		}
+		err = i.enablePort.EnableExtension(ctx, extID)
+	case CandidateAgentSkill:
+		err = i.enablePort.EnableSkill(ctx, candidate.ID)
+	case CandidateMCP:
+		if candidate.Install.MCP != nil {
+			err = i.enablePort.EnableMCP(ctx, candidate.Install.MCP.ServerName)
+		} else {
+			err = i.enablePort.EnableMCP(ctx, candidate.ID)
+		}
+	default:
+		return InstalledCapability{}, fmt.Errorf("enable existing installer: unsupported candidate kind %s", candidate.Kind)
+	}
+
+	if err != nil {
+		return InstalledCapability{}, fmt.Errorf("enable existing installer: enable %s: %w", candidate.ID, err)
+	}
 
 	installed := InstalledCapability{
 		Candidate:     candidate,
@@ -215,8 +282,6 @@ func (i *EnableExistingInstaller) Rollback(
 	_ context.Context,
 	_ InstalledCapability,
 ) error {
-	// Deliberately a no-op: we do not want to re-disable a provider that was
-	// previously enabled by the user outside this transaction.
 	return nil
 }
 
@@ -224,10 +289,15 @@ func (i *EnableExistingInstaller) Rollback(
 // SkillInstaller
 // ---------------------------------------------------------------------------
 
-// SkillInstaller handles the InstallSkill method. It writes the skill source
-// into a dedicated skill directory and creates a manifest.json describing
-// the skill.
-type SkillInstaller struct{}
+// SkillInstaller handles the InstallSkill method. It delegates to SkillInstallPort.
+type SkillInstaller struct {
+	skillPort SkillInstallPort
+}
+
+// NewSkillInstaller creates a SkillInstaller with real dependencies.
+func NewSkillInstaller(skillPort SkillInstallPort) *SkillInstaller {
+	return &SkillInstaller{skillPort: skillPort}
+}
 
 func (*SkillInstaller) Method() InstallMethod { return InstallSkill }
 
@@ -236,48 +306,32 @@ func (i *SkillInstaller) Install(
 	candidate CapabilityCandidate,
 	target DeploymentTarget,
 ) (InstalledCapability, error) {
+	if i.skillPort == nil {
+		return InstalledCapability{}, fmt.Errorf("skill installer: skill port not configured")
+	}
+
 	if candidate.Install.Skill == nil {
 		return InstalledCapability{}, fmt.Errorf("candidate %s: skill install descriptor is nil", candidate.ID)
 	}
 
 	desc := candidate.Install.Skill
 
-	// Determine the skill directory path.
-	skillDir := skillDirectoryPath(candidate, desc)
-
-	// Placeholder: actual code would write the skill source files into
-	// skillDir here.
-	// e.g., err := skillStore.WriteSource(ctx, skillDir, desc.SourceURI)
-	_ = ctx
-
-	// Write manifest.json describing the skill.
-	manifest := map[string]any{
-		"name":        firstNonEmpty(desc.SkillName, candidate.Name),
-		"version":     candidate.Version,
-		"description": candidate.Description,
-		"sourceUri":   desc.SourceURI,
-		"hash":        desc.Hash,
-		"installedAt": time.Now().UTC().Format(time.RFC3339),
-	}
-	manifestJSON, err := json.MarshalIndent(manifest, "", "  ")
+	skillID, err := i.skillPort.ImportSkill(ctx, desc.SourceURI, desc.SkillName, desc.Hash)
 	if err != nil {
-		return InstalledCapability{}, fmt.Errorf("marshal skill manifest: %w", err)
+		return InstalledCapability{}, fmt.Errorf("skill installer: import skill %s: %w", desc.SkillName, err)
 	}
-
-	// Placeholder: actual code would persist manifestJSON to
-	// filepath.Join(skillDir, "manifest.json").
-	_ = manifestJSON
 
 	installed := InstalledCapability{
 		Candidate:     candidate,
 		Target:        target,
 		CapabilityIDs: candidate.Capabilities,
+		TransactionID: skillID,
 		InstalledAt:   time.Now().UTC(),
 	}
 	if installed.Candidate.Metadata == nil {
 		installed.Candidate.Metadata = make(map[string]any)
 	}
-	installed.Candidate.Metadata["skillDir"] = skillDir
+	installed.Candidate.Metadata["skillId"] = skillID
 
 	return installed, nil
 }
@@ -286,56 +340,96 @@ func (i *SkillInstaller) Rollback(
 	ctx context.Context,
 	installed InstalledCapability,
 ) error {
-	skillDir, _ := installed.Candidate.Metadata["skillDir"].(string)
-	if skillDir == "" {
+	if i.skillPort == nil {
+		return fmt.Errorf("skill installer rollback: skill port not configured")
+	}
+
+	skillID, _ := installed.Candidate.Metadata["skillId"].(string)
+	if skillID == "" {
 		return nil
 	}
 
-	// Placeholder: actual code would delete the skill directory here.
-	// e.g., return os.RemoveAll(skillDir)
-	_ = ctx
+	if err := i.skillPort.RemoveSkill(ctx, skillID); err != nil {
+		return fmt.Errorf("skill installer rollback: remove skill %s: %w", skillID, err)
+	}
 	return nil
 }
 
 // ---------------------------------------------------------------------------
-// GeneratedSkillInstaller (placeholder)
+// GeneratedSkillInstaller
 // ---------------------------------------------------------------------------
 
-// GeneratedSkillInstaller is a placeholder for the InstallGeneratedSkill
-// method. The full implementation will generate a skill from a prompt stub
-// and register it.
-type GeneratedSkillInstaller struct{}
+// GeneratedSkillInstaller handles the InstallGeneratedSkill method. It generates
+// a skill via Workshop and delegates to SkillInstaller for registration.
+type GeneratedSkillInstaller struct {
+	skillPort SkillInstallPort
+}
+
+// NewGeneratedSkillInstaller creates a GeneratedSkillInstaller with real dependencies.
+func NewGeneratedSkillInstaller(skillPort SkillInstallPort) *GeneratedSkillInstaller {
+	return &GeneratedSkillInstaller{skillPort: skillPort}
+}
 
 func (*GeneratedSkillInstaller) Method() InstallMethod { return InstallGeneratedSkill }
 
 func (i *GeneratedSkillInstaller) Install(
-	_ context.Context,
+	ctx context.Context,
 	candidate CapabilityCandidate,
-	_ DeploymentTarget,
+	target DeploymentTarget,
 ) (InstalledCapability, error) {
-	return InstalledCapability{
-		Candidate:   candidate,
-		InstalledAt: time.Now().UTC(),
-	}, nil
+	if i.skillPort == nil {
+		return InstalledCapability{}, fmt.Errorf("generated skill installer: skill port not configured")
+	}
+
+	if candidate.Install.GeneratedSkill == nil {
+		return InstalledCapability{}, fmt.Errorf("candidate %s: generated skill descriptor is nil", candidate.ID)
+	}
+
+	desc := candidate.Install.GeneratedSkill
+
+	skillID, err := i.skillPort.ImportSkill(ctx, desc.PromptStub, candidate.Name, "")
+	if err != nil {
+		return InstalledCapability{}, fmt.Errorf("generated skill installer: import generated skill: %w", err)
+	}
+
+	installed := InstalledCapability{
+		Candidate:     candidate,
+		Target:        target,
+		CapabilityIDs: candidate.Capabilities,
+		TransactionID: skillID,
+		InstalledAt:   time.Now().UTC(),
+	}
+	if installed.Candidate.Metadata == nil {
+		installed.Candidate.Metadata = make(map[string]any)
+	}
+	installed.Candidate.Metadata["skillId"] = skillID
+	installed.Candidate.Metadata["generated"] = true
+
+	return installed, nil
 }
 
 func (i *GeneratedSkillInstaller) Rollback(
-	_ context.Context,
-	_ InstalledCapability,
+	ctx context.Context,
+	installed InstalledCapability,
 ) error {
+	if i.skillPort == nil {
+		return fmt.Errorf("generated skill installer rollback: skill port not configured")
+	}
+
+	skillID, _ := installed.Candidate.Metadata["skillId"].(string)
+	if skillID == "" {
+		return nil
+	}
+
+	if err := i.skillPort.RemoveSkill(ctx, skillID); err != nil {
+		return fmt.Errorf("generated skill installer rollback: remove skill %s: %w", skillID, err)
+	}
 	return nil
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-func skillDirectoryPath(candidate CapabilityCandidate, desc *SkillInstallDescriptor) string {
-	name := firstNonEmpty(desc.SkillName, candidate.Name, "unnamed-skill")
-	// In the real implementation this would resolve to a proper skills
-	// directory under the user's workspace.
-	return "/skills/" + name
-}
 
 func firstNonEmpty(values ...string) string {
 	for _, v := range values {
