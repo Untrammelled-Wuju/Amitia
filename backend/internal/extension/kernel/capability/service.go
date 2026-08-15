@@ -54,12 +54,18 @@ const (
 // GetCapability is deprecated. Use GetCapabilityDescriptor for capability queries
 // and ToolRegistry/ToolFacade for tool definitions.
 func (s *CapabilityService) GetCapability(ctx context.Context, toolID string) (ToolDefinition, bool) {
-	return ToolDefinition{}, false
+	if s.toolRegistry == nil {
+		return ToolDefinition{}, false
+	}
+	return s.toolRegistry.Get(ctx, toolID)
 }
 
 // ListCapabilities is deprecated. Use ListCapabilityDescriptors instead.
 func (s *CapabilityService) ListCapabilities(ctx context.Context) []ToolDefinition {
-	return nil
+	if s.toolRegistry == nil {
+		return nil
+	}
+	return s.toolRegistry.List(ctx, ToolFilter{})
 }
 
 func (s *CapabilityService) GetCapabilityDescriptor(capID CapabilityID) (CapabilityDescriptor, bool) {
