@@ -5,20 +5,21 @@ import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
-from .common.artifact_record import FrozenArtifactRecord, load as load_record
-from .common.hashing import sha256_file, sha256_bytes
-from .common.safe_extract import safe_extract
-from .common.deterministic_archive import create_deterministic_tar_xz
-from .common.tree_manifest import generate_tree_manifest
-from .common.atomic_publish import publish_candidate
-from .common.program_tree_validator import validate_program_tree
-from .common.errors import BuildError, ValidationError
-from .program_tree_assembler import (
+from common.artifact_record import FrozenArtifactRecord, load as load_record
+from common.hashing import sha256_file, sha256_bytes
+from common.safe_extract import safe_extract
+from common.deterministic_archive import create_deterministic_tar_xz
+from common.tree_manifest import generate_tree_manifest
+from common.atomic_publish import publish_candidate
+from common.program_tree_validator import validate_program_tree
+from common.errors import BuildError, ValidationError
+from package_validator import validate_package
+from program_tree_assembler import (
     ProgramComponent,
     assemble_program_tree,
     copy_manifest_files,
 )
-from .package_index import (
+from package_index import (
     generate_package_index,
     validate_package_index,
     write_package_index,
@@ -408,6 +409,10 @@ def build_runtime_package(
                 shutil.copytree(final_staging, output_path) if os.path.isdir(final_staging) else shutil.copy2(final_staging, output_path)
             finally:
                 shutil.rmtree(final_tmp, ignore_errors=True)
+
+            validation = validate_package(output_path)
+            if not validation.valid:
+                raise ValidationError(f"Package validation failed: {validation.errors}")
 
         finally:
             shutil.rmtree(candidate_dir, ignore_errors=True)

@@ -2,7 +2,7 @@ import json
 import os
 from typing import List, Dict, Optional, Tuple
 
-from .common.hashing import sha256_file
+from common.hashing import sha256_file
 
 
 def generate_package_index(
@@ -122,7 +122,7 @@ def compute_package_index_sha256(index: dict) -> str:
 
 
 def write_package_index(index: dict, output_path: str) -> str:
-    from .common.hashing import sha256_file
+    from common.hashing import sha256_file
     parent = os.path.dirname(output_path)
     if parent:
         os.makedirs(parent, exist_ok=True)
