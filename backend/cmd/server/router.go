@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/config"
+	"gorm.io/gorm"
 	"github.com/u-ai/backend/internal/accountsession"
 	"github.com/u-ai/backend/internal/agent"
 	"github.com/u-ai/backend/internal/asr"
@@ -63,6 +64,7 @@ import (
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/safety"
 	"github.com/u-ai/backend/internal/securityaudit"
+	"github.com/u-ai/backend/internal/sync"
 	"github.com/u-ai/backend/internal/system"
 	"github.com/u-ai/backend/internal/temporal"
 	"github.com/u-ai/backend/internal/tts"
@@ -430,6 +432,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		safety.RegisterSafetyRouter(apiGroup, ctx.DB)
 		delivery.RegisterSubmitRouter(apiGroup, services.DeliveryStore)
 		extension.RegisterRouter(apiGroup, ctx, services.Extension)
+		registerSyncRouter(apiGroup, ctx.DB)
 		if services.KernelContainer != nil {
 			cardProvider := extension_center.NewKernelCardProvider(services.KernelContainer.DefinitionRepository, services.KernelContainer.InstallationRepository)
 			centerSvc := extension_center.NewCenterService(cardProvider)
@@ -673,6 +676,18 @@ func registerImportStagingRoutes(r *gin.RouterGroup, reg *desktoppetsecurity.Pat
 		g.POST("/consume", handler.Consume)
 		g.POST("/:stagingId/reject", handler.Reject)
 	}
+}
+
+func registerSyncRouter(apiGroup *gin.RouterGroup, db *gorm.DB) {
+	syncSvc := sync.NewService(db, func(mutation sync.ClientMutation) (int64, error) {
+		return 0, nil
+	})
+	syncHandler := sync.NewHandler(syncSvc)
+	syncGroup := apiGroup.Group("/v1/sync")
+	syncGroup.POST("/pull", syncHandler.HandlePull)
+	syncGroup.POST("/push", syncHandler.HandlePush)
+	syncGroup.GET("/status", syncHandler.HandleStatus)
+	syncGroup.GET("/gap", syncHandler.HandleGap)
 }
 
 func generateShutdownOpID() string {

@@ -417,8 +417,18 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		CommandRetentionHr: int64(runtimeConfig.CommandRetentionHours),
 	})
 
+	processingDataDir := mcpDataDirectory(ctx)
+
+	releaseRepo := releaserepo.NewSQLiteRepository(ctx.DB)
+	releaseStoragePort := releasestorage.NewFileSystemStorage(processingDataDir)
+	gateReader := qualitygate.NewQualityGateReader(ctx.DB)
+	releaseEventPublisher := release.NewReleaseEventPublisher(releaseRepo)
+	newReleaseService := release.NewReleaseService(releaseRepo, gateReader, releaseStoragePort, releaseEventPublisher)
+
 	kernelBuilder.WithDesktopPetPluginCapabilities(integration.NewProductionCapabilities(integration.ProductionCapabilitiesOptions{
 		InstallationRepo: installationRepo,
+		ReleaseService:   newReleaseService,
+		RuntimeFacade:    runtimeV2Facade,
 	}))
 
 	if bootstrap != nil {
@@ -685,7 +695,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	desktopPetRepo := desktoppet.NewRepository(ctx.DB, ctx)
 	desktopPetWorker := worker.NewWorker(ctx.DB, desktopPetRepo, imageProviderRegistry)
 	processingRepo := processing.NewRepository(ctx.DB, ctx)
-	processingDataDir := mcpDataDirectory(ctx)
 
 	bgRegistry := backgroundremoval.NewRegistry()
 	if err := bgRegistry.Register(local.NewLocalProvider(), local.LocalCapabilities()); err != nil {
@@ -779,16 +788,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	bridgeRecoveryWorker := revisioncommit.NewRecoveryWorker(bridgeProcessor, 30*time.Second)
 	_ = bridgeRecoveryWorker
 
-	releaseRepo := releaserepo.NewSQLiteRepository(ctx.DB)
-	releaseStoragePort := releasestorage.NewFileSystemStorage(processingDataDir)
-
 	if err := releaseStoragePort.Validate(); err != nil {
 		return nil, fmt.Errorf("initialize release storage: %w", err)
 	}
-
-	gateReader := qualitygate.NewQualityGateReader(ctx.DB)
-	releaseEventPublisher := release.NewReleaseEventPublisher(releaseRepo)
-	newReleaseService := release.NewReleaseService(releaseRepo, gateReader, releaseStoragePort, releaseEventPublisher)
 
 	pathRegistry := desktoppetsecurity.NewPathRootRegistry()
 	if err := desktoppetsecurity.EnsureAllRequiredRoots(pathRegistry, config.AppCfg.Storage.DataDir); err != nil {
