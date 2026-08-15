@@ -20,6 +20,8 @@ type Envelope struct {
 	PluginID  string `json:"pluginId,omitempty"`
 	ServiceID string `json:"serviceId,omitempty"`
 
+	Generation uint64 `json:"generation,omitempty"`
+
 	Payload json.RawMessage `json:"payload,omitempty"`
 	Error   *ProtocolError  `json:"error,omitempty"`
 
