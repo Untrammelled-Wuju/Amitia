@@ -294,7 +294,7 @@ func (c *UpgradeCoordinator) ExecuteUpgrade(ctx context.Context, req UpgradeRequ
 
 	result.Stage = UpgradeStateCompleted
 	result.Success = true
-	c.clearUpgradeIntent(runtimeSnapshots)
+	c.clearUpgradeIntent(currentSnapshots)
 	c.logStage(operationID, req.ExtensionID, UpgradeStateCompleted, fmt.Sprintf("resumed=%d", len(result.ResumedRuntimes)))
 	c.recordAudit(operationID, req, result, nil)
 	return result, nil

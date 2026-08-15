@@ -121,23 +121,72 @@ try {
     $PackageIndex = @{
         schemaVersion = 1
         runtimeVersion = $RuntimeVersion
+        packageId = "amitia-runtime"
         packageFormatVersion = $PackageFormatVersion
-        guestOs = "linux"
-        guestArchitecture = "arm64"
-        buildMode = "release"
-        components = @{
-            node = @{
-                version = $NodeVersion
-                treeSha256 = $NodeExpectedTreeSha
-            }
+        target = @{
+            hostPlatform = "android"
+            hostAbi = "arm64-v8a"
+            runtimeKind = "proot"
+            guestPlatform = "linux"
+            guestArchitecture = "arm64"
         }
+        payloads = @(
+            @{
+                role = "rootfs"
+                path = "payload/rootfs/rootfs.tar.xz"
+                sha256 = "placeholder"
+                size = 0
+            }
+            @{
+                role = "runtime"
+                path = "payload/runtime/runtime.tar.xz"
+                sha256 = "placeholder"
+                size = 0
+            }
+        )
+        metadata = @(
+            @{
+                role = "guest-layout"
+                path = "metadata/guest-layout.json"
+                sha256 = "placeholder"
+                size = 0
+            }
+            @{
+                role = "mount-contract"
+                path = "metadata/mount-contract.json"
+                sha256 = "placeholder"
+                size = 0
+            }
+            @{
+                role = "sha256sums"
+                path = "metadata/SHA256SUMS"
+                sha256 = "placeholder"
+                size = 0
+            }
+        )
     } | ConvertTo-Json -Depth 10
     $PackageIndex | Set-Content -Path (Join-Path $MetadataDir "package-index.json") -Encoding UTF8
 
     $ComponentLock = @{
         schemaVersion = 1
         runtimeVersion = $RuntimeVersion
-        requiredComponents = @("backend", "node", "qdrant", "rootfs", "plugin-host", "task-host")
+        packageId = "amitia-runtime"
+        components = @(
+            @{
+                id = "node"
+                version = $NodeVersion
+                architecture = "arm64"
+                path = "payload/runtime/runtime.tar.xz"
+                sha256 = "placeholder"
+            }
+            @{
+                id = "rootfs"
+                version = $RuntimeVersion
+                architecture = "arm64"
+                path = "payload/rootfs/rootfs.tar.xz"
+                sha256 = "placeholder"
+            }
+        )
     } | ConvertTo-Json -Depth 5
     $ComponentLock | Set-Content -Path (Join-Path $MetadataDir "component-lock.json") -Encoding UTF8
 
@@ -215,7 +264,6 @@ try {
             treeSha256 = $NodeExpectedTreeSha
             verifiedSha = $NodeActualTreeSha
         }
-        createdAt = $Timestamp
     } | ConvertTo-Json -Depth 10
 
     $RecordPath = Join-Path $OutputDir "runtime-package-build-record.json"
