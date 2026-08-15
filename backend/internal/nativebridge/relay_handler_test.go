@@ -2,6 +2,7 @@ package nativebridge
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 )
 
@@ -10,6 +11,7 @@ type fakeRelayBridge struct {
 	transport   RelayTransport
 	generation  uint64
 	health      Health
+	envelopes   [][]byte
 	executeFunc func(ctx context.Context, req Request) (Response, error)
 }
 
@@ -29,16 +31,19 @@ func (f *fakeRelayBridge) Health(_ context.Context) Health {
 	return f.health
 }
 
-func (f *fakeRelayBridge) AttachRelaySession(transport RelayTransport) {
+func (f *fakeRelayBridge) AttachRelaySession(transport RelayTransport) uint64 {
 	f.attached = true
 	f.transport = transport
 	f.generation++
+	return f.generation
 }
 
-func (f *fakeRelayBridge) DetachSession() {
+func (f *fakeRelayBridge) DetachRelaySession(expectedGeneration uint64) {
+	if f.generation != expectedGeneration {
+		return
+	}
 	f.attached = false
 	f.transport = nil
-	f.generation++
 }
 
 func (f *fakeRelayBridge) Generation() uint64 {
@@ -47,6 +52,25 @@ func (f *fakeRelayBridge) Generation() uint64 {
 
 func (f *fakeRelayBridge) SessionAttached() bool {
 	return f.attached
+}
+
+func (f *fakeRelayBridge) HandleRelayEnvelope(payload []byte) error {
+	f.envelopes = append(f.envelopes, payload)
+	var env RelayEnvelope
+	if err := json.Unmarshal(payload, &env); err != nil {
+		return err
+	}
+	if env.Type == "native_bridge.response" && env.RequestID != "" {
+		resp := Response{
+			ProtocolVersion: 1,
+			RequestID:       env.RequestID,
+			Status:          "success",
+			Result:          map[string]any{"echo": true},
+		}
+		respData, _ := json.Marshal(resp)
+		f.envelopes = append(f.envelopes, respData)
+	}
+	return nil
 }
 
 func TestRelayHandlerRegisterBridge(t *testing.T) {
@@ -97,18 +121,14 @@ func TestRelayBridgeLifecycle(t *testing.T) {
 		t.Fatal("expected not attached initially")
 	}
 
-	bridge.AttachRelaySession(nil)
+	gen := bridge.AttachRelaySession(nil)
 	if !bridge.SessionAttached() {
 		t.Fatal("expected attached after AttachRelaySession")
 	}
 
-	initialGen := bridge.Generation()
-	bridge.DetachSession()
+	bridge.DetachRelaySession(gen)
 	if bridge.SessionAttached() {
-		t.Fatal("expected not attached after DetachSession")
-	}
-	if bridge.Generation() <= initialGen {
-		t.Fatal("expected generation to increment after detach")
+		t.Fatal("expected not attached after DetachRelaySession")
 	}
 }
 
@@ -117,5 +137,59 @@ func TestRelayHandlerSessionTracking(t *testing.T) {
 	_, ok := handler.GetSession("android")
 	if ok {
 		t.Fatal("expected no session initially")
+	}
+}
+
+func TestRelayBridgeDetachOnlyMatchingGeneration(t *testing.T) {
+	bridge := &fakeRelayBridge{health: HealthUnknown}
+
+	gen1 := bridge.AttachRelaySession(nil)
+	gen2 := bridge.AttachRelaySession(nil)
+
+	bridge.DetachRelaySession(gen1)
+	if !bridge.SessionAttached() {
+		t.Fatal("expected still attached after stale generation detach")
+	}
+
+	bridge.DetachRelaySession(gen2)
+	if bridge.SessionAttached() {
+		t.Fatal("expected not attached after current generation detach")
+	}
+}
+
+func TestRelayBridgeHandleEnvelopeRoutesToBridge(t *testing.T) {
+	bridge := &fakeRelayBridge{health: HealthReady}
+	bridge.AttachRelaySession(nil)
+
+	env := RelayEnvelope{
+		Type:       "native_bridge.event",
+		Generation: bridge.Generation(),
+		Payload:    json.RawMessage(`{"domain":"test"}`),
+	}
+	data, _ := json.Marshal(env)
+	if err := bridge.HandleRelayEnvelope(data); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(bridge.envelopes) == 0 {
+		t.Fatal("expected bridge to receive envelope")
+	}
+}
+
+func TestRelayBridgeRejectsOldGenerationEnvelope(t *testing.T) {
+	bridge := &fakeRelayBridge{health: HealthReady}
+	bridge.AttachRelaySession(nil)
+	oldGen := bridge.Generation()
+
+	bridge.AttachRelaySession(nil)
+
+	env := RelayEnvelope{
+		Type:       "native_bridge.event",
+		Generation: oldGen,
+		Payload:    json.RawMessage(`{"domain":"test"}`),
+	}
+	data, _ := json.Marshal(env)
+	if err := bridge.HandleRelayEnvelope(data); err != nil {
+		t.Fatalf("unexpected error for old generation: %v", err)
 	}
 }
