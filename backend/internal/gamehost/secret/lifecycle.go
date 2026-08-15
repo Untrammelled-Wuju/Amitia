@@ -11,9 +11,10 @@ import (
 )
 
 type ServiceSecretManifest struct {
-	Ref      kernelsecret.SecretRef
-	Purpose  Purpose
-	Required bool
+	Ref       kernelsecret.SecretRef
+	Purpose   Purpose
+	Required  bool
+	ServiceID string
 }
 
 type runtimeStartupKey struct {
