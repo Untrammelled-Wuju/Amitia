@@ -57,6 +57,7 @@ export interface ControlOutputResult {
   allowed: boolean;
   reason?: string;
   currentEpoch?: number;
+  generation?: number;
 }
 
 export interface AuthorityTakeoverInput {
@@ -107,6 +108,9 @@ export interface EmergencyStopStatusResult {
 export interface SinkEffectDispatchPayload {
   sinkId: string;
   serviceId: string;
+  outputId: string;
+  epoch: number;
+  generation: number;
   payload: unknown;
 }
 
