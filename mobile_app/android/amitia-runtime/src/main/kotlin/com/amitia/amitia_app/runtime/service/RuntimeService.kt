@@ -34,6 +34,12 @@ class RuntimeService : Service() {
         STARTUP_FAILURE_CLEANUP,
     }
 
+    private enum class ServiceTeardownReason {
+        EXPECTED_STOP,
+        UNEXPECTED_TERMINATION,
+        STARTUP_FAILURE,
+    }
+
     private data class StartupFailureCleanupContext(
         val generation: Long,
         val startId: Int,
@@ -57,6 +63,7 @@ class RuntimeService : Service() {
     private val currentIntent: AtomicReference<Intent?> = AtomicReference(null)
     private val currentStartIdRef = AtomicReference(0)
     private val startupFailureCleanupContextRef = AtomicReference<StartupFailureCleanupContext?>(null)
+    private val serviceTeardownCompleted = AtomicBoolean(false)
 
     init {
         instanceRef.set(this)
@@ -73,6 +80,7 @@ class RuntimeService : Service() {
             currentSessionIdRef.set(null)
             currentGenerationRef.set(0L)
             startupFailureCleanupContextRef.set(null)
+            serviceTeardownCompleted.set(false)
         }
     }
 
@@ -311,9 +319,21 @@ class RuntimeService : Service() {
 
             if (exit.stopRequested) {
                 serviceState.set(ServiceHostState.DESTROYED)
+                teardownServiceForTerminalSession(
+                    generation = exit.generation,
+                    sessionId = exit.sessionId,
+                    startId = sessionContext.startId,
+                    reason = ServiceTeardownReason.EXPECTED_STOP,
+                )
                 endpoint.notify(RuntimeServiceHostEvent.ExpectedStopped(generation = exit.generation))
             } else {
                 serviceState.set(ServiceHostState.DESTROYED)
+                teardownServiceForTerminalSession(
+                    generation = exit.generation,
+                    sessionId = exit.sessionId,
+                    startId = sessionContext.startId,
+                    reason = ServiceTeardownReason.UNEXPECTED_TERMINATION,
+                )
                 endpoint.notify(
                     RuntimeServiceHostEvent.UnexpectedTermination(
                         generation = exit.generation,
@@ -325,17 +345,32 @@ class RuntimeService : Service() {
         }
     }
 
+    private fun teardownServiceForTerminalSession(
+        generation: Long,
+        sessionId: String?,
+        startId: Int,
+        reason: ServiceTeardownReason,
+    ) {
+        if (!serviceTeardownCompleted.compareAndSet(false, true)) return
+        try {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } catch (_: Exception) {
+        }
+        try {
+            stopSelfResult(startId)
+        } catch (_: Exception) {
+            try {
+                stopSelf()
+            } catch (_: Exception) {
+            }
+        }
+    }
+
     private fun performStartupFailureCleanup(cleanupContext: StartupFailureCleanupContext) {
         serviceState.set(ServiceHostState.CREATED)
-        endpoint.notify(
-            RuntimeServiceHostEvent.LaunchFailed(
-                generation = cleanupContext.generation,
-                cause = cleanupContext.cause,
-                message = cleanupContext.message,
-            )
-        )
         clearSessionState()
         startupFailureCleanupContextRef.set(null)
+        serviceTeardownCompleted.set(true)
         try {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } catch (_: Exception) {
@@ -348,6 +383,13 @@ class RuntimeService : Service() {
             } catch (_: Exception) {
             }
         }
+        endpoint.notify(
+            RuntimeServiceHostEvent.LaunchFailed(
+                generation = cleanupContext.generation,
+                cause = cleanupContext.cause,
+                message = cleanupContext.message,
+            )
+        )
     }
 
     private fun clearSessionState() {

@@ -98,7 +98,7 @@ internal class DefaultProotSession(
             try { stderrPump.stop() } catch (_: Throwable) {}
             try { if (process.isAlive) process.destroyForcibly() } catch (_: Throwable) {}
             try { exitDeferred.get(5, java.util.concurrent.TimeUnit.SECONDS) } catch (_: Exception) {}
-            shutdownWatcherExecutor()
+            awaitWatcherExecutorTermination()
         }
     }
 
@@ -114,15 +114,20 @@ internal class DefaultProotSession(
         try {
             if (watcherExecutor is java.util.concurrent.ExecutorService) {
                 watcherExecutor.shutdown()
-                try {
-                    if (!watcherExecutor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)) {
-                        watcherExecutor.shutdownNow()
-                    }
-                } catch (_: InterruptedException) {
+            }
+        } catch (_: Throwable) {}
+    }
+
+    private fun awaitWatcherExecutorTermination() {
+        try {
+            if (watcherExecutor is java.util.concurrent.ExecutorService) {
+                if (!watcherExecutor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)) {
                     watcherExecutor.shutdownNow()
-                    Thread.currentThread().interrupt()
                 }
             }
+        } catch (_: InterruptedException) {
+            watcherExecutor.shutdownNow()
+            Thread.currentThread().interrupt()
         } catch (_: Throwable) {}
     }
 
@@ -177,9 +182,11 @@ internal class DefaultProotSession(
                     exitRef.set(exit)
                     publishTerminalOnce(exit)
                     exitDeferred.complete(exit)
+                } else {
+                    exitDeferred.completeExceptionally(e)
                 }
             } finally {
-                shutdownWatcherExecutor()
+                watcherExecutor.shutdown()
             }
         }
     }

@@ -3,6 +3,7 @@ package capability
 import (
 	"encoding/json"
 
+	"github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
@@ -11,7 +12,7 @@ type ProviderInvocationRequest struct {
 
 	Input json.RawMessage
 
-	UserID runtimeidentity.UserID
+	ExecContext *execution.ExecutionContext `json:"-"`
 
 	PreferredPlacement ProviderPlacement
 	RequiredPlacement  ProviderPlacement
@@ -21,11 +22,7 @@ type ProviderInvocationRequest struct {
 
 	PreferredProviderID ProviderID
 
-	ScopeSnapshotID      string
-	PermissionSnapshotID string
-
-	InvocationID string
-	TraceID      string
+	UserID runtimeidentity.UserID `json:"-"`
 
 	AllowCore   bool
 	AllowDevice bool

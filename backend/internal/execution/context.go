@@ -5,9 +5,16 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/u-ai/backend/internal/extension/kernel/capability/acquisition"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
+
+type RuntimeTarget struct {
+	Placement        string                     `json:"placement"`
+	UserID           runtimeidentity.UserID     `json:"userId,omitempty"`
+	DeviceID         runtimeidentity.DeviceID   `json:"deviceId,omitempty"`
+	RuntimeID        runtimeidentity.RuntimeID  `json:"runtimeId,omitempty"`
+	RuntimeSessionID string                     `json:"runtimeSessionId,omitempty"`
+}
 
 type ExecutionContext struct {
 	ExecutionID string `json:"executionId"`
@@ -23,7 +30,7 @@ type ExecutionContext struct {
 	InvocationID string `json:"invocationId,omitempty"`
 	TraceID      string `json:"traceId,omitempty"`
 
-	RuntimeTarget *acquisition.DeploymentTarget `json:"runtimeTarget,omitempty"`
+	RuntimeTarget *RuntimeTarget `json:"runtimeTarget,omitempty"`
 
 	ScopeSnapshotID      string `json:"scopeSnapshotId,omitempty"`
 	PermissionSnapshotID string `json:"permissionSnapshotId,omitempty"`
@@ -95,4 +102,8 @@ func (c ExecutionContext) CanAcquire() bool {
 
 func (c ExecutionContext) IncrementAcquisitions() {
 	c.Budget.CapabilityAcquisitions++
+}
+
+func (c ExecutionContext) ToInvocationSource() string {
+	return c.Source
 }

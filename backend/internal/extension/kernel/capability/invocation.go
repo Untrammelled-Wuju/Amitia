@@ -5,6 +5,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
@@ -82,23 +83,26 @@ func (t InvocationExecutionTarget) IsZero() bool {
 }
 
 type ToolInvocationContext struct {
-	InvocationID   string           `json:"invocationId"`
-	ParentID       string           `json:"parentId,omitempty"`
-	RootID         string           `json:"rootId,omitempty"`
-	ExternalCallID string           `json:"externalCallId,omitempty"`
-	UserID         string           `json:"userId"`
-	CharacterID    string           `json:"characterId,omitempty"`
-	ConversationID string           `json:"conversationId,omitempty"`
-	Channel        string           `json:"channel,omitempty"`
-	SessionID      string           `json:"sessionId,omitempty"`
-	ExtensionID    string           `json:"extensionId,omitempty"`
-	ModuleID       string           `json:"moduleId,omitempty"`
-	Generation     int64            `json:"generation,omitempty"`
+	InvocationID string `json:"invocationId"`
+
+	ExecContext *execution.ExecutionContext `json:"-"`
+
+	ParentID       string `json:"parentId,omitempty"`
+	RootID         string `json:"rootId,omitempty"`
+	ExternalCallID string `json:"externalCallId,omitempty"`
+	UserID         string `json:"userId"`
+	CharacterID    string `json:"characterId,omitempty"`
+	ConversationID string `json:"conversationId,omitempty"`
+	Channel        string `json:"channel,omitempty"`
+	SessionID      string `json:"sessionId,omitempty"`
+	ExtensionID    string `json:"extensionId,omitempty"`
+	ModuleID       string `json:"moduleId,omitempty"`
+	Generation     int64  `json:"generation,omitempty"`
 	Source         InvocationSource `json:"source"`
 	ApprovalMode   ApprovalMode     `json:"approvalMode,omitempty"`
 	ExpiresAt      time.Time        `json:"expiresAt,omitempty"`
 	IdempotencyKey string           `json:"idempotencyKey,omitempty"`
-	TraceID        string           `json:"traceId,omitempty"`
+	TraceID        string `json:"traceId,omitempty"`
 	OperationID    string           `json:"operationId,omitempty"`
 	CorrelationID  string           `json:"correlationId,omitempty"`
 	CausationID    string           `json:"causationId,omitempty"`

@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
-	"github.com/u-ai/backend/internal/extension/kernel/permission"
 )
 
 func NewApprovalGate() *ApprovalGate {

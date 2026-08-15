@@ -1,22 +1,21 @@
 package acquisition
 
 import (
+	"github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 type AcquisitionContext struct {
-	ConversationID string `json:"conversationId,omitempty"`
-	TaskID         string `json:"taskId,omitempty"`
-	InvocationID   string `json:"invocationId,omitempty"`
-	TraceID        string `json:"traceId,omitempty"`
-	Source         string `json:"source,omitempty"`
+	Source string `json:"source,omitempty"`
 }
 
 type AcquisitionRequest struct {
 	CapabilityID capability.CapabilityID `json:"capabilityId"`
 
 	UserID runtimeidentity.UserID `json:"userId"`
+
+	ExecContext *execution.ExecutionContext `json:"-"`
 
 	Description string `json:"description,omitempty"`
 	Intent      string `json:"intent,omitempty"`

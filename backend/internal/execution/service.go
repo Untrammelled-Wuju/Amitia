@@ -5,8 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"sync"
-
-	"github.com/u-ai/backend/internal/extension/kernel/capability"
 )
 
 type ResumeHandler interface {
@@ -63,7 +61,7 @@ func (s *ExecutionService) CreateChildExecution(parent ExecutionContext, source 
 	return child
 }
 
-func (s *ExecutionService) CreateResume(execCtx ExecutionContext, resumeType ResumeType, capabilityID capability.CapabilityID) (*ResumeContext, error) {
+func (s *ExecutionService) CreateResume(execCtx ExecutionContext, resumeType ResumeType, capabilityID string) (*ResumeContext, error) {
 	if !execCtx.Budget.CanAcquireCapability() && resumeType == ResumeTypeCapabilityAcquisition {
 		return nil, ErrBudgetExhausted
 	}

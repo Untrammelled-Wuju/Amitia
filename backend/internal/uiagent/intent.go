@@ -1,10 +1,17 @@
 package uiagent
 
 import (
+	"github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 type UIIntent struct {
+	RootExecutionID string `json:"rootExecutionId,omitempty"`
+	ExecutionID     string `json:"executionId,omitempty"`
+	TraceID         string `json:"traceId,omitempty"`
+
+	ExecContext *execution.ExecutionContext `json:"-"`
+
 	Action          UIActionType `json:"action"`
 	Description     string       `json:"description"`
 	Target          UITarget     `json:"target"`

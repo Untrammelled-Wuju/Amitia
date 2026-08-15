@@ -3,6 +3,7 @@ package uiagent
 import (
 	"encoding/json"
 
+	"github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 )
 
@@ -14,6 +15,12 @@ type UIOperation struct {
 }
 
 type UIChangePlan struct {
+	RootExecutionID string `json:"rootExecutionId,omitempty"`
+	ExecutionID     string `json:"executionId,omitempty"`
+	TraceID         string `json:"traceId,omitempty"`
+
+	ExecContext *execution.ExecutionContext `json:"-"`
+
 	Intent              UIIntent               `json:"intent"`
 	Mode                UITargetType           `json:"mode"`
 	RequiredCapabilities []capability.CapabilityID `json:"requiredCapabilities,omitempty"`
