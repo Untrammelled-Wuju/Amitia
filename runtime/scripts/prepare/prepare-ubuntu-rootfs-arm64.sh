@@ -1,4 +1,7 @@
 #!/bin/bash
+# DEPRECATED: Prototype script, not used by the authoritative Python build system.
+# The Python builders are at runtime/build/<component>/linux-arm64/build.py
+# Use: python runtime/build/rootfs/linux-arm64/build.py
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
