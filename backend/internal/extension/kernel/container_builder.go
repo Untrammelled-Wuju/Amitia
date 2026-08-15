@@ -11,7 +11,6 @@ import (
 
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/browser"
-	"github.com/u-ai/backend/internal/deepsearch"
 	"github.com/u-ai/backend/internal/desktoppet/integration"
 	"github.com/u-ai/backend/internal/desktoppet/plugin_boundary"
 	"github.com/u-ai/backend/internal/deviceruntime"
@@ -109,7 +108,7 @@ type ContainerBuilder struct {
 	runtimeProfile               runtimeprofile.Profile
 	runtimePolicy                runtimeprofile.Policy
 
-	backgroundBootstrapFunc func() (*backgroundremoval.Registry, error)
+	backgroundBootstrapFunc func() (backgroundremoval.Registry, error)
 }
 
 func NewContainerBuilder() *ContainerBuilder {
@@ -245,7 +244,7 @@ func (b *ContainerBuilder) WithRuntimeProfile(profile runtimeprofile.Profile) *C
 	return b
 }
 
-func (b *ContainerBuilder) WithBackgroundBootstrapFunc(fn func() (*backgroundremoval.Registry, error)) *ContainerBuilder {
+func (b *ContainerBuilder) WithBackgroundBootstrapFunc(fn func() (backgroundremoval.Registry, error)) *ContainerBuilder {
 	b.backgroundBootstrapFunc = fn
 	return b
 }
@@ -710,7 +709,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return nil, fmt.Errorf("builtin provider reconcile failed: %w", err)
 	}
 
-	var bgRegistry *backgroundremoval.Registry
+	var bgRegistry backgroundremoval.Registry
 	if b.backgroundBootstrapFunc != nil {
 		bgRegistry, err = b.backgroundBootstrapFunc()
 		if err != nil {
