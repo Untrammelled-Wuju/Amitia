@@ -184,6 +184,7 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 	var def struct {
 		ToolID       string          `json:"toolId"`
 		ModelName    string          `json:"modelName"`
+		CapabilityID string          `json:"capabilityId,omitempty"`
 		InputSchema  json.RawMessage `json:"inputSchema"`
 		OutputSchema json.RawMessage `json:"outputSchema"`
 		RiskLevel    string          `json:"riskLevel,omitempty"`
@@ -203,6 +204,10 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 	if modelName == "" {
 		modelName = contrib.Name.Default
 	}
+	capID := capability.CapabilityID(def.CapabilityID)
+	if capID == "" {
+		capID = capability.CapabilityID(toolID)
+	}
 
 	var perms []capability.PermissionRequirement
 	if len(def.Permissions) > 0 {
@@ -216,6 +221,7 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 	toolDef := capability.ToolDefinition{
 		ID:           toolID,
 		ModelName:    modelName,
+		CapabilityID: capID,
 		ExtensionID:  string(contrib.ExtensionID),
 		ModuleID:     string(contrib.ModuleID),
 		Source:       capability.ToolSourcePlugin,
