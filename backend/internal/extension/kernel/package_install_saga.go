@@ -642,6 +642,55 @@ func statusForStep(status string) string {
 	return "in_progress"
 }
 
+func (r *Runtime) restorePackageReadModelSnapshot(ctx context.Context, extID domain.ExtensionID, previous *domain.ExtensionInstallation, previousDefinition *domain.ExtensionDefinition, previousModules []domain.ModuleDefinition, previousContributions []domain.ContributionDefinition, providerSnapshot []*capability.CapabilityProviderDefinition) error {
+	if r.container == nil {
+		return fmt.Errorf("kernel: container unavailable for snapshot restore")
+	}
+	if previous == nil {
+		if err := r.container.InstallationRepository.DeleteInstallation(ctx, extID); err != nil {
+			return fmt.Errorf("restore: delete installation: %w", err)
+		}
+		if err := r.container.ContributionRepository.DeleteContributions(ctx, extID); err != nil {
+			return fmt.Errorf("restore: delete contributions: %w", err)
+		}
+		if err := r.container.ModuleRepository.DeleteModules(ctx, extID); err != nil {
+			return fmt.Errorf("restore: delete modules: %w", err)
+		}
+	} else {
+		if previousDefinition != nil {
+			if err := r.container.DefinitionRepository.PutExtension(ctx, *previousDefinition); err != nil {
+				return fmt.Errorf("restore: put definition: %w", err)
+			}
+		}
+		if err := r.container.ContributionRepository.DeleteContributions(ctx, extID); err != nil {
+			return fmt.Errorf("restore: clear contributions: %w", err)
+		}
+		for _, c := range previousContributions {
+			if err := r.container.ContributionRepository.PutContribution(ctx, c); err != nil {
+				return fmt.Errorf("restore: put contribution: %w", err)
+			}
+		}
+		if err := r.container.ModuleRepository.DeleteModules(ctx, extID); err != nil {
+			return fmt.Errorf("restore: clear modules: %w", err)
+		}
+		for _, m := range previousModules {
+			if err := r.container.ModuleRepository.PutModule(ctx, m); err != nil {
+				return fmt.Errorf("restore: put module: %w", err)
+			}
+		}
+		previous.UpdatedAt = previous.UpdatedAt.Add(0)
+		if err := r.container.InstallationRepository.PutInstallation(ctx, *previous); err != nil {
+			return fmt.Errorf("restore: put installation: %w", err)
+		}
+	}
+	if r.container.ExtensionProviderReconciler != nil {
+		if err := r.container.ExtensionProviderReconciler.RestoreExtension(providerSnapshot); err != nil {
+			return fmt.Errorf("restore: provider snapshot: %w", err)
+		}
+	}
+	return nil
+}
+
 func packageJSON(value any) string {
 	raw, _ := json.Marshal(value)
 	return string(raw)
