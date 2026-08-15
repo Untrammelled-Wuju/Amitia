@@ -1,5 +1,9 @@
 package migration
 
+import (
+	artifactmigration "github.com/u-ai/backend/internal/artifact"
+)
+
 func DefaultMigrations() []Migration {
 	return []Migration{
 		BackupMigration(),
@@ -157,6 +161,7 @@ func DefaultMigrations() []Migration {
 		MemorySummaryConsolidationMigration(),
 		ProductionCutoverMigration(),
 		TaskRunPauseColumnsMigration(),
+		artifactmigration.Migration(),
 	}
 }
 

@@ -44,7 +44,7 @@ export async function channelSubscribe(
   input: ChannelSubscribeInput,
   opts: MessageOption[] = []
 ): Promise<ChannelSubscribeOutput> {
-  const envelope = await client.sendRequest(METHOD_CHANNEL_SUBSCRIBE, input, ...opts);
+  const envelope = await client.sendReservedRequest(METHOD_CHANNEL_SUBSCRIBE, input, ...opts);
   return envelope.payload as ChannelSubscribeOutput;
 }
 
@@ -53,5 +53,5 @@ export async function channelUnsubscribe(
   input: ChannelUnsubscribeInput,
   opts: MessageOption[] = []
 ): Promise<void> {
-  await client.sendRequest(METHOD_CHANNEL_UNSUBSCRIBE, input, ...opts);
+  await client.sendReservedRequest(METHOD_CHANNEL_UNSUBSCRIBE, input, ...opts);
 }

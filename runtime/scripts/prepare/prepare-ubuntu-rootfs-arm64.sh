@@ -264,6 +264,7 @@ FROZEN_TAR_PATH="$OUTPUT_PATH/$FROZEN_TAR_NAME"
 TEMP_TAR_PATH="$STAGING_PATH/$FROZEN_TAR_NAME"
 
 SOURCE_DATE_EPOCH="${SOURCE_DATE_EPOCH:-0}"
+export XZ_OPT="--threads=1 --memlimit-compress=256MiB"
 
 (
     cd "$EXTRACT_DIR"
@@ -362,14 +363,18 @@ cat > "$PUBLISH_TMP/rootfs-build-record.json" << ENDOFJSON
 ENDOFJSON
 
 echo "[PUBLISH] Atomic rename of candidate -> final output..."
-if [[ -f "$FROZEN_TAR_PATH" ]]; then rm -f "$FROZEN_TAR_PATH"; fi
-if [[ -f "$OUTPUT_PATH/rootfs-files.tsv" ]]; then rm -f "$OUTPUT_PATH/rootfs-files.tsv"; fi
-if [[ -f "$FINAL_RECORD" ]]; then rm -f "$FINAL_RECORD"; fi
+OLD_ASIDE="$OUTPUT_PATH/.old.$$"
+mkdir -p "$OLD_ASIDE"
+
+if [[ -f "$FROZEN_TAR_PATH" ]]; then mv "$FROZEN_TAR_PATH" "$OLD_ASIDE/"; fi
+if [[ -f "$OUTPUT_PATH/rootfs-files.tsv" ]]; then mv "$OUTPUT_PATH/rootfs-files.tsv" "$OLD_ASIDE/"; fi
+if [[ -f "$FINAL_RECORD" ]]; then mv "$FINAL_RECORD" "$OLD_ASIDE/"; fi
 
 mv "$PUBLISH_TMP/$FROZEN_TAR_NAME" "$FROZEN_TAR_PATH"
 mv "$PUBLISH_TMP/rootfs-files.tsv" "$OUTPUT_PATH/rootfs-files.tsv"
 mv "$PUBLISH_TMP/rootfs-build-record.json" "$FINAL_RECORD"
 rm -rf "$PUBLISH_TMP"
+rm -rf "$OLD_ASIDE"
 
 echo "[RECORD] Final build record: $FINAL_RECORD"
 

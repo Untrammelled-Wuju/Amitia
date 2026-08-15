@@ -319,6 +319,145 @@ func (r *registryRepository) ListExpiredEntries(ctx context.Context) ([]*Runtime
 	return scanEntries(rows)
 }
 
+func (r *registryRepository) SaveDevice(ctx context.Context, record *DeviceRecord) error {
+	if r.db == nil {
+		return nil
+	}
+	var trustedAt sql.NullString
+	if record.TrustedAt != nil {
+		trustedAt = sql.NullString{String: record.TrustedAt.Format(time.RFC3339Nano), Valid: true}
+	}
+	_, err := r.db.ExecContext(ctx,
+		`INSERT OR REPLACE INTO kernel_devices (
+			device_id, user_id, platform, label, trust_state, created_at, trusted_at, last_seen_at, revision
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		record.DeviceID.String(),
+		record.UserID.String(),
+		record.Platform.String(),
+		record.Label,
+		string(record.TrustState),
+		record.CreatedAt.Format(time.RFC3339Nano),
+		trustedAt,
+		record.LastSeenAt.Format(time.RFC3339Nano),
+		record.Revision,
+	)
+	return err
+}
+
+func (r *registryRepository) GetDevice(ctx context.Context, deviceID runtimeidentity.DeviceID) (*DeviceRecord, error) {
+	if r.db == nil {
+		return nil, nil
+	}
+	row := r.db.QueryRowContext(ctx,
+		`SELECT device_id, user_id, platform, label, trust_state, created_at, trusted_at, last_seen_at, revision
+		FROM kernel_devices WHERE device_id = ?`,
+		deviceID.String(),
+	)
+	return scanDevice(row)
+}
+
+func (r *registryRepository) ListDevicesByUser(ctx context.Context, userID runtimeidentity.UserID) ([]*DeviceRecord, error) {
+	if r.db == nil {
+		return nil, nil
+	}
+	rows, err := r.db.QueryContext(ctx,
+		`SELECT device_id, user_id, platform, label, trust_state, created_at, trusted_at, last_seen_at, revision
+		FROM kernel_devices WHERE user_id = ?`,
+		userID.String(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var devices []*DeviceRecord
+	for rows.Next() {
+		d, err := scanDevice(rows)
+		if err != nil {
+			return nil, err
+		}
+		if d != nil {
+			devices = append(devices, d)
+		}
+	}
+	return devices, rows.Err()
+}
+
+func (r *registryRepository) UpdateDeviceTrust(ctx context.Context, deviceID runtimeidentity.DeviceID, state DeviceTrustState, trustedAt *time.Time) error {
+	if r.db == nil {
+		return nil
+	}
+	var trustedAtVal sql.NullString
+	if trustedAt != nil {
+		trustedAtVal = sql.NullString{String: trustedAt.Format(time.RFC3339Nano), Valid: true}
+	}
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE kernel_devices SET trust_state = ?, trusted_at = ?, revision = revision + 1 WHERE device_id = ?`,
+		string(state),
+		trustedAtVal,
+		deviceID.String(),
+	)
+	return err
+}
+
+func (r *registryRepository) UpdateDeviceLastSeen(ctx context.Context, deviceID runtimeidentity.DeviceID, at time.Time) error {
+	if r.db == nil {
+		return nil
+	}
+	_, err := r.db.ExecContext(ctx,
+		`UPDATE kernel_devices SET last_seen_at = ?, revision = revision + 1 WHERE device_id = ?`,
+		at.Format(time.RFC3339Nano),
+		deviceID.String(),
+	)
+	return err
+}
+
+func scanDevice(s rowScanner) (*DeviceRecord, error) {
+	var d DeviceRecord
+	var userID, platform, trustState string
+	var createdStr, lastSeenStr string
+	var trustedAt sql.NullString
+
+	err := s.Scan(
+		&d.DeviceID,
+		&userID,
+		&platform,
+		&d.Label,
+		&trustState,
+		&createdStr,
+		&trustedAt,
+		&lastSeenStr,
+		&d.Revision,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	d.UserID = runtimeidentity.ParseUserID(userID)
+	d.Platform = runtimeidentity.Platform(platform)
+	d.TrustState = DeviceTrustState(trustState)
+
+	if createdStr != "" {
+		if t, err := time.Parse(time.RFC3339Nano, createdStr); err == nil {
+			d.CreatedAt = t
+		}
+	}
+	if lastSeenStr != "" {
+		if t, err := time.Parse(time.RFC3339Nano, lastSeenStr); err == nil {
+			d.LastSeenAt = t
+		}
+	}
+	if trustedAt.Valid && trustedAt.String != "" {
+		if t, err := time.Parse(time.RFC3339Nano, trustedAt.String); err == nil {
+			d.TrustedAt = &t
+		}
+	}
+
+	return &d, nil
+}
+
 type rowScanner interface {
 	Scan(dest ...interface{}) error
 }

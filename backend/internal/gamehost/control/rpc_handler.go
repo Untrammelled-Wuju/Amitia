@@ -7,6 +7,7 @@ import (
 
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/rpc"
+	"github.com/u-ai/backend/pkg/gameplugin/protocol/contracts"
 )
 
 const (
@@ -14,26 +15,11 @@ const (
 	ControlSinkRegisterMethod = "control.sink.register"
 )
 
-type ControlOutputInput struct {
-	SinkID    string          `json:"sinkId"`
-	ServiceID string          `json:"serviceId,omitempty"`
-	Epoch     uint64          `json:"epoch"`
-	Kind      string          `json:"kind,omitempty"`
-	Payload   json.RawMessage `json:"payload"`
-}
+type ControlOutputInput = contracts.ControlOutputInput
 
-type ControlOutputResult struct {
-	Allowed    bool   `json:"allowed"`
-	Reason     string `json:"reason,omitempty"`
-	Epoch      uint64 `json:"epoch"`
-	Generation uint64 `json:"generation"`
-}
+type ControlOutputResult = contracts.ControlOutputResult
 
-type ControlSinkRegisterInput struct {
-	SinkID    string `json:"sinkId"`
-	Kind      string `json:"kind"`
-	ServiceID string `json:"serviceId,omitempty"`
-}
+type ControlSinkRegisterInput = contracts.SinkRegisterInput
 
 type ControlSinkRegisterResult struct {
 	Registered bool   `json:"registered"`
@@ -101,11 +87,16 @@ func (h *ControlHandler) handleControlOutput(ctx context.Context, request rpc.RP
 		}, nil
 	}
 
+	if input.OutputID == "" {
+		input.OutputID = request.ID
+	}
+
 	sinkDesc, sink, found := h.sinkRegistry.ResolveEffect(request.RuntimeID, domain.ServiceID(input.ServiceID), input.SinkID)
 	if !found {
 		result := ControlOutputResult{
-			Allowed: false,
-			Reason:  "sink_not_found",
+			OutputID: input.OutputID,
+			Allowed:  false,
+			Reason:   "sink_not_found",
 		}
 		payload, _ := json.Marshal(result)
 		return rpc.RPCResponse{
@@ -114,13 +105,13 @@ func (h *ControlHandler) handleControlOutput(ctx context.Context, request rpc.RP
 		}, nil
 	}
 	if sinkDesc.PluginID != request.PluginID || sinkDesc.ServiceID != request.ServiceID || sinkDesc.Generation != uint64(request.Generation) {
-		result := ControlOutputResult{Allowed: false, Reason: "sink_identity_mismatch", Generation: uint64(request.Generation)}
+		result := ControlOutputResult{OutputID: input.OutputID, Allowed: false, Reason: "sink_identity_mismatch", Generation: int64(request.Generation)}
 		payload, _ := json.Marshal(result)
 		return rpc.RPCResponse{RequestID: request.ID, Payload: payload}, nil
 	}
 
 	intent := ControlOutputIntent{
-		OutputID:       request.ID,
+		OutputID:       input.OutputID,
 		RuntimeID:      request.RuntimeID,
 		ServiceID:      domain.ServiceID(input.ServiceID),
 		AuthorityEpoch: input.Epoch,
@@ -144,10 +135,11 @@ func (h *ControlHandler) handleControlOutput(ctx context.Context, request rpc.RP
 	decision, err := h.gate.AuthorizeAndDispatch(ctx, checkReq, sink)
 
 	result := ControlOutputResult{
-		Allowed:    decision.Allowed,
-		Reason:     string(decision.Reason),
-		Epoch:      decision.CurrentEpoch,
-		Generation: uint64(request.Generation),
+		OutputID:     input.OutputID,
+		Allowed:      decision.Allowed,
+		Reason:       string(decision.Reason),
+		CurrentEpoch: decision.CurrentEpoch,
+		Generation:   int64(request.Generation),
 	}
 	if err != nil && result.Reason == "" {
 		result.Allowed = false

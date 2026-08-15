@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 
 	"github.com/u-ai/backend/internal/gamehost/domain"
+	"github.com/u-ai/backend/pkg/gameplugin/protocol/contracts"
 )
 
 type ControlOutputKind string

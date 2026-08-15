@@ -12,4 +12,6 @@ var (
 
 	ErrStaleRuntimeSessionBinding    = errors.New("host_registry: stale runtime session binding")
 	ErrRuntimeSessionBindingConflict = errors.New("host_registry: runtime session binding conflict")
+	ErrDeviceNotFound                = errors.New("host_registry: device not found")
+	ErrDeviceOwnedByOther            = errors.New("host_registry: device owned by another user")
 )

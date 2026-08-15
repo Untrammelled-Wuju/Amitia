@@ -38,7 +38,7 @@ type SessionStore interface {
 		ctx context.Context,
 		sessionID runtimeidentity.RuntimeSessionID,
 		generation int64,
-		cursor protocol.ResumeCursor,
+		cursor protocol.SessionCursor,
 		at time.Time,
 	) error
 

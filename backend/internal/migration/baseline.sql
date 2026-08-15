@@ -5725,3 +5725,36 @@ CREATE INDEX IF NOT EXISTS idx_kernel_device_runtime_sessions_identity ON kernel
 CREATE INDEX IF NOT EXISTS idx_kernel_device_runtime_sessions_status ON kernel_device_runtime_sessions(status);
 CREATE INDEX IF NOT EXISTS idx_kernel_device_runtime_sessions_heartbeat ON kernel_device_runtime_sessions(last_heartbeat_at);
 
+--- 来源: artifact/migration.go ---
+CREATE TABLE IF NOT EXISTS artifacts (
+    artifact_id TEXT PRIMARY KEY,
+    owner_user_id TEXT NOT NULL,
+    workspace_id TEXT NOT NULL DEFAULT '',
+    kind TEXT NOT NULL,
+    blob_digest TEXT NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    mime_type TEXT NOT NULL,
+    filename TEXT NOT NULL DEFAULT '',
+    file_extension TEXT NOT NULL DEFAULT '',
+    status TEXT NOT NULL,
+    source TEXT NOT NULL,
+    width INTEGER NOT NULL DEFAULT 0,
+    height INTEGER NOT NULL DEFAULT 0,
+    duration_ms INTEGER NOT NULL DEFAULT 0,
+    revision INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL,
+    deleted_at DATETIME
+);
+CREATE TABLE IF NOT EXISTS artifact_references (
+    artifact_id TEXT NOT NULL,
+    reference_type TEXT NOT NULL,
+    reference_id TEXT NOT NULL,
+    created_at DATETIME NOT NULL,
+    PRIMARY KEY(artifact_id, reference_type, reference_id)
+);
+CREATE INDEX IF NOT EXISTS idx_artifacts_owner ON artifacts(owner_user_id);
+CREATE INDEX IF NOT EXISTS idx_artifacts_blob_digest ON artifacts(blob_digest);
+CREATE INDEX IF NOT EXISTS idx_artifacts_status ON artifacts(status);
+CREATE INDEX IF NOT EXISTS idx_artifacts_created_at ON artifacts(created_at);
+

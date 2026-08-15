@@ -75,11 +75,19 @@ internal class AndroidProotComponent(
         }
         val avail = availability()
         if (avail !is ProotAvailability.Available) return ClosedSession
-        val spec = ProotLaunchSpec.from(request, avail.absoluteBinaryPath)
-        val command = commandBuilder.build(spec)
-        val session = processLauncher.launch(command, observer, generation)
-        activeSessions[session.sessionId] = session
-        return session
+        synchronized(lock) {
+            cleanupDeadSessions()
+            val existing = mainSession.get()
+            if (existing != null && existing.isAlive()) {
+                return AlreadyRunningSession(existing.sessionId)
+            }
+            val spec = ProotLaunchSpec.from(request, avail.absoluteBinaryPath)
+            val command = commandBuilder.build(spec)
+            val session = processLauncher.launch(command, observer, generation)
+            mainSession.set(session)
+            activeSessions[session.sessionId] = session
+            return session
+        }
     }
 
     override fun currentSession(): ProotSession? {

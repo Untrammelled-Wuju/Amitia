@@ -2,7 +2,8 @@ package sdk
 
 import (
 	"context"
-	"encoding/json"
+
+	"github.com/u-ai/backend/pkg/gameplugin/protocol/contracts"
 )
 
 const (
@@ -74,33 +75,16 @@ type AuthoritySnapshot struct {
 	Valid     bool   `json:"valid"`
 }
 
-type ControlSinkRegisterInput struct {
-	SinkID          string `json:"sinkId"`
-	Kind            string `json:"kind"`
-	ServiceID       string `json:"serviceId,omitempty"`
-	Metadata        map[string]json.RawMessage `json:"metadata,omitempty"`
-}
+type ControlSinkRegisterInput = contracts.SinkRegisterInput
 
 type ControlSinkRegisterResult struct {
 	SinkID  string `json:"sinkId"`
 	Registered bool `json:"registered"`
 }
 
-type ControlOutputInput struct {
-	OutputID  string          `json:"outputId"`
-	SinkID    string          `json:"sinkId"`
-	Epoch     uint64          `json:"epoch"`
-	Kind      string          `json:"kind"`
-	ServiceID string          `json:"serviceId,omitempty"`
-	Payload   json.RawMessage `json:"payload"`
-}
+type ControlOutputInput = contracts.ControlOutputInput
 
-type ControlOutputResult struct {
-	OutputID string `json:"outputId"`
-	Allowed  bool   `json:"allowed"`
-	Reason   string `json:"reason,omitempty"`
-	CurrentEpoch uint64 `json:"currentEpoch,omitempty"`
-}
+type ControlOutputResult = contracts.ControlOutputResult
 
 type AuthorityTakeoverInput struct {
 	TargetMode    string `json:"targetMode"`
@@ -152,7 +136,7 @@ func (c *Client) GetAuthoritySnapshot(ctx context.Context, runtimeID, serviceID 
 		"runtimeId": runtimeID,
 		"serviceId": serviceID,
 	}
-	envelope, err := c.sendHostRequest(ctx, MethodAuthoritySnapshot, input, opts...)
+	envelope, err := c.SendReservedRequest(ctx, MethodAuthoritySnapshot, input, opts...)
 	if err != nil {
 		return AuthoritySnapshot{}, err
 	}
@@ -166,7 +150,7 @@ func (c *Client) GetAuthoritySnapshot(ctx context.Context, runtimeID, serviceID 
 }
 
 func (c *Client) RegisterControlSink(ctx context.Context, input ControlSinkRegisterInput, opts ...MessageOption) (ControlSinkRegisterResult, error) {
-	envelope, err := c.sendHostRequest(ctx, MethodControlRegisterSink, input, opts...)
+	envelope, err := c.SendReservedRequest(ctx, MethodControlRegisterSink, input, opts...)
 	if err != nil {
 		return ControlSinkRegisterResult{}, err
 	}
@@ -180,7 +164,7 @@ func (c *Client) RegisterControlSink(ctx context.Context, input ControlSinkRegis
 }
 
 func (c *Client) SubmitControlOutput(ctx context.Context, input ControlOutputInput, opts ...MessageOption) (ControlOutputResult, error) {
-	envelope, err := c.sendHostRequest(ctx, MethodControlOutput, input, opts...)
+	envelope, err := c.SendReservedRequest(ctx, MethodControlOutput, input, opts...)
 	if err != nil {
 		return ControlOutputResult{}, err
 	}
@@ -194,7 +178,7 @@ func (c *Client) SubmitControlOutput(ctx context.Context, input ControlOutputInp
 }
 
 func (c *Client) TakeoverAuthority(ctx context.Context, input AuthorityTakeoverInput, runtimeID string, opts ...MessageOption) (AuthorityTakeoverResult, error) {
-	envelope, err := c.sendHostRequest(ctx, MethodControlAuthorityTakeover, input, opts...)
+	envelope, err := c.SendReservedRequest(ctx, MethodControlAuthorityTakeover, input, opts...)
 	if err != nil {
 		return AuthorityTakeoverResult{}, err
 	}
@@ -208,7 +192,7 @@ func (c *Client) TakeoverAuthority(ctx context.Context, input AuthorityTakeoverI
 }
 
 func (c *Client) ReleaseAuthority(ctx context.Context, input AuthorityReleaseInput, runtimeID string, opts ...MessageOption) (AuthorityReleaseResult, error) {
-	envelope, err := c.sendHostRequest(ctx, MethodControlAuthorityRelease, input, opts...)
+	envelope, err := c.SendReservedRequest(ctx, MethodControlAuthorityRelease, input, opts...)
 	if err != nil {
 		return AuthorityReleaseResult{}, err
 	}
@@ -222,7 +206,7 @@ func (c *Client) ReleaseAuthority(ctx context.Context, input AuthorityReleaseInp
 }
 
 func (c *Client) GetEmergencyStopStatus(ctx context.Context, input EmergencyStopStatusInput, opts ...MessageOption) (EmergencyStopStatusResult, error) {
-	envelope, err := c.sendHostRequest(ctx, MethodEmergencyStopStatus, input, opts...)
+	envelope, err := c.SendReservedRequest(ctx, MethodEmergencyStopStatus, input, opts...)
 	if err != nil {
 		return EmergencyStopStatusResult{}, err
 	}

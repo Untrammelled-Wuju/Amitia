@@ -241,7 +241,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         let availability = AlarmKitAdapter.shared.checkAvailability()
         switch availability {
         case .available:
-            var schedule = AlarmSchedule()
+            var schedule = AmitiaAlarmScheduleDTO()
             if let scheduleRaw = request.payload?["schedule"] as? [String: Any] {
                 if let fireAt = scheduleRaw["fireAt"] as? String { schedule.fireAt = fireAt }
                 if let hour = scheduleRaw["hour"] as? Int { schedule.hour = hour }
@@ -250,7 +250,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
                 if let weekdays = scheduleRaw["weekdays"] as? [String] { schedule.weekdays = weekdays }
             }
 
-            var presentation = AlarmPresentation()
+            var presentation = AmitiaAlarmPresentationDTO()
             if let presRaw = request.payload?["presentation"] as? [String: Any] {
                 if let alertTitle = presRaw["alertTitle"] as? String { presentation.alertTitle = alertTitle }
                 if let countdownTitle = presRaw["countdownTitle"] as? String { presentation.countdownTitle = countdownTitle }
@@ -261,16 +261,16 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
                 presentation.alertTitle = title
             }
 
-            var sound: AlarmSound?
+            var sound: AmitiaAlarmSoundDTO?
             if let soundRaw = request.payload?["sound"] as? [String: Any] {
-                sound = AlarmSound()
+                sound = AmitiaAlarmSoundDTO()
                 if let kind = soundRaw["kind"] as? String { sound?.kind = kind }
                 if let soundId = soundRaw["soundId"] as? String { sound?.soundId = soundId }
             }
 
-            var metadata: AlarmMetadata?
+            var metadata: AmitiaAlarmMetadataDTO?
             if let metaRaw = request.payload?["metadata"] as? [String: Any] {
-                metadata = AlarmMetadata()
+                metadata = AmitiaAlarmMetadataDTO()
                 if let kind = metaRaw["kind"] as? String { metadata?.kind = kind }
                 if let icon = metaRaw["icon"] as? String { metadata?.icon = icon }
                 if let ownerRef = metaRaw["ownerRef"] as? String { metadata?.ownerRef = ownerRef }
@@ -418,7 +418,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         let title = (countdownPayload["title"] as? String) ?? "Countdown"
         countdownPayload["title"] = title
 
-        var schedule = AlarmSchedule()
+        var schedule = AmitiaAlarmScheduleDTO()
         let futureDate = Date().addingTimeInterval(seconds)
         let formatter = ISO8601DateFormatter()
         schedule.fireAt = formatter.string(from: futureDate)

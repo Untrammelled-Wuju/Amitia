@@ -47,6 +47,6 @@ export async function getState(
   input: StateGetInput,
   opts: MessageOption[] = []
 ): Promise<StateGetOutput> {
-  const envelope = await client.sendRequest(METHOD_STATE_GET, input, ...opts);
+  const envelope = await client.sendReservedRequest(METHOD_STATE_GET, input, ...opts);
   return envelope.payload as StateGetOutput;
 }

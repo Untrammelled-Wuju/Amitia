@@ -16,6 +16,7 @@ const (
 
 	devicePresenceReady        event.EventTypeID = "device.presence.ready"
 	devicePresenceDisconnected event.EventTypeID = "device.presence.disconnected"
+	deviceNativeEvent          event.EventTypeID = "device.native.event"
 
 	providerRegistered   event.EventTypeID = "capability_provider.registered"
 	providerUpdated      event.EventTypeID = "capability_provider.updated"
@@ -70,6 +71,7 @@ func RegisterCloudFoundationEventTypes(
 		rtSessionExpired,
 		devicePresenceReady,
 		devicePresenceDisconnected,
+		deviceNativeEvent,
 		providerRegistered,
 		providerUpdated,
 		providerUnregistered,

@@ -96,9 +96,30 @@ def build_runtime_payload(lock, work_dir, plugin_host_files, task_host_files, ma
     return result_path, result_sha
 
 
-def generate_manifest_file(payloads, rootfs_sha, runtime_sha, version, commit):
+def generate_manifest_file(payloads, rootfs_sha, runtime_sha, version, commit, sha256sums_ref=None):
+    metadata = [
+        {
+            "role": "guest-layout",
+            "path": "metadata/guest-layout.json",
+            "sha256": payloads["guestLayoutSha"],
+            "size": payloads["guestLayoutSize"],
+        },
+        {
+            "role": "mount-contract",
+            "path": "metadata/mount-contract.json",
+            "sha256": payloads["mountContractSha"],
+            "size": payloads["mountContractSize"],
+        },
+        {
+            "role": "sha256sums",
+            "path": "metadata/SHA256SUMS",
+            "sha256": sha256sums_ref["sha256"] if sha256sums_ref else "placeholder",
+            "size": sha256sums_ref["size"] if sha256sums_ref else 0,
+        },
+    ]
     return {
         "schemaVersion": 1,
+        "packageFormatVersion": 1,
         "packageId": "amitia.runtime.android",
         "runtimeVersion": version,
         "sourceCommit": commit,
@@ -111,16 +132,21 @@ def generate_manifest_file(payloads, rootfs_sha, runtime_sha, version, commit):
             "distribution": "ubuntu",
             "distributionRelease": "24.04.4",
         },
-        "payloads": {
-            "rootfs": payloads["rootfs"],
-            "runtime": payloads["runtime"],
-        },
-        "metadata": {
-            "guestLayout": "metadata/guest-layout.json",
-            "mountContract": "metadata/mount-contract.json",
-            "componentLock": "metadata/component-lock.json",
-            "componentIndex": "metadata/component-index.json",
-        },
+        "payloads": [
+            {
+                "role": "rootfs",
+                "path": payloads["rootfs"]["path"],
+                "sha256": payloads["rootfs"]["sha256"],
+                "size": payloads["rootfs"]["size"],
+            },
+            {
+                "role": "runtime",
+                "path": payloads["runtime"]["path"],
+                "sha256": payloads["runtime"]["sha256"],
+                "size": payloads["runtime"]["size"],
+            },
+        ],
+        "metadata": metadata,
     }
 
 
@@ -138,30 +164,15 @@ def generate_file_manifest(payload_rootfs, payload_runtime):
 
 
 def compute_sha256sums(work_dir):
-    targets = [
-        ("payload", "rootfs"),
-        ("payload", "runtime"),
-        ("metadata", "package-index.json"),
-        ("metadata", "component-lock.json"),
-        ("metadata", "component-index.json"),
-        ("metadata", "guest-layout.json"),
-        ("metadata", "mount-contract.json"),
-        ("metadata", "file-manifest.json"),
-        ("licenses", "THIRD_PARTY_NOTICES.md"),
-    ]
     lines = []
-    for parts in targets:
-        p = work_dir.joinpath(*parts)
-        if p.exists():
-            if p.is_dir():
-                # Find the archive file inside the directory
-                archive_files = list(p.glob("*.tar.xz"))
-                if archive_files:
-                    p = archive_files[0]
-                else:
-                    continue
-            sha = hashlib.sha256(p.read_bytes()).hexdigest()
-            rel = "/".join(parts)
+    for root, dirs, files in os.walk(str(work_dir)):
+        root_path = pathlib.Path(root)
+        for fname in sorted(files):
+            fp = root_path / fname
+            rel = fp.relative_to(work_dir).as_posix()
+            if rel == "SHA256SUMS":
+                continue
+            sha = hashlib.sha256(fp.read_bytes()).hexdigest()
             lines.append((rel, sha))
     lines.sort(key=lambda x: x[0])
     content = "".join(f"{sha}  {name}\n" for name, sha in lines)
@@ -286,9 +297,10 @@ def main():
                 "size": pathlib.Path(runtime_path).stat().st_size,
             },
         }
-        package_index = generate_manifest_file(payload_index, rootfs_sha, runtime_sha, args.runtime_version, args.commit)
-        pkg_idx_path = work_dir / "metadata" / "package-index.json"
-        pkg_idx_path.write_text(json.dumps(package_index, indent=2, sort_keys=False, ensure_ascii=False) + "\n", encoding="utf-8")
+        payload_index["guestLayoutSha"] = guest_layout_sha
+        payload_index["guestLayoutSize"] = guest_payload_path.stat().st_size
+        payload_index["mountContractSha"] = mount_contract_sha
+        payload_index["mountContractSize"] = mount_payload_path.stat().st_size
         comp_lock_out = {
             "schemaVersion": 1,
             "runtimeVersion": args.runtime_version,
@@ -374,8 +386,7 @@ def main():
         third_party_src = REPO_ROOT / "THIRD_PARTY_NOTICES.md"
         if third_party_src.exists():
             shutil.copy2(str(third_party_src), str(work_dir / "licenses" / "THIRD_PARTY_NOTICES.md"))
-        sha256sums = compute_sha256sums(work_dir)
-        (work_dir / "SHA256SUMS").write_text(sha256sums, encoding="utf-8")
+        compute_sha256sums(work_dir)
         for cid, files_info in [("pluginHost", plugin_host_result), ("taskHost", task_host_result)]:
             meta = {
                 "schemaVersion": 1,

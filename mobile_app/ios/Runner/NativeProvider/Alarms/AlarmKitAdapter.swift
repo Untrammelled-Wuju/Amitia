@@ -15,7 +15,7 @@ public enum AlarmAuthorizationStatus {
     case restricted
 }
 
-public struct AlarmSchedule: Codable {
+public struct AmitiaAlarmScheduleDTO: Codable {
     var fireAt: String?
     var hour: Int?
     var minute: Int?
@@ -23,7 +23,7 @@ public struct AlarmSchedule: Codable {
     var weekdays: [String]?
 }
 
-public struct AlarmPresentation: Codable {
+public struct AmitiaAlarmPresentationDTO: Codable {
     var alertTitle: String?
     var countdownTitle: String?
     var pausedTitle: String?
@@ -31,12 +31,12 @@ public struct AlarmPresentation: Codable {
     var secondaryAction: String?
 }
 
-public struct AlarmSound: Codable {
+public struct AmitiaAlarmSoundDTO: Codable {
     var kind: String?
     var soundId: String?
 }
 
-public struct AlarmMetadata: Codable {
+public struct AmitiaAlarmMetadataDTO: Codable {
     var kind: String?
     var icon: String?
     var ownerRef: String?
@@ -92,10 +92,10 @@ public class AlarmKitAdapter {
     public func createAlarm(
         id: String,
         title: String,
-        schedule: AlarmSchedule,
-        presentation: AlarmPresentation,
-        sound: AlarmSound?,
-        metadata: AlarmMetadata?
+        schedule: AmitiaAlarmScheduleDTO,
+        presentation: AmitiaAlarmPresentationDTO,
+        sound: AmitiaAlarmSoundDTO?,
+        metadata: AmitiaAlarmMetadataDTO?
     ) async -> Bool {
         guard isAlarmKitAvailable() else { return false }
         #if canImport(AlarmKit)
@@ -196,10 +196,10 @@ public class AlarmKitAdapter {
     private func createAlarmInternal(
         id: String,
         title: String,
-        schedule: AlarmSchedule,
-        presentation: AlarmPresentation,
-        sound: AlarmSound?,
-        metadata: AlarmMetadata?
+        schedule: AmitiaAlarmScheduleDTO,
+        presentation: AmitiaAlarmPresentationDTO,
+        sound: AmitiaAlarmSoundDTO?,
+        metadata: AmitiaAlarmMetadataDTO?
     ) async -> Bool {
         do {
             let manager = AlarmManager.shared
@@ -214,22 +214,22 @@ public class AlarmKitAdapter {
     }
 
     @available(iOS 26.0, *)
-    private func buildAlarmSchedule(_ schedule: AlarmSchedule) -> AlarmSchedule? {
+    private func buildAlarmSchedule(_ schedule: AmitiaAlarmScheduleDTO) -> AlarmKit.AlarmSchedule? {
         if let fireAt = schedule.fireAt, let date = ISO8601DateFormatter().date(from: fireAt) {
-            return AlarmSchedule(date: date)
+            return AlarmKit.AlarmSchedule(date: date)
         }
         if let hour = schedule.hour, let minute = schedule.minute {
             var dc = DateComponents()
             dc.hour = hour
             dc.minute = minute
-            return AlarmSchedule(dateComponents: dc)
+            return AlarmKit.AlarmSchedule(dateComponents: dc)
         }
         return nil
     }
 
     @available(iOS 26.0, *)
-    private func buildAlarmPresentation(_ presentation: AlarmPresentation) -> AlarmPresentation? {
-        var p = AlarmPresentation()
+    private func buildAlarmPresentation(_ presentation: AmitiaAlarmPresentationDTO) -> AlarmKit.AlarmPresentation? {
+        var p = AlarmKit.AlarmPresentation()
         if let alertTitle = presentation.alertTitle {
             p.alertTitle = alertTitle
         }

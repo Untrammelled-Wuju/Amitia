@@ -261,7 +261,7 @@ func (s *SQLiteSessionStore) UpdateCursor(
 	ctx context.Context,
 	sessionID runtimeidentity.RuntimeSessionID,
 	generation int64,
-	cursor protocol.ResumeCursor,
+	cursor protocol.SessionCursor,
 	at time.Time,
 ) error {
 	res, err := s.db.ExecContext(ctx,
@@ -666,7 +666,7 @@ func (t *SQLiteSessionStoreTx) UpdateCursor(
 	ctx context.Context,
 	sessionID runtimeidentity.RuntimeSessionID,
 	generation int64,
-	cursor protocol.ResumeCursor,
+	cursor protocol.SessionCursor,
 	at time.Time,
 ) error {
 	res, err := t.tx.ExecContext(ctx,

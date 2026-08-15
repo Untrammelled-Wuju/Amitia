@@ -7,6 +7,16 @@ import (
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
+type PresenceSnapshot struct {
+	UserID               runtimeidentity.UserID
+	DeviceID             runtimeidentity.DeviceID
+	RuntimeID            runtimeidentity.RuntimeID
+	RuntimeSessionID     runtimeidentity.RuntimeSessionID
+	Platform             runtimeidentity.Platform
+	ConnectionGeneration int64
+	At                   time.Time
+}
+
 type SendPort interface {
 	SendEnvelope(
 		ctx context.Context,
@@ -18,7 +28,7 @@ type SessionLifecyclePort interface {
 	Acquire(
 		ctx context.Context,
 		identity SessionIdentity,
-		cursor ResumeCursor,
+		cursor SessionCursor,
 		runtimeVersion string,
 		contractVersion RuntimeContractVersion,
 		capabilities []string,
@@ -37,6 +47,17 @@ type SessionLifecyclePort interface {
 	Close(
 		ctx context.Context,
 		sessionID runtimeidentity.RuntimeSessionID,
+		reason string,
+	) error
+
+	SessionReady(
+		ctx context.Context,
+		snapshot PresenceSnapshot,
+	) error
+
+	SessionDisconnected(
+		ctx context.Context,
+		snapshot PresenceSnapshot,
 		reason string,
 	) error
 }

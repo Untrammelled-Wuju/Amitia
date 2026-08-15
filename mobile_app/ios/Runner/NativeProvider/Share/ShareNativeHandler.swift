@@ -124,7 +124,7 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
             )
         }
 
-        return await presentShareSheet(activityItems: items, on: rootViewController)
+        return await presentShareSheet(activityItems: items, on: rootViewController, requestID: request.requestID)
     }
 
     private func handlePreviewSupported(_ request: IOSNativeRequest) -> IOSNativeResponse {
@@ -480,7 +480,7 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
         return URL(string: uri)
     }
 
-    private func presentShareSheet(activityItems: [Any], on viewController: UIViewController) async -> IOSNativeResponse {
+    private func presentShareSheet(activityItems: [Any], on viewController: UIViewController, requestID: String) async -> IOSNativeResponse {
         return await withCheckedContinuation { continuation in
             let activityVC = UIActivityViewController(activityItems: activityItems, applicationActivities: nil)
 
@@ -488,8 +488,8 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
                 DispatchQueue.main.async {
                     if let error = error {
                         continuation.resume(returning: IOSNativeResponse(
-                            protocolVersion: activityVC.protocolVersion,
-                            requestID: activityVC.requestID,
+                            protocolVersion: "1.0",
+                            requestID: requestID,
                             status: "error",
                             result: nil,
                             error: IOSNativeError(code: "SHARE_FAILED", message: error.localizedDescription)
@@ -500,8 +500,8 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
                     if completed {
                         let activityName = activityType?.rawValue ?? "unknown"
                         continuation.resume(returning: IOSNativeResponse(
-                            protocolVersion: activityVC.protocolVersion,
-                            requestID: activityVC.requestID,
+                            protocolVersion: "1.0",
+                            requestID: requestID,
                             status: "ok",
                             result: [
                                 "shared": true,
@@ -514,8 +514,8 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
                         ))
                     } else {
                         continuation.resume(returning: IOSNativeResponse(
-                            protocolVersion: activityVC.protocolVersion,
-                            requestID: activityVC.requestID,
+                            protocolVersion: "1.0",
+                            requestID: requestID,
                             status: "ok",
                             result: [
                                 "shared": false,
@@ -551,9 +551,4 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return inForeground
     }
-}
-
-private extension UIActivityViewController {
-    var protocolVersion: String { "1.0" }
-    var requestID: String { "share-\(UUID().uuidString)" }
 }

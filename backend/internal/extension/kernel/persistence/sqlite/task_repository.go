@@ -513,6 +513,15 @@ func (r *TaskRepository) GetLatestCheckpoint(ctx context.Context, taskRunID stri
 	return &cp, nil
 }
 
+func (r *TaskRepository) RemoveCheckpoint(ctx context.Context, checkpointID string) error {
+	ex := getExecutor(ctx, r.db)
+	_, err := ex.ExecContext(ctx, `DELETE FROM extension_task_checkpoints WHERE checkpoint_id = ?`, checkpointID)
+	if err != nil {
+		return fmt.Errorf("sqlite: remove checkpoint: %w", err)
+	}
+	return nil
+}
+
 func (r *TaskRepository) PutProgress(ctx context.Context, taskRunID string, seq int64, progressJSON []byte) error {
 	ex := getExecutor(ctx, r.db)
 	now := time.Now().UTC()

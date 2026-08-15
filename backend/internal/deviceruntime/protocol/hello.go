@@ -18,8 +18,8 @@ type HelloPayload struct {
 	ActualStateHash              string                    `json:"actualStateHash,omitempty"`
 }
 
-func (p HelloPayload) ResumeCursor(connectionGeneration int64) ResumeCursor {
-	return ResumeCursor{
+func (p HelloPayload) ResumeCursor(connectionGeneration int64) SessionCursor {
+	return SessionCursor{
 		ConnectionGeneration:         connectionGeneration,
 		LastAppliedStateRevision:     p.LastAppliedStateRevision,
 		LastProcessedCommandSequence: p.LastProcessedCommandSequence,

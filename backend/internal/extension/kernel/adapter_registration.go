@@ -58,9 +58,6 @@ func RegisterProductionAdapters(registry *capability.RuntimeAdapterRegistry, dep
 	if deps.Supervisor == nil {
 		return fmt.Errorf("runtime supervisor must not be nil")
 	}
-	if deps.TaskService == nil {
-		return fmt.Errorf("task runtime service must not be nil")
-	}
 	if deps.WorkflowCaller == nil {
 		return fmt.Errorf("workflow caller must not be nil (no noop allowed)")
 	}
@@ -88,11 +85,13 @@ func RegisterProductionAdapters(registry *capability.RuntimeAdapterRegistry, dep
 	registry.Register(capability.RuntimeTypeTrustedService, tsAdapter)
 	registry.Register(capability.RuntimeTypePluginService, tsAdapter)
 
-	taskAdapter := capability.NewTaskRuntimeAdapter(
-		makeTaskEnqueueFunc(deps.TaskService),
-		makeTaskStatusFunc(deps.TaskService),
-	)
-	registry.Register(capability.RuntimeTypeTask, taskAdapter)
+	if deps.TaskService != nil {
+		taskAdapter := capability.NewTaskRuntimeAdapter(
+			makeTaskEnqueueFunc(deps.TaskService),
+			makeTaskStatusFunc(deps.TaskService),
+		)
+		registry.Register(capability.RuntimeTypeTask, taskAdapter)
+	}
 
 	if deps.MCPCaller != nil {
 		mcpAdapter := capability.NewMCPRuntimeAdapter(deps.MCPCaller, deps.MCPHealth)

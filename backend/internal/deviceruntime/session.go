@@ -58,8 +58,8 @@ func (s RuntimeSession) RuntimeIdentity() runtimeidentity.Identity {
 	}
 }
 
-func (s RuntimeSession) ResumeCursor() protocol.ResumeCursor {
-	return protocol.ResumeCursor{
+func (s RuntimeSession) ResumeCursor() protocol.SessionCursor {
+	return protocol.SessionCursor{
 		ConnectionGeneration:         s.ConnectionGeneration,
 		LastAppliedStateRevision:     s.LastAppliedStateRevision,
 		LastProcessedCommandSequence: s.LastProcessedCommandSequence,

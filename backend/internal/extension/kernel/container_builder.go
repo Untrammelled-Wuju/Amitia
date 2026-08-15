@@ -493,34 +493,41 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 
 	taskRepo := sqlite.NewTaskRepository(db)
-	taskCfg := task_runtime.DefaultTaskRuntimeConfig()
-	taskCfg.WorkspaceRoot = b.extRoot
-	taskCfg.NodeEnvironmentResolver = nodeResolver
-	taskCfg.HostArtifactResolver = artifactResolver
-	taskRuntimeService := task_runtime.NewTaskRuntimeService(taskRepo, taskCfg)
-	taskHandler := task_runtime.NewTaskRuntimeHandler(taskRuntimeService)
+	var taskRuntimeService *task_runtime.TaskRuntimeService
+	var taskHandler *task_runtime.TaskRuntimeHandler
+	if b.runtimePolicy.TaskRuntime {
+		taskCfg := task_runtime.DefaultTaskRuntimeConfig()
+		taskCfg.WorkspaceRoot = b.extRoot
+		taskCfg.NodeEnvironmentResolver = nodeResolver
+		taskCfg.HostArtifactResolver = artifactResolver
+		taskRuntimeService = task_runtime.NewTaskRuntimeService(taskRepo, taskCfg)
+		taskHandler = task_runtime.NewTaskRuntimeHandler(taskRuntimeService)
+	}
 
 	taskSupervisorAdapter := task_runtime.NewSupervisorAdapter(taskRuntimeService)
 	_ = taskSupervisorAdapter
 
 	scheduleRepo := sqlite.NewScheduleRepository(db)
-	scheduleSvc, err := schedule.NewScheduleService(schedule.ScheduleDeps{
-		Store:             scheduleRepo,
-		PermissionChecker: schedule.NewBrokerPermissionChecker(permBroker, scheduleRepo),
-		ScopeChecker:      schedule.NewManagerScopeChecker(scopeManager, scheduleRepo, scopeStore),
-		DependencyChecker: schedule.NewResolverDependencyChecker(dependencyResolver),
-		WorkflowExecutor: NewKernelWorkflowFacadeAdapter(workflowExecutor, func(ctx context.Context, extensionID string) (int64, error) {
-			installation, err := instRepo.GetInstallation(ctx, domain.ExtensionID(extensionID))
-			if err != nil {
-				return 0, err
-			}
-			return installation.Generation, nil
-		}),
-		TaskEnqueueFn:    BuildScheduleTaskEnqueueFunc(taskRuntimeService),
-		RuntimeHandlerFn: BuildScheduleRuntimeHandlerFn(supervisor),
-	})
-	if err != nil {
-		return nil, fmt.Errorf("kernel: create schedule service: %w", err)
+	var scheduleSvc *schedule.ScheduleService
+	if b.runtimePolicy.TaskRuntime {
+		scheduleSvc, err = schedule.NewScheduleService(schedule.ScheduleDeps{
+			Store:             scheduleRepo,
+			PermissionChecker: schedule.NewBrokerPermissionChecker(permBroker, scheduleRepo),
+			ScopeChecker:      schedule.NewManagerScopeChecker(scopeManager, scheduleRepo, scopeStore),
+			DependencyChecker: schedule.NewResolverDependencyChecker(dependencyResolver),
+			WorkflowExecutor: NewKernelWorkflowFacadeAdapter(workflowExecutor, func(ctx context.Context, extensionID string) (int64, error) {
+				installation, err := instRepo.GetInstallation(ctx, domain.ExtensionID(extensionID))
+				if err != nil {
+					return 0, err
+				}
+				return installation.Generation, nil
+			}),
+			TaskEnqueueFn:    BuildScheduleTaskEnqueueFunc(taskRuntimeService),
+			RuntimeHandlerFn: BuildScheduleRuntimeHandlerFn(supervisor),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("kernel: create schedule service: %w", err)
+		}
 	}
 
 	hookService, err := hook.NewService(hook.ServiceConfig{
@@ -576,8 +583,10 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return nil, fmt.Errorf("kernel: create eventbridge publisher: %w", err)
 	}
 
-	taskEventPublisher := eventbridge.NewTaskEventPublisher(eventBridgePublisher)
-	taskRuntimeService.SetEventSink(taskEventPublisher)
+	if b.runtimePolicy.DurableEvents && taskRuntimeService != nil {
+		taskEventPublisher := eventbridge.NewTaskEventPublisher(eventBridgePublisher)
+		taskRuntimeService.SetEventSink(taskEventPublisher)
+	}
 
 	hostAPIGateway := host_api.NewDefaultGateway()
 	host_api.RegisterPermissionDefinitions(permDefRegistry)
@@ -720,7 +729,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}); err != nil {
 		return nil, fmt.Errorf("kernel: setup migration sandbox routes: %w", err)
 	}
-	scheduleSvc.GetExecutor().RegisterTargetAdapter(schedule.NewToolTargetAdapter(NewKernelToolExecutorAdapter(executionKernel)))
+	if scheduleSvc != nil {
+		scheduleSvc.GetExecutor().RegisterTargetAdapter(schedule.NewToolTargetAdapter(NewKernelToolExecutorAdapter(executionKernel)))
+	}
 	jsFactory.SetHostAPI(hostAPIGateway)
 
 	jsSupervisorFactory := javascript_main.NewSupervisorFactory(jsFactory, nodeResolver, artifactResolver)

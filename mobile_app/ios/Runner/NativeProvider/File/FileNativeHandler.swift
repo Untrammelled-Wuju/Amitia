@@ -292,7 +292,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
             protocolVersion: request.protocolVersion,
             requestID: request.requestID,
             status: "ok",
-            result: ["size": data.count, "mountId": mountId],
+            result: ["size": data.count, "mountId": mountId, "contentBase64": data.base64EncodedString()],
             error: nil
         )
     }
@@ -388,60 +388,97 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleAccessMove(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        guard let sourceMountId = request.payload?["sourceMountId"] as? String,
-              let destMountId = request.payload?["destMountId"] as? String else {
+        guard let sourcePath = request.payload?["sourcePath"] as? String,
+              let destPath = request.payload?["destPath"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing sourceMountId or destMountId")
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing sourcePath or destPath")
             )
         }
-        let success = SecurityScopedBookmarkStore.shared.move(sourceMountId: sourceMountId, destMountId: destMountId)
-        if !success {
+        _ = SecurityScopedBookmarkStore.shared.startAccessing(identifier: sourcePath)
+        _ = SecurityScopedBookmarkStore.shared.startAccessing(identifier: destPath)
+        defer {
+            SecurityScopedBookmarkStore.shared.stopAccessing(identifier: sourcePath)
+            SecurityScopedBookmarkStore.shared.stopAccessing(identifier: destPath)
+        }
+        let sourceUrl = SecurityScopedBookmarkStore.shared.resolve(identifier: sourcePath)
+        let destUrl = SecurityScopedBookmarkStore.shared.resolve(identifier: destPath)
+        guard let src = sourceUrl, let dst = destUrl else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "MOVE_FAILED", message: "failed to move")
+                error: IOSNativeError(code: "NOT_FOUND", message: "failed to resolve source or destination path")
+            )
+        }
+        do {
+            try FileManager.default.moveItem(at: src, to: dst)
+        } catch {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "MOVE_FAILED", message: error.localizedDescription)
             )
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
             requestID: request.requestID,
             status: "ok",
-            result: ["moved": success],
+            result: ["moved": true, "destPath": destPath],
             error: nil
         )
     }
 
     private func handleAccessCopy(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        guard let sourceMountId = request.payload?["sourceMountId"] as? String,
-              let destMountId = request.payload?["destMountId"] as? String else {
+        guard let sourcePath = request.payload?["sourcePath"] as? String,
+              let destPath = request.payload?["destPath"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing sourceMountId or destMountId")
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing sourcePath or destPath")
             )
         }
-        guard let newMountId = SecurityScopedBookmarkStore.shared.copy(sourceMountId: sourceMountId, destMountId: destMountId) else {
+        _ = SecurityScopedBookmarkStore.shared.startAccessing(identifier: sourcePath)
+        _ = SecurityScopedBookmarkStore.shared.startAccessing(identifier: destPath)
+        defer {
+            SecurityScopedBookmarkStore.shared.stopAccessing(identifier: sourcePath)
+            SecurityScopedBookmarkStore.shared.stopAccessing(identifier: destPath)
+        }
+        let sourceUrl = SecurityScopedBookmarkStore.shared.resolve(identifier: sourcePath)
+        let destUrl = SecurityScopedBookmarkStore.shared.resolve(identifier: destPath)
+        guard let src = sourceUrl, let dst = destUrl else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestID: request.requestID,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "COPY_FAILED", message: "failed to copy")
+                error: IOSNativeError(code: "NOT_FOUND", message: "failed to resolve source or destination path")
+            )
+        }
+        do {
+            try FileManager.default.copyItem(at: src, to: dst)
+        } catch {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "COPY_FAILED", message: error.localizedDescription)
             )
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
             requestID: request.requestID,
             status: "ok",
-            result: ["mountId": newMountId],
+            result: ["copied": true, "destPath": destPath],
             error: nil
         )
     }

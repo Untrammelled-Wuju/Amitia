@@ -2,8 +2,10 @@ package host_registry
 
 import (
 	"context"
+	"time"
 
-	"github.com/u-ai/backend/internal/deviceruntime"
+	"github.com/u-ai/backend/internal/deviceruntime/protocol"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 type DeviceRuntimePresenceAdapter struct {
@@ -14,7 +16,34 @@ func NewDeviceRuntimePresenceAdapter(registry *Registry) *DeviceRuntimePresenceA
 	return &DeviceRuntimePresenceAdapter{registry: registry}
 }
 
-func (a *DeviceRuntimePresenceAdapter) SessionReady(ctx context.Context, snapshot deviceruntime.PresenceSnapshot) error {
+func (a *DeviceRuntimePresenceAdapter) Acquire(
+	ctx context.Context,
+	identity protocol.SessionIdentity,
+	cursor protocol.SessionCursor,
+	runtimeVersion string,
+	contractVersion protocol.RuntimeContractVersion,
+	capabilities []string,
+) (runtimeidentity.RuntimeSessionID, protocol.ResumeDecision, error) {
+	return "", protocol.ResumeDecision{}, nil
+}
+
+func (a *DeviceRuntimePresenceAdapter) Heartbeat(
+	ctx context.Context,
+	sessionID runtimeidentity.RuntimeSessionID,
+	at time.Time,
+) error {
+	return nil
+}
+
+func (a *DeviceRuntimePresenceAdapter) Close(
+	ctx context.Context,
+	sessionID runtimeidentity.RuntimeSessionID,
+	reason string,
+) error {
+	return nil
+}
+
+func (a *DeviceRuntimePresenceAdapter) SessionReady(ctx context.Context, snapshot protocol.PresenceSnapshot) error {
 	_, err := a.registry.BindRuntimeSession(ctx, RuntimeSessionBinding{
 		UserID:               snapshot.UserID,
 		DeviceID:             snapshot.DeviceID,
@@ -27,19 +56,7 @@ func (a *DeviceRuntimePresenceAdapter) SessionReady(ctx context.Context, snapsho
 	return err
 }
 
-func (a *DeviceRuntimePresenceAdapter) Heartbeat(ctx context.Context, snapshot deviceruntime.PresenceSnapshot) error {
-	return a.registry.HeartbeatRuntimeSession(ctx, RuntimeSessionBinding{
-		UserID:               snapshot.UserID,
-		DeviceID:             snapshot.DeviceID,
-		RuntimeID:            snapshot.RuntimeID,
-		RuntimeSessionID:     snapshot.RuntimeSessionID,
-		Platform:             snapshot.Platform,
-		ConnectionGeneration: snapshot.ConnectionGeneration,
-		At:                   snapshot.At,
-	})
-}
-
-func (a *DeviceRuntimePresenceAdapter) SessionDisconnected(ctx context.Context, snapshot deviceruntime.PresenceSnapshot, reason string) error {
+func (a *DeviceRuntimePresenceAdapter) SessionDisconnected(ctx context.Context, snapshot protocol.PresenceSnapshot, reason string) error {
 	return a.registry.DisconnectRuntimeSession(ctx, RuntimeSessionBinding{
 		UserID:               snapshot.UserID,
 		DeviceID:             snapshot.DeviceID,
@@ -51,4 +68,4 @@ func (a *DeviceRuntimePresenceAdapter) SessionDisconnected(ctx context.Context, 
 	})
 }
 
-var _ deviceruntime.PresencePort = (*DeviceRuntimePresenceAdapter)(nil)
+var _ protocol.SessionLifecyclePort = (*DeviceRuntimePresenceAdapter)(nil)

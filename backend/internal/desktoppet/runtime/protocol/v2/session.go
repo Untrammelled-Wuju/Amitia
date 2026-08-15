@@ -78,8 +78,8 @@ func (s *RuntimeSession) ProtocolSessionIdentity() protocol.SessionIdentity {
 	}
 }
 
-func (s *RuntimeSession) ResumeCursor() protocol.ResumeCursor {
-	return protocol.ResumeCursor{
+func (s *RuntimeSession) ResumeCursor() protocol.SessionCursor {
+	return protocol.SessionCursor{
 		ConnectionGeneration:         s.ConnectionGeneration,
 		LastAppliedStateRevision:     s.LastAppliedDesiredRevision,
 		LastProcessedCommandSequence: s.LastProcessedCommandSequence,
@@ -113,8 +113,8 @@ func (p HelloPayload) ToDeviceRuntimeHello() protocol.HelloPayload {
 	}
 }
 
-func (p HelloPayload) ResumeCursor(connectionGeneration int64) protocol.ResumeCursor {
-	return protocol.ResumeCursor{
+func (p HelloPayload) ResumeCursor(connectionGeneration int64) protocol.SessionCursor {
+	return protocol.SessionCursor{
 		ConnectionGeneration:         connectionGeneration,
 		LastAppliedStateRevision:     p.LastAppliedDesiredRevision,
 		LastProcessedCommandSequence: p.LastProcessedCommandSequence,

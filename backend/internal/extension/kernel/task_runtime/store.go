@@ -55,6 +55,7 @@ type TaskStore interface {
 
 	PutCheckpoint(ctx context.Context, cp *TaskCheckpoint) error
 	GetLatestCheckpoint(ctx context.Context, taskRunID string) (*TaskCheckpoint, error)
+	RemoveCheckpoint(ctx context.Context, checkpointID string) error
 
 	PutProgress(ctx context.Context, taskRunID string, seq int64, progressJSON []byte) error
 	GetProgress(ctx context.Context, taskRunID string) (*TaskRunProgress, error)

@@ -44,7 +44,7 @@ func (c *Client) ChannelPublish(ctx context.Context, input ChannelPublishInput, 
 }
 
 func (c *Client) ChannelSubscribe(ctx context.Context, input ChannelSubscribeInput, opts ...MessageOption) (ChannelSubscribeOutput, error) {
-	envelope, err := c.sendHostRequest(ctx, MethodChannelSubscribe, input, opts...)
+	envelope, err := c.SendReservedRequest(ctx, MethodChannelSubscribe, input, opts...)
 	if err != nil {
 		return ChannelSubscribeOutput{}, err
 	}
@@ -58,6 +58,6 @@ func (c *Client) ChannelSubscribe(ctx context.Context, input ChannelSubscribeInp
 }
 
 func (c *Client) ChannelUnsubscribe(ctx context.Context, input ChannelUnsubscribeInput, opts ...MessageOption) error {
-	_, err := c.sendHostRequest(ctx, MethodChannelUnsubscribe, input, opts...)
+	_, err := c.SendReservedRequest(ctx, MethodChannelUnsubscribe, input, opts...)
 	return err
 }

@@ -65,14 +65,14 @@ public class MediaStaging {
 
                 do {
                     try data.write(to: targetURL)
-                    let stagingId = "nativeStaging:\(filename)"
                     let fileSize = (try? FileManager.default.attributesOfItem(atPath: targetURL.path)[.size] as? Int64) ?? 0
+                    let resourceUri = targetURL.absoluteString.hasPrefix("file://") ? targetURL.absoluteString : "file://" + targetURL.absoluteString
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
                         requestID: request.requestID,
                         status: "ok",
                         result: [
-                            "nativeStagingId": stagingId,
+                            "resourceUri": resourceUri,
                             "fileSize": fileSize,
                             "mimeType": "image/jpeg",
                             "width": image.size.width,
