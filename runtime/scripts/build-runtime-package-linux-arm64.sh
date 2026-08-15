@@ -58,7 +58,7 @@ if [[ "$NODE_ACTUAL_TREE_SHA" != "$NODE_EXPECTED_TREE_SHA" ]]; then
 fi
 echo "[VERIFY] Node tree SHA verified: $NODE_ACTUAL_TREE_SHA"
 
-ROOTFS_TAR="$RUNTIME_ROOT/build/out/rootfs/linux-arm64/ubuntu-rootfs-arm64.tar"
+ROOTFS_TAR="$RUNTIME_ROOT/build/out/rootfs/linux-arm64/ubuntu-rootfs-arm64.tar.xz"
 if [[ ! -f "$ROOTFS_TAR" ]]; then
     echo "[FATAL] Rootfs frozen archive not found. Run prepare-ubuntu-rootfs-arm64.sh first." >&2
     exit 1
@@ -129,7 +129,7 @@ RUNTIME_TAR_XZ="$PAYLOAD_DIR/runtime/runtime.tar.xz"
 RUNTIME_SHA=$(sha256sum "$RUNTIME_TAR_XZ" | awk '{print $1}')
 echo "[FREEZE] runtime.tar.xz created: $RUNTIME_SHA"
 
-cp "$ROOTFS_TAR" "$PAYLOAD_DIR/rootfs/rootfs.tar"
+cp "$ROOTFS_TAR" "$PAYLOAD_DIR/rootfs/rootfs.tar.xz"
 echo "[INPUT] Rootfs copied to payload"
 
 for component in "${REQUIRED_COMPONENTS[@]}"; do
