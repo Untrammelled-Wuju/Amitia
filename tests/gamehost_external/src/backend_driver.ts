@@ -42,6 +42,10 @@ export class BackendDriver {
     return this.client.uninstallPlugin(extensionId);
   }
 
+  async updatePlugin(extensionId: string, archivePath: string): Promise<unknown> {
+    return this.client.updatePlugin(extensionId, archivePath);
+  }
+
   async startRuntime(runtimeId: string): Promise<unknown> {
     return this.client.startRuntime(runtimeId);
   }
@@ -68,6 +72,34 @@ export class BackendDriver {
 
   async rearm(runtimeId: string): Promise<unknown> {
     return this.client.rearm(runtimeId);
+  }
+
+  async updatePlugin(extensionId: string, archivePath: string): Promise<unknown> {
+    return this.client.updatePlugin(extensionId, archivePath);
+  }
+
+  async waitForPluginVersion(
+    extensionId: string,
+    expectedVersion: string,
+    timeoutMs: number = 30000
+  ): Promise<GamePluginSummary> {
+    return new Promise<GamePluginSummary>(async (resolve, reject) => {
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        try {
+          const plugins = await this.listPlugins({ search: extensionId });
+          const found = plugins.find(p => p.extensionId === extensionId);
+          if (found && found.version === expectedVersion) {
+            resolve(found);
+            return;
+          }
+        } catch {
+          // transient
+        }
+        await sleep(200);
+      }
+      reject(new TimeoutError(`plugin ${extensionId} did not reach version ${expectedVersion} within ${timeoutMs}ms`));
+    });
   }
 
   async getRuntime(runtimeId: string, pluginId?: string): Promise<GameRuntimeDetail> {
@@ -148,6 +180,30 @@ export class BackendDriver {
         await sleep(200);
       }
       reject(new TimeoutError(`plugin ${extensionId} not found within ${timeoutMs}ms`));
+    });
+  }
+
+  async waitForPluginVersion(
+    extensionId: string,
+    currentVersion: string,
+    timeoutMs: number = 30000
+  ): Promise<GamePluginSummary> {
+    return new Promise<GamePluginSummary>(async (resolve, reject) => {
+      const deadline = Date.now() + timeoutMs;
+      while (Date.now() < deadline) {
+        try {
+          const plugins = await this.listPlugins({ search: extensionId });
+          const found = plugins.find(p => p.extensionId === extensionId);
+          if (found && found.version !== currentVersion) {
+            resolve(found);
+            return;
+          }
+        } catch {
+          // transient
+        }
+        await sleep(500);
+      }
+      reject(new TimeoutError(`plugin ${extensionId} did not change version from ${currentVersion} within ${timeoutMs}ms`));
     });
   }
 

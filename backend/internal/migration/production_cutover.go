@@ -3,6 +3,7 @@ package migration
 import (
 	"context"
 	"crypto/sha256"
+	"database/sql/driver"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -11,6 +12,44 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
+
+type textTime struct {
+	time.Time
+}
+
+func (t textTime) Value() (driver.Value, error) {
+	return t.Format(time.RFC3339), nil
+}
+
+func (t *textTime) Scan(src interface{}) error {
+	switch v := src.(type) {
+	case time.Time:
+		t.Time = v
+	case []byte:
+		parsed, err := time.Parse(time.RFC3339, string(v))
+		if err != nil {
+			parsed, err = time.Parse("2006-01-02 15:04:05", string(v))
+			if err != nil {
+				t.Time = time.Time{}
+				return nil
+			}
+		}
+		t.Time = parsed
+	case string:
+		parsed, err := time.Parse(time.RFC3339, v)
+		if err != nil {
+			parsed, err = time.Parse("2006-01-02 15:04:05", v)
+			if err != nil {
+				t.Time = time.Time{}
+				return nil
+			}
+		}
+		t.Time = parsed
+	default:
+		t.Time = time.Time{}
+	}
+	return nil
+}
 
 type CutoverPhase string
 
@@ -49,9 +88,9 @@ type CutoverState struct {
 	PhaseStatus         string       `gorm:"column:phase_status" json:"phase_status"`
 	SnapshotID          string       `gorm:"column:snapshot_id" json:"snapshot_id"`
 	ErrorMessage        string       `gorm:"column:error_message" json:"error_message"`
-	StartedAt           time.Time    `gorm:"column:started_at" json:"started_at"`
-	UpdatedAt           time.Time    `gorm:"column:updated_at" json:"updated_at"`
-	CompletedAt         *time.Time   `gorm:"column:completed_at" json:"completed_at,omitempty"`
+	StartedAt           textTime     `gorm:"column:started_at" json:"started_at"`
+	UpdatedAt           textTime     `gorm:"column:updated_at" json:"updated_at"`
+	CompletedAt         *textTime    `gorm:"column:completed_at" json:"completed_at,omitempty"`
 	CanonicalGeneration int64        `gorm:"column:canonical_generation" json:"canonical_generation"`
 	PlanVersion         int          `gorm:"column:plan_version" json:"plan_version"`
 }
@@ -260,7 +299,7 @@ func (s *dbStateStore) LoadLatestState(ctx context.Context) (*CutoverState, erro
 }
 
 func (s *dbStateStore) SaveState(ctx context.Context, state *CutoverState) error {
-	state.UpdatedAt = s.now()
+	state.UpdatedAt = textTime{Time: s.now()}
 	return s.db.WithContext(ctx).Save(state).Error
 }
 
@@ -276,13 +315,14 @@ func (p *CutoverPlan) Run(ctx context.Context) error {
 	if existing != nil && existing.Status == "running" {
 		state = existing
 	} else {
+		now := textTime{Time: p.deps.Now()}
 		state = &CutoverState{
 			OperationID:         uuid.NewString(),
 			Phase:               "",
 			Status:              "running",
 			PhaseStatus:         "pending",
-			StartedAt:           p.deps.Now(),
-			UpdatedAt:           p.deps.Now(),
+			StartedAt:           now,
+			UpdatedAt:           now,
 			PlanVersion:         1,
 			CanonicalGeneration: p.deps.Now().Unix(),
 		}
@@ -333,7 +373,7 @@ func (p *CutoverPlan) Run(ctx context.Context) error {
 		state.Phase = phase.name
 		state.Status = "running"
 		state.PhaseStatus = "running"
-		state.UpdatedAt = p.deps.Now()
+		state.UpdatedAt = textTime{Time: p.deps.Now()}
 		if err := store.SaveState(ctx, state); err != nil {
 			return fmt.Errorf("persist phase %s running: %w", phase.name, err)
 		}
@@ -342,7 +382,7 @@ func (p *CutoverPlan) Run(ctx context.Context) error {
 			state.Status = "failed"
 			state.PhaseStatus = "failed"
 			state.ErrorMessage = err.Error()
-			state.UpdatedAt = p.deps.Now()
+			state.UpdatedAt = textTime{Time: p.deps.Now()}
 			if saveErr := store.SaveState(ctx, state); saveErr != nil {
 				return fmt.Errorf("phase %s failed: %v; additionally state persistence failed: %w", phase.name, err, saveErr)
 			}
@@ -351,7 +391,7 @@ func (p *CutoverPlan) Run(ctx context.Context) error {
 
 		state.PhaseStatus = "completed"
 		state.ErrorMessage = ""
-		state.UpdatedAt = p.deps.Now()
+		state.UpdatedAt = textTime{Time: p.deps.Now()}
 		if err := store.SaveState(ctx, state); err != nil {
 			return fmt.Errorf("persist phase %s completed: %w", phase.name, err)
 		}
@@ -461,7 +501,7 @@ func (p *CutoverPlan) runCommit(ctx context.Context, state *CutoverState) error 
 		state.CanonicalGeneration = p.deps.Now().Unix()
 	}
 
-	commitTime := p.deps.Now()
+	commitTime := textTime{Time: p.deps.Now()}
 	state.CompletedAt = &commitTime
 	state.PhaseStatus = "completed"
 	state.Status = "committed"

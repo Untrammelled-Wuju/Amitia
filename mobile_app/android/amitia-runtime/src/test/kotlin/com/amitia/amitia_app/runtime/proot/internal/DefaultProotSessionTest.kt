@@ -347,4 +347,69 @@ class DefaultProotSessionTest {
         assertEquals(0, exitCount.get())
         session.close()
     }
+
+    @Test
+    fun watcherInterruptWhileProcessAlive_doesNotPublishExited() {
+        val process = execProcess(sleepCmd(30))
+        val exitCount = AtomicInteger(0)
+        val session = DefaultProotSession("test-interrupt-alive", process, ProotObserver { event ->
+            if (event is ProotEvent.Exited) exitCount.incrementAndGet()
+        }, testGeneration)
+        session.markStarted()
+        Thread.sleep(200)
+
+        val watcherThread = Thread.getAllStackTraces().keys.firstOrNull { it.name == "proot-exit-watcher-test-interrupt-alive" }
+        assertNotNull("Watcher thread should exist", watcherThread)
+        watcherThread!!.interrupt()
+
+        Thread.sleep(500)
+        assertEquals("Interrupt should not publish Exited while process alive", 0, exitCount.get())
+        assertTrue("Process should still be alive", session.isAlive())
+
+        session.close()
+        Thread.sleep(500)
+        assertEquals("After close, exactly one Exited should be published", 1, exitCount.get())
+    }
+
+    @Test
+    fun watcherExecutorTerminatesAfterSessionTerminal() {
+        val process = execProcess("exit 0")
+        val session = DefaultProotSession("test-executor-terminate", process, ProotObserver {}, testGeneration)
+        session.markStarted()
+        process.waitFor(5, TimeUnit.SECONDS)
+        Thread.sleep(500)
+        session.close()
+        Thread.sleep(1000)
+
+        val watcherThread = Thread.getAllStackTraces().keys.firstOrNull { it.name == "proot-exit-watcher-test-executor-terminate" }
+        assertTrue("Watcher thread should be terminated after session terminal", watcherThread == null || !watcherThread.isAlive)
+    }
+
+    @Test
+    fun watcherInterruptAfterProcessExited_returnsRealExitCode() {
+        val process = execProcess("exit 55")
+        val capturedExit = AtomicReference<ProotExit?>(null)
+        val session = DefaultProotSession("test-interrupt-after-exit", process, ProotObserver { event ->
+            if (event is ProotEvent.Exited) capturedExit.set(event.exit)
+        }, testGeneration)
+        session.markStarted()
+        process.waitFor(5, TimeUnit.SECONDS)
+
+        val watcherThread = Thread.getAllStackTraces().keys.firstOrNull { it.name == "proot-exit-watcher-test-interrupt-after-exit" }
+        if (watcherThread != null) {
+            watcherThread.interrupt()
+        }
+
+        Thread.sleep(500)
+        session.awaitExit(3000)
+        Thread.sleep(200)
+
+        val exit = capturedExit.get()
+        assertNotNull("Should have received exit event", exit)
+        assertEquals("Exit code should be real value, not fake", 55, exit!!.exitCode)
+        assertEquals("Exactly one Exited should be published", 1, java.util.concurrent.atomic.AtomicInteger(0).also {
+            if (exit != null) it.incrementAndGet()
+        }.get())
+        session.close()
+    }
 }

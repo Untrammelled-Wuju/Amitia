@@ -474,44 +474,51 @@ func (c *UpgradeCoordinator) discoverRuntimes(pluginIDs []domain.PluginID) ([]Ru
 
 func (c *UpgradeCoordinator) quiesceRuntimes(ctx context.Context, snapshots []RuntimeUpgradeSnapshot) error {
 	committed := make([]domain.RuntimeInstanceID, 0, len(snapshots))
-	defer func() {
-		if len(committed) > 0 {
-			for _, rid := range committed {
-				intent, err := c.lifecycleIntents.GetLifecycleIntent(rid)
-				if err == nil && intent == "upgrade" {
-					_ = c.lifecycleIntents.SetLifecycleIntent(rid, "")
-				}
-			}
-		}
-	}()
+	var quiesceErr error
 
 	for i := range snapshots {
 		snap := &snapshots[i]
 		rtInfo, err := c.runtimeManager.GetRuntime(snap.RuntimeID)
 		if err != nil {
-			return fmt.Errorf("get runtime %s: %w", snap.RuntimeID, err)
+			quiesceErr = fmt.Errorf("get runtime %s: %w", snap.RuntimeID, err)
+			break
 		}
 		if domain.IsTerminalRuntimeState(rtInfo.State) {
 			continue
 		}
 		if err := c.lifecycleIntents.SetLifecycleIntent(snap.RuntimeID, "upgrade"); err != nil {
-			return fmt.Errorf("set upgrade intent for runtime %s: %w", snap.RuntimeID, err)
+			quiesceErr = fmt.Errorf("set upgrade intent for runtime %s: %w", snap.RuntimeID, err)
+			break
 		}
 		committed = append(committed, snap.RuntimeID)
 
 		if rtInfo.State == domain.RuntimeStateRunning || rtInfo.State == domain.RuntimeStateDegraded || rtInfo.State == domain.RuntimeStateSuspended {
 			if err := c.runtimeExecutor.StopRuntime(ctx, snap.RuntimeID); err != nil {
-				return fmt.Errorf("stop runtime %s: %w", snap.RuntimeID, err)
+				quiesceErr = fmt.Errorf("stop runtime %s: %w", snap.RuntimeID, err)
+				break
 			}
 			stopped, err := c.runtimeManager.GetRuntime(snap.RuntimeID)
 			if err != nil {
-				return fmt.Errorf("verify quiesced runtime %s: %w", snap.RuntimeID, err)
+				quiesceErr = fmt.Errorf("verify quiesced runtime %s: %w", snap.RuntimeID, err)
+				break
 			}
 			if stopped.State != domain.RuntimeStateStopped {
-				return fmt.Errorf("verify quiesced runtime %s: state=%s", snap.RuntimeID, stopped.State)
+				quiesceErr = fmt.Errorf("verify quiesced runtime %s: state=%s", snap.RuntimeID, stopped.State)
+				break
 			}
 		}
 	}
+
+	if quiesceErr != nil {
+		for _, rid := range committed {
+			intent, err := c.lifecycleIntents.GetLifecycleIntent(rid)
+			if err == nil && intent == "upgrade" {
+				_ = c.lifecycleIntents.SetLifecycleIntent(rid, "")
+			}
+		}
+		return quiesceErr
+	}
+
 	return nil
 }
 

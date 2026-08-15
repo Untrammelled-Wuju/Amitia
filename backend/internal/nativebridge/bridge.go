@@ -35,12 +35,14 @@ const (
 type Bridge interface {
 	Execute(context.Context, Request) (Response, error)
 	Health(context.Context) Health
+	SessionAttached() bool
 }
 
 type AndroidBridge interface {
 	Bridge
 	AttachRelaySession(transport RelayTransport)
 	DetachSession()
+	HandleRelayEnvelope(payload []byte) error
 	Generation() uint64
 	SessionAttached() bool
 }

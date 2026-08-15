@@ -16,8 +16,9 @@ type Service struct {
 
 	visual VisualLocator
 
-	root RootInteractionExecutor
-	adb  ADBInteractionExecutor
+	root     RootInteractionExecutor
+	adb      ADBInteractionExecutor
+	shizuku  ShizukuInteractionExecutor
 
 	verifier Verifier
 
@@ -32,6 +33,7 @@ func NewService(
 	visual VisualLocator,
 	root RootInteractionExecutor,
 	adb ADBInteractionExecutor,
+	shizuku ShizukuInteractionExecutor,
 	verifier Verifier,
 	policy Policy,
 ) *Service {
@@ -43,6 +45,7 @@ func NewService(
 		visual:           visual,
 		root:             root,
 		adb:              adb,
+		shizuku:          shizuku,
 		verifier:         verifier,
 		policy:           policy,
 	}

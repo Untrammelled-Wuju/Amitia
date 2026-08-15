@@ -247,14 +247,19 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 					)
 					return
 				}
-				err := services.DeviceRepository.RegisterOrTouch(c.Request.Context(), device.Identity{
+				platform, parseErr := runtimeidentity.ParsePlatform(request.Platform)
+			if parseErr != nil {
+				c.JSON(400, gin.H{"code": 400, "msg": "invalid platform"})
+				return
+			}
+			err := services.DeviceRepository.RegisterOrTouch(c.Request.Context(), device.Identity{
 					UserID:            actor.UserID,
 					DeviceID:          runtimeidentity.ParseDeviceID(request.DeviceID),
 					DesktopInstanceID: request.DesktopInstanceID,
-					Platform:          runtimeidentity.ParsePlatform(request.Platform),
+					Platform:          platform,
 					AppVersion:        request.AppVersion,
 				})
-				if err != nil {
+			if err != nil {
 					log.Error("failed to register device identity", "error", err)
 					c.JSON(500, gin.H{"code": 500, "msg": "failed to register device"})
 					return
@@ -550,6 +555,10 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
 	}))
 	maintenance.RegisterMaintenanceRouter(maintenanceAuthGroup, services.DesktopPetMaintenanceHandler)
+
+	if services.NativeBridgeRelay != nil {
+		apiGroup.GET("/native-bridge/relay", services.NativeBridgeRelay.Handler().HandleWebSocket)
+	}
 
 	return r, nil
 }

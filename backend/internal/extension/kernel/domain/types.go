@@ -86,7 +86,7 @@ var (
 	ErrInvalidModuleID    = errors.New("domain: invalid module id")
 )
 
-var extensionIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*(\.[a-z0-9-]+)+/[a-z0-9][a-z0-9-]*$`)
+var extensionIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9-]*(\.[a-z0-9-]+)+(/[a-z0-9][a-z0-9-]+)?$`)
 
 func ValidateExtensionID(id ExtensionID) error {
 	if id == "" {
@@ -280,6 +280,8 @@ type ExtensionDefinition struct {
 	Integrity     ExtensionIntegrity     `json:"integrity"`
 	Policies      ExtensionPolicies      `json:"policies"`
 
+	SecretRefs []SecretRefDefinition `json:"secretRefs,omitempty"`
+
 	Metadata map[string]any `json:"metadata,omitempty"`
 }
 
@@ -294,6 +296,13 @@ type ExtensionPackage struct {
 	Signature       SignatureReference `json:"signature"`
 	Publisher       PublisherReference `json:"publisher"`
 	CreatedAt       time.Time          `json:"createdAt"`
+}
+
+type SecretRefDefinition struct {
+	Ref       string `json:"ref"`
+	ServiceID string `json:"serviceId,omitempty"`
+	Purpose   string `json:"purpose,omitempty"`
+	Required  bool   `json:"required,omitempty"`
 }
 
 type ExtensionInstallation struct {

@@ -19,12 +19,19 @@ const (
 	capabilityDeliverWechat capability.CapabilityID = "channel.deliver.wechat"
 )
 
+// BuildWebChannelExtension constructs a Built-in Extension definition for the Web channel.
+//
+//	Extension ID: com.amitia.builtin.channel.web
+//	Provider Capability: channel.deliver.web
 func BuildWebChannelExtension(version string) Definition {
-	ver, _ := domain.ParseVersion(version)
+	extID := domain.ExtensionID(PrefixBuiltin + "channel.web")
+	moduleID := moduleIDWebChannel
+	contributionID := domain.ContributionID(PrefixBuiltin + "channel.web/deliver")
+	ver := parseBuiltinVersion(version)
 
 	return Definition{
 		Extension: domain.ExtensionDefinition{
-			ID:   domain.ExtensionID(PrefixBuiltin + "channel.web"),
+			ID:   extID,
 			Name: domain.LocalizedText{Default: "Web Channel"},
 			Description: domain.LocalizedText{
 				Default: "Built-in web channel delivery provider for sending messages through web interfaces.",
@@ -35,36 +42,38 @@ func BuildWebChannelExtension(version string) Definition {
 			Placement:       domain.ExtensionPlacementCloud,
 			Publisher: domain.PublisherReference{
 				PublisherID: "com.amitia",
-				DisplayName: "Built-in",
+				DisplayName: "Amitia",
 			},
-			Policies: domain.ExtensionPolicies{
-				AutoUpdate:    false,
-				NetworkAccess: true,
-			},
-			Compatibility: domain.ExtensionCompatibility{
-				Platforms: []string{"web"},
+			Package: domain.PackageReference{
+				PackageID: "builtin-channel-web",
 			},
 			Modules: []domain.ModuleDefinition{
-				buildChannelModule(
-					domain.ExtensionID(PrefixBuiltin + "channel.web"),
-					moduleIDWebChannel,
-					providerIDWebChannel,
-					capabilityDeliverWeb,
-				),
+				buildChannelModule(extID, moduleID, contributionID, providerIDWebChannel, capabilityDeliverWeb, ver),
 			},
+			Compatibility: domain.ExtensionCompatibility{},
+			Integrity:     domain.ExtensionIntegrity{},
+			Policies:      domain.ExtensionPolicies{},
 		},
-		SystemManaged:  true,
-		Required:       true,
-		DisableAllowed: false,
+		SystemManaged:    true,
+		Required:         true,
+		DisableAllowed:   false,
+		BootstrapRevision: 1,
 	}
 }
 
+// BuildQQChannelExtension constructs a Built-in Extension definition for the QQ channel.
+//
+//	Extension ID: com.amitia.builtin.channel.qq
+//	Provider Capability: channel.deliver.qq
 func BuildQQChannelExtension(version string) Definition {
-	ver, _ := domain.ParseVersion(version)
+	extID := domain.ExtensionID(PrefixBuiltin + "channel.qq")
+	moduleID := moduleIDQQChannel
+	contributionID := domain.ContributionID(PrefixBuiltin + "channel.qq/deliver")
+	ver := parseBuiltinVersion(version)
 
 	return Definition{
 		Extension: domain.ExtensionDefinition{
-			ID:   domain.ExtensionID(PrefixBuiltin + "channel.qq"),
+			ID:   extID,
 			Name: domain.LocalizedText{Default: "QQ Channel"},
 			Description: domain.LocalizedText{
 				Default: "Built-in QQ channel delivery provider for sending messages through QQ sidecar.",
@@ -75,36 +84,38 @@ func BuildQQChannelExtension(version string) Definition {
 			Placement:       domain.ExtensionPlacementCloud,
 			Publisher: domain.PublisherReference{
 				PublisherID: "com.amitia",
-				DisplayName: "Built-in",
+				DisplayName: "Amitia",
 			},
-			Policies: domain.ExtensionPolicies{
-				AutoUpdate:    false,
-				NetworkAccess: true,
-			},
-			Compatibility: domain.ExtensionCompatibility{
-				Platforms: []string{"qq"},
+			Package: domain.PackageReference{
+				PackageID: "builtin-channel-qq",
 			},
 			Modules: []domain.ModuleDefinition{
-				buildChannelModule(
-					domain.ExtensionID(PrefixBuiltin + "channel.qq"),
-					moduleIDQQChannel,
-					providerIDQQChannel,
-					capabilityDeliverQQ,
-				),
+				buildChannelModule(extID, moduleID, contributionID, providerIDQQChannel, capabilityDeliverQQ, ver),
 			},
+			Compatibility: domain.ExtensionCompatibility{},
+			Integrity:     domain.ExtensionIntegrity{},
+			Policies:      domain.ExtensionPolicies{},
 		},
-		SystemManaged:  true,
-		Required:       false,
-		DisableAllowed: true,
+		SystemManaged:    true,
+		Required:         false,
+		DisableAllowed:   true,
+		BootstrapRevision: 1,
 	}
 }
 
+// BuildWechatChannelExtension constructs a Built-in Extension definition for the Wechat channel.
+//
+//	Extension ID: com.amitia.builtin.channel.wechat
+//	Provider Capability: channel.deliver.wechat
 func BuildWechatChannelExtension(version string) Definition {
-	ver, _ := domain.ParseVersion(version)
+	extID := domain.ExtensionID(PrefixBuiltin + "channel.wechat")
+	moduleID := moduleIDWechatChannel
+	contributionID := domain.ContributionID(PrefixBuiltin + "channel.wechat/deliver")
+	ver := parseBuiltinVersion(version)
 
 	return Definition{
 		Extension: domain.ExtensionDefinition{
-			ID:   domain.ExtensionID(PrefixBuiltin + "channel.wechat"),
+			ID:   extID,
 			Name: domain.LocalizedText{Default: "Wechat Channel"},
 			Description: domain.LocalizedText{
 				Default: "Built-in Wechat channel delivery provider for sending messages through Wechat sidecar.",
@@ -115,31 +126,33 @@ func BuildWechatChannelExtension(version string) Definition {
 			Placement:       domain.ExtensionPlacementCloud,
 			Publisher: domain.PublisherReference{
 				PublisherID: "com.amitia",
-				DisplayName: "Built-in",
+				DisplayName: "Amitia",
 			},
-			Policies: domain.ExtensionPolicies{
-				AutoUpdate:    false,
-				NetworkAccess: true,
-			},
-			Compatibility: domain.ExtensionCompatibility{
-				Platforms: []string{"wechat"},
+			Package: domain.PackageReference{
+				PackageID: "builtin-channel-wechat",
 			},
 			Modules: []domain.ModuleDefinition{
-				buildChannelModule(
-					domain.ExtensionID(PrefixBuiltin + "channel.wechat"),
-					moduleIDWechatChannel,
-					providerIDWechatChannel,
-					capabilityDeliverWechat,
-				),
+				buildChannelModule(extID, moduleID, contributionID, providerIDWechatChannel, capabilityDeliverWechat, ver),
 			},
+			Compatibility: domain.ExtensionCompatibility{},
+			Integrity:     domain.ExtensionIntegrity{},
+			Policies:      domain.ExtensionPolicies{},
 		},
-		SystemManaged:  true,
-		Required:       false,
-		DisableAllowed: true,
+		SystemManaged:    true,
+		Required:         false,
+		DisableAllowed:   true,
+		BootstrapRevision: 1,
 	}
 }
 
-func buildChannelModule(extID domain.ExtensionID, modID domain.ModuleID, providerName string, capID capability.CapabilityID) domain.ModuleDefinition {
+func buildChannelModule(
+	extID domain.ExtensionID,
+	modID domain.ModuleID,
+	contributionID domain.ContributionID,
+	providerName string,
+	capID capability.CapabilityID,
+	ver domain.SemanticVersion,
+) domain.ModuleDefinition {
 	return domain.ModuleDefinition{
 		ID:          modID,
 		ExtensionID: extID,
@@ -149,29 +162,30 @@ func buildChannelModule(extID domain.ExtensionID, modID domain.ModuleID, provide
 		Description: domain.LocalizedText{
 			Default: "Provides channel delivery capability for " + providerName,
 		},
-		Type:    domain.ModuleTypeBuiltin,
-		Version: "1.0.0",
+		Type: domain.ModuleTypeBuiltin,
 		Runtime: &domain.RuntimeDefinition{
-			Type:       domain.RuntimeTypeBuiltin,
-			EntryPoint: "deliver",
+			Type: domain.RuntimeTypeBuiltin,
 		},
 		Contributions: []domain.ContributionDefinition{
 			{
-				ID:          domain.ContributionID(capID),
+				ID:          contributionID,
 				ModuleID:    modID,
 				ExtensionID: extID,
 				Kind:        domain.ContributionKindProvider,
 				Name: domain.LocalizedText{
-					Default: "Channel Provider - " + providerName,
+					Default: "Channel Deliver - " + providerName,
+				},
+				Description: domain.LocalizedText{
+					Default: "Deliver messages through the " + providerName + " channel",
+				},
+				RuntimeBinding: &domain.RuntimeBinding{
+					RuntimeType: domain.RuntimeTypeBuiltin,
+					InstanceID:  string(capID),
 				},
 			},
 		},
-		Placement: domain.ModulePlacementCloud,
 		ProvidedCapabilities: []domain.ProvidedCapability{
-			{
-				ID:      string(capID),
-				Version: "1.0.0",
-			},
+			{ID: string(capID), Version: ver.String()},
 		},
 		Provider: &domain.ProviderMetadata{
 			ID:       providerName,

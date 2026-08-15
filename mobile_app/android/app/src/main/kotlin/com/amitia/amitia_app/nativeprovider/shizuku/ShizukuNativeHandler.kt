@@ -3,16 +3,39 @@ package com.amitia.amitia_app.nativeprovider.shizuku
 import android.content.Context
 import android.content.pm.PackageManager
 import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import com.amitia.amitia_app.nativeprovider.AndroidNativeOperationHandler
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeError
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeProtocol
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeRequest
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeResponse
 import rikka.shizuku.Shizuku
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.TimeoutException
 
 internal class ShizukuNativeHandler(
     private val context: Context,
 ) : AndroidNativeOperationHandler {
+
+    private val mainHandler = Handler(Looper.getMainLooper())
+    private val permissionWaiters = mutableMapOf<Int, CompletableFuture<Int>>()
+    private var requestCode = 1000
+
+    init {
+        Shizuku.addRequestPermissionResultListener { requestCode, result ->
+            mainHandler.post {
+                val waiter = permissionWaiters.remove(requestCode)
+                waiter?.complete(result)
+            }
+        }
+
+        Shizuku.addBinderDeadListener {
+            permissionWaiters.values.forEach { it.complete(-1) }
+            permissionWaiters.clear()
+        }
+    }
 
     override val operations: Set<String> = setOf(OP_STATUS, OP_REQUEST_PERMISSION, OP_EXECUTE)
 
@@ -66,29 +89,110 @@ internal class ShizukuNativeHandler(
                 ),
             )
         }
-        return NativeBridgeResponse(
-            protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
-            requestId = request.requestId,
-            status = NativeBridgeProtocol.STATUS_SUCCESS,
-            result = mapOf(
-                "requested" to true,
-                "userActionRequired" to true,
-                "state" to "permission_pending",
-            ),
-        )
+
+        if (Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED) {
+            return NativeBridgeResponse(
+                protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+                requestId = request.requestId,
+                status = NativeBridgeProtocol.STATUS_SUCCESS,
+                result = mapOf(
+                    "authorized" to true,
+                    "state" to "authorized",
+                ),
+            )
+        }
+
+        val result = try {
+            requestPermissionAsync().get(60, TimeUnit.SECONDS)
+        } catch (e: TimeoutException) {
+            return NativeBridgeResponse(
+                protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+                requestId = request.requestId,
+                status = NativeBridgeProtocol.STATUS_ERROR,
+                error = NativeBridgeError(
+                    code = "SHIZUKU_PERMISSION_TIMEOUT",
+                    message = "Shizuku permission request timed out",
+                ),
+            )
+        } catch (e: Exception) {
+            return NativeBridgeResponse(
+                protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+                requestId = request.requestId,
+                status = NativeBridgeProtocol.STATUS_ERROR,
+                error = NativeBridgeError(
+                    code = "SHIZUKU_PERMISSION_CANCELLED",
+                    message = "Shizuku permission request was cancelled: ${e.message}",
+                ),
+            )
+        }
+
+        return when (result) {
+            PackageManager.PERMISSION_GRANTED -> NativeBridgeResponse(
+                protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+                requestId = request.requestId,
+                status = NativeBridgeProtocol.STATUS_SUCCESS,
+                result = mapOf(
+                    "authorized" to true,
+                    "state" to "authorized",
+                ),
+            )
+            -1 -> NativeBridgeResponse(
+                protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+                requestId = request.requestId,
+                status = NativeBridgeProtocol.STATUS_ERROR,
+                error = NativeBridgeError(
+                    code = "SHIZUKU_SERVICE_DEAD",
+                    message = "Shizuku service died during permission request",
+                ),
+            )
+            else -> NativeBridgeResponse(
+                protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+                requestId = request.requestId,
+                status = NativeBridgeProtocol.STATUS_ERROR,
+                error = NativeBridgeError(
+                    code = "SHIZUKU_PERMISSION_DENIED",
+                    message = "Shizuku permission was denied by user",
+                ),
+            )
+        }
+    }
+
+    private fun requestPermissionAsync(): CompletableFuture<Int> {
+        val future = CompletableFuture<Int>()
+        val code = requestCode++
+        permissionWaiters[code] = future
+
+        if (Shizuku.isPreV11) {
+            future.complete(-1)
+            permissionWaiters.remove(code)
+        } else {
+            try {
+                Shizuku.requestPermission(code)
+            } catch (e: Exception) {
+                future.complete(-1)
+                permissionWaiters.remove(code)
+            }
+        }
+
+        return future
     }
 
     private fun handleExecute(request: NativeBridgeRequest): NativeBridgeResponse {
         val payload = request.payload
-        val command = payload["command"] as? String
-        if (command.isNullOrBlank()) {
+        val executable = payload["executable"] as? String
+        val args = payload["args"] as? List<*>
+        val stdin = payload["stdin"] as? String
+        val timeoutMs = (payload["timeoutMs"] as? Number)?.toLong() ?: 30000L
+        val maxOutputBytes = (payload["maxOutputBytes"] as? Number)?.toLong() ?: 1048576L
+
+        if (executable.isNullOrBlank()) {
             return NativeBridgeResponse(
                 protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
                 requestId = request.requestId,
                 status = NativeBridgeProtocol.STATUS_ERROR,
                 error = NativeBridgeError(
                     code = "SHIZUKU_INVALID_REQUEST",
-                    message = "command is required",
+                    message = "executable is required",
                 ),
             )
         }
@@ -106,16 +210,56 @@ internal class ShizukuNativeHandler(
             )
         }
 
-        return NativeBridgeResponse(
-            protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
-            requestId = request.requestId,
-            status = NativeBridgeProtocol.STATUS_SUCCESS,
-            result = mapOf(
-                "executed" to false,
-                "state" to "adapter_pending",
-                "reason" to "direct execution via Shizuku binder requires host-side adapter",
-            ),
-        )
+        return executeViaUserService(request, executable, args, stdin, timeoutMs, maxOutputBytes)
+    }
+
+    private fun executeViaUserService(
+        request: NativeBridgeRequest,
+        executable: String,
+        args: List<*>?,
+        stdin: String?,
+        timeoutMs: Long,
+        maxOutputBytes: Long,
+    ): NativeBridgeResponse {
+        val service = ShizukuCommandServiceHolder.service
+        if (service == null) {
+            return NativeBridgeResponse(
+                protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+                requestId = request.requestId,
+                status = NativeBridgeProtocol.STATUS_ERROR,
+                error = NativeBridgeError(
+                    code = "SHIZUKU_SERVICE_UNAVAILABLE",
+                    message = "Shizuku UserService is not bound",
+                ),
+            )
+        }
+
+        return try {
+            val result = service.executeCommand(executable, args ?: emptyList(), stdin, timeoutMs, maxOutputBytes)
+            NativeBridgeResponse(
+                protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+                requestId = request.requestId,
+                status = NativeBridgeProtocol.STATUS_SUCCESS,
+                result = mapOf(
+                    "exitCode" to result.exitCode,
+                    "exitCodeAvailable" to result.exitCodeAvailable,
+                    "stdout" to result.stdout,
+                    "stderr" to result.stderr,
+                    "durationMs" to result.durationMs,
+                    "timedOut" to result.timedOut,
+                ),
+            )
+        } catch (e: Exception) {
+            NativeBridgeResponse(
+                protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+                requestId = request.requestId,
+                status = NativeBridgeProtocol.STATUS_ERROR,
+                error = NativeBridgeError(
+                    code = "SHIZUKU_EXECUTION_ERROR",
+                    message = "Shizuku execution failed: ${e.message}",
+                ),
+            )
+        }
     }
 
     private fun detectShizukuState(): ShizukuCapabilityState {
@@ -143,11 +287,7 @@ internal class ShizukuNativeHandler(
         }
 
         val granted = try {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
-            } else {
-                Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
-            }
+            Shizuku.checkSelfPermission() == PackageManager.PERMISSION_GRANTED
         } catch (_: Exception) {
             false
         }

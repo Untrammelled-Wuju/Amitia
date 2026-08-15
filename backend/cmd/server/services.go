@@ -79,6 +79,7 @@ import (
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval/local"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/localmodel/llamacpp"
+	"github.com/u-ai/backend/internal/nativebridge"
 	"github.com/u-ai/backend/internal/mcp"
 	"github.com/u-ai/backend/internal/media"
 	"github.com/u-ai/backend/internal/memory"
@@ -182,6 +183,7 @@ type AppServices struct {
 	WorkspaceRegistry            *workspace.Registry
 	WorkspaceService             *workspace.Service
 	ProductionCutover            *cutoverComposition
+	NativeBridgeRelay            *nativeBridgeRelay
 }
 
 type RuntimeOrchestrator interface {
@@ -1035,6 +1037,12 @@ services := &AppServices{
 		MediaService:                 mediaService,
 		WorkspaceRegistry:            workspaceRegistry,
 		WorkspaceService:             workspaceService,
+		NativeBridgeRelay:            newNativeBridgeRelay(),
+	}
+	if services.NativeBridgeRelay != nil && bootstrap != nil {
+		if androidBridge, ok := bootstrap.AndroidNativeBridge().(*nativebridge.AndroidTransportBridge); ok {
+			services.NativeBridgeRelay.RegisterAndroidBridge(androidBridge)
+		}
 	}
 	if err := runCanonicalBuildAssertions(services); err != nil {
 		return nil, fmt.Errorf("canonical build assertion failed: %w", err)

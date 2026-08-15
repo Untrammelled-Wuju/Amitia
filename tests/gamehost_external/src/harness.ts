@@ -13,6 +13,8 @@ export { BackendDriver, createDriver, GameCenterClient, createClient };
  * backend via Game Center HTTP API on port 18899, where the plugin is launched
  * exclusively by the existing trusted_service.ProcessSupervisor through the
  * canonical RuntimeManager → GameHost → ControlPlane path.
+ *
+ * All legacy methods below throw to prevent accidental misuse.
  */
 export class ExternalPluginHarness {
   private driver: BackendDriver;
@@ -38,31 +40,31 @@ export class ExternalPluginHarness {
   }
 
   kill(): void {
-    // no-op in driver mode
+    throw new Error('ExternalPluginHarness.kill is deprecated. Use BackendDriver with real Game Center API.');
   }
 
   softKill(): void {
-    // no-op in driver mode
+    throw new Error('ExternalPluginHarness.softKill is deprecated. Use BackendDriver with real Game Center API.');
   }
 
   async waitExit(_timeoutMs: number = 5000): Promise<number> {
-    return 0;
+    throw new Error('ExternalPluginHarness.waitExit is deprecated. Use BackendDriver with real Game Center API.');
   }
 
   getExitCode(): number | null {
-    return 0;
+    throw new Error('ExternalPluginHarness.getExitCode is deprecated. Use BackendDriver with real Game Center API.');
   }
 
   getGeneration(): number {
-    return 1;
+    throw new Error('ExternalPluginHarness.getGeneration is deprecated. Use BackendDriver with real Game Center API.');
   }
 
   isRunning(): boolean {
-    return true;
+    throw new Error('ExternalPluginHarness.isRunning is deprecated. Use BackendDriver with real Game Center API.');
   }
 
   isHandshakeDone(): boolean {
-    return true;
+    throw new Error('ExternalPluginHarness.isHandshakeDone is deprecated. Use BackendDriver with real Game Center API.');
   }
 
   getResponseCount(): number {
@@ -74,11 +76,11 @@ export class ExternalPluginHarness {
   }
 
   async restart(): Promise<void> {
-    await this.start();
+    throw new Error('ExternalPluginHarness.restart is deprecated. Use BackendDriver with real Game Center API.');
   }
 
   getResidue(): { processRunning: boolean; handshakeDone: boolean; responseCount: number; pendingCount: number } {
-    return { processRunning: false, handshakeDone: true, responseCount: 0, pendingCount: 0 };
+    throw new Error('ExternalPluginHarness.getResidue is deprecated. Use BackendDriver with real Game Center API.');
   }
 }
 

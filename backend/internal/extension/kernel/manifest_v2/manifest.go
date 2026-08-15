@@ -31,6 +31,7 @@ type Manifest struct {
 	Lifecycle       LifecycleMeta   `json:"lifecycle,omitempty"`
 	Integrity       IntegrityMeta   `json:"integrity"`
 	Development     DevelopmentMeta `json:"development,omitempty"`
+	SecretRefs      []SecretRefMeta `json:"secretRefs,omitempty"`
 }
 
 type ExtensionMeta struct {
@@ -191,6 +192,13 @@ type ProviderMetadataMeta struct {
 	Priority int               `json:"priority,omitempty"`
 	Labels   map[string]string `json:"labels,omitempty"`
 	Metadata map[string]any    `json:"metadata,omitempty"`
+}
+
+type SecretRefMeta struct {
+	Ref      string `json:"ref"`
+	ServiceID string `json:"serviceId,omitempty"`
+	Purpose  string `json:"purpose,omitempty"`
+	Required bool   `json:"required,omitempty"`
 }
 
 type LocalizedText struct {
@@ -562,6 +570,14 @@ func (m Manifest) ToExtensionDefinition() (domain.ExtensionDefinition, error) {
 			Version:  dep.Version,
 			Optional: dep.Optional,
 			Reason:   dep.Reason,
+		})
+	}
+	for _, sr := range normalized.SecretRefs {
+		def.SecretRefs = append(def.SecretRefs, domain.SecretRefDefinition{
+			Ref:       sr.Ref,
+			ServiceID: sr.ServiceID,
+			Purpose:   sr.Purpose,
+			Required:  sr.Required,
 		})
 	}
 	return def, nil

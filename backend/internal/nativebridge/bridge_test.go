@@ -87,6 +87,7 @@ func TestHealthMapping(t *testing.T) {
 type fakeBridge struct {
 	executeFunc func(ctx context.Context, req Request) (Response, error)
 	healthFunc  func(ctx context.Context) Health
+	attached    bool
 }
 
 func (f *fakeBridge) Execute(ctx context.Context, req Request) (Response, error) {
@@ -105,6 +106,10 @@ func (f *fakeBridge) Health(ctx context.Context) Health {
 		return f.healthFunc(ctx)
 	}
 	return HealthReady
+}
+
+func (f *fakeBridge) SessionAttached() bool {
+	return f.attached
 }
 
 func TestBridgeExecute(t *testing.T) {

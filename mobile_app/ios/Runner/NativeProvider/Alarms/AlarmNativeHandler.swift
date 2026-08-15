@@ -1,5 +1,4 @@
 import Foundation
-import EventKit
 
 public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
     public let operations: Set<String> = [
@@ -15,8 +14,6 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         "media.alarms.pause",
         "media.alarms.resume"
     ]
-
-    private let eventStore = EKEventStore()
 
     public override init() {
         super.init()

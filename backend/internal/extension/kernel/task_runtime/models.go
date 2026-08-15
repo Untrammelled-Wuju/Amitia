@@ -278,6 +278,82 @@ func (r *TaskRun) ClearTransientConnectionBinding() {
 	r.ExecutionTarget.ConnectionGeneration = 0
 }
 
+func cloneTaskRun(run *TaskRun) *TaskRun {
+	if run == nil {
+		return nil
+	}
+	clone := *run
+	if run.Input != nil {
+		clone.Input = append([]byte(nil), run.Input...)
+	}
+	if run.ExecutionResolvedAt != nil {
+		t := *run.ExecutionResolvedAt
+		clone.ExecutionResolvedAt = &t
+	}
+	if run.QueuedAt != nil {
+		t := *run.QueuedAt
+		clone.QueuedAt = &t
+	}
+	if run.StartedAt != nil {
+		t := *run.StartedAt
+		clone.StartedAt = &t
+	}
+	if run.FinishedAt != nil {
+		t := *run.FinishedAt
+		clone.FinishedAt = &t
+	}
+	if run.DeadlineAt != nil {
+		t := *run.DeadlineAt
+		clone.DeadlineAt = &t
+	}
+	if run.CancelRequestedAt != nil {
+		t := *run.CancelRequestedAt
+		clone.CancelRequestedAt = &t
+	}
+	if run.PauseRequestedAt != nil {
+		t := *run.PauseRequestedAt
+		clone.PauseRequestedAt = &t
+	}
+	if run.PausedAt != nil {
+		t := *run.PausedAt
+		clone.PausedAt = &t
+	}
+	if run.ResumedAt != nil {
+		t := *run.ResumedAt
+		clone.ResumedAt = &t
+	}
+	if run.RuntimeInstanceID != nil {
+		s := *run.RuntimeInstanceID
+		clone.RuntimeInstanceID = &s
+	}
+	if run.CheckpointID != nil {
+		s := *run.CheckpointID
+		clone.CheckpointID = &s
+	}
+	if run.ResultArtifactID != nil {
+		s := *run.ResultArtifactID
+		clone.ResultArtifactID = &s
+	}
+	if run.InputArtifactID != nil {
+		s := *run.InputArtifactID
+		clone.InputArtifactID = &s
+	}
+	if run.ErrorCode != nil {
+		s := *run.ErrorCode
+		clone.ErrorCode = &s
+	}
+	if run.ErrorMessage != nil {
+		s := *run.ErrorMessage
+		clone.ErrorMessage = &s
+	}
+	if run.PauseReason != nil {
+		s := *run.PauseReason
+		clone.PauseReason = &s
+	}
+	clone.ExecutionTarget = run.ExecutionTarget
+	return &clone
+}
+
 func (r *TaskRun) HasStaleDeviceConnection(
 	activeSessionID interface{ String() string },
 	generation int64,

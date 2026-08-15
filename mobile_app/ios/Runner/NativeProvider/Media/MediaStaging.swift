@@ -10,20 +10,20 @@ public class MediaStaging {
         return dir
     }()
 
-    public static func urlForStagedResource(_ resourceUri: String) -> URL? {
-        if resourceUri.hasPrefix("file://") {
-            return URL(string: resourceUri)
+    public static func urlForStagedResource(_ stagingId: String) -> URL? {
+        if stagingId.hasPrefix("file://") {
+            return nil
         }
-        if resourceUri.hasPrefix("media:staging:") {
-            let filename = String(resourceUri.dropFirst("media:staging:".count))
+        if stagingId.hasPrefix("nativeStaging:") {
+            let filename = String(stagingId.dropFirst("nativeStaging:".count))
             let url = stagingDir.appendingPathComponent(filename)
             return FileManager.default.fileExists(atPath: url.path) ? url : nil
         }
         return nil
     }
 
-    public static func deleteStagedResource(_ resourceUri: String) {
-        if let url = urlForStagedResource(resourceUri) {
+    public static func deleteStagedResource(_ stagingId: String) {
+        if let url = urlForStagedResource(stagingId) {
             try? FileManager.default.removeItem(at: url)
         }
     }
@@ -65,19 +65,19 @@ public class MediaStaging {
 
                 do {
                     try data.write(to: targetURL)
-                    let resourceUri = "media:staging:\(filename)"
+                    let stagingId = "nativeStaging:\(filename)"
                     let fileSize = (try? FileManager.default.attributesOfItem(atPath: targetURL.path)[.size] as? Int64) ?? 0
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
                         requestID: request.requestID,
                         status: "ok",
                         result: [
-                            "resourceUri": resourceUri,
-                            "filePath": targetURL.path,
+                            "nativeStagingId": stagingId,
                             "fileSize": fileSize,
                             "mimeType": "image/jpeg",
                             "width": image.size.width,
-                            "height": image.size.height
+                            "height": image.size.height,
+                            "filename": filename
                         ],
                         error: nil
                     ))

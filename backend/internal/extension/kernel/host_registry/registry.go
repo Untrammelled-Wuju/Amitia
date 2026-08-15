@@ -299,7 +299,11 @@ func (r *Registry) FindTargetHost(ctx context.Context, userID runtimeidentity.Us
 }
 
 func (r *Registry) FindTargetHostString(ctx context.Context, userID string, capability HostCapability, platform string, windowID string) (*HostEntry, error) {
-	return r.FindTargetHost(ctx, runtimeidentity.ParseUserID(userID), capability, runtimeidentity.ParsePlatform(platform), windowID)
+	plat, err := runtimeidentity.ParsePlatform(platform)
+	if err != nil {
+		return nil, err
+	}
+	return r.FindTargetHost(ctx, runtimeidentity.ParseUserID(userID), capability, plat, windowID)
 }
 
 func (r *Registry) FindRuntimeEntry(ctx context.Context, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (*RuntimeEntry, error) {

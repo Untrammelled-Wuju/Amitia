@@ -25,6 +25,7 @@ const (
 	ErrCodeMigrationIncompatible RecoveryErrorCode = "migration_incompatible"
 	ErrCodeRuntimeRebuildFailed  RecoveryErrorCode = "runtime_rebuild_failed"
 	ErrCodeRuntimeRestartFailed  RecoveryErrorCode = "runtime_restart_failed"
+	ErrCodeRecoverySuppressed    RecoveryErrorCode = "recovery_suppressed"
 	ErrCodeInternal              RecoveryErrorCode = "internal"
 )
 
@@ -73,5 +74,12 @@ func NewRollbackFailedError(extensionID string, cause error) *RecoveryError {
 		Code:    ErrCodeRollbackFailed,
 		Message: fmt.Sprintf("rollback failed for extension %s", extensionID),
 		Cause:   cause,
+	}
+}
+
+func NewRecoverySuppressedError(runtimeID domain.RuntimeInstanceID, reason string) *RecoveryError {
+	return &RecoveryError{
+		Code:    ErrCodeRecoverySuppressed,
+		Message: fmt.Sprintf("recovery suppressed for runtime %s: %s", runtimeID, reason),
 	}
 }

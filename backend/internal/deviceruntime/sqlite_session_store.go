@@ -452,7 +452,11 @@ func scanRuntimeSession(row rowScanner) (RuntimeSession, error) {
 	session.UserID = runtimeidentity.ParseUserID(userIDStr)
 	session.DeviceID = runtimeidentity.ParseDeviceID(deviceIDStr)
 	session.RuntimeID = runtimeidentity.ParseRuntimeID(runtimeIDStr)
-	session.Platform = runtimeidentity.ParsePlatform(platformStr)
+	platform, err := runtimeidentity.ParsePlatform(platformStr)
+	if err != nil {
+		return RuntimeSession{}, fmt.Errorf("deviceruntime: parse platform: %w", err)
+	}
+	session.Platform = platform
 	session.Status = protocol.SessionStatus(statusStr)
 	session.CreatedAt = time.UnixMilli(createdAtMs).UTC()
 	session.UpdatedAt = time.UnixMilli(updatedAtMs).UTC()

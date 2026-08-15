@@ -6,6 +6,11 @@ const (
 	ExtensionDomainGeneral    ExtensionDomain = "general"
 	ExtensionDomainGame       ExtensionDomain = "game"
 	ExtensionDomainDesktopPet ExtensionDomain = "desktop_pet"
+	ExtensionDomainMemory     ExtensionDomain = "memory"
+	ExtensionDomainProfile    ExtensionDomain = "profile"
+	ExtensionDomainEpisodic   ExtensionDomain = "episodic"
+	ExtensionDomainWorldbook  ExtensionDomain = "worldbook"
+	ExtensionDomainCompanion  ExtensionDomain = "companion"
 )
 
 func DefaultExtensionDomain() ExtensionDomain {
@@ -14,7 +19,9 @@ func DefaultExtensionDomain() ExtensionDomain {
 
 func IsValidExtensionDomain(domain ExtensionDomain) bool {
 	switch domain {
-	case ExtensionDomainGeneral, ExtensionDomainGame, ExtensionDomainDesktopPet:
+	case ExtensionDomainGeneral, ExtensionDomainGame, ExtensionDomainDesktopPet,
+		ExtensionDomainMemory, ExtensionDomainProfile, ExtensionDomainEpisodic,
+		ExtensionDomainWorldbook, ExtensionDomainCompanion:
 		return true
 	default:
 		return false

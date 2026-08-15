@@ -95,6 +95,17 @@ func (b *processExitBridgeImpl) OnProcessExit(event trusted_service.ProcessExitE
 	if err == nil && (state == domain.RuntimeStateRestarting || state == domain.RuntimeStateStopping || state == domain.RuntimeStateStopped) {
 		return
 	}
+
+	if b.registry.IsEmergencyLatched(runtimeID) {
+		log.Printf("[process-exit-bridge] recovery suppressed: runtime %s is emergency-latched", runtimeID)
+		return
+	}
+	intent, err := b.registry.GetLifecycleIntent(runtimeID)
+	if err == nil && (intent == "disable" || intent == "uninstall") {
+		log.Printf("[process-exit-bridge] recovery suppressed: runtime %s lifecycle intent=%q", runtimeID, intent)
+		return
+	}
+
 	generation, generationErr := b.registry.GetCurrentGeneration(runtimeID)
 	b.mu.Lock()
 	revoker := b.leaseRevoker

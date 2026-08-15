@@ -197,6 +197,10 @@ export class GameCenterClient {
   async rearm(runtimeId: string): Promise<unknown> {
     return this.post(`/game-center/runtimes/${encodeURIComponent(runtimeId)}/rearm`);
   }
+
+  async updatePlugin(extensionId: string, archivePath: string): Promise<unknown> {
+    return this.post(`/game-center/plugins/${encodeURIComponent(extensionId)}/update`, { archivePath } satisfies InstallPluginRequest);
+  }
 }
 
 export function createClient(baseUrl?: string): GameCenterClient {

@@ -168,9 +168,19 @@ func (p *iosNativeProviderInstance) Capability() any {
 		RuntimeID:    runtimeID,
 		HostPlatform: hostPlatform,
 		Healthy:      p.healthy,
-		BridgeReady:  p.bridge != nil,
+		BridgeReady:  p.isBridgeReady(),
 		Generation:   p.generation,
 	}
+}
+
+func (p *iosNativeProviderInstance) isBridgeReady() bool {
+	if p.bridge == nil {
+		return false
+	}
+	if !p.bridge.SessionAttached() {
+		return false
+	}
+	return p.bridge.Health(context.Background()) == nativebridge.HealthReady
 }
 
 func (p *iosNativeProviderInstance) ReportComponentState(state runtimeorchestrator.ComponentState, err error) {

@@ -1,5 +1,14 @@
 import { createDriver, BackendDriver } from '../backend_driver';
 
+const ARCHIVE_PATH = process.env.MOCK_PLUGIN_ARCHIVE_PATH;
+
+function requireArchive(): string {
+  if (!ARCHIVE_PATH) {
+    throw new Error('MOCK_PLUGIN_ARCHIVE_PATH environment variable is required for F15 smoke tests');
+  }
+  return ARCHIVE_PATH;
+}
+
 describe('G47-F15 Smoke (Backend Driver)', () => {
   let driver: BackendDriver;
 
@@ -18,11 +27,7 @@ describe('G47-F15 Smoke (Backend Driver)', () => {
   }, 10000);
 
   it('install plugin via API returns success', async () => {
-    const archivePath = process.env.MOCK_PLUGIN_ARCHIVE_PATH;
-    if (!archivePath) {
-      console.log('MOCK_PLUGIN_ARCHIVE_PATH not set - skipping install test');
-      return;
-    }
+    const archivePath = requireArchive();
     const result = await driver.installPlugin(archivePath);
     expect(result).toBeDefined();
   }, 30000);

@@ -2,6 +2,13 @@ import { createDriver, BackendDriver } from '../backend_driver';
 
 const ARCHIVE_PATH = process.env.MOCK_PLUGIN_ARCHIVE_PATH;
 
+function requireArchive(): string {
+  if (!ARCHIVE_PATH) {
+    throw new Error('MOCK_PLUGIN_ARCHIVE_PATH environment variable is required for F15 security tests');
+  }
+  return ARCHIVE_PATH;
+}
+
 describe('G47-F15 Security (Backend Driver)', () => {
   let driver: BackendDriver;
   let extensionId: string | null = null;
@@ -29,12 +36,9 @@ describe('G47-F15 Security (Backend Driver)', () => {
   });
 
   it('install enable and acquire control', async () => {
-    if (!ARCHIVE_PATH) {
-      console.log('MOCK_PLUGIN_ARCHIVE_PATH not set - skipping');
-      return;
-    }
+    const archivePath = requireArchive();
 
-    await driver.installPlugin(ARCHIVE_PATH);
+    await driver.installPlugin(archivePath);
     const plugin = await driver.waitForPluginByExtension('mock-amitiax-game-plugin', 30000);
     extensionId = plugin.extensionId;
     await driver.enablePlugin(extensionId);
@@ -56,12 +60,9 @@ describe('G47-F15 Security (Backend Driver)', () => {
   }, 90000);
 
   it('emergency stop and rearm flow', async () => {
-    if (!ARCHIVE_PATH) {
-      console.log('MOCK_PLUGIN_ARCHIVE_PATH not set - skipping');
-      return;
-    }
+    const archivePath = requireArchive();
 
-    await driver.installPlugin(ARCHIVE_PATH);
+    await driver.installPlugin(archivePath);
     const plugin = await driver.waitForPluginByExtension('mock-amitiax-game-plugin', 30000);
     extensionId = plugin.extensionId;
     await driver.enablePlugin(extensionId);
@@ -83,18 +84,23 @@ describe('G47-F15 Security (Backend Driver)', () => {
   }, 90000);
 
   it('disable plugin prevents runtime start', async () => {
-    if (!ARCHIVE_PATH) {
-      console.log('MOCK_PLUGIN_ARCHIVE_PATH not set - skipping');
-      return;
-    }
+    const archivePath = requireArchive();
 
-    await driver.installPlugin(ARCHIVE_PATH);
+    await driver.installPlugin(archivePath);
     const plugin = await driver.waitForPluginByExtension('mock-amitiax-game-plugin', 30000);
     extensionId = plugin.extensionId;
     await driver.enablePlugin(extensionId);
+
+    const runtimes = await driver.listRuntimes({ pluginId: plugin.pluginId });
+    expect(runtimes.length).toBeGreaterThan(0);
+    runtimeId = runtimes[0].runtimeId;
+
+    await driver.startRuntime(runtimeId);
+    await driver.waitForRuntimeReady(runtimeId, 30000);
+    await driver.stopRuntime(runtimeId);
+
     await driver.disablePlugin(extensionId);
 
-    const disabled = await driver.getRuntime(runtimeId || '');
-    expect(disabled).toBeDefined();
-  }, 60000);
+    await expect(driver.startRuntime(runtimeId)).rejects.toThrow();
+  }, 90000);
 });

@@ -1,6 +1,9 @@
 package runtimeidentity
 
-import "strings"
+import (
+	"fmt"
+	"strings"
+)
 
 type Platform string
 
@@ -14,15 +17,19 @@ const (
 	PlatformWeb     Platform = "web"
 )
 
-func ParsePlatform(raw string) Platform {
+func ParsePlatform(raw string) (Platform, error) {
 	s := strings.ToLower(strings.TrimSpace(raw))
 	switch s {
 	case "macos", "mac":
-		return PlatformDarwin
+		return PlatformDarwin, nil
 	case "win":
-		return PlatformWindows
+		return PlatformWindows, nil
+	case "android", "ios", "windows", "linux", "darwin", "web":
+		return Platform(s), nil
+	case "":
+		return PlatformUnknown, nil
 	default:
-		return Platform(s)
+		return PlatformUnknown, fmt.Errorf("runtimeidentity: unknown platform: %q", raw)
 	}
 }
 

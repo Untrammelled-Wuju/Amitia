@@ -3,8 +3,6 @@ package capability
 import (
 	"errors"
 	"fmt"
-
-	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 type CapabilityResolver interface {
@@ -143,7 +141,7 @@ func buildExecutionTarget(def *CapabilityProviderDefinition, inst *CapabilityPro
 		UserID:           inst.UserID,
 		DeviceID:         inst.DeviceID,
 		RuntimeID:        inst.RuntimeID,
-		RuntimeSessionID: runtimeidentity.RuntimeSessionID(inst.RuntimeInstanceID),
+		RuntimeSessionID: inst.RuntimeSessionID,
 
 		ProviderID:         string(inst.ProviderID),
 		ProviderInstanceID: string(inst.ID),

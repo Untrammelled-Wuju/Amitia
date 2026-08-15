@@ -2,6 +2,8 @@ package nativebridge
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"sync"
 	"sync/atomic"
 )
@@ -133,4 +135,27 @@ func (b *AndroidTransportBridge) SetHostHealth(h Health) {
 	b.healthMu.Lock()
 	defer b.healthMu.Unlock()
 	b.hostHealth = h
+}
+
+func (b *AndroidTransportBridge) HandleRelayEnvelope(payload []byte) error {
+	var env RelayEnvelope
+	if err := json.Unmarshal(payload, &env); err != nil {
+		return fmt.Errorf("decode relay envelope: %w", err)
+	}
+
+	switch env.Type {
+	case "native_bridge.response", "native_bridge.request":
+		b.mu.RLock()
+		session := b.session
+		b.mu.RUnlock()
+		if session == nil {
+			return fmt.Errorf("no active relay session")
+		}
+		if pSession, ok := session.(*productionRelaySession); ok {
+			pSession.handleIncomingEnvelope(env)
+		}
+		return nil
+	default:
+		return fmt.Errorf("unknown relay envelope type: %s", env.Type)
+	}
 }

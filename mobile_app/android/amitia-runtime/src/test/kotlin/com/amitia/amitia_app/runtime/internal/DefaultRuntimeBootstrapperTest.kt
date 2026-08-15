@@ -62,6 +62,36 @@ class DefaultRuntimeBootstrapperTest {
         override val runtimeManifestShaFile: File = File("/tmp/test/runtime-manifest.json.sha256")
     }
 
+    private class FakeInstalledRuntimeVerifier(
+        private val result: InstalledRuntimeVerificationResult = InstalledRuntimeVerificationResult.Success(
+            InstalledRuntimeVerification(
+                valid = true,
+                backendPresent = true,
+                nodePresent = true,
+                npmPresent = true,
+                npxPresent = true,
+                qdrantPresent = true,
+                pluginHostPresent = true,
+                taskHostPresent = true,
+                nodeScriptsPresent = true,
+                guestLayoutPresent = true,
+                mountContractPresent = true,
+                hasInvalidMutableDirs = false,
+                runtimeRootTreeSha256 = "e".repeat(64),
+            )
+        ),
+    ) : InstalledRuntimeVerifier {
+        var callCount: Int = 0
+            private set
+
+        override fun verify(runtimeRootDir: File): InstalledRuntimeVerificationResult {
+            callCount++
+            return result
+        }
+
+        override fun computeTreeSha256(rootDir: File): String = "fake-hash"
+    }
+
     private fun manifest(
         version: String = "1.0.0",
     ): RuntimeManifest = RuntimeManifest(
@@ -140,19 +170,23 @@ class DefaultRuntimeBootstrapperTest {
 
     @Test
     fun freshInstall_noManifestNoActive_returnsNotInstalled() {
+        val verifier = FakeInstalledRuntimeVerifier()
         val bootstrapper = DefaultRuntimeBootstrapper(
             manifestStore = FakeManifestStore(manifestNotFoundResult()),
             activeRuntimeManager = FakeActiveRuntimeManager(ActiveRuntimeResult.NoActiveRuntime),
             hostLayout = FakeHostLayout(),
+            installedRuntimeVerifier = verifier,
         )
 
         val result = bootstrapper.bootstrap()
 
         assertTrue(result is RuntimeBootstrapResult.NotInstalled)
+        assertEquals(0, verifier.callCount)
     }
 
     @Test
     fun validInstalled_returnsInstalledStopped() {
+        val verifier = FakeInstalledRuntimeVerifier()
         val bootstrapper = DefaultRuntimeBootstrapper(
             manifestStore = FakeManifestStore(RuntimeManifestResult.Success(manifest("1.0.0"))),
             activeRuntimeManager = FakeActiveRuntimeManager(
@@ -164,20 +198,24 @@ class DefaultRuntimeBootstrapperTest {
                 )
             ),
             hostLayout = FakeHostLayout(existingVersions = setOf("1.0.0")),
+            installedRuntimeVerifier = verifier,
         )
 
         val result = bootstrapper.bootstrap()
 
         assertTrue(result is RuntimeBootstrapResult.InstalledStopped)
         assertEquals("1.0.0", (result as RuntimeBootstrapResult.InstalledStopped).runtimeVersion)
+        assertEquals(1, verifier.callCount)
     }
 
     @Test
     fun manifestWithoutActive_returnsFailed() {
+        val verifier = FakeInstalledRuntimeVerifier()
         val bootstrapper = DefaultRuntimeBootstrapper(
             manifestStore = FakeManifestStore(RuntimeManifestResult.Success(manifest("1.0.0"))),
             activeRuntimeManager = FakeActiveRuntimeManager(ActiveRuntimeResult.NoActiveRuntime),
             hostLayout = FakeHostLayout(),
+            installedRuntimeVerifier = verifier,
         )
 
         val result = bootstrapper.bootstrap()
@@ -187,10 +225,12 @@ class DefaultRuntimeBootstrapperTest {
             RuntimeBootstrapErrorCode.MANIFEST_WITHOUT_ACTIVE,
             (result as RuntimeBootstrapResult.Failed).code
         )
+        assertEquals(0, verifier.callCount)
     }
 
     @Test
     fun activeWithoutManifest_returnsFailed() {
+        val verifier = FakeInstalledRuntimeVerifier()
         val bootstrapper = DefaultRuntimeBootstrapper(
             manifestStore = FakeManifestStore(manifestNotFoundResult()),
             activeRuntimeManager = FakeActiveRuntimeManager(
@@ -202,6 +242,7 @@ class DefaultRuntimeBootstrapperTest {
                 )
             ),
             hostLayout = FakeHostLayout(),
+            installedRuntimeVerifier = verifier,
         )
 
         val result = bootstrapper.bootstrap()
@@ -211,10 +252,12 @@ class DefaultRuntimeBootstrapperTest {
             RuntimeBootstrapErrorCode.ACTIVE_WITHOUT_MANIFEST,
             (result as RuntimeBootstrapResult.Failed).code
         )
+        assertEquals(0, verifier.callCount)
     }
 
     @Test
     fun activeVersionMissing_returnsFailed() {
+        val verifier = FakeInstalledRuntimeVerifier()
         val bootstrapper = DefaultRuntimeBootstrapper(
             manifestStore = FakeManifestStore(RuntimeManifestResult.Success(manifest("1.0.0"))),
             activeRuntimeManager = FakeActiveRuntimeManager(
@@ -226,6 +269,7 @@ class DefaultRuntimeBootstrapperTest {
                 )
             ),
             hostLayout = FakeHostLayout(existingVersions = emptySet()),
+            installedRuntimeVerifier = verifier,
         )
 
         val result = bootstrapper.bootstrap()
@@ -235,10 +279,12 @@ class DefaultRuntimeBootstrapperTest {
             RuntimeBootstrapErrorCode.ACTIVE_VERSION_MISSING,
             (result as RuntimeBootstrapResult.Failed).code
         )
+        assertEquals(0, verifier.callCount)
     }
 
     @Test
     fun versionMismatch_returnsFailed() {
+        val verifier = FakeInstalledRuntimeVerifier()
         val bootstrapper = DefaultRuntimeBootstrapper(
             manifestStore = FakeManifestStore(RuntimeManifestResult.Success(manifest("1.0.0"))),
             activeRuntimeManager = FakeActiveRuntimeManager(
@@ -250,6 +296,7 @@ class DefaultRuntimeBootstrapperTest {
                 )
             ),
             hostLayout = FakeHostLayout(existingVersions = setOf("0.9.0")),
+            installedRuntimeVerifier = verifier,
         )
 
         val result = bootstrapper.bootstrap()
@@ -259,10 +306,12 @@ class DefaultRuntimeBootstrapperTest {
             RuntimeBootstrapErrorCode.PACKAGE_IDENTITY_MISMATCH,
             (result as RuntimeBootstrapResult.Failed).code
         )
+        assertEquals(0, verifier.callCount)
     }
 
     @Test
     fun bootstrap_doesNotIncrementGeneration() {
+        val verifier = FakeInstalledRuntimeVerifier()
         val stateStore = RuntimeStateStore()
         val bootstrapper = DefaultRuntimeBootstrapper(
             manifestStore = FakeManifestStore(RuntimeManifestResult.Success(manifest("1.0.0"))),
@@ -275,6 +324,7 @@ class DefaultRuntimeBootstrapperTest {
                 )
             ),
             hostLayout = FakeHostLayout(existingVersions = setOf("1.0.0")),
+            installedRuntimeVerifier = verifier,
         )
 
         val result = bootstrapper.bootstrap()
@@ -292,10 +342,12 @@ class DefaultRuntimeBootstrapperTest {
         assertFalse(manifestFile.exists())
         assertFalse(activeFile.exists())
 
+        val verifier = FakeInstalledRuntimeVerifier()
         val bootstrapper = DefaultRuntimeBootstrapper(
             manifestStore = FakeManifestStore(manifestNotFoundResult()),
             activeRuntimeManager = FakeActiveRuntimeManager(ActiveRuntimeResult.NoActiveRuntime),
             hostLayout = FakeHostLayout(),
+            installedRuntimeVerifier = verifier,
         )
 
         bootstrapper.bootstrap()
@@ -304,5 +356,86 @@ class DefaultRuntimeBootstrapperTest {
         assertFalse(activeFile.exists())
 
         tempDir.deleteRecursively()
+    }
+
+    @Test
+    fun verifierFailure_returnsFailed() {
+        val verifier = FakeInstalledRuntimeVerifier(
+            result = InstalledRuntimeVerificationResult.Failure(
+                code = com.amitia.amitia_app.runtime.install.RuntimeInstallErrorCode.RUNTIME_VERIFY_FAILED,
+                message = "verification failed",
+            )
+        )
+        val bootstrapper = DefaultRuntimeBootstrapper(
+            manifestStore = FakeManifestStore(RuntimeManifestResult.Success(manifest("1.0.0"))),
+            activeRuntimeManager = FakeActiveRuntimeManager(
+                ActiveRuntimeResult.Active(
+                    com.amitia.amitia_app.runtime.install.ActiveRuntimeInfo(
+                        version = "1.0.0",
+                        activatedAtEpochMillis = 1000L,
+                    )
+                )
+            ),
+            hostLayout = FakeHostLayout(existingVersions = setOf("1.0.0")),
+            installedRuntimeVerifier = verifier,
+        )
+
+        val result = bootstrapper.bootstrap()
+
+        assertTrue(result is RuntimeBootstrapResult.Failed)
+        assertEquals(
+            RuntimeBootstrapErrorCode.INSTALLED_RUNTIME_CORRUPT,
+            (result as RuntimeBootstrapResult.Failed).code
+        )
+        assertEquals(1, verifier.callCount)
+    }
+
+    @Test
+    fun manifestCorrupt_returnsFailed() {
+        val verifier = FakeInstalledRuntimeVerifier()
+        val bootstrapper = DefaultRuntimeBootstrapper(
+            manifestStore = FakeManifestStore(
+                RuntimeManifestResult.Failure(
+                    com.amitia.amitia_app.runtime.manifest.RuntimeManifestError(
+                        code = com.amitia.amitia_app.runtime.manifest.RuntimeManifestErrorCode.MANIFEST_CORRUPT,
+                        manifestMessage = "manifest corrupt",
+                    )
+                )
+            ),
+            activeRuntimeManager = FakeActiveRuntimeManager(ActiveRuntimeResult.NoActiveRuntime),
+            hostLayout = FakeHostLayout(),
+            installedRuntimeVerifier = verifier,
+        )
+
+        val result = bootstrapper.bootstrap()
+
+        assertTrue(result is RuntimeBootstrapResult.Failed)
+        assertEquals(
+            RuntimeBootstrapErrorCode.MANIFEST_CORRUPT,
+            (result as RuntimeBootstrapResult.Failed).code
+        )
+        assertEquals(0, verifier.callCount)
+    }
+
+    @Test
+    fun activeCorrupt_returnsFailed() {
+        val verifier = FakeInstalledRuntimeVerifier()
+        val bootstrapper = DefaultRuntimeBootstrapper(
+            manifestStore = FakeManifestStore(manifestNotFoundResult()),
+            activeRuntimeManager = FakeActiveRuntimeManager(
+                ActiveRuntimeResult.Failure("active corrupt")
+            ),
+            hostLayout = FakeHostLayout(),
+            installedRuntimeVerifier = verifier,
+        )
+
+        val result = bootstrapper.bootstrap()
+
+        assertTrue(result is RuntimeBootstrapResult.Failed)
+        assertEquals(
+            RuntimeBootstrapErrorCode.ACTIVE_CORRUPT,
+            (result as RuntimeBootstrapResult.Failed).code
+        )
+        assertEquals(0, verifier.callCount)
     }
 }

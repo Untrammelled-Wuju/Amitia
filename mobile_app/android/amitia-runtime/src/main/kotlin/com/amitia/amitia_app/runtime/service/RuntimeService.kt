@@ -234,16 +234,16 @@ class RuntimeService : Service() {
             return
         }
 
-        val session = currentSessionRef.get()
-        if (session != null) {
-            try {
-                session.requestStop()
-            } catch (_: Throwable) {
-            }
-        }
         val sessionContext = currentSessionContextRef.get()
-        if (sessionContext != null && sessionContext.terminalEvent == null) {
-            sessionContext.terminalEvent = TerminalEventKind.STARTUP_FAILURE_CLEANUP
+        if (sessionContext == null) {
+            performStartupFailureCleanup(cleanupContext)
+            return
+        }
+
+        val session = currentSessionRef.get()
+        if (session != null && session.isAlive()) {
+            session.requestStop()
+            session.stop(GRACEFUL_SHUTDOWN_TIMEOUT_MS)
         }
     }
 
@@ -280,21 +280,22 @@ class RuntimeService : Service() {
             if (serviceState.get() == ServiceHostState.DESTROYED) return
             val sessionContext = currentSessionContextRef.get()
             if (sessionContext == null || sessionContext.generation != exit.generation) return
-            if (sessionContext.terminalEvent != null) return
 
             val cleanupContext = startupFailureCleanupContextRef.get()
             val isStartupFailureCleanup = cleanupContext != null && cleanupContext.generation == exit.generation
 
-            sessionContext.terminalEvent = when {
-                isStartupFailureCleanup -> TerminalEventKind.STARTUP_FAILURE_CLEANUP
-                exit.stopRequested -> TerminalEventKind.EXPECTED_STOPPED
-                else -> TerminalEventKind.UNEXPECTED_TERMINATION
-            }
-
             if (isStartupFailureCleanup) {
                 cleanupContext!!.processConfirmedDead = true
+                sessionContext.terminalEvent = TerminalEventKind.STARTUP_FAILURE_CLEANUP
                 performStartupFailureCleanup(cleanupContext)
                 return
+            }
+
+            if (sessionContext.terminalEvent != null) return
+
+            sessionContext.terminalEvent = when {
+                exit.stopRequested -> TerminalEventKind.EXPECTED_STOPPED
+                else -> TerminalEventKind.UNEXPECTED_TERMINATION
             }
 
             endpoint.notify(
@@ -373,6 +374,7 @@ class RuntimeService : Service() {
         val session = currentSessionRef.get()
         if (session != null && session.isAlive()) {
             session.requestStop()
+            session.stop(GRACEFUL_SHUTDOWN_TIMEOUT_MS)
         }
     }
 

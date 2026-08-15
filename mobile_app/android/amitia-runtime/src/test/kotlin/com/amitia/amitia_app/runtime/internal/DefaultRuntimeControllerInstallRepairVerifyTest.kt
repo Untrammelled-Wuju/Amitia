@@ -9,6 +9,7 @@ import com.amitia.amitia_app.runtime.api.RuntimeState
 import com.amitia.amitia_app.runtime.api.RuntimeVerifyRequest
 import com.amitia.amitia_app.runtime.install.ActiveRuntimeManager
 import com.amitia.amitia_app.runtime.install.ActiveRuntimeResult
+import com.amitia.amitia_app.runtime.install.InstalledRuntimeVerification
 import com.amitia.amitia_app.runtime.install.InstalledRuntimeVerificationResult
 import com.amitia.amitia_app.runtime.install.InstalledRuntimeVerifier
 import com.amitia.amitia_app.runtime.install.RuntimeHostLayout
@@ -235,6 +236,25 @@ class DefaultRuntimeControllerInstallRepairVerifyTest {
             manifestStore = FakeManifestStore(manifestNotFoundResult()),
             activeRuntimeManager = FakeActiveRuntimeManager(ActiveRuntimeResult.NoActiveRuntime),
             hostLayout = FakeHostLayout(),
+            installedRuntimeVerifier = FakeInstalledVerifier(
+                InstalledRuntimeVerificationResult.Success(
+                    com.amitia.amitia_app.runtime.install.InstalledRuntimeVerification(
+                        valid = true,
+                        backendPresent = true,
+                        nodePresent = true,
+                        npmPresent = true,
+                        npxPresent = true,
+                        qdrantPresent = true,
+                        pluginHostPresent = true,
+                        taskHostPresent = true,
+                        nodeScriptsPresent = true,
+                        guestLayoutPresent = true,
+                        mountContractPresent = true,
+                        hasInvalidMutableDirs = false,
+                        runtimeRootTreeSha256 = "d".repeat(64),
+                    )
+                )
+            ),
         )
 
         val controller = DefaultRuntimeController(

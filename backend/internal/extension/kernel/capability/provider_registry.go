@@ -129,7 +129,10 @@ func (r *ProviderRegistry) getDefinition(key string) (*CapabilityProviderDefinit
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	v, ok := r.definitions[key]
-	return v, ok
+	if !ok {
+		return nil, false
+	}
+	return cloneProviderDefinition(v), true
 }
 
 func (r *ProviderRegistry) setDefinition(key string, def *CapabilityProviderDefinition) {
@@ -148,7 +151,10 @@ func (r *ProviderRegistry) getInstance(key string) (*CapabilityProviderInstance,
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	v, ok := r.instances[key]
-	return v, ok
+	if !ok {
+		return nil, false
+	}
+	return cloneProviderInstance(v), true
 }
 
 func (r *ProviderRegistry) setInstance(key string, inst *CapabilityProviderInstance) {
@@ -214,18 +220,20 @@ func (r *ProviderRegistry) RegisterDefinition(def CapabilityProviderDefinition) 
 	}
 	normalizedID := string(def.ID)
 
-	existed, found := r.getDefinition(normalizedID)
-	if found && existed.Placement != def.Placement {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	existing, found := r.definitions[normalizedID]
+	if found && existing.Placement != def.Placement {
 		return ErrProviderPlacementMismatch
 	}
 
-	r.setDefinition(normalizedID, &def)
+	if found && existing.CapabilityID != def.CapabilityID {
+		r.byCapability = r.removeCapabilityIndexLocked(r.byCapability, ProviderID(normalizedID))
+	}
 
-	r.mu.Lock()
+	r.definitions[normalizedID] = &def
 	r.byCapability = r.upsertCapabilityIndexLocked(r.byCapability, def)
-	r.mu.Unlock()
-
-	r.rebuildProviderInstanceIndex()
 	return nil
 }
 
@@ -234,17 +242,15 @@ func (r *ProviderRegistry) DeregisterDefinition(id ProviderID) (bool, error) {
 	if normalized == "" {
 		return false, ErrProviderInvalid
 	}
-	_, existed := r.getDefinition(string(normalized))
-	if !existed {
-		return false, nil
-	}
-	r.delDefinition(string(normalized))
 
 	r.mu.Lock()
-	r.byCapability = r.removeCapabilityIndexLocked(r.byCapability, normalized)
-	r.mu.Unlock()
+	defer r.mu.Unlock()
 
-	r.rebuildProviderInstanceIndex()
+	if _, existed := r.definitions[string(normalized)]; !existed {
+		return false, nil
+	}
+	delete(r.definitions, string(normalized))
+	r.byCapability = r.removeCapabilityIndexLocked(r.byCapability, normalized)
 	return true, nil
 }
 
@@ -280,7 +286,11 @@ func (r *ProviderRegistry) RegisterInstance(inst CapabilityProviderInstance) err
 	if err := inst.Validate(); err != nil {
 		return err
 	}
-	def, found := r.getDefinition(string(inst.ProviderID))
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	def, found := r.definitions[string(inst.ProviderID)]
 	if !found {
 		return ErrProviderInstanceInvalid
 	}
@@ -297,11 +307,8 @@ func (r *ProviderRegistry) RegisterInstance(inst CapabilityProviderInstance) err
 		inst.UpdatedAt = inst.RegisteredAt
 	}
 
-	r.setInstance(string(inst.ID), &inst)
-
-	r.mu.Lock()
+	r.instances[string(inst.ID)] = &inst
 	r.byProvider[string(inst.ProviderID)] = r.appendInstanceLocked(r.byProvider[string(inst.ProviderID)], &inst)
-	r.mu.Unlock()
 	return nil
 }
 
@@ -323,24 +330,32 @@ func (r *ProviderRegistry) UpdateInstanceHealth(instanceID ProviderInstanceID, h
 	if !health.IsValid() {
 		return ErrProviderInstanceInvalid
 	}
-	current, found := r.getInstance(string(normalized))
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	current, found := r.instances[string(normalized)]
 	if !found {
 		return ErrProviderInstanceNotFound
 	}
-	current.Health = health
-	current.UpdatedAt = time.Now().UTC()
-	r.setInstance(string(current.ID), current)
+	if current.Health == health {
+		return nil
+	}
 
-	r.mu.Lock()
-	list := r.byProvider[string(current.ProviderID)]
+	updated := cloneProviderInstance(current)
+	updated.Health = health
+	updated.UpdatedAt = time.Now().UTC()
+	updated.Revision = current.Revision + 1
+
+	r.instances[string(updated.ID)] = updated
+	list := r.byProvider[string(updated.ProviderID)]
 	for i := range list {
 		if list[i] != nil && list[i].ID == normalized {
-			list[i] = current
+			list[i] = updated
 			break
 		}
 	}
-	r.byProvider[string(current.ProviderID)] = list
-	r.mu.Unlock()
+	r.byProvider[string(updated.ProviderID)] = list
 	return nil
 }
 
@@ -352,24 +367,32 @@ func (r *ProviderRegistry) UpdateInstanceAvailability(instanceID ProviderInstanc
 	if !availability.IsValid() {
 		return ErrProviderInstanceInvalid
 	}
-	current, found := r.getInstance(string(normalized))
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	current, found := r.instances[string(normalized)]
 	if !found {
 		return ErrProviderInstanceNotFound
 	}
-	current.Availability = availability
-	current.UpdatedAt = time.Now().UTC()
-	r.setInstance(string(current.ID), current)
+	if current.Availability == availability {
+		return nil
+	}
 
-	r.mu.Lock()
-	list := r.byProvider[string(current.ProviderID)]
+	updated := cloneProviderInstance(current)
+	updated.Availability = availability
+	updated.UpdatedAt = time.Now().UTC()
+	updated.Revision = current.Revision + 1
+
+	r.instances[string(updated.ID)] = updated
+	list := r.byProvider[string(updated.ProviderID)]
 	for i := range list {
 		if list[i] != nil && list[i].ID == normalized {
-			list[i] = current
+			list[i] = updated
 			break
 		}
 	}
-	r.byProvider[string(current.ProviderID)] = list
-	r.mu.Unlock()
+	r.byProvider[string(updated.ProviderID)] = list
 	return nil
 }
 
@@ -378,15 +401,17 @@ func (r *ProviderRegistry) DeregisterInstance(instanceID ProviderInstanceID) (bo
 	if normalized == "" {
 		return false, ErrProviderInstanceInvalid
 	}
-	current, found := r.getInstance(string(normalized))
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	current, found := r.instances[string(normalized)]
 	if !found {
 		return false, nil
 	}
 	providerID := current.ProviderID
 
-	r.delInstance(string(normalized))
-
-	r.mu.Lock()
+	delete(r.instances, string(normalized))
 	if list, ok := r.byProvider[string(providerID)]; ok {
 		newList := make([]*CapabilityProviderInstance, 0, len(list))
 		for _, inst := range list {
@@ -401,7 +426,6 @@ func (r *ProviderRegistry) DeregisterInstance(instanceID ProviderInstanceID) (bo
 			r.byProvider[string(providerID)] = newList
 		}
 	}
-	r.mu.Unlock()
 	return true, nil
 }
 
@@ -1172,7 +1196,7 @@ func instanceIdentityFilter(identity runtimeidentity.Identity) func(*CapabilityP
 		if identity.RuntimeID != "" && inst.RuntimeID != identity.RuntimeID {
 			return false
 		}
-		if identity.RuntimeSessionID != "" && inst.RuntimeInstanceID != string(identity.RuntimeSessionID) {
+		if identity.RuntimeSessionID != "" && inst.RuntimeSessionID != identity.RuntimeSessionID {
 			return false
 		}
 		return true

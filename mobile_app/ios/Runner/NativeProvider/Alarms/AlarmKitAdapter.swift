@@ -1,5 +1,7 @@
 import Foundation
-import EventKit
+#if canImport(AlarmKit)
+import AlarmKit
+#endif
 
 public enum AlarmKitAvailability {
     case available
@@ -42,59 +44,49 @@ public struct AlarmMetadata: Codable {
 
 public class AlarmKitAdapter {
     public static let shared = AlarmKitAdapter()
-    private let eventStore = EKEventStore()
-    private var alarmCalendar: EKCalendar?
 
     private init() {}
 
     public func checkAvailability() -> AlarmKitAvailability {
-        if #available(iOS 26.0, *) {
-            return AlarmKitManager.shared.isAlarmKitSupported ? .available : .unsupported("AlarmKit not available on this device")
-        } else if #available(iOS 10.0, *) {
-            return .unsupported("system alarm API requires iOS 26.0+")
-        } else {
-            return .unsupported("iOS 10.0+ required for alarm functionality")
+        if isAlarmKitAvailable() {
+            return .available
         }
+        let majorVersion = Int((UIDevice.current.systemVersion).split(separator: ".").first ?? "25") ?? 25
+        if majorVersion < 26 {
+            return .unsupported("system clock alarm API requires iOS 26.0+ AlarmKit. Current iOS \(majorVersion) does not expose alarm management.")
+        }
+        return .unsupported("AlarmKit framework not available on this device")
     }
 
     public func authorizationStatus() -> AlarmAuthorizationStatus {
+        guard isAlarmKitAvailable() else { return .notDetermined }
+        #if canImport(AlarmKit)
         if #available(iOS 26.0, *) {
-            return AlarmKitManager.shared.authorizationStatus()
+            let manager = AlarmManager.shared
+            switch manager.authorizationStatus {
+            case .authorized: return .authorized
+            case .denied: return .denied
+            case .notDetermined: return .notDetermined
+            case .restricted: return .restricted
+            @unknown default: return .notDetermined
+            }
         }
+        #endif
         return .notDetermined
     }
 
     public func requestAuthorization() async -> Bool {
+        guard isAlarmKitAvailable() else { return false }
+        #if canImport(AlarmKit)
         if #available(iOS 26.0, *) {
-            return await AlarmKitManager.shared.requestAuthorization()
+            do {
+                return try await AlarmManager.shared.requestAuthorization()
+            } catch {
+                return false
+            }
         }
+        #endif
         return false
-    }
-
-    private func getOrCreateAlarmCalendar() -> EKCalendar? {
-        if let calendar = alarmCalendar { return calendar }
-
-        let calendars = eventStore.calendars(for: .event)
-        if let existing = calendars.first(where: { $0.title == "Amitia" && $0.allowsContentModifications }) {
-            alarmCalendar = existing
-            return existing
-        }
-
-        let newCalendar = EKCalendar(for: .event, eventStore: eventStore)
-        newCalendar.title = "Amitia"
-        if let source = eventStore.sources.first(where: { $0.sourceType == .local }) ?? eventStore.defaultCalendarForNewEvents?.source {
-            newCalendar.source = source
-        } else {
-            return nil
-        }
-
-        do {
-            try eventStore.saveCalendar(newCalendar, commit: true)
-            alarmCalendar = newCalendar
-            return newCalendar
-        } catch {
-            return nil
-        }
     }
 
     public func createAlarm(
@@ -105,141 +97,149 @@ public class AlarmKitAdapter {
         sound: AlarmSound?,
         metadata: AlarmMetadata?
     ) async -> Bool {
-        let reminderResult = await createReminder(
-            id: id,
-            title: title,
-            schedule: schedule,
-            metadata: metadata
-        )
-        return reminderResult
+        guard isAlarmKitAvailable() else { return false }
+        #if canImport(AlarmKit)
+        if #available(iOS 26.0, *) {
+            return await createAlarmInternal(
+                id: id,
+                title: title,
+                schedule: schedule,
+                presentation: presentation,
+                sound: sound,
+                metadata: metadata
+            )
+        }
+        #endif
+        return false
     }
 
     public func cancelAlarm(id: String) async -> Bool {
-        let reminders = await newWaitContinuation { continuation in
-            let predicate = eventStore.predicateForReminders(in: nil)
-            eventStore.fetchReminders(matching: predicate) { reminders in
-                continuation.resume(returning: reminders ?? [])
+        guard isAlarmKitAvailable() else { return false }
+        #if canImport(AlarmKit)
+        if #available(iOS 26.0, *) {
+            do {
+                let alarms = try await AlarmManager.shared.alarms
+                guard let target = alarms.first(where: { $0.id == id }) else {
+                    return false
+                }
+                try await AlarmManager.shared.remove(alarm: target)
+                return true
+            } catch {
+                return false
             }
         }
-
-        guard let target = reminders.first(where: { $0.calendarItemIdentifier == id }) else {
-            return false
-        }
-
-        do {
-            try eventStore.remove(target, commit: true)
-            return true
-        } catch {
-            return false
-        }
+        #endif
+        return false
     }
 
     public func listAlarms() async -> [String: Any] {
-        let reminders = await newWaitContinuation { continuation in
-            let predicate = eventStore.predicateForReminders(in: nil)
-            eventStore.fetchReminders(matching: predicate) { reminders in
-                continuation.resume(returning: reminders ?? [])
+        guard isAlarmKitAvailable() else { return ["alarms": []] }
+        #if canImport(AlarmKit)
+        if #available(iOS 26.0, *) {
+            do {
+                let alarms = try await AlarmManager.shared.alarms
+                let result = alarms.map { alarm -> [String: Any] in
+                    var item: [String: Any] = [
+                        "id": alarm.id,
+                        "title": alarm.title
+                    ]
+                    if let state = alarm.state {
+                        item["state"] = String(describing: state)
+                    }
+                    return item
+                }
+                return ["alarms": result]
+            } catch {
+                return ["alarms": []]
             }
         }
-
-        let alarms = reminders.map { reminder -> [String: Any] in
-            var alarm: [String: Any] = [
-                "id": reminder.calendarItemIdentifier,
-                "title": reminder.title ?? ""
-            ]
-            if let dueDate = reminder.dueDateComponents?.date {
-                alarm["dueDate"] = ISO8601DateFormatter().string(from: dueDate)
-            }
-            alarm["completed"] = reminder.isCompleted
-            alarm["calendarItemIdentifier"] = reminder.calendarItemIdentifier
-            return alarm
-        }
-
-        return ["alarms": alarms]
+        #endif
+        return ["alarms": []]
     }
 
     public func getAlarm(id: String) async -> [String: Any]? {
-        let reminders = await newWaitContinuation { continuation in
-            let predicate = eventStore.predicateForReminders(in: nil)
-            eventStore.fetchReminders(matching: predicate) { reminders in
-                continuation.resume(returning: reminders ?? [])
+        guard isAlarmKitAvailable() else { return nil }
+        #if canImport(AlarmKit)
+        if #available(iOS 26.0, *) {
+            do {
+                let alarms = try await AlarmManager.shared.alarms
+                guard let target = alarms.first(where: { $0.id == id }) else {
+                    return nil
+                }
+                var item: [String: Any] = [
+                    "id": target.id,
+                    "title": target.title
+                ]
+                if let state = target.state {
+                    item["state"] = String(describing: state)
+                }
+                return item
+            } catch {
+                return nil
             }
         }
-
-        guard let reminder = reminders.first(where: { $0.calendarItemIdentifier == id }) else {
-            return nil
-        }
-
-        var alarm: [String: Any] = [
-            "id": reminder.calendarItemIdentifier,
-            "title": reminder.title ?? ""
-        ]
-        if let dueDate = reminder.dueDateComponents?.date {
-            alarm["dueDate"] = ISO8601DateFormatter().string(from: dueDate)
-        }
-        alarm["completed"] = reminder.isCompleted
-        return alarm
+        #endif
+        return nil
     }
 
-    private func createReminder(
+    private func isAlarmKitAvailable() -> Bool {
+        if #available(iOS 26.0, *) {
+            #if canImport(AlarmKit)
+            return true
+            #endif
+        }
+        return false
+    }
+
+    #if canImport(AlarmKit)
+    @available(iOS 26.0, *)
+    private func createAlarmInternal(
         id: String,
         title: String,
         schedule: AlarmSchedule,
+        presentation: AlarmPresentation,
+        sound: AlarmSound?,
         metadata: AlarmMetadata?
     ) async -> Bool {
-        let authStatus = eventStore.authorizationStatus(for: .reminder)
-        if authStatus != .authorized && authStatus != .fullAccess {
-            return false
-        }
-
-        let reminder = EKReminder(eventStore: eventStore)
-        reminder.title = title
-        reminder.calendar = eventStore.defaultCalendarForNewReminders()
-        reminder.calendarItemIdentifier = id
-
-        if let fireAt = schedule.fireAt, let date = ISO8601DateFormatter().date(from: fireAt) {
-            let dc = Calendar.current.dateComponents([.year, .month, .day, .hour, .minute, .second], from: date)
-            reminder.dueDateComponents = dc
-        } else if let hour = schedule.hour, let minute = schedule.minute {
-            var dc = DateComponents()
-            dc.hour = hour
-            dc.minute = minute
-            reminder.dueDateComponents = dc
-            if let recurrence = schedule.recurrence, recurrence == "daily" {
-                reminder.recurrenceRules = [EKRecurrenceRule(recurrenceWith: .daily, interval: 1, end: nil)]
-            }
-        }
-
         do {
-            try eventStore.save(reminder, commit: true)
+            let manager = AlarmManager.shared
+            var alarm = Alarm(id: id, title: title)
+            alarm.schedule = buildAlarmSchedule(schedule)
+            alarm.presentation = buildAlarmPresentation(presentation)
+            try await manager.add(alarm: alarm)
             return true
         } catch {
             return false
         }
     }
 
-    private func newWaitContinuation<T>(_ operation: @escaping (@escaping (T) -> Void) -> Void) async -> T {
-        return await withCheckedContinuation { continuation in
-            operation { result in
-                continuation.resume(returning: result)
-            }
+    @available(iOS 26.0, *)
+    private func buildAlarmSchedule(_ schedule: AlarmSchedule) -> AlarmSchedule? {
+        if let fireAt = schedule.fireAt, let date = ISO8601DateFormatter().date(from: fireAt) {
+            return AlarmSchedule(date: date)
         }
-    }
-}
-
-@available(iOS 26.0, *)
-private class AlarmKitManager {
-    static let shared = AlarmKitManager()
-
-    func isAlarmKitSupported() -> Bool {
-        return NSClassFromString("AlarmKit.AlarmManager") != nil
+        if let hour = schedule.hour, let minute = schedule.minute {
+            var dc = DateComponents()
+            dc.hour = hour
+            dc.minute = minute
+            return AlarmSchedule(dateComponents: dc)
+        }
+        return nil
     }
 
-    func authorizationStatus() -> AlarmAuthorizationStatus {
-        return .authorized
+    @available(iOS 26.0, *)
+    private func buildAlarmPresentation(_ presentation: AlarmPresentation) -> AlarmPresentation? {
+        var p = AlarmPresentation()
+        if let alertTitle = presentation.alertTitle {
+            p.alertTitle = alertTitle
+        }
+        if let countdownTitle = presentation.countdownTitle {
+            p.countdownTitle = countdownTitle
+        }
+        if let pausedTitle = presentation.pausedTitle {
+            p.pausedTitle = pausedTitle
+        }
+        return p
     }
-
-    func requestAuthorization() async -> Bool {
-        return true
-    }
+    #endif
 }

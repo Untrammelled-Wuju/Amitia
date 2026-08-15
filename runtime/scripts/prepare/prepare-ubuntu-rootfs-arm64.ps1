@@ -3,10 +3,17 @@ param(
     [string]$CacheDir,
     [string]$StagingDir,
     [string]$OutputDir,
-    [switch]$SkipVerify
+    [switch]$SkipVerify,
+    [switch]$DevMode
 )
 
 $ErrorActionPreference = "Stop"
+
+$ReleaseMode = -not $DevMode
+if ($SkipVerify -and $ReleaseMode) {
+    Write-Error "[FATAL] -SkipVerify is not allowed in release mode"
+    exit 1
+}
 
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $ProjectRoot = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $ScriptDir))

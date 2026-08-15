@@ -2,6 +2,13 @@ import { createDriver, BackendDriver } from '../backend_driver';
 
 const ARCHIVE_PATH = process.env.MOCK_PLUGIN_ARCHIVE_PATH;
 
+function requireArchive(): string {
+  if (!ARCHIVE_PATH) {
+    throw new Error('MOCK_PLUGIN_ARCHIVE_PATH environment variable is required for F15 lifecycle tests');
+  }
+  return ARCHIVE_PATH;
+}
+
 describe('G47-F15 Lifecycle (Backend Driver)', () => {
   let driver: BackendDriver;
   let extensionId: string | null = null;
@@ -29,12 +36,9 @@ describe('G47-F15 Lifecycle (Backend Driver)', () => {
   });
 
   it('install plugin and reach ready state', async () => {
-    if (!ARCHIVE_PATH) {
-      console.log('MOCK_PLUGIN_ARCHIVE_PATH not set - skipping');
-      return;
-    }
+    const archivePath = requireArchive();
 
-    await driver.installPlugin(ARCHIVE_PATH);
+    await driver.installPlugin(archivePath);
     const plugin = await driver.waitForPluginByExtension('mock-amitiax-game-plugin', 30000);
     extensionId = plugin.extensionId;
 
@@ -48,12 +52,9 @@ describe('G47-F15 Lifecycle (Backend Driver)', () => {
   }, 60000);
 
   it('stop runtime reaches idle state', async () => {
-    if (!ARCHIVE_PATH) {
-      console.log('MOCK_PLUGIN_ARCHIVE_PATH not set - skipping');
-      return;
-    }
+    const archivePath = requireArchive();
 
-    await driver.installPlugin(ARCHIVE_PATH);
+    await driver.installPlugin(archivePath);
     const plugin = await driver.waitForPluginByExtension('mock-amitiax-game-plugin', 30000);
     extensionId = plugin.extensionId;
     await driver.enablePlugin(extensionId);
@@ -69,12 +70,9 @@ describe('G47-F15 Lifecycle (Backend Driver)', () => {
   }, 90000);
 
   it('restart runtime preserves fresh generation', async () => {
-    if (!ARCHIVE_PATH) {
-      console.log('MOCK_PLUGIN_ARCHIVE_PATH not set - skipping');
-      return;
-    }
+    const archivePath = requireArchive();
 
-    await driver.installPlugin(ARCHIVE_PATH);
+    await driver.installPlugin(archivePath);
     const plugin = await driver.waitForPluginByExtension('mock-amitiax-game-plugin', 30000);
     extensionId = plugin.extensionId;
     await driver.enablePlugin(extensionId);
@@ -90,19 +88,26 @@ describe('G47-F15 Lifecycle (Backend Driver)', () => {
   }, 90000);
 
   it('uninstall plugin leaves zero residue', async () => {
-    if (!ARCHIVE_PATH) {
-      console.log('MOCK_PLUGIN_ARCHIVE_PATH not set - skipping');
-      return;
-    }
+    const archivePath = requireArchive();
 
-    await driver.installPlugin(ARCHIVE_PATH);
+    await driver.installPlugin(archivePath);
     const plugin = await driver.waitForPluginByExtension('mock-amitiax-game-plugin', 30000);
     extensionId = plugin.extensionId;
+    await driver.enablePlugin(extensionId);
+
+    const runtimes = await driver.listRuntimes({ pluginId: plugin.pluginId });
+    if (runtimes.length > 0) {
+      runtimeId = runtimes[0].runtimeId;
+      await driver.startRuntime(runtimeId);
+      await driver.stopRuntime(runtimeId);
+    }
 
     await driver.uninstallPlugin(extensionId);
     extensionId = null;
+    runtimeId = null;
 
     const residue = await driver.getResidue();
     expect(residue.pluginCount).toBe(0);
+    expect(residue.runtimeCount).toBe(0);
   }, 60000);
 });

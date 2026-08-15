@@ -361,7 +361,11 @@ func scanEntry(row rowScanner) (*RuntimeEntry, error) {
 	}
 
 	entry.UserID = runtimeidentity.ParseUserID(userID)
-	entry.Platform = runtimeidentity.ParsePlatform(platform)
+	plat, err := runtimeidentity.ParsePlatform(platform)
+	if err != nil {
+		return nil, fmt.Errorf("host_registry: parse platform: %w", err)
+	}
+	entry.Platform = plat
 	entry.DeviceID = runtimeidentity.ParseDeviceID(deviceID)
 	entry.RuntimeID = runtimeidentity.ParseRuntimeID(runtimeID)
 	entry.Kind = ParseRegistryEntryKind(kind)

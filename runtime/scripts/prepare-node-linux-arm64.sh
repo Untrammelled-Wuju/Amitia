@@ -110,8 +110,9 @@ if [[ ! -f "$NPX_CLI" ]]; then
 fi
 
 echo "[ELF] Checking node binary ELF header..."
+STATIC_VALIDATION_STATUS="NOT_EXECUTED"
 if ! command -v file &> /dev/null; then
-    echo "[WARN] 'file' command not available, skipping ELF check"
+    echo "[WARN] 'file' command not available, static validation will be NOT_EXECUTED"
 else
     ELF_INFO=$(file "$NODE_BIN")
     echo "  $ELF_INFO"
@@ -130,13 +131,35 @@ else
         rm -rf "$STAGING_ROOT"
         exit 1
     fi
+    STATIC_VALIDATION_STATUS="PASS"
     echo "[PASS] ELF verification passed"
+fi
+
+echo "[VALIDATOR] Running node_artifact_validator.py..."
+VALIDATOR_PATH="$RUNTIME_ROOT/validation/linux-arm64/node_artifact_validator.py"
+VALIDATOR_PASSED=false
+if [[ -f "$VALIDATOR_PATH" ]]; then
+    if python "$VALIDATOR_PATH" --artifact "$EXTRACTED_ROOT" --lock "$LOCK_FILE"; then
+        VALIDATOR_PASSED=true
+        echo "[PASS] node_artifact_validator.py passed"
+    else
+        echo "[FATAL] node_artifact_validator.py failed" >&2
+        rm -rf "$STAGING_ROOT"
+        exit 1
+    fi
+else
+    echo "[SKIP] Validator not found: $VALIDATOR_PATH (static validation status remains $STATIC_VALIDATION_STATUS)"
 fi
 
 NODE_DEST="$OUTPUT_DIR/$INSTALL_SUBDIR"
 TEMP_DEST="${NODE_DEST}.tmp.$$"
 rm -rf "$TEMP_DEST"
 mkdir -p "$OUTPUT_DIR"
+
+if [[ -d "$NODE_DEST" ]]; then
+    OLD_TREE_SHA=$(sha256sum "$OUTPUT_DIR/node-files.sha256" 2>/dev/null | awk '{print $1}' || echo "")
+fi
+
 cp -a "$EXTRACTED_ROOT" "$TEMP_DEST"
 if [[ -d "$NODE_DEST" ]]; then
     rm -rf "$NODE_DEST"
@@ -151,6 +174,10 @@ echo "[PASS] node-files.sha256 generated"
 echo "[TREE SHA] Computing tree hash..."
 TREE_SHA=$(sha256sum "$OUTPUT_DIR/node-files.sha256" | awk '{print $1}')
 echo "[TREE SHA] $TREE_SHA"
+
+if [[ -n "${OLD_TREE_SHA:-}" ]] && [[ "$OLD_TREE_SHA" != "$TREE_SHA" ]]; then
+    echo "[WARN] Same version but different tree: old=$OLD_TREE_SHA new=$TREE_SHA"
+fi
 
 EXECUTION_STATUS="NOT_EXECUTED"
 
@@ -189,7 +216,7 @@ cat > "$OUTPUT_DIR/node-build-record.json" << BUILDEOF
   "npxVersion": "${NPX_VERSION_OUTPUT:-bundled}",
   "corepackIncluded": false,
   "validation": {
-    "staticValidation": "PASS",
+    "staticValidation": "$STATIC_VALIDATION_STATUS",
     "executionValidation": "$EXECUTION_STATUS"
   },
   "treeSha256": "$TREE_SHA",

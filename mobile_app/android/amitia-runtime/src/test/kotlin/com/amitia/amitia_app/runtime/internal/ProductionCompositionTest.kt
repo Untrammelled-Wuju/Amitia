@@ -5,6 +5,9 @@ import com.amitia.amitia_app.runtime.abi.RuntimeAbiSnapshot
 import com.amitia.amitia_app.runtime.abi.RuntimeAbiStatus
 import com.amitia.amitia_app.runtime.api.RuntimeState
 import com.amitia.amitia_app.runtime.install.RuntimeInstaller
+import com.amitia.amitia_app.runtime.install.InstalledRuntimeVerification
+import com.amitia.amitia_app.runtime.install.InstalledRuntimeVerificationResult
+import com.amitia.amitia_app.runtime.install.InstalledRuntimeVerifier
 import com.amitia.amitia_app.runtime.install.internal.DefaultRuntimeHostLayout
 import com.amitia.amitia_app.runtime.install.internal.DefaultRuntimeInstaller
 import com.amitia.amitia_app.runtime.manifest.RuntimeManifestStore
@@ -44,6 +47,29 @@ class ProductionCompositionTest {
         }
     }
 
+    private class FakeInstalledRuntimeVerifier(
+        private val result: InstalledRuntimeVerificationResult = InstalledRuntimeVerificationResult.Success(
+            InstalledRuntimeVerification(
+                valid = true,
+                backendPresent = true,
+                nodePresent = true,
+                npmPresent = true,
+                npxPresent = true,
+                qdrantPresent = true,
+                pluginHostPresent = true,
+                taskHostPresent = true,
+                nodeScriptsPresent = true,
+                guestLayoutPresent = true,
+                mountContractPresent = true,
+                hasInvalidMutableDirs = false,
+                runtimeRootTreeSha256 = "e".repeat(64),
+            )
+        ),
+    ) : InstalledRuntimeVerifier {
+        override fun verify(runtimeRootDir: File): InstalledRuntimeVerificationResult = result
+        override fun computeTreeSha256(rootDir: File): String = "fake-hash"
+    }
+
     private fun createDefaultRuntimeController(
         baseDir: File,
         installer: RuntimeInstaller,
@@ -58,6 +84,7 @@ class ProductionCompositionTest {
             manifestStore = manifestStore,
             activeRuntimeManager = activeRuntimeManager,
             hostLayout = layout,
+            installedRuntimeVerifier = FakeInstalledRuntimeVerifier(),
         )
         return DefaultRuntimeController(
             stateStore = stateStore,

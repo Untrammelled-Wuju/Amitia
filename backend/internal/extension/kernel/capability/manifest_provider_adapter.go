@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sort"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/runtimeidentity"
@@ -104,11 +105,22 @@ func ProviderDefinitionsFromExtension(def domain.ExtensionDefinition) ([]Capabil
 			var providerID ProviderID
 			var priority int
 			var providerMetadata map[string]any
-			platforms := make([]runtimeidentity.Platform, 0)
-			if mod.DeviceRequirements != nil {
+			var platforms []runtimeidentity.Platform
+			if placement == ProviderPlacementDevice && mod.DeviceRequirements != nil {
+				platforms = make([]runtimeidentity.Platform, 0, len(mod.DeviceRequirements.Platforms))
 				for _, p := range mod.DeviceRequirements.Platforms {
-					platforms = append(platforms, runtimeidentity.Platform(p))
+					parsed, err := runtimeidentity.ParsePlatform(p)
+					if err != nil {
+						return nil, ManifestProviderError{
+							ExtensionID:  string(def.ID),
+							ModuleID:     string(mod.ID),
+							CapabilityID: CapabilityID(pc.ID),
+							Err:          err,
+						}
+					}
+					platforms = append(platforms, parsed)
 				}
+				platforms = dedupeAndSortPlatforms(platforms)
 			}
 
 			if providerMeta != nil && providerMeta.ID != "" {
@@ -163,4 +175,23 @@ func ProviderDefinitionsFromExtension(def domain.ExtensionDefinition) ([]Capabil
 	}
 
 	return results, nil
+}
+
+func dedupeAndSortPlatforms(items []runtimeidentity.Platform) []runtimeidentity.Platform {
+	if len(items) == 0 {
+		return nil
+	}
+	seen := make(map[runtimeidentity.Platform]struct{}, len(items))
+	result := make([]runtimeidentity.Platform, 0, len(items))
+	for _, p := range items {
+		if _, ok := seen[p]; ok {
+			continue
+		}
+		seen[p] = struct{}{}
+		result = append(result, p)
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i] < result[j]
+	})
+	return result
 }

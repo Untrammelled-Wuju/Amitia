@@ -169,6 +169,8 @@ type CapabilityProviderInstance struct {
 
 	RuntimeInstanceID string `json:"runtimeInstanceId,omitempty"`
 
+	RuntimeSessionID runtimeidentity.RuntimeSessionID `json:"runtimeSessionId,omitempty"`
+
 	Health       HealthStatus              `json:"health"`
 	Availability ProviderAvailabilityState `json:"availability"`
 
@@ -229,7 +231,13 @@ func (p CapabilityProviderInstance) ValidateIdentity() error {
 }
 
 func (p CapabilityProviderInstance) IsExecutable() bool {
-	return p.Availability == ProviderAvailabilityAvailable && p.Health == HealthReady
+	if p.Availability != ProviderAvailabilityAvailable || p.Health != HealthReady {
+		return false
+	}
+	if p.Placement == ProviderPlacementDevice {
+		return p.RuntimeSessionID != ""
+	}
+	return true
 }
 
 func normalizePlatforms(src []runtimeidentity.Platform) []runtimeidentity.Platform {
@@ -239,10 +247,11 @@ func normalizePlatforms(src []runtimeidentity.Platform) []runtimeidentity.Platfo
 	seen := make(map[runtimeidentity.Platform]struct{}, len(src))
 	result := make([]runtimeidentity.Platform, 0, len(src))
 	for _, p := range src {
-		p = runtimeidentity.ParsePlatform(p.String())
-		if !p.IsKnown() {
+		parsed, err := runtimeidentity.ParsePlatform(p.String())
+		if err != nil || !parsed.IsKnown() {
 			continue
 		}
+		p = parsed
 		if _, ok := seen[p]; ok {
 			continue
 		}
@@ -266,4 +275,24 @@ func sortPlatforms(items []runtimeidentity.Platform) {
 func cloneRuntimeBinding(binding RuntimeBinding) RuntimeBinding {
 	binding.Metadata = cloneStringAnyMap(binding.Metadata)
 	return binding
+}
+
+func cloneProviderDefinition(def *CapabilityProviderDefinition) *CapabilityProviderDefinition {
+	if def == nil {
+		return nil
+	}
+	cp := *def
+	cp.Platforms = append([]runtimeidentity.Platform(nil), def.Platforms...)
+	cp.Metadata = cloneStringAnyMap(def.Metadata)
+	cp.Runtime = cloneRuntimeBinding(def.Runtime)
+	return &cp
+}
+
+func cloneProviderInstance(inst *CapabilityProviderInstance) *CapabilityProviderInstance {
+	if inst == nil {
+		return nil
+	}
+	cp := *inst
+	cp.Metadata = cloneStringAnyMap(inst.Metadata)
+	return &cp
 }

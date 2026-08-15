@@ -1,0 +1,5 @@
+2026/08/15 16:43:51 [Config] 已加载配置: D:\桌面\跟进项目\U-Ai\backend\config\config.yml
+2026/08/15 16:43:52 [DB] 连接 SQLite: D:\桌面\跟进项目\U-Ai\backend\AmitiaData\data\app.db
+2026/08/15 16:44:23 [startup-recovery] operationID=startup-fad6201f1bbd6f1f success=true degraded=false cleaned=0 skipped=0 errors=0
+2026/08/15 16:44:23 [event] service started
+2026/08/15 16:44:23 [event] service stopped

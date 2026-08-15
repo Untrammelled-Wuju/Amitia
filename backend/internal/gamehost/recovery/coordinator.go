@@ -105,6 +105,22 @@ type RecoveryAuditEvent struct {
 	Timestamp    time.Time
 }
 
+type RuntimeLifecycleIntentChecker interface {
+	IsEmergencyLatched(runtimeID domain.RuntimeInstanceID) bool
+	GetLifecycleIntent(runtimeID domain.RuntimeInstanceID) (string, error)
+}
+
+type ExtensionStateChecker interface {
+	IsExtensionInstalled(extensionID string) bool
+	IsExtensionEnabled(extensionID string) bool
+	IsPluginCurrent(pluginID domain.PluginID) bool
+}
+
+type RecoveryEligibilityChecker struct {
+	intentChecker    RuntimeLifecycleIntentChecker
+	extensionChecker ExtensionStateChecker
+}
+
 type HostStructureBuilder interface {
 	RebuildTopology(ctx context.Context, pluginID domain.PluginID, extensionID string) (TopologyResult, error)
 	RebuildLifecyclePlan(ctx context.Context, topology TopologyResult) (LifecycleResult, error)
@@ -136,6 +152,7 @@ type RecoveryCoordinator struct {
 	authority      ControlAuthorityView
 	structureBuilder HostStructureBuilder
 	audit          AuditSink
+	eligibility    *RecoveryEligibilityChecker
 }
 
 type RecoveryCoordinatorDeps struct {
@@ -150,6 +167,7 @@ type RecoveryCoordinatorDeps struct {
 	CheckpointClassifier CheckpointClassifier
 	StructureBuilder     HostStructureBuilder
 	AuditSink            AuditSink
+	EligibilityChecker   *RecoveryEligibilityChecker
 }
 
 func NewRecoveryCoordinator(deps RecoveryCoordinatorDeps) (*RecoveryCoordinator, error) {
@@ -201,6 +219,7 @@ func NewRecoveryCoordinator(deps RecoveryCoordinatorDeps) (*RecoveryCoordinator,
 		structureBuilder: deps.StructureBuilder,
 		audit:          deps.AuditSink,
 		checkpoint:     deps.CheckpointClassifier,
+		eligibility:    deps.EligibilityChecker,
 	}
 	return c, nil
 }
@@ -268,6 +287,29 @@ func (c *RecoveryCoordinator) executeRecoveryFlow(ctx context.Context, op *Recov
 		return nil, fmt.Errorf("get plugin descriptor: %w", err)
 	}
 	op.ExtensionID = desc.ExtensionID
+
+	if c.eligibility != nil {
+		if c.eligibility.intentChecker != nil {
+			if c.eligibility.intentChecker.IsEmergencyLatched(req.RuntimeID) {
+				return nil, NewRecoverySuppressedError(req.RuntimeID, "runtime is emergency-latched")
+			}
+			intent, err := c.eligibility.intentChecker.GetLifecycleIntent(req.RuntimeID)
+			if err == nil && (intent == "disable" || intent == "uninstall") {
+				return nil, NewRecoverySuppressedError(req.RuntimeID, fmt.Sprintf("lifecycle intent=%q suppresses recovery", intent))
+			}
+		}
+		if c.eligibility.extensionChecker != nil {
+			if !c.eligibility.extensionChecker.IsExtensionInstalled(op.ExtensionID) {
+				return nil, NewRecoverySuppressedError(req.RuntimeID, "extension no longer installed")
+			}
+			if !c.eligibility.extensionChecker.IsExtensionEnabled(op.ExtensionID) {
+				return nil, NewRecoverySuppressedError(req.RuntimeID, "extension disabled")
+			}
+			if !c.eligibility.extensionChecker.IsPluginCurrent(op.PluginID) {
+				return nil, NewRecoverySuppressedError(req.RuntimeID, "plugin no longer current")
+			}
+		}
+	}
 
 	level := c.classifier.DetermineLevel(op.FailureClass, 0, 3)
 	op.Level = level

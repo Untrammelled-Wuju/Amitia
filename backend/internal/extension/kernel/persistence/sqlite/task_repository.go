@@ -155,7 +155,9 @@ func (r *TaskRepository) PutTaskRun(ctx context.Context, run *task_runtime.TaskR
 			paused_at = excluded.paused_at,
 			resumed_at = excluded.resumed_at,
 			error_code = excluded.error_code, error_message = excluded.error_message,
-			generation = excluded.generation, revision = excluded.revision
+			generation = excluded.generation,
+			revision = excluded.revision
+		WHERE excluded.revision >= extension_task_runs.revision
 	`,
 		run.TaskRunID, run.OperationID, run.InvocationID, run.TaskDefinitionID,
 		run.ExtensionID, run.ModuleID, string(run.Status), run.Priority,
@@ -673,7 +675,7 @@ func (r *TaskRepository) UpdateExecutionConnectionBinding(
 	_, err := ex.ExecContext(ctx, `
 		UPDATE extension_task_runs
 		SET execution_target_json = json_set(
-			COALESCE(execution_target_json, '{} '),
+			COALESCE(execution_target_json, '{}'),
 			'$.runtimeSessionId', ?,
 			'$.connectionGeneration', ?
 		),

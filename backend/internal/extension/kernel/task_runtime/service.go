@@ -14,7 +14,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 )
 
@@ -24,8 +23,7 @@ type TaskRuntimeService struct {
 	limiter *ConcurrencyLimiter
 	config  TaskRuntimeConfig
 
-	eventEmitter event.HostEventEmitter
-	events       TaskEventSink
+	events TaskEventSink
 
 	mu          sync.RWMutex
 	activeHosts map[string]*TaskProcessHost
@@ -66,10 +64,6 @@ func NewTaskRuntimeService(store TaskStore, config TaskRuntimeConfig) *TaskRunti
 	svc.localExecutor = NewLocalTaskExecutor(svc)
 	svc.remoteExecutor = UnavailableRemoteTaskExecutor{}
 	return svc
-}
-
-func (s *TaskRuntimeService) SetEventEmitter(emitter event.HostEventEmitter) {
-	s.eventEmitter = emitter
 }
 
 func (s *TaskRuntimeService) SetEventSink(sink TaskEventSink) {
@@ -229,12 +223,12 @@ func (s *TaskRuntimeService) BindExecutionTarget(
 	taskRunID string,
 	request TrustedExecutionTargetRequest,
 ) (*TaskRun, error) {
-	run, err := s.store.GetTaskRun(ctx, taskRunID)
+	current, err := s.store.GetTaskRun(ctx, taskRunID)
 	if err != nil {
 		return nil, NewTaskError(ErrTaskNotFound, err.Error())
 	}
 
-	if run.Status != RunStatusCreated && run.Status != RunStatusQueued && run.Status != RunStatusRecoveryRequired {
+	if current.Status != RunStatusCreated && current.Status != RunStatusQueued && current.Status != RunStatusRecoveryRequired {
 		return nil, NewTaskError(ErrTaskExecutionTargetConflict, "execution target can only be bound in created/queued/recovery_required state")
 	}
 
@@ -245,33 +239,58 @@ func (s *TaskRuntimeService) BindExecutionTarget(
 	}
 
 	now := time.Now().UTC()
-	if err := run.BindExecutionTarget(decision, request.ResolvedBy, now); err != nil {
+	existingRevision := current.Revision
+	next := cloneTaskRun(current)
+	if err := next.BindExecutionTarget(decision, request.ResolvedBy, now); err != nil {
 		return nil, err
 	}
 
-	if err := s.store.UpdateExecutionTarget(ctx, run.TaskRunID, run.ExecutionPlacement, run.ExecutionTarget, *run.ExecutionResolvedAt, run.ExecutionResolvedBy); err != nil {
-		return nil, fmt.Errorf("task_runtime: update execution target: %w", err)
+	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
+		if err := s.store.UpdateExecutionTarget(txCtx, next.TaskRunID, next.ExecutionPlacement, next.ExecutionTarget, *next.ExecutionResolvedAt, next.ExecutionResolvedBy); err != nil {
+			return fmt.Errorf("task_runtime: update execution target: %w", err)
+		}
+		next.Revision = existingRevision + 1
+		if err := s.publishTaskEvent(txCtx, TaskEventExecutionTargetBound, next, "", ""); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return nil, err
 	}
 
-	return run, nil
+	next.Revision = existingRevision + 1
+	return next, nil
 }
 
 func (s *TaskRuntimeService) ClearExecutionConnectionBinding(
 	ctx context.Context,
 	taskRunID string,
 ) error {
-	run, err := s.store.GetTaskRun(ctx, taskRunID)
+	current, err := s.store.GetTaskRun(ctx, taskRunID)
 	if err != nil {
 		return NewTaskError(ErrTaskNotFound, err.Error())
 	}
 
-	if run.EffectiveExecutionPlacement() != TaskExecutionPlacementDevice {
+	if current.EffectiveExecutionPlacement() != TaskExecutionPlacementDevice {
 		return NewTaskError(ErrTaskExecutionPlacementInvalid, "connection binding only applies to device placement")
 	}
 
-	run.ClearTransientConnectionBinding()
-	now := time.Now().UTC()
-	return s.store.UpdateExecutionConnectionBinding(ctx, taskRunID, emptyRuntimeSessionID(""), 0, now)
+	if current.ExecutionTarget.RuntimeSessionID == "" && current.ExecutionTarget.ConnectionGeneration == 0 {
+		return nil
+	}
+
+	existingRevision := current.Revision
+	next := cloneTaskRun(current)
+	next.ClearTransientConnectionBinding()
+
+	return s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
+		now := time.Now().UTC()
+		if err := s.store.UpdateExecutionConnectionBinding(txCtx, taskRunID, emptyRuntimeSessionID(""), 0, now); err != nil {
+			return err
+		}
+		next.Revision = existingRevision + 1
+		return s.publishTaskEvent(txCtx, TaskEventConnectionBindingChanged, next, "", "")
+	})
 }
 
 type emptyRuntimeSessionID string
@@ -347,6 +366,34 @@ func (s *TaskRuntimeService) executorFor(placement TaskExecutionPlacement) (Task
 	return nil, NewTaskError(ErrTaskExecutionPlacementInvalid, "unknown placement: "+string(placement))
 }
 
+func (s *TaskRuntimeService) persistExecutionAttempt(
+	ctx context.Context,
+	run *TaskRun,
+	attemptID TaskExecutionAttemptID,
+	runtimeInstanceID string,
+) error {
+	current, err := s.store.GetTaskRun(ctx, run.TaskRunID)
+	if err != nil {
+		return err
+	}
+	existingRevision := current.Revision
+	next := cloneTaskRun(current)
+	next.ExecutionAttemptID = attemptID
+	next.RuntimeInstanceID = strPtr(runtimeInstanceID)
+
+	return s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
+		now := time.Now().UTC()
+		if err := s.store.UpdateExecutionAttempt(txCtx, next.TaskRunID, attemptID, runtimeInstanceID, now); err != nil {
+			return err
+		}
+		next.Revision = existingRevision + 1
+		run.Revision = next.Revision
+		run.ExecutionAttemptID = next.ExecutionAttemptID
+		run.RuntimeInstanceID = next.RuntimeInstanceID
+		return s.publishTaskEvent(txCtx, TaskEventAttemptStarted, next, "", "")
+	})
+}
+
 func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 	defer s.tryDispatch()
 
@@ -365,7 +412,7 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 			return
 		}
 
-		if err := s.store.UpdateExecutionAttempt(ctx, run.TaskRunID, attemptID, "", time.Now().UTC()); err != nil {
+		if err := s.persistExecutionAttempt(ctx, run, attemptID, ""); err != nil {
 			s.failRun(ctx, run, ErrTaskExecutionAttemptInvalid, fmt.Sprintf("persist attempt: %v", err))
 			return
 		}
@@ -381,7 +428,7 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 		return
 	}
 
-	if err := s.store.UpdateExecutionAttempt(ctx, run.TaskRunID, attemptID, "", time.Now().UTC()); err != nil {
+	if err := s.persistExecutionAttempt(ctx, run, attemptID, ""); err != nil {
 		s.failRun(ctx, run, ErrTaskExecutionAttemptInvalid, fmt.Sprintf("persist attempt: %v", err))
 		return
 	}
@@ -392,26 +439,68 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 		return
 	}
 
-	now := time.Now().UTC()
-	run.Status = RunStatusStarting
-	run.StartedAt = &now
-	run.RuntimeInstanceID = strPtr("ri-" + uuid.NewString())
-	if err := s.store.PutTaskRun(ctx, run); err != nil {
+	current, err := s.store.GetTaskRun(ctx, run.TaskRunID)
+	if err != nil {
+		s.failRun(ctx, run, ErrTaskRuntimeStartFailed, fmt.Sprintf("reload run: %v", err))
 		return
 	}
+	existingRevision := current.Revision
+	startingRun := cloneTaskRun(current)
+	now := time.Now().UTC()
+	startingRun.Status = RunStatusStarting
+	startingRun.StartedAt = &now
+	startingRun.RuntimeInstanceID = strPtr("ri-" + uuid.NewString())
+
+	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
+		if err := s.store.PutTaskRun(txCtx, startingRun); err != nil {
+			return err
+		}
+		startingRun.Revision = existingRevision + 1
+		run.Revision = startingRun.Revision
+		return s.publishTaskEvent(txCtx, TaskEventStarting, startingRun, "", "")
+	}); err != nil {
+		s.failRun(ctx, run, ErrTaskRuntimeStartFailed, fmt.Sprintf("persist starting: %v", err))
+		return
+	}
+	run.Status = startingRun.Status
+	run.StartedAt = startingRun.StartedAt
 
 	var checkpointPayload json.RawMessage
 	if run.CheckpointID != nil && *run.CheckpointID != "" {
 		cp, err := s.store.GetLatestCheckpoint(ctx, run.TaskRunID)
 		if err == nil && cp != nil {
 			checkpointPayload = cp.Payload
-			run.Status = RunStatusResuming
-			s.store.PutTaskRun(ctx, run)
+			resumingRun := cloneTaskRun(startingRun)
+			resumingRun.Status = RunStatusResuming
+			if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
+				if err := s.store.PutTaskRun(txCtx, resumingRun); err != nil {
+					return err
+				}
+				resumingRun.Revision = startingRun.Revision + 1
+				run.Revision = resumingRun.Revision
+				return s.publishTaskEvent(txCtx, TaskEventResuming, resumingRun, "", "")
+			}); err != nil {
+				s.failRun(ctx, run, ErrTaskRuntimeStartFailed, fmt.Sprintf("persist resuming: %v", err))
+				return
+			}
+			run.Status = resumingRun.Status
 		}
 	}
 
+	runningRun := cloneTaskRun(run)
+	runningRun.Status = RunStatusRunning
+	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
+		if err := s.store.PutTaskRun(txCtx, runningRun); err != nil {
+			return err
+		}
+		runningRun.Revision = run.Revision + 1
+		run.Revision = runningRun.Revision
+		return s.publishTaskEvent(txCtx, TaskEventRunning, runningRun, "", "")
+	}); err != nil {
+		s.failRun(ctx, run, ErrTaskRuntimeStartFailed, fmt.Sprintf("persist running: %v", err))
+		return
+	}
 	run.Status = RunStatusRunning
-	s.store.PutTaskRun(ctx, run)
 
 	instanceID := "ri-" + uuid.NewString()
 
@@ -513,10 +602,6 @@ func (s *TaskRuntimeService) runRemoteExecution(ctx context.Context, run *TaskRu
 	return outcome
 }
 
-func (s *TaskRuntimeService) persistExecutionAttempt(ctx context.Context, run *TaskRun, attemptID TaskExecutionAttemptID, runtimeInstanceID string) error {
-	return s.store.UpdateExecutionAttempt(ctx, run.TaskRunID, attemptID, runtimeInstanceID, time.Now().UTC())
-}
-
 func (s *TaskRuntimeService) applyExecutionOutcome(ctx context.Context, run *TaskRun, def *TaskDefinition, outcome TaskExecutionOutcome) {
 	now := time.Now().UTC()
 	if outcome.Status.IsTerminal() {
@@ -604,21 +689,27 @@ func (s *TaskRuntimeService) handleCheckpoint(ctx context.Context, run *TaskRun,
 }
 
 func (s *TaskRuntimeService) handleFinished(ctx context.Context, run *TaskRun, status string, result json.RawMessage, artifactID string, errCode, errMsg string) {
+	current, err := s.store.GetTaskRun(ctx, run.TaskRunID)
+	if err != nil {
+		return
+	}
+	existingRevision := current.Revision
+	next := cloneTaskRun(current)
 	now := time.Now().UTC()
-	run.FinishedAt = &now
+	next.FinishedAt = &now
 
 	var eventType TaskDomainEventType
 	var runResult *TaskRunResult
 	switch status {
 	case "succeeded":
-		run.Status = RunStatusSucceeded
+		next.Status = RunStatusSucceeded
 		eventType = TaskEventSucceeded
 		resultType := ResultInlineJSON
 		if artifactID != "" || len(result) > s.config.MaxInlineResultBytes {
 			resultType = ResultArtifact
 		}
 		runResult = &TaskRunResult{
-			TaskRunID:  run.TaskRunID,
+			TaskRunID:  next.TaskRunID,
 			ResultType: resultType,
 			ResultJSON: result,
 			ArtifactID: artifactID,
@@ -626,73 +717,64 @@ func (s *TaskRuntimeService) handleFinished(ctx context.Context, run *TaskRun, s
 			CreatedAt:  now,
 		}
 		if artifactID != "" {
-			run.ResultArtifactID = &artifactID
+			next.ResultArtifactID = &artifactID
 		}
 	case "failed":
-		run.Status = RunStatusFailed
+		next.Status = RunStatusFailed
 		eventType = TaskEventFailed
 		if errCode != "" {
-			run.ErrorCode = &errCode
+			next.ErrorCode = &errCode
 		}
 		if errMsg != "" {
-			run.ErrorMessage = &errMsg
+			next.ErrorMessage = &errMsg
 		}
 	case "cancelled":
-		run.Status = RunStatusCancelled
+		next.Status = RunStatusCancelled
 		eventType = TaskEventCancelled
 		if errMsg != "" {
-			run.ErrorMessage = &errMsg
+			next.ErrorMessage = &errMsg
 		}
 	default:
 		eventType = TaskEventFailed
 	}
 
-	run.Revision++
-	_ = s.store.WithinTaskTx(ctx, func(ctx context.Context) error {
+	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
 		if runResult != nil {
-			if err := s.store.PutResult(ctx, runResult); err != nil {
+			if err := s.store.PutResult(txCtx, runResult); err != nil {
 				return err
 			}
 		}
-		if err := s.store.PutTaskRun(ctx, run); err != nil {
+		if err := s.store.PutTaskRun(txCtx, next); err != nil {
 			return err
 		}
-		if err := s.queue.Remove(ctx, run.TaskRunID); err != nil {
+		if err := s.queue.Remove(txCtx, next.TaskRunID); err != nil {
 			return err
 		}
-		return s.publishTaskEvent(ctx, eventType, run, "", errCode)
-	})
-
-	if s.eventEmitter != nil {
-		taskPayload, _ := json.Marshal(map[string]interface{}{
-			"taskRunId":        run.TaskRunID,
-			"taskDefinitionId": run.TaskDefinitionID,
-			"extensionId":      run.ExtensionID,
-			"moduleId":         run.ModuleID,
-			"status":           string(run.Status),
-			"operationId":      run.OperationID,
-			"invocationId":     run.InvocationID,
-			"traceId":          run.TraceID,
-			"correlationId":    run.CorrelationID,
-			"causationId":      run.CausationID,
-			"generation":       run.Generation,
-			"attempt":          run.Attempt,
-			"finishedAt":       now.Format(time.RFC3339),
-		})
-		taskOpts := event.PublishOptions{
-			AggregateType: "task_run",
-			AggregateID:   run.TaskRunID,
-			OperationID:   run.OperationID,
-		}
-		_, _ = s.eventEmitter.EmitTaskCompleted(ctx, taskPayload, taskOpts)
+		next.Revision = existingRevision + 1
+		return s.publishTaskEvent(txCtx, eventType, next, "", errCode)
+	}); err != nil {
+		return
 	}
+
+	run.Status = next.Status
+	run.FinishedAt = next.FinishedAt
+	run.Revision = next.Revision
+	run.ErrorCode = next.ErrorCode
+	run.ErrorMessage = next.ErrorMessage
+	run.ResultArtifactID = next.ResultArtifactID
 }
 
 func (s *TaskRuntimeService) handleCrash(ctx context.Context, run *TaskRun, def *TaskDefinition, exitCode int) {
+	current, err := s.store.GetTaskRun(ctx, run.TaskRunID)
+	if err != nil {
+		return
+	}
+	existingRevision := current.Revision
+	next := cloneTaskRun(current)
 	now := time.Now().UTC()
-	run.FinishedAt = &now
+	next.FinishedAt = &now
 	errMsg := fmt.Sprintf("task process crashed with exit code %d", exitCode)
-	run.ErrorMessage = &errMsg
+	next.ErrorMessage = &errMsg
 
 	recoverability := def.Recoverability
 	if recoverability == "" {
@@ -715,82 +797,106 @@ func (s *TaskRuntimeService) handleCrash(ctx context.Context, run *TaskRun, def 
 	var eventType TaskDomainEventType
 	switch recoverability {
 	case CheckpointRecoverable:
-		cp, _ := s.store.GetLatestCheckpoint(ctx, run.TaskRunID)
+		cp, _ := s.store.GetLatestCheckpoint(ctx, next.TaskRunID)
 		if cp != nil {
-			run.Status = RunStatusRecoveryRequired
+			next.Status = RunStatusRecoveryRequired
 			eventType = TaskEventRecoveryRequired
 		} else {
-			run.Status = RunStatusFailed
+			next.Status = RunStatusFailed
 			eventType = TaskEventFailed
 		}
 	case RestartableFromBeginning:
-		if idempotency == Idempotent && run.Attempt < run.MaxAttempts {
-			run.Status = RunStatusRecoveryRequired
+		if idempotency == Idempotent && next.Attempt < next.MaxAttempts {
+			next.Status = RunStatusRecoveryRequired
 			eventType = TaskEventRecoveryRequired
 		} else {
-			run.Status = RunStatusFailed
+			next.Status = RunStatusFailed
 			eventType = TaskEventFailed
 		}
 	case ManualRecovery:
-		run.Status = RunStatusManualIntervention
+		next.Status = RunStatusManualIntervention
 		eventType = TaskEventFailed
 	default:
 		if idempotency == NonIdempotent {
-			run.Status = RunStatusManualIntervention
+			next.Status = RunStatusManualIntervention
 			eventType = TaskEventFailed
 		} else {
-			run.Status = RunStatusFailed
+			next.Status = RunStatusFailed
 			eventType = TaskEventFailed
 		}
 	}
 
 	code := string(ErrTaskRuntimeCrashed)
-	run.ErrorCode = &code
-	run.Revision++
-	_ = s.store.WithinTaskTx(ctx, func(ctx context.Context) error {
-		if err := s.store.PutTaskRun(ctx, run); err != nil {
+	next.ErrorCode = &code
+
+	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
+		if err := s.store.PutTaskRun(txCtx, next); err != nil {
 			return err
 		}
-		if err := s.queue.Remove(ctx, run.TaskRunID); err != nil {
+		if err := s.queue.Remove(txCtx, next.TaskRunID); err != nil {
 			return err
 		}
-		return s.publishTaskEvent(ctx, eventType, run, errMsg, code)
-	})
+		next.Revision = existingRevision + 1
+		return s.publishTaskEvent(txCtx, eventType, next, errMsg, code)
+	}); err != nil {
+		return
+	}
+
+	run.Status = next.Status
+	run.FinishedAt = next.FinishedAt
+	run.Revision = next.Revision
+	run.ErrorCode = next.ErrorCode
+	run.ErrorMessage = next.ErrorMessage
 }
 
 func (s *TaskRuntimeService) failRun(ctx context.Context, run *TaskRun, code TaskErrorCode, message string) {
+	current, err := s.store.GetTaskRun(ctx, run.TaskRunID)
+	if err != nil {
+		return
+	}
+	existingRevision := current.Revision
+	next := cloneTaskRun(current)
 	now := time.Now().UTC()
-	run.Status = RunStatusFailed
-	run.FinishedAt = &now
+	next.Status = RunStatusFailed
+	next.FinishedAt = &now
 	c := string(code)
-	run.ErrorCode = &c
-	run.ErrorMessage = &message
-	run.Revision++
-	_ = s.store.WithinTaskTx(ctx, func(ctx context.Context) error {
-		if err := s.store.PutTaskRun(ctx, run); err != nil {
+	next.ErrorCode = &c
+	next.ErrorMessage = &message
+
+	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
+		if err := s.store.PutTaskRun(txCtx, next); err != nil {
 			return err
 		}
-		if err := s.queue.Remove(ctx, run.TaskRunID); err != nil {
+		if err := s.queue.Remove(txCtx, next.TaskRunID); err != nil {
 			return err
 		}
-		return s.publishTaskEvent(ctx, TaskEventFailed, run, message, string(code))
-	})
+		next.Revision = existingRevision + 1
+		return s.publishTaskEvent(txCtx, TaskEventFailed, next, message, string(code))
+	}); err != nil {
+		return
+	}
+
+	run.Status = next.Status
+	run.FinishedAt = next.FinishedAt
+	run.Revision = next.Revision
+	run.ErrorCode = next.ErrorCode
+	run.ErrorMessage = next.ErrorMessage
 }
 
 func (s *TaskRuntimeService) Cancel(ctx context.Context, taskRunID, reason string) error {
-	run, err := s.store.GetTaskRun(ctx, taskRunID)
+	current, err := s.store.GetTaskRun(ctx, taskRunID)
 	if err != nil {
 		return NewTaskError(ErrTaskNotFound, err.Error())
 	}
 
-	if run.Status.IsTerminal() {
-		return NewTaskError(ErrTaskNotCancelable, "task already terminal: "+string(run.Status))
+	if current.Status.IsTerminal() {
+		return NewTaskError(ErrTaskNotCancelable, "task already terminal: "+string(current.Status))
 	}
 
-	placement := run.EffectiveExecutionPlacement()
+	placement := current.EffectiveExecutionPlacement()
 	if placement != TaskExecutionPlacementLocal {
 		if s.remoteExecutor != nil {
-			if err := s.remoteExecutor.Cancel(ctx, run); err != nil {
+			if err := s.remoteExecutor.Cancel(ctx, current); err != nil {
 				return err
 			}
 		}
@@ -798,50 +904,71 @@ func (s *TaskRuntimeService) Cancel(ctx context.Context, taskRunID, reason strin
 	}
 
 	now := time.Now().UTC()
-	run.CancelRequestedAt = &now
+	current.CancelRequestedAt = &now
 
-	if run.Status == RunStatusQueued || run.Status == RunStatusPaused {
-		previousStatus := run.Status
-		run.Status = RunStatusCancelling
-		if ok, casErr := s.store.UpdateTaskRunCAS(ctx, run, previousStatus, run.Generation); casErr != nil {
+	if current.Status == RunStatusQueued || current.Status == RunStatusPaused {
+		previousStatus := current.Status
+		next := cloneTaskRun(current)
+		next.Status = RunStatusCancelling
+		if ok, casErr := s.store.UpdateTaskRunCAS(ctx, next, previousStatus, next.Generation); casErr != nil {
 			return fmt.Errorf("task_runtime: cancel cas: %w", casErr)
 		} else if !ok {
 			return NewTaskError(ErrTaskPauseInProgress, "concurrent state change, retry cancel")
 		}
-		run.Revision++
 
-		_ = s.queue.Remove(ctx, taskRunID)
-		now := time.Now().UTC()
-		run.Status = RunStatusCancelled
-		run.FinishedAt = &now
-		run.Revision++
-		_ = s.store.PutTaskRun(ctx, run)
-		s.publishTaskEvent(ctx, TaskEventCancelled, run, "", "")
+		cancelledRun := cloneTaskRun(next)
+		cancelledRun.Status = RunStatusCancelled
+		cancelledRun.FinishedAt = &now
+		if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
+			if err := s.store.PutTaskRun(txCtx, cancelledRun); err != nil {
+				return err
+			}
+			if err := s.queue.Remove(txCtx, taskRunID); err != nil {
+				return err
+			}
+			cancelledRun.Revision = next.Revision + 1
+			return s.publishTaskEvent(txCtx, TaskEventCancelled, cancelledRun, reason, "")
+		}); err != nil {
+			return err
+		}
 		return nil
 	}
 
-	if run.Status == RunStatusPausing {
-		previousStatus := run.Status
-		run.Status = RunStatusCancelling
-		if ok, casErr := s.store.UpdateTaskRunCAS(ctx, run, previousStatus, run.Generation); casErr != nil {
+	if current.Status == RunStatusPausing {
+		previousStatus := current.Status
+		next := cloneTaskRun(current)
+		next.Status = RunStatusCancelling
+		if ok, casErr := s.store.UpdateTaskRunCAS(ctx, next, previousStatus, next.Generation); casErr != nil {
 			return fmt.Errorf("task_runtime: cancel pausing cas: %w", casErr)
 		} else if !ok {
 			return NewTaskError(ErrTaskPauseInProgress, "concurrent state change, retry cancel")
 		}
-		run.Revision++
 
-		run.Status = RunStatusCancelled
-		now := time.Now().UTC()
-		run.FinishedAt = &now
-		run.Revision++
-		_ = s.store.PutTaskRun(ctx, run)
-		s.publishTaskEvent(ctx, TaskEventCancelled, run, "", "")
+		cancelledRun := cloneTaskRun(next)
+		cancelledRun.Status = RunStatusCancelled
+		cancelledRun.FinishedAt = &now
+		if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
+			if err := s.store.PutTaskRun(txCtx, cancelledRun); err != nil {
+				return err
+			}
+			if err := s.queue.Remove(txCtx, taskRunID); err != nil {
+				return err
+			}
+			cancelledRun.Revision = next.Revision + 1
+			return s.publishTaskEvent(txCtx, TaskEventCancelled, cancelledRun, reason, "")
+		}); err != nil {
+			return err
+		}
 		return nil
 	}
 
-	run.Status = RunStatusCancelling
-	run.Revision++
-	_ = s.store.PutTaskRun(ctx, run)
+	next := cloneTaskRun(current)
+	next.Status = RunStatusCancelling
+	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
+		return s.store.PutTaskRun(txCtx, next)
+	}); err != nil {
+		return err
+	}
 
 	s.mu.RLock()
 	host, ok := s.activeHosts[taskRunID]

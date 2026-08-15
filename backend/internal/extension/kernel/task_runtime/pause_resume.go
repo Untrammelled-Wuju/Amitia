@@ -34,12 +34,12 @@ const (
 )
 
 func (s *TaskRuntimeService) PauseTask(ctx context.Context, req PauseTaskRequest) error {
-	run, err := s.store.GetTaskRun(ctx, req.TaskRunID)
+	current, err := s.store.GetTaskRun(ctx, req.TaskRunID)
 	if err != nil {
 		return NewTaskError(ErrTaskNotFound, err.Error())
 	}
 
-	def, err := s.store.GetTaskDefinition(ctx, run.TaskDefinitionID)
+	def, err := s.store.GetTaskDefinition(ctx, current.TaskDefinitionID)
 	if err != nil {
 		return NewTaskError(ErrTaskDefinitionInvalid, err.Error())
 	}
@@ -48,35 +48,47 @@ func (s *TaskRuntimeService) PauseTask(ctx context.Context, req PauseTaskRequest
 		return NewTaskError(ErrTaskPauseUnsupported, "pause not supported for this task definition")
 	}
 
-	if req.Generation != 0 && req.Generation != run.Generation {
+	if req.Generation != 0 && req.Generation != current.Generation {
 		return NewTaskError(ErrTaskResumeStaleGeneration, "stale generation")
 	}
 
-	if run.Status == RunStatusPaused {
+	if current.Status == RunStatusPaused {
 		return nil
 	}
 
-	if run.Status != RunStatusRunning && run.Status != RunStatusCheckpointing {
-		return NewTaskError(ErrTaskPauseUnsupported, "cannot pause in status: "+string(run.Status))
+	if current.Status != RunStatusRunning && current.Status != RunStatusCheckpointing {
+		return NewTaskError(ErrTaskPauseUnsupported, "cannot pause in status: "+string(current.Status))
 	}
 
-	if run.EffectiveExecutionPlacement() != TaskExecutionPlacementLocal {
+	if current.EffectiveExecutionPlacement() != TaskExecutionPlacementLocal {
 		return NewTaskError(ErrTaskPauseUnsupported, "only local task execution can be paused in G13")
 	}
 
-	previousStatus := run.Status
-	run.Status = RunStatusPausing
+	pausingRun := cloneTaskRun(current)
+	pausingRun.Status = RunStatusPausing
 	reason := req.Reason
-	run.PauseReason = &reason
+	pausingRun.PauseReason = &reason
 	now := time.Now().UTC()
-	run.PauseRequestedAt = &now
+	pausingRun.PauseRequestedAt = &now
 
-	if ok, casErr := s.store.UpdateTaskRunCAS(ctx, run, previousStatus, run.Generation); casErr != nil {
+	if ok, casErr := s.store.UpdateTaskRunCAS(ctx, pausingRun, current.Status, current.Generation); casErr != nil {
 		return fmt.Errorf("task_runtime: pause cas: %w", casErr)
 	} else if !ok {
 		return NewTaskError(ErrTaskPauseInProgress, "concurrent state change, retry pause")
 	}
-	run.Revision++
+
+	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
+		pausedRun := cloneTaskRun(pausingRun)
+		pausedRun.Status = RunStatusPaused
+		pausedRun.PausedAt = &now
+		if err := s.store.PutTaskRun(txCtx, pausedRun); err != nil {
+			return err
+		}
+		pausedRun.Revision = pausingRun.Revision + 1
+		return s.publishTaskEvent(txCtx, TaskEventPaused, pausedRun, reason, "")
+	}); err != nil {
+		return err
+	}
 
 	s.mu.RLock()
 	host, ok := s.activeHosts[req.TaskRunID]
@@ -98,20 +110,20 @@ func (s *TaskRuntimeService) PauseTask(ctx context.Context, req PauseTaskRequest
 }
 
 func (s *TaskRuntimeService) ResumeTask(ctx context.Context, req ResumeTaskRequest) error {
-	run, err := s.store.GetTaskRun(ctx, req.TaskRunID)
+	current, err := s.store.GetTaskRun(ctx, req.TaskRunID)
 	if err != nil {
 		return NewTaskError(ErrTaskNotFound, err.Error())
 	}
 
-	if run.Status != RunStatusPaused {
+	if current.Status != RunStatusPaused {
 		return NewTaskError(ErrTaskNotPaused, "task not paused")
 	}
 
-	if req.Generation != 0 && req.Generation != run.Generation {
+	if req.Generation != 0 && req.Generation != current.Generation {
 		return NewTaskError(ErrTaskResumeStaleGeneration, "stale generation")
 	}
 
-	if run.EffectiveExecutionPlacement() != TaskExecutionPlacementLocal {
+	if current.EffectiveExecutionPlacement() != TaskExecutionPlacementLocal {
 		return NewTaskError(ErrTaskResumeIncompatible, "only local task execution can be resumed in G13")
 	}
 
@@ -119,37 +131,50 @@ func (s *TaskRuntimeService) ResumeTask(ctx context.Context, req ResumeTaskReque
 		req.ResumeKind = ResumeKindResume
 	}
 
-	previousStatus := run.Status
-	run.Status = RunStatusResuming
+	resumingRun := cloneTaskRun(current)
+	resumingRun.Status = RunStatusResuming
 	now := time.Now().UTC()
-	run.ResumedAt = &now
+	resumingRun.ResumedAt = &now
 
-	if ok, casErr := s.store.UpdateTaskRunCAS(ctx, run, previousStatus, run.Generation); casErr != nil {
+	if ok, casErr := s.store.UpdateTaskRunCAS(ctx, resumingRun, current.Status, current.Generation); casErr != nil {
 		return fmt.Errorf("task_runtime: resume cas: %w", casErr)
 	} else if !ok {
 		return NewTaskError(ErrTaskPauseInProgress, "concurrent state change, retry resume")
 	}
 
-	run.Status = RunStatusRunning
+	nextStatus := RunStatusRunning
+	var failMsg string
 	if req.ResumeKind == ResumeKindResumeFrom {
-		if run.CheckpointID == nil || *run.CheckpointID == "" {
-			run.Status = RunStatusFailed
-			msg := "resume_from_checkpoint but no checkpoint available"
-			run.ErrorMessage = &msg
-			_ = s.store.PutTaskRun(ctx, run)
-			return NewTaskError(ErrTaskResumeFailed, msg)
-		}
-		cp, err := s.store.GetLatestCheckpoint(ctx, run.TaskRunID)
-		if err != nil || cp == nil {
-			run.Status = RunStatusFailed
-			msg := "resume_from_checkpoint but checkpoint not found"
-			run.ErrorMessage = &msg
-			_ = s.store.PutTaskRun(ctx, run)
-			return NewTaskError(ErrTaskResumeFailed, msg)
+		if current.CheckpointID == nil || *current.CheckpointID == "" {
+			failMsg = "resume_from_checkpoint but no checkpoint available"
+			nextStatus = RunStatusFailed
+		} else {
+			cp, err := s.store.GetLatestCheckpoint(ctx, current.TaskRunID)
+			if err != nil || cp == nil {
+				failMsg = "resume_from_checkpoint but checkpoint not found"
+				nextStatus = RunStatusFailed
+			}
 		}
 	}
 
-	_ = s.store.PutTaskRun(ctx, run)
+	next := cloneTaskRun(resumingRun)
+	next.Status = nextStatus
+	if failMsg != "" {
+		next.ErrorMessage = &failMsg
+	}
+
+	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
+		if err := s.store.PutTaskRun(txCtx, next); err != nil {
+			return err
+		}
+		next.Revision = resumingRun.Revision + 1
+		if failMsg != "" {
+			return s.publishTaskEvent(txCtx, TaskEventFailed, next, failMsg, "")
+		}
+		return s.publishTaskEvent(txCtx, TaskEventResumed, next, "", "")
+	}); err != nil {
+		return err
+	}
 
 	return nil
 }

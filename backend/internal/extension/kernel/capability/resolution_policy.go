@@ -1,6 +1,13 @@
 package capability
 
+// ResolutionFailure is a typed string representing a specific kind of capability
+// resolution failure.
+type ResolutionFailure string
+
 const (
+	// ResolutionFailureNone indicates that no resolution failure occurred.
+	ResolutionFailureNone ResolutionFailure = ""
+
 	ResolutionFailureCapabilityNotRegistered   = "CAPABILITY_NOT_REGISTERED"
 	ResolutionFailureNoAvailableProvider       = "CAPABILITY_NO_AVAILABLE_PROVIDER"
 	ResolutionFailurePlacementUnavailable      = "CAPABILITY_PLACEMENT_UNAVAILABLE"

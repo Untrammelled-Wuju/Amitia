@@ -571,7 +571,6 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	jsFactory := javascript_main.NewRuntimeFactory()
 	eventDeliveryAdapter := javascript_main.NewEventDeliveryAdapter(jsFactory)
 	eventBridge.SetDeliveryCallback(eventDeliveryAdapter.HandleDelivery)
-	taskRuntimeService.SetEventEmitter(hostEmitter)
 
 	eventBridgePublisher, err := eventbridge.NewPublisher(eventSvc)
 	if err != nil {
@@ -656,6 +655,17 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	builtinBootstrapper := builtin.NewBootstrapper(builtinCatalog, defRepo, instRepo)
 	builtinBootstrapper.SetProviderReconciler(extensionProviderReconciler)
 
+	if err := builtin.ApplyBuiltinRegistrations(builtinCatalog); err != nil {
+		return nil, fmt.Errorf("register builtin extensions: %w", err)
+	}
+
+	initCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	if err := builtinBootstrapper.Reconcile(initCtx); err != nil {
+		cancel()
+		return nil, fmt.Errorf("builtin reconcile failed: %w", err)
+	}
+	cancel()
+
 	providerInvocationService := capability.NewProviderInvocationService(capabilityService, adapterRegistry)
 	kernelProviderInvoker := NewKernelProviderInvoker(providerInvocationService)
 
@@ -687,7 +697,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		ExtensionRoot:       b.extRoot,
 		ScopeSnapshotStore:  host_api.NewSnapshotStoreAdapter(scopeStore),
 		SecretStore:         nil,
-		ProviderInvoker:     nil,
+		ProviderInvoker:     kernelProviderInvoker,
 	}); err != nil {
 		return nil, fmt.Errorf("kernel: setup host api routes: %w", err)
 	}

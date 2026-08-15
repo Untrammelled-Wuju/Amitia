@@ -159,33 +159,21 @@ func (p *RuntimeGraphProvisioner) reconcilePlugin(ctx context.Context, kp Kernel
 }
 
 func (p *RuntimeGraphProvisioner) extractSecretManifest(kp KernelGamePlugin) []gamehostsecret.ServiceSecretManifest {
-	rawSecrets, ok := kp.Contribution.Definition["secrets"]
-	if !ok || rawSecrets == nil {
+	if len(kp.Extension.SecretRefs) == 0 {
 		return nil
 	}
-	arr, ok := rawSecrets.([]any)
-	if !ok {
-		return nil
-	}
-	var manifests []gamehostsecret.ServiceSecretManifest
-	for _, item := range arr {
-		m, ok := item.(map[string]any)
-		if !ok {
+	manifest := make([]gamehostsecret.ServiceSecretManifest, 0, len(kp.Extension.SecretRefs))
+	for _, sr := range kp.Extension.SecretRefs {
+		if sr.Ref == "" {
 			continue
 		}
-		ref, _ := m["ref"].(string)
-		if ref == "" {
-			continue
-		}
-		purpose, _ := m["purpose"].(string)
-		required, _ := m["required"].(bool)
-		manifests = append(manifests, gamehostsecret.ServiceSecretManifest{
-			Ref:      kernelsecret.SecretRef(ref),
-			Purpose:  gamehostsecret.Purpose(purpose),
-			Required: required,
+		manifest = append(manifest, gamehostsecret.ServiceSecretManifest{
+			Ref:      kernelsecret.SecretRef(sr.Ref),
+			Purpose:  gamehostsecret.Purpose(sr.Purpose),
+			Required: sr.Required,
 		})
 	}
-	return manifests
+	return manifest
 }
 
 type bootServiceInfo struct {

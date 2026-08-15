@@ -7,6 +7,7 @@ export const METHOD_CONTROL_AUTHORITY_TAKEOVER = 'control.authority.takeover';
 export const METHOD_CONTROL_AUTHORITY_RELEASE = 'control.authority.release';
 export const METHOD_EMERGENCY_STOP_INITIATE = 'emergency.stop.initiate';
 export const METHOD_EMERGENCY_STOP_STATUS = 'emergency.stop.status';
+export const METHOD_CONTROL_SINK_DISPATCH = 'control.sink.dispatch';
 
 export const CONTROL_MODE_OBSERVE = 'observe';
 export const CONTROL_MODE_ASSIST = 'assist';
@@ -103,6 +104,12 @@ export interface EmergencyStopStatusResult {
   completedAt?: number;
 }
 
+export interface SinkEffectDispatchPayload {
+  sinkId: string;
+  serviceId: string;
+  payload: unknown;
+}
+
 export async function getAuthoritySnapshot(
   client: Client,
   runtimeId: string,
@@ -162,4 +169,16 @@ export async function getEmergencyStopStatus(
 ): Promise<EmergencyStopStatusResult> {
   const envelope = await client.sendRequest(METHOD_EMERGENCY_STOP_STATUS, input, ...opts);
   return envelope.payload as EmergencyStopStatusResult;
+}
+
+export type SinkDispatchHandler = (payload: SinkEffectDispatchPayload) => Promise<void>;
+
+export function registerSinkDispatchHandler(
+  registry: import('./handler').HandlerRegistry,
+  handler: SinkDispatchHandler
+): void {
+  registry.registerNotification(METHOD_CONTROL_SINK_DISPATCH, async (notification) => {
+    const payload = notification.payload as SinkEffectDispatchPayload;
+    await handler(payload);
+  });
 }

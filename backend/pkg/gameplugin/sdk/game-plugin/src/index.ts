@@ -18,5 +18,11 @@ export * from './secret';
 export * from './control';
 export * from './hostapi';
 export * from './security';
+export {
+  METHOD_CONTROL_SINK_DISPATCH,
+  SinkEffectDispatchPayload,
+  SinkDispatchHandler,
+  registerSinkDispatchHandler
+} from './control';
 
 export { SDK_NAME, SDK_VERSION } from './version';

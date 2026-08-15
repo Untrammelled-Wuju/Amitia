@@ -189,16 +189,52 @@ echo "============================================"
 echo " Staging: $EXTRACT_DIR"
 echo "============================================"
 
-echo "[FREEZE] Generating tree manifest..."
-(cd "$EXTRACT_DIR" && find . -type f -print0 | sort -z | xargs -0 sha256sum) > "$OUTPUT_PATH/rootfs-files.sha256"
+echo "[FREEZE] Generating tree manifest with filesystem semantics..."
+generate_tree_manifest() {
+    local dir="$1"
+    local output="$2"
+    > "$output"
+    (
+        cd "$dir"
+        find . -print0 | sort -z | while IFS= read -r -d '' entry; do
+            case "$entry" in
+                .) continue ;;
+                ./) continue ;;
+            esac
+            local rel_path="${entry#./}"
+            if [[ -L "$entry" ]]; then
+                local target
+                target=$(readlink "$entry")
+                echo "L $(stat -c '%a' "$entry") $target $rel_path" >> "$output"
+            elif [[ -d "$entry" ]]; then
+                echo "D $(stat -c '%a' "$entry") - $rel_path" >> "$output"
+            elif [[ -f "$entry" ]]; then
+                local sha
+                sha=$(sha256sum "$entry" | awk '{print $1}')
+                echo "F $(stat -c '%a' "$entry") $sha $rel_path" >> "$output"
+            fi
+        done
+    )
+}
+generate_tree_manifest "$EXTRACT_DIR" "$OUTPUT_PATH/rootfs-files.sha256"
 echo "[PASS] rootfs-files.sha256 generated"
 
 FROZEN_TAR_NAME="ubuntu-rootfs-arm64.tar"
 FROZEN_TAR_PATH="$OUTPUT_PATH/$FROZEN_TAR_NAME"
 TEMP_TAR_PATH="$FROZEN_TAR_PATH.tmp.$$"
 
-echo "[FREEZE] Creating deterministic frozen tar archive..."
-(cd "$EXTRACT_DIR" && find . -type f -print0 | sort -z | tar --null -T - --mtime=@0 --owner=0 --group=0 --numeric-owner -cf "$TEMP_TAR_PATH")
+echo "[FREEZE] Creating deterministic frozen tar archive (preserving symlinks/dirs/modes)..."
+(
+    cd "$EXTRACT_DIR"
+    tar --sort=name \
+        --mtime='UTC 1970-01-01' \
+        --owner=0 \
+        --group=0 \
+        --numeric-owner \
+        --format=posix \
+        -cf "$TEMP_TAR_PATH" \
+        .
+)
 FROZEN_SHA=$(sha256sum "$TEMP_TAR_PATH" | awk '{print $1}')
 
 [[ -f "$FROZEN_TAR_PATH" ]] && rm -f "$FROZEN_TAR_PATH"
