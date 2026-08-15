@@ -82,7 +82,7 @@ func (w *Worker) processBatch(ctx context.Context) {
 }
 
 func (w *Worker) deliver(ctx context.Context, intent DeliveryIntent) error {
-	adapter := w.findAdapter(intent.Channel)
+	adapter := w.resolver.Resolve(intent.Channel)
 	if adapter == nil {
 		if err := w.store.MarkFailed(intent.ID, intent.LeaseToken, "no channel adapter for "+intent.Channel); err != nil {
 			applog.Error("delivery worker mark failed (no adapter) error", "id", intent.ID, "error", err)
@@ -96,15 +96,6 @@ func (w *Worker) deliver(ctx context.Context, intent DeliveryIntent) error {
 
 	if err := w.store.MarkSent(intent.ID, intent.LeaseToken); err != nil {
 		applog.Error("delivery worker mark sent failed", "id", intent.ID, "channel", intent.Channel, "error", err)
-	}
-	return nil
-}
-
-func (w *Worker) findAdapter(channel string) ChannelAdapter {
-	for _, a := range w.adapters {
-		if a.Name() == channel {
-			return a
-		}
 	}
 	return nil
 }

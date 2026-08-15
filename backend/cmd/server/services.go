@@ -549,11 +549,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 	runtimeQueue := queue.NewSQLiteRuntimeQueueStore(ctx.DB)
 	deliveryStore := delivery.NewSQLiteDeliveryStore(ctx.DB)
-	deliveryWorker := delivery.NewWorker(deliveryStore, []delivery.ChannelAdapter{
+	channelResolver := delivery.NewMapChannelResolverWith([]delivery.ChannelAdapter{
 		delivery.NewWebChannelAdapter(),
 		delivery.NewQQChannelAdapter("http://127.0.0.1:19877"),
 		delivery.NewWechatChannelAdapter("http://127.0.0.1:19876"),
-	}, delivery.DefaultWorkerConfig())
+	})
+	deliveryWorker := delivery.NewWorker(deliveryStore, channelResolver, delivery.DefaultWorkerConfig())
 	deliveryAdapter := &chatDeliveryAdapter{store: deliveryStore}
 	chatSvc.SetDeliveryStore(deliveryAdapter)
 	emoteSvc := emote.NewService(ctx.DB, deliveryStore)
