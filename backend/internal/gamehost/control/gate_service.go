@@ -251,6 +251,7 @@ func (g *PluginOutputGate) Check(ctx context.Context, req OutputCheckRequest) (O
 	}
 
 	permit := NewOutputPermit(
+		intent.OutputID,
 		intent.RuntimeID,
 		intent.ServiceID,
 		identity.PluginID,

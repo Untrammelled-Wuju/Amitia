@@ -6,34 +6,20 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/gamehost/control"
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/ipc"
 	"github.com/u-ai/backend/pkg/gameplugin/protocol"
+	"github.com/u-ai/backend/pkg/gameplugin/protocol/contracts"
 )
 
-const SinkDispatchMethod = "control.sink.dispatch"
+const SinkDispatchMethod = contracts.MethodSinkDispatch
 
 const DefaultSinkDispatchTimeout = 30 * time.Second
 
-type SinkEffectDispatchPayload struct {
-	SinkID    string          `json:"sinkId"`
-	Service   string          `json:"serviceId"`
-	Payload   json.RawMessage `json:"payload"`
-	OutputID  string          `json:"outputId"`
-	Epoch     uint64          `json:"epoch"`
-	Generation uint64         `json:"generation"`
-}
+type SinkEffectDispatchPayload = contracts.SinkEffectDispatchPayload
 
-type SinkEffectCommitResult struct {
-	Accepted  bool   `json:"accepted"`
-	Committed bool   `json:"committed"`
-	EffectID  string `json:"effectId,omitempty"`
-	Generation uint64 `json:"generation,omitempty"`
-	ErrorCode string `json:"errorCode,omitempty"`
-	Message   string `json:"message,omitempty"`
-}
+type SinkEffectCommitResult = contracts.SinkEffectCommitResult
 
 type ProtocolControlEffectSink struct {
 	runtimeID    domain.RuntimeInstanceID
@@ -74,10 +60,13 @@ func (s *ProtocolControlEffectSink) ExecuteAuthorized(
 		return fmt.Errorf("connection registry unavailable for effect delivery")
 	}
 
-	outputID := fmt.Sprintf("effect-%s-%s", s.sinkID, uuid.New().String())
+	outputID := permit.OutputID
+	if outputID == "" {
+		return fmt.Errorf("effect commit failed: permit missing outputId")
+	}
 	dispatch := SinkEffectDispatchPayload{
 		SinkID:     s.sinkID,
-		Service:    string(serviceID),
+		ServiceID:  string(serviceID),
 		Payload:    payload,
 		OutputID:   outputID,
 		Epoch:      permit.OutputEpoch,

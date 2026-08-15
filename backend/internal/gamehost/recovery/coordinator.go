@@ -524,10 +524,6 @@ func (c *RecoveryCoordinator) reconcileAfterRollback(ctx context.Context, op *Re
 			}
 		}
 
-		if c.secretLease != nil {
-			c.secretLease.RevokeByRuntimeInstance(string(runtimeID))
-		}
-
 		if c.authority != nil {
 			auth, err := c.authority.GetAuthority(runtimeID)
 			if err == nil && auth.Mode == "emergency" {
