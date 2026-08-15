@@ -226,18 +226,22 @@ type ResolvedToolReference struct {
 	Generation      int64
 }
 
-func (f *ToolFacade) ResolveModelTool(modelName string) (ResolvedToolReference, error) {
-	if f.toolRegistry == nil {
-		return ResolvedToolReference{}, fmt.Errorf("tool registry not configured")
-	}
-	def, ok := f.toolRegistry.GetByModelName(context.Background(), modelName)
-	if !ok {
-		return ResolvedToolReference{}, fmt.Errorf("tool not found: %s", modelName)
-	}
-	return ResolvedToolReference{
-		ID:              capability.CapabilityID(def.ID),
-		ModelName:       def.ModelName,
-		ExtensionID:     def.ExtensionID,
+	func (f *ToolFacade) ResolveModelTool(modelName string) (ResolvedToolReference, error) {
+		if f.toolRegistry == nil {
+			return ResolvedToolReference{}, fmt.Errorf("tool registry not configured")
+		}
+		def, ok := f.toolRegistry.GetByModelName(context.Background(), modelName)
+		if !ok {
+			return ResolvedToolReference{}, fmt.Errorf("tool not found: %s", modelName)
+		}
+		resolvedID := capability.CapabilityID(def.ID)
+		if def.CapabilityID != "" {
+			resolvedID = def.CapabilityID
+		}
+		return ResolvedToolReference{
+			ID:              resolvedID,
+			ModelName:       def.ModelName,
+			ExtensionID:     def.ExtensionID,
 		ModuleID:        def.ModuleID,
 		RuntimeType:     def.Runtime.RuntimeType,
 		RuntimeID:       def.Runtime.RuntimeID,
@@ -548,8 +552,12 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 		ExecutionTarget: resolved.target,
 		Metadata:       metadata,
 	})
+	execToolID := capability.CapabilityID(def.ID)
+	if def.CapabilityID != "" {
+		execToolID = def.CapabilityID
+	}
 	req := execution.ToolExecutionRequest{
-		ToolID:     capability.CapabilityID(def.ID),
+		ToolID:     execToolID,
 		Input:      input,
 		Invocation: invocation,
 	}
@@ -603,8 +611,12 @@ func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName strin
 		ExecutionTarget: resolved.target,
 		Metadata:       streamMetadata,
 	})
+	execToolID := capability.CapabilityID(def.ID)
+	if def.CapabilityID != "" {
+		execToolID = def.CapabilityID
+	}
 	req := execution.ToolExecutionRequest{
-		ToolID:     capability.CapabilityID(def.ID),
+		ToolID:     execToolID,
 		Input:      input,
 		Invocation: invocation,
 	}
