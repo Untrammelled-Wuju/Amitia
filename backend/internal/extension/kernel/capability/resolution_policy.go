@@ -8,6 +8,7 @@ const (
 	ResolutionFailureNoAvailableProvider ResolutionFailure = "CAPABILITY_NO_AVAILABLE_PROVIDER"
 	ResolutionFailurePlacementUnavailable ResolutionFailure = "CAPABILITY_PLACEMENT_UNAVAILABLE"
 	ResolutionFailureDeviceUnavailable   ResolutionFailure = "CAPABILITY_DEVICE_UNAVAILABLE"
+	ResolutionFailureDeviceOffline       ResolutionFailure = "CAPABILITY_DEVICE_OFFLINE"
 	ResolutionFailureRuntimeUnavailable  ResolutionFailure = "CAPABILITY_RUNTIME_UNAVAILABLE"
 	ResolutionFailureProviderConflict    ResolutionFailure = "CAPABILITY_PROVIDER_CONFLICT"
 )

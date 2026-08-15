@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
@@ -30,6 +31,7 @@ type AcquisitionDependencies struct {
 	PolicyEngine          *PolicyEngine
 	DeploymentPlanner     *DeploymentPlanner
 	ProviderLifecycle     ProviderLifecyclePort
+	Execution             ExecutionPort
 }
 
 // AcquisitionService orchestrates the full capability acquisition lifecycle:
@@ -44,6 +46,7 @@ type AcquisitionService struct {
 	capabilityService *capability.CapabilityService
 	providerRegistry  *capability.ProviderRegistry
 	providerLifecycle ProviderLifecyclePort
+	execution         ExecutionPort
 }
 
 // NewAcquisitionService creates an AcquisitionService with explicitly provided
@@ -79,6 +82,7 @@ func NewAcquisitionService(deps AcquisitionDependencies) (*AcquisitionService, e
 		capabilityService: deps.CapabilityService,
 		providerRegistry:  deps.ProviderRegistry,
 		providerLifecycle: deps.ProviderLifecycle,
+		execution:         deps.Execution,
 	}, nil
 }
 
@@ -95,6 +99,14 @@ func NewAcquisitionServiceWithRegistry(registry *SourceRegistry, providerRegistr
 		DeploymentPlanner: NewDeploymentPlanner(),
 	}
 	return NewAcquisitionService(deps)
+}
+
+// SetExecution sets the execution port used to create child executions and
+// resume contexts during the acquisition lifecycle.
+func (s *AcquisitionService) SetExecution(port ExecutionPort) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.execution = port
 }
 
 // SetCapabilityService sets the capability service used to check whether a
@@ -150,11 +162,12 @@ func (s *AcquisitionService) FindCapabilities(ctx context.Context, request Acqui
 // Acquire executes the full acquisition pipeline for the requested capability:
 //
 //  1. Check whether the capability is already executable (skip if so).
+//     If ExecContext is present, create a child execution for this acquisition.
 //  2. Search Sources for candidate providers.
 //  3. Deduplicate and rank candidates.
 //  4. Plan the deployment target and evaluate policy for the top candidate.
 //  5. If policy = Deny → return error.
-//  6. If policy = RequireApproval && !yes → return ApprovalRequired.
+//  6. If policy = RequireApproval && !yes → create pending resume, return ApprovalRequired.
 //  7. If policy = AllowAuto || yes:
 //     a. Execute the plan (install → enable → reconcile).
 //     b. Verify the capability is executable.
@@ -169,13 +182,19 @@ func (s *AcquisitionService) Acquire(ctx context.Context, request AcquisitionReq
 		return nil, NewAcquisitionError("invalid_request", "capabilityId is required", nil)
 	}
 
+	// Create child execution if ExecContext is present.
+	var acqExecCtx execution.ExecutionContext
+	if request.ExecContext != nil && s.execution != nil {
+		acqExecCtx = s.execution.CreateChildExecution(*request.ExecContext, "acquisition")
+	}
+
 	// Step 1: Check if the capability is already executable.
 	s.mu.RLock()
 	capSvc := s.capabilityService
 	s.mu.RUnlock()
 
 	if capSvc != nil && capSvc.HasExecutableProvider(request.CapabilityID) {
-		return &AcquisitionResult{
+		result := &AcquisitionResult{
 			State:         StateReady,
 			Installed:     true,
 			Enabled:       true,
@@ -183,7 +202,14 @@ func (s *AcquisitionService) Acquire(ctx context.Context, request AcquisitionReq
 			Error:         "",
 			CreatedAt:     time.Now(),
 			UpdatedAt:     time.Now(),
-		}, nil
+		}
+		if request.ExecContext != nil {
+			result.ExecutionID = request.ExecContext.ExecutionID
+		}
+		if s.execution != nil {
+			s.execution.CompleteExecution(acqExecCtx, "capability_already_executable")
+		}
+		return result, nil
 	}
 
 	// Step 2-4: Plan the acquisition (search, deduplicate, rank, plan target, evaluate policy).
@@ -208,12 +234,11 @@ func (s *AcquisitionService) Acquire(ctx context.Context, request AcquisitionReq
 		return result, ErrCandidateBlocked
 	}
 
-	// Step 6: If policy = RequireApproval && !yes → return ApprovalRequired.
+	// Step 6: If policy = RequireApproval && !yes → create pending resume, return ApprovalRequired.
 	if plan.NeedsApproval() && !yes {
 		result.State = StateAwaitingApproval
 		result.UpdatedAt = time.Now()
 
-		// Store resume context for later continuation.
 		resumeToken := generateResumeToken()
 		result.ResumeToken = resumeToken
 
@@ -224,6 +249,13 @@ func (s *AcquisitionService) Acquire(ctx context.Context, request AcquisitionReq
 			AcquisitionTransactionID: result.TransactionID,
 		}
 		s.mu.Unlock()
+
+		if s.execution != nil {
+			resume, err := s.execution.CreateResume(acqExecCtx, execution.ResumeTypeCapabilityAcquisition, string(request.CapabilityID))
+			if err == nil && resume != nil {
+				result.ResumeID = resume.ResumeID
+			}
+		}
 
 		return result, ErrApprovalRequired
 	}
@@ -242,6 +274,9 @@ func (s *AcquisitionService) Acquire(ctx context.Context, request AcquisitionReq
 		if rollbackErr := s.rollbackPlan(ctx, plan); rollbackErr != nil {
 			result.Warnings = append(result.Warnings, "rollback also failed: "+rollbackErr.Error())
 			result.State = StateRolledBack
+		}
+		if s.execution != nil {
+			s.execution.CompleteExecution(acqExecCtx, "acquisition_failed: "+execErr.Error())
 		}
 		return result, execErr
 	}
@@ -263,6 +298,9 @@ func (s *AcquisitionService) Acquire(ctx context.Context, request AcquisitionReq
 	}
 
 	result.UpdatedAt = time.Now()
+	if s.execution != nil {
+		s.execution.CompleteExecution(acqExecCtx, "acquisition_completed: "+string(result.State))
+	}
 	return result, nil
 }
 

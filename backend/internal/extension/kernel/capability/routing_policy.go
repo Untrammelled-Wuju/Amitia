@@ -13,6 +13,7 @@ const (
 	RoutingPlacementUnavailable RoutingDecision = "placement_unavailable"
 	RoutingPlatformMismatch    RoutingDecision = "platform_mismatch"
 	RoutingRuntimeUnavailable  RoutingDecision = "runtime_unavailable"
+	RoutingDeviceOffline       RoutingDecision = "device_offline"
 	RoutingTransportUnresolved RoutingDecision = "transport_unresolved"
 )
 
@@ -52,6 +53,7 @@ const (
 	RejectionPlatformMismatch      CandidateRejectionReason = "platform_mismatch"
 	RejectionRuntimeTypeMismatch   CandidateRejectionReason = "runtime_type_mismatch"
 	RejectionRuntimeAdapterUnavailable CandidateRejectionReason = "runtime_adapter_unavailable"
+	RejectionDeviceOffline         CandidateRejectionReason = "device_offline"
 	RejectionTransportUnresolved   CandidateRejectionReason = "transport_unresolved"
 )
 

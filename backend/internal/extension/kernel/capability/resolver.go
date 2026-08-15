@@ -1,13 +1,21 @@
 package capability
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 type CapabilityResolver interface {
 	Resolve(request CapabilityResolutionRequest) (CapabilityResolution, error)
+}
+
+type RuntimeAvailabilityPort interface {
+	IsRuntimeOnline(ctx context.Context, runtimeID runtimeidentity.RuntimeID) (bool, error)
+	IsDeviceOffline(ctx context.Context, deviceID runtimeidentity.DeviceID) (bool, error)
 }
 
 type Resolver struct {
@@ -15,19 +23,22 @@ type Resolver struct {
 	runtime    RuntimeCatalog
 	host       RoutingHostContext
 	policy     RoutingPolicy
+	availability RuntimeAvailabilityPort
 }
 
 func NewResolver(catalog ProviderCatalog) *Resolver {
 	return &Resolver{
-		catalog: catalog,
-		policy:  ProductionRoutingPolicy(),
+		catalog:      catalog,
+		policy:       ProductionRoutingPolicy(),
+		availability: &noopRuntimeAvailability{},
 	}
 }
 
 func NewResolverWithPolicy(catalog ProviderCatalog, policy RoutingPolicy) *Resolver {
 	return &Resolver{
-		catalog: catalog,
-		policy:  policy,
+		catalog:      catalog,
+		policy:       policy,
+		availability: &noopRuntimeAvailability{},
 	}
 }
 
@@ -41,6 +52,22 @@ func (r *Resolver) SetHostContext(host RoutingHostContext) {
 
 func (r *Resolver) SetPolicy(policy RoutingPolicy) {
 	r.policy = policy
+}
+
+func (r *Resolver) SetAvailability(availability RuntimeAvailabilityPort) {
+	if availability != nil {
+		r.availability = availability
+	}
+}
+
+type noopRuntimeAvailability struct{}
+
+func (n *noopRuntimeAvailability) IsRuntimeOnline(_ context.Context, _ runtimeidentity.RuntimeID) (bool, error) {
+	return true, nil
+}
+
+func (n *noopRuntimeAvailability) IsDeviceOffline(_ context.Context, _ runtimeidentity.DeviceID) (bool, error) {
+	return false, nil
 }
 
 func (r *Resolver) Resolve(request CapabilityResolutionRequest) (CapabilityResolution, error) {
@@ -72,14 +99,21 @@ func (r *Resolver) Resolve(request CapabilityResolutionRequest) (CapabilityResol
 	if len(hardFiltered) == 0 {
 		result.ReasonCodes = append(result.ReasonCodes, string(ResolutionFailureNoAvailableProvider))
 		result.Decision = r.classifyRejection(rejections)
+		if result.Decision == RoutingDeviceOffline {
+			result.ReasonCodes = append(result.ReasonCodes, string(ResolutionFailureDeviceOffline))
+		}
 		result.Trace = r.buildTraceWithRejections(request, result, rejections, start)
 		return result, fmt.Errorf("%w: %s", ErrNoAvailableProvider, request.CapabilityID)
 	}
 
-	instances := r.collectExecutableInstances(hardFiltered, request)
+	instances, instanceRejections := r.collectExecutableInstances(hardFiltered, request)
+	rejections = append(rejections, instanceRejections...)
 	if len(instances) == 0 {
 		result.ReasonCodes = append(result.ReasonCodes, string(ResolutionFailureNoAvailableProvider))
-		result.Decision = RoutingNoHealthyInstance
+		result.Decision = r.classifyRejection(rejections)
+		if result.Decision == RoutingDeviceOffline {
+			result.ReasonCodes = append(result.ReasonCodes, string(ResolutionFailureDeviceOffline))
+		}
 		result.Trace = r.buildTraceWithRejections(request, result, rejections, start)
 		return result, fmt.Errorf("%w: no executable instance for %s", ErrNoAvailableProvider, request.CapabilityID)
 	}
@@ -206,28 +240,40 @@ func (r *Resolver) applyHardFilter(defs []CapabilityProviderDefinition, request 
 	return filtered, rejections
 }
 
-func (r *Resolver) collectExecutableInstances(defs []CapabilityProviderDefinition, request CapabilityResolutionRequest) []CapabilityProviderInstance {
+func (r *Resolver) collectExecutableInstances(defs []CapabilityProviderDefinition, request CapabilityResolutionRequest) ([]CapabilityProviderInstance, []CandidateRejection) {
 	seen := make(map[ProviderInstanceID]bool)
 	var instances []CapabilityProviderInstance
+	var rejections []CandidateRejection
 
 	for i := range defs {
 		def := defs[i]
 		providerInsts := r.catalog.ListInstancesByProvider(def.ID)
 		for _, inst := range providerInsts {
-			if !inst.IsExecutable() {
-				continue
-			}
 			if request.RequiredDeviceID != "" && string(inst.DeviceID) != string(request.RequiredDeviceID) {
 				continue
 			}
 			if seen[inst.ID] {
 				continue
 			}
+			if !inst.IsExecutable() {
+				if r.availability != nil && inst.DeviceID != "" {
+					offline, err := r.availability.IsDeviceOffline(context.Background(), inst.DeviceID)
+					if err == nil && offline {
+						rejections = append(rejections, CandidateRejection{
+							ProviderID: def.ID,
+							Reason:     RejectionDeviceOffline,
+						})
+						seen[inst.ID] = true
+						continue
+					}
+				}
+				continue
+			}
 			seen[inst.ID] = true
 			instances = append(instances, inst)
 		}
 	}
-	return instances
+	return instances, rejections
 }
 
 func (r *Resolver) classifyRejection(rejections []CandidateRejection) RoutingDecision {
@@ -246,6 +292,9 @@ func (r *Resolver) classifyRejection(rejections []CandidateRejection) RoutingDec
 	}
 	if counts[RejectionRuntimeTypeMismatch] > 0 || counts[RejectionRuntimeAdapterUnavailable] > 0 {
 		return RoutingRuntimeUnavailable
+	}
+	if counts[RejectionDeviceOffline] > 0 {
+		return RoutingDeviceOffline
 	}
 	if counts[RejectionProviderUnhealthy] > 0 || counts[RejectionProviderUnavailable] > 0 {
 		return RoutingNoHealthyInstance
