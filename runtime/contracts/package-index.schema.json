@@ -1,0 +1,50 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PackageIndex",
+  "type": "object",
+  "required": ["schemaVersion", "packageFormatVersion", "runtimeVersion", "packageId", "sourceRevision", "target", "payloads", "metadata"],
+  "properties": {
+    "schemaVersion": {"type": "integer", "minimum": 1},
+    "packageFormatVersion": {"type": "integer", "minimum": 1},
+    "runtimeVersion": {"type": "string"},
+    "packageId": {"type": "string", "pattern": "^[a-zA-Z0-9._-]+$"},
+    "sourceRevision": {"type": "string", "pattern": "^[a-fA-F0-9]{7,40}$"},
+    "target": {
+      "type": "object",
+      "required": ["hostPlatform", "hostAbi", "runtimeKind", "guestPlatform", "guestArchitecture"],
+      "properties": {
+        "hostPlatform": {"type": "string", "enum": ["android"]},
+        "hostAbi": {"type": "string", "enum": ["arm64-v8a"]},
+        "runtimeKind": {"type": "string", "enum": ["embedded-proot"]},
+        "guestPlatform": {"type": "string", "enum": ["linux"]},
+        "guestArchitecture": {"type": "string", "enum": ["arm64"]}
+      }
+    },
+    "payloads": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["role", "path", "sha256", "size"],
+        "properties": {
+          "role": {"type": "string", "enum": ["rootfs", "runtime"]},
+          "path": {"type": "string"},
+          "sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
+          "size": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "metadata": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["role", "path", "sha256", "size"],
+        "properties": {
+          "role": {"type": "string", "enum": ["guest-layout", "mount-contract", "sha256sums"]},
+          "path": {"type": "string"},
+          "sha256": {"type": "string", "pattern": "^[a-fA-F0-9]{64}$"},
+          "size": {"type": "integer", "minimum": 0}
+        }
+      }
+    }
+  }
+}
