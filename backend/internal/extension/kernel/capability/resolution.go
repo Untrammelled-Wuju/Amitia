@@ -37,7 +37,11 @@ type CapabilityResolution struct {
 	ExecutionTarget InvocationExecutionTarget
 
 	CandidateCount int
+	RejectedCount  int
 	ReasonCodes    []string
+
+	Decision       RoutingDecision
+	Trace          *RoutingTrace
 }
 
 func (r CapabilityResolution) HasResult() bool {

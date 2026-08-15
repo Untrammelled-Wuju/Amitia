@@ -16,7 +16,7 @@ import (
 	"github.com/u-ai/backend/internal/nativebridge"
 )
 
-func NewCanonicalProvider(bridge nativebridge.Bridge) (*Provider, error) {
+func NewCanonicalProvider(bridge nativebridge.Bridge, taskRuntimePort ...background.TaskRuntimePort) (*Provider, error) {
 	provider := NewProvider(bridge)
 
 	healthHandler := health.NewHealthHandler(bridge)
@@ -97,6 +97,9 @@ func NewCanonicalProvider(bridge nativebridge.Bridge) (*Provider, error) {
 	}
 
 	backgroundHandler := background.NewBackgroundHandler(bridge)
+	if len(taskRuntimePort) > 0 && taskRuntimePort[0] != nil {
+		backgroundHandler.SetTaskRuntimePort(taskRuntimePort[0])
+	}
 	for _, op := range background.Operations() {
 		if err := provider.RegisterHandler(op, backgroundHandler); err != nil {
 			return nil, err

@@ -7,14 +7,16 @@ import type { ApiResponse } from "@/types";
 import { getRuntimeConnection, getDeploymentConfig, getBackendAuthHeaders } from "@/runtime/runtime-adapter";
 import { getDeviceTimezone } from "@/utils/requestEnvelope";
 import { classifyError, displayError } from "./request";
+import { getStoredToken, setStoredToken, clearStoredToken } from "@/stores/session-store";
+import { ensureValidToken, initRefreshCoordinator, stopRefreshCoordinator } from "@/stores/refresh-coordinator";
 
 const BASE_URL = (import.meta as any).env?.VITE_API_URL || "";
-const TOKEN_KEY = "ai-companion-token";
 
 const PUBLIC_AUTH_PATHS = new Set([
   "/api/public/auth/status",
   "/api/public/auth/setup",
   "/api/public/auth/login",
+  "/api/public/auth/refresh",
   "/api/public/onboarding/status",
 ]);
 
@@ -43,12 +45,12 @@ apiClient.interceptors.request.use(async (config) => {
     for (const [key, value] of Object.entries(desktopHeaders)) {
       config.headers[key] = value;
     }
-    const token = localStorage.getItem(TOKEN_KEY);
+    const token = getStoredToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
   } else {
-    const token = localStorage.getItem(TOKEN_KEY);
+    const token = await ensureValidToken();
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -153,19 +155,20 @@ export function useApi() {
   return { loading, get, post, postUpload, put, del };
 }
 
-// Auth helpers
+// Auth helpers (legacy compatibility - prefer session-manager)
 export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
+  return getStoredToken();
 }
 
 export function setToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token);
+  setStoredToken(token);
 }
 
 export function removeToken(): void {
-  localStorage.removeItem(TOKEN_KEY);
+  clearStoredToken();
+  stopRefreshCoordinator();
 }
 
 export function isLoggedIn(): boolean {
-  return !!localStorage.getItem(TOKEN_KEY);
+  return !!getStoredToken();
 }

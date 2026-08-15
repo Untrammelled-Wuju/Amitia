@@ -36,6 +36,7 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/stream"
 	"github.com/u-ai/backend/internal/gamehost/stream/binary"
 	"github.com/u-ai/backend/internal/gamehost/upgrade"
+	"github.com/u-ai/backend/internal/desktoppet/plugin"
 	"github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
@@ -612,10 +613,32 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	)
 	extensionChecker := recovery.NewExtensionStateCheckerAdapter(
 		func(extensionID string) bool {
+			if opts.KernelSource != nil {
+				plugins, err := opts.KernelSource.ListEnabledGamePlugins(context.Background())
+				if err == nil {
+					for _, p := range plugins {
+						if string(p.Extension.ID) == extensionID {
+							return true
+						}
+					}
+					return false
+				}
+			}
 			plugins, err := pluginReg.ListByExtension(context.Background(), extensionID)
 			return err == nil && len(plugins) > 0
 		},
 		func(extensionID string) bool {
+			if opts.KernelSource != nil {
+				plugins, err := opts.KernelSource.ListEnabledGamePlugins(context.Background())
+				if err == nil {
+					for _, p := range plugins {
+						if string(p.Extension.ID) == extensionID {
+							return true
+						}
+					}
+					return false
+				}
+			}
 			plugins, err := pluginReg.ListByExtension(context.Background(), extensionID)
 			return err == nil && len(plugins) > 0
 		},
@@ -743,7 +766,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	startupRecovery, err := ComposeStartupRecovery(startup.StartupRecoveryDeps{
 		HostIdentity:      startup.NewHostIdentity("", ""),
 		ProcessCleanup:    startup.NewProcessCleanupAdapter(opts.TrustedSupervisor),
-		TempCleanup:       startup.NewTempCleanupAdapter(),
+		TempCleanup:       startup.NewTempCleanupAdapter(dirMgr),
 		BinaryCleanup:     binaryCleanup,
 		EndpointCleanup:   startup.NewEndpointCleanupAdapter(),
 		ShmCleanup:        startup.NewSharedMemoryCleanupAdapter(),
@@ -794,6 +817,9 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		if err := hostapi.RegisterHostAPIMethods(adapter, hostHandlers, opts.HostAPIGateway.ListMethods(context.Background())); err != nil {
 			return nil, fmt.Errorf("register host API RPC handlers: %w", err)
 		}
+		if err := hostHandlers.Register(hostapi.HostInvokeMethod, hostapi.NewHostInvokeHandler(adapter)); err != nil {
+			return nil, fmt.Errorf("register host.invoke handler: %w", err)
+		}
 	}
 
 	if opts.TrustedSupervisor != nil {
@@ -805,6 +831,9 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		)
 		if err := opts.TrustedSupervisor.RegisterStdioProtocolHandler(protocol.ProtocolVersion, handler); err != nil {
 			return nil, fmt.Errorf("register gamehost stdio protocol handler: %w", err)
+		}
+		if err := opts.TrustedSupervisor.RegisterStdioProtocolHandler(plugin.PetSupportedProtocol, handler); err != nil {
+			return nil, fmt.Errorf("register desktop pet stdio protocol handler: %w", err)
 		}
 	}
 

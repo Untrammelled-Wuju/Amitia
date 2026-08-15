@@ -162,6 +162,12 @@ class RuntimeDetailPage extends ConsumerWidget {
                     height: 36,
                     onPressed: () => _confirmEmergencyStop(context, controller),
                   ),
+                  AmitiaButton(
+                    label: 'Rearm',
+                    isSecondary: true,
+                    height: 36,
+                    onPressed: () => controller.rearm(runtimeId),
+                  ),
                 ],
               ),
           ],

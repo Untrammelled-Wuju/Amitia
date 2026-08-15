@@ -243,6 +243,7 @@ func (s *ProcessSupervisor) HasDefinition(serviceID string) bool {
 type StartRequest struct {
 	ServiceID      string
 	InstanceID     string
+	RuntimeID      string
 	Generation     int64
 	PublisherTrust TrustLevel
 	BasePath       string
@@ -328,6 +329,7 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 	instance := &ServiceInstance{
 		InstanceID:   instanceID,
 		ServiceID:    req.ServiceID,
+		RuntimeID:    req.RuntimeID,
 		Definition:   def,
 		Generation:   req.Generation,
 		Platform:     s.selector.current,
@@ -801,6 +803,7 @@ func (s *ProcessSupervisor) restart(inst *ServiceInstance) {
 	_, err := s.Start(ctx, StartRequest{
 		ServiceID:      inst.ServiceID,
 		InstanceID:     newServiceInstanceID(inst.ServiceID),
+		RuntimeID:      inst.RuntimeID,
 		Generation:     inst.Generation,
 		PublisherTrust: TrustLevel(def.TrustLevel),
 		WorkingDir:     inst.WorkingDir,

@@ -127,8 +127,6 @@ func contributionTags(ext domain.ExtensionDefinition) []ContributionTag {
 				tagSet[TagWorkflows] = true
 			case domain.ContributionKindMCPServer:
 				tagSet[TagMCP] = true
-			case domain.ContributionKindProvider:
-				tagSet[TagProviders] = true
 			case domain.ContributionKindUIPage, domain.ContributionKindUIPanel,
 				domain.ContributionKindUIChat, domain.ContributionKindUIContextAction,
 				domain.ContributionKindUIDesktop:
@@ -142,6 +140,9 @@ func contributionTags(ext domain.ExtensionDefinition) []ContributionTag {
 			case domain.ContributionKindBackgroundTask:
 				tagSet[TagDesktop] = true
 			}
+		}
+		if len(mod.ProvidedCapabilities) > 0 {
+			tagSet[TagProviders] = true
 		}
 	}
 	tags := make([]ContributionTag, 0, len(tagSet))

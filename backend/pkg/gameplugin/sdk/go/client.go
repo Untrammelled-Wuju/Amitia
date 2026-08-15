@@ -3,6 +3,7 @@ package sdk
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"time"
 
@@ -45,7 +46,7 @@ func WithTimeout(timeoutMs int) MessageOption {
 		if e.Metadata == nil {
 			e.Metadata = make(map[string]json.RawMessage)
 		}
-		e.Metadata["__timeout"] = json.RawMessage(rune(timeoutMs))
+		e.Metadata["__timeout"] = json.RawMessage(fmt.Sprintf("%d", timeoutMs))
 	}
 }
 
@@ -171,7 +172,7 @@ func (c *Client) CancelPendingRequests(reason string) {
 	}
 	c.pendingMu.Unlock()
 
-	for id, pr := range pending {
+	for _, pr := range pending {
 		pr.Timer.Stop()
 		close(pr.ResponseCh)
 	}
@@ -295,6 +296,17 @@ func (c *Client) SendReservedRequest(ctx context.Context, method string, payload
 	case <-ctx.Done():
 		return protocol.Envelope{}, NewTransportError("reserved request %s cancelled: %v", envelope.ID, ctx.Err())
 	}
+}
+
+func (c *Client) sendHostNotification(ctx context.Context, method string, payload any, opts ...MessageOption) (protocol.Envelope, error) {
+	if err := protocol.ValidateMethod(method); err != nil {
+		return protocol.Envelope{}, NewValidationError("invalid method: %v", err)
+	}
+	if !protocol.IsReservedNamespace(method) {
+		return protocol.Envelope{}, NewValidationError("host notification method %q is not reserved", method)
+	}
+
+	return c.sendValidatedNotification(ctx, method, payload, opts...)
 }
 
 func (c *Client) sendValidatedRequest(ctx context.Context, method string, payload any, opts ...MessageOption) (protocol.Envelope, error) {

@@ -196,3 +196,61 @@ func (i *LeaseBindingIndex) Clear() {
 func defaultClock() int64 {
 	return 0
 }
+
+type TopologyServiceView interface {
+	HasService(serviceID string) bool
+	ExecutableServiceCount() int
+	DefaultExecutableService() (string, bool)
+}
+
+type SecretRefBindingError struct {
+	Ref     string
+	ServiceID string
+	Reason  string
+}
+
+func (e *SecretRefBindingError) Error() string {
+	return fmt.Sprintf("secret binding invalid: ref=%s serviceId=%s reason=%s", e.Ref, e.ServiceID, e.Reason)
+}
+
+func ValidateAndBindSecretRef(ref ServiceSecretManifest, view TopologyServiceView) (*ServiceSecretManifest, error) {
+	if !ref.Ref.Valid() {
+		return &ref, &SecretRefBindingError{Ref: string(ref.Ref), ServiceID: ref.ServiceID, Reason: "invalid secret ref"}
+	}
+
+	if ref.ServiceID != "" {
+		if !view.HasService(ref.ServiceID) {
+			return &ref, &SecretRefBindingError{Ref: string(ref.Ref), ServiceID: ref.ServiceID, Reason: "serviceId not found in runtime topology"}
+		}
+		return &ref, nil
+	}
+
+	count := view.ExecutableServiceCount()
+	if count == 0 {
+		return &ref, &SecretRefBindingError{Ref: string(ref.Ref), ServiceID: "", Reason: "no executable service available for auto-bind"}
+	}
+	if count > 1 {
+		return &ref, &SecretRefBindingError{Ref: string(ref.Ref), ServiceID: "", Reason: "multiple executable services; serviceId must be specified"}
+	}
+
+	svcID, ok := view.DefaultExecutableService()
+	if !ok || svcID == "" {
+		return &ref, &SecretRefBindingError{Ref: string(ref.Ref), ServiceID: "", Reason: "unable to resolve default executable service"}
+	}
+	ref.ServiceID = svcID
+	return &ref, nil
+}
+
+func ValidateAndBindSecretRefs(refs []ServiceSecretManifest, view TopologyServiceView) ([]ServiceSecretManifest, []error) {
+	var result []ServiceSecretManifest
+	var errs []error
+	for _, ref := range refs {
+		binded, err := ValidateAndBindSecretRef(ref, view)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		result = append(result, *binded)
+	}
+	return result, errs
+}

@@ -4,15 +4,17 @@ package chat
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/u-ai/backend/config"
 	"io"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/u-ai/backend/config"
 )
 
 func analyzeImageInternal(imageUrl string) (string, string) {
@@ -37,7 +39,7 @@ func analyzeImageInternal(imageUrl string) (string, string) {
 		filePath := filepath.Join(config.AppCfg.Storage.DataDir, "images", filepath.Base(imageUrl))
 		data, err := os.ReadFile(filePath)
 		if err == nil {
-			imageData = "data:" + mimeType + ";base64," + base64Encode(data)
+			imageData = "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(data)
 		}
 	}
 	content := []map[string]interface{}{

@@ -167,15 +167,15 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
 
   String _statusDisplayName(MobileBackendStatus status) {
     switch (status.state) {
-      case RuntimeConnectionState.unavailable:
+      case RuntimeDeploymentState.unavailable:
         return '未就绪';
-      case RuntimeConnectionState.starting:
+      case RuntimeDeploymentState.starting:
         return '启动中...';
-      case RuntimeConnectionState.ready:
+      case RuntimeDeploymentState.ready:
         return '已就绪';
-      case RuntimeConnectionState.stopping:
+      case RuntimeDeploymentState.stopping:
         return '停止中...';
-      case RuntimeConnectionState.failed:
+      case RuntimeDeploymentState.failed:
         return '连接失败';
     }
   }

@@ -296,7 +296,22 @@ func mapDispatcherResolverError(err error) string {
 		return capability.ErrorCodeRuntimeUnavailable
 	}
 	if capability.IsProviderExecutionError(err) {
-		return capability.ErrorCodeRuntimeUnavailable
+		switch err {
+		case capability.ErrProviderExecutionProviderNotFound:
+			return capability.ErrorCodeProviderNotFound
+		case capability.ErrProviderExecutionInstanceNotFound:
+			return capability.ErrorCodeProviderNotFound
+		case capability.ErrProviderExecutionUnavailable:
+			return capability.ErrorCodeProviderUnavailable
+		case capability.ErrProviderExecutionBindingMismatch:
+			return capability.ErrorCodeProviderUnavailable
+		case capability.ErrProviderExecutionCapabilityMismatch:
+			return capability.ErrorCodeProviderUnavailable
+		case capability.ErrProviderExecutionPlacementMismatch:
+			return capability.ErrorCodeProviderUnavailable
+		case capability.ErrProviderRuntimeBindingInvalid:
+			return capability.ErrorCodeRuntimeUnavailable
+		}
 	}
 	return capability.ErrorCodeRuntimeUnavailable
 }

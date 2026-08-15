@@ -3,7 +3,6 @@ package artifact
 import (
 	"bufio"
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -56,7 +55,7 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (Artifact, erro
 	}
 	kind := req.Kind
 	if kind == "" {
-		kind = DeriveKindFromMIME(req MIMEType)
+		kind = DeriveKindFromMIME(req.MIMEType)
 	}
 	maxBytes := req.MaxBytes
 	if maxBytes <= 0 {
@@ -64,7 +63,7 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (Artifact, erro
 	}
 	filename := SanitizeFilename(req.Filename)
 	ext := ExtractExtension(filename)
-	mimeType := normalizeMIME(req MIMEType)
+	mimeType := normalizeMIME(req.MIMEType)
 	br := bufio.NewReader(req.Reader)
 	prefix, err := br.Peek(512)
 	if err != nil && err != io.EOF {

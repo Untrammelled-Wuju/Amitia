@@ -2,10 +2,13 @@ package secret
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"sync"
 
 	kernelsecret "github.com/u-ai/backend/internal/extension/kernel/secret"
+	"github.com/u-ai/backend/internal/gamehost/contracts"
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/runtime"
 )
@@ -15,6 +18,14 @@ type ServiceSecretManifest struct {
 	Purpose   Purpose
 	Required  bool
 	ServiceID string
+}
+
+type RuntimeSecretLeaseSession = contracts.RuntimeSecretLeaseSession
+
+func newSessionID() string {
+	buf := make([]byte, 12)
+	_, _ = rand.Read(buf)
+	return "sess-" + hex.EncodeToString(buf)
 }
 
 type runtimeStartupKey struct {
@@ -47,19 +58,19 @@ func (o *LifecycleOrchestrator) RemoveRuntimeStartupManifests(runtimeID string) 
 	}
 }
 
-func (o *LifecycleOrchestrator) PrepareServiceStart(ctx context.Context, execCtx runtime.ServiceExecutionContext) (string, error) {
+func (o *LifecycleOrchestrator) PrepareServiceStart(ctx context.Context, execCtx runtime.ServiceExecutionContext) (*RuntimeSecretLeaseSession, error) {
 	leases := o.adapter.ActiveServiceLeases(string(execCtx.RuntimeID), string(execCtx.ServiceID))
 	for _, leaseID := range leases {
 		lease, valid, err := o.adapter.QueryServiceLease(string(execCtx.RuntimeID), string(execCtx.ServiceID), execCtx.Generation, leaseID)
 		if err != nil || !valid {
 			continue
 		}
-		return string(lease.ID), nil
+		return o.sessionForExistingLease(string(execCtx.RuntimeID), string(execCtx.ServiceID), execCtx.Generation, lease.ID), nil
 	}
 
 	startup := o.getStartupManifest(string(execCtx.RuntimeID), string(execCtx.ServiceID))
 	if len(startup) == 0 {
-		return "", nil
+		return nil, nil
 	}
 
 	manifest := RuntimeSecretManifest{
@@ -71,14 +82,101 @@ func (o *LifecycleOrchestrator) PrepareServiceStart(ctx context.Context, execCtx
 	}
 	handle := o.AcquireRuntimeStartup(ctx, manifest)
 	if handle.Failed {
-		return "", handle.LastError
+		return nil, handle.LastError
 	}
+	return o.registerStartupSession(manifest, handle), nil
+}
+
+func (o *LifecycleOrchestrator) sessionForExistingLease(runtimeID, serviceID string, generation int64, leaseID kernelsecret.LeaseID) *RuntimeSecretLeaseSession {
+	sess := &RuntimeSecretLeaseSession{
+		SessionID:  newSessionID(),
+		RuntimeID:  runtimeID,
+		ServiceID:  serviceID,
+		Generation: generation,
+		LeaseIDs:   []kernelsecret.LeaseID{leaseID},
+	}
+	o.mu.Lock()
+	if o.sessions == nil {
+		o.sessions = make(map[string]*RuntimeSecretLeaseSession)
+	}
+	o.sessions[sess.SessionID] = sess
+	key := runtimeStartupKey{runtimeID: runtimeID, serviceID: serviceID}
+	o.serviceSessions[key] = append(o.serviceSessions[key], sess.SessionID)
+	o.mu.Unlock()
+	return sess
+}
+
+func (o *LifecycleOrchestrator) registerStartupSession(manifest RuntimeSecretManifest, handle StartupHandle) *RuntimeSecretLeaseSession {
+	var leaseIDs []kernelsecret.LeaseID
 	for _, r := range handle.Results {
 		if r.Result.Granted && r.Result.LeaseID != "" {
-			return string(r.Result.LeaseID), nil
+			leaseIDs = append(leaseIDs, r.Result.LeaseID)
 		}
 	}
-	return "", nil
+	if len(leaseIDs) == 0 {
+		return nil
+	}
+	sess := &RuntimeSecretLeaseSession{
+		SessionID:  newSessionID(),
+		RuntimeID:  manifest.RuntimeID,
+		ServiceID:  manifest.ServiceID,
+		Generation: manifest.Generation,
+		LeaseIDs:   leaseIDs,
+	}
+	o.mu.Lock()
+	if o.sessions == nil {
+		o.sessions = make(map[string]*RuntimeSecretLeaseSession)
+	}
+	o.sessions[sess.SessionID] = sess
+	key := runtimeStartupKey{runtimeID: manifest.RuntimeID, serviceID: manifest.ServiceID}
+	o.serviceSessions[key] = append(o.serviceSessions[key], sess.SessionID)
+	o.mu.Unlock()
+	return sess
+}
+
+func (o *LifecycleOrchestrator) SessionByID(sessionID string) (*RuntimeSecretLeaseSession, bool) {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	sess, ok := o.sessions[sessionID]
+	return sess, ok
+}
+
+func (o *LifecycleOrchestrator) SessionsForService(runtimeID, serviceID string) []*RuntimeSecretLeaseSession {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	key := runtimeStartupKey{runtimeID: runtimeID, serviceID: serviceID}
+	var result []*RuntimeSecretLeaseSession
+	for _, sid := range o.serviceSessions[key] {
+		if sess, ok := o.sessions[sid]; ok {
+			result = append(result, sess)
+		}
+	}
+	return result
+}
+
+func (o *LifecycleOrchestrator) RevokeSession(sessionID, reason string) RevokeOutcome {
+	sess, ok := o.SessionByID(sessionID)
+	if !ok {
+		return RevokeOutcome{RequestedBy: sessionID, Reason: reason}
+	}
+	var revoked int
+	for _, leaseID := range sess.LeaseIDs {
+		if err := o.adapter.RevokeLease(leaseID, reason); err == nil {
+			revoked++
+		}
+	}
+	o.mu.Lock()
+	delete(o.sessions, sessionID)
+	key := runtimeStartupKey{runtimeID: sess.RuntimeID, serviceID: sess.ServiceID}
+	filtered := make([]string, 0, len(o.serviceSessions[key]))
+	for _, sid := range o.serviceSessions[key] {
+		if sid != sessionID {
+			filtered = append(filtered, sid)
+		}
+	}
+	o.serviceSessions[key] = filtered
+	o.mu.Unlock()
+	return RevokeOutcome{RevokedCount: revoked, RequestedBy: sessionID, Reason: reason}
 }
 
 func (o *LifecycleOrchestrator) getStartupManifest(runtimeID, serviceID string) []ServiceSecretManifest {
@@ -115,10 +213,16 @@ type LifecycleOrchestrator struct {
 	adapter          *SecretLeaseAdapter
 	mu               sync.RWMutex
 	startupManifests map[runtimeStartupKey][]ServiceSecretManifest
+	sessions         map[string]*RuntimeSecretLeaseSession
+	serviceSessions  map[runtimeStartupKey][]string
 }
 
 func NewLifecycleOrchestrator(adapter *SecretLeaseAdapter) *LifecycleOrchestrator {
-	return &LifecycleOrchestrator{adapter: adapter}
+	return &LifecycleOrchestrator{
+		adapter:         adapter,
+		sessions:        make(map[string]*RuntimeSecretLeaseSession),
+		serviceSessions: make(map[runtimeStartupKey][]string),
+	}
 }
 
 func (o *LifecycleOrchestrator) AcquireRuntimeStartup(

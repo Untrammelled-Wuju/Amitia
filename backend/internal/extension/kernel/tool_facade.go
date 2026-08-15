@@ -429,22 +429,22 @@ func (f *ToolFacade) SetCapabilityService(svc *capability.CapabilityService) {
 
 func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.ToolDefinition) resolvedExecution {
 	if f.capabilityResolver == nil {
-		return resolvedExecution{}
+		return resolvedExecution{legacyUnresolved: true}
 	}
 	req := capability.CapabilityResolutionRequest{
-		CapabilityID:  capability.CapabilityID(def.ID),
-		ExtensionID:   def.ExtensionID,
-		ModuleID:      def.ModuleID,
-		AllowCore:     true,
-		AllowDevice:   false,
+		CapabilityID:       capability.CapabilityID(def.ID),
+		ExtensionID:        def.ExtensionID,
+		ModuleID:           def.ModuleID,
+		AllowCore:          true,
+		AllowDevice:        true,
 		PreferredPlacement: capability.ProviderPlacementCore,
 	}
 	result, err := f.capabilityResolver.Resolve(req)
 	if err != nil {
-		return resolvedExecution{}
+		return resolvedExecution{legacyUnresolved: true}
 	}
 	if !result.HasResult() {
-		return resolvedExecution{}
+		return resolvedExecution{legacyUnresolved: true}
 	}
 	return resolvedExecution{target: result.ExecutionTarget}
 }

@@ -31,6 +31,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/behavior/wiring"
 	"github.com/u-ai/backend/internal/desktoppet/device"
 	"github.com/u-ai/backend/internal/desktoppet/editing"
+	"github.com/u-ai/backend/internal/devicemesh"
 	"github.com/u-ai/backend/internal/desktoppet/editing/baseline"
 	"github.com/u-ai/backend/internal/desktoppet/editing/revisioncommit"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
@@ -78,6 +79,7 @@ import (
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval"
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval/local"
 	"github.com/u-ai/backend/internal/interaction"
+	iosnative_background "github.com/u-ai/backend/internal/iosnative/background"
 	"github.com/u-ai/backend/internal/localmodel/llamacpp"
 	"github.com/u-ai/backend/internal/nativebridge"
 	"github.com/u-ai/backend/internal/mcp"
@@ -185,6 +187,9 @@ type AppServices struct {
 	ProductionCutover            *cutoverComposition
 	ClosureGate                 *Stage2ClosureGate
 	NativeBridgeRelay            *nativeBridgeRelay
+	BackgroundTaskRuntimeWired  bool
+	Artifact                    *ArtifactRuntime
+	DeviceMesh                 *devicemesh.Runtime
 }
 
 type RuntimeOrchestrator interface {
@@ -463,6 +468,17 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	if err := extensionRuntime.AttachKernelFacade(extensionRuntime.Kernel); err != nil {
 		log.Error("extension kernel facade attach failed: ", err)
 		panic("failed to attach extension kernel facade")
+	}
+	if bootstrap != nil && kernelContainer.TaskRuntimeService != nil {
+		iosProv := bootstrap.IOSNativeProvider()
+		if iosProv != nil {
+			if setter, ok := iosProv.(interface {
+				SetTaskRuntimePort(port iosnative_background.TaskRuntimePort)
+			}); ok {
+				setter.SetTaskRuntimePort(iosnative_background.NewTaskRuntimeServiceAdapter(kernelContainer.TaskRuntimeService))
+				services.BackgroundTaskRuntimeWired = true
+			}
+		}
 	}
 	artifactMaintenance, err := kernel.NewPackageArtifactMaintenanceForStore(kernelContainer.PackageRepository, kernelContainer.PackageArtifactStore, kernel.DefaultPackageArtifactMaintenanceConfig())
 	if err != nil {
@@ -1039,6 +1055,25 @@ services := &AppServices{
 		WorkspaceRegistry:            workspaceRegistry,
 		WorkspaceService:             workspaceService,
 		NativeBridgeRelay:            newNativeBridgeRelay(),
+		Artifact:                     nil,
+		DeviceMesh:                   nil,
+	}
+	if runtimeProfile == runtimeprofile.ProfileCloudCore && kernelContainer != nil {
+		deviceMeshRuntime, err := devicemesh.NewCloudRuntime(kernelContainer.Store.DB(), kernelContainer.DeviceRegistry)
+		if err != nil {
+			log.Warn("device-mesh cloud runtime unavailable: ", err)
+		} else {
+			services.DeviceMesh = deviceMeshRuntime
+		}
+	}
+	if services.Artifact == nil {
+		artifactRuntime, err := BuildArtifactRuntime(ctx.DB, "")
+		if err != nil {
+			log.Warn("artifact runtime build deferred: ", err)
+		} else {
+			services.Artifact = artifactRuntime
+			chatSvc.SetArtifactResolver(&chatArtifactAdapter{resolver: artifactRuntime.Resolver})
+		}
 	}
 	if services.NativeBridgeRelay != nil && bootstrap != nil {
 		if androidBridge, ok := bootstrap.AndroidNativeBridge().(*nativebridge.AndroidTransportBridge); ok {
@@ -1093,6 +1128,11 @@ func newDeviceAgentServices(ctx *app.AppContext, graphSvc graph.Service, bootstr
 		log.Warn("kernel recovery warning: ", err)
 	}
 
+	deviceAgentRuntime, err := devicemesh.NewDeviceAgentRuntime(config.AppCfg.Storage.DataDir, runtimeidentity.PlatformWindows)
+	if err != nil {
+		log.Warn("device-mesh agent runtime unavailable: ", err)
+	}
+
 	services := &AppServices{
 		DB:               ctx.DB,
 		RuntimeProfile:   runtimeProfile,
@@ -1101,6 +1141,7 @@ func newDeviceAgentServices(ctx *app.AppContext, graphSvc graph.Service, bootstr
 		Chat:             nil,
 		Extension:        extensionRuntime,
 		KernelContainer:  kernelContainer,
+		DeviceMesh:       deviceAgentRuntime,
 	}
 	return services, nil
 }

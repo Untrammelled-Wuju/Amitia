@@ -40,7 +40,52 @@ func (s *InstalledSource) Search(ctx context.Context, request AcquisitionRequest
 		return nil, nil
 	}
 
-	// 获取已注册但未 enabled 的 Provider Definition
+	requestedID := capability.CapabilityID(request.CapabilityID)
+
+	// 如果请求指定了 CapabilityID，仅返回匹配的 provider
+	if requestedID != "" {
+		return s.searchByCapability(requestedID)
+	}
+
+	// 未指定 CapabilityID 时，返回所有已注册但未 enabled 的 provider
+	return s.searchAllInstalled()
+}
+
+func (s *InstalledSource) searchByCapability(requestedID capability.CapabilityID) ([]CapabilityCandidate, error) {
+	if !s.service.HasCapability(requestedID) {
+		return nil, nil
+	}
+
+	if s.service.HasExecutableProvider(requestedID) {
+		return nil, nil
+	}
+
+	defs := s.registry.ListByCapability(requestedID)
+	var candidates []CapabilityCandidate
+	for _, def := range defs {
+		if def == nil {
+			continue
+		}
+		candidate := CapabilityCandidate{
+			ID:           string(def.ID),
+			Kind:         CandidateInstalledExtension,
+			Name:         string(def.CapabilityID),
+			Description:  "Installed but not enabled capability",
+			Version:      "",
+			Capabilities: []capability.CapabilityID{def.CapabilityID},
+			Install: CandidateInstallDescriptor{
+				Method: InstallEnableExisting,
+			},
+			Trust: CandidateTrust{
+				Level: TrustVerified,
+			},
+		}
+		candidates = append(candidates, candidate)
+	}
+	return candidates, nil
+}
+
+func (s *InstalledSource) searchAllInstalled() ([]CapabilityCandidate, error) {
 	providers := s.service.ListProviders()
 	if len(providers) == 0 {
 		return nil, nil
@@ -51,13 +96,9 @@ func (s *InstalledSource) Search(ctx context.Context, request AcquisitionRequest
 		if def == nil {
 			continue
 		}
-
-		// 检查该 Capability 是否已有可执行的实例（已 enabled）
 		if s.service.HasExecutableProvider(def.CapabilityID) {
 			continue
 		}
-
-		// 对未注册的 Capability，返回空
 		if !s.service.HasCapability(def.CapabilityID) {
 			continue
 		}

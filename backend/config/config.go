@@ -120,10 +120,13 @@ type StorageConfig struct {
 }
 
 type JWTConfig struct {
-	Secret     string `mapstructure:"secret"`
-	Issuer     string `mapstructure:"issuer"`
-	Audience   string `mapstructure:"audience"`
-	ExpireDays int    `mapstructure:"expireDays"`
+	Secret            string `mapstructure:"secret"`
+	Issuer            string `mapstructure:"issuer"`
+	Audience          string `mapstructure:"audience"`
+	ExpireDays        int    `mapstructure:"expireDays"`
+	AccessTokenMinutes int   `mapstructure:"accessTokenMinutes"`
+	RefreshTokenDays   int   `mapstructure:"refreshTokenDays"`
+	AbsoluteSessionDays int  `mapstructure:"absoluteSessionDays"`
 }
 
 type AppConfig struct {
@@ -268,6 +271,8 @@ type SecurityRuntimeConfig struct {
 	LocalTokenFile    string   `mapstructure:"localTokenFile"`
 	LocalUserID       string   `mapstructure:"localUserId"`
 	AllowedOrigins    []string `mapstructure:"allowedOrigins"`
+	AuditHmacSecret   string   `mapstructure:"auditHmacSecret"`
+	RecoveryPepper    string   `mapstructure:"recoveryPepper"`
 }
 
 func (c *Config) ScriptRuntimeConfig() *ScriptRuntimeProviderConfig {
@@ -352,6 +357,9 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("storage.dataDir", "../data")
 	v.SetDefault("jwt.secret", "")
 	v.SetDefault("jwt.expireDays", 7)
+	v.SetDefault("jwt.accessTokenMinutes", 15)
+	v.SetDefault("jwt.refreshTokenDays", 30)
+	v.SetDefault("jwt.absoluteSessionDays", 90)
 	v.SetDefault("app.name", "U-Ai")
 	v.SetDefault("app.version", "1.0.0-beta")
 	v.SetDefault("app.deployMode", "desktop-local")

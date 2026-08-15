@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
+	"github.com/u-ai/backend/internal/gamehost/contracts"
 	"github.com/u-ai/backend/internal/gamehost/domain"
 )
 
@@ -23,7 +24,7 @@ type ServiceExecutor interface {
 type DefinitionResolverFunc func(definitionID string) (*trusted_service.ServiceRuntimeDefinition, error)
 
 type ServiceLeaseLifecycle interface {
-	PrepareServiceStart(ctx context.Context, execCtx ServiceExecutionContext) (string, error)
+	PrepareServiceStart(ctx context.Context, execCtx ServiceExecutionContext) (*contracts.RuntimeSecretLeaseSession, error)
 	RevokeServiceLeases(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID, generation int64, reason string)
 }
 
@@ -144,7 +145,7 @@ func (e *serviceExecutor) Start(ctx context.Context, entry ServicePlanEntry, res
 		return nil, &ExecutionError{Code: ErrServiceLaunchFailed, RuntimeID: string(svc.RuntimeID), ServiceID: string(svc.ServiceID), Message: "create execution session token", Cause: err}
 	}
 	if e.leaseLifecycle != nil && svc.ServiceKind != domain.ServiceKindExternal {
-		execCtx.SecretLease, err = e.leaseLifecycle.PrepareServiceStart(ctx, execCtx)
+		execCtx.SecretLeaseSession, err = e.leaseLifecycle.PrepareServiceStart(ctx, execCtx)
 		if err != nil {
 			topology.UpdateServiceState(serviceID, ServiceStateFailed, time.Now())
 			return nil, &ExecutionError{Code: ErrServiceLaunchFailed, RuntimeID: string(svc.RuntimeID), ServiceID: string(svc.ServiceID), Message: "acquire service secret lease", Cause: err}

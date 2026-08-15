@@ -11,6 +11,9 @@ jwt:
   issuer: "amitia"
   audience: "amitia-api"
   expireDays: 7
+  accessTokenMinutes: 15
+  refreshTokenDays: 30
+  absoluteSessionDays: 90
 
 app:
   name: "U-Ai"

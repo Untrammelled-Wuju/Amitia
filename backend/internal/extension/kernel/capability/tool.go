@@ -8,12 +8,13 @@ import (
 type ToolSource string
 
 const (
-	ToolSourceBuiltin  ToolSource = "builtin"
-	ToolSourcePlugin   ToolSource = "plugin"
-	ToolSourceMCP      ToolSource = "mcp"
-	ToolSourceWorkflow ToolSource = "workflow"
-	ToolSourceInternal ToolSource = "internal"
-	ToolSourceLegacy   ToolSource = "legacy_tool"
+	ToolSourceBuiltin     ToolSource = "builtin"
+	ToolSourcePlugin      ToolSource = "plugin"
+	ToolSourceMCP         ToolSource = "mcp"
+	ToolSourceWorkflow    ToolSource = "workflow"
+	ToolSourceInternal    ToolSource = "internal"
+	ToolSourceLegacy      ToolSource = "legacy_tool"
+	ToolSourceAcquisition ToolSource = "acquisition"
 )
 
 type RiskLevel string

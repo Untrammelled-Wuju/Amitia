@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 
@@ -23,12 +24,12 @@ type ProcessCleanupProvider interface {
 }
 
 type ProcessCandidate struct {
-	PID        int
-	RuntimeID  domain.RuntimeInstanceID
-	PluginID   domain.PluginID
+	PID         int
+	RuntimeID   domain.RuntimeInstanceID
+	PluginID    domain.PluginID
 	ExtensionID string
-	Generation uint64
-	Output     string
+	Generation  uint64
+	Output      string
 }
 
 type TempCleanupProvider interface {
@@ -37,10 +38,10 @@ type TempCleanupProvider interface {
 }
 
 type TempCandidate struct {
-	RuntimeID    domain.RuntimeInstanceID
-	Path         string
-	PluginID     domain.PluginID
-	ExtensionID  string
+	RuntimeID   domain.RuntimeInstanceID
+	Path        string
+	PluginID    domain.PluginID
+	ExtensionID string
 }
 
 type BinaryCleanupProvider interface {
@@ -49,10 +50,10 @@ type BinaryCleanupProvider interface {
 }
 
 type BinaryCandidate struct {
-	BinaryID    string
-	RuntimeID   domain.RuntimeInstanceID
-	PluginID    domain.PluginID
-	Removed     bool
+	BinaryID  string
+	RuntimeID domain.RuntimeInstanceID
+	PluginID  domain.PluginID
+	Removed   bool
 }
 
 type EndpointCleanupProvider interface {
@@ -61,9 +62,9 @@ type EndpointCleanupProvider interface {
 }
 
 type EndpointCandidate struct {
-	EndpointID  string
-	RuntimeID   domain.RuntimeInstanceID
-	ServiceID   string
+	EndpointID string
+	RuntimeID  domain.RuntimeInstanceID
+	ServiceID  string
 }
 
 type SharedMemoryCleanupProvider interface {
@@ -72,9 +73,9 @@ type SharedMemoryCleanupProvider interface {
 }
 
 type SharedMemoryCandidate struct {
-	ID          string
-	RuntimeID   domain.RuntimeInstanceID
-	Generation  uint64
+	ID         string
+	RuntimeID  domain.RuntimeInstanceID
+	Generation uint64
 }
 
 type KernelReconciliationProvider interface {
@@ -89,16 +90,16 @@ type AuditSink interface {
 }
 
 type StartupRecoveryAuditEvent struct {
-	OperationID    StartupRecoveryOperationID
-	Stage          StartupRecoveryStage
-	ResourceType   ResourceType
-	ResourceID     string
-	RuntimeID      domain.RuntimeInstanceID
-	ExtensionID    string
-	Ownership      OwnershipResult
-	CleanupResult  CleanupResult
-	Error          string
-	Timestamp      time.Time
+	OperationID   StartupRecoveryOperationID
+	Stage         StartupRecoveryStage
+	ResourceType  ResourceType
+	ResourceID    string
+	RuntimeID     domain.RuntimeInstanceID
+	ExtensionID   string
+	Ownership     OwnershipResult
+	CleanupResult CleanupResult
+	Error         string
+	Timestamp     time.Time
 }
 
 type RuntimeGraphReconcileProvider interface {
@@ -106,16 +107,16 @@ type RuntimeGraphReconcileProvider interface {
 }
 
 type StartupRecoveryDeps struct {
-	HostIdentity    HostIdentityProvider
-	ProcessCleanup  ProcessCleanupProvider
-	TempCleanup     TempCleanupProvider
-	BinaryCleanup   BinaryCleanupProvider
-	EndpointCleanup EndpointCleanupProvider
-	ShmCleanup      SharedMemoryCleanupProvider
-	KernelRecon     KernelReconciliationProvider
+	HostIdentity      HostIdentityProvider
+	ProcessCleanup    ProcessCleanupProvider
+	TempCleanup       TempCleanupProvider
+	BinaryCleanup     BinaryCleanupProvider
+	EndpointCleanup   EndpointCleanupProvider
+	ShmCleanup        SharedMemoryCleanupProvider
+	KernelRecon       KernelReconciliationProvider
 	RuntimeGraphRecon RuntimeGraphReconcileProvider
-	AuditSink       AuditSink
-	Gate            *StartupGate
+	AuditSink         AuditSink
+	Gate              *StartupGate
 }
 
 type StartupRecoveryCoordinator struct {
@@ -319,35 +320,52 @@ func (c *StartupRecoveryCoordinator) classifyOrphans(ctx context.Context, report
 	if c.deps.EndpointCleanup != nil {
 		endpoints, err := c.deps.EndpointCleanup.ListStaleEndpoints(ctx)
 		if err != nil {
-			return fmt.Errorf("list endpoint candidates: %w", err)
-		}
-		for _, ec := range endpoints {
-			candidates = append(candidates, &OrphanResource{
-				Type:       ResourceStaleEndpoint,
-				ResourceID: ec.EndpointID,
-				RuntimeID:  ec.RuntimeID,
-				ServiceName: ec.ServiceID,
-			})
+			if isNotApplicable(err) {
+				log.Printf("[startup-recovery] endpoint cleanup NOT_APPLICABLE: %v", err)
+			} else {
+				return fmt.Errorf("list endpoint candidates: %w", err)
+			}
+		} else {
+			for _, ec := range endpoints {
+				candidates = append(candidates, &OrphanResource{
+					Type:        ResourceStaleEndpoint,
+					ResourceID:  ec.EndpointID,
+					RuntimeID:   ec.RuntimeID,
+					ServiceName: ec.ServiceID,
+				})
+			}
 		}
 	}
 
 	if c.deps.ShmCleanup != nil {
 		shms, err := c.deps.ShmCleanup.ListStaleSharedMemory(ctx)
 		if err != nil {
-			return fmt.Errorf("list shared memory candidates: %w", err)
-		}
-		for _, sc := range shms {
-			candidates = append(candidates, &OrphanResource{
-				Type:       ResourceStaleSharedMem,
-				ResourceID: sc.ID,
-				RuntimeID:  sc.RuntimeID,
-				Generation: sc.Generation,
-			})
+			if isNotApplicable(err) {
+				log.Printf("[startup-recovery] shared memory cleanup NOT_APPLICABLE: %v", err)
+			} else {
+				return fmt.Errorf("list shared memory candidates: %w", err)
+			}
+		} else {
+			for _, sc := range shms {
+				candidates = append(candidates, &OrphanResource{
+					Type:       ResourceStaleSharedMem,
+					ResourceID: sc.ID,
+					RuntimeID:  sc.RuntimeID,
+					Generation: sc.Generation,
+				})
+			}
 		}
 	}
 
 	report.Candidates = candidates
 	return nil
+}
+
+func isNotApplicable(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(err.Error(), "NOT_APPLICABLE")
 }
 
 func (c *StartupRecoveryCoordinator) cleanupOrphans(ctx context.Context, report *StartupRecoveryReport) error {

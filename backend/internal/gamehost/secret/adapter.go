@@ -64,13 +64,14 @@ type PermissionGate interface {
 }
 
 type SecretLeaseAdapter struct {
-	broker   KernelLeaseBroker
-	index    *LeaseBindingIndex
-	reader   RuntimeIdentityReader
-	gate     PermissionGate
-	mu       sync.RWMutex
-	stopping map[serviceBinding]bool
-	shutdown bool
+	broker       KernelLeaseBroker
+	index        *LeaseBindingIndex
+	reader       RuntimeIdentityReader
+	gate         PermissionGate
+	mu           sync.RWMutex
+	stopping     map[serviceBinding]bool
+	shutdown     bool
+	sessionLeases map[string][]kernelsecret.LeaseID
 }
 
 type serviceBinding struct {
@@ -329,6 +330,66 @@ func (a *SecretLeaseAdapter) RevokeRuntimeGenerationLeases(runtimeID string, gen
 
 func (a *SecretLeaseAdapter) ActiveServiceLeases(runtimeID, serviceID string) []kernelsecret.LeaseID {
 	return a.index.ActiveLeasesByService(runtimeID, serviceID)
+}
+
+func (a *SecretLeaseAdapter) AcquireServiceLeaseSession(
+	ctx context.Context,
+	session *RuntimeSecretLeaseSession,
+	pluginID string,
+	purpose Purpose,
+	required bool,
+) error {
+	if session == nil || len(session.LeaseIDs) == 0 {
+		return ErrBindingInvalid
+	}
+	a.mu.Lock()
+	if a.sessionLeases == nil {
+		a.sessionLeases = make(map[string][]kernelsecret.LeaseID)
+	}
+	a.sessionLeases[session.SessionID] = append([]kernelsecret.LeaseID{}, session.LeaseIDs...)
+	a.mu.Unlock()
+
+	for _, leaseID := range session.LeaseIDs {
+		if _, ok := a.index.LookupByLease(leaseID); !ok {
+			_, err := a.AcquireServiceLease(ctx, session.RuntimeID, pluginID, session.ServiceID, kernelsecret.SecretRef(leaseID), purpose, required, session.Generation)
+			if err != nil {
+				a.RevokeServiceSession(session.SessionID)
+				return err
+			}
+		}
+	}
+	return nil
+}
+
+func (a *SecretLeaseAdapter) RevokeServiceSession(sessionID string) RevokeOutcome {
+	a.mu.Lock()
+	leases, ok := a.sessionLeases[sessionID]
+	if ok {
+		delete(a.sessionLeases, sessionID)
+	}
+	a.mu.Unlock()
+	if !ok {
+		return RevokeOutcome{RequestedBy: sessionID, Reason: "session not found"}
+	}
+	revoked := 0
+	for _, leaseID := range leases {
+		if err := a.RevokeLease(leaseID, "session revoked"); err == nil {
+			revoked++
+		}
+	}
+	return RevokeOutcome{RevokedCount: revoked, RequestedBy: sessionID, Reason: "session revoked"}
+}
+
+func (a *SecretLeaseAdapter) LeasesForSession(sessionID string) []kernelsecret.LeaseID {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	leases := a.sessionLeases[sessionID]
+	if leases == nil {
+		return nil
+	}
+	out := make([]kernelsecret.LeaseID, len(leases))
+	copy(out, leases)
+	return out
 }
 
 func (a *SecretLeaseAdapter) ActiveRuntimeLeases(runtimeID string) []kernelsecret.LeaseID {

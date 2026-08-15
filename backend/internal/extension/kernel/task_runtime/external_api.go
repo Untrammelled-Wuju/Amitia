@@ -89,12 +89,14 @@ func (s *TaskRuntimeService) HandleExternalProgress(ctx context.Context, taskRun
 	s.progressLast[taskRunID] = now
 	s.progressMu.Unlock()
 
+	completedFloat := float64(completedUnits)
+	totalFloat := float64(totalUnits)
 	seq := now.UnixNano()
 	prog := TaskRunProgress{
 		TaskRunID:  taskRunID,
 		Sequence:   seq,
-		Current:    completedUnits,
-		Total:      totalUnits,
+		Current:    &completedFloat,
+		Total:      &totalFloat,
 		Stage:      phase,
 		Message:    phase,
 		UpdatedAt:  now.UTC(),

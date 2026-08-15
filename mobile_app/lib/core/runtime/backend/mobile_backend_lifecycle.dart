@@ -7,7 +7,7 @@ import '../embedded/embedded_runtime_controller.dart';
 
 export '../embedded/embedded_runtime_controller.dart' show EmbeddedRuntimeStatus;
 
-enum RuntimeConnectionState {
+enum RuntimeDeploymentState {
   unavailable,
   starting,
   ready,
@@ -16,7 +16,7 @@ enum RuntimeConnectionState {
 }
 
 class BackendNodeStatus {
-  final RuntimeConnectionState state;
+  final RuntimeDeploymentState state;
   final Uri? baseUri;
   final String? profile;
   final String? message;
@@ -29,7 +29,7 @@ class BackendNodeStatus {
   });
 
   factory BackendNodeStatus.initial() => const BackendNodeStatus(
-        state: RuntimeConnectionState.unavailable,
+        state: RuntimeDeploymentState.unavailable,
       );
 
   @override
@@ -51,7 +51,7 @@ class BackendNodeStatus {
 
 class MobileBackendStatus {
   final MobileDeploymentMode mode;
-  final RuntimeConnectionState state;
+  final RuntimeDeploymentState state;
   final BackendNodeStatus businessCore;
   final BackendNodeStatus? localRuntime;
   final int generation;
@@ -66,13 +66,13 @@ class MobileBackendStatus {
 
   factory MobileBackendStatus.initial() => MobileBackendStatus(
         mode: MobileDeploymentMode.local,
-        state: RuntimeConnectionState.unavailable,
+        state: RuntimeDeploymentState.unavailable,
         businessCore: BackendNodeStatus.initial(),
         generation: 0,
       );
 
   bool get isBusinessReady =>
-      businessCore.state == RuntimeConnectionState.ready;
+      businessCore.state == RuntimeDeploymentState.ready;
 
   @override
   bool operator ==(Object other) =>
@@ -153,9 +153,9 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
     } on DeploymentConfigValidationError catch (e) {
       _emitStatus(MobileBackendStatus(
         mode: config.mode,
-        state: RuntimeConnectionState.failed,
+        state: RuntimeDeploymentState.failed,
         businessCore: BackendNodeStatus(
-          state: RuntimeConnectionState.failed,
+          state: RuntimeDeploymentState.failed,
           message: e.message,
         ),
         generation: expectedGeneration,
@@ -181,7 +181,7 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
 
     _updateBusinessNode(
       expectedGeneration,
-      RuntimeConnectionState.starting,
+      RuntimeDeploymentState.starting,
       topology.businessCore.httpBaseUri,
     );
 
@@ -191,9 +191,9 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
     if (reachable) {
       _emitStatus(MobileBackendStatus(
         mode: MobileDeploymentMode.cloud,
-        state: RuntimeConnectionState.ready,
+        state: RuntimeDeploymentState.ready,
         businessCore: BackendNodeStatus(
-          state: RuntimeConnectionState.ready,
+          state: RuntimeDeploymentState.ready,
           baseUri: topology.businessCore.httpBaseUri,
         ),
         generation: expectedGeneration,
@@ -201,9 +201,9 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
     } else {
       _emitStatus(MobileBackendStatus(
         mode: MobileDeploymentMode.cloud,
-        state: RuntimeConnectionState.failed,
+        state: RuntimeDeploymentState.failed,
         businessCore: BackendNodeStatus(
-          state: RuntimeConnectionState.failed,
+          state: RuntimeDeploymentState.failed,
           baseUri: topology.businessCore.httpBaseUri,
           message: 'remote core not reachable',
         ),
@@ -218,7 +218,7 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
   ) async {
     _updateBusinessNode(
       expectedGeneration,
-      RuntimeConnectionState.starting,
+      RuntimeDeploymentState.starting,
       topology.businessCore.httpBaseUri,
     );
 
@@ -231,15 +231,15 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
       if (status != EmbeddedRuntimeStatus.ready) {
         _emitStatus(MobileBackendStatus(
           mode: MobileDeploymentMode.local,
-          state: RuntimeConnectionState.failed,
+          state: RuntimeDeploymentState.failed,
           businessCore: BackendNodeStatus(
-            state: RuntimeConnectionState.failed,
+            state: RuntimeDeploymentState.failed,
             baseUri: topology.businessCore.httpBaseUri,
             profile: 'local',
             message: 'embedded runtime failed to start',
           ),
           localRuntime: BackendNodeStatus(
-            state: RuntimeConnectionState.failed,
+            state: RuntimeDeploymentState.failed,
             profile: 'local',
             message: 'embedded runtime failed to start',
           ),
@@ -250,14 +250,14 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
 
       _emitStatus(MobileBackendStatus(
         mode: MobileDeploymentMode.local,
-        state: RuntimeConnectionState.ready,
+        state: RuntimeDeploymentState.ready,
         businessCore: BackendNodeStatus(
-          state: RuntimeConnectionState.ready,
+          state: RuntimeDeploymentState.ready,
           baseUri: topology.businessCore.httpBaseUri,
           profile: 'local',
         ),
         localRuntime: BackendNodeStatus(
-          state: RuntimeConnectionState.ready,
+          state: RuntimeDeploymentState.ready,
           baseUri: topology.localRuntime?.httpBaseUri,
           profile: 'local',
         ),
@@ -267,9 +267,9 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
       if (expectedGeneration != _generation) return;
       _emitStatus(MobileBackendStatus(
         mode: MobileDeploymentMode.local,
-        state: RuntimeConnectionState.failed,
+        state: RuntimeDeploymentState.failed,
         businessCore: BackendNodeStatus(
-          state: RuntimeConnectionState.failed,
+          state: RuntimeDeploymentState.failed,
           message: e.toString(),
         ),
         generation: expectedGeneration,
@@ -283,7 +283,7 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
   ) async {
     _updateBusinessNode(
       expectedGeneration,
-      RuntimeConnectionState.starting,
+      RuntimeDeploymentState.starting,
       topology.businessCore.httpBaseUri,
     );
 
@@ -300,8 +300,8 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
 
     final localNodeStatus = BackendNodeStatus(
       state: localStatus == EmbeddedRuntimeStatus.ready
-          ? RuntimeConnectionState.ready
-          : RuntimeConnectionState.failed,
+          ? RuntimeDeploymentState.ready
+          : RuntimeDeploymentState.failed,
       baseUri: topology.localRuntime?.httpBaseUri,
       profile: 'device-agent',
       message: localStatus != EmbeddedRuntimeStatus.ready
@@ -312,9 +312,9 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
     if (remoteReachable) {
       _emitStatus(MobileBackendStatus(
         mode: MobileDeploymentMode.hybrid,
-        state: RuntimeConnectionState.ready,
+        state: RuntimeDeploymentState.ready,
         businessCore: BackendNodeStatus(
-          state: RuntimeConnectionState.ready,
+          state: RuntimeDeploymentState.ready,
           baseUri: topology.businessCore.httpBaseUri,
         ),
         localRuntime: localNodeStatus,
@@ -323,9 +323,9 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
     } else {
       _emitStatus(MobileBackendStatus(
         mode: MobileDeploymentMode.hybrid,
-        state: RuntimeConnectionState.failed,
+        state: RuntimeDeploymentState.failed,
         businessCore: BackendNodeStatus(
-          state: RuntimeConnectionState.failed,
+          state: RuntimeDeploymentState.failed,
           baseUri: topology.businessCore.httpBaseUri,
           message: 'remote core not reachable',
         ),
@@ -343,7 +343,7 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
 
   void _updateBusinessNode(
     int expectedGeneration,
-    RuntimeConnectionState state,
+    RuntimeDeploymentState state,
     Uri baseUri,
   ) {
     if (expectedGeneration != _generation) return;

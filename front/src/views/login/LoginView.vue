@@ -80,7 +80,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { ref, reactive, onMounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { ElMessage } from "element-plus";
-import { apiClient, setToken } from "../../composables/useApi";
+import { apiClient } from "../../composables/useApi";
+import { useSessionStore, getStoredToken, setStoredToken } from "../../stores/session-store";
 
 const router = useRouter();
 const route = useRoute();
@@ -123,12 +124,25 @@ async function handleLogin() {
       password: pw,
     });
     const data = res.data?.data || res.data;
-    if (data?.token) {
-      setToken(data.token);
-      if (window.amitiaDesktop?.setAuthToken) {
-        void window.amitiaDesktop.setAuthToken(data.token);
+    if (data?.accessToken || data?.token) {
+      const { setSession } = useSessionStore();
+      setSession({
+        accessToken: data.accessToken || data.token,
+        accessTokenExpiresAt: data.accessTokenExpiresAt || null,
+        sessionId: data.session?.sessionId || null,
+        userId: data.user?.id?.toString() || null,
+        username: data.user?.username || data.username || name,
+        role: data.user?.role || data.role || null,
+        refreshToken: data.refreshToken || null,
+        clientType: "web",
+      });
+      if (data.refreshToken) {
+        setStoredToken(data.refreshToken);
       }
-      ElMessage.success(`欢迎回来，${data.username || name}`);
+      if (window.amitiaDesktop?.setAuthToken) {
+        void window.amitiaDesktop.setAuthToken(data.accessToken || data.token);
+      }
+      ElMessage.success(`欢迎回来，${data.user?.username || data.username || name}`);
       const redirect = (route.query.redirect as string) || "/chat";
       router.push(redirect);
     } else {

@@ -18,20 +18,10 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
         "homekit.scenes.list",
         "homekit.scenes.get",
         "homekit.scenes.execute",
-        "homekit.scenes.create",
-        "homekit.scenes.update",
-        "homekit.scenes.delete",
         "homekit.action_sets.list",
         "homekit.action_sets.get",
         "homekit.action_sets.execute",
-        "homekit.automations.list",
-        "homekit.automations.get",
-        "homekit.automations.create",
-        "homekit.automations.update",
-        "homekit.automations.enable",
-        "homekit.automations.delete",
-        "homekit.setup.present",
-        "homekit.enable"
+        "homekit.automations.list"
     ]
 
     private let store = HomeKitStore.shared
@@ -109,28 +99,8 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
             return handleActionSetsGet(request)
         case "homekit.scenes.execute", "homekit.action_sets.execute":
             return await handleActionSetsExecute(request)
-        case "homekit.scenes.create":
-            return handleActionSetsCreate(request)
-        case "homekit.scenes.update":
-            return handleActionSetsUpdate(request)
-        case "homekit.scenes.delete":
-            return handleActionSetsDelete(request)
         case "homekit.automations.list":
             return handleAutomationsList(request)
-        case "homekit.automations.get":
-            return handleAutomationsGet(request)
-        case "homekit.automations.create":
-            return handleAutomationsCreate(request)
-        case "homekit.automations.update":
-            return handleAutomationsUpdate(request)
-        case "homekit.automations.enable":
-            return handleAutomationsEnable(request)
-        case "homekit.automations.delete":
-            return handleAutomationsDelete(request)
-        case "homekit.setup.present":
-            return handleSetupPresent(request)
-        case "homekit.enable":
-            return handleEnable(request)
         default:
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
@@ -612,39 +582,6 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
         }
     }
 
-    private func handleActionSetsCreate(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        guard let name = request.payload?["name"] as? String else {
-            return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing action set name")
-        }
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
-            status: "error",
-            result: nil,
-            error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "action set creation not supported in this version")
-        )
-    }
-
-    private func handleActionSetsUpdate(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
-            status: "error",
-            result: nil,
-            error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "action set update not supported in this version")
-        )
-    }
-
-    private func handleActionSetsDelete(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
-            status: "error",
-            result: nil,
-            error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "action set deletion not supported in this version")
-        )
-    }
-
     private func handleAutomationsList(_ request: IOSNativeRequest) -> IOSNativeResponse {
         if let rejection = ensureAuthorized(request) { return rejection }
         guard let homeId = request.payload?["homeId"] as? String else {
@@ -669,76 +606,6 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
             status: "ok",
             result: ["automations": triggers, "count": triggers.count],
             error: nil
-        )
-    }
-
-    private func handleAutomationsGet(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
-            status: "error",
-            result: nil,
-            error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "automation get not supported in this version")
-        )
-    }
-
-    private func handleAutomationsCreate(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
-            status: "error",
-            result: nil,
-            error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "automation creation not supported in this version")
-        )
-    }
-
-    private func handleAutomationsUpdate(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
-            status: "error",
-            result: nil,
-            error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "automation update not supported in this version")
-        )
-    }
-
-    private func handleAutomationsEnable(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
-            status: "error",
-            result: nil,
-            error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "automation enable not supported in this version")
-        )
-    }
-
-    private func handleAutomationsDelete(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
-            status: "error",
-            result: nil,
-            error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "automation deletion not supported in this version")
-        )
-    }
-
-    private func handleSetupPresent(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
-            status: "error",
-            result: nil,
-            error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "setup presentation not supported in this version")
-        )
-    }
-
-    private func handleEnable(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
-            status: "error",
-            result: nil,
-            error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "manual enable not supported in this version")
         )
     }
 

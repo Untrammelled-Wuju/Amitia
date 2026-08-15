@@ -8,17 +8,10 @@ import (
 	"github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
-type pendingResponse struct {
-	ch     chan *protocol.Envelope
-	key    RequestKey
-	cancel func()
-}
-
 type rpcResponseCorrelator struct {
-	mu        sync.Mutex
-	pending   map[RequestKey]*pendingResponse
-	registry  PendingRequestRegistry
-	keyIndex  map[string][]RequestKey
+	mu       sync.Mutex
+	registry PendingRequestRegistry
+	pending  map[RequestKey]chan *protocol.Envelope
 }
 
 func NewRPCResponseCorrelator(registry PendingRequestRegistry) *rpcResponseCorrelator {
@@ -26,9 +19,8 @@ func NewRPCResponseCorrelator(registry PendingRequestRegistry) *rpcResponseCorre
 		registry = NewPendingRequestRegistry(DefaultPendingRegistryConfig())
 	}
 	return &rpcResponseCorrelator{
-		pending:  make(map[RequestKey]*pendingResponse),
 		registry: registry,
-		keyIndex: make(map[string][]RequestKey),
+		pending:  make(map[RequestKey]chan *protocol.Envelope),
 	}
 }
 
@@ -46,30 +38,25 @@ func (c *rpcResponseCorrelator) RegisterPending(peer ipc.Peer, requestID string)
 		return nil, nil, false
 	}
 
-	for _, existingKey := range c.keyIndex[requestID] {
-		if existingKey.RuntimeID != key.RuntimeID || existingKey.ServiceID != key.ServiceID {
-			return nil, nil, false
-		}
-	}
-
-	ch := make(chan *protocol.Envelope, 1)
-	pr := &pendingResponse{
-		ch:  ch,
-		key: key,
-	}
-	c.pending[key] = pr
-	c.keyIndex[requestID] = append(c.keyIndex[requestID], key)
-
-	c.registry.Register(&PendingRequest{
+	req := &PendingRequest{
 		Key:       key,
 		RequestID: requestID,
 		State:     RequestStatePending,
 		Done:      make(chan struct{}),
-	})
+	}
 
-	return ch, func() {
+	if _, err := c.registry.Register(req); err != nil {
+		return nil, nil, false
+	}
+
+	respCh := make(chan *protocol.Envelope, 1)
+	c.pending[key] = respCh
+
+	cancel := func() {
 		c.remove(key)
-	}, true
+	}
+
+	return respCh, cancel, true
 }
 
 func (c *rpcResponseCorrelator) HandleResponse(peer ipc.Peer, envelope *protocol.Envelope) bool {
@@ -80,19 +67,27 @@ func (c *rpcResponseCorrelator) HandleResponse(peer ipc.Peer, envelope *protocol
 	}
 
 	c.mu.Lock()
-	pr, ok := c.pending[key]
+	respCh, ok := c.pending[key]
 	if !ok {
 		c.mu.Unlock()
 		return false
 	}
 	delete(c.pending, key)
-	c.removeKeyIndex(envelope.RequestID, key)
 	c.mu.Unlock()
 
-	c.registry.Complete(key, *envelope)
+	if envelope.Type == protocol.MessageTypeError {
+		c.registry.Fail(key, NewRPCErrorWithCause(
+			"protocol_error",
+			domain.ErrorCode(envelope.Error.Code),
+			envelope.Error.Message,
+			nil,
+		))
+	} else {
+		c.registry.Complete(key, *envelope)
+	}
 
 	select {
-	case pr.ch <- envelope:
+	case respCh <- envelope:
 	default:
 	}
 	return true
@@ -103,70 +98,32 @@ func (c *rpcResponseCorrelator) CancelByPeer(peer ipc.Peer) {
 	serviceID := domain.ServiceID(peer.ServiceID)
 
 	c.mu.Lock()
-	var toCancel []*pendingResponse
-	for k, pr := range c.pending {
+	var toCancel []RequestKey
+	for k := range c.pending {
 		if k.RuntimeID == runtimeID && k.ServiceID == serviceID {
-			toCancel = append(toCancel, pr)
+			toCancel = append(toCancel, k)
 		}
 	}
-	for _, pr := range toCancel {
-		delete(c.pending, pr.key)
-		c.removeKeyIndex(pr.key.RequestID, pr.key)
+	for _, k := range toCancel {
+		delete(c.pending, k)
 	}
 	c.mu.Unlock()
 
-	for _, pr := range toCancel {
-		c.registry.Cancel(pr.key)
-		select {
-		case pr.ch <- &protocol.Envelope{
-			Protocol:  protocol.ProtocolVersion,
-			Type:      protocol.MessageTypeResponse,
-			ID:        pr.key.RequestID,
-			RequestID: pr.key.RequestID,
-			Error: &protocol.ProtocolError{
-				Code:    protocol.ErrorCode(domain.ErrRuntimeUnavailable),
-				Message: "connection closed",
-			},
-		}:
-		default:
-		}
+	for _, k := range toCancel {
+		c.registry.Cancel(k)
 	}
 }
 
 func (c *rpcResponseCorrelator) remove(key RequestKey) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if pr, ok := c.pending[key]; ok {
-		delete(c.pending, key)
-		c.removeKeyIndex(key.RequestID, key)
-		c.registry.Remove(key)
-		select {
-		case pr.ch <- &protocol.Envelope{
-			Protocol: protocol.ProtocolVersion,
-			Type:     protocol.MessageTypeResponse,
-			ID:       key.RequestID,
-			RequestID: key.RequestID,
-			Error: &protocol.ProtocolError{
-				Code:    protocol.ErrorCode(domain.ErrCancelled),
-				Message: "pending request cleaned up",
-			},
-		}:
-		default:
-		}
+	if _, ok := c.pending[key]; !ok {
+		c.mu.Unlock()
+		return
 	}
-}
+	delete(c.pending, key)
+	c.mu.Unlock()
 
-func (c *rpcResponseCorrelator) removeKeyIndex(requestID string, key RequestKey) {
-	keys := c.keyIndex[requestID]
-	for i, k := range keys {
-		if k == key {
-			c.keyIndex[requestID] = append(keys[:i], keys[i+1:]...)
-			break
-		}
-	}
-	if len(c.keyIndex[requestID]) == 0 {
-		delete(c.keyIndex, requestID)
-	}
+	c.registry.Remove(key)
 }
 
 var _ ipc.ResponseCorrelator = (*rpcResponseCorrelator)(nil)

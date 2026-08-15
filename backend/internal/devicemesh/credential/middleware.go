@@ -3,7 +3,6 @@ package credential
 import (
 	"context"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/runtimeidentity"
@@ -84,10 +83,36 @@ func GinPrincipal(c *gin.Context) (DeviceRuntimePrincipal, bool) {
 	return p, ok
 }
 
-func formatTimePtr(t *time.Time) *string {
-	if t == nil {
-		return nil
+func DeviceAuthCredentialWS(svc *Service, handler WSHandler) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		header := c.GetHeader("Authorization")
+		var rawCred string
+		if strings.HasPrefix(header, "AmitiaDevice ") {
+			rawCred = strings.TrimPrefix(header, "AmitiaDevice ")
+		}
+		if rawCred == "" {
+			c.AbortWithStatusJSON(401, gin.H{"code": "mesh.credential_invalid", "message": "missing device credential"})
+			return
+		}
+
+		cred, err := svc.Validate(c.Request.Context(), rawCred)
+		if err != nil {
+			c.AbortWithStatusJSON(401, gin.H{"code": "mesh.credential_invalid", "message": err.Error()})
+			return
+		}
+
+		principal := DeviceRuntimePrincipal{
+			CredentialID: cred.ID,
+			UserID:       cred.UserID,
+			DeviceID:     cred.DeviceID,
+			RuntimeID:    cred.RuntimeID,
+		}
+
+		c.Set(string(principalKey), principal)
+		handler.HandleWS(c)
 	}
-	s := t.UTC().Format(time.RFC3339Nano)
-	return &s
+}
+
+type WSHandler interface {
+	HandleWS(c *gin.Context)
 }

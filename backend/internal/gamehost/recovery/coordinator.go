@@ -17,10 +17,10 @@ type KernelRollback interface {
 }
 
 type KernelRollbackResult struct {
-	Success      bool
-	NewVersion   string
+	Success           bool
+	NewVersion        string
 	RequiresReconcile bool
-	Error        string
+	Error             string
 }
 
 type SupervisorView interface {
@@ -58,9 +58,9 @@ type SecretLeaseService interface {
 
 type SecretLeaseRequest struct {
 	RuntimeInstanceID string
-	PluginID         string
-	ExtensionID      string
-	InvocationID     string
+	PluginID          string
+	ExtensionID       string
+	InvocationID      string
 }
 
 type SecretLeaseResult struct {
@@ -134,32 +134,32 @@ type HostStructureBuilder interface {
 }
 
 type TopologyResult struct {
-	TopologyID    string
-	ServiceIDs    []string
-	Valid         bool
+	TopologyID string
+	ServiceIDs []string
+	Valid      bool
 }
 
 type LifecycleResult struct {
-	PlanID        string
-	Valid         bool
+	PlanID string
+	Valid  bool
 }
 
 type RecoveryCoordinator struct {
-	mu             sync.Mutex
-	gate           *RecoveryGate
-	classifier     *FailureClassifier
-	checkpoint     CheckpointClassifier
-	kernel         KernelRollback
-	supervisor     SupervisorView
-	pluginReg      PluginRegistryReader
-	runtimeMgr     RuntimeManagerReader
-	runtimeExecutor RuntimeExecutor
-	secretLease    SecretLeaseService
-	permission     PermissionService
-	authority      ControlAuthorityView
+	mu               sync.Mutex
+	gate             *RecoveryGate
+	classifier       *FailureClassifier
+	checkpoint       CheckpointClassifier
+	kernel           KernelRollback
+	supervisor       SupervisorView
+	pluginReg        PluginRegistryReader
+	runtimeMgr       RuntimeManagerReader
+	runtimeExecutor  RuntimeExecutor
+	secretLease      SecretLeaseService
+	permission       PermissionService
+	authority        ControlAuthorityView
 	structureBuilder HostStructureBuilder
-	audit          AuditSink
-	eligibility    *RecoveryEligibilityChecker
+	audit            AuditSink
+	eligibility      *RecoveryEligibilityChecker
 }
 
 type RecoveryCoordinatorDeps struct {
@@ -207,20 +207,20 @@ func NewRecoveryCoordinator(deps RecoveryCoordinatorDeps) (*RecoveryCoordinator,
 	}
 
 	c := &RecoveryCoordinator{
-		gate:           NewRecoveryGate(),
-		classifier:     NewFailureClassifier(),
-		kernel:         deps.Kernel,
-		supervisor:     deps.Supervisor,
-		pluginReg:      deps.PluginRegistry,
-		runtimeMgr:     deps.RuntimeManager,
-		runtimeExecutor: deps.RuntimeExecutor,
-		secretLease:    deps.SecretLease,
-		permission:     deps.Permission,
-		authority:      deps.AuthorityView,
+		gate:             NewRecoveryGate(),
+		classifier:       NewFailureClassifier(),
+		kernel:           deps.Kernel,
+		supervisor:       deps.Supervisor,
+		pluginReg:        deps.PluginRegistry,
+		runtimeMgr:       deps.RuntimeManager,
+		runtimeExecutor:  deps.RuntimeExecutor,
+		secretLease:      deps.SecretLease,
+		permission:       deps.Permission,
+		authority:        deps.AuthorityView,
 		structureBuilder: deps.StructureBuilder,
-		audit:          deps.AuditSink,
-		checkpoint:     deps.CheckpointClassifier,
-		eligibility:    deps.EligibilityChecker,
+		audit:            deps.AuditSink,
+		checkpoint:       deps.CheckpointClassifier,
+		eligibility:      deps.EligibilityChecker,
 	}
 	return c, nil
 }
@@ -312,7 +312,16 @@ func (c *RecoveryCoordinator) executeRecoveryFlow(ctx context.Context, op *Recov
 		}
 	}
 
-	level := c.classifier.DetermineLevel(op.FailureClass, 0, 3)
+	restartCount := 0
+	maxRestarts := 3
+	if c.supervisor != nil {
+		restartCount = c.supervisor.GetRestartCount(string(req.RuntimeID))
+		maxRestarts = c.supervisor.GetMaxRestarts(string(req.RuntimeID))
+		if maxRestarts <= 0 {
+			maxRestarts = 3
+		}
+	}
+	level := c.classifier.DetermineLevel(op.FailureClass, restartCount, maxRestarts)
 	op.Level = level
 
 	result := &RecoveryResult{}
@@ -471,7 +480,87 @@ func (c *RecoveryCoordinator) executeRuntimeReconstruction(ctx context.Context, 
 }
 
 func (c *RecoveryCoordinator) reconcileAfterRollback(ctx context.Context, op *RecoveryOperation) error {
+	if c.pluginReg == nil || c.runtimeMgr == nil {
+		return nil
+	}
+
+	plugins, err := c.pluginReg.ListByExtension(ctx, op.ExtensionID)
+	if err != nil {
+		return fmt.Errorf("list plugins after rollback: %w", err)
+	}
+
+	for _, plugin := range plugins {
+		if plugin.ID != op.PluginID {
+			continue
+		}
+		var runtimeID domain.RuntimeInstanceID
+		runtimes := c.runtimeMgr.ListRuntimes()
+		for _, rt := range runtimes {
+			if rt.PluginID == op.PluginID && rt.State != domain.RuntimeStateStopped {
+				runtimeID = rt.ID
+				break
+			}
+		}
+		if runtimeID == "" {
+			runtimeID = reqRuntimeID(op, c.runtimeMgr)
+		}
+		if runtimeID == "" {
+			log.Printf("[recovery-coordinator] reconcileAfterRollback: no active runtime for plugin %s, skipping", op.PluginID)
+			continue
+		}
+
+		if c.eligibility != nil && c.eligibility.ExtensionChecker != nil {
+			if !c.eligibility.ExtensionChecker.IsExtensionInstalled(op.ExtensionID) {
+				log.Printf("[recovery-coordinator] reconcileAfterRollback: extension %s no longer installed, skipping", op.ExtensionID)
+				continue
+			}
+			if !c.eligibility.ExtensionChecker.IsExtensionEnabled(op.ExtensionID) {
+				log.Printf("[recovery-coordinator] reconcileAfterRollback: extension %s disabled, skipping", op.ExtensionID)
+				continue
+			}
+			if !c.eligibility.ExtensionChecker.IsPluginCurrent(op.PluginID) {
+				log.Printf("[recovery-coordinator] reconcileAfterRollback: plugin %s no longer current, skipping", op.PluginID)
+				continue
+			}
+		}
+
+		if c.secretLease != nil {
+			c.secretLease.RevokeByRuntimeInstance(string(runtimeID))
+		}
+
+		if c.authority != nil {
+			auth, err := c.authority.GetAuthority(runtimeID)
+			if err == nil && auth.Mode == "emergency" {
+				log.Printf("[recovery-coordinator] reconcileAfterRollback: runtime %s in emergency mode, skipping restart", runtimeID)
+				continue
+			}
+		}
+
+		if c.runtimeExecutor != nil {
+			if err := c.runtimeExecutor.StopRuntime(ctx, runtimeID); err != nil {
+				log.Printf("[recovery-coordinator] reconcileAfterRollback: stop runtime %s failed: %v", runtimeID, err)
+			}
+			if err := c.runtimeExecutor.StartRuntime(ctx, runtimeID); err != nil {
+				return fmt.Errorf("reconcileAfterRollback: start runtime %s failed: %w", runtimeID, err)
+			}
+		}
+	}
+
 	return nil
+}
+
+func reqRuntimeID(op *RecoveryOperation, runtimeMgr RuntimeManagerReader) domain.RuntimeInstanceID {
+	runtimes := runtimeMgr.ListRuntimes()
+	candidates := make([]domain.RuntimeInstanceID, 0, len(runtimes))
+	for _, rt := range runtimes {
+		if rt.PluginID == op.PluginID {
+			candidates = append(candidates, rt.ID)
+		}
+	}
+	if len(candidates) == 1 {
+		return candidates[0]
+	}
+	return ""
 }
 
 func (c *RecoveryCoordinator) IsRecovering(runtimeID domain.RuntimeInstanceID) bool {

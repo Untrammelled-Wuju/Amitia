@@ -170,7 +170,7 @@ def compute_sha256sums(work_dir):
         for fname in sorted(files):
             fp = root_path / fname
             rel = fp.relative_to(work_dir).as_posix()
-            if rel == "SHA256SUMS":
+            if rel == "metadata/SHA256SUMS":
                 continue
             sha = hashlib.sha256(fp.read_bytes()).hexdigest()
             lines.append((rel, sha))
@@ -304,33 +304,32 @@ def main():
         comp_lock_out = {
             "schemaVersion": 1,
             "runtimeVersion": args.runtime_version,
-            "components": {}
+            "packageId": "amitia.runtime.android",
+            "components": []
         }
         for key in ["rootfs", "backend", "node", "nodeScripts", "qdrant", "guestLayout"]:
             c = components[key]
-            comp_lock_out["components"][key] = {
-                "componentId": c["componentId"],
+            comp_lock_out["components"].append({
+                "id": key,
                 "version": c["version"],
-                "sha256": c["sha256"],
-                "platform": c["platform"],
                 "architecture": c["architecture"],
-            }
-            if "artifact" in c:
-                comp_lock_out["components"][key]["artifact"] = c["artifact"]
-        comp_lock_out["components"]["pluginHost"] = {
-            "componentId": components["pluginHost"]["componentId"],
-            "source": components["pluginHost"]["source"],
-            "entry": components["pluginHost"]["entry"],
-            "commit": components["pluginHost"]["commit"],
-            "treeSha256": plugin_host_result["tree_sha256"],
-        }
-        comp_lock_out["components"]["taskHost"] = {
-            "componentId": components["taskHost"]["componentId"],
-            "source": components["taskHost"]["source"],
-            "entry": components["taskHost"]["entry"],
-            "commit": components["taskHost"]["commit"],
-            "treeSha256": task_host_result["tree_sha256"],
-        }
+                "sha256": c["sha256"],
+                "path": c.get("artifact", ""),
+            })
+        comp_lock_out["components"].append({
+            "id": "plugin-host",
+            "version": "1.0.0",
+            "architecture": "arm64",
+            "sha256": plugin_host_result["tree_sha256"],
+            "path": "plugin-host/dist/index.js",
+        })
+        comp_lock_out["components"].append({
+            "id": "task-host",
+            "version": "1.0.0",
+            "architecture": "arm64",
+            "sha256": task_host_result["tree_sha256"],
+            "path": "task-host/dist/index.js",
+        })
         cl_path = work_dir / "metadata" / "component-lock.json"
         cl_path.write_text(json.dumps(comp_lock_out, indent=2, sort_keys=False, ensure_ascii=False) + "\n", encoding="utf-8")
         component_index = {
@@ -386,7 +385,6 @@ def main():
         third_party_src = REPO_ROOT / "THIRD_PARTY_NOTICES.md"
         if third_party_src.exists():
             shutil.copy2(str(third_party_src), str(work_dir / "licenses" / "THIRD_PARTY_NOTICES.md"))
-        compute_sha256sums(work_dir)
         for cid, files_info in [("pluginHost", plugin_host_result), ("taskHost", task_host_result)]:
             meta = {
                 "schemaVersion": 1,
@@ -397,6 +395,18 @@ def main():
             }
             meta_path = work_dir / "metadata" / f"{cid.lower()}.json"
             meta_path.write_text(json.dumps(meta, indent=2, sort_keys=False, ensure_ascii=False) + "\n", encoding="utf-8")
+        sha256sums_content = compute_sha256sums(work_dir)
+        sha256sums_path = work_dir / "metadata" / "SHA256SUMS"
+        sha256sums_path.parent.mkdir(parents=True, exist_ok=True)
+        sha256sums_path.write_text(sha256sums_content, encoding="utf-8")
+        sha256sums_sha = hashlib.sha256(sha256sums_path.read_bytes()).hexdigest()
+        sha256sums_size = sha256sums_path.stat().st_size
+        package_index = generate_manifest_file(
+            payload_index, rootfs_sha, runtime_sha, args.runtime_version, args.commit,
+            sha256sums_ref={"sha256": sha256sums_sha, "size": sha256sums_size}
+        )
+        pkg_idx_path = work_dir / "metadata" / "package-index.json"
+        pkg_idx_path.write_text(json.dumps(package_index, indent=2, sort_keys=False, ensure_ascii=False) + "\n", encoding="utf-8")
         import package_writer
         zip_payload = []
         for root, dirs, files in os.walk(str(work_dir)):

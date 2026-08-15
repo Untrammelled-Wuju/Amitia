@@ -39,10 +39,10 @@ type SinkHelloDescriptor struct {
 }
 
 type RunnerConfig struct {
-	PluginID          string
-	DefaultServiceID  string
-	Hello             HelloConfiguration
-	OnReady           func(ctx context.Context, client *Client) func(ctx context.Context)
+	PluginID         string
+	DefaultServiceID string
+	Hello            HelloConfiguration
+	OnReady          func(ctx context.Context, client *Client) func(ctx context.Context)
 }
 
 type ServiceRegistry struct {
@@ -200,6 +200,15 @@ func (r *HandlerRegistry) sendErrorResponse(ctx context.Context, client *Client,
 	}
 }
 
+func (r *Runner) findRegistryForNotification(notification protocol.Envelope) *HandlerRegistry {
+	if notification.ServiceID != "" {
+		if reg, ok := r.services[notification.ServiceID]; ok {
+			return reg
+		}
+	}
+	return nil
+}
+
 func (r *Runner) Run(ctx context.Context, defaultRegistry *HandlerRegistry) error {
 	if _, err := r.performHandshake(ctx); err != nil {
 		return fmt.Errorf("handshake failed: %w", err)
@@ -234,29 +243,30 @@ func (r *Runner) Run(ctx context.Context, defaultRegistry *HandlerRegistry) erro
 		}
 
 		switch envelope.Type {
+		case protocol.MessageTypeResponse, protocol.MessageTypeError:
+			r.client.DispatchIncomingResponse(envelope)
 		case protocol.MessageTypeRequest:
 			registry := r.findRegistryForRequest(envelope)
 			if registry == nil {
 				registry = defaultRegistry
 			}
-			registry.HandleRequest(ctx, r.client, envelope)
+			if registry != nil {
+				registry.HandleRequest(ctx, r.client, envelope)
+			}
 		case protocol.MessageTypeNotification:
 			registry := r.findRegistryForNotification(envelope)
 			if registry == nil {
 				registry = defaultRegistry
 			}
-			registry.HandleNotification(ctx, r.client, envelope)
+			if registry != nil {
+				registry.HandleNotification(ctx, r.client, envelope)
+			}
 		default:
 			fmt.Fprintf(os.Stderr, "unexpected message type: %s\n", envelope.Type)
 		}
 	}
 }
 
-func (r *Runner) findRegistryForNotification(notification protocol.Envelope) *HandlerRegistry {
-	if notification.ServiceID != "" {
-		if reg, ok := r.services[notification.ServiceID]; ok {
-			return reg
-		}
-	}
-	return nil
+func (r *Runner) Stop() {
+	r.running = false
 }

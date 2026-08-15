@@ -253,6 +253,9 @@ func main() {
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = services.Extension.Close(shutdownCtx)
+		if services.DeviceMesh != nil {
+			_ = services.DeviceMesh.Stop()
+		}
 	}()
 	if policy.GraphStore {
 		surrealdbDB.SetSurrealRestartCallback(func() {
@@ -350,13 +353,21 @@ func main() {
 			os.Exit(1)
 		}
 		srv.Handler = r
-		if err := startCoreWorkers(appCtx, services, srv); err != nil {
-			log.Error("核心Worker启动失败:", err)
-			cleanup()
-			os.Exit(1)
+	if err := startCoreWorkers(appCtx, services, srv); err != nil {
+		log.Error("核心Worker启动失败:", err)
+		cleanup()
+		os.Exit(1)
+	}
+	if services.DeviceMesh != nil {
+		if err := services.DeviceMesh.Start(); err != nil {
+			log.Warn("device-mesh runtime start failed: ", err)
 		}
+	}
 		runCoreServer(appCtx, srv, serverErr, services, srv)
 		return
+	}
+	if services.DeviceMesh != nil && services.DeviceMesh.LocalHandler != nil {
+		setLocalMeshHandler(services.DeviceMesh.LocalHandler)
 	}
 	r, errSetup := setupDeviceAgentRouter(ctx, services)
 	if errSetup != nil {

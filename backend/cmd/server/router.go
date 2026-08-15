@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/accountsession"
 	"github.com/u-ai/backend/internal/agent"
 	"github.com/u-ai/backend/internal/asr"
 	"github.com/u-ai/backend/internal/character"
@@ -34,6 +35,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/release/importer"
 	"github.com/u-ai/backend/internal/desktoppet/runtime"
 	runtimev2 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v2"
+	devicemeshserver "github.com/u-ai/backend/internal/devicemesh/server"
 	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/embedding_config"
 	"github.com/u-ai/backend/internal/emote"
@@ -60,6 +62,7 @@ import (
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/safety"
+	"github.com/u-ai/backend/internal/securityaudit"
 	"github.com/u-ai/backend/internal/system"
 	"github.com/u-ai/backend/internal/temporal"
 	"github.com/u-ai/backend/internal/tts"
@@ -137,6 +140,17 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		public.POST("/onboarding/complete", systemHandler.OnboardingComplete)
 	}
 
+	accountSessionSvc := accountsession.NewAccountSessionService(ctx.DB, accountsession.AccountSessionServiceConfig{
+		Sessions:    accountsession.NewSessionRepository(ctx.DB),
+		Refresh:     accountsession.NewRefreshRepository(ctx.DB),
+		Audit:       accountsession.NewAuditLogger(securityaudit.NewRepository(ctx.DB)),
+		Guard:       accountsession.NewLoginGuardService(accountsession.NewGuardRepository(ctx.DB)),
+		MaxSessions: 10,
+	})
+	accountSessionValidator := accountsession.NewValidator(accountSessionSvc.SessionRepository(), &userServiceProvider{repo: userRepo})
+	accountSessionHandler := accountsession.NewHandler(accountSessionSvc, accountSessionValidator, accountSessionSvc.AuditLogger(), &userServiceProvider{repo: userRepo})
+	accountsession.RegisterPublicRoutes(public, accountSessionHandler)
+
 	sessionSvc, err := security.NewDesktopSessionService(ctx.DB, config.AppCfg.Storage.DataDir, localCredentialStore)
 	if err != nil {
 		return nil, fmt.Errorf("initialize desktop session service: %w", err)
@@ -165,6 +179,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 					LocalUserID:      config.AppCfg.Security.LocalUserID,
 					ListenAddress:    config.AppCfg.Server.Host,
 					AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
+					AccountSessions:  accountSessionValidator,
 				},
 			),
 		)
@@ -180,6 +195,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 				sessionSvc.CreateSession,
 			)
 		}
+		accountsession.RegisterAuthenticatedRoutes(localRoot, accountSessionHandler)
 	}
 
 	if services.DesktopInstanceStore != nil {
@@ -198,6 +214,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 					ListenAddress:    config.AppCfg.Server.Host,
 					AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
 					SessionService:   sessionSvc,
+					AccountSessions:  accountSessionValidator,
 				},
 			),
 		)
@@ -390,7 +407,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		feedback.RegisterFeedbackRouter(apiGroup, ctx)
 		graph.RegisterGraphRouter(apiGroup, config.AppCfg.Providers.GraphStore.SurrealDB)
 		agent.RegisterAgentRouter(apiGroup, ctx, services.UnifiedEntry)
-		system.RegisterSystemRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.DataLifecycle, services.Reconciliation, services.Memory, services.Profile, services.Episodic, services.Graph, services.Temporal, services.DataPortability)
+		system.RegisterSystemRouter(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.DataLifecycle, services.Reconciliation, services.Memory, services.Profile, services.Episodic, services.Graph, services.Temporal, services.DataPortability, services.Artifact.Service)
 		companion.RegisterCompanionRouter(apiGroup, services.Companion)
 		qq.RegisterQQRouter(apiGroup, ctx)
 		tts.RegisterTtsRouter(apiGroup, ctx)
@@ -400,6 +417,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		embedding_config.RegisterEmbeddingConfigRouter(apiGroup, ctx)
 		imagegen.RegisterImageGenRouter(apiGroup, ctx)
 		desktoppet.RegisterDesktopPetRouter(apiGroup, ctx, services.PathRegistry)
+		if services.Artifact != nil && services.Artifact.Handler != nil {
+			services.Artifact.Handler.Register(apiGroup)
+		}
 		doctor.RegisterRouter(apiGroup, ctx.DB, services.Extension)
 		readiness.RegisterRouter(apiGroup, ctx.DB, services.Extension)
 		system.RegisterPsycheAPIRouter(apiGroup)
@@ -544,6 +564,45 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		},
 	)
 	runtimev2.RegisterUserRoutes(apiGroup, services.DesktopPetRuntimeV2)
+
+	if services.DeviceMesh != nil && services.KernelContainer != nil {
+		kernelStore := services.KernelContainer.Store.DB()
+		deviceReg := services.KernelContainer.DeviceRegistry
+		meshSessionSvc := services.KernelContainer.DeviceRuntimeSessions
+		devicemeshserver.RegisterCloudRoutes(apiGroup, security.AuthenticationMiddleware(security.AuthConfig{
+			Mode:             config.AppCfg.Security.Mode,
+			JWTSecret:        config.AppCfg.JWT.Secret,
+			JWTIssuer:        config.AppCfg.JWT.Issuer,
+			JWTAudience:      config.AppCfg.JWT.Audience,
+			LocalCredentials: localCredentialStore,
+			LocalUserID:      config.AppCfg.Security.LocalUserID,
+			ListenAddress:    config.AppCfg.Server.Host,
+			AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
+			SessionService:   sessionSvc,
+		}), &devicemeshserver.RouterDeps{
+			DB:            kernelStore,
+			Sessions:      meshSessionSvc,
+			BootstrapSvc:  services.DeviceMesh.BootstrapSvc,
+			CredentialSvc: services.DeviceMesh.CredentialSvc,
+			Hub:           services.DeviceMesh.Hub,
+			Probe:         services.DeviceMesh.Probe,
+			DeviceReg:     deviceReg,
+			GetUserID: func(c *gin.Context) (runtimeidentity.UserID, bool) {
+				val, exists := c.Get("userId")
+				if !exists {
+					return runtimeidentity.UserID(""), false
+				}
+				switch v := val.(type) {
+				case runtimeidentity.UserID:
+					return v, true
+				case string:
+					return runtimeidentity.UserID(v), true
+				default:
+					return runtimeidentity.UserID(""), false
+				}
+			},
+		})
+	}
 
 	maintenanceAuthGroup := r.Group("/api")
 	maintenanceAuthGroup.Use(security.AuthenticationMiddleware(security.AuthConfig{

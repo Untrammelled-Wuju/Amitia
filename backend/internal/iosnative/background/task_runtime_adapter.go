@@ -3,7 +3,6 @@ package background
 import (
 	"context"
 	"encoding/json"
-	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 )
@@ -42,9 +41,13 @@ func (a *taskRuntimeServiceAdapter) GetRun(ctx context.Context, taskRunID string
 	}
 	if prog, err := a.svc.GetProgress(ctx, taskRunID); err == nil && prog != nil {
 		rec.Progress = &TaskProgressRecord{
-			TotalUnits:     int64(prog.Total),
-			CompletedUnits: int64(prog.Current),
-			Phase:          prog.Message,
+			Phase: prog.Message,
+		}
+		if prog.Total != nil {
+			rec.Progress.TotalUnits = int64(*prog.Total)
+		}
+		if prog.Current != nil {
+			rec.Progress.CompletedUnits = int64(*prog.Current)
 		}
 	}
 	return rec, nil
@@ -82,10 +85,12 @@ func (a *taskRuntimeServiceAdapter) GetCheckpoint(ctx context.Context, taskRunID
 	if cp == nil {
 		return nil, nil
 	}
+	var data map[string]any
+	if len(cp.Payload) > 0 {
+		_ = json.Unmarshal(cp.Payload, &data)
+	}
 	return &CheckpointData{
-		LastUnit: cp.LastUnit,
-		Phase:    cp.Phase,
-		Data:     cp.Data,
+		Data: data,
 	}, nil
 }
 
@@ -106,7 +111,3 @@ func (a *taskRuntimeServiceAdapter) CancelRun(ctx context.Context, taskRunID str
 }
 
 var _ TaskRuntimePort = (*taskRuntimeServiceAdapter)(nil)
-
-func timePtr(t time.Time) *time.Time {
-	return &t
-}

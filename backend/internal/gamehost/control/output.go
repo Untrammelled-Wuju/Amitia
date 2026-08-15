@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 
 	"github.com/u-ai/backend/internal/gamehost/domain"
-	"github.com/u-ai/backend/pkg/gameplugin/protocol/contracts"
 )
 
 type ControlOutputKind string
@@ -23,6 +22,8 @@ var validOutputKinds = map[ControlOutputKind]bool{
 	KindChannel:    true,
 	KindBinary:     true,
 	KindEffect:     true,
+	KindInternal:   true,
+	KindHostAction: true,
 }
 
 func IsValidPublicOutputKind(kind ControlOutputKind) bool {

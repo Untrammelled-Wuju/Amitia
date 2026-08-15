@@ -24,6 +24,12 @@ var (
 	ErrCapabilityStillUnavailable = errors.New("acquisition: capability still unavailable after acquisition")
 	ErrResumeContextMissing  = errors.New("acquisition: resume context missing")
 	ErrAcquisitionCancelled  = errors.New("acquisition: cancelled")
+
+	ErrInstallerRegistryUnavailable = errors.New("acquisition: installer registry unavailable")
+	ErrNoInstallerForMethod         = errors.New("acquisition: no installer registered for install method")
+	ErrProviderRegistryUnavailable  = errors.New("acquisition: provider registry unavailable")
+	ErrProviderDefinitionNotFound   = errors.New("acquisition: provider definition not found for capability")
+	ErrToolRegistryNil              = errors.New("acquisition: tool registry is nil")
 )
 
 type AcquisitionError struct {

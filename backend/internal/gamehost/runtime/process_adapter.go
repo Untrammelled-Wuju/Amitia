@@ -45,15 +45,20 @@ func (a *processSupervisorAdapter) StartProcess(ctx context.Context, def *truste
 		env[k] = v
 	}
 
+	if execCtx.SecretLeaseSession != nil && execCtx.SecretLeaseSession.SessionID != "" {
+		env["AMITIA_SECRET_LEASE_SESSION"] = execCtx.SecretLeaseSession.SessionID
+	}
+
 	startReq := trusted_service.StartRequest{
 		ServiceID:      supervisorKey,
 		InstanceID:     instanceID,
+		RuntimeID:      string(execCtx.RuntimeID),
 		Generation:     execCtx.Generation,
 		PublisherTrust: a.resolveTrustLevel(def),
 		BasePath:       execCtx.BasePath,
 		WorkingDir:     execCtx.ServicePaths.Data,
 		SessionToken:   execCtx.SessionToken,
-		SecretLease:    execCtx.SecretLease,
+		SecretLease:    secretSessionID(execCtx),
 		LogLevel:       "info",
 		Args:           env,
 	}
@@ -110,4 +115,11 @@ func (a *processSupervisorAdapter) resolveTrustLevel(def *trusted_service.Servic
 		return trusted_service.TrustLevel(def.TrustLevel)
 	}
 	return trusted_service.TrustLevelTrusted
+}
+
+func secretSessionID(execCtx ServiceExecutionContext) string {
+	if execCtx.SecretLeaseSession == nil {
+		return ""
+	}
+	return execCtx.SecretLeaseSession.SessionID
 }

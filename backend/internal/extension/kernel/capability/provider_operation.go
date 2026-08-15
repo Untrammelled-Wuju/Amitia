@@ -89,19 +89,19 @@ func (s *ProviderInvocationService) Invoke(
 	}
 
 	invocation := NewToolInvocationContext(ToolInvocationOptions{
-		Source:          InvocationSourceProvider,
-		UserID:          request.UserID,
+		Source:          InvocationSourceUser,
+		UserID:          string(request.UserID),
 		ExecutionTarget:  resolution.ExecutionTarget,
 	})
 
+	var execResult UnifiedToolResult
 	if routedAdapter, ok := adapter.(RoutedRuntimeAdapter); ok {
-		execResult := routedAdapter.ExecuteRoute(ctx, route, invocation, request.Input)
-		result.Output = execResult.Output
+		execResult = routedAdapter.ExecuteRoute(ctx, route, invocation, request.Input)
 	} else {
-		execResult := adapter.Execute(ctx, route.Binding, invocation, request.Input)
-		result.Output = execResult.Output
+		execResult = adapter.Execute(ctx, route.Binding, invocation, request.Input)
 	}
 
+	result.Output = execResult.Structured
 	return result, nil
 }
 

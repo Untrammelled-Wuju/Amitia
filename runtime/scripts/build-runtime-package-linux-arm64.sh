@@ -1,4 +1,8 @@
 #!/bin/bash
+# DEPRECATED: This shell script is a prototype and is not used by the build system.
+# The authoritative build system is the Python-based builder at:
+#   runtime/build/runtime-package/android-arm64/build.py
+# Use: python build.py --runtime-version <version> --commit <commit>
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
