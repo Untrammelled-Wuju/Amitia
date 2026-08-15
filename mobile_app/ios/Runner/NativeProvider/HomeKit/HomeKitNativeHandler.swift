@@ -34,16 +34,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     public func capabilitySnapshot() -> IOSNativeCapability {
-        let status = HMHomeManager.authorizationStatus
-        let authorized: Bool
-        switch status {
-        case .authorized:
-            authorized = true
-        case .notDetermined, .restricted, .determined:
-            authorized = false
-        @unknown default:
-            authorized = false
-        }
+        let authorized = isHomeKitAuthorized()
         return IOSNativeCapability(
             available: true,
             authorized: authorized,
@@ -109,7 +100,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleStatus(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        let status = HMHomeManager.authorizationStatus
+        let status = homeKitAuthorizationStatusUnchecked()
         let authorized = status == .authorized
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
@@ -126,7 +117,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleAuthorizationStatus(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        let status = HMHomeManager.authorizationStatus
+        let status = homeKitAuthorizationStatusUnchecked()
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
             requestID: request.requestID,
@@ -638,6 +629,25 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
             result: nil,
             error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "trigger deletion not supported in this version")
         )
+    }
+
+    private func isHomeKitAuthorized() -> Bool {
+        if #available(iOS 16.1, *) {
+            return homeKitAuthorizationStatus() == .authorized
+        }
+        return false
+    }
+
+    @available(iOS 16.1, *)
+    private func homeKitAuthorizationStatus() -> HMAuthorizationStatus {
+        return HMHomeManager.authorizationStatus
+    }
+
+    private func homeKitAuthorizationStatusUnchecked() -> HMAuthorizationStatus {
+        if #available(iOS 16.1, *) {
+            return HMHomeManager.authorizationStatus
+        }
+        return .notDetermined
     }
 
     private func authorizationStatusString(_ status: HMAuthorizationStatus) -> String {

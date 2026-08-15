@@ -177,14 +177,21 @@ public final class BluetoothCentralStore: NSObject, CBCentralManagerDelegate, CB
     }
 
     public func authorizationStatus() -> String {
-        let status = CBCentralManager.authorization
-        switch status {
-        case .notDetermined: return "notDetermined"
-        case .restricted: return "restricted"
-        case .denied: return "denied"
-        case .allowedAlways: return "authorized"
-        @unknown default: return "unknown"
+        if #available(iOS 13.1, *) {
+            let status = CBCentralManager.authorization
+            switch status {
+            case .notDetermined: return "notDetermined"
+            case .restricted: return "restricted"
+            case .denied: return "denied"
+            case .allowedAlways: return "authorized"
+            @unknown default: return "unknown"
+            }
         }
+        let state = adapterState()
+        if state == .poweredOn {
+            return "authorized"
+        }
+        return "notDetermined"
     }
 
     public func startScan(withServiceUUIDs uuids: [CBUUID]?, duration: TimeInterval) -> Bool {
@@ -694,25 +701,6 @@ public final class BluetoothCentralStore: NSObject, CBCentralManagerDelegate, CB
         scanTimer?.cancel()
         scanTimer = nil
         lock.unlock()
-    }
-
-    private func resolveCompletionKey(_ type: String, peripheral: CBPeripheral?, service: CBService?, characteristic: CBCharacteristic?, descriptor: CBDescriptor?) -> String {
-        switch type {
-        case "connect", "disconnect", "readRSSI":
-            return "\(type)-\(peripheral?.identifier.uuidString ?? "")"
-        case "discoverServices":
-            return "\(type)-\(peripheral?.identifier.uuidString ?? "")"
-        case "discoverCharacteristics":
-            return "\(type)-\(peripheral?.identifier.uuidString ?? "")-\(service?.uuid.uuidString ?? "")"
-        case "discoverDescriptors":
-            return "\(type)-\(peripheral?.identifier.uuidString ?? "")-\(characteristic?.uuid.uuidString ?? "")"
-        case "readCharacteristic", "writeCharacteristic", "setNotify":
-            return "\(type)-\(peripheral?.identifier.uuidString ?? "")-\(characteristic?.uuid.uuidString ?? "")"
-        case "readDescriptor", "writeDescriptor":
-            return "\(type)-\(peripheral?.identifier.uuidString ?? "")-\(descriptor?.uuid.uuidString ?? "")"
-        default:
-            return "\(type)-\(UUID().uuidString)"
-        }
     }
 
     private func completeOperation(key: String, result: Any?, error: Error?) {

@@ -112,34 +112,24 @@ try {
 
 Write-Host "[EXTRACT] Extraction complete: $ExtractDir" -ForegroundColor Green
 
-$BuildRecord = @{
-    schemaVersion = 1
-    component = "ubuntu-rootfs"
-    distribution = $Lock.distribution
-    flavor = $Lock.flavor
-    release = $Lock.release
-    codename = $Lock.codename
-    architecture = $Lock.architecture
-    guestPlatform = $Lock.guestPlatform
-    runtimeKind = $Lock.runtimeKind
-    source = @{
-        url = $Lock.sourceUrl
-        archiveFileName = $Lock.archiveFileName
-        expectedSha256 = $ExpectedSha
-        actualSha256 = $ActualSha
-    }
-    stagingPath = $ExtractDir
-    timestamp = (Get-Date -Format "yyyy-MM-ddTHH:mm:ssZ")
-    offline = [bool]$Offline
+Write-Host "[CLEAN] Cleaning rootfs before freeze..." -ForegroundColor Cyan
+@(
+    "$ExtractDir\tmp\*",
+    "$ExtractDir\var\tmp\*",
+    "$ExtractDir\var\cache\apt\*"
+) | ForEach-Object {
+    Remove-Item $_ -Force -ErrorAction SilentlyContinue
 }
-
-$BuildRecordPath = Join-Path $StagingPath "rootfs-build-record.json"
-$BuildRecord | ConvertTo-Json -Depth 5 | Set-Content -Path $BuildRecordPath -Encoding UTF8
-
-Write-Host "[RECORD] Build record written: $BuildRecordPath" -ForegroundColor Green
+Remove-Item "$ExtractDir\etc\machine-id" -Force -ErrorAction SilentlyContinue
+Get-ChildItem "$ExtractDir\etc\ssh" -Filter "ssh_host_*" -ErrorAction SilentlyContinue | Remove-Item -Force
+Remove-Item "$ExtractDir\root\.bash_history" -Force -ErrorAction SilentlyContinue
+Remove-Item "$ExtractDir\root\.cache" -Recurse -Force -ErrorAction SilentlyContinue
+Get-ChildItem "$ExtractDir" -Filter "*.log" -Recurse -ErrorAction SilentlyContinue | Remove-Item -Force
+Get-ChildItem "$ExtractDir\var\log" -File -ErrorAction SilentlyContinue | Remove-Item -Force
+Write-Host "[CLEAN] Rootfs cleaned" -ForegroundColor Green
 
 if (-not $SkipVerify) {
-    Write-Host "[VERIFY] Running static validation..." -ForegroundColor Cyan
+    Write-Host "[VERIFY] Running static validation on final rootfs tree..." -ForegroundColor Cyan
     $ValidatorPath = Join-Path $ProjectRoot "runtime\validation\linux-arm64\rootfs_validator.py"
     if (Test-Path $ValidatorPath) {
         $VerifyArgs = @("--rootfs", $ExtractDir, "--lock", $LockFile, "--policy", $PolicyFile)
@@ -158,13 +148,96 @@ Write-Host "============================================" -ForegroundColor Cyan
 Write-Host " Ubuntu ARM64 Rootfs Prepare Complete" -ForegroundColor Cyan
 Write-Host "============================================" -ForegroundColor Cyan
 Write-Host " Staging: $ExtractDir"
-Write-Host " Build Record: $BuildRecordPath"
+Write-Host "============================================" -ForegroundColor Cyan
+
+Write-Host "[FREEZE] Generating tree manifest..." -ForegroundColor Cyan
+$ManifestLines = Get-ChildItem -Path $ExtractDir -Recurse -File | Sort-Object { $_.FullName.Substring($ExtractDir.Length + 1) } | ForEach-Object {
+    $RelPath = $_.FullName.Substring($ExtractDir.Length + 1) -replace '\\', '/'
+    $Hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash.ToLower()
+    "$Hash  $RelPath"
+}
+$ManifestLines | Set-Content -Path (Join-Path $OutputPath "rootfs-files.sha256") -Encoding UTF8
+Write-Host "[PASS] rootfs-files.sha256 generated" -ForegroundColor Green
+
+$Sha256Algo = [System.Security.Cryptography.SHA256]::Create()
+$ManifestBytes = [System.Text.Encoding]::UTF8.GetBytes(($ManifestLines -join "`n"))
+$HashBytes = $Sha256Algo.ComputeHash($ManifestBytes)
+$TreeSha = ($HashBytes | ForEach-Object { '{0:x2}' -f $_ }) -join ''
+$Sha256Algo.Dispose()
+Write-Host "[TREE SHA] $TreeSha" -ForegroundColor Green
+
+$FrozenTarName = "ubuntu-rootfs-arm64.tar"
+$FrozenTarPath = Join-Path $OutputPath $FrozenTarName
+$TempTarPath = "$FrozenTarPath.tmp.$([guid]::NewGuid().ToString('N').Substring(0,8))"
+
+if (Test-Path $TempTarPath) { Remove-Item $TempTarPath -Force }
+
+Write-Host "[FREEZE] Creating deterministic frozen tar archive..." -ForegroundColor Cyan
+$SortedFiles = Get-ChildItem -Path $ExtractDir -Recurse -File | Sort-Object { $_.FullName.Substring($ExtractDir.Length + 1) } | ForEach-Object { $_.FullName }
+$FileNamesFile = [System.IO.Path]::GetTempFileName()
+$SortedFiles | Set-Content -Path $FileNamesFile -Encoding UTF8
+
+try {
+    & tar --null -T $FileNamesFile --mtime=@0 --owner=0 --group=0 --numeric-owner -cf $TempTarPath -C $ExtractDir 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        throw "tar failed with exit code $LASTEXITCODE"
+    }
+} finally {
+    Remove-Item $FileNamesFile -Force -ErrorAction SilentlyContinue
+}
+
+$FrozenSha = (Get-FileHash -Path $TempTarPath -Algorithm SHA256).Hash.ToLower()
+
+if (Test-Path $FrozenTarPath) { Remove-Item $FrozenTarPath -Force }
+Move-Item -Path $TempTarPath -Destination $FrozenTarPath -Force
+Write-Host "[FREEZE] Frozen archive created: $FrozenTarPath" -ForegroundColor Green
+Write-Host "[FREEZE] Frozen SHA256: $FrozenSha" -ForegroundColor Green
+
+$BuildRecord = @{
+    schemaVersion = 1
+    component = "ubuntu-rootfs"
+    distribution = $Lock.distribution
+    flavor = $Lock.flavor
+    release = $Lock.release
+    codename = $Lock.codename
+    architecture = $Lock.architecture
+    guestPlatform = $Lock.guestPlatform
+    runtimeKind = $Lock.runtimeKind
+    source = @{
+        url = $Lock.sourceUrl
+        archiveFileName = $Lock.archiveFileName
+        expectedSha256 = $ExpectedSha
+        actualSha256 = $ActualSha
+    }
+    frozen = @{
+        archiveFileName = $FrozenTarName
+        archiveSha256 = $FrozenSha
+        treeSha256 = $TreeSha
+    }
+    outputPath = $OutputPath
+    timestamp = [DateTimeOffset]::UtcNow.ToString("o")
+    offline = [bool]$Offline
+} | ConvertTo-Json -Depth 5
+
+$BuildRecordPath = Join-Path $OutputPath "rootfs-build-record.json"
+$BuildRecord | Set-Content -Path $BuildRecordPath -Encoding UTF8
+Write-Host "[RECORD] Final build record: $BuildRecordPath" -ForegroundColor Green
+
+Write-Host "============================================" -ForegroundColor Cyan
+Write-Host "[DONE] Ubuntu ARM64 Rootfs Freeze Complete" -ForegroundColor Cyan
+Write-Host "============================================" -ForegroundColor Cyan
+Write-Host " Output: $OutputPath"
+Write-Host "  $FrozenTarName   - frozen rootfs archive"
+Write-Host "  rootfs-files.sha256     - tree manifest"
+Write-Host "  rootfs-build-record.json - final build record"
 Write-Host "============================================" -ForegroundColor Cyan
 
 return @{
     RootfsPath = $ExtractDir
     BuildRecordPath = $BuildRecordPath
     ArchiveSha256 = $ActualSha
+    FrozenSha256 = $FrozenSha
+    TreeSha256 = $TreeSha
     StagingDir = $StagingPath
     OutputDir = $OutputPath
 }

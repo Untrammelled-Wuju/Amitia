@@ -36,3 +36,11 @@ type Bridge interface {
 	Execute(context.Context, Request) (Response, error)
 	Health(context.Context) Health
 }
+
+type AndroidBridge interface {
+	Bridge
+	AttachRelaySession(transport RelayTransport)
+	DetachSession()
+	Generation() uint64
+	SessionAttached() bool
+}

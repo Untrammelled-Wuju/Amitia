@@ -84,7 +84,16 @@ func (b *AndroidTransportBridge) Execute(ctx context.Context, req Request) (Resp
 func (b *AndroidTransportBridge) Health(_ context.Context) Health {
 	b.healthMu.RLock()
 	defer b.healthMu.RUnlock()
+	if b.session == nil {
+		return HealthUnhealthy
+	}
 	return b.hostHealth
+}
+
+func (b *AndroidTransportBridge) SessionAttached() bool {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+	return b.session != nil
 }
 
 func (b *AndroidTransportBridge) AttachSession(session relaySession) {

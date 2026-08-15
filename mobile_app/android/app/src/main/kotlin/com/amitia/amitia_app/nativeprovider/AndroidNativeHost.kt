@@ -118,8 +118,13 @@ internal class AndroidNativeHost private constructor(
 
     fun health(): NativeBridgeHealth {
         val capabilities = buildCapabilities()
+        val hasHandlers = handlers.isNotEmpty()
+        val status = when {
+            !hasHandlers -> NativeBridgeProtocol.HEALTH_UNKNOWN
+            else -> NativeBridgeProtocol.HEALTH_READY
+        }
         return NativeBridgeHealth(
-            status = NativeBridgeProtocol.HEALTH_READY,
+            status = status,
             platform = NativeBridgeProtocol.PLATFORM_ANDROID,
             protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
             hostGeneration = hostGeneration.get(),
