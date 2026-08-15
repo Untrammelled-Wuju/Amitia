@@ -141,6 +141,19 @@ func (p *PsycheBackupContributor) PreviewImport(ctx context.Context, req datapor
 }
 
 func (p *PsycheBackupContributor) Import(ctx context.Context, req dataportability.ImportRequest, in dataportability.BackupReader) error {
+	opts := dataportability.RestoreOptions{
+		OperationID:        req.OperationID,
+		Purpose:            dataportability.RestorePurposeOrdinary,
+		CharacterPolicy:    req.CharacterPolicy,
+		DefaultCharacterID: req.DefaultCharacterID,
+		ActivateImported:   req.ActivateImported,
+		IdentityMap:        req.IdentityMap,
+		SecretProvider:     req.SecretProvider,
+	}
+	return p.RestorePsyche(ctx, in, opts)
+}
+
+func (p *PsycheBackupContributor) RestorePsyche(ctx context.Context, in dataportability.BackupReader, opts dataportability.RestoreOptions) error {
 	rc, err := in.ReadComponent(ComponentIDPsycheStates)
 	if err != nil {
 		return err
@@ -162,7 +175,7 @@ func (p *PsycheBackupContributor) Import(ctx context.Context, req dataportabilit
 		p.DB.WithContext(ctx).Table("psyche_states").Select("character_id").Where("character_id = ?", rec.CharacterID).Scan(&existing)
 
 		if existing.CharacterID != "" {
-			switch req.CharacterPolicy {
+			switch opts.CharacterPolicy {
 			case dataportability.CollisionSkip:
 				continue
 			case dataportability.CollisionReplace:
@@ -202,3 +215,5 @@ func (p *PsycheBackupContributor) Import(ctx context.Context, req dataportabilit
 
 	return nil
 }
+
+var _ dataportability.PsycheRestorePort = (*PsycheBackupContributor)(nil)

@@ -129,9 +129,14 @@ class BackendWebSocketClient implements BackendWebSocketTransport {
 
     final token = _config.credential.revealForTransport();
     final headers = <String, String>{
-      BackendAuthHeader.localToken: token,
       'User-Agent': 'Amitia-Mobile',
     };
+    switch (_config.authStrategy) {
+      case BackendAuthStrategy.localToken:
+        headers[BackendAuthHeader.localToken] = token;
+      case BackendAuthStrategy.bearer:
+        headers[BackendAuthHeader.authorization] = 'Bearer $token';
+    }
 
     final webSocket = await WebSocket.connect(
       uri.toString(),

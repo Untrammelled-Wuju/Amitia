@@ -463,6 +463,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	})
 	executionKernel.ScopeGate.ScopeManager = scopeManager
 	executionKernel.PermissionGate.Broker = permBroker
+	executionKernel.ApprovalGate.Broker = permBroker
 	executionKernel.ScopeStore = scopeStore
 	executionKernel.PermissionSnapshotStore = permSnapshotStore
 

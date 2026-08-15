@@ -237,7 +237,7 @@ func (b *DefaultPermissionBroker) applyRemoteExecutionPolicy(def PermissionDefin
 	case RemoteExecutionDeny:
 		return DecisionDeny
 	case RemoteExecutionRequireApproval:
-		return ""
+		return DecisionRequireApproval
 	}
 	return ""
 }
@@ -401,6 +401,10 @@ func (b *DefaultPermissionBroker) ValidateSnapshot(ctx context.Context, snapshot
 
 	if snap.ExpiresAt != nil && time.Now().After(*snap.ExpiresAt) {
 		return ErrPermissionSnapshotExpired
+	}
+
+	if err := snap.VerifyIdentity(inv.Subject.ExtensionID, inv.Subject.ModuleID, inv.Generation); err != nil {
+		return err
 	}
 
 	if b.registry != nil {

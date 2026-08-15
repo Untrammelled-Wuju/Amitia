@@ -141,6 +141,19 @@ func (w *WorldbookBackupContributor) PreviewImport(ctx context.Context, req data
 }
 
 func (w *WorldbookBackupContributor) Import(ctx context.Context, req dataportability.ImportRequest, in dataportability.BackupReader) error {
+	opts := dataportability.RestoreOptions{
+		OperationID:        req.OperationID,
+		Purpose:            dataportability.RestorePurposeOrdinary,
+		CharacterPolicy:    req.CharacterPolicy,
+		DefaultCharacterID: req.DefaultCharacterID,
+		ActivateImported:   req.ActivateImported,
+		IdentityMap:        req.IdentityMap,
+		SecretProvider:     req.SecretProvider,
+	}
+	return w.RestoreWorldbook(ctx, in, opts)
+}
+
+func (w *WorldbookBackupContributor) RestoreWorldbook(ctx context.Context, in dataportability.BackupReader, opts dataportability.RestoreOptions) error {
 	rc, err := in.ReadComponent(ComponentIDWorldbookRecords)
 	if err != nil {
 		return err
@@ -162,7 +175,7 @@ func (w *WorldbookBackupContributor) Import(ctx context.Context, req dataportabi
 		var existing struct{ ID string }
 		w.DB.WithContext(ctx).Table("world_book").Select("id").Where("id = ?", rec.ID).Scan(&existing)
 		if existing.ID != "" {
-			switch req.CharacterPolicy {
+			switch opts.CharacterPolicy {
 			case dataportability.CollisionSkip:
 				continue
 			case dataportability.CollisionReplace:
@@ -206,3 +219,5 @@ func (w *WorldbookBackupContributor) Import(ctx context.Context, req dataportabi
 
 	return nil
 }
+
+var _ dataportability.WorldbookRestorePort = (*WorldbookBackupContributor)(nil)

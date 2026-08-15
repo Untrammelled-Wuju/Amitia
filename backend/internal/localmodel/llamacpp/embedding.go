@@ -16,7 +16,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/u-ai/backend/internal/chat/localmodel"
 	"github.com/u-ai/backend/internal/localmodel/gguf"
+	"github.com/u-ai/backend/internal/media"
 	"github.com/u-ai/backend/internal/runtimehost"
 )
 
@@ -32,20 +34,24 @@ type llamaCppEmbeddingBackend struct {
 }
 
 type llamaEmbeddingRuntime struct {
-	config     LlamaCppEmbeddingConfig
-	mu         sync.Mutex
-	baseURL    string
-	port       int
-	host       runtimehost.RuntimeHost
-	supervisor runtimehost.ProcessSupervisor
-	processID  runtimehost.ProcessID
+	config       LlamaCppEmbeddingConfig
+	mu           sync.Mutex
+	baseURL      string
+	port         int
+	host         runtimehost.RuntimeHost
+	supervisor   runtimehost.ProcessSupervisor
+	processID    runtimehost.ProcessID
+	materializer media.ResourceMaterializer
+	modelPath    string
+	modelCleanup func() error
 }
 
 func newLlamaEmbeddingRuntime(config LlamaCppEmbeddingConfig) *llamaEmbeddingRuntime {
 	return &llamaEmbeddingRuntime{
-		config:    config,
-		port:      0,
-		processID: runtimehost.ProcessID("llama-embedding-" + config.LocalModelID),
+		config:       config,
+		port:         0,
+		processID:    runtimehost.ProcessID("llama-embedding-" + config.LocalModelID),
+		materializer: localmodel.GetGlobalMediaMaterializer(),
 	}
 }
 
@@ -62,8 +68,17 @@ func (r *llamaEmbeddingRuntime) validateModelArtifact() error {
 	if r.config.ResourceURI == "" {
 		return fmt.Errorf("embedding model resource URI is empty")
 	}
+	if r.materializer == nil {
+		return fmt.Errorf("embedding model materializer not available")
+	}
 
-	info, err := os.Stat(r.config.ResourceURI)
+	materialized, cleanup, err := r.materializer.Materialize(context.Background(), r.config.ResourceURI)
+	if err != nil {
+		return fmt.Errorf("materialize embedding model resource: %w", err)
+	}
+	cleanup()
+
+	info, err := os.Stat(materialized)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return fmt.Errorf("embedding model not found: %w", err)
@@ -75,15 +90,23 @@ func (r *llamaEmbeddingRuntime) validateModelArtifact() error {
 		return fmt.Errorf("embedding model too small: %d bytes", info.Size())
 	}
 
-	if err := gguf.ValidateGGUFResource(r.config.ResourceURI); err != nil {
+	if err := gguf.ValidateGGUFResource(materialized); err != nil {
 		return fmt.Errorf("invalid GGUF: %w", err)
 	}
 	return nil
 }
 
 func (r *llamaEmbeddingRuntime) inspectModel() (*gguf.GGUFModelManifest, error) {
+	if r.materializer == nil {
+		return nil, fmt.Errorf("embedding model materializer not available")
+	}
+	localPath, cleanup, err := r.materializer.Materialize(context.Background(), r.config.ResourceURI)
+	if err != nil {
+		return nil, fmt.Errorf("materialize embedding model resource: %w", err)
+	}
+	defer cleanup()
 	inspector := gguf.NewInspector()
-	manifest, err := inspector.Inspect(r.config.ResourceURI)
+	manifest, err := inspector.Inspect(localPath)
 	if err != nil {
 		return nil, fmt.Errorf("inspect GGUF: %w", err)
 	}
@@ -108,8 +131,24 @@ func (r *llamaEmbeddingRuntime) startServer(ctx context.Context) error {
 	r.port = port
 	r.baseURL = fmt.Sprintf("http://127.0.0.1:%d", port)
 
+	if r.materializer != nil {
+		localPath, cleanup, err := r.materializer.Materialize(ctx, r.config.ResourceURI)
+		if err != nil {
+			releasePort(port)
+			r.port = 0
+			return fmt.Errorf("materialize embedding model resource: %w", err)
+		}
+		r.modelPath = localPath
+		r.modelCleanup = cleanup
+	}
+
+	modelPath := r.config.ResourceURI
+	if r.modelPath != "" {
+		modelPath = r.modelPath
+	}
+
 	args := []string{
-		"--model", r.config.ResourceURI,
+		"--model", modelPath,
 		"--port", strconv.Itoa(port),
 		"--host", "127.0.0.1",
 		"--ctx-size", strconv.Itoa(r.config.ContextSize),
@@ -144,12 +183,14 @@ func (r *llamaEmbeddingRuntime) startServer(ctx context.Context) error {
 	}
 
 	if err := r.supervisor.Register(spec); err != nil {
+		r.cleanupModel()
 		releasePort(port)
 		r.port = 0
 		return fmt.Errorf("register embedding server: %w", err)
 	}
 
 	if err := r.supervisor.Start(ctx, r.processID); err != nil {
+		r.cleanupModel()
 		releasePort(port)
 		r.port = 0
 		r.supervisor.Unregister(r.processID)
@@ -161,6 +202,14 @@ func (r *llamaEmbeddingRuntime) startServer(ctx context.Context) error {
 		return fmt.Errorf("embedding server not ready: %w", err)
 	}
 	return nil
+}
+
+func (r *llamaEmbeddingRuntime) cleanupModel() {
+	if r.modelCleanup != nil {
+		_ = r.modelCleanup()
+		r.modelCleanup = nil
+		r.modelPath = ""
+	}
 }
 
 func (r *llamaEmbeddingRuntime) stopServer() {
@@ -175,6 +224,7 @@ func (r *llamaEmbeddingRuntime) stopServer() {
 		releasePort(r.port)
 		r.port = 0
 	}
+	r.cleanupModel()
 	r.baseURL = ""
 }
 

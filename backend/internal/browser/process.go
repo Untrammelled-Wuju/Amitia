@@ -33,33 +33,6 @@ func newBrowserProcess(execInfo BrowserExecutable, config BrowserConfig, profile
 	}
 }
 
-func (p *browserProcess) start(ctx context.Context) error {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-
-	if err := p.ensureProfileDir(); err != nil {
-		return &BrowserError{
-			Code:    ErrCodeBrowserStartFailed,
-			Message: "failed to create browser profile directory",
-			Cause:   err,
-		}
-	}
-
-	args := p.buildArgs()
-
-	if err := launchPlatformProcess(p, args); err != nil {
-		return &BrowserError{
-			Code:    ErrCodeBrowserStartFailed,
-			Message: "failed to start browser process",
-			Cause:   err,
-		}
-	}
-
-	p.alive = true
-	p.connected = false
-	return nil
-}
-
 func (p *browserProcess) connectCDP(ctx context.Context) error {
 	p.mu.Lock()
 	reader := p.reader

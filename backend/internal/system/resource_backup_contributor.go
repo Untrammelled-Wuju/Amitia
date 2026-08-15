@@ -235,6 +235,19 @@ func (c *ResourceBackupContributor) PreviewImport(ctx context.Context, req datap
 }
 
 func (c *ResourceBackupContributor) Import(ctx context.Context, req dataportability.ImportRequest, in dataportability.BackupReader) error {
+	opts := dataportability.RestoreOptions{
+		OperationID:        req.OperationID,
+		Purpose:            dataportability.RestorePurposeOrdinary,
+		CharacterPolicy:    req.CharacterPolicy,
+		DefaultCharacterID: req.DefaultCharacterID,
+		ActivateImported:   req.ActivateImported,
+		IdentityMap:        req.IdentityMap,
+		SecretProvider:     req.SecretProvider,
+	}
+	return c.RestoreResources(ctx, in, opts)
+}
+
+func (c *ResourceBackupContributor) RestoreResources(ctx context.Context, in dataportability.BackupReader, opts dataportability.RestoreOptions) error {
 	useTable := c.tableExists("resource_files") || c.tableExists("attachments")
 
 	rc, err := in.ReadComponent(ComponentIDResources)

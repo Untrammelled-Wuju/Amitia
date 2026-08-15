@@ -6,6 +6,10 @@ front/dist/
 *.db-shm
 *.db-wal
 *.db-journal
+
+# Accidental Windows absolute-path artifacts
+**/D:*
+**/D*
 backend/data/data/backups/
 backend/data/migration_backups/
 backend/cmd/data/migration_backups/

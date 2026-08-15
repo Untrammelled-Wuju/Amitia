@@ -8,21 +8,28 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
+	ghpermission "github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/gamehost/domain"
+	"github.com/u-ai/backend/internal/gamehost/permission"
 )
 
 type ReadyVerifier interface {
 	IsReady(connKey string) bool
 }
 
+type RuntimePermissionChecker interface {
+	CheckRuntimePermission(ctx context.Context, runtimeID string, pluginID string, permID string) permission.DecisionResult
+}
+
 type HostAPIAdapter struct {
-	gateway   host_api.Gateway
-	mapper    IdentityMapper
-	permProv  PermissionSnapshotIDProvider
-	scopeProv ScopeSnapshotIDProvider
-	ready     ReadyVerifier
-	idGen     func() string
-	tracker   InvocationTracker
+	gateway      host_api.Gateway
+	mapper       IdentityMapper
+	permProv     PermissionSnapshotIDProvider
+	scopeProv    ScopeSnapshotIDProvider
+	ready        ReadyVerifier
+	idGen        func() string
+	tracker      InvocationTracker
+	permChecker  RuntimePermissionChecker
 }
 
 type InvocationTracker interface {
@@ -38,6 +45,7 @@ type HostAPIAdapterConfig struct {
 	ReadyVerifier      ReadyVerifier
 	IDGenerator        func() string
 	InvocationTracker  InvocationTracker
+	PermissionChecker  RuntimePermissionChecker
 }
 
 func NewHostAPIAdapter(cfg HostAPIAdapterConfig) (*HostAPIAdapter, error) {
@@ -57,13 +65,14 @@ func NewHostAPIAdapter(cfg HostAPIAdapterConfig) (*HostAPIAdapter, error) {
 		return nil, fmt.Errorf("hostapi: id generator is required")
 	}
 	return &HostAPIAdapter{
-		gateway:   cfg.Gateway,
-		mapper:    cfg.Mapper,
-		permProv:  cfg.PermissionProvider,
-		scopeProv: cfg.ScopeProvider,
-		ready:     cfg.ReadyVerifier,
-		idGen:     cfg.IDGenerator,
-		tracker:   cfg.InvocationTracker,
+		gateway:     cfg.Gateway,
+		mapper:      cfg.Mapper,
+		permProv:    cfg.PermissionProvider,
+		scopeProv:   cfg.ScopeProvider,
+		ready:       cfg.ReadyVerifier,
+		idGen:       cfg.IDGenerator,
+		tracker:     cfg.InvocationTracker,
+		permChecker: cfg.PermissionChecker,
 	}, nil
 }
 
@@ -94,6 +103,13 @@ func (a *HostAPIAdapter) Call(ctx context.Context, req Request) (Response, error
 	identity, err := a.mapper.MapIdentity(ctx, req.Peer)
 	if err != nil {
 		return Response{}, fmt.Errorf("hostapi: identity mapping failed: %w", err)
+	}
+
+	if a.permChecker != nil && req.Peer.RuntimeID != "" && req.Peer.PluginID != "" {
+		result := a.permChecker.CheckRuntimePermission(ctx, string(req.Peer.RuntimeID), string(req.Peer.PluginID), ghpermission.PermissionGameHostAPIInvoke)
+		if !result.Allowed() {
+			return Response{}, &PermissionDeniedError{Reason: string(result.Reason)}
+		}
 	}
 
 	var permSnapID, scopeSnapID string
@@ -150,4 +166,15 @@ func atomicIDGenerator() func() string {
 
 func DefaultIDGenerator() func() string {
 	return atomicIDGenerator()
+}
+
+type PermissionDeniedError struct {
+	Reason string
+}
+
+func (e *PermissionDeniedError) Error() string {
+	if e.Reason != "" {
+		return "hostapi: permission denied: " + e.Reason
+	}
+	return "hostapi: permission denied"
 }

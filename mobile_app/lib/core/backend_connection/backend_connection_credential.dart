@@ -1,9 +1,9 @@
 class BackendConnectionCredential {
-  final String _localToken;
+  final String _secret;
 
-  BackendConnectionCredential._(this._localToken);
+  BackendConnectionCredential._(this._secret);
 
-  String revealForTransport() => _localToken;
+  String revealForTransport() => _secret;
 
   @override
   String toString() => 'BackendConnectionCredential([REDACTED])';

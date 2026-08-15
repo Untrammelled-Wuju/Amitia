@@ -17,6 +17,13 @@ type RuntimeExecutor interface {
 	StopServices(ctx context.Context, runtimeID domain.RuntimeInstanceID, serviceIDs []domain.ServiceID) error
 	CleanupRuntime(ctx context.Context, runtimeID domain.RuntimeInstanceID) error
 	SetResolveDefinition(fn DefinitionResolverFunc)
+	SetRuntimeSubscriptionWatcher(w RuntimeSubscriptionWatcher)
+}
+
+type RuntimeSubscriptionWatcher interface {
+	OnRuntimeStopped(runtimeID string)
+	OnRuntimeRestarted(runtimeID string)
+	OnRuntimeGenerationChanged(runtimeID string, oldGeneration int64)
 }
 
 type RuntimeInstanceRef struct {
@@ -33,6 +40,8 @@ type RuntimeManager interface {
 	AllocateGeneration(runtimeID domain.RuntimeInstanceID) (int64, error)
 	GetLifecycleIntent(runtimeID domain.RuntimeInstanceID) (string, error)
 	SetLifecycleIntent(runtimeID domain.RuntimeInstanceID, intent string) error
+	IsEmergencyLatched(runtimeID domain.RuntimeInstanceID) bool
+	SetEmergencyLatch(runtimeID domain.RuntimeInstanceID, latched bool)
 }
 
 type RuntimeTopologyStore interface {
@@ -51,6 +60,13 @@ type runtimeExecutor struct {
 	handleStore       *RuntimeHandleStore
 	rollbackExecutor  RollbackExecutor
 	resolveDefinition DefinitionResolverFunc
+	runtimeSub        RuntimeSubscriptionWatcher
+}
+
+func (e *runtimeExecutor) SetRuntimeSubscriptionWatcher(w RuntimeSubscriptionWatcher) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.runtimeSub = w
 }
 
 func NewRuntimeExecutor(
@@ -101,6 +117,15 @@ func (e *runtimeExecutor) StartRuntime(ctx context.Context, runtimeID domain.Run
 	lock := e.getRuntimeLock(runtimeID)
 	lock.Lock()
 	defer lock.Unlock()
+
+	if e.runtimeManager.IsEmergencyLatched(runtimeID) {
+		return &ExecutionError{
+			Code:      ErrEmergencyActive,
+			RuntimeID: string(runtimeID),
+			Message:   "runtime is emergency-latched: clear emergency latch before starting",
+		}
+	}
+
 	return e.startRuntimeLocked(ctx, runtimeID)
 }
 
@@ -194,6 +219,11 @@ func (e *runtimeExecutor) RestartRuntime(ctx context.Context, runtimeID domain.R
 			NewGeneration: newGeneration,
 			Cause:         startErr,
 		}
+	}
+
+	if e.runtimeSub != nil {
+		e.runtimeSub.OnRuntimeRestarted(string(runtimeID))
+		e.runtimeSub.OnRuntimeGenerationChanged(string(runtimeID), oldGeneration)
 	}
 
 	return nil
@@ -416,6 +446,12 @@ func (e *runtimeExecutor) stopRuntimeLocked(ctx context.Context, runtimeID domai
 			e.runtimeManager.UpdateRuntimeState(runtimeID, domain.RuntimeStateFailed, "stop failed", time.Now())
 		} else {
 			e.runtimeManager.UpdateRuntimeState(runtimeID, domain.RuntimeStateStopped, "runtime_stop", time.Now())
+		}
+	}
+
+	if len(stopErrors) == 0 {
+		if e.runtimeSub != nil {
+			e.runtimeSub.OnRuntimeStopped(string(runtimeID))
 		}
 	}
 

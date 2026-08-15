@@ -83,6 +83,11 @@ func (r *productionResourceTransfer) ensureDownloadSubscription() {
 			if rec.state == DownloadStatePending {
 				if rec.suggestedFilename == "" || rec.suggestedFilename == evt.SuggestedFilename {
 					r.guidMap[evt.GUID] = id
+					rec.state = DownloadStateInProgress
+					rec.guid = evt.GUID
+					if rec.suggestedFilename == "" && evt.SuggestedFilename != "" {
+						rec.suggestedFilename = evt.SuggestedFilename
+					}
 					break
 				}
 			}
@@ -99,27 +104,33 @@ func (r *productionResourceTransfer) ensureDownloadSubscription() {
 		if err := json.Unmarshal(params, &evt); err != nil || evt.GUID == "" {
 			return
 		}
-		if evt.State != "completed" {
-			return
-		}
 		r.mu.Lock()
+		defer r.mu.Unlock()
 		downloadID, ok := r.guidMap[evt.GUID]
 		if !ok {
-			r.mu.Unlock()
 			return
 		}
 		rec, ok := r.downloads[downloadID]
 		if !ok {
-			r.mu.Unlock()
 			return
 		}
-		rec.state = DownloadStateCompleted
-		rec.receivedBytes = int64(evt.ReceivedBytes)
-		now := time.Now()
-		rec.completedAt = &now
-		rec.stagedPath = filepath.Join(r.downloadPolicy.StagingRootPath, rec.suggestedFilename)
-		delete(r.guidMap, evt.GUID)
-		r.mu.Unlock()
+		switch evt.State {
+		case "inProgress":
+			rec.state = DownloadStateInProgress
+			rec.totalBytes = int64(evt.TotalBytes)
+			rec.receivedBytes = int64(evt.ReceivedBytes)
+		case "completed":
+			rec.state = DownloadStateCompleted
+			rec.receivedBytes = int64(evt.ReceivedBytes)
+			rec.totalBytes = int64(evt.TotalBytes)
+			now := time.Now()
+			rec.completedAt = &now
+			rec.stagedPath = filepath.Join(r.downloadPolicy.StagingRootPath, rec.suggestedFilename)
+			delete(r.guidMap, evt.GUID)
+		case "canceled":
+			rec.state = DownloadStateCancelled
+			delete(r.guidMap, evt.GUID)
+		}
 	})
 }
 

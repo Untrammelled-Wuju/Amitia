@@ -35,6 +35,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/editing/revisioncommit"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
+	"github.com/u-ai/backend/internal/desktoppet/integration"
 	"github.com/u-ai/backend/internal/desktoppet/maintenance"
 	"github.com/u-ai/backend/internal/desktoppet/migration"
 	migrationplans "github.com/u-ai/backend/internal/desktoppet/migration/plans"
@@ -111,6 +112,7 @@ import (
 )
 
 type AppServices struct {
+	DB                           *gorm.DB
 	RuntimeProfile               runtimeprofile.Profile
 	RuntimePolicy                runtimeprofile.Policy
 	DataPortability              *dataportability.Coordinator
@@ -326,7 +328,15 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		} else {
 			safBridge = newWorkspaceSAFBridge(nil)
 		}
-		workspaceRegistry, workspaceService, err = buildWorkspaceServices(config.AppCfg.Storage.DataDir, resourceResolver, ctx.DB, safBridge, unavailableWorkspaceCredentialResolver{})
+		var remoteCredResolver workspace.RemoteCredentialResolver
+		resolver, credErr := newWorkspaceRemoteCredentialResolver(config.AppCfg.Storage.DataDir)
+		if credErr != nil {
+			log.Warn("workspace remote credential resolver unavailable:", credErr)
+			remoteCredResolver = &unavailableWorkspaceCredentialResolver{}
+		} else {
+			remoteCredResolver = resolver
+		}
+		workspaceRegistry, workspaceService, err = buildWorkspaceServices(config.AppCfg.Storage.DataDir, resourceResolver, ctx.DB, safBridge, remoteCredResolver)
 		if err != nil {
 			return nil, fmt.Errorf("initialize workspace services: %w", err)
 		}
@@ -335,11 +345,14 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	var mediaService *media.Service
 	if bootstrap != nil {
 		mediaService = buildMediaService(bootstrap.RuntimeHost(), config.AppCfg.Storage.DataDir, resourceResolver, workspaceService)
+		if mediaService != nil {
+			chatlocalmodel.SetGlobalMediaMaterializer(mediaService.Materializer())
+		}
 	}
 
 	var browserProvider browser.BrowserProvider
 	if config.AppCfg != nil && config.AppCfg.Providers.Browser.Enabled {
-		browserProvider, err = buildProductionBrowserProvider(config.AppCfg)
+		browserProvider, err = buildProductionBrowserProvider(config.AppCfg, bootstrap)
 		if err != nil {
 			return nil, fmt.Errorf("browser provider init failed: %w", err)
 		}
@@ -364,7 +377,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithMediaService(mediaService).
 		WithWorkspaceService(workspaceService).
 		WithBrowserProvider(browserProvider).
-		WithRuntimeProfile(runtimeProfile)
+		WithRuntimeProfile(runtimeProfile).
+		WithDesktopPetPluginCapabilities(integration.DefaultCapabilities())
 
 	if bootstrap != nil {
 		kernelBuilder.WithRuntimeHost(bootstrap.RuntimeHost())
@@ -952,10 +966,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		return nil, fmt.Errorf("build data portability coordinator: %w", err)
 	}
 
-	services := &AppServices{
-		RuntimeProfile:               runtimeProfile,
-		RuntimePolicy:                policy,
-		DataPortability:              dpCoord,
+services := &AppServices{
+	DB:                           ctx.DB,
+	RuntimeProfile:               runtimeProfile,
+	RuntimePolicy:                policy,
+	DataPortability:              dpCoord,
 		Graph:                        graphSvc,
 		ChatDeliveryAdapter:          deliveryAdapter,
 		Memory:                       memSvc,

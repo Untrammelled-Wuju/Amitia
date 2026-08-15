@@ -145,6 +145,19 @@ func (c *EpisodicBackupContributor) PreviewImport(ctx context.Context, req datap
 }
 
 func (c *EpisodicBackupContributor) Import(ctx context.Context, req dataportability.ImportRequest, in dataportability.BackupReader) error {
+	opts := dataportability.RestoreOptions{
+		OperationID:        req.OperationID,
+		Purpose:            dataportability.RestorePurposeOrdinary,
+		CharacterPolicy:    req.CharacterPolicy,
+		DefaultCharacterID: req.DefaultCharacterID,
+		ActivateImported:   req.ActivateImported,
+		IdentityMap:        req.IdentityMap,
+		SecretProvider:     req.SecretProvider,
+	}
+	return c.RestoreEpisodic(ctx, in, opts)
+}
+
+func (c *EpisodicBackupContributor) RestoreEpisodic(ctx context.Context, in dataportability.BackupReader, opts dataportability.RestoreOptions) error {
 	rc, err := in.ReadComponent(ComponentIDEpisodicRecords)
 	if err != nil {
 		return err
@@ -187,7 +200,7 @@ func (c *EpisodicBackupContributor) Import(ctx context.Context, req dataportabil
 		c.DB.WithContext(ctx).Table("episodic_memories").Select("id").Where("id = ?", rec.ID).Scan(&existing)
 
 		if existing.ID != "" {
-			switch req.CharacterPolicy {
+			switch opts.CharacterPolicy {
 			case dataportability.CollisionSkip:
 				continue
 			case dataportability.CollisionReplace:
@@ -203,3 +216,5 @@ func (c *EpisodicBackupContributor) Import(ctx context.Context, req dataportabil
 
 	return scanner.Err()
 }
+
+var _ dataportability.EpisodicRestorePort = (*EpisodicBackupContributor)(nil)

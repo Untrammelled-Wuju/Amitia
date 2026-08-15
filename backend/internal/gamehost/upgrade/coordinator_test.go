@@ -218,6 +218,8 @@ func (f *fakeRuntimeExecutor) CleanupRuntime(ctx context.Context, runtimeID doma
 
 func (f *fakeRuntimeExecutor) SetResolveDefinition(fn runtime.DefinitionResolverFunc) {}
 
+func (f *fakeRuntimeExecutor) SetRuntimeSubscriptionWatcher(w runtime.RuntimeSubscriptionWatcher) {}
+
 func (f *fakeRuntimeExecutor) setFailStop(err error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()

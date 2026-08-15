@@ -247,20 +247,33 @@ func (c *VoiceBackupContributor) previewASR(ctx context.Context, rc io.ReadClose
 }
 
 func (c *VoiceBackupContributor) Import(ctx context.Context, req dataportability.ImportRequest, in dataportability.BackupReader) error {
+	opts := dataportability.RestoreOptions{
+		OperationID:        req.OperationID,
+		Purpose:            dataportability.RestorePurposeOrdinary,
+		CharacterPolicy:    req.CharacterPolicy,
+		DefaultCharacterID: req.DefaultCharacterID,
+		ActivateImported:   req.ActivateImported,
+		IdentityMap:        req.IdentityMap,
+		SecretProvider:     req.SecretProvider,
+	}
+	return c.RestoreVoices(ctx, in, opts)
+}
+
+func (c *VoiceBackupContributor) RestoreVoices(ctx context.Context, in dataportability.BackupReader, opts dataportability.RestoreOptions) error {
 	ttsRC, err := in.ReadComponent("voice.tts.v1")
 	if err == nil {
-		c.importTTS(ctx, req, ttsRC)
+		c.restoreTTS(ctx, ttsRC, opts)
 	}
 
 	asrRC, err := in.ReadComponent("voice.asr.v1")
 	if err == nil {
-		c.importASR(ctx, req, asrRC)
+		c.restoreASR(ctx, asrRC, opts)
 	}
 
 	return nil
 }
 
-func (c *VoiceBackupContributor) importTTS(ctx context.Context, req dataportability.ImportRequest, rc io.ReadCloser) {
+func (c *VoiceBackupContributor) restoreTTS(ctx context.Context, rc io.ReadCloser, opts dataportability.RestoreOptions) {
 	defer rc.Close()
 
 	scanner := bufio.NewScanner(rc)
@@ -282,7 +295,7 @@ func (c *VoiceBackupContributor) importTTS(ctx context.Context, req dataportabil
 
 		newID := 0
 		if existing.ID != 0 {
-			switch req.CharacterPolicy {
+			switch opts.CharacterPolicy {
 			case dataportability.CollisionSkip:
 				continue
 			case dataportability.CollisionReplace:
@@ -340,7 +353,7 @@ func (c *VoiceBackupContributor) importTTS(ctx context.Context, req dataportabil
 	}
 }
 
-func (c *VoiceBackupContributor) importASR(ctx context.Context, req dataportability.ImportRequest, rc io.ReadCloser) {
+func (c *VoiceBackupContributor) restoreASR(ctx context.Context, rc io.ReadCloser, opts dataportability.RestoreOptions) {
 	defer rc.Close()
 
 	scanner := bufio.NewScanner(rc)
@@ -361,7 +374,7 @@ func (c *VoiceBackupContributor) importASR(ctx context.Context, req dataportabil
 		c.DB.WithContext(ctx).Table("asr_configs").Select("id, name").Where("name = ?", rec.Name).Scan(&existing)
 
 		if existing.ID != 0 {
-			switch req.CharacterPolicy {
+			switch opts.CharacterPolicy {
 			case dataportability.CollisionSkip:
 				continue
 			case dataportability.CollisionReplace:
@@ -393,3 +406,19 @@ func (c *VoiceBackupContributor) importASR(ctx context.Context, req dataportabil
 		})
 	}
 }
+
+func (c *VoiceBackupContributor) importTTS(ctx context.Context, req dataportability.ImportRequest, rc io.ReadCloser) {
+	opts := dataportability.RestoreOptions{
+		CharacterPolicy: req.CharacterPolicy,
+	}
+	c.restoreTTS(ctx, rc, opts)
+}
+
+func (c *VoiceBackupContributor) importASR(ctx context.Context, req dataportability.ImportRequest, rc io.ReadCloser) {
+	opts := dataportability.RestoreOptions{
+		CharacterPolicy: req.CharacterPolicy,
+	}
+	c.restoreASR(ctx, rc, opts)
+}
+
+var _ dataportability.VoiceRestorePort = (*VoiceBackupContributor)(nil)

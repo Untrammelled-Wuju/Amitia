@@ -177,6 +177,19 @@ func (r *RelationshipBackupContributor) PreviewImport(ctx context.Context, req d
 }
 
 func (r *RelationshipBackupContributor) Import(ctx context.Context, req dataportability.ImportRequest, in dataportability.BackupReader) error {
+	opts := dataportability.RestoreOptions{
+		OperationID:        req.OperationID,
+		Purpose:            dataportability.RestorePurposeOrdinary,
+		CharacterPolicy:    req.CharacterPolicy,
+		DefaultCharacterID: req.DefaultCharacterID,
+		ActivateImported:   req.ActivateImported,
+		IdentityMap:        req.IdentityMap,
+		SecretProvider:     req.SecretProvider,
+	}
+	return r.RestoreRelationships(ctx, in, opts)
+}
+
+func (r *RelationshipBackupContributor) RestoreRelationships(ctx context.Context, in dataportability.BackupReader, opts dataportability.RestoreOptions) error {
 	rc, err := in.ReadComponent(ComponentIDRelationshipRecords)
 	if err != nil {
 		return err
@@ -198,7 +211,7 @@ func (r *RelationshipBackupContributor) Import(ctx context.Context, req dataport
 		var existing struct{ ID string }
 		r.DB.WithContext(ctx).Table("relationship_states").Select("id").Where("id = ?", rec.ID).Scan(&existing)
 		if existing.ID != "" {
-			switch req.CharacterPolicy {
+			switch opts.CharacterPolicy {
 			case dataportability.CollisionSkip:
 				continue
 			case dataportability.CollisionReplace:
@@ -244,3 +257,5 @@ func (r *RelationshipBackupContributor) Import(ctx context.Context, req dataport
 
 	return nil
 }
+
+var _ dataportability.RelationshipRestorePort = (*RelationshipBackupContributor)(nil)

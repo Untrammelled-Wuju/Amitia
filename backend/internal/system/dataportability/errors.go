@@ -49,4 +49,6 @@ var (
 	ErrImportReconciliationPending   = errors.New("IMPORT_RECONCILIATION_PENDING")
 	ErrImportArchiveInvalid          = errors.New("IMPORT_ARCHIVE_INVALID")
 	ErrImportStagingFailed           = errors.New("IMPORT_STAGING_FAILED")
+	ErrImportIdentityMapMissing      = errors.New("IMPORT_IDENTITY_MAP_MISSING")
+	ErrRestoreNoPorts                = errors.New("RESTORE_NO_CONTROLLED_PORTS_CONFIGURED")
 )

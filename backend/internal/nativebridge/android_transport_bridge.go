@@ -101,6 +101,11 @@ func (b *AndroidTransportBridge) AttachSession(session relaySession) {
 	b.generation.Add(1)
 }
 
+func (b *AndroidTransportBridge) AttachRelaySession(transport RelayTransport) {
+	session := newRelaySession(transport)
+	b.AttachSession(session)
+}
+
 func (b *AndroidTransportBridge) DetachSession() {
 	b.mu.Lock()
 	defer b.mu.Unlock()

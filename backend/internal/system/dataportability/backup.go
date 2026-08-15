@@ -2,7 +2,6 @@ package dataportability
 
 import (
 	"context"
-	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -11,6 +10,8 @@ import (
 	"os"
 	"path/filepath"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 const batchSize = 1000
@@ -24,7 +25,7 @@ type BackupResult struct {
 }
 
 func GenerateBackupID() string {
-	return fmt.Sprintf("backup-%s", time.Now().UTC().Format("20060102T150405.000000000"))
+	return "backup-" + uuid.NewString()
 }
 
 func (c *Coordinator) CreateBackup(ctx context.Context, req BackupRequest, dbPath string, runner SnapshotRunner) (*BackupResult, error) {
@@ -72,7 +73,7 @@ func (c *Coordinator) CreateBackup(ctx context.Context, req BackupRequest, dbPat
 	for _, ct := range c.Contributors {
 		plans, err := ct.Plan(ctx, req)
 		if err != nil {
-			continue
+			return nil, c.failBackup(opID, fmt.Errorf("contributor %s plan failed: %w", ct.ID(), err))
 		}
 		for _, plan := range plans {
 			compWriter, err := writer.CreateComponent(plan.ID, plan.LogicalName, plan.Kind)
@@ -85,16 +86,6 @@ func (c *Coordinator) CreateBackup(ctx context.Context, req BackupRequest, dbPat
 			}
 			compWriter.Close()
 		}
-	}
-
-	if req.Profile == ProfileFull && req.Purpose == PurposeMigration && dbPath != "" {
-		snapComp, err := c.snapshotSQLite(runner, writer)
-		if err != nil {
-			return nil, c.failBackup(opID, err)
-		}
-		snapComp.SourceOfTruth = false
-		snapComp.Rebuildable = false
-		manifest.Components = append(manifest.Components, *snapComp)
 	}
 
 	manifestData, err := json.MarshalIndent(manifest, "", "  ")
@@ -142,42 +133,6 @@ func (c *Coordinator) failBackup(opID string, err error) error {
 	return err
 }
 
-func (c *Coordinator) snapshotSQLite(runner SnapshotRunner, writer *ArchiveWriter) (*BackupComponentManifest, error) {
-	runner.CheckpointWAL()
-	runner.RunIntegrityCheck()
-	runner.RunForeignKeyCheck()
-
-	dbFiles := runner.GetSQLiteFiles()
-	totalSize := int64(0)
-	for _, f := range dbFiles {
-		info, err := os.Stat(f.Path)
-		if err != nil {
-			continue
-		}
-		totalSize += info.Size()
-	}
-
-	comp := &BackupComponentManifest{
-		ID:            "sqlite-main",
-		Kind:          string(KindSQLite),
-		LogicalName:   "database/sqlite",
-		Path:          "database/sqlite",
-		Required:      true,
-		SourceOfTruth: true,
-		Rebuildable:   false,
-		SizeBytes:     totalSize,
-		SHA256:        "",
-	}
-
-	for _, f := range dbFiles {
-		if err := writer.CopyFile("database/sqlite", f.Name, f.Path); err != nil {
-			return nil, err
-		}
-	}
-
-	return comp, nil
-}
-
 type componentWriterAdapter struct {
 	w      io.Writer
 	plan   BackupComponentPlan
@@ -216,12 +171,6 @@ func fileSHA256(path string) (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(h.Sum(nil)), nil
-}
-
-func randomComponentID() string {
-	b := make([]byte, 8)
-	rand.Read(b)
-	return hex.EncodeToString(b)
 }
 
 type SnapshotRunner interface {

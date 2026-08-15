@@ -90,8 +90,14 @@ export class DesktopDeploymentLifecycle {
     this.stopLegacyPetIntegrations();
     this.stopBusinessIntegrations();
 
+    this.runtimeManager.setBusinessCoreStatus(
+      "starting",
+      this.topology.businessCore.baseURL,
+    );
+
     await ensureCoreProfile("local");
     await this.probeLocalRuntime();
+    await this.probeBusinessCore(this.topology.businessCore);
 
     await this.rebuildBusinessIntegrations(this.topology);
 

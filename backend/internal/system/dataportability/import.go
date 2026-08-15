@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"io"
 	"time"
+
+	"github.com/google/uuid"
 )
 
 type ImportPreviewResult struct {
@@ -48,7 +50,7 @@ func (c *Coordinator) PreviewImport(ctx context.Context, archivePath string) (*I
 	for _, ct := range c.Contributors {
 		p, err := ct.PreviewImport(ctx, req, br)
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("contributor %s preview failed: %w", ct.ID(), err)
 		}
 		previews = append(previews, p...)
 	}
@@ -169,15 +171,11 @@ func (c *Coordinator) FailImport(opID string, err error) {
 }
 
 func generateOpID() string {
-	return fmt.Sprintf("import-%d", time.Now().Unix())
+	return "import-" + uuid.NewString()
 }
 
 func nowRFC3339() string {
 	return time.Now().UTC().Format(time.RFC3339)
-}
-
-func currentUnixTime() int64 {
-	return time.Now().Unix()
 }
 
 type archiveBackupReader struct {

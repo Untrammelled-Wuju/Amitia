@@ -30,6 +30,7 @@ type Manager struct {
 
 	generations      map[domain.RuntimeInstanceID]int64
 	lifecycleIntents map[domain.RuntimeInstanceID]string
+	emergencyLatches map[domain.RuntimeInstanceID]bool
 }
 
 type ManagerOptions struct {
@@ -46,13 +47,14 @@ func NewManager(opts ManagerOptions) *Manager {
 	if clock == nil {
 		clock = time.Now
 	}
-	return &Manager{
+ return &Manager{
 		runtimes:         make(map[domain.RuntimeInstanceID]*domain.RuntimeInstance),
 		byPlugin:         make(map[domain.PluginID]map[domain.RuntimeInstanceID]struct{}),
 		idGenerator:      idGen,
 		clock:            clock,
 		generations:      make(map[domain.RuntimeInstanceID]int64),
 		lifecycleIntents: make(map[domain.RuntimeInstanceID]string),
+		emergencyLatches: make(map[domain.RuntimeInstanceID]bool),
 	}
 }
 
@@ -275,6 +277,18 @@ func (m *Manager) SetLifecycleIntent(runtimeID domain.RuntimeInstanceID, intent 
 	}
 	m.lifecycleIntents[runtimeID] = intent
 	return nil
+}
+
+func (m *Manager) IsEmergencyLatched(runtimeID domain.RuntimeInstanceID) bool {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.emergencyLatches[runtimeID]
+}
+
+func (m *Manager) SetEmergencyLatch(runtimeID domain.RuntimeInstanceID, latched bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.emergencyLatches[runtimeID] = latched
 }
 
 func cloneRuntimeInstance(rt *domain.RuntimeInstance) *domain.RuntimeInstance {

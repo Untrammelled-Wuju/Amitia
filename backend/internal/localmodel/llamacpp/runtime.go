@@ -21,21 +21,27 @@ import (
 
 	"github.com/u-ai/backend/internal/chat/localmodel"
 	"github.com/u-ai/backend/internal/localmodel/gguf"
+	"github.com/u-ai/backend/internal/media"
 	"github.com/u-ai/backend/internal/runtimehost"
 )
 
 type llamaRuntime struct {
-	config     LlamaCppProviderConfig
-	mu         sync.Mutex
-	state      string
-	loadedAt   string
-	lastError  string
-	manifest   *gguf.GGUFModelManifest
-	host       runtimehost.RuntimeHost
-	processID  runtimehost.ProcessID
-	baseURL    string
-	port       int
-	supervisor runtimehost.ProcessSupervisor
+	config         LlamaCppProviderConfig
+	mu             sync.Mutex
+	state          string
+	loadedAt       string
+	lastError      string
+	manifest       *gguf.GGUFModelManifest
+	host           runtimehost.RuntimeHost
+	processID      runtimehost.ProcessID
+	baseURL        string
+	port           int
+	supervisor     runtimehost.ProcessSupervisor
+	materializer   media.ResourceMaterializer
+	modelPath      string
+	mmprojPath     string
+	modelCleanup   func() error
+	mmprojCleanup  func() error
 }
 
 var (
@@ -70,10 +76,11 @@ func releasePort(p int) {
 
 func newLlamaRuntime(config LlamaCppProviderConfig) *llamaRuntime {
 	return &llamaRuntime{
-		config:    config,
-		state:     "unloaded",
-		port:      0,
-		processID: runtimehost.ProcessID("llama-cpp-" + config.LocalModelID + "-" + llamaConfigFingerprint(config)),
+		config:      config,
+		state:       "unloaded",
+		port:        0,
+		processID:   runtimehost.ProcessID("llama-cpp-" + config.LocalModelID + "-" + llamaConfigFingerprint(config)),
+		materializer: localmodel.GetGlobalMediaMaterializer(),
 	}
 }
 
@@ -100,8 +107,20 @@ func (r *llamaRuntime) validateModelArtifact() error {
 	if r.config.ResourceURI == "" {
 		return fmt.Errorf("model resource URI is empty")
 	}
+	if r.materializer == nil {
+		return fmt.Errorf("llama.cpp model materializer not available")
+	}
 
-	info, err := os.Stat(r.config.ResourceURI)
+	localPath, cleanup, err := r.materializer.Materialize(context.Background(), r.config.ResourceURI)
+	if err != nil {
+		return fmt.Errorf("materialize model resource: %w", err)
+	}
+	defer cleanup()
+	return validateLocalGGUF(localPath)
+}
+
+func validateLocalGGUF(localPath string) error {
+	info, err := os.Stat(localPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return localmodel.ErrModelPackageNotFound
@@ -113,23 +132,30 @@ func (r *llamaRuntime) validateModelArtifact() error {
 		return localmodel.ErrModelPackageInvalid
 	}
 
-	f, err := os.Open(r.config.ResourceURI)
+	f, err := os.Open(localPath)
 	if err != nil {
 		return fmt.Errorf("open model file: %w", err)
 	}
 	defer f.Close()
 
-	if err := gguf.ValidateGGUFResource(r.config.ResourceURI); err != nil {
+	if err := gguf.ValidateGGUFResource(localPath); err != nil {
 		return localmodel.ErrModelPackageInvalid
 	}
 
-	f.Close()
 	return nil
 }
 
 func (r *llamaRuntime) inspectModel() (*gguf.GGUFModelManifest, error) {
+	if r.materializer == nil {
+		return nil, fmt.Errorf("llama.cpp model materializer not available")
+	}
+	localPath, cleanup, err := r.materializer.Materialize(context.Background(), r.config.ResourceURI)
+	if err != nil {
+		return nil, fmt.Errorf("materialize model resource: %w", err)
+	}
+	defer cleanup()
 	inspector := gguf.NewInspector()
-	manifest, err := inspector.Inspect(r.config.ResourceURI)
+	manifest, err := inspector.Inspect(localPath)
 	if err != nil {
 		return nil, fmt.Errorf("inspect GGUF: %w", err)
 	}
@@ -153,6 +179,29 @@ func (r *llamaRuntime) startServer(ctx context.Context) error {
 	}
 	r.port = port
 	r.baseURL = fmt.Sprintf("http://127.0.0.1:%d", port)
+
+	if r.materializer != nil {
+		localPath, cleanup, err := r.materializer.Materialize(ctx, r.config.ResourceURI)
+		if err != nil {
+			releasePort(port)
+			r.port = 0
+			return fmt.Errorf("materialize model resource: %w", err)
+		}
+		r.modelPath = localPath
+		r.modelCleanup = cleanup
+	}
+
+	if r.materializer != nil && r.config.MMProjURI != "" {
+		localPath, cleanup, err := r.materializer.Materialize(ctx, r.config.MMProjURI)
+		if err != nil {
+			r.cleanupModel()
+			releasePort(port)
+			r.port = 0
+			return fmt.Errorf("materialize mmproj resource: %w", err)
+		}
+		r.mmprojPath = localPath
+		r.mmprojCleanup = cleanup
+	}
 
 	args := r.buildServerArgs(port)
 
@@ -178,12 +227,14 @@ func (r *llamaRuntime) startServer(ctx context.Context) error {
 	}
 
 	if err := r.supervisor.Register(spec); err != nil {
+		r.cleanupModel()
 		releasePort(port)
 		r.port = 0
 		return fmt.Errorf("register llama-server: %w", err)
 	}
 
 	if err := r.supervisor.Start(ctx, r.processID); err != nil {
+		r.cleanupModel()
 		releasePort(port)
 		r.port = 0
 		r.supervisor.Unregister(r.processID)
@@ -198,6 +249,19 @@ func (r *llamaRuntime) startServer(ctx context.Context) error {
 	return nil
 }
 
+func (r *llamaRuntime) cleanupModel() {
+	if r.modelCleanup != nil {
+		_ = r.modelCleanup()
+		r.modelCleanup = nil
+		r.modelPath = ""
+	}
+	if r.mmprojCleanup != nil {
+		_ = r.mmprojCleanup()
+		r.mmprojCleanup = nil
+		r.mmprojPath = ""
+	}
+}
+
 func (r *llamaRuntime) stopServer() {
 	if r.supervisor == nil {
 		return
@@ -210,6 +274,7 @@ func (r *llamaRuntime) stopServer() {
 		releasePort(r.port)
 		r.port = 0
 	}
+	r.cleanupModel()
 	r.baseURL = ""
 }
 
@@ -246,8 +311,12 @@ func (r *llamaRuntime) findLlamaServerExecutable() string {
 }
 
 func (r *llamaRuntime) buildServerArgs(port int) []string {
+	modelPath := r.config.ResourceURI
+	if r.modelPath != "" {
+		modelPath = r.modelPath
+	}
 	args := []string{
-		"--model", r.config.ResourceURI,
+		"--model", modelPath,
 		"--port", strconv.Itoa(port),
 		"--host", "127.0.0.1",
 		"--ctx-size", strconv.Itoa(r.config.ContextSize),
@@ -282,7 +351,11 @@ func (r *llamaRuntime) buildServerArgs(port int) []string {
 		args = append(args, "--mlock")
 	}
 	if r.config.MMProjURI != "" {
-		args = append(args, "--mmproj", r.config.MMProjURI)
+		mmprojPath := r.config.MMProjURI
+		if r.mmprojPath != "" {
+			mmprojPath = r.mmprojPath
+		}
+		args = append(args, "--mmproj", mmprojPath)
 	}
 	if r.config.KVCacheTypeK != "" {
 		args = append(args, "--cache-type-k", r.config.KVCacheTypeK)
@@ -362,7 +435,7 @@ func (r *llamaRuntime) chatStream(ctx context.Context, request localmodel.LocalM
 func (r *llamaRuntime) buildChatRequestBody(request localmodel.LocalModelRequest, stream bool) map[string]interface{} {
 	reqMsgs := make([]map[string]interface{}, 0, len(request.Messages))
 	for _, msg := range request.Messages {
-		content := buildMessageContent(msg)
+		content := r.buildMessageContent(msg, context.Background())
 		reqMsgs = append(reqMsgs, map[string]interface{}{
 			"role":    msg.Role,
 			"content": content,
@@ -412,7 +485,7 @@ func (r *llamaRuntime) buildChatRequestBody(request localmodel.LocalModelRequest
 	return reqBody
 }
 
-func buildMessageContent(msg localmodel.LocalModelMessage) interface{} {
+func (r *llamaRuntime) buildMessageContent(msg localmodel.LocalModelMessage, ctx context.Context) interface{} {
 	if len(msg.Parts) == 1 && msg.Parts[0].Type == "text" {
 		return msg.Parts[0].Text
 	}
@@ -425,10 +498,17 @@ func buildMessageContent(msg localmodel.LocalModelMessage) interface{} {
 				"text": p.Text,
 			})
 		case "image":
+			imgURL := p.ResourceURI
+			if r.materializer != nil && p.ResourceURI != "" {
+				if localPath, cleanup, err := r.materializer.Materialize(ctx, p.ResourceURI); err == nil {
+					defer cleanup()
+					imgURL = "file://" + localPath
+				}
+			}
 			parts = append(parts, map[string]interface{}{
 				"type": "image_url",
 				"image_url": map[string]interface{}{
-					"url": p.ResourceURI,
+					"url": imgURL,
 				},
 			})
 		}

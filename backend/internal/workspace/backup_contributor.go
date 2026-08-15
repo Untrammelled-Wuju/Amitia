@@ -149,6 +149,19 @@ func (c *WorkspaceBackupContributor) PreviewImport(ctx context.Context, req data
 }
 
 func (c *WorkspaceBackupContributor) Import(ctx context.Context, req dataportability.ImportRequest, in dataportability.BackupReader) error {
+	opts := dataportability.RestoreOptions{
+		OperationID:        req.OperationID,
+		Purpose:            dataportability.RestorePurposeOrdinary,
+		CharacterPolicy:    req.CharacterPolicy,
+		DefaultCharacterID: req.DefaultCharacterID,
+		ActivateImported:   req.ActivateImported,
+		IdentityMap:        req.IdentityMap,
+		SecretProvider:     req.SecretProvider,
+	}
+	return c.RestoreWorkspaces(ctx, in, opts)
+}
+
+func (c *WorkspaceBackupContributor) RestoreWorkspaces(ctx context.Context, in dataportability.BackupReader, opts dataportability.RestoreOptions) error {
 	rc, err := in.ReadComponent(ComponentIDWorkspaces)
 	if err != nil {
 		return err
@@ -176,7 +189,7 @@ func (c *WorkspaceBackupContributor) Import(ctx context.Context, req dataportabi
 		var existing struct{ ID string }
 		c.DB.WithContext(ctx).Table("workspace_mounts").Select("id").Where("id = ?", rec.ID).Scan(&existing)
 		if existing.ID != "" {
-			switch req.CharacterPolicy {
+			switch opts.CharacterPolicy {
 			case dataportability.CollisionSkip:
 				continue
 			case dataportability.CollisionReplace:
@@ -209,3 +222,5 @@ func (c *WorkspaceBackupContributor) Import(ctx context.Context, req dataportabi
 
 	return scanner.Err()
 }
+
+var _ dataportability.WorkspaceRestorePort = (*WorkspaceBackupContributor)(nil)

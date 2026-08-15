@@ -125,9 +125,11 @@ func (r *TaskRepository) PutTaskRun(ctx context.Context, run *task_runtime.TaskR
 			 trace_id, correlation_id, causation_id, source,
 			 scope_snapshot_id, permission_snapshot_id, dependency_snapshot_id,
 			 runtime_instance_id, checkpoint_id, result_artifact_id,
+			 execution_placement, execution_target_json, execution_attempt_id,
+			 execution_resolved_at, execution_resolved_by,
 			 attempt, max_attempts, created_at, queued_at, started_at, finished_at,
 			 deadline_at, cancel_requested_at, error_code, error_message, generation, revision)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(task_run_id) DO UPDATE SET
 			status = excluded.status, priority = excluded.priority,
 			input_json = excluded.input_json, input_hash = excluded.input_hash,
@@ -135,6 +137,11 @@ func (r *TaskRepository) PutTaskRun(ctx context.Context, run *task_runtime.TaskR
 			causation_id = excluded.causation_id, source = excluded.source,
 			runtime_instance_id = excluded.runtime_instance_id, checkpoint_id = excluded.checkpoint_id,
 			result_artifact_id = excluded.result_artifact_id,
+			execution_placement = excluded.execution_placement,
+			execution_target_json = excluded.execution_target_json,
+			execution_attempt_id = excluded.execution_attempt_id,
+			execution_resolved_at = excluded.execution_resolved_at,
+			execution_resolved_by = excluded.execution_resolved_by,
 			attempt = excluded.attempt, max_attempts = excluded.max_attempts,
 			queued_at = excluded.queued_at, started_at = excluded.started_at,
 			finished_at = excluded.finished_at, deadline_at = excluded.deadline_at,
@@ -149,6 +156,9 @@ func (r *TaskRepository) PutTaskRun(ctx context.Context, run *task_runtime.TaskR
 		run.ScopeSnapshotID, run.PermissionSnapshotID, run.DependencySnapshotID,
 		nullableString(run.RuntimeInstanceID), nullableString(run.CheckpointID),
 		nullableString(run.ResultArtifactID),
+		string(run.ExecutionPlacement), serializeExecutionTarget(run.ExecutionTarget),
+		string(run.ExecutionAttemptID), nullableTime(run.ExecutionResolvedAt),
+		run.ExecutionResolvedBy,
 		run.Attempt, run.MaxAttempts, run.CreatedAt,
 		nullableTime(run.QueuedAt), nullableTime(run.StartedAt), nullableTime(run.FinishedAt),
 		nullableTime(run.DeadlineAt), nullableTime(run.CancelRequestedAt),
@@ -205,9 +215,11 @@ func (r *TaskRepository) GetTaskRun(ctx context.Context, runID string) (*task_ru
 	var run task_runtime.TaskRun
 	var inputJSON sql.NullString
 	var inputArtifactID, runtimeInstanceID, checkpointID, resultArtifactID sql.NullString
+	var executionTargetJSON sql.NullString
+	var executionResolvedAt sql.NullTime
 	var queuedAt, startedAt, finishedAt, deadlineAt, cancelRequestedAt sql.NullTime
 	var errorCode, errorMessage sql.NullString
-	var invocationID sql.NullString
+	var invocationID, executionPlacement, executionAttemptID, executionResolvedBy sql.NullString
 
 	err := ex.QueryRowContext(ctx, `
 		SELECT task_run_id, operation_id, invocation_id, task_definition_id, extension_id, module_id,
@@ -215,6 +227,8 @@ func (r *TaskRepository) GetTaskRun(ctx context.Context, runID string) (*task_ru
 		       trace_id, correlation_id, causation_id, source,
 		       scope_snapshot_id, permission_snapshot_id, dependency_snapshot_id,
 		       runtime_instance_id, checkpoint_id, result_artifact_id,
+		       execution_placement, execution_target_json, execution_attempt_id,
+		       execution_resolved_at, execution_resolved_by,
 		       attempt, max_attempts, created_at, queued_at, started_at, finished_at,
 		       deadline_at, cancel_requested_at, error_code, error_message, generation, revision
 		FROM extension_task_runs WHERE task_run_id = ?
@@ -225,6 +239,8 @@ func (r *TaskRepository) GetTaskRun(ctx context.Context, runID string) (*task_ru
 		&run.TraceID, &run.CorrelationID, &run.CausationID, &run.Source,
 		&run.ScopeSnapshotID, &run.PermissionSnapshotID, &run.DependencySnapshotID,
 		&runtimeInstanceID, &checkpointID, &resultArtifactID,
+		&executionPlacement, &executionTargetJSON, &executionAttemptID,
+		&executionResolvedAt, &executionResolvedBy,
 		&run.Attempt, &run.MaxAttempts, &run.CreatedAt,
 		&queuedAt, &startedAt, &finishedAt, &deadlineAt, &cancelRequestedAt,
 		&errorCode, &errorMessage, &run.Generation, &run.Revision,
@@ -241,6 +257,11 @@ func (r *TaskRepository) GetTaskRun(ctx context.Context, runID string) (*task_ru
 	run.RuntimeInstanceID = stringPtr(runtimeInstanceID)
 	run.CheckpointID = stringPtr(checkpointID)
 	run.ResultArtifactID = stringPtr(resultArtifactID)
+	run.ExecutionPlacement = task_runtime.TaskExecutionPlacement(executionPlacement.String)
+	run.ExecutionTarget = deserializeExecutionTarget(executionTargetJSON.String)
+	run.ExecutionAttemptID = task_runtime.TaskExecutionAttemptID(executionAttemptID.String)
+	run.ExecutionResolvedAt = timePtr(executionResolvedAt)
+	run.ExecutionResolvedBy = executionResolvedBy.String
 	run.QueuedAt = timePtr(queuedAt)
 	run.StartedAt = timePtr(startedAt)
 	run.FinishedAt = timePtr(finishedAt)
@@ -258,6 +279,8 @@ func (r *TaskRepository) ListTaskRuns(ctx context.Context, filter task_runtime.L
 		       trace_id, correlation_id, causation_id, source,
 		       scope_snapshot_id, permission_snapshot_id, dependency_snapshot_id,
 		       runtime_instance_id, checkpoint_id, result_artifact_id,
+		       execution_placement, execution_target_json, execution_attempt_id,
+		       execution_resolved_at, execution_resolved_by,
 		       attempt, max_attempts, created_at, queued_at, started_at, finished_at,
 		       deadline_at, cancel_requested_at, error_code, error_message, generation, revision
 		FROM extension_task_runs`
@@ -296,9 +319,11 @@ func (r *TaskRepository) ListTaskRuns(ctx context.Context, filter task_runtime.L
 		var run task_runtime.TaskRun
 		var inputJSON sql.NullString
 		var inputArtifactID, runtimeInstanceID, checkpointID, resultArtifactID sql.NullString
+		var executionTargetJSON sql.NullString
+		var executionResolvedAt sql.NullTime
 		var queuedAt, startedAt, finishedAt, deadlineAt, cancelRequestedAt sql.NullTime
 		var errorCode, errorMessage sql.NullString
-		var invocationID sql.NullString
+		var invocationID, executionPlacement, executionAttemptID, executionResolvedBy sql.NullString
 
 		err := rows.Scan(
 			&run.TaskRunID, &run.OperationID, &invocationID, &run.TaskDefinitionID,
@@ -307,6 +332,8 @@ func (r *TaskRepository) ListTaskRuns(ctx context.Context, filter task_runtime.L
 			&run.TraceID, &run.CorrelationID, &run.CausationID, &run.Source,
 			&run.ScopeSnapshotID, &run.PermissionSnapshotID, &run.DependencySnapshotID,
 			&runtimeInstanceID, &checkpointID, &resultArtifactID,
+			&executionPlacement, &executionTargetJSON, &executionAttemptID,
+			&executionResolvedAt, &executionResolvedBy,
 			&run.Attempt, &run.MaxAttempts, &run.CreatedAt,
 			&queuedAt, &startedAt, &finishedAt, &deadlineAt, &cancelRequestedAt,
 			&errorCode, &errorMessage, &run.Generation, &run.Revision,
@@ -320,6 +347,11 @@ func (r *TaskRepository) ListTaskRuns(ctx context.Context, filter task_runtime.L
 		run.RuntimeInstanceID = stringPtr(runtimeInstanceID)
 		run.CheckpointID = stringPtr(checkpointID)
 		run.ResultArtifactID = stringPtr(resultArtifactID)
+		run.ExecutionPlacement = task_runtime.TaskExecutionPlacement(executionPlacement.String)
+		run.ExecutionTarget = deserializeExecutionTarget(executionTargetJSON.String)
+		run.ExecutionAttemptID = task_runtime.TaskExecutionAttemptID(executionAttemptID.String)
+		run.ExecutionResolvedAt = timePtr(executionResolvedAt)
+		run.ExecutionResolvedBy = executionResolvedBy.String
 		run.QueuedAt = timePtr(queuedAt)
 		run.StartedAt = timePtr(startedAt)
 		run.FinishedAt = timePtr(finishedAt)

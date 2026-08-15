@@ -3,6 +3,7 @@ package migration
 import (
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -283,7 +284,7 @@ func (p *CutoverPlan) Run(ctx context.Context) error {
 			StartedAt:           p.deps.Now(),
 			UpdatedAt:           p.deps.Now(),
 			PlanVersion:         1,
-			CanonicalGeneration: 1,
+			CanonicalGeneration: p.deps.Now().Unix(),
 		}
 		if err := store.SaveState(ctx, state); err != nil {
 			return fmt.Errorf("save initial cutover state: %w", err)
@@ -306,14 +307,28 @@ func (p *CutoverPlan) Run(ctx context.Context) error {
 		{CutoverPhaseCommit, p.runCommit},
 	}
 
-	started := false
-	for _, phase := range phases {
-		if !started && state.Phase != "" && state.PhaseStatus == "completed" && state.Phase != phase.name {
-			continue
+	resumeFrom := 0
+	if existing != nil && existing.Status == "running" && state.Phase != "" {
+		for i, phase := range phases {
+			if phase.name == state.Phase {
+				if state.PhaseStatus == "completed" {
+					resumeFrom = i + 1
+				} else {
+					resumeFrom = i
+				}
+				break
+			}
 		}
-		if !started {
-			started = true
+	}
+
+	if state.Status == "running" && state.Phase != "" && state.Phase != CutoverPhasePreflight {
+		if maint := p.getMaintenance(); maint != nil {
+			_ = maint.BeginQuiesce(ctx)
 		}
+	}
+
+	for i := resumeFrom; i < len(phases); i++ {
+		phase := phases[i]
 
 		state.Phase = phase.name
 		state.Status = "running"
@@ -366,14 +381,14 @@ func (p *CutoverPlan) runPreflight(ctx context.Context, state *CutoverState) err
 
 func (p *CutoverPlan) runQuiesce(ctx context.Context, state *CutoverState) error {
 	if p.getMaintenance() == nil {
-		return nil
+		return fmt.Errorf("%w: maintenance gate not configured", ErrCutoverPreflightFailure)
 	}
 	return p.getMaintenance().BeginQuiesce(ctx)
 }
 
 func (p *CutoverPlan) runSnapshot(ctx context.Context, state *CutoverState) error {
 	if p.getSnapshot() == nil {
-		return nil
+		return fmt.Errorf("%w: snapshot port not configured", ErrCutoverPreflightFailure)
 	}
 	snapshotID, err := p.getSnapshot().CreatePortableSnapshot(ctx, state.OperationID)
 	if err != nil {
@@ -388,7 +403,7 @@ func (p *CutoverPlan) runSnapshot(ctx context.Context, state *CutoverState) erro
 
 func (p *CutoverPlan) runMigrate(ctx context.Context, state *CutoverState) error {
 	if p.getMigration() == nil {
-		return nil
+		return fmt.Errorf("%w: migration port not configured", ErrCutoverPreflightFailure)
 	}
 	return p.getMigration().ExecuteLegacyToCanonical(ctx, state.OperationID)
 }
@@ -402,7 +417,7 @@ func (p *CutoverPlan) runBootstrap(ctx context.Context, state *CutoverState) err
 
 func (p *CutoverPlan) runReadSwitch(ctx context.Context, state *CutoverState) error {
 	if p.getReadSwitch() == nil {
-		return nil
+		return fmt.Errorf("%w: read switch port not configured", ErrCutoverPreflightFailure)
 	}
 	return p.getReadSwitch().VerifyReadCanonical(ctx)
 }
@@ -434,7 +449,7 @@ func (p *CutoverPlan) runWorkerCutoff(ctx context.Context, state *CutoverState) 
 
 func (p *CutoverPlan) runSmoke(ctx context.Context, state *CutoverState) error {
 	if p.getSmoke() == nil {
-		return nil
+		return fmt.Errorf("%w: smoke port not configured", ErrCutoverPreflightFailure)
 	}
 	return p.getSmoke().RunSmokeChecks(ctx)
 }
@@ -470,29 +485,43 @@ func (p *CutoverPlan) computeCanonicalGeneration() (int64, error) {
 		return 0, errors.New("container not available")
 	}
 	h := sha256.New()
-	if p.deps.Container.ToolFacade() != nil {
-		h.Write([]byte("tool_facade"))
+	snap := p.captureAuthoritySnapshot()
+	data, err := json.Marshal(snap)
+	if err != nil {
+		return 0, fmt.Errorf("marshal authority snapshot: %w", err)
 	}
-	if p.deps.Container.PermissionBroker() != nil {
-		h.Write([]byte("permission_broker"))
-	}
-	if p.deps.Container.EventService() != nil {
-		h.Write([]byte("event_service"))
-	}
-	if p.deps.Container.ScheduleService() != nil {
-		h.Write([]byte("schedule_service"))
-	}
-	if p.deps.Container.TaskRuntimeService() != nil {
-		h.Write([]byte("task_runtime"))
-	}
-	if p.deps.Container.HookService() != nil {
-		h.Write([]byte("hook_service"))
-	}
+	h.Write(data)
 	var sum int64
 	for _, b := range h.Sum(nil) {
 		sum += int64(b)
 	}
 	return sum, nil
+}
+
+func (p *CutoverPlan) captureAuthoritySnapshot() AuthoritySnapshot {
+	snap := AuthoritySnapshot{}
+	if p.deps.Container == nil {
+		return snap
+	}
+	if p.deps.Container.ToolFacade() != nil {
+		snap.ToolFacadeCount++
+	}
+	if p.deps.Container.PermissionBroker() != nil {
+		snap.PermissionBrokerCount++
+	}
+	if p.deps.Container.TaskRuntimeService() != nil {
+		snap.TaskRuntimeCount++
+	}
+	if p.deps.Container.EventService() != nil {
+		snap.EventServiceCount++
+	}
+	if p.deps.Container.ScheduleService() != nil {
+		snap.ScheduleServiceCount++
+	}
+	if p.deps.Container.HookService() != nil {
+		snap.HookServiceCount++
+	}
+	return snap
 }
 
 func (p *CutoverPlan) Preflight(ctx context.Context) error {

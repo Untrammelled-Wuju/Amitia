@@ -155,9 +155,6 @@ func DefaultMigrations() []Migration {
 		VoiceProfileMigration(),
 		MemoryTimeQueryIndexesMigration(),
 		MemorySummaryConsolidationMigration(),
-		KernelHostRegistryEntryKindMigration(),
 		ProductionCutoverMigration(),
-		DeviceRuntimeSessionMigration(),
-		KernelHostRegistryRuntimeSessionColumnsMigration(),
 	}
 }

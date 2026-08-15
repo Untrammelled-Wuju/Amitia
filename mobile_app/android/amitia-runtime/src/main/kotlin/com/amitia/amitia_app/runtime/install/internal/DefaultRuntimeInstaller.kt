@@ -101,11 +101,10 @@ internal class DefaultRuntimeInstaller(
         abiStatus: com.amitia.amitia_app.runtime.abi.RuntimeAbiStatus.Supported,
     ): RuntimeInstallResult {
         val transaction = createTransaction()
+        var commitStage = CommitStage.PRE_COMMIT
+        var versionExistedBeforeInstall = false
         try {
             transaction.updateStage(com.amitia.amitia_app.runtime.install.TransactionStage.CREATED)
-
-            var commitStage = CommitStage.PRE_COMMIT
-            var versionExistedBeforeInstall = false
 
             val verifiedPackage = when (val result = verifyPackage(request, transaction)) {
                 is VerifyPackageSuccess -> result.pkg

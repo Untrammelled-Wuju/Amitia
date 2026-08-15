@@ -1,6 +1,8 @@
 import { spawn, ChildProcess } from 'child_process';
 import { EventEmitter } from 'events';
 
+const GAME_HOST_PROTOCOL = 'amitia-game-host/1';
+
 interface RequestEnvelope {
   type: 'request';
   id: string;
@@ -56,7 +58,7 @@ export interface ResidueSnapshot {
   pendingCount: number;
 }
 
-export class ExternalE2EHarness {
+export class ExternalPluginHarness {
   private pluginPath: string;
   private proc: ChildProcess | null = null;
   private stdin: any = null;
@@ -278,13 +280,13 @@ export class ExternalE2EHarness {
 
   private routeIncoming(env: IncomingEnvelope): void {
     if (env.method === 'control.handshake.hello' && env.id) {
-      const protocol = (env.payload as Record<string, unknown>)?.protocol || 'amitia-game-host/1';
+      const clientProtocol = (env.payload as Record<string, unknown>)?.protocol || GAME_HOST_PROTOCOL;
       this.writeFrame({
         type: 'response',
         id: 'hs-' + env.id,
         requestId: env.id,
-        payload: { protocol },
-        protocol,
+        payload: { protocol: GAME_HOST_PROTOCOL, accepted: clientProtocol === GAME_HOST_PROTOCOL },
+        protocol: GAME_HOST_PROTOCOL,
       });
       this.completeHandshake();
       return;
@@ -335,6 +337,13 @@ export class ExternalE2EHarness {
   }
 }
 
-export function createHarness(pluginPath: string): ExternalE2EHarness {
-  return new ExternalE2EHarness(pluginPath);
+export function createHarness(pluginPath: string): ExternalPluginHarness {
+  return new ExternalPluginHarness(pluginPath);
 }
+
+/**
+ * @deprecated Use ExternalPluginHarness instead. This harness implements a
+ * simplified GameHost protocol for plugin integration testing. For true E2E
+ * validation, use the real backend process via the Game Center HTTP API.
+ */
+export type ExternalE2EHarness = ExternalPluginHarness;

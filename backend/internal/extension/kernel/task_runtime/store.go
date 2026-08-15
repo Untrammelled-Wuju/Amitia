@@ -62,4 +62,6 @@ type TaskStore interface {
 	CountActive(ctx context.Context) (int, error)
 	CountActiveByExtension(ctx context.Context, extensionID string) (int, error)
 	CountActiveByDefinition(ctx context.Context, defID string) (int, error)
+
+	WithinTaskTx(ctx context.Context, fn func(ctx context.Context) error) error
 }

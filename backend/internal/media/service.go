@@ -30,6 +30,10 @@ func NewService(backend Backend, tempDir string, materializer ResourceMaterializ
 	}
 }
 
+func (s *Service) Materializer() ResourceMaterializer {
+	return s.materializer
+}
+
 func (s *Service) GetMetadata(ctx context.Context, resourceURI string, req metadata.MetadataRequest) (*metadata.MediaMetadata, error) {
 	if s.backend == nil || s.materializer == nil {
 		return nil, fmt.Errorf("media service unavailable")

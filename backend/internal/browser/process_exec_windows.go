@@ -4,13 +4,130 @@ package browser
 
 import (
 	"fmt"
+	"os"
+	"os/exec"
 	"strings"
 	"syscall"
+	"time"
 	"unsafe"
 
 	proc "github.com/u-ai/backend/internal/platform/process"
+	"github.com/u-ai/backend/internal/runtimehost"
 	"golang.org/x/sys/windows"
 )
+
+func (p *browserProcess) Start() (pid int, handle proc.ProcessTreeHandle, err error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if err := p.ensureProfileDir(); err != nil {
+		return 0, 0, &BrowserError{
+			Code:    ErrCodeBrowserStartFailed,
+			Message: "failed to create browser profile directory",
+			Cause:   err,
+		}
+	}
+
+	args := p.buildArgs()
+	safeEnv := p.sanitizeEnv(os.Environ())
+
+	result, launchErr := launchChromiumWithPipes(p.execInfo.Path, args, p.profileDir, safeEnv)
+	if launchErr != nil {
+		return 0, 0, launchErr
+	}
+
+	p.pid = result.pid
+	p.procHandle = result.handle
+	p.reader = handleToIOReader(result.reader)
+	p.writer = handleToIOWriter(result.writer)
+	p.alive = true
+	p.connected = false
+
+	go func() {
+		for {
+			if !isProcessAliveByPID(p.pid) {
+				break
+			}
+			time.Sleep(500 * time.Millisecond)
+		}
+		p.mu.Lock()
+		p.alive = false
+		p.connected = false
+		p.mu.Unlock()
+	}()
+
+	return p.pid, p.procHandle, nil
+}
+
+func (p *browserProcess) Stop(handle proc.ProcessTreeHandle, pid int, gracePeriod time.Duration) error {
+	p.mu.Lock()
+	client := p.cdpClient
+	reader := p.reader
+	writer := p.writer
+	alive := p.alive
+	p.mu.Unlock()
+
+	if !alive {
+		return nil
+	}
+
+	if client != nil {
+		client.Close()
+	}
+	if reader != nil {
+		reader.Close()
+	}
+	if writer != nil {
+		writer.Close()
+	}
+
+	if handle != 0 {
+		_ = exec.Command("taskkill", "/T", "/F", "/PID", fmt.Sprintf("%d", int(handle))).Run()
+	} else if pid > 0 {
+		_ = exec.Command("taskkill", "/T", "/F", "/PID", fmt.Sprintf("%d", pid)).Run()
+	}
+
+	p.mu.Lock()
+	p.alive = false
+	p.connected = false
+	p.mu.Unlock()
+
+	return nil
+}
+
+var _ runtimehost.ProcessExec = (*browserProcess)(nil)
+var _ runtimehost.ProcessStopper = (*browserProcess)(nil)
+
+func isProcessAliveByPID(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	h, err := windows.OpenProcess(windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(pid))
+	if err != nil {
+		return false
+	}
+	defer syscall.CloseHandle(syscall.Handle(h))
+	var code uint32
+	if err := syscall.GetExitCodeProcess(syscall.Handle(h), &code); err != nil {
+		return false
+	}
+	return code == 259
+}
+
+func killProcessTreeHandle(handle proc.ProcessTreeHandle) {
+	if handle == 0 {
+		return
+	}
+	_ = exec.Command("taskkill", "/T", "/F", "/PID", fmt.Sprintf("%d", int(handle))).Run()
+}
+
+func removeProfileDir(path string) {
+	_ = os.RemoveAll(path)
+}
+
+func makeProfileDir(path string) error {
+	return os.MkdirAll(path, 0700)
+}
 
 const procThreadAttributeHandleList uintptr = 0x00020002
 

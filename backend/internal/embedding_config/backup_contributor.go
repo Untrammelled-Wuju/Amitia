@@ -145,9 +145,22 @@ func (c *EmbeddingBackupContributor) PreviewImport(ctx context.Context, req data
 }
 
 func (c *EmbeddingBackupContributor) Import(ctx context.Context, req dataportability.ImportRequest, in dataportability.BackupReader) error {
+	opts := dataportability.RestoreOptions{
+		OperationID:        req.OperationID,
+		Purpose:            dataportability.RestorePurposeOrdinary,
+		CharacterPolicy:    req.CharacterPolicy,
+		DefaultCharacterID: req.DefaultCharacterID,
+		ActivateImported:   req.ActivateImported,
+		IdentityMap:        req.IdentityMap,
+		SecretProvider:     req.SecretProvider,
+	}
+	return c.RestoreEmbeddings(ctx, in, opts)
+}
+
+func (c *EmbeddingBackupContributor) RestoreEmbeddings(ctx context.Context, in dataportability.BackupReader, opts dataportability.RestoreOptions) error {
 	rc, err := in.ReadComponent(ComponentIDEmbeddingConfigs + ".v1")
 	if err != nil {
-		return fmt.Errorf("import: embedding.configs component missing: %w", err)
+		return fmt.Errorf("restore: embedding.configs component missing: %w", err)
 	}
 	defer rc.Close()
 
@@ -180,7 +193,7 @@ func (c *EmbeddingBackupContributor) Import(ctx context.Context, req dataportabi
 		}
 
 		if exists {
-			switch req.CharacterPolicy {
+			switch opts.CharacterPolicy {
 			case dataportability.CollisionSkip:
 				continue
 			case dataportability.CollisionReplace:
@@ -208,3 +221,5 @@ func (c *EmbeddingBackupContributor) Import(ctx context.Context, req dataportabi
 
 	return nil
 }
+
+var _ dataportability.EmbeddingRestorePort = (*EmbeddingBackupContributor)(nil)

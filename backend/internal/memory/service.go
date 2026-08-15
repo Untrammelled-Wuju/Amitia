@@ -171,6 +171,10 @@ type service struct {
 	embedLocks               map[string]*sync.Mutex
 	temporalReranker         TemporalMemoryReranker
 	temporalRepo             *temporal.SQLiteRepository
+	canonicalMutator         bool
+	legacyRawWriter          bool
+	legacyHistoryWriter      bool
+	rawImportWriter          bool
 }
 
 type TemporalMemoryReranker interface {
@@ -195,11 +199,15 @@ func NewService(repo Repository, ctx *app.AppContext, graphSvc ...graph.Service)
 		gs = graphSvc[0]
 	}
 	return &service{
-		repo:         repo,
-		db:           ctx.DB,
-		embeddingSvc: embedding.NewService(ctx.DB),
-		graphSvc:     gs,
-		embedLocks:   map[string]*sync.Mutex{},
+		repo:                repo,
+		db:                  ctx.DB,
+		embeddingSvc:        embedding.NewService(ctx.DB),
+		graphSvc:            gs,
+		embedLocks:          map[string]*sync.Mutex{},
+		canonicalMutator:    true,
+		legacyRawWriter:     false,
+		legacyHistoryWriter: false,
+		rawImportWriter:     false,
 	}
 }
 
@@ -209,10 +217,10 @@ func (s *service) SetDataLifecycleCoordinator(c *mindruntime.DataLifecycleCoordi
 
 func (s *service) WriteAuthoritySnapshot() WriteAuthoritySnapshot {
 	return WriteAuthoritySnapshot{
-		CanonicalMutationEnabled:   true,
-		LegacyRawWriterEnabled:     false,
-		LegacyHistoryWriterEnabled: false,
-		RawImportWriterEnabled:     false,
+		CanonicalMutationEnabled:   s.canonicalMutator,
+		LegacyRawWriterEnabled:     s.legacyRawWriter,
+		LegacyHistoryWriterEnabled: s.legacyHistoryWriter,
+		RawImportWriterEnabled:     s.rawImportWriter,
 	}
 }
 

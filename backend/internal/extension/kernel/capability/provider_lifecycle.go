@@ -87,7 +87,7 @@ func (s *ProviderLifecycleService) RegisterProvider(def CapabilityProviderDefini
 
 func (s *ProviderLifecycleService) UnregisterProvider(id ProviderID) (bool, error) {
 	if s.events == nil {
-		return s.registry.DeregisterDefinition(id)
+		return s.registry.DeregisterDefinitionCascade(id)
 	}
 
 	oldDef, found := s.registry.GetByID(id)
@@ -95,12 +95,26 @@ func (s *ProviderLifecycleService) UnregisterProvider(id ProviderID) (bool, erro
 		return false, nil
 	}
 
-	removed, err := s.registry.DeregisterDefinition(id)
+	oldInstances := s.registry.ListInstancesByProvider(id)
+
+	removed, err := s.registry.DeregisterDefinitionCascade(id)
 	if err != nil {
 		return removed, err
 	}
 
 	now := time.Now().UTC()
+
+	for _, inst := range oldInstances {
+		if err := s.events.ProviderInstanceUnregistered(context.Background(), toInstanceEventPayload(inst, now)); err != nil {
+			s.registry.setDefinition(string(oldDef.ID), oldDef)
+			for _, restore := range oldInstances {
+				s.registry.setInstance(string(restore.ID), restore)
+			}
+			s.registry.rebuildProviderInstanceIndex()
+			return false, err
+		}
+	}
+
 	err = s.events.ProviderUnregistered(context.Background(), ProviderUnregisteredPayload{
 		ProviderID:   oldDef.ID,
 		CapabilityID: oldDef.CapabilityID,
@@ -110,6 +124,9 @@ func (s *ProviderLifecycleService) UnregisterProvider(id ProviderID) (bool, erro
 	})
 	if err != nil {
 		s.registry.setDefinition(string(oldDef.ID), oldDef)
+		for _, restore := range oldInstances {
+			s.registry.setInstance(string(restore.ID), restore)
+		}
 		s.registry.rebuildProviderInstanceIndex()
 		return false, err
 	}

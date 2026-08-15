@@ -149,6 +149,19 @@ func (c *ModelConfigBackupContributor) PreviewImport(ctx context.Context, req da
 }
 
 func (c *ModelConfigBackupContributor) Import(ctx context.Context, req dataportability.ImportRequest, in dataportability.BackupReader) error {
+	opts := dataportability.RestoreOptions{
+		OperationID:        req.OperationID,
+		Purpose:            dataportability.RestorePurposeOrdinary,
+		CharacterPolicy:    req.CharacterPolicy,
+		DefaultCharacterID: req.DefaultCharacterID,
+		ActivateImported:   req.ActivateImported,
+		IdentityMap:        req.IdentityMap,
+		SecretProvider:     req.SecretProvider,
+	}
+	return c.RestoreModelConfigs(ctx, in, opts)
+}
+
+func (c *ModelConfigBackupContributor) RestoreModelConfigs(ctx context.Context, in dataportability.BackupReader, opts dataportability.RestoreOptions) error {
 	rc, err := in.ReadComponent(ComponentIDModelConfigs)
 	if err != nil {
 		return err
@@ -175,7 +188,7 @@ func (c *ModelConfigBackupContributor) Import(ctx context.Context, req dataporta
 
 		newID := rec.ID
 		if existing.ID != 0 {
-			switch req.CharacterPolicy {
+			switch opts.CharacterPolicy {
 			case dataportability.CollisionSkip:
 				continue
 			case dataportability.CollisionReplace:
@@ -253,4 +266,5 @@ func splitModelConfigLines(data []byte) [][]byte {
 	return lines
 }
 
+var _ dataportability.ModelConfigRestorePort = (*ModelConfigBackupContributor)(nil)
 var _ dataportability.BackupContributor = (*ModelConfigBackupContributor)(nil)

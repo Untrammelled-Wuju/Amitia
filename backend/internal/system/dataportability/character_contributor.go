@@ -145,6 +145,19 @@ func (c *CharacterContributor) PreviewImport(ctx context.Context, req ImportPrev
 }
 
 func (c *CharacterContributor) Import(ctx context.Context, req ImportRequest, in BackupReader) error {
+	opts := RestoreOptions{
+		OperationID:        req.OperationID,
+		Purpose:            RestorePurposeOrdinary,
+		CharacterPolicy:    req.CharacterPolicy,
+		DefaultCharacterID: req.DefaultCharacterID,
+		ActivateImported:   req.ActivateImported,
+		IdentityMap:        req.IdentityMap,
+		SecretProvider:     req.SecretProvider,
+	}
+	return c.RestoreCharacters(ctx, in, opts)
+}
+
+func (c *CharacterContributor) RestoreCharacters(ctx context.Context, in BackupReader, opts RestoreOptions) error {
 	rc, err := in.ReadComponent("character.records.v1")
 	if err != nil {
 		return err
@@ -156,7 +169,7 @@ func (c *CharacterContributor) Import(ctx context.Context, req ImportRequest, in
 		return err
 	}
 
-	idMap := req.IdentityMap
+	idMap := opts.IdentityMap
 	lines := splitLines(data)
 	for _, line := range lines {
 		if len(line) == 0 {
@@ -171,7 +184,7 @@ func (c *CharacterContributor) Import(ctx context.Context, req ImportRequest, in
 		var existing struct{ ID string }
 		c.DB.WithContext(ctx).Table("characters").Select("id").Where("id = ?", rec.ID).Scan(&existing)
 		if existing.ID != "" {
-			switch req.CharacterPolicy {
+			switch opts.CharacterPolicy {
 			case CollisionSkip:
 				if idMap != nil {
 					idMap.AddCharacter(rec.ID, existing.ID)
@@ -258,6 +271,8 @@ func splitLines(data []byte) [][]byte {
 func estimateRecordsSize(count int64, avgRecordSize int64) int64 {
 	return count * avgRecordSize
 }
+
+var _ CharacterRestorePort = (*CharacterContributor)(nil)
 
 func init() {
 	_ = hex.EncodeToString

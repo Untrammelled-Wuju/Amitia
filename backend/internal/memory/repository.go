@@ -4,6 +4,7 @@ package memory
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -48,6 +49,8 @@ type Repository interface {
 	IsNewID(id string) (bool, error)
 	AppendRestoredEvents(events []MemoryEventV1) error
 }
+
+var ErrRestoreEventConflict = errors.New("restore event content conflict")
 
 type repository struct {
 	db *gorm.DB
@@ -507,16 +510,30 @@ func (r *repository) AppendRestoredEvents(events []MemoryEventV1) error {
 	}
 	return r.db.Transaction(func(tx *gorm.DB) error {
 		for _, e := range events {
-			err := tx.Exec(
-				`INSERT INTO memory_events (id, memory_id, version, event_type, operation_id, snapshot_hash, event_reason, created_at)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-				 ON CONFLICT(id) DO NOTHING`,
-				e.ID, e.MemoryID, e.Version, e.EventType, e.OperationID, e.SnapshotHash, e.EventReason, e.CreatedAt,
-			).Error
-			if err != nil {
+			var existing MemoryEventV1
+			err := tx.Where("id = ?", e.ID).Take(&existing).Error
+			if err == nil {
+				if !eventsEqual(existing, e) {
+					return fmt.Errorf("%w: event ID %s content mismatch", ErrRestoreEventConflict, e.ID)
+				}
+				continue
+			}
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+			if err := tx.Create(&e).Error; err != nil {
 				return err
 			}
 		}
 		return nil
 	})
+}
+
+func eventsEqual(a, b MemoryEventV1) bool {
+	return a.MemoryID == b.MemoryID &&
+		a.Version == b.Version &&
+		a.EventType == b.EventType &&
+		a.OperationID == b.OperationID &&
+		a.SnapshotHash == b.SnapshotHash &&
+		a.EventReason == b.EventReason
 }

@@ -46,6 +46,7 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
 
   Future<void> _loadConfig() async {
     await Future.delayed(Duration.zero);
+    await ref.read(mobileDeploymentConfigProvider.notifier).init();
     if (mounted) {
       setState(() => _loading = false);
     }
@@ -181,9 +182,11 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
 
   void _onRemoteUriChanged(String value) {
     final current = ref.read(mobileDeploymentConfigProvider);
-    ref.read(mobileDeploymentConfigProvider.notifier).state = MobileDeploymentConfig(
-      mode: current.mode,
-      remoteCoreUri: value.trim().isEmpty ? null : value.trim(),
+    ref.read(mobileDeploymentConfigProvider.notifier).update(
+      MobileDeploymentConfig(
+        mode: current.mode,
+        remoteCoreUri: value.trim().isEmpty ? null : value.trim(),
+      ),
     );
   }
 
@@ -226,7 +229,7 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
       mode: newMode,
       remoteCoreUri: config.remoteCoreUri,
     );
-    ref.read(mobileDeploymentConfigProvider.notifier).state = newConfig;
+    ref.read(mobileDeploymentConfigProvider.notifier).update(newConfig);
     lifecycle.reconcile(newConfig);
     setState(() => _testState = false);
     ScaffoldMessenger.of(context).showSnackBar(

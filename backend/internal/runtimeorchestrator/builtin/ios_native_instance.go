@@ -305,3 +305,14 @@ func (p *iosNativeProviderInstance) Health(ctx context.Context) capability.Healt
 		return capability.HealthUnknown
 	}
 }
+
+func (p *iosNativeProviderInstance) Cancel(ctx context.Context, requestID string, reason string) error {
+	p.mu.RLock()
+	domain := p.domainProvider
+	p.mu.RUnlock()
+
+	if domain == nil {
+		return fmt.Errorf("ios native provider not available")
+	}
+	return domain.Cancel(ctx, requestID, reason)
+}

@@ -204,6 +204,7 @@ func (c *UpgradeCoordinator) ExecuteUpgrade(ctx context.Context, req UpgradeRequ
 			if err == nil {
 				err = fmt.Errorf("kernel update failed: unknown reason")
 			}
+			c.clearUpgradeIntent(runtimeSnapshots)
 			result.Error = fmt.Errorf("kernel package update failed: %w", err)
 			result.Stage = UpgradeStateFailed
 			c.recordAudit(operationID, req, result, result.Error)
@@ -214,6 +215,7 @@ func (c *UpgradeCoordinator) ExecuteUpgrade(ctx context.Context, req UpgradeRequ
 	result.Stage = UpgradeStateMigrating
 	c.logStage(operationID, req.ExtensionID, UpgradeStateMigrating, "")
 	if err := c.executeMigrationHooks(ctx, req, operationID, runtimeSnapshots); err != nil {
+		c.clearUpgradeIntent(runtimeSnapshots)
 		result.Error = fmt.Errorf("migration failed: %w", err)
 		result.Stage = UpgradeStateFailed
 		c.recordAudit(operationID, req, result, result.Error)
@@ -225,6 +227,7 @@ func (c *UpgradeCoordinator) ExecuteUpgrade(ctx context.Context, req UpgradeRequ
 
 	descSync := c.contributionReconcile.SyncExtension(ctx, req.ExtensionID)
 	if descSync.HasError() {
+		c.clearUpgradeIntent(runtimeSnapshots)
 		result.Error = fmt.Errorf("contribution sync failed: %v", descSync.Errors)
 		result.Stage = UpgradeStateFailed
 		c.recordAudit(operationID, req, result, result.Error)
@@ -232,6 +235,7 @@ func (c *UpgradeCoordinator) ExecuteUpgrade(ctx context.Context, req UpgradeRequ
 	}
 
 	if err := c.runtimeGraphReconcile.ReconcileExtension(ctx, req.ExtensionID); err != nil {
+		c.clearUpgradeIntent(runtimeSnapshots)
 		result.Error = fmt.Errorf("runtime graph reconcile failed: %w", err)
 		result.Stage = UpgradeStateFailed
 		c.recordAudit(operationID, req, result, result.Error)
@@ -240,6 +244,7 @@ func (c *UpgradeCoordinator) ExecuteUpgrade(ctx context.Context, req UpgradeRequ
 
 	defReport := c.definitionReconcile.ReconcileExtension(req.ExtensionID)
 	if len(defReport.Errors) > 0 {
+		c.clearUpgradeIntent(runtimeSnapshots)
 		result.Error = fmt.Errorf("definition reconcile failed: %v", defReport.Errors)
 		result.Stage = UpgradeStateFailed
 		c.recordAudit(operationID, req, result, result.Error)
@@ -248,6 +253,7 @@ func (c *UpgradeCoordinator) ExecuteUpgrade(ctx context.Context, req UpgradeRequ
 
 	currentSnapshots, err := c.rediscoverCurrentRuntimes(ctx, req.ExtensionID, runtimeSnapshots)
 	if err != nil {
+		c.clearUpgradeIntent(runtimeSnapshots)
 		result.Error = fmt.Errorf("current runtime rediscovery failed: %w", err)
 		result.Stage = UpgradeStateFailed
 		c.recordAudit(operationID, req, result, result.Error)
@@ -256,6 +262,7 @@ func (c *UpgradeCoordinator) ExecuteUpgrade(ctx context.Context, req UpgradeRequ
 
 	configErrors := c.reconcileConfigs(ctx, currentSnapshots)
 	if len(configErrors) > 0 {
+		c.clearUpgradeIntent(runtimeSnapshots)
 		result.Error = fmt.Errorf("config validation failed: %v", configErrors)
 		result.Stage = UpgradeStateFailed
 		c.recordAudit(operationID, req, result, result.Error)
@@ -338,13 +345,19 @@ func (c *UpgradeCoordinator) ExecuteUpgradeByArchive(ctx context.Context, extens
 		if err == nil {
 			err = fmt.Errorf("kernel archive update failed: unknown reason")
 		}
-		return fmt.Errorf("kernel package update failed: %w", err)
+		c.clearUpgradeIntent(runtimeSnapshots)
+		archiveErr := fmt.Errorf("kernel package update failed: %w", err)
+		c.recordAudit(result.OperationID, UpgradeRequest{ExtensionID: extensionID}, result, archiveErr)
+		return archiveErr
 	}
 
 	result.Stage = UpgradeStateMigrating
 	c.logStage(result.OperationID, extensionID, UpgradeStateMigrating, "")
 	if err := c.executeMigrationHooks(ctx, UpgradeRequest{ExtensionID: extensionID}, result.OperationID, runtimeSnapshots); err != nil {
-		return fmt.Errorf("migration failed: %w", err)
+		c.clearUpgradeIntent(runtimeSnapshots)
+		archiveErr := fmt.Errorf("migration failed: %w", err)
+		c.recordAudit(result.OperationID, UpgradeRequest{ExtensionID: extensionID}, result, archiveErr)
+		return archiveErr
 	}
 
 	result.Stage = UpgradeStateReconciling
@@ -352,26 +365,41 @@ func (c *UpgradeCoordinator) ExecuteUpgradeByArchive(ctx context.Context, extens
 
 	descSync := c.contributionReconcile.SyncExtension(ctx, extensionID)
 	if descSync.HasError() {
-		return fmt.Errorf("contribution sync failed: %v", descSync.Errors)
+		c.clearUpgradeIntent(runtimeSnapshots)
+		archiveErr := fmt.Errorf("contribution sync failed: %v", descSync.Errors)
+		c.recordAudit(result.OperationID, UpgradeRequest{ExtensionID: extensionID}, result, archiveErr)
+		return archiveErr
 	}
 
 	if err := c.runtimeGraphReconcile.ReconcileExtension(ctx, extensionID); err != nil {
-		return fmt.Errorf("runtime graph reconcile failed: %w", err)
+		c.clearUpgradeIntent(runtimeSnapshots)
+		archiveErr := fmt.Errorf("runtime graph reconcile failed: %w", err)
+		c.recordAudit(result.OperationID, UpgradeRequest{ExtensionID: extensionID}, result, archiveErr)
+		return archiveErr
 	}
 
 	defReport := c.definitionReconcile.ReconcileExtension(extensionID)
 	if len(defReport.Errors) > 0 {
-		return fmt.Errorf("definition reconcile failed: %v", defReport.Errors)
+		c.clearUpgradeIntent(runtimeSnapshots)
+		archiveErr := fmt.Errorf("definition reconcile failed: %v", defReport.Errors)
+		c.recordAudit(result.OperationID, UpgradeRequest{ExtensionID: extensionID}, result, archiveErr)
+		return archiveErr
 	}
 
 	currentSnapshots, err := c.rediscoverCurrentRuntimes(ctx, extensionID, runtimeSnapshots)
 	if err != nil {
-		return fmt.Errorf("current runtime rediscovery failed: %w", err)
+		c.clearUpgradeIntent(runtimeSnapshots)
+		archiveErr := fmt.Errorf("current runtime rediscovery failed: %w", err)
+		c.recordAudit(result.OperationID, UpgradeRequest{ExtensionID: extensionID}, result, archiveErr)
+		return archiveErr
 	}
 
 	configErrors := c.reconcileConfigs(ctx, currentSnapshots)
 	if len(configErrors) > 0 {
-		return fmt.Errorf("config validation failed: %v", configErrors)
+		c.clearUpgradeIntent(runtimeSnapshots)
+		archiveErr := fmt.Errorf("config validation failed: %v", configErrors)
+		c.recordAudit(result.OperationID, UpgradeRequest{ExtensionID: extensionID}, result, archiveErr)
+		return archiveErr
 	}
 
 	result.Stage = UpgradeStateResuming
@@ -380,7 +408,10 @@ func (c *UpgradeCoordinator) ExecuteUpgradeByArchive(ctx context.Context, extens
 	for _, snap := range currentSnapshots {
 		if snap.WasRunning || snap.WasSuspended {
 			if _, failed := resumeFailures[snap.RuntimeID]; failed {
-				return fmt.Errorf("partial resume failure: runtime=%s", snap.RuntimeID)
+				c.clearUpgradeIntent(runtimeSnapshots)
+				archiveErr := fmt.Errorf("partial resume failure: runtime=%s", snap.RuntimeID)
+				c.recordAudit(result.OperationID, UpgradeRequest{ExtensionID: extensionID}, result, archiveErr)
+				return archiveErr
 			}
 		}
 	}
@@ -544,18 +575,38 @@ func (c *UpgradeCoordinator) rediscoverCurrentRuntimes(ctx context.Context, exte
 	if len(current) == 0 {
 		return current, nil
 	}
-	previousByID := make(map[domain.RuntimeInstanceID]RuntimeUpgradeSnapshot, len(previous))
+	previousByPluginID := make(map[domain.PluginID][]RuntimeUpgradeSnapshot, len(previous))
 	for _, snap := range previous {
-		previousByID[snap.RuntimeID] = snap
+		previousByPluginID[snap.PluginID] = append(previousByPluginID[snap.PluginID], snap)
 	}
+	usedRuntimeIDs := make(map[string]bool, len(previous))
 	eligible := make([]RuntimeUpgradeSnapshot, 0, len(previous))
 	for _, currentSnap := range current {
-		if old, exists := previousByID[currentSnap.RuntimeID]; exists {
-			currentSnap.WasRunning = old.WasRunning
-			currentSnap.WasSuspended = old.WasSuspended
-			currentSnap.PreUpgradeGeneration = old.PreUpgradeGeneration
-			eligible = append(eligible, currentSnap)
+		candidates := previousByPluginID[currentSnap.PluginID]
+		var best RuntimeUpgradeSnapshot
+		hasBest := false
+		for _, prev := range candidates {
+			if usedRuntimeIDs[string(prev.RuntimeID)] {
+				continue
+			}
+			if prev.RuntimeID == currentSnap.RuntimeID {
+				best = prev
+				hasBest = true
+				usedRuntimeIDs[string(prev.RuntimeID)] = true
+				break
+			}
+			if !hasBest {
+				best = prev
+				hasBest = true
+			}
 		}
+		if hasBest {
+			currentSnap.WasRunning = best.WasRunning
+			currentSnap.WasSuspended = best.WasSuspended
+			currentSnap.PreUpgradeGeneration = best.PreUpgradeGeneration
+			usedRuntimeIDs[string(best.RuntimeID)] = true
+		}
+		eligible = append(eligible, currentSnap)
 	}
 	return eligible, nil
 }

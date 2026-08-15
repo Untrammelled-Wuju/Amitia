@@ -450,11 +450,24 @@ func (c *MemoryBackupContributor) PreviewImport(ctx context.Context, req datapor
 }
 
 func (c *MemoryBackupContributor) Import(ctx context.Context, req dataportability.ImportRequest, in dataportability.BackupReader) error {
-	idMap := req.IdentityMap
-	if idMap == nil {
-		idMap = dataportability.NewImportIdentityMap()
+	opts := dataportability.RestoreOptions{
+		OperationID:        req.OperationID,
+		Purpose:            dataportability.RestorePurposeOrdinary,
+		CharacterPolicy:    req.CharacterPolicy,
+		DefaultCharacterID: req.DefaultCharacterID,
+		ActivateImported:   req.ActivateImported,
+		IdentityMap:        req.IdentityMap,
+		SecretProvider:     req.SecretProvider,
 	}
-	charPolicy := string(req.CharacterPolicy)
+	return c.RestoreMemories(ctx, in, opts)
+}
+
+func (c *MemoryBackupContributor) RestoreMemories(ctx context.Context, in dataportability.BackupReader, opts dataportability.RestoreOptions) error {
+	if opts.IdentityMap == nil {
+		return dataportability.ErrImportIdentityMapMissing
+	}
+	idMap := opts.IdentityMap
+	charPolicy := string(opts.CharacterPolicy)
 
 	recRC, err := in.ReadComponent(ComponentIDMemoryRecords + ".v1")
 	if err != nil {
@@ -471,7 +484,7 @@ func (c *MemoryBackupContributor) Import(ctx context.Context, req dataportabilit
 	stats := importStats{}
 
 	charIDMap := make(map[string]string)
-	for oldCID := range c.extractTargetCharacters(req) {
+	for oldCID := range c.extractTargetCharacters(opts) {
 		newCID := oldCID
 		if charPolicy == string(dataportability.CollisionReplace) {
 			newCID = oldCID
@@ -551,10 +564,10 @@ func (c *MemoryBackupContributor) Import(ctx context.Context, req dataportabilit
 	return nil
 }
 
-func (c *MemoryBackupContributor) extractTargetCharacters(req dataportability.ImportRequest) map[string]bool {
+func (c *MemoryBackupContributor) extractTargetCharacters(opts dataportability.RestoreOptions) map[string]bool {
 	result := make(map[string]bool)
-	if req.DefaultCharacterID != "" {
-		result[req.DefaultCharacterID] = true
+	if opts.DefaultCharacterID != "" {
+		result[opts.DefaultCharacterID] = true
 	}
 	return result
 }
@@ -607,6 +620,8 @@ func sameMemorySnapshot(m *Memory, rec *MemoryRecordV1) bool {
 	recMemory := rec.toMemory()
 	return computeMemorySnapshotHashCanonical(m) == computeMemorySnapshotHashCanonical(&recMemory)
 }
+
+var _ dataportability.MemoryRestorePort = (*MemoryBackupContributor)(nil)
 
 func (m *Memory) toV1() MemoryRecordV1 {
 	layer := "fact"

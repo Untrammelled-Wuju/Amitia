@@ -6,6 +6,7 @@ import (
 	"time"
 
 	proc "github.com/u-ai/backend/internal/platform/process"
+	"github.com/u-ai/backend/internal/runtimehost"
 )
 
 type chromiumEngine struct {
@@ -14,16 +15,22 @@ type chromiumEngine struct {
 	state       *runtimeState
 	generation  atomicCounter
 	process     *browserProcess
+	processID   runtimehost.ProcessID
+	supervisor  runtimehost.ProcessSupervisor
 	mu          sync.Mutex
 	cancelWatch context.CancelFunc
 }
 
 func NewChromiumEngine(config BrowserConfig, resolver BrowserExecutableResolver) BrowserEngine {
-	return &chromiumEngine{
+	engine := &chromiumEngine{
 		config:   config,
 		resolver: resolver,
 		state:    newRuntimeState(),
 	}
+	if s := GetGlobalRuntimeSupervisor(); s != nil {
+		engine.supervisor = s
+	}
+	return engine
 }
 
 func (e *chromiumEngine) Start(ctx context.Context) (*BrowserRuntimeInfo, error) {
@@ -122,6 +129,8 @@ func (e *chromiumEngine) Stop(ctx context.Context) error {
 		}
 	}
 	proc := e.process
+	processID := e.processID
+	supervisor := e.supervisor
 	e.mu.Unlock()
 
 	e.stopWatchdog()
@@ -129,7 +138,10 @@ func (e *chromiumEngine) Stop(ctx context.Context) error {
 	stopCtx, cancel := context.WithTimeout(context.Background(), e.config.ShutdownTimeout)
 	defer cancel()
 
-	if proc != nil {
+	if supervisor != nil && processID != "" {
+		_ = supervisor.Stop(stopCtx, processID)
+		_ = supervisor.Unregister(processID)
+	} else if proc != nil {
 		if err := proc.gracefulClose(stopCtx); err != nil {
 			proc.kill()
 		}
@@ -139,6 +151,7 @@ func (e *chromiumEngine) Stop(ctx context.Context) error {
 
 	e.mu.Lock()
 	e.process = nil
+	e.processID = ""
 	e.state.setStopped()
 	e.mu.Unlock()
 
@@ -189,8 +202,36 @@ func (e *chromiumEngine) launchProcess(ctx context.Context, execInfo BrowserExec
 	profileDir := e.profileDirForGeneration(e.generation.get() + 1)
 	proc := newBrowserProcess(execInfo, e.config, profileDir)
 
-	if err := proc.start(ctx); err != nil {
-		return nil, err
+	if e.supervisor != nil {
+		processID := runtimehost.ProcessID("browser-" + execInfo.Kind)
+		spec := runtimehost.ProcessSpec{
+			ID:                processID,
+			ExecutableProcess: proc,
+			Environment:       runtimehost.EnvironmentSpec{Policy: runtimehost.EnvPolicyMinimal},
+			StartupTimeout:    e.config.StartupTimeout,
+			StopGracePeriod:   10 * time.Second,
+			RestartPolicy:     runtimehost.RestartPolicy{Mode: runtimehost.RestartNever},
+		}
+		if err := e.supervisor.Register(spec); err != nil {
+			return nil, &BrowserError{
+				Code:    ErrCodeBrowserStartFailed,
+				Message: "failed to register browser with runtime host",
+				Cause:   err,
+			}
+		}
+		e.processID = processID
+		if err := e.supervisor.Start(ctx, processID); err != nil {
+			e.supervisor.Unregister(processID)
+			return nil, &BrowserError{
+				Code:    ErrCodeBrowserStartFailed,
+				Message: "failed to start browser process via runtime host",
+				Cause:   err,
+			}
+		}
+	} else {
+		if _, _, startErr := proc.Start(); startErr != nil {
+			return nil, startErr
+		}
 	}
 
 	return proc, nil
@@ -333,6 +374,10 @@ func (e *chromiumEngine) handleDisconnect() {
 	e.state.setFailed()
 	proc := e.process
 	e.process = nil
+	if e.supervisor != nil && e.processID != "" {
+		_ = e.supervisor.Unregister(e.processID)
+	}
+	e.processID = ""
 	e.mu.Unlock()
 
 	if proc != nil {

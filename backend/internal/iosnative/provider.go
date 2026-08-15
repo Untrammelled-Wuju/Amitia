@@ -88,3 +88,7 @@ func (p *Provider) Health(ctx context.Context) nativebridge.Health {
 		return h
 	}
 }
+
+func (p *Provider) Cancel(ctx context.Context, requestID string, reason string) error {
+	return nil
+}

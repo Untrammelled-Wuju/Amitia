@@ -64,9 +64,11 @@ func runtimeBindingFromManifestModule(mod domain.ModuleDefinition) RuntimeBindin
 		}
 	}
 	rt := runtimeTypeFromManifest(mod.Runtime.Type, mod.Placement)
-	metadata := make(map[string]any, len(mod.Runtime.Env))
-	for k, v := range mod.Runtime.Env {
-		metadata[k] = v
+	metadata := make(map[string]any)
+	if mod.Metadata != nil {
+		for k, v := range mod.Metadata {
+			metadata[k] = v
+		}
 	}
 	return RuntimeBinding{
 		RuntimeType: rt,
@@ -102,12 +104,20 @@ func ProviderDefinitionsFromExtension(def domain.ExtensionDefinition) ([]Capabil
 			var providerID ProviderID
 			var priority int
 			var providerMetadata map[string]any
-			var platforms []runtimeidentity.Platform
+			platforms := make([]runtimeidentity.Platform, 0)
+			for _, p := range mod.Compatibility.Platforms {
+				platforms = append(platforms, runtimeidentity.Platform(p))
+			}
 
 			if providerMeta != nil && providerMeta.ID != "" {
-				providerID = ParseProviderID(providerMeta.ID)
+				providerID = BuildManifestProviderID(def.ID, mod.ID, providerMeta, CapabilityID(pc.ID))
 				priority = providerMeta.Priority
-				providerMetadata = providerMeta.Metadata
+				if providerMeta.Metadata != nil {
+					providerMetadata = make(map[string]any, len(providerMeta.Metadata))
+					for k, v := range providerMeta.Metadata {
+						providerMetadata[k] = v
+					}
+				}
 			} else {
 				providerID = BuildManifestProviderID(def.ID, mod.ID, nil, CapabilityID(pc.ID))
 				priority = 0

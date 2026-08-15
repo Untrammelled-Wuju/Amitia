@@ -363,6 +363,9 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		if leaseAwareExecutor, ok := serviceExecutor.(runtime.SecretLeaseAwareServiceExecutor); ok {
 			leaseAwareExecutor.SetServiceLeaseLifecycle(secretLifecycle)
 		}
+		if runtimeExecutor != nil {
+			runtimeExecutor.SetRuntimeSubscriptionWatcher(secretSubscriptions)
+		}
 	}
 
 	if secretAdapter == nil {
@@ -703,6 +706,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 			GenerationReader:   generationReader,
 			ConnectionRegistry: readyGate,
 			InvocationTracker:  emergencyHostAPITracker,
+			PermissionChecker:  opts.EffectivePermission,
 		})
 		if err != nil {
 			return nil, err

@@ -277,6 +277,7 @@ export function startCore(profile: BundledCoreProfile): void {
     cwd: dataDir,
     env,
     windowsHide: true,
+    detached: process.platform !== "win32",
   });
   runningCoreProfile = profile;
 
@@ -323,14 +324,13 @@ export async function stopCore(): Promise<void> {
       console.error("[CoreManager] 优雅关闭异常，强制终止:", err);
       forceKillProcessTree(pid);
     }
-    cleanupRemainingProcesses();
+    await waitForChildExit(coreProcess, 5000);
     if (currentGeneration === coreGeneration) {
       coreProcess = null;
       runningCoreProfile = null;
     }
     return;
   }
-  cleanupRemainingProcesses();
   coreProcess = null;
   runningCoreProfile = null;
 }
@@ -370,7 +370,8 @@ async function waitForProcessExit(): Promise<void> {
 }
 
 function forceKillProcessTree(pid: number): void {
-  if (process.platform === "win32" && pid) {
+  if (!pid) return;
+  if (process.platform === "win32") {
     try {
       execSync(`taskkill /PID ${pid} /T /F`, {
         windowsHide: true,
@@ -380,35 +381,32 @@ function forceKillProcessTree(pid: number): void {
     } catch (e) {
       console.error("[CoreManager] taskkill异常:", e);
     }
-  } else if (pid) {
+  } else {
     try {
-      process.kill(pid, "SIGTERM");
-    } catch (_) {}
+      process.kill(-pid, "SIGKILL");
+      console.log("[CoreManager] 进程组已强制终止");
+    } catch (e) {
+      console.error("[CoreManager] kill进程组异常:", e);
+      try {
+        process.kill(pid, "SIGKILL");
+      } catch (_) {}
+    }
   }
 }
 
-function cleanupRemainingProcesses(): void {
-  if (process.platform === "win32") {
-    try {
-      execSync(`taskkill /F /IM qdrant.exe`, {
-        windowsHide: true,
-        stdio: "pipe",
-      });
-    } catch (_) {}
-    try {
-      execSync(`taskkill /F /IM surreal.exe`, {
-        windowsHide: true,
-        stdio: "pipe",
-      });
-    } catch (_) {}
-  } else {
-    try {
-      execSync("pkill -9 qdrant", { stdio: "pipe" });
-    } catch (_) {}
-    try {
-      execSync("pkill -9 surreal", { stdio: "pipe" });
-    } catch (_) {}
-  }
+async function waitForChildExit(child: ChildProcessWithoutNullStreams | null, timeoutMs: number): Promise<void> {
+  if (!child || child.exitCode !== null || child.killed) return;
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => {
+      child.removeAllListeners("exit");
+      console.warn("[CoreManager] 等待进程退出超时");
+      resolve();
+    }, timeoutMs);
+    child.once("exit", () => {
+      clearTimeout(timer);
+      resolve();
+    });
+  });
 }
 
 async function gracefulShutdown(pid: number): Promise<boolean> {

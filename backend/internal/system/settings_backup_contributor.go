@@ -139,6 +139,19 @@ func (c *SettingsBackupContributor) PreviewImport(ctx context.Context, req datap
 }
 
 func (c *SettingsBackupContributor) Import(ctx context.Context, req dataportability.ImportRequest, in dataportability.BackupReader) error {
+	opts := dataportability.RestoreOptions{
+		OperationID:        req.OperationID,
+		Purpose:            dataportability.RestorePurposeOrdinary,
+		CharacterPolicy:    req.CharacterPolicy,
+		DefaultCharacterID: req.DefaultCharacterID,
+		ActivateImported:   req.ActivateImported,
+		IdentityMap:        req.IdentityMap,
+		SecretProvider:     req.SecretProvider,
+	}
+	return c.RestoreSettings(ctx, in, opts)
+}
+
+func (c *SettingsBackupContributor) RestoreSettings(ctx context.Context, in dataportability.BackupReader, opts dataportability.RestoreOptions) error {
 	rc, err := in.ReadComponent(ComponentIDSettings)
 	if err != nil {
 		return err

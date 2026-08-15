@@ -166,6 +166,19 @@ func (c *ExtensionBackupContributor) PreviewImport(ctx context.Context, req data
 }
 
 func (c *ExtensionBackupContributor) Import(ctx context.Context, req dataportability.ImportRequest, in dataportability.BackupReader) error {
+	opts := dataportability.RestoreOptions{
+		OperationID:        req.OperationID,
+		Purpose:            dataportability.RestorePurposeOrdinary,
+		CharacterPolicy:    req.CharacterPolicy,
+		DefaultCharacterID: req.DefaultCharacterID,
+		ActivateImported:   req.ActivateImported,
+		IdentityMap:        req.IdentityMap,
+		SecretProvider:     req.SecretProvider,
+	}
+	return c.RestoreExtensions(ctx, in, opts)
+}
+
+func (c *ExtensionBackupContributor) RestoreExtensions(ctx context.Context, in dataportability.BackupReader, opts dataportability.RestoreOptions) error {
 	rc, err := in.ReadComponent(extensionComponentID)
 	if err != nil {
 		return err
@@ -229,7 +242,7 @@ func (c *ExtensionBackupContributor) Import(ctx context.Context, req dataportabi
 			c.DB.WithContext(ctx).Table("extension_agent_skill_metadata").Select("id, extension_id").Where("extension_id = ?", rec.ExtensionID).Scan(&existing)
 
 			if existing.ID != "" {
-				switch req.CharacterPolicy {
+				switch opts.CharacterPolicy {
 				case dataportability.CollisionSkip:
 					continue
 				case dataportability.CollisionReplace:
@@ -282,3 +295,5 @@ func (c *ExtensionBackupContributor) Import(ctx context.Context, req dataportabi
 
 	return nil
 }
+
+var _ dataportability.ExtensionRestorePort = (*ExtensionBackupContributor)(nil)

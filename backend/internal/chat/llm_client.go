@@ -252,13 +252,18 @@ func localModelRuntimeKey(cfg *ModelConfig) string {
 
 func ensureLocalModelReady(ctx context.Context, backend LocalModelInfer) error {
 	health := backend.Health(ctx)
-	if health.State == "ready" {
+	switch health.State {
+	case "ready":
 		return nil
-	}
-	if health.State == "failed" || health.State == "unloaded" {
+	case "loading", "generating", "embedding":
+		return localmodel.ErrModelNotYetReady
+	case "stopping":
+		return localmodel.ErrModelUnavailable
+	case "failed", "unloaded":
+		return backend.Load(ctx)
+	default:
 		return backend.Load(ctx)
 	}
-	return nil
 }
 
 func toLocalModelRequest(req ModelRequest, messages []map[string]interface{}) localmodel.LocalModelRequest {

@@ -2,6 +2,7 @@ package browser
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"sync"
 	"time"
@@ -144,7 +145,7 @@ func (i *productionInteractor) Click(ctx context.Context, sessionID BrowserSessi
 		Success:            true,
 		Action:             "click",
 		Strategy:           "cdp_input",
-		Verified:           true,
+		Verified:           false,
 		DocumentGeneration: docGen,
 		DurationMS:         time.Since(startTime).Milliseconds(),
 	}, nil
@@ -249,6 +250,18 @@ func (i *productionInteractor) Input(ctx context.Context, sessionID BrowserSessi
 		}
 	}
 
+	verified := false
+	described, descErr := i.dom.DescribeNode(ctx, resolved.TargetID, fmt.Sprintf("%d", record.backendNodeID))
+	if descErr == nil && described != nil {
+		if described.NodeValue == text {
+			verified = true
+		} else if described.Attributes != nil {
+			if v, ok := described.Attributes["value"]; ok && v == text {
+				verified = true
+			}
+		}
+	}
+
 	var docGen uint64
 	if i.tabMgr != nil {
 		if rec, ok := i.tabMgr.store.get(tabID); ok {
@@ -260,7 +273,7 @@ func (i *productionInteractor) Input(ctx context.Context, sessionID BrowserSessi
 		Success:            true,
 		Action:             "input",
 		Strategy:           "cdp_insert_text",
-		Verified:           true,
+		Verified:           verified,
 		DocumentGeneration: docGen,
 		DurationMS:         time.Since(startTime).Milliseconds(),
 	}, nil
@@ -351,6 +364,16 @@ func (i *productionInteractor) Select(ctx context.Context, sessionID BrowserSess
 		}
 	}
 
+	verified := false
+	described, descErr := i.dom.DescribeNode(ctx, resolved.TargetID, fmt.Sprintf("%d", record.backendNodeID))
+	if descErr == nil && described != nil {
+		if described.Attributes != nil {
+			if v, ok := described.Attributes["value"]; ok && v == value {
+				verified = true
+			}
+		}
+	}
+
 	var docGen uint64
 	if i.tabMgr != nil {
 		if rec, ok := i.tabMgr.store.get(tabID); ok {
@@ -362,7 +385,7 @@ func (i *productionInteractor) Select(ctx context.Context, sessionID BrowserSess
 		Success:            true,
 		Action:             "select",
 		Strategy:           "js_helper",
-		Verified:           true,
+		Verified:           verified,
 		DocumentGeneration: docGen,
 		DurationMS:         time.Since(startTime).Milliseconds(),
 	}, nil
@@ -468,7 +491,7 @@ func (i *productionInteractor) Hover(ctx context.Context, sessionID BrowserSessi
 		Success:            true,
 		Action:             "hover",
 		Strategy:           "cdp_input",
-		Verified:           true,
+		Verified:           false,
 		DocumentGeneration: docGen,
 		DurationMS:         time.Since(startTime).Milliseconds(),
 	}, nil
@@ -538,7 +561,7 @@ func (i *productionInteractor) Scroll(ctx context.Context, sessionID BrowserSess
 		Success:            true,
 		Action:             "scroll",
 		Strategy:           "cdp_wheel",
-		Verified:           true,
+		Verified:           false,
 		DocumentGeneration: docGen,
 		DurationMS:         time.Since(startTime).Milliseconds(),
 	}, nil

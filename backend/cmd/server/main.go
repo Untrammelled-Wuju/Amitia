@@ -143,7 +143,10 @@ func main() {
 		log.Error("创建运行时宿主失败:", bootErr)
 		os.Exit(1)
 	}
-	graphSvc := initGraph()
+	var graphSvc graph.Service
+	if policy.GraphStore {
+		graphSvc = initGraph()
+	}
 	if err := bootstrap.RegisterInfrastructure(sqlDB, graphSvc); err != nil {
 		log.Error("基础设施注册失败:", err)
 		os.Exit(1)
@@ -177,54 +180,56 @@ func main() {
 		os.Exit(1)
 	}
 
-	productionCutover := initCutoverGate(db, services)
-	checkResult, err := productionCutover.cutoverPlan.ComputeCutoverCheck(appCtx)
-	if err != nil {
-		log.Error("检查生产切换状态失败:", err)
-		_ = bootstrap.StopAll(context.Background())
-		os.Exit(1)
-	}
-
-	if checkResult.Failed {
-		log.Error("检测到生产切换失败状态，进入recovery模式")
-		_ = bootstrap.StopAll(context.Background())
-		os.Exit(1)
-	}
-
-	if checkResult.Incomplete {
-		log.Info("检测到未完成的生产切换，正在恢复执行...")
-		if err := productionCutover.RunCutover(appCtx); err != nil {
-			log.Error("生产切换执行失败:", err)
+	if policy.CoreBusinessServices {
+		productionCutover := initCutoverGate(db, services)
+		checkResult, err := productionCutover.cutoverPlan.ComputeCutoverCheck(appCtx)
+		if err != nil {
+			log.Error("检查生产切换状态失败:", err)
 			_ = bootstrap.StopAll(context.Background())
 			os.Exit(1)
 		}
-		log.Info("生产切换完成")
-	} else if !checkResult.Committed {
-		if !freshInstall {
-			log.Info("执行生产切换...")
+
+		if checkResult.Failed {
+			log.Error("检测到生产切换失败状态，进入recovery模式")
+			_ = bootstrap.StopAll(context.Background())
+			os.Exit(1)
+		}
+
+		if checkResult.Incomplete {
+			log.Info("检测到未完成的生产切换，正在恢复执行...")
 			if err := productionCutover.RunCutover(appCtx); err != nil {
 				log.Error("生产切换执行失败:", err)
 				_ = bootstrap.StopAll(context.Background())
 				os.Exit(1)
 			}
 			log.Info("生产切换完成")
-		} else {
-			log.Info("新安装数据库，初始化canonical已提交状态...")
-			if err := initializeCommittedCutoverState(db, services); err != nil {
-				log.Error("初始化canonical切换状态失败:", err)
-				_ = bootstrap.StopAll(context.Background())
-				os.Exit(1)
+		} else if !checkResult.Committed {
+			if !freshInstall {
+				log.Info("执行生产切换...")
+				if err := productionCutover.RunCutover(appCtx); err != nil {
+					log.Error("生产切换执行失败:", err)
+					_ = bootstrap.StopAll(context.Background())
+					os.Exit(1)
+				}
+				log.Info("生产切换完成")
+			} else {
+				log.Info("新安装数据库，初始化canonical已提交状态...")
+				if err := initializeCommittedCutoverState(db, services); err != nil {
+					log.Error("初始化canonical切换状态失败:", err)
+					_ = bootstrap.StopAll(context.Background())
+					os.Exit(1)
+				}
 			}
 		}
-	}
 
-	if err := runCanonicalRuntimeAssertions(services); err != nil {
-		log.Error("Post-cutover canonical assertions failed:", err)
-		_ = bootstrap.StopAll(context.Background())
-		os.Exit(1)
-	}
+		if err := runCanonicalRuntimeAssertions(services); err != nil {
+			log.Error("Post-cutover canonical assertions failed:", err)
+			_ = bootstrap.StopAll(context.Background())
+			os.Exit(1)
+		}
 
-	services.ProductionCutover = productionCutover
+		services.ProductionCutover = productionCutover
+	}
 
 	cleanup := func() {
 		_ = bootstrap.StopAll(context.Background())
@@ -262,45 +267,47 @@ func main() {
 	fmt.Printf("    SurrealDB:      %s:%d\n", config.AppCfg.Providers.GraphStore.SurrealDB.Host, config.AppCfg.Providers.GraphStore.SurrealDB.Port)
 	fmt.Printf("  ========================================\n\n")
 
-	qqMgr := qq.NewManager("http://127.0.0.1:19877")
-	qq.SetManager(qqMgr)
+	if policy.FullHTTPAPI {
+		qqMgr := qq.NewManager("http://127.0.0.1:19877")
+		qq.SetManager(qqMgr)
 
-	agenttool.SetOnMemorySaved(func(id, key, value, memoryType, characterID string) {
-		services.Memory.SyncEmbedding(id, key, value, characterID, memoryType)
-		services.Memory.SyncGraphMemory(id)
-	})
-	agenttool.SetOnProfileSaved(func(id string) {
-		services.Profile.SyncGraphProfile(id)
-	})
-	agenttool.SetOnEpisodicSaved(func(id string) {
-		services.Episodic.SyncGraphEpisodic(id)
-	})
-	chat.InitBuffer(config.AppCfg.Chat.MergeWindowMs)
-	go func() {
-		time.Sleep(3 * time.Second)
-		services.Chat.EnsureChannelConversation("wechat")
-		services.Chat.EnsureChannelConversation("qq")
-		log.Info("频道对话已确保创建")
-	}()
-	count, err := services.Chat.RecalculateMessageCounts()
-	backfilled, backfillErr := services.Chat.BackfillMissingConversations()
-	if backfillErr != nil {
-		log.Error("回填缺失对话记录失败:", backfillErr)
-	} else if backfilled > 0 {
-		log.Info("已回填缺失对话记录，影响", backfilled, "条")
-	}
+		agenttool.SetOnMemorySaved(func(id, key, value, memoryType, characterID string) {
+			services.Memory.SyncEmbedding(id, key, value, characterID, memoryType)
+			services.Memory.SyncGraphMemory(id)
+		})
+		agenttool.SetOnProfileSaved(func(id string) {
+			services.Profile.SyncGraphProfile(id)
+		})
+		agenttool.SetOnEpisodicSaved(func(id string) {
+			services.Episodic.SyncGraphEpisodic(id)
+		})
+		chat.InitBuffer(config.AppCfg.Chat.MergeWindowMs)
+		go func() {
+			time.Sleep(3 * time.Second)
+			services.Chat.EnsureChannelConversation("wechat")
+			services.Chat.EnsureChannelConversation("qq")
+			log.Info("频道对话已确保创建")
+		}()
+		count, err := services.Chat.RecalculateMessageCounts()
+		backfilled, backfillErr := services.Chat.BackfillMissingConversations()
+		if backfillErr != nil {
+			log.Error("回填缺失对话记录失败:", backfillErr)
+		} else if backfilled > 0 {
+			log.Info("已回填缺失对话记录，影响", backfilled, "条")
+		}
 
-	if err != nil {
-		log.Error("重算消息计数失败:", err)
-	} else {
-		log.Info("消息计数已修复，影响", count, "条对话")
+		if err != nil {
+			log.Error("重算消息计数失败:", err)
+		} else {
+			log.Info("消息计数已修复，影响", count, "条对话")
+		}
+		var charIDs []string
+		services.DB.Table("characters").Pluck("id", &charIDs)
+		for _, cid := range charIDs {
+			services.Companion.ScheduleBasedGenerator(time.Now().Format("2006-01-02"), cid)
+		}
+		log.Info("今日主动消息任务已生成")
 	}
-	var charIDs []string
-	db.Table("characters").Pluck("id", &charIDs)
-	for _, cid := range charIDs {
-		services.Companion.ScheduleBasedGenerator(time.Now().Format("2006-01-02"), cid)
-	}
-	log.Info("今日主动消息任务已生成")
 
 	killExistingServer(serverAddr)
 
@@ -311,33 +318,55 @@ func main() {
 		log.Info("SurrealDB: disabled by runtime profile")
 	}
 
-	r, errSetup := setupRouter(ctx, services)
+	srv := &http.Server{
+		Addr:    serverAddr,
+		Handler: nil,
+	}
+	serverErr := make(chan error, 1)
+
+	if policy.FullHTTPAPI {
+		r, errSetup := setupRouter(ctx, services)
+		if errSetup != nil {
+			log.Error("路由和安全服务初始化失败:", errSetup)
+			cleanup()
+			os.Exit(1)
+		}
+		srv.Handler = r
+		if err := startCoreWorkers(appCtx, services, srv); err != nil {
+			log.Error("核心Worker启动失败:", err)
+			cleanup()
+			os.Exit(1)
+		}
+		runCoreServer(appCtx, srv, serverErr, services, srv)
+		return
+	}
+	r, errSetup := setupDeviceAgentRouter(ctx, services)
 	if errSetup != nil {
-		log.Error("路由和安全服务初始化失败:", errSetup)
+		log.Error("Device Agent路由初始化失败:", errSetup)
 		cleanup()
 		os.Exit(1)
 	}
+	srv.Handler = r
+	runDeviceAgentServer(appCtx, srv, serverErr, services, srv)
+}
+
+func startCoreWorkers(appCtx context.Context, services *AppServices, r *http.Server) error {
+	ginEngine := r.Handler
+	_ = ginEngine
 	if result, err := services.UnifiedEntry.RecoverStaleInteractions(context.Background(), time.Now()); err != nil {
 		log.Error("交互启动恢复失败:", err)
 	} else if result.Recovered > 0 || result.Failed > 0 {
 		log.Info("交互启动恢复完成 scanned=", result.Scanned, " recovered=", result.Recovered, " skipped=", result.Skipped, " failed=", result.Failed)
 	}
 	services.UnifiedEntry.SetOrchestratorReady(true)
-	defer services.UnifiedEntry.SetOrchestratorReady(false)
 	services.OutboxWorker.Start(appCtx)
-	defer services.OutboxWorker.Stop()
 	services.DeliveryWorker.Start(appCtx)
-	defer services.DeliveryWorker.Stop()
 
-	selfHeal := startSelfHealMonitor(appCtx, db)
+	selfHeal := startSelfHealMonitor(appCtx, services.DB)
 	defer selfHeal.Stop()
-	cron := NewProactiveCron(db, services.Companion, services.RuntimeQueue)
+	cron := NewProactiveCron(services.DB, services.Companion, services.RuntimeQueue)
 	cron.Start()
 	proactive.SchedulerRunning = true
-	defer func() {
-		proactive.SchedulerRunning = false
-		cron.Stop()
-	}()
 
 	go func() {
 		ticker := time.NewTicker(5 * time.Minute)
@@ -354,13 +383,11 @@ func main() {
 	}()
 
 	go services.Reconciliation.RunWorker(appCtx, 10*time.Minute, mindruntime.DefaultReconciliationWorkerTargets())
+	return nil
+}
 
-	srv := &http.Server{
-		Addr:    serverAddr,
-		Handler: r,
-	}
-	log.Info("所有服务已就绪，开始监听 ", serverAddr)
-	serverErr := make(chan error, 1)
+func runCoreServer(appCtx context.Context, srv *http.Server, serverErr chan error, services *AppServices, r *http.Server) {
+	log.Info("所有服务已就绪，开始监听 ", srv.Addr)
 	go func() {
 		serverErr <- srv.ListenAndServe()
 	}()
@@ -369,19 +396,10 @@ func main() {
 	case err := <-serverErr:
 		if err != nil && err != http.ErrServerClosed {
 			log.Error("服务启动失败:", err)
-			cleanup()
-			os.Exit(1)
 		}
 	case <-appCtx.Done():
 		log.Info("收到关闭信号，开始排水...")
 		services.UnifiedEntry.SetOrchestratorReady(false)
-		pluginShutdownCtx, pluginCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		if err := services.Extension.Close(pluginShutdownCtx); err != nil {
-			log.Error("Plugin Runtime 关闭失败:", err)
-		}
-		pluginCancel()
-		bootstrap.StopAll(context.Background())
-		log.Info("已停止接收新请求，等待现有请求完成...")
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		if err := srv.Shutdown(shutdownCtx); err != nil {
@@ -391,10 +409,29 @@ func main() {
 			log.Error("服务退出异常:", err)
 		}
 	}
-	if err := appCtx.Err(); err != nil && err != context.Canceled {
-		log.Error("服务启动失败:", err)
-		cleanup()
-		os.Exit(1)
+}
+
+func runDeviceAgentServer(appCtx context.Context, srv *http.Server, serverErr chan error, services *AppServices, r *http.Server) {
+	log.Info("Device Agent已就绪，开始监听 ", srv.Addr)
+	go func() {
+		serverErr <- srv.ListenAndServe()
+	}()
+
+	select {
+	case err := <-serverErr:
+		if err != nil && err != http.ErrServerClosed {
+			log.Error("Device Agent启动失败:", err)
+		}
+	case <-appCtx.Done():
+		log.Info("收到关闭信号，Device Agent停止...")
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := srv.Shutdown(shutdownCtx); err != nil {
+			log.Error("Device Agent关闭失败:", err)
+		}
+		if err := <-serverErr; err != nil && err != http.ErrServerClosed {
+			log.Error("Device Agent退出异常:", err)
+		}
 	}
 }
 

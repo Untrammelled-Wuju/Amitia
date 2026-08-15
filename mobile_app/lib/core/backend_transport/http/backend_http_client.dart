@@ -66,7 +66,12 @@ class BackendHttpClient implements BackendHttpTransport {
     };
 
     final token = _config.credential.revealForTransport();
-    headers[BackendAuthHeader.localToken] = token;
+    switch (_config.authStrategy) {
+      case BackendAuthStrategy.localToken:
+        headers[BackendAuthHeader.localToken] = token;
+      case BackendAuthStrategy.bearer:
+        headers[BackendAuthHeader.authorization] = 'Bearer $token';
+    }
 
     if (request.headers != null) {
       for (final entry in request.headers!.entries) {

@@ -40,15 +40,26 @@ type ControlSinkRegisterResult struct {
 	SinkID     string `json:"sinkId"`
 }
 
+type EffectSinkFactory func(runtimeID domain.RuntimeInstanceID, pluginID domain.PluginID, sinkID string) ControlEffectSink
+
 type ControlHandler struct {
-	gate         *PluginOutputGate
-	sinkRegistry *ControlSinkRegistry
+	gate             *PluginOutputGate
+	sinkRegistry     *ControlSinkRegistry
+	effectSinkFactory EffectSinkFactory
 }
 
 func NewControlHandler(gate *PluginOutputGate, sinkRegistry *ControlSinkRegistry) *ControlHandler {
 	return &ControlHandler{
 		gate:         gate,
 		sinkRegistry: sinkRegistry,
+	}
+}
+
+func NewControlHandlerWithEffectFactory(gate *PluginOutputGate, sinkRegistry *ControlSinkRegistry, factory EffectSinkFactory) *ControlHandler {
+	return &ControlHandler{
+		gate:             gate,
+		sinkRegistry:     sinkRegistry,
+		effectSinkFactory: factory,
 	}
 }
 
@@ -191,7 +202,15 @@ func (h *ControlHandler) handleSinkRegister(ctx context.Context, request rpc.RPC
 		Generation: uint64(request.Generation),
 	}
 
-	if err := h.sinkRegistry.Register(sink); err != nil {
+	var effectSink ControlEffectSink
+	if h.effectSinkFactory != nil {
+		effectSink = h.effectSinkFactory(request.RuntimeID, request.PluginID, input.SinkID)
+	}
+	if effectSink == nil {
+		effectSink = NewDefaultControlEffectSink(request.RuntimeID, request.PluginID, input.SinkID, nil)
+	}
+
+	if err := h.sinkRegistry.RegisterEffect(sink, effectSink); err != nil {
 		return rpc.RPCResponse{
 			RequestID: request.ID,
 			Error: &rpc.RPCRoutedError{

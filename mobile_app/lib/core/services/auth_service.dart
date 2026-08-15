@@ -1,4 +1,5 @@
 import 'package:shared_preferences/shared_preferences.dart';
+import '../auth/auth_token_store.dart';
 import '../backend_transport/backend_service_api.dart';
 
 class AuthResult {
@@ -25,24 +26,21 @@ class UserInfo {
 }
 
 class AuthService {
-  static const String _tokenKey = 'ai_companion_token';
   static const String _userIdKey = 'user_id';
   static const String _usernameKey = 'username';
 
   final BackendServiceApi _api;
+  final AuthTokenStore _tokenStore;
 
-  AuthService(this._api);
+  AuthService(this._api, {AuthTokenStore? tokenStore})
+      : _tokenStore = tokenStore ?? const SharedPreferencesAuthTokenStore();
 
   Future<bool> get isLoggedIn async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString(_tokenKey);
+    final token = await _tokenStore.getToken();
     return token != null && token.isNotEmpty;
   }
 
-  Future<String?> get token async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getString(_tokenKey);
-  }
+  Future<String?> get token => _tokenStore.getToken();
 
   Future<UserInfo?> get currentUser async {
     final prefs = await SharedPreferences.getInstance();
@@ -65,8 +63,8 @@ class AuthService {
     final token = resp['token'] as String? ?? '';
     final userInfo = UserInfo.fromJson(resp);
 
+    await _tokenStore.setToken(token);
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_tokenKey, token);
     await prefs.setString(_userIdKey, userInfo.id);
     await prefs.setString(_usernameKey, userInfo.username);
 
@@ -77,8 +75,8 @@ class AuthService {
     try {
       await _api.post('/api/auth/logout');
     } catch (_) {}
+    await _tokenStore.clear();
     final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_tokenKey);
     await prefs.remove(_userIdKey);
     await prefs.remove(_usernameKey);
   }

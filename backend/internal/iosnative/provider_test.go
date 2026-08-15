@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/u-ai/backend/internal/iosnative/health"
 	"github.com/u-ai/backend/internal/nativebridge"
 )
 
@@ -72,13 +73,13 @@ func TestProvider_Execute_RegisteredHandler(t *testing.T) {
 	p := NewProvider(bridge)
 
 	handler := &testHandler{}
-	p.RegisterHandler(OpHealthAuthorizationStatus, handler)
+	p.RegisterHandler(health.OpHealthAuthorizationStatus, handler)
 
 	resp := p.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
 		RequestID:       "test-1",
 		Platform:        "ios",
-		Operation:       OpHealthAuthorizationStatus,
+		Operation:       health.OpHealthAuthorizationStatus,
 	})
 
 	if resp.Status != "success" {

@@ -4,6 +4,7 @@ import com.amitia.amitia_app.runtime.api.RuntimeState
 import com.amitia.amitia_app.runtime.install.ActiveRuntimeManager
 import com.amitia.amitia_app.runtime.install.ActiveRuntimeResult
 import com.amitia.amitia_app.runtime.install.RuntimeHostLayout
+import com.amitia.amitia_app.runtime.manifest.RuntimeManifestErrorCode
 import com.amitia.amitia_app.runtime.manifest.RuntimeManifestResult
 import com.amitia.amitia_app.runtime.manifest.RuntimeManifestStore
 
@@ -41,10 +42,33 @@ internal class DefaultRuntimeBootstrapper(
         val manifestResult = manifestStore.read()
         val activeResult = activeRuntimeManager.current()
 
+        val manifestMissing = manifestResult is RuntimeManifestResult.Failure &&
+            manifestResult.error.code == RuntimeManifestErrorCode.MANIFEST_NOT_FOUND
+        val manifestCorrupt = manifestResult is RuntimeManifestResult.Failure &&
+            manifestResult.error.code != RuntimeManifestErrorCode.MANIFEST_NOT_FOUND
         val hasManifest = manifestResult is RuntimeManifestResult.Success
+
+        val activeMissing = activeResult is ActiveRuntimeResult.NoActiveRuntime
+        val activeCorrupt = activeResult is ActiveRuntimeResult.Failure
         val hasActive = activeResult is ActiveRuntimeResult.Active
 
-        if (!hasManifest && !hasActive) {
+        if (manifestCorrupt) {
+            val errorMessage = (manifestResult as RuntimeManifestResult.Failure).error.manifestMessage
+            return RuntimeBootstrapResult.Failed(
+                code = RuntimeBootstrapErrorCode.MANIFEST_CORRUPT,
+                message = "manifest corrupt: $errorMessage"
+            )
+        }
+
+        if (activeCorrupt) {
+            val errorMessage = (activeResult as ActiveRuntimeResult.Failure).message
+            return RuntimeBootstrapResult.Failed(
+                code = RuntimeBootstrapErrorCode.ACTIVE_CORRUPT,
+                message = "active runtime corrupt: $errorMessage"
+            )
+        }
+
+        if (manifestMissing && activeMissing) {
             return RuntimeBootstrapResult.NotInstalled
         }
 

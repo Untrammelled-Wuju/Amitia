@@ -20,21 +20,24 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/chat/localmodel"
+	"github.com/u-ai/backend/internal/media"
 	"github.com/u-ai/backend/internal/runtimehost"
 )
 
 type mnnRuntime struct {
-	config     MNNProviderConfig
-	mu         sync.Mutex
-	state      string
-	loadedAt   string
-	lastError  string
-	host       runtimehost.RuntimeHost
-	processID  runtimehost.ProcessID
-	baseURL    string
-	port       int
-	supervisor runtimehost.ProcessSupervisor
-	modelPath  string
+	config       MNNProviderConfig
+	mu           sync.Mutex
+	state        string
+	loadedAt     string
+	lastError    string
+	host         runtimehost.RuntimeHost
+	processID    runtimehost.ProcessID
+	baseURL      string
+	port         int
+	supervisor   runtimehost.ProcessSupervisor
+	materializer media.ResourceMaterializer
+	modelPath    string
+	modelCleanup func() error
 }
 
 var (
@@ -69,11 +72,11 @@ func releaseMNNPort(p int) {
 
 func newMNNRuntime(config MNNProviderConfig) *mnnRuntime {
 	return &mnnRuntime{
-		config:    config,
-		state:     "unloaded",
-		port:      0,
-		processID: runtimehost.ProcessID("mnn-" + config.LocalModelID + "-" + configFingerprint(config)),
-		modelPath: config.ModelResourceURI,
+		config:       config,
+		state:        "unloaded",
+		port:         0,
+		processID:    runtimehost.ProcessID("mnn-" + config.LocalModelID + "-" + configFingerprint(config)),
+		materializer: localmodel.GetGlobalMediaMaterializer(),
 	}
 }
 
@@ -102,7 +105,17 @@ func (r *mnnRuntime) validateModelArtifact() error {
 		return fmt.Errorf("MNN model resource URI is empty")
 	}
 
-	info, err := os.Stat(r.config.ModelResourceURI)
+	if r.materializer == nil {
+		return fmt.Errorf("MNN model materializer not available")
+	}
+
+	localPath, cleanup, err := r.materializer.Materialize(context.Background(), r.config.ModelResourceURI)
+	if err != nil {
+		return fmt.Errorf("materialize MNN model resource: %w", err)
+	}
+	defer cleanup()
+
+	info, err := os.Stat(localPath)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return localmodel.ErrModelPackageNotFound
@@ -114,7 +127,7 @@ func (r *mnnRuntime) validateModelArtifact() error {
 		return localmodel.ErrModelPackageInvalid
 	}
 
-	ext := filepath.Ext(r.config.ModelResourceURI)
+	ext := filepath.Ext(localPath)
 	if ext != ".mnn" {
 		return fmt.Errorf("invalid MNN model format: %s", ext)
 	}
@@ -139,6 +152,17 @@ func (r *mnnRuntime) startServer(ctx context.Context) error {
 	r.port = port
 	r.baseURL = fmt.Sprintf("http://127.0.0.1:%d", port)
 
+	if r.materializer != nil {
+		localPath, cleanup, err := r.materializer.Materialize(ctx, r.config.ModelResourceURI)
+		if err != nil {
+			releaseMNNPort(port)
+			r.port = 0
+			return fmt.Errorf("materialize MNN model resource: %w", err)
+		}
+		r.modelPath = localPath
+		r.modelCleanup = cleanup
+	}
+
 	args := r.buildServerArgs(port)
 
 	workDir := filepath.Dir(executable)
@@ -159,12 +183,14 @@ func (r *mnnRuntime) startServer(ctx context.Context) error {
 	}
 
 	if err := r.supervisor.Register(spec); err != nil {
+		r.cleanupModel()
 		releaseMNNPort(port)
 		r.port = 0
 		return fmt.Errorf("register MNN server: %w", err)
 	}
 
 	if err := r.supervisor.Start(ctx, r.processID); err != nil {
+		r.cleanupModel()
 		releaseMNNPort(port)
 		r.port = 0
 		r.supervisor.Unregister(r.processID)
@@ -179,6 +205,14 @@ func (r *mnnRuntime) startServer(ctx context.Context) error {
 	return nil
 }
 
+func (r *mnnRuntime) cleanupModel() {
+	if r.modelCleanup != nil {
+		_ = r.modelCleanup()
+		r.modelCleanup = nil
+		r.modelPath = ""
+	}
+}
+
 func (r *mnnRuntime) stopServer() {
 	if r.supervisor == nil {
 		return
@@ -191,6 +225,7 @@ func (r *mnnRuntime) stopServer() {
 		releaseMNNPort(r.port)
 		r.port = 0
 	}
+	r.cleanupModel()
 	r.baseURL = ""
 }
 
@@ -227,8 +262,12 @@ func (r *mnnRuntime) findMNNServerExecutable() string {
 }
 
 func (r *mnnRuntime) buildServerArgs(port int) []string {
+	modelPath := r.modelPath
+	if modelPath == "" {
+		modelPath = r.config.ModelResourceURI
+	}
 	args := []string{
-		"--model", r.config.ModelResourceURI,
+		"--model", modelPath,
 		"--port", strconv.Itoa(port),
 		"--host", "127.0.0.1",
 		"--threads", strconv.Itoa(r.config.ThreadNum),
@@ -319,7 +358,7 @@ func (r *mnnRuntime) chatStream(ctx context.Context, request localmodel.LocalMod
 func (r *mnnRuntime) buildChatRequestBody(request localmodel.LocalModelRequest, stream bool) map[string]interface{} {
 	reqMsgs := make([]map[string]interface{}, 0, len(request.Messages))
 	for _, msg := range request.Messages {
-		content := mnnBuildMessageContent(msg)
+		content := r.mnnBuildMessageContent(msg, context.Background())
 		reqMsgs = append(reqMsgs, map[string]interface{}{
 			"role":    msg.Role,
 			"content": content,
@@ -376,7 +415,7 @@ func (r *mnnRuntime) buildChatRequestBody(request localmodel.LocalModelRequest, 
 	return reqBody
 }
 
-func mnnBuildMessageContent(msg localmodel.LocalModelMessage) interface{} {
+func (r *mnnRuntime) mnnBuildMessageContent(msg localmodel.LocalModelMessage, ctx context.Context) interface{} {
 	if len(msg.Parts) == 1 && msg.Parts[0].Type == "text" {
 		return msg.Parts[0].Text
 	}
@@ -389,10 +428,17 @@ func mnnBuildMessageContent(msg localmodel.LocalModelMessage) interface{} {
 				"text": p.Text,
 			})
 		case "image":
+			imgURL := p.ResourceURI
+			if r.materializer != nil && p.ResourceURI != "" {
+				if localPath, cleanup, err := r.materializer.Materialize(ctx, p.ResourceURI); err == nil {
+					defer cleanup()
+					imgURL = "file://" + localPath
+				}
+			}
 			parts = append(parts, map[string]interface{}{
 				"type": "image_url",
 				"image_url": map[string]interface{}{
-					"url": p.ResourceURI,
+					"url": imgURL,
 				},
 			})
 		}

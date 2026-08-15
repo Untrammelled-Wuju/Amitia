@@ -216,14 +216,27 @@ func (c *ChatBackupContributor) PreviewImport(ctx context.Context, req dataporta
 }
 
 func (c *ChatBackupContributor) Import(ctx context.Context, req dataportability.ImportRequest, in dataportability.BackupReader) error {
-	idMap := req.IdentityMap
-	if idMap == nil {
-		idMap = dataportability.NewImportIdentityMap()
+	opts := dataportability.RestoreOptions{
+		OperationID:        req.OperationID,
+		Purpose:            dataportability.RestorePurposeOrdinary,
+		CharacterPolicy:    req.CharacterPolicy,
+		DefaultCharacterID: req.DefaultCharacterID,
+		ActivateImported:   req.ActivateImported,
+		IdentityMap:        req.IdentityMap,
+		SecretProvider:     req.SecretProvider,
 	}
+	return c.RestoreChats(ctx, in, opts)
+}
+
+func (c *ChatBackupContributor) RestoreChats(ctx context.Context, in dataportability.BackupReader, opts dataportability.RestoreOptions) error {
+	if opts.IdentityMap == nil {
+		return dataportability.ErrImportIdentityMapMissing
+	}
+	idMap := opts.IdentityMap
 
 	convRC, err := in.ReadComponent(ComponentIDChatConversations + ".v1")
 	if err != nil {
-		return fmt.Errorf("import: conversations component missing: %w", err)
+		return fmt.Errorf("restore: conversations component missing: %w", err)
 	}
 	defer convRC.Close()
 
@@ -246,7 +259,7 @@ func (c *ChatBackupContributor) Import(ctx context.Context, req dataportability.
 		var existing struct{ ID string }
 		c.DB.WithContext(ctx).Model(&Conversation{}).Select("id").Where("id = ?", rec.ID).Scan(&existing)
 		if existing.ID != "" {
-			switch req.CharacterPolicy {
+			switch opts.CharacterPolicy {
 			case dataportability.CollisionSkip:
 				idMap.AddConversation(rec.ID, existing.ID)
 				continue
@@ -311,3 +324,5 @@ func (c *ChatBackupContributor) Import(ctx context.Context, req dataportability.
 
 	return nil
 }
+
+var _ dataportability.ChatRestorePort = (*ChatBackupContributor)(nil)

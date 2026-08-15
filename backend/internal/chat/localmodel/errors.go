@@ -24,4 +24,6 @@ var (
 	ErrNativeBridgeUnavailable    = errors.New("native bridge unavailable")
 	ErrNativeCrashed              = errors.New("native crashed")
 	ErrResourceLimit              = errors.New("resource limit exceeded")
+	ErrModelNotYetReady           = errors.New("model not yet ready")
+	ErrModelUnavailable           = errors.New("model unavailable")
 )

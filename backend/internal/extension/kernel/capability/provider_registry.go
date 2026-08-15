@@ -248,6 +248,33 @@ func (r *ProviderRegistry) DeregisterDefinition(id ProviderID) (bool, error) {
 	return true, nil
 }
 
+func (r *ProviderRegistry) DeregisterDefinitionCascade(id ProviderID) (bool, error) {
+	normalized := ParseProviderID(string(id))
+	if normalized == "" {
+		return false, ErrProviderInvalid
+	}
+	_, existed := r.getDefinition(string(normalized))
+	if !existed {
+		return false, nil
+	}
+
+	r.delDefinition(string(normalized))
+
+	r.mu.Lock()
+	r.byCapability = r.removeCapabilityIndexLocked(r.byCapability, normalized)
+	if instances, ok := r.byProvider[string(normalized)]; ok {
+		for _, inst := range instances {
+			if inst != nil {
+				r.delInstance(string(inst.ID))
+			}
+		}
+		delete(r.byProvider, string(normalized))
+	}
+	r.mu.Unlock()
+
+	return true, nil
+}
+
 func (r *ProviderRegistry) RegisterInstance(inst CapabilityProviderInstance) error {
 	inst = inst.Normalize()
 	if err := inst.Validate(); err != nil {

@@ -3,6 +3,7 @@ package secret
 import (
 	"context"
 	"fmt"
+	"sync"
 
 	kernelsecret "github.com/u-ai/backend/internal/extension/kernel/secret"
 	"github.com/u-ai/backend/internal/gamehost/domain"
@@ -15,6 +16,20 @@ type ServiceSecretManifest struct {
 	Required bool
 }
 
+type runtimeStartupKey struct {
+	runtimeID string
+	serviceID string
+}
+
+func (o *LifecycleOrchestrator) RegisterStartupManifest(runtimeID, serviceID string, startup []ServiceSecretManifest) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if o.startupManifests == nil {
+		o.startupManifests = make(map[runtimeStartupKey][]ServiceSecretManifest)
+	}
+	o.startupManifests[runtimeStartupKey{runtimeID: runtimeID, serviceID: serviceID}] = startup
+}
+
 func (o *LifecycleOrchestrator) PrepareServiceStart(ctx context.Context, execCtx runtime.ServiceExecutionContext) (string, error) {
 	leases := o.adapter.ActiveServiceLeases(string(execCtx.RuntimeID), string(execCtx.ServiceID))
 	for _, leaseID := range leases {
@@ -24,7 +39,35 @@ func (o *LifecycleOrchestrator) PrepareServiceStart(ctx context.Context, execCtx
 		}
 		return string(lease.ID), nil
 	}
+
+	startup := o.getStartupManifest(string(execCtx.RuntimeID), string(execCtx.ServiceID))
+	if len(startup) == 0 {
+		return "", nil
+	}
+
+	manifest := RuntimeSecretManifest{
+		RuntimeID:  string(execCtx.RuntimeID),
+		PluginID:   string(execCtx.PluginID),
+		ServiceID:  string(execCtx.ServiceID),
+		Generation: execCtx.Generation,
+		Startup:    startup,
+	}
+	handle := o.AcquireRuntimeStartup(ctx, manifest)
+	if handle.Failed {
+		return "", handle.LastError
+	}
+	for _, r := range handle.Results {
+		if r.Result.Granted && r.Result.LeaseID != "" {
+			return string(r.Result.LeaseID), nil
+		}
+	}
 	return "", nil
+}
+
+func (o *LifecycleOrchestrator) getStartupManifest(runtimeID, serviceID string) []ServiceSecretManifest {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	return o.startupManifests[runtimeStartupKey{runtimeID: runtimeID, serviceID: serviceID}]
 }
 
 func (o *LifecycleOrchestrator) RevokeServiceLeases(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID, generation int64, reason string) {
@@ -52,7 +95,9 @@ type StartupHandle struct {
 }
 
 type LifecycleOrchestrator struct {
-	adapter *SecretLeaseAdapter
+	adapter          *SecretLeaseAdapter
+	mu               sync.RWMutex
+	startupManifests map[runtimeStartupKey][]ServiceSecretManifest
 }
 
 func NewLifecycleOrchestrator(adapter *SecretLeaseAdapter) *LifecycleOrchestrator {

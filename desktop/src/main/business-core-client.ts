@@ -43,18 +43,36 @@ export class BusinessCoreClient {
   }
 
   async probe(timeoutMs = 5000): Promise<BusinessCoreProbeResult> {
+    const probeResult = await this.probePath("/readyz", timeoutMs);
+    if (probeResult.reachable) {
+      return probeResult;
+    }
+    if (probeResult.statusCode === 404 || probeResult.statusCode === 405) {
+      return this.probePath("/livez", timeoutMs);
+    }
+    return probeResult;
+  }
+
+  private async probePath(
+    path: "/readyz" | "/livez",
+    timeoutMs: number,
+  ): Promise<BusinessCoreProbeResult> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
 
     try {
-      let res: Response;
-      try {
-        res = await this.fetch("/readyz", { signal: controller.signal });
-      } catch {
-        res = await this.fetch("/livez", { signal: controller.signal });
-      }
+      const res = await this.fetch(path, { signal: controller.signal });
       clearTimeout(timer);
-      return { reachable: true, ready: res.status === 200, statusCode: res.status };
+      if (path === "/livez") {
+        return { reachable: true, ready: res.status === 200, statusCode: res.status };
+      }
+      if (res.status === 200) {
+        return { reachable: true, ready: true, statusCode: res.status };
+      }
+      if (res.status === 404 || res.status === 405) {
+        return { reachable: false, ready: false, statusCode: res.status };
+      }
+      return { reachable: true, ready: false, statusCode: res.status };
     } catch (err) {
       clearTimeout(timer);
       return {

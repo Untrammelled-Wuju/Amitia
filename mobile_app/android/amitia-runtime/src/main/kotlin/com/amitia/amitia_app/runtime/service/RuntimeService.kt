@@ -390,19 +390,13 @@ class RuntimeService : Service() {
         val intent = currentIntent.get() ?: return
         val targetGeneration = intent.getLongExtra(RuntimeServiceContract.EXTRA_TARGET_GENERATION, Long.MIN_VALUE)
         if (targetGeneration == Long.MIN_VALUE || targetGeneration <= 0L) {
-            stopForegroundSafely()
-            stopSelfSafely()
             return
         }
         val sessionContext = currentSessionContextRef.get()
         if (sessionContext == null) {
-            stopForegroundSafely()
-            stopSelfSafely()
             return
         }
         if (sessionContext.generation != targetGeneration) {
-            stopForegroundSafely()
-            stopSelfSafely()
             return
         }
         val session = currentSessionRef.get()

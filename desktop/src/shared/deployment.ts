@@ -53,10 +53,20 @@ function normalizeServerURL(raw: string): string {
     throw new DeploymentConfigError("服务器地址不允许包含凭据信息");
   }
 
+  if (parsed.search) {
+    throw new DeploymentConfigError("服务器地址不允许包含查询参数");
+  }
+
+  const pathname = parsed.pathname.replace(/\/+$/, "");
+  if (pathname && pathname !== "/") {
+    throw new DeploymentConfigError("当前版本仅支持远程Core根地址，不支持子路径部署");
+  }
+
   parsed.hash = "";
   parsed.search = "";
+  parsed.pathname = "";
 
-  return parsed.toString().replace(/\/+$/, "");
+  return parsed.origin;
 }
 
 export function validateDeploymentConfig(raw: unknown): DeploymentModeConfig {

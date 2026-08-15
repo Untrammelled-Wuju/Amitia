@@ -67,6 +67,10 @@ func (h *GameHostStdioProtocolHandler) Attach(
 		return nil, fmt.Errorf("gamehost stdio: runtime generation is unavailable")
 	}
 
+	if meta.Generation > 0 && uint64(meta.Generation) != uint64(generation) {
+		return nil, fmt.Errorf("gamehost stdio: process generation %d does not match current runtime generation %d", meta.Generation, generation)
+	}
+
 	peer := ipc.Peer{
 		PluginID:   rt.PluginID,
 		RuntimeID:  rt.ID,

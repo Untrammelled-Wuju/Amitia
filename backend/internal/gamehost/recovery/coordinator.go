@@ -299,8 +299,16 @@ func (c *RecoveryCoordinator) executeRecoveryFlow(ctx context.Context, op *Recov
 			result.Quarantined = true
 			return result, NewQuarantinedError(req.RuntimeID, "service quarantined")
 		}
+		if c.runtimeExecutor != nil {
+			if err := c.runtimeExecutor.StopRuntime(ctx, req.RuntimeID); err != nil {
+				return result, fmt.Errorf("recovery process restart: stop failed: %w", err)
+			}
+			if err := c.runtimeExecutor.StartRuntime(ctx, req.RuntimeID); err != nil {
+				return result, fmt.Errorf("recovery process restart: start failed: %w", err)
+			}
+		}
 		result.Success = true
-		result.RequiresRestart = true
+		result.RequiresRestart = false
 	}
 
 	return result, nil
@@ -406,7 +414,15 @@ func (c *RecoveryCoordinator) executeRuntimeReconstruction(ctx context.Context, 
 	}
 
 	op.Stage = RecoveryStageRestarting
-	op.Result.RequiresRestart = true
+	if c.runtimeExecutor != nil {
+		if err := c.runtimeExecutor.StopRuntime(ctx, req.RuntimeID); err != nil {
+			return fmt.Errorf("recovery runtime reconstruction: stop failed: %w", err)
+		}
+		if err := c.runtimeExecutor.StartRuntime(ctx, req.RuntimeID); err != nil {
+			return fmt.Errorf("recovery runtime reconstruction: start failed: %w", err)
+		}
+	}
+	op.Result.RequiresRestart = false
 
 	return nil
 }

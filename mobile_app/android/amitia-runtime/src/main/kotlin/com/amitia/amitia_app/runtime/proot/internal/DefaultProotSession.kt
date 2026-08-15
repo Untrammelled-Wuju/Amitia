@@ -50,10 +50,7 @@ internal class DefaultProotSession(
     override fun awaitExit(timeoutMillis: Long): Int? {
         val existing = exitRef.get()
         if (existing != null) return existing.exitCode
-        if (timeoutMillis <= 0L) {
-            if (closed.get()) return exitRef.get()?.exitCode
-            return try { process.exitValue() } catch (_: IllegalThreadStateException) { null }
-        }
+        if (timeoutMillis <= 0L) return exitRef.get()?.exitCode
         return try {
             exitDeferred.get(timeoutMillis, java.util.concurrent.TimeUnit.MILLISECONDS)?.exitCode
         } catch (e: Exception) {
@@ -69,10 +66,13 @@ internal class DefaultProotSession(
         stopRequested.set(true)
         return try {
             process.destroy()
-            val graceful = process.waitFor(graceMillis, java.util.concurrent.TimeUnit.MILLISECONDS)
-            if (graceful) {
-                try { exitDeferred.get(5, java.util.concurrent.TimeUnit.MILLISECONDS) } catch (_: Exception) {}
-                val code = exitRef.get()?.exitCode ?: process.exitValue()
+            val graceful = try {
+                exitDeferred.get(graceMillis, java.util.concurrent.TimeUnit.MILLISECONDS)
+            } catch (_: Exception) {
+                null
+            }
+            if (graceful != null) {
+                val code = exitRef.get()?.exitCode
                 ProotStopResult.Graceful(sessionId, code)
             } else {
                 process.destroyForcibly()
@@ -87,6 +87,7 @@ internal class DefaultProotSession(
             val code = exitRef.get()?.exitCode
             ProotStopResult.Forced(sessionId, code)
         } catch (e: Exception) {
+            process.destroyForcibly()
             ProotStopResult.Failed(sessionId, com.amitia.amitia_app.runtime.proot.ProotErrorCode.PROCESS_STOP_FAILED, e.message ?: "error")
         }
     }

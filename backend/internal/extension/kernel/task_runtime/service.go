@@ -76,9 +76,9 @@ func (s *TaskRuntimeService) SetEventSink(sink TaskEventSink) {
 	s.events = sink
 }
 
-func (s *TaskRuntimeService) publishTaskEvent(ctx context.Context, eventType TaskDomainEventType, run *TaskRun, reason, errorCode string) {
+func (s *TaskRuntimeService) publishTaskEvent(ctx context.Context, eventType TaskDomainEventType, run *TaskRun, reason, errorCode string) error {
 	if s.events == nil {
-		return
+		return nil
 	}
 	event := TaskDomainEvent{
 		Type:       eventType,
@@ -87,7 +87,10 @@ func (s *TaskRuntimeService) publishTaskEvent(ctx context.Context, eventType Tas
 		ErrorCode:  errorCode,
 		OccurredAt: time.Now().UTC(),
 	}
-	_ = s.events.TaskEvent(ctx, event)
+	if err := s.events.TaskEvent(ctx, event); err != nil {
+		return fmt.Errorf("task_runtime: publish event %s: %w", eventType, err)
+	}
+	return nil
 }
 
 func (s *TaskRuntimeService) GetTaskDefinition(ctx context.Context, defID string) (*TaskDefinition, error) {
@@ -198,15 +201,17 @@ func (s *TaskRuntimeService) Enqueue(ctx context.Context, req EnqueueTaskRequest
 		Revision:             1,
 	}
 
-	if err := s.store.PutTaskRun(ctx, run); err != nil {
-		return nil, fmt.Errorf("task_runtime: persist run: %w", err)
+	if err := s.store.WithinTaskTx(ctx, func(ctx context.Context) error {
+		if err := s.store.PutTaskRun(ctx, run); err != nil {
+			return fmt.Errorf("task_runtime: persist run: %w", err)
+		}
+		if err := s.queue.Enqueue(ctx, run); err != nil {
+			return fmt.Errorf("task_runtime: enqueue: %w", err)
+		}
+		return s.publishTaskEvent(ctx, TaskEventQueued, run, "", "")
+	}); err != nil {
+		return nil, err
 	}
-
-	if err := s.queue.Enqueue(ctx, run); err != nil {
-		return nil, fmt.Errorf("task_runtime: enqueue: %w", err)
-	}
-
-	s.publishTaskEvent(ctx, TaskEventQueued, run, "", "")
 
 	result := &EnqueueTaskResult{
 		TaskRunID: runID,

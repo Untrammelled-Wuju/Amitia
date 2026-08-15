@@ -196,14 +196,15 @@ func (c *extensionKernelComponent) Start(ctx context.Context) error {
 		return fmt.Errorf("kernel container not initialized")
 	}
 	container := svc.KernelContainer
-	if container.EventService != nil {
+	policy := svc.RuntimePolicy
+	if policy.DurableEvents && container.EventService != nil {
 		if err := container.EventService.Start(ctx); err != nil {
 			return fmt.Errorf("event service: %w", err)
 		}
 	}
-	if container.ScheduleService != nil {
+	if policy.TaskRuntime && container.ScheduleService != nil {
 		if err := container.ScheduleService.Start(ctx); err != nil {
-			if container.EventService != nil {
+			if policy.DurableEvents && container.EventService != nil {
 				container.EventService.Stop()
 			}
 			return fmt.Errorf("schedule service: %w", err)
@@ -211,10 +212,10 @@ func (c *extensionKernelComponent) Start(ctx context.Context) error {
 	}
 	if container.ArtifactMaintenance != nil {
 		if err := container.ArtifactMaintenance.Start(ctx); err != nil {
-			if container.ScheduleService != nil {
+			if policy.TaskRuntime && container.ScheduleService != nil {
 				container.ScheduleService.Shutdown(ctx)
 			}
-			if container.EventService != nil {
+			if policy.DurableEvents && container.EventService != nil {
 				container.EventService.Stop()
 			}
 			return fmt.Errorf("artifact maintenance: %w", err)
@@ -231,8 +232,15 @@ func (c *extensionKernelComponent) Ready(ctx context.Context) error {
 		return fmt.Errorf("kernel container not initialized")
 	}
 	container := c.services.KernelContainer
-	if container.EventService == nil || container.ScheduleService == nil || container.ArtifactMaintenance == nil {
-		return fmt.Errorf("kernel sub-services not ready")
+	policy := c.services.RuntimePolicy
+	if policy.DurableEvents && container.EventService == nil {
+		return fmt.Errorf("event service not ready")
+	}
+	if policy.TaskRuntime && container.ScheduleService == nil {
+		return fmt.Errorf("schedule service not ready")
+	}
+	if container.ArtifactMaintenance == nil {
+		return fmt.Errorf("artifact maintenance not ready")
 	}
 	return nil
 }
@@ -506,19 +514,6 @@ func newBrowserComponent(services *AppServices, host runtimehost.RuntimeHost) *b
 	}
 }
 
-func buildBrowserProcessSpec(engine browser.BrowserEngine) runtimehost.ProcessSpec {
-	return runtimehost.ProcessSpec{
-		ID:                runtimehost.ProcessIDBrowser,
-		Executable:        "",
-		WorkingDir:        "",
-		StartupTimeout:    60 * time.Second,
-		StopGracePeriod:   10 * time.Second,
-		RestartPolicy:     runtimehost.RestartPolicy{Mode: runtimehost.RestartNever},
-		HealthInterval:    10 * time.Second,
-		ExecutableProcess: browser.NewBrowserProcessExec(engine),
-	}
-}
-
 func (c *browserComponent) Descriptor() runtimeorchestrator.ComponentDescriptor {
 	return runtimeorchestrator.ComponentDescriptor{
 		ID:           runtimeorchestrator.ComponentBrowser,
@@ -541,17 +536,12 @@ func (c *browserComponent) Start(ctx context.Context) error {
 	if svc == nil || svc.Browser == nil {
 		return nil
 	}
-	engine := svc.Browser.Runtime().Engine()
-	if engine == nil {
-		return nil
-	}
-	spec := buildBrowserProcessSpec(engine)
-	supervisor := c.host.Processes()
-	if err := supervisor.Register(spec); err != nil {
-		return fmt.Errorf("register browser: %w", err)
-	}
-	if err := supervisor.Start(ctx, spec.ID); err != nil {
+	info, err := svc.Browser.Runtime().Start(ctx)
+	if err != nil {
 		return fmt.Errorf("start browser: %w", err)
+	}
+	if info == nil {
+		return fmt.Errorf("start browser: nil runtime info")
 	}
 	c.started = true
 	return nil
@@ -580,10 +570,16 @@ func (c *browserComponent) Stop(ctx context.Context) error {
 	if !c.started {
 		return nil
 	}
-	supervisor := c.host.Processes()
-	if err := supervisor.Stop(ctx, runtimehost.ProcessIDBrowser); err != nil {
+	if err := svcStopBrowser(c.services); err != nil {
 		return fmt.Errorf("stop browser: %w", err)
 	}
 	c.started = false
 	return nil
+}
+
+func svcStopBrowser(services *AppServices) error {
+	if services == nil || services.Browser == nil {
+		return nil
+	}
+	return services.Browser.Runtime().Stop(context.Background())
 }

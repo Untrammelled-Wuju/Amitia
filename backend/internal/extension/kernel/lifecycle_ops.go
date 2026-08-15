@@ -647,6 +647,10 @@ func (r *Runtime) Disable(ctx context.Context, extensionID string) error {
 		}
 	}
 
+	if r.container.GameHost != nil && r.container.GameHost.SecretSubscriptions != nil {
+		r.container.GameHost.SecretSubscriptions.OnExtensionDisabled(extensionID)
+	}
+
 	finalState := domain.EnablementDisabled
 	if len(stopErrs) > 0 || len(disableErrs) > 0 {
 		finalState = domain.EnablementPartiallyDisabled
@@ -721,6 +725,10 @@ func (r *Runtime) Uninstall(ctx context.Context, extensionID string) error {
 		if err := r.container.DesktopPetPluginBoundary.HandleExtensionUninstalled(ctx, extID, version, "", ""); err != nil {
 			log.Printf("[uninstall-tx] desktop_pet_plugin boundary error: %v", err)
 		}
+	}
+
+	if r.container.GameHost != nil && r.container.GameHost.SecretSubscriptions != nil {
+		r.container.GameHost.SecretSubscriptions.OnExtensionUninstalled(extensionID)
 	}
 
 	var cleanupErrs []error

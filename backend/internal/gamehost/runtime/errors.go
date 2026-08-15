@@ -36,6 +36,7 @@ const (
 	ErrSupersededByDisable    ErrorCode = "superseded_by_disable"
 	ErrSupersededByUninstall  ErrorCode = "superseded_by_uninstall"
 	ErrRevisionChanged        ErrorCode = "revision_changed"
+	ErrEmergencyActive        ErrorCode = "emergency_active"
 )
 
 type TopologyError struct {

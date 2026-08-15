@@ -2,10 +2,7 @@ package dataportability
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"os"
 	"path/filepath"
 	"time"
 )
@@ -51,8 +48,6 @@ func (c *Coordinator) RestoreVerify(ctx context.Context, archivePath string) err
 		}
 		path := ""
 		switch comp.Kind {
-		case string(KindSQLite):
-			path = fmt.Sprintf("database/%s/app.db", "sqlite")
 		case string(KindDataset):
 			path = fmt.Sprintf("datasets/%s.ndjson", comp.ID)
 		case string(KindManifest):
@@ -99,13 +94,9 @@ func (c *Coordinator) CreateRestoreTicket(ctx context.Context, archivePath, back
 	return ticket, nil
 }
 
-func (c *Coordinator) ExecuteRestore(ctx context.Context, ticket *DataRestoreTicket, dbPath string, runner SnapshotRunner) error {
-	backupCurrent := filepath.Join(c.DataDir, "backups", fmt.Sprintf("prerestore-%s.db", ticket.OperationID))
-	if err := runner.BackupTo(backupCurrent); err != nil {
-		return ErrRestorePreBackupFailed
-	}
-
-	reader, err := NewArchiveReader(filepath.Join(c.DataDir, "backups", ticket.BackupID+".amitia-backup"))
+func (c *Coordinator) ExecuteRestore(ctx context.Context, ticket *DataRestoreTicket, _ string, _ SnapshotRunner) error {
+	archivePath := filepath.Join(c.DataDir, "backups", ticket.BackupID+".amitia-backup")
+	reader, err := NewArchiveReader(archivePath)
 	if err != nil {
 		return err
 	}
@@ -116,82 +107,52 @@ func (c *Coordinator) ExecuteRestore(ctx context.Context, ticket *DataRestoreTic
 		return err
 	}
 
-	for _, comp := range manifest.Components {
-		if comp.Kind == string(KindDataset) || comp.Kind == string(KindNDJSON) {
-			continue
-		}
+	if manifest.SchemaFingerprint != c.SchemaFinger && len(manifest.SchemaFingerprint) > 0 {
+		return ErrRestoreMigrationFailed
 	}
 
-	if manifest.SchemaFingerprint != c.SchemaFinger && len(manifest.SchemaFingerprint) > 0 {
-		if err := runner.Migrate(); err != nil {
-			return ErrRestoreMigrationFailed
-		}
+	br := &archiveBackupReader{r: reader}
+	sortedContributors := c.sortedContributorsForImport()
+
+	opID := generateOpID()
+	op := &ImportOperation{
+		ID:        opID,
+		Status:    "restoring",
+		Scope:     string(manifest.Scope),
+		CreatedAt: nowRFC3339(),
+		Stats:     make(map[string]int64),
 	}
+	c.mu.Lock()
+	c.importOps[opID] = op
+	c.mu.Unlock()
+
+	idMap := NewImportIdentityMap()
+	req := ImportRequest{
+		OperationID:      opID,
+		StagingPath:      ticket.StagingPath,
+		Manifest:         manifest,
+		CharacterPolicy:  CollisionReplace,
+		ActivateImported: true,
+		IdentityMap:      idMap,
+		Purpose:          PurposePreRestore,
+	}
+
+	op.Status = "importing"
+	for _, ct := range sortedContributors {
+		if err := ct.Import(ctx, req, br); err != nil {
+			op.Status = "failed"
+			op.Error = err.Error()
+			return fmt.Errorf("canonical restore contributor %s failed: %w", ct.ID(), err)
+		}
+		op.Stats[ct.ID()]++
+	}
+
+	op.Status = "completed"
+	op.UpdatedAt = nowRFC3339()
 
 	c.Staging.ClearRestoreTicket()
 
 	_ = ctx
-	return nil
-}
-
-func stagingFromTicket(ticket *DataRestoreTicket) string {
-	return ticket.StagingPath
-}
-
-func RestoreSQLiteSnapshot(reader *ArchiveReader, dbPath, staging string) error {
-	dbDir := filepath.Dir(dbPath)
-	restoreDir := filepath.Join(dbDir, ".restore-tmp")
-	if err := os.MkdirAll(restoreDir, 0o700); err != nil {
-		return err
-	}
-	defer os.RemoveAll(restoreDir)
-
-	mainFile, ok := reader.files["database/sqlite/app.db"]
-	if !ok {
-		return ErrRestoreAtomicReplaceFailed
-	}
-
-	mainData, err := mainFile.Open()
-	if err != nil {
-		return err
-	}
-	defer mainData.Close()
-
-	tmpMain := filepath.Join(restoreDir, "app.db")
-	w, err := os.OpenFile(tmpMain, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o600)
-	if err != nil {
-		return err
-	}
-
-	if _, err := readAllRestore(mainData, w); err != nil {
-		w.Close()
-		return err
-	}
-	w.Close()
-
-	if err := atomicReplace(tmpMain, dbPath); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func readAllRestore(src io.Reader, dst io.Writer) (int64, error) {
-	buf := make([]byte, 32*1024)
-	return io.CopyBuffer(dst, src, buf)
-}
-
-func atomicReplace(src, dst string) error {
-	backup := dst + ".old"
-	os.Remove(backup)
-	os.Rename(dst, backup)
-	if err := os.Rename(src, dst); err != nil {
-		os.Rename(backup, dst)
-		return err
-	}
-	os.Remove(backup)
-	os.Remove(dst + "-wal")
-	os.Remove(dst + "-shm")
 	return nil
 }
 
@@ -207,16 +168,3 @@ func (c *Coordinator) CancelRestore() error {
 	return c.Staging.ClearRestoreTicket()
 }
 
-func (r *ArchiveReader) ReadFileContent(path string) ([]byte, error) {
-	_ = r
-	_ = path
-	return nil, nil
-}
-
-func readJSONFromFile(path string, v interface{}) error {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	return json.Unmarshal(data, v)
-}
