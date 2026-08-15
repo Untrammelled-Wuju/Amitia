@@ -5,18 +5,23 @@ import rikka.shizuku.Shizuku
 import rikka.shizuku.ShizukuUserServiceArgs
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 
 class ShizukuCommandService : Shizuku.UserService() {
 
+    private val ioExecutor = Executors.newFixedThreadPool(2)
+
     override fun onCreate() {
         super.onCreate()
-        ShizukuCommandServiceHolder.service = this
+        ShizukuCommandServiceHolder.onServiceCreated(this)
     }
 
     override fun onDestroy() {
         super.onDestroy()
-        ShizukuCommandServiceHolder.service = null
+        ShizukuCommandServiceHolder.onServiceDestroyed(this)
+        ioExecutor.shutdownNow()
     }
 
     fun executeCommand(
@@ -46,75 +51,39 @@ class ShizukuCommandService : Shizuku.UserService() {
                 process.outputStream.close()
             }
 
-            val stdoutBuilder = StringBuilder()
-            val stderrBuilder = StringBuilder()
+            val timedOut = AtomicBoolean(false)
 
-            val stdoutReader = BufferedReader(InputStreamReader(process.inputStream))
-            val stderrReader = BufferedReader(InputStreamReader(process.errorStream))
+            val stdoutFuture = ioExecutor.submit {
+                readBounded(process.inputStream, maxOutputBytes)
+            }
 
-            var totalBytes = 0L
-            var line: String?
-
-            while (totalBytes < maxOutputBytes) {
-                val stdoutAvailable = process.inputStream.available() > 0
-                val stderrAvailable = process.errorStream.available() > 0
-
-                if (!stdoutAvailable && !stderrAvailable) {
-                    val exited = try {
-                        process.exitValue()
-                        true
-                    } catch (e: IllegalThreadStateException) {
-                        false
-                    }
-                    if (exited) break
-                    Thread.sleep(10)
-                    continue
-                }
-
-                if (stdoutAvailable) {
-                    line = stdoutReader.readLine()
-                    if (line != null) {
-                        totalBytes += line.length
-                        if (totalBytes <= maxOutputBytes) {
-                            stdoutBuilder.append(line).append("\n")
-                        }
-                    }
-                }
-
-                if (stderrAvailable) {
-                    line = stderrReader.readLine()
-                    if (line != null) {
-                        totalBytes += line.length
-                        if (totalBytes <= maxOutputBytes) {
-                            stderrBuilder.append(line).append("\n")
-                        }
-                    }
-                }
+            val stderrFuture = ioExecutor.submit {
+                readBounded(process.errorStream, maxOutputBytes)
             }
 
             val finished = process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
-            val duration = System.currentTimeMillis() - startTime
 
             if (!finished) {
-                process.destroyForcibly()
-                ShizukuCommandResult(
-                    exitCode = -1,
-                    exitCodeAvailable = false,
-                    stdout = stdoutBuilder.toString(),
-                    stderr = stderrBuilder.toString(),
-                    durationMs = duration,
-                    timedOut = true,
-                )
-            } else {
-                ShizukuCommandResult(
-                    exitCode = process.exitValue(),
-                    exitCodeAvailable = true,
-                    stdout = stdoutBuilder.toString(),
-                    stderr = stderrBuilder.toString(),
-                    durationMs = duration,
-                    timedOut = false,
-                )
+                timedOut.set(true)
+                process.destroy()
+                if (!process.waitFor(200, TimeUnit.MILLISECONDS)) {
+                    process.destroyForcibly()
+                }
             }
+
+            val stdout = stdoutFuture.get(500, TimeUnit.MILLISECONDS)
+            val stderr = stderrFuture.get(500, TimeUnit.MILLISECONDS)
+
+            val duration = System.currentTimeMillis() - startTime
+
+            ShizukuCommandResult(
+                exitCode = if (finished && !timedOut.get()) process.exitValue() else -1,
+                exitCodeAvailable = finished && !timedOut.get(),
+                stdout = stdout,
+                stderr = stderr,
+                durationMs = duration,
+                timedOut = timedOut.get(),
+            )
         } catch (e: Exception) {
             val duration = System.currentTimeMillis() - startTime
             try {
@@ -130,6 +99,22 @@ class ShizukuCommandService : Shizuku.UserService() {
                 timedOut = false,
             )
         }
+    }
+
+    private fun readBounded(stream: java.io.InputStream, maxBytes: Long): String {
+        val sb = StringBuilder()
+        val reader = BufferedReader(InputStreamReader(stream))
+        var totalBytes = 0L
+        try {
+            var line: String?
+            while (reader.readLine().also { line = it } != null) {
+                totalBytes += (line?.length ?: 0) + 1
+                if (totalBytes > maxBytes) break
+                sb.append(line).append("\n")
+                if (Thread.currentThread().isInterrupted) break
+            }
+        } catch (_: Exception) {}
+        return sb.toString()
     }
 
     companion object {

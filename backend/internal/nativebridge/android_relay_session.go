@@ -43,11 +43,11 @@ type NativeEventSink interface {
 	PublishNativeEvent(ctx context.Context, platform string, generation uint64, payload json.RawMessage) error
 }
 
-func newRelaySession(transport RelayTransport) *productionRelaySession {
+func newRelaySession(transport RelayTransport, generation uint64) *productionRelaySession {
 	return &productionRelaySession{
 		transport:   transport,
 		pending:     make(map[string]chan RelayEnvelope),
-		generation:  1,
+		generation:  generation,
 		connectedAt: time.Now(),
 	}
 }

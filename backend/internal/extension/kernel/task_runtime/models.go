@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"time"
 
+	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 )
 
@@ -47,12 +48,7 @@ const (
 	RuntimeTaskJavaScript TaskRuntimeType = "task_javascript"
 )
 
-type PermissionRequirement struct {
-	Permission string          `json:"permission"`
-	Reason     string          `json:"reason,omitempty"`
-	Required   bool            `json:"required"`
-	Scope      json.RawMessage `json:"scope,omitempty"`
-}
+type PermissionRequirement = permission.PermissionRequirement
 
 type ScopeRule struct {
 	ScopeType  string   `json:"scopeType"`

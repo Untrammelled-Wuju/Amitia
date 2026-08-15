@@ -44,13 +44,13 @@ func (c *BrokerPermissionChecker) CheckPermission(ctx context.Context, scheduleI
 
 	permReqs := make([]permission.PermissionRequirement, 0, len(requirements))
 	for _, r := range requirements {
-		if r.Permission == "" {
+		if r.PermissionID == "" {
 			continue
 		}
 		permReqs = append(permReqs, permission.PermissionRequirement{
-			PermissionID: r.Permission,
+			PermissionID: r.PermissionID,
 			Scope:        permission.ScopeForExtension(def.ExtensionID),
-			Optional:     !r.Required,
+			Optional:     r.Optional,
 		})
 	}
 

@@ -12,6 +12,7 @@ import com.amitia.amitia_app.nativeprovider.model.NativeBridgeRequest
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeResponse
 import rikka.shizuku.Shizuku
 import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.TimeoutException
 
@@ -34,6 +35,9 @@ internal class ShizukuNativeHandler(
         Shizuku.addBinderDeadListener {
             permissionWaiters.values.forEach { it.complete(-1) }
             permissionWaiters.clear()
+            ShizukuCommandServiceHolder.onServiceDestroyed(
+                ShizukuCommandServiceHolder.currentService() ?: return@addBinderDeadListener
+            )
         }
     }
 
@@ -127,15 +131,18 @@ internal class ShizukuNativeHandler(
         }
 
         return when (result) {
-            PackageManager.PERMISSION_GRANTED -> NativeBridgeResponse(
-                protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
-                requestId = request.requestId,
-                status = NativeBridgeProtocol.STATUS_SUCCESS,
-                result = mapOf(
-                    "authorized" to true,
-                    "state" to "authorized",
-                ),
-            )
+            PackageManager.PERMISSION_GRANTED -> {
+                ShizukuCommandServiceHolder.bindService()
+                NativeBridgeResponse(
+                    protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+                    requestId = request.requestId,
+                    status = NativeBridgeProtocol.STATUS_SUCCESS,
+                    result = mapOf(
+                        "authorized" to true,
+                        "state" to "authorized",
+                    ),
+                )
+            }
             -1 -> NativeBridgeResponse(
                 protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
                 requestId = request.requestId,
@@ -213,6 +220,36 @@ internal class ShizukuNativeHandler(
         return executeViaUserService(request, executable, args, stdin, timeoutMs, maxOutputBytes)
     }
 
+    private suspend fun ensureServiceReady(timeoutMs: Long): ShizukuCommandService {
+        if (!Shizuku.pingBinder()) throw BinderUnavailable
+        if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
+            throw PermissionRequired
+        }
+
+        ShizukuCommandServiceHolder.currentService()?.let { return it }
+
+        val latch = CountDownLatch(1)
+        ShizukuCommandServiceHolder.setServiceConnectedListener {
+            latch.countDown()
+        }
+
+        val bound = ShizukuCommandServiceHolder.bindService()
+        if (!bound) {
+            ShizukuCommandServiceHolder.setServiceConnectedListener(null)
+            throw ServiceBindFailed
+        }
+
+        val awaited = latch.await(timeoutMs, TimeUnit.MILLISECONDS)
+        ShizukuCommandServiceHolder.setServiceConnectedListener(null)
+
+        if (!awaited) {
+            throw ServiceBindTimeout
+        }
+
+        return ShizukuCommandServiceHolder.currentService()
+            ?: throw ServiceBindFailed
+    }
+
     private fun executeViaUserService(
         request: NativeBridgeRequest,
         executable: String,
@@ -221,15 +258,56 @@ internal class ShizukuNativeHandler(
         timeoutMs: Long,
         maxOutputBytes: Long,
     ): NativeBridgeResponse {
-        val service = ShizukuCommandServiceHolder.service
-        if (service == null) {
+        val service = try {
+            ensureServiceReady(10000L)
+        } catch (e: BinderUnavailable) {
+            return NativeBridgeResponse(
+                protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+                requestId = request.requestId,
+                status = NativeBridgeProtocol.STATUS_ERROR,
+                error = NativeBridgeError(
+                    code = "SHIZUKU_BINDER_UNAVAILABLE",
+                    message = "Shizuku binder is not available",
+                ),
+            )
+        } catch (e: PermissionRequired) {
+            return NativeBridgeResponse(
+                protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+                requestId = request.requestId,
+                status = NativeBridgeProtocol.STATUS_ERROR,
+                error = NativeBridgeError(
+                    code = "SHIZUKU_PERMISSION_REQUIRED",
+                    message = "Shizuku permission not granted",
+                ),
+            )
+        } catch (e: ServiceBindFailed) {
             return NativeBridgeResponse(
                 protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
                 requestId = request.requestId,
                 status = NativeBridgeProtocol.STATUS_ERROR,
                 error = NativeBridgeError(
                     code = "SHIZUKU_SERVICE_UNAVAILABLE",
-                    message = "Shizuku UserService is not bound",
+                    message = "Shizuku UserService could not be bound",
+                ),
+            )
+        } catch (e: ServiceBindTimeout) {
+            return NativeBridgeResponse(
+                protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+                requestId = request.requestId,
+                status = NativeBridgeProtocol.STATUS_ERROR,
+                error = NativeBridgeError(
+                    code = "SHIZUKU_BIND_TIMEOUT",
+                    message = "Shizuku UserService bind timed out",
+                ),
+            )
+        } catch (e: Exception) {
+            return NativeBridgeResponse(
+                protocolVersion = NativeBridgeProtocol.PROTOCOL_VERSION,
+                requestId = request.requestId,
+                status = NativeBridgeProtocol.STATUS_ERROR,
+                error = NativeBridgeError(
+                    code = "SHIZUKU_SERVICE_UNAVAILABLE",
+                    message = "Shizuku UserService bind failed: ${e.message}",
                 ),
             )
         }
@@ -331,3 +409,8 @@ internal class ShizukuNativeHandler(
         const val OP_EXECUTE = "shizuku.execute"
     }
 }
+
+private class BinderUnavailable : Exception("Shizuku binder not available")
+private class PermissionRequired : Exception("Shizuku permission not granted")
+private class ServiceBindFailed : Exception("Shizuku UserService bind failed")
+private class ServiceBindTimeout : Exception("Shizuku UserService bind timed out")

@@ -36,6 +36,10 @@ import UIKit
     if let host = self.iosNativeHost {
       self.nativeTransport = IOSNativeTransport(host: host, delegate: self)
       self.nativeTransport?.attach()
+      IOSNativeBridgePlugin.register(
+        messenger: self.registrar(forPlugin: "IOSNativeBridgePlugin")!.messenger(),
+        host: host
+      )
     }
 
     let resolver = RootfsResolver()

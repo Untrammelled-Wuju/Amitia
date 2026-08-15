@@ -71,7 +71,7 @@ func (p *PayloadProjector) Project(payload json.RawMessage, req EventProjectionR
 			case SensitiveAllowWithPermission:
 				allowed := false
 				for _, req := range rule.RequiredPermission {
-					if grantedPermissions[req.Permission] {
+					if grantedPermissions[req.PermissionID] {
 						allowed = true
 						break
 					}

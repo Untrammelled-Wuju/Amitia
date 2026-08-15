@@ -51,7 +51,7 @@ func (v *PreconditionValidator) CheckPermissions(reqs []PermissionRequirement) e
 		if req.PermissionID == "" {
 			return fmt.Errorf("permission requirement has empty permission_id")
 		}
-		if req.Scope == "" {
+		if req.Scope.Type == "" {
 			return fmt.Errorf("permission requirement %s has empty scope", req.PermissionID)
 		}
 	}

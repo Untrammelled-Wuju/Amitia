@@ -31,7 +31,7 @@ func (a *EventPermissionCheckerAdapter) CheckSubscriptionPermission(ctx context.
 	reqs := make([]permission.PermissionRequirement, 0, len(def.PermissionRequirements))
 	for _, r := range def.PermissionRequirements {
 		reqs = append(reqs, permission.PermissionRequirement{
-			PermissionID: r.Permission,
+			PermissionID: r.PermissionID,
 			Scope:        permission.ScopeForExtension(def.ExtensionID),
 			Optional:     false,
 		})

@@ -97,13 +97,13 @@ func (b *IOSBridge) SessionAttached() bool {
 
 func (b *IOSBridge) AttachRelaySession(transport RelayTransport) uint64 {
 	b.mu.Lock()
-	session := newRelaySession(transport)
+	b.generation.Add(1)
+	gen := b.generation.Load()
+	session := newRelaySession(transport, gen)
 	b.session = session
 	b.healthMu.Lock()
 	b.hostHealth = HealthReady
 	b.healthMu.Unlock()
-	b.generation.Add(1)
-	gen := b.generation.Load()
 	b.mu.Unlock()
 	return gen
 }

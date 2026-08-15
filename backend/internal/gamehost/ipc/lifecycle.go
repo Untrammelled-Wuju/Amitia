@@ -108,6 +108,12 @@ type IDGenerator interface {
 	Generate() ConnectionID
 }
 
+type ResponseCorrelator interface {
+	RegisterPending(peer Peer, requestID string) (respCh chan *protocol.Envelope, cancel func(), ok bool)
+	HandleResponse(peer Peer, envelope *protocol.Envelope) bool
+	CancelByPeer(peer Peer)
+}
+
 type ControlPlaneConfig struct {
 	Registry            *ConnectionRegistry
 	Resolver            RuntimePeerResolver
@@ -116,6 +122,7 @@ type ControlPlaneConfig struct {
 	IDGenerator         IDGenerator
 	MaxEnvelopeSize     int64
 	HandshakeController HandshakeController
+	ResponseCorrelator  ResponseCorrelator
 }
 
 type controlPlane struct {
@@ -132,8 +139,7 @@ type controlPlane struct {
 	shuttingDown        bool
 	maxEnvelopeSize     int64
 	handshakeController HandshakeController
-	pendingResponses    map[string]chan *protocol.Envelope
-	pendingMu           sync.Mutex
+	responseCorrelator  ResponseCorrelator
 }
 
 func NewControlPlane(config ControlPlaneConfig) (ControlPlane, error) {
@@ -168,7 +174,7 @@ func NewControlPlane(config ControlPlaneConfig) (ControlPlane, error) {
 		controlCancel:       controlCancel,
 		maxEnvelopeSize:     config.MaxEnvelopeSize,
 		handshakeController: config.HandshakeController,
-		pendingResponses:    make(map[string]chan *protocol.Envelope),
+		responseCorrelator:  config.ResponseCorrelator,
 	}
 	cp.connHandler = newDefaultConnectionHandler(cp.dispatcher, cp.handler)
 	return cp, nil
@@ -311,16 +317,15 @@ func (cp *controlPlane) SendRequest(ctx context.Context, peer Peer, envelope pro
 		return nil, NewIPCError(IPCErrorProtocol, domain.ErrInvalidArgument, "envelope ID is required for request/response")
 	}
 
-	respChan := make(chan *protocol.Envelope, 1)
-	cp.pendingMu.Lock()
-	cp.pendingResponses[envelope.ID] = respChan
-	cp.pendingMu.Unlock()
+	if cp.responseCorrelator == nil {
+		return nil, NewIPCError(IPCErrorProtocol, domain.ErrInternal, "response correlator not configured")
+	}
 
-	defer func() {
-		cp.pendingMu.Lock()
-		delete(cp.pendingResponses, envelope.ID)
-		cp.pendingMu.Unlock()
-	}()
+	respChan, cancel, ok := cp.responseCorrelator.RegisterPending(peer, envelope.ID)
+	if !ok {
+		return nil, NewIPCError(IPCErrorProtocol, domain.ErrInvalidState, "duplicate or rejected request id")
+	}
+	defer cancel()
 
 	FillRouting(&envelope, peer)
 
@@ -333,6 +338,9 @@ func (cp *controlPlane) SendRequest(ctx context.Context, peer Peer, envelope pro
 
 	select {
 	case resp := <-respChan:
+		if resp == nil {
+			return nil, NewIPCError(IPCErrorTransport, domain.ErrRuntimeUnavailable, "connection closed before response received")
+		}
 		return resp, nil
 	case <-timer.C:
 		return nil, NewIPCError(IPCErrorTimeout, domain.ErrTimeout, "request timed out")
@@ -423,17 +431,11 @@ func (cp *controlPlane) processEnvelope(conn *Connection, envelope protocol.Enve
 		return
 	}
 
-	cp.pendingMu.Lock()
-	if ch, ok := cp.pendingResponses[envelope.RequestID]; ok {
-		delete(cp.pendingResponses, envelope.RequestID)
-		cp.pendingMu.Unlock()
-		select {
-		case ch <- &envelope:
-		default:
+	if cp.responseCorrelator != nil && envelope.Type == protocol.MessageTypeResponse {
+		if cp.responseCorrelator.HandleResponse(conn.Peer, &envelope) {
+			return
 		}
-		return
 	}
-	cp.pendingMu.Unlock()
 
 	if !cp.handshakeController.CanProcess(conn.ID, envelope.Method) {
 		cp.connHandler.OnError(conn, NewIPCError(
@@ -503,15 +505,9 @@ func (cp *controlPlane) closeConnection(conn *Connection) {
 
 	conn.cancel()
 
-	cp.pendingMu.Lock()
-	for id, ch := range cp.pendingResponses {
-		select {
-		case ch <- nil:
-		default:
-		}
-		delete(cp.pendingResponses, id)
+	if cp.responseCorrelator != nil {
+		cp.responseCorrelator.CancelByPeer(conn.Peer)
 	}
-	cp.pendingMu.Unlock()
 
 	transport := conn.Transport()
 	if transport != nil {
