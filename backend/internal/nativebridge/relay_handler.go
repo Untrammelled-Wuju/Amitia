@@ -13,10 +13,23 @@ import (
 
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
-		return true
+		origin := r.Header.Get("Origin")
+		if origin == "" {
+			return true
+		}
+		host := r.Host
+		if r.TLS != nil {
+			return origin == "https://"+host || origin == "wss://"+host
+		}
+		return origin == "http://"+host || origin == "ws://"+host
 	},
 	ReadBufferSize:  16 * 1024,
 	WriteBufferSize: 16 * 1024,
+}
+
+var validPlatforms = map[string]bool{
+	"android": true,
+	"ios":     true,
 }
 
 type RelayHandler struct {
@@ -49,6 +62,11 @@ func (h *RelayHandler) HandleWebSocket(c *gin.Context) {
 		return
 	}
 
+	if !validPlatforms[platform] {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "unsupported platform: " + platform})
+		return
+	}
+
 	h.mu.RLock()
 	bridge, ok := h.bridges[platform]
 	h.mu.RUnlock()
@@ -74,6 +92,17 @@ func (h *RelayHandler) HandleWebSocket(c *gin.Context) {
 
 	attachedGeneration := bridge.AttachRelaySession(relayConn.Transport)
 
+	if err := sendRelayHello(bridge, relayConn); err != nil {
+		relayConn.Close()
+		h.mu.Lock()
+		if h.sessions[platform] == relayConn {
+			delete(h.sessions, platform)
+		}
+		h.mu.Unlock()
+		bridge.DetachRelaySession(attachedGeneration)
+		return
+	}
+
 	relayConn.StartPongLoop()
 
 	go func() {
@@ -94,6 +123,20 @@ func (h *RelayHandler) HandleWebSocket(c *gin.Context) {
 			return
 		}
 	}()
+}
+
+func sendRelayHello(bridge RelayBridge, conn *RelayConnection) error {
+	hello := RelayEnvelope{
+		Type:       "native_bridge.health",
+		Platform:   conn.Platform,
+		Generation: bridge.Generation(),
+		Payload: json.RawMessage(`{"protocolVersion":1,"ready":true}`),
+	}
+	data, err := json.Marshal(hello)
+	if err != nil {
+		return err
+	}
+	return conn.Transport.Send(data)
 }
 
 func (h *RelayHandler) GetSession(platform string) (*RelayConnection, bool) {
