@@ -64,7 +64,7 @@ if ($NodeActualTreeSha -ne $NodeExpectedTreeSha) {
 }
 Write-Host "[VERIFY] Node tree SHA verified: $NodeActualTreeSha"
 
-$RootfsTar = Join-Path $RuntimeRoot "build\out\rootfs\linux-arm64\ubuntu-rootfs-arm64.tar"
+$RootfsTar = Join-Path $RuntimeRoot "build\out\rootfs\linux-arm64\ubuntu-rootfs-arm64.tar.xz"
 if (-not (Test-Path $RootfsTar)) {
     Write-Error "[FATAL] Rootfs frozen archive not found. Run prepare-ubuntu-rootfs-arm64.sh first."
     exit 1
