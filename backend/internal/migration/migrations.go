@@ -161,6 +161,36 @@ func DefaultMigrations() []Migration {
 		AccountSessionSecurityMigration(),
 		SyncChangeLogMigration(),
 		SyncCursorMigration(),
+		ExecutionResumeMigration(),
+	}
+}
+
+func ExecutionResumeMigration() Migration {
+	return Migration{
+		Version: "20260816003",
+		Name:    "execution_resumes_table",
+		Up: func(s *Step) error {
+			s.CreateTable(`CREATE TABLE IF NOT EXISTS execution_resumes (
+				resume_id TEXT PRIMARY KEY,
+				root_execution_id TEXT,
+				parent_execution_id TEXT,
+				resume_type TEXT NOT NULL,
+				resume_state TEXT NOT NULL,
+				checkpoint_ref TEXT,
+				required_capability_id TEXT,
+				acquisition_transaction_id TEXT,
+				task_id TEXT,
+				payload_ref TEXT,
+				reason TEXT,
+				metadata TEXT,
+				created_at DATETIME NOT NULL,
+				updated_at DATETIME NOT NULL
+			)`)
+			s.CreateIndex("idx_execution_resumes_state", "execution_resumes", []string{"resume_state"}, false)
+			s.CreateIndex("idx_execution_resumes_root", "execution_resumes", []string{"root_execution_id"}, false)
+			s.CreateIndex("idx_execution_resumes_acq_txn", "execution_resumes", []string{"acquisition_transaction_id"}, false)
+			return nil
+		},
 	}
 }
 
