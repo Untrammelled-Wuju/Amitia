@@ -96,18 +96,27 @@ export class Runner {
       while (this.running) {
         const envelope = await this.client.getTransport().receive();
 
+        if (envelope.type === 'response' || envelope.type === 'error') {
+          this.client.handleIncomingResponse(envelope);
+          continue;
+        }
+
         switch (envelope.type) {
           case 'request': {
             const registry = this.findRegistryForService(envelope.serviceId);
             if (registry) {
-              await registry.handleRequest(this.client, envelope);
+              registry.handleRequest(this.client, envelope).catch((err) => {
+                console.error(`request handler error: ${err}`);
+              });
             }
             break;
           }
           case 'notification': {
             const registry = this.findRegistryForService(envelope.serviceId);
             if (registry) {
-              await registry.handleNotification(this.client, envelope);
+              registry.handleNotification(this.client, envelope).catch((err) => {
+                console.error(`notification handler error: ${err}`);
+              });
             }
             break;
           }
