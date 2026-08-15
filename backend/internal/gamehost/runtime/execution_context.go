@@ -4,6 +4,8 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/hex"
+
+	"github.com/u-ai/backend/internal/gamehost/contracts"
 	"github.com/u-ai/backend/internal/gamehost/domain"
 )
 
@@ -61,9 +63,9 @@ type ServiceExecutionContext struct {
 
 	Env map[string]string
 
-	Generation   int64
-	SessionToken string
-	SecretLease  string
+	Generation         int64
+	SessionToken       string
+	SecretLeaseSession *contracts.RuntimeSecretLeaseSession
 }
 
 func (c ServiceExecutionContext) DirectoryIdentifier() string {

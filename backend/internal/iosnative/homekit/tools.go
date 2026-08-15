@@ -21,19 +21,8 @@ const (
 	ToolIDScenesList    = "ios.homekit.scenes.list"
 	ToolIDScenesGet     = "ios.homekit.scenes.get"
 	ToolIDScenesExecute = "ios.homekit.scenes.execute"
-	ToolIDScenesCreate  = "ios.homekit.scenes.create"
-	ToolIDScenesUpdate  = "ios.homekit.scenes.update"
-	ToolIDScenesDelete  = "ios.homekit.scenes.delete"
 
 	ToolIDAutomationsList   = "ios.homekit.automations.list"
-	ToolIDAutomationsGet    = "ios.homekit.automations.get"
-	ToolIDAutomationsCreate = "ios.homekit.automations.create"
-	ToolIDAutomationsUpdate = "ios.homekit.automations.update"
-	ToolIDAutomationsEnable = "ios.homekit.automations.enable"
-	ToolIDAutomationsDelete = "ios.homekit.automations.delete"
-
-	ToolIDSetupPresent  = "ios.homekit.setup.present"
-	ToolIDEnableHomeKit = "ios.homekit.enable"
 )
 
 const (

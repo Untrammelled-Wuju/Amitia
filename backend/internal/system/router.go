@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/graph"
@@ -21,9 +22,10 @@ import (
 	"github.com/u-ai/backend/pkg/sse"
 )
 
-func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.Service, unifiedEntry *interaction.UnifiedEntry, dataLifecycle *mindruntime.DataLifecycleCoordinator, reconciliation *mindruntime.ReconciliationEngine, memSvc memory.Service, profSvc profile.Service, epiSvc episodic.Service, graphSvc graph.Service, temporalSvc *temporal.Service, dpCoord *dataportability.Coordinator) {
+func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.Service, unifiedEntry *interaction.UnifiedEntry, dataLifecycle *mindruntime.DataLifecycleCoordinator, reconciliation *mindruntime.ReconciliationEngine, memSvc memory.Service, profSvc profile.Service, epiSvc episodic.Service, graphSvc graph.Service, temporalSvc *temporal.Service, dpCoord *dataportability.Coordinator, artifactSvc *artifact.Service) {
 	svc := NewService(ctx, runtimeprofile.Profile(""))
 	handler := NewHandler(svc, ctx.DB, chatSvc, dataLifecycle, unifiedEntry, reconciliation, memSvc)
+	handler.SetArtifactService(artifactSvc)
 	svc.AttachTemporalService(temporalSvc)
 
 	if dpCoord == nil {

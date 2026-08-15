@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/memory"
@@ -37,12 +38,17 @@ type Handler struct {
 	unifiedEntry   *interaction.UnifiedEntry
 	reconciliation *mindruntime.ReconciliationEngine
 	versionInfo    atomic.Value
+	artifactSvc    *artifact.Service
 }
 
 func NewHandler(srv Service, db *gorm.DB, chatSvc chat.Service, dataLifecycle *mindruntime.DataLifecycleCoordinator, unifiedEntry *interaction.UnifiedEntry, reconciliation *mindruntime.ReconciliationEngine, memorySvc memory.Service) *Handler {
 	h := &Handler{service: srv, db: db, chatSvc: chatSvc, memorySvc: memorySvc, unifiedEntry: unifiedEntry, dataLifecycle: dataLifecycle, reconciliation: reconciliation}
 	h.versionInfo.Store(srv.GetVersion())
 	return h
+}
+
+func (h *Handler) SetArtifactService(svc *artifact.Service) {
+	h.artifactSvc = svc
 }
 
 func (h *Handler) getDBPath() string {

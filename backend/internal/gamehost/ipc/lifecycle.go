@@ -431,7 +431,7 @@ func (cp *controlPlane) processEnvelope(conn *Connection, envelope protocol.Enve
 		return
 	}
 
-	if cp.responseCorrelator != nil && envelope.Type == protocol.MessageTypeResponse {
+	if cp.responseCorrelator != nil && (envelope.Type == protocol.MessageTypeResponse || envelope.Type == protocol.MessageTypeError) {
 		if cp.responseCorrelator.HandleResponse(conn.Peer, &envelope) {
 			return
 		}

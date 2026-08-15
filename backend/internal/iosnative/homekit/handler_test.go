@@ -321,39 +321,6 @@ func TestHandler_ScenesExecute_MissingID(t *testing.T) {
 	}
 }
 
-func TestHandler_ScenesCreate_MissingHomeID(t *testing.T) {
-	h := NewHomeKitHandler(newMockHomeKitBridge(nativebridge.Response{}, nil))
-	req := baseHomeKitRequest(OperationScenesCreate)
-	resp := h.Execute(context.Background(), req)
-
-	if resp.Status != "error" {
-		t.Errorf("expected error status, got %s", resp.Status)
-	}
-}
-
-func TestHandler_ScenesCreate_MissingName(t *testing.T) {
-	h := NewHomeKitHandler(newMockHomeKitBridge(nativebridge.Response{}, nil))
-	req := baseHomeKitRequest(OperationScenesCreate)
-	req.Payload["homeId"] = "h-001"
-	resp := h.Execute(context.Background(), req)
-
-	if resp.Status != "error" {
-		t.Errorf("expected error status, got %s", resp.Status)
-	}
-}
-
-func TestHandler_ScenesCreate_EmptyActions(t *testing.T) {
-	h := NewHomeKitHandler(newMockHomeKitBridge(nativebridge.Response{}, nil))
-	req := baseHomeKitRequest(OperationScenesCreate)
-	req.Payload["homeId"] = "h-001"
-	req.Payload["name"] = "Test Scene"
-	resp := h.Execute(context.Background(), req)
-
-	if resp.Status != "error" {
-		t.Errorf("expected error status, got %s", resp.Status)
-	}
-}
-
 func TestHandler_AutomationsList(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
@@ -365,105 +332,6 @@ func TestHandler_AutomationsList(t *testing.T) {
 	h := NewHomeKitHandler(bridge)
 
 	req := baseHomeKitRequest(OperationAutomationsList)
-	resp := h.Execute(context.Background(), req)
-
-	if resp.Status != "ok" {
-		t.Errorf("expected ok status, got %s", resp.Status)
-	}
-}
-
-func TestHandler_AutomationsGet_MissingID(t *testing.T) {
-	h := NewHomeKitHandler(newMockHomeKitBridge(nativebridge.Response{}, nil))
-	req := baseHomeKitRequest(OperationAutomationsGet)
-	resp := h.Execute(context.Background(), req)
-
-	if resp.Status != "error" {
-		t.Errorf("expected error status, got %s", resp.Status)
-	}
-	if resp.Error.Code != ErrAutomationNotFound {
-		t.Errorf("expected ErrAutomationNotFound, got %s", resp.Error.Code)
-	}
-}
-
-func TestHandler_AutomationsCreate_MissingHomeID(t *testing.T) {
-	h := NewHomeKitHandler(newMockHomeKitBridge(nativebridge.Response{}, nil))
-	req := baseHomeKitRequest(OperationAutomationsCreate)
-	resp := h.Execute(context.Background(), req)
-
-	if resp.Status != "error" {
-		t.Errorf("expected error status, got %s", resp.Status)
-	}
-}
-
-func TestHandler_AutomationsCreate_UnsupportedType(t *testing.T) {
-	h := NewHomeKitHandler(newMockHomeKitBridge(nativebridge.Response{}, nil))
-	req := baseHomeKitRequest(OperationAutomationsCreate)
-	req.Payload["homeId"] = "h-001"
-	req.Payload["name"] = "Test"
-	req.Payload["type"] = "unsupported_type"
-	resp := h.Execute(context.Background(), req)
-
-	if resp.Status != "error" {
-		t.Errorf("expected error status, got %s", resp.Status)
-	}
-}
-
-func TestHandler_AutomationsEnable_MissingID(t *testing.T) {
-	h := NewHomeKitHandler(newMockHomeKitBridge(nativebridge.Response{}, nil))
-	req := baseHomeKitRequest(OperationAutomationsEnable)
-	resp := h.Execute(context.Background(), req)
-
-	if resp.Status != "error" {
-		t.Errorf("expected error status, got %s", resp.Status)
-	}
-	if resp.Error.Code != ErrAutomationNotFound {
-		t.Errorf("expected ErrAutomationNotFound, got %s", resp.Error.Code)
-	}
-}
-
-func TestHandler_AutomationsDelete_MissingID(t *testing.T) {
-	h := NewHomeKitHandler(newMockHomeKitBridge(nativebridge.Response{}, nil))
-	req := baseHomeKitRequest(OperationAutomationsDelete)
-	resp := h.Execute(context.Background(), req)
-
-	if resp.Status != "error" {
-		t.Errorf("expected error status, got %s", resp.Status)
-	}
-	if resp.Error.Code != ErrAutomationNotFound {
-		t.Errorf("expected ErrAutomationNotFound, got %s", resp.Error.Code)
-	}
-}
-
-func TestHandler_SetupPresent(t *testing.T) {
-	expected := nativebridge.Response{
-		ProtocolVersion: 1,
-		RequestID:       "test-hk-001",
-		Status:          "ok",
-		Result:          map[string]any{"status": "pending"},
-	}
-	bridge := newMockHomeKitBridge(expected, nil)
-	h := NewHomeKitHandler(bridge)
-
-	req := baseHomeKitRequest(OperationSetupPresent)
-	req.Payload["homeId"] = "h-001"
-	resp := h.Execute(context.Background(), req)
-
-	if resp.Status != "ok" {
-		t.Errorf("expected ok status, got %s", resp.Status)
-	}
-}
-
-func TestHandler_EnableHomeKit(t *testing.T) {
-	expected := nativebridge.Response{
-		ProtocolVersion: 1,
-		RequestID:       "test-hk-001",
-		Status:          "ok",
-		Result:          map[string]any{"enabled": true},
-	}
-	bridge := newMockHomeKitBridge(expected, nil)
-	h := NewHomeKitHandler(bridge)
-
-	req := baseHomeKitRequest(OperationEnableHomeKit)
 	resp := h.Execute(context.Background(), req)
 
 	if resp.Status != "ok" {
@@ -666,45 +534,6 @@ func TestValidateAutomationInput(t *testing.T) {
 	})
 	if err == nil {
 		t.Error("expected error for unsupported type")
-	}
-}
-
-func TestParseCharacteristicValue(t *testing.T) {
-	v := parseCharacteristicValue(map[string]any{
-		"type": "bool",
-		"bool": true,
-	})
-	if v.Type != "bool" {
-		t.Errorf("expected type=bool, got %s", v.Type)
-	}
-	if v.Bool == nil || *v.Bool != true {
-		t.Error("expected bool=true")
-	}
-
-	v2 := parseCharacteristicValue(map[string]any{
-		"type":   "integer",
-		"integer": float64(42),
-	})
-	if v2.Type != "integer" {
-		t.Errorf("expected type=integer, got %s", v2.Type)
-	}
-	if v2.Integer == nil || *v2.Integer != 42 {
-		t.Error("expected integer=42")
-	}
-}
-
-func TestSerializeCharacteristicValue(t *testing.T) {
-	b := true
-	v := HomeCharacteristicValue{
-		Type: "bool",
-		Bool: &b,
-	}
-	m := serializeCharacteristicValue(v)
-	if m["type"] != "bool" {
-		t.Errorf("expected type=bool")
-	}
-	if m["bool"] != true {
-		t.Error("expected bool=true")
 	}
 }
 

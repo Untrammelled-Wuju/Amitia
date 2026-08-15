@@ -6,14 +6,21 @@ import (
 
 type CapabilityService struct {
 	registry *ProviderRegistry
+	catalog  ProviderCatalog
 	resolver *Resolver
 }
 
 func NewCapabilityService(registry *ProviderRegistry) *CapabilityService {
+	catalog := NewProviderCatalogAdapter(registry)
 	return &CapabilityService{
 		registry: registry,
-		resolver: NewResolver(registry),
+		catalog:  catalog,
+		resolver: NewResolver(catalog),
 	}
+}
+
+func (s *CapabilityService) Catalog() ProviderCatalog {
+	return s.catalog
 }
 
 type CapabilityDescriptor struct {

@@ -25,7 +25,7 @@ func (k *KernelProviderInvoker) Invoke(ctx context.Context, req ProviderInvokeRe
 		Input:              req.Payload,
 		PreferredPlacement: capability.ProviderPlacementCore,
 		AllowCore:          true,
-		AllowDevice:        false,
+		AllowDevice:        true,
 	}
 
 	result, err := k.invocationService.Invoke(ctx, invReq)

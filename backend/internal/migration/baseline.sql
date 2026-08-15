@@ -27,7 +27,73 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
     user_agent TEXT DEFAULT '',
     last_active_at TEXT DEFAULT (datetime('now')),
     expires_at TEXT,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT (datetime('now')),
+    public_id TEXT UNIQUE,
+    status TEXT NOT NULL DEFAULT 'active',
+    revision INTEGER NOT NULL DEFAULT 1,
+    absolute_expires_at DATETIME,
+    revoked_at DATETIME,
+    revoke_reason TEXT,
+    last_refreshed_at DATETIME
+);
+
+CREATE TABLE IF NOT EXISTS auth_refresh_tokens (
+    token_id TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    token_hash TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL DEFAULT 'active',
+    issued_at DATETIME NOT NULL,
+    expires_at DATETIME NOT NULL,
+    used_at DATETIME,
+    revoked_at DATETIME,
+    replaced_by_token_id TEXT,
+    created_at DATETIME NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS auth_login_guards (
+    guard_key TEXT NOT NULL,
+    dimension TEXT NOT NULL,
+    failure_count INTEGER NOT NULL DEFAULT 0,
+    window_started_at DATETIME NOT NULL,
+    blocked_until DATETIME,
+    updated_at DATETIME NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY(guard_key, dimension)
+);
+
+CREATE TABLE IF NOT EXISTS security_audit_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_id TEXT NOT NULL UNIQUE,
+    user_id TEXT,
+    session_id TEXT,
+    event_type TEXT NOT NULL,
+    outcome TEXT NOT NULL DEFAULT 'success',
+    severity TEXT NOT NULL DEFAULT 'info',
+    ip_address TEXT,
+    user_agent TEXT,
+    device_name TEXT,
+    detail TEXT,
+    created_at DATETIME NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS auth_recovery_codes (
+    code_id TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    code_hash TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+    used_at DATETIME,
+    expires_at DATETIME,
+    generation INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS auth_recovery_grants (
+    grant_id TEXT PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    grant_hash TEXT NOT NULL UNIQUE,
+    status TEXT NOT NULL DEFAULT 'active',
+    created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+    expires_at DATETIME NOT NULL,
+    consumed_at DATETIME
 );
 
 CREATE TABLE IF NOT EXISTS characters (

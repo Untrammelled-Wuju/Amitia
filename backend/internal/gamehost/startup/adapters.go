@@ -2,14 +2,18 @@ package startup
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
+	"path/filepath"
+	"strings"
 	"sync"
 
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/integration"
 	"github.com/u-ai/backend/internal/gamehost/runtime"
+	"github.com/u-ai/backend/internal/gamehost/storage"
 	"github.com/u-ai/backend/internal/gamehost/stream/binary"
 )
 
@@ -77,9 +81,14 @@ func (a *ProcessCleanupProcessAdapter) ListOrphanCandidates(ctx context.Context)
 		if inst.PID <= 0 {
 			continue
 		}
+		runtimeID := inst.RuntimeID
+		if runtimeID == "" {
+			log.Printf("[startup-recovery] skip process candidate pid=%d: no owner metadata (RuntimeID empty)", inst.PID)
+			continue
+		}
 		candidates = append(candidates, ProcessCandidate{
 			PID:         inst.PID,
-			RuntimeID:   domain.RuntimeInstanceID(inst.ServiceID),
+			RuntimeID:   domain.RuntimeInstanceID(runtimeID),
 			PluginID:    domain.PluginID(inst.Definition.ModuleID),
 			ExtensionID: inst.Definition.ExtensionID,
 			Generation:  uint64(inst.Generation),
@@ -89,37 +98,61 @@ func (a *ProcessCleanupProcessAdapter) ListOrphanCandidates(ctx context.Context)
 }
 
 type TempCleanupDirAdapter struct {
-	dirMgr interface {
-		ListStaleTempRuntimeIDs(ctx context.Context) ([]domain.RuntimeInstanceID, error)
-	}
+	dirMgr storage.DirectoryManager
 }
 
-func NewTempCleanupAdapter() *TempCleanupDirAdapter {
-	return &TempCleanupDirAdapter{}
+func NewTempCleanupAdapter(dirMgr storage.DirectoryManager) *TempCleanupDirAdapter {
+	return &TempCleanupDirAdapter{dirMgr: dirMgr}
 }
 
 func (a *TempCleanupDirAdapter) ListStaleTempCandidates(ctx context.Context) ([]TempCandidate, error) {
 	if a.dirMgr == nil {
 		return nil, nil
 	}
-	ids, err := a.dirMgr.ListStaleTempRuntimeIDs(ctx)
+	runtimeIDs, err := a.listStaleTempRuntimeIDs(ctx)
 	if err != nil {
 		return nil, err
 	}
-	candidates := make([]TempCandidate, 0, len(ids))
-	for _, rid := range ids {
+	candidates := make([]TempCandidate, 0, len(runtimeIDs))
+	for _, rid := range runtimeIDs {
 		candidates = append(candidates, TempCandidate{RuntimeID: rid})
 	}
 	return candidates, nil
 }
 
+func (a *TempCleanupDirAdapter) listStaleTempRuntimeIDs(ctx context.Context) ([]domain.RuntimeInstanceID, error) {
+	dataRoot := a.dirMgr.Root()
+	if dataRoot == "" {
+		return nil, fmt.Errorf("directory manager has no root")
+	}
+	runtimeDir := filepath.Join(dataRoot, "gamehost", "runtimes")
+	entries, err := os.ReadDir(runtimeDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("list runtime dirs: %w", err)
+	}
+	ids := make([]domain.RuntimeInstanceID, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() || !strings.HasPrefix(entry.Name(), "run-") {
+			continue
+		}
+		runtimeID := domain.RuntimeInstanceID(strings.TrimPrefix(entry.Name(), "run-"))
+		ids = append(ids, runtimeID)
+	}
+	return ids, nil
+}
+
 func (a *TempCleanupDirAdapter) RemoveStaleTemp(ctx context.Context, runtimeID domain.RuntimeInstanceID) error {
-	log.Printf("[startup-recovery] temp cleanup: runtime=%s", runtimeID)
-	return nil
+	if a.dirMgr == nil {
+		return fmt.Errorf("directory manager not available for temp cleanup")
+	}
+	return a.dirMgr.RemoveRuntimeTemp(ctx, runtimeID)
 }
 
 type BinaryCleanupAdapter struct {
-	binaryReg binary.ObjectRegistry
+	binaryReg  binary.ObjectRegistry
 	runtimeMgr interface {
 		ListRuntimes() []*runtime.RuntimeInstanceRef
 	}
@@ -163,32 +196,68 @@ func (a *BinaryCleanupAdapter) RemoveOrphanBinary(ctx context.Context, binaryID 
 	return a.binaryReg.Release(ctx, binary.BinaryObjectID(binaryID))
 }
 
-type EndpointCleanupAdapter struct{}
+type EndpointCleanupAdapter struct {
+	registry interface {
+		ListStaleEndpoints(ctx context.Context) ([]EndpointCandidate, error)
+		RemoveStaleEndpoint(ctx context.Context, endpointID string) error
+	}
+}
 
 func NewEndpointCleanupAdapter() *EndpointCleanupAdapter {
 	return &EndpointCleanupAdapter{}
 }
 
+func NewEndpointCleanupAdapterWithRegistry(registry interface {
+	ListStaleEndpoints(ctx context.Context) ([]EndpointCandidate, error)
+	RemoveStaleEndpoint(ctx context.Context, endpointID string) error
+}) *EndpointCleanupAdapter {
+	return &EndpointCleanupAdapter{registry: registry}
+}
+
 func (a *EndpointCleanupAdapter) ListStaleEndpoints(ctx context.Context) ([]EndpointCandidate, error) {
-	return nil, nil
+	if a.registry == nil {
+		return nil, fmt.Errorf("NOT_APPLICABLE: no endpoint registry configured")
+	}
+	return a.registry.ListStaleEndpoints(ctx)
 }
 
 func (a *EndpointCleanupAdapter) RemoveStaleEndpoint(ctx context.Context, endpointID string) error {
-	return nil
+	if a.registry == nil {
+		return fmt.Errorf("NOT_APPLICABLE: no endpoint registry configured")
+	}
+	return a.registry.RemoveStaleEndpoint(ctx, endpointID)
 }
 
-type SharedMemoryCleanupAdapter struct{}
+type SharedMemoryCleanupAdapter struct {
+	registry interface {
+		ListStaleSharedMemory(ctx context.Context) ([]SharedMemoryCandidate, error)
+		ReleaseSharedMemory(ctx context.Context, shmID string) error
+	}
+}
 
 func NewSharedMemoryCleanupAdapter() *SharedMemoryCleanupAdapter {
 	return &SharedMemoryCleanupAdapter{}
 }
 
+func NewSharedMemoryCleanupAdapterWithRegistry(registry interface {
+	ListStaleSharedMemory(ctx context.Context) ([]SharedMemoryCandidate, error)
+	ReleaseSharedMemory(ctx context.Context, shmID string) error
+}) *SharedMemoryCleanupAdapter {
+	return &SharedMemoryCleanupAdapter{registry: registry}
+}
+
 func (a *SharedMemoryCleanupAdapter) ListStaleSharedMemory(ctx context.Context) ([]SharedMemoryCandidate, error) {
-	return nil, nil
+	if a.registry == nil {
+		return nil, fmt.Errorf("NOT_APPLICABLE: no shared memory registry configured")
+	}
+	return a.registry.ListStaleSharedMemory(ctx)
 }
 
 func (a *SharedMemoryCleanupAdapter) ReleaseSharedMemory(ctx context.Context, shmID string) error {
-	return nil
+	if a.registry == nil {
+		return fmt.Errorf("NOT_APPLICABLE: no shared memory registry configured")
+	}
+	return a.registry.ReleaseSharedMemory(ctx, shmID)
 }
 
 type KernelReconciliationRegistryAdapter struct {
@@ -244,8 +313,8 @@ func NewKernelReconciliationAdapter(
 	},
 ) *KernelReconciliationRegistryAdapter {
 	return &KernelReconciliationRegistryAdapter{
-		pluginReg:      pluginReg,
-		runtimeMgr:     runtimeMgr,
+		pluginReg:       pluginReg,
+		runtimeMgr:      runtimeMgr,
 		extensionLookup: extensionLookup,
 	}
 }

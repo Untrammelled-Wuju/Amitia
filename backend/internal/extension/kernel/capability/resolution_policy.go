@@ -1,40 +1,34 @@
 package capability
 
-// ResolutionFailure is a typed string representing a specific kind of capability
-// resolution failure.
 type ResolutionFailure string
 
 const (
-	// ResolutionFailureNone indicates that no resolution failure occurred.
-	ResolutionFailureNone ResolutionFailure = ""
-
-	ResolutionFailureCapabilityNotRegistered   = "CAPABILITY_NOT_REGISTERED"
-	ResolutionFailureNoAvailableProvider       = "CAPABILITY_NO_AVAILABLE_PROVIDER"
-	ResolutionFailurePlacementUnavailable      = "CAPABILITY_PLACEMENT_UNAVAILABLE"
-	ResolutionFailureDeviceUnavailable         = "CAPABILITY_DEVICE_UNAVAILABLE"
-	ResolutionFailureRuntimeUnavailable        = "CAPABILITY_RUNTIME_UNAVAILABLE"
-	ResolutionFailureProviderConflict          = "CAPABILITY_PROVIDER_CONFLICT"
+	ResolutionFailureNone                ResolutionFailure = ""
+	ResolutionFailureCapabilityNotRegistered ResolutionFailure = "CAPABILITY_NOT_REGISTERED"
+	ResolutionFailureNoAvailableProvider ResolutionFailure = "CAPABILITY_NO_AVAILABLE_PROVIDER"
+	ResolutionFailurePlacementUnavailable ResolutionFailure = "CAPABILITY_PLACEMENT_UNAVAILABLE"
+	ResolutionFailureDeviceUnavailable   ResolutionFailure = "CAPABILITY_DEVICE_UNAVAILABLE"
+	ResolutionFailureRuntimeUnavailable  ResolutionFailure = "CAPABILITY_RUNTIME_UNAVAILABLE"
+	ResolutionFailureProviderConflict    ResolutionFailure = "CAPABILITY_PROVIDER_CONFLICT"
 )
 
 type ResolutionRanking struct {
-	defs      []*CapabilityProviderDefinition
-	instances []*CapabilityProviderInstance
+	defs      []CapabilityProviderDefinition
+	instances []CapabilityProviderInstance
 	request   CapabilityResolutionRequest
 }
 
 func (r *ResolutionRanking) Rank() ([]RankedProvider, error) {
 	var scored []RankedProvider
-	for _, def := range r.defs {
-		if def == nil {
-			continue
-		}
+	for i := range r.defs {
+		def := r.defs[i]
 		inst := r.matchInstance(def)
 		if inst == nil {
 			continue
 		}
-		score := scoreProvider(def, inst, r.request)
+		score := scoreProvider(&def, inst, r.request)
 		scored = append(scored, RankedProvider{
-			Definition: def,
+			Definition: &def,
 			Instance:   inst,
 			Score:      score,
 		})
@@ -86,11 +80,9 @@ func scoreProvider(def *CapabilityProviderDefinition, inst *CapabilityProviderIn
 	return score
 }
 
-func (r *ResolutionRanking) matchInstance(def *CapabilityProviderDefinition) *CapabilityProviderInstance {
-	for _, inst := range r.instances {
-		if inst == nil {
-			continue
-		}
+func (r *ResolutionRanking) matchInstance(def CapabilityProviderDefinition) *CapabilityProviderInstance {
+	for i := range r.instances {
+		inst := r.instances[i]
 		if inst.ProviderID != def.ID {
 			continue
 		}
@@ -100,7 +92,7 @@ func (r *ResolutionRanking) matchInstance(def *CapabilityProviderDefinition) *Ca
 		if r.request.Platform != "" && !matchPlatform(def.Platforms, r.request.Platform) {
 			continue
 		}
-		return inst
+		return &inst
 	}
 	return nil
 }

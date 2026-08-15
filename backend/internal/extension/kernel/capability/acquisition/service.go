@@ -15,16 +15,18 @@ import (
 // finding candidates, evaluating policy, executing installation/enablement,
 // and verifying that the acquired capability becomes executable.
 type AcquisitionService struct {
-	planner          *Planner
-	registry         *SourceRegistry
-	mu               sync.RWMutex
-	resumeContexts   map[string]CapabilityResumeContext
+	planner           *Planner
+	registry          *SourceRegistry
+	installerRegistry *InstallerRegistry
+	mu                sync.RWMutex
+	resumeContexts    map[string]CapabilityResumeContext
 	capabilityService *capability.CapabilityService
+	providerRegistry  *capability.ProviderRegistry
 }
 
 // NewAcquisitionService creates an AcquisitionService with a default Planner
 // wired to the provided SourceRegistry.
-func NewAcquisitionService() *AcquisitionService {
+func NewAcquisitionService(providerRegistry *capability.ProviderRegistry) *AcquisitionService {
 	registry := NewSourceRegistry()
 	search := NewSourceSearchService(registry)
 	policy := NewPolicyEngine()
@@ -32,24 +34,28 @@ func NewAcquisitionService() *AcquisitionService {
 	planner := NewPlanner(search, policy, deployment)
 
 	return &AcquisitionService{
-		planner:        planner,
-		registry:       registry,
-		resumeContexts: make(map[string]CapabilityResumeContext),
+		planner:           planner,
+		registry:          registry,
+		installerRegistry: NewInstallerRegistry(),
+		resumeContexts:    make(map[string]CapabilityResumeContext),
+		providerRegistry:  providerRegistry,
 	}
 }
 
 // NewAcquisitionServiceWithRegistry creates an AcquisitionService using a
 // pre-configured SourceRegistry.
-func NewAcquisitionServiceWithRegistry(registry *SourceRegistry) *AcquisitionService {
+func NewAcquisitionServiceWithRegistry(registry *SourceRegistry, providerRegistry *capability.ProviderRegistry) *AcquisitionService {
 	search := NewSourceSearchService(registry)
 	policy := NewPolicyEngine()
 	deployment := NewDeploymentPlanner()
 	planner := NewPlanner(search, policy, deployment)
 
 	return &AcquisitionService{
-		planner:        planner,
-		registry:       registry,
-		resumeContexts: make(map[string]CapabilityResumeContext),
+		planner:           planner,
+		registry:          registry,
+		installerRegistry: NewInstallerRegistry(),
+		resumeContexts:    make(map[string]CapabilityResumeContext),
+		providerRegistry:  providerRegistry,
 	}
 }
 
@@ -59,6 +65,20 @@ func (s *AcquisitionService) SetCapabilityService(svc *capability.CapabilityServ
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.capabilityService = svc
+}
+
+// SetProviderRegistry sets the provider registry used to enable providers.
+func (s *AcquisitionService) SetProviderRegistry(reg *capability.ProviderRegistry) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.providerRegistry = reg
+}
+
+// SetInstallerRegistry sets the installer registry used to dispatch install methods.
+func (s *AcquisitionService) SetInstallerRegistry(reg *InstallerRegistry) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.installerRegistry = reg
 }
 
 // RegisterSource adds a Source to the service's SourceRegistry so it will be
@@ -241,6 +261,8 @@ func (s *AcquisitionService) ResumeAcquire(ctx context.Context, resumeToken stri
 
 // executePlan runs the ordered steps of an acquisition plan.
 func (s *AcquisitionService) executePlan(ctx context.Context, plan *AcquisitionPlan) error {
+	var installed InstalledCapability
+
 	for i := range plan.Steps {
 		step := &plan.Steps[i]
 		if err := ctx.Err(); err != nil {
@@ -249,9 +271,11 @@ func (s *AcquisitionService) executePlan(ctx context.Context, plan *AcquisitionP
 
 		switch step.Action {
 		case "install":
-			if err := s.executeInstall(ctx, plan.Candidate); err != nil {
+			result, err := s.executeInstall(ctx, plan.Candidate, plan.Target)
+			if err != nil {
 				return errors.Join(ErrInstallFailed, err)
 			}
+			installed = result
 		case "enable":
 			if err := s.executeEnable(ctx, plan.Candidate); err != nil {
 				return errors.Join(ErrEnableFailed, err)
@@ -268,42 +292,159 @@ func (s *AcquisitionService) executePlan(ctx context.Context, plan *AcquisitionP
 		step.Completed = true
 	}
 
+	_, _ = installed, installed
 	return nil
 }
 
-// executeInstall performs the installation step for a candidate.
-func (s *AcquisitionService) executeInstall(ctx context.Context, candidate CapabilityCandidate) error {
-	// Delegate to the candidate's install descriptor.
-	// Concrete implementations will handle extension/MCP/skill/generated-skill
-	// installation in later phases.
-	switch candidate.Install.Method {
-	case InstallEnableExisting:
-		// No installation needed; only enable.
-		return nil
-	default:
-		// Placeholder for actual installation logic.
+// executeInstall performs the installation step for a candidate by dispatching
+// to the registered Installer for the candidate's InstallMethod.
+func (s *AcquisitionService) executeInstall(ctx context.Context, candidate CapabilityCandidate, target DeploymentTarget) (InstalledCapability, error) {
+	s.mu.RLock()
+	installerReg := s.installerRegistry
+	s.mu.RUnlock()
+
+	if installerReg == nil {
+		return InstalledCapability{}, ErrInstallerRegistryUnavailable
+	}
+
+	installer, err := installerReg.Resolve(candidate.Install.Method)
+	if err != nil {
+		return InstalledCapability{}, errors.Join(ErrNoInstallerForMethod, err)
+	}
+
+	installed, err := installer.Install(ctx, candidate, target)
+	if err != nil {
+		return InstalledCapability{}, err
+	}
+	return installed, nil
+}
+
+// executeEnable enables the provider by ensuring at least one executable
+// ProviderInstance exists for the provider definition.
+func (s *AcquisitionService) executeEnable(ctx context.Context, candidate CapabilityCandidate) error {
+	s.mu.RLock()
+	reg := s.providerRegistry
+	capSvc := s.capabilityService
+	s.mu.RUnlock()
+
+	if reg == nil {
+		return ErrProviderRegistryUnavailable
+	}
+
+	capID := capability.CapabilityID(candidate.ID)
+	if len(candidate.Capabilities) > 0 {
+		capID = candidate.Capabilities[0]
+	}
+
+	// Already executable? Nothing to do.
+	if capSvc != nil && capSvc.HasExecutableProvider(capID) {
 		return nil
 	}
-}
+	if reg.CountExecutableInstances(capID) > 0 {
+		return nil
+	}
 
-// executeEnable enables the provider after installation.
-func (s *AcquisitionService) executeEnable(ctx context.Context, candidate CapabilityCandidate) error {
-	// Placeholder for actual enable logic.
-	// Concrete implementations will register/enable the provider in the
-	// capability registry.
+	defs := reg.ListByCapability(capID)
+	if len(defs) == 0 {
+		return ErrProviderDefinitionNotFound
+	}
+
+	for _, def := range defs {
+		if def == nil {
+			continue
+		}
+		if err := s.enableProviderDefinition(def, candidate); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
-// executeReconcile verifies provider instances are available and consistent.
+// enableProviderDefinition registers an executable ProviderInstance for a
+// provider definition, enabling the capability for runtime use.
+func (s *AcquisitionService) enableProviderDefinition(def *capability.CapabilityProviderDefinition, candidate CapabilityCandidate) error {
+	s.mu.RLock()
+	reg := s.providerRegistry
+	s.mu.RUnlock()
+
+	if reg == nil {
+		return ErrProviderRegistryUnavailable
+	}
+
+	// Check if an executable instance already exists for this provider.
+	existing := reg.ListInstancesByProvider(def.ID)
+	for _, inst := range existing {
+		if inst != nil && inst.IsExecutable() {
+			return nil
+		}
+	}
+
+	instanceID := capability.ProviderInstanceID(fmt.Sprintf("acq_%s_%d", def.ID, time.Now().UnixNano()))
+
+	inst := capability.CapabilityProviderInstance{
+		ID:           instanceID,
+		ProviderID:   def.ID,
+		CapabilityID: def.CapabilityID,
+		Placement:    def.Placement,
+		Health:       capability.HealthReady,
+		Availability: capability.ProviderAvailabilityAvailable,
+		ExtensionID:  def.ExtensionID,
+		ModuleID:     def.ModuleID,
+	}
+
+	if def.Placement == capability.ProviderPlacementDevice {
+		if candidate.Metadata != nil {
+			if devID, ok := candidate.Metadata["deviceId"].(string); ok && devID != "" {
+				inst.DeviceID = runtimeidentity.DeviceID(devID)
+			}
+			if rtID, ok := candidate.Metadata["runtimeId"].(string); ok && rtID != "" {
+				inst.RuntimeID = runtimeidentity.RuntimeID(rtID)
+			}
+		}
+	}
+
+	if err := reg.RegisterInstance(inst); err != nil {
+		return fmt.Errorf("register instance for provider %s: %w", def.ID, err)
+	}
+
+	return nil
+}
+
+// executeReconcile verifies provider instances are available and consistent
+// after enablement by checking that the capability is now executable.
 func (s *AcquisitionService) executeReconcile(ctx context.Context, candidate CapabilityCandidate) error {
-	// Placeholder for actual reconciliation logic.
-	// Concrete implementations will reconcile provider instances.
-	return nil
+	s.mu.RLock()
+	reg := s.providerRegistry
+	capSvc := s.capabilityService
+	s.mu.RUnlock()
+
+	if reg == nil {
+		return ErrProviderRegistryUnavailable
+	}
+
+	capID := capability.CapabilityID(candidate.ID)
+	if len(candidate.Capabilities) > 0 {
+		capID = candidate.Capabilities[0]
+	}
+
+	// Verify at least one executable instance now exists.
+	if reg.CountExecutableInstances(capID) > 0 {
+		return nil
+	}
+	if capSvc != nil && capSvc.HasExecutableProvider(capID) {
+		return nil
+	}
+
+	return ErrReconcileFailed
 }
 
 // rollbackPlan attempts to undo the execution of a plan after a failure.
 func (s *AcquisitionService) rollbackPlan(ctx context.Context, plan *AcquisitionPlan) error {
-	// Walk the steps in reverse order and undo completed ones.
+	s.mu.RLock()
+	installerReg := s.installerRegistry
+	s.mu.RUnlock()
+
 	for i := len(plan.Steps) - 1; i >= 0; i-- {
 		step := plan.Steps[i]
 		if !step.Completed {
@@ -312,9 +453,18 @@ func (s *AcquisitionService) rollbackPlan(ctx context.Context, plan *Acquisition
 
 		switch step.Action {
 		case "install":
-			// Placeholder: uninstall the candidate.
+			if installerReg != nil && s.providerRegistry != nil {
+				installer, err := installerReg.Resolve(plan.Candidate.Install.Method)
+				if err == nil {
+					_ = installer.Rollback(ctx, InstalledCapability{
+						Candidate: plan.Candidate,
+						Target:    plan.Target,
+					})
+				}
+			}
 		case "enable":
-			// Placeholder: disable the candidate.
+			// Deliberately no-op: do not re-disable providers that may have
+			// been enabled by the user outside this transaction.
 		}
 	}
 	return nil

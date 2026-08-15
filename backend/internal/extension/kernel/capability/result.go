@@ -122,6 +122,8 @@ const (
 	ErrorCodeIdempotencyStateInvalid      = "idempotency_state_invalid"
 	ErrorCodeSecretUnavailable            = "secret_unavailable"
 	ErrorCodeSecretLeaseIssueFailed       = "secret_lease_issue_failed"
+	ErrorCodeProviderNotFound             = "provider_not_found"
+	ErrorCodeProviderUnavailable          = "provider_unavailable"
 )
 
 func ErrorCategoryForCode(code string) ToolErrorCategory {

@@ -41,12 +41,12 @@ func (m *DefinitionMapper) MapToDefinition(view ServiceRuntimeView) (*trusted_se
 	}
 
 	return &trusted_service.ServiceRuntimeDefinition{
-		ServiceID:         definitionID,
-		ExtensionID:       view.ExtensionID,
-		ModuleID:          view.ModuleID,
-		Name:              view.Name,
-		Description:       view.Description,
-		TrustLevel:        "trusted",
+		ServiceID:   definitionID,
+		ExtensionID: view.ExtensionID,
+		ModuleID:    view.ModuleID,
+		Name:        view.Name,
+		Description: view.Description,
+		TrustLevel:  "trusted",
 		Executables: []trusted_service.PlatformExecutable{
 			{
 				Platform:    trusted_service.CurrentPlatform(),
@@ -57,8 +57,8 @@ func (m *DefinitionMapper) MapToDefinition(view ServiceRuntimeView) (*trusted_se
 				},
 			},
 		},
-		Protocol:          protocol.ProtocolVersion,
-		InstancePolicy:    "single",
+		Protocol:       resolveProtocol(view),
+		InstancePolicy: "single",
 		HealthCheck: trusted_service.ServiceHealthCheck{
 			Type:                "heartbeat",
 			Interval:            30 * time.Second,
@@ -150,4 +150,18 @@ func CanonicalizeEnv(env map[string]string) []string {
 		result = append(result, fmt.Sprintf("%s=%s", k, env[k]))
 	}
 	return result
+}
+
+const DesktopPetProtocol = "amitia.desktop.pet/1"
+
+func resolveProtocol(view ServiceRuntimeView) string {
+	if view.Metadata != nil {
+		if proto, ok := view.Metadata["protocol"]; ok && proto != "" {
+			return proto
+		}
+	}
+	if view.RuntimeType == ServiceRuntimeType && view.EntryPoint != "" {
+		return DesktopPetProtocol
+	}
+	return protocol.ProtocolVersion
 }

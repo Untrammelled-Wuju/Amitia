@@ -151,7 +151,15 @@ func (p *RuntimeGraphProvisioner) reconcilePlugin(ctx context.Context, kp Kernel
 	}
 
 	if p.secretRegistrar != nil {
-		grouped := p.extractSecretManifestGrouped(kp)
+		snapshot, err := p.topologyStore.GetTopologySnapshot(runtime.ID)
+		if err != nil {
+			return fmt.Errorf("get topology snapshot for binding validation: %w", err)
+		}
+		view := newTopologyServiceView(snapshot)
+		grouped, errs := p.extractSecretManifestGrouped(kp, view)
+		if len(errs) > 0 {
+			return fmt.Errorf("secret binding validation failed: %v", errs[0])
+		}
 		for serviceID, manifest := range grouped {
 			p.secretRegistrar.RegisterStartupManifest(string(runtime.ID), serviceID, manifest)
 		}
@@ -160,27 +168,66 @@ func (p *RuntimeGraphProvisioner) reconcilePlugin(ctx context.Context, kp Kernel
 	return nil
 }
 
-func (p *RuntimeGraphProvisioner) extractSecretManifestGrouped(kp KernelGamePlugin) map[string][]gamehostsecret.ServiceSecretManifest {
+type topologyServiceView struct {
+	snapshot ghruntime.RuntimeTopologySnapshot
+}
+
+func newTopologyServiceView(snapshot ghruntime.RuntimeTopologySnapshot) *topologyServiceView {
+	return &topologyServiceView{snapshot: snapshot}
+}
+
+func (v *topologyServiceView) HasService(serviceID string) bool {
+	for _, svc := range v.snapshot.Services {
+		if string(svc.ServiceID) == serviceID {
+			return true
+		}
+	}
+	return false
+}
+
+func (v *topologyServiceView) ExecutableServiceCount() int {
+	count := 0
+	for _, svc := range v.snapshot.Services {
+		if svc.ServiceKind == ghdomain.ServiceKindProcess {
+			count++
+		}
+	}
+	return count
+}
+
+func (v *topologyServiceView) DefaultExecutableService() (string, bool) {
+	for _, svc := range v.snapshot.Services {
+		if svc.ServiceKind == ghdomain.ServiceKindProcess {
+			return string(svc.ServiceID), true
+		}
+	}
+	return "", false
+}
+
+func (p *RuntimeGraphProvisioner) extractSecretManifestGrouped(kp KernelGamePlugin, view gamehostsecret.TopologyServiceView) (map[string][]gamehostsecret.ServiceSecretManifest, []error) {
 	grouped := make(map[string][]gamehostsecret.ServiceSecretManifest)
+	var errs []error
 	if len(kp.Extension.SecretRefs) == 0 {
-		return grouped
+		return grouped, nil
 	}
 	for _, sr := range kp.Extension.SecretRefs {
 		if sr.Ref == "" {
 			continue
 		}
-		serviceID := sr.ServiceID
-		if serviceID == "" {
-			serviceID = string(kp.Contribution.ID)
-		}
-		grouped[serviceID] = append(grouped[serviceID], gamehostsecret.ServiceSecretManifest{
+		manifest := gamehostsecret.ServiceSecretManifest{
 			Ref:       kernelsecret.SecretRef(sr.Ref),
 			Purpose:   gamehostsecret.Purpose(sr.Purpose),
 			Required:  sr.Required,
 			ServiceID: sr.ServiceID,
-		})
+		}
+		binded, err := gamehostsecret.ValidateAndBindSecretRef(manifest, view)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		grouped[binded.ServiceID] = append(grouped[binded.ServiceID], *binded)
 	}
-	return grouped
+	return grouped, errs
 }
 
 type bootServiceInfo struct {

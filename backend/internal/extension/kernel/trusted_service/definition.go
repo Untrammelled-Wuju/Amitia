@@ -159,6 +159,7 @@ type ServiceNetworkPolicy struct {
 type ServiceInstance struct {
 	InstanceID      string                    `json:"instance_id"`
 	ServiceID       string                    `json:"service_id"`
+	RuntimeID       string                    `json:"runtime_id,omitempty"`
 	Definition      *ServiceRuntimeDefinition `json:"-"`
 	Generation      int64                     `json:"generation"`
 	Platform        Platform                  `json:"platform"`

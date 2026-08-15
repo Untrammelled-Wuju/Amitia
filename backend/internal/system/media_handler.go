@@ -10,6 +10,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/asr"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
@@ -22,6 +23,27 @@ func (h *Handler) VoiceUpload(c *gin.Context) {
 		return
 	}
 	defer file.Close()
+
+	if h.artifactSvc != nil {
+		owner := currentUserID(c)
+		art, err := h.artifactSvc.Create(c.Request.Context(), artifact.CreateRequest{
+			OwnerUserID: owner,
+			Kind:        artifact.KindAudio,
+			Filename:    header.Filename,
+			Source:      artifact.SourceUpload,
+			Reader:      file,
+		})
+		if err != nil {
+			util.ErrorResponse(c, response.InternalError, "上传失败: "+err.Error(), nil)
+			return
+		}
+		util.SuccessResponse(c, gin.H{
+			"audioUrl":  artifact.URI(art.ID),
+			"duration":  0,
+			"artifactId": string(art.ID),
+		})
+		return
+	}
 
 	voiceDir := filepath.Join("data", "voice_msg")
 	if err := os.MkdirAll(voiceDir, 0755); err != nil {
@@ -60,6 +82,26 @@ func (h *Handler) ImageUpload(c *gin.Context) {
 	}
 	defer file.Close()
 
+	if h.artifactSvc != nil {
+		owner := currentUserID(c)
+		art, err := h.artifactSvc.Create(c.Request.Context(), artifact.CreateRequest{
+			OwnerUserID: owner,
+			Kind:        artifact.KindImage,
+			Filename:    header.Filename,
+			Source:      artifact.SourceUpload,
+			Reader:      file,
+		})
+		if err != nil {
+			util.ErrorResponse(c, response.InternalError, "上传失败: "+err.Error(), nil)
+			return
+		}
+		util.SuccessResponse(c, gin.H{
+			"imageUrl":   artifact.URI(art.ID),
+			"artifactId": string(art.ID),
+		})
+		return
+	}
+
 	imageDir := filepath.Join("data", "images")
 	if err := os.MkdirAll(imageDir, 0755); err != nil {
 		util.ErrorResponse(c, response.InternalError, "创建目录失败", nil)
@@ -97,6 +139,26 @@ func (h *Handler) VideoUpload(c *gin.Context) {
 	}
 	defer file.Close()
 
+	if h.artifactSvc != nil {
+		owner := currentUserID(c)
+		art, err := h.artifactSvc.Create(c.Request.Context(), artifact.CreateRequest{
+			OwnerUserID: owner,
+			Kind:        artifact.KindVideo,
+			Filename:    header.Filename,
+			Source:      artifact.SourceUpload,
+			Reader:      file,
+		})
+		if err != nil {
+			util.ErrorResponse(c, response.InternalError, "上传失败: "+err.Error(), nil)
+			return
+		}
+		util.SuccessResponse(c, gin.H{
+			"videoUrl":   artifact.URI(art.ID),
+			"artifactId": string(art.ID),
+		})
+		return
+	}
+
 	videoDir := filepath.Join("data", "videos")
 	if err := os.MkdirAll(videoDir, 0755); err != nil {
 		util.ErrorResponse(c, response.InternalError, "创建目录失败", nil)
@@ -124,6 +186,15 @@ func (h *Handler) VideoUpload(c *gin.Context) {
 
 	videoUrl := "/videos/" + filename
 	util.SuccessResponse(c, gin.H{"videoUrl": videoUrl})
+}
+
+func currentUserID(c *gin.Context) string {
+	if v, ok := c.Get("userID"); ok {
+		if s, ok := v.(string); ok {
+			return s
+		}
+	}
+	return ""
 }
 
 func (h *Handler) VoiceTranscribe(c *gin.Context) {

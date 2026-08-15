@@ -7,10 +7,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/episodic"
@@ -74,6 +76,8 @@ type Service interface {
 	SetContinuationService(svc interaction.ContinuationService)
 	SetReplanner(replanner interaction.Replanner)
 	SetReflectionProcessor(r interaction.ReflectionProcessor)
+	SetArtifactResolver(resolver ArtifactResolver)
+	GetArtifactResolver() ArtifactResolver
 }
 
 // systemFormatInstruction is injected into every LLM call for WeChat-style line splitting.
@@ -106,6 +110,23 @@ const WechatStylePrompt = "你和用户是比较熟悉的长期对话关系，�
 	"回复中不要使用任何emoji表情符号。\\n" +
 	"不能使用markdown格式。"
 
+type ArtifactResolver interface {
+	Resolve(ctx context.Context, actor string, resourceURI string) (ArtifactResolution, error)
+	Open(ctx context.Context, actor string, resourceURI string) (io.ReadCloser, ArtifactResolution, error)
+}
+
+type ArtifactResolution struct {
+	ID          string
+	OwnerUserID string
+	Kind        string
+	BlobDigest  string
+	SizeBytes   int64
+	MIMEType    string
+	Filename    string
+	Status      string
+	Revision    int64
+}
+
 type service struct {
 	repo                Repository
 	charRepo            character.Repository
@@ -134,6 +155,7 @@ type service struct {
 	continuationService interaction.ContinuationService
 	replanner           interaction.Replanner
 	reflectionProcessor interaction.ReflectionProcessor
+	artifactResolver    ArtifactResolver
 	localModelMu        sync.Mutex
 	localModels         map[string]LocalModelInfer
 }
@@ -203,6 +225,65 @@ func (s *service) SetReplanner(replanner interaction.Replanner) {
 
 func (s *service) SetReflectionProcessor(r interaction.ReflectionProcessor) {
 	s.reflectionProcessor = r
+}
+
+func (s *service) SetArtifactResolver(resolver ArtifactResolver) {
+	s.artifactResolver = resolver
+}
+
+func (s *service) GetArtifactResolver() ArtifactResolver {
+	return s.artifactResolver
+}
+
+type ResolvedAttachment struct {
+	Type        string
+	ResourceURI string
+	MIMEType    string
+	Filename    string
+	SizeBytes   int64
+	ContentHash string
+	Width       int
+	Height      int
+	DurationMS  int64
+}
+
+func (s *service) ResolveAttachment(ctx context.Context, actor string, input MessageAttachmentInput) (*ResolvedAttachment, error) {
+	if s.artifactResolver == nil {
+		return &ResolvedAttachment{
+			Type:        input.Type,
+			ResourceURI: input.ResourceURI,
+			MIMEType:    input.MIMEType,
+			Filename:    input.Filename,
+		}, nil
+	}
+	_, err := artifact.ParseURI(input.ResourceURI)
+	if err != nil {
+		return &ResolvedAttachment{
+			Type:        input.Type,
+			ResourceURI: input.ResourceURI,
+			MIMEType:    input.MIMEType,
+			Filename:    input.Filename,
+		}, nil
+	}
+	art, err := s.artifactResolver.Resolve(ctx, actor, input.ResourceURI)
+	if err != nil {
+		return nil, fmt.Errorf("attachment_not_owned: %w", err)
+	}
+	if art.Status != "ready" {
+		return nil, fmt.Errorf("attachment_not_ready")
+	}
+	kind := art.Kind
+	if input.Type != "" {
+		kind = input.Type
+	}
+	return &ResolvedAttachment{
+		Type:        kind,
+		ResourceURI: input.ResourceURI,
+		MIMEType:    art.MIMEType,
+		Filename:    art.Filename,
+		SizeBytes:   art.SizeBytes,
+		ContentHash: art.BlobDigest,
+	}, nil
 }
 
 func (s *service) invalidateLocalModels(ctx context.Context) {

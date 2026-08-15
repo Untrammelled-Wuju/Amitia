@@ -2,6 +2,7 @@ package sdk
 
 import (
 	"context"
+	"encoding/json"
 
 	"github.com/u-ai/backend/pkg/gameplugin/protocol/contracts"
 )

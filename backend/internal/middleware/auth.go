@@ -10,17 +10,13 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/u-ai/backend/config"
 	desktoppetAuth "github.com/u-ai/backend/internal/auth"
+	"github.com/u-ai/backend/internal/accountsession"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
 
-type JWTClaims struct {
-	UserId   int    `json:"userId"`
-	Username string `json:"username"`
-	Role     string `json:"role"`
-	jwt.RegisteredClaims
-}
+type JWTClaims = accountsession.AccessClaims
 
 var publicPathPrefixes = []string{
 	"/api/auth/login",
@@ -94,16 +90,17 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		actor := &desktoppetAuth.ActorContext{
 			ActorType:   actorType,
-			UserID:      runtimeidentity.UserID(fmt.Sprintf("%d", claims.UserId)),
+			UserID:      runtimeidentity.UserID(fmt.Sprintf("%d", claims.UserID)),
 			Roles:       roles,
 			Permissions: permissions,
 			AuthMethod:  "jwt",
+			SessionID:   claims.SessionID,
 		}
 
 		ctx := desktoppetAuth.WithActor(c.Request.Context(), actor)
 		c.Request = c.Request.WithContext(ctx)
 		c.Set("actorContext", actor)
-		c.Set("userId", fmt.Sprintf("%d", claims.UserId))
+		c.Set("userId", fmt.Sprintf("%d", claims.UserID))
 		c.Set("username", claims.Username)
 		c.Set("role", claims.Role)
 		c.Next()

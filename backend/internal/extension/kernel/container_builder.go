@@ -656,7 +656,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	providerLifecycle := capability.NewProviderLifecycleService(capabilityProviderRegistry, providerEventSink)
 	extensionProviderReconciler := capability.NewExtensionProviderReconciler(providerLifecycle, capabilityProviderRegistry)
 	providerInstanceReconciler := capability.NewProviderInstanceReconciler(providerLifecycle, capabilityProviderRegistry, runtimeidentity.Identity{})
-	capabilityResolver := capability.NewResolver(capabilityProviderRegistry)
+	builtinProviderReconciler := capability.NewBuiltinProviderReconciler(capabilityProviderRegistry, providerLifecycle)
+	capabilityResolver := capability.NewResolver(capability.NewProviderCatalogAdapter(capabilityProviderRegistry))
+	capabilityResolver.SetRuntimeCatalog(capability.NewRuntimeAdapterCatalogAdapter(adapterRegistry))
 	capabilityService := capability.NewCapabilityService(capabilityProviderRegistry)
 
 	builtinCatalog := builtin.NewCatalog()
@@ -686,6 +688,10 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if err := builtinBootstrapper.Reconcile(initCtx); err != nil {
 		cancel()
 		return nil, fmt.Errorf("builtin reconcile failed: %w", err)
+	}
+	if err := builtinProviderReconciler.Reconcile(); err != nil {
+		cancel()
+		return nil, fmt.Errorf("builtin provider reconcile failed: %w", err)
 	}
 	cancel()
 

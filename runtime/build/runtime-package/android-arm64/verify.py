@@ -148,10 +148,10 @@ def verify_package(package_path, runtime_version, commit):
         "metadata/package-index.json",
         "metadata/component-lock.json",
         "metadata/component-index.json",
+        "metadata/SHA256SUMS",
         "payload/rootfs/",
         "payload/runtime/",
         "licenses/THIRD_PARTY_NOTICES.md",
-        "SHA256SUMS",
     }
     for r in required_entries:
         if not any(n == r or n.startswith(r) for n in names):
@@ -172,11 +172,10 @@ def verify_package(package_path, runtime_version, commit):
                 issues.append("Package hostPlatform错误")
             if target.get("hostAbi") != "arm64-v8a":
                 issues.append("Package hostAbi错误")
-            payloads = idx.get("payloads", {})
-            if "rootfs" not in payloads or "runtime" not in payloads:
+            payloads = idx.get("payloads", [])
+            payload_roles = {p.get("role") for p in payloads if isinstance(p, dict)}
+            if "rootfs" not in payload_roles or "runtime" not in payload_roles:
                 issues.append("Package缺少Payload声明")
-            if len(payloads) > 2:
-                issues.append(f"Package声明了过多Payload: {list(payloads.keys())}")
     if not issues:
         print(f"包体验证通过: {len(names)} entry")
     return issues

@@ -14,6 +14,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/u-ai/backend/internal/accountsession"
 	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
@@ -31,14 +32,10 @@ type AuthConfig struct {
 	AllowedOrigins           []string
 	SessionService           *DesktopSessionService
 	DesktopInstanceValidator func(string) bool
+	AccountSessions          *accountsession.Validator
 }
 
-type JWTClaims struct {
-	UserId   int    `json:"userId"`
-	Username string `json:"username"`
-	Role     string `json:"role"`
-	jwt.RegisteredClaims
-}
+type AccessClaims = accountsession.AccessClaims
 
 const (
 	AuthMethodJWT             = "jwt"
@@ -166,14 +163,48 @@ func handleNetworkAuth(c *gin.Context, cfg AuthConfig) {
 		return
 	}
 
-	actor, err := parseAndValidateJWT(tokenStr, cfg.JWTSecret, cfg.JWTIssuer, cfg.JWTAudience)
+	claims, err := parseAndValidateJWT(tokenStr, cfg.JWTSecret, cfg.JWTIssuer, cfg.JWTAudience)
 	if err != nil {
 		util.ErrorResponse(c, response.InvalidToken, "令牌无效", nil)
 		c.Abort()
 		return
 	}
-	actor.CorrelationID = sanitizeCorrelationID(c.GetHeader("X-Request-ID"))
 
+	if cfg.AccountSessions != nil && claims.SessionID != "" {
+		result := cfg.AccountSessions.ValidateAccessSession(claims.SessionID, claims.UserID)
+		if !result.Valid {
+			switch {
+			case errors.Is(result.Reason, accountsession.ErrSessionRevoked):
+				util.ErrorResponse(c, response.Unauthorized, "auth.session_revoked", nil)
+			case errors.Is(result.Reason, accountsession.ErrSessionExpired):
+				util.ErrorResponse(c, response.Unauthorized, "auth.session_expired", nil)
+			default:
+				util.ErrorResponse(c, response.Unauthorized, "auth.access_invalid", nil)
+			}
+			c.Abort()
+			return
+		}
+	}
+
+	actorType := auth.ActorTypeUser
+	roles := []string{"user"}
+	permissions := auth.DefaultUserPermissions()
+	if claims.Role == "admin" {
+		actorType = auth.ActorTypeAdmin
+		roles = []string{"admin"}
+		permissions = auth.AdminPermissions()
+	}
+
+	actor := &auth.ActorContext{
+		ActorType:     actorType,
+		UserID:        runtimeidentity.UserID(fmt.Sprintf("%d", claims.UserID)),
+		Roles:         roles,
+		Permissions:   permissions,
+		AuthMethod:    AuthMethodJWT,
+		SessionID:     claims.SessionID,
+		RequestID:     generateRequestID(),
+		CorrelationID: sanitizeCorrelationID(c.GetHeader("X-Request-ID")),
+	}
 	applyActorToContext(c, actor)
 }
 
@@ -220,19 +251,23 @@ func handleLocalSingleUserAuth(c *gin.Context, cfg AuthConfig) {
 
 	jwtStr := extractBearerToken(c)
 	if jwtStr != "" {
-		claims := &JWTClaims{}
-		token, err := jwt.ParseWithClaims(jwtStr, claims, func(t *jwt.Token) (interface{}, error) {
-			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-				return nil, fmt.Errorf("unexpected signing method")
+		claims, err := parseAndValidateJWT(jwtStr, cfg.JWTSecret, cfg.JWTIssuer, cfg.JWTAudience)
+		if err == nil && claims.UserID > 0 {
+			actorType := auth.ActorTypeUser
+			roles := []string{"user"}
+			permissions := auth.DefaultUserPermissions()
+			if claims.Role == "admin" {
+				actorType = auth.ActorTypeAdmin
+				roles = []string{"admin"}
+				permissions = auth.AdminPermissions()
 			}
-			return []byte(cfg.JWTSecret), nil
-		}, jwt.WithValidMethods([]string{"HS256", "HS384", "HS512"}))
-		if err == nil && token.Valid && claims.UserId > 0 {
 			actor := &auth.ActorContext{
-				ActorType:      auth.ActorTypeUser,
-				UserID:         runtimeidentity.UserID(fmt.Sprintf("%d", claims.UserId)),
-				Roles:          []string{claims.Role},
-				AuthMethod:     "jwt",
+				ActorType:      actorType,
+				UserID:         runtimeidentity.UserID(fmt.Sprintf("%d", claims.UserID)),
+				Roles:          roles,
+				Permissions:    permissions,
+				AuthMethod:     AuthMethodJWT,
+				SessionID:      claims.SessionID,
 				IsLocalTrusted: true,
 			}
 			applyActorToContext(c, actor)
@@ -266,8 +301,10 @@ func handleMaintenanceAuth(c *gin.Context, cfg AuthConfig) {
 
 	tokenStr := extractBearerToken(c)
 	if tokenStr != "" {
-		actor, err := parseAndValidateJWT(tokenStr, cfg.JWTSecret, cfg.JWTIssuer, cfg.JWTAudience)
+		claims, err := parseAndValidateJWT(tokenStr, cfg.JWTSecret, cfg.JWTIssuer, cfg.JWTAudience)
 		if err == nil {
+			actor := buildAdminActor(c, AuthMethodLocalToken)
+			actor.SessionID = claims.SessionID
 			applyActorToContext(c, actor)
 			return
 		}
@@ -285,8 +322,8 @@ func extractBearerToken(c *gin.Context) string {
 	return ""
 }
 
-func parseAndValidateJWT(tokenStr, secret, issuer, audience string) (*auth.ActorContext, error) {
-	claims := &JWTClaims{}
+func parseAndValidateJWT(tokenStr, secret, issuer, audience string) (*AccessClaims, error) {
+	claims := &AccessClaims{}
 	token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
 		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
@@ -307,28 +344,11 @@ func parseAndValidateJWT(tokenStr, secret, issuer, audience string) (*auth.Actor
 		return nil, errors.New("invalid token")
 	}
 
-	if claims.UserId <= 0 {
+	if claims.UserID <= 0 {
 		return nil, errors.New("invalid user id")
 	}
 
-	actorType := auth.ActorTypeUser
-	roles := []string{"user"}
-	permissions := auth.DefaultUserPermissions()
-	if claims.Role == "admin" {
-		actorType = auth.ActorTypeAdmin
-		roles = []string{"admin"}
-		permissions = auth.AdminPermissions()
-	}
-
-	return &auth.ActorContext{
-		ActorType:     actorType,
-		UserID:        runtimeidentity.UserID(fmt.Sprintf("%d", claims.UserId)),
-		Roles:         roles,
-		Permissions:   permissions,
-		AuthMethod:    AuthMethodJWT,
-		RequestID:     generateRequestID(),
-		CorrelationID: "",
-	}, nil
+	return claims, nil
 }
 
 func secureEqual(a, b string) bool {

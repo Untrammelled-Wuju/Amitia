@@ -10,6 +10,7 @@ import (
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/iosnative"
+	"github.com/u-ai/backend/internal/iosnative/background"
 	"github.com/u-ai/backend/internal/nativebridge"
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
@@ -30,6 +31,7 @@ type IOSNativeProviderCapability struct {
 type iosNativeProviderInstance struct {
 	mu             sync.RWMutex
 	bridge         nativebridge.Bridge
+	taskRuntime    background.TaskRuntimePort
 	domainProvider *iosnative.Provider
 	host           runtimehost.RuntimeHost
 	orch           *runtimeorchestrator.RuntimeOrchestrator
@@ -47,34 +49,44 @@ func newIOSNativeProviderInstance(
 	}
 
 	if bridge != nil {
-		domain, err := iosnative.NewCanonicalProvider(bridge)
-		if err != nil {
-			instance.bridge = bridge
-			return instance
-		}
 		instance.bridge = bridge
-		instance.domainProvider = domain
+		instance.rebuildDomainProvider()
 	}
 
 	return instance
+}
+
+func (p *iosNativeProviderInstance) rebuildDomainProvider() {
+	ports := []background.TaskRuntimePort{}
+	if p.taskRuntime != nil {
+		ports = append(ports, p.taskRuntime)
+	}
+	domain, err := iosnative.NewCanonicalProvider(p.bridge, ports...)
+	if err != nil {
+		return
+	}
+	p.domainProvider = domain
 }
 
 func (p *iosNativeProviderInstance) SetBridge(bridge nativebridge.Bridge) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
-	domain, err := iosnative.NewCanonicalProvider(bridge)
-	if err != nil {
-		return err
-	}
-
 	p.bridge = bridge
-	p.domainProvider = domain
+	p.rebuildDomainProvider()
 	p.generation++
 	if p.orch != nil {
 		p.reportComponentStateLocked()
 	}
 	return nil
+}
+
+func (p *iosNativeProviderInstance) SetTaskRuntimePort(port background.TaskRuntimePort) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	p.taskRuntime = port
+	p.rebuildDomainProvider()
 }
 
 func (p *iosNativeProviderInstance) SetOrchestrator(orch *runtimeorchestrator.RuntimeOrchestrator) {

@@ -20,17 +20,19 @@ var upgrader = websocket.Upgrader{
 }
 
 type RelayHandler struct {
-	mu       sync.RWMutex
-	bridges  map[string]RelayBridge
-	sessions map[string]*RelayConnection
+	mu         sync.RWMutex
+	bridges    map[string]RelayBridge
+	sessions   map[string]*RelayConnection
+	eventSinks map[string]bool
 
 	connectionCounter atomic.Uint64
 }
 
 func NewRelayHandler() *RelayHandler {
 	return &RelayHandler{
-		bridges:  make(map[string]RelayBridge),
-		sessions: make(map[string]*RelayConnection),
+		bridges:    make(map[string]RelayBridge),
+		sessions:   make(map[string]*RelayConnection),
+		eventSinks: make(map[string]bool),
 	}
 }
 
@@ -109,15 +111,21 @@ func (h *RelayHandler) GetBridge(platform string) (RelayBridge, bool) {
 }
 
 func (h *RelayHandler) SetEventSink(platform string, sink NativeEventSink) {
-	h.mu.RLock()
-	bridge, ok := h.bridges[platform]
-	h.mu.RUnlock()
-	if !ok {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if _, ok := h.bridges[platform]; !ok {
 		return
 	}
-	if b, ok := bridge.(interface{ SetEventSink(NativeEventSink) }); ok {
+	if b, ok := h.bridges[platform].(interface{ SetEventSink(NativeEventSink) }); ok {
 		b.SetEventSink(sink)
 	}
+	h.eventSinks[platform] = true
+}
+
+func (h *RelayHandler) HasEventSink(platform string) bool {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return h.eventSinks[platform]
 }
 
 type relayEventSink struct {

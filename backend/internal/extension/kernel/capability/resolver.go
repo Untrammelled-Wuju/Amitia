@@ -3,6 +3,7 @@ package capability
 import (
 	"errors"
 	"fmt"
+	"time"
 )
 
 type CapabilityResolver interface {
@@ -10,56 +11,96 @@ type CapabilityResolver interface {
 }
 
 type Resolver struct {
-	registry *ProviderRegistry
+	catalog    ProviderCatalog
+	runtime    RuntimeCatalog
+	host       RoutingHostContext
+	policy     RoutingPolicy
 }
 
-func NewResolver(registry *ProviderRegistry) *Resolver {
-	return &Resolver{registry: registry}
+func NewResolver(catalog ProviderCatalog) *Resolver {
+	return &Resolver{
+		catalog: catalog,
+		policy:  ProductionRoutingPolicy(),
+	}
+}
+
+func NewResolverWithPolicy(catalog ProviderCatalog, policy RoutingPolicy) *Resolver {
+	return &Resolver{
+		catalog: catalog,
+		policy:  policy,
+	}
+}
+
+func (r *Resolver) SetRuntimeCatalog(rt RuntimeCatalog) {
+	r.runtime = rt
+}
+
+func (r *Resolver) SetHostContext(host RoutingHostContext) {
+	r.host = host
+}
+
+func (r *Resolver) SetPolicy(policy RoutingPolicy) {
+	r.policy = policy
 }
 
 func (r *Resolver) Resolve(request CapabilityResolutionRequest) (CapabilityResolution, error) {
+	start := time.Now()
 	result := CapabilityResolution{
 		CapabilityID: request.CapabilityID,
+		Decision:     RoutingNoProvider,
 	}
 
 	if ParseCapabilityID(string(request.CapabilityID)) == "" {
-		result.ReasonCodes = append(result.ReasonCodes, ResolutionFailureCapabilityNotRegistered)
+		result.ReasonCodes = append(result.ReasonCodes, string(ResolutionFailureCapabilityNotRegistered))
+		result.Decision = RoutingNoProvider
+		result.Trace = r.buildTrace(request, result, start)
 		return result, fmt.Errorf("invalid capability id: %s", request.CapabilityID)
 	}
 
-	defs := r.registry.ListByCapability(request.CapabilityID)
+	defs := r.catalog.ListDefinitionsByCapability(request.CapabilityID)
 	if len(defs) == 0 {
-		result.ReasonCodes = append(result.ReasonCodes, ResolutionFailureCapabilityNotRegistered)
+		result.ReasonCodes = append(result.ReasonCodes, string(ResolutionFailureCapabilityNotRegistered))
+		result.Decision = RoutingNoProvider
+		result.Trace = r.buildTrace(request, result, start)
 		return result, fmt.Errorf("%w: %s", ErrCapabilityNotRegistered, request.CapabilityID)
 	}
 
-	filtered := r.applyHardFilter(defs, request)
-	if len(filtered) == 0 {
-		result.ReasonCodes = append(result.ReasonCodes, ResolutionFailureNoAvailableProvider)
+	hardFiltered, rejections := r.applyHardFilter(defs, request)
+	result.CandidateCount = len(hardFiltered)
+	result.RejectedCount = len(rejections)
+
+	if len(hardFiltered) == 0 {
+		result.ReasonCodes = append(result.ReasonCodes, string(ResolutionFailureNoAvailableProvider))
+		result.Decision = r.classifyRejection(rejections)
+		result.Trace = r.buildTraceWithRejections(request, result, rejections, start)
 		return result, fmt.Errorf("%w: %s", ErrNoAvailableProvider, request.CapabilityID)
 	}
 
-	instances := r.collectExecutableInstances(filtered, request)
+	instances := r.collectExecutableInstances(hardFiltered, request)
 	if len(instances) == 0 {
-		result.ReasonCodes = append(result.ReasonCodes, ResolutionFailureNoAvailableProvider)
+		result.ReasonCodes = append(result.ReasonCodes, string(ResolutionFailureNoAvailableProvider))
+		result.Decision = RoutingNoHealthyInstance
+		result.Trace = r.buildTraceWithRejections(request, result, rejections, start)
 		return result, fmt.Errorf("%w: no executable instance for %s", ErrNoAvailableProvider, request.CapabilityID)
 	}
 
-	result.CandidateCount = len(filtered)
-
 	ranking := &ResolutionRanking{
-		defs:      filtered,
+		defs:      hardFiltered,
 		instances: instances,
 		request:   request,
 	}
 
 	ranked, err := ranking.Rank()
 	if err != nil {
-		result.ReasonCodes = append(result.ReasonCodes, ResolutionFailureProviderConflict)
+		result.ReasonCodes = append(result.ReasonCodes, string(ResolutionFailureProviderConflict))
+		result.Decision = RoutingNoProvider
+		result.Trace = r.buildTraceWithRejections(request, result, rejections, start)
 		return result, fmt.Errorf("ranking conflict: %w", err)
 	}
 	if len(ranked) == 0 {
-		result.ReasonCodes = append(result.ReasonCodes, ResolutionFailureNoAvailableProvider)
+		result.ReasonCodes = append(result.ReasonCodes, string(ResolutionFailureNoAvailableProvider))
+		result.Decision = RoutingNoHealthyInstance
+		result.Trace = r.buildTraceWithRejections(request, result, rejections, start)
 		return result, fmt.Errorf("%w: no ranked provider for %s", ErrNoAvailableProvider, request.CapabilityID)
 	}
 
@@ -67,54 +108,112 @@ func (r *Resolver) Resolve(request CapabilityResolutionRequest) (CapabilityResol
 	result.Provider = *winner.Definition
 	result.ProviderInstance = *winner.Instance
 	result.ExecutionTarget = buildExecutionTarget(winner.Definition, winner.Instance)
+	result.Decision = RoutingResolved
+	result.ReasonCodes = nil
+	result.Trace = r.buildTraceWithRejections(request, result, rejections, start)
 
 	return result, nil
 }
 
-func (r *Resolver) applyHardFilter(defs []*CapabilityProviderDefinition, request CapabilityResolutionRequest) []*CapabilityProviderDefinition {
-	var filtered []*CapabilityProviderDefinition
-	for _, def := range defs {
-		if def == nil {
+func (r *Resolver) applyHardFilter(defs []CapabilityProviderDefinition, request CapabilityResolutionRequest) ([]CapabilityProviderDefinition, []CandidateRejection) {
+	var filtered []CapabilityProviderDefinition
+	var rejections []CandidateRejection
+
+	for i := range defs {
+		def := defs[i]
+		if def.CapabilityID != request.CapabilityID {
+			rejections = append(rejections, CandidateRejection{
+				ProviderID: def.ID,
+				Reason:     RejectionCapabilityMismatch,
+			})
 			continue
 		}
-		if def.CapabilityID != request.CapabilityID {
+		if !r.policy.AllowCore && def.Placement == ProviderPlacementCore {
+			rejections = append(rejections, CandidateRejection{
+				ProviderID: def.ID,
+				Reason:     RejectionPlacementNotAllowed,
+			})
+			continue
+		}
+		if !r.policy.AllowDevice && def.Placement == ProviderPlacementDevice {
+			rejections = append(rejections, CandidateRejection{
+				ProviderID: def.ID,
+				Reason:     RejectionPlacementNotAllowed,
+			})
 			continue
 		}
 		if request.RequiredPlacement != "" && def.Placement != request.RequiredPlacement {
+			rejections = append(rejections, CandidateRejection{
+				ProviderID: def.ID,
+				Reason:     RejectionPlacementNotAllowed,
+			})
 			continue
 		}
-		if !request.AllowCore && def.Placement == ProviderPlacementCore && request.RequiredPlacement == "" {
-			continue
-		}
-		if !request.AllowDevice && def.Placement == ProviderPlacementDevice {
-			continue
+		if r.policy.RequireAvailable || r.policy.RequireHealthy {
+			insts := r.catalog.ListInstancesByProvider(def.ID)
+			hasHealthy := false
+			for _, inst := range insts {
+				if inst.IsExecutable() {
+					hasHealthy = true
+					break
+				}
+			}
+			if !hasHealthy {
+				rejections = append(rejections, CandidateRejection{
+					ProviderID: def.ID,
+					Reason:     RejectionProviderUnhealthy,
+				})
+				continue
+			}
 		}
 		if request.Platform != "" && !matchPlatform(def.Platforms, request.Platform) {
+			rejections = append(rejections, CandidateRejection{
+				ProviderID: def.ID,
+				Reason:     RejectionPlatformMismatch,
+			})
+			continue
+		}
+		if def.Runtime.RuntimeType == "" {
+			rejections = append(rejections, CandidateRejection{
+				ProviderID: def.ID,
+				Reason:     RejectionRuntimeTypeMismatch,
+			})
+			continue
+		}
+		if r.runtime != nil && !r.runtime.Supports(def.Runtime.RuntimeType) {
+			rejections = append(rejections, CandidateRejection{
+				ProviderID: def.ID,
+				Reason:     RejectionRuntimeAdapterUnavailable,
+			})
 			continue
 		}
 		if request.ExtensionID != "" && def.ExtensionID != request.ExtensionID {
+			rejections = append(rejections, CandidateRejection{
+				ProviderID: def.ID,
+				Reason:     RejectionCapabilityMismatch,
+			})
 			continue
 		}
 		if request.ModuleID != "" && def.ModuleID != request.ModuleID {
+			rejections = append(rejections, CandidateRejection{
+				ProviderID: def.ID,
+				Reason:     RejectionCapabilityMismatch,
+			})
 			continue
 		}
 		filtered = append(filtered, def)
 	}
-	return filtered
+	return filtered, rejections
 }
 
-func (r *Resolver) collectExecutableInstances(defs []*CapabilityProviderDefinition, request CapabilityResolutionRequest) []*CapabilityProviderInstance {
+func (r *Resolver) collectExecutableInstances(defs []CapabilityProviderDefinition, request CapabilityResolutionRequest) []CapabilityProviderInstance {
 	seen := make(map[ProviderInstanceID]bool)
-	var instances []*CapabilityProviderInstance
-	for _, def := range defs {
-		if def == nil {
-			continue
-		}
-		providerInsts := r.registry.ListInstancesByProvider(def.ID)
+	var instances []CapabilityProviderInstance
+
+	for i := range defs {
+		def := defs[i]
+		providerInsts := r.catalog.ListInstancesByProvider(def.ID)
 		for _, inst := range providerInsts {
-			if inst == nil {
-				continue
-			}
 			if !inst.IsExecutable() {
 				continue
 			}
@@ -129,6 +228,49 @@ func (r *Resolver) collectExecutableInstances(defs []*CapabilityProviderDefiniti
 		}
 	}
 	return instances
+}
+
+func (r *Resolver) classifyRejection(rejections []CandidateRejection) RoutingDecision {
+	if len(rejections) == 0 {
+		return RoutingNoProvider
+	}
+	counts := make(map[CandidateRejectionReason]int)
+	for _, rej := range rejections {
+		counts[rej.Reason]++
+	}
+	if counts[RejectionPlacementNotAllowed] > 0 {
+		return RoutingPlacementUnavailable
+	}
+	if counts[RejectionPlatformMismatch] > 0 {
+		return RoutingPlatformMismatch
+	}
+	if counts[RejectionRuntimeTypeMismatch] > 0 || counts[RejectionRuntimeAdapterUnavailable] > 0 {
+		return RoutingRuntimeUnavailable
+	}
+	if counts[RejectionProviderUnhealthy] > 0 || counts[RejectionProviderUnavailable] > 0 {
+		return RoutingNoHealthyInstance
+	}
+	return RoutingNoProvider
+}
+
+func (r *Resolver) buildTrace(request CapabilityResolutionRequest, result CapabilityResolution, start time.Time) *RoutingTrace {
+	return &RoutingTrace{
+		CapabilityID:   request.CapabilityID,
+		CandidateCount: result.CandidateCount,
+		RejectedCount:  result.RejectedCount,
+		Decision:       result.Decision,
+		Duration:       time.Since(start),
+	}
+}
+
+func (r *Resolver) buildTraceWithRejections(request CapabilityResolutionRequest, result CapabilityResolution, rejections []CandidateRejection, start time.Time) *RoutingTrace {
+	trace := r.buildTrace(request, result, start)
+	trace.Rejections = rejections
+	if result.Decision == RoutingResolved {
+		trace.WinnerProviderID = result.Provider.ID
+		trace.WinnerInstanceID = result.ProviderInstance.ID
+	}
+	return trace
 }
 
 func buildExecutionTarget(def *CapabilityProviderDefinition, inst *CapabilityProviderInstance) InvocationExecutionTarget {

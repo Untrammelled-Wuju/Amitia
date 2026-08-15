@@ -6,9 +6,9 @@ import (
 )
 
 const (
-	MethodHostAPIInvoke     = "host_api.invoke"
-	MethodHostAPIQueryCaps  = "host_api.query_capabilities"
-	MethodHostAPIRateLimit  = "host_api.rate_limit_status"
+	MethodHostInvoke       = "host.invoke"
+	MethodHostQueryCaps    = "host_api.query_capabilities"
+	MethodHostRateLimit    = "host_api.rate_limit_status"
 )
 
 const (
@@ -17,9 +17,9 @@ const (
 	HostAPIExecute = "execute"
 	HostAPINotify  = "notify"
 
-	HostAPISuccess = "success"
-	HostAPIFailed  = "failed"
-	HostAPITimeout = "timeout"
+	HostAPISuccess   = "success"
+	HostAPIFailed    = "failed"
+	HostAPITimeout   = "timeout"
 	HostAPICancelled = "cancelled"
 
 	HostAPIPermissionDenied = "permission_denied"
@@ -32,7 +32,7 @@ const (
 	HostAPIHostUnavailable  = "host_unavailable"
 )
 
-type HostAPIInvokeInput struct {
+type HostInvokeInput struct {
 	Method     string          `json:"method"`
 	Version    int             `json:"version,omitempty"`
 	Input      json.RawMessage `json:"input"`
@@ -42,7 +42,7 @@ type HostAPIInvokeInput struct {
 	TimeoutMs  int             `json:"timeoutMs,omitempty"`
 }
 
-type HostAPIInvokeResult struct {
+type HostInvokeResult struct {
 	Status     string          `json:"status"`
 	Output     json.RawMessage `json:"output,omitempty"`
 	Method     string          `json:"method,omitempty"`
@@ -71,27 +71,31 @@ type HostAPIQueryCapsResult struct {
 }
 
 type HostAPIRateLimitStatusResult struct {
-	Limit    int `json:"limit"`
-	Remaining int `json:"remaining"`
-	ResetAt  int64 `json:"resetAt"`
+	Limit     int   `json:"limit"`
+	Remaining int   `json:"remaining"`
+	ResetAt   int64 `json:"resetAt"`
 }
 
-func (c *Client) InvokeHostAPI(ctx context.Context, input HostAPIInvokeInput, opts ...MessageOption) (HostAPIInvokeResult, error) {
-	envelope, err := c.sendHostRequest(ctx, MethodHostAPIInvoke, input, opts...)
+func (c *Client) InvokeHostMethod(ctx context.Context, input HostInvokeInput, opts ...MessageOption) (HostInvokeResult, error) {
+	envelope, err := c.SendReservedRequest(ctx, MethodHostInvoke, input, opts...)
 	if err != nil {
-		return HostAPIInvokeResult{}, err
+		return HostInvokeResult{}, err
 	}
-	var out HostAPIInvokeResult
+	var out HostInvokeResult
 	if len(envelope.Payload) > 0 {
 		if err := json.Unmarshal(envelope.Payload, &out); err != nil {
-			return HostAPIInvokeResult{}, NewEncodeError("unmarshal host api invoke response: %v", err)
+			return HostInvokeResult{}, NewEncodeError("unmarshal host invoke response: %v", err)
 		}
 	}
 	return out, nil
 }
 
+func (c *Client) InvokeHostAPI(ctx context.Context, input HostInvokeInput, opts ...MessageOption) (HostInvokeResult, error) {
+	return c.InvokeHostMethod(ctx, input, opts...)
+}
+
 func (c *Client) QueryHostAPICapabilities(ctx context.Context, input HostAPIQueryCapsInput, opts ...MessageOption) (HostAPIQueryCapsResult, error) {
-	envelope, err := c.sendHostRequest(ctx, MethodHostAPIQueryCaps, input, opts...)
+	envelope, err := c.SendReservedRequest(ctx, MethodHostQueryCaps, input, opts...)
 	if err != nil {
 		return HostAPIQueryCapsResult{}, err
 	}
@@ -106,7 +110,7 @@ func (c *Client) QueryHostAPICapabilities(ctx context.Context, input HostAPIQuer
 
 func (c *Client) QueryHostAPIRateLimit(ctx context.Context, method string, opts ...MessageOption) (HostAPIRateLimitStatusResult, error) {
 	input := map[string]any{"method": method}
-	envelope, err := c.sendHostRequest(ctx, MethodHostAPIRateLimit, input, opts...)
+	envelope, err := c.SendReservedRequest(ctx, MethodHostRateLimit, input, opts...)
 	if err != nil {
 		return HostAPIRateLimitStatusResult{}, err
 	}
