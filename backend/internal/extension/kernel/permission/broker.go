@@ -106,6 +106,10 @@ func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request Permissi
 		Missing:       make([]PermissionRequirement, 0),
 	}
 
+	hasHardDeny := false
+	hasForcedApprovalMissing := false
+	hasNormalMissing := false
+
 	for _, req := range request.Requirements {
 		def, ok := b.registry.Get(req.PermissionID)
 		if !ok {
@@ -114,6 +118,7 @@ func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request Permissi
 				Code:       "unknown_permission",
 				Permission: req.PermissionID,
 			})
+			hasHardDeny = true
 			continue
 		}
 
@@ -123,6 +128,7 @@ func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request Permissi
 				Code:       "trusted_only",
 				Permission: req.PermissionID,
 			})
+			hasHardDeny = true
 			continue
 		}
 
@@ -132,6 +138,7 @@ func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request Permissi
 				Code:       "background_not_allowed",
 				Permission: req.PermissionID,
 			})
+			hasHardDeny = true
 			continue
 		}
 
@@ -142,6 +149,7 @@ func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request Permissi
 				Code:       "scope_not_allowed",
 				Permission: req.PermissionID,
 			})
+			hasHardDeny = true
 			continue
 		}
 
@@ -153,6 +161,7 @@ func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request Permissi
 						Code:       "system_policy_deny",
 						Permission: req.PermissionID,
 					})
+					hasHardDeny = true
 				}
 				continue
 			}
@@ -166,18 +175,31 @@ func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request Permissi
 						Code:       "execution_policy_deny",
 						Permission: req.PermissionID,
 					})
+					hasHardDeny = true
 				}
 				continue
 			}
 		}
 
-		if decision := b.applyRemoteExecutionPolicy(def, request.ExecutionContext); decision != "" {
-			if decision == DecisionDeny {
+		remoteDecision := b.applyRemoteExecutionPolicy(def, request.ExecutionContext)
+		if remoteDecision == DecisionDeny {
+			result.Missing = append(result.Missing, req)
+			result.Reasons = append(result.Reasons, PermissionReason{
+				Code:       "remote_execution_denied",
+				Permission: req.PermissionID,
+			})
+			hasHardDeny = true
+			continue
+		}
+
+		if remoteDecision == DecisionRequireApproval {
+			if !b.validateApprovalRecord(req.PermissionID, request) {
 				result.Missing = append(result.Missing, req)
 				result.Reasons = append(result.Reasons, PermissionReason{
-					Code:       "remote_execution_denied",
+					Code:       "remote_approval_required",
 					Permission: req.PermissionID,
 				})
+				hasForcedApprovalMissing = true
 				continue
 			}
 		}
@@ -209,16 +231,22 @@ func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request Permissi
 				Code:       "remote_bound_grant_required",
 				Permission: req.PermissionID,
 			})
+			hasForcedApprovalMissing = true
 		} else {
 			result.Missing = append(result.Missing, req)
 			result.Reasons = append(result.Reasons, PermissionReason{
 				Code:       "missing_grant",
 				Permission: req.PermissionID,
 			})
+			hasNormalMissing = true
 		}
 	}
 
-	if len(result.Missing) > 0 {
+	if hasHardDeny {
+		b.determineDenyOrApproval(&result, request)
+	} else if hasForcedApprovalMissing {
+		b.determineDenyOrApproval(&result, request)
+	} else if hasNormalMissing {
 		b.determineDenyOrApproval(&result, request)
 	} else {
 		result.Decision = DecisionAllow
@@ -251,6 +279,69 @@ func (b *DefaultPermissionBroker) requiresBoundGrant(def PermissionDefinition, e
 		return true
 	}
 	return false
+}
+
+func (b *DefaultPermissionBroker) validateApprovalRecord(permissionID string, request PermissionEvaluationRequest) bool {
+	if request.ApprovalRecordID == "" {
+		return false
+	}
+
+	record, ok := b.getApprovalRecord(request.ApprovalRecordID)
+	if !ok {
+		return false
+	}
+
+	if record.Decision != ApprovalDecisionApproved {
+		return false
+	}
+
+	if record.InvocationID != request.InvocationID {
+		return false
+	}
+
+	permFound := false
+	for _, pid := range record.PermissionIDs {
+		if pid == permissionID {
+			permFound = true
+			break
+		}
+	}
+	if !permFound {
+		return false
+	}
+
+	if record.ExpiresAt != nil && time.Now().After(*record.ExpiresAt) {
+		return false
+	}
+
+	if request.RiskLevel != "" && record.RiskLevel != "" {
+		if riskRank(request.RiskLevel) > riskRank(record.RiskLevel) {
+			return false
+		}
+	}
+
+	if !record.ExecutionContext.IsDeviceExecution() {
+		return false
+	}
+
+	return true
+}
+
+func riskRank(risk string) int {
+	switch risk {
+	case "":
+		return 0
+	case "low":
+		return 1
+	case "medium":
+		return 2
+	case "high":
+		return 3
+	case "critical":
+		return 4
+	default:
+		return 0
+	}
 }
 
 func (b *DefaultPermissionBroker) Grant(ctx context.Context, request PermissionGrantRequest) (PermissionGrant, error) {

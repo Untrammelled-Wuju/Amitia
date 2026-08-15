@@ -3,9 +3,10 @@ package execution
 import (
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/runtimeidentity"
-	"github.com/u-ai/backend/internal/uiagent"
 )
 
 type ExecutionContext struct {
