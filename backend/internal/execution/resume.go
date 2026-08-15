@@ -3,6 +3,8 @@ package execution
 import (
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 )
 
