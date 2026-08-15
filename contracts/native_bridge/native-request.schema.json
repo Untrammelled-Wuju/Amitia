@@ -1,0 +1,30 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://amitia.untrammelled.top/contracts/native_bridge/native-request.schema.json",
+  "title": "NativeBridgeRequest",
+  "description": "Native Bridge v1 请求载荷",
+  "type": "object",
+  "required": ["protocolVersion", "requestId", "platform", "operation"],
+  "properties": {
+    "protocolVersion": {
+      "type": "integer",
+      "enum": [1]
+    },
+    "requestId": {
+      "type": "string",
+      "minLength": 1
+    },
+    "platform": {
+      "type": "string",
+      "enum": ["android", "ios"]
+    },
+    "operation": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*\\.[a-z][a-z0-9]*$"
+    },
+    "payload": {
+      "type": "object"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,11 @@
+{
+  "type": "native_bridge.health",
+  "platform": "ios",
+  "generation": 3,
+  "payload": {
+    "generation": 3,
+    "ready": true,
+    "foreground": true,
+    "platform": "ios"
+  }
+}
