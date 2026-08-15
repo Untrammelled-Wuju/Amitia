@@ -159,6 +159,8 @@ func DefaultMigrations() []Migration {
 		TaskRunPauseColumnsMigration(),
 		ArtifactsMigration(),
 		AccountSessionSecurityMigration(),
+		SyncChangeLogMigration(),
+		SyncCursorMigration(),
 	}
 }
 
@@ -277,6 +279,52 @@ func AccountSessionSecurityMigration() Migration {
 			s.CreateIndex("idx_recovery_grants_user", "auth_recovery_grants", []string{"user_id"}, false)
 			s.CreateIndex("idx_audit_events_user", "security_audit_events", []string{"user_id", "created_at"}, false)
 			s.CreateIndex("idx_audit_events_type", "security_audit_events", []string{"event_type", "created_at"}, false)
+			return nil
+		},
+	}
+}
+
+func SyncChangeLogMigration() Migration {
+	return Migration{
+		Version: "20260816001",
+		Name:    "create_sync_changes_table",
+		Up: func(s *Step) error {
+			s.CreateTable(`CREATE TABLE IF NOT EXISTS sync_changes (
+				change_id TEXT PRIMARY KEY,
+				seq INTEGER NOT NULL,
+				entity_type TEXT NOT NULL,
+				entity_id TEXT NOT NULL,
+				operation TEXT NOT NULL,
+				revision INTEGER NOT NULL,
+				mutation_id TEXT,
+				origin_device TEXT,
+				payload BLOB,
+				checksum TEXT NOT NULL,
+				created_at DATETIME NOT NULL
+			)`)
+			s.CreateIndex("idx_sync_changes_seq", "sync_changes", []string{"seq"}, true)
+			s.CreateIndex("idx_sync_changes_entity", "sync_changes", []string{"entity_type", "entity_id"}, false)
+			s.CreateIndex("idx_sync_changes_mutation", "sync_changes", []string{"mutation_id"}, false)
+			s.CreateIndex("idx_sync_changes_origin", "sync_changes", []string{"origin_device"}, false)
+			return nil
+		},
+	}
+}
+
+func SyncCursorMigration() Migration {
+	return Migration{
+		Version: "20260816002",
+		Name:    "create_sync_cursors_table",
+		Up: func(s *Step) error {
+			s.CreateTable(`CREATE TABLE IF NOT EXISTS sync_cursors (
+				device_id TEXT PRIMARY KEY,
+				user_id TEXT NOT NULL,
+				scope TEXT NOT NULL DEFAULT 'device',
+				last_applied INTEGER NOT NULL DEFAULT 0,
+				last_pushed INTEGER NOT NULL DEFAULT 0,
+				updated_at DATETIME NOT NULL
+			)`)
+			s.CreateIndex("idx_sync_cursors_user", "sync_cursors", []string{"user_id"}, false)
 			return nil
 		},
 	}
