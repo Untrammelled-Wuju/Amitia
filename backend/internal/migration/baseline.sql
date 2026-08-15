@@ -5851,3 +5851,23 @@ CREATE TABLE IF NOT EXISTS sync_cursors (
     updated_at DATETIME NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_sync_cursors_user ON sync_cursors(user_id);
+
+CREATE TABLE IF NOT EXISTS execution_resumes (
+    resume_id TEXT PRIMARY KEY,
+    root_execution_id TEXT,
+    parent_execution_id TEXT,
+    resume_type TEXT NOT NULL,
+    resume_state TEXT NOT NULL,
+    checkpoint_ref TEXT,
+    required_capability_id TEXT,
+    acquisition_transaction_id TEXT,
+    task_id TEXT,
+    payload_ref TEXT,
+    reason TEXT,
+    metadata TEXT,
+    created_at DATETIME NOT NULL,
+    updated_at DATETIME NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_execution_resumes_state ON execution_resumes(resume_state);
+CREATE INDEX IF NOT EXISTS idx_execution_resumes_root ON execution_resumes(root_execution_id);
+CREATE INDEX IF NOT EXISTS idx_execution_resumes_acq_txn ON execution_resumes(acquisition_transaction_id);
