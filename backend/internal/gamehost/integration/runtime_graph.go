@@ -151,29 +151,36 @@ func (p *RuntimeGraphProvisioner) reconcilePlugin(ctx context.Context, kp Kernel
 	}
 
 	if p.secretRegistrar != nil {
-		manifest := p.extractSecretManifest(kp)
-		p.secretRegistrar.RegisterStartupManifest(string(runtime.ID), string(bootServiceID), manifest)
+		grouped := p.extractSecretManifestGrouped(kp)
+		for serviceID, manifest := range grouped {
+			p.secretRegistrar.RegisterStartupManifest(string(runtime.ID), serviceID, manifest)
+		}
 	}
 
 	return nil
 }
 
-func (p *RuntimeGraphProvisioner) extractSecretManifest(kp KernelGamePlugin) []gamehostsecret.ServiceSecretManifest {
+func (p *RuntimeGraphProvisioner) extractSecretManifestGrouped(kp KernelGamePlugin) map[string][]gamehostsecret.ServiceSecretManifest {
+	grouped := make(map[string][]gamehostsecret.ServiceSecretManifest)
 	if len(kp.Extension.SecretRefs) == 0 {
-		return nil
+		return grouped
 	}
-	manifest := make([]gamehostsecret.ServiceSecretManifest, 0, len(kp.Extension.SecretRefs))
 	for _, sr := range kp.Extension.SecretRefs {
 		if sr.Ref == "" {
 			continue
 		}
-		manifest = append(manifest, gamehostsecret.ServiceSecretManifest{
-			Ref:      kernelsecret.SecretRef(sr.Ref),
-			Purpose:  gamehostsecret.Purpose(sr.Purpose),
-			Required: sr.Required,
+		serviceID := sr.ServiceID
+		if serviceID == "" {
+			serviceID = string(kp.Contribution.ID)
+		}
+		grouped[serviceID] = append(grouped[serviceID], gamehostsecret.ServiceSecretManifest{
+			Ref:       kernelsecret.SecretRef(sr.Ref),
+			Purpose:   gamehostsecret.Purpose(sr.Purpose),
+			Required:  sr.Required,
+			ServiceID: sr.ServiceID,
 		})
 	}
-	return manifest
+	return grouped
 }
 
 type bootServiceInfo struct {

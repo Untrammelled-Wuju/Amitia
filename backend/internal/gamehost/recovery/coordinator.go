@@ -294,7 +294,7 @@ func (c *RecoveryCoordinator) executeRecoveryFlow(ctx context.Context, op *Recov
 				return nil, NewRecoverySuppressedError(req.RuntimeID, "runtime is emergency-latched")
 			}
 			intent, err := c.eligibility.intentChecker.GetLifecycleIntent(req.RuntimeID)
-			if err == nil && (intent == "disable" || intent == "uninstall") {
+			if err == nil && (intent == "emergency" || intent == "disable" || intent == "uninstall") {
 				return nil, NewRecoverySuppressedError(req.RuntimeID, fmt.Sprintf("lifecycle intent=%q suppresses recovery", intent))
 			}
 		}
