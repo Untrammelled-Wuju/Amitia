@@ -29,6 +29,13 @@ type ControlPlane interface {
 		envelope protocol.Envelope,
 	) error
 
+	SendRequest(
+		ctx context.Context,
+		peer Peer,
+		envelope protocol.Envelope,
+		timeout time.Duration,
+	) (*protocol.Envelope, error)
+
 	Shutdown(ctx context.Context) error
 }
 
@@ -118,13 +125,15 @@ type controlPlane struct {
 	handler             EventHandler
 	connHandler         ConnectionHandler
 	idGenerator         IDGenerator
-	mu                  sync.Mutex
+	mu                  sync.RWMutex
 	connections         []*Connection
 	controlCtx          context.Context
 	controlCancel       context.CancelFunc
 	shuttingDown        bool
 	maxEnvelopeSize     int64
 	handshakeController HandshakeController
+	pendingResponses    map[string]chan *protocol.Envelope
+	pendingMu           sync.Mutex
 }
 
 func NewControlPlane(config ControlPlaneConfig) (ControlPlane, error) {
@@ -159,6 +168,7 @@ func NewControlPlane(config ControlPlaneConfig) (ControlPlane, error) {
 		controlCancel:       controlCancel,
 		maxEnvelopeSize:     config.MaxEnvelopeSize,
 		handshakeController: config.HandshakeController,
+		pendingResponses:    make(map[string]chan *protocol.Envelope),
 	}
 	cp.connHandler = newDefaultConnectionHandler(cp.dispatcher, cp.handler)
 	return cp, nil
@@ -269,6 +279,68 @@ func (cp *controlPlane) Send(ctx context.Context, peer Peer, envelope protocol.E
 	return nil
 }
 
+func (cp *controlPlane) SendRequest(ctx context.Context, peer Peer, envelope protocol.Envelope, timeout time.Duration) (*protocol.Envelope, error) {
+	if err := envelope.Validate(); err != nil {
+		return nil, NewIPCErrorWithCause(IPCErrorProtocol, domain.ErrInvalidArgument, "envelope validation failed", err)
+	}
+
+	if err := ValidateEnvelopePeer(envelope, peer); err != nil {
+		return nil, err
+	}
+
+	conn, exists := cp.registry.GetByPeer(peer.Key())
+	if !exists {
+		return nil, NewIPCErrorWithCause(
+			IPCErrorTransport,
+			domain.ErrRuntimeUnavailable,
+			"no active connection for peer",
+			nil,
+		)
+	}
+
+	if !conn.IsActive() {
+		return nil, NewIPCErrorWithCause(
+			IPCErrorTransport,
+			domain.ErrRuntimeUnavailable,
+			"connection is not active",
+			nil,
+		)
+	}
+
+	if envelope.ID == "" {
+		return nil, NewIPCError(IPCErrorProtocol, domain.ErrInvalidArgument, "envelope ID is required for request/response")
+	}
+
+	respChan := make(chan *protocol.Envelope, 1)
+	cp.pendingMu.Lock()
+	cp.pendingResponses[envelope.ID] = respChan
+	cp.pendingMu.Unlock()
+
+	defer func() {
+		cp.pendingMu.Lock()
+		delete(cp.pendingResponses, envelope.ID)
+		cp.pendingMu.Unlock()
+	}()
+
+	FillRouting(&envelope, peer)
+
+	if err := conn.Transport().Send(ctx, envelope); err != nil {
+		return nil, NewIPCErrorWithCause(IPCErrorTransport, domain.ErrRuntimeUnavailable, "send failed", err)
+	}
+
+	timer := time.NewTimer(timeout)
+	defer timer.Stop()
+
+	select {
+	case resp := <-respChan:
+		return resp, nil
+	case <-timer.C:
+		return nil, NewIPCError(IPCErrorTimeout, domain.ErrTimeout, "request timed out")
+	case <-ctx.Done():
+		return nil, NewIPCError(IPCErrorCancelled, domain.ErrCancelled, "request cancelled")
+	}
+}
+
 func (cp *controlPlane) Shutdown(ctx context.Context) error {
 	cp.mu.Lock()
 	if cp.shuttingDown {
@@ -351,6 +423,18 @@ func (cp *controlPlane) processEnvelope(conn *Connection, envelope protocol.Enve
 		return
 	}
 
+	cp.pendingMu.Lock()
+	if ch, ok := cp.pendingResponses[envelope.RequestID]; ok {
+		delete(cp.pendingResponses, envelope.RequestID)
+		cp.pendingMu.Unlock()
+		select {
+		case ch <- &envelope:
+		default:
+		}
+		return
+	}
+	cp.pendingMu.Unlock()
+
 	if !cp.handshakeController.CanProcess(conn.ID, envelope.Method) {
 		cp.connHandler.OnError(conn, NewIPCError(
 			IPCErrorProtocol,
@@ -418,6 +502,16 @@ func (cp *controlPlane) closeConnection(conn *Connection) {
 	}
 
 	conn.cancel()
+
+	cp.pendingMu.Lock()
+	for id, ch := range cp.pendingResponses {
+		select {
+		case ch <- nil:
+		default:
+		}
+		delete(cp.pendingResponses, id)
+	}
+	cp.pendingMu.Unlock()
 
 	transport := conn.Transport()
 	if transport != nil {

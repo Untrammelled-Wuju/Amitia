@@ -182,6 +182,74 @@ func (a *ControlAuthorityViewAdapter) GetAuthority(runtimeID domain.RuntimeInsta
 	return AuthoritySnapshot{RuntimeID: runtimeID, Mode: "standard", Epoch: 1}, nil
 }
 
+type RuntimeLifecycleIntentCheckerAdapter struct {
+	IsEmergencyLatchedFn func(runtimeID domain.RuntimeInstanceID) bool
+	GetLifecycleIntentFn func(runtimeID domain.RuntimeInstanceID) (string, error)
+}
+
+func NewRuntimeLifecycleIntentCheckerAdapter(
+	isEmergencyLatchedFn func(runtimeID domain.RuntimeInstanceID) bool,
+	getLifecycleIntentFn func(runtimeID domain.RuntimeInstanceID) (string, error),
+) *RuntimeLifecycleIntentCheckerAdapter {
+	return &RuntimeLifecycleIntentCheckerAdapter{
+		IsEmergencyLatchedFn: isEmergencyLatchedFn,
+		GetLifecycleIntentFn: getLifecycleIntentFn,
+	}
+}
+
+func (a *RuntimeLifecycleIntentCheckerAdapter) IsEmergencyLatched(runtimeID domain.RuntimeInstanceID) bool {
+	if a.IsEmergencyLatchedFn != nil {
+		return a.IsEmergencyLatchedFn(runtimeID)
+	}
+	return false
+}
+
+func (a *RuntimeLifecycleIntentCheckerAdapter) GetLifecycleIntent(runtimeID domain.RuntimeInstanceID) (string, error) {
+	if a.GetLifecycleIntentFn != nil {
+		return a.GetLifecycleIntentFn(runtimeID)
+	}
+	return "", nil
+}
+
+type ExtensionStateCheckerAdapter struct {
+	IsExtensionInstalledFn func(extensionID string) bool
+	IsExtensionEnabledFn   func(extensionID string) bool
+	IsPluginCurrentFn      func(pluginID domain.PluginID) bool
+}
+
+func NewExtensionStateCheckerAdapter(
+	isExtensionInstalledFn func(extensionID string) bool,
+	isExtensionEnabledFn func(extensionID string) bool,
+	isPluginCurrentFn func(pluginID domain.PluginID) bool,
+) *ExtensionStateCheckerAdapter {
+	return &ExtensionStateCheckerAdapter{
+		IsExtensionInstalledFn: isExtensionInstalledFn,
+		IsExtensionEnabledFn:   isExtensionEnabledFn,
+		IsPluginCurrentFn:      isPluginCurrentFn,
+	}
+}
+
+func (a *ExtensionStateCheckerAdapter) IsExtensionInstalled(extensionID string) bool {
+	if a.IsExtensionInstalledFn != nil {
+		return a.IsExtensionInstalledFn(extensionID)
+	}
+	return false
+}
+
+func (a *ExtensionStateCheckerAdapter) IsExtensionEnabled(extensionID string) bool {
+	if a.IsExtensionEnabledFn != nil {
+		return a.IsExtensionEnabledFn(extensionID)
+	}
+	return false
+}
+
+func (a *ExtensionStateCheckerAdapter) IsPluginCurrent(pluginID domain.PluginID) bool {
+	if a.IsPluginCurrentFn != nil {
+		return a.IsPluginCurrentFn(pluginID)
+	}
+	return false
+}
+
 type CheckpointStoreAdapter struct {
 	hasMetadataFn func(ctx context.Context, runtimeID domain.RuntimeInstanceID) (bool, error)
 	loadMetadataFn func(ctx context.Context, runtimeID domain.RuntimeInstanceID) (RuntimeMetadataView, error)

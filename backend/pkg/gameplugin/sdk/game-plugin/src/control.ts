@@ -171,14 +171,24 @@ export async function getEmergencyStopStatus(
   return envelope.payload as EmergencyStopStatusResult;
 }
 
-export type SinkDispatchHandler = (payload: SinkEffectDispatchPayload) => Promise<void>;
+export interface SinkEffectCommitResult {
+  accepted: boolean;
+  committed: boolean;
+  effectId?: string;
+  generation?: number;
+  errorCode?: string;
+  message?: string;
+}
+
+export type SinkDispatchHandler = (payload: SinkEffectDispatchPayload) => Promise<SinkEffectCommitResult>;
 
 export function registerSinkDispatchHandler(
   registry: import('./handler').HandlerRegistry,
   handler: SinkDispatchHandler
 ): void {
-  registry.registerNotification(METHOD_CONTROL_SINK_DISPATCH, async (notification) => {
-    const payload = notification.payload as SinkEffectDispatchPayload;
-    await handler(payload);
+  registry.registerRequest(METHOD_CONTROL_SINK_DISPATCH, async (request) => {
+    const payload = request.payload as SinkEffectDispatchPayload;
+    const result = await handler(payload);
+    return result;
   });
 }

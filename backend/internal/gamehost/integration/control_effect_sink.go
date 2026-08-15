@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/u-ai/backend/internal/gamehost/control"
 	"github.com/u-ai/backend/internal/gamehost/domain"
@@ -13,10 +14,24 @@ import (
 
 const SinkDispatchMethod = "control.sink.dispatch"
 
+const DefaultSinkDispatchTimeout = 30 * time.Second
+
 type SinkEffectDispatchPayload struct {
-	SinkID  string          `json:"sinkId"`
-	Service string          `json:"serviceId"`
-	Payload json.RawMessage `json:"payload"`
+	SinkID    string          `json:"sinkId"`
+	Service   string          `json:"serviceId"`
+	Payload   json.RawMessage `json:"payload"`
+	OutputID  string          `json:"outputId"`
+	Epoch     uint64          `json:"epoch"`
+	Generation uint64         `json:"generation"`
+}
+
+type SinkEffectCommitResult struct {
+	Accepted  bool   `json:"accepted"`
+	Committed bool   `json:"committed"`
+	EffectID  string `json:"effectId,omitempty"`
+	Generation uint64 `json:"generation,omitempty"`
+	ErrorCode string `json:"errorCode,omitempty"`
+	Message   string `json:"message,omitempty"`
 }
 
 type ProtocolControlEffectSink struct {
@@ -58,10 +73,14 @@ func (s *ProtocolControlEffectSink) ExecuteAuthorized(
 		return fmt.Errorf("connection registry unavailable for effect delivery")
 	}
 
+	outputID := fmt.Sprintf("effect-%s-%d", s.sinkID, time.Now().UnixNano())
 	dispatch := SinkEffectDispatchPayload{
-		SinkID:  s.sinkID,
-		Service: string(serviceID),
-		Payload: payload,
+		SinkID:     s.sinkID,
+		Service:    string(serviceID),
+		Payload:    payload,
+		OutputID:   outputID,
+		Epoch:      permit.OutputEpoch,
+		Generation: permit.Generation,
 	}
 	dispatchBytes, err := json.Marshal(dispatch)
 	if err != nil {
@@ -77,13 +96,34 @@ func (s *ProtocolControlEffectSink) ExecuteAuthorized(
 
 	envelope := protocol.Envelope{
 		Protocol: protocol.ProtocolVersion,
-		Type:     protocol.MessageTypeNotification,
+		Type:     protocol.MessageTypeRequest,
 		ID:       fmt.Sprintf("sink-dispatch-%s-%s", runtimeID, s.sinkID),
 		Method:   SinkDispatchMethod,
 		Payload:  dispatchBytes,
 	}
 
-	return s.controlPlane.Send(ctx, peer, envelope)
+	resp, err := s.controlPlane.SendRequest(ctx, peer, envelope, DefaultSinkDispatchTimeout)
+	if err != nil {
+		return fmt.Errorf("sink dispatch failed: %w", err)
+	}
+
+	if resp.Error != nil {
+		return fmt.Errorf("sink dispatch rejected: %s - %s", resp.Error.Code, resp.Error.Message)
+	}
+
+	var commit SinkEffectCommitResult
+	if resp.Payload != nil {
+		if err := json.Unmarshal(resp.Payload.(json.RawMessage), &commit); err == nil {
+			if !commit.Committed {
+				if commit.ErrorCode != "" {
+					return fmt.Errorf("effect commit failed: %s - %s", commit.ErrorCode, commit.Message)
+				}
+				return fmt.Errorf("effect not committed by plugin")
+			}
+		}
+	}
+
+	return nil
 }
 
 type ProtocolControlEffectSinkFactory struct {

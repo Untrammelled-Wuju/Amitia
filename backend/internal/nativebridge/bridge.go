@@ -38,11 +38,14 @@ type Bridge interface {
 	SessionAttached() bool
 }
 
-type AndroidBridge interface {
+type RelayBridge interface {
 	Bridge
-	AttachRelaySession(transport RelayTransport)
-	DetachSession()
+
+	AttachRelaySession(transport RelayTransport) uint64
+	DetachRelaySession(expectedGeneration uint64)
+
 	HandleRelayEnvelope(payload []byte) error
+
 	Generation() uint64
 	SessionAttached() bool
 }

@@ -21,6 +21,7 @@ export * from './security';
 export {
   METHOD_CONTROL_SINK_DISPATCH,
   SinkEffectDispatchPayload,
+  SinkEffectCommitResult,
   SinkDispatchHandler,
   registerSinkDispatchHandler
 } from './control';

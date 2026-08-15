@@ -1,8 +1,6 @@
 package nativebridge
 
 import (
-	"context"
-	"encoding/json"
 	"sync"
 	"time"
 
@@ -66,53 +64,29 @@ func (t *websocketTransport) startPongLoop(stop <-chan struct{}) {
 	}
 }
 
-type wsRelaySession struct {
-	transport *websocketTransport
-	relay     *productionRelaySession
-}
-
-func newWsRelaySession(conn *websocket.Conn) *wsRelaySession {
-	t := newWebsocketTransport(conn)
-	r := newRelaySession(t)
-	return &wsRelaySession{
-		transport: t,
-		relay:     r,
-	}
-}
-
-func (s *wsRelaySession) SendRequest(ctx context.Context, req Request) (Response, error) {
-	return s.relay.SendRequest(ctx, req)
-}
-
-func (s *wsRelaySession) handleEnvelope(env RelayEnvelope) {
-	s.relay.handleIncomingEnvelope(env)
-}
-
-func (s *wsRelaySession) generation() uint64 {
-	return s.relay.generationValue()
-}
-
-func (s *wsRelaySession) close() {
-	_ = s.transport.close()
-}
-
 type RelayConnection struct {
-	Platform string
-	Session  *wsRelaySession
-	done     chan struct{}
+	Platform     string
+	ConnectionID uint64
+	Transport    *websocketTransport
+
+	closeOnce sync.Once
+	done      chan struct{}
 }
 
-func NewRelayConnection(platform string, conn *websocket.Conn) *RelayConnection {
+func NewRelayConnection(platform string, conn *websocket.Conn, connectionID uint64) *RelayConnection {
 	return &RelayConnection{
-		Platform: platform,
-		Session:  newWsRelaySession(conn),
-		done:     make(chan struct{}),
+		Platform:     platform,
+		ConnectionID: connectionID,
+		Transport:    newWebsocketTransport(conn),
+		done:         make(chan struct{}),
 	}
 }
 
 func (c *RelayConnection) Close() {
-	close(c.done)
-	c.Session.close()
+	c.closeOnce.Do(func() {
+		close(c.done)
+		_ = c.Transport.close()
+	})
 }
 
 func (c *RelayConnection) Done() <-chan struct{} {
@@ -120,12 +94,12 @@ func (c *RelayConnection) Done() <-chan struct{} {
 }
 
 func (c *RelayConnection) StartPongLoop() {
-	go c.Session.transport.startPongLoop(c.done)
+	go c.Transport.startPongLoop(c.done)
 }
 
 func (c *RelayConnection) ReadLoop(handle func([]byte) error) error {
 	for {
-		data, err := c.Session.transport.read()
+		data, err := c.Transport.read()
 		if err != nil {
 			return err
 		}
@@ -134,8 +108,3 @@ func (c *RelayConnection) ReadLoop(handle func([]byte) error) error {
 		}
 	}
 }
-
-func encodeRelayEnvelope(env RelayEnvelope) ([]byte, error) {
-	return json.Marshal(env)
-}
-

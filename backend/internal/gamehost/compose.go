@@ -590,9 +590,43 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	}
 
 	var productionAuditSink recovery.AuditSink
-	productionAuditSink = recovery.NewAuditSinkAdapter(func(event recovery.RecoveryAuditEvent) {})
+	productionAuditSink = recovery.NewAuditSinkAdapter(func(event recovery.RecoveryAuditEvent) {
+		log.Printf("[recovery-audit] op=%s runtime=%s ext=%s plugin=%s stage=%s result=%s err=%s",
+			event.OperationID, event.RuntimeID, event.ExtensionID, event.PluginID, event.Stage, event.Result, event.Error)
+	})
 
 	recoveryRuntimeManager := &recoveryRuntimeManagerAdapter{mgr: runtimeManager}
+
+	intentChecker := recovery.NewRuntimeLifecycleIntentCheckerAdapter(
+		runtimeManager.IsEmergencyLatched,
+		runtimeManager.GetLifecycleIntent,
+	)
+	extensionChecker := recovery.NewExtensionStateCheckerAdapter(
+		func(extensionID string) bool {
+			plugins, err := pluginReg.ListByExtension(context.Background(), extensionID)
+			return err == nil && len(plugins) > 0
+		},
+		func(extensionID string) bool {
+			plugins, err := pluginReg.ListByExtension(context.Background(), extensionID)
+			if err != nil || len(plugins) == 0 {
+				return false
+			}
+			for _, p := range plugins {
+				if p.InstallationState == domain.InstallationStateInstalled && p.EnablementState == domain.EnablementStateEnabled {
+					return true
+				}
+			}
+			return false
+		},
+		func(pluginID domain.PluginID) bool {
+			_, err := pluginReg.Get(context.Background(), pluginID)
+			return err == nil
+		},
+	)
+	eligibilityChecker := &recovery.RecoveryEligibilityChecker{
+		intentChecker:    intentChecker,
+		extensionChecker: extensionChecker,
+	}
 
 	recoveryCoordinator, err := ComposeRecoveryCoordinator(recovery.RecoveryCoordinatorDeps{
 		Kernel:               kernelRollbackAdapter,
@@ -606,6 +640,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		CheckpointClassifier: checkpointClassifier,
 		StructureBuilder:     structureBuilderAdapter,
 		AuditSink:            productionAuditSink,
+		EligibilityChecker:   eligibilityChecker,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("compose recovery coordinator: %w", err)
