@@ -14,6 +14,7 @@ type ResumeHandler interface {
 
 type ExecutionService struct {
 	journal         *InMemoryJournal
+	repo            ResumeRepository
 	resumeHandlers  []ResumeHandler
 	mu              sync.RWMutex
 	activeContexts  map[string]ExecutionContext
@@ -26,6 +27,18 @@ func NewExecutionService() *ExecutionService {
 		activeContexts: make(map[string]ExecutionContext),
 		resumeContexts: make(map[string]ResumeContext),
 	}
+}
+
+func NewExecutionServiceWithRepository(repo ResumeRepository) *ExecutionService {
+	svc := NewExecutionService()
+	svc.repo = repo
+	return svc
+}
+
+func (s *ExecutionService) SetRepository(repo ResumeRepository) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.repo = repo
 }
 
 func (s *ExecutionService) RegisterResumeHandler(handler ResumeHandler) {
@@ -78,6 +91,12 @@ func (s *ExecutionService) CreateResume(execCtx ExecutionContext, resumeType Res
 	s.resumeContexts[resume.ResumeID] = resumeCopy
 	s.mu.Unlock()
 
+	if s.repo != nil {
+		if err := s.repo.Save(context.Background(), resumeCopy); err != nil {
+		return nil, fmt.Errorf("execution service: persist resume: %w", err)
+		}
+	}
+
 	s.journal.Record(JournalEntry{
 		RootExecutionID: execCtx.RootExecutionID,
 		ExecutionID:     execCtx.ExecutionID,
@@ -100,13 +119,27 @@ func (s *ExecutionService) ResumeExecution(ctx context.Context, resumeID string)
 	resume, ok := s.resumeContexts[resumeID]
 	s.mu.Unlock()
 	if !ok {
-		return nil, ErrResumeNotFound
+		if s.repo != nil {
+			if stored, err := s.repo.Get(ctx, resumeID); err == nil && stored != nil {
+				resume = *stored
+				s.mu.Lock()
+				s.resumeContexts[resumeID] = resume
+				s.mu.Unlock()
+			} else {
+				return nil, ErrResumeNotFound
+			}
+		} else {
+			return nil, ErrResumeNotFound
+		}
 	}
 
 	resume.MarkInProgress()
 	s.mu.Lock()
 	s.resumeContexts[resumeID] = resume
 	s.mu.Unlock()
+	if s.repo != nil {
+		_ = s.repo.UpdateState(ctx, resumeID, ResumeStateInProgress, "")
+	}
 
 	var handled bool
 	for _, handler := range s.resumeHandlers {
@@ -118,6 +151,9 @@ func (s *ExecutionService) ResumeExecution(ctx context.Context, resumeID string)
 				s.mu.Lock()
 				s.resumeContexts[resumeID] = resume
 				s.mu.Unlock()
+				if s.repo != nil {
+					_ = s.repo.UpdateState(ctx, resumeID, ResumeStateFailed, err.Error())
+				}
 				return nil, err
 			}
 			resume.MarkCompleted()
@@ -125,6 +161,9 @@ func (s *ExecutionService) ResumeExecution(ctx context.Context, resumeID string)
 			s.resumeContexts[resumeID] = resume
 			s.activeContexts[result.ExecutionID] = *result
 			s.mu.Unlock()
+			if s.repo != nil {
+				_ = s.repo.UpdateState(ctx, resumeID, ResumeStateCompleted, "")
+			}
 			s.journal.Record(JournalEntry{
 				RootExecutionID: resume.RootExecutionID,
 				ExecutionID:     result.ExecutionID,
@@ -139,10 +178,29 @@ func (s *ExecutionService) ResumeExecution(ctx context.Context, resumeID string)
 		s.mu.Lock()
 		s.resumeContexts[resumeID] = resume
 		s.mu.Unlock()
+		if s.repo != nil {
+			_ = s.repo.UpdateState(ctx, resumeID, ResumeStateFailed, "no handler for resume type")
+		}
 		return nil, fmt.Errorf("no resume handler for type: %s", resume.Type)
 	}
 
 	return nil, nil
+}
+
+func (s *ExecutionService) LoadPendingResumes(ctx context.Context) error {
+	if s.repo == nil {
+		return nil
+	}
+	pending, err := s.repo.ListPending(ctx)
+	if err != nil {
+		return fmt.Errorf("execution service: load pending resumes: %w", err)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, resume := range pending {
+		s.resumeContexts[resume.ResumeID] = resume
+	}
+	return nil
 }
 
 func (s *ExecutionService) reconstructExecutionContext(resume ResumeContext) ExecutionContext {
