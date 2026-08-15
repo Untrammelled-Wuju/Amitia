@@ -19,6 +19,13 @@ export const IPC_CHANNELS = {
   setAuthToken: "amitia:auth:set-token",
   uiNavigate: "amitia:ui:navigate",
   getBackendAuthHeaders: "amitia:backend-auth:get-headers",
+  meshGetStatus: "amitia:mesh:status:get",
+  meshProvision: "amitia:mesh:provision",
+  meshDeprovision: "amitia:mesh:deprovision",
+  meshGetIdentity: "amitia:mesh:identity:get",
+  meshCloudListDevices: "amitia:mesh:cloud:list-devices",
+  meshCloudRevokeDevice: "amitia:mesh:cloud:revoke-device",
+  meshCloudProbe: "amitia:mesh:cloud:probe",
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];

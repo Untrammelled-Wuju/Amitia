@@ -164,7 +164,7 @@ async function enterMainApp(): Promise<void> {
       console.error("[AmitiaDesktop] reconcile失败:", err);
       notifyStatus(runtimeManager, "failed", String(err));
     }
-  });
+  }, () => mainWindow);
 
   const autoLaunch = await configStore.getAutoLaunch();
   app.setLoginItemSettings({ openAtLogin: autoLaunch });
