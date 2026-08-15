@@ -9,7 +9,7 @@ import (
 
 type Worker struct {
 	store     *SQLiteDeliveryStore
-	adapters  []ChannelAdapter
+	resolver  ChannelResolver
 	batchSize int
 	interval  time.Duration
 	done      chan struct{}
@@ -27,10 +27,10 @@ func DefaultWorkerConfig() WorkerConfig {
 	}
 }
 
-func NewWorker(store *SQLiteDeliveryStore, adapters []ChannelAdapter, cfg WorkerConfig) *Worker {
+func NewWorker(store *SQLiteDeliveryStore, resolver ChannelResolver, cfg WorkerConfig) *Worker {
 	return &Worker{
 		store:     store,
-		adapters:  adapters,
+		resolver:  resolver,
 		batchSize: cfg.BatchSize,
 		interval:  cfg.Interval,
 		done:      make(chan struct{}),
