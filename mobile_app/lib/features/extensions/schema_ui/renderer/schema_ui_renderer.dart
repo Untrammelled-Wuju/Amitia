@@ -396,10 +396,10 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
         if (label.isNotEmpty) ...[
           Text(label, style: AppTypography.label(context)),
           const SizedBox(height: 4),
-        ),
+        ],
         AmitiaTextField(
           hintText: placeholder,
-          controller: TextEditingController(text: value?.toString() ?? ""),
+          controller: TextEditingController(text: value?.toString() ?? ''),
           onChanged: (v) {
             if (binding != null) {
               _updateFormState(binding.path, v);
@@ -521,11 +521,12 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
 
   Widget _buildTable(BuildContext context, SchemaUINode node) {
     final headers = (node.props?['headers'] as List?)?.map((e) => e.toString()).toList() ?? [];
-    final rows = (node.props?['rows'] as List?)?.map((r) {
+    final rowsRaw = node.props?['rows'] as List?;
+    final rows = rowsRaw?.map((r) {
       if (r is List) return r.map((c) => c.toString()).toList();
       return [r.toString()];
     }).toList() ?? [];
-    if (headers.isEmpty) return const SizedBox.shrink;
+    if (headers.isEmpty) return const SizedBox.shrink();
     return SingleChildScrollView(
       scrollDirection: Axis.horizontal,
       child: DataTable(
