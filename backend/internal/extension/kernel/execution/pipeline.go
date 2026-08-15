@@ -1030,17 +1030,15 @@ func (p *ExecutionPipeline) runApprovalWithReEvaluate(ctx context.Context, tool 
 	}
 
 	reEvalReq := permission.PermissionEvaluationRequest{
-		Subject:           permission.SubjectForTool(tool.ExtensionID, tool.ID),
-		SubjectExtension:  tool.ExtensionID,
-		SubjectModuleID:   inv.ModuleID,
-		Requirements:      buildPermissionRequirements(tool, inv),
-		InvocationID:      inv.InvocationID,
-		RiskLevel:         string(tool.RiskLevel),
-		ScopeSnapshotID:   inv.ScopeSnapshotID,
-		ApprovalMode:      string(inv.ApprovalMode),
-		Generation:        inv.Generation,
-		ExecutionContext:  execCtx,
-		ApprovalRecordID:  record.RecordID,
+		Subject:          permission.SubjectForTool(tool.ExtensionID, tool.ID),
+		Requirements:     buildPermissionRequirements(tool, inv),
+		InvocationID:     inv.InvocationID,
+		RiskLevel:        string(tool.RiskLevel),
+		ScopeSnapshotID:  inv.ScopeSnapshotID,
+		ApprovalMode:     string(inv.ApprovalMode),
+		Generation:       inv.Generation,
+		ExecutionContext: execCtx,
+		ApprovalRecordID: record.RecordID,
 	}
 
 	reEvalResult := broker.Evaluate(ctx, reEvalReq)
@@ -1077,13 +1075,8 @@ func (p *ExecutionPipeline) createPermissionSnapshot(ctx context.Context, inv ca
 	}
 }
 
-func (p *ExecutionPipeline) revalidateSnapshots(ctx context.Context, inv capability.ToolInvocationContext) error {
+func (p *ExecutionPipeline) revalidateSnapshots(ctx context.Context, inv capability.ToolInvocationContext, tool capability.ToolDefinition) error {
 	if inv.PermissionSnapshotID != "" && p.PermissionGate != nil && p.PermissionGate.Broker != nil {
-		tool, err := p.resolveTool(ctx, string(inv.ToolID))
-		if err != nil {
-			return fmt.Errorf("resolve tool for snapshot revalidation failed: %w", err)
-		}
-
 		execCtx := permission.ExecutionContextFromInvocation(inv)
 		if err := p.PermissionGate.Broker.ValidateSnapshot(ctx, inv.PermissionSnapshotID, permission.PermissionEvaluationRequest{
 			Subject:          permission.SubjectForTool(tool.ExtensionID, tool.ID),
