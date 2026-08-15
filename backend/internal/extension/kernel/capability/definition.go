@@ -150,8 +150,12 @@ func (td ToolDefinition) CapabilitySource() CapabilitySource {
 }
 
 func (td ToolDefinition) ToCapabilityDefinition() CapabilityDefinition {
+	capID := td.CapabilityID
+	if capID == "" {
+		capID = CapabilityID(td.ID)
+	}
 	return CapabilityDefinition{
-		ID:              CapabilityID(td.ID),
+		ID:              capID,
 		Type:            CapabilityTypeTool,
 		Owner:           td.Owner(),
 		Source:          td.CapabilitySource(),
