@@ -39,7 +39,7 @@ func (h *CalendarHandler) Execute(ctx context.Context, request nativebridge.Requ
 	default:
 		return nativebridge.Response{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Status:          "error",
 			Error: &nativebridge.Error{
 				Code:    nativebridge.ErrOperationNotSupported,
@@ -58,7 +58,7 @@ func (h *CalendarHandler) handleStatus(ctx context.Context, request nativebridge
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       OperationStatus,
 		})
@@ -86,7 +86,7 @@ func (h *CalendarHandler) handleAuthorizationStatus(ctx context.Context, request
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       OperationAuthorizationStatus,
 		})
@@ -123,7 +123,7 @@ func (h *CalendarHandler) handleAuthorizationRequest(ctx context.Context, reques
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       OperationAuthorizationRequest,
 			Payload:         map[string]any{"access": access},
@@ -152,7 +152,7 @@ func (h *CalendarHandler) handleCalendarsList(ctx context.Context, request nativ
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       OperationCalendarsList,
 			Payload:         request.Payload,
@@ -210,7 +210,7 @@ func (h *CalendarHandler) handleEventsQuery(ctx context.Context, request nativeb
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       OperationEventsQuery,
 			Payload:         request.Payload,
@@ -244,7 +244,7 @@ func (h *CalendarHandler) handleEventsGet(ctx context.Context, request nativebri
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       OperationEventsGet,
 			Payload:         map[string]any{"eventId": eventID},
@@ -322,7 +322,7 @@ func (h *CalendarHandler) handleEventsCreate(ctx context.Context, request native
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       OperationEventsCreate,
 			Payload:         request.Payload,
@@ -378,7 +378,7 @@ func (h *CalendarHandler) handleEventsUpdate(ctx context.Context, request native
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       OperationEventsUpdate,
 			Payload:         request.Payload,
@@ -412,7 +412,7 @@ func (h *CalendarHandler) handleEventsDelete(ctx context.Context, request native
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       OperationEventsDelete,
 			Payload:         request.Payload,
@@ -435,7 +435,7 @@ func (h *CalendarHandler) handleEventsDelete(ctx context.Context, request native
 func (h *CalendarHandler) errorResponse(request nativebridge.Request, code, message string) nativebridge.Response {
 	return nativebridge.Response{
 		ProtocolVersion: request.ProtocolVersion,
-		RequestID:       request.RequestID,
+		RequestId:       request.RequestId,
 		Status:          "error",
 		Error: &nativebridge.Error{
 			Code:       code,
