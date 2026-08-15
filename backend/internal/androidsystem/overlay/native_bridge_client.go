@@ -20,7 +20,7 @@ func NewNativeBridgeOverlayClient(bridge nativebridge.Bridge) OverlayClient {
 func (c *nativeBridgeOverlayClient) Status(ctx context.Context) (CapabilityState, error) {
 	req := nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       generateRequestID(),
+		RequestId:       generateRequestId(),
 		Platform:        "android",
 		Operation:       OperationStatus,
 		Payload:         map[string]any{},
@@ -38,7 +38,7 @@ func (c *nativeBridgeOverlayClient) Status(ctx context.Context) (CapabilityState
 func (c *nativeBridgeOverlayClient) RequestPermission(ctx context.Context) (PermissionResult, error) {
 	req := nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       generateRequestID(),
+		RequestId:       generateRequestId(),
 		Platform:        "android",
 		Operation:       OperationPermissionRequest,
 		Payload:         map[string]any{},
@@ -67,7 +67,7 @@ func (c *nativeBridgeOverlayClient) Create(ctx context.Context, req CreateReques
 	appendOverlayGeometryPayload(payload, req.X, req.Y, req.Width, req.Height, req.Gravity, req.Focusable, req.Touchable, req.Draggable, req.TTLms)
 	bridgeReq := nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       generateRequestID(),
+		RequestId:       generateRequestId(),
 		Platform:        "android",
 		Operation:       OperationCreate,
 		Payload:         payload,
@@ -90,7 +90,7 @@ func (c *nativeBridgeOverlayClient) Update(ctx context.Context, req UpdateReques
 	appendOverlayGeometryPayload(payload, req.X, req.Y, req.Width, req.Height, req.Gravity, req.Focusable, req.Touchable, req.Draggable, req.TTLms)
 	bridgeReq := nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       generateRequestID(),
+		RequestId:       generateRequestId(),
 		Platform:        "android",
 		Operation:       OperationUpdate,
 		Payload:         payload,
@@ -144,7 +144,7 @@ func appendOverlayGeometryPayload(
 func (c *nativeBridgeOverlayClient) Show(ctx context.Context, overlayID string) (OverlayInstance, error) {
 	bridgeReq := nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       generateRequestID(),
+		RequestId:       generateRequestId(),
 		Platform:        "android",
 		Operation:       OperationShow,
 		Payload:         map[string]any{"overlayId": overlayID},
@@ -162,7 +162,7 @@ func (c *nativeBridgeOverlayClient) Show(ctx context.Context, overlayID string) 
 func (c *nativeBridgeOverlayClient) Hide(ctx context.Context, overlayID string) (OverlayInstance, error) {
 	bridgeReq := nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       generateRequestID(),
+		RequestId:       generateRequestId(),
 		Platform:        "android",
 		Operation:       OperationHide,
 		Payload:         map[string]any{"overlayId": overlayID},
@@ -180,7 +180,7 @@ func (c *nativeBridgeOverlayClient) Hide(ctx context.Context, overlayID string) 
 func (c *nativeBridgeOverlayClient) Close(ctx context.Context, overlayID string) error {
 	bridgeReq := nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       generateRequestID(),
+		RequestId:       generateRequestId(),
 		Platform:        "android",
 		Operation:       OperationClose,
 		Payload:         map[string]any{"overlayId": overlayID},
@@ -198,7 +198,7 @@ func (c *nativeBridgeOverlayClient) Close(ctx context.Context, overlayID string)
 func (c *nativeBridgeOverlayClient) List(ctx context.Context) ([]OverlayInstance, error) {
 	req := nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       generateRequestID(),
+		RequestId:       generateRequestId(),
 		Platform:        "android",
 		Operation:       OperationList,
 		Payload:         map[string]any{},
@@ -231,7 +231,7 @@ func (c *nativeBridgeOverlayClient) List(ctx context.Context) ([]OverlayInstance
 func (c *nativeBridgeOverlayClient) CloseAll(ctx context.Context) (int, error) {
 	req := nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       generateRequestID(),
+		RequestId:       generateRequestId(),
 		Platform:        "android",
 		Operation:       OperationCloseAll,
 		Payload:         map[string]any{},
@@ -327,7 +327,7 @@ func toInt64(v any) int64 {
 
 var requestIDCounter uint64
 
-func generateRequestID() string {
+func generateRequestId() string {
 	requestIDCounter++
 	return fmt.Sprintf("req-%d-%d", time.Now().UnixNano(), requestIDCounter)
 }
