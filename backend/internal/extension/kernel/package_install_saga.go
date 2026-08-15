@@ -230,6 +230,11 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	currentSwitched := false
 	readModelCommitted := false
 	var providerSnapshot []*capability.CapabilityProviderDefinition
+	var definition domain.ExtensionDefinition
+	var previous *domain.ExtensionInstallation
+	var previousDefinition *domain.ExtensionDefinition
+	var previousModules []domain.ModuleDefinition
+	var previousContributions []domain.ContributionDefinition
 	step := func(order int, name, status, result, code string) error {
 		if renewErr := leaseGuard.AssertAlive(ctx); renewErr != nil {
 			return renewErr
@@ -280,7 +285,7 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	if stagingHash == "" {
 		return fail("install.verify_staging_tree", fmt.Errorf("kernel: staging hash empty"), "")
 	}
-	definition, err := pkg.Manifest.ToExtensionDefinition()
+	definition, err = pkg.Manifest.ToExtensionDefinition()
 	if err != nil {
 		return fail(StepBuildCandidateDefinitions, err, "")
 	}
