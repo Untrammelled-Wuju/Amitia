@@ -6,6 +6,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	"github.com/u-ai/backend/internal/extension/kernel/capability/acquisition"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
@@ -23,7 +24,7 @@ type ExecutionContext struct {
 	InvocationID string `json:"invocationId,omitempty"`
 	TraceID      string `json:"traceId,omitempty"`
 
-	RuntimeTarget *capability.DeploymentTarget `json:"runtimeTarget,omitempty"`
+	RuntimeTarget *acquisition.DeploymentTarget `json:"runtimeTarget,omitempty"`
 
 	ScopeSnapshotID      string `json:"scopeSnapshotId,omitempty"`
 	PermissionSnapshotID string `json:"permissionSnapshotId,omitempty"`
