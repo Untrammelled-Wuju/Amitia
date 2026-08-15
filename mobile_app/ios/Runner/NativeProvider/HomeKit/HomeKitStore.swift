@@ -137,6 +137,11 @@ public final class HomeKitStore: NSObject, HMHomeManagerDelegate, @unchecked Sen
         for cont in continuations {
             cont.resume()
         }
+        NativeEventEmitter.shared.emit(NativeEventPayload(
+            domain: "homekit",
+            event: "homes.updated",
+            data: ["count": manager.homes.count]
+        ))
     }
 
     public func homeManager(_ manager: HMHomeManager, didAdd home: HMHome) {
@@ -145,11 +150,21 @@ public final class HomeKitStore: NSObject, HMHomeManagerDelegate, @unchecked Sen
                 cachedHomes.append(home)
             }
         }
+        NativeEventEmitter.shared.emit(NativeEventPayload(
+            domain: "homekit",
+            event: "home.added",
+            data: ["id": home.uniqueIdentifier.uuidString, "name": home.name]
+        ))
     }
 
     public func homeManager(_ manager: HMHomeManager, didRemove home: HMHome) {
         queue.sync {
             cachedHomes.removeAll { $0.uniqueIdentifier == home.uniqueIdentifier }
         }
+        NativeEventEmitter.shared.emit(NativeEventPayload(
+            domain: "homekit",
+            event: "home.removed",
+            data: ["id": home.uniqueIdentifier.uuidString, "name": home.name]
+        ))
     }
 }

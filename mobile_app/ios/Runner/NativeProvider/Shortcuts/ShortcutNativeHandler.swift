@@ -106,7 +106,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
         default:
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "OPERATION_NOT_SUPPORTED", message: "unsupported operation: \(request.operation)")
@@ -118,7 +118,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
         let available = #available(iOS 16.0, *)
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: [
                 "available": available,
@@ -132,7 +132,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let actionId = request.payload?["actionId"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing actionId")
@@ -142,7 +142,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
         guard ShortcutActionGateway.shared.isCuratedAction(actionId) else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "action not in curated catalog: \(actionId)")
@@ -152,7 +152,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
         ShortcutActionGateway.shared.registerAction(actionId)
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["registered": true, "actionId": actionId],
             error: nil
@@ -163,7 +163,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let actionId = request.payload?["actionId"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing actionId")
@@ -172,7 +172,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
         ShortcutActionGateway.shared.revokeAction(actionId)
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["revoked": true, "actionId": actionId],
             error: nil
@@ -183,7 +183,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let actionId = request.payload?["actionId"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing actionId")
@@ -193,7 +193,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
         guard ShortcutActionGateway.shared.isCuratedAction(actionId) else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "action not in curated catalog: \(actionId)")
@@ -204,7 +204,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
         if donated {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["donated": true, "actionId": actionId],
                 error: nil
@@ -212,7 +212,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
         } else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "DONATION_FAILED", message: "failed to donate intent for \(actionId)")
@@ -223,7 +223,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
     private func handleEntitiesCharacters(_ request: IOSNativeRequest) -> IOSNativeResponse {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "entities.characters handled by Backend")
@@ -233,7 +233,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
     private func handleEntitiesConversations(_ request: IOSNativeRequest) -> IOSNativeResponse {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "entities.conversations handled by Backend")
@@ -243,7 +243,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
     private func handleEntitiesAlarms(_ request: IOSNativeRequest) -> IOSNativeResponse {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "entities.alarms handled by Backend")
@@ -253,7 +253,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
     private func handleEntitiesReminders(_ request: IOSNativeRequest) -> IOSNativeResponse {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "entities.reminders handled by Backend")
@@ -263,7 +263,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
     private func handleEntitiesActions(_ request: IOSNativeRequest) -> IOSNativeResponse {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "entities.actions handled by Backend")
@@ -273,7 +273,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
     private func handleEntityResolve(_ request: IOSNativeRequest) -> IOSNativeResponse {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "entity.resolve handled by Backend")
@@ -283,7 +283,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
     private func handleEntitySuggestions(_ request: IOSNativeRequest) -> IOSNativeResponse {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "entity.suggestions handled by Backend")
@@ -293,7 +293,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
     private func handleActionsCatalog(_ request: IOSNativeRequest) -> IOSNativeResponse {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "actions.catalog handled by Backend")
@@ -303,7 +303,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
     private func handleActionDescribe(_ request: IOSNativeRequest) -> IOSNativeResponse {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "action.describe handled by Backend")
@@ -314,7 +314,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let actionId = request.payload?["actionId"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing actionId")
@@ -324,7 +324,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
         guard ShortcutActionGateway.shared.isCuratedAction(actionId) else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "action not in curated catalog: \(actionId)")
@@ -334,7 +334,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
         let result = await ShortcutActionGateway.shared.executeAction(actionId: actionId, payload: request.payload)
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["executed": true, "actionId": actionId, "result": result],
             error: nil
@@ -345,7 +345,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let actionId = request.payload?["actionId"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing actionId")
@@ -353,7 +353,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["confirmed": true, "actionId": actionId],
             error: nil
@@ -364,7 +364,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
         let available = #available(iOS 16.0, *)
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["ready": available],
             error: nil
@@ -375,7 +375,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
         let available = #available(iOS 16.0, *)
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["ensured": available],
             error: nil
@@ -385,7 +385,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
     private func handleSnapshotGet(_ request: IOSNativeRequest) -> IOSNativeResponse {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "snapshot.get handled by Backend")
@@ -395,7 +395,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
     private func handleSnapshotRefresh(_ request: IOSNativeRequest) -> IOSNativeResponse {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "snapshot.refresh handled by Backend")
@@ -407,7 +407,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
             let shortcuts = AmitiaAppShortcutsProvider.appShortcuts
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["shortcuts": shortcuts.map { $0.phrases.first ?? "" }],
                 error: nil
@@ -415,7 +415,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "iOS 16.0+ required")
@@ -425,7 +425,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
     private func handleShortcutsPhrase(_ request: IOSNativeRequest) -> IOSNativeResponse {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["phrases": []],
             error: nil
@@ -437,7 +437,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
             ShortcutActionGateway.shared.updateShortcuts()
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["updated": true],
                 error: nil
@@ -445,7 +445,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "iOS 16.0+ required")
@@ -455,7 +455,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
     private func handleSettingsGet(_ request: IOSNativeRequest) -> IOSNativeResponse {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "settings.get handled by Backend")
@@ -465,7 +465,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
     private func handleSettingsUpdate(_ request: IOSNativeRequest) -> IOSNativeResponse {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "settings.update handled by Backend")

@@ -719,6 +719,21 @@ public final class BluetoothCentralStore: NSObject, CBCentralManagerDelegate, CB
         if central.state != .poweredOn {
             stopScan()
         }
+        let stateString: String
+        switch central.state {
+        case .unknown: stateString = "unknown"
+        case .resetting: stateString = "resetting"
+        case .unsupported: stateString = "unsupported"
+        case .unauthorized: stateString = "unauthorized"
+        case .poweredOff: stateString = "poweredOff"
+        case .poweredOn: stateString = "poweredOn"
+        @unknown default: stateString = "unknown"
+        }
+        NativeEventEmitter.shared.emit(NativeEventPayload(
+            domain: "bluetooth",
+            event: "adapter.state_changed",
+            data: ["state": stateString]
+        ))
     }
 
     public func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String : Any], rssi RSSI: NSNumber) {
@@ -741,6 +756,11 @@ public final class BluetoothCentralStore: NSObject, CBCentralManagerDelegate, CB
         if let op = op {
             op.continuation?.resume(returning: nil)
         }
+        NativeEventEmitter.shared.emit(NativeEventPayload(
+            domain: "bluetooth",
+            event: "peripheral.connected",
+            data: ["id": peripheral.identifier.uuidString, "name": peripheral.name ?? NSNull()]
+        ))
     }
 
     public func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
@@ -766,6 +786,11 @@ public final class BluetoothCentralStore: NSObject, CBCentralManagerDelegate, CB
                 op.continuation?.resume(returning: nil)
             }
         }
+        NativeEventEmitter.shared.emit(NativeEventPayload(
+            domain: "bluetooth",
+            event: "peripheral.disconnected",
+            data: ["id": peripheral.identifier.uuidString, "name": peripheral.name ?? NSNull(), "error": error?.localizedDescription ?? NSNull()]
+        ))
     }
 
     public func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
@@ -802,6 +827,18 @@ public final class BluetoothCentralStore: NSObject, CBCentralManagerDelegate, CB
             return
         }
         completeOperation(key: key, result: characteristic.value ?? Data(), error: nil)
+        if characteristic.isNotifying {
+            NativeEventEmitter.shared.emit(NativeEventPayload(
+                domain: "bluetooth",
+                event: "characteristic.value_updated",
+                data: [
+                    "peripheralId": peripheral.identifier.uuidString,
+                    "serviceUUID": characteristic.service?.uuid.uuidString ?? "",
+                    "characteristicUUID": characteristic.uuid.uuidString,
+                    "value": (characteristic.value ?? Data()).base64EncodedString()
+                ]
+            ))
+        }
     }
 
     public func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {

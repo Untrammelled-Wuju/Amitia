@@ -61,7 +61,7 @@ public class RemindersNativeHandler: NSObject, IOSNativeOperationHandler {
         default:
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "OPERATION_NOT_SUPPORTED", message: "unsupported operation: \(request.operation)")
@@ -72,7 +72,7 @@ public class RemindersNativeHandler: NSObject, IOSNativeOperationHandler {
     private func handleStatus(_ request: IOSNativeRequest) -> IOSNativeResponse {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["available": true, "message": "Reminders available"],
             error: nil
@@ -92,7 +92,7 @@ public class RemindersNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["authorized": authorized, "status": "\(status.rawValue)"],
             error: nil
@@ -103,7 +103,7 @@ public class RemindersNativeHandler: NSObject, IOSNativeOperationHandler {
         let granted = await store.requestRemindersAccess()
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["granted": granted],
             error: nil
@@ -117,7 +117,7 @@ public class RemindersNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["lists": list],
             error: nil
@@ -149,7 +149,7 @@ public class RemindersNativeHandler: NSObject, IOSNativeOperationHandler {
 
                 continuation.resume(returning: IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "ok",
                     result: ["reminders": results, "count": results.count],
                     error: nil
@@ -162,7 +162,7 @@ public class RemindersNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let reminderId = request.payload?["id"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing reminder id")
@@ -176,7 +176,7 @@ public class RemindersNativeHandler: NSObject, IOSNativeOperationHandler {
                 guard let reminder = reminders?.first(where: { $0.calendarItemIdentifier == reminderId }) else {
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
+                        requestId: request.requestId,
                         status: "error",
                         result: nil,
                         error: IOSNativeError(code: "NOT_FOUND", message: "reminder not found: \(reminderId)")
@@ -186,7 +186,7 @@ public class RemindersNativeHandler: NSObject, IOSNativeOperationHandler {
 
                 continuation.resume(returning: IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "ok",
                     result: [
                         "reminder": [
@@ -209,7 +209,7 @@ public class RemindersNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let title = request.payload?["title"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing title")
@@ -234,7 +234,7 @@ public class RemindersNativeHandler: NSObject, IOSNativeOperationHandler {
             try store.eventStore.save(reminder, commit: true)
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["created": true, "reminderId": reminder.calendarItemIdentifier],
                 error: nil
@@ -242,7 +242,7 @@ public class RemindersNativeHandler: NSObject, IOSNativeOperationHandler {
         } catch {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "CREATE_FAILED", message: error.localizedDescription)
@@ -254,7 +254,7 @@ public class RemindersNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let reminderId = request.payload?["id"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing reminder id")
@@ -268,7 +268,7 @@ public class RemindersNativeHandler: NSObject, IOSNativeOperationHandler {
                 guard let reminder = reminders?.first(where: { $0.calendarItemIdentifier == reminderId }) else {
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
+                        requestId: request.requestId,
                         status: "error",
                         result: nil,
                         error: IOSNativeError(code: "NOT_FOUND", message: "reminder not found: \(reminderId)")
@@ -290,7 +290,7 @@ public class RemindersNativeHandler: NSObject, IOSNativeOperationHandler {
                     try self.store.eventStore.save(reminder, commit: true)
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
+                        requestId: request.requestId,
                         status: "ok",
                         result: ["updated": true, "reminderId": reminder.calendarItemIdentifier],
                         error: nil
@@ -298,7 +298,7 @@ public class RemindersNativeHandler: NSObject, IOSNativeOperationHandler {
                 } catch {
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
+                        requestId: request.requestId,
                         status: "error",
                         result: nil,
                         error: IOSNativeError(code: "UPDATE_FAILED", message: error.localizedDescription)
@@ -312,7 +312,7 @@ public class RemindersNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let reminderId = request.payload?["id"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing reminder id")
@@ -326,7 +326,7 @@ public class RemindersNativeHandler: NSObject, IOSNativeOperationHandler {
                 guard let reminder = reminders?.first(where: { $0.calendarItemIdentifier == reminderId }) else {
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
+                        requestId: request.requestId,
                         status: "error",
                         result: nil,
                         error: IOSNativeError(code: "NOT_FOUND", message: "reminder not found: \(reminderId)")
@@ -340,7 +340,7 @@ public class RemindersNativeHandler: NSObject, IOSNativeOperationHandler {
                     try self.store.eventStore.save(reminder, commit: true)
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
+                        requestId: request.requestId,
                         status: "ok",
                         result: ["completed": true, "reminderId": reminder.calendarItemIdentifier],
                         error: nil
@@ -348,7 +348,7 @@ public class RemindersNativeHandler: NSObject, IOSNativeOperationHandler {
                 } catch {
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
+                        requestId: request.requestId,
                         status: "error",
                         result: nil,
                         error: IOSNativeError(code: "UPDATE_FAILED", message: error.localizedDescription)
@@ -362,7 +362,7 @@ public class RemindersNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let reminderId = request.payload?["id"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing reminder id")
@@ -376,7 +376,7 @@ public class RemindersNativeHandler: NSObject, IOSNativeOperationHandler {
                 guard let reminder = reminders?.first(where: { $0.calendarItemIdentifier == reminderId }) else {
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
+                        requestId: request.requestId,
                         status: "error",
                         result: nil,
                         error: IOSNativeError(code: "NOT_FOUND", message: "reminder not found: \(reminderId)")
@@ -390,7 +390,7 @@ public class RemindersNativeHandler: NSObject, IOSNativeOperationHandler {
                     try self.store.eventStore.save(reminder, commit: true)
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
+                        requestId: request.requestId,
                         status: "ok",
                         result: ["uncompleted": true, "reminderId": reminder.calendarItemIdentifier],
                         error: nil
@@ -398,7 +398,7 @@ public class RemindersNativeHandler: NSObject, IOSNativeOperationHandler {
                 } catch {
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
+                        requestId: request.requestId,
                         status: "error",
                         result: nil,
                         error: IOSNativeError(code: "UPDATE_FAILED", message: error.localizedDescription)
@@ -412,7 +412,7 @@ public class RemindersNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let reminderId = request.payload?["id"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing reminder id")
@@ -426,7 +426,7 @@ public class RemindersNativeHandler: NSObject, IOSNativeOperationHandler {
                 guard let reminder = reminders?.first(where: { $0.calendarItemIdentifier == reminderId }) else {
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
+                        requestId: request.requestId,
                         status: "error",
                         result: nil,
                         error: IOSNativeError(code: "NOT_FOUND", message: "reminder not found: \(reminderId)")
@@ -438,7 +438,7 @@ public class RemindersNativeHandler: NSObject, IOSNativeOperationHandler {
                     try self.store.eventStore.remove(reminder, commit: true)
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
+                        requestId: request.requestId,
                         status: "ok",
                         result: ["deleted": true, "reminderId": reminderId],
                         error: nil
@@ -446,7 +446,7 @@ public class RemindersNativeHandler: NSObject, IOSNativeOperationHandler {
                 } catch {
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
+                        requestId: request.requestId,
                         status: "error",
                         result: nil,
                         error: IOSNativeError(code: "DELETE_FAILED", message: error.localizedDescription)

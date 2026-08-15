@@ -69,7 +69,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
         default:
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "OPERATION_NOT_SUPPORTED", message: "unsupported operation: \(request.operation)")
@@ -80,7 +80,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
     private func handleStatus(_ request: IOSNativeRequest) -> IOSNativeResponse {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["available": true, "message": "Contacts available"],
             error: nil
@@ -92,7 +92,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
         let authorized = status == .authorized
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["authorized": authorized, "status": "\(status.rawValue)"],
             error: nil
@@ -104,7 +104,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
             let granted = try await store.requestAccess(for: .contacts)
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["granted": granted],
                 error: nil
@@ -112,7 +112,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
         } catch {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "AUTHORIZATION_FAILED", message: error.localizedDescription)
@@ -124,7 +124,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let query = request.payload?["query"] as? String, !query.isEmpty else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing search query")
@@ -148,7 +148,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
             }
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["contacts": results, "count": results.count],
                 error: nil
@@ -156,7 +156,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
         } catch {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "SEARCH_FAILED", message: error.localizedDescription)
@@ -182,7 +182,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
             }
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["contacts": results, "count": results.count],
                 error: nil
@@ -190,7 +190,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
         } catch {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "LIST_FAILED", message: error.localizedDescription)
@@ -202,7 +202,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let contactId = request.payload?["id"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing contact id")
@@ -225,7 +225,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
             let contact = try store.unifiedContact(withIdentifier: contactId, keysToFetch: keys)
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["contact": contactToDict(contact)],
                 error: nil
@@ -233,7 +233,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
         } catch {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "NOT_FOUND", message: "contact not found: \(contactId)")
@@ -271,7 +271,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
             try store.execute(saveRequest)
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["created": true, "contactId": contact.identifier],
                 error: nil
@@ -279,7 +279,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
         } catch {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "CREATE_FAILED", message: error.localizedDescription)
@@ -291,7 +291,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let contactId = request.payload?["id"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing contact id")
@@ -318,7 +318,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
             try store.execute(saveRequest)
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["updated": true, "contactId": contact.identifier],
                 error: nil
@@ -326,7 +326,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
         } catch {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "UPDATE_FAILED", message: error.localizedDescription)
@@ -338,7 +338,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let contactId = request.payload?["id"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing contact id")
@@ -355,7 +355,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
             try store.execute(saveRequest)
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["deleted": true, "contactId": contactId],
                 error: nil
@@ -363,7 +363,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
         } catch {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "DELETE_FAILED", message: error.localizedDescription)
@@ -379,7 +379,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
             }
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["containers": results, "count": results.count],
                 error: nil
@@ -387,7 +387,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
         } catch {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "LIST_FAILED", message: error.localizedDescription)
@@ -403,7 +403,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
             }
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["groups": results, "count": results.count],
                 error: nil
@@ -411,7 +411,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
         } catch {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "LIST_FAILED", message: error.localizedDescription)
@@ -423,7 +423,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let contactId = request.payload?["id"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing contact id")
@@ -437,7 +437,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
             if let photoData = photoData {
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "ok",
                     result: ["photo": photoData],
                     error: nil
@@ -445,7 +445,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
             } else {
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "ok",
                     result: ["photo": NSNull()],
                     error: nil
@@ -454,7 +454,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
         } catch {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "NOT_FOUND", message: "contact not found: \(contactId)")
@@ -467,7 +467,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
               let photoData = request.payload?["photoData"] as? Data else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing contact id or photo data")
@@ -485,7 +485,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
 
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["set": true, "contactId": contact.identifier],
                 error: nil
@@ -493,7 +493,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
         } catch {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "UPDATE_FAILED", message: error.localizedDescription)
@@ -505,7 +505,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let contactId = request.payload?["id"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing contact id")
@@ -523,7 +523,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
 
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["removed": true, "contactId": contact.identifier],
                 error: nil
@@ -531,7 +531,7 @@ public class ContactsNativeHandler: NSObject, IOSNativeOperationHandler {
         } catch {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "UPDATE_FAILED", message: error.localizedDescription)

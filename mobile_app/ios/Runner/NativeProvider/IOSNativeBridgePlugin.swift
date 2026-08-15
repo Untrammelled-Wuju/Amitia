@@ -5,6 +5,8 @@ final class IOSNativeBridgePlugin {
     static let channelName = "com.amitia.ios_native/bridge"
 
     private weak var host: IOSNativeHost?
+    private var eventObserver: NSObjectProtocol?
+    private var flutterChannel: FlutterMethodChannel?
 
     static func register(
         messenger: FlutterBinaryMessenger,
@@ -15,13 +17,36 @@ final class IOSNativeBridgePlugin {
             name: channelName,
             binaryMessenger: messenger
         )
+        plugin.flutterChannel = channel
         channel.setMethodCallHandler { call, result in
             plugin.handle(call: call, result: result)
         }
+        plugin.startEventForwarding()
     }
 
     private init(host: IOSNativeHost) {
         self.host = host
+    }
+
+    private func startEventForwarding() {
+        eventObserver = NotificationCenter.default.addObserver(
+            forName: NSNotification.Name("com.amitia.iosnative.emitEvent"),
+            object: nil,
+            queue: .main
+        ) { [weak self] notification in
+            guard let self = self,
+                  let jsonData = notification.userInfo?["payload"] as? Data,
+                  let payload = try? JSONSerialization.jsonObject(with: jsonData) as? [String: Any] else {
+                return
+            }
+            self.flutterChannel?.invokeMethod("nativeEvent", arguments: payload)
+        }
+    }
+
+    deinit {
+        if let observer = eventObserver {
+            NotificationCenter.default.removeObserver(observer)
+        }
     }
 
     private func handle(call: FlutterMethodCall, result: @escaping FlutterResult) {

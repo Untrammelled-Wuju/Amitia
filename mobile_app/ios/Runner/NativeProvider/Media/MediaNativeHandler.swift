@@ -71,7 +71,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         default:
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "OPERATION_NOT_SUPPORTED", message: "unsupported operation: \(request.operation)")
@@ -86,7 +86,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
 
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: [
                 "available": true,
@@ -103,7 +103,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         if status == .denied || status == .restricted {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "PERMISSION_DENIED", message: "photo library access denied")
@@ -115,7 +115,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
             if newStatus == .denied || newStatus == .restricted {
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "error",
                     result: nil,
                     error: IOSNativeError(code: "PERMISSION_DENIED", message: "photo library access denied")
@@ -145,7 +145,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
 
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["photos": assets, "count": assets.count],
                 error: nil
@@ -167,7 +167,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
 
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["status": statusString, "authorized": status == .authorized || status == .limited],
             error: nil
@@ -179,7 +179,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         guard status == .authorized || status == .limited else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "PERMISSION_DENIED", message: "photo library access denied")
@@ -208,7 +208,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
 
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["photos": photos, "count": photos.count],
             error: nil
@@ -219,7 +219,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let localId = request.payload?["localIdentifier"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing localIdentifier")
@@ -230,7 +230,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         guard status == .authorized || status == .limited else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "PERMISSION_DENIED", message: "photo library access denied")
@@ -240,7 +240,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [localId], options: nil).firstObject else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "NOT_FOUND", message: "photo not found: \(localId)")
@@ -255,7 +255,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let localId = request.payload?["localIdentifier"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing localIdentifier")
@@ -266,7 +266,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         guard status == .authorized || status == .limited else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "PERMISSION_DENIED", message: "photo library access denied")
@@ -276,7 +276,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let asset = PHAsset.fetchAssets(withLocalIdentifiers: [localId], options: nil).firstObject else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "NOT_FOUND", message: "photo not found: \(localId)")
@@ -291,7 +291,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let resourceUri = request.payload?["resourceUri"] as? String else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing resourceUri")
@@ -302,7 +302,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         guard fileURL != nil || resourceUri.hasPrefix("file://") else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "resource not staged: \(resourceUri)")
@@ -320,7 +320,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
               let image = UIImage(data: imageData) else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "failed to load image data from \(sourceURL.path)")
@@ -333,7 +333,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
             if newStatus == .denied || newStatus == .restricted {
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "error",
                     result: nil,
                     error: IOSNativeError(code: "PERMISSION_DENIED", message: "photo library access denied")
@@ -342,7 +342,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         } else if authStatus == .denied || authStatus == .restricted {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "PERMISSION_DENIED", message: "photo library access denied")
@@ -357,7 +357,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
             MediaStaging.deleteStagedResource(resourceUri)
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["saved": true],
                 error: nil
@@ -365,7 +365,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         } catch {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "SAVE_FAILED", message: error.localizedDescription)
@@ -377,7 +377,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let localIds = request.payload?["localIdentifiers"] as? [String], !localIds.isEmpty else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing localIdentifiers")
@@ -388,7 +388,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         guard status == .authorized else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "PERMISSION_DENIED", message: "photo library access denied")
@@ -403,7 +403,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
             }
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["deleted": true, "count": localIds.count],
                 error: nil
@@ -411,7 +411,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         } catch {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "DELETE_FAILED", message: error.localizedDescription)
@@ -423,7 +423,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         if #available(iOS 15, *) {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["presentLimitedLibraryPicker": true],
                 error: nil
@@ -431,7 +431,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         } else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "limited library picker requires iOS 15+")
@@ -446,7 +446,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
 
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["available": hasCamera, "authorized": authorized, "status": "\(authStatus.rawValue)"],
             error: nil
@@ -471,7 +471,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
 
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["devices": devices, "count": devices.count],
             error: nil
@@ -488,7 +488,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
             } else {
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "error",
                     result: nil,
                     error: IOSNativeError(code: "FOREGROUND_REQUIRED", message: "camera capture requires explicit user authorization prompt in foreground")
@@ -499,7 +499,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         if !authorized {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "PERMISSION_DENIED", message: "camera access denied")
@@ -508,7 +508,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
 
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: "FOREGROUND_REQUIRED", message: "photo capture requires presenting system camera UI in foreground scene")
@@ -525,7 +525,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
             } else {
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "error",
                     result: nil,
                     error: IOSNativeError(code: "FOREGROUND_REQUIRED", message: "video recording requires explicit user authorization prompt in foreground")
@@ -536,7 +536,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         if !videoAuthorized {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "PERMISSION_DENIED", message: "camera access denied")
@@ -552,7 +552,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
 
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: "FOREGROUND_REQUIRED", message: "video recording requires presenting system camera UI in foreground scene")
@@ -565,7 +565,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
 
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["authorized": authorized, "status": "\(authStatus.rawValue)"],
             error: nil
@@ -582,7 +582,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
             } else {
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "error",
                     result: nil,
                     error: IOSNativeError(code: "FOREGROUND_REQUIRED", message: "audio recording requires explicit user authorization prompt in foreground")
@@ -593,7 +593,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         if !authorized {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "PERMISSION_DENIED", message: "microphone access denied")
@@ -602,7 +602,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
 
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: "FOREGROUND_REQUIRED", message: "audio recording requires presenting recording UI in foreground scene")

@@ -49,7 +49,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
         if status == .restricted {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "HOMEKIT_RESTRICTED", message: "HomeKit access is restricted by system policy")
@@ -58,7 +58,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
         if status == .notDetermined {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "HOMEKIT_NOT_DETERMINED", message: "HomeKit authorization not yet determined")
@@ -104,7 +104,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
         default:
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "OPERATION_NOT_SUPPORTED", message: "unsupported operation: \(request.operation)")
@@ -117,7 +117,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
         let authorized = status == .authorized
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: [
                 "available": true,
@@ -133,7 +133,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
         let status = homeKitAuthorizationStatusUnchecked()
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: [
                 "authorized": status == .authorized,
@@ -156,7 +156,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["homes": homes, "count": homes.count],
             error: nil
@@ -174,7 +174,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
         let generation = store.currentGeneration
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: [
                 "home": [
@@ -207,7 +207,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["rooms": rooms, "count": rooms.count],
             error: nil
@@ -233,7 +233,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["zones": zones, "count": zones.count],
             error: nil
@@ -262,7 +262,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["accessories": accessories, "count": accessories.count],
             error: nil
@@ -286,7 +286,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
         let generation = store.currentGeneration
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: [
                 "accessory": [
@@ -332,7 +332,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["services": services, "count": services.count],
             error: nil
@@ -375,7 +375,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["characteristics": characteristics, "count": characteristics.count],
             error: nil
@@ -410,7 +410,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
             let value = try await readCharacteristicValue(characteristic)
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: [
                     "value": value,
@@ -459,7 +459,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
             try await writeCharacteristicValue(characteristic, value: writeValue)
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: [
                     "written": true,
@@ -501,7 +501,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: result,
             error: nil
@@ -525,7 +525,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
         let generation = store.currentGeneration
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: [
                 "actionSet": [
@@ -568,7 +568,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
             }
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: [
                     "executed": true,
@@ -602,7 +602,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["automations": triggers, "count": triggers.count],
             error: nil
@@ -701,7 +701,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
     private func errorResponse(_ request: IOSNativeRequest, code: String, message: String) -> IOSNativeResponse {
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "error",
             result: nil,
             error: IOSNativeError(code: code, message: message)

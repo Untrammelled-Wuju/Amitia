@@ -39,7 +39,7 @@ public class ClipboardNativeHandler: NSObject, IOSNativeOperationHandler {
         default:
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "OPERATION_NOT_SUPPORTED", message: "unsupported operation: \(request.operation)")
@@ -52,7 +52,7 @@ public class ClipboardNativeHandler: NSObject, IOSNativeOperationHandler {
         let hasContent = clipboard.hasStrings || clipboard.hasURLs || clipboard.hasImages
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["available": true, "hasContent": hasContent],
             error: nil
@@ -67,7 +67,7 @@ public class ClipboardNativeHandler: NSObject, IOSNativeOperationHandler {
         if clipboard.hasImages { types.append("image") }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["types": types, "hasContent": !types.isEmpty],
             error: nil
@@ -79,7 +79,7 @@ public class ClipboardNativeHandler: NSObject, IOSNativeOperationHandler {
         if let text = clipboard.string {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["text": text, "type": "text"],
                 error: nil
@@ -88,7 +88,7 @@ public class ClipboardNativeHandler: NSObject, IOSNativeOperationHandler {
         if let url = clipboard.url {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["url": url.absoluteString, "type": "url"],
                 error: nil
@@ -97,7 +97,7 @@ public class ClipboardNativeHandler: NSObject, IOSNativeOperationHandler {
         if let image = clipboard.image {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "ok",
                 result: ["type": "image", "hasImage": image != nil],
                 error: nil
@@ -105,7 +105,7 @@ public class ClipboardNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["empty": true],
             error: nil
@@ -127,7 +127,7 @@ public class ClipboardNativeHandler: NSObject, IOSNativeOperationHandler {
         if !written {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
+                requestId: request.requestId,
                 status: "error",
                 result: nil,
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing text or url in payload")
@@ -136,7 +136,7 @@ public class ClipboardNativeHandler: NSObject, IOSNativeOperationHandler {
 
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["written": true],
             error: nil
@@ -148,7 +148,7 @@ public class ClipboardNativeHandler: NSObject, IOSNativeOperationHandler {
         clipboard.items = []
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
+            requestId: request.requestId,
             status: "ok",
             result: ["cleared": true],
             error: nil
