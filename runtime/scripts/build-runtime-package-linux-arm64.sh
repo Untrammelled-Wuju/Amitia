@@ -156,7 +156,7 @@ cat > "$METADATA_DIR/package-index.json" << MANIFESTEOF
   "payloads": [
     {
       "role": "rootfs",
-      "path": "payload/rootfs/rootfs.tar",
+      "path": "payload/rootfs/rootfs.tar.xz",
       "sha256": "$ROOTFS_SHA",
       "size": $(stat -c %s "$ROOTFS_TAR" 2>/dev/null || stat -f %z "$ROOTFS_TAR" 2>/dev/null || wc -c < "$ROOTFS_TAR")
     },
@@ -208,7 +208,7 @@ cat > "$METADATA_DIR/component-lock.json" << LOCKEOF
       "id": "rootfs",
       "version": "$RUNTIME_VERSION",
       "architecture": "arm64",
-      "path": "payload/rootfs/rootfs.tar",
+      "path": "payload/rootfs/rootfs.tar.xz",
       "sha256": "$ROOTFS_SHA"
     }
   ]

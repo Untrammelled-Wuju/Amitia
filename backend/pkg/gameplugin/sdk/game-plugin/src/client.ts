@@ -4,6 +4,15 @@ import { SDKError, createEncodeError, createTransportError, createValidationErro
 import { validateMessageId, validatePluginMethod } from './validation';
 import { v4 as uuidv4 } from 'uuid';
 
+export interface PendingRequest {
+  id: string;
+  method: string;
+  resolve: (envelope: Envelope) => void;
+  reject: (error: Error) => void;
+  timer: ReturnType<typeof setTimeout>;
+  createdAt: number;
+}
+
 export type MessageOption = (envelope: Envelope) => void;
 
 export function withRuntimeID(id: string): MessageOption {
@@ -69,12 +78,16 @@ export interface ClientOptions {
   serviceId?: string;
 }
 
+export const DEFAULT_RPC_TIMEOUT_MS = 30000;
+
 export class Client {
   private transport: Transport;
   private idGenerator: IDGenerator;
   private pluginId: string;
   private runtimeId: string;
   private serviceId: string;
+  private pending: Map<string, PendingRequest> = new Map();
+  private pendingTimeoutMs: number = DEFAULT_RPC_TIMEOUT_MS;
 
   constructor(transport: Transport, options: ClientOptions = {}) {
     this.transport = transport;
@@ -88,17 +101,90 @@ export class Client {
     return this.transport;
   }
 
+  getPendingCount(): number {
+    return this.pending.size;
+  }
+
+  cancelPendingRequests(reason: string = 'client cancelled'): void {
+    for (const [id, pending] of this.pending) {
+      clearTimeout(pending.timer);
+      pending.reject(new Error(`request ${id} cancelled: ${reason}`));
+    }
+    this.pending.clear();
+  }
+
   async sendRequest(
     method: string,
     payload?: unknown,
+    timeoutMs?: number,
     ...opts: MessageOption[]
   ): Promise<Envelope> {
     const err = validatePluginMethod(method);
     if (err) throw createValidationError(err);
 
     const envelope = this.newRequest(method, payload, ...opts);
-    await this.transport.send(envelope);
-    return envelope;
+    return this.sendWithPending(envelope, timeoutMs);
+  }
+
+  async sendReservedRequest(
+    method: string,
+    payload?: unknown,
+    timeoutMs?: number,
+    ...opts: MessageOption[]
+  ): Promise<Envelope> {
+    const envelope = this.newRequest(method, payload, ...opts);
+    return this.sendWithPending(envelope, timeoutMs);
+  }
+
+  private async sendWithPending(
+    envelope: Envelope,
+    timeoutMs?: number
+  ): Promise<Envelope> {
+    const id = envelope.id!;
+    const timeout = timeoutMs ?? this.pendingTimeoutMs;
+
+    return new Promise<Envelope>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.pending.delete(id);
+        reject(new Error(`request ${id} timed out after ${timeout}ms`));
+      }, timeout);
+
+      this.pending.set(id, {
+        id,
+        method: envelope.method || '',
+        resolve,
+        reject,
+        timer,
+        createdAt: Date.now(),
+      });
+
+      this.transport.send(envelope).catch((err) => {
+        this.pending.delete(id);
+        clearTimeout(timer);
+        reject(err);
+      });
+    });
+  }
+
+  handleIncomingResponse(envelope: Envelope): boolean {
+    if (envelope.type !== 'response' && envelope.type !== 'error') {
+      return false;
+    }
+    const requestId = envelope.requestId;
+    if (!requestId) return false;
+    const pending = this.pending.get(requestId);
+    if (!pending) return false;
+
+    clearTimeout(pending.timer);
+    this.pending.delete(requestId);
+
+    if (envelope.type === 'error') {
+      const errMsg = envelope.error ? `${envelope.error.code}: ${envelope.error.message}` : 'unknown error';
+      pending.reject(new Error(errMsg));
+    } else {
+      pending.resolve(envelope);
+    }
+    return true;
   }
 
   async sendResponse(
