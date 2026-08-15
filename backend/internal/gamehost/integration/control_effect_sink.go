@@ -112,8 +112,8 @@ func (s *ProtocolControlEffectSink) ExecuteAuthorized(
 	}
 
 	var commit SinkEffectCommitResult
-	if resp.Payload != nil {
-		if err := json.Unmarshal(resp.Payload.(json.RawMessage), &commit); err == nil {
+	if len(resp.Payload) > 0 {
+		if err := json.Unmarshal(resp.Payload, &commit); err == nil {
 			if !commit.Committed {
 				if commit.ErrorCode != "" {
 					return fmt.Errorf("effect commit failed: %s - %s", commit.ErrorCode, commit.Message)

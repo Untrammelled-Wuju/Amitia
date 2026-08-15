@@ -31,13 +31,8 @@ func (s *ProviderLifecycleService) RegisterProvider(def CapabilityProviderDefini
 	}
 
 	newDef, _ := s.registry.GetByID(def.ID)
-	if newDef != nil {
-		if found {
-			newDef.Revision = old.Revision + 1
-		} else {
-			newDef.Revision = 1
-		}
-		s.registry.setDefinition(string(newDef.ID), newDef)
+	if newDef == nil {
+		return nil
 	}
 
 	if found {
@@ -58,7 +53,11 @@ func (s *ProviderLifecycleService) RegisterProvider(def CapabilityProviderDefini
 			OccurredAt:    now,
 		})
 		if err != nil {
-			s.registry.setDefinition(string(old.ID), old)
+			if old != nil {
+				s.registry.setDefinition(string(old.ID), old)
+			} else {
+				s.registry.delDefinition(string(def.ID))
+			}
 			return err
 		}
 		return nil
@@ -148,13 +147,8 @@ func (s *ProviderLifecycleService) RegisterInstance(inst CapabilityProviderInsta
 	}
 
 	newInst, _ := s.registry.GetInstanceByID(inst.ID)
-	if newInst != nil {
-		if found {
-			newInst.Revision = old.Revision + 1
-		} else {
-			newInst.Revision = 1
-		}
-		s.registry.setInstance(string(newInst.ID), newInst)
+	if newInst == nil {
+		return nil
 	}
 
 	if found {

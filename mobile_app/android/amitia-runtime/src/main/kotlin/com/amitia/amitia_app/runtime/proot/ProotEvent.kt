@@ -15,4 +15,9 @@ sealed class ProotEvent {
     data class Exited(val exit: ProotExit) : ProotEvent() {
         override val sessionId: String get() = exit.sessionId
     }
+    data class ExitWatcherFailed(
+        override val sessionId: String,
+        val generation: Long,
+        val message: String,
+    ) : ProotEvent()
 }

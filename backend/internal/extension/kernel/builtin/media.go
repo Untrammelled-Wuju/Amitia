@@ -30,7 +30,6 @@ func parseBuiltinVersion(version string) domain.SemanticVersion {
 func BuildAIExtension(protocolFamily, version string) Definition {
 	extID := domain.ExtensionID(fmt.Sprintf("com.amitia.builtin.ai.%s", protocolFamily))
 	moduleID := domain.ModuleID(fmt.Sprintf("com.amitia.builtin.ai.%s/main", protocolFamily))
-	contributionID := domain.ContributionID(fmt.Sprintf("com.amitia.builtin.ai.%s/chat.generate", protocolFamily))
 	contributionName := fmt.Sprintf("AI %s Chat Generate", protocolFamily)
 	capID := capability.CapabilityID("ai.chat.generate")
 	ver := parseBuiltinVersion(version)
@@ -67,26 +66,15 @@ func BuildAIExtension(protocolFamily, version string) Definition {
 					Runtime: &domain.RuntimeDefinition{
 						Type: domain.RuntimeTypeBuiltin,
 					},
-					Contributions: []domain.ContributionDefinition{
-						{
-							ID:          contributionID,
-							ModuleID:    moduleID,
-							ExtensionID: extID,
-							Kind:        domain.ContributionKindProvider,
-							Name: domain.LocalizedText{
-								Default: "Chat Generate",
-							},
-							Description: domain.LocalizedText{
-								Default: "Generate chat responses using AI models",
-							},
-							RuntimeBinding: &domain.RuntimeBinding{
-								RuntimeType: domain.RuntimeTypeBuiltin,
-								InstanceID:  string(capID),
-							},
+ProvidedCapabilities: []domain.ProvidedCapability{
+					{ID: string(capID), Version: "1.0.0"},
+				},
+					Provider: &domain.ProviderMetadata{
+						ID:       "builtin.ai." + protocolFamily,
+						Priority: 100,
+						Metadata: map[string]any{
+							"protocol": protocolFamily,
 						},
-					},
-					ProvidedCapabilities: []domain.ProvidedCapability{
-						{ID: string(capID), Version: "1.0.0"},
 					},
 				},
 			},
@@ -142,43 +130,14 @@ func BuildTTSExtension(version string) Definition {
 					Runtime: &domain.RuntimeDefinition{
 						Type: domain.RuntimeTypeBuiltin,
 					},
-					Contributions: []domain.ContributionDefinition{
-						{
-							ID:          domain.ContributionID(PrefixBuiltin + "tts/synthesize"),
-							ModuleID:    moduleID,
-							ExtensionID: extID,
-							Kind:        domain.ContributionKindProvider,
-							Name: domain.LocalizedText{
-								Default: "TTS Synthesize",
-							},
-							Description: domain.LocalizedText{
-								Default: "Synthesize text to speech audio",
-							},
-							RuntimeBinding: &domain.RuntimeBinding{
-								RuntimeType: domain.RuntimeTypeBuiltin,
-								InstanceID:  "speech.tts.synthesize",
-							},
-						},
-						{
-							ID:          domain.ContributionID(PrefixBuiltin + "tts/stream"),
-							ModuleID:    moduleID,
-							ExtensionID: extID,
-							Kind:        domain.ContributionKindProvider,
-							Name: domain.LocalizedText{
-								Default: "TTS Stream",
-							},
-							Description: domain.LocalizedText{
-								Default: "Stream text-to-speech audio in real-time",
-							},
-							RuntimeBinding: &domain.RuntimeBinding{
-								RuntimeType: domain.RuntimeTypeBuiltin,
-								InstanceID:  "speech.tts.stream",
-							},
-						},
-					},
 					ProvidedCapabilities: []domain.ProvidedCapability{
 						{ID: "speech.tts.synthesize", Version: "1.0.0"},
 						{ID: "speech.tts.stream", Version: "1.0.0"},
+					},
+					Provider: &domain.ProviderMetadata{
+						ID:       "builtin.tts",
+						Priority: 100,
+						Metadata: map[string]any{},
 					},
 				},
 			},
@@ -234,43 +193,14 @@ func BuildASRExtension(version string) Definition {
 					Runtime: &domain.RuntimeDefinition{
 						Type: domain.RuntimeTypeBuiltin,
 					},
-					Contributions: []domain.ContributionDefinition{
-						{
-							ID:          domain.ContributionID(PrefixBuiltin + "asr/transcribe"),
-							ModuleID:    moduleID,
-							ExtensionID: extID,
-							Kind:        domain.ContributionKindProvider,
-							Name: domain.LocalizedText{
-								Default: "ASR Transcribe",
-							},
-							Description: domain.LocalizedText{
-								Default: "Transcribe speech audio to text",
-							},
-							RuntimeBinding: &domain.RuntimeBinding{
-								RuntimeType: domain.RuntimeTypeBuiltin,
-								InstanceID:  "speech.asr.transcribe",
-							},
-						},
-						{
-							ID:          domain.ContributionID(PrefixBuiltin + "asr/stream"),
-							ModuleID:    moduleID,
-							ExtensionID: extID,
-							Kind:        domain.ContributionKindProvider,
-							Name: domain.LocalizedText{
-								Default: "ASR Stream",
-							},
-							Description: domain.LocalizedText{
-								Default: "Stream real-time speech recognition",
-							},
-							RuntimeBinding: &domain.RuntimeBinding{
-								RuntimeType: domain.RuntimeTypeBuiltin,
-								InstanceID:  "speech.asr.stream",
-							},
-						},
-					},
-					ProvidedCapabilities: []domain.ProvidedCapability{
-						{ID: "speech.asr.transcribe", Version: "1.0.0"},
-						{ID: "speech.asr.stream", Version: "1.0.0"},
+ProvidedCapabilities: []domain.ProvidedCapability{
+					{ID: "speech.asr.transcribe", Version: "1.0.0"},
+					{ID: "speech.asr.stream", Version: "1.0.0"},
+				},
+					Provider: &domain.ProviderMetadata{
+						ID:       "builtin.asr",
+						Priority: 100,
+						Metadata: map[string]any{},
 					},
 				},
 			},
@@ -334,16 +264,12 @@ func BuildMediaExtension(version string) Definition {
 							ID:          domain.ContributionID("media.metadata"),
 							ModuleID:    moduleID,
 							ExtensionID: extID,
-							Kind:        domain.ContributionKindProvider,
+							Kind:        domain.ContributionKindTool,
 							Name: domain.LocalizedText{
 								Default: "Media Metadata",
 							},
 							Description: domain.LocalizedText{
 								Default: "Get metadata of a media file",
-							},
-							RuntimeBinding: &domain.RuntimeBinding{
-								RuntimeType: domain.RuntimeTypeBuiltin,
-								InstanceID:  "media.metadata",
 							},
 							Metadata: map[string]any{
 								"legacyToolId": "media.metadata",
@@ -353,16 +279,12 @@ func BuildMediaExtension(version string) Definition {
 							ID:          domain.ContributionID("media.convert"),
 							ModuleID:    moduleID,
 							ExtensionID: extID,
-							Kind:        domain.ContributionKindProvider,
+							Kind:        domain.ContributionKindTool,
 							Name: domain.LocalizedText{
 								Default: "Media Convert",
 							},
 							Description: domain.LocalizedText{
 								Default: "Convert media to another format",
-							},
-							RuntimeBinding: &domain.RuntimeBinding{
-								RuntimeType: domain.RuntimeTypeBuiltin,
-								InstanceID:  "media.convert",
 							},
 							Metadata: map[string]any{
 								"legacyToolId": "media.convert",
@@ -372,6 +294,11 @@ func BuildMediaExtension(version string) Definition {
 					ProvidedCapabilities: []domain.ProvidedCapability{
 						{ID: "media.metadata", Version: "1.0.0"},
 						{ID: "media.convert", Version: "1.0.0"},
+					},
+					Provider: &domain.ProviderMetadata{
+						ID:       "builtin.media",
+						Priority: 100,
+						Metadata: map[string]any{},
 					},
 				},
 			},
@@ -427,26 +354,13 @@ func BuildImageExtension(version string) Definition {
 					Runtime: &domain.RuntimeDefinition{
 						Type: domain.RuntimeTypeBuiltin,
 					},
-					Contributions: []domain.ContributionDefinition{
-						{
-							ID:          domain.ContributionID(PrefixBuiltin + "image/generate"),
-							ModuleID:    moduleID,
-							ExtensionID: extID,
-							Kind:        domain.ContributionKindProvider,
-							Name: domain.LocalizedText{
-								Default: "Image Generate",
-							},
-							Description: domain.LocalizedText{
-								Default: "Generate images from text descriptions",
-							},
-							RuntimeBinding: &domain.RuntimeBinding{
-								RuntimeType: domain.RuntimeTypeBuiltin,
-								InstanceID:  "image.generate",
-							},
-						},
-					},
-					ProvidedCapabilities: []domain.ProvidedCapability{
-						{ID: "image.generate", Version: "1.0.0"},
+ProvidedCapabilities: []domain.ProvidedCapability{
+					{ID: "image.generate", Version: "1.0.0"},
+				},
+					Provider: &domain.ProviderMetadata{
+						ID:       "builtin.image",
+						Priority: 100,
+						Metadata: map[string]any{},
 					},
 				},
 			},
@@ -502,26 +416,13 @@ func BuildBackgroundRemovalExtension(version string) Definition {
 					Runtime: &domain.RuntimeDefinition{
 						Type: domain.RuntimeTypeBuiltin,
 					},
-					Contributions: []domain.ContributionDefinition{
-						{
-							ID:          domain.ContributionID(PrefixBuiltin + "background-removal/remove"),
-							ModuleID:    moduleID,
-							ExtensionID: extID,
-							Kind:        domain.ContributionKindProvider,
-							Name: domain.LocalizedText{
-								Default: "Background Remove",
-							},
-							Description: domain.LocalizedText{
-								Default: "Remove the background from an image",
-							},
-							RuntimeBinding: &domain.RuntimeBinding{
-								RuntimeType: domain.RuntimeTypeBuiltin,
-								InstanceID:  "image.background.remove",
-							},
-						},
-					},
 					ProvidedCapabilities: []domain.ProvidedCapability{
 						{ID: "image.background.remove", Version: "1.0.0"},
+					},
+					Provider: &domain.ProviderMetadata{
+						ID:       "builtin.background-removal",
+						Priority: 100,
+						Metadata: map[string]any{},
 					},
 				},
 			},
@@ -577,26 +478,13 @@ func BuildVisionExtension(version string) Definition {
 					Runtime: &domain.RuntimeDefinition{
 						Type: domain.RuntimeTypeBuiltin,
 					},
-					Contributions: []domain.ContributionDefinition{
-						{
-							ID:          domain.ContributionID(PrefixBuiltin + "vision/analyze"),
-							ModuleID:    moduleID,
-							ExtensionID: extID,
-							Kind:        domain.ContributionKindProvider,
-							Name: domain.LocalizedText{
-								Default: "Vision Analyze",
-							},
-							Description: domain.LocalizedText{
-								Default: "Analyze and describe image content",
-							},
-							RuntimeBinding: &domain.RuntimeBinding{
-								RuntimeType: domain.RuntimeTypeBuiltin,
-								InstanceID:  "vision.analyze",
-							},
-						},
-					},
 					ProvidedCapabilities: []domain.ProvidedCapability{
 						{ID: "vision.analyze", Version: "1.0.0"},
+					},
+					Provider: &domain.ProviderMetadata{
+						ID:       "builtin.vision",
+						Priority: 100,
+						Metadata: map[string]any{},
 					},
 				},
 			},

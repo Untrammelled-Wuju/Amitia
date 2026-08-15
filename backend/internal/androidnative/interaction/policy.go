@@ -12,6 +12,7 @@ const (
 	DefaultMinVisionConfidence   = 0.85
 
 	DefaultAllowCoordinateFallback = true
+	DefaultAllowShizukuFallback    = false
 	DefaultAllowVisualFallback     = true
 	DefaultAllowRootFallback       = false
 	DefaultAllowADBFallback        = false
@@ -39,6 +40,7 @@ type Policy struct {
 	MinVisionConfidence float64
 
 	AllowCoordinateFallback bool
+	AllowShizukuFallback    bool
 	AllowVisualFallback     bool
 	AllowRootFallback       bool
 	AllowADBFallback        bool
@@ -55,6 +57,7 @@ func DefaultPolicy() Policy {
 		MinVisionConfidence: DefaultMinVisionConfidence,
 
 		AllowCoordinateFallback: DefaultAllowCoordinateFallback,
+		AllowShizukuFallback:    DefaultAllowShizukuFallback,
 		AllowVisualFallback:     DefaultAllowVisualFallback,
 		AllowRootFallback:       DefaultAllowRootFallback,
 		AllowADBFallback:        DefaultAllowADBFallback,

@@ -168,6 +168,41 @@ func (m *mockADBExecutor) InputText(ctx context.Context, text string) error {
 	return nil
 }
 
+type mockShizukuExecutor struct {
+	tapFunc      func(ctx context.Context, x, y int) error
+	longPressFunc func(ctx context.Context, x, y, duration int) error
+	inputFunc    func(ctx context.Context, text string) error
+	swipeFunc    func(ctx context.Context, startX, startY, endX, endY, duration int) error
+}
+
+func (m *mockShizukuExecutor) Tap(ctx context.Context, x, y int) error {
+	if m.tapFunc != nil {
+		return m.tapFunc(ctx, x, y)
+	}
+	return nil
+}
+
+func (m *mockShizukuExecutor) LongPress(ctx context.Context, x, y, duration int) error {
+	if m.longPressFunc != nil {
+		return m.longPressFunc(ctx, x, y, duration)
+	}
+	return nil
+}
+
+func (m *mockShizukuExecutor) InputText(ctx context.Context, text string) error {
+	if m.inputFunc != nil {
+		return m.inputFunc(ctx, text)
+	}
+	return nil
+}
+
+func (m *mockShizukuExecutor) Swipe(ctx context.Context, startX, startY, endX, endY, duration int) error {
+	if m.swipeFunc != nil {
+		return m.swipeFunc(ctx, startX, startY, endX, endY, duration)
+	}
+	return nil
+}
+
 type mockVerifier struct {
 	verifyFunc func(ctx context.Context, before InteractionContext, result InteractionResult) (VerificationResult, error)
 }
@@ -188,6 +223,7 @@ func newTestService() *Service {
 		&mockVisualLocator{},
 		&mockRootExecutor{},
 		&mockADBExecutor{},
+		&mockShizukuExecutor{},
 		&mockVerifier{},
 		DefaultPolicy(),
 	)

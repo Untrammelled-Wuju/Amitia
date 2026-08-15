@@ -94,10 +94,13 @@ class DefaultRuntimeControllerStartupFailureTest {
         assertTrue(result is RuntimeOperationResult.Success)
 
         val currentGen = controller.snapshot().generation
-        host.emit(RuntimeServiceHostEvent.LaunchFailed(
+        host.emit(RuntimeServiceHostEvent.StartupFailed(
             generation = currentGen,
             cause = com.amitia.amitia_app.runtime.service.RuntimeServiceTerminationCause.NO_ACTIVE_RUNTIME,
-            message = "no active runtime"
+            message = "no active runtime",
+            sessionId = null,
+            launchStartId = 1,
+            phase = "test"
         ))
 
         assertEquals(RuntimeState.FAILED, controller.snapshot().state)
@@ -116,10 +119,13 @@ class DefaultRuntimeControllerStartupFailureTest {
         assertTrue(result1 is RuntimeOperationResult.Success)
         val gen1 = controller.snapshot().generation
 
-        host.emit(RuntimeServiceHostEvent.LaunchFailed(
+        host.emit(RuntimeServiceHostEvent.StartupFailed(
             generation = gen1,
             cause = com.amitia.amitia_app.runtime.service.RuntimeServiceTerminationCause.NO_ACTIVE_RUNTIME,
-            message = "no active runtime"
+            message = "no active runtime",
+            sessionId = null,
+            launchStartId = 1,
+            phase = "test"
         ))
         assertEquals(RuntimeState.FAILED, controller.snapshot().state)
 
@@ -141,10 +147,13 @@ class DefaultRuntimeControllerStartupFailureTest {
         assertEquals(0, host.teardownRequestCount.get())
 
         val currentGen = controller.snapshot().generation
-        host.emit(RuntimeServiceHostEvent.LaunchFailed(
+        host.emit(RuntimeServiceHostEvent.StartupFailed(
             generation = currentGen,
             cause = com.amitia.amitia_app.runtime.service.RuntimeServiceTerminationCause.NO_ACTIVE_RUNTIME,
-            message = "no active runtime"
+            message = "no active runtime",
+            sessionId = null,
+            launchStartId = 1,
+            phase = "test"
         ))
 
         assertEquals(0, host.teardownRequestCount.get())
@@ -165,10 +174,13 @@ class DefaultRuntimeControllerStartupFailureTest {
         startAndCapture(controller)
         val gen2 = controller.snapshot().generation
 
-        host.emit(RuntimeServiceHostEvent.LaunchFailed(
+        host.emit(RuntimeServiceHostEvent.StartupFailed(
             generation = gen1,
             cause = com.amitia.amitia_app.runtime.service.RuntimeServiceTerminationCause.NO_ACTIVE_RUNTIME,
-            message = "no active runtime"
+            message = "no active runtime",
+            sessionId = null,
+            launchStartId = 1,
+            phase = "test"
         ))
 
         assertTrue(controller.snapshot().generation == gen2 || controller.snapshot().state == RuntimeState.STOPPED)

@@ -119,7 +119,7 @@ func (r *TaskRepository) DeleteByExtension(ctx context.Context, extensionID stri
 func (r *TaskRepository) PutTaskRun(ctx context.Context, run *task_runtime.TaskRun) error {
 	ex := getExecutor(ctx, r.db)
 	now := time.Now().UTC()
-	_, err := ex.ExecContext(ctx, `
+	res, err := ex.ExecContext(ctx, `
 		INSERT INTO extension_task_runs
 			(task_run_id, operation_id, invocation_id, task_definition_id, extension_id, module_id,
 			 status, priority, input_json, input_hash, input_artifact_id,
@@ -183,11 +183,16 @@ func (r *TaskRepository) PutTaskRun(ctx context.Context, run *task_runtime.TaskR
 	if err != nil {
 		return fmt.Errorf("sqlite: upsert task run: %w", err)
 	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return task_runtime.NewTaskError(task_runtime.ErrTaskStaleWrite, "stale task run write rejected")
+	}
 	return nil
 }
 
-func (r *TaskRepository) UpdateTaskRunCAS(ctx context.Context, run *task_runtime.TaskRun, expectedStatus task_runtime.TaskRunStatus, expectedGeneration int64) (bool, error) {
+func (r *TaskRepository) UpdateTaskRunCAS(ctx context.Context, run *task_runtime.TaskRun, expectedStatus task_runtime.TaskRunStatus, expectedGeneration int64, expectedRevision int64) (bool, error) {
 	ex := getExecutor(ctx, r.db)
+	nextRevision := expectedRevision + 1
 	res, err := ex.ExecContext(ctx, `
 		UPDATE extension_task_runs
 		SET status = ?, priority = ?,
@@ -200,8 +205,8 @@ func (r *TaskRepository) UpdateTaskRunCAS(ctx context.Context, run *task_runtime
 		    pause_reason = ?, pause_requested_at = ?, paused_at = ?, resumed_at = ?,
 		    error_code = ?, error_message = ?,
 		    generation = ?,
-		    revision = revision + 1
-		WHERE task_run_id = ? AND status = ? AND generation = ?
+		    revision = ?
+		WHERE task_run_id = ? AND status = ? AND generation = ? AND revision = ?
 `,
 		string(run.Status), run.Priority,
 		string(run.Input), run.InputHash,
@@ -213,7 +218,8 @@ func (r *TaskRepository) UpdateTaskRunCAS(ctx context.Context, run *task_runtime
 		nullableString(run.PauseReason), nullableTime(run.PauseRequestedAt), nullableTime(run.PausedAt), nullableTime(run.ResumedAt),
 		nullableString(run.ErrorCode), nullableString(run.ErrorMessage),
 		run.Generation,
-		run.TaskRunID, string(expectedStatus), expectedGeneration,
+		nextRevision,
+		run.TaskRunID, string(expectedStatus), expectedGeneration, expectedRevision,
 	)
 	if err != nil {
 		return false, fmt.Errorf("sqlite: cas update task run: %w", err)
@@ -222,6 +228,7 @@ func (r *TaskRepository) UpdateTaskRunCAS(ctx context.Context, run *task_runtime
 	if n == 0 {
 		return false, nil
 	}
+	run.Revision = nextRevision
 	return true, nil
 }
 
@@ -386,16 +393,11 @@ func (r *TaskRepository) EnqueueTask(ctx context.Context, entry *task_runtime.Ta
 }
 
 func (r *TaskRepository) DequeueTask(ctx context.Context, leaseOwner string, leaseDuration time.Duration) (*task_runtime.TaskQueueEntry, error) {
-	tx, err := r.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("sqlite: begin dequeue tx: %w", err)
-	}
-	defer tx.Rollback()
-
+	ex := getExecutor(ctx, r.db)
 	now := time.Now().UTC()
 	leaseExpires := now.Add(leaseDuration)
 
-	row := tx.QueryRowContext(ctx, `
+	row := ex.QueryRowContext(ctx, `
 		SELECT task_run_id, priority, available_at, created_at
 		FROM extension_task_queue
 		WHERE (lease_expires_at IS NULL OR lease_expires_at < ?)
@@ -405,7 +407,7 @@ func (r *TaskRepository) DequeueTask(ctx context.Context, leaseOwner string, lea
 	`, now, now)
 
 	var entry task_runtime.TaskQueueEntry
-	err = row.Scan(&entry.TaskRunID, &entry.Priority, &entry.AvailableAt, &entry.CreatedAt)
+	err := row.Scan(&entry.TaskRunID, &entry.Priority, &entry.AvailableAt, &entry.CreatedAt)
 	if err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
@@ -413,15 +415,11 @@ func (r *TaskRepository) DequeueTask(ctx context.Context, leaseOwner string, lea
 		return nil, fmt.Errorf("sqlite: dequeue query: %w", err)
 	}
 
-	_, err = tx.ExecContext(ctx, `
+	_, err = ex.ExecContext(ctx, `
 		UPDATE extension_task_queue SET lease_owner = ?, lease_expires_at = ? WHERE task_run_id = ?
 	`, leaseOwner, leaseExpires, entry.TaskRunID)
 	if err != nil {
 		return nil, fmt.Errorf("sqlite: lease task: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("sqlite: commit dequeue: %w", err)
 	}
 
 	entry.LeaseOwner = leaseOwner
@@ -637,28 +635,36 @@ func (r *TaskRepository) UpdateExecutionTarget(
 	target task_runtime.TaskExecutionTarget,
 	resolvedAt time.Time,
 	resolvedBy string,
+	expectedRevision int64,
 ) error {
 	ex := getExecutor(ctx, r.db)
 	now := time.Now().UTC()
-	_, err := ex.ExecContext(ctx, `
+	nextRevision := expectedRevision + 1
+	res, err := ex.ExecContext(ctx, `
 		UPDATE extension_task_runs
 		SET execution_placement = ?,
 		    execution_target_json = ?,
 		    execution_resolved_at = ?,
 		    execution_resolved_by = ?,
-		    revision = revision + 1,
+		    revision = ?,
 		    updated_at = ?
-		WHERE task_run_id = ?
+		WHERE task_run_id = ? AND revision = ?
 	`,
 		string(placement),
 		serializeExecutionTarget(target),
 		resolvedAt,
 		resolvedBy,
+		nextRevision,
 		now,
 		taskRunID,
+		expectedRevision,
 	)
 	if err != nil {
 		return fmt.Errorf("sqlite: update execution target: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return task_runtime.NewTaskError(task_runtime.ErrTaskRevisionConflict, "execution target update conflict")
 	}
 	return nil
 }
@@ -669,27 +675,35 @@ func (r *TaskRepository) UpdateExecutionConnectionBinding(
 	runtimeSessionID interface{ String() string },
 	generation int64,
 	at time.Time,
+	expectedRevision int64,
 ) error {
 	ex := getExecutor(ctx, r.db)
 	now := time.Now().UTC()
-	_, err := ex.ExecContext(ctx, `
+	nextRevision := expectedRevision + 1
+	res, err := ex.ExecContext(ctx, `
 		UPDATE extension_task_runs
 		SET execution_target_json = json_set(
 			COALESCE(execution_target_json, '{}'),
 			'$.runtimeSessionId', ?,
 			'$.connectionGeneration', ?
 		),
-		    revision = revision + 1,
+		    revision = ?,
 		    updated_at = ?
-		WHERE task_run_id = ?
+		WHERE task_run_id = ? AND revision = ?
 	`,
 		runtimeSessionID.String(),
 		generation,
+		nextRevision,
 		now,
 		taskRunID,
+		expectedRevision,
 	)
 	if err != nil {
 		return fmt.Errorf("sqlite: update execution connection binding: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return task_runtime.NewTaskError(task_runtime.ErrTaskRevisionConflict, "connection binding update conflict")
 	}
 	return nil
 }
@@ -700,24 +714,32 @@ func (r *TaskRepository) UpdateExecutionAttempt(
 	attemptID task_runtime.TaskExecutionAttemptID,
 	runtimeInstanceID string,
 	at time.Time,
+	expectedRevision int64,
 ) error {
 	ex := getExecutor(ctx, r.db)
 	now := time.Now().UTC()
-	_, err := ex.ExecContext(ctx, `
+	nextRevision := expectedRevision + 1
+	res, err := ex.ExecContext(ctx, `
 		UPDATE extension_task_runs
 		SET execution_attempt_id = ?,
 		    runtime_instance_id = COALESCE(?, runtime_instance_id),
-		    revision = revision + 1,
+		    revision = ?,
 		    updated_at = ?
-		WHERE task_run_id = ?
+		WHERE task_run_id = ? AND revision = ?
 	`,
 		string(attemptID),
 		runtimeInstanceID,
+		nextRevision,
 		now,
 		taskRunID,
+		expectedRevision,
 	)
 	if err != nil {
 		return fmt.Errorf("sqlite: update execution attempt: %w", err)
+	}
+	n, _ := res.RowsAffected()
+	if n == 0 {
+		return task_runtime.NewTaskError(task_runtime.ErrTaskRevisionConflict, "execution attempt update conflict")
 	}
 	return nil
 }

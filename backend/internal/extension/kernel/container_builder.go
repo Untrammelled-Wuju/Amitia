@@ -621,6 +621,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 
 	deviceRuntimePresence := host_registry.NewDeviceRuntimePresenceAdapter(deviceRegistry)
+	providerExecutionResolver.SetSessionResolver(capability.NewHostRegistryDeviceSessionResolver(deviceRegistry))
 
 	var sessionStore *deviceruntime.SQLiteSessionStore
 	var sessionService *deviceruntime.Service
@@ -652,7 +653,21 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	builtinCatalog := builtin.NewCatalog()
 	builtinHandlerRegistry := builtin.NewHandlerRegistry()
 	builtinBootstrapper := builtin.NewBootstrapper(builtinCatalog, defRepo, instRepo)
+	builtinBootstrapper.SetModuleRepository(moduleRepo)
+	builtinBootstrapper.SetContributionRepository(contribRepo)
 	builtinBootstrapper.SetProviderReconciler(extensionProviderReconciler)
+	builtinBootstrapper.SetEnableFunc(func(ctx context.Context, extID domain.ExtensionID) error {
+		inst, err := instRepo.GetInstallation(ctx, extID)
+		if err != nil {
+			return fmt.Errorf("enable builtin %s: get installation: %w", extID, err)
+		}
+		inst.EnablementState = domain.EnablementEnabled
+		inst.UpdatedAt = time.Now().UTC()
+		if err := instRepo.PutInstallation(ctx, inst); err != nil {
+			return fmt.Errorf("enable builtin %s: persist installation: %w", extID, err)
+		}
+		return nil
+	})
 
 	if err := builtin.ApplyBuiltinRegistrations(builtinCatalog); err != nil {
 		return nil, fmt.Errorf("register builtin extensions: %w", err)

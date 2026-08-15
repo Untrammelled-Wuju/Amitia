@@ -42,6 +42,15 @@ export function withMetadata(key: string, value: unknown): MessageOption {
   };
 }
 
+export function withTimeout(timeoutMs: number): MessageOption {
+  return (envelope: Envelope) => {
+    if (!envelope.metadata) {
+      envelope.metadata = {};
+    }
+    envelope.metadata['__timeout'] = timeoutMs;
+  };
+}
+
 export interface IDGenerator {
   newID(): string;
 }
@@ -116,38 +125,42 @@ export class Client {
   async sendRequest(
     method: string,
     payload?: unknown,
-    timeoutMs?: number,
     ...opts: MessageOption[]
   ): Promise<Envelope> {
     const err = validatePluginMethod(method);
     if (err) throw createValidationError(err);
 
-    const envelope = this.newRequest(method, payload, ...opts);
-    return this.sendWithPending(envelope, timeoutMs);
+    const envelope = this.newRequest(method, payload, ...opts)
+    return this.sendWithPending(envelope, opts)
   }
 
   async sendReservedRequest(
     method: string,
     payload?: unknown,
-    timeoutMs?: number,
     ...opts: MessageOption[]
   ): Promise<Envelope> {
-    const envelope = this.newRequest(method, payload, ...opts);
-    return this.sendWithPending(envelope, timeoutMs);
+    const envelope = this.newRequest(method, payload, ...opts)
+    return this.sendWithPending(envelope, opts)
   }
 
   private async sendWithPending(
     envelope: Envelope,
-    timeoutMs?: number
+    opts: MessageOption[]
   ): Promise<Envelope> {
-    const id = envelope.id!;
-    const timeout = timeoutMs ?? this.pendingTimeoutMs;
+    const id = envelope.id!
+    let timeout = this.pendingTimeoutMs
+    if (envelope.metadata && envelope.metadata['__timeout']) {
+      const t = envelope.metadata['__timeout']
+      if (typeof t === 'number') {
+        timeout = t
+      }
+    }
 
     return new Promise<Envelope>((resolve, reject) => {
       const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error(`request ${id} timed out after ${timeout}ms`));
-      }, timeout);
+        this.pending.delete(id)
+        reject(new Error(`request ${id} timed out after ${timeout}ms`))
+      }, timeout)
 
       this.pending.set(id, {
         id,
@@ -156,14 +169,14 @@ export class Client {
         reject,
         timer,
         createdAt: Date.now(),
-      });
+      })
 
       this.transport.send(envelope).catch((err) => {
-        this.pending.delete(id);
-        clearTimeout(timer);
-        reject(err);
-      });
-    });
+        this.pending.delete(id)
+        clearTimeout(timer)
+        reject(err)
+      })
+    })
   }
 
   handleIncomingResponse(envelope: Envelope): boolean {

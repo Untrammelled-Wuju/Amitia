@@ -56,7 +56,7 @@ class RuntimeServiceFailClosedTest {
             putExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 1L)
         }, 0, 1)
 
-        val failedEvents = events.filterIsInstance<RuntimeServiceHostEvent.LaunchFailed>()
+        val failedEvents = events.filterIsInstance<RuntimeServiceHostEvent.StartupFailed>()
         assertEquals(1, failedEvents.size)
         assertEquals(1L, failedEvents[0].generation)
         assertEquals(RuntimeServiceTerminationCause.PROOT_COMPONENT_MISSING, failedEvents[0].cause)
@@ -79,7 +79,7 @@ class RuntimeServiceFailClosedTest {
             putExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 2L)
         }, 0, 1)
 
-        val failedEvents = events.filterIsInstance<RuntimeServiceHostEvent.LaunchFailed>()
+        val failedEvents = events.filterIsInstance<RuntimeServiceHostEvent.StartupFailed>()
         assertEquals(1, failedEvents.size)
         assertEquals(2L, failedEvents[0].generation)
         assertEquals(RuntimeServiceTerminationCause.NO_ACTIVE_RUNTIME, failedEvents[0].cause)
@@ -103,7 +103,7 @@ class RuntimeServiceFailClosedTest {
             putExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 3L)
         }, 0, 1)
 
-        val failedEvents = events.filterIsInstance<RuntimeServiceHostEvent.LaunchFailed>()
+        val failedEvents = events.filterIsInstance<RuntimeServiceHostEvent.StartupFailed>()
         assertEquals(1, failedEvents.size)
         assertEquals(3L, failedEvents[0].generation)
         assertEquals(RuntimeServiceTerminationCause.ACTIVE_PROGRAM_ROOT_INVALID, failedEvents[0].cause)
@@ -127,7 +127,7 @@ class RuntimeServiceFailClosedTest {
             putExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 4L)
         }, 0, 1)
 
-        val failedEvents = events.filterIsInstance<RuntimeServiceHostEvent.LaunchFailed>()
+        val failedEvents = events.filterIsInstance<RuntimeServiceHostEvent.StartupFailed>()
         assertEquals(1, failedEvents.size)
         assertEquals(4L, failedEvents[0].generation)
         assertEquals(RuntimeServiceTerminationCause.ENVIRONMENT_BUILD_FAILED, failedEvents[0].cause)
@@ -151,7 +151,7 @@ class RuntimeServiceFailClosedTest {
             putExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 5L)
         }, 0, 1)
 
-        assertEquals(0, events.count { it is RuntimeServiceHostEvent.LaunchFailed })
+        assertEquals(0, events.count { it is RuntimeServiceHostEvent.StartupFailed })
         assertEquals(1, component.launchCount)
         assertTrue(service.currentProotSession() != null)
     }
@@ -171,7 +171,7 @@ class RuntimeServiceFailClosedTest {
             putExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 6L)
         }, 0, 1)
 
-        val failedEvents = events.filterIsInstance<RuntimeServiceHostEvent.LaunchFailed>()
+        val failedEvents = events.filterIsInstance<RuntimeServiceHostEvent.StartupFailed>()
         assertEquals(1, failedEvents.size)
         assertEquals(6L, failedEvents[0].generation)
         assertEquals(RuntimeServiceTerminationCause.ASSEMBLER_MISSING, failedEvents[0].cause)
@@ -195,7 +195,7 @@ class RuntimeServiceFailClosedTest {
             putExtra(RuntimeServiceContract.EXTRA_RUNTIME_GENERATION, 7L)
         }, 0, 1)
 
-        val failedEvents = events.filterIsInstance<RuntimeServiceHostEvent.LaunchFailed>()
+        val failedEvents = events.filterIsInstance<RuntimeServiceHostEvent.StartupFailed>()
         assertEquals(1, failedEvents.size)
         assertEquals(7L, failedEvents[0].generation)
         assertEquals(RuntimeServiceTerminationCause.ROOTFS_MISSING, failedEvents[0].cause)

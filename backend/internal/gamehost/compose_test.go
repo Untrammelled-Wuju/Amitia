@@ -11,6 +11,7 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/integration/service_definition"
 	"github.com/u-ai/backend/internal/gamehost/rpc"
 	"github.com/u-ai/backend/internal/gamehost/storage"
+	"github.com/u-ai/backend/internal/gamehost/upgrade"
 )
 
 type fakeDefinitionReconcile struct{}
@@ -25,6 +26,12 @@ func (fakeKernelSource) ListEnabledGamePlugins(ctx context.Context) ([]integrati
 	return nil, nil
 }
 
+type fakeArchiveUpdater struct{}
+
+func (fakeArchiveUpdater) UpdateArchive(ctx context.Context, extensionID string, archivePath string) (*upgrade.KernelUpdateResult, error) {
+	return &upgrade.KernelUpdateResult{Success: true}, nil
+}
+
 func composeTestContainer(t *testing.T) *GameHostContainer {
 	t.Helper()
 	root := filepath.Join(t.TempDir(), "data")
@@ -35,6 +42,7 @@ func composeTestContainer(t *testing.T) *GameHostContainer {
 		KernelSource:        fakeKernelSource{},
 		TrustedSupervisor:   supervisor,
 		DefinitionReconcile: fakeDefinitionReconcile{},
+		ArchiveUpdater:      fakeArchiveUpdater{},
 	})
 	if err != nil {
 		t.Fatalf("ComposeGameHost error: %v", err)
@@ -52,6 +60,7 @@ func composeTestContainerWithSupervisor(t *testing.T) *GameHostContainer {
 		KernelSource:        fakeKernelSource{},
 		TrustedSupervisor:   supervisor,
 		DefinitionReconcile: fakeDefinitionReconcile{},
+		ArchiveUpdater:      fakeArchiveUpdater{},
 	})
 	if err != nil {
 		t.Fatalf("ComposeGameHost with supervisor error: %v", err)

@@ -189,6 +189,27 @@ const (
 	EnablementRequiresRecovery  EnablementState = "requires_recovery"
 )
 
+func (e ExtensionInstallation) AllowsEnable() bool {
+	if e.EnablementState == EnablementRequiresRecovery {
+		return false
+	}
+	return true
+}
+
+func (e ExtensionInstallation) WasUserDisabled() bool {
+	if e.Metadata == nil {
+		return false
+	}
+	if v, ok := e.Metadata["user.disabled"].(bool); ok {
+		return v
+	}
+	return false
+}
+
+func (e ExtensionInstallation) IsUserDisabled() bool {
+	return e.EnablementState == EnablementDisabled && e.WasUserDisabled()
+}
+
 type PublisherReference struct {
 	PublisherID string `json:"publisherId"`
 	DisplayName string `json:"displayName,omitempty"`
@@ -454,6 +475,7 @@ const (
 	ContributionKindUIDesktop         ContributionKind = "ui_desktop"
 	ContributionKindBackgroundTask    ContributionKind = "background_task"
 	ContributionKindBackgroundService ContributionKind = "background_task"
+	// Deprecated: legacy manifest input only. Production definitions must use Module.Provider.
 	ContributionKindProvider          ContributionKind = "provider"
 	ContributionKindGamePlugin        ContributionKind = "game_plugin"
 	ContributionKindDesktopPetPlugin  ContributionKind = "desktop_pet_plugin"

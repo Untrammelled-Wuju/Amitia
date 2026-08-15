@@ -117,8 +117,15 @@ type ExtensionStateChecker interface {
 }
 
 type RecoveryEligibilityChecker struct {
-	intentChecker    RuntimeLifecycleIntentChecker
-	extensionChecker ExtensionStateChecker
+	IntentChecker    RuntimeLifecycleIntentChecker
+	ExtensionChecker ExtensionStateChecker
+}
+
+func NewRecoveryEligibilityChecker(intentChecker RuntimeLifecycleIntentChecker, extensionChecker ExtensionStateChecker) *RecoveryEligibilityChecker {
+	return &RecoveryEligibilityChecker{
+		IntentChecker:    intentChecker,
+		ExtensionChecker: extensionChecker,
+	}
 }
 
 type HostStructureBuilder interface {
@@ -185,12 +192,6 @@ func NewRecoveryCoordinator(deps RecoveryCoordinatorDeps) (*RecoveryCoordinator,
 	}
 	if deps.RuntimeExecutor == nil {
 		return nil, fmt.Errorf("recovery: RuntimeExecutor is required")
-	}
-	if deps.SecretLease == nil {
-		return nil, fmt.Errorf("recovery: SecretLease is required")
-	}
-	if deps.Permission == nil {
-		return nil, fmt.Errorf("recovery: Permission is required")
 	}
 	if deps.AuthorityView == nil {
 		return nil, fmt.Errorf("recovery: AuthorityView is required")
@@ -289,23 +290,23 @@ func (c *RecoveryCoordinator) executeRecoveryFlow(ctx context.Context, op *Recov
 	op.ExtensionID = desc.ExtensionID
 
 	if c.eligibility != nil {
-		if c.eligibility.intentChecker != nil {
-			if c.eligibility.intentChecker.IsEmergencyLatched(req.RuntimeID) {
+		if c.eligibility.IntentChecker != nil {
+			if c.eligibility.IntentChecker.IsEmergencyLatched(req.RuntimeID) {
 				return nil, NewRecoverySuppressedError(req.RuntimeID, "runtime is emergency-latched")
 			}
-			intent, err := c.eligibility.intentChecker.GetLifecycleIntent(req.RuntimeID)
+			intent, err := c.eligibility.IntentChecker.GetLifecycleIntent(req.RuntimeID)
 			if err == nil && (intent == "emergency" || intent == "disable" || intent == "uninstall") {
 				return nil, NewRecoverySuppressedError(req.RuntimeID, fmt.Sprintf("lifecycle intent=%q suppresses recovery", intent))
 			}
 		}
-		if c.eligibility.extensionChecker != nil {
-			if !c.eligibility.extensionChecker.IsExtensionInstalled(op.ExtensionID) {
+		if c.eligibility.ExtensionChecker != nil {
+			if !c.eligibility.ExtensionChecker.IsExtensionInstalled(op.ExtensionID) {
 				return nil, NewRecoverySuppressedError(req.RuntimeID, "extension no longer installed")
 			}
-			if !c.eligibility.extensionChecker.IsExtensionEnabled(op.ExtensionID) {
+			if !c.eligibility.ExtensionChecker.IsExtensionEnabled(op.ExtensionID) {
 				return nil, NewRecoverySuppressedError(req.RuntimeID, "extension disabled")
 			}
-			if !c.eligibility.extensionChecker.IsPluginCurrent(op.PluginID) {
+			if !c.eligibility.ExtensionChecker.IsPluginCurrent(op.PluginID) {
 				return nil, NewRecoverySuppressedError(req.RuntimeID, "plugin no longer current")
 			}
 		}

@@ -35,7 +35,6 @@ const (
 type Bridge interface {
 	Execute(context.Context, Request) (Response, error)
 	Health(context.Context) Health
-	SessionAttached() bool
 }
 
 type RelayBridge interface {

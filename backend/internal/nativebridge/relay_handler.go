@@ -1,6 +1,7 @@
 package nativebridge
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"sync"
@@ -37,12 +38,6 @@ func (h *RelayHandler) RegisterBridge(platform string, bridge RelayBridge) {
 	h.mu.Lock()
 	defer h.mu.Unlock()
 	h.bridges[platform] = bridge
-	if androidBridge, ok := bridge.(*AndroidTransportBridge); ok {
-		androidBridge.SetEventSink(&relayEventSink{handler: h, platform: platform})
-	}
-	if iosBridge, ok := bridge.(*IOSBridge); ok {
-		iosBridge.SetEventSink(&relayEventSink{handler: h, platform: platform})
-	}
 }
 
 func (h *RelayHandler) HandleWebSocket(c *gin.Context) {
@@ -111,6 +106,18 @@ func (h *RelayHandler) GetBridge(platform string) (RelayBridge, bool) {
 	defer h.mu.RUnlock()
 	bridge, ok := h.bridges[platform]
 	return bridge, ok
+}
+
+func (h *RelayHandler) SetEventSink(platform string, sink NativeEventSink) {
+	h.mu.RLock()
+	bridge, ok := h.bridges[platform]
+	h.mu.RUnlock()
+	if !ok {
+		return
+	}
+	if b, ok := bridge.(interface{ SetEventSink(NativeEventSink) }); ok {
+		b.SetEventSink(sink)
+	}
 }
 
 type relayEventSink struct {

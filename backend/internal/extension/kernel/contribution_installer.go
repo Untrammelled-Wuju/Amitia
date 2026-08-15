@@ -147,10 +147,12 @@ func (i *TypedContributionInstaller) buildInstallOp(ctx context.Context, contrib
 		return installOp{}, fmt.Errorf("marshal definition: %w", err)
 	}
 
-	switch contrib.Kind {
-	case domain.ContributionKindTool:
-		return i.buildToolOp(ctx, contrib, defData, generation)
-	case domain.ContributionKindEventSubscription:
+switch contrib.Kind {
+case domain.ContributionKindProvider:
+    return installOp{}, fmt.Errorf("legacy provider contribution must be normalized to module provider metadata: %s", contrib.ID)
+case domain.ContributionKindTool:
+    return i.buildToolOp(ctx, contrib, defData, generation)
+case domain.ContributionKindEventSubscription:
 		return i.buildEventSubscriptionOp(ctx, contrib, defData)
 	case domain.ContributionKindHook:
 		return i.buildHookOp(ctx, contrib, defData)

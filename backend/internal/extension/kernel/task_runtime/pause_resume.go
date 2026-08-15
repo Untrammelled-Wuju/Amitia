@@ -71,7 +71,7 @@ func (s *TaskRuntimeService) PauseTask(ctx context.Context, req PauseTaskRequest
 	now := time.Now().UTC()
 	pausingRun.PauseRequestedAt = &now
 
-	if ok, casErr := s.store.UpdateTaskRunCAS(ctx, pausingRun, current.Status, current.Generation); casErr != nil {
+	if ok, casErr := s.store.UpdateTaskRunCAS(ctx, pausingRun, current.Status, current.Generation, current.Revision); casErr != nil {
 		return fmt.Errorf("task_runtime: pause cas: %w", casErr)
 	} else if !ok {
 		return NewTaskError(ErrTaskPauseInProgress, "concurrent state change, retry pause")
@@ -81,10 +81,10 @@ func (s *TaskRuntimeService) PauseTask(ctx context.Context, req PauseTaskRequest
 		pausedRun := cloneTaskRun(pausingRun)
 		pausedRun.Status = RunStatusPaused
 		pausedRun.PausedAt = &now
+		pausedRun.Revision = pausingRun.Revision
 		if err := s.store.PutTaskRun(txCtx, pausedRun); err != nil {
 			return err
 		}
-		pausedRun.Revision = pausingRun.Revision + 1
 		return s.publishTaskEvent(txCtx, TaskEventPaused, pausedRun, reason, "")
 	}); err != nil {
 		return err
@@ -136,7 +136,7 @@ func (s *TaskRuntimeService) ResumeTask(ctx context.Context, req ResumeTaskReque
 	now := time.Now().UTC()
 	resumingRun.ResumedAt = &now
 
-	if ok, casErr := s.store.UpdateTaskRunCAS(ctx, resumingRun, current.Status, current.Generation); casErr != nil {
+	if ok, casErr := s.store.UpdateTaskRunCAS(ctx, resumingRun, current.Status, current.Generation, current.Revision); casErr != nil {
 		return fmt.Errorf("task_runtime: resume cas: %w", casErr)
 	} else if !ok {
 		return NewTaskError(ErrTaskPauseInProgress, "concurrent state change, retry resume")
@@ -162,12 +162,12 @@ func (s *TaskRuntimeService) ResumeTask(ctx context.Context, req ResumeTaskReque
 	if failMsg != "" {
 		next.ErrorMessage = &failMsg
 	}
+	next.Revision = resumingRun.Revision
 
 	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
 		if err := s.store.PutTaskRun(txCtx, next); err != nil {
 			return err
 		}
-		next.Revision = resumingRun.Revision + 1
 		if failMsg != "" {
 			return s.publishTaskEvent(txCtx, TaskEventFailed, next, failMsg, "")
 		}

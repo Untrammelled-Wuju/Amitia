@@ -22,6 +22,7 @@ internal class DefaultProotSession(
     private val closed = AtomicBoolean(false)
     private val stopRequested = AtomicBoolean(false)
     private val terminalPublished = AtomicBoolean(false)
+    private val watcherFailurePublished = AtomicBoolean(false)
     private val exitDeferred = CompletableFuture<ProotExit>()
     private val exitRef = AtomicReference<ProotExit?>(null)
     private val stdoutPump: StreamPump
@@ -97,8 +98,7 @@ internal class DefaultProotSession(
             try { stdoutPump.stop() } catch (_: Throwable) {}
             try { stderrPump.stop() } catch (_: Throwable) {}
             try { if (process.isAlive) process.destroyForcibly() } catch (_: Throwable) {}
-            try { exitDeferred.get(5, java.util.concurrent.TimeUnit.SECONDS) } catch (_: Exception) {}
-            awaitWatcherExecutorTermination()
+            shutdownWatcherExecutor()
         }
     }
 
@@ -112,26 +112,12 @@ internal class DefaultProotSession(
 
     private fun shutdownWatcherExecutor() {
         try {
-            if (watcherExecutor is java.util.concurrent.ExecutorService) {
-                watcherExecutor.shutdown()
-            }
-        } catch (_: Throwable) {}
-    }
-
-    private fun awaitWatcherExecutorTermination() {
-        try {
-            if (watcherExecutor is java.util.concurrent.ExecutorService) {
-                if (!watcherExecutor.awaitTermination(5, java.util.concurrent.TimeUnit.SECONDS)) {
-                    watcherExecutor.shutdownNow()
-                }
-            }
-        } catch (_: InterruptedException) {
-            watcherExecutor.shutdownNow()
-            Thread.currentThread().interrupt()
+            watcherExecutor.shutdown()
         } catch (_: Throwable) {}
     }
 
     private fun waitForRealExit(): Int {
+        var retries = 0
         var interrupted = false
 
         while (true) {
@@ -152,7 +138,21 @@ internal class DefaultProotSession(
                     Thread.currentThread().interrupt()
                     return exitCode
                 }
+
+                retries++
+                if (retries >= MAX_WATCHER_RETRY) {
+                    throw InterruptedException("watcher retry exhausted after $retries attempts")
+                }
             }
+        }
+    }
+
+    private fun isProcessDead(): Boolean {
+        return try {
+            process.exitValue()
+            true
+        } catch (_: IllegalThreadStateException) {
+            false
         }
     }
 
@@ -170,8 +170,8 @@ internal class DefaultProotSession(
                 exitRef.set(exit)
                 publishTerminalOnce(exit)
                 exitDeferred.complete(exit)
-            } catch (e: Exception) {
-                if (!process.isAlive) {
+            } catch (e: InterruptedException) {
+                if (isProcessDead()) {
                     val exitCode = process.exitValue()
                     val exit = ProotExit(
                         generation = generation,
@@ -183,11 +183,38 @@ internal class DefaultProotSession(
                     publishTerminalOnce(exit)
                     exitDeferred.complete(exit)
                 } else {
-                    exitDeferred.completeExceptionally(e)
+                    publishWatcherFailure(e.message ?: "interrupted")
+                }
+            } catch (e: Exception) {
+                if (isProcessDead()) {
+                    val exitCode = process.exitValue()
+                    val exit = ProotExit(
+                        generation = generation,
+                        sessionId = sessionId,
+                        exitCode = exitCode,
+                        stopRequested = stopRequested.get(),
+                    )
+                    exitRef.set(exit)
+                    publishTerminalOnce(exit)
+                    exitDeferred.complete(exit)
+                } else {
+                    publishWatcherFailure(e.message ?: "unknown watcher error")
                 }
             } finally {
                 watcherExecutor.shutdown()
             }
+        }
+    }
+
+    private fun publishWatcherFailure(message: String) {
+        if (watcherFailurePublished.compareAndSet(false, true)) {
+            safeNotify(
+                ProotEvent.ExitWatcherFailed(
+                    sessionId = sessionId,
+                    generation = generation,
+                    message = message,
+                )
+            )
         }
     }
 
@@ -199,6 +226,10 @@ internal class DefaultProotSession(
 
     private fun safeNotify(event: ProotEvent) {
         try { observer.onEvent(event) } catch (_: Throwable) {}
+    }
+
+    private companion object {
+        const val MAX_WATCHER_RETRY = 3
     }
 }
 

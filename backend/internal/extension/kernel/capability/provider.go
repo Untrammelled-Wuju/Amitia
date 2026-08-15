@@ -169,8 +169,6 @@ type CapabilityProviderInstance struct {
 
 	RuntimeInstanceID string `json:"runtimeInstanceId,omitempty"`
 
-	RuntimeSessionID runtimeidentity.RuntimeSessionID `json:"runtimeSessionId,omitempty"`
-
 	Health       HealthStatus              `json:"health"`
 	Availability ProviderAvailabilityState `json:"availability"`
 
@@ -233,9 +231,6 @@ func (p CapabilityProviderInstance) ValidateIdentity() error {
 func (p CapabilityProviderInstance) IsExecutable() bool {
 	if p.Availability != ProviderAvailabilityAvailable || p.Health != HealthReady {
 		return false
-	}
-	if p.Placement == ProviderPlacementDevice {
-		return p.RuntimeSessionID != ""
 	}
 	return true
 }

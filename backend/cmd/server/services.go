@@ -183,6 +183,7 @@ type AppServices struct {
 	WorkspaceRegistry            *workspace.Registry
 	WorkspaceService             *workspace.Service
 	ProductionCutover            *cutoverComposition
+	ClosureGate                 *Stage2ClosureGate
 	NativeBridgeRelay            *nativeBridgeRelay
 }
 
@@ -1043,6 +1044,7 @@ services := &AppServices{
 		if androidBridge, ok := bootstrap.AndroidNativeBridge().(*nativebridge.AndroidTransportBridge); ok {
 			services.NativeBridgeRelay.RegisterAndroidBridge(androidBridge)
 		}
+		tryRegisterIOSBridge(services.NativeBridgeRelay, bootstrap)
 	}
 	if err := runCanonicalBuildAssertions(services); err != nil {
 		return nil, fmt.Errorf("canonical build assertion failed: %w", err)

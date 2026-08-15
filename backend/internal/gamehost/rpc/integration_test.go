@@ -3,8 +3,10 @@ package rpc_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/ipc"
@@ -531,10 +533,12 @@ func TestRPCDispatcher_Integration(t *testing.T) {
 		t.Fatalf("register namespace failed: %v", err)
 	}
 
-	err := disp.Dispatch(ctx, ipc.Peer{
-		PluginID:  "plugin-1",
-		RuntimeID: "runtime-1",
-		ServiceID: "service-a",
+	err := disp.Dispatch(ctx, ipc.DispatchSource{
+		Peer: ipc.Peer{
+			PluginID:  "plugin-1",
+			RuntimeID: "runtime-1",
+			ServiceID: "service-a",
+		},
 	}, protocol.Envelope{
 		Protocol: protocol.ProtocolVersion,
 		Type:     protocol.MessageTypeRequest,
@@ -583,10 +587,12 @@ func TestRPCDispatcher_CustomRouteForward(t *testing.T) {
 	})
 	disp.SetControlPlane(controlPlane)
 
-	err := disp.Dispatch(ctx, ipc.Peer{
-		PluginID:  "plugin-1",
-		RuntimeID: "runtime-1",
-		ServiceID: "service-a",
+	err := disp.Dispatch(ctx, ipc.DispatchSource{
+		Peer: ipc.Peer{
+			PluginID:  "plugin-1",
+			RuntimeID: "runtime-1",
+			ServiceID: "service-a",
+		},
 	}, protocol.Envelope{
 		Protocol: protocol.ProtocolVersion,
 		Type:     protocol.MessageTypeRequest,
@@ -630,10 +636,12 @@ func TestRPCDispatcher_CustomNamespaceNotFound(t *testing.T) {
 	})
 	disp.SetControlPlane(controlPlane)
 
-	err := disp.Dispatch(ctx, ipc.Peer{
-		PluginID:  "plugin-1",
-		RuntimeID: "runtime-1",
-		ServiceID: "agent",
+	err := disp.Dispatch(ctx, ipc.DispatchSource{
+		Peer: ipc.Peer{
+			PluginID:  "plugin-1",
+			RuntimeID: "runtime-1",
+			ServiceID: "agent",
+		},
 	}, protocol.Envelope{
 		Protocol: protocol.ProtocolVersion,
 		Type:     protocol.MessageTypeRequest,
@@ -687,6 +695,15 @@ func (m *mockControlPlane) Send(
 		Envelope: envelope,
 	})
 	return nil
+}
+
+func (m *mockControlPlane) SendRequest(
+	ctx context.Context,
+	peer ipc.Peer,
+	envelope protocol.Envelope,
+	timeout time.Duration,
+) (*protocol.Envelope, error) {
+	return nil, fmt.Errorf("not implemented in mock")
 }
 
 func (m *mockControlPlane) Shutdown(ctx context.Context) error {
