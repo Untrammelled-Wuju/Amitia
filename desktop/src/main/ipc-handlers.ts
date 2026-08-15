@@ -9,11 +9,20 @@ import type { DesktopRuntimeManager } from "../runtime/runtime-manager";
 import { refreshTrayMenu } from "./tray";
 import { setAuthToken } from "./auth-token-store";
 import { getDesktopAuthHeaders } from "./backend-session-client";
+import { getMeshCoordinator } from "./device-mesh/coordinator";
+import { getMeshIdentity, getMeshStatus } from "./device-mesh/local-agent-client";
+import {
+  listDevices as cloudListDevices,
+  revokeDevice as cloudRevokeDevice,
+  probeRuntime as cloudProbeRuntime,
+  createBootstrapTicket,
+} from "./device-mesh/remote-bootstrap-client";
 
 export function registerIpcHandlers(
   configStore: ConfigStore,
   runtimeManager: DesktopRuntimeManager,
   onDeploymentConfigSaved?: (config: DeploymentModeConfig) => void | Promise<void>,
+  getMainWindow?: () => BrowserWindow | null,
 ): void {
   ipcMain.handle(IPC_CHANNELS.getEnvironment, () => ({
     platform: process.platform,
@@ -267,5 +276,54 @@ export function registerIpcHandlers(
 
   ipcMain.handle(IPC_CHANNELS.getBackendAuthHeaders, async () => {
     return getDesktopAuthHeaders();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.meshGetStatus, async () => {
+    return getMeshStatus();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.meshGetIdentity, async () => {
+    return getMeshIdentity();
+  });
+
+  ipcMain.handle(IPC_CHANNELS.meshProvision, async (_event, cloudBaseUrl: string) => {
+    if (!cloudBaseUrl || typeof cloudBaseUrl !== "string") {
+      throw new Error("cloudBaseUrl is required");
+    }
+    const coordinator = getMeshCoordinator(getMainWindow ?? (() => null));
+    await coordinator.provision(cloudBaseUrl);
+    return { ok: true };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.meshDeprovision, async () => {
+    const coordinator = getMeshCoordinator(getMainWindow ?? (() => null));
+    await coordinator.deprovision();
+    return { ok: true };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.meshCloudListDevices, async (_event, cloudBaseUrl: string) => {
+    return cloudListDevices(cloudBaseUrl);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.meshCloudRevokeDevice, async (_event, cloudBaseUrl: string, deviceId: string) => {
+    await cloudRevokeDevice(cloudBaseUrl, deviceId);
+    return { ok: true };
+  });
+
+  ipcMain.handle(IPC_CHANNELS.meshCloudProbe, async (_event, cloudBaseUrl: string, deviceId: string, runtimeId: string) => {
+    return cloudProbeRuntime(cloudBaseUrl, deviceId, runtimeId);
+  });
+
+  ipcMain.handle("amitia:mesh:cloud:create-ticket", async (_event, cloudBaseUrl: string, label?: string) => {
+    const identity = await getMeshIdentity();
+    if (!identity) {
+      throw new Error("local device-mesh identity unavailable");
+    }
+    return createBootstrapTicket(cloudBaseUrl, {
+      deviceId: identity.deviceId,
+      runtimeId: identity.runtimeId,
+      platform: identity.platform,
+      label: label ?? `Desktop ${identity.deviceId}`,
+    });
   });
 }

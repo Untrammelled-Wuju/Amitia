@@ -1,4 +1,4 @@
-import { getAuthToken } from "./auth-token-store";
+import { getAccessToken } from "./auth-token-store";
 
 export interface BusinessCoreProbeResult {
   reachable: boolean;
@@ -8,10 +8,10 @@ export interface BusinessCoreProbeResult {
 }
 
 export class BusinessCoreClient {
-  constructor(
-    private readonly baseURL: string,
-    private readonly tokenProvider: () => string | null = getAuthToken,
-  ) {}
+	constructor(
+		private readonly baseURL: string,
+		private readonly tokenProvider: () => string | null = getAccessToken,
+	) {}
 
   url(path: string): URL {
     return new URL(path, this.baseURL);

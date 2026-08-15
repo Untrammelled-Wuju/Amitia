@@ -19,6 +19,7 @@ import { UIHostSSE } from "./ui-host-sse";
 import { DesktopPetManager } from "./pet/manager";
 import { ChatStateSubscriber } from "./pet/chat-state-subscriber";
 import { CharacterWatcher } from "./pet/character-watcher";
+import { getMeshCoordinator } from "./device-mesh/coordinator";
 
 export interface DesktopDeploymentLifecycleDeps {
   configStore: ConfigStore;
@@ -89,6 +90,7 @@ export class DesktopDeploymentLifecycle {
   private async reconcileLocalMode(): Promise<void> {
     this.stopLegacyPetIntegrations();
     this.stopBusinessIntegrations();
+    getMeshCoordinator(this.getMainWindow).stop();
 
     this.runtimeManager.setBusinessCoreStatus(
       "starting",
@@ -126,6 +128,9 @@ export class DesktopDeploymentLifecycle {
     }
 
     await this.rebuildBusinessIntegrations(this.topology);
+
+    const coordinator = getMeshCoordinator(this.getMainWindow);
+    coordinator.start();
   }
 
   private async probeLocalRuntime(): Promise<void> {
@@ -309,6 +314,7 @@ export class DesktopDeploymentLifecycle {
   async shutdown(): Promise<void> {
     this.stopBusinessIntegrations();
     this.stopLegacyPetIntegrations();
+    getMeshCoordinator(this.getMainWindow).stop();
     await stopCore();
   }
 }
