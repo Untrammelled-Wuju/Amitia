@@ -126,15 +126,14 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 	systemSvc := system.NewService(ctx, services.RuntimeProfile)
 	systemHandler := system.NewHandler(systemSvc, ctx.DB, services.Chat, services.DataLifecycle, services.UnifiedEntry, services.Reconciliation, services.Memory)
 
+	userRepo := user.NewRepository(ctx)
+	userSvc := user.NewService(userRepo, ctx)
+	userHandler := user.NewHandler(userSvc)
+
 	public := r.Group("/api/public")
 	{
-		userRepo := user.NewRepository(ctx)
-		userSvc := user.NewService(userRepo, ctx)
-		userHandler := user.NewHandler(userSvc)
-
 		public.GET("/auth/status", userHandler.Status)
 		public.POST("/auth/setup", userHandler.Setup)
-		public.POST("/auth/login", userHandler.Login)
 
 		public.GET("/onboarding/status", systemHandler.OnboardingStatus)
 		public.POST("/onboarding/complete", systemHandler.OnboardingComplete)

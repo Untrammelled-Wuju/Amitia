@@ -16,6 +16,7 @@ type Service struct {
 	mountRepo          *MountRepository
 	safGrantResolver   SAFGrantResolver
 	remoteCredResolver RemoteCredentialResolver
+	precise            PreciseEditingService
 }
 
 type PhysicalResolverProvider interface {
@@ -59,6 +60,22 @@ func (s *Service) ListMounts(ctx context.Context) ([]WorkspaceMount, error) {
 
 func (s *Service) HasBackend(kind WorkspaceKind) bool {
 	return s.registry != nil && s.registry.HasBackend(kind)
+}
+
+// Precise returns a PreciseEditingService backed by this Service.
+// The precise engine provides fine-grained file editing operations
+// with content-addressable integrity checking and transaction support.
+func (s *Service) Precise() PreciseEditingService {
+	if s.precise != nil {
+		return s.precise
+	}
+	return NewDefaultPreciseEditingService(s)
+}
+
+// SetPrecise overrides the default PreciseEditingService implementation.
+// This is primarily useful for testing.
+func (s *Service) SetPrecise(p PreciseEditingService) {
+	s.precise = p
 }
 
 func (s *Service) RegisterSAFMount(ctx context.Context, name string, grantID string, readOnly bool) (WorkspaceMount, error) {

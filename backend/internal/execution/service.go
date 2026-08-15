@@ -192,6 +192,26 @@ func (s *ExecutionService) GetJournal() *InMemoryJournal {
 	return s.journal
 }
 
+func (s *ExecutionService) ListActiveExecutions() []ExecutionContext {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	result := make([]ExecutionContext, 0, len(s.activeContexts))
+	for _, ctx := range s.activeContexts {
+		result = append(result, ctx)
+	}
+	return result
+}
+
+func (s *ExecutionService) ListResumes() []ResumeContext {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	result := make([]ResumeContext, 0, len(s.resumeContexts))
+	for _, ctx := range s.resumeContexts {
+		result = append(result, ctx)
+	}
+	return result
+}
+
 var (
 	ErrBudgetExhausted = errors.New("execution service: budget exhausted")
 	ErrResumeNotFound  = errors.New("execution service: resume not found")

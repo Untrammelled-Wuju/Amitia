@@ -30,7 +30,7 @@ func (h *Handler) VoiceUpload(c *gin.Context) {
 			OwnerUserID: owner,
 			Kind:        artifact.KindAudio,
 			Filename:    header.Filename,
-			Source:      artifact.SourceUpload,
+			Source:      artifact.SourceUserUpload,
 			Reader:      file,
 		})
 		if err != nil {
@@ -88,7 +88,7 @@ func (h *Handler) ImageUpload(c *gin.Context) {
 			OwnerUserID: owner,
 			Kind:        artifact.KindImage,
 			Filename:    header.Filename,
-			Source:      artifact.SourceUpload,
+			Source:      artifact.SourceUserUpload,
 			Reader:      file,
 		})
 		if err != nil {
@@ -145,7 +145,7 @@ func (h *Handler) VideoUpload(c *gin.Context) {
 			OwnerUserID: owner,
 			Kind:        artifact.KindVideo,
 			Filename:    header.Filename,
-			Source:      artifact.SourceUpload,
+			Source:      artifact.SourceUserUpload,
 			Reader:      file,
 		})
 		if err != nil {

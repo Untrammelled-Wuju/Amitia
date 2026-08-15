@@ -3,6 +3,7 @@ package credential
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/runtimeidentity"
@@ -13,6 +14,7 @@ type DeviceRuntimePrincipal struct {
 	UserID       runtimeidentity.UserID
 	DeviceID     runtimeidentity.DeviceID
 	RuntimeID    runtimeidentity.RuntimeID
+	ExpiresAt    time.Time
 }
 
 type contextKey string
@@ -49,6 +51,7 @@ func DeviceAuthMiddleware(svc *Service) gin.HandlerFunc {
 			UserID:       cred.UserID,
 			DeviceID:     cred.DeviceID,
 			RuntimeID:    cred.RuntimeID,
+			ExpiresAt:    cred.ExpiresAt,
 		}
 
 		if devHeader := c.GetHeader("X-Amitia-Device-ID"); devHeader != "" {
