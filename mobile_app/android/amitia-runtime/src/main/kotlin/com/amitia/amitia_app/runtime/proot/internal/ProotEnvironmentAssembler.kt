@@ -14,7 +14,7 @@ import com.amitia.amitia_app.runtime.proot.RuntimeEnvironmentRequest
 import com.amitia.amitia_app.runtime.proot.RuntimeEnvironmentResult
 import java.io.File
 
-internal class ProotEnvironmentAssembler(
+internal open class ProotEnvironmentAssembler(
     private val layout: RuntimeHostLayout,
     private val environmentBuilder: RuntimeEnvironmentBuilder,
 ) {
@@ -33,7 +33,7 @@ internal class ProotEnvironmentAssembler(
         )
     }
 
-    fun assembleBackendLaunch(activeProgramSource: File, runtimeProfile: String): ProotLaunchSpec {
+    open fun assembleBackendLaunch(activeProgramSource: File, runtimeProfile: String): ProotLaunchSpec {
         val environment = buildEnvironment()
         val bindMounts = buildBindMounts(activeProgramSource)
 

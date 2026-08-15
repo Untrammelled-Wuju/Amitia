@@ -181,13 +181,13 @@ internal class DefaultPackageVerifier : PackageVerifier {
                 "runtime payload hash mismatch"
             )
         }
-        if (!verifySha256sumText(packageIndex.guestLayout.path, packageIndex.guestLayout.sha256, sha256sums)) {
+        if (!verifySha256sum(zip, packageIndex.guestLayout, sha256sums)) {
             return PackageVerificationResult.Failure(
                 RuntimeInstallErrorCode.PACKAGE_HASH_MISMATCH,
                 "guest-layout hash mismatch"
             )
         }
-        if (!verifySha256sumText(packageIndex.mountContract.path, packageIndex.mountContract.sha256, sha256sums)) {
+        if (!verifySha256sum(zip, packageIndex.mountContract, sha256sums)) {
             return PackageVerificationResult.Failure(
                 RuntimeInstallErrorCode.PACKAGE_HASH_MISMATCH,
                 "mount-contract hash mismatch"
@@ -305,6 +305,7 @@ internal class DefaultPackageVerifier : PackageVerifier {
     private fun parsePackageIndex(text: String): PackageIndex {
         val runtimeVersion = extractJsonString(text, "runtimeVersion")
         val packageId = extractJsonString(text, "packageId")
+        val sourceRevision = extractJsonString(text, "sourceRevision")
 
         val targetJson = extractJsonObject(text, "target")
         val hostPlatform = extractJsonString(targetJson, "hostPlatform")
@@ -320,7 +321,7 @@ internal class DefaultPackageVerifier : PackageVerifier {
             val role = extractJsonString(item, "role")
             val path = extractJsonString(item, "path")
             val sha = extractJsonString(item, "sha256")
-            val size = extractJsonString(item, "size").toLongOrNull() ?: 0L
+            val size = extractJsonNumber(item, "size")
             when (role) {
                 "rootfs" -> rootfsPayload = PayloadRef(path, sha, size)
                 "runtime" -> runtimePayload = PayloadRef(path, sha, size)
@@ -338,7 +339,7 @@ internal class DefaultPackageVerifier : PackageVerifier {
             val role = extractJsonString(item, "role")
             val path = extractJsonString(item, "path")
             val sha = extractJsonString(item, "sha256")
-            val size = extractJsonString(item, "size").toLongOrNull() ?: 0L
+            val size = extractJsonNumber(item, "size")
             when (role) {
                 "guest-layout" -> guestLayout = PayloadRef(path, sha, size)
                 "mount-contract" -> mountContract = PayloadRef(path, sha, size)
@@ -353,6 +354,7 @@ internal class DefaultPackageVerifier : PackageVerifier {
         return PackageIndex(
             runtimeVersion = runtimeVersion,
             packageId = packageId,
+            sourceRevision = sourceRevision,
             target = PackageTarget(
                 hostPlatform = hostPlatform,
                 hostAbi = hostAbi,
@@ -453,6 +455,12 @@ internal class DefaultPackageVerifier : PackageVerifier {
     private fun extractJsonStringOrNull(json: String, key: String): String? {
         val pattern = Regex("\"$key\"\\s*:\\s*\"([^\"]+)\"")
         return pattern.find(json)?.groupValues?.get(1)
+    }
+
+    private fun extractJsonNumber(json: String, key: String): Long {
+        val pattern = Regex("\"$key\"\\s*:\\s*(\\d+)")
+        val match = pattern.find(json) ?: throw IllegalArgumentException("missing number key: $key")
+        return match.groupValues[1].toLongOrNull() ?: throw IllegalArgumentException("invalid number for key: $key")
     }
 
     private fun extractJsonObject(text: String, key: String): String {

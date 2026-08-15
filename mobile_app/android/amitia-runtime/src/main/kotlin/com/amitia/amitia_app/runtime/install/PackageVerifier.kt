@@ -5,6 +5,7 @@ import java.io.File
 internal data class PackageIndex(
     val runtimeVersion: String,
     val packageId: String,
+    val sourceRevision: String,
     val target: PackageTarget,
     val guestLayout: PayloadRef,
     val mountContract: PayloadRef,
