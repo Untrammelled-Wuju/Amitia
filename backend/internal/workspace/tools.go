@@ -31,6 +31,10 @@ func BuildWorkspaceTools() []capability.ToolDefinition {
 		buildMoveTool(),
 		buildCopyTool(),
 		buildDeleteTool(),
+		buildSearchTool(),
+		buildPrecisePatchTool(),
+		buildPreciseDiffTool(),
+		buildPreciseReplaceTool(),
 	}
 }
 
@@ -544,12 +548,262 @@ func buildDeleteTool() capability.ToolDefinition {
 	}
 }
 
+func buildSearchTool() capability.ToolDefinition {
+	inputSchema := json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"workspaceId": {"type": "string"},
+			"query": {"type": "string"},
+			"regex": {"type": "boolean"},
+			"includeGlobs": {"type": "array", "items": {"type": "string"}},
+			"excludeGlobs": {"type": "array", "items": {"type": "string"}},
+			"maxResults": {"type": "integer", "minimum": 1, "maximum": 1000},
+			"contextBefore": {"type": "integer", "minimum": 0, "maximum": 10},
+			"contextAfter": {"type": "integer", "minimum": 0, "maximum": 10}
+		},
+		"required": ["workspaceId", "query"],
+		"additionalProperties": false
+	}`)
+	outputSchema := json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"matches": {"type": "array", "items": {"type": "object"}},
+			"total": {"type": "integer"},
+			"truncated": {"type": "boolean"}
+		}
+	}`)
+	return capability.ToolDefinition{
+		ID:           "workspace.search",
+		ModelName:    "workspace.search",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Workspace Search",
+		Description:  "Search for literal or regex patterns across workspace files.",
+		InputSchema:  inputSchema,
+		OutputSchema: outputSchema,
+		Permissions: []capability.PermissionRequirement{
+			{Capability: "workspace.read", Risk: "low"},
+		},
+		RiskLevel:      capability.RiskLow,
+		SideEffect:     capability.SideEffectReadOnly,
+		HasSideEffects: false,
+		Idempotent:     true,
+		Retryable:      true,
+		TimeoutMS:      30000,
+		ToolVersion:    capability.ToolVersion{SchemaVersion: 1, Revision: "b55-workspace-v1"},
+		ExecutionPolicy: capability.ToolExecutionPolicy{
+			Timeout:          30 * time.Second,
+			MaxConcurrency:   5,
+			Idempotent:       true,
+			ApprovalRequired: false,
+			AllowBackground:  true,
+			MaxDepth:         0,
+		},
+		ResultPolicy: capability.ToolResultPolicy{
+			SanitizeError:  true,
+			MaxOutputBytes: 131072,
+			Streaming:      capability.ToolStreamingPolicy{Enabled: false},
+		},
+		Runtime: capability.RuntimeBinding{
+			RuntimeType: workspaceRuntime.RuntimeType,
+			RuntimeID:   workspaceRuntime.RuntimeID,
+			HandlerName: "workspace.search",
+		},
+		Enabled: true,
+	}
+}
+
+func buildPrecisePatchTool() capability.ToolDefinition {
+	inputSchema := json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"workspaceId": {"type": "string"},
+			"filePath": {"type": "string"},
+			"baseSha256": {"type": "string"},
+			"patch": {"type": "string"}
+		},
+		"required": ["workspaceId", "filePath", "patch"],
+		"additionalProperties": false
+	}`)
+	outputSchema := json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"applied": {"type": "boolean"},
+			"filePath": {"type": "string"},
+			"newSha256": {"type": "string"}
+		}
+	}`)
+	return capability.ToolDefinition{
+		ID:           "workspace.patch",
+		ModelName:    "workspace.patch",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Workspace Patch",
+		Description:  "Apply a unified-diff patch to a workspace file with integrity verification.",
+		InputSchema:  inputSchema,
+		OutputSchema: outputSchema,
+		Permissions: []capability.PermissionRequirement{
+			{Capability: "workspace.write", Risk: "medium"},
+		},
+		RiskLevel:      capability.RiskMedium,
+		SideEffect:     capability.SideEffectWrite,
+		HasSideEffects: true,
+		Idempotent:     false,
+		Retryable:      false,
+		TimeoutMS:      30000,
+		ToolVersion:    capability.ToolVersion{SchemaVersion: 1, Revision: "b55-workspace-v1"},
+		ExecutionPolicy: capability.ToolExecutionPolicy{
+			Timeout:          30 * time.Second,
+			MaxConcurrency:   3,
+			Idempotent:       false,
+			ApprovalRequired: true,
+			AllowBackground:  false,
+			MaxDepth:         0,
+		},
+		ResultPolicy: capability.ToolResultPolicy{
+			SanitizeError:  true,
+			MaxOutputBytes: 4096,
+			Streaming:      capability.ToolStreamingPolicy{Enabled: false},
+		},
+		Runtime: capability.RuntimeBinding{
+			RuntimeType: workspaceRuntime.RuntimeType,
+			RuntimeID:   workspaceRuntime.RuntimeID,
+			HandlerName: "workspace.patch",
+		},
+		Enabled: true,
+	}
+}
+
+func buildPreciseDiffTool() capability.ToolDefinition {
+	inputSchema := json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"workspaceId": {"type": "string"},
+			"beforeFiles": {"type": "object"},
+			"afterFiles": {"type": "object"}
+		},
+		"required": ["workspaceId"],
+		"additionalProperties": false
+	}`)
+	outputSchema := json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"changedFiles": {"type": "array", "items": {"type": "string"}},
+			"unifiedDiff": {"type": "string"},
+			"additions": {"type": "integer"},
+			"deletions": {"type": "integer"}
+		}
+	}`)
+	return capability.ToolDefinition{
+		ID:           "workspace.diff",
+		ModelName:    "workspace.diff",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Workspace Diff",
+		Description:  "Compute unified diff between before and after file snapshots.",
+		InputSchema:  inputSchema,
+		OutputSchema: outputSchema,
+		Permissions: []capability.PermissionRequirement{
+			{Capability: "workspace.read", Risk: "low"},
+		},
+		RiskLevel:      capability.RiskLow,
+		SideEffect:     capability.SideEffectReadOnly,
+		HasSideEffects: false,
+		Idempotent:     true,
+		Retryable:      true,
+		TimeoutMS:      15000,
+		ToolVersion:    capability.ToolVersion{SchemaVersion: 1, Revision: "b55-workspace-v1"},
+		ExecutionPolicy: capability.ToolExecutionPolicy{
+			Timeout:          15 * time.Second,
+			MaxConcurrency:   5,
+			Idempotent:       true,
+			ApprovalRequired: false,
+			AllowBackground:  true,
+			MaxDepth:         0,
+		},
+		ResultPolicy: capability.ToolResultPolicy{
+			SanitizeError:  true,
+			MaxOutputBytes: 131072,
+			Streaming:      capability.ToolStreamingPolicy{Enabled: false},
+		},
+		Runtime: capability.RuntimeBinding{
+			RuntimeType: workspaceRuntime.RuntimeType,
+			RuntimeID:   workspaceRuntime.RuntimeID,
+			HandlerName: "workspace.diff",
+		},
+		Enabled: true,
+	}
+}
+
+func buildPreciseReplaceTool() capability.ToolDefinition {
+	inputSchema := json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"workspaceId": {"type": "string"},
+			"filePath": {"type": "string"},
+			"oldText": {"type": "string"},
+			"newText": {"type": "string"},
+			"expectedOccurrences": {"type": "integer", "minimum": 0}
+		},
+		"required": ["workspaceId", "filePath", "oldText"],
+		"additionalProperties": false
+	}`)
+	outputSchema := json.RawMessage(`{
+		"type": "object",
+		"properties": {
+			"replaced": {"type": "boolean"},
+			"actualOccurrences": {"type": "integer"},
+			"filePath": {"type": "string"}
+		}
+	}`)
+	return capability.ToolDefinition{
+		ID:           "workspace.replace",
+		ModelName:    "workspace.replace",
+		Source:       capability.ToolSourceBuiltin,
+		Name:         "Workspace Replace",
+		Description:  "Perform exact text replacement in a workspace file with occurrence validation.",
+		InputSchema:  inputSchema,
+		OutputSchema: outputSchema,
+		Permissions: []capability.PermissionRequirement{
+			{Capability: "workspace.write", Risk: "medium"},
+		},
+		RiskLevel:      capability.RiskMedium,
+		SideEffect:     capability.SideEffectWrite,
+		HasSideEffects: true,
+		Idempotent:     false,
+		Retryable:      false,
+		TimeoutMS:      30000,
+		ToolVersion:    capability.ToolVersion{SchemaVersion: 1, Revision: "b55-workspace-v1"},
+		ExecutionPolicy: capability.ToolExecutionPolicy{
+			Timeout:          30 * time.Second,
+			MaxConcurrency:   3,
+			Idempotent:       false,
+			ApprovalRequired: true,
+			AllowBackground:  false,
+			MaxDepth:         0,
+		},
+		ResultPolicy: capability.ToolResultPolicy{
+			SanitizeError:  true,
+			MaxOutputBytes: 4096,
+			Streaming:      capability.ToolStreamingPolicy{Enabled: false},
+		},
+		Runtime: capability.RuntimeBinding{
+			RuntimeType: workspaceRuntime.RuntimeType,
+			RuntimeID:   workspaceRuntime.RuntimeID,
+			HandlerName: "workspace.replace",
+		},
+		Enabled: true,
+	}
+}
+
 type ToolDispatcher struct {
-	service *Service
+	service  *Service
+	precise  PreciseEditingService
 }
 
 func NewToolDispatcher(service *Service) *ToolDispatcher {
 	return &ToolDispatcher{service: service}
+}
+
+func (d *ToolDispatcher) SetPreciseService(precise PreciseEditingService) {
+	d.precise = precise
 }
 
 func (d *ToolDispatcher) Dispatch(ctx context.Context, handlerName string, input json.RawMessage) (json.RawMessage, error) {
@@ -572,6 +826,14 @@ func (d *ToolDispatcher) Dispatch(ctx context.Context, handlerName string, input
 		return d.handleCopy(ctx, input)
 	case "workspace.delete":
 		return d.handleDelete(ctx, input)
+	case "workspace.search":
+		return d.handleSearch(ctx, input)
+	case "workspace.patch":
+		return d.handlePrecisePatch(ctx, input)
+	case "workspace.diff":
+		return d.handlePreciseDiff(ctx, input)
+	case "workspace.replace":
+		return d.handlePreciseReplace(ctx, input)
 	default:
 		return nil, fmt.Errorf("unknown workspace tool: %s", handlerName)
 	}
@@ -748,6 +1010,131 @@ func (d *ToolDispatcher) handleDelete(ctx context.Context, input json.RawMessage
 		return nil, err
 	}
 	return json.Marshal(map[string]any{"deleted": true})
+}
+
+func (d *ToolDispatcher) handleSearch(ctx context.Context, input json.RawMessage) (json.RawMessage, error) {
+	if d.precise == nil {
+		return nil, fmt.Errorf("precise editing service not available")
+	}
+	var req struct {
+		WorkspaceID   string   `json:"workspaceId"`
+		Query         string   `json:"query"`
+		Regex         bool     `json:"regex"`
+		IncludeGlobs  []string `json:"includeGlobs"`
+		ExcludeGlobs  []string `json:"excludeGlobs"`
+		MaxResults    int      `json:"maxResults"`
+		ContextBefore int      `json:"contextBefore"`
+		ContextAfter  int      `json:"contextAfter"`
+	}
+	if err := json.Unmarshal(input, &req); err != nil {
+		return nil, err
+	}
+	result, err := d.precise.Search(ctx, SearchRequest{
+		WorkspaceID:   req.WorkspaceID,
+		Query:         req.Query,
+		Regex:         req.Regex,
+		IncludeGlobs:  req.IncludeGlobs,
+		ExcludeGlobs:  req.ExcludeGlobs,
+		MaxResults:    req.MaxResults,
+		ContextBefore: req.ContextBefore,
+		ContextAfter:  req.ContextAfter,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(map[string]any{
+		"matches":   result.Matches,
+		"total":     result.Total,
+		"truncated": result.Truncated,
+	})
+}
+
+func (d *ToolDispatcher) handlePrecisePatch(ctx context.Context, input json.RawMessage) (json.RawMessage, error) {
+	if d.precise == nil {
+		return nil, fmt.Errorf("precise editing service not available")
+	}
+	var req struct {
+		WorkspaceID string `json:"workspaceId"`
+		FilePath    string `json:"filePath"`
+		BaseSHA256  string `json:"baseSha256"`
+		Patch       string `json:"patch"`
+	}
+	if err := json.Unmarshal(input, &req); err != nil {
+		return nil, err
+	}
+	result, err := d.precise.Patch(ctx, PatchRequest{
+		WorkspaceID: req.WorkspaceID,
+		FilePath:    req.FilePath,
+		BaseSHA256:  req.BaseSHA256,
+		Patch:       req.Patch,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(map[string]any{
+		"applied":   result.Applied,
+		"filePath":  result.FilePath,
+		"newSha256": result.NewSHA256,
+	})
+}
+
+func (d *ToolDispatcher) handlePreciseDiff(ctx context.Context, input json.RawMessage) (json.RawMessage, error) {
+	if d.precise == nil {
+		return nil, fmt.Errorf("precise editing service not available")
+	}
+	var req struct {
+		WorkspaceID string            `json:"workspaceId"`
+		BeforeFiles map[string]string `json:"beforeFiles"`
+		AfterFiles  map[string]string `json:"afterFiles"`
+	}
+	if err := json.Unmarshal(input, &req); err != nil {
+		return nil, err
+	}
+	result, err := d.precise.Diff(ctx, DiffRequest{
+		WorkspaceID: req.WorkspaceID,
+		BeforeFiles: req.BeforeFiles,
+		AfterFiles:  req.AfterFiles,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(map[string]any{
+		"changedFiles": result.ChangedFiles,
+		"unifiedDiff":  result.UnifiedDiff,
+		"additions":    result.Additions,
+		"deletions":    result.Deletions,
+	})
+}
+
+func (d *ToolDispatcher) handlePreciseReplace(ctx context.Context, input json.RawMessage) (json.RawMessage, error) {
+	if d.precise == nil {
+		return nil, fmt.Errorf("precise editing service not available")
+	}
+	var req struct {
+		WorkspaceID         string `json:"workspaceId"`
+		FilePath            string `json:"filePath"`
+		OldText             string `json:"oldText"`
+		NewText             string `json:"newText"`
+		ExpectedOccurrences int    `json:"expectedOccurrences"`
+	}
+	if err := json.Unmarshal(input, &req); err != nil {
+		return nil, err
+	}
+	result, err := d.precise.Replace(ctx, ReplaceRequest{
+		WorkspaceID:         req.WorkspaceID,
+		FilePath:            req.FilePath,
+		OldText:             req.OldText,
+		NewText:             req.NewText,
+		ExpectedOccurrences: req.ExpectedOccurrences,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(map[string]any{
+		"replaced":          result.Replaced,
+		"actualOccurrences": result.ActualOccurrences,
+		"filePath":          result.FilePath,
+	})
 }
 
 func readerFromBytes(data []byte) io.Reader {

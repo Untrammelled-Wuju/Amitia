@@ -98,15 +98,32 @@ type EditTransaction struct {
 	WorkspaceID  string                  `json:"workspaceId"`
 	BaseFiles    map[string]FileSnapshot `json:"baseFiles"`
 	ChangedFiles map[string]FileSnapshot `json:"changedFiles"`
+	WrittenFiles map[string]FileSnapshot `json:"writtenFiles"`
 	State        string                  `json:"state"`
+	Journal      *TransactionJournal     `json:"journal"`
+	Version      int                     `json:"version"`
 	CreatedAt    time.Time               `json:"createdAt"`
+	UpdatedAt    time.Time               `json:"updatedAt"`
 	mu           sync.Mutex
 }
 
+// TransactionJournal records transaction lifecycle for crash recovery.
+type TransactionJournal struct {
+	TxID          string            `json:"txId"`
+	WorkspaceID   string            `json:"workspaceId"`
+	BaseHashes    map[string]string `json:"baseHashes"`
+	ChangedHashes map[string]string `json:"changedHashes"`
+	WrittenFiles  []string          `json:"writtenFiles"`
+	State         string            `json:"state"`
+	CreatedAt     time.Time         `json:"createdAt"`
+	UpdatedAt     time.Time         `json:"updatedAt"`
+}
+
 const (
-	TxStateActive     = "active"
-	TxStateCommitted  = "committed"
-	TxStateRolledBack = "rolled_back"
+	TxStateActive       = "active"
+	TxStateCommitted    = "committed"
+	TxStateRolledBack   = "rolled_back"
+	TxStateCommitFailed = "commit_failed"
 )
 
 // PreciseEditingService provides fine-grained file editing operations

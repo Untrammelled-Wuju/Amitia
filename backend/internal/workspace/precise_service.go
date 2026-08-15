@@ -200,14 +200,29 @@ func (s *defaultPreciseEditingService) Diff(ctx context.Context, req DiffRequest
 
 // BeginTransaction creates a new edit transaction for the workspace.
 func (s *defaultPreciseEditingService) BeginTransaction(ctx context.Context, workspaceID string) (*EditTransaction, error) {
-	return &EditTransaction{
+	now := time.Now().UTC()
+	tx := &EditTransaction{
 		ID:           uuid.NewString(),
 		WorkspaceID:  workspaceID,
 		BaseFiles:    make(map[string]FileSnapshot),
 		ChangedFiles: make(map[string]FileSnapshot),
+		WrittenFiles: make(map[string]FileSnapshot),
 		State:        TxStateActive,
-		CreatedAt:    time.Now().UTC(),
-	}, nil
+		Version:      0,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	tx.Journal = &TransactionJournal{
+		TxID:          tx.ID,
+		WorkspaceID:   workspaceID,
+		BaseHashes:    make(map[string]string),
+		ChangedHashes: make(map[string]string),
+		WrittenFiles:  []string{},
+		State:         TxStateActive,
+		CreatedAt:     now,
+		UpdatedAt:     now,
+	}
+	return tx, nil
 }
 
 // ApplyPatchTx applies a patch within a transaction, tracking base and changed state.
@@ -222,46 +237,60 @@ func (s *defaultPreciseEditingService) ApplyPatchTx(ctx context.Context, tx *Edi
 		return nil, fmt.Errorf("%w: transaction is not active (state: %s)", ErrOperationUnsupported, tx.State)
 	}
 
-	// Read current file content
-	content, err := s.readFile(ctx, tx.WorkspaceID, req.FilePath)
-	if err != nil {
-		return nil, err
+	var content []byte
+	var readFromDisk bool
+
+	if changed, exists := tx.ChangedFiles[req.FilePath]; exists {
+		content = append([]byte(nil), changed.Content...)
+	} else {
+		var err error
+		content, err = s.readFile(ctx, tx.WorkspaceID, req.FilePath)
+		if err != nil {
+			return nil, err
+		}
+		readFromDisk = true
 	}
 
-	// Snapshot base file if not already captured
 	if _, exists := tx.BaseFiles[req.FilePath]; !exists {
 		tx.BaseFiles[req.FilePath] = FileSnapshot{
 			Path:    req.FilePath,
 			SHA256:  ComputeSHA256(content),
 			Content: append([]byte(nil), content...),
 		}
+		tx.Journal.BaseHashes[req.FilePath] = tx.BaseFiles[req.FilePath].SHA256
 	}
 
-	// Verify base SHA256 against the snapshot's hash
 	if req.BaseSHA256 != "" {
 		baseSnap := tx.BaseFiles[req.FilePath]
-		if baseSnap.SHA256 != req.BaseSHA256 {
-			return nil, fmt.Errorf("%w: base SHA256 mismatch: expected %s, got %s", ErrWriteFailed, req.BaseSHA256, baseSnap.SHA256)
+		expectedHash := baseSnap.SHA256
+		if readFromDisk {
+			expectedHash = baseSnap.SHA256
+		}
+		if expectedHash != req.BaseSHA256 {
+			return nil, fmt.Errorf("%w: base SHA256 mismatch: expected %s, got %s", ErrWriteFailed, req.BaseSHA256, expectedHash)
 		}
 	}
 
-	// Apply patch
 	patched, err := applyUnifiedPatch(content, req.Patch)
 	if err != nil {
 		return nil, fmt.Errorf("%w: patch apply failed: %v", ErrWriteFailed, err)
 	}
 
-	// Update changed files in-memory only
+	newSHA256 := ComputeSHA256(patched)
 	tx.ChangedFiles[req.FilePath] = FileSnapshot{
 		Path:    req.FilePath,
-		SHA256:  ComputeSHA256(patched),
+		SHA256:  newSHA256,
 		Content: patched,
 	}
+	tx.Journal.ChangedHashes[req.FilePath] = newSHA256
+	tx.Version++
+	tx.UpdatedAt = time.Now().UTC()
+	tx.Journal.UpdatedAt = tx.UpdatedAt
 
 	return &PatchResult{
 		Applied:   true,
 		FilePath:  req.FilePath,
-		NewSHA256: ComputeSHA256(patched),
+		NewSHA256: newSHA256,
 	}, nil
 }
 
@@ -328,21 +357,54 @@ func (s *defaultPreciseEditingService) Commit(ctx context.Context, tx *EditTrans
 		return fmt.Errorf("%w: transaction is not active (state: %s)", ErrOperationUnsupported, tx.State)
 	}
 
-	// Write all changed files to disk
-	for filePath, snap := range tx.ChangedFiles {
-		if err := s.writeFile(ctx, tx.WorkspaceID, filePath, snap.Content); err != nil {
-			// Transaction failure must not leave partial state:
-			// we stop at the first error and do not mark committed.
-			return fmt.Errorf("%w: failed to write %q: %v", ErrWriteFailed, filePath, err)
+	now := time.Now().UTC()
+
+	for filePath, baseSnap := range tx.BaseFiles {
+		if _, changed := tx.ChangedFiles[filePath]; !changed {
+			continue
+		}
+		currentContent, err := s.readFile(ctx, tx.WorkspaceID, filePath)
+		if err != nil {
+			continue
+		}
+		currentHash := ComputeSHA256(currentContent)
+		if currentHash != baseSnap.SHA256 {
+			tx.State = TxStateCommitFailed
+			tx.UpdatedAt = now
+			tx.Journal.State = TxStateCommitFailed
+			tx.Journal.UpdatedAt = now
+			return fmt.Errorf("%w: conflict detected on %q: base hash %s, current hash %s", ErrWriteFailed, filePath, baseSnap.SHA256, currentHash)
 		}
 	}
 
+	writtenFiles := make([]string, 0, len(tx.ChangedFiles))
+	for filePath, snap := range tx.ChangedFiles {
+		if err := s.writeFile(ctx, tx.WorkspaceID, filePath, snap.Content); err != nil {
+			for i := len(writtenFiles) - 1; i >= 0; i-- {
+				writtenPath := writtenFiles[i]
+				if baseSnap, exists := tx.BaseFiles[writtenPath]; exists {
+					_ = s.writeFile(ctx, tx.WorkspaceID, writtenPath, baseSnap.Content)
+				}
+			}
+			tx.State = TxStateCommitFailed
+			tx.UpdatedAt = now
+			tx.Journal.State = TxStateCommitFailed
+			tx.Journal.UpdatedAt = now
+			return fmt.Errorf("%w: failed to write %q: %v (rolled back %d files)", ErrWriteFailed, filePath, err, len(writtenFiles))
+		}
+		writtenFiles = append(writtenFiles, filePath)
+		tx.WrittenFiles[filePath] = snap
+	}
+
+	tx.Journal.WrittenFiles = writtenFiles
 	tx.State = TxStateCommitted
+	tx.UpdatedAt = now
+	tx.Journal.State = TxStateCommitted
+	tx.Journal.UpdatedAt = now
 	return nil
 }
 
-// Rollback discards all changes. Since ApplyPatchTx only stores changes
-// in-memory, rollback simply clears them and marks the transaction.
+// Rollback discards all changes and restores written files if needed.
 func (s *defaultPreciseEditingService) Rollback(ctx context.Context, tx *EditTransaction) error {
 	if tx == nil {
 		return fmt.Errorf("%w: transaction is nil", ErrOperationUnsupported)
@@ -350,13 +412,32 @@ func (s *defaultPreciseEditingService) Rollback(ctx context.Context, tx *EditTra
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
 
-	if tx.State != TxStateActive {
-		return fmt.Errorf("%w: transaction is not active (state: %s)", ErrOperationUnsupported, tx.State)
+	if tx.State != TxStateActive && tx.State != TxStateCommitFailed {
+		return fmt.Errorf("%w: transaction is not active or commit_failed (state: %s)", ErrOperationUnsupported, tx.State)
 	}
 
-	// In-memory only: clear changed files. Workspace state is untouched.
+	now := time.Now().UTC()
+
+	if tx.State == TxStateCommitFailed {
+		for writtenPath, baseSnap := range tx.BaseFiles {
+			if _, wasWritten := tx.WrittenFiles[writtenPath]; wasWritten {
+				restoreContent := append([]byte(nil), baseSnap.Content...)
+				if err := s.writeFile(ctx, tx.WorkspaceID, writtenPath, restoreContent); err != nil {
+					tx.UpdatedAt = now
+					tx.Journal.UpdatedAt = now
+					return fmt.Errorf("%w: rollback failed to restore %q: %v", ErrWriteFailed, writtenPath, err)
+				}
+			}
+		}
+	}
+
 	tx.ChangedFiles = make(map[string]FileSnapshot)
+	tx.WrittenFiles = make(map[string]FileSnapshot)
 	tx.State = TxStateRolledBack
+	tx.UpdatedAt = now
+	tx.Journal.State = TxStateRolledBack
+	tx.Journal.UpdatedAt = now
+	tx.Journal.WrittenFiles = []string{}
 	return nil
 }
 
