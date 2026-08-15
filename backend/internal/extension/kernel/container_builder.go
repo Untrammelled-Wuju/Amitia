@@ -74,6 +74,7 @@ import (
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/runtimeprofile"
+	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/search"
 	"github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/workspace"
@@ -669,6 +670,11 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	builtinProviderReconciler := capability.NewBuiltinProviderReconciler(capabilityProviderRegistry, providerLifecycle)
 	capabilityResolver := capability.NewResolver(capability.NewProviderCatalogAdapter(capabilityProviderRegistry))
 	capabilityResolver.SetRuntimeCatalog(capability.NewRuntimeAdapterCatalogAdapter(adapterRegistry))
+
+	runtimeStateService := runtimeorchestrator.NewRuntimeStateService(nil, nil)
+	runtimeAvailabilityAdapter := capability.NewRuntimeAvailabilityAdapter(runtimeStateService)
+	capabilityResolver.SetAvailability(runtimeAvailabilityAdapter)
+
 	capabilityService := capability.NewCapabilityService(capabilityProviderRegistry)
 
 	builtinCatalog := builtin.NewCatalog()
@@ -880,10 +886,20 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		toolFacade.SetHookService(hookService)
 	}
 
-	execService := coreexec.NewExecutionService()
+	resumeRepo := coreexec.NewSQLiteResumeRepository(db)
+	if err := resumeRepo.InitTable(ctx); err != nil {
+		return nil, fmt.Errorf("kernel: init execution_resumes table: %w", err)
+	}
+	execService := coreexec.NewExecutionServiceWithRepository(resumeRepo)
 	execService.RegisterResumeHandler(NewUISourceResumeHandler())
 	execService.RegisterResumeHandler(NewUISchemaResumeHandler())
 	execService.RegisterResumeHandler(NewApprovalResumeHandler())
+	execService.RegisterResumeHandler(NewCapabilityAcquisitionResumeHandler(acquisitionService))
+	if err := execService.LoadPendingResumes(ctx); err != nil {
+		return nil, fmt.Errorf("kernel: load pending resumes: %w", err)
+	}
+
+	acquisitionService.SetExecution(acquisition.NewExecutionPort(execService))
 
 	runtimeState := NewRuntimeState()
 
