@@ -13,11 +13,15 @@ from unittest import mock
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
-BUILD_ROOT = SCRIPT_DIR.parents[3]
+BUILD_ROOT = SCRIPT_DIR.parents[1]
 if str(BUILD_ROOT) not in sys.path:
     sys.path.insert(0, str(BUILD_ROOT))
 
-import build
+import importlib.util
+BuildSpec = importlib.util.spec_from_file_location("node_linux_arm64_build", str(SCRIPT_DIR / "build.py"))
+BuildModule = importlib.util.module_from_spec(BuildSpec)
+sys.modules["node_linux_arm64_build"] = BuildModule
+BuildSpec.loader.exec_module(BuildModule)
 
 
 def make_node_archive(base, root_name="node-v24.19.0-linux-arm64"):
@@ -32,16 +36,6 @@ def make_node_archive(base, root_name="node-v24.19.0-linux-arm64"):
             info.mtime = 0
             tf.addfile(info)
 
-        def add_file(name, content):
-            info = tarfile.TarInfo(name=name)
-            info.type = tarfile.REGTYPE
-            info.mode = 0o644
-            info.uid = 0
-            info.gid = 0
-            info.mtime = 0
-            info.size = len(content)
-            tf.addfile(info, io.BytesIO(content))
-
         def add_exec(name, content):
             info = tarfile.TarInfo(name=name)
             info.type = tarfile.REGTYPE
@@ -54,13 +48,13 @@ def make_node_archive(base, root_name="node-v24.19.0-linux-arm64"):
 
         add_dir(root_name)
         add_dir(root_name + "/bin")
-        elf_magic = b"\x7fELF\x02\x01\x01"
-        elf_rest = b"\x00" * 14
-        elf_machine = struct.pack("<H", 183)
-        elf_content = elf_magic + elf_rest + elf_machine + b"\x00" * 40
+        elf_ident = b"\x7fELF\x02\x01\x01" + b"\x00" * 9
+        e_type = b"\x00\x00"
+        e_machine = struct.pack("<H", 183)
+        elf_content = elf_ident + e_type + e_machine + b"\x00" * 40
         add_exec(root_name + "/bin/node", elf_content)
     data = buf.getvalue()
-    archive_path = pathlib.Path(base) / "node.tar.xz"
+    archive_path = pathlib.Path(base) / "node.tar"
     archive_path.write_bytes(data)
     sha = hashlib.sha256(data).hexdigest()
     return archive_path, sha
@@ -68,10 +62,7 @@ def make_node_archive(base, root_name="node-v24.19.0-linux-arm64"):
 
 def make_lock(base, sha):
     lock_path = pathlib.Path(base) / "node.lock.json"
-    lock_data = {
-        "schemaVersion": 1,
-        "sourceSha256": sha,
-    }
+    lock_data = {"schemaVersion": 1, "sourceSha256": sha}
     with open(lock_path, "w", encoding="utf-8") as f:
         json.dump(lock_data, f)
     return lock_path
@@ -89,29 +80,35 @@ class TestFreshBuild(unittest.TestCase):
 
     def test_fresh_build_returns_record(self):
         lock_path = make_lock(self.tmpdir, self.sha)
-        with mock.patch("build.sha256_tree_manifest", return_value="a" * 64):
-            with mock.patch("build.atomic_publish_directory") as mock_pub:
-                mock_pub.return_value = mock.Mock(
-                    success=True,
-                    published_dir=str(self.output_base / "node" / "linux-arm64" / "1.0.0"),
-                    errors=[],
-                )
-                record = build.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
+        pub_dir = self.output_base / "node" / "linux-arm64" / "1.0.0"
+        pub_dir.mkdir(parents=True, exist_ok=True)
+        (pub_dir / "bin").mkdir()
+        (pub_dir / "bin" / "node").write_bytes(b"\x7fELF" + b"\x00" * 60)
+        with mock.patch("node_linux_arm64_build.sha256_tree_manifest", return_value="a" * 64):
+            with mock.patch("common.artifact_record.sha256_file", return_value="b" * 64):
+                with mock.patch("node_linux_arm64_build.atomic_publish_directory") as mock_pub:
+                    mock_pub.return_value = mock.Mock(
+                        success=True, published_dir=str(pub_dir), errors=[]
+                    )
+                    record = BuildModule.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
         self.assertIsNotNone(record)
         self.assertEqual(record.componentId, "node")
         self.assertEqual(record.version, "1.0.0")
 
     def test_fresh_build_saves_record(self):
         lock_path = make_lock(self.tmpdir, self.sha)
-        with mock.patch("build.sha256_tree_manifest", return_value="a" * 64):
-            with mock.patch("build.atomic_publish_directory") as mock_pub:
-                mock_pub.return_value = mock.Mock(
-                    success=True,
-                    published_dir=str(self.output_base / "node" / "linux-arm64" / "1.0.0"),
-                    errors=[],
-                )
-                build.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
-        record_path = self.output_base / "node" / "linux-arm64" / "1.0.0" / "build-record.json"
+        pub_dir = self.output_base / "node" / "linux-arm64" / "1.0.0"
+        pub_dir.mkdir(parents=True, exist_ok=True)
+        (pub_dir / "bin").mkdir()
+        (pub_dir / "bin" / "node").write_bytes(b"\x7fELF" + b"\x00" * 60)
+        with mock.patch("node_linux_arm64_build.sha256_tree_manifest", return_value="a" * 64):
+            with mock.patch("common.artifact_record.sha256_file", return_value="b" * 64):
+                with mock.patch("node_linux_arm64_build.atomic_publish_directory") as mock_pub:
+                    mock_pub.return_value = mock.Mock(
+                        success=True, published_dir=str(pub_dir), errors=[]
+                    )
+                    BuildModule.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
+        record_path = pub_dir / "build-record.json"
         self.assertTrue(record_path.exists())
 
 
@@ -127,12 +124,12 @@ class TestMissingInput(unittest.TestCase):
     def test_missing_archive_fails(self):
         lock_path = make_lock(self.tmpdir, "a" * 64)
         with self.assertRaises(Exception):
-            build.build("/nonexistent.tar.xz", str(self.output_base), "1.0.0", str(lock_path))
+            BuildModule.build("/nonexistent.tar", str(self.output_base), "1.0.0", str(lock_path))
 
     def test_missing_lock_fails(self):
         archive, sha = make_node_archive(self.tmpdir)
         with self.assertRaises(Exception):
-            build.build(str(archive), str(self.output_base), "1.0.0", "/nonexistent.lock.json")
+            BuildModule.build(str(archive), str(self.output_base), "1.0.0", "/nonexistent.lock.json")
 
 
 class TestShaMismatch(unittest.TestCase):
@@ -148,7 +145,7 @@ class TestShaMismatch(unittest.TestCase):
     def test_sha_mismatch_fails(self):
         lock_path = make_lock(self.tmpdir, "f" * 64)
         with self.assertRaises(ValueError):
-            build.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
+            BuildModule.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
 
 
 class TestSameVersionSameBytes(unittest.TestCase):
@@ -163,14 +160,17 @@ class TestSameVersionSameBytes(unittest.TestCase):
 
     def test_same_archive_same_sha_succeeds(self):
         lock_path = make_lock(self.tmpdir, self.sha)
-        with mock.patch("build.sha256_tree_manifest", return_value="a" * 64):
-            with mock.patch("build.atomic_publish_directory") as mock_pub:
-                mock_pub.return_value = mock.Mock(
-                    success=True,
-                    published_dir=str(self.output_base / "node" / "linux-arm64" / "1.0.0"),
-                    errors=[],
-                )
-                record = build.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
+        pub_dir = self.output_base / "node" / "linux-arm64" / "1.0.0"
+        pub_dir.mkdir(parents=True, exist_ok=True)
+        (pub_dir / "bin").mkdir()
+        (pub_dir / "bin" / "node").write_bytes(b"\x7fELF" + b"\x00" * 60)
+        with mock.patch("node_linux_arm64_build.sha256_tree_manifest", return_value="a" * 64):
+            with mock.patch("common.artifact_record.sha256_file", return_value="b" * 64):
+                with mock.patch("node_linux_arm64_build.atomic_publish_directory") as mock_pub:
+                    mock_pub.return_value = mock.Mock(
+                        success=True, published_dir=str(pub_dir), errors=[]
+                    )
+                    record = BuildModule.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
         self.assertEqual(record.componentId, "node")
 
 
@@ -188,7 +188,7 @@ class TestSameVersionDifferentBytes(unittest.TestCase):
         lock_path = make_lock(self.tmpdir, self.sha)
         other_archive, other_sha = make_node_archive(self.tmpdir, root_name="node-v24.20.0-linux-arm64")
         with self.assertRaises(ValueError):
-            build.build(str(other_archive), str(self.output_base), "1.0.0", str(lock_path))
+            BuildModule.build(str(other_archive), str(self.output_base), "1.0.0", str(lock_path))
 
 
 class TestFailureBeforePublish(unittest.TestCase):
@@ -203,7 +203,7 @@ class TestFailureBeforePublish(unittest.TestCase):
     def test_failure_before_publish_leaves_output_intact(self):
         output_before = list(self.output_base.rglob("*"))
         with self.assertRaises(Exception):
-            build.build("/nonexistent", str(self.output_base), "1.0.0", "/nonexistent.lock.json")
+            BuildModule.build("/nonexistent", str(self.output_base), "1.0.0", "/nonexistent.lock.json")
         output_after = list(self.output_base.rglob("*"))
         self.assertEqual(output_before, output_after)
 
@@ -220,13 +220,14 @@ class TestFailureDuringCandidateMetadata(unittest.TestCase):
 
     def test_publish_failure_leaves_no_partial(self):
         lock_path = make_lock(self.tmpdir, self.sha)
-        with mock.patch("build.sha256_tree_manifest", return_value="a" * 64):
-            with mock.patch("build.atomic_publish_directory") as mock_pub:
-                mock_pub.return_value = mock.Mock(
-                    success=False, published_dir="", errors=["disk full"]
-                )
-                with self.assertRaises(RuntimeError):
-                    build.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
+        with mock.patch("node_linux_arm64_build.sha256_tree_manifest", return_value="a" * 64):
+            with mock.patch("common.artifact_record.sha256_file", return_value="b" * 64):
+                with mock.patch("node_linux_arm64_build.atomic_publish_directory") as mock_pub:
+                    mock_pub.return_value = mock.Mock(
+                        success=False, published_dir="", errors=["disk full"]
+                    )
+                    with self.assertRaises(RuntimeError):
+                        BuildModule.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
         pub_dir = self.output_base / "node" / "linux-arm64" / "1.0.0"
         self.assertFalse(pub_dir.exists())
 
@@ -337,24 +338,30 @@ class TestReproducibility(unittest.TestCase):
 
     def test_two_builds_same_tree_sha(self):
         lock_path = make_lock(self.tmpdir, self.sha)
-        with mock.patch("build.sha256_tree_manifest", return_value="a" * 64):
-            with mock.patch("build.atomic_publish_directory") as mock_pub:
-                mock_pub.return_value = mock.Mock(
-                    success=True,
-                    published_dir=str(self.output_base / "node" / "linux-arm64" / "1.0.0"),
-                    errors=[],
-                )
-                record1 = build.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
+        pub_dir1 = self.output_base / "node" / "linux-arm64" / "1.0.0"
+        pub_dir1.mkdir(parents=True, exist_ok=True)
+        (pub_dir1 / "bin").mkdir()
+        (pub_dir1 / "bin" / "node").write_bytes(b"\x7fELF" + b"\x00" * 60)
+        with mock.patch("node_linux_arm64_build.sha256_tree_manifest", return_value="a" * 64):
+            with mock.patch("common.artifact_record.sha256_file", return_value="b" * 64):
+                with mock.patch("node_linux_arm64_build.atomic_publish_directory") as mock_pub:
+                    mock_pub.return_value = mock.Mock(
+                        success=True, published_dir=str(pub_dir1), errors=[]
+                    )
+                    record1 = BuildModule.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
         output_base2 = pathlib.Path(self.tmpdir) / "output2"
         output_base2.mkdir()
-        with mock.patch("build.sha256_tree_manifest", return_value="a" * 64):
-            with mock.patch("build.atomic_publish_directory") as mock_pub:
-                mock_pub.return_value = mock.Mock(
-                    success=True,
-                    published_dir=str(output_base2 / "node" / "linux-arm64" / "1.0.0"),
-                    errors=[],
-                )
-                record2 = build.build(str(self.archive), str(output_base2), "1.0.0", str(lock_path))
+        pub_dir2 = output_base2 / "node" / "linux-arm64" / "1.0.0"
+        pub_dir2.mkdir(parents=True, exist_ok=True)
+        (pub_dir2 / "bin").mkdir()
+        (pub_dir2 / "bin" / "node").write_bytes(b"\x7fELF" + b"\x00" * 60)
+        with mock.patch("node_linux_arm64_build.sha256_tree_manifest", return_value="a" * 64):
+            with mock.patch("common.artifact_record.sha256_file", return_value="b" * 64):
+                with mock.patch("node_linux_arm64_build.atomic_publish_directory") as mock_pub:
+                    mock_pub.return_value = mock.Mock(
+                        success=True, published_dir=str(pub_dir2), errors=[]
+                    )
+                    record2 = BuildModule.build(str(self.archive), str(output_base2), "1.0.0", str(lock_path))
         self.assertEqual(record1.treeSha256, record2.treeSha256)
 
 
@@ -370,14 +377,17 @@ class TestOffline(unittest.TestCase):
 
     def test_offline_mode_succeeds_with_matching_lock(self):
         lock_path = make_lock(self.tmpdir, self.sha)
-        with mock.patch("build.sha256_tree_manifest", return_value="a" * 64):
-            with mock.patch("build.atomic_publish_directory") as mock_pub:
-                mock_pub.return_value = mock.Mock(
-                    success=True,
-                    published_dir=str(self.output_base / "node" / "linux-arm64" / "1.0.0"),
-                    errors=[],
-                )
-                record = build.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
+        pub_dir = self.output_base / "node" / "linux-arm64" / "1.0.0"
+        pub_dir.mkdir(parents=True, exist_ok=True)
+        (pub_dir / "bin").mkdir()
+        (pub_dir / "bin" / "node").write_bytes(b"\x7fELF" + b"\x00" * 60)
+        with mock.patch("node_linux_arm64_build.sha256_tree_manifest", return_value="a" * 64):
+            with mock.patch("common.artifact_record.sha256_file", return_value="b" * 64):
+                with mock.patch("node_linux_arm64_build.atomic_publish_directory") as mock_pub:
+                    mock_pub.return_value = mock.Mock(
+                        success=True, published_dir=str(pub_dir), errors=[]
+                    )
+                    record = BuildModule.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
         self.assertIsNotNone(record)
 
 

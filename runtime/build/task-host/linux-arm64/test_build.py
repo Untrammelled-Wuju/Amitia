@@ -17,9 +17,9 @@ if str(BUILD_ROOT) not in sys.path:
     sys.path.insert(0, str(BUILD_ROOT))
 
 import importlib.util
-BuildSpec = importlib.util.spec_from_file_location("plugin_host_build", str(SCRIPT_DIR / "build.py"))
+BuildSpec = importlib.util.spec_from_file_location("task_host_linux_arm64_build", str(SCRIPT_DIR / "build.py"))
 BuildModule = importlib.util.module_from_spec(BuildSpec)
-sys.modules["plugin_host_build"] = BuildModule
+sys.modules["task_host_linux_arm64_build"] = BuildModule
 BuildSpec.loader.exec_module(BuildModule)
 
 
@@ -45,32 +45,35 @@ class TestFreshBuild(unittest.TestCase):
         self.source_dir = make_source_dir(self.tmpdir)
         self.output_base = pathlib.Path(self.tmpdir) / "output"
         self.output_base.mkdir()
-        self.pub_dir = setup_pub_dir(self.output_base, "plugin-host", "1.0.0")
+        self.pub_dir = setup_pub_dir(self.output_base, "task-host", "1.0.0")
+        self.patches = [
+            mock.patch("task_host_linux_arm64_build.sha256_tree_manifest", return_value="a" * 64),
+            mock.patch("common.artifact_record.sha256_file", return_value="b" * 64),
+        ]
+        for p in self.patches:
+            p.start()
 
     def tearDown(self):
+        mock.patch.stopall()
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_fresh_build_returns_record(self):
-        with mock.patch("plugin_host_build.sha256_tree_manifest", return_value="a" * 64):
-            with mock.patch("common.artifact_record.sha256_file", return_value="b" * 64):
-                with mock.patch("plugin_host_build.atomic_publish_directory") as mock_pub:
-                    mock_pub.return_value = mock.Mock(
-                        success=True, published_dir=str(self.pub_dir), errors=[]
-                    )
-                    record = BuildModule.build(str(self.source_dir), str(self.output_base), "1.0.0")
+        with mock.patch("task_host_linux_arm64_build.atomic_publish_directory") as mock_pub:
+            mock_pub.return_value = mock.Mock(
+                success=True, published_dir=str(self.pub_dir), errors=[]
+            )
+            record = BuildModule.build(str(self.source_dir), str(self.output_base), "1.0.0")
         self.assertIsNotNone(record)
-        self.assertEqual(record.componentId, "plugin-host")
+        self.assertEqual(record.componentId, "task-host")
         self.assertEqual(record.version, "1.0.0")
 
     def test_fresh_build_calls_publish(self):
-        with mock.patch("plugin_host_build.sha256_tree_manifest", return_value="a" * 64):
-            with mock.patch("common.artifact_record.sha256_file", return_value="b" * 64):
-                with mock.patch("plugin_host_build.atomic_publish_directory") as mock_pub:
-                    mock_pub.return_value = mock.Mock(
-                        success=True, published_dir=str(self.pub_dir), errors=[]
-                    )
-                    BuildModule.build(str(self.source_dir), str(self.output_base), "1.0.0")
-                    mock_pub.assert_called_once()
+        with mock.patch("task_host_linux_arm64_build.atomic_publish_directory") as mock_pub:
+            mock_pub.return_value = mock.Mock(
+                success=True, published_dir=str(self.pub_dir), errors=[]
+            )
+            BuildModule.build(str(self.source_dir), str(self.output_base), "1.0.0")
+            mock_pub.assert_called_once()
 
 
 class TestMissingInput(unittest.TestCase):
@@ -113,17 +116,18 @@ class TestShaMismatch(unittest.TestCase):
             call_count["n"] += 1
             return val
 
-        with mock.patch("plugin_host_build.sha256_tree_manifest", side_effect=fake_tree):
-            with mock.patch("plugin_host_build.atomic_publish_directory") as mock_pub:
-                pub_dir = self.output_base / "plugin-host" / "linux-arm64" / "1.0.0"
-                pub_dir.mkdir(parents=True, exist_ok=True)
-                (pub_dir / "dist").mkdir()
-                (pub_dir / "dist" / "index.js").write_text("module.exports={}")
-                mock_pub.return_value = mock.Mock(
-                    success=True, published_dir=str(pub_dir), errors=[]
-                )
-                with self.assertRaises(RuntimeError):
-                    BuildModule.build(str(self.source_dir), str(self.output_base), "1.0.0")
+        with mock.patch("task_host_linux_arm64_build.sha256_tree_manifest", side_effect=fake_tree):
+            with mock.patch("common.artifact_record.sha256_file", return_value="b" * 64):
+                with mock.patch("task_host_linux_arm64_build.atomic_publish_directory") as mock_pub:
+                    pub_dir = self.output_base / "task-host" / "linux-arm64" / "1.0.0"
+                    pub_dir.mkdir(parents=True, exist_ok=True)
+                    (pub_dir / "dist").mkdir()
+                    (pub_dir / "dist" / "index.js").write_text("module.exports={}")
+                    mock_pub.return_value = mock.Mock(
+                        success=True, published_dir=str(pub_dir), errors=[]
+                    )
+                    with self.assertRaises(RuntimeError):
+                        BuildModule.build(str(self.source_dir), str(self.output_base), "1.0.0")
 
 
 class TestSameVersionSameBytes(unittest.TestCase):
@@ -132,20 +136,25 @@ class TestSameVersionSameBytes(unittest.TestCase):
         self.source_dir = make_source_dir(self.tmpdir)
         self.output_base = pathlib.Path(self.tmpdir) / "output"
         self.output_base.mkdir()
+        self.patches = [
+            mock.patch("task_host_linux_arm64_build.sha256_tree_manifest", return_value="a" * 64),
+            mock.patch("common.artifact_record.sha256_file", return_value="b" * 64),
+        ]
+        for p in self.patches:
+            p.start()
 
     def tearDown(self):
+        mock.patch.stopall()
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_same_version_same_tree_reuses_or_succeeds(self):
-        pub_dir = setup_pub_dir(self.output_base, "plugin-host", "1.0.0")
-        with mock.patch("plugin_host_build.sha256_tree_manifest", return_value="a" * 64):
-            with mock.patch("common.artifact_record.sha256_file", return_value="b" * 64):
-                with mock.patch("plugin_host_build.atomic_publish_directory") as mock_pub:
-                    mock_pub.return_value = mock.Mock(
-                        success=True, published_dir=str(pub_dir), errors=[]
-                    )
-                    record1 = BuildModule.build(str(self.source_dir), str(self.output_base), "1.0.0")
-        self.assertEqual(record1.componentId, "plugin-host")
+        pub_dir = setup_pub_dir(self.output_base, "task-host", "1.0.0")
+        with mock.patch("task_host_linux_arm64_build.atomic_publish_directory") as mock_pub:
+            mock_pub.return_value = mock.Mock(
+                success=True, published_dir=str(pub_dir), errors=[]
+            )
+            record1 = BuildModule.build(str(self.source_dir), str(self.output_base), "1.0.0")
+        self.assertEqual(record1.componentId, "task-host")
 
 
 class TestSameVersionDifferentBytes(unittest.TestCase):
@@ -159,18 +168,19 @@ class TestSameVersionDifferentBytes(unittest.TestCase):
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_existing_publish_dir_causes_failure(self):
-        pub_dir = self.output_base / "plugin-host" / "linux-arm64" / "1.0.0"
+        pub_dir = self.output_base / "task-host" / "linux-arm64" / "1.0.0"
         pub_dir.mkdir(parents=True)
         (pub_dir / "existing.txt").write_text("original")
-        with mock.patch("plugin_host_build.sha256_tree_manifest", return_value="x" * 64):
-            with mock.patch("plugin_host_build.atomic_publish_directory") as mock_pub:
-                mock_pub.return_value = mock.Mock(
-                    success=False,
-                    published_dir="",
-                    errors=["Target version directory already exists"],
-                )
-                with self.assertRaises(RuntimeError):
-                    BuildModule.build(str(self.source_dir), str(self.output_base), "1.0.0")
+        with mock.patch("task_host_linux_arm64_build.sha256_tree_manifest", return_value="x" * 64):
+            with mock.patch("common.artifact_record.sha256_file", return_value="b" * 64):
+                with mock.patch("task_host_linux_arm64_build.atomic_publish_directory") as mock_pub:
+                    mock_pub.return_value = mock.Mock(
+                        success=False,
+                        published_dir="",
+                        errors=["Target version directory already exists"],
+                    )
+                    with self.assertRaises(RuntimeError):
+                        BuildModule.build(str(self.source_dir), str(self.output_base), "1.0.0")
         self.assertTrue((pub_dir / "existing.txt").exists())
 
 
@@ -202,14 +212,15 @@ class TestFailureDuringCandidateMetadata(unittest.TestCase):
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_publish_failure_leaves_no_partial_record(self):
-        with mock.patch("plugin_host_build.sha256_tree_manifest", return_value="a" * 64):
-            with mock.patch("plugin_host_build.atomic_publish_directory") as mock_pub:
-                mock_pub.return_value = mock.Mock(
-                    success=False, published_dir="", errors=["disk full"]
-                )
-                with self.assertRaises(RuntimeError):
-                    BuildModule.build(str(self.source_dir), str(self.output_base), "1.0.0")
-        pub_dir = self.output_base / "plugin-host" / "linux-arm64" / "1.0.0"
+        with mock.patch("task_host_linux_arm64_build.sha256_tree_manifest", return_value="a" * 64):
+            with mock.patch("common.artifact_record.sha256_file", return_value="b" * 64):
+                with mock.patch("task_host_linux_arm64_build.atomic_publish_directory") as mock_pub:
+                    mock_pub.return_value = mock.Mock(
+                        success=False, published_dir="", errors=["disk full"]
+                    )
+                    with self.assertRaises(RuntimeError):
+                        BuildModule.build(str(self.source_dir), str(self.output_base), "1.0.0")
+        pub_dir = self.output_base / "task-host" / "linux-arm64" / "1.0.0"
         self.assertFalse(pub_dir.exists())
 
 
@@ -313,29 +324,32 @@ class TestReproducibility(unittest.TestCase):
         self.source_dir = make_source_dir(self.tmpdir)
         self.output_base = pathlib.Path(self.tmpdir) / "output"
         self.output_base.mkdir()
+        self.patches = [
+            mock.patch("task_host_linux_arm64_build.sha256_tree_manifest", return_value="a" * 64),
+            mock.patch("common.artifact_record.sha256_file", return_value="b" * 64),
+        ]
+        for p in self.patches:
+            p.start()
 
     def tearDown(self):
+        mock.patch.stopall()
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_two_builds_same_tree_sha(self):
-        pub_dir1 = setup_pub_dir(self.output_base, "plugin-host", "1.0.0")
-        with mock.patch("plugin_host_build.sha256_tree_manifest", return_value="a" * 64):
-            with mock.patch("common.artifact_record.sha256_file", return_value="b" * 64):
-                with mock.patch("plugin_host_build.atomic_publish_directory") as mock_pub:
-                    mock_pub.return_value = mock.Mock(
-                        success=True, published_dir=str(pub_dir1), errors=[]
-                    )
-                    record1 = BuildModule.build(str(self.source_dir), str(self.output_base), "1.0.0")
+        pub_dir1 = setup_pub_dir(self.output_base, "task-host", "1.0.0")
+        with mock.patch("task_host_linux_arm64_build.atomic_publish_directory") as mock_pub:
+            mock_pub.return_value = mock.Mock(
+                success=True, published_dir=str(pub_dir1), errors=[]
+            )
+            record1 = BuildModule.build(str(self.source_dir), str(self.output_base), "1.0.0")
         output_base2 = pathlib.Path(self.tmpdir) / "output2"
         output_base2.mkdir()
-        pub_dir2 = setup_pub_dir(output_base2, "plugin-host", "1.0.0")
-        with mock.patch("plugin_host_build.sha256_tree_manifest", return_value="a" * 64):
-            with mock.patch("common.artifact_record.sha256_file", return_value="b" * 64):
-                with mock.patch("plugin_host_build.atomic_publish_directory") as mock_pub:
-                    mock_pub.return_value = mock.Mock(
-                        success=True, published_dir=str(pub_dir2), errors=[]
-                    )
-                    record2 = BuildModule.build(str(self.source_dir), str(output_base2), "1.0.0")
+        pub_dir2 = setup_pub_dir(output_base2, "task-host", "1.0.0")
+        with mock.patch("task_host_linux_arm64_build.atomic_publish_directory") as mock_pub:
+            mock_pub.return_value = mock.Mock(
+                success=True, published_dir=str(pub_dir2), errors=[]
+            )
+            record2 = BuildModule.build(str(self.source_dir), str(output_base2), "1.0.0")
         self.assertEqual(record1.treeSha256, record2.treeSha256)
 
 
@@ -345,19 +359,24 @@ class TestOffline(unittest.TestCase):
         self.source_dir = make_source_dir(self.tmpdir)
         self.output_base = pathlib.Path(self.tmpdir) / "output"
         self.output_base.mkdir()
+        self.patches = [
+            mock.patch("task_host_linux_arm64_build.sha256_tree_manifest", return_value="a" * 64),
+            mock.patch("common.artifact_record.sha256_file", return_value="b" * 64),
+        ]
+        for p in self.patches:
+            p.start()
 
     def tearDown(self):
+        mock.patch.stopall()
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_offline_mode_no_network_fallback(self):
-        pub_dir = setup_pub_dir(self.output_base, "plugin-host", "1.0.0")
-        with mock.patch("plugin_host_build.sha256_tree_manifest", return_value="a" * 64):
-            with mock.patch("common.artifact_record.sha256_file", return_value="b" * 64):
-                with mock.patch("plugin_host_build.atomic_publish_directory") as mock_pub:
-                    mock_pub.return_value = mock.Mock(
-                        success=True, published_dir=str(pub_dir), errors=[]
-                    )
-                    record = BuildModule.build(str(self.source_dir), str(self.output_base), "1.0.0")
+        pub_dir = setup_pub_dir(self.output_base, "task-host", "1.0.0")
+        with mock.patch("task_host_linux_arm64_build.atomic_publish_directory") as mock_pub:
+            mock_pub.return_value = mock.Mock(
+                success=True, published_dir=str(pub_dir), errors=[]
+            )
+            record = BuildModule.build(str(self.source_dir), str(self.output_base), "1.0.0")
         self.assertIsNotNone(record)
 
 

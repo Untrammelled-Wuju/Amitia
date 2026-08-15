@@ -12,13 +12,15 @@ from unittest import mock
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
-BUILD_ROOT = SCRIPT_DIR.parents[3]
+BUILD_ROOT = SCRIPT_DIR.parents[1]
 if str(BUILD_ROOT) not in sys.path:
     sys.path.insert(0, str(BUILD_ROOT))
 
-import build
-
-
+import importlib.util
+BuildSpec = importlib.util.spec_from_file_location("qdrant_linux_arm64_build", str(SCRIPT_DIR / "build.py"))
+BuildModule = importlib.util.module_from_spec(BuildSpec)
+sys.modules["qdrant_linux_arm64_build"] = BuildModule
+BuildSpec.loader.exec_module(BuildModule)
 def make_archive(base, name="qdrant.zip", content=b"fake qdrant content"):
     archive_path = pathlib.Path(base) / name
     archive_path.write_bytes(content)
@@ -36,18 +38,18 @@ class TestFreshBuild(unittest.TestCase):
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_fresh_build_returns_record(self):
-        record = build.build(str(self.archive), str(self.output_base), "1.0.0")
+        record = BuildModule.build(str(self.archive), str(self.output_base), "1.0.0")
         self.assertIsNotNone(record)
         self.assertEqual(record.componentId, "qdrant")
         self.assertEqual(record.version, "1.0.0")
 
     def test_fresh_build_copies_archive(self):
-        build.build(str(self.archive), str(self.output_base), "1.0.0")
+        BuildModule.build(str(self.archive), str(self.output_base), "1.0.0")
         dest = self.output_base / "qdrant" / "linux-arm64" / "1.0.0" / "qdrant.zip"
         self.assertTrue(dest.exists())
 
     def test_fresh_build_saves_record(self):
-        build.build(str(self.archive), str(self.output_base), "1.0.0")
+        BuildModule.build(str(self.archive), str(self.output_base), "1.0.0")
         record_path = self.output_base / "qdrant" / "linux-arm64" / "1.0.0" / "build-record.json"
         self.assertTrue(record_path.exists())
 
@@ -63,12 +65,12 @@ class TestMissingInput(unittest.TestCase):
 
     def test_missing_archive_fails(self):
         with self.assertRaises(FileNotFoundError):
-            build.build("/nonexistent/archive.zip", str(self.output_base), "1.0.0")
+            BuildModule.build("/nonexistent/archive.zip", str(self.output_base), "1.0.0")
 
     def test_empty_archive_fails(self):
         archive = make_archive(self.tmpdir, content=b"")
         with self.assertRaises(ValueError):
-            build.build(str(archive), str(self.output_base), "1.0.0")
+            BuildModule.build(str(archive), str(self.output_base), "1.0.0")
 
 
 class TestShaMismatch(unittest.TestCase):
@@ -82,11 +84,11 @@ class TestShaMismatch(unittest.TestCase):
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_different_archive_produces_different_sha(self):
-        record1 = build.build(str(self.archive), str(self.output_base), "1.0.0")
+        record1 = BuildModule.build(str(self.archive), str(self.output_base), "1.0.0")
         output_base2 = pathlib.Path(self.tmpdir) / "output2"
         output_base2.mkdir()
         different_archive = make_archive(self.tmpdir, name="qdrant2.zip", content=b"different content")
-        record2 = build.build(str(different_archive), str(output_base2), "1.0.0")
+        record2 = BuildModule.build(str(different_archive), str(output_base2), "1.0.0")
         self.assertNotEqual(record1.artifactSha256, record2.artifactSha256)
 
 
@@ -101,10 +103,10 @@ class TestSameVersionSameBytes(unittest.TestCase):
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_same_archive_produces_same_sha(self):
-        record1 = build.build(str(self.archive), str(self.output_base), "1.0.0")
+        record1 = BuildModule.build(str(self.archive), str(self.output_base), "1.0.0")
         output_base2 = pathlib.Path(self.tmpdir) / "output2"
         output_base2.mkdir()
-        record2 = build.build(str(self.archive), str(output_base2), "1.0.0")
+        record2 = BuildModule.build(str(self.archive), str(output_base2), "1.0.0")
         self.assertEqual(record1.artifactSha256, record2.artifactSha256)
 
 
@@ -119,11 +121,11 @@ class TestSameVersionDifferentBytes(unittest.TestCase):
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_different_archive_different_record(self):
-        record1 = build.build(str(self.archive), str(self.output_base), "1.0.0")
+        record1 = BuildModule.build(str(self.archive), str(self.output_base), "1.0.0")
         output_base2 = pathlib.Path(self.tmpdir) / "output2"
         output_base2.mkdir()
         different_archive = make_archive(self.tmpdir, name="qdrant2.zip", content=b"other content")
-        record2 = build.build(str(different_archive), str(output_base2), "1.0.0")
+        record2 = BuildModule.build(str(different_archive), str(output_base2), "1.0.0")
         self.assertNotEqual(record1.artifactSha256, record2.artifactSha256)
 
 
@@ -139,7 +141,7 @@ class TestFailureBeforePublish(unittest.TestCase):
     def test_failure_before_publish_leaves_output_intact(self):
         output_before = list(self.output_base.rglob("*"))
         with self.assertRaises(Exception):
-            build.build("/nonexistent", str(self.output_base), "1.0.0")
+            BuildModule.build("/nonexistent", str(self.output_base), "1.0.0")
         output_after = list(self.output_base.rglob("*"))
         self.assertEqual(output_before, output_after)
 
@@ -155,7 +157,7 @@ class TestFailureDuringCandidateMetadata(unittest.TestCase):
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_build_succeeds_with_valid_input(self):
-        record = build.build(str(self.archive), str(self.output_base), "1.0.0")
+        record = BuildModule.build(str(self.archive), str(self.output_base), "1.0.0")
         self.assertIsNotNone(record)
 
 
@@ -264,10 +266,10 @@ class TestReproducibility(unittest.TestCase):
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_two_builds_same_sha(self):
-        record1 = build.build(str(self.archive), str(self.output_base), "1.0.0")
+        record1 = BuildModule.build(str(self.archive), str(self.output_base), "1.0.0")
         output_base2 = pathlib.Path(self.tmpdir) / "output2"
         output_base2.mkdir()
-        record2 = build.build(str(self.archive), str(output_base2), "1.0.0")
+        record2 = BuildModule.build(str(self.archive), str(output_base2), "1.0.0")
         self.assertEqual(record1.artifactSha256, record2.artifactSha256)
 
 
@@ -282,7 +284,7 @@ class TestOffline(unittest.TestCase):
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_offline_mode_succeeds(self):
-        record = build.build(str(self.archive), str(self.output_base), "1.0.0")
+        record = BuildModule.build(str(self.archive), str(self.output_base), "1.0.0")
         self.assertIsNotNone(record)
 
 
