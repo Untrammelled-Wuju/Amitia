@@ -225,30 +225,8 @@ func (r *TaskRepository) UpdateTaskRunCAS(ctx context.Context, run *task_runtime
 
 func (r *TaskRepository) GetTaskRun(ctx context.Context, runID string) (*task_runtime.TaskRun, error) {
 	ex := getExecutor(ctx, r.db)
-	run, err := scanTaskRun(ex.QueryRowContext(ctx, `
-		SELECT task_run_id, operation_id, invocation_id, task_definition_id, extension_id, module_id,
-		       status, priority, input_json, input_hash, input_artifact_id,
-		       trace_id, correlation_id, causation_id, source,
-		       scope_snapshot_id, permission_snapshot_id, dependency_snapshot_id,
-		       runtime_instance_id, checkpoint_id, result_artifact_id,
-		       execution_placement, execution_target_json, execution_attempt_id,
-		       execution_resolved_at, execution_resolved_by,
-		       attempt, max_attempts, created_at, queued_at, started_at,
-		       updated_at, finished_at, deadline_at, cancel_requested_at,
-		       pause_reason, pause_requested_at, paused_at, resumed_at,
-		       error_code, error_message, generation, revision
-		FROM extension_task_runs WHERE task_run_id = ?
-	`, runID))
-	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("sqlite: task run not found: %s", runID)
-		}
-		return nil, fmt.Errorf("sqlite: query task run: %w", err)
-	}
-	return run, nil
-}
 
-func scanTaskRow(scanner interface {
+func scanTaskRun(scanner interface {
 	Scan(dest ...any) error
 }) (*task_runtime.TaskRun, error) {
 	var run task_runtime.TaskRun
