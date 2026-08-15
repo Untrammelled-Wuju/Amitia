@@ -17,16 +17,23 @@ const (
 
 type IOSBridge struct {
 	mu         sync.RWMutex
-	session    relaySession
+	session    *productionRelaySession
 	generation atomic.Uint64
 	hostHealth Health
 	healthMu   sync.RWMutex
+	evtSink    NativeEventSink
 }
 
 func NewIOSBridge() *IOSBridge {
 	return &IOSBridge{
 		hostHealth: HealthUnknown,
 	}
+}
+
+func (b *IOSBridge) SetEventSink(sink NativeEventSink) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.evtSink = sink
 }
 
 func (b *IOSBridge) Execute(ctx context.Context, req Request) (Response, error) {
@@ -76,46 +83,45 @@ func (b *IOSBridge) Execute(ctx context.Context, req Request) (Response, error) 
 func (b *IOSBridge) Health(_ context.Context) Health {
 	b.healthMu.RLock()
 	defer b.healthMu.RUnlock()
-	return b.hostHealth
-}
-
-func (b *IOSBridge) AttachSession(session relaySession) {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.session = session
-	b.healthMu.Lock()
-	if session != nil {
-		b.hostHealth = HealthReady
-	} else {
-		b.hostHealth = HealthUnhealthy
+	if b.session == nil {
+		return HealthUnhealthy
 	}
-	b.healthMu.Unlock()
-	b.generation.Add(1)
-}
-
-func (b *IOSBridge) AttachRelaySession(transport RelayTransport) {
-	session := newRelaySession(transport)
-	b.AttachSession(session)
-}
-
-func (b *IOSBridge) DetachSession() {
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	b.session = nil
-	b.healthMu.Lock()
-	b.hostHealth = HealthUnhealthy
-	b.healthMu.Unlock()
-	b.generation.Add(1)
-}
-
-func (b *IOSBridge) Generation() uint64 {
-	return b.generation.Load()
+	return b.hostHealth
 }
 
 func (b *IOSBridge) SessionAttached() bool {
 	b.mu.RLock()
 	defer b.mu.RUnlock()
 	return b.session != nil
+}
+
+func (b *IOSBridge) AttachRelaySession(transport RelayTransport) uint64 {
+	b.mu.Lock()
+	session := newRelaySession(transport)
+	b.session = session
+	b.healthMu.Lock()
+	b.hostHealth = HealthReady
+	b.healthMu.Unlock()
+	b.generation.Add(1)
+	gen := b.generation.Load()
+	b.mu.Unlock()
+	return gen
+}
+
+func (b *IOSBridge) DetachRelaySession(expectedGeneration uint64) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.generation.Load() != expectedGeneration {
+		return
+	}
+	b.session = nil
+	b.healthMu.Lock()
+	b.hostHealth = HealthUnhealthy
+	b.healthMu.Unlock()
+}
+
+func (b *IOSBridge) Generation() uint64 {
+	return b.generation.Load()
 }
 
 func (b *IOSBridge) SetHostHealth(h Health) {
@@ -134,15 +140,65 @@ func (b *IOSBridge) HandleRelayEnvelope(payload []byte) error {
 	case "native_bridge.response", "native_bridge.request":
 		b.mu.RLock()
 		session := b.session
+		gen := b.generation.Load()
 		b.mu.RUnlock()
 		if session == nil {
 			return fmt.Errorf("no active relay session")
 		}
-		if pSession, ok := session.(*productionRelaySession); ok {
-			pSession.handleIncomingEnvelope(env)
+		if gen != env.Generation {
+			return nil
+		}
+		session.handleIncomingEnvelope(env)
+		return nil
+	case "native_bridge.event":
+		b.mu.RLock()
+		sink := b.evtSink
+		gen := b.generation.Load()
+		b.mu.RUnlock()
+		if gen != env.Generation {
+			return nil
+		}
+		if sink != nil {
+			return sink.PublishNativeEvent(context.Background(), "ios", env.Generation, env.Payload)
 		}
 		return nil
+	case "native_bridge.health":
+		b.mu.RLock()
+		gen := b.generation.Load()
+		b.mu.RUnlock()
+		if gen != env.Generation {
+			return nil
+		}
+		return b.updateHostHealthFromEnvelope(env)
 	default:
 		return fmt.Errorf("unknown relay envelope type: %s", env.Type)
 	}
+}
+
+func (b *IOSBridge) updateHostHealthFromEnvelope(env RelayEnvelope) error {
+	if env.Payload == nil {
+		return nil
+	}
+	var healthData struct {
+		Generation uint64 `json:"generation"`
+		Ready      bool   `json:"ready"`
+		Foreground bool   `json:"foreground"`
+	}
+	if err := json.Unmarshal(env.Payload, &healthData); err != nil {
+		return err
+	}
+	b.mu.RLock()
+	gen := b.generation.Load()
+	b.mu.RUnlock()
+	if gen != healthData.Generation {
+		return nil
+	}
+	b.healthMu.Lock()
+	if healthData.Ready {
+		b.hostHealth = HealthReady
+	} else {
+		b.hostHealth = HealthUnhealthy
+	}
+	b.healthMu.Unlock()
+	return nil
 }
