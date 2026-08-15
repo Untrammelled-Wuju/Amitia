@@ -26,9 +26,10 @@ func DefaultToolFacadeConfig() ToolFacadeConfig {
 	}
 }
 
-type ToolFacade struct {
+	type ToolFacade struct {
 	toolRegistry          *capability.ToolRegistry
 	executionKernel       *execution.ExecutionPipeline
+	capabilityResolver    capability.CapabilityResolver
 	hookService           *hook.Service
 	agentSkillCatalog     *agent_skill.AgentSkillCatalog
 	activationService     *agent_skill.ActivationService
@@ -37,7 +38,7 @@ type ToolFacade struct {
 	skillResourceHandler  SkillResourceHandler
 	counters              *ToolFacadeCounters
 	config                ToolFacadeConfig
-}
+	}
 
 func NewToolFacade(toolRegistry *capability.ToolRegistry, executionKernel *execution.ExecutionPipeline, args ...any) *ToolFacade {
 	config := DefaultToolFacadeConfig()
@@ -79,6 +80,10 @@ func (f *ToolFacade) SetRunSkillScriptHandler(handler RunSkillScriptHandler) {
 
 func (f *ToolFacade) SetSkillResourceHandler(handler SkillResourceHandler) {
 	f.skillResourceHandler = handler
+}
+
+func (f *ToolFacade) SetCapabilityResolver(resolver capability.CapabilityResolver) {
+	f.capabilityResolver = resolver
 }
 
 func (f *ToolFacade) PrepareAgentSkillPrompt(ctx context.Context, scope LegacyScope, message string) (string, []LegacyActivatedSkill, []string) {
@@ -411,11 +416,49 @@ func (f *ToolFacade) buildKernelModelTools(ctx context.Context, scope LegacyScop
 	return tools, nil
 }
 
+type resolvedExecution struct {
+	target        capability.InvocationExecutionTarget
+	legacyUnresolved bool
+}
+
+func (f *ToolFacade) SetCapabilityService(svc *capability.CapabilityService) {
+	if svc != nil {
+		f.capabilityResolver = svc
+	}
+}
+
+func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.ToolDefinition) resolvedExecution {
+	if f.capabilityResolver == nil {
+		return resolvedExecution{}
+	}
+	req := capability.CapabilityResolutionRequest{
+		CapabilityID:  capability.CapabilityID(def.ID),
+		ExtensionID:   def.ExtensionID,
+		ModuleID:      def.ModuleID,
+		AllowCore:     true,
+		AllowDevice:   false,
+		PreferredPlacement: capability.ProviderPlacementCore,
+	}
+	result, err := f.capabilityResolver.Resolve(req)
+	if err != nil {
+		return resolvedExecution{}
+	}
+	if !result.HasResult() {
+		return resolvedExecution{}
+	}
+	return resolvedExecution{target: result.ExecutionTarget}
+}
+
 func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.ToolDefinition, input json.RawMessage, scope LegacyScope, externalCallID string, idempotencyKey string) LegacyToolResult {
 	if f.executionKernel == nil {
 		return LegacyToolResult{Status: "FAILED", VisibleText: "execution kernel not configured", Error: &LegacyToolError{Code: "EXECUTION_KERNEL_UNAVAILABLE"}}
 	}
 	isBackground := def.Runtime.RuntimeType == capability.RuntimeTypeTask && def.ExecutionPolicy.AllowBackground
+	resolved := f.resolveExecutionTarget(ctx, def)
+	metadata := map[string]any{}
+	if resolved.legacyUnresolved {
+		metadata["execution_mode"] = "legacy_unresolved_provider"
+	}
 	invocation := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
 		ExternalCallID: externalCallID,
 		UserID:         scope.UserID,
@@ -430,6 +473,8 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 		TraceID:        scope.TraceID,
 		OperationID:    scope.RequestID,
 		IsBackground:   isBackground,
+		ExecutionTarget: resolved.target,
+		Metadata:       metadata,
 	})
 	req := execution.ToolExecutionRequest{
 		ToolID:     capability.CapabilityID(def.ID),
@@ -464,6 +509,11 @@ func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName strin
 	}
 
 	isBackground := def.Runtime.RuntimeType == capability.RuntimeTypeTask && def.ExecutionPolicy.AllowBackground
+	resolved := f.resolveExecutionTarget(ctx, def)
+	streamMetadata := map[string]any{}
+	if resolved.legacyUnresolved {
+		streamMetadata["execution_mode"] = "legacy_unresolved_provider"
+	}
 	invocation := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
 		ExternalCallID: scope.ToolCallID,
 		UserID:         scope.UserID,
@@ -478,6 +528,8 @@ func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName strin
 		TraceID:        scope.TraceID,
 		OperationID:    scope.RequestID,
 		IsBackground:   isBackground,
+		ExecutionTarget: resolved.target,
+		Metadata:       streamMetadata,
 	})
 	req := execution.ToolExecutionRequest{
 		ToolID:     capability.CapabilityID(def.ID),

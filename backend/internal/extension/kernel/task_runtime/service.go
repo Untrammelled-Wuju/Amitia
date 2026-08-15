@@ -608,6 +608,7 @@ func (s *TaskRuntimeService) handleFinished(ctx context.Context, run *TaskRun, s
 	run.FinishedAt = &now
 
 	var eventType TaskDomainEventType
+	var runResult *TaskRunResult
 	switch status {
 	case "succeeded":
 		run.Status = RunStatusSucceeded
@@ -616,7 +617,7 @@ func (s *TaskRuntimeService) handleFinished(ctx context.Context, run *TaskRun, s
 		if artifactID != "" || len(result) > s.config.MaxInlineResultBytes {
 			resultType = ResultArtifact
 		}
-		runResult := &TaskRunResult{
+		runResult = &TaskRunResult{
 			TaskRunID:  run.TaskRunID,
 			ResultType: resultType,
 			ResultJSON: result,
@@ -624,7 +625,6 @@ func (s *TaskRuntimeService) handleFinished(ctx context.Context, run *TaskRun, s
 			ResultHash: hashBytes(result),
 			CreatedAt:  now,
 		}
-		_ = s.store.PutResult(ctx, runResult)
 		if artifactID != "" {
 			run.ResultArtifactID = &artifactID
 		}
@@ -648,10 +648,20 @@ func (s *TaskRuntimeService) handleFinished(ctx context.Context, run *TaskRun, s
 	}
 
 	run.Revision++
-	_ = s.store.PutTaskRun(ctx, run)
-	_ = s.queue.Remove(ctx, run.TaskRunID)
-
-	s.publishTaskEvent(ctx, eventType, run, "", errCode)
+	_ = s.store.WithinTaskTx(ctx, func(ctx context.Context) error {
+		if runResult != nil {
+			if err := s.store.PutResult(ctx, runResult); err != nil {
+				return err
+			}
+		}
+		if err := s.store.PutTaskRun(ctx, run); err != nil {
+			return err
+		}
+		if err := s.queue.Remove(ctx, run.TaskRunID); err != nil {
+			return err
+		}
+		return s.publishTaskEvent(ctx, eventType, run, "", errCode)
+	})
 
 	if s.eventEmitter != nil {
 		taskPayload, _ := json.Marshal(map[string]interface{}{
@@ -737,9 +747,15 @@ func (s *TaskRuntimeService) handleCrash(ctx context.Context, run *TaskRun, def 
 	code := string(ErrTaskRuntimeCrashed)
 	run.ErrorCode = &code
 	run.Revision++
-	_ = s.store.PutTaskRun(ctx, run)
-	_ = s.queue.Remove(ctx, run.TaskRunID)
-	s.publishTaskEvent(ctx, eventType, run, errMsg, code)
+	_ = s.store.WithinTaskTx(ctx, func(ctx context.Context) error {
+		if err := s.store.PutTaskRun(ctx, run); err != nil {
+			return err
+		}
+		if err := s.queue.Remove(ctx, run.TaskRunID); err != nil {
+			return err
+		}
+		return s.publishTaskEvent(ctx, eventType, run, errMsg, code)
+	})
 }
 
 func (s *TaskRuntimeService) failRun(ctx context.Context, run *TaskRun, code TaskErrorCode, message string) {
@@ -750,9 +766,15 @@ func (s *TaskRuntimeService) failRun(ctx context.Context, run *TaskRun, code Tas
 	run.ErrorCode = &c
 	run.ErrorMessage = &message
 	run.Revision++
-	_ = s.store.PutTaskRun(ctx, run)
-	_ = s.queue.Remove(ctx, run.TaskRunID)
-	s.publishTaskEvent(ctx, TaskEventFailed, run, message, string(code))
+	_ = s.store.WithinTaskTx(ctx, func(ctx context.Context) error {
+		if err := s.store.PutTaskRun(ctx, run); err != nil {
+			return err
+		}
+		if err := s.queue.Remove(ctx, run.TaskRunID); err != nil {
+			return err
+		}
+		return s.publishTaskEvent(ctx, TaskEventFailed, run, message, string(code))
+	})
 }
 
 func (s *TaskRuntimeService) Cancel(ctx context.Context, taskRunID, reason string) error {

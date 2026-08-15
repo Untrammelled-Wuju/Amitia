@@ -12,6 +12,7 @@ const (
 	StepInstallSwitchCurrentPointer   = "install.switch_current_pointer"
 	StepUpdateSwitchCurrentPointer    = "update.switch_current_pointer"
 	StepCommitKernelRepositories      = "install.commit_kernel_repositories"
+	StepReconcileCapabilityProviders  = "install.reconcile_capability_providers"
 	StepCommitUpdateState             = "update.commit_update_state"
 	StepMarkInstallationDisabled      = "install.mark_installation_disabled"
 	StepExecuteMigrations             = "update.execute_migrations"

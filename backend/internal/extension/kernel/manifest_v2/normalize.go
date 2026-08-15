@@ -56,6 +56,15 @@ const maxMetadataBytes = 1 << 20
 const maxProvidedCapabilities = 256
 const maxProviderLabels = 64
 
+func normalizeContributionKind(kind string) string {
+	switch kind {
+	case "background_service":
+		return "background_task"
+	default:
+		return kind
+	}
+}
+
 func normalizeStringList(values []string, lower bool) []string {
 	result := make([]string, 0, len(values))
 	seen := make(map[string]bool)
@@ -198,8 +207,20 @@ func (m Manifest) NormalizeCompatibility() (Manifest, ValidationReport) {
 			if hasProviderContribution {
 				report.AddWarningCode(
 					fmt.Sprintf("modules[%d].provider", i),
-					"legacy_provider_contribution_present",
-					"provider contribution kind is deprecated in favor of provider metadata",
+					"provider_contribution_deprecated",
+					"provider contribution kind is deprecated in favor of module.provider + providedCapabilities",
+				)
+			}
+		}
+
+		for j := range mod.Contributions {
+			normalizedKind := normalizeContributionKind(mod.Contributions[j].Kind)
+			if normalizedKind != mod.Contributions[j].Kind {
+				mod.Contributions[j].Kind = normalizedKind
+				report.AddWarningCode(
+					fmt.Sprintf("modules[%d].contributions[%d].kind", i, j),
+					"contribution_kind_canonicalized",
+					fmt.Sprintf("contribution kind %q canonicalized to %q", mod.Contributions[j].Kind, normalizedKind),
 				)
 			}
 		}

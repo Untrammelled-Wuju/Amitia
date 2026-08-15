@@ -22,6 +22,7 @@ void main() {
         livenessPath: '/healthz',
         readinessPath: '/readyz',
       ),
+      authStrategy: BackendAuthStrategy.localToken,
       credential: BackendConnectionCredential.tryCreate('a' * 32)!,
     );
   }

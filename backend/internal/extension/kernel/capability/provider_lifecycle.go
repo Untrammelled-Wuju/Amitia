@@ -111,6 +111,7 @@ func (s *ProviderLifecycleService) UnregisterProvider(id ProviderID) (bool, erro
 				s.registry.setInstance(string(restore.ID), restore)
 			}
 			s.registry.rebuildProviderInstanceIndex()
+			s.registry.rebuildCapabilityIndex()
 			return false, err
 		}
 	}
@@ -128,6 +129,7 @@ func (s *ProviderLifecycleService) UnregisterProvider(id ProviderID) (bool, erro
 			s.registry.setInstance(string(restore.ID), restore)
 		}
 		s.registry.rebuildProviderInstanceIndex()
+		s.registry.rebuildCapabilityIndex()
 		return false, err
 	}
 	return true, nil
@@ -288,6 +290,28 @@ func toInstanceEventPayload(inst *CapabilityProviderInstance, at time.Time) Prov
 		Revision:           inst.Revision,
 		OccurredAt:         at,
 	}
+}
+
+func (s *ProviderLifecycleService) DrainExtension(extensionID string) error {
+	defs := s.registry.ListByExtension(extensionID)
+	for _, d := range defs {
+		if d == nil {
+			continue
+		}
+		instances := s.registry.ListInstancesByProvider(d.ID)
+		for _, inst := range instances {
+			if inst == nil {
+				continue
+			}
+			if inst.Availability == ProviderAvailabilityDraining || inst.Availability == ProviderAvailabilityUnavailable {
+				continue
+			}
+			if err := s.UpdateInstanceAvailability(inst.ID, ProviderAvailabilityDraining); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 func diffDefinitionFields(old, new *CapabilityProviderDefinition) []string {

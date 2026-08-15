@@ -20,6 +20,8 @@ public class BluetoothNativeHandler: NSObject, IOSNativeOperationHandler {
         "bluetooth.descriptor.read",
         "bluetooth.descriptor.write",
         "bluetooth.rssi.read",
+        "bluetooth.peripheral_role.start",
+        "bluetooth.peripheral_role.stop",
         "bluetooth.peripherals.list"
     ]
 
@@ -85,6 +87,10 @@ public class BluetoothNativeHandler: NSObject, IOSNativeOperationHandler {
             return await handleDescriptorWrite(request)
         case "bluetooth.rssi.read":
             return await handleRSSIRead(request)
+        case "bluetooth.peripheral_role.start":
+            return handlePeripheralRoleStart(request)
+        case "bluetooth.peripheral_role.stop":
+            return handlePeripheralRoleStop(request)
         default:
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
@@ -623,6 +629,26 @@ public class BluetoothNativeHandler: NSObject, IOSNativeOperationHandler {
         } catch {
             return errorResponse(request, code: "RSSI_READ_FAILED", message: error.localizedDescription)
         }
+    }
+
+    private func handlePeripheralRoleStart(_ request: IOSNativeRequest) -> IOSNativeResponse {
+        return IOSNativeResponse(
+            protocolVersion: request.protocolVersion,
+            requestID: request.requestID,
+            status: "error",
+            result: nil,
+            error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "peripheral role not supported in this version")
+        )
+    }
+
+    private func handlePeripheralRoleStop(_ request: IOSNativeRequest) -> IOSNativeResponse {
+        return IOSNativeResponse(
+            protocolVersion: request.protocolVersion,
+            requestID: request.requestID,
+            status: "error",
+            result: nil,
+            error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "peripheral role not supported in this version")
+        )
     }
 
     private func adapterStateString(_ state: BluetoothAdapterState) -> String {

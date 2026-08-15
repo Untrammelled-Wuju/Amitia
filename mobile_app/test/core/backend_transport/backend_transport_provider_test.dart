@@ -24,6 +24,7 @@ BackendConnectionConfig _makeConfig(int generation) {
       livenessPath: '/livez',
       readinessPath: '/readyz',
     ),
+    authStrategy: BackendAuthStrategy.localToken,
     credential: BackendConnectionCredential.tryCreate('a' * 32)!,
   );
 }

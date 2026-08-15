@@ -3,7 +3,6 @@ package control
 import (
 	"context"
 	"errors"
-	"log"
 
 	"github.com/u-ai/backend/internal/gamehost/domain"
 )

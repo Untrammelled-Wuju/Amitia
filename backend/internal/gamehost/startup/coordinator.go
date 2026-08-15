@@ -101,6 +101,10 @@ type StartupRecoveryAuditEvent struct {
 	Timestamp      time.Time
 }
 
+type RuntimeGraphReconcileProvider interface {
+	Reconcile(ctx context.Context) error
+}
+
 type StartupRecoveryDeps struct {
 	HostIdentity    HostIdentityProvider
 	ProcessCleanup  ProcessCleanupProvider
@@ -109,6 +113,7 @@ type StartupRecoveryDeps struct {
 	EndpointCleanup EndpointCleanupProvider
 	ShmCleanup      SharedMemoryCleanupProvider
 	KernelRecon     KernelReconciliationProvider
+	RuntimeGraphRecon RuntimeGraphReconcileProvider
 	AuditSink       AuditSink
 	Gate            *StartupGate
 }
@@ -443,17 +448,17 @@ func (c *StartupRecoveryCoordinator) cleanupProcessCandidate(ctx context.Context
 }
 
 func (c *StartupRecoveryCoordinator) reconstructRuntimes(ctx context.Context, report *StartupRecoveryReport) error {
+	if c.deps.RuntimeGraphRecon != nil {
+		if err := c.deps.RuntimeGraphRecon.Reconcile(ctx); err != nil {
+			return fmt.Errorf("runtime graph reconcile: %w", err)
+		}
+	}
 	if c.deps.KernelRecon == nil {
 		return nil
 	}
 	runtimeIDs, err := c.deps.KernelRecon.CurrentRuntimeIDs(ctx)
 	if err != nil {
 		return fmt.Errorf("list current runtime IDs: %w", err)
-	}
-	for _, runtimeID := range runtimeIDs {
-		if c.deps.ProcessCleanup != nil {
-			_ = c.deps.ProcessCleanup.CleanupOwnedProcess(ctx, runtimeID, 0)
-		}
 	}
 	report.ReconstructedRuntimes = runtimeIDs
 	return nil

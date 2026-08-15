@@ -12,7 +12,7 @@ class RuntimeBackendConnectionSource implements BackendConnectionSource {
   const RuntimeBackendConnectionSource();
 
   @override
-  Future<BackendConnectionAvailability> resolve({int expectedGeneration = 0}) async {
+  Future<BackendConnectionAvailability> resolve({int? expectedRuntimeGeneration}) async {
     try {
       final result = await _channel.invokeMethod<Map<Object?, Object?>>(_methodGetBackendConnection);
       if (result == null) return BackendConnectionUnavailable();
@@ -20,7 +20,7 @@ class RuntimeBackendConnectionSource implements BackendConnectionSource {
       for (final entry in result.entries) {
         converted[entry.key.toString()] = entry.value;
       }
-      return _parsePayload(converted, expectedGeneration: expectedGeneration);
+      return _parsePayload(converted, expectedRuntimeGeneration: expectedRuntimeGeneration);
     } on PlatformException {
       return BackendConnectionUnavailable();
     } on MissingPluginException {
@@ -28,7 +28,7 @@ class RuntimeBackendConnectionSource implements BackendConnectionSource {
     }
   }
 
-  BackendConnectionAvailability _parsePayload(Map<String, dynamic> decoded, {int expectedGeneration = 0}) {
+  BackendConnectionAvailability _parsePayload(Map<String, dynamic> decoded, {int? expectedRuntimeGeneration}) {
     try {
       final schemaVersion = decoded['schemaVersion'];
       if (schemaVersion is! int || schemaVersion != 1) {
@@ -40,7 +40,9 @@ class RuntimeBackendConnectionSource implements BackendConnectionSource {
         if (generationRaw is! int || generationRaw <= 0) {
           return BackendConnectionUnavailable();
         }
-        if (expectedGeneration > 0 && generationRaw != expectedGeneration) {
+        if (expectedRuntimeGeneration != null &&
+            expectedRuntimeGeneration > 0 &&
+            generationRaw != expectedRuntimeGeneration) {
           return BackendConnectionUnavailable();
         }
         final endpointMap = decoded['endpoint'];
@@ -81,6 +83,7 @@ class RuntimeBackendConnectionSource implements BackendConnectionSource {
           schemaVersion: 1,
           generation: generationRaw,
           endpoint: endpoint,
+          authStrategy: BackendAuthStrategy.localToken,
           credential: credential,
         );
         return BackendConnectionAvailable(config);

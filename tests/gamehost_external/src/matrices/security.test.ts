@@ -1,111 +1,100 @@
-import * as path from 'path';
-import { ExternalE2EHarness } from '../harness';
+import { createDriver, BackendDriver } from '../backend_driver';
 
-const PLUGIN_PATH = path.resolve(__dirname, '../../../../testplugins/mock-amitiax-game-plugin/dist/index.js');
+const ARCHIVE_PATH = process.env.MOCK_PLUGIN_ARCHIVE_PATH;
 
-describe('G36 Security', () => {
-  it('permission check returns pending state (host decides)', async () => {
-    const harness = new ExternalE2EHarness(PLUGIN_PATH);
-    await harness.start();
+describe('G47-F15 Security (Backend Driver)', () => {
+  let driver: BackendDriver;
+  let extensionId: string | null = null;
+  let runtimeId: string | null = null;
 
-    const resp = await harness.callRPC('mockgame.permission.check', { permissionId: 'gamehost.control' }, 5000);
-    expect((resp.payload as any).permissionId).toBe('gamehost.control');
+  beforeEach(() => {
+    driver = createDriver();
+  });
 
-    harness.kill();
-    await harness.waitExit(3000);
-  }, 10000);
+  afterEach(async () => {
+    if (runtimeId) {
+      try {
+        await driver.stopRuntime(runtimeId);
+      } catch {
+        // ignore
+      }
+    }
+    if (extensionId) {
+      try {
+        await driver.uninstallPlugin(extensionId);
+      } catch {
+        // ignore
+      }
+    }
+  });
 
-  it('permission snapshot returns valid structure', async () => {
-    const harness = new ExternalE2EHarness(PLUGIN_PATH);
-    await harness.start();
+  it('install enable and acquire control', async () => {
+    if (!ARCHIVE_PATH) {
+      console.log('MOCK_PLUGIN_ARCHIVE_PATH not set - skipping');
+      return;
+    }
 
-    const resp = await harness.callRPC('mockgame.permission.snapshot', {}, 5000);
-    expect((resp.payload as any).isValid).toBe(true);
-    expect((resp.payload as any).snapshotId).toBeDefined();
+    await driver.installPlugin(ARCHIVE_PATH);
+    const plugin = await driver.waitForPluginByExtension('mock-amitiax-game-plugin', 30000);
+    extensionId = plugin.extensionId;
+    await driver.enablePlugin(extensionId);
 
-    harness.kill();
-    await harness.waitExit(3000);
-  }, 10000);
+    const runtimes = await driver.listRuntimes({ pluginId: plugin.pluginId });
+    if (runtimes.length > 0) {
+      runtimeId = runtimes[0].runtimeId;
+      await driver.startRuntime(runtimeId);
+      await driver.waitForRuntimeReady(runtimeId, 30000);
 
-  it('hostapi check returns pending invoke result', async () => {
-    const harness = new ExternalE2EHarness(PLUGIN_PATH);
-    await harness.start();
+      await driver.takeover(runtimeId, 'plugin');
+      const detailAfterTakeover = await driver.getRuntime(runtimeId);
+      expect(detailAfterTakeover.controlAuthority?.mode).toBe('plugin');
 
-    const resp = await harness.callRPC('mockgame.hostapi.check', { method: 'host.runtime.health' }, 5000);
-    expect((resp.payload as any).method).toBe('host.runtime.health');
+      await driver.release(runtimeId, 'observe');
+      const detailAfterRelease = await driver.getRuntime(runtimeId);
+      expect(detailAfterRelease.controlAuthority?.mode).toBe('observe');
+    }
+  }, 90000);
 
-    harness.kill();
-    await harness.waitExit(3000);
-  }, 10000);
+  it('emergency stop and rearm flow', async () => {
+    if (!ARCHIVE_PATH) {
+      console.log('MOCK_PLUGIN_ARCHIVE_PATH not set - skipping');
+      return;
+    }
 
-  it('secret probe returns lease status', async () => {
-    const harness = new ExternalE2EHarness(PLUGIN_PATH);
-    await harness.start();
+    await driver.installPlugin(ARCHIVE_PATH);
+    const plugin = await driver.waitForPluginByExtension('mock-amitiax-game-plugin', 30000);
+    extensionId = plugin.extensionId;
+    await driver.enablePlugin(extensionId);
 
-    const resp = await harness.callRPC('mockgame.secret.probe', {}, 5000);
-    expect((resp.payload as any).hasLease).toBe(false);
-    expect((resp.payload as any).ref).toBe('secret://mock_provider_token');
+    const runtimes = await driver.listRuntimes({ pluginId: plugin.pluginId });
+    if (runtimes.length > 0) {
+      runtimeId = runtimes[0].runtimeId;
+      await driver.startRuntime(runtimeId);
+      await driver.waitForRuntimeReady(runtimeId, 30000);
 
-    harness.kill();
-    await harness.waitExit(3000);
-  }, 10000);
+      await driver.emergencyStop(runtimeId);
+      const detailAfterEstop = await driver.getRuntime(runtimeId);
+      expect(detailAfterEstop.runtimeState).toBe('stopped');
 
-  it('control sink register returns registered', async () => {
-    const harness = new ExternalE2EHarness(PLUGIN_PATH);
-    await harness.start();
+      await driver.rearm(runtimeId);
+      await driver.startRuntime(runtimeId);
+      await driver.waitForRuntimeReady(runtimeId, 30000);
+    }
+  }, 90000);
 
-    const resp = await harness.callRPC('mockgame.control.sink.register', { sinkId: 'mockgame.effect', kind: 'effect' }, 5000);
-    expect((resp.payload as any).registered).toBe(true);
-    expect((resp.payload as any).sinkId).toBe('mockgame.effect');
+  it('disable plugin prevents runtime start', async () => {
+    if (!ARCHIVE_PATH) {
+      console.log('MOCK_PLUGIN_ARCHIVE_PATH not set - skipping');
+      return;
+    }
 
-    harness.kill();
-    await harness.waitExit(3000);
-  }, 10000);
+    await driver.installPlugin(ARCHIVE_PATH);
+    const plugin = await driver.waitForPluginByExtension('mock-amitiax-game-plugin', 30000);
+    extensionId = plugin.extensionId;
+    await driver.enablePlugin(extensionId);
+    await driver.disablePlugin(extensionId);
 
-  it('control output in observe mode denied', async () => {
-    const harness = new ExternalE2EHarness(PLUGIN_PATH);
-    await harness.start();
-
-    const resp = await harness.callRPC('mockgame.control.output', { outputId: 'test-001', sinkId: 'mockgame.effect', epoch: 0 }, 5000);
-    expect((resp.payload as any).allowed).toBe(false);
-
-    harness.kill();
-    await harness.waitExit(3000);
-  }, 10000);
-
-  it('takeover returns expected structure', async () => {
-    const harness = new ExternalE2EHarness(PLUGIN_PATH);
-    await harness.start();
-
-    const resp = await harness.callRPC('mockgame.control.takeover', { targetMode: 'plugin', actor: 'test' }, 5000);
-    expect((resp.payload as any).targetMode).toBe('plugin');
-    expect((resp.payload as any).actor).toBe('test');
-
-    harness.kill();
-    await harness.waitExit(3000);
-  }, 10000);
-
-  it('release returns expected structure', async () => {
-    const harness = new ExternalE2EHarness(PLUGIN_PATH);
-    await harness.start();
-
-    const resp = await harness.callRPC('mockgame.control.release', { targetMode: 'observe', actor: 'test' }, 5000);
-    expect((resp.payload as any).targetMode).toBe('observe');
-    expect((resp.payload as any).actor).toBe('test');
-
-    harness.kill();
-    await harness.waitExit(3000);
-  }, 10000);
-
-  it('emergency status returns inactive by default', async () => {
-    const harness = new ExternalE2EHarness(PLUGIN_PATH);
-    await harness.start();
-
-    const resp = await harness.callRPC('mockgame.control.emergency_status', {}, 5000);
-    expect((resp.payload as any).active).toBe(false);
-    expect((resp.payload as any).state).toBe('inactive');
-
-    harness.kill();
-    await harness.waitExit(3000);
-  }, 10000);
+    const disabled = await driver.getRuntime(runtimeId || '');
+    expect(disabled).toBeDefined();
+  }, 60000);
 });

@@ -231,6 +231,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	if config.AppCfg == nil {
 		config.AppCfg = &config.Config{}
 	}
+	if runtimeProfile == runtimeprofile.ProfileDeviceAgent {
+		return newDeviceAgentServices(ctx, graphSvc, bootstrap, runtimeProfile, policy)
+	}
 	temporalSvc := temporal.NewService(temporal.NewRepository(ctx.DB), temporal.SystemClock{})
 	relTimeRepo := temporal.NewRelationshipTimeRepository(ctx.DB, temporal.SystemClock{})
 	relTimeCoordinator := temporal.NewRelationshipTimeCoordinator(relTimeRepo, temporal.SystemClock{})
@@ -377,8 +380,37 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithMediaService(mediaService).
 		WithWorkspaceService(workspaceService).
 		WithBrowserProvider(browserProvider).
-		WithRuntimeProfile(runtimeProfile).
-		WithDesktopPetPluginCapabilities(integration.DefaultCapabilities())
+		WithRuntimeProfile(runtimeProfile)
+
+	installationRepo := installation.NewRepository(ctx.DB, ctx)
+	runtimeConfig := runtime.DefaultRuntimeConfig()
+	runtimeConfig.Enabled = config.AppCfg.DesktopPetRuntime.Enabled
+	runtimeConfig.LoopbackOnly = config.AppCfg.DesktopPetRuntime.LoopbackOnly
+	runtimeConfig.HeartbeatIntervalMs = config.AppCfg.DesktopPetRuntime.HeartbeatIntervalMs
+	runtimeConfig.HeartbeatTimeoutMs = config.AppCfg.DesktopPetRuntime.HeartbeatTimeoutMs
+	runtimeConfig.MaxMessageBytes = config.AppCfg.DesktopPetRuntime.MaxMessageBytes
+	runtimeConfig.RegisterTimeoutSec = config.AppCfg.DesktopPetRuntime.RegisterTimeoutSec
+	runtimeConfig.SendQueueSize = config.AppCfg.DesktopPetRuntime.SendQueueSize
+	runtimeConfig.CommandTimeoutSec = config.AppCfg.DesktopPetRuntime.CommandTimeoutSec
+	runtimeConfig.MaxRetryAttempts = config.AppCfg.DesktopPetRuntime.MaxRetryAttempts
+	runtimeConfig.RetryBaseDelayMs = config.AppCfg.DesktopPetRuntime.RetryBaseDelayMs
+	runtimeConfig.RetryMaxDelayMs = config.AppCfg.DesktopPetRuntime.RetryMaxDelayMs
+	runtimeConfig.CommandRetentionHours = config.AppCfg.DesktopPetRuntime.CommandRetentionHours
+
+	runtimeV2Facade := runtimev2.NewRuntimeFacade(ctx.DB, &runtimev2.FacadeConfig{
+		Enabled:            runtimeConfig.Enabled,
+		Path:               runtimeConfig.Path,
+		LoopbackOnly:       runtimeConfig.LoopbackOnly,
+		HeartbeatInterval:  time.Duration(runtimeConfig.HeartbeatIntervalMs) * time.Millisecond,
+		HeartbeatTimeout:   time.Duration(runtimeConfig.HeartbeatTimeoutMs) * time.Millisecond,
+		MaxMessageBytes:    int64(runtimeConfig.MaxMessageBytes),
+		CommandTimeoutSec:  int64(runtimeConfig.CommandTimeoutSec),
+		CommandRetentionHr: int64(runtimeConfig.CommandRetentionHours),
+	})
+
+	kernelBuilder.WithDesktopPetPluginCapabilities(integration.NewProductionCapabilities(integration.ProductionCapabilitiesOptions{
+		InstallationRepo: installationRepo,
+	}))
 
 	if bootstrap != nil {
 		kernelBuilder.WithRuntimeHost(bootstrap.RuntimeHost())
@@ -703,34 +735,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 	qualityWorker := qualityworker.NewWorker(ctx.DB, qualitySvc, processingDataDir)
 
-	installationRepo := installation.NewRepository(ctx.DB, ctx)
-	var installationCoordinator coordinator.InstallationCoordinator
-
-	runtimeConfig := runtime.DefaultRuntimeConfig()
-	runtimeConfig.Enabled = config.AppCfg.DesktopPetRuntime.Enabled
-	runtimeConfig.LoopbackOnly = config.AppCfg.DesktopPetRuntime.LoopbackOnly
-	runtimeConfig.HeartbeatIntervalMs = config.AppCfg.DesktopPetRuntime.HeartbeatIntervalMs
-	runtimeConfig.HeartbeatTimeoutMs = config.AppCfg.DesktopPetRuntime.HeartbeatTimeoutMs
-	runtimeConfig.MaxMessageBytes = config.AppCfg.DesktopPetRuntime.MaxMessageBytes
-	runtimeConfig.RegisterTimeoutSec = config.AppCfg.DesktopPetRuntime.RegisterTimeoutSec
-	runtimeConfig.SendQueueSize = config.AppCfg.DesktopPetRuntime.SendQueueSize
-	runtimeConfig.CommandTimeoutSec = config.AppCfg.DesktopPetRuntime.CommandTimeoutSec
-	runtimeConfig.MaxRetryAttempts = config.AppCfg.DesktopPetRuntime.MaxRetryAttempts
-	runtimeConfig.RetryBaseDelayMs = config.AppCfg.DesktopPetRuntime.RetryBaseDelayMs
-	runtimeConfig.RetryMaxDelayMs = config.AppCfg.DesktopPetRuntime.RetryMaxDelayMs
-	runtimeConfig.CommandRetentionHours = config.AppCfg.DesktopPetRuntime.CommandRetentionHours
-
-	runtimeV2Facade := runtimev2.NewRuntimeFacade(ctx.DB, &runtimev2.FacadeConfig{
-		Enabled:            runtimeConfig.Enabled,
-		Path:               runtimeConfig.Path,
-		LoopbackOnly:       runtimeConfig.LoopbackOnly,
-		HeartbeatInterval:  time.Duration(runtimeConfig.HeartbeatIntervalMs) * time.Millisecond,
-		HeartbeatTimeout:   time.Duration(runtimeConfig.HeartbeatTimeoutMs) * time.Millisecond,
-		MaxMessageBytes:    int64(runtimeConfig.MaxMessageBytes),
-		CommandTimeoutSec:  int64(runtimeConfig.CommandTimeoutSec),
-		CommandRetentionHr: int64(runtimeConfig.CommandRetentionHours),
-	})
-
 	runtimeSinkHolder := &runtimeEventSinkHolder{}
 	runtimeOutboxSink := runtime.NewOutboxRuntimeEventSink(
 		runtime.NewV2ActualStateEventOutbox(runtimeV2Facade.StateService().AppendDomainEvent),
@@ -788,6 +792,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	coordStager := &coordinatorReleaseStager{registry: pathRegistry, releases: releaseRepo}
 	coordPublisher := &coordinatorRuntimePublisher{facade: runtimeV2Facade}
 	coordProjection := &coordinatorProjectionService{installRepo: installationRepo}
+	var installationCoordinator coordinator.InstallationCoordinator
 	installationCoordinator = coordinator.NewCoordinator(coordRepo, coordValidator, coordStager, coordPublisher, coordProjection)
 	deviceRepo := device.NewRepository(ctx.DB)
 
@@ -1033,6 +1038,54 @@ services := &AppServices{
 	}
 	if err := runCanonicalBuildAssertions(services); err != nil {
 		return nil, fmt.Errorf("canonical build assertion failed: %w", err)
+	}
+	return services, nil
+}
+
+func newDeviceAgentServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runtimeBootstrap, runtimeProfile runtimeprofile.Profile, policy runtimeprofile.Policy) (*AppServices, error) {
+	extensionRuntime, err := extension.NewRuntimeWithOptions(context.Background(), ctx.DB, "1.0.0", extension.RuntimeOptions{SkipPluginManagerStart: true})
+	if err != nil {
+		return nil, fmt.Errorf("initialize skill runtime: %w", err)
+	}
+	kernelRoot := filepath.Join(os.TempDir(), "amitia-extension-kernel")
+	if config.AppCfg != nil && config.AppCfg.Storage.DataDir != "" {
+		kernelRoot = filepath.Join(config.AppCfg.Storage.DataDir, "extensions-v2")
+	}
+	if err := extensionRuntime.AttachKernel(kernelRoot); err != nil {
+		return nil, fmt.Errorf("initialize extension kernel: %w", err)
+	}
+	kernelDBPath := filepath.Join(kernelRoot, "kernel.db")
+	var nodeResolver script_host.NodeEnvironmentResolver
+	var artifactResolver script_host.ArtifactResolver
+	if bootstrap != nil {
+		nodeResolver = bootstrap.NodeEnvironmentResolver()
+	}
+	kernelBuilder := kernel.NewContainerBuilder().
+		WithDBPath(kernelDBPath).
+		WithExtensionRoot(kernelRoot).
+		WithNodeEnvironmentResolver(nodeResolver).
+		WithHostArtifactResolver(artifactResolver).
+		WithRuntimeProfile(runtimeProfile)
+	if bootstrap != nil {
+		kernelBuilder.WithRuntimeHost(bootstrap.RuntimeHost())
+	}
+	kernelContainer, err := kernelBuilder.Build(context.Background())
+	if err != nil {
+		return nil, fmt.Errorf("initialize kernel container: %w", err)
+	}
+	extensionRuntime.Kernel.SetContainer(kernelContainer)
+	if err := kernelContainer.Recover(context.Background()); err != nil {
+		log.Warn("kernel recovery warning: ", err)
+	}
+	chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, nil, nil, nil, nil, nil, nil, graphSvc, nil)
+	services := &AppServices{
+		DB:              ctx.DB,
+		RuntimeProfile:   runtimeProfile,
+		RuntimePolicy:    policy,
+		Graph:            graphSvc,
+		Chat:             chatSvc,
+		Extension:        extensionRuntime,
+		KernelContainer:  kernelContainer,
 	}
 	return services, nil
 }

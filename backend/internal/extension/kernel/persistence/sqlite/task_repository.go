@@ -225,6 +225,29 @@ func (r *TaskRepository) UpdateTaskRunCAS(ctx context.Context, run *task_runtime
 
 func (r *TaskRepository) GetTaskRun(ctx context.Context, runID string) (*task_runtime.TaskRun, error) {
 	ex := getExecutor(ctx, r.db)
+	row := ex.QueryRowContext(ctx, `
+		SELECT task_run_id, operation_id, invocation_id, task_definition_id, extension_id, module_id,
+		       status, priority, input_json, input_hash, input_artifact_id,
+		       trace_id, correlation_id, causation_id, source,
+		       scope_snapshot_id, permission_snapshot_id, dependency_snapshot_id,
+		       runtime_instance_id, checkpoint_id, result_artifact_id,
+		       execution_placement, execution_target_json, execution_attempt_id,
+		       execution_resolved_at, execution_resolved_by,
+		       attempt, max_attempts, created_at, queued_at, started_at,
+		       updated_at, finished_at, deadline_at, cancel_requested_at,
+		       pause_reason, pause_requested_at, paused_at, resumed_at,
+		       error_code, error_message, generation, revision
+		FROM extension_task_runs WHERE task_run_id = ?
+	`, runID)
+	run, err := scanTaskRun(row)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("sqlite: task run not found: %s", runID)
+		}
+		return nil, fmt.Errorf("sqlite: query task run: %w", err)
+	}
+	return run, nil
+}
 
 func scanTaskRun(scanner interface {
 	Scan(dest ...any) error
@@ -256,12 +279,6 @@ func scanTaskRun(scanner interface {
 		&errorCode, &errorMessage, &run.Generation, &run.Revision,
 	)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("sqlite: task run not found: %s", runID)
-		}
-		return nil, fmt.Errorf("sqlite: query task run: %w", err)
-	}
-	if err != nil {
 		return nil, err
 	}
 	run.Input = json.RawMessage(inputJSON.String)
@@ -277,7 +294,6 @@ func scanTaskRun(scanner interface {
 	run.ExecutionResolvedBy = executionResolvedBy.String
 	run.QueuedAt = timePtr(queuedAt)
 	run.StartedAt = timePtr(startedAt)
-	run.UpdatedAt = &updatedAt.Time
 	run.FinishedAt = timePtr(finishedAt)
 	run.DeadlineAt = timePtr(deadlineAt)
 	run.CancelRequestedAt = timePtr(cancelRequestedAt)
@@ -299,8 +315,10 @@ func (r *TaskRepository) ListTaskRuns(ctx context.Context, filter task_runtime.L
 		       runtime_instance_id, checkpoint_id, result_artifact_id,
 		       execution_placement, execution_target_json, execution_attempt_id,
 		       execution_resolved_at, execution_resolved_by,
-		       attempt, max_attempts, created_at, queued_at, started_at, finished_at,
-		       deadline_at, cancel_requested_at, error_code, error_message, generation, revision
+		       attempt, max_attempts, created_at, queued_at, started_at,
+		       updated_at, finished_at, deadline_at, cancel_requested_at,
+		       pause_reason, pause_requested_at, paused_at, resumed_at,
+		       error_code, error_message, generation, revision
 		FROM extension_task_runs`
 	var args []interface{}
 	where := ""
@@ -334,50 +352,11 @@ func (r *TaskRepository) ListTaskRuns(ctx context.Context, filter task_runtime.L
 
 	var out []*task_runtime.TaskRun
 	for rows.Next() {
-		var run task_runtime.TaskRun
-		var inputJSON sql.NullString
-		var inputArtifactID, runtimeInstanceID, checkpointID, resultArtifactID sql.NullString
-		var executionTargetJSON sql.NullString
-		var executionResolvedAt sql.NullTime
-		var queuedAt, startedAt, finishedAt, deadlineAt, cancelRequestedAt sql.NullTime
-		var errorCode, errorMessage sql.NullString
-		var invocationID, executionPlacement, executionAttemptID, executionResolvedBy sql.NullString
-
-		err := rows.Scan(
-			&run.TaskRunID, &run.OperationID, &invocationID, &run.TaskDefinitionID,
-			&run.ExtensionID, &run.ModuleID, &run.Status, &run.Priority,
-			&inputJSON, &run.InputHash, &inputArtifactID,
-			&run.TraceID, &run.CorrelationID, &run.CausationID, &run.Source,
-			&run.ScopeSnapshotID, &run.PermissionSnapshotID, &run.DependencySnapshotID,
-			&runtimeInstanceID, &checkpointID, &resultArtifactID,
-			&executionPlacement, &executionTargetJSON, &executionAttemptID,
-			&executionResolvedAt, &executionResolvedBy,
-			&run.Attempt, &run.MaxAttempts, &run.CreatedAt,
-			&queuedAt, &startedAt, &finishedAt, &deadlineAt, &cancelRequestedAt,
-			&errorCode, &errorMessage, &run.Generation, &run.Revision,
-		)
+		run, err := scanTaskRun(rows)
 		if err != nil {
 			return nil, fmt.Errorf("sqlite: scan task run: %w", err)
 		}
-		run.Input = json.RawMessage(inputJSON.String)
-		run.InvocationID = invocationID.String
-		run.InputArtifactID = stringPtr(inputArtifactID)
-		run.RuntimeInstanceID = stringPtr(runtimeInstanceID)
-		run.CheckpointID = stringPtr(checkpointID)
-		run.ResultArtifactID = stringPtr(resultArtifactID)
-		run.ExecutionPlacement = task_runtime.TaskExecutionPlacement(executionPlacement.String)
-		run.ExecutionTarget = deserializeExecutionTarget(executionTargetJSON.String)
-		run.ExecutionAttemptID = task_runtime.TaskExecutionAttemptID(executionAttemptID.String)
-		run.ExecutionResolvedAt = timePtr(executionResolvedAt)
-		run.ExecutionResolvedBy = executionResolvedBy.String
-		run.QueuedAt = timePtr(queuedAt)
-		run.StartedAt = timePtr(startedAt)
-		run.FinishedAt = timePtr(finishedAt)
-		run.DeadlineAt = timePtr(deadlineAt)
-		run.CancelRequestedAt = timePtr(cancelRequestedAt)
-		run.ErrorCode = stringPtr(errorCode)
-		run.ErrorMessage = stringPtr(errorMessage)
-		out = append(out, &run)
+		out = append(out, run)
 	}
 	return out, rows.Err()
 }

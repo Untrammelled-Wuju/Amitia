@@ -18,6 +18,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/authority"
+	"github.com/u-ai/backend/internal/extension/kernel/builtin"
 	"github.com/u-ai/backend/internal/extension/kernel/canary"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/chat_ui_extension"
@@ -68,6 +69,7 @@ import (
 	"github.com/u-ai/backend/internal/media"
 	"github.com/u-ai/backend/internal/platform/process"
 	"github.com/u-ai/backend/internal/runtimehost"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/search"
 	"github.com/u-ai/backend/internal/vision"
@@ -434,6 +436,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		_ = executionAuditHook.OnRateLimitWait(context.Background(), dimensions, waitMs)
 	})
 
+	capabilityProviderRegistry := capability.NewProviderRegistry()
+	providerExecutionResolver := capability.NewProviderRuntimeExecutionResolver(&capability.ProviderRegistryExecutionLookup{Registry: capabilityProviderRegistry})
+
 	executionKernel := &execution.ExecutionPipeline{
 		InvocationValidator: execution.NewInvocationValidator(),
 		InputValidator:      execution.NewInputValidator(),
@@ -448,7 +453,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		TimeoutCtrl:         execution.NewTimeoutController(30 * time.Second),
 		CancellationCtrl:    execution.NewCancellationController(),
 		DepthGuard:          execution.NewDepthGuard(),
-		Dispatcher:          execution.NewRuntimeDispatcher(adapterRegistry),
+		Dispatcher:          execution.NewRuntimeDispatcher(adapterRegistry, providerExecutionResolver),
 		ResultValidator:     execution.NewResultValidator(),
 		Sanitizer:           execution.NewSanitizer(),
 		SideEffectRec:       execution.NewSideEffectRecorder(),
@@ -568,11 +573,25 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	eventBridge.SetDeliveryCallback(eventDeliveryAdapter.HandleDelivery)
 	taskRuntimeService.SetEventEmitter(hostEmitter)
 
+	eventBridgePublisher, err := eventbridge.NewPublisher(eventSvc)
+	if err != nil {
+		return nil, fmt.Errorf("kernel: create eventbridge publisher: %w", err)
+	}
+
+	taskEventPublisher := eventbridge.NewTaskEventPublisher(eventBridgePublisher)
+	taskRuntimeService.SetEventSink(taskEventPublisher)
+
 	hostAPIGateway := host_api.NewDefaultGateway()
 	host_api.RegisterPermissionDefinitions(permDefRegistry)
 	permIDValidator := permission.NewPermissionIDValidator(permDefRegistry)
 	if permSnapshotStore != nil {
-		_, _ = permSnapshotStore.RevokeInvalidSnapshots(ctx, permIDValidator)
+		_, _ = permSnapshotStore.RevokeInvalidSnapshots(ctx, permIDValidator, func(extensionID, moduleID string, generation int64) bool {
+			installation, err := instRepo.GetInstallation(ctx, domain.ExtensionID(extensionID))
+			if err != nil {
+				return false
+			}
+			return installation.Generation == generation
+		})
 	}
 	hostAPIGateway.SetPermissionChecker(host_api.NewBrokerPermissionChecker(permBroker))
 	hostAPIGateway.SetScopeChecker(host_api.NewManagerScopeChecker(scopeManager, host_api.NewSnapshotStoreAdapter(scopeStore)))
@@ -592,10 +611,6 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		memQuerySvc = NewDefaultMemoryQueryService()
 	}
 
-	eventBridgePublisher, err := eventbridge.NewPublisher(eventSvc)
-	if err != nil {
-		return nil, fmt.Errorf("kernel: create eventbridge publisher: %w", err)
-	}
 	if b.runtimePolicy.DurableEvents {
 		if err := eventbridge.RegisterCloudFoundationEventTypes(ctx, eventSvc.EventTypeRegistry()); err != nil {
 			return nil, fmt.Errorf("kernel: register cloud foundation event types: %w", err)
@@ -626,13 +641,23 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		}
 	}
 
-	capabilityProviderRegistry := capability.NewProviderRegistry()
 	var providerEventSink capability.ProviderEventSink
 	if b.runtimePolicy.DurableEvents {
 		providerEventSink = eventbridge.NewProviderEventEmitter(eventBridgePublisher)
 	}
 	providerLifecycle := capability.NewProviderLifecycleService(capabilityProviderRegistry, providerEventSink)
-	providerExecutionResolver := capability.NewProviderRuntimeExecutionResolver(&capability.ProviderRegistryExecutionLookup{Registry: capabilityProviderRegistry})
+	extensionProviderReconciler := capability.NewExtensionProviderReconciler(providerLifecycle, capabilityProviderRegistry)
+	providerInstanceReconciler := capability.NewProviderInstanceReconciler(providerLifecycle, capabilityProviderRegistry, runtimeidentity.Identity{})
+	capabilityResolver := capability.NewResolver(capabilityProviderRegistry)
+	capabilityService := capability.NewCapabilityService(capabilityProviderRegistry)
+
+	builtinCatalog := builtin.NewCatalog()
+	builtinHandlerRegistry := builtin.NewHandlerRegistry()
+	builtinBootstrapper := builtin.NewBootstrapper(builtinCatalog, defRepo, instRepo)
+	builtinBootstrapper.SetProviderReconciler(extensionProviderReconciler)
+
+	providerInvocationService := capability.NewProviderInvocationService(capabilityService, adapterRegistry)
+	kernelProviderInvoker := NewKernelProviderInvoker(providerInvocationService)
 
 	startupAt := time.Now().UTC()
 	if sessionService != nil {
@@ -790,6 +815,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 	toolFacade := NewToolFacade(toolRegistry, executionKernel, DefaultToolFacadeConfig())
 	toolFacade.SetAgentSkillCatalog(agentSkillCatalog)
+	toolFacade.SetCapabilityResolver(capabilityResolver)
+	toolFacade.SetCapabilityService(capabilityService)
 	if hookService != nil {
 		toolFacade.SetHookService(hookService)
 	}
@@ -1204,6 +1231,17 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		CapabilityProviders:       capabilityProviderRegistry,
 		ProviderLifecycle:         providerLifecycle,
 		ProviderExecutionResolver: providerExecutionResolver,
+		ExtensionProviderReconciler: extensionProviderReconciler,
+		ProviderInstanceReconciler:  providerInstanceReconciler,
+		CapabilityService:          capabilityService,
+
+		BuiltinCatalog:        builtinCatalog,
+		BuiltinBootstrapper:   builtinBootstrapper,
+		BuiltinHandlerRegistry: builtinHandlerRegistry,
+
+		ProviderInvocationService: providerInvocationService,
+		ProviderInvoker:          kernelProviderInvoker,
+
 		EventBridgePublisher:      eventBridgePublisher,
 	}
 

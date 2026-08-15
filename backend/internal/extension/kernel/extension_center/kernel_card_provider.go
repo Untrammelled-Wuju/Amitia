@@ -139,7 +139,7 @@ func contributionTags(ext domain.ExtensionDefinition) []ContributionTag {
 				tagSet[TagEvents] = true
 			case domain.ContributionKindSchedule:
 				tagSet[TagTasks] = true
-			case domain.ContributionKindBackgroundService:
+			case domain.ContributionKindBackgroundTask:
 				tagSet[TagDesktop] = true
 			}
 		}

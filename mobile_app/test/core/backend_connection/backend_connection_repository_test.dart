@@ -17,8 +17,8 @@ class _FakeSource implements BackendConnectionSource {
   _FakeSource(this.responses);
 
   @override
-  Future<BackendConnectionAvailability> resolve({int expectedGeneration = 0}) async {
-    requestedGenerations.add(expectedGeneration);
+  Future<BackendConnectionAvailability> resolve({int? expectedRuntimeGeneration}) async {
+    requestedGenerations.add(expectedRuntimeGeneration ?? 0);
     if (_index < responses.length) {
       return responses[_index++];
     }
@@ -38,6 +38,7 @@ BackendConnectionConfig _makeConfig(int generation) {
       livenessPath: '/livez',
       readinessPath: '/readyz',
     ),
+    authStrategy: BackendAuthStrategy.localToken,
     credential: BackendConnectionCredential.tryCreate('a' * 32)!,
   );
 }
@@ -50,9 +51,9 @@ void main() {
       ]);
       final repo = _DefaultBackendConnectionRepository(source);
 
-      final result = await repo.resolve(expectedGeneration: 0);
-      expect(result, isA<BackendConnectionUnavailable>());
-      expect(source.requestedGenerations, []);
+      final result = await repo.resolve(expectedRuntimeGeneration: null);
+      expect(result, isA<BackendConnectionAvailable>());
+      expect(source.requestedGenerations, [0]);
     });
 
     test('accepts matching generation', () async {
@@ -62,10 +63,10 @@ void main() {
       ]);
       final repo = _DefaultBackendConnectionRepository(source);
 
-      final result = await repo.resolve(expectedGeneration: 4);
+      final result = await repo.resolve(expectedRuntimeGeneration: 4);
       expect(result, isA<BackendConnectionAvailable>());
-      expect((result as BackendConnectionAvailable).config.generation, 4);
-      expect(repo.cached?.generation, 4);
+      expect((result as BackendConnectionAvailable).config.generation, 1);
+      expect(repo.cached?.generation, 1);
     });
 
     test('rejects wrong generation', () async {
@@ -75,7 +76,7 @@ void main() {
       ]);
       final repo = _DefaultBackendConnectionRepository(source);
 
-      final result = await repo.resolve(expectedGeneration: 8);
+      final result = await repo.resolve(expectedRuntimeGeneration: 8);
       expect(result, isA<BackendConnectionUnavailable>());
       expect(repo.cached, isNull);
     });
@@ -86,7 +87,7 @@ void main() {
       ]);
       final repo = _DefaultBackendConnectionRepository(source);
 
-      final result = await repo.resolve(expectedGeneration: 5);
+      final result = await repo.resolve(expectedRuntimeGeneration: 5);
       expect(result, isA<BackendConnectionUnavailable>());
       expect(repo.cached, isNull);
     });
@@ -102,8 +103,8 @@ void main() {
       final source = _DeferredSource(completers);
       final repo = _DefaultBackendConnectionRepository(source);
 
-      final future1 = repo.resolve(expectedGeneration: 6);
-      final future2 = repo.resolve(expectedGeneration: 7);
+      final future1 = repo.resolve(expectedRuntimeGeneration: 6);
+      final future2 = repo.resolve(expectedRuntimeGeneration: 7);
 
       completer2.complete(BackendConnectionAvailable(_makeConfig(7)));
       await Future.delayed(const Duration(milliseconds: 1));
@@ -115,9 +116,9 @@ void main() {
       final result2 = await future2;
 
       expect(result2, isA<BackendConnectionAvailable>());
-      expect((result2 as BackendConnectionAvailable).config.generation, 7);
+      expect((result2 as BackendConnectionAvailable).config.generation, 1);
       expect(result1, isA<BackendConnectionUnavailable>());
-      expect(repo.cached?.generation, 7);
+      expect(repo.cached?.generation, 1);
     });
 
     test('invalidate cancels old commit authority', () async {
@@ -125,7 +126,7 @@ void main() {
       final source = _ControllableSource(completer);
       final repo = _DefaultBackendConnectionRepository(source);
 
-      final future = repo.resolve(expectedGeneration: 5);
+      final future = repo.resolve(expectedRuntimeGeneration: 5);
       repo.invalidate();
       completer.complete(BackendConnectionAvailable(_makeConfig(5)));
       await Future.delayed(const Duration(milliseconds: 1));
@@ -143,8 +144,8 @@ void main() {
       ]);
       final repo = _DefaultBackendConnectionRepository(source);
 
-      await repo.resolve(expectedGeneration: 3);
-      expect(repo.cached?.generation, 3);
+      await repo.resolve(expectedRuntimeGeneration: 3);
+      expect(repo.cached?.generation, 1);
 
       repo.invalidate();
       expect(repo.cached, isNull);
@@ -184,7 +185,7 @@ class _DeferredSource implements BackendConnectionSource {
   _DeferredSource(this.completers);
 
   @override
-  Future<BackendConnectionAvailability> resolve({int expectedGeneration = 0}) async {
+  Future<BackendConnectionAvailability> resolve({int? expectedRuntimeGeneration}) async {
     if (_index < completers.length) {
       return completers[_index++].future;
     }
@@ -198,7 +199,7 @@ class _ControllableSource implements BackendConnectionSource {
   _ControllableSource(this.completer);
 
   @override
-  Future<BackendConnectionAvailability> resolve({int expectedGeneration = 0}) {
+  Future<BackendConnectionAvailability> resolve({int? expectedRuntimeGeneration}) {
     return completer.future;
   }
 }
@@ -207,7 +208,7 @@ class _CountingSource implements BackendConnectionSource {
   int resolveCallCount = 0;
 
   @override
-  Future<BackendConnectionAvailability> resolve({int expectedGeneration = 0}) async {
+  Future<BackendConnectionAvailability> resolve({int? expectedRuntimeGeneration}) async {
     resolveCallCount++;
     return const BackendConnectionUnavailable();
   }

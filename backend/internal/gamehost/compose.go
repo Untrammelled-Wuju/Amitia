@@ -110,6 +110,13 @@ func ComposeRecoveryCoordinator(deps recovery.RecoveryCoordinatorDeps) (*recover
 	return recovery.NewRecoveryCoordinator(deps)
 }
 
+func getRollbackArchivePath(ctx context.Context, extensionID string, opts GameHostComposeOptions) string {
+	if extensionID == "" {
+		return ""
+	}
+	return ""
+}
+
 func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	dirMgr, err := storage.NewDirectoryManager(opts.DataRoot)
 	if err != nil {
@@ -258,7 +265,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	})
 
 	effectSinkFactory := integration.NewProtocolControlEffectSinkFactory(connReg, controlPlane)
-	if err := control.NewControlHandlerWithEffectFactory(pluginOutputGate, controlSinkRegistry, effectSinkFactory).RegisterHandlers(hostHandlers); err != nil {
+	if err := control.NewControlHandlerWithEffectFactory(pluginOutputGate, controlSinkRegistry, effectSinkFactory.CreateSink).RegisterHandlers(hostHandlers); err != nil {
 		return nil, fmt.Errorf("register control RPC handlers: %w", err)
 	}
 
@@ -266,6 +273,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	var serviceExecutor runtime.ServiceExecutor
 	var runtimeExecutor runtime.RuntimeExecutor
 	var runtimeHealth runtime.HealthAdapter
+	var secretLifecycle *gamehostsecret.LifecycleOrchestrator
 
 	if opts.TrustedSupervisor != nil && procAdapter != nil {
 		var err error
@@ -338,7 +346,6 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	var emergencyStopService *control.EmergencyStopService
 
 	var secretAdapter *gamehostsecret.SecretLeaseAdapter
-	var secretLifecycle *gamehostsecret.LifecycleOrchestrator
 	var secretSubscriptions *gamehostsecret.SubscriptionAdapter
 
 	if opts.SecretBroker != nil {
@@ -362,7 +369,9 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 			return nil, fmt.Errorf("compose secret lease adapter: %w", err)
 		}
 
-		secretLifecycle = gamehostsecret.NewLifecycleOrchestrator(secretAdapter)
+		if secretLifecycle == nil {
+			secretLifecycle = gamehostsecret.NewLifecycleOrchestrator(secretAdapter)
+		}
 		secretSubscriptions = gamehostsecret.NewSubscriptionAdapter(secretAdapter)
 		if leaseAwareExecutor, ok := serviceExecutor.(runtime.SecretLeaseAwareServiceExecutor); ok {
 			leaseAwareExecutor.SetServiceLeaseLifecycle(secretLifecycle)
@@ -371,6 +380,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 			runtimeExecutor.SetRuntimeSubscriptionWatcher(secretSubscriptions)
 		}
 	}
+
 
 	if secretAdapter == nil {
 		return nil, fmt.Errorf("compose emergency stop service: SecretBroker is required")
@@ -472,7 +482,11 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 			if opts.ArchiveUpdater == nil {
 				return recovery.KernelRollbackResult{Success: false, Error: "kernel rollback is unavailable"}, fmt.Errorf("kernel rollback is unavailable")
 			}
-			result, err := opts.ArchiveUpdater.UpdateArchive(ctx, extensionID, "")
+			archivePath := getRollbackArchivePath(ctx, extensionID, opts)
+			if archivePath == "" {
+				return recovery.KernelRollbackResult{Success: false, Error: "no previous package archive available for rollback"}, fmt.Errorf("no previous package archive for extension %s", extensionID)
+			}
+			result, err := opts.ArchiveUpdater.UpdateArchive(ctx, extensionID, archivePath)
 			if err != nil {
 				return recovery.KernelRollbackResult{Success: false, Error: err.Error()}, err
 			}
@@ -666,16 +680,44 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	}
 	container.UpgradeCoordinator = upgradeCoordinator
 
+	var kernelRecon startup.KernelReconciliationProvider
+	if pluginReg != nil && runtimeManager != nil {
+		var extLookup interface {
+			ListEnabledGamePlugins(ctx context.Context) ([]startup.KernelGamePlugin, error)
+		}
+		if opts.KernelSource != nil {
+			extLookup = &startup.KernelGamePluginAdapter{Source: opts.KernelSource}
+		}
+		kernelRecon = startup.NewKernelReconciliationAdapter(
+			pluginReg,
+			runtimeManager,
+			extLookup,
+		)
+	}
+
+	var binaryCleanup startup.BinaryCleanupProvider
+	if binaryReg != nil && runtimeManager != nil {
+		binaryCleanup = startup.NewBinaryCleanupAdapter(binaryReg, runtimeManager)
+	}
+
+	if kernelRecon == nil {
+		kernelRecon = startup.NewNoopKernelReconciliationProvider()
+	}
+	if binaryCleanup == nil {
+		binaryCleanup = startup.NewNoopBinaryCleanupProvider()
+	}
+
 	startupRecovery, err := ComposeStartupRecovery(startup.StartupRecoveryDeps{
-		HostIdentity:    startup.NewHostIdentity("", ""),
-		ProcessCleanup:  startup.NewProcessCleanupAdapter(),
-		TempCleanup:     startup.NewTempCleanupAdapter(),
-		BinaryCleanup:   startup.NewBinaryCleanupAdapter(),
-		EndpointCleanup: startup.NewEndpointCleanupAdapter(),
-		ShmCleanup:      startup.NewSharedMemoryCleanupAdapter(),
-		KernelRecon:     startup.NewKernelReconciliationAdapter(),
-		AuditSink:       startup.NewAuditSinkLoggerAdapter(),
-		Gate:            startupGate,
+		HostIdentity:      startup.NewHostIdentity("", ""),
+		ProcessCleanup:    startup.NewProcessCleanupAdapter(opts.TrustedSupervisor),
+		TempCleanup:       startup.NewTempCleanupAdapter(),
+		BinaryCleanup:     binaryCleanup,
+		EndpointCleanup:   startup.NewEndpointCleanupAdapter(),
+		ShmCleanup:        startup.NewSharedMemoryCleanupAdapter(),
+		KernelRecon:       kernelRecon,
+		RuntimeGraphRecon: runtimeProvisioner,
+		AuditSink:         startup.NewAuditSinkLoggerAdapter(),
+		Gate:              startupGate,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("compose startup recovery: %w", err)

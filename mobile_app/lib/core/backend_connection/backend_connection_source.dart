@@ -1,12 +1,6 @@
 import 'backend_connection_availability.dart';
-import 'backend_connection_error.dart';
+import 'backend_connection_config.dart';
 
 abstract interface class BackendConnectionSource {
-  Future<BackendConnectionAvailability> resolve({int expectedGeneration = 0});
-}
-
-class BackendConnectionSourceException {
-  final BackendConnectionErrorCode code;
-  final String message;
-  BackendConnectionSourceException(this.code, this.message);
+  Future<BackendConnectionAvailability> resolve({int? expectedRuntimeGeneration});
 }

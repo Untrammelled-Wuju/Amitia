@@ -377,11 +377,19 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	if err := step(7, StepCommitKernelRepositories, "completed", packageJSON(commitRepoResult), ""); err != nil {
 		return KernelInstallResult{}, err
 	}
+	if r.container.ExtensionProviderReconciler != nil {
+		if err := r.container.ExtensionProviderReconciler.ReconcileDefinitions(definition); err != nil {
+			return fail(StepReconcileCapabilityProviders, err, targetPath)
+		}
+	}
+	if err := step(8, StepReconcileCapabilityProviders, "completed", "{}", ""); err != nil {
+		return KernelInstallResult{}, err
+	}
 	if err := r.container.PackageRepository.ConsumePreview(ctx, session.SessionID); err != nil {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", "consume_preview_session", "PACKAGE_RECOVERY_REQUIRED", err.Error(), false, guard)
 		return KernelInstallResult{}, err
 	}
-	if err := step(8, StepMarkInstallationDisabled, "completed", "{}", ""); err != nil {
+	if err := step(9, StepMarkInstallationDisabled, "completed", "{}", ""); err != nil {
 		return KernelInstallResult{}, err
 	}
 	if err := r.recordPackageVersionAfterOperation(ctx, operationID, "install", session.ExtensionID, session.Version, artifact.ArtifactID, targetPath, generationTreeHash, artifact.ArchiveHash, artifact.ManifestHash, artifact.ContentTreeHash, targetGeneration.Current.GenerationID, guard); err != nil {

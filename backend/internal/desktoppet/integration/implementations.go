@@ -190,12 +190,3 @@ func (r *defaultActionTargetResolver) ResolveActionTarget(ctx context.Context, e
 	return ExistingPetActionTarget{}, fmt.Errorf("ResolveActionTarget: fixture resolver has no desktop pet target")
 }
 
-func DefaultCapabilities() DesktopPetPluginCapabilities {
-	return DesktopPetPluginCapabilities{
-		Resource:       NewDefaultResourceCapability(),
-		Action:         NewDefaultActionCapability(),
-		Runtime:        NewDefaultRuntimeCapability(),
-		FloatingWindow: NewDefaultFloatingWindowCapability(),
-		ActionTarget:   NewDefaultActionTargetResolver(),
-	}
-}

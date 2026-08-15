@@ -199,9 +199,10 @@ func (s *SQLitePermissionSnapshotStore) DeleteBySession(ctx context.Context, ses
 	return nil
 }
 
-func (s *SQLitePermissionSnapshotStore) RevokeInvalidSnapshots(ctx context.Context, validator *PermissionIDValidator) (int, error) {
+func (s *SQLitePermissionSnapshotStore) RevokeInvalidSnapshots(ctx context.Context, validator *PermissionIDValidator, subjectValidator func(extensionID, moduleID string, generation int64) bool) (int, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT snapshot_id, granted_perms FROM kernel_permission_snapshots
+		SELECT snapshot_id, extension_id, module_id, generation, granted_perms
+		FROM kernel_permission_snapshots
 		WHERE revoked_at IS NULL
 	`)
 	if err != nil {
@@ -211,12 +212,24 @@ func (s *SQLitePermissionSnapshotStore) RevokeInvalidSnapshots(ctx context.Conte
 
 	revoked := 0
 	for rows.Next() {
-		var snapshotID, grantedPermsJSON string
-		if err := rows.Scan(&snapshotID, &grantedPermsJSON); err != nil {
+		var snapshotID, extensionID, moduleID, grantedPermsJSON string
+		var generation int64
+		if err := rows.Scan(&snapshotID, &extensionID, &moduleID, &generation, &grantedPermsJSON); err != nil {
 			return revoked, fmt.Errorf("sqlite: scan snapshot row: %w", err)
 		}
-		perms := unmarshalStringList(grantedPermsJSON)
-		if validator != nil && len(validator.ValidateAll(perms)) > 0 {
+
+		invalidPerms := false
+		if validator != nil {
+			perms := unmarshalStringList(grantedPermsJSON)
+			invalidPerms = len(validator.ValidateAll(perms)) > 0
+		}
+
+		invalidSubject := false
+		if subjectValidator != nil {
+			invalidSubject = !subjectValidator(extensionID, moduleID, generation)
+		}
+
+		if invalidPerms || invalidSubject {
 			if err := s.RevokeSnapshot(ctx, snapshotID); err != nil {
 				continue
 			}

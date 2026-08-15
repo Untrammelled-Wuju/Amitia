@@ -15,6 +15,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 )
 
 type moduleEnablementSnapshot struct {
@@ -38,7 +39,9 @@ type enableTransaction struct {
 	extEnablementCommitted bool
 	modulesCommitted       int
 	contributionsActivated bool
-	uiRegistered           bool
+	providerInstancesActivated bool
+	providerInstanceIDs        []capability.ProviderInstanceID
+	uiRegistered               bool
 }
 
 func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
@@ -255,6 +258,34 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 	r.logEnableStep(operationID, extensionID, "activate_contributions", "succeeded", nil)
 	r.persistLifecycleStep(ctx, operationID, "activate_contributions", LifecycleStepSucceeded, nil)
 
+	if r.container.ProviderInstanceReconciler != nil && r.container.DefinitionRepository != nil {
+		def, defErr := r.container.DefinitionRepository.GetExtension(ctx, extID, inst.InstalledVersion)
+		if defErr == nil {
+			runtimeResults := make(map[domain.ModuleID]capability.RuntimeReadyResult)
+			for _, sid := range startedInstanceIDs {
+				if r.container.RuntimeSupervisor != nil {
+					snap, _ := r.container.RuntimeSupervisor.GetInstance(ctx, sid)
+					if snap.Identity.ModuleID != "" {
+						runtimeResults[snap.Identity.ModuleID] = capability.RuntimeReadyResult{
+							InstanceID: sid,
+							Health:     string(snap.Health),
+						}
+					}
+				}
+			}
+			if providerIDs, piErr := r.container.ProviderInstanceReconciler.ActivateExtension(def, runtimeResults); piErr != nil {
+				tx.rollback(ctx)
+				r.logEnableStep(operationID, extensionID, "activate_provider_instances", "failed", piErr)
+				r.persistLifecycleStep(ctx, operationID, "activate_provider_instances", LifecycleStepFailed, piErr)
+				r.updateLifecycleOperationStatus(ctx, operationID, LifecycleOperationCompensating, "activate_provider_instances", piErr)
+				return fmt.Errorf("kernel: activate provider instances: %w", piErr)
+			} else {
+				tx.providerInstancesActivated = true
+				tx.providerInstanceIDs = providerIDs
+			}
+		}
+	}
+
 	if r.container.DesktopPetPluginBoundary != nil {
 		if err := r.container.DesktopPetPluginBoundary.HandleExtensionEnabled(ctx, extID, inst.InstalledVersion.String(), operationID); err != nil {
 			log.Printf("[enable-tx] desktop_pet_plugin boundary error: %v", err)
@@ -343,6 +374,15 @@ func (tx *enableTransaction) rollback(ctx context.Context) {
 			tx.saveCompensationWithError(ctx, "activate_contributions", "deactivate_contributions", err)
 		} else {
 			tx.saveCompensation(ctx, "activate_contributions", "deactivate_contributions")
+		}
+	}
+
+	if tx.providerInstancesActivated && tx.runtime.container.ProviderInstanceReconciler != nil {
+		if err := tx.runtime.container.ProviderInstanceReconciler.DeactivateExtension(string(tx.extID)); err != nil {
+			rollbackErrs = append(rollbackErrs, fmt.Errorf("deactivate provider instances: %w", err))
+			tx.saveCompensationWithError(ctx, "activate_provider_instances", "deactivate_provider_instances", err)
+		} else {
+			tx.saveCompensation(ctx, "activate_provider_instances", "deactivate_provider_instances")
 		}
 	}
 
@@ -596,6 +636,10 @@ func (r *Runtime) Disable(ctx context.Context, extensionID string) error {
 		disableErrs = append(disableErrs, fmt.Errorf("set extension desired runtime: %w", err))
 	}
 
+	if r.container.ProviderInstanceReconciler != nil && r.container.ProviderLifecycle != nil {
+		r.container.ProviderLifecycle.DrainExtension(extensionID)
+	}
+
 	for _, mod := range modules {
 		modSubject := enablement.StateSubject{
 			Kind:     enablement.SubjectModule,
@@ -649,6 +693,12 @@ func (r *Runtime) Disable(ctx context.Context, extensionID string) error {
 
 	if r.container.GameHost != nil && r.container.GameHost.SecretSubscriptions != nil {
 		r.container.GameHost.SecretSubscriptions.OnExtensionDisabled(extensionID)
+	}
+
+	if r.container.ProviderInstanceReconciler != nil {
+		if err := r.container.ProviderInstanceReconciler.DeactivateExtension(extensionID); err != nil {
+			log.Printf("[disable-tx] failed to deactivate provider instances for %s: %v", extensionID, err)
+		}
 	}
 
 	finalState := domain.EnablementDisabled

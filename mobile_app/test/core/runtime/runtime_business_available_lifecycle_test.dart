@@ -40,6 +40,7 @@ void main() {
           livenessPath: '/livez',
           readinessPath: '/readyz',
         ),
+        authStrategy: BackendAuthStrategy.localToken,
         credential: BackendConnectionCredential.tryCreate('a' * 32) ??
             (throw StateError('Failed to create credential')),
       );

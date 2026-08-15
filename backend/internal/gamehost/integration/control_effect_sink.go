@@ -72,7 +72,7 @@ func (s *ProtocolControlEffectSink) ExecuteAuthorized(
 		RuntimeID:  runtimeID,
 		PluginID:   pluginID,
 		ServiceID:  serviceID,
-		Generation: int(permit.Generation),
+		Generation: int64(permit.Generation),
 	}
 
 	envelope := protocol.Envelope{

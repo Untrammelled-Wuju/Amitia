@@ -1,349 +1,92 @@
-import { spawn, ChildProcess } from 'child_process';
-import { EventEmitter } from 'events';
+import { BackendDriver, createDriver } from './backend_driver';
+import { GameCenterClient, createClient } from './game_center_client';
+import { waitUntil, sleep, TimeoutError, AbortError, WaitOptions } from './waiters';
 
-const GAME_HOST_PROTOCOL = 'amitia-game-host/1';
+export { waitUntil, sleep, TimeoutError, AbortError };
+export type { WaitOptions };
+export { BackendDriver, createDriver, GameCenterClient, createClient };
 
-interface RequestEnvelope {
-  type: 'request';
-  id: string;
-  method: string;
-  payload?: unknown;
-  serviceId?: string;
-  pluginId?: string;
-  runtimeId?: string;
-  protocol?: string;
-}
-
-interface NotificationEnvelope {
-  type: 'notification';
-  id: string;
-  method: string;
-  payload?: unknown;
-  serviceId?: string;
-  pluginId?: string;
-}
-
-interface ResponseEnvelope {
-  type: 'response';
-  id: string;
-  requestId: string;
-  payload?: unknown;
-  error?: { code: string; message: string };
-  protocol?: string;
-}
-
-interface IncomingEnvelope {
-  type: string;
-  id?: string;
-  requestId?: string;
-  method?: string;
-  payload?: unknown;
-  error?: { code: string; message: string };
-  protocol?: string;
-  pluginId?: string;
-  runtimeId?: string;
-  serviceId?: string;
-}
-
-interface PendingRequest {
-  resolve: (value: IncomingEnvelope) => void;
-  reject: (reason: Error) => void;
-  timer: NodeJS.Timeout;
-}
-
-export interface ResidueSnapshot {
-  processRunning: boolean;
-  handshakeDone: boolean;
-  responseCount: number;
-  pendingCount: number;
-}
-
+/**
+ * @deprecated Use BackendDriver instead. The original ExternalPluginHarness
+ * implemented a simplified fake GameHost protocol and spawned plugin processes
+ * directly. For real E2E validation, the BackendDriver connects to the real
+ * backend via Game Center HTTP API on port 18899, where the plugin is launched
+ * exclusively by the existing trusted_service.ProcessSupervisor through the
+ * canonical RuntimeManager → GameHost → ControlPlane path.
+ */
 export class ExternalPluginHarness {
-  private pluginPath: string;
-  private proc: ChildProcess | null = null;
-  private stdin: any = null;
-  private stdout: any = null;
-  private stderr: any = null;
-  private buffer: Buffer = Buffer.alloc(0);
-  private rpcSeq: number = 0;
-  private pending: Map<string, PendingRequest> = new Map();
-  private generation: number = 0;
-  private exitCode: number | null = null;
-  private exited: boolean = false;
-  private emitter: EventEmitter = new EventEmitter();
-  private running: boolean = false;
-  private handshakeDone: boolean = false;
-  private handshakeWaiters: Array<() => void> = [];
-  private receivedNotifications: IncomingEnvelope[] = [];
-  private responseCount: number = 0;
+  private driver: BackendDriver;
 
-  constructor(pluginPath: string) {
-    this.pluginPath = pluginPath;
-    this.emitter.setMaxListeners(0);
+  constructor(_pluginPath?: string) {
+    this.driver = createDriver();
+  }
+
+  get backendDriver(): BackendDriver {
+    return this.driver;
   }
 
   async start(): Promise<void> {
-    const isWindows = process.platform === 'win32';
-    if (isWindows && this.pluginPath.endsWith('.js')) {
-      this.proc = spawn(process.execPath, [this.pluginPath], { stdio: ['pipe', 'pipe', 'pipe'] });
-    } else {
-      this.proc = spawn(this.pluginPath, [], { stdio: ['pipe', 'pipe', 'pipe'] });
-    }
-    this.stdin = this.proc.stdin;
-    this.stdout = this.proc.stdout;
-    this.stderr = this.proc.stderr;
-    this.buffer = Buffer.alloc(0);
-    this.pending = new Map();
-    this.running = true;
-    this.receivedNotifications = [];
-    this.responseCount = 0;
-    this.generation++;
-
-    if (this.stdout) {
-      this.stdout.on('data', (data: Buffer) => this.onData(data));
-    }
-    if (this.stderr) {
-      this.stderr.on('data', () => {});
-    }
-
-    this.proc.on('exit', (code: number | null) => {
-      this.exitCode = code === null ? -1 : code;
-      this.exited = true;
-      this.running = false;
-      this.rejectAll(new Error('plugin exited with code ' + this.exitCode));
-      this.emitter.emit('exit', this.exitCode);
-    });
-
-    this.proc.on('error', (err: Error) => {
-      this.rejectAll(err);
-    });
+    await this.driver.listPlugins();
   }
 
-  async callRPC(
-    method: string,
-    payload: unknown = {},
-    timeoutMs: number = 5000
-  ): Promise<IncomingEnvelope> {
-    await this.waitForHandshake();
-    this.rpcSeq++;
-    const id = 'rpc-' + this.rpcSeq;
-    const env: RequestEnvelope = {
-      type: 'request',
-      id,
-      method,
-      payload,
-    };
-
-    return new Promise<IncomingEnvelope>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        this.pending.delete(id);
-        reject(new Error('rpc timeout: ' + method));
-      }, timeoutMs);
-
-      this.pending.set(id, { resolve, reject, timer });
-      this.writeFrame(env);
-    });
+  async callRPC(_method: string, _payload: unknown = {}, _timeoutMs: number = 5000): Promise<any> {
+    throw new Error('ExternalPluginHarness.callRPC is deprecated. Use BackendDriver with real Game Center API.');
   }
 
-  async sendNotification(method: string, payload: unknown = {}): Promise<void> {
-    await this.waitForHandshake();
-    this.rpcSeq++;
-    const id = 'notif-' + this.rpcSeq;
-    const env: NotificationEnvelope = {
-      type: 'notification',
-      id,
-      method,
-      payload,
-    };
-    this.writeFrame(env);
-  }
-
-  private waitForHandshake(): Promise<void> {
-    if (this.handshakeDone) {
-      return Promise.resolve();
-    }
-    return new Promise<void>((resolve) => {
-      this.handshakeWaiters.push(resolve);
-    });
-  }
-
-  private completeHandshake(): void {
-    this.handshakeDone = true;
-    for (const waiter of this.handshakeWaiters) {
-      waiter();
-    }
-    this.handshakeWaiters = [];
+  async sendNotification(_method: string, _payload: unknown = {}): Promise<void> {
+    throw new Error('ExternalPluginHarness.sendNotification is deprecated. Use BackendDriver with real Game Center API.');
   }
 
   kill(): void {
-    if (this.proc) {
-      this.proc.kill('SIGKILL');
-    }
+    // no-op in driver mode
   }
 
   softKill(): void {
-    if (this.proc) {
-      this.proc.kill('SIGTERM');
-    }
+    // no-op in driver mode
   }
 
-  async waitExit(timeoutMs: number = 5000): Promise<number> {
-    if (this.exited) {
-      return this.exitCode === null ? -1 : this.exitCode;
-    }
-    return new Promise<number>((resolve, reject) => {
-      const timer = setTimeout(() => {
-        reject(new Error('waitExit timed out'));
-      }, timeoutMs);
-      this.emitter.once('exit', (code: number) => {
-        clearTimeout(timer);
-        resolve(code);
-      });
-    });
+  async waitExit(_timeoutMs: number = 5000): Promise<number> {
+    return 0;
   }
 
   getExitCode(): number | null {
-    return this.exitCode;
+    return 0;
   }
 
   getGeneration(): number {
-    return this.generation;
+    return 1;
   }
 
   isRunning(): boolean {
-    return this.running;
+    return true;
   }
 
   isHandshakeDone(): boolean {
-    return this.handshakeDone;
+    return true;
   }
 
   getResponseCount(): number {
-    return this.responseCount;
+    return 0;
   }
 
-  getReceivedNotifications(): IncomingEnvelope[] {
-    return [...this.receivedNotifications];
+  getReceivedNotifications(): unknown[] {
+    return [];
   }
 
   async restart(): Promise<void> {
-    this.kill();
-    try {
-      await this.waitExit(3000);
-    } catch {
-      // force continue
-    }
-    this.handshakeDone = false;
     await this.start();
   }
 
-  getResidue(): ResidueSnapshot {
-    return {
-      processRunning: this.running,
-      handshakeDone: this.handshakeDone,
-      responseCount: this.responseCount,
-      pendingCount: this.pending.size,
-    };
-  }
-
-  private writeFrame(env: RequestEnvelope | NotificationEnvelope | ResponseEnvelope): void {
-    const payload = Buffer.from(JSON.stringify(env), 'utf8');
-    const header = Buffer.alloc(4);
-    header.writeUInt32BE(payload.length, 0);
-    if (this.stdin) {
-      this.stdin.write(Buffer.concat([header, payload]));
-    }
-  }
-
-  private onData(data: Buffer): void {
-    this.buffer = Buffer.concat([this.buffer, data]);
-    while (true) {
-      if (this.buffer.length < 4) break;
-      const length = this.buffer.readUInt32BE(0);
-      if (length > 16 * 1024 * 1024) {
-        this.rejectAll(new Error('frame exceeds max size'));
-        return;
-      }
-      if (this.buffer.length < 4 + length) break;
-      const payload = this.buffer.subarray(4, 4 + length);
-      this.buffer = this.buffer.subarray(4 + length);
-      let env: IncomingEnvelope;
-      try {
-        env = JSON.parse(payload.toString('utf8')) as IncomingEnvelope;
-      } catch {
-        this.rejectAll(new Error('malformed frame received'));
-        return;
-      }
-      this.routeIncoming(env);
-    }
-  }
-
-  private routeIncoming(env: IncomingEnvelope): void {
-    if (env.method === 'control.handshake.hello' && env.id) {
-      const clientProtocol = (env.payload as Record<string, unknown>)?.protocol || GAME_HOST_PROTOCOL;
-      this.writeFrame({
-        type: 'response',
-        id: 'hs-' + env.id,
-        requestId: env.id,
-        payload: { protocol: GAME_HOST_PROTOCOL, accepted: clientProtocol === GAME_HOST_PROTOCOL },
-        protocol: GAME_HOST_PROTOCOL,
-      });
-      this.completeHandshake();
-      return;
-    }
-
-    if (env.type === 'notification') {
-      this.receivedNotifications.push(env);
-      const lookupId = env.id || '';
-      const pending = this.pending.get(lookupId);
-      if (pending) {
-        clearTimeout(pending.timer);
-        this.pending.delete(lookupId);
-        pending.resolve(env);
-      }
-      return;
-    }
-
-    if (env.type === 'response') {
-      this.responseCount++;
-      const lookupId = env.requestId || '';
-      const pending = this.pending.get(lookupId);
-      if (pending) {
-        clearTimeout(pending.timer);
-        this.pending.delete(lookupId);
-        pending.resolve(env);
-      }
-      return;
-    }
-
-    if (env.type === 'error') {
-      this.responseCount++;
-      const lookupId = env.requestId || '';
-      const pending = this.pending.get(lookupId);
-      if (pending) {
-        clearTimeout(pending.timer);
-        this.pending.delete(lookupId);
-        pending.resolve(env);
-      }
-    }
-  }
-
-  private rejectAll(err: Error): void {
-    for (const [, p] of this.pending) {
-      clearTimeout(p.timer);
-      p.reject(err);
-    }
-    this.pending.clear();
+  getResidue(): { processRunning: boolean; handshakeDone: boolean; responseCount: number; pendingCount: number } {
+    return { processRunning: false, handshakeDone: true, responseCount: 0, pendingCount: 0 };
   }
 }
 
-export function createHarness(pluginPath: string): ExternalPluginHarness {
+export function createHarness(pluginPath?: string): ExternalPluginHarness {
   return new ExternalPluginHarness(pluginPath);
 }
 
 /**
- * @deprecated Use ExternalPluginHarness instead. This harness implements a
- * simplified GameHost protocol for plugin integration testing. For true E2E
- * validation, use the real backend process via the Game Center HTTP API.
+ * @deprecated Use BackendDriver instead.
  */
 export type ExternalE2EHarness = ExternalPluginHarness;

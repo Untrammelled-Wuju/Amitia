@@ -265,7 +265,7 @@ func (r *ProviderRegistry) DeregisterDefinitionCascade(id ProviderID) (bool, err
 	if instances, ok := r.byProvider[string(normalized)]; ok {
 		for _, inst := range instances {
 			if inst != nil {
-				r.delInstance(string(inst.ID))
+				delete(r.instances, string(inst.ID))
 			}
 		}
 		delete(r.byProvider, string(normalized))
@@ -1007,10 +1007,14 @@ func (r *ProviderRegistry) SnapshotBindings() map[ProviderID]RuntimeBinding {
 func (r *ProviderRegistry) upsertCapabilityIndexLocked(entries map[string][]*CapabilityProviderDefinition, def CapabilityProviderDefinition) map[string][]*CapabilityProviderDefinition {
 	key := string(def.CapabilityID)
 	existing := entries[key]
-	updated := make([]*CapabilityProviderDefinition, len(existing)+1)
-	copy(updated, existing)
-	updated[len(existing)] = &def
-	entries[key] = updated
+	for i := range existing {
+		if existing[i] != nil && existing[i].ID == def.ID {
+			existing[i] = &def
+			entries[key] = existing
+			return entries
+		}
+	}
+	entries[key] = append(existing, &def)
 	return entries
 }
 
@@ -1052,6 +1056,22 @@ func (r *ProviderRegistry) rebuildProviderInstanceIndex() {
 
 	r.mu.Lock()
 	r.byProvider = index
+	r.mu.Unlock()
+}
+
+func (r *ProviderRegistry) rebuildCapabilityIndex() {
+	all := r.cloneDefinitions()
+	index := make(map[string][]*CapabilityProviderDefinition)
+	for _, def := range all {
+		if def == nil {
+			continue
+		}
+		key := string(def.CapabilityID)
+		index[key] = append(index[key], def)
+	}
+
+	r.mu.Lock()
+	r.byCapability = index
 	r.mu.Unlock()
 }
 

@@ -160,7 +160,7 @@ func (i *TypedContributionInstaller) buildInstallOp(ctx context.Context, contrib
 		return i.buildAgentSkillOp(ctx, contrib, defData)
 	case domain.ContributionKindWorkflow:
 		return i.buildWorkflowOp(ctx, contrib, defData)
-	case domain.ContributionKindBackgroundService:
+	case domain.ContributionKindBackgroundTask:
 		return i.buildTaskDefinitionOp(ctx, contrib, defData)
 	case domain.ContributionKindMCPServer:
 		return i.buildMCPServerOp(ctx, contrib, defData)
@@ -513,7 +513,7 @@ func (i *TypedContributionInstaller) buildTaskDefinitionOp(ctx context.Context, 
 		def.ContributionID = string(contrib.ID)
 	}
 	return installOp{
-		kind: domain.ContributionKindBackgroundService,
+		kind: domain.ContributionKindBackgroundTask,
 		doInstall: func(ctx context.Context) error {
 			if err := i.container.TaskRuntimeService.PutTaskDefinition(ctx, &def); err != nil {
 				return fmt.Errorf("put task definition: %w", err)
@@ -1286,7 +1286,7 @@ func (i *TypedContributionInstaller) UninstallContributions(ctx context.Context,
 	}
 	if i.container.TaskRuntimeService != nil {
 		if err := i.container.TaskRuntimeService.DeleteByExtension(ctx, string(extID)); err != nil {
-			i.recordAudit(domain.ContributionDefinition{ID: "background_tasks", Kind: domain.ContributionKindBackgroundService, ExtensionID: extID}, operationID, generation, startedAt, auditResultFailed, err)
+			i.recordAudit(domain.ContributionDefinition{ID: "background_tasks", Kind: domain.ContributionKindBackgroundTask, ExtensionID: extID}, operationID, generation, startedAt, auditResultFailed, err)
 			return fmt.Errorf("uninstall background tasks for %s: %w", extID, err)
 		}
 	}
@@ -1573,7 +1573,7 @@ func (i *TypedContributionInstaller) discardSingleContribution(ctx context.Conte
 		return nil
 	case domain.ContributionKindWorkflow:
 		return i.discardWorkflow(ctx, contrib, defData)
-	case domain.ContributionKindBackgroundService:
+	case domain.ContributionKindBackgroundTask:
 		return i.discardTaskDefinition(ctx, contrib, defData)
 	case domain.ContributionKindMCPServer:
 		return i.discardMCPServer(ctx, contrib, defData)

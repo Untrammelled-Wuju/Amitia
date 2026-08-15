@@ -105,8 +105,10 @@ func ProviderDefinitionsFromExtension(def domain.ExtensionDefinition) ([]Capabil
 			var priority int
 			var providerMetadata map[string]any
 			platforms := make([]runtimeidentity.Platform, 0)
-			for _, p := range mod.Compatibility.Platforms {
-				platforms = append(platforms, runtimeidentity.Platform(p))
+			if mod.DeviceRequirements != nil {
+				for _, p := range mod.DeviceRequirements.Platforms {
+					platforms = append(platforms, runtimeidentity.Platform(p))
+				}
 			}
 
 			if providerMeta != nil && providerMeta.ID != "" {

@@ -12,7 +12,7 @@ class FakeBackendConnectionSource implements BackendConnectionSource {
   }
 
   @override
-  Future<BackendConnectionAvailability> resolve({int expectedGeneration = 0}) async {
+  Future<BackendConnectionAvailability> resolve({int? expectedRuntimeGeneration}) async {
     _resolveCallCount++;
     return _availability;
   }

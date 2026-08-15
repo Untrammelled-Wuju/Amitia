@@ -203,6 +203,7 @@ BackendConnectionAvailability _simulateParse(
         schemaVersion: 1,
         generation: generationRaw,
         endpoint: endpoint,
+        authStrategy: BackendAuthStrategy.localToken,
         credential: credential,
       );
       return BackendConnectionAvailable(config);

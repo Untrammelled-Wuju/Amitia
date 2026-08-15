@@ -22,7 +22,13 @@ func (g *ApprovalGate) Evaluate(ctx context.Context, tool capability.ToolDefinit
 	}
 
 	if g.Broker != nil {
-		return g.evaluateWithBroker(ctx, tool, inv)
+		allowed, err := g.evaluateWithBroker(ctx, tool, inv)
+		if err != nil {
+			return false, err
+		}
+		if allowed {
+			return true, nil
+		}
 	}
 
 	if g.OnEvaluate != nil {

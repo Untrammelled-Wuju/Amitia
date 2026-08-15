@@ -160,6 +160,9 @@ type CapabilityProviderInstance struct {
 	CapabilityID CapabilityID       `json:"capabilityId"`
 	Placement    ProviderPlacement  `json:"placement"`
 
+	ExtensionID string `json:"extensionId,omitempty"`
+	ModuleID    string `json:"moduleId,omitempty"`
+
 	UserID    runtimeidentity.UserID    `json:"userId,omitempty"`
 	DeviceID  runtimeidentity.DeviceID  `json:"deviceId,omitempty"`
 	RuntimeID runtimeidentity.RuntimeID `json:"runtimeId,omitempty"`

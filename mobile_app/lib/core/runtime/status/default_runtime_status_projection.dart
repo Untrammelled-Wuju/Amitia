@@ -101,7 +101,7 @@ class DefaultRuntimeStatusProjection implements RuntimeStatusProjection {
   Future<void> _refreshConnection() async {
     try {
       final expectedGen = _lastBridge.state == RuntimeBridgeState.ready ? _lastBridge.generation : 0;
-      final result = await _connectionSource.resolve(expectedGeneration: expectedGen);
+      final result = await _connectionSource.resolve(expectedRuntimeGeneration: expectedGen);
       if (!_disposed) {
         _lastConnection = result;
         _rederive();

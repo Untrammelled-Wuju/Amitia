@@ -24,37 +24,26 @@ Write-Host "Package Format:  $PackageFormatVersion"
 Write-Host "============================================"
 
 $RequiredRecords = @(
-    "backend",
     "node",
-    "qdrant",
     "rootfs",
-    "sidecar",
-    "qqSidecar"
+    "backend",
+    "qdrant",
+    "plugin-host",
+    "task-host"
 )
 
-$BuildRecords = @{}
 foreach ($component in $RequiredRecords) {
     $recordPath = Join-Path $RuntimeRoot "build\out\$component\linux-arm64\$component-build-record.json"
-    if (-not (Test-Path $recordPath)) {
-        $altPath = Join-Path $RuntimeRoot "build\out\$component\linux-arm64\$($component)-build-record.json"
-        if (Test-Path $altPath) {
-            $recordPath = $altPath
-        }
-    }
     if (-not (Test-Path $recordPath)) {
         Write-Error "[FATAL] Missing build record for $component : $recordPath"
         Write-Error "All frozen input build records are required. Cannot auto-build missing components."
         exit 1
     }
-    $BuildRecords[$component] = Get-Content $recordPath -Raw | ConvertFrom-Json
     Write-Host "[INPUT] $component build record loaded: $recordPath"
 }
 
-$NodeRecord = $BuildRecords["node"]
-if ($NodeRecord.version -ne $Lock.components.node.version) {
-    Write-Error "[FATAL] Node version mismatch: lock=$($Lock.components.node.version) actual=$($NodeRecord.version)"
-    exit 1
-}
+$NodeVersion = $Lock.components.node.version
+$NodeExpectedTreeSha = $Lock.components.node.treeSha256
 
 $NodeArtifacts = Join-Path $RuntimeRoot "build\out\node\linux-arm64\node"
 if (-not (Test-Path $NodeArtifacts)) {
@@ -69,83 +58,133 @@ if (-not (Test-Path $NodeFilesSha)) {
 }
 
 $NodeActualTreeSha = (Get-FileHash -Path $NodeFilesSha -Algorithm SHA256).Hash.ToLower()
-if ($NodeActualTreeSha -ne $Lock.components.node.treeSha256) {
-    Write-Error "[FATAL] Node tree SHA mismatch: lock=$($Lock.components.node.treeSha256) actual=$NodeActualTreeSha"
+if ($NodeActualTreeSha -ne $NodeExpectedTreeSha) {
+    Write-Error "[FATAL] Node tree SHA mismatch: lock=$NodeExpectedTreeSha actual=$NodeActualTreeSha"
     exit 1
 }
 Write-Host "[VERIFY] Node tree SHA verified: $NodeActualTreeSha"
 
-$RootfsRecord = $BuildRecords["rootfs"]
-$RootfsTar = Join-Path $OutputDir "..\..\..\..\rootfs\linux-arm64\ubuntu-rootfs-arm64.tar"
-$RootfsTar = Resolve-Path $RootfsTar -ErrorAction SilentlyContinue
-if (-not $RootfsTar -or -not (Test-Path $RootfsTar)) {
+$RootfsTar = Join-Path $RuntimeRoot "build\out\rootfs\linux-arm64\ubuntu-rootfs-arm64.tar"
+if (-not (Test-Path $RootfsTar)) {
     Write-Error "[FATAL] Rootfs frozen archive not found. Run prepare-ubuntu-rootfs-arm64.sh first."
     exit 1
 }
 Write-Host "[INPUT] Rootfs archive: $RootfsTar"
 
+$BackendTar = Join-Path $RuntimeRoot "build\out\backend\linux-arm64\amitia-backend-linux-arm64.tar.xz"
+if (-not (Test-Path $BackendTar)) {
+    Write-Error "[FATAL] Backend frozen archive not found."
+    exit 1
+}
+Write-Host "[INPUT] Backend archive: $BackendTar"
+
+$QdrantTar = Join-Path $RuntimeRoot "build\out\qdrant\linux-arm64\qdrant-linux-arm64.tar.xz"
+if (-not (Test-Path $QdrantTar)) {
+    Write-Error "[FATAL] Qdrant frozen archive not found."
+    exit 1
+}
+Write-Host "[INPUT] Qdrant archive: $QdrantTar"
+
 if (-not (Test-Path $OutputDir)) {
     New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
 }
 
-$StagingId = [guid]::NewGuid().ToString("N").Substring(0, 12)
-$StagingPath = Join-Path $StagingDir $StagingId
+$BuildId = (Get-Date -Format "yyyyMMddHHmmss") + "-" + $PID
+$StagingPath = Join-Path $StagingDir $BuildId
 if (Test-Path $StagingPath) { Remove-Item $StagingPath -Recurse -Force }
 New-Item -ItemType Directory -Force -Path $StagingPath | Out-Null
 
 try {
     $PayloadDir = Join-Path $StagingPath "payload"
     $MetadataDir = Join-Path $StagingPath "metadata"
-    New-Item -ItemType Directory -Force -Path $PayloadDir | Out-Null
-    New-Item -ItemType Directory -Force -Path $MetadataDir | Out-Null
-    New-Item -ItemType Directory -Force -Path (Join-Path $MetadataDir "component-build-records") | Out-Null
-    New-Item -ItemType Directory -Force -Path (Join-Path $PayloadDir "program") | Out-Null
-    New-Item -ItemType Directory -Force -Path (Join-Path $PayloadDir "rootfs") | Out-Null
+    $RuntimeDir = Join-Path $PayloadDir "runtime"
+    $RootfsDir = Join-Path $PayloadDir "rootfs"
+    $ComponentRecordsDir = Join-Path $MetadataDir "component-build-records"
 
-    $ProgramDir = Join-Path $PayloadDir "program"
-    Copy-Item -Path $NodeArtifacts -Destination (Join-Path $ProgramDir "node") -Recurse
+    New-Item -ItemType Directory -Force -Path $RuntimeDir | Out-Null
+    New-Item -ItemType Directory -Force -Path $RootfsDir | Out-Null
+    New-Item -ItemType Directory -Force -Path $ComponentRecordsDir | Out-Null
 
-    foreach ($recName in $RequiredRecords) {
-        $srcRec = Join-Path $RuntimeRoot "build\out\$recName\linux-arm64\$recName-build-record.json"
-        if (-not (Test-Path $srcRec)) {
-            $srcRec = Join-Path $RuntimeRoot "build\out\$recName\linux-arm64\$($recName)-build-record.json"
-        }
+    Copy-Item -Path $NodeArtifacts -Destination (Join-Path $RuntimeDir "node") -Recurse
+    Copy-Item -Path $BackendTar -Destination (Join-Path $RuntimeDir "backend.tar.xz") -Force
+    Copy-Item -Path $QdrantTar -Destination (Join-Path $RuntimeDir "qdrant.tar.xz") -Force
+    Copy-Item -Path $RootfsTar -Destination (Join-Path $RootfsDir "rootfs.tar") -Force
+    Copy-Item -Path $NodeFilesSha -Destination (Join-Path $ComponentRecordsDir "node-files.sha256") -Force
+
+    foreach ($component in $RequiredRecords) {
+        $srcRec = Join-Path $RuntimeRoot "build\out\$component\linux-arm64\$component-build-record.json"
         if (Test-Path $srcRec) {
-            Copy-Item -Path $srcRec -Destination (Join-Path $MetadataDir "component-build-records" "$recName-build-record.json") -Force
+            Copy-Item -Path $srcRec -Destination (Join-Path $ComponentRecordsDir "$component-build-record.json") -Force
         }
     }
 
-    Copy-Item -Path $NodeFilesSha -Destination (Join-Path $MetadataDir "component-build-records" "node-files.sha256") -Force
-
-    $PackageManifest = @{
+    $PackageIndex = @{
         schemaVersion = 1
         runtimeVersion = $RuntimeVersion
         packageFormatVersion = $PackageFormatVersion
         guestOs = "linux"
         guestArchitecture = "arm64"
         buildMode = "release"
-        createdAt = [DateTimeOffset]::UtcNow.ToString("o")
         components = @{
             node = @{
-                version = $Lock.components.node.version
-                treeSha256 = $Lock.components.node.treeSha256
-            }
-            rootfs = @{
-                rootfsId = $Lock.components.rootfs.rootfsId
-                sha256 = $Lock.components.rootfs.sha256
+                version = $NodeVersion
+                treeSha256 = $NodeExpectedTreeSha
             }
         }
     } | ConvertTo-Json -Depth 10
-    $PackageManifest | Set-Content -Path (Join-Path $MetadataDir "package-manifest.json") -Encoding UTF8
+    $PackageIndex | Set-Content -Path (Join-Path $MetadataDir "package-index.json") -Encoding UTF8
+
+    $ComponentLock = @{
+        schemaVersion = 1
+        runtimeVersion = $RuntimeVersion
+        requiredComponents = @("backend", "node", "qdrant", "rootfs", "plugin-host", "task-host")
+    } | ConvertTo-Json -Depth 5
+    $ComponentLock | Set-Content -Path (Join-Path $MetadataDir "component-lock.json") -Encoding UTF8
+
+    $PayloadSha = & {
+        Get-ChildItem -Path $PayloadDir -Recurse -File |
+            Sort-Object { $_.FullName.Substring($PayloadDir.Length + 1) } |
+            ForEach-Object {
+                $RelPath = $_.FullName.Substring($PayloadDir.Length + 1) -replace '\\', '/'
+                $Hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash.ToLower()
+                "$Hash  $RelPath"
+            }
+    } | & {
+        $sha = [System.Security.Cryptography.SHA256]::Create()
+        $bytes = [System.Text.Encoding]::UTF8.GetBytes(($input -join "`n"))
+        $hash = $sha.ComputeHash($bytes)
+        ($hash | ForEach-Object { '{0:x2}' -f $_ }) -join ''
+        $sha.Dispose()
+    }
+    Write-Host "[VERIFY] Payload tree SHA: $PayloadSha"
+
+    $SortedFiles = Get-ChildItem -Path $PayloadDir -Recurse -File | Sort-Object { $_.FullName.Substring($PayloadDir.Length + 1) }
+    $Sha256SumsContent = $SortedFiles | ForEach-Object {
+        $RelPath = $_.FullName.Substring($PayloadDir.Length + 1) -replace '\\', '/'
+        $Hash = (Get-FileHash -Path $_.FullName -Algorithm SHA256).Hash.ToLower()
+        "$Hash  $RelPath"
+    }
+    $Sha256SumsContent | Set-Content -Path (Join-Path $MetadataDir "SHA256SUMS") -Encoding UTF8
 
     $PackageFileName = "amitia-runtime-$RuntimeVersion-linux-arm64.zip"
     $PackagePath = Join-Path $OutputDir $PackageFileName
-    $TempPackagePath = "$PackagePath.tmp.$StagingId"
+    $TempPackagePath = "$PackagePath.tmp.$BuildId"
 
     if (Test-Path $TempPackagePath) { Remove-Item $TempPackagePath -Force }
 
     Write-Host "[PACK] Creating package archive..."
-    Compress-Archive -Path "$StagingPath\*" -DestinationPath $TempPackagePath -Force
+    $SortedAllFiles = Get-ChildItem -Path $StagingPath -Recurse -File | Sort-Object { $_.FullName.Substring($StagingPath.Length + 1) }
+    $FileNamesFile = [System.IO.Path]::GetTempFileName()
+    ($SortedAllFiles | ForEach-Object { $_.FullName }) | Set-Content -Path $FileNamesFile -Encoding UTF8
+
+    try {
+        & zip -rq -@ $TempPackagePath --names-stdin "$FileNamesFile" 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            throw "zip failed with exit code $LASTEXITCODE"
+        }
+    } finally {
+        Remove-Item $FileNamesFile -Force -ErrorAction SilentlyContinue
+    }
 
     $PackageSha = (Get-FileHash -Path $TempPackagePath -Algorithm SHA256).Hash.ToLower()
     $PackageSize = (Get-Item $TempPackagePath).Length
@@ -156,6 +195,8 @@ try {
     Write-Host "[PACK] Package created: $PackagePath"
     Write-Host "[PACK] SHA256: $PackageSha"
     Write-Host "[PACK] Size: $PackageSize bytes"
+
+    $Timestamp = [DateTimeOffset]::UtcNow.ToString("yyyy-MM-ddTHH:mm:ssZ")
 
     $FinalRecord = @{
         schemaVersion = 1
@@ -170,15 +211,11 @@ try {
             size = $PackageSize
         }
         node = @{
-            version = $Lock.components.node.version
-            treeSha256 = $Lock.components.node.treeSha256
+            version = $NodeVersion
+            treeSha256 = $NodeExpectedTreeSha
             verifiedSha = $NodeActualTreeSha
         }
-        rootfs = @{
-            rootfsId = $Lock.components.rootfs.rootfsId
-            sha256 = $Lock.components.rootfs.sha256
-        }
-        createdAt = [DateTimeOffset]::UtcNow.ToString("o")
+        createdAt = $Timestamp
     } | ConvertTo-Json -Depth 10
 
     $RecordPath = Join-Path $OutputDir "runtime-package-build-record.json"

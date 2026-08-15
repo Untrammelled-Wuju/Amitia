@@ -1,63 +1,33 @@
-import * as path from 'path';
-import { ExternalE2EHarness } from '../harness';
+import { createDriver, BackendDriver } from '../backend_driver';
 
-const PLUGIN_PATH = path.resolve(__dirname, '../../../../testplugins/mock-amitiax-game-plugin/dist/index.js');
+describe('G47-F15 Smoke (Backend Driver)', () => {
+  let driver: BackendDriver;
 
-describe('G34 Smoke', () => {
-  it('plugin performs handshake and reaches ready state', async () => {
-    const harness = new ExternalE2EHarness(PLUGIN_PATH);
-    await harness.start();
+  beforeEach(() => {
+    driver = createDriver();
+  });
 
-    expect(harness.isRunning()).toBe(true);
-    expect(harness.isHandshakeDone()).toBe(false);
-
-    await new Promise(resolve => setTimeout(resolve, 500));
-
-    expect(harness.isHandshakeDone()).toBe(true);
-    harness.kill();
-    await harness.waitExit(3000);
+  it('backend is reachable via game-center API', async () => {
+    const plugins = await driver.listPlugins();
+    expect(Array.isArray(plugins)).toBe(true);
   }, 10000);
 
-  it('echo rpc returns message with counter', async () => {
-    const harness = new ExternalE2EHarness(PLUGIN_PATH);
-    await harness.start();
-
-    const resp = await harness.callRPC('mockgame.echo', { message: 'hello' }, 5000);
-    expect(resp.payload).toBeDefined();
-    const payload = resp.payload as any;
-    expect(payload.message).toBe('hello');
-    expect(payload.count).toBe(1);
-
-    harness.kill();
-    await harness.waitExit(3000);
+  it('list runtimes returns array', async () => {
+    const runtimes = await driver.listRuntimes();
+    expect(Array.isArray(runtimes)).toBe(true);
   }, 10000);
 
-  it('status rpc returns full state snapshot', async () => {
-    const harness = new ExternalE2EHarness(PLUGIN_PATH);
-    await harness.start();
+  it('install plugin via API returns success', async () => {
+    const archivePath = process.env.MOCK_PLUGIN_ARCHIVE_PATH;
+    if (!archivePath) {
+      console.log('MOCK_PLUGIN_ARCHIVE_PATH not set - skipping install test');
+      return;
+    }
+    const result = await driver.installPlugin(archivePath);
+    expect(result).toBeDefined();
+  }, 30000);
 
-    const resp = await harness.callRPC('mockgame.status', {}, 5000);
-    expect(resp.payload).toBeDefined();
-    const payload = resp.payload as any;
-    expect(payload.pluginVersion).toBe('1.0.0');
-    expect(payload.status).toBe('ok');
-    expect(payload.state).toBeDefined();
-
-    harness.kill();
-    await harness.waitExit(3000);
-  }, 10000);
-
-  it('control authority snapshot returns valid state', async () => {
-    const harness = new ExternalE2EHarness(PLUGIN_PATH);
-    await harness.start();
-
-    const resp = await harness.callRPC('mockgame.control.authority.snapshot', {}, 5000);
-    expect(resp.payload).toBeDefined();
-    const payload = resp.payload as any;
-    expect(payload.mode).toBe('observe');
-    expect(payload.valid).toBe(true);
-
-    harness.kill();
-    await harness.waitExit(3000);
+  it('zero residue after fresh backend start', async () => {
+    await driver.assertZeroResidue();
   }, 10000);
 });

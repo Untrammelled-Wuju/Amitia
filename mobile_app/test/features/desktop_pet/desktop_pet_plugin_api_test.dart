@@ -94,6 +94,7 @@ BackendConnectionConfig _cfg(int p) => BackendConnectionConfig(
     host: '127.0.0.1', port: p, httpScheme: 'http', webSocketScheme: 'ws',
     livenessPath: '/livez', readinessPath: '/readyz',
   ),
+  authStrategy: BackendAuthStrategy.localToken,
   credential: BackendConnectionCredential.tryCreate(
     'test_token_32characters_abcdefghij',
   )!,

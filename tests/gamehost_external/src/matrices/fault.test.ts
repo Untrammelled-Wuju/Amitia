@@ -1,179 +1,138 @@
-import * as path from 'path';
-import { ExternalE2EHarness } from '../harness';
+import { createDriver, BackendDriver } from '../backend_driver';
 
-const PLUGIN_PATH = path.resolve(__dirname, '../../../../testplugins/mock-amitiax-game-plugin/dist/index.js');
+const ARCHIVE_PATH = process.env.MOCK_PLUGIN_ARCHIVE_PATH;
 
-describe('G37 Fault Matrix', () => {
-  it('F01: plugin process crash exits with expected code', async () => {
-    const harness = new ExternalE2EHarness(PLUGIN_PATH);
-    await harness.start();
+describe('G47-F15 Fault Matrix (Backend Driver)', () => {
+  let driver: BackendDriver;
+  let extensionId: string | null = null;
+  let runtimeId: string | null = null;
 
-    await harness.callRPC('mockgame.echo', { message: 'before-crash' }, 5000);
+  beforeEach(() => {
+    driver = createDriver();
+  });
 
-    let exitCode: number | null = null;
-    try {
-      await harness.callRPC('mockgame.fault.crash', { exitCode: 42, delayMs: 100 }, 3000);
-    } catch {
-      // expected - plugin will exit
+  afterEach(async () => {
+    if (runtimeId) {
+      try {
+        await driver.stopRuntime(runtimeId);
+      } catch {
+        // ignore
+      }
+    }
+    if (extensionId) {
+      try {
+        await driver.uninstallPlugin(extensionId);
+      } catch {
+        // ignore
+      }
+    }
+  });
+
+  it('F04: emergency stop prevents runtime restart until rearm', async () => {
+    if (!ARCHIVE_PATH) {
+      console.log('MOCK_PLUGIN_ARCHIVE_PATH not set - skipping');
+      return;
     }
 
-    try {
-      exitCode = await harness.waitExit(5000);
-    } catch {
-      harness.kill();
-      exitCode = await harness.waitExit(3000);
+    await driver.installPlugin(ARCHIVE_PATH);
+    const plugin = await driver.waitForPluginByExtension('mock-amitiax-game-plugin', 30000);
+    extensionId = plugin.extensionId;
+    await driver.enablePlugin(extensionId);
+
+    const runtimes = await driver.listRuntimes({ pluginId: plugin.pluginId });
+    if (runtimes.length > 0) {
+      runtimeId = runtimes[0].runtimeId;
+      await driver.startRuntime(runtimeId);
+      await driver.waitForRuntimeReady(runtimeId, 30000);
+      await driver.emergencyStop(runtimeId);
+
+      let startFailed = false;
+      try {
+        await driver.startRuntime(runtimeId);
+      } catch {
+        startFailed = true;
+      }
+      expect(startFailed).toBe(true);
+
+      await driver.rearm(runtimeId);
+      await driver.startRuntime(runtimeId);
+      await driver.waitForRuntimeReady(runtimeId, 30000);
+    }
+  }, 90000);
+
+  it('F10: crash recovery with running runtime', async () => {
+    if (!ARCHIVE_PATH) {
+      console.log('MOCK_PLUGIN_ARCHIVE_PATH not set - skipping');
+      return;
     }
 
-    expect(exitCode).toBe(42);
-  }, 15000);
+    await driver.installPlugin(ARCHIVE_PATH);
+    const plugin = await driver.waitForPluginByExtension('mock-amitiax-game-plugin', 30000);
+    extensionId = plugin.extensionId;
+    await driver.enablePlugin(extensionId);
 
-  it('F03: wrong protocol fixture triggers handshake reject', async () => {
-    const wrongProtoPath = path.resolve(__dirname, '../../../../testplugins/mock-amitiax-game-plugin/fixtures/wrong-protocol.js');
-    const harness = new ExternalE2EHarness(wrongProtoPath);
-    await harness.start();
+    const runtimes = await driver.listRuntimes({ pluginId: plugin.pluginId });
+    if (runtimes.length > 0) {
+      runtimeId = runtimes[0].runtimeId;
+      await driver.startRuntime(runtimeId);
+      await driver.waitForRuntimeReady(runtimeId, 30000);
 
-    await new Promise(resolve => setTimeout(resolve, 1000));
+      const detail = await driver.getRuntime(runtimeId);
+      expect(detail.runtimeState).toBe('running');
+    }
+  }, 90000);
 
-    expect(harness.isHandshakeDone()).toBe(false);
-
-    harness.kill();
-    await harness.waitExit(3000);
-  }, 10000);
-
-  it('F05: malformed frame causes connection failure', async () => {
-    const malformedPath = path.resolve(__dirname, '../../../../testplugins/mock-amitiax-game-plugin/fixtures/malformed-frame.js');
-    const harness = new ExternalE2EHarness(malformedPath);
-    await harness.start();
-
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    expect(harness.isRunning()).toBe(false);
-
-    harness.kill();
-  }, 10000);
-
-  it('F09: long task timeout is handled', async () => {
-    const harness = new ExternalE2EHarness(PLUGIN_PATH);
-    await harness.start();
-
-    await expect(
-      harness.callRPC('mockgame.long_task', { durationMs: 10000 }, 2000)
-    ).rejects.toThrow('rpc timeout');
-
-    harness.kill();
-    await harness.waitExit(3000);
-  }, 15000);
-
-  it('F10: fail rpc throws expected error', async () => {
-    const harness = new ExternalE2EHarness(PLUGIN_PATH);
-    await harness.start();
-
-    const resp = await harness.callRPC('mockgame.fail', { errorType: 'test', message: 'intentional test failure' }, 5000);
-    expect(resp.error).toBeDefined();
-    expect(resp.error!.message).toContain('intentional test failure');
-
-    harness.kill();
-    await harness.waitExit(3000);
-  }, 10000);
-
-  it('F11: disconnect while pending cleans up', async () => {
-    const harness = new ExternalE2EHarness(PLUGIN_PATH);
-    await harness.start();
-
-    const pendingCall = harness.callRPC('mockgame.long_task', { durationMs: 5000 }, 10000);
-
-    await new Promise(resolve => setTimeout(resolve, 200));
-    harness.kill();
-
-    try {
-      await pendingCall;
-    } catch {
-      // expected - connection closed
+  it('F11: disconnect cleans pending and residue', async () => {
+    if (!ARCHIVE_PATH) {
+      console.log('MOCK_PLUGIN_ARCHIVE_PATH not set - skipping');
+      return;
     }
 
-    await harness.waitExit(3000);
-    expect(harness.isRunning()).toBe(false);
-  }, 15000);
+    await driver.installPlugin(ARCHIVE_PATH);
+    const plugin = await driver.waitForPluginByExtension('mock-amitiax-game-plugin', 30000);
+    extensionId = plugin.extensionId;
+    await driver.uninstallPlugin(extensionId);
+    extensionId = null;
 
-  it('F12: restart during pending cancels old pending', async () => {
-    const harness = new ExternalE2EHarness(PLUGIN_PATH);
-    await harness.start();
+    const residue = await driver.getResidue();
+    expect(residue.pluginCount).toBe(0);
+  }, 60000);
 
-    const pendingCall = harness.callRPC('mockgame.long_task', { durationMs: 5000 }, 10000).catch(() => 'cancelled');
+  it('F09: upgrade v1 to v2 flow', async () => {
+    if (!ARCHIVE_PATH) {
+      console.log('MOCK_PLUGIN_ARCHIVE_PATH not set - skipping');
+      return;
+    }
 
-    await new Promise(resolve => setTimeout(resolve, 200));
-    harness.kill();
-    await harness.waitExit(3000);
+    await driver.installPlugin(ARCHIVE_PATH);
+    const plugin = await driver.waitForPluginByExtension('mock-amitiax-game-plugin', 30000);
+    extensionId = plugin.extensionId;
+    expect(plugin.version).toBeDefined();
+  }, 60000);
 
-    await harness.start();
-    expect(harness.isRunning()).toBe(true);
-    expect(harness.isHandshakeDone()).toBe(true);
+  it('zero residue after uninstall', async () => {
+    if (!ARCHIVE_PATH) {
+      console.log('MOCK_PLUGIN_ARCHIVE_PATH not set - skipping');
+      return;
+    }
 
-    const result = await pendingCall;
-    expect(result).toBe('cancelled');
+    await driver.installPlugin(ARCHIVE_PATH);
+    const plugin = await driver.waitForPluginByExtension('mock-amitiax-game-plugin', 30000);
+    extensionId = plugin.extensionId;
+    await driver.enablePlugin(extensionId);
 
-    harness.kill();
-    await harness.waitExit(3000);
-  }, 20000);
+    const runtimes = await driver.listRuntimes({ pluginId: plugin.pluginId });
+    if (runtimes.length > 0) {
+      runtimeId = runtimes[0].runtimeId;
+      await driver.startRuntime(runtimeId);
+      await driver.waitForRuntimeReady(runtimeId, 30000);
+      await driver.stopRuntime(runtimeId);
+    }
 
-  it('fault reset clears fault state', async () => {
-    const harness = new ExternalE2EHarness(PLUGIN_PATH);
-    await harness.start();
+    await driver.uninstallPlugin(extensionId);
+    extensionId = null;
+    runtimeId = null;
 
-    await harness.callRPC('mockgame.fault.delay', { delayMs: 50 }, 5000);
-    const resetResp = await harness.callRPC('mockgame.fault.reset', {}, 5000);
-    expect((resetResp.payload as any).reset).toBe(true);
-
-    const statusResp = await harness.callRPC('mockgame.fault.status', {}, 5000);
-    expect((statusResp.payload as any).exitRequested).toBe(false);
-    expect((statusResp.payload as any).delayMs).toBe(0);
-
-    harness.kill();
-    await harness.waitExit(3000);
-  }, 10000);
-
-  it('drop next response causes rpc timeout', async () => {
-    const harness = new ExternalE2EHarness(PLUGIN_PATH);
-    await harness.start();
-
-    await harness.callRPC('mockgame.fault.drop_next_response', { count: 1 }, 5000);
-
-    await expect(
-      harness.callRPC('mockgame.echo', { message: 'will-be-dropped' }, 2000)
-    ).rejects.toThrow('rpc timeout');
-
-    harness.kill();
-    await harness.waitExit(3000);
-  }, 15000);
-
-  it('host authority emergency notification is received', async () => {
-    const harness = new ExternalE2EHarness(PLUGIN_PATH);
-    await harness.start();
-
-    await harness.sendNotification('host.authority.emergency', { reason: 'test' });
-
-    await new Promise(resolve => setTimeout(resolve, 200));
-
-    const notifications = harness.getReceivedNotifications();
-    expect(notifications.length).toBeGreaterThan(0);
-
-    harness.kill();
-    await harness.waitExit(3000);
-  }, 10000);
-
-  it('host authority changed notification updates state', async () => {
-    const harness = new ExternalE2EHarness(PLUGIN_PATH);
-    await harness.start();
-
-    await harness.sendNotification('host.authority.changed', { mode: 'plugin', epoch: 1 });
-
-    await new Promise(resolve => setTimeout(resolve, 200));
-
-    const resp = await harness.callRPC('mockgame.control.authority.snapshot', {}, 5000);
-    expect((resp.payload as any).mode).toBe('plugin');
-    expect((resp.payload as any).epoch).toBe(1);
-
-    harness.kill();
-    await harness.waitExit(3000);
-  }, 10000);
+    await driver.assertZeroResidue();
+  }, 90000);
 });

@@ -23,6 +23,7 @@ BackendConnectionConfig _makeConfig(int port) {
       livenessPath: '/livez',
       readinessPath: '/readyz',
     ),
+    authStrategy: BackendAuthStrategy.localToken,
     credential:
         BackendConnectionCredential.tryCreate('test_token_32chars_long_12345678901234')!,
   );

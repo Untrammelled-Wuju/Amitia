@@ -23,6 +23,7 @@ void main() {
           schemaVersion: 1,
           generation: 1,
           endpoint: _validEndpoint(),
+          authStrategy: BackendAuthStrategy.localToken,
           credential: _validCredential(),
         );
         expect(config.schemaVersion, 1);
@@ -35,6 +36,7 @@ void main() {
           schemaVersion: 1,
           generation: 999999,
           endpoint: _validEndpoint(),
+          authStrategy: BackendAuthStrategy.localToken,
           credential: _validCredential(),
         );
         expect(config.generation, 999999);
@@ -48,6 +50,7 @@ void main() {
             schemaVersion: 0,
             generation: 1,
             endpoint: _validEndpoint(),
+            authStrategy: BackendAuthStrategy.localToken,
             credential: _validCredential(),
           ),
           throwsArgumentError,
@@ -60,6 +63,7 @@ void main() {
             schemaVersion: 2,
             generation: 1,
             endpoint: _validEndpoint(),
+            authStrategy: BackendAuthStrategy.localToken,
             credential: _validCredential(),
           ),
           throwsArgumentError,
@@ -72,6 +76,7 @@ void main() {
             schemaVersion: -1,
             generation: 1,
             endpoint: _validEndpoint(),
+            authStrategy: BackendAuthStrategy.localToken,
             credential: _validCredential(),
           ),
           throwsArgumentError,
@@ -86,6 +91,7 @@ void main() {
             schemaVersion: 1,
             generation: 0,
             endpoint: _validEndpoint(),
+            authStrategy: BackendAuthStrategy.localToken,
             credential: _validCredential(),
           ),
           throwsArgumentError,
@@ -98,6 +104,7 @@ void main() {
             schemaVersion: 1,
             generation: -1,
             endpoint: _validEndpoint(),
+            authStrategy: BackendAuthStrategy.localToken,
             credential: _validCredential(),
           ),
           throwsArgumentError,

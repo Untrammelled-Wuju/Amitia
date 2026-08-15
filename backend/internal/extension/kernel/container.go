@@ -9,6 +9,7 @@ import (
 	"github.com/u-ai/backend/internal/deviceruntime"
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
+	"github.com/u-ai/backend/internal/extension/kernel/builtin"
 	"github.com/u-ai/backend/internal/extension/kernel/canary"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/chat_ui_extension"
@@ -217,6 +218,17 @@ type Container struct {
 	CapabilityProviders       *capability.ProviderRegistry
 	ProviderLifecycle         *capability.ProviderLifecycleService
 	ProviderExecutionResolver *capability.ProviderRuntimeExecutionResolver
+	ExtensionProviderReconciler *capability.ExtensionProviderReconciler
+	ProviderInstanceReconciler  capability.ProviderInstanceReconciler
+	CapabilityService          *capability.CapabilityService
+
+	BuiltinCatalog       *builtin.Catalog
+	BuiltinBootstrapper  *builtin.Bootstrapper
+	BuiltinHandlerRegistry *builtin.HandlerRegistry
+
+	ProviderInvocationService *capability.ProviderInvocationService
+	ProviderInvoker          *KernelProviderInvoker
+
 	EventBridgePublisher      *eventbridge.Publisher
 }
 

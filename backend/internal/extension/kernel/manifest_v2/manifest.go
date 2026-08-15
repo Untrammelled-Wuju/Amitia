@@ -389,7 +389,7 @@ func (m Manifest) Validate() ValidationReport {
 		"provider":   true, "hook": true, "event_subscription": true,
 		"schedule": true, "background_task": true,
 		"ui_page": true, "ui_panel": true, "ui_chat": true,
-		"ui_context_action": true, "ui_desktop": true, "resource": true,
+		"ui_context_action": true, "ui_desktop": true,
 		"game_plugin": true, "desktop_pet_plugin": true,
 	}
 	contributionIDs := make(map[string]bool)

@@ -67,7 +67,7 @@ type InteractionPlan struct {
 type VisualCandidate struct {
 	Source string `json:"source"`
 
-	Text        string `json:"description,omitempty"`
+	Text        string `json:"text,omitempty"`
 	Description string `json:"description,omitempty"`
 
 	Bounds uitree.Rect `json:"bounds"`
