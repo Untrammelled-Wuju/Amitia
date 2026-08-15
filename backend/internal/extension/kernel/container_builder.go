@@ -828,36 +828,14 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return nil, fmt.Errorf("kernel: register production adapters: %w", err)
 	}
 
-	if b.browserProvider != nil {
-		if err := registerBrowserTools(toolRegistry, b.browserProvider); err != nil {
-			return nil, fmt.Errorf("kernel: register browser tools: %w", err)
-		}
-	}
-
 	if err := registerIOSToolsIfPresent(toolRegistry, b.iosNativeProvider); err != nil {
 		return nil, fmt.Errorf("kernel: register ios native tools: %w", err)
 	}
 	if err := registerAndroidNativeToolsIfPresent(ctx, toolRegistry, b.androidNativeProvider); err != nil {
 		return nil, fmt.Errorf("kernel: register android native tools: %w", err)
 	}
-	if err := registerSearchTools(toolRegistry, b.searchConfig, kernelSecretBroker); err != nil {
-		return nil, err
-	}
-	if b.mediaService != nil {
-		if err := registerMediaTools(toolRegistry, b.mediaService); err != nil {
-			return nil, fmt.Errorf("kernel: register media tools: %w", err)
-		}
-	}
-	if b.workspaceService != nil {
-		if err := registerWorkspaceTools(toolRegistry, b.workspaceService); err != nil {
-			return nil, fmt.Errorf("kernel: register workspace tools: %w", err)
-		}
-	}
 	if err := registerDeepSearchSystemTask(ctx, taskRuntimeService, b.deepSearchTaskEntry); err != nil {
 		return nil, fmt.Errorf("kernel: register deep search system task: %w", err)
-	}
-	if err := registerDeepSearchTool(toolRegistry, taskRuntimeService, b.deepSearchTaskEntry); err != nil {
-		return nil, fmt.Errorf("kernel: register deep search tool: %w", err)
 	}
 	if imageIntelligenceHandler != nil {
 		if err := toolRegistry.BatchRegister(ctx, imageintelligence.BuildToolDefinitions(imageIntelligenceHandler)); err != nil {
@@ -880,6 +858,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	toolFacade.SetCapabilityResolver(capabilityResolver)
 	toolFacade.SetCapabilityService(capabilityService)
 	toolFacade.SetAcquisitionBridge(acquisitionBridge)
+	capabilityService.SetToolRegistry(toolRegistry)
 	if hookService != nil {
 		toolFacade.SetHookService(hookService)
 	}
@@ -1540,24 +1519,6 @@ func makeSearchHealthFunc(cfg search.Config, broker *secret.Broker) capability.S
 	return buildSearchHealthFunc(svc)
 }
 
-func registerSearchTools(registry *capability.ToolRegistry, cfg search.Config, broker *secret.Broker) error {
-	svc := buildSearchService(cfg, broker)
-	return RegisterWebSearchTool(SearchToolsDeps{
-		Registry: registry,
-		Service:  svc,
-		Config:   cfg,
-	})
-}
-
 func registerDeepSearchSystemTask(ctx context.Context, svc *task_runtime.TaskRuntimeService, entry string) error {
 	return RegisterDeepSearchSystemTask(ctx, svc, entry)
-}
-
-func registerDeepSearchTool(registry *capability.ToolRegistry, svc *task_runtime.TaskRuntimeService, entry string) error {
-	return RegisterDeepSearchTool(DeepSearchDeps{
-		TaskService:  svc,
-		ToolRegistry: registry,
-		Config:       deepsearch.Config{},
-		TaskEntry:    entry,
-	})
 }

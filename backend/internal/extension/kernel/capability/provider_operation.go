@@ -68,8 +68,13 @@ func (s *ProviderInvocationService) Invoke(
 		ExecutionTarget:    resolution.ExecutionTarget,
 	}
 
-	if s.adapterRegistry == nil || !resolution.HasResult() {
-		return result, nil
+	if !resolution.HasResult() {
+		return result, fmt.Errorf("provider invocation: no executable provider for capability %s", request.CapabilityID)
+	}
+
+	if s.adapterRegistry == nil {
+		return result, fmt.Errorf("provider invocation: runtime adapter registry unavailable for capability %s (provider %s, instance %s)",
+			request.CapabilityID, resolution.Provider.ID, resolution.ProviderInstance.ID)
 	}
 
 	route := RuntimeExecutionRoute{
@@ -85,7 +90,9 @@ func (s *ProviderInvocationService) Invoke(
 
 	adapter, ok := s.adapterRegistry.ResolveRoute(route)
 	if !ok {
-		return result, nil
+		return result, fmt.Errorf("provider invocation: no runtime adapter for provider %s (placement %s, binding %s, device %s, runtime %s)",
+			resolution.Provider.ID, resolution.Provider.Placement, resolution.Provider.Runtime.RuntimeType,
+			resolution.ProviderInstance.DeviceID, resolution.ProviderInstance.RuntimeID)
 	}
 
 	invocation := NewToolInvocationContext(ToolInvocationOptions{
@@ -101,8 +108,23 @@ func (s *ProviderInvocationService) Invoke(
 		execResult = adapter.Execute(ctx, route.Binding, invocation, request.Input)
 	}
 
-	result.Output = execResult.Structured
-	return result, nil
+	switch execResult.Status {
+	case ToolResultStatusSuccess:
+		result.Output = execResult.Structured
+		return result, nil
+	case ToolResultStatusFailed:
+		return result, fmt.Errorf("provider invocation: execution failed for capability %s: %s", request.CapabilityID, execResult.Error.Message)
+	case ToolResultStatusCancelled:
+		return result, fmt.Errorf("provider invocation: execution cancelled for capability %s", request.CapabilityID)
+	case ToolResultStatusTimedOut:
+		return result, fmt.Errorf("provider invocation: execution timed out for capability %s", request.CapabilityID)
+	default:
+		if execResult.Error != nil {
+			return result, fmt.Errorf("provider invocation: execution error for capability %s: %s", request.CapabilityID, execResult.Error.Message)
+		}
+		result.Output = execResult.Structured
+		return result, nil
+	}
 }
 
 func (s *ProviderInvocationService) InvokeLocal(

@@ -9,17 +9,6 @@ import (
 	"github.com/u-ai/backend/internal/workspace"
 )
 
-func registerWorkspaceTools(registry *capability.ToolRegistry, svc *workspace.Service) error {
-	ctx := context.Background()
-	defs := workspace.BuildWorkspaceTools()
-	for _, def := range defs {
-		if err := registry.Register(ctx, def); err != nil {
-			return fmt.Errorf("register workspace tool %s: %w", def.ID, err)
-		}
-	}
-	return nil
-}
-
 func makeWorkspaceCallFunc(svc *workspace.Service) capability.WorkspaceCallFunc {
 	return func(ctx context.Context, handlerName string, invocation capability.ToolInvocationContext, input json.RawMessage) (json.RawMessage, error) {
 		if svc == nil {

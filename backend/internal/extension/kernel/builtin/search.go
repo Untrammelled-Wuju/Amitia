@@ -6,11 +6,27 @@ import (
 )
 
 const (
-	SearchExtensionID    = domain.ExtensionID("com.amitia.builtin.search")
-	SearchModuleID       = domain.ModuleID("search-runtime")
-	SearchCapabilityID   = capability.CapabilityID("search.web")
-	SearchProviderID     = capability.ProviderID("com.amitia.builtin.search.provider")
+	SearchExtensionID  = domain.ExtensionID("com.amitia.builtin.search")
+	SearchModuleID     = domain.ModuleID("search-runtime")
+	SearchCapabilityID = capability.CapabilityID("search.web")
+	SearchProviderID   = capability.ProviderID("com.amitia.builtin.search.provider")
 )
+
+func buildSearchInputSchema() string {
+	return `{"type":"object","additionalProperties":false,"required":["query"],"properties":{"query":{"type":"string","minLength":1,"maxLength":2048},"kind":{"type":"string","enum":["web","news","academic","code","image","video","places","product"]},"limit":{"type":"integer","minimum":1,"maximum":20},"offset":{"type":"integer","minimum":0,"maximum":100},"language":{"type":"string"},"country":{"type":"string"},"safeSearch":{"type":"string","enum":["off","moderate","strict"]},"domains":{"type":"array","maxItems":16,"items":{"type":"string","maxLength":253}},"specialized":{"type":"object"}}}`
+}
+
+func buildSearchOutputSchema() string {
+	return `{"type":"object","additionalProperties":false,"required":["query","provider","results","returned","retrievedAt"],"properties":{"query":{"type":"string"},"kind":{"type":"string"},"provider":{"type":"string"},"results":{"type":"array","items":{"type":"object"}},"returned":{"type":"integer"},"hasMore":{"type":"boolean"},"retrievedAt":{"type":"string","format":"date-time"},"citations":{"type":"array","items":{"type":"object"}}}}`
+}
+
+func buildDeepSearchInputSchema() string {
+	return `{"type":"object","additionalProperties":false,"required":["query"],"properties":{"query":{"type":"string","minLength":1,"maxLength":2048},"maxDepth":{"type":"integer","minimum":1,"maximum":5},"maxResults":{"type":"integer","minimum":1,"maximum":50},"language":{"type":"string"},"country":{"type":"string"},"timeoutMs":{"type":"integer","minimum":5000,"maximum":120000}}}`
+}
+
+func buildDeepSearchOutputSchema() string {
+	return `{"type":"object","additionalProperties":false,"required":["dossierId","query","status"],"properties":{"dossierId":{"type":"string"},"query":{"type":"string"},"status":{"type":"string","enum":["completed","partial","failed"]},"results":{"type":"array","items":{"type":"object"}},"sources":{"type":"array","items":{"type":"object"}},"generatedAt":{"type":"string","format":"date-time"}}}`
+}
 
 func BuildSearchExtension(version string) Definition {
 	ver, err := domain.ParseVersion(version)
@@ -52,18 +68,56 @@ func BuildSearchExtension(version string) Definition {
 					EntryPoint:  "search.general",
 					WorkerCount: 2,
 				},
-				Contributions: []domain.ContributionDefinition{
-					{
-						ID:          "web_search",
-						ModuleID:    SearchModuleID,
-						ExtensionID: SearchExtensionID,
-						Kind:        domain.ContributionKindTool,
-						Name:        domain.LocalizedText{Default: "Web Search"},
-						Description: domain.LocalizedText{
-							Default: "Search the web using the configured provider.",
+			Contributions: []domain.ContributionDefinition{
+				{
+					ID:          "web_search",
+					ModuleID:    SearchModuleID,
+					ExtensionID: SearchExtensionID,
+					Kind:        domain.ContributionKindTool,
+					Name:        domain.LocalizedText{Default: "Web Search"},
+					Description: domain.LocalizedText{
+						Default: "Search the web using the configured provider.",
+					},
+					Definition: map[string]any{
+						"capabilityId": string(SearchCapabilityID),
+						"modelName":    "web_search",
+						"inputSchema":  buildSearchInputSchema(),
+						"outputSchema": buildSearchOutputSchema(),
+						"riskLevel":    "medium",
+						"sideEffect":   "external",
+						"permissions": []map[string]any{
+							{"capability": "network.request", "description": "Sends query to external search provider"},
+						},
+						"timeoutMs":     int64(30000),
+						"idempotent":    true,
+						"retryable":     true,
+						"hasSideEffects": true,
+						"executionPolicy": map[string]any{
+							"timeout":    "30s",
+							"idempotent": true,
+							"retryPolicy": map[string]any{
+								"maxRetries":   1,
+								"backoffBase":  "1s",
+							},
+						},
+						"resultPolicy": map[string]any{
+							"sanitizeError":  true,
+							"maxOutputBytes": 131072,
+							"streaming": map[string]any{
+								"enabled": false,
+							},
+						},
+						"runtime": map[string]any{
+							"runtimeType": "search",
+							"runtimeId":   "default",
+							"handlerName": "search.general",
 						},
 					},
+					Metadata: map[string]any{
+						"system.builtin": true,
+					},
 				},
+			},
 				ProvidedCapabilities: []domain.ProvidedCapability{
 					{
 						ID:      string(SearchCapabilityID),
@@ -158,6 +212,28 @@ func BuildDeepSearchExtension(version string) Definition {
 						Name:        domain.LocalizedText{Default: "Deep Search"},
 						Description: domain.LocalizedText{
 							Default: "Run a multi-round web search that aggregates, deduplicates, and ranks results into a research dossier.",
+						},
+						Definition: map[string]any{
+							"capabilityId": string(DeepSearchCapabilityID),
+							"modelName":    "deep_search",
+							"inputSchema":  buildDeepSearchInputSchema(),
+							"outputSchema": buildDeepSearchOutputSchema(),
+							"riskLevel":    "medium",
+							"sideEffect":   "external",
+							"permissions": []map[string]any{
+								{"capability": "network.request", "description": "Sends queries to external search providers"},
+							},
+							"timeoutMs":    int64(120000),
+							"idempotent":   true,
+							"retryable":    true,
+							"runtime": map[string]any{
+								"runtimeType": "task",
+								"runtimeId":   "default",
+								"handlerName": "deep_search",
+							},
+						},
+						Metadata: map[string]any{
+							"system.builtin": true,
 						},
 					},
 				},

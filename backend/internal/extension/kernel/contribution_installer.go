@@ -218,13 +218,18 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 		_ = json.Unmarshal(def.Scope, &scope)
 	}
 
+	toolSource := capability.ToolSourcePlugin
+	if isSystemBuiltin(contrib.Metadata) {
+		toolSource = capability.ToolSourceBuiltin
+	}
+
 	toolDef := capability.ToolDefinition{
 		ID:           toolID,
 		ModelName:    modelName,
 		CapabilityID: capID,
 		ExtensionID:  string(contrib.ExtensionID),
 		ModuleID:     string(contrib.ModuleID),
-		Source:       capability.ToolSourcePlugin,
+		Source:       toolSource,
 		Name:         contrib.Name.Default,
 		Description:  contrib.Description.Default,
 		Version:      contrib.Version,
@@ -839,6 +844,7 @@ func (i *TypedContributionInstaller) activateTool(ctx context.Context, contrib d
 	var def struct {
 		ToolID       string          `json:"toolId"`
 		ModelName    string          `json:"modelName"`
+		CapabilityID string          `json:"capabilityId,omitempty"`
 		InputSchema  json.RawMessage `json:"inputSchema"`
 		OutputSchema json.RawMessage `json:"outputSchema"`
 		RiskLevel    string          `json:"riskLevel,omitempty"`
@@ -855,6 +861,10 @@ func (i *TypedContributionInstaller) activateTool(ctx context.Context, contrib d
 	if modelName == "" {
 		modelName = contrib.Name.Default
 	}
+	capID := capability.CapabilityID(def.CapabilityID)
+	if capID == "" {
+		capID = capability.CapabilityID(toolID)
+	}
 	var perms []capability.PermissionRequirement
 	if len(def.Permissions) > 0 {
 		_ = json.Unmarshal(def.Permissions, &perms)
@@ -863,12 +873,18 @@ func (i *TypedContributionInstaller) activateTool(ctx context.Context, contrib d
 	if len(def.Scope) > 0 {
 		_ = json.Unmarshal(def.Scope, &scope)
 	}
+	toolSource := capability.ToolSourcePlugin
+	if isSystemBuiltin(contrib.Metadata) {
+		toolSource = capability.ToolSourceBuiltin
+	}
+
 	toolDef := capability.ToolDefinition{
 		ID:           toolID,
 		ModelName:    modelName,
+		CapabilityID: capID,
 		ExtensionID:  string(contrib.ExtensionID),
 		ModuleID:     string(contrib.ModuleID),
-		Source:       capability.ToolSourcePlugin,
+		Source:       toolSource,
 		Name:         contrib.Name.Default,
 		Description:  contrib.Description.Default,
 		Version:      contrib.Version,
@@ -885,6 +901,23 @@ func (i *TypedContributionInstaller) activateTool(ctx context.Context, contrib d
 		return fmt.Errorf("activate tool %s: %w", toolID, err)
 	}
 	return nil
+}
+
+func isSystemBuiltin(metadata map[string]any) bool {
+	if metadata == nil {
+		return false
+	}
+	v, ok := metadata["system.builtin"]
+	if !ok {
+		return false
+	}
+	if b, ok := v.(bool); ok {
+		return b
+	}
+	if s, ok := v.(string); ok {
+		return s == "true"
+	}
+	return false
 }
 
 func (i *TypedContributionInstaller) activateEventSubscription(ctx context.Context, contrib domain.ContributionDefinition) error {

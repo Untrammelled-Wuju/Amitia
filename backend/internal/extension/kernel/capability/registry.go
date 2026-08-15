@@ -17,12 +17,13 @@ type ToolFilter struct {
 // 后续 Capability Provider Registry 与 Provider Instance 必须属于 capability 领域。
 // runtimeorchestrator.ProviderRegistry 不是此层 Provider Registry。
 type ToolRegistry struct {
-	mu          sync.RWMutex
-	items       map[string]ToolDefinition
-	names       map[string]string
-	byOwner     map[string][]string
-	bySource    map[ToolSource][]string
-	schemaCache *JSONSchemaCache
+	mu           sync.RWMutex
+	items        map[string]ToolDefinition
+	names        map[string]string
+	byOwner      map[string][]string
+	bySource     map[ToolSource][]string
+	byCapability map[string][]string
+	schemaCache  *JSONSchemaCache
 }
 
 func NewToolRegistry(schemaCaches ...*JSONSchemaCache) *ToolRegistry {
@@ -35,11 +36,12 @@ func NewToolRegistry(schemaCaches ...*JSONSchemaCache) *ToolRegistry {
 	}
 
 	return &ToolRegistry{
-		items:       map[string]ToolDefinition{},
-		names:       map[string]string{},
-		byOwner:     map[string][]string{},
-		bySource:    map[ToolSource][]string{},
-		schemaCache: cache,
+		items:        map[string]ToolDefinition{},
+		names:        map[string]string{},
+		byOwner:      map[string][]string{},
+		bySource:     map[ToolSource][]string{},
+		byCapability: map[string][]string{},
+		schemaCache:  cache,
 	}
 }
 
@@ -104,6 +106,11 @@ func (r *ToolRegistry) storeUnsafe(definition ToolDefinition) {
 		r.bySource[definition.Source],
 		definition.ID,
 	)
+
+	if definition.CapabilityID != "" {
+		capKey := string(definition.CapabilityID)
+		r.byCapability[capKey] = append(r.byCapability[capKey], definition.ID)
+	}
 }
 
 func (r *ToolRegistry) register(ctx context.Context, definition ToolDefinition) error {
@@ -438,6 +445,15 @@ func (r *ToolRegistry) CountByOwner(ownerKey string) int {
 	return len(r.byOwner[ownerKey])
 }
 
+func (r *ToolRegistry) ListToolIDsByCapabilityID(capID string) []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	ids := r.byCapability[capID]
+	result := make([]string, len(ids))
+	copy(result, ids)
+	return result
+}
+
 func (r *ToolRegistry) removeUnsafe(id string) error {
 	item, ok := r.items[id]
 	if !ok {
@@ -473,6 +489,16 @@ func (r *ToolRegistry) removeUnsafe(id string) error {
 		delete(r.bySource, item.Source)
 	} else {
 		r.bySource[item.Source] = sourceSlice
+	}
+
+	if item.CapabilityID != "" {
+		capKey := string(item.CapabilityID)
+		capSlice := removeFromSlice(r.byCapability[capKey], id)
+		if len(capSlice) == 0 {
+			delete(r.byCapability, capKey)
+		} else {
+			r.byCapability[capKey] = capSlice
+		}
 	}
 
 	delete(r.items, id)

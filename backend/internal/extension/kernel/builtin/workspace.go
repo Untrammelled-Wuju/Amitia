@@ -6,12 +6,12 @@ import (
 )
 
 const (
-	WorkspaceExtensionID      = domain.ExtensionID("com.amitia.builtin.workspace")
-	WorkspaceModuleID         = domain.ModuleID("workspace-runtime")
-	WorkspaceReadCapabilityID = capability.CapabilityID("workspace.read")
+	WorkspaceExtensionID       = domain.ExtensionID("com.amitia.builtin.workspace")
+	WorkspaceModuleID          = domain.ModuleID("workspace-runtime")
+	WorkspaceReadCapabilityID  = capability.CapabilityID("workspace.read")
 	WorkspaceWriteCapabilityID = capability.CapabilityID("workspace.write")
 	WorkspaceManageCapabilityID = capability.CapabilityID("workspace.manage")
-	WorkspaceProviderID       = capability.ProviderID("com.amitia.builtin.workspace.provider")
+	WorkspaceProviderID        = capability.ProviderID("com.amitia.builtin.workspace.provider")
 )
 
 func BuildWorkspaceExtension(version string) Definition {
@@ -56,18 +56,9 @@ func BuildWorkspaceExtension(version string) Definition {
 				},
 				Contributions: buildWorkspaceContributions(WorkspaceExtensionID, WorkspaceModuleID),
 				ProvidedCapabilities: []domain.ProvidedCapability{
-					{
-						ID:      string(WorkspaceReadCapabilityID),
-						Version: version,
-					},
-					{
-						ID:      string(WorkspaceWriteCapabilityID),
-						Version: version,
-					},
-					{
-						ID:      string(WorkspaceManageCapabilityID),
-						Version: version,
-					},
+					{ID: string(WorkspaceReadCapabilityID), Version: version},
+					{ID: string(WorkspaceWriteCapabilityID), Version: version},
+					{ID: string(WorkspaceManageCapabilityID), Version: version},
 				},
 				Provider: &domain.ProviderMetadata{
 					ID:       string(WorkspaceProviderID),
@@ -101,33 +92,201 @@ func BuildWorkspaceExtension(version string) Definition {
 	}
 }
 
+type workspaceToolSpec struct {
+	id           string
+	name         string
+	description  string
+	modelName    string
+	handlerName  string
+	inputSchema  string
+	outputSchema string
+	riskLevel    string
+	sideEffect   string
+	idempotent   bool
+	retryable    bool
+	timeoutMs    int64
+	permissions  []map[string]any
+}
+
 func buildWorkspaceContributions(extID domain.ExtensionID, modID domain.ModuleID) []domain.ContributionDefinition {
-	contributionKinds := []struct {
-		id          string
-		name        string
-		description string
-	}{
-		{"workspace_list", "Workspace List", "List entries in a workspace directory"},
-		{"workspace_stat", "Workspace Stat", "Get metadata of a workspace entry"},
-		{"workspace_read", "Workspace Read", "Read content from a workspace file"},
-		{"workspace_write", "Workspace Write", "Write content to a workspace file"},
-		{"workspace_mkdir", "Workspace Mkdir", "Create a directory in the workspace"},
-		{"workspace_rename", "Workspace Rename", "Rename a workspace entry"},
-		{"workspace_move", "Workspace Move", "Move a workspace entry within the same mount"},
-		{"workspace_copy", "Workspace Copy", "Copy a workspace entry within the same mount"},
-		{"workspace_delete", "Workspace Delete", "Delete a workspace entry"},
+	specs := []workspaceToolSpec{
+		{
+			id:           "workspace_list",
+			name:         "Workspace List",
+			description:  "List entries in a workspace directory",
+			modelName:    "workspace.list",
+			handlerName:  "workspace.list",
+			inputSchema:  `{"type":"object","properties":{"uri":{"type":"string"},"limit":{"type":"integer","minimum":1,"maximum":500},"cursor":{"type":"string"}},"required":["uri"],"additionalProperties":false}`,
+			outputSchema: `{"type":"object","properties":{"entries":{"type":"array","items":{"type":"object"}},"nextCursor":{"type":"string"},"hasMore":{"type":"boolean"}}}`,
+			riskLevel:    "low",
+			sideEffect:   "read_only",
+			idempotent:   true,
+			retryable:    true,
+			timeoutMs:    10000,
+			permissions:  []map[string]any{{"capability": "workspace.read", "risk": "low"}},
+		},
+		{
+			id:           "workspace_stat",
+			name:         "Workspace Stat",
+			description:  "Get metadata of a workspace entry",
+			modelName:    "workspace.stat",
+			handlerName:  "workspace.stat",
+			inputSchema:  `{"type":"object","properties":{"uri":{"type":"string"}},"required":["uri"],"additionalProperties":false}`,
+			outputSchema: `{"type":"object","properties":{"entry":{"type":"object"}}}`,
+			riskLevel:    "low",
+			sideEffect:   "read_only",
+			idempotent:   true,
+			retryable:    true,
+			timeoutMs:    5000,
+			permissions:  []map[string]any{{"capability": "workspace.read", "risk": "low"}},
+		},
+		{
+			id:           "workspace_read",
+			name:         "Workspace Read",
+			description:  "Read content from a workspace file",
+			modelName:    "workspace.read",
+			handlerName:  "workspace.read",
+			inputSchema:  `{"type":"object","properties":{"uri":{"type":"string"},"offset":{"type":"integer","minimum":0},"maxBytes":{"type":"integer","minimum":1}},"required":["uri"],"additionalProperties":false}`,
+			outputSchema: `{"type":"object","properties":{"content":{"type":"string"},"isText":{"type":"boolean"},"resource":{"type":"string"}}}`,
+			riskLevel:    "low",
+			sideEffect:   "read_only",
+			idempotent:   true,
+			retryable:    true,
+			timeoutMs:    15000,
+			permissions:  []map[string]any{{"capability": "workspace.read", "risk": "low"}},
+		},
+		{
+			id:           "workspace_write",
+			name:         "Workspace Write",
+			description:  "Write content to a workspace file",
+			modelName:    "workspace.write",
+			handlerName:  "workspace.write",
+			inputSchema:  `{"type":"object","properties":{"uri":{"type":"string"},"text":{"type":"string"},"sourceUri":{"type":"string"},"overwrite":{"type":"boolean"}},"required":["uri"],"additionalProperties":false}`,
+			outputSchema: `{"type":"object","properties":{"entry":{"type":"object"}}}`,
+			riskLevel:    "medium",
+			sideEffect:   "write",
+			idempotent:   false,
+			retryable:    false,
+			timeoutMs:    30000,
+			permissions:  []map[string]any{{"capability": "workspace.write", "risk": "medium"}},
+		},
+		{
+			id:           "workspace_mkdir",
+			name:         "Workspace Mkdir",
+			description:  "Create a directory in the workspace",
+			modelName:    "workspace.mkdir",
+			handlerName:  "workspace.mkdir",
+			inputSchema:  `{"type":"object","properties":{"uri":{"type":"string"}},"required":["uri"],"additionalProperties":false}`,
+			outputSchema: `{"type":"object","properties":{"entry":{"type":"object"}}}`,
+			riskLevel:    "medium",
+			sideEffect:   "write",
+			idempotent:   false,
+			retryable:    false,
+			timeoutMs:    10000,
+			permissions:  []map[string]any{{"capability": "workspace.write", "risk": "medium"}},
+		},
+		{
+			id:           "workspace_rename",
+			name:         "Workspace Rename",
+			description:  "Rename a workspace entry",
+			modelName:    "workspace.rename",
+			handlerName:  "workspace.rename",
+			inputSchema:  `{"type":"object","properties":{"uri":{"type":"string"},"newName":{"type":"string"}},"required":["uri","newName"],"additionalProperties":false}`,
+			outputSchema: `{"type":"object","properties":{"entry":{"type":"object"}}}`,
+			riskLevel:    "medium",
+			sideEffect:   "write",
+			idempotent:   false,
+			retryable:    false,
+			timeoutMs:    10000,
+			permissions:  []map[string]any{{"capability": "workspace.write", "risk": "medium"}},
+		},
+		{
+			id:           "workspace_move",
+			name:         "Workspace Move",
+			description:  "Move a workspace entry within the same mount",
+			modelName:    "workspace.move",
+			handlerName:  "workspace.move",
+			inputSchema:  `{"type":"object","properties":{"sourceUri":{"type":"string"},"destinationDirUri":{"type":"string"}},"required":["sourceUri","destinationDirUri"],"additionalProperties":false}`,
+			outputSchema: `{"type":"object","properties":{"entry":{"type":"object"}}}`,
+			riskLevel:    "medium",
+			sideEffect:   "write",
+			idempotent:   false,
+			retryable:    false,
+			timeoutMs:    15000,
+			permissions:  []map[string]any{{"capability": "workspace.write", "risk": "medium"}},
+		},
+		{
+			id:           "workspace_copy",
+			name:         "Workspace Copy",
+			description:  "Copy a workspace entry within the same mount",
+			modelName:    "workspace.copy",
+			handlerName:  "workspace.copy",
+			inputSchema:  `{"type":"object","properties":{"sourceUri":{"type":"string"},"destinationDirUri":{"type":"string"}},"required":["sourceUri","destinationDirUri"],"additionalProperties":false}`,
+			outputSchema: `{"type":"object","properties":{"entry":{"type":"object"}}}`,
+			riskLevel:    "medium",
+			sideEffect:   "write",
+			idempotent:   false,
+			retryable:    false,
+			timeoutMs:    15000,
+			permissions:  []map[string]any{{"capability": "workspace.write", "risk": "medium"}},
+		},
+		{
+			id:           "workspace_delete",
+			name:         "Workspace Delete",
+			description:  "Delete a workspace entry",
+			modelName:    "workspace.delete",
+			handlerName:  "workspace.delete",
+			inputSchema:  `{"type":"object","properties":{"uri":{"type":"string"},"recursive":{"type":"boolean"}},"required":["uri"],"additionalProperties":false}`,
+			outputSchema: `{"type":"object","properties":{"deleted":{"type":"boolean"}}}`,
+			riskLevel:    "high",
+			sideEffect:   "write",
+			idempotent:   false,
+			retryable:    false,
+			timeoutMs:    15000,
+			permissions:  []map[string]any{{"capability": "workspace.write", "risk": "high"}},
+		},
 	}
 
-	contributions := make([]domain.ContributionDefinition, 0, len(contributionKinds))
-	for _, k := range contributionKinds {
+	contributions := make([]domain.ContributionDefinition, 0, len(specs))
+	for _, s := range specs {
 		contributions = append(contributions, domain.ContributionDefinition{
-			ID:          domain.ContributionID(k.id),
+			ID:          domain.ContributionID(s.id),
 			ModuleID:    modID,
 			ExtensionID: extID,
 			Kind:        domain.ContributionKindTool,
-			Name:        domain.LocalizedText{Default: k.name},
-			Description: domain.LocalizedText{Default: k.description},
+			Name:        domain.LocalizedText{Default: s.name},
+			Description: domain.LocalizedText{Default: s.description},
+			Definition: map[string]any{
+				"capabilityId": resolveWorkspaceCapabilityID(s.id),
+				"modelName":    s.modelName,
+				"inputSchema":  s.inputSchema,
+				"outputSchema": s.outputSchema,
+				"riskLevel":    s.riskLevel,
+				"sideEffect":   s.sideEffect,
+				"permissions":  s.permissions,
+				"timeoutMs":    s.timeoutMs,
+				"idempotent":   s.idempotent,
+				"retryable":    s.retryable,
+				"runtime": map[string]any{
+					"runtimeType": "workspace",
+					"runtimeId":   "default",
+					"handlerName": s.handlerName,
+				},
+			},
+			Metadata: map[string]any{
+				"system.builtin": true,
+			},
 		})
 	}
 	return contributions
+}
+
+func resolveWorkspaceCapabilityID(toolID string) string {
+	switch toolID {
+	case "workspace_read", "workspace_stat", "workspace_list":
+		return string(WorkspaceReadCapabilityID)
+	case "workspace_write", "workspace_mkdir", "workspace_rename", "workspace_move", "workspace_copy", "workspace_delete":
+		return string(WorkspaceWriteCapabilityID)
+	}
+	return string(WorkspaceManageCapabilityID)
 }
