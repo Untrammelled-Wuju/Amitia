@@ -40,15 +40,15 @@ import UserNotifications
 }
 
 @objc public class IOSNativeRequest: NSObject {
-    public let protocolVersion: String
-    public let requestID: String
+    public let protocolVersion: Int
+    public let requestId: String
     public let platform: String
     public let operation: String
     public let payload: [String: Any]?
 
-    public init(protocolVersion: String, requestID: String, platform: String, operation: String, payload: [String: Any]?) {
+    public init(protocolVersion: Int, requestId: String, platform: String, operation: String, payload: [String: Any]?) {
         self.protocolVersion = protocolVersion
-        self.requestID = requestID
+        self.requestId = requestId
         self.platform = platform
         self.operation = operation
         self.payload = payload
@@ -57,15 +57,15 @@ import UserNotifications
 }
 
 @objc public class IOSNativeResponse: NSObject {
-    public let protocolVersion: String
-    public let requestID: String
+    public let protocolVersion: Int
+    public let requestId: String
     public let status: String
     public let result: [String: Any]?
     public let error: IOSNativeError?
 
-    public init(protocolVersion: String, requestID: String, status: String, result: [String: Any]?, error: IOSNativeError?) {
+    public init(protocolVersion: Int, requestId: String, status: String, result: [String: Any]?, error: IOSNativeError?) {
         self.protocolVersion = protocolVersion
-        self.requestID = requestID
+        self.requestId = requestId
         self.status = status
         self.result = result
         self.error = error
@@ -86,7 +86,7 @@ import UserNotifications
     }
 }
 
-private let supportedProtocolVersions: Set<String> = ["1.0"]
+private let supportedProtocolVersions: Set<Int> = [1]
 
 @objc public class IOSNativeHost: NSObject {
 
@@ -152,84 +152,84 @@ private let supportedProtocolVersions: Set<String> = ["1.0"]
         }
     }
 
-    public func execute(_ request: IOSNativeRequest) async -> IOSNativeResponse {
-        return await withCheckedContinuation { continuation in
-            queue.async {
-                guard request.platform == "ios" else {
-                    let error = IOSNativeError(
-                        code: "INVALID_PLATFORM",
-                        message: "unsupported platform: \(request.platform)",
-                        domainCode: nil
-                    )
-                    let response = IOSNativeResponse(
-                        protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
-                        status: "error",
-                        result: nil,
-                        error: error
-                    )
-                    continuation.resume(returning: response)
-                    return
-                }
+	public func execute(_ request: IOSNativeRequest) async -> IOSNativeResponse {
+		return await withCheckedContinuation { continuation in
+			queue.async {
+				guard request.platform == "ios" else {
+					let error = IOSNativeError(
+						code: "INVALID_PLATFORM",
+						message: "unsupported platform: \(request.platform)",
+						domainCode: nil
+					)
+					let response = IOSNativeResponse(
+						protocolVersion: request.protocolVersion,
+						requestId: request.requestId,
+						status: "error",
+						result: nil,
+						error: error
+					)
+					continuation.resume(returning: response)
+					return
+				}
 
-                guard supportedProtocolVersions.contains(request.protocolVersion) else {
-                    let error = IOSNativeError(
-                        code: "BRIDGE_PROTOCOL_MISMATCH",
-                        message: "unsupported protocol version: \(request.protocolVersion)",
-                        domainCode: nil
-                    )
-                    let response = IOSNativeResponse(
-                        protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
-                        status: "error",
-                        result: nil,
-                        error: error
-                    )
-                    continuation.resume(returning: response)
-                    return
-                }
+				guard supportedProtocolVersions.contains(request.protocolVersion) else {
+					let error = IOSNativeError(
+						code: "BRIDGE_PROTOCOL_MISMATCH",
+						message: "unsupported protocol version: \(request.protocolVersion)",
+						domainCode: nil
+					)
+					let response = IOSNativeResponse(
+						protocolVersion: request.protocolVersion,
+						requestId: request.requestId,
+						status: "error",
+						result: nil,
+						error: error
+					)
+					continuation.resume(returning: response)
+					return
+				}
 
-                guard !request.requestID.isEmpty else {
-                    let error = IOSNativeError(
-                        code: "INVALID_ARGUMENT",
-                        message: "requestID must not be empty",
-                        domainCode: nil
-                    )
-                    let response = IOSNativeResponse(
-                        protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
-                        status: "error",
-                        result: nil,
-                        error: error
-                    )
-                    continuation.resume(returning: response)
-                    return
-                }
+				guard !request.requestId.isEmpty else {
+					let error = IOSNativeError(
+						code: "INVALID_ARGUMENT",
+						message: "requestId must not be empty",
+						domainCode: nil
+					)
+					let response = IOSNativeResponse(
+						protocolVersion: request.protocolVersion,
+						requestId: request.requestId,
+						status: "error",
+						result: nil,
+						error: error
+					)
+					continuation.resume(returning: response)
+					return
+				}
 
-                guard let handler = self.handlers[request.operation] else {
-                    let error = IOSNativeError(
-                        code: "OPERATION_NOT_SUPPORTED",
-                        message: "operation not supported: \(request.operation)",
-                        domainCode: nil
-                    )
-                    let response = IOSNativeResponse(
-                        protocolVersion: request.protocolVersion,
-                        requestID: request.requestID,
-                        status: "error",
-                        result: nil,
-                        error: error
-                    )
-                    continuation.resume(returning: response)
-                    return
-                }
+				guard let handler = self.handlers[request.operation] else {
+					let error = IOSNativeError(
+						code: "OPERATION_NOT_SUPPORTED",
+						message: "operation not supported: \(request.operation)",
+						domainCode: nil
+					)
+					let response = IOSNativeResponse(
+						protocolVersion: request.protocolVersion,
+						requestId: request.requestId,
+						status: "error",
+						result: nil,
+						error: error
+					)
+					continuation.resume(returning: response)
+					return
+				}
 
-                Task {
-                    let response = await handler.execute(request)
-                    continuation.resume(returning: response)
-                }
-            }
-        }
-    }
+				Task {
+					let response = await handler.execute(request)
+					continuation.resume(returning: response)
+				}
+			}
+		}
+	}
 
     public func handshake() -> [String: Any] {
         return queue.sync {
@@ -245,7 +245,7 @@ private let supportedProtocolVersions: Set<String> = ["1.0"]
 
             return [
                 "platform": "ios",
-                "protocolVersion": "1.0",
+                "protocolVersion": 1,
                 "hostGeneration": hostGeneration,
                 "osVersion": UIDevice.current.systemVersion,
                 "deviceFamily": UIDevice.current.userInterfaceIdiom == .pad ? "ipad" : "iphone",
