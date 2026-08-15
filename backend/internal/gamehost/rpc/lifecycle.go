@@ -107,12 +107,12 @@ func (m *RequestLifecycleManager) HandleOutgoingRequest(
 	fp := ComputeRequestFingerprint(request)
 
 	if cached, ok := m.cache.Lookup(key, fp); ok {
-		return &PendingRequest{
-			Key:     key,
-			State:   RequestStateCompleted,
-			Request: request,
-			Result:  clonedEnvelope(cached),
-		}, nil
+	return &PendingRequest{
+		Key:     key,
+		State:   RequestStateCompleted,
+		Request: request,
+		result:  clonedEnvelope(cached),
+	}, nil
 	}
 
 	deadline, _ := EffectiveDeadline(ctx, customTimeoutMS, m.timeoutCfg, time.Now().UTC())
@@ -129,7 +129,7 @@ func (m *RequestLifecycleManager) HandleOutgoingRequest(
 		CreatedAt:   time.Now().UTC(),
 		Ctx:         cancelCtx,
 		CancelFunc:  cancel,
-		Done:        make(chan struct{}),
+		done:        make(chan struct{}),
 		Fingerprint: fp,
 	}
 
@@ -256,9 +256,7 @@ func (m *RequestLifecycleManager) Shutdown(ctx context.Context) error {
 
 	done := make(chan struct{})
 	go func() {
-		if r, ok := m.pending.(*pendingRequestRegistry); ok {
-			r.shutdown()
-		}
+		m.pending.Shutdown()
 		close(done)
 	}()
 
