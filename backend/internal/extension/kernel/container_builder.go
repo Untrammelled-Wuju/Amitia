@@ -17,6 +17,7 @@ import (
 	"github.com/u-ai/backend/internal/deviceruntime"
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
+	"github.com/u-ai/backend/internal/extension/kernel/capability/acquisition"
 	"github.com/u-ai/backend/internal/extension/kernel/authority"
 	"github.com/u-ai/backend/internal/extension/kernel/builtin"
 	"github.com/u-ai/backend/internal/extension/kernel/canary"
@@ -699,6 +700,25 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	providerInvocationService := capability.NewProviderInvocationService(capabilityService, adapterRegistry)
 	kernelProviderInvoker := NewKernelProviderInvoker(providerInvocationService)
 
+	acquisitionSourceRegistry := acquisition.NewSourceRegistry()
+	acquisitionInstallerRegistry := acquisition.NewInstallerRegistry(&acquisition.InstallerRegistryOpts{})
+	acquisitionService, err := acquisition.NewAcquisitionService(acquisition.AcquisitionDependencies{
+		CapabilityService: capabilityService,
+		ProviderRegistry:  capabilityProviderRegistry,
+		SourceRegistry:    acquisitionSourceRegistry,
+		InstallerRegistry: acquisitionInstallerRegistry,
+		PolicyEngine:      acquisition.NewPolicyEngine(),
+		DeploymentPlanner: acquisition.NewDeploymentPlanner(),
+		ProviderLifecycle: providerLifecycle,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("kernel: create acquisition service: %w", err)
+	}
+	acquisitionBridge := acquisition.NewAgentCapabilityBridge(acquisitionService)
+	if err := acquisition.RegisterAcquisitionTools(initCtx, toolRegistry); err != nil {
+		return nil, fmt.Errorf("kernel: register acquisition tools: %w", err)
+	}
+
 	startupAt := time.Now().UTC()
 	if sessionService != nil {
 		if err := sessionService.RecoverStartup(ctx, startupAt); err != nil {
@@ -859,6 +879,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	toolFacade.SetAgentSkillCatalog(agentSkillCatalog)
 	toolFacade.SetCapabilityResolver(capabilityResolver)
 	toolFacade.SetCapabilityService(capabilityService)
+	toolFacade.SetAcquisitionBridge(acquisitionBridge)
 	if hookService != nil {
 		toolFacade.SetHookService(hookService)
 	}
@@ -1293,6 +1314,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 		ProviderInvocationService: providerInvocationService,
 		ProviderInvoker:          kernelProviderInvoker,
+
+		AcquisitionService: acquisitionService,
 
 		EventBridgePublisher:      eventBridgePublisher,
 	}

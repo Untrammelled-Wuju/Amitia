@@ -56,6 +56,9 @@ const (
 	StateFailed           AcquisitionState = "failed"
 	StateRolledBack       AcquisitionState = "rolled_back"
 	StateCancelled        AcquisitionState = "cancelled"
+	StateInstalledOnly    AcquisitionState = "installed_only"
+	StateWaitingRuntime   AcquisitionState = "waiting_runtime"
+	StateReconcileFailed  AcquisitionState = "reconcile_failed"
 )
 
 type ResumeState string

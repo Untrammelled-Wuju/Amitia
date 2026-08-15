@@ -11,6 +11,27 @@ import (
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
+// ProviderLifecyclePort is the minimal interface AcquisitionService needs to
+// trigger provider enablement without fabricating ProviderInstance directly.
+// The real implementation lives in capability.ProviderLifecycleService.
+type ProviderLifecyclePort interface {
+	RegisterInstance(inst capability.CapabilityProviderInstance) error
+	UpdateInstanceHealth(id capability.ProviderInstanceID, health capability.HealthStatus) error
+	UpdateInstanceAvailability(id capability.ProviderInstanceID, availability capability.ProviderAvailabilityState) error
+}
+
+// AcquisitionDependencies holds all required dependencies for constructing
+// an AcquisitionService. All fields must be non-nil for production use.
+type AcquisitionDependencies struct {
+	CapabilityService     *capability.CapabilityService
+	ProviderRegistry      *capability.ProviderRegistry
+	SourceRegistry        *SourceRegistry
+	InstallerRegistry     *InstallerRegistry
+	PolicyEngine          *PolicyEngine
+	DeploymentPlanner     *DeploymentPlanner
+	ProviderLifecycle     ProviderLifecyclePort
+}
+
 // AcquisitionService orchestrates the full capability acquisition lifecycle:
 // finding candidates, evaluating policy, executing installation/enablement,
 // and verifying that the acquired capability becomes executable.
@@ -22,41 +43,58 @@ type AcquisitionService struct {
 	resumeContexts    map[string]CapabilityResumeContext
 	capabilityService *capability.CapabilityService
 	providerRegistry  *capability.ProviderRegistry
+	providerLifecycle ProviderLifecyclePort
 }
 
-// NewAcquisitionService creates an AcquisitionService with a default Planner
-// wired to the provided SourceRegistry.
-func NewAcquisitionService(providerRegistry *capability.ProviderRegistry) *AcquisitionService {
-	registry := NewSourceRegistry()
-	search := NewSourceSearchService(registry)
-	policy := NewPolicyEngine()
-	deployment := NewDeploymentPlanner()
-	planner := NewPlanner(search, policy, deployment)
+// NewAcquisitionService creates an AcquisitionService with explicitly provided
+// dependencies. This is the canonical production constructor.
+func NewAcquisitionService(deps AcquisitionDependencies) (*AcquisitionService, error) {
+	if deps.CapabilityService == nil {
+		return nil, errors.New("acquisition: CapabilityService is required")
+	}
+	if deps.ProviderRegistry == nil {
+		return nil, errors.New("acquisition: ProviderRegistry is required")
+	}
+	if deps.SourceRegistry == nil {
+		return nil, errors.New("acquisition: SourceRegistry is required")
+	}
+	if deps.InstallerRegistry == nil {
+		return nil, errors.New("acquisition: InstallerRegistry is required")
+	}
+	if deps.PolicyEngine == nil {
+		return nil, errors.New("acquisition: PolicyEngine is required")
+	}
+	if deps.DeploymentPlanner == nil {
+		return nil, errors.New("acquisition: DeploymentPlanner is required")
+	}
+
+	search := NewSourceSearchService(deps.SourceRegistry)
+	planner := NewPlanner(search, deps.PolicyEngine, deps.DeploymentPlanner)
 
 	return &AcquisitionService{
 		planner:           planner,
-		registry:          registry,
-		installerRegistry: NewInstallerRegistry(),
+		registry:          deps.SourceRegistry,
+		installerRegistry: deps.InstallerRegistry,
 		resumeContexts:    make(map[string]CapabilityResumeContext),
-		providerRegistry:  providerRegistry,
-	}
+		capabilityService: deps.CapabilityService,
+		providerRegistry:  deps.ProviderRegistry,
+		providerLifecycle: deps.ProviderLifecycle,
+	}, nil
 }
 
 // NewAcquisitionServiceWithRegistry creates an AcquisitionService using a
-// pre-configured SourceRegistry.
-func NewAcquisitionServiceWithRegistry(registry *SourceRegistry, providerRegistry *capability.ProviderRegistry) *AcquisitionService {
-	search := NewSourceSearchService(registry)
-	policy := NewPolicyEngine()
-	deployment := NewDeploymentPlanner()
-	planner := NewPlanner(search, policy, deployment)
-
-	return &AcquisitionService{
-		planner:           planner,
-		registry:          registry,
-		installerRegistry: NewInstallerRegistry(),
-		resumeContexts:    make(map[string]CapabilityResumeContext),
-		providerRegistry:  providerRegistry,
+// pre-configured SourceRegistry. This is retained for test/compat purposes;
+// production code should use NewAcquisitionService with full AcquisitionDependencies.
+func NewAcquisitionServiceWithRegistry(registry *SourceRegistry, providerRegistry *capability.ProviderRegistry) (*AcquisitionService, error) {
+	deps := AcquisitionDependencies{
+		CapabilityService: nil,
+		ProviderRegistry:  providerRegistry,
+		SourceRegistry:    registry,
+		InstallerRegistry: NewInstallerRegistry(nil),
+		PolicyEngine:      NewPolicyEngine(),
+		DeploymentPlanner: NewDeploymentPlanner(),
 	}
+	return NewAcquisitionService(deps)
 }
 
 // SetCapabilityService sets the capability service used to check whether a
@@ -208,20 +246,20 @@ func (s *AcquisitionService) Acquire(ctx context.Context, request AcquisitionReq
 		return result, execErr
 	}
 
-	// Step 7b: Verify the capability is executable.
+	// Step 7b: Verify the capability is executable via authoritative state.
 	if capSvc != nil && capSvc.HasExecutableProvider(request.CapabilityID) {
 		result.State = StateReady
 		result.Installed = true
 		result.Enabled = true
 		result.CapabilityIDs = []capability.CapabilityID{request.CapabilityID}
 	} else {
-		// Even if HasExecutableProvider doesn't confirm, the plan steps may have
-		// succeeded. Mark as ready if the plan completed without error.
-		result.State = StateReady
+		// Plan steps completed but authoritative state has not yet produced an
+		// executable instance. Do NOT fabricate Ready or ProviderInstance here.
+		result.State = StateReconciling
 		result.Installed = true
-		result.Enabled = true
+		result.Enabled = false
 		result.CapabilityIDs = []capability.CapabilityID{request.CapabilityID}
-		result.Warnings = append(result.Warnings, "capability marked ready but executable verification inconclusive")
+		result.Warnings = append(result.Warnings, "plan executed but executable provider not yet reconciled")
 	}
 
 	result.UpdatedAt = time.Now()
@@ -319,12 +357,14 @@ func (s *AcquisitionService) executeInstall(ctx context.Context, candidate Capab
 	return installed, nil
 }
 
-// executeEnable enables the provider by ensuring at least one executable
-// ProviderInstance exists for the provider definition.
+// executeEnable triggers provider enablement via the authoritative lifecycle.
+// It does NOT fabricate ProviderInstance directly; instead it delegates to the
+// ProviderLifecyclePort so that the canonical lifecycle produces instances.
 func (s *AcquisitionService) executeEnable(ctx context.Context, candidate CapabilityCandidate) error {
 	s.mu.RLock()
 	reg := s.providerRegistry
 	capSvc := s.capabilityService
+	lc := s.providerLifecycle
 	s.mu.RUnlock()
 
 	if reg == nil {
@@ -353,7 +393,7 @@ func (s *AcquisitionService) executeEnable(ctx context.Context, candidate Capabi
 		if def == nil {
 			continue
 		}
-		if err := s.enableProviderDefinition(def, candidate); err != nil {
+		if err := s.enableProviderViaLifecycle(def, candidate, lc); err != nil {
 			return err
 		}
 	}
@@ -361,9 +401,10 @@ func (s *AcquisitionService) executeEnable(ctx context.Context, candidate Capabi
 	return nil
 }
 
-// enableProviderDefinition registers an executable ProviderInstance for a
-// provider definition, enabling the capability for runtime use.
-func (s *AcquisitionService) enableProviderDefinition(def *capability.CapabilityProviderDefinition, candidate CapabilityCandidate) error {
+// enableProviderViaLifecycle enables a provider definition by delegating to the
+// authoritative ProviderLifecyclePort. It does NOT fabricate HealthReady or
+// ProviderAvailabilityAvailable; those states are owned by the lifecycle.
+func (s *AcquisitionService) enableProviderViaLifecycle(def *capability.CapabilityProviderDefinition, candidate CapabilityCandidate, lc ProviderLifecyclePort) error {
 	s.mu.RLock()
 	reg := s.providerRegistry
 	s.mu.RUnlock()
@@ -380,17 +421,19 @@ func (s *AcquisitionService) enableProviderDefinition(def *capability.Capability
 		}
 	}
 
+	if lc == nil {
+		return fmt.Errorf("provider lifecycle not available for provider %s", def.ID)
+	}
+
 	instanceID := capability.ProviderInstanceID(fmt.Sprintf("acq_%s_%d", def.ID, time.Now().UnixNano()))
 
 	inst := capability.CapabilityProviderInstance{
-		ID:           instanceID,
-		ProviderID:   def.ID,
+		ID:          instanceID,
+		ProviderID:  def.ID,
 		CapabilityID: def.CapabilityID,
-		Placement:    def.Placement,
-		Health:       capability.HealthReady,
-		Availability: capability.ProviderAvailabilityAvailable,
-		ExtensionID:  def.ExtensionID,
-		ModuleID:     def.ModuleID,
+		Placement:   def.Placement,
+		ExtensionID: def.ExtensionID,
+		ModuleID:    def.ModuleID,
 	}
 
 	if def.Placement == capability.ProviderPlacementDevice {
@@ -404,15 +447,16 @@ func (s *AcquisitionService) enableProviderDefinition(def *capability.Capability
 		}
 	}
 
-	if err := reg.RegisterInstance(inst); err != nil {
+	if err := lc.RegisterInstance(inst); err != nil {
 		return fmt.Errorf("register instance for provider %s: %w", def.ID, err)
 	}
 
 	return nil
 }
 
-// executeReconcile verifies provider instances are available and consistent
-// after enablement by checking that the capability is now executable.
+// executeReconcile waits for the authoritative state to produce an executable
+// provider instance with bounded waiting. It does NOT poll infinitely and does
+// NOT fabricate success.
 func (s *AcquisitionService) executeReconcile(ctx context.Context, candidate CapabilityCandidate) error {
 	s.mu.RLock()
 	reg := s.providerRegistry
@@ -428,15 +472,27 @@ func (s *AcquisitionService) executeReconcile(ctx context.Context, candidate Cap
 		capID = candidate.Capabilities[0]
 	}
 
-	// Verify at least one executable instance now exists.
-	if reg.CountExecutableInstances(capID) > 0 {
-		return nil
-	}
-	if capSvc != nil && capSvc.HasExecutableProvider(capID) {
-		return nil
-	}
+	// Bounded waiting: poll with timeout for authoritative executable state.
+	deadline := time.Now().Add(30 * time.Second)
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
 
-	return ErrReconcileFailed
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ticker.C:
+			if reg.CountExecutableInstances(capID) > 0 {
+				return nil
+			}
+			if capSvc != nil && capSvc.HasExecutableProvider(capID) {
+				return nil
+			}
+			if time.Now().After(deadline) {
+				return ErrReconcileTimeout
+			}
+		}
+	}
 }
 
 // rollbackPlan attempts to undo the execution of a plan after a failure.

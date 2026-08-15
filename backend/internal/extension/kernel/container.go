@@ -12,6 +12,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/builtin"
 	"github.com/u-ai/backend/internal/extension/kernel/canary"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	"github.com/u-ai/backend/internal/extension/kernel/capability/acquisition"
 	"github.com/u-ai/backend/internal/extension/kernel/chat_ui_extension"
 	"github.com/u-ai/backend/internal/extension/kernel/contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/dependency"
@@ -234,6 +235,8 @@ type Container struct {
 	ProviderInvoker          *KernelProviderInvoker
 
 	EventBridgePublisher      *eventbridge.Publisher
+
+	AcquisitionService *acquisition.AcquisitionService
 }
 
 func (c *Container) Close() error {

@@ -5,19 +5,28 @@ import (
 	"sync"
 )
 
+// InstallerRegistryOpts holds optional dependencies for constructing Installers.
+// When provided, InstallerRegistry will create real implementations instead of placeholders.
+type InstallerRegistryOpts struct {
+	PackageInstallPort PackageInstallPort
+	MCPInstallPort     MCPInstallPort
+	SkillInstallPort   SkillInstallPort
+	EnableExistingPort EnableExistingPort
+}
+
 // InstallerRegistry 管理所有 Installer 的注册与查找。
 // 按 InstallMethod 分发到对应的 Installer 实现。
 type InstallerRegistry struct {
-	mu        sync.RWMutex
+	mu         sync.RWMutex
 	installers map[InstallMethod]Installer
 }
 
-// NewInstallerRegistry 创建 InstallerRegistry 并注册所有内置 Installer。
-func NewInstallerRegistry() *InstallerRegistry {
+// NewInstallerRegistry 创建 InstallerRegistry。如果 opts 提供了 port，则创建真实实现。
+func NewInstallerRegistry(opts *InstallerRegistryOpts) *InstallerRegistry {
 	r := &InstallerRegistry{
 		installers: make(map[InstallMethod]Installer),
 	}
-	r.registerDefaults()
+	r.registerDefaults(opts)
 	return r
 }
 
@@ -51,10 +60,20 @@ func (r *InstallerRegistry) Methods() []InstallMethod {
 }
 
 // registerDefaults 注册所有内置 Installer 实现。
-func (r *InstallerRegistry) registerDefaults() {
-	r.installers[InstallExtension] = &ExtensionPackageInstaller{}
-	r.installers[InstallMCP] = &MCPInstaller{}
-	r.installers[InstallSkill] = &SkillInstaller{}
-	r.installers[InstallGeneratedSkill] = &GeneratedSkillInstaller{}
-	r.installers[InstallEnableExisting] = &EnableExistingInstaller{}
+func (r *InstallerRegistry) registerDefaults(opts *InstallerRegistryOpts) {
+	if opts != nil {
+		if opts.PackageInstallPort != nil {
+			r.installers[InstallExtension] = NewExtensionPackageInstaller(opts.PackageInstallPort)
+		}
+		if opts.MCPInstallPort != nil {
+			r.installers[InstallMCP] = NewMCPInstaller(opts.MCPInstallPort)
+		}
+		if opts.SkillInstallPort != nil {
+			r.installers[InstallSkill] = NewSkillInstaller(opts.SkillInstallPort)
+			r.installers[InstallGeneratedSkill] = NewGeneratedSkillInstaller(opts.SkillInstallPort)
+		}
+		if opts.EnableExistingPort != nil {
+			r.installers[InstallEnableExisting] = NewEnableExistingInstaller(opts.EnableExistingPort)
+		}
+	}
 }

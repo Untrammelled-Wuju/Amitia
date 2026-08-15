@@ -30,6 +30,8 @@ var (
 	ErrProviderRegistryUnavailable  = errors.New("acquisition: provider registry unavailable")
 	ErrProviderDefinitionNotFound   = errors.New("acquisition: provider definition not found for capability")
 	ErrToolRegistryNil              = errors.New("acquisition: tool registry is nil")
+	ErrRuntimeNotLive               = errors.New("acquisition: device runtime not live")
+	ErrReconcileTimeout             = errors.New("acquisition: reconcile timed out waiting for executable provider")
 )
 
 type AcquisitionError struct {
