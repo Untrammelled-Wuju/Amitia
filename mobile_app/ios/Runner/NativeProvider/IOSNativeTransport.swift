@@ -40,7 +40,7 @@ import Foundation
                 let error = IOSNativeError(code: "TRANSPORT_UNAVAILABLE", message: "transport not available")
                 let response = IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
-                    requestID: request.requestID,
+                    requestId: request.requestId,
                     status: "error",
                     result: nil,
                     error: error

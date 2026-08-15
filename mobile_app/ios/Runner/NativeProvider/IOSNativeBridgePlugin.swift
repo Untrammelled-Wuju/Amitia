@@ -76,16 +76,16 @@ final class IOSNativeBridgePlugin {
             return
         }
 
-        let protocolVersion = args["protocolVersion"] as? String ?? "1.0"
-        let requestID = args["requestID"] as? String ?? ""
+        let protocolVersion = args["protocolVersion"] as? Int ?? 1
+        let requestId = args["requestId"] as? String ?? ""
         let platform = args["platform"] as? String ?? "ios"
         let operation = args["operation"] as? String ?? ""
         let payload = args["payload"] as? [String: Any]
 
-        guard !requestID.isEmpty else {
+        guard !requestId.isEmpty else {
             result(FlutterError(
                 code: "INVALID_ARGUMENT",
-                message: "requestID must not be empty",
+                message: "requestId must not be empty",
                 details: nil
             ))
             return
@@ -102,7 +102,7 @@ final class IOSNativeBridgePlugin {
 
         let request = IOSNativeRequest(
             protocolVersion: protocolVersion,
-            requestID: requestID,
+            requestId: requestId,
             platform: platform,
             operation: operation,
             payload: payload
@@ -166,7 +166,7 @@ final class IOSNativeBridgePlugin {
     private func serializeResponse(_ response: IOSNativeResponse) -> [String: Any] {
         var map: [String: Any] = [
             "protocolVersion": response.protocolVersion,
-            "requestID": response.requestID,
+            "requestId": response.requestId,
             "status": response.status
         ]
         if let result = response.result {
