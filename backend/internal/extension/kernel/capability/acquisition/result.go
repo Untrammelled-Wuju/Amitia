@@ -12,6 +12,9 @@ type AcquisitionResult struct {
 	TransactionID string `json:"transactionId,omitempty"`
 	CandidateID   string `json:"candidateId,omitempty"`
 
+	ExecutionID string `json:"executionId,omitempty"`
+	ResumeID    string `json:"resumeId,omitempty"`
+
 	Installed bool `json:"installed"`
 	Enabled   bool `json:"enabled"`
 
