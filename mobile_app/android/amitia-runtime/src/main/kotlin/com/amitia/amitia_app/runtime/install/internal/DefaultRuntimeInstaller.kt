@@ -257,7 +257,7 @@ internal class DefaultRuntimeInstaller(
 
             val manifestResult = manifestBuilder.buildFromInstalledTree(
                 runtimeVersion = verifiedPackage.packageIndex.runtimeVersion,
-                sourceCommit = verifiedPackage.packageSha256.take(40),
+                sourceCommit = verifiedPackage.packageIndex.sourceRevision,
                 packageId = verifiedPackage.packageIndex.packageId,
                 packageSha256 = verifiedPackage.packageSha256,
                 rootfsId = rootfsInfo.rootfsId,

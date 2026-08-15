@@ -42,7 +42,7 @@ internal class DefaultRuntimeManifestBuilder(
             hostAbi = abiStatus.abi,
             runtimeKind = RuntimeManifestTarget.RUNTIME_KIND_PROOT,
             guestPlatform = RuntimeManifestTarget.GUEST_PLATFORM_LINUX,
-            guestArchitecture = abiStatus.abi,
+            guestArchitecture = "arm64",
             distribution = "amitia",
             distributionRelease = runtimeVersion,
         )
@@ -56,7 +56,7 @@ internal class DefaultRuntimeManifestBuilder(
 
         val paths = RuntimeManifestPaths(
             rootfsHostPath = layout.rootfsRoot.absolutePath,
-            runtimeRootHostPath = layout.versionsRoot.absolutePath,
+            runtimeRootHostPath = layout.runtimeVersionRoot(runtimeVersion).absolutePath,
             configHostPath = layout.configRoot.absolutePath,
             dataHostPath = layout.dataRoot.absolutePath,
             cacheHostPath = layout.cacheRoot.absolutePath,
