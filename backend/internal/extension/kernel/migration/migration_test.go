@@ -2,6 +2,8 @@ package migration
 
 import (
 	"testing"
+
+	"github.com/u-ai/backend/internal/extension/kernel/permission"
 )
 
 func makeTestMigration(id, fromRange, toVersion, reversibility string) MigrationDefinition {
@@ -17,7 +19,7 @@ func makeTestMigration(id, fromRange, toVersion, reversibility string) Migration
 		DataDomains:            []DataDomain{{Domain: "extension_storage", Storage: "sqlite", Namespace: "test_data"}},
 		Idempotency:            IdempotencyIdempotent,
 		Reversibility:          Reversibility(reversibility),
-		PermissionRequirements: []PermissionRequirement{{PermissionID: "storage:read", Scope: "extension"}},
+		PermissionRequirements: []PermissionRequirement{{PermissionID: "storage:read", Scope: permission.PermissionScope{Type: permission.ScopeExtension}}},
 		ScopeRule:              ScopeRule{BindingType: "module", ModuleIDs: []string{"main"}},
 		ResourceLimits:         TaskResourceLimits{MaxMemoryMB: 256, MaxCPUPercent: 50, MaxDiskMB: 512, MaxDurationSecs: 300},
 		DefinitionHash:         id,

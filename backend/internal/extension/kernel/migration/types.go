@@ -3,6 +3,8 @@ package migration
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/u-ai/backend/internal/extension/kernel/permission"
 )
 
 type MigrationType string
@@ -54,10 +56,7 @@ type MigrationCondition struct {
 	Actual   json.RawMessage `json:"actual,omitempty"`
 }
 
-type PermissionRequirement struct {
-	PermissionID string `json:"permission_id"`
-	Scope        string `json:"scope"`
-}
+type PermissionRequirement = permission.PermissionRequirement
 
 type ScopeRule struct {
 	BindingType string   `json:"binding_type"`

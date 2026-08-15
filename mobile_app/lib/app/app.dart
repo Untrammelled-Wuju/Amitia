@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../core/native_bridge/providers/native_bridge_relay_bootstrap_provider.dart';
 import '../core/runtime/runtime_bootstrap_provider.dart';
 import '../core/runtime/runtime_bootstrap_phase.dart';
 import '../core/runtime/runtime_bridge_provider.dart';
@@ -242,6 +243,7 @@ class AmitiaApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    ref.watch(nativeBridgeRelayBootstrapProvider);
     final themeMode = ref.watch(themeModeProvider);
     final router = ref.watch(goRouterProvider);
 

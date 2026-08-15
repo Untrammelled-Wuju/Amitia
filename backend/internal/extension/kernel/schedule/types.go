@@ -3,6 +3,8 @@ package schedule
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/u-ai/backend/internal/extension/kernel/permission"
 )
 
 type TriggerType string
@@ -199,12 +201,7 @@ type ScheduleConcurrencyPolicy struct {
 	PerTargetLimit    int `json:"perTargetLimit"`
 }
 
-type PermissionRequirement struct {
-	Permission string          `json:"permission"`
-	Reason     string          `json:"reason,omitempty"`
-	Required   bool            `json:"required"`
-	Scope      json.RawMessage `json:"scope,omitempty"`
-}
+type PermissionRequirement = permission.PermissionRequirement
 
 type ScopeRule struct {
 	ScopeType  string   `json:"scopeType"`

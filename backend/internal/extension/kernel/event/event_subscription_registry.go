@@ -524,9 +524,6 @@ func defaultFilterFields(typeDef EventTypeDefinition) []string {
 	return []string{"eventTypeId", "aggregateId", "partitionKey", "depth"}
 }
 
-func (p PermissionRequirement) String() string {
-	return fmt.Sprintf("%s/%s", p.Permission, p.Scope)
-}
 
 func (d EventSubscriptionDefinition) ProducerPolicyFor(extensionID string) bool {
 	return d.ExtensionID == extensionID

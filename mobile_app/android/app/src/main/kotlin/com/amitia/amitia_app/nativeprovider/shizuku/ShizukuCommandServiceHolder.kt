@@ -6,10 +6,27 @@ import rikka.shizuku.Shizuku
 
 object ShizukuCommandServiceHolder {
     @Volatile
-    var service: ShizukuCommandService? = null
-        private set
+    private var service: ShizukuCommandService? = null
 
     private var connection: ServiceConnection? = null
+    private var serviceConnectedListener: (() -> Unit)? = null
+
+    fun setServiceConnectedListener(listener: (() -> Unit)?) {
+        serviceConnectedListener = listener
+    }
+
+    fun onServiceCreated(instance: ShizukuCommandService) {
+        service = instance
+        serviceConnectedListener?.invoke()
+    }
+
+    fun onServiceDestroyed(instance: ShizukuCommandService) {
+        if (service === instance) {
+            service = null
+        }
+    }
+
+    fun currentService(): ShizukuCommandService? = service
 
     fun bindService(): Boolean {
         if (service != null) return true
@@ -24,7 +41,10 @@ object ShizukuCommandServiceHolder {
             val conn = object : ServiceConnection {
                 override fun onServiceConnected(name: android.content.ComponentName?, binder: IBinder?) {
                     binder?.let {
-                        service = (it as? ShizukuCommandService)
+                        val svc = it as? ShizukuCommandService
+                        if (svc != null) {
+                            service = svc
+                        }
                     }
                 }
 

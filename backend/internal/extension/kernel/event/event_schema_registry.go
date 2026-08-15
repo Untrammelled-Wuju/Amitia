@@ -207,8 +207,8 @@ func DefaultHostEventTypes() []EventTypeDefinition {
 			OrderingPolicy:   OrderingPerPartition,
 			RetentionPolicy:  EventRetentionPolicy{MaxAge: 7 * 24 * 60 * 60 * 1e9, MaxDeliveryCount: 5},
 			SensitiveFields: []SensitiveFieldRule{
-				{Path: "text", Classification: "message_content", DefaultAction: SensitiveAllowWithPermission, RequiredPermission: []PermissionRequirement{{Permission: "message.read"}}},
-				{Path: "attachments", Classification: "attachments", DefaultAction: SensitiveAllowWithPermission, RequiredPermission: []PermissionRequirement{{Permission: "message.read"}}},
+{Path: "text", Classification: "message_content", DefaultAction: SensitiveAllowWithPermission, RequiredPermission: []PermissionRequirement{{PermissionID: "message.read"}}},
+			{Path: "attachments", Classification: "attachments", DefaultAction: SensitiveAllowWithPermission, RequiredPermission: []PermissionRequirement{{PermissionID: "message.read"}}},
 				{Path: "context", Classification: "context", DefaultAction: SensitiveOmit},
 				{Path: "systemPrompt", Classification: "prompt", DefaultAction: SensitiveOmit},
 			},

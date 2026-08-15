@@ -105,6 +105,9 @@ class NativeBridgeRelayClient {
     try {
       final data = jsonDecode(raw) as Map<String, dynamic>;
       final envelope = RelayEnvelope.fromMap(data);
+      if (envelope.generation > 0) {
+        _currentGeneration = envelope.generation;
+      }
       if (envelope.type == 'native_bridge.request' &&
           envelope.requestId.isNotEmpty &&
           envelope.payload != null) {
@@ -124,7 +127,7 @@ class NativeBridgeRelayClient {
         type: 'native_bridge.response',
         requestId: request.requestId,
         platform: platform,
-        generation: _currentGeneration,
+        generation: request.generation,
         payload: nativeResponse,
       );
       socket.add(responseEnvelope.json());
@@ -133,7 +136,7 @@ class NativeBridgeRelayClient {
         type: 'native_bridge.response',
         requestId: request.requestId,
         platform: platform,
-        generation: _currentGeneration,
+        generation: request.generation,
         payload: {
           'protocolVersion': 1,
           'requestID': request.requestId,

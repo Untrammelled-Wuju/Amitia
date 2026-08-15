@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/gamehost/control"
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/ipc"
@@ -73,7 +74,7 @@ func (s *ProtocolControlEffectSink) ExecuteAuthorized(
 		return fmt.Errorf("connection registry unavailable for effect delivery")
 	}
 
-	outputID := fmt.Sprintf("effect-%s-%d", s.sinkID, time.Now().UnixNano())
+	outputID := fmt.Sprintf("effect-%s-%s", s.sinkID, uuid.New().String())
 	dispatch := SinkEffectDispatchPayload{
 		SinkID:     s.sinkID,
 		Service:    string(serviceID),
@@ -97,7 +98,7 @@ func (s *ProtocolControlEffectSink) ExecuteAuthorized(
 	envelope := protocol.Envelope{
 		Protocol: protocol.ProtocolVersion,
 		Type:     protocol.MessageTypeRequest,
-		ID:       fmt.Sprintf("sink-dispatch-%s-%s", runtimeID, s.sinkID),
+		ID:       outputID,
 		Method:   SinkDispatchMethod,
 		Payload:  dispatchBytes,
 	}
@@ -111,16 +112,32 @@ func (s *ProtocolControlEffectSink) ExecuteAuthorized(
 		return fmt.Errorf("sink dispatch rejected: %s - %s", resp.Error.Code, resp.Error.Message)
 	}
 
+	if len(resp.Payload) == 0 {
+		return fmt.Errorf("effect commit failed: empty response payload")
+	}
+
 	var commit SinkEffectCommitResult
-	if len(resp.Payload) > 0 {
-		if err := json.Unmarshal(resp.Payload, &commit); err == nil {
-			if !commit.Committed {
-				if commit.ErrorCode != "" {
-					return fmt.Errorf("effect commit failed: %s - %s", commit.ErrorCode, commit.Message)
-				}
-				return fmt.Errorf("effect not committed by plugin")
-			}
+	if err := json.Unmarshal(resp.Payload, &commit); err != nil {
+		return fmt.Errorf("effect commit failed: invalid response payload: %w", err)
+	}
+
+	if !commit.Accepted {
+		return fmt.Errorf("effect not accepted by plugin")
+	}
+
+	if !commit.Committed {
+		if commit.ErrorCode != "" {
+			return fmt.Errorf("effect commit failed: %s - %s", commit.ErrorCode, commit.Message)
 		}
+		return fmt.Errorf("effect not committed by plugin")
+	}
+
+	if commit.EffectID != "" && commit.EffectID != outputID {
+		return fmt.Errorf("effect commit mismatch: expected %s, got %s", outputID, commit.EffectID)
+	}
+
+	if commit.Generation > 0 && commit.Generation != permit.Generation {
+		return fmt.Errorf("effect commit generation mismatch: expected %d, got %d", permit.Generation, commit.Generation)
 	}
 
 	return nil

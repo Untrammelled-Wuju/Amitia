@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"strings"
 	"time"
+
+	"github.com/u-ai/backend/internal/extension/kernel/permission"
 )
 
 type EventTypeID string
@@ -93,11 +95,7 @@ type EventProjectionRule struct {
 	RequiresScope      string
 }
 
-type PermissionRequirement struct {
-	Permission string
-	Scope      string
-	Reason     string
-}
+type PermissionRequirement = permission.PermissionRequirement
 
 type EventTypeDefinition struct {
 	EventTypeID      EventTypeID

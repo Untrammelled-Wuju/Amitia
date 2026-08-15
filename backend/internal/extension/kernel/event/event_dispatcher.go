@@ -155,7 +155,7 @@ func (p *DeliveryPlanner) PlanDeliveries(ctx context.Context, record OutboxRecor
 func (p *DeliveryPlanner) extractGrantedPermissions(sub *ResolvedSubscription) map[string]bool {
 	result := make(map[string]bool)
 	for _, req := range sub.Definition.PermissionRequirements {
-		result[req.Permission] = true
+		result[req.PermissionID] = true
 	}
 	return result
 }

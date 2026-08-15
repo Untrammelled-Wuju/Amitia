@@ -30,11 +30,7 @@ type ScopeRule struct {
 	ModuleID       string `json:"moduleId,omitempty"`
 }
 
-type PermissionRequirement struct {
-	PermissionID string `json:"permissionId"`
-	Scope        string `json:"scope,omitempty"`
-	Required     bool   `json:"required"`
-}
+type PermissionRequirement = permission.PermissionRequirement
 
 type HookContributionDefinition struct {
 	ContributionID         string                  `json:"contributionId"`
@@ -117,14 +113,7 @@ func (d HookContributionDefinition) EffectiveFailurePolicy(point HookPointDefini
 }
 
 func (d HookContributionDefinition) ToPermissionRequirements() []permission.PermissionRequirement {
-	out := make([]permission.PermissionRequirement, 0, len(d.PermissionRequirements))
-	for _, pr := range d.PermissionRequirements {
-		out = append(out, permission.PermissionRequirement{
-			PermissionID: pr.PermissionID,
-			Optional:     !pr.Required,
-		})
-	}
-	return out
+	return d.PermissionRequirements
 }
 
 func (d HookContributionDefinition) ToScopeEvaluationRequest() scope.ScopeEvaluationRequest {

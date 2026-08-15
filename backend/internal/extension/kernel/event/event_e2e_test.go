@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	_ "github.com/glebarez/sqlite"
 )
 
@@ -501,7 +502,7 @@ func TestEventE2E_NoPermission_NoDelivery(t *testing.T) {
 	}
 
 	def := makeTestSubscriptionDef("contrib-no-perm", "com.test/noperm", "system.test")
-	def.PermissionRequirements = []PermissionRequirement{{Permission: "test.permission", Scope: "extension"}}
+	def.PermissionRequirements = []PermissionRequirement{{PermissionID: "test.permission", Scope: permission.PermissionScope{Type: permission.ScopeExtension}}}
 	if err := svc.RegisterSubscription(context.Background(), def); err != nil {
 		t.Fatalf("register subscription: %v", err)
 	}

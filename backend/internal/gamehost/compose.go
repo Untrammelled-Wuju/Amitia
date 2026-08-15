@@ -181,11 +181,14 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 
 	handshakeController := handshake.NewHandshakeControllerAdapter(handshakeMgr, readyGate)
 
+	responseCorrelator := rpc.NewRPCResponseCorrelator(rpcLifecycle.Registry())
+
 	controlPlane, err := ipc.NewControlPlane(ipc.ControlPlaneConfig{
 		Registry:            connReg,
 		Resolver:            integration.NewRuntimePeerResolver(topologyStore),
 		Dispatcher:          rpcDispatcher,
 		HandshakeController: handshakeController,
+		ResponseCorrelator:  responseCorrelator,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("compose control plane: %w", err)

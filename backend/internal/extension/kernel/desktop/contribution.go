@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"time"
+
+	"github.com/u-ai/backend/internal/extension/kernel/permission"
 )
 
 type LocalizedText struct {
@@ -91,11 +93,7 @@ type DesktopShortcutDefinition struct {
 	Repeatable  bool   `json:"repeatable,omitempty"`
 }
 
-type PermissionRequirement struct {
-	PermissionID string `json:"permissionId"`
-	Scope        string `json:"scope,omitempty"`
-	Required     bool   `json:"required"`
-}
+type PermissionRequirement = permission.PermissionRequirement
 
 type ScopeRule struct {
 	ScopeType string `json:"scopeType"`
