@@ -143,22 +143,23 @@ func DefaultMigrations() []Migration {
 		DesktopPetRuntimeV2CommandForwardFixMigration(),
 		DesktopPetImportStagingsMigration(),
 		DesktopPetMigrationControlMigration(),
-	DesktopPetDevicesMigration(),
-	DesktopPetLocalSessionFixMigration(),
-	ExtensionEventOutboxDomainCausationMigration(),
-	DesktopPetImportSagaFieldsMigration(),
-	WorkspaceMountsMigration(),
-	WorkspaceMountsRemoteMigration(),
-	ModelConfigProtocolMigration(),
-	ModelConfigProviderConfigMigration(),
-	EmbeddingConfigProviderConfigMigration(),
-	VoiceProfileMigration(),
-	MemoryTimeQueryIndexesMigration(),
-	MemorySummaryConsolidationMigration(),
-	ProductionCutoverMigration(),
-	TaskRunPauseColumnsMigration(),
-	ArtifactsMigration(),
-	AccountSessionSecurityMigration(),
+		DesktopPetDevicesMigration(),
+		DesktopPetLocalSessionFixMigration(),
+		ExtensionEventOutboxDomainCausationMigration(),
+		DesktopPetImportSagaFieldsMigration(),
+		WorkspaceMountsMigration(),
+		WorkspaceMountsRemoteMigration(),
+		ModelConfigProtocolMigration(),
+		ModelConfigProviderConfigMigration(),
+		EmbeddingConfigProviderConfigMigration(),
+		VoiceProfileMigration(),
+		MemoryTimeQueryIndexesMigration(),
+		MemorySummaryConsolidationMigration(),
+		ProductionCutoverMigration(),
+		TaskRunPauseColumnsMigration(),
+		ArtifactsMigration(),
+		AccountSessionSecurityMigration(),
+	}
 }
 
 func ArtifactsMigration() Migration {
@@ -295,3 +296,4 @@ func TaskRunPauseColumnsMigration() Migration {
 		},
 	}
 }
+

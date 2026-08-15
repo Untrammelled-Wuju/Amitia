@@ -2189,6 +2189,8 @@ var schemaMigrations = []string{
 	`CREATE INDEX IF NOT EXISTS idx_kernel_device_rc_device ON kernel_device_runtime_credentials(device_id)`,
 	`CREATE INDEX IF NOT EXISTS idx_kernel_device_rc_runtime ON kernel_device_runtime_credentials(user_id, device_id, runtime_id)`,
 	`CREATE INDEX IF NOT EXISTS idx_kernel_device_rc_status ON kernel_device_runtime_credentials(status)`,
+	`DROP INDEX IF EXISTS idx_ext_event_outbox_idempotency`,
+	`CREATE UNIQUE INDEX IF NOT EXISTS idx_ext_event_outbox_idempotency ON extension_event_outbox(idempotency_key)`,
 }
 
 type dbExecutor interface {

@@ -33,6 +33,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/extension/kernel/eventbridge"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
+	coreexec "github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
 	"github.com/u-ai/backend/internal/extension/kernel/hook"
@@ -862,6 +863,13 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		toolFacade.SetHookService(hookService)
 	}
 
+	execService := coreexec.NewExecutionService()
+	execService.RegisterResumeHandler(NewUISourceResumeHandler())
+	execService.RegisterResumeHandler(NewUISchemaResumeHandler())
+	execService.RegisterResumeHandler(NewApprovalResumeHandler())
+
+	runtimeState := NewRuntimeState()
+
 	uiHost := ui_contribution.NewUIHost()
 	uiHost.Bridge().SetScopeSnapshotFactory(func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error) {
 		invocationID := fmt.Sprintf("ui-sess-%d", time.Now().UnixNano())
@@ -1173,11 +1181,14 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		EnablementService:      enablementService,
 		EnablementResolver:     enablementResolver,
 
-		ToolRegistry:    toolRegistry,
-		AdapterRegistry: adapterRegistry,
-		ToolFacade:      toolFacade,
+	ToolRegistry:    toolRegistry,
+	AdapterRegistry: adapterRegistry,
+	ToolFacade:      toolFacade,
 
-		HostCommandRegistry: hostCmdRegistry,
+	ExecutionService: execService,
+	RuntimeState:     runtimeState,
+
+	HostCommandRegistry: hostCmdRegistry,
 
 		TaskRepository:     taskRepo,
 		TaskRuntimeService: taskRuntimeService,
