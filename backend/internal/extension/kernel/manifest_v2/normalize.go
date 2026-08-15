@@ -65,6 +65,160 @@ func normalizeContributionKind(kind string) string {
 	}
 }
 
+func normalizeProviderContributions(modIdx int, mod *ModuleMeta, report *ValidationReport) bool {
+	var providerContribs []int
+	for idx, c := range mod.Contributions {
+		if c.Kind == "provider" {
+			providerContribs = append(providerContribs, idx)
+		}
+	}
+	if len(providerContribs) == 0 {
+		return true
+	}
+
+	canonicalID := ""
+	canonicalPriority := 0
+	canonicalLabels := map[string]string{}
+	canonicalMetadata := map[string]any{}
+	var capabilityIDs []string
+	conflict := false
+
+	for _, idx := range providerContribs {
+		c := mod.Contributions[idx]
+		spec := c.Spec
+
+		provID := ""
+		if spec != nil {
+			if v, ok := spec["id"].(string); ok {
+				provID = strings.ToLower(strings.TrimSpace(v))
+			}
+		}
+		if provID == "" {
+			provID = strings.ToLower(strings.TrimSpace(c.ID))
+		}
+		if provID != "" {
+			if canonicalID == "" {
+				canonicalID = provID
+			} else if canonicalID != provID {
+				report.AddWarningCode(
+					fmt.Sprintf("modules[%d].contributions[%d].kind", modIdx, idx),
+					"provider_contribution_id_conflict",
+					fmt.Sprintf("multiple provider contributions with different ids: %q vs %q", canonicalID, provID),
+				)
+				conflict = true
+			}
+		}
+
+		provPriority := 0
+		if spec != nil {
+			if v, ok := spec["priority"].(float64); ok {
+				provPriority = int(v)
+			}
+		}
+		if canonicalPriority == 0 && provPriority != 0 {
+			canonicalPriority = provPriority
+		}
+
+		if spec != nil {
+			if labels, ok := spec["labels"].(map[string]any); ok {
+				for k, v := range labels {
+					if vs, ok := v.(string); ok {
+						canonicalLabels[k] = vs
+					}
+				}
+			}
+		}
+
+		if spec != nil {
+			if caps, ok := spec["capabilities"].([]any); ok {
+				for _, cap := range caps {
+					if capID, ok := cap.(string); ok {
+						capabilityIDs = append(capabilityIDs, strings.ToLower(strings.TrimSpace(capID)))
+					} else if capMap, ok := cap.(map[string]any); ok {
+						if v, ok := capMap["id"].(string); ok {
+							capabilityIDs = append(capabilityIDs, strings.ToLower(strings.TrimSpace(v)))
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if conflict {
+		return false
+	}
+
+	if mod.Provider != nil && mod.Provider.ID != "" && canonicalID != "" && mod.Provider.ID != canonicalID {
+		report.AddWarningCode(
+			fmt.Sprintf("modules[%d].provider", modIdx),
+			"provider_contribution_conflicts_with_existing",
+			fmt.Sprintf("provider contribution id %q conflicts with existing module.provider.id %q", canonicalID, mod.Provider.ID),
+		)
+		return false
+	}
+
+	if canonicalID != "" {
+		if mod.Provider == nil {
+			mod.Provider = &ProviderMetadataMeta{ID: canonicalID}
+		} else if mod.Provider.ID == "" {
+			mod.Provider.ID = canonicalID
+		}
+	}
+	if canonicalPriority != 0 && mod.Provider != nil {
+		mod.Provider.Priority = canonicalPriority
+	}
+	if len(canonicalLabels) > 0 && mod.Provider != nil {
+		if mod.Provider.Labels == nil {
+			mod.Provider.Labels = map[string]string{}
+		}
+		for k, v := range canonicalLabels {
+			mod.Provider.Labels[k] = v
+		}
+	}
+	if len(canonicalMetadata) > 0 && mod.Provider != nil {
+		if mod.Provider.Metadata == nil {
+			mod.Provider.Metadata = map[string]any{}
+		}
+		for k, v := range canonicalMetadata {
+			mod.Provider.Metadata[k] = v
+		}
+	}
+
+	seenCaps := map[string]bool{}
+	for _, pc := range mod.ProvidedCapabilities {
+		seenCaps[strings.ToLower(strings.TrimSpace(pc.ID))] = true
+	}
+	for _, capID := range capabilityIDs {
+		if !seenCaps[capID] {
+			mod.ProvidedCapabilities = append(mod.ProvidedCapabilities, ProvidedCapabilityMeta{ID: capID})
+			seenCaps[capID] = true
+		}
+	}
+
+	newContribs := make([]ContributionMeta, 0, len(mod.Contributions))
+	for idx, c := range mod.Contributions {
+		isProvider := false
+		for _, pi := range providerContribs {
+			if idx == pi {
+				isProvider = true
+				break
+			}
+		}
+		if !isProvider {
+			newContribs = append(newContribs, c)
+		}
+	}
+	mod.Contributions = newContribs
+
+	report.AddWarningCode(
+		fmt.Sprintf("modules[%d]", modIdx),
+		"provider_contribution_normalized",
+		"legacy provider contribution normalized to module.provider + providedCapabilities",
+	)
+
+	return true
+}
+
 func normalizeStringList(values []string, lower bool) []string {
 	result := make([]string, 0, len(values))
 	seen := make(map[string]bool)
@@ -197,30 +351,35 @@ func (m Manifest) NormalizeCompatibility() (Manifest, ValidationReport) {
 		}
 
 		if mod.Provider != nil && len(mod.Contributions) > 0 {
-			hasProviderContribution := false
 			for _, c := range mod.Contributions {
 				if c.Kind == "provider" {
-					hasProviderContribution = true
+					report.AddWarningCode(
+						fmt.Sprintf("modules[%d].provider", i),
+						"provider_contribution_deprecated",
+						"provider contribution kind is deprecated in favor of module.provider + providedCapabilities",
+					)
 					break
 				}
 			}
-			if hasProviderContribution {
-				report.AddWarningCode(
-					fmt.Sprintf("modules[%d].provider", i),
-					"provider_contribution_deprecated",
-					"provider contribution kind is deprecated in favor of module.provider + providedCapabilities",
-				)
-			}
+		}
+
+		if normalized := normalizeProviderContributions(i, mod, &report); !normalized {
+			report.AddError(
+				fmt.Sprintf("modules[%d].contributions", i),
+				"provider_contribution_deprecated_invalid",
+				"legacy provider contribution cannot be unambiguously mapped to module.provider + providedCapabilities",
+			)
 		}
 
 		for j := range mod.Contributions {
 			normalizedKind := normalizeContributionKind(mod.Contributions[j].Kind)
 			if normalizedKind != mod.Contributions[j].Kind {
+				oldKind := mod.Contributions[j].Kind
 				mod.Contributions[j].Kind = normalizedKind
 				report.AddWarningCode(
 					fmt.Sprintf("modules[%d].contributions[%d].kind", i, j),
 					"contribution_kind_canonicalized",
-					fmt.Sprintf("contribution kind %q canonicalized to %q", mod.Contributions[j].Kind, normalizedKind),
+					fmt.Sprintf("contribution kind %q canonicalized to %q", oldKind, normalizedKind),
 				)
 			}
 		}
