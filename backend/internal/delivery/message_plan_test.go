@@ -50,7 +50,8 @@ func TestMessagePlanFailureDoesNotStopLaterText(t *testing.T) {
 		}
 	}
 	adapter := &orderedPlanAdapter{}
-	worker := NewWorker(store, []ChannelAdapter{adapter}, WorkerConfig{BatchSize: 10, Interval: time.Second})
+	resolver := NewMapChannelResolverWith([]ChannelAdapter{adapter})
+	worker := NewWorker(store, resolver, WorkerConfig{BatchSize: 10, Interval: time.Second})
 	worker.processBatch(context.Background())
 	if !reflect.DeepEqual(adapter.delivered, []string{"text", "emote", "text"}) {
 		t.Fatalf("投递未严格按计划继续执行: %#v", adapter.delivered)
