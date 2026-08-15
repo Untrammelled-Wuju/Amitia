@@ -3,7 +3,7 @@ import os
 import tempfile
 import unittest
 
-from program_tree_validator import validate_program_tree, load_program_contract
+from .program_tree_validator import validate_program_tree, load_program_contract
 
 
 class TestProgramTreeValidator(unittest.TestCase):

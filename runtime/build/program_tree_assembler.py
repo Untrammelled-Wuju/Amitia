@@ -5,11 +5,11 @@ import tempfile
 from dataclasses import dataclass, field
 from typing import List, Dict, Optional, Tuple
 
-from .common.artifact_record import FrozenArtifactRecord
-from .common.hashing import sha256_file, sha256_tree_manifest
-from .common.safe_extract import safe_extract
-from .common.tree_manifest import generate_tree_manifest
-from .common.errors import BuildError, ValidationError
+from common.artifact_record import FrozenArtifactRecord
+from common.hashing import sha256_file, sha256_tree_manifest
+from common.safe_extract import safe_extract
+from common.tree_manifest import generate_tree_manifest
+from common.errors import BuildError, ValidationError
 
 
 FORBIDDEN_STAGING_ENTRIES = {
