@@ -1,12 +1,12 @@
 package schema
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
-)
 
-// SchemaDraftState represents the lifecycle state of a schema document.
-type SchemaDraftState string
+	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
+)
 
 const (
 	DraftStateDraft     SchemaDraftState = "draft"
@@ -14,42 +14,13 @@ const (
 	DraftStatePublished SchemaDraftState = "published"
 )
 
-// SchemaUIDocument is the top-level representation of a generated schema UI.
-type SchemaUIDocument struct {
-	Version     string            `json:"version"`
-	SchemaID    string            `json:"schemaId"`
-	Revision    int               `json:"revision"`
-	State       SchemaDraftState `json:"state"`
-	Title       string            `json:"title"`
-	Root        SchemaNode        `json:"root"`
-	ExtensionID string            `json:"extensionId,omitempty"`
-	Metadata    map[string]any    `json:"metadata,omitempty"`
-}
+type SchemaDraftState string
 
-// SchemaNode is a single node in the schema tree.
-type SchemaNode struct {
-	Type       string         `json:"type"`
-	ID         string         `json:"id,omitempty"`
-	Properties map[string]any `json:"properties,omitempty"`
-	Children   []SchemaNode   `json:"children,omitempty"`
-	Bindings   []DataBinding  `json:"bindings,omitempty"`
-	Actions    []SchemaAction `json:"actions,omitempty"`
-}
+// SchemaUIDocument is the canonical schema UI document from schema_ui package.
+type SchemaUIDocument = schema_ui.SchemaUIDocument
 
-// DataBinding connects a node property to a data source.
-type DataBinding struct {
-	Property   string `json:"property"`
-	Source     string `json:"source"`
-	DataSource string `json:"dataSource,omitempty"`
-}
-
-// SchemaAction defines an action triggered by user interaction.
-type SchemaAction struct {
-	Trigger string         `json:"trigger"`
-	Type    string         `json:"type"`
-	Target  string         `json:"target,omitempty"`
-	Payload map[string]any `json:"payload,omitempty"`
-}
+// SchemaUINode is the canonical schema UI node from schema_ui package.
+type SchemaUINode = schema_ui.SchemaUINode
 
 // SchemaUIGenerator generates SchemaUIDocuments from natural language descriptions.
 type SchemaUIGenerator struct {
@@ -62,7 +33,6 @@ func NewSchemaUIGenerator(catalog *ComponentCatalog) *SchemaUIGenerator {
 }
 
 // Generate produces a valid SchemaUIDocument from a description.
-// The description is parsed to determine the layout and components needed.
 func (g *SchemaUIGenerator) Generate(
 	description string,
 	availableComps []SchemaComponentType,
@@ -72,83 +42,60 @@ func (g *SchemaUIGenerator) Generate(
 		return nil, fmt.Errorf("description must not be empty")
 	}
 
-	// Build the set of allowed component types.
 	allowed := make(map[SchemaComponentType]bool)
 	for _, c := range availableComps {
 		allowed[c] = true
 	}
 
-	// Determine the title from the description (first sentence or first 60 chars).
 	title := extractTitle(description)
 
-	// Build the root page node.
-	rootNode := SchemaNode{
-		Type:       string(CompPage),
-		ID:         "root",
-		Properties: map[string]any{"title": title},
-		Children:   []SchemaNode{},
-	}
+	var children []SchemaUINode
 
-	// Analyze the description to determine required sections and components.
 	sections := analyzeDescription(desc)
-
 	for _, sec := range sections {
-		sectionNode := SchemaNode{
-			Type:       string(CompSection),
-			ID:         generateNodeID("section"),
-			Properties: map[string]any{"title": sec.title},
-			Children:   []SchemaNode{},
-		}
-
+		sectionChildren := []SchemaUINode{}
 		for _, comp := range sec.components {
-			// Fall back to text if the component is not in the allowed list.
 			compType := comp
 			if !allowed[comp] {
 				compType = CompText
 			}
-
-			 // Skip if the catalog doesn't know this type.
 			if _, ok := g.catalog.Get(compType); !ok {
 				compType = CompText
 			}
-
 			node := buildNode(compType, g.catalog)
 			node.ID = generateNodeID(string(compType))
-			sectionNode.Children = append(sectionNode.Children, node)
+			sectionChildren = append(sectionChildren, node)
 		}
 
-		rootNode.Children = append(rootNode.Children, sectionNode)
+		sectionProps, _ := json.Marshal(map[string]any{"title": sec.title})
+		children = append(children, SchemaUINode{
+			Type:     schema_ui.NodeSection,
+			ID:       generateNodeID("section"),
+			Props:    sectionProps,
+			Children: sectionChildren,
+		})
 	}
 
-	// If no sections were inferred, create a default one with text.
-	if len(rootNode.Children) == 0 {
-		sectionNode := SchemaNode{
-			Type:       string(CompSection),
-			ID:         generateNodeID("section"),
-			Properties: map[string]any{"title": title},
-			Children: []SchemaNode{
-				{
-					Type:       string(CompText),
-					ID:         generateNodeID("text"),
-					Properties: map[string]any{"content": description},
-				},
+	if len(children) == 0 {
+		textProps, _ := json.Marshal(map[string]any{"text": description})
+		children = []SchemaUINode{
+			{
+				Type:   schema_ui.NodeText,
+				ID:     generateNodeID("text"),
+				Props:  textProps,
 			},
 		}
-		rootNode.Children = append(rootNode.Children, sectionNode)
 	}
 
 	doc := &SchemaUIDocument{
-		Version:  "1.0",
-		SchemaID: generateSchemaID(),
-		Revision: 1,
-		State:    DraftStateDraft,
-		Title:    title,
-		Root:     rootNode,
-		Metadata: map[string]any{
-			"generator":  "natural-language-schema-ui",
-			"generated":  true,
-			"components": componentTypesToStrings(availableComps),
+		SchemaVersion: schema_ui.SchemaUIVersion,
+		Type:          "document",
+		Title:         title,
+		Layout: map[string]any{
+			"title":     title,
+			"generator": "natural-language-schema-ui",
 		},
+		Children: children,
 	}
 
 	return doc, nil
@@ -201,41 +148,40 @@ func analyzeDescription(desc string) []sectionDesc {
 	return sections
 }
 
-// buildNode constructs a SchemaNode for a given component type using catalog metadata.
-func buildNode(compType SchemaComponentType, catalog *ComponentCatalog) SchemaNode {
+// buildNode constructs a SchemaUINode for a given component type using catalog metadata.
+func buildNode(compType SchemaComponentType, catalog *ComponentCatalog) SchemaUINode {
 	schema, ok := catalog.Get(compType)
 	if !ok {
-		return SchemaNode{
-			Type:       string(compType),
-			Properties: map[string]any{},
+		return SchemaUINode{
+			Type: schema_ui.NodeType(string(compType)),
 		}
 	}
 
 	props := map[string]any{}
-	// Apply default values from the property schema.
 	for _, p := range schema.Properties {
 		if p.Default != nil {
 			props[p.Name] = p.Default
 		}
 	}
 
-	// Provide reasonable placeholder values for required properties.
 	for _, p := range schema.Properties {
 		if p.Required {
 			if _, exists := props[p.Name]; !exists {
-				props[p.Name] = placeholderForProperty(p)
+				props[p.Name] = placeholderValueForProperty(p)
 			}
 		}
 	}
 
-	return SchemaNode{
-		Type:       string(compType),
-		Properties: props,
+	propsJSON, _ := json.Marshal(props)
+
+	return SchemaUINode{
+		Type:  schema_ui.NodeType(string(compType)),
+		Props: propsJSON,
 	}
 }
 
-// placeholderForProperty returns a placeholder value based on property type.
-func placeholderForProperty(p PropertySchema) any {
+// placeholderValueForProperty returns a placeholder value based on property type.
+func placeholderValueForProperty(p PropertySchema) any {
 	switch p.Type {
 	case "string":
 		return "placeholder"

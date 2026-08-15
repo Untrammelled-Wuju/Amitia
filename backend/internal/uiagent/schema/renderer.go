@@ -2,17 +2,21 @@ package schema
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+
+	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
 )
 
-// FlutterRenderer renders a SchemaUIDocument into a Flutter-compatible widget tree.
-type FlutterRenderer struct {
+// FlutterSchemaProjection produces a preview-only widget tree description from a SchemaUIDocument.
+// It is NOT a real renderer - for production rendering, use the Flutter mobile_app schema UI renderer.
+type FlutterSchemaProjection struct {
 	catalog *ComponentCatalog
 }
 
-// NewFlutterRenderer creates a renderer backed by the given catalog.
-func NewFlutterRenderer(catalog *ComponentCatalog) *FlutterRenderer {
-	return &FlutterRenderer{catalog: catalog}
+// NewFlutterSchemaProjection creates a projection backed by the given catalog.
+func NewFlutterSchemaProjection(catalog *ComponentCatalog) *FlutterSchemaProjection {
+	return &FlutterSchemaProjection{catalog: catalog}
 }
 
 // RenderOutput is the result of rendering a schema document.
@@ -41,19 +45,19 @@ type WidgetBinding struct {
 }
 
 // Render converts a SchemaUIDocument into a Flutter widget tree.
-func (r *FlutterRenderer) Render(ctx context.Context, doc *SchemaUIDocument, req RenderSchemaRequest) (*RenderOutput, error) {
+func (r *FlutterSchemaProjection) Project(ctx context.Context, doc *SchemaUIDocument, req RenderSchemaRequest) (*RenderOutput, error) {
 	if doc == nil {
 		return nil, fmt.Errorf("document is nil")
 	}
-	if doc.Root.Type == "" {
-		return nil, fmt.Errorf("document root is empty")
+	if len(doc.Children) == 0 {
+		return nil, fmt.Errorf("document has no children")
 	}
 
 	output := &RenderOutput{
 		PreviewToken: req.PreviewToken,
 	}
 
-	rootWidget, errs := r.renderNode(&doc.Root)
+	rootWidget, errs := r.projectSchemaNode(&doc.Children[0])
 	output.WidgetTree = rootWidget
 	output.WidgetCount = countWidgetNodes(rootWidget)
 	output.BinderCount = countBindings(rootWidget)
@@ -66,33 +70,38 @@ func (r *FlutterRenderer) Render(ctx context.Context, doc *SchemaUIDocument, req
 	return output, nil
 }
 
-func (r *FlutterRenderer) renderNode(node *SchemaNode) (*WidgetNode, []string) {
+func (r *FlutterSchemaProjection) projectSchemaNode(node *schema_ui.SchemaUINode) (*WidgetNode, []string) {
 	if node == nil {
 		return nil, nil
 	}
 
 	widget := &WidgetNode{
-		Type:       node.Type,
-		WidgetName: r.mapToFlutterWidget(node.Type),
+		Type:       string(node.Type),
+		WidgetName: r.mapToFlutterWidget(string(node.Type)),
 		Properties: make(map[string]interface{}),
 	}
 
 	var errors []string
 
-	for k, v := range node.Properties {
-		widget.Properties[k] = v
-	}
-
-	for _, binding := range node.Bindings {
-		widget.Binding = &WidgetBinding{
-			Property: binding.Property,
-			Source:   binding.Source,
+	if len(node.Props) > 0 {
+		var props map[string]any
+		if err := json.Unmarshal(node.Props, &props); err == nil {
+			for k, v := range props {
+				widget.Properties[k] = v
+			}
 		}
-		break
 	}
 
-	for _, child := range node.Children {
-		childWidget, childErrs := r.renderNode(&child)
+	if len(node.Bindings) > 0 {
+		binding := node.Bindings[0]
+		widget.Binding = &WidgetBinding{
+			Property: binding.Path,
+			Source:   string(binding.Source),
+		}
+	}
+
+	for i := range node.Children {
+		childWidget, childErrs := r.projectSchemaNode(&node.Children[i])
 		if childWidget != nil {
 			widget.Children = append(widget.Children, childWidget)
 		}
@@ -100,10 +109,10 @@ func (r *FlutterRenderer) renderNode(node *SchemaNode) (*WidgetNode, []string) {
 	}
 
 	if r.catalog != nil {
-		if schema, ok := r.catalog.Get(SchemaComponentType(node.Type)); ok {
+		if schema, ok := r.catalog.Get(SchemaComponentType(string(node.Type))); ok {
 			for _, reqProp := range schema.RequiredProps {
 				if _, exists := widget.Properties[reqProp]; !exists {
-					errors = append(errors, fmt.Sprintf("node %q missing required property %q", node.Type, reqProp))
+					errors = append(errors, fmt.Sprintf("node %q missing required property %q", string(node.Type), reqProp))
 				}
 			}
 		}
@@ -112,7 +121,7 @@ func (r *FlutterRenderer) renderNode(node *SchemaNode) (*WidgetNode, []string) {
 	return widget, errors
 }
 
-func (r *FlutterRenderer) mapToFlutterWidget(schemaType string) string {
+func (r *FlutterSchemaProjection) mapToFlutterWidget(schemaType string) string {
 	switch SchemaComponentType(schemaType) {
 	case CompPage:
 		return "Scaffold"
