@@ -292,10 +292,6 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	if err := step(4, StepBuildCandidateDefinitions, "completed", "{}", ""); err != nil {
 		return fail(StepBuildCandidateDefinitions, err, "")
 	}
-	var previous *domain.ExtensionInstallation
-	var previousDefinition *domain.ExtensionDefinition
-	var previousModules []domain.ModuleDefinition
-	var previousContributions []domain.ContributionDefinition
 	if installed, currentErr := r.container.InstallationRepository.GetInstallation(ctx, definition.ID); currentErr == nil {
 		previous = &installed
 		if oldDef, oldErr := r.container.DefinitionRepository.GetExtension(ctx, definition.ID, installed.InstalledVersion); oldErr == nil {
