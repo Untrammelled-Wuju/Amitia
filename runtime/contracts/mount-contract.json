@@ -5,49 +5,49 @@
       "role": "program",
       "source": "${HOST_PROGRAM_ROOT}",
       "target": "/opt/amitia",
-      "writable": false,
+      "readOnly": true,
       "description": "Active read-only program source mounted into guest"
     },
     {
       "role": "config",
       "source": "${HOST_CONFIG_ROOT}",
       "target": "/etc/amitia",
-      "writable": true,
+      "readOnly": false,
       "description": "Persistent configuration directory"
     },
     {
       "role": "data",
       "source": "${HOST_DATA_ROOT}",
       "target": "/var/lib/amitia",
-      "writable": true,
+      "readOnly": false,
       "description": "Persistent data directory (security, providers, storage)"
     },
     {
       "role": "cache",
       "source": "${HOST_CACHE_ROOT}",
       "target": "/var/cache/amitia",
-      "writable": true,
+      "readOnly": false,
       "description": "Cache directory (npm cache)"
     },
     {
       "role": "logs",
       "source": "${HOST_LOG_ROOT}",
       "target": "/var/log/amitia",
-      "writable": true,
+      "readOnly": false,
       "description": "Log directory"
     },
     {
       "role": "run",
       "source": "${HOST_RUN_ROOT}",
       "target": "/run/amitia",
-      "writable": true,
+      "readOnly": false,
       "description": "Runtime state directory"
     },
     {
       "role": "home",
       "source": "${HOST_HOME_ROOT}",
       "target": "/home/amitia",
-      "writable": true,
+      "readOnly": false,
       "description": "Guest home directory for runtime user"
     }
   ],
