@@ -28,7 +28,7 @@ func (e *BridgeCoordinateExecutor) Tap(
 
 	bridgeReq := androidnative.NativeBridgeRequest{
 		ProtocolVersion: 1,
-		RequestID:       "",
+		RequestId:       "",
 		Operation:       "interaction.tap",
 		Payload: map[string]any{
 			"displayId": displayID,
@@ -62,7 +62,7 @@ func (e *BridgeCoordinateExecutor) LongPress(
 
 	bridgeReq := androidnative.NativeBridgeRequest{
 		ProtocolVersion: 1,
-		RequestID:       "",
+		RequestId:       "",
 		Operation:       "interaction.long_press",
 		Payload: map[string]any{
 			"displayId":  displayID,
@@ -105,7 +105,7 @@ func (e *BridgeCoordinateExecutor) Swipe(
 
 	bridgeReq := androidnative.NativeBridgeRequest{
 		ProtocolVersion: 1,
-		RequestID:       "",
+		RequestId:       "",
 		Operation:       "interaction.swipe",
 		Payload: map[string]any{
 			"displayId":  request.DisplayID,

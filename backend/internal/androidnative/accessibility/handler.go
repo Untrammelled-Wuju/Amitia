@@ -54,7 +54,7 @@ func (h *AccessibilityHandler) handleStatus(ctx context.Context, request capabil
 
 	bridgeReq := androidnative.NativeBridgeRequest{
 		ProtocolVersion: request.ProtocolVersion,
-		RequestID:       request.RequestID,
+		RequestId:       request.RequestID,
 		Operation:       OperationStatus,
 		Payload:         map[string]any{},
 	}
@@ -90,7 +90,7 @@ func (h *AccessibilityHandler) handleOpenSettings(ctx context.Context, request c
 
 	bridgeReq := androidnative.NativeBridgeRequest{
 		ProtocolVersion: request.ProtocolVersion,
-		RequestID:       request.RequestID,
+		RequestId:       request.RequestID,
 		Operation:       OperationOpenSettings,
 		Payload:         map[string]any{},
 	}
@@ -114,11 +114,11 @@ func (h *AccessibilityHandler) handleOpenSettings(ctx context.Context, request c
 func mapNativeBridgeResponse(resp androidnative.NativeBridgeResponse, requestID string) capability.AndroidBridgeResponse {
 	result := capability.AndroidBridgeResponse{
 		ProtocolVersion: resp.ProtocolVersion,
-		RequestID:       resp.RequestID,
+		RequestID:       resp.RequestId,
 		Status:          resp.Status,
 	}
 
-	if resp.RequestID != requestID {
+	if resp.RequestId != requestID {
 		result.Status = "error"
 		result.Error = &capability.AndroidError{
 			Code:    "BRIDGE_INVALID_RESPONSE",

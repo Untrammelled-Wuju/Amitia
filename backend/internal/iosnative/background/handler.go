@@ -105,7 +105,7 @@ func (h *BackgroundHandler) bridgeCall(ctx context.Context, request nativebridge
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       operation,
 			Payload:         payload,
@@ -385,7 +385,7 @@ func (h *BackgroundHandler) handleCheckpointGet(ctx context.Context, request nat
 		}
 		return nativebridge.Response{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Status:          "success",
 			Result:          result,
 		}
@@ -420,7 +420,7 @@ func (h *BackgroundHandler) handleCheckpointSet(ctx context.Context, request nat
 		}
 		return nativebridge.Response{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Status:          "success",
 		}
 	}
@@ -448,7 +448,7 @@ func (h *BackgroundHandler) handleCheckpointClear(ctx context.Context, request n
 		}
 		return nativebridge.Response{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Status:          "success",
 		}
 	}

@@ -29,7 +29,7 @@ func (a *NativeBridgeAdapter) Execute(ctx context.Context, operation string, pay
 	requestID := fmt.Sprintf("vdr_%d", reqID)
 	req := androidnative.NativeBridgeRequest{
 		ProtocolVersion: 1,
-		RequestID:       requestID,
+		RequestId:       requestID,
 		Platform:        "android",
 		Operation:       operation,
 		Payload:         payload,

@@ -61,7 +61,7 @@ func (e *shizukuExecutor) executeInteraction(ctx context.Context, operation stri
 
 	req := nativebridge.Request{
 		ProtocolVersion: nativebridge.AndroidBridgeProtocolVersion,
-		RequestID:       generateShizukuRequestID(),
+		RequestId:       generateShizukuRequestID(),
 		Platform:        "android",
 		Operation:       operation,
 		Payload:         payload,
