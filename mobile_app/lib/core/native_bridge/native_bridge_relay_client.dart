@@ -139,7 +139,7 @@ class NativeBridgeRelayClient {
         generation: request.generation,
         payload: {
           'protocolVersion': 1,
-          'requestID': request.requestId,
+          'requestId': request.requestId,
           'status': 'error',
           'error': {
             'code': 'NATIVE_ERROR',
