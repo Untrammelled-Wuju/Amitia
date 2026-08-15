@@ -24,6 +24,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/extension/kernel/eventbridge"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
+	coreexec "github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
 	"github.com/u-ai/backend/internal/extension/kernel/hook"
@@ -112,6 +113,9 @@ type Container struct {
 	ToolRegistry    *capability.ToolRegistry
 	AdapterRegistry *capability.RuntimeAdapterRegistry
 	ToolFacade      *ToolFacade
+
+	ExecutionService *coreexec.ExecutionService
+	RuntimeState     *RuntimeState
 
 	HostCommandRegistry *HostCommandRegistry
 
