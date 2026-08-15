@@ -52,6 +52,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
 	"github.com/u-ai/backend/internal/gamehost"
+	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval"
 	"github.com/u-ai/backend/internal/runtimeprofile"
 )
 
@@ -237,6 +238,8 @@ type Container struct {
 	EventBridgePublisher      *eventbridge.Publisher
 
 	AcquisitionService *acquisition.AcquisitionService
+
+	BackgroundRemovalRegistry *backgroundremoval.Registry
 }
 
 func (c *Container) Close() error {

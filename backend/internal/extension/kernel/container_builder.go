@@ -68,6 +68,7 @@ import (
 	"github.com/u-ai/backend/internal/imagegen"
 	"github.com/u-ai/backend/internal/imageintelligence"
 	"github.com/u-ai/backend/internal/imageprovider"
+	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval"
 	"github.com/u-ai/backend/internal/media"
 	"github.com/u-ai/backend/internal/platform/process"
 	"github.com/u-ai/backend/internal/runtimehost"
@@ -106,6 +107,8 @@ type ContainerBuilder struct {
 	desktopPetPluginCapabilities *integration.DesktopPetPluginCapabilities
 	runtimeProfile               runtimeprofile.Profile
 	runtimePolicy                runtimeprofile.Policy
+
+	backgroundBootstrapFunc func() (*backgroundremoval.Registry, error)
 }
 
 func NewContainerBuilder() *ContainerBuilder {
@@ -238,6 +241,11 @@ func (b *ContainerBuilder) WithBrowserProvider(provider browser.BrowserProvider)
 func (b *ContainerBuilder) WithRuntimeProfile(profile runtimeprofile.Profile) *ContainerBuilder {
 	b.runtimeProfile = profile
 	b.runtimePolicy = runtimeprofile.PolicyFor(profile)
+	return b
+}
+
+func (b *ContainerBuilder) WithBackgroundBootstrapFunc(fn func() (*backgroundremoval.Registry, error)) *ContainerBuilder {
+	b.backgroundBootstrapFunc = fn
 	return b
 }
 
@@ -694,6 +702,15 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if err := builtinProviderReconciler.Reconcile(); err != nil {
 		cancel()
 		return nil, fmt.Errorf("builtin provider reconcile failed: %w", err)
+	}
+
+	var bgRegistry *backgroundremoval.Registry
+	if b.backgroundBootstrapFunc != nil {
+		bgRegistry, err = b.backgroundBootstrapFunc()
+		if err != nil {
+			cancel()
+			return nil, fmt.Errorf("background removal bootstrap failed: %w", err)
+		}
 	}
 	cancel()
 
@@ -1295,6 +1312,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		ProviderInvoker:          kernelProviderInvoker,
 
 		AcquisitionService: acquisitionService,
+
+		BackgroundRemovalRegistry: bgRegistry,
 
 		EventBridgePublisher:      eventBridgePublisher,
 	}
