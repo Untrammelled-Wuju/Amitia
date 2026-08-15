@@ -26,7 +26,7 @@ func BuildSearchExtension(version string) Definition {
 		},
 		Version:         ver,
 		ManifestVersion: 1,
-		Domain:          domain.ExtensionDomainCore,
+		Domain:          domain.ExtensionDomainGeneral,
 		Placement:       domain.ExtensionPlacementCloud,
 		Publisher: domain.PublisherReference{
 			PublisherID: "com.amitia",
@@ -123,7 +123,7 @@ func BuildDeepSearchExtension(version string) Definition {
 		},
 		Version:         ver,
 		ManifestVersion: 1,
-		Domain:          domain.ExtensionDomainCore,
+		Domain:          domain.ExtensionDomainGeneral,
 		Placement:       domain.ExtensionPlacementCloud,
 		Publisher: domain.PublisherReference{
 			PublisherID: "com.amitia",
