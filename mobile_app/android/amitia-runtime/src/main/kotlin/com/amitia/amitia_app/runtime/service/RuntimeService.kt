@@ -47,7 +47,9 @@ class RuntimeService : Service() {
         val generation: Long,
         val session: ProotSession,
         val launchStartId: Int,
+        var latestStartId: Int,
         var stopStartId: Int? = null,
+        var stopRequested: Boolean = false,
         var terminalEvent: TerminalEventKind? = null,
     )
 
@@ -279,8 +281,10 @@ class RuntimeService : Service() {
                 generation = generation,
                 session = realSession,
                 launchStartId = startId,
+                latestStartId = startId,
             )
         )
+        realSession.markStarted()
     }
 
     private fun resolveActiveProgramSource(generation: Long, startId: Int): java.io.File? {
@@ -433,7 +437,7 @@ class RuntimeService : Service() {
 
             if (sessionContext.terminalEvent != null) return
 
-            val terminalKind = if (exit.stopRequested) {
+            val terminalKind = if (sessionContext.stopRequested) {
                 TerminalEventKind.EXPECTED_STOPPED
             } else {
                 TerminalEventKind.UNEXPECTED_TERMINATION
@@ -511,13 +515,7 @@ class RuntimeService : Service() {
         return if (stopResult) {
             ServiceTeardownResult.FullyStopped(startId)
         } else {
-            if (reason == ServiceTeardownReason.STARTUP_FAILURE || reason == ServiceTeardownReason.EXPECTED_STOP) {
-                try { stopSelf() } catch (_: Exception) {}
-                val recheck = try { stopSelfResult(startId) } catch (_: Exception) { false }
-                if (recheck) ServiceTeardownResult.FullyStopped(startId) else ServiceTeardownResult.Failed
-            } else {
-                ServiceTeardownResult.Failed
-            }
+            ServiceTeardownResult.Failed
         }
     }
 
@@ -530,9 +528,7 @@ class RuntimeService : Service() {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } catch (_: Exception) {
         }
-        if (!tryStopSelf(cleanupContext.launchStartId)) {
-            try { stopSelf() } catch (_: Exception) {}
-        }
+        tryStopSelf(cleanupContext.launchStartId)
         endpoint.notify(
             RuntimeServiceHostEvent.StartupFailed(
                 generation = cleanupContext.generation,
@@ -574,7 +570,8 @@ class RuntimeService : Service() {
                 return
             }
             sessionContext.stopStartId = stopStartId
-            sessionContext.terminalEvent = TerminalEventKind.EXPECTED_STOPPED
+            sessionContext.stopRequested = true
+            sessionContext.latestStartId = stopStartId
             val session = currentSessionRef.get()
             if (session != null && session.isAlive()) {
                 session.requestStop()

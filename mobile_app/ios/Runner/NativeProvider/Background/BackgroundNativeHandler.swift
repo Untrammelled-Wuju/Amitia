@@ -15,9 +15,6 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
         "background.task.reconcile",
         "background.runtime.readiness",
         "background.runtime.ensure",
-        "background.checkpoint.get",
-        "background.checkpoint.set",
-        "background.checkpoint.clear",
         "background.binding.get"
     ]
 
@@ -74,12 +71,6 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
             return handleRuntimeReadiness(request)
         case "background.runtime.ensure":
             return handleRuntimeEnsure(request)
-        case "background.checkpoint.get":
-            return handleCheckpointGet(request)
-        case "background.checkpoint.set":
-            return handleCheckpointSet(request)
-        case "background.checkpoint.clear":
-            return handleCheckpointClear(request)
         case "background.binding.get":
             return handleBindingGet(request)
         default:
@@ -408,70 +399,6 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
         )
     }
 
-    private func handleCheckpointGet(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        guard let identifier = request.payload?["identifier"] as? String else {
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
-                status: "error",
-                result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing identifier")
-            )
-        }
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
-            status: "ok",
-            result: ["identifier": identifier, "hasCheckpoint": false],
-            error: nil
-        )
-    }
-
-    private func handleCheckpointSet(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        guard let identifier = request.payload?["identifier"] as? String else {
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
-                status: "error",
-                result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing identifier")
-            )
-        }
-        let generation = Int64(request.payload?["generation"] as? Int ?? 0)
-        let phase = request.payload?["phase"] as? String ?? ""
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
-            status: "ok",
-            result: [
-                "identifier": identifier,
-                "generation": generation,
-                "phase": phase,
-                "stored": true
-            ],
-            error: nil
-        )
-    }
-
-    private func handleCheckpointClear(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        guard let identifier = request.payload?["identifier"] as? String else {
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestID: request.requestID,
-                status: "error",
-                result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing identifier")
-            )
-        }
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestID: request.requestID,
-            status: "ok",
-            result: ["identifier": identifier, "cleared": true],
-            error: nil
-        )
-    }
-
     private func handleBindingGet(_ request: IOSNativeRequest) -> IOSNativeResponse {
         guard let identifier = request.payload?["identifier"] as? String else {
             return IOSNativeResponse(
@@ -519,6 +446,9 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func pendingTaskCount() -> Int {
+        if #available(iOS 13.0, *) {
+            return BGTaskScheduler.shared.pendingTaskRequests().count
+        }
         return 0
     }
 }

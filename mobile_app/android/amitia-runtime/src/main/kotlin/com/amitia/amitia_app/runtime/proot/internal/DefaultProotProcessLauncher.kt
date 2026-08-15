@@ -22,7 +22,7 @@ internal class DefaultProotProcessLauncher(private val sessionIdGenerator: Sessi
                 observer = observer,
                 generation = generation,
             )
-            session.markStarted(); return session
+            return session
         } catch (e: SecurityException) { throw ProotLaunchException(ProotErrorCode.PROCESS_START_FAILED, "security: ${e.message}", e) }
         catch (e: java.io.IOException) { throw ProotLaunchException(ProotErrorCode.PROCESS_START_FAILED, "io: ${e.message}", e) }
         catch (e: Exception) { throw ProotLaunchException(ProotErrorCode.PROCESS_START_FAILED, "failed: ${e.message}", e) }
