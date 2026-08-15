@@ -108,7 +108,7 @@ try {
     Copy-Item -Path $NodeArtifacts -Destination (Join-Path $RuntimeDir "node") -Recurse
     Copy-Item -Path $BackendTar -Destination (Join-Path $RuntimeDir "backend.tar.xz") -Force
     Copy-Item -Path $QdrantTar -Destination (Join-Path $RuntimeDir "qdrant.tar.xz") -Force
-    Copy-Item -Path $RootfsTar -Destination (Join-Path $RootfsDir "rootfs.tar") -Force
+    Copy-Item -Path $RootfsTar -Destination (Join-Path $RootfsDir "rootfs.tar.xz") -Force
     Copy-Item -Path $NodeFilesSha -Destination (Join-Path $ComponentRecordsDir "node-files.sha256") -Force
 
     foreach ($component in $RequiredRecords) {
