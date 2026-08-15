@@ -227,6 +227,8 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	stableGeneration := PackageGenerationCurrent{}
 	targetGeneration := PackagePreparedGeneration{}
 	currentSwitched := false
+	readModelCommitted := false
+	var providerSnapshot []*capability.CapabilityProviderDefinition
 	step := func(order int, name, status, result, code string) error {
 		if renewErr := leaseGuard.AssertAlive(ctx); renewErr != nil {
 			return renewErr
@@ -247,6 +249,12 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 			if compensationErr := r.compensatePackageGeneration(context.Background(), stableGeneration, targetGeneration, currentSwitched); compensationErr != nil {
 				_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", name, "PACKAGE_RECOVERY_REQUIRED", compensationErr.Error(), false, guard)
 				return KernelInstallResult{}, errors.Join(cause, compensationErr)
+			}
+		}
+		if readModelCommitted {
+			if restoreErr := r.restorePackageReadModelSnapshot(context.Background(), definition.ID, previous, previousDefinition, previousModules, previousContributions, providerSnapshot); restoreErr != nil {
+				_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", name, "PACKAGE_RECOVERY_REQUIRED", restoreErr.Error(), false, guard)
+				return KernelInstallResult{}, errors.Join(cause, restoreErr)
 			}
 		}
 		_ = step(99, name, "failed", "{}", "PACKAGE_INSTALL_FAILED")

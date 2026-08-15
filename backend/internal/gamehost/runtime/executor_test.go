@@ -98,8 +98,7 @@ func (m *fakeRuntimeManager) IsEmergencyLatched(runtimeID domain.RuntimeInstance
 	return false
 }
 
-func (m *fakeRuntimeManager) SetEmergencyLatch(runtimeID domain.RuntimeInstanceID, latched bool) error {
-	return nil
+func (m *fakeRuntimeManager) SetEmergencyLatch(runtimeID domain.RuntimeInstanceID, latched bool) {
 }
 
 type fakeTopologyStore struct {

@@ -351,7 +351,7 @@ func (c *RecoveryCoordinator) executeRecoveryFlow(ctx context.Context, op *Recov
 			}
 		}
 		result.Success = true
-		result.RequiresRestart = false
+		result.RequiresRestart = true
 	}
 
 	return result, nil

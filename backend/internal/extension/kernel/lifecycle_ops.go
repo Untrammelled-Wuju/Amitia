@@ -771,6 +771,20 @@ func (r *Runtime) Uninstall(ctx context.Context, extensionID string) error {
 		}
 	}
 
+	if r.container.ExtensionProviderReconciler != nil {
+		if err := r.container.ExtensionProviderReconciler.RemoveExtension(extensionID); err != nil {
+			if inst.InstallationID != "" {
+				inst.InstallationState = domain.InstallationStateUninstallFailed
+				inst.EnablementState = domain.EnablementRequiresRecovery
+				inst.UpdatedAt = time.Now().UTC()
+				if putErr := r.container.InstallationRepository.PutInstallation(ctx, inst); putErr != nil {
+					log.Printf("[uninstall-tx] failed to persist uninstall_failed state for %s: %v", extensionID, putErr)
+				}
+			}
+			return fmt.Errorf("kernel: uninstall providers: %w", err)
+		}
+	}
+
 	if r.container.DesktopPetPluginBoundary != nil {
 		if err := r.container.DesktopPetPluginBoundary.HandleExtensionUninstalled(ctx, extID, version, "", ""); err != nil {
 			log.Printf("[uninstall-tx] desktop_pet_plugin boundary error: %v", err)
