@@ -15,16 +15,13 @@ import (
 	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/decision"
-	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/interaction"
 	"github.com/u-ai/backend/internal/memory"
-	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/psyche"
 	"github.com/u-ai/backend/internal/qdrant"
 	"github.com/u-ai/backend/internal/temporal"
 	visioncfg "github.com/u-ai/backend/internal/vision"
-	"github.com/u-ai/backend/internal/worldbook"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -132,10 +129,11 @@ type service struct {
 	charRepo            character.Repository
 	db                  *gorm.DB
 	psycheStore         psyche.PsycheStore
-	memorySvc           memory.Service
-	profileSvc          profile.Service
-	episodicSvc         episodic.Service
-	worldBookSvc        worldbook.Service
+	memoryPort          MemoryPort
+	profilePort         ProfilePort
+	episodicPort        EpisodicPort
+	worldBookPort       WorldBookPort
+	visionPort          VisionPort
 	wmCache             *WorkingMemoryCache
 	stateProvider       *ConversationStateProvider
 	compressor          *Compressor
@@ -385,9 +383,9 @@ func getVisionModelConfig() (*visioncfg.VisionConfig, error) {
 	return cfg, nil
 }
 
-func NewService(repo Repository, ctx *app.AppContext, memSvc memory.Service, profSvc profile.Service, epiSvc episodic.Service, wbSvc worldbook.Service, comp *Compressor, visionSvc visioncfg.Service, graphSvc graph.Service, psycheStore psyche.PsycheStore) Service {
-	if visionSvc != nil {
-		SetVisionModelConfigProvider(visionSvc.GetActive)
+func NewService(repo Repository, ctx *app.AppContext, memPort MemoryPort, profPort ProfilePort, epiPort EpisodicPort, wbPort WorldBookPort, comp *Compressor, visionPort VisionPort, graphSvc graph.Service, psycheStore psyche.PsycheStore) Service {
+	if visionPort != nil {
+		SetVisionModelConfigProvider(visionPort.GetActive)
 	}
 	graphLayer := graphSvc
 	if graphLayer == nil {
@@ -397,11 +395,11 @@ func NewService(repo Repository, ctx *app.AppContext, memSvc memory.Service, pro
 	stateProvider := NewConversationStateProvider(wmCache)
 	p := memory.NewPipeline(
 		memory.NewWorkingMemoryService(stateProvider),
-		profSvc.(memory.PipelineLayer),
-		epiSvc.(memory.PipelineLayer),
-		memSvc.(memory.PipelineLayer),
+		profPort,
+		epiPort,
+		memPort,
 		qdrant.NewQdrantClient(),
 		graphLayer,
 	)
-	return &service{repo: repo, charRepo: character.NewRepository(ctx), db: ctx.DB, psycheStore: psycheStore, memorySvc: memSvc, profileSvc: profSvc, episodicSvc: epiSvc, worldBookSvc: wbSvc, wmCache: wmCache, stateProvider: stateProvider, compressor: comp, pipeline: p, localModels: make(map[string]LocalModelInfer)}
+	return &service{repo: repo, charRepo: character.NewRepository(ctx), db: ctx.DB, psycheStore: psycheStore, memoryPort: memPort, profilePort: profPort, episodicPort: epiPort, worldBookPort: wbPort, visionPort: visionPort, wmCache: wmCache, stateProvider: stateProvider, compressor: comp, pipeline: p, localModels: make(map[string]LocalModelInfer)}
 }
