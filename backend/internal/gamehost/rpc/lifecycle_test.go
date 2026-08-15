@@ -84,7 +84,7 @@ func TestPendingRegistry_BasicCRUD(t *testing.T) {
 		Key:       RequestKey{RuntimeID: "r1", ServiceID: "s1", RequestID: "req-1"},
 		State:     RequestStatePending,
 		CreatedAt: time.Now().UTC(),
-		Done:      make(chan struct{}),
+		done:      make(chan struct{}),
 	}
 
 	ok, err := reg.Register(req)
@@ -124,7 +124,7 @@ func TestPendingRegistry_Timeout(t *testing.T) {
 		Key:       RequestKey{RuntimeID: "r1", ServiceID: "s1", RequestID: "req-1"},
 		State:     RequestStatePending,
 		CreatedAt: time.Now().UTC(),
-		Done:      make(chan struct{}),
+		done:      make(chan struct{}),
 	}
 
 	reg.Register(req)
@@ -147,7 +147,7 @@ func TestPendingRegistry_Cancel(t *testing.T) {
 		Key:       RequestKey{RuntimeID: "r1", ServiceID: "s1", RequestID: "req-1"},
 		State:     RequestStatePending,
 		CreatedAt: time.Now().UTC(),
-		Done:      make(chan struct{}),
+		done:      make(chan struct{}),
 	}
 
 	reg.Register(req)
@@ -171,7 +171,7 @@ func TestPendingRegistry_ListByPeer(t *testing.T) {
 			Key:       RequestKey{RuntimeID: "r1", ServiceID: "s1", RequestID: fmt.Sprintf("req-%d", i)},
 			State:     RequestStatePending,
 			CreatedAt: time.Now().UTC(),
-			Done:      make(chan struct{}),
+			done:      make(chan struct{}),
 		}
 		reg.Register(req)
 	}
@@ -190,7 +190,7 @@ func TestPendingRegistry_Shutdown(t *testing.T) {
 			Key:       RequestKey{RuntimeID: "r1", ServiceID: "s1", RequestID: fmt.Sprintf("req-%d", i)},
 			State:     RequestStatePending,
 			CreatedAt: time.Now().UTC(),
-			Done:      make(chan struct{}),
+			done:      make(chan struct{}),
 		}
 		reg.Register(req)
 	}
@@ -200,7 +200,7 @@ func TestPendingRegistry_Shutdown(t *testing.T) {
 	}
 
 	if r, ok := reg.(*pendingRequestRegistry); ok {
-		r.shutdown()
+		r.Shutdown()
 	}
 
 	if reg.Count() != 0 {

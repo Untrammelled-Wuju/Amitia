@@ -41,6 +41,8 @@ type RequestKey struct {
 	RequestID string
 }
 
+type RequestGeneration uint64
+
 func (k RequestKey) String() string {
 	return fmt.Sprintf("%s/%s/%s", k.RuntimeID, k.ServiceID, k.RequestID)
 }
@@ -88,16 +90,18 @@ type PendingRequest struct {
 	State     RequestState
 	CreatedAt time.Time
 
+	Generation RequestGeneration
+
 	Ctx        context.Context
 	CancelFunc context.CancelFunc
 
 	Target *RequestKey
 
-	Done chan struct{}
+	done chan struct{}
 
-	Result protocol.Envelope
+	result protocol.Envelope
 
-	Error error
+	err error
 
 	Fingerprint RequestFingerprint
 
@@ -108,6 +112,19 @@ type PendingRequest struct {
 
 func (r *PendingRequest) IsTerminal() bool {
 	return r.State.IsTerminal()
+}
+
+func (r *PendingRequest) DoneCh() chan struct{} {
+	return r.done
+}
+
+func (r *PendingRequest) Result() (protocol.Envelope, error) {
+	return r.result, r.err
+}
+
+func (r *PendingRequest) SetResult(env protocol.Envelope, err error) {
+	r.result = env
+	r.err = err
 }
 
 type RequestFingerprint string

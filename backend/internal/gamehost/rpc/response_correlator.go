@@ -11,7 +11,6 @@ import (
 type rpcResponseCorrelator struct {
 	mu       sync.Mutex
 	registry PendingRequestRegistry
-	pending  map[RequestKey]chan *protocol.Envelope
 }
 
 func NewRPCResponseCorrelator(registry PendingRequestRegistry) *rpcResponseCorrelator {
@@ -20,11 +19,10 @@ func NewRPCResponseCorrelator(registry PendingRequestRegistry) *rpcResponseCorre
 	}
 	return &rpcResponseCorrelator{
 		registry: registry,
-		pending:  make(map[RequestKey]chan *protocol.Envelope),
 	}
 }
 
-func (c *rpcResponseCorrelator) RegisterPending(peer ipc.Peer, requestID string) (chan *protocol.Envelope, func(), bool) {
+func (c *rpcResponseCorrelator) RegisterPending(peer ipc.Peer, requestID string, generation uint64) (ipc.PendingRequestHandle, bool) {
 	key := RequestKey{
 		RuntimeID: domain.RuntimeInstanceID(peer.RuntimeID),
 		ServiceID: domain.ServiceID(peer.ServiceID),
@@ -34,29 +32,19 @@ func (c *rpcResponseCorrelator) RegisterPending(peer ipc.Peer, requestID string)
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
-	if _, exists := c.pending[key]; exists {
-		return nil, nil, false
-	}
-
 	req := &PendingRequest{
-		Key:       key,
-		RequestID: requestID,
-		State:     RequestStatePending,
-		Done:      make(chan struct{}),
+		Key:         key,
+		RequestID:   requestID,
+		State:       RequestStatePending,
+		done:        make(chan struct{}),
+		Generation:  RequestGeneration(generation),
 	}
 
 	if _, err := c.registry.Register(req); err != nil {
-		return nil, nil, false
+		return nil, false
 	}
 
-	respCh := make(chan *protocol.Envelope, 1)
-	c.pending[key] = respCh
-
-	cancel := func() {
-		c.remove(key)
-	}
-
-	return respCh, cancel, true
+	return req, true
 }
 
 func (c *rpcResponseCorrelator) HandleResponse(peer ipc.Peer, envelope *protocol.Envelope) bool {
@@ -65,15 +53,6 @@ func (c *rpcResponseCorrelator) HandleResponse(peer ipc.Peer, envelope *protocol
 		ServiceID: domain.ServiceID(peer.ServiceID),
 		RequestID: envelope.RequestID,
 	}
-
-	c.mu.Lock()
-	respCh, ok := c.pending[key]
-	if !ok {
-		c.mu.Unlock()
-		return false
-	}
-	delete(c.pending, key)
-	c.mu.Unlock()
 
 	if envelope.Type == protocol.MessageTypeError {
 		c.registry.Fail(key, NewRPCErrorWithCause(
@@ -85,45 +64,17 @@ func (c *rpcResponseCorrelator) HandleResponse(peer ipc.Peer, envelope *protocol
 	} else {
 		c.registry.Complete(key, *envelope)
 	}
-
-	select {
-	case respCh <- envelope:
-	default:
-	}
 	return true
 }
 
 func (c *rpcResponseCorrelator) CancelByPeer(peer ipc.Peer) {
 	runtimeID := domain.RuntimeInstanceID(peer.RuntimeID)
 	serviceID := domain.ServiceID(peer.ServiceID)
-
-	c.mu.Lock()
-	var toCancel []RequestKey
-	for k := range c.pending {
-		if k.RuntimeID == runtimeID && k.ServiceID == serviceID {
-			toCancel = append(toCancel, k)
-		}
-	}
-	for _, k := range toCancel {
-		delete(c.pending, k)
-	}
-	c.mu.Unlock()
-
-	for _, k := range toCancel {
-		c.registry.Cancel(k)
-	}
+	c.registry.CancelByPeer(runtimeID, serviceID)
 }
 
-func (c *rpcResponseCorrelator) remove(key RequestKey) {
-	c.mu.Lock()
-	if _, ok := c.pending[key]; !ok {
-		c.mu.Unlock()
-		return
-	}
-	delete(c.pending, key)
-	c.mu.Unlock()
-
-	c.registry.Remove(key)
+func (c *rpcResponseCorrelator) CancelByRuntime(runtimeID string) {
+	c.registry.CancelByRuntime(domain.RuntimeInstanceID(runtimeID))
 }
 
 var _ ipc.ResponseCorrelator = (*rpcResponseCorrelator)(nil)

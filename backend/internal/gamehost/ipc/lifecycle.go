@@ -108,10 +108,16 @@ type IDGenerator interface {
 	Generate() ConnectionID
 }
 
+type PendingRequestHandle interface {
+	DoneCh() chan struct{}
+	Result() (protocol.Envelope, error)
+}
+
 type ResponseCorrelator interface {
-	RegisterPending(peer Peer, requestID string) (respCh chan *protocol.Envelope, cancel func(), ok bool)
+	RegisterPending(peer Peer, requestID string, generation uint64) (PendingRequestHandle, bool)
 	HandleResponse(peer Peer, envelope *protocol.Envelope) bool
 	CancelByPeer(peer Peer)
+	CancelByRuntime(runtimeID string)
 }
 
 type ControlPlaneConfig struct {
@@ -321,11 +327,10 @@ func (cp *controlPlane) SendRequest(ctx context.Context, peer Peer, envelope pro
 		return nil, NewIPCError(IPCErrorProtocol, domain.ErrInternal, "response correlator not configured")
 	}
 
-	respChan, cancel, ok := cp.responseCorrelator.RegisterPending(peer, envelope.ID)
+	handle, ok := cp.responseCorrelator.RegisterPending(peer, envelope.ID, envelope.Generation)
 	if !ok {
 		return nil, NewIPCError(IPCErrorProtocol, domain.ErrInvalidState, "duplicate or rejected request id")
 	}
-	defer cancel()
 
 	FillRouting(&envelope, peer)
 
@@ -337,11 +342,12 @@ func (cp *controlPlane) SendRequest(ctx context.Context, peer Peer, envelope pro
 	defer timer.Stop()
 
 	select {
-	case resp := <-respChan:
-		if resp == nil {
-			return nil, NewIPCError(IPCErrorTransport, domain.ErrRuntimeUnavailable, "connection closed before response received")
+	case <-handle.DoneCh():
+		env, err := handle.Result()
+		if err != nil {
+			return nil, err
 		}
-		return resp, nil
+		return &env, nil
 	case <-timer.C:
 		return nil, NewIPCError(IPCErrorTimeout, domain.ErrTimeout, "request timed out")
 	case <-ctx.Done():

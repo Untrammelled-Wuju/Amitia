@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/ipc"
@@ -23,9 +24,12 @@ type PendingRequestRegistry interface {
 	Remove(key RequestKey) bool
 	ListByPeer(runtimeID, serviceID string) []*PendingRequest
 	ListByRuntime(runtimeID domain.RuntimeInstanceID) []*PendingRequest
+	CancelByPeer(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID) int
 	CancelByRuntime(runtimeID domain.RuntimeInstanceID) int
 	Count() int
 	CountByRuntime(runtimeID domain.RuntimeInstanceID) int
+	Shutdown()
+	get(key RequestKey) *PendingRequest
 }
 
 type pendingRequestRegistry struct {
@@ -105,6 +109,8 @@ func (r *pendingRequestRegistry) Register(req *PendingRequest) (bool, error) {
 		)
 	}
 
+	req.State = RequestStatePending
+	req.CreatedAt = time.Now().UTC()
 	r.requests[req.Key] = req
 	r.peerCount[peerKey] = count + 1
 	return true, nil
@@ -153,26 +159,40 @@ func (r *pendingRequestRegistry) transitionLocked(
 		return false, nil
 	}
 
+	if result != nil && req.Generation > 0 {
+		respGen := extractGenerationFromEnvelope(result)
+		if respGen > 0 && RequestGeneration(respGen) != req.Generation {
+			return false, nil
+		}
+	}
+
 	req.State = targetState
 
 	if result != nil {
-		req.Result = *result
+		req.result = *result
 	}
-	req.Error = err
+	req.err = err
 
 	if req.CancelFunc != nil {
 		req.CancelFunc()
 	}
 
-	if req.Done != nil {
+	if req.done != nil {
 		select {
-		case <-req.Done:
+		case <-req.done:
 		default:
-			close(req.Done)
+			close(req.done)
 		}
 	}
 
 	return true, nil
+}
+
+func extractGenerationFromEnvelope(env *protocol.Envelope) uint64 {
+	if env == nil {
+		return 0
+	}
+	return env.Generation
 }
 
 func (r *pendingRequestRegistry) Remove(key RequestKey) bool {
@@ -188,11 +208,11 @@ func (r *pendingRequestRegistry) Remove(key RequestKey) bool {
 		req.CancelFunc()
 	}
 
-	if req.Done != nil {
+	if req.done != nil {
 		select {
-		case <-req.Done:
+		case <-req.done:
 		default:
-			close(req.Done)
+			close(req.done)
 		}
 	}
 
@@ -234,6 +254,36 @@ func (r *pendingRequestRegistry) ListByRuntime(runtimeID domain.RuntimeInstanceI
 	return result
 }
 
+func (r *pendingRequestRegistry) CancelByPeer(runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	count := 0
+	for k, req := range r.requests {
+		if k.RuntimeID == runtimeID && k.ServiceID == serviceID && !req.State.IsTerminal() {
+			req.State = RequestStateCancelled
+			req.err = NewRPCErrorWithCause(
+				"peer_disconnected",
+				domain.ErrRuntimeUnavailable,
+				"peer disconnected",
+				nil,
+			)
+			if req.CancelFunc != nil {
+				req.CancelFunc()
+			}
+			if req.done != nil {
+				select {
+				case <-req.done:
+				default:
+					close(req.done)
+				}
+			}
+			count++
+		}
+	}
+	return count
+}
+
 func (r *pendingRequestRegistry) CancelByRuntime(runtimeID domain.RuntimeInstanceID) int {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -245,11 +295,11 @@ func (r *pendingRequestRegistry) CancelByRuntime(runtimeID domain.RuntimeInstanc
 			if req.CancelFunc != nil {
 				req.CancelFunc()
 			}
-			if req.Done != nil {
+			if req.done != nil {
 				select {
-				case <-req.Done:
+				case <-req.done:
 				default:
-					close(req.Done)
+					close(req.done)
 				}
 			}
 			count++
@@ -283,7 +333,7 @@ func (r *pendingRequestRegistry) get(key RequestKey) *PendingRequest {
 	return r.requests[key]
 }
 
-func (r *pendingRequestRegistry) shutdown() {
+func (r *pendingRequestRegistry) Shutdown() {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.shutdownLocked()
@@ -296,11 +346,11 @@ func (r *pendingRequestRegistry) shutdownLocked() {
 			if req.CancelFunc != nil {
 				req.CancelFunc()
 			}
-			if req.Done != nil {
+			if req.done != nil {
 				select {
-				case <-req.Done:
+				case <-req.done:
 				default:
-					close(req.Done)
+					close(req.done)
 				}
 			}
 		}
