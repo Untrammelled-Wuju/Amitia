@@ -388,7 +388,7 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 	}
 
 	if inv.ScopeSnapshotID != "" || inv.PermissionSnapshotID != "" {
-		if err := p.revalidateSnapshots(timeoutCtx, inv); err != nil {
+		if err := p.revalidateSnapshots(timeoutCtx, inv, tool); err != nil {
 			return p.finalizeCancellation(timeoutCtx, inv, p.failWithAudit(timeoutCtx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 				Code:     capability.ErrorCodePermissionDenied,
 				Category: capability.ToolErrorCategoryPermission,
@@ -480,7 +480,7 @@ func (p *ExecutionPipeline) execute(ctx context.Context, request ToolExecutionRe
 		}
 
 		if inv.ScopeSnapshotID != "" || inv.PermissionSnapshotID != "" {
-			if err := p.revalidateSnapshots(timeoutCtx, inv); err != nil {
+			if err := p.revalidateSnapshots(timeoutCtx, inv, tool); err != nil {
 				return p.finalizeCancellation(timeoutCtx, inv, p.failWithAudit(timeoutCtx, inv, toolID, capability.NewToolFailureResult(inv.InvocationID, toolID, &capability.ToolError{
 					Code:     capability.ErrorCodePermissionDenied,
 					Category: capability.ToolErrorCategoryPermission,
