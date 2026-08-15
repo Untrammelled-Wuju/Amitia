@@ -37,7 +37,7 @@ data class MountContract(
     val guestTargets: List<String> get() = mounts.map { it.guestTarget }
 
     fun toProotBindMounts(): List<ProotBindMount> = mounts.map {
-        ProotBindMount.create(it.hostSource, it.guestTarget)
+        ProotBindMount.create(it.hostSource, it.guestTarget, readOnly = !it.writable)
     }
 
     companion object {

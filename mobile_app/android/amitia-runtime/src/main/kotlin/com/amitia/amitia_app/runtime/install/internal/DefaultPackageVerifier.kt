@@ -213,13 +213,24 @@ internal class DefaultPackageVerifier : PackageVerifier {
                 )
             val metadataDir = extractedSha256sums.parentFile
 
+            val guestLayout = parseGuestLayoutFromZip(zip, packageIndex.guestLayout.path)
+                ?: return PackageVerificationResult.Failure(
+                    RuntimeInstallErrorCode.PACKAGE_INVALID,
+                    "failed to parse guest-layout.json"
+                )
+            val mountContract = parseMountContractFromZip(zip, packageIndex.mountContract.path)
+                ?: return PackageVerificationResult.Failure(
+                    RuntimeInstallErrorCode.PACKAGE_INVALID,
+                    "failed to parse mount-contract.json"
+                )
+
             val verified = VerifiedPackage(
                 packageFile = packageFile,
                 packageSha256 = packageSha256,
                 packageIndex = packageIndex,
                 componentLock = componentLock,
-                guestLayout = GuestLayout(packageIndex.guestLayout.path, emptyList()),
-                mountContract = MountContract(emptyList()),
+                guestLayout = guestLayout,
+                mountContract = mountContract,
                 rootfsPayloadFile = extractedRootfs,
                 runtimePayloadFile = extractedRuntime,
                 sha256sumsFile = extractedSha256sums,
@@ -528,5 +539,47 @@ internal class DefaultPackageVerifier : PackageVerifier {
             }
         }
         return result
+    }
+
+    private fun parseGuestLayoutFromZip(zip: ZipFile, entryPath: String): GuestLayout? {
+        val text = readZipEntryText(zip, entryPath) ?: return null
+        return try {
+            val root = extractJsonString(text, "root")
+            val directories = mutableListOf<String>()
+            val arrayContent = extractJsonArrayContent(text, "directories") ?: "[]"
+            val dirPattern = Regex("\"([^\"]+)\"")
+            for (match in dirPattern.findAll(arrayContent)) {
+                val dir = match.groupValues[1]
+                if (dir.startsWith("/")) {
+                    directories.add(dir)
+                }
+            }
+            GuestLayout(root = root, directories = directories)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun parseMountContractFromZip(zip: ZipFile, entryPath: String): MountContract? {
+        val text = readZipEntryText(zip, entryPath) ?: return null
+        return try {
+            val binds = mutableListOf<BindMount>()
+            val bindsArray = extractJsonArray(text, "binds")
+            for (bindObj in bindsArray) {
+                val source = extractJsonString(bindObj, "source")
+                val target = extractJsonString(bindObj, "target")
+                val readOnly = extractJsonBoolean(bindObj, "readOnly")
+                binds.add(BindMount(source = source, target = target, readOnly = readOnly))
+            }
+            MountContract(binds = binds)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun extractJsonBoolean(json: String, key: String): Boolean {
+        val pattern = Regex("\"$key\"\\s*:\\s*(true|false)")
+        val match = pattern.find(json) ?: return false
+        return match.groupValues[1] == "true"
     }
 }

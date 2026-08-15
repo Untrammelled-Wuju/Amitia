@@ -22,6 +22,12 @@ object GuestLayout {
     const val QDRANT_DIR = "$PROGRAM/qdrant"
     const val QDRANT_BIN = "$QDRANT_DIR/bin/qdrant"
 
+    const val PLUGIN_HOST_DIR = "$PROGRAM/plugin-host"
+    const val PLUGIN_HOST_ENTRY = "$PLUGIN_HOST_DIR/dist/index.js"
+
+    const val TASK_HOST_DIR = "$PROGRAM/task-host"
+    const val TASK_HOST_ENTRY = "$TASK_HOST_DIR/dist/index.js"
+
     const val SIDECAR_DIR = "$PROGRAM/sidecar"
     const val SIDECAR_LAUNCHER = "$SIDECAR_DIR/launcher.mjs"
     const val SIDECAR_BUNDLE = "$SIDECAR_DIR/bundle.mjs"
@@ -29,6 +35,13 @@ object GuestLayout {
     const val QQ_SIDECAR_DIR = "$PROGRAM/qq-sidecar"
     const val QQ_SIDECAR_LAUNCHER = "$QQ_SIDECAR_DIR/launcher.mjs"
     const val QQ_SIDECAR_BUNDLE = "$QQ_SIDECAR_DIR/bundle.mjs"
+
+    const val SCRIPTS_DIR = "$PROGRAM/scripts"
+    const val SCRIPTS_NODE_DIR = "$SCRIPTS_DIR/node"
+
+    const val MANIFEST_DIR = "$PROGRAM/manifest"
+
+    const val LICENSES_DIR = "$PROGRAM/licenses"
 
     const val SECURITY_DIR = "$DATA/security"
     const val LOCAL_TOKEN = "$SECURITY_DIR/local-token"
@@ -45,6 +58,7 @@ object GuestLayout {
 
     val PROGRAM_SUBDIRS = listOf(
         "backend", "node", "qdrant", "sidecar", "qq-sidecar",
+        "plugin-host", "task-host", "scripts", "manifest", "licenses",
     )
 
     val ALL_ROOTS = listOf(

@@ -1,6 +1,10 @@
 ﻿package com.amitia.amitia_app.runtime.proot
 
-class ProotBindMount private constructor(val host: String, val guest: String) {
+class ProotBindMount private constructor(
+    val host: String,
+    val guest: String,
+    val readOnly: Boolean,
+) {
     companion object {
         private fun isAbsoluteStyle(path: String): Boolean {
             if (path.startsWith("/")) return true
@@ -15,7 +19,7 @@ class ProotBindMount private constructor(val host: String, val guest: String) {
             return path.contains(":")
         }
 
-        fun create(host: String, guest: String): ProotBindMount {
+        fun create(host: String, guest: String, readOnly: Boolean = false): ProotBindMount {
             require(host.isNotEmpty() && guest.isNotEmpty()) { "empty path" }
             require(isAbsoluteStyle(host) && isAbsoluteStyle(guest)) { "must be absolute" }
             require(guest != "/") { "guest cannot be root" }
@@ -23,14 +27,14 @@ class ProotBindMount private constructor(val host: String, val guest: String) {
             require(!host.contains("..")) { "host no traversal" }
             require(!guest.contains("..")) { "guest no traversal" }
             require(!hasBadColon(host) && !hasBadColon(guest)) { "no extra colon" }
-            return ProotBindMount(host, guest)
+            return ProotBindMount(host, guest, readOnly)
         }
     }
     override fun equals(other: Any?): Boolean {
         if (this === other) return true
         if (other !is ProotBindMount) return false
-        return host == other.host && guest == other.guest
+        return host == other.host && guest == other.guest && readOnly == other.readOnly
     }
-    override fun hashCode(): Int = 31 * host.hashCode() + guest.hashCode()
-    override fun toString(): String = "$host:$guest"
+    override fun hashCode(): Int = 31 * (31 * host.hashCode() + guest.hashCode()) + readOnly.hashCode()
+    override fun toString(): String = "$host:$guest${if (readOnly) ":ro" else ""}"
 }

@@ -11,7 +11,13 @@ internal class DefaultProotCommandBuilder : ProotCommandBuilder {
         if (spec.fakeRoot) args.add("-0")
         args.add("-r"); args.add(spec.rootfsPath)
         args.add("-w"); args.add(spec.workingDirectory)
-        for (mount in spec.bindMounts) { args.add("-b"); args.add("${mount.host}:${mount.guest}") }
+        for (mount in spec.bindMounts) {
+            if (mount.readOnly) {
+                args.add("-b"); args.add("${mount.host}:${mount.guest}")
+            } else {
+                args.add("-b"); args.add("${mount.host}:${mount.guest}")
+            }
+        }
         args.add("--")
         args.addAll(spec.command)
         return ProotCommand(spec.binaryPath, args.toList(), spec.environment.toMap())

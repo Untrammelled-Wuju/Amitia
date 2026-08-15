@@ -29,8 +29,7 @@ internal class DefaultProotSession(
     private val stderrPump: StreamPump
     private val started = AtomicBoolean(false)
     private val watcherStarted = AtomicBoolean(false)
-    private val watcherRecoveryActive = AtomicBoolean(false)
-    private var watcherRecoveryThread: Thread? = null
+    private val watcherFailureRef = AtomicReference<String?>(null)
 
     init {
         stdoutPump = InputStreamPump(process.inputStream) { data, seq -> if (!closed.get()) safeNotify(ProotEvent.Stdout(sessionId, data, seq)) }
@@ -42,51 +41,8 @@ internal class DefaultProotSession(
         if (closed.get()) return false
         return try {
             process.exitValue()
-            if (watcherRecoveryActive.get()) {
-                completeDeferredFromRecovery()
-            }
             false
         } catch (e: IllegalThreadStateException) { true }
-    }
-
-    private fun completeDeferredFromRecovery() {
-        if (exitRef.get() != null) return
-        try {
-            val exitCode = process.exitValue()
-            val exit = ProotExit(
-                generation = generation,
-                sessionId = sessionId,
-                exitCode = exitCode,
-                stopRequested = stopRequested.get(),
-            )
-            exitRef.set(exit)
-            publishTerminalOnce(exit)
-            exitDeferred.complete(exit)
-        } catch (_: IllegalThreadStateException) {}
-    }
-
-    private fun startWatcherRecoveryPoll() {
-        if (watcherRecoveryActive.compareAndSet(false, true)) {
-            watcherRecoveryThread = Thread {
-                try {
-                    while (watcherRecoveryActive.get() && !closed.get()) {
-                        if (isProcessDead()) {
-                            completeDeferredFromRecovery()
-                            break
-                        }
-                        Thread.sleep(WATCHER_RECOVERY_POLL_INTERVAL_MS)
-                    }
-                } catch (_: InterruptedException) {
-                    Thread.currentThread().interrupt()
-                } finally {
-                    watcherRecoveryActive.set(false)
-                }
-            }.apply {
-                isDaemon = true
-                name = "proot-watcher-recovery-$sessionId"
-                start()
-            }
-        }
     }
 
     override fun requestStop() {
@@ -143,9 +99,6 @@ internal class DefaultProotSession(
 
     override fun close() {
         if (closed.compareAndSet(false, true)) {
-            watcherRecoveryActive.set(false)
-            watcherRecoveryThread?.interrupt()
-            watcherRecoveryThread = null
             try { stdoutPump.stop() } catch (_: Throwable) {}
             try { stderrPump.stop() } catch (_: Throwable) {}
             try { if (process.isAlive) process.destroyForcibly() } catch (_: Throwable) {}
@@ -234,8 +187,8 @@ internal class DefaultProotSession(
                     publishTerminalOnce(exit)
                     exitDeferred.complete(exit)
                 } else {
+                    watcherFailureRef.set(e.message ?: "interrupted")
                     publishWatcherFailure(e.message ?: "interrupted")
-                    startWatcherRecoveryPoll()
                 }
             } catch (e: Exception) {
                 if (isProcessDead()) {
@@ -250,8 +203,8 @@ internal class DefaultProotSession(
                     publishTerminalOnce(exit)
                     exitDeferred.complete(exit)
                 } else {
+                    watcherFailureRef.set(e.message ?: "unknown watcher error")
                     publishWatcherFailure(e.message ?: "unknown watcher error")
-                    startWatcherRecoveryPoll()
                 }
             } finally {
                 watcherExecutor.shutdown()
@@ -283,7 +236,6 @@ internal class DefaultProotSession(
 
     private companion object {
         const val MAX_WATCHER_RETRY = 3
-        const val WATCHER_RECOVERY_POLL_INTERVAL_MS = 500L
     }
 }
 
