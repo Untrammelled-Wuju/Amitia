@@ -21,9 +21,10 @@ const (
 	StrategyNodeBounds          = "node_bounds"
 	StrategyVisualOCR           = "visual_ocr"
 	StrategyVisualUnderstand    = "visual_understand"
+	StrategyCoordinate          = "coordinate"
+	StrategyShizuku             = "shizuku"
 	StrategyRoot                = "root"
 	StrategyADB                 = "adb"
-	StrategyCoordinate          = "coordinate"
 )
 
 const (

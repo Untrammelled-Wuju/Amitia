@@ -94,6 +94,14 @@ func (m *fakeRuntimeManager) SetLifecycleIntent(runtimeID domain.RuntimeInstance
 	return nil
 }
 
+func (m *fakeRuntimeManager) IsEmergencyLatched(runtimeID domain.RuntimeInstanceID) bool {
+	return false
+}
+
+func (m *fakeRuntimeManager) SetEmergencyLatch(runtimeID domain.RuntimeInstanceID, latched bool) error {
+	return nil
+}
+
 type fakeTopologyStore struct {
 	topology RuntimeTopologySnapshot
 	graph    DependencyGraphSnapshot

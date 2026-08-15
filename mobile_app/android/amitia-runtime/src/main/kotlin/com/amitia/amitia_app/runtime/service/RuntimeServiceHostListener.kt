@@ -12,7 +12,15 @@ enum class RuntimeServiceTerminationCause {
     ACTIVE_PROGRAM_ROOT_MISSING,
     ACTIVE_PROGRAM_ROOT_INVALID,
     ENVIRONMENT_BUILD_FAILED,
-    MOUNT_CONTRACT_INVALID
+    MOUNT_CONTRACT_INVALID,
+    EXIT_WATCHER_FAILED,
+    STOP_RESULT_FAILED,
+}
+
+sealed interface ServiceTeardownResult {
+    data class FullyStopped(val startId: Int) : ServiceTeardownResult
+    data object SupersededByNewStart : ServiceTeardownResult
+    data object Failed : ServiceTeardownResult
 }
 
 sealed interface RuntimeServiceHostEvent {
@@ -21,23 +29,21 @@ sealed interface RuntimeServiceHostEvent {
         val generation: Long,
         val sessionId: String
     ) : RuntimeServiceHostEvent
-    data class SessionExited(
-        val generation: Long,
-        val sessionId: String,
-        val exitCode: Int?,
-        val forced: Boolean
-    ) : RuntimeServiceHostEvent
     data class ExpectedStopped(
-        val generation: Long
+        val generation: Long,
+        val result: ServiceTeardownResult,
     ) : RuntimeServiceHostEvent
     data class UnexpectedTermination(
         val generation: Long,
         val cause: RuntimeServiceTerminationCause,
     ) : RuntimeServiceHostEvent
-    data class LaunchFailed(
+    data class StartupFailed(
         val generation: Long,
         val cause: RuntimeServiceTerminationCause,
         val message: String,
+        val sessionId: String?,
+        val launchStartId: Int,
+        val phase: String,
     ) : RuntimeServiceHostEvent
 }
 

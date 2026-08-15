@@ -8,11 +8,20 @@ import (
 )
 
 type BackgroundHandler struct {
-	bridge nativebridge.Bridge
+	bridge  nativebridge.Bridge
+	taskRT  TaskRuntimePort
 }
 
 func NewBackgroundHandler(bridge nativebridge.Bridge) *BackgroundHandler {
 	return &BackgroundHandler{bridge: bridge}
+}
+
+func (h *BackgroundHandler) SetTaskRuntimePort(port TaskRuntimePort) {
+	h.taskRT = port
+}
+
+func (h *BackgroundHandler) HasTaskRuntimePort() bool {
+	return h.taskRT != nil
 }
 
 func (h *BackgroundHandler) Execute(ctx context.Context, request nativebridge.Request) nativebridge.Response {
@@ -175,29 +184,29 @@ func (h *BackgroundHandler) handleTaskRegister(ctx context.Context, request nati
 
 func (h *BackgroundHandler) handleTaskSubmit(ctx context.Context, request nativebridge.Request) nativebridge.Response {
 	req := BackgroundSubmissionRequest{
-		SystemClass:            BackgroundSystemClass(getString(request.Payload, "systemClass")),
-		TaskRunID:              getString(request.Payload, "taskRunId"),
-		TaskDefinitionID:       getString(request.Payload, "taskDefinitionID"),
-		IdentifierClass:        getString(request.Payload, "identifierClass"),
-		Reason:                 getString(request.Payload, "reason"),
-		Strategy:               ContinuedTaskStrategy(getString(request.Payload, "strategy")),
-		Initiator:              TaskInitiator(getString(request.Payload, "initiator")),
-		NetworkRequired:        getBool(request.Payload, "networkRequired"),
-		ExternalPowerRequired:  getBool(request.Payload, "externalPowerRequired"),
-		GPURequired:            getBool(request.Payload, "gpuRequired"),
-		Title:                  getString(request.Payload, "title"),
-		Subtitle:               getString(request.Payload, "subtitle"),
+		SystemClass:           BackgroundSystemClass(getString(request.Payload, "systemClass")),
+		TaskRunID:             getString(request.Payload, "taskRunId"),
+		TaskDefinitionID:      getString(request.Payload, "taskDefinitionID"),
+		IdentifierClass:       getString(request.Payload, "identifierClass"),
+		Reason:                getString(request.Payload, "reason"),
+		Strategy:              ContinuedTaskStrategy(getString(request.Payload, "strategy")),
+		Initiator:             TaskInitiator(getString(request.Payload, "initiator")),
+		NetworkRequired:       getBool(request.Payload, "networkRequired"),
+		ExternalPowerRequired: getBool(request.Payload, "externalPowerRequired"),
+		GPURequired:           getBool(request.Payload, "gpuRequired"),
+		Title:                 getString(request.Payload, "title"),
+		Subtitle:              getString(request.Payload, "subtitle"),
 	}
 	if err := ValidateSubmission(req); err != nil {
 		code, msg := MapErrorToNativeBridge(err)
 		return NewBackgroundError(request, code, msg)
 	}
 	payload := map[string]any{
-		"systemClass":       string(req.SystemClass),
-		"identifierClass":   req.IdentifierClass,
-		"networkRequired":   req.NetworkRequired,
+		"systemClass":           string(req.SystemClass),
+		"identifierClass":       req.IdentifierClass,
+		"networkRequired":       req.NetworkRequired,
 		"externalPowerRequired": req.ExternalPowerRequired,
-		"gpuRequired":       req.GPURequired,
+		"gpuRequired":           req.GPURequired,
 	}
 	if req.TaskRunID != "" {
 		payload["taskRunId"] = req.TaskRunID
@@ -212,7 +221,7 @@ func (h *BackgroundHandler) handleTaskSubmit(ctx context.Context, request native
 		payload["strategy"] = string(req.Strategy)
 	}
 	if req.Initiator != "" {
-		payload["initiator"] = string(req.Initiator)
+		payload["initiator"] = req.Initiator
 	}
 	if req.Title != "" {
 		payload["title"] = req.Title
@@ -265,6 +274,11 @@ func (h *BackgroundHandler) handleTaskProgress(ctx context.Context, request nati
 		code, msg := MapErrorToNativeBridge(err)
 		return NewBackgroundError(request, code, msg)
 	}
+	if h.taskRT != nil {
+		if err := h.taskRT.ReportProgress(ctx, progress.TaskRunID, progress.TotalUnits, progress.CompletedUnits, progress.Phase); err != nil {
+			return NewBackgroundError(request, ErrTaskRuntimeError, err.Error())
+		}
+	}
 	return h.bridgeCall(ctx, request, OperationTaskProgress, map[string]any{
 		"taskRunId":       progress.TaskRunID,
 		"identifierClass": progress.IdentifierClass,
@@ -284,6 +298,11 @@ func (h *BackgroundHandler) handleTaskExpire(ctx context.Context, request native
 		code, msg := MapErrorToNativeBridge(err)
 		return NewBackgroundError(request, code, msg)
 	}
+	if h.taskRT != nil {
+		if err := h.taskRT.SignalExpiration(ctx, taskRunID, "execution_window_expiring"); err != nil {
+			return NewBackgroundError(request, ErrTaskRuntimeError, err.Error())
+		}
+	}
 	return h.bridgeCall(ctx, request, OperationTaskExpire, map[string]any{
 		"systemClass":    string(systemClass),
 		"taskRunId":      taskRunID,
@@ -301,11 +320,22 @@ func (h *BackgroundHandler) handleTaskComplete(ctx context.Context, request nati
 		code, msg := MapErrorToNativeBridge(err)
 		return NewBackgroundError(request, code, msg)
 	}
+	success := getBool(request.Payload, "success")
+	var errCode, errMsg string
+	if !success {
+		errCode = getString(request.Payload, "errorCode")
+		errMsg = getString(request.Payload, "errorMessage")
+	}
+	if h.taskRT != nil {
+		if err := h.taskRT.CompleteRun(ctx, taskRunID, success, errCode, errMsg); err != nil {
+			return NewBackgroundError(request, ErrTaskRuntimeError, err.Error())
+		}
+	}
 	return h.bridgeCall(ctx, request, OperationTaskComplete, map[string]any{
 		"systemClass":     string(systemClass),
 		"taskRunId":       taskRunID,
 		"identifierClass": getString(request.Payload, "identifierClass"),
-		"success":         getBool(request.Payload, "success"),
+		"success":         success,
 	})
 }
 
@@ -340,6 +370,26 @@ func (h *BackgroundHandler) handleCheckpointGet(ctx context.Context, request nat
 		code, msg := MapErrorToNativeBridge(err)
 		return NewBackgroundError(request, code, msg)
 	}
+	if h.taskRT != nil {
+		cp, err := h.taskRT.GetCheckpoint(ctx, taskRunID)
+		if err != nil {
+			return NewBackgroundError(request, ErrTaskRuntimeError, err.Error())
+		}
+		result := map[string]any{
+			"taskRunId": taskRunID,
+			"lastUnit":  cp.LastUnit,
+			"phase":     cp.Phase,
+		}
+		if cp.Data != nil {
+			result["data"] = cp.Data
+		}
+		return nativebridge.Response{
+			ProtocolVersion: request.ProtocolVersion,
+			RequestID:       request.RequestID,
+			Status:          "success",
+			Result:          result,
+		}
+	}
 	return h.bridgeCall(ctx, request, OperationCheckpointGet, map[string]any{
 		"taskRunId": taskRunID,
 	})
@@ -347,10 +397,10 @@ func (h *BackgroundHandler) handleCheckpointGet(ctx context.Context, request nat
 
 func (h *BackgroundHandler) handleCheckpointSet(ctx context.Context, request nativebridge.Request) nativebridge.Response {
 	req := BackgroundCheckpointSetRequest{
-		TaskRunID:      getString(request.Payload, "taskRunId"),
-		Generation:     getInt64(request.Payload, "generation", 0),
-		LastUnit:       getInt64(request.Payload, "lastUnit", 0),
-		Phase:          getString(request.Payload, "phase"),
+		TaskRunID:  getString(request.Payload, "taskRunId"),
+		Generation: getInt64(request.Payload, "generation", 0),
+		LastUnit:   getInt64(request.Payload, "lastUnit", 0),
+		Phase:      getString(request.Payload, "phase"),
 	}
 	if data, ok := request.Payload["checkpointData"].(map[string]any); ok {
 		req.CheckpointData = data
@@ -358,6 +408,21 @@ func (h *BackgroundHandler) handleCheckpointSet(ctx context.Context, request nat
 	if err := ValidateCheckpoint(req); err != nil {
 		code, msg := MapErrorToNativeBridge(err)
 		return NewBackgroundError(request, code, msg)
+	}
+	if h.taskRT != nil {
+		cp := CheckpointData{
+			LastUnit: req.LastUnit,
+			Phase:    req.Phase,
+			Data:     req.CheckpointData,
+		}
+		if err := h.taskRT.SetCheckpoint(ctx, req.TaskRunID, cp); err != nil {
+			return NewBackgroundError(request, ErrTaskRuntimeError, err.Error())
+		}
+		return nativebridge.Response{
+			ProtocolVersion: request.ProtocolVersion,
+			RequestID:       request.RequestID,
+			Status:          "success",
+		}
 	}
 	payload := map[string]any{
 		"taskRunId":  req.TaskRunID,
@@ -376,6 +441,16 @@ func (h *BackgroundHandler) handleCheckpointClear(ctx context.Context, request n
 	if err := ValidateTaskRunID(taskRunID); err != nil {
 		code, msg := MapErrorToNativeBridge(err)
 		return NewBackgroundError(request, code, msg)
+	}
+	if h.taskRT != nil {
+		if err := h.taskRT.ClearCheckpoint(ctx, taskRunID); err != nil {
+			return NewBackgroundError(request, ErrTaskRuntimeError, err.Error())
+		}
+		return nativebridge.Response{
+			ProtocolVersion: request.ProtocolVersion,
+			RequestID:       request.RequestID,
+			Status:          "success",
+		}
 	}
 	return h.bridgeCall(ctx, request, OperationCheckpointClear, map[string]any{
 		"taskRunId": taskRunID,
@@ -413,8 +488,8 @@ func (h *BackgroundHandler) handleFileMountReauthorize(ctx context.Context, requ
 
 func (h *BackgroundHandler) handleFileAccessStat(ctx context.Context, request nativebridge.Request) nativebridge.Response {
 	req := IOSFileAccessRequest{
-		MountID:        getString(request.Payload, "mountId"),
-		RelativePath:   getString(request.Payload, "relativePath"),
+		MountID:      getString(request.Payload, "mountId"),
+		RelativePath: getString(request.Payload, "relativePath"),
 	}
 	if err := ValidateStatRequest(req); err != nil {
 		code, msg := MapErrorToNativeBridge(err)
@@ -428,8 +503,8 @@ func (h *BackgroundHandler) handleFileAccessStat(ctx context.Context, request na
 
 func (h *BackgroundHandler) handleFileAccessList(ctx context.Context, request nativebridge.Request) nativebridge.Response {
 	req := IOSFileAccessRequest{
-		MountID:        getString(request.Payload, "mountId"),
-		RelativePath:   getString(request.Payload, "relativePath"),
+		MountID:      getString(request.Payload, "mountId"),
+		RelativePath: getString(request.Payload, "relativePath"),
 	}
 	if err := ValidateListRequest(req); err != nil {
 		code, msg := MapErrorToNativeBridge(err)
@@ -443,10 +518,10 @@ func (h *BackgroundHandler) handleFileAccessList(ctx context.Context, request na
 
 func (h *BackgroundHandler) handleFileAccessRead(ctx context.Context, request nativebridge.Request) nativebridge.Response {
 	req := IOSFileReadRequest{
-		MountID:        getString(request.Payload, "mountId"),
-		RelativePath:   getString(request.Payload, "relativePath"),
-		Offset:         getInt64(request.Payload, "offset", 0),
-		Length:         getInt64(request.Payload, "length", 0),
+		MountID:      getString(request.Payload, "mountId"),
+		RelativePath: getString(request.Payload, "relativePath"),
+		Offset:       getInt64(request.Payload, "offset", 0),
+		Length:       getInt64(request.Payload, "length", 0),
 	}
 	if err := ValidateReadRequest(req); err != nil {
 		code, msg := MapErrorToNativeBridge(err)
@@ -467,9 +542,9 @@ func (h *BackgroundHandler) handleFileAccessRead(ctx context.Context, request na
 
 func (h *BackgroundHandler) handleFileAccessWrite(ctx context.Context, request nativebridge.Request) nativebridge.Response {
 	req := IOSFileWriteRequest{
-		MountID:        getString(request.Payload, "mountId"),
-		RelativePath:   getString(request.Payload, "relativePath"),
-		Atomic:         getBool(request.Payload, "atomic"),
+		MountID:      getString(request.Payload, "mountId"),
+		RelativePath: getString(request.Payload, "relativePath"),
+		Atomic:       getBool(request.Payload, "atomic"),
 	}
 	if data, ok := request.Payload["content"].([]byte); ok {
 		req.Content = data
@@ -488,8 +563,8 @@ func (h *BackgroundHandler) handleFileAccessWrite(ctx context.Context, request n
 
 func (h *BackgroundHandler) handleFileAccessMkdir(ctx context.Context, request nativebridge.Request) nativebridge.Response {
 	req := IOSFileMkdirRequest{
-		MountID:        getString(request.Payload, "mountId"),
-		RelativePath:   getString(request.Payload, "relativePath"),
+		MountID:      getString(request.Payload, "mountId"),
+		RelativePath: getString(request.Payload, "relativePath"),
 	}
 	if err := ValidateMkdirRequest(req); err != nil {
 		code, msg := MapErrorToNativeBridge(err)
@@ -503,9 +578,9 @@ func (h *BackgroundHandler) handleFileAccessMkdir(ctx context.Context, request n
 
 func (h *BackgroundHandler) handleFileAccessRename(ctx context.Context, request nativebridge.Request) nativebridge.Response {
 	req := IOSFileRenameRequest{
-		MountID:        getString(request.Payload, "mountId"),
-		RelativePath:   getString(request.Payload, "relativePath"),
-		NewName:        getString(request.Payload, "newName"),
+		MountID:      getString(request.Payload, "mountId"),
+		RelativePath: getString(request.Payload, "relativePath"),
+		NewName:      getString(request.Payload, "newName"),
 	}
 	if err := ValidateRenameRequest(req); err != nil {
 		code, msg := MapErrorToNativeBridge(err)
@@ -554,8 +629,8 @@ func (h *BackgroundHandler) handleFileAccessCopy(ctx context.Context, request na
 
 func (h *BackgroundHandler) handleFileAccessDelete(ctx context.Context, request nativebridge.Request) nativebridge.Response {
 	req := IOSFileDeleteRequest{
-		MountID:        getString(request.Payload, "mountId"),
-		RelativePath:   getString(request.Payload, "relativePath"),
+		MountID:      getString(request.Payload, "mountId"),
+		RelativePath: getString(request.Payload, "relativePath"),
 	}
 	if err := ValidateDeleteRequest(req); err != nil {
 		code, msg := MapErrorToNativeBridge(err)
@@ -569,9 +644,9 @@ func (h *BackgroundHandler) handleFileAccessDelete(ctx context.Context, request 
 
 func (h *BackgroundHandler) handleFileExport(ctx context.Context, request nativebridge.Request) nativebridge.Response {
 	req := IOSFileExportRequest{
-		MountID:        getString(request.Payload, "mountId"),
-		RelativePath:   getString(request.Payload, "relativePath"),
-		ResourceURI:    getString(request.Payload, "resourceUri"),
+		MountID:      getString(request.Payload, "mountId"),
+		RelativePath: getString(request.Payload, "relativePath"),
+		ResourceURI:  getString(request.Payload, "resourceUri"),
 	}
 	if err := ValidateExportRequest(req); err != nil {
 		code, msg := MapErrorToNativeBridge(err)

@@ -3,7 +3,9 @@ package rpc_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/ipc"
@@ -85,6 +87,15 @@ func (m *mockLifecycleCP) Send(
 ) error {
 	m.sent = append(m.sent, mockLifecycleSent{Peer: peer, Envelope: envelope})
 	return nil
+}
+
+func (m *mockLifecycleCP) SendRequest(
+	ctx context.Context,
+	peer ipc.Peer,
+	envelope protocol.Envelope,
+	timeout time.Duration,
+) (*protocol.Envelope, error) {
+	return nil, fmt.Errorf("not implemented in mock")
 }
 
 func (m *mockLifecycleCP) Shutdown(ctx context.Context) error {

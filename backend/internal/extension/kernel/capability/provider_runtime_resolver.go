@@ -2,6 +2,8 @@ package capability
 
 import (
 	"context"
+
+	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 type ProviderExecutionLookup interface {
@@ -14,6 +16,15 @@ type ProviderExecutionLookup interface {
 		ctx context.Context,
 		id ProviderInstanceID,
 	) (CapabilityProviderInstance, bool)
+}
+
+type DeviceSessionResolver interface {
+	ResolveActiveSession(
+		ctx context.Context,
+		userID runtimeidentity.UserID,
+		deviceID runtimeidentity.DeviceID,
+		runtimeID runtimeidentity.RuntimeID,
+	) (runtimeidentity.RuntimeSessionID, bool)
 }
 
 type ProviderRegistryExecutionLookup struct {
@@ -57,11 +68,20 @@ func (r *LegacyRuntimeExecutionResolver) ResolveRuntimeExecution(
 }
 
 type ProviderRuntimeExecutionResolver struct {
-	lookup ProviderExecutionLookup
+	lookup          ProviderExecutionLookup
+	sessionResolver DeviceSessionResolver
 }
 
 func NewProviderRuntimeExecutionResolver(lookup ProviderExecutionLookup) *ProviderRuntimeExecutionResolver {
 	return &ProviderRuntimeExecutionResolver{lookup: lookup}
+}
+
+func NewProviderRuntimeExecutionResolverWithSessions(lookup ProviderExecutionLookup, sessionResolver DeviceSessionResolver) *ProviderRuntimeExecutionResolver {
+	return &ProviderRuntimeExecutionResolver{lookup: lookup, sessionResolver: sessionResolver}
+}
+
+func (r *ProviderRuntimeExecutionResolver) SetSessionResolver(resolver DeviceSessionResolver) {
+	r.sessionResolver = resolver
 }
 
 func (r *ProviderRuntimeExecutionResolver) ResolveRuntimeExecution(
@@ -160,13 +180,27 @@ func (r *ProviderRuntimeExecutionResolver) ResolveRuntimeExecution(
 		route.RuntimeID = target.RuntimeID
 	}
 
-	route.RuntimeSessionID = target.RuntimeSessionID
-
 	if definition.Placement == ProviderPlacementDevice {
-		if route.RuntimeSessionID == "" {
+		sessionID, ok := r.resolveDeviceSession(ctx, route.UserID, route.DeviceID, route.RuntimeID)
+		if !ok || sessionID == "" {
 			return RuntimeExecutionRoute{}, ErrProviderExecutionTargetInvalid
 		}
+		route.RuntimeSessionID = sessionID
+	} else if target.RuntimeSessionID != "" {
+		route.RuntimeSessionID = target.RuntimeSessionID
 	}
 
 	return route, nil
+}
+
+func (r *ProviderRuntimeExecutionResolver) resolveDeviceSession(
+	ctx context.Context,
+	userID runtimeidentity.UserID,
+	deviceID runtimeidentity.DeviceID,
+	runtimeID runtimeidentity.RuntimeID,
+) (runtimeidentity.RuntimeSessionID, bool) {
+	if r.sessionResolver == nil {
+		return "", false
+	}
+	return r.sessionResolver.ResolveActiveSession(ctx, userID, deviceID, runtimeID)
 }

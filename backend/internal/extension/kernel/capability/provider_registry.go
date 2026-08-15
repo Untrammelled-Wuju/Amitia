@@ -232,6 +232,11 @@ func (r *ProviderRegistry) RegisterDefinition(def CapabilityProviderDefinition) 
 		r.byCapability = r.removeCapabilityIndexLocked(r.byCapability, ProviderID(normalizedID))
 	}
 
+	if found {
+		def.Revision = existing.Revision + 1
+	} else {
+		def.Revision = 1
+	}
 	r.definitions[normalizedID] = &def
 	r.byCapability = r.upsertCapabilityIndexLocked(r.byCapability, def)
 	return nil
@@ -305,6 +310,12 @@ func (r *ProviderRegistry) RegisterInstance(inst CapabilityProviderInstance) err
 	}
 	if inst.UpdatedAt.IsZero() {
 		inst.UpdatedAt = inst.RegisteredAt
+	}
+
+	if existing, ok := r.instances[string(inst.ID)]; ok {
+		inst.Revision = existing.Revision + 1
+	} else {
+		inst.Revision = 1
 	}
 
 	r.instances[string(inst.ID)] = &inst
@@ -1194,9 +1205,6 @@ func instanceIdentityFilter(identity runtimeidentity.Identity) func(*CapabilityP
 			return false
 		}
 		if identity.RuntimeID != "" && inst.RuntimeID != identity.RuntimeID {
-			return false
-		}
-		if identity.RuntimeSessionID != "" && inst.RuntimeSessionID != identity.RuntimeSessionID {
 			return false
 		}
 		return true

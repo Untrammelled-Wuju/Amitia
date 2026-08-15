@@ -87,6 +87,7 @@ type CapabilityState struct {
 	AccessibilityGesture bool `json:"accessibilityGesture"`
 
 	CoordinateTap bool `json:"coordinateTap"`
+	Shizuku       bool `json:"shizuku"`
 	TextInput     bool `json:"textInput"`
 	Scroll        bool `json:"scroll"`
 
@@ -105,6 +106,7 @@ type ClickRequest struct {
 	Target InteractionTarget `json:"target"`
 
 	AllowCoordinateFallback bool `json:"allowCoordinateFallback,omitempty"`
+	AllowShizukuFallback    bool `json:"allowShizukuFallback,omitempty"`
 	AllowVisualFallback     bool `json:"allowVisualFallback,omitempty"`
 	AllowRootFallback       bool `json:"allowRootFallback,omitempty"`
 	AllowADBFallback        bool `json:"allowAdbFallback,omitempty"`
@@ -118,6 +120,7 @@ type LongClickRequest struct {
 	DurationMS int `json:"durationMs,omitempty"`
 
 	AllowCoordinateFallback bool `json:"allowCoordinateFallback,omitempty"`
+	AllowShizukuFallback    bool `json:"allowShizukuFallback,omitempty"`
 	AllowVisualFallback     bool `json:"allowVisualFallback,omitempty"`
 	AllowRootFallback       bool `json:"allowRootFallback,omitempty"`
 	AllowADBFallback        bool `json:"allowAdbFallback,omitempty"`

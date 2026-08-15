@@ -70,4 +70,5 @@ const (
 	ErrInvalidResponse               = "IOS_INVALID_RESPONSE"
 	ErrTimeout                       = "IOS_TIMEOUT"
 	ErrCancelled                     = "IOS_CANCELLED"
+	ErrTaskRuntimeError              = "IOS_TASK_RUNTIME_ERROR"
 )

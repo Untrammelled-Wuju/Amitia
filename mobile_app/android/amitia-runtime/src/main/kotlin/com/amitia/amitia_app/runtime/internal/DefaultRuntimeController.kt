@@ -122,9 +122,6 @@ internal class DefaultRuntimeController(
             is RuntimeServiceHostEvent.SessionReady -> {
                 onSessionReady(event.generation)
             }
-            is RuntimeServiceHostEvent.SessionExited -> {
-                onSessionExited(event.generation, event.exitCode)
-            }
             is RuntimeServiceHostEvent.ExpectedStopped -> {
                 cancelPendingRecovery()
                 cancelStartupDetector()
@@ -151,7 +148,7 @@ internal class DefaultRuntimeController(
                     }
                 }
             }
-            is RuntimeServiceHostEvent.LaunchFailed -> {
+            is RuntimeServiceHostEvent.StartupFailed -> {
                 cancelStartupDetector()
                 if (!isCurrentGeneration(event.generation)) return
                 val current = stateStore.snapshot()
@@ -214,28 +211,6 @@ internal class DefaultRuntimeController(
 
         activeDetectorSession.set(session)
         startStartupDetection(session, generation, attemptId)
-    }
-
-    private fun onSessionExited(generation: Long, exitCode: Int?) {
-        if (!isCurrentGeneration(generation)) return
-
-        cancelStartupDetector()
-        val current = stateStore.snapshot()
-        if (current.state == RuntimeState.STARTING) {
-            val target = RuntimeStateMachine.startupFailureTarget(RuntimeState.STARTING)
-            if (target != null) {
-                stateStore.update {
-                    it.copy(
-                        state = target,
-                        lastError = RuntimeError(
-                            code = RuntimeErrorCode.RUNTIME_EXECUTION_NOT_AVAILABLE,
-                            message = "outer proot session exited unexpectedly with code: ${exitCode ?: "unknown"}",
-                            recoverable = true
-                        )
-                    )
-                }
-            }
-        }
     }
 
     private fun startStartupDetection(session: ProotSession, generation: Long, attemptId: String) {
@@ -507,6 +482,16 @@ internal class DefaultRuntimeController(
             RuntimeServiceTerminationCause.MOUNT_CONTRACT_INVALID -> RuntimeError(
                 code = RuntimeErrorCode.START_FAILED,
                 message = detail ?: "mount contract is invalid",
+                recoverable = true
+            )
+            RuntimeServiceTerminationCause.EXIT_WATCHER_FAILED -> RuntimeError(
+                code = RuntimeErrorCode.RUNTIME_EXECUTION_NOT_AVAILABLE,
+                message = "exit watcher failed to observe process termination",
+                recoverable = true
+            )
+            RuntimeServiceTerminationCause.STOP_RESULT_FAILED -> RuntimeError(
+                code = RuntimeErrorCode.STOP_SERVICE_TEARDOWN_FAILED,
+                message = "stopSelfResult returned false, service did not stop as expected",
                 recoverable = true
             )
         }

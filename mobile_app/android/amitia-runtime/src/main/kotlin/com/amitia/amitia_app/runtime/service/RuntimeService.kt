@@ -28,12 +28,6 @@ class RuntimeService : Service() {
     private val endpoint by lazy { DefaultRuntimeServiceEndpoint { this@RuntimeService } }
     private val binder by lazy { RuntimeServiceBinder(endpoint) }
 
-    private enum class TerminalEventKind {
-        EXPECTED_STOPPED,
-        UNEXPECTED_TERMINATION,
-        STARTUP_FAILURE_CLEANUP,
-    }
-
     private enum class ServiceTeardownReason {
         EXPECTED_STOP,
         UNEXPECTED_TERMINATION,
@@ -42,19 +36,26 @@ class RuntimeService : Service() {
 
     private data class StartupFailureCleanupContext(
         val generation: Long,
-        val startId: Int,
-        val cause: RuntimeServiceTerminationCause,
-        val message: String,
+        val sessionId: String?,
+        val launchStartId: Int,
+        val originalFailure: RuntimeServiceTerminationCause,
+        val phase: String,
         var processConfirmedDead: Boolean = false,
     )
 
     private data class ServiceSessionContext(
         val generation: Long,
         val session: ProotSession,
-        val startId: Int,
-        var stopRequested: Boolean = false,
+        val launchStartId: Int,
+        var stopStartId: Int? = null,
         var terminalEvent: TerminalEventKind? = null,
     )
+
+    private enum class TerminalEventKind {
+        EXPECTED_STOPPED,
+        UNEXPECTED_TERMINATION,
+        STARTUP_FAILURE_CLEANUP,
+    }
 
     private val currentSessionContextRef: AtomicReference<ServiceSessionContext?> = AtomicReference(null)
     private val currentSessionRef: AtomicReference<ProotSession?> = AtomicReference(null)
@@ -103,10 +104,19 @@ class RuntimeService : Service() {
                 val profile = intent.getStringExtra(RuntimeServiceContract.EXTRA_RUNTIME_PROFILE) ?: "local"
                 handleStartHost(generation, profile, startId)
             }
-            RuntimeServiceContract.ACTION_STOP_HOST -> handleStopHost()
+            RuntimeServiceContract.ACTION_STOP_HOST -> {
+                val targetGeneration = intent.getLongExtra(RuntimeServiceContract.EXTRA_TARGET_GENERATION, Long.MIN_VALUE)
+                handleStopHost(targetGeneration, startId)
+            }
             RuntimeServiceContract.ACTION_TEARDOWN_AFTER_STARTUP_FAILURE -> {
                 val generation = currentGenerationRef.get()
-                teardownAfterStartupFailure(generation, startId, RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR, "startup failure cleanup requested by controller")
+                teardownAfterStartupFailure(
+                    generation = generation,
+                    sessionId = currentSessionIdRef.get(),
+                    launchStartId = currentStartIdRef.get(),
+                    cause = RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR,
+                    phase = "controller_requested_cleanup"
+                )
             }
             else -> {
                 stopSelfSafely()
@@ -119,12 +129,24 @@ class RuntimeService : Service() {
 
     private fun handleStartHost(generation: Long, profile: String, startId: Int) {
         if (generation <= 0L) {
-            teardownAfterStartupFailure(generation, startId, RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR, "invalid generation: $generation")
+            teardownAfterStartupFailure(
+                generation = generation,
+                sessionId = currentSessionIdRef.get(),
+                launchStartId = startId,
+                cause = RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR,
+                phase = "invalid_generation"
+            )
             return
         }
 
         if (!serviceState.compareAndSet(ServiceHostState.CREATED, ServiceHostState.FOREGROUND)) {
-            teardownAfterStartupFailure(generation, startId, RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR, "service state is not CREATED, current state: ${serviceState.get()}")
+            teardownAfterStartupFailure(
+                generation = generation,
+                sessionId = currentSessionIdRef.get(),
+                launchStartId = startId,
+                cause = RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR,
+                phase = "state_not_created"
+            )
             return
         }
 
@@ -139,11 +161,23 @@ class RuntimeService : Service() {
                     )
                     startProotSessionLocked(generation, profile, startId)
                 } catch (e: Exception) {
-                    teardownAfterStartupFailure(generation, startId, RuntimeServiceTerminationCause.FOREGROUND_FAILED, "foreground start failed: ${e.message}")
+                    teardownAfterStartupFailure(
+                        generation = generation,
+                        sessionId = currentSessionIdRef.get(),
+                        launchStartId = startId,
+                        cause = RuntimeServiceTerminationCause.FOREGROUND_FAILED,
+                        phase = "foreground_start_exception"
+                    )
                 }
             }
             is RuntimeForegroundNotificationResult.Failure -> {
-                teardownAfterStartupFailure(generation, startId, RuntimeServiceTerminationCause.NOTIFICATION_FAILED, "notification creation failed")
+                teardownAfterStartupFailure(
+                    generation = generation,
+                    sessionId = currentSessionIdRef.get(),
+                    launchStartId = startId,
+                    cause = RuntimeServiceTerminationCause.NOTIFICATION_FAILED,
+                    phase = "notification_creation"
+                )
             }
         }
     }
@@ -153,19 +187,37 @@ class RuntimeService : Service() {
 
         val component = AndroidRuntimeModule.prootComponent
         if (component == null) {
-            teardownAfterStartupFailure(generation, startId, RuntimeServiceTerminationCause.PROOT_COMPONENT_MISSING, "proot component is not available")
+            teardownAfterStartupFailure(
+                generation = generation,
+                sessionId = currentSessionIdRef.get(),
+                launchStartId = startId,
+                cause = RuntimeServiceTerminationCause.PROOT_COMPONENT_MISSING,
+                phase = "proot_component_check"
+            )
             return
         }
 
         val rootfsPath = AndroidRuntimeModule.prootRootfsPath
         if (rootfsPath == null) {
-            teardownAfterStartupFailure(generation, startId, RuntimeServiceTerminationCause.ROOTFS_MISSING, "rootfs path is not available")
+            teardownAfterStartupFailure(
+                generation = generation,
+                sessionId = currentSessionIdRef.get(),
+                launchStartId = startId,
+                cause = RuntimeServiceTerminationCause.ROOTFS_MISSING,
+                phase = "rootfs_path_check"
+            )
             return
         }
 
         val assembler = AndroidRuntimeModule.prootEnvironmentAssembler
         if (assembler == null) {
-            teardownAfterStartupFailure(generation, startId, RuntimeServiceTerminationCause.ASSEMBLER_MISSING, "launch assembler is not available")
+            teardownAfterStartupFailure(
+                generation = generation,
+                sessionId = currentSessionIdRef.get(),
+                launchStartId = startId,
+                cause = RuntimeServiceTerminationCause.ASSEMBLER_MISSING,
+                phase = "assembler_check"
+            )
             return
         }
 
@@ -178,13 +230,31 @@ class RuntimeService : Service() {
             val spec = assembler.assembleBackendLaunch(activeProgramSource, profile)
             assembler.toProotLaunchRequest(spec, "")
         } catch (e: com.amitia.amitia_app.runtime.proot.internal.ProotEnvironmentException) {
-            teardownAfterStartupFailure(generation, startId, RuntimeServiceTerminationCause.ENVIRONMENT_BUILD_FAILED, "environment build failed: ${e.message}")
+            teardownAfterStartupFailure(
+                generation = generation,
+                sessionId = currentSessionIdRef.get(),
+                launchStartId = startId,
+                cause = RuntimeServiceTerminationCause.ENVIRONMENT_BUILD_FAILED,
+                phase = "environment_build"
+            )
             return
         } catch (e: java.lang.IllegalArgumentException) {
-            teardownAfterStartupFailure(generation, startId, RuntimeServiceTerminationCause.MOUNT_CONTRACT_INVALID, "mount contract invalid: ${e.message}")
+            teardownAfterStartupFailure(
+                generation = generation,
+                sessionId = currentSessionIdRef.get(),
+                launchStartId = startId,
+                cause = RuntimeServiceTerminationCause.MOUNT_CONTRACT_INVALID,
+                phase = "mount_contract"
+            )
             return
         } catch (e: java.lang.IllegalStateException) {
-            teardownAfterStartupFailure(generation, startId, RuntimeServiceTerminationCause.MOUNT_CONTRACT_INVALID, "mount contract invalid: ${e.message}")
+            teardownAfterStartupFailure(
+                generation = generation,
+                sessionId = currentSessionIdRef.get(),
+                launchStartId = startId,
+                cause = RuntimeServiceTerminationCause.MOUNT_CONTRACT_INVALID,
+                phase = "mount_contract"
+            )
             return
         }
 
@@ -192,7 +262,13 @@ class RuntimeService : Service() {
         val session = try {
             component.launch(request, observer, generation)
         } catch (e: Exception) {
-            teardownAfterStartupFailure(generation, startId, RuntimeServiceTerminationCause.ENVIRONMENT_BUILD_FAILED, "proot launch exception: ${e.message}")
+            teardownAfterStartupFailure(
+                generation = generation,
+                sessionId = currentSessionIdRef.get(),
+                launchStartId = startId,
+                cause = RuntimeServiceTerminationCause.ENVIRONMENT_BUILD_FAILED,
+                phase = "proot_launch_exception"
+            )
             return
         }
         currentSessionRef.set(session)
@@ -201,7 +277,7 @@ class RuntimeService : Service() {
             ServiceSessionContext(
                 generation = generation,
                 session = session,
-                startId = startId,
+                launchStartId = startId,
             )
         )
     }
@@ -209,18 +285,36 @@ class RuntimeService : Service() {
     private fun resolveActiveProgramSource(generation: Long, startId: Int): java.io.File? {
         val manager = AndroidRuntimeModule.activeRuntimeManager
         if (manager == null) {
-            teardownAfterStartupFailure(generation, startId, RuntimeServiceTerminationCause.NO_ACTIVE_RUNTIME, "active runtime manager is not available")
+            teardownAfterStartupFailure(
+                generation = generation,
+                sessionId = currentSessionIdRef.get(),
+                launchStartId = startId,
+                cause = RuntimeServiceTerminationCause.NO_ACTIVE_RUNTIME,
+                phase = "active_runtime_manager_check"
+            )
             return null
         }
         return when (val result = manager.resolveActiveProgramRoot()) {
             is com.amitia.amitia_app.runtime.install.ActiveProgramRootResult.Ready ->
                 result.root.hostDirectory
             is com.amitia.amitia_app.runtime.install.ActiveProgramRootResult.NoActiveRuntime -> {
-                teardownAfterStartupFailure(generation, startId, RuntimeServiceTerminationCause.NO_ACTIVE_RUNTIME, "no active runtime")
+                teardownAfterStartupFailure(
+                    generation = generation,
+                    sessionId = currentSessionIdRef.get(),
+                    launchStartId = startId,
+                    cause = RuntimeServiceTerminationCause.NO_ACTIVE_RUNTIME,
+                    phase = "no_active_runtime"
+                )
                 null
             }
             is com.amitia.amitia_app.runtime.install.ActiveProgramRootResult.Failure -> {
-                teardownAfterStartupFailure(generation, startId, RuntimeServiceTerminationCause.ACTIVE_PROGRAM_ROOT_INVALID, "active program root failure: ${result.message}")
+                teardownAfterStartupFailure(
+                    generation = generation,
+                    sessionId = currentSessionIdRef.get(),
+                    launchStartId = startId,
+                    cause = RuntimeServiceTerminationCause.ACTIVE_PROGRAM_ROOT_INVALID,
+                    phase = "active_program_root_failure"
+                )
                 null
             }
         }
@@ -228,15 +322,17 @@ class RuntimeService : Service() {
 
     private fun teardownAfterStartupFailure(
         generation: Long,
-        startId: Int,
+        sessionId: String?,
+        launchStartId: Int,
         cause: RuntimeServiceTerminationCause,
-        message: String,
+        phase: String,
     ) {
         val cleanupContext = StartupFailureCleanupContext(
             generation = generation,
-            startId = startId,
-            cause = cause,
-            message = message,
+            sessionId = sessionId,
+            launchStartId = launchStartId,
+            originalFailure = cause,
+            phase = phase,
         )
         if (!startupFailureCleanupContextRef.compareAndSet(null, cleanupContext)) {
             return
@@ -278,7 +374,35 @@ class RuntimeService : Service() {
                 if (currentSid != null && exit.sessionId != currentSid) return
                 handleSessionExited(exit)
             }
+            is ProotEvent.ExitWatcherFailed -> {
+                if (exitWatcherFailureAlreadyHandled()) return
+                handleExitWatcherFailed(event)
+            }
             else -> {}
+        }
+    }
+
+    private fun exitWatcherFailureAlreadyHandled(): Boolean {
+        val ctx = currentSessionContextRef.get() ?: return false
+        return ctx.terminalEvent != null
+    }
+
+    private fun handleExitWatcherFailed(event: ProotEvent.ExitWatcherFailed) {
+        lock.withLock {
+            if (destroyed.get()) return
+            val ctx = currentSessionContextRef.get() ?: return
+            if (ctx.terminalEvent != null) return
+
+            ctx.terminalEvent = TerminalEventKind.UNEXPECTED_TERMINATION
+
+            val teardownReason = ServiceTeardownReason.UNEXPECTED_TERMINATION
+            val stopId = ctx.stopStartId ?: ctx.launchStartId
+            val teardownResult = performServiceTeardown(stopId, teardownReason)
+            publishTerminalEventForExpectedOrUnexpected(
+                ctx = ctx,
+                teardownResult = teardownResult,
+                unexpectedCause = RuntimeServiceTerminationCause.EXIT_WATCHER_FAILED,
+            )
         }
     }
 
@@ -301,67 +425,89 @@ class RuntimeService : Service() {
 
             if (sessionContext.terminalEvent != null) return
 
-            sessionContext.terminalEvent = when {
-                exit.stopRequested -> TerminalEventKind.EXPECTED_STOPPED
-                else -> TerminalEventKind.UNEXPECTED_TERMINATION
-            }
-
-            endpoint.notify(
-                RuntimeServiceHostEvent.SessionExited(
-                    generation = exit.generation,
-                    sessionId = exit.sessionId,
-                    exitCode = exit.exitCode,
-                    forced = exit.stopRequested
-                )
-            )
-
-            if (serviceState.get() != ServiceHostState.FOREGROUND) return
-
-            if (exit.stopRequested) {
-                serviceState.set(ServiceHostState.DESTROYED)
-                teardownServiceForTerminalSession(
-                    generation = exit.generation,
-                    sessionId = exit.sessionId,
-                    startId = sessionContext.startId,
-                    reason = ServiceTeardownReason.EXPECTED_STOP,
-                )
-                endpoint.notify(RuntimeServiceHostEvent.ExpectedStopped(generation = exit.generation))
+            val terminalKind = if (exit.stopRequested) {
+                TerminalEventKind.EXPECTED_STOPPED
             } else {
-                serviceState.set(ServiceHostState.DESTROYED)
-                teardownServiceForTerminalSession(
-                    generation = exit.generation,
-                    sessionId = exit.sessionId,
-                    startId = sessionContext.startId,
-                    reason = ServiceTeardownReason.UNEXPECTED_TERMINATION,
-                )
-                endpoint.notify(
-                    RuntimeServiceHostEvent.UnexpectedTermination(
-                        generation = exit.generation,
-                        cause = RuntimeServiceTerminationCause.SESSION_EXITED
-                    )
-                )
+                TerminalEventKind.UNEXPECTED_TERMINATION
             }
-            clearSessionState()
+            sessionContext.terminalEvent = terminalKind
+
+            val teardownReason = if (terminalKind == TerminalEventKind.EXPECTED_STOPPED) {
+                ServiceTeardownReason.EXPECTED_STOP
+            } else {
+                ServiceTeardownReason.UNEXPECTED_TERMINATION
+            }
+            val stopId = sessionContext.stopStartId ?: sessionContext.launchStartId
+            val teardownResult = performServiceTeardown(stopId, teardownReason)
+
+            publishTerminalEventForExpectedOrUnexpected(
+                ctx = sessionContext,
+                teardownResult = teardownResult,
+                unexpectedCause = RuntimeServiceTerminationCause.SESSION_EXITED,
+            )
         }
     }
 
-    private fun teardownServiceForTerminalSession(
-        generation: Long,
-        sessionId: String?,
-        startId: Int,
-        reason: ServiceTeardownReason,
+    private fun publishTerminalEventForExpectedOrUnexpected(
+        ctx: ServiceSessionContext,
+        teardownResult: ServiceTeardownResult,
+        unexpectedCause: RuntimeServiceTerminationCause,
     ) {
-        if (!serviceTeardownCompleted.compareAndSet(false, true)) return
+        when {
+            ctx.terminalEvent == TerminalEventKind.EXPECTED_STOPPED &&
+                teardownResult is ServiceTeardownResult.FullyStopped -> {
+                serviceState.set(ServiceHostState.DESTROYED)
+                endpoint.notify(
+                    RuntimeServiceHostEvent.ExpectedStopped(
+                        generation = ctx.generation,
+                        result = teardownResult,
+                    )
+                )
+            }
+            ctx.terminalEvent == TerminalEventKind.EXPECTED_STOPPED &&
+                teardownResult !is ServiceTeardownResult.FullyStopped -> {
+                serviceState.set(ServiceHostState.DESTROYED)
+                endpoint.notify(
+                    RuntimeServiceHostEvent.UnexpectedTermination(
+                        generation = ctx.generation,
+                        cause = RuntimeServiceTerminationCause.STOP_RESULT_FAILED,
+                    )
+                )
+            }
+            ctx.terminalEvent == TerminalEventKind.UNEXPECTED_TERMINATION -> {
+                serviceState.set(ServiceHostState.DESTROYED)
+                endpoint.notify(
+                    RuntimeServiceHostEvent.UnexpectedTermination(
+                        generation = ctx.generation,
+                        cause = unexpectedCause,
+                    )
+                )
+            }
+        }
+        clearSessionState()
+    }
+
+    private fun performServiceTeardown(startId: Int, reason: ServiceTeardownReason): ServiceTeardownResult {
+        if (!serviceTeardownCompleted.compareAndSet(false, true)) {
+            return ServiceTeardownResult.SupersededByNewStart
+        }
         try {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } catch (_: Exception) {
         }
-        try {
+        val stopResult = try {
             stopSelfResult(startId)
         } catch (_: Exception) {
-            try {
-                stopSelf()
-            } catch (_: Exception) {
+            false
+        }
+        return if (stopResult) {
+            ServiceTeardownResult.FullyStopped(startId)
+        } else {
+            if (reason == ServiceTeardownReason.STARTUP_FAILURE) {
+                try { stopSelf() } catch (_: Exception) {}
+                ServiceTeardownResult.Failed
+            } else {
+                ServiceTeardownResult.Failed
             }
         }
     }
@@ -375,21 +521,27 @@ class RuntimeService : Service() {
             stopForeground(STOP_FOREGROUND_REMOVE)
         } catch (_: Exception) {
         }
-        try {
-            stopSelfResult(cleanupContext.startId)
-        } catch (_: Exception) {
-            try {
-                stopSelf()
-            } catch (_: Exception) {
-            }
+        if (!tryStopSelf(cleanupContext.launchStartId)) {
+            try { stopSelf() } catch (_: Exception) {}
         }
         endpoint.notify(
-            RuntimeServiceHostEvent.LaunchFailed(
+            RuntimeServiceHostEvent.StartupFailed(
                 generation = cleanupContext.generation,
-                cause = cleanupContext.cause,
-                message = cleanupContext.message,
+                cause = cleanupContext.originalFailure,
+                message = cleanupContext.phase,
+                sessionId = cleanupContext.sessionId,
+                launchStartId = cleanupContext.launchStartId,
+                phase = cleanupContext.phase,
             )
         )
+    }
+
+    private fun tryStopSelf(startId: Int): Boolean {
+        return try {
+            stopSelfResult(startId)
+        } catch (_: Exception) {
+            false
+        }
     }
 
     private fun clearSessionState() {
@@ -399,20 +551,20 @@ class RuntimeService : Service() {
         currentGenerationRef.set(0L)
     }
 
-    private fun handleStopHost() {
-        val intent = currentIntent.get() ?: return
-        val targetGeneration = intent.getLongExtra(RuntimeServiceContract.EXTRA_TARGET_GENERATION, Long.MIN_VALUE)
+    private fun handleStopHost(targetGeneration: Long, stopStartId: Int) {
         if (targetGeneration == Long.MIN_VALUE || targetGeneration <= 0L) {
             return
         }
-        val sessionContext = currentSessionContextRef.get()
-        if (sessionContext == null) {
-            return
-        }
+        val sessionContext = currentSessionContextRef.get() ?: return
         if (sessionContext.generation != targetGeneration) {
             return
         }
-        sessionContext.stopRequested = true
+        val currentStopId = sessionContext.stopStartId
+        if (currentStopId != null && stopStartId < currentStopId) {
+            return
+        }
+        sessionContext.stopStartId = stopStartId
+        sessionContext.terminalEvent = TerminalEventKind.EXPECTED_STOPPED
         val session = currentSessionRef.get()
         if (session != null && session.isAlive()) {
             session.requestStop()
@@ -435,30 +587,26 @@ class RuntimeService : Service() {
     }
 
     override fun onDestroy() {
-        var expectedStoppedGeneration: Long? = null
-        var unexpectedTerminationCause: RuntimeServiceTerminationCause? = null
         var unexpectedTerminationGeneration: Long? = null
+        var unexpectedTerminationCause: RuntimeServiceTerminationCause? = null
         lock.withLock {
             destroyed.set(true)
             serviceState.set(ServiceHostState.DESTROYED)
             val sessionContext = currentSessionContextRef.get()
             if (sessionContext != null && sessionContext.terminalEvent == null) {
-                if (sessionContext.stopRequested) {
-                    sessionContext.terminalEvent = TerminalEventKind.EXPECTED_STOPPED
-                    expectedStoppedGeneration = sessionContext.generation
-                } else {
-                    sessionContext.terminalEvent = TerminalEventKind.UNEXPECTED_TERMINATION
-                    unexpectedTerminationCause = RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
-                    unexpectedTerminationGeneration = sessionContext.generation
+                sessionContext.terminalEvent = TerminalEventKind.UNEXPECTED_TERMINATION
+                unexpectedTerminationCause = RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
+                unexpectedTerminationGeneration = sessionContext.generation
+                serviceTeardownCompleted.set(true)
+                try {
+                    stopForeground(STOP_FOREGROUND_REMOVE)
+                } catch (_: Exception) {
                 }
             }
             clearSessionState()
             startupFailureCleanupContextRef.set(null)
         }
-        if (expectedStoppedGeneration != null) {
-            endpoint.notify(RuntimeServiceHostEvent.ExpectedStopped(generation = expectedStoppedGeneration!!))
-        }
-        if (unexpectedTerminationCause != null && unexpectedTerminationGeneration != null) {
+        if (unexpectedTerminationGeneration != null && unexpectedTerminationCause != null) {
             endpoint.notify(
                 RuntimeServiceHostEvent.UnexpectedTermination(
                     generation = unexpectedTerminationGeneration!!,

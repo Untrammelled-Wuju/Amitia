@@ -42,14 +42,39 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     public func capabilitySnapshot() -> IOSNativeCapability {
-        let authorized = isHomeKitAuthorized()
+        let status = homeKitAuthorizationStatusUnchecked()
+        let authorized = status == .authorized
+        let available = status != .restricted
         return IOSNativeCapability(
-            available: true,
+            available: available,
             authorized: authorized,
             hardwareAvailable: true,
             platformSupported: true,
-            foregroundRequired: false
+            foregroundRequired: true
         )
+    }
+
+    private func ensureAuthorized(_ request: IOSNativeRequest) -> IOSNativeResponse? {
+        let status = homeKitAuthorizationStatusUnchecked()
+        if status == .restricted {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "HOMEKIT_RESTRICTED", message: "HomeKit access is restricted by system policy")
+            )
+        }
+        if status == .notDetermined {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestID: request.requestID,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "HOMEKIT_NOT_DETERMINED", message: "HomeKit authorization not yet determined")
+            )
+        }
+        return nil
     }
 
     public func execute(_ request: IOSNativeRequest) async -> IOSNativeResponse {
@@ -149,6 +174,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleHomesList(_ request: IOSNativeRequest) -> IOSNativeResponse {
+        if let rejection = ensureAuthorized(request) { return rejection }
         let generation = store.currentGeneration
         let homes = store.allHomes().map { home in
             [
@@ -168,6 +194,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleHomesGet(_ request: IOSNativeRequest) -> IOSNativeResponse {
+        if let rejection = ensureAuthorized(request) { return rejection }
         guard let homeId = request.payload?["id"] as? String else {
             return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing home id")
         }
@@ -192,6 +219,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleRoomsList(_ request: IOSNativeRequest) -> IOSNativeResponse {
+        if let rejection = ensureAuthorized(request) { return rejection }
         guard let homeId = request.payload?["homeId"] as? String else {
             return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing homeId")
         }
@@ -217,6 +245,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleZonesList(_ request: IOSNativeRequest) -> IOSNativeResponse {
+        if let rejection = ensureAuthorized(request) { return rejection }
         guard let homeId = request.payload?["homeId"] as? String else {
             return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing homeId")
         }
@@ -242,6 +271,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleAccessoriesList(_ request: IOSNativeRequest) -> IOSNativeResponse {
+        if let rejection = ensureAuthorized(request) { return rejection }
         guard let homeId = request.payload?["homeId"] as? String else {
             return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing homeId")
         }
@@ -270,6 +300,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleAccessoriesGet(_ request: IOSNativeRequest) -> IOSNativeResponse {
+        if let rejection = ensureAuthorized(request) { return rejection }
         guard let homeId = request.payload?["homeId"] as? String else {
             return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing homeId")
         }
@@ -303,6 +334,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleServicesList(_ request: IOSNativeRequest) -> IOSNativeResponse {
+        if let rejection = ensureAuthorized(request) { return rejection }
         guard let homeId = request.payload?["homeId"] as? String else {
             return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing homeId")
         }
@@ -338,6 +370,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleCharacteristicsList(_ request: IOSNativeRequest) -> IOSNativeResponse {
+        if let rejection = ensureAuthorized(request) { return rejection }
         guard let homeId = request.payload?["homeId"] as? String else {
             return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing homeId")
         }
@@ -380,6 +413,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleCharacteristicsRead(_ request: IOSNativeRequest) async -> IOSNativeResponse {
+        if let rejection = ensureAuthorized(request) { return rejection }
         guard let homeId = request.payload?["homeId"] as? String else {
             return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing homeId")
         }
@@ -423,6 +457,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleCharacteristicsWrite(_ request: IOSNativeRequest) async -> IOSNativeResponse {
+        if let rejection = ensureAuthorized(request) { return rejection }
         guard let homeId = request.payload?["homeId"] as? String else {
             return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing homeId")
         }
@@ -472,6 +507,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleActionSetsList(_ request: IOSNativeRequest) -> IOSNativeResponse {
+        if let rejection = ensureAuthorized(request) { return rejection }
         guard let homeId = request.payload?["homeId"] as? String else {
             return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing homeId")
         }
@@ -503,6 +539,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleActionSetsGet(_ request: IOSNativeRequest) -> IOSNativeResponse {
+        if let rejection = ensureAuthorized(request) { return rejection }
         guard let homeId = request.payload?["homeId"] as? String else {
             return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing homeId")
         }
@@ -535,6 +572,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleActionSetsExecute(_ request: IOSNativeRequest) async -> IOSNativeResponse {
+        if let rejection = ensureAuthorized(request) { return rejection }
         guard let homeId = request.payload?["homeId"] as? String else {
             return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing homeId")
         }
@@ -608,6 +646,7 @@ public class HomeKitNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleAutomationsList(_ request: IOSNativeRequest) -> IOSNativeResponse {
+        if let rejection = ensureAuthorized(request) { return rejection }
         guard let homeId = request.payload?["homeId"] as? String else {
             return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing homeId")
         }

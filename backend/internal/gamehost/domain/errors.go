@@ -15,6 +15,8 @@ const (
 	ErrPermissionDenied   ErrorCode = "permission_denied"
 	ErrResourceExhausted  ErrorCode = "resource_exhausted"
 	ErrInternal           ErrorCode = "internal"
+	ErrTimeout            ErrorCode = "timeout"
+	ErrCancelled          ErrorCode = "cancelled"
 )
 
 type HostError struct {

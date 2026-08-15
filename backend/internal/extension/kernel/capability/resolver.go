@@ -138,10 +138,9 @@ func buildExecutionTarget(def *CapabilityProviderDefinition, inst *CapabilityPro
 	return InvocationExecutionTarget{
 		Placement: string(inst.Placement),
 
-		UserID:           inst.UserID,
-		DeviceID:         inst.DeviceID,
-		RuntimeID:        inst.RuntimeID,
-		RuntimeSessionID: inst.RuntimeSessionID,
+		UserID:    inst.UserID,
+		DeviceID:  inst.DeviceID,
+		RuntimeID: inst.RuntimeID,
 
 		ProviderID:         string(inst.ProviderID),
 		ProviderInstanceID: string(inst.ID),

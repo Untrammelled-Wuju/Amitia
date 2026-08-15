@@ -71,8 +71,15 @@ func (s *Service) Status(ctx context.Context) CapabilityState {
 		}
 	}
 
-	state.TextInput = s.accessibility != nil
-	state.Scroll = s.accessibility != nil
+	if s.shizuku != nil && s.policy.AllowShizukuFallback {
+		state.Shizuku = true
+		if state.State == "unavailable" {
+			state.State = "degraded"
+		}
+	}
+
+	state.TextInput = s.accessibility != nil || (s.shizuku != nil && s.policy.AllowShizukuFallback)
+	state.Scroll = s.accessibility != nil || (s.shizuku != nil && s.policy.AllowShizukuFallback)
 
 	if s.visual != nil {
 		state.VisualLocate = true
@@ -196,6 +203,27 @@ func (s *Service) clickNodeBounds(
 		return InteractionResult{}, err
 	}
 
+	if s.shizuku != nil && req.AllowShizukuFallback && s.policy.AllowShizukuFallback {
+		err := s.shizuku.Tap(ctx, centerX, centerY)
+		if err == nil {
+			result := InteractionResult{
+				Success:    true,
+				Operation:  OperationClick,
+				Strategy:   StrategyShizuku,
+				SnapshotID: node.SnapshotID,
+				NodeID:     node.Node.NodeID,
+				X:          &centerX,
+				Y:          &centerY,
+				DurationMS: time.Since(startTime).Milliseconds(),
+			}
+			if req.Verify {
+				s.verifyResult(ctx, result)
+			}
+			return result, nil
+		}
+		return InteractionResult{}, err
+	}
+
 	if s.root != nil && req.AllowRootFallback && s.policy.AllowRootFallback {
 		err := s.root.Tap(ctx, centerX, centerY)
 		if err == nil {
@@ -261,6 +289,25 @@ func (s *Service) clickCoordinate(
 				Success:    true,
 				Operation:  OperationClick,
 				Strategy:   StrategyCoordinate,
+				X:          &x,
+				Y:          &y,
+				DurationMS: time.Since(startTime).Milliseconds(),
+			}
+			if req.Verify {
+				s.verifyResult(ctx, result)
+			}
+			return result, nil
+		}
+		return InteractionResult{}, err
+	}
+
+	if s.shizuku != nil && req.AllowShizukuFallback && s.policy.AllowShizukuFallback {
+		err := s.shizuku.Tap(ctx, x, y)
+		if err == nil {
+			result := InteractionResult{
+				Success:    true,
+				Operation:  OperationClick,
+				Strategy:   StrategyShizuku,
 				X:          &x,
 				Y:          &y,
 				DurationMS: time.Since(startTime).Milliseconds(),
@@ -449,6 +496,31 @@ func (s *Service) LongClick(ctx context.Context, req LongClickRequest) (Interact
 		return InteractionResult{}, err
 	}
 
+	if s.shizuku != nil && req.AllowShizukuFallback && s.policy.AllowShizukuFallback {
+		bounds := node.Node.Bounds
+		centerX := bounds.CenterX()
+		centerY := bounds.CenterY()
+
+		err := s.shizuku.LongPress(ctx, centerX, centerY, durationMS)
+		if err == nil {
+			result := InteractionResult{
+				Success:    true,
+				Operation:  OperationLongClick,
+				Strategy:   StrategyShizuku,
+				SnapshotID: target.SnapshotID,
+				NodeID:     target.NodeID,
+				X:          &centerX,
+				Y:          &centerY,
+				DurationMS: time.Since(startTime).Milliseconds(),
+			}
+			if req.Verify {
+				s.verifyResult(ctx, result)
+			}
+			return result, nil
+		}
+		return InteractionResult{}, err
+	}
+
 	return InteractionResult{}, &Error{Code: INTERACTION_ACTION_UNSUPPORTED, Message: "long click not supported"}
 }
 
@@ -495,6 +567,24 @@ func (s *Service) InputText(ctx context.Context, req InputTextRequest) (Interact
 				Success:    true,
 				Operation:  OperationInputText,
 				Strategy:   StrategyAccessibilityAction,
+				SnapshotID: target.SnapshotID,
+				NodeID:     target.NodeID,
+				DurationMS: time.Since(startTime).Milliseconds(),
+			}
+			if req.Verify {
+				s.verifyResult(ctx, result)
+			}
+			return result, nil
+		}
+	}
+
+	if s.shizuku != nil && s.policy.AllowShizukuFallback {
+		err := s.shizuku.InputText(ctx, req.Text)
+		if err == nil {
+			result := InteractionResult{
+				Success:    true,
+				Operation:  OperationInputText,
+				Strategy:   StrategyShizuku,
 				SnapshotID: target.SnapshotID,
 				NodeID:     target.NodeID,
 				DurationMS: time.Since(startTime).Milliseconds(),
@@ -687,6 +777,23 @@ func (s *Service) Swipe(ctx context.Context, req SwipeRequest) (InteractionResul
 				Success:    true,
 				Operation:  OperationSwipe,
 				Strategy:   StrategyCoordinate,
+				DisplayID:  req.DisplayID,
+				X:          &req.StartX,
+				Y:          &req.StartY,
+				DurationMS: time.Since(startTime).Milliseconds(),
+			}
+			return result, nil
+		}
+		return InteractionResult{}, err
+	}
+
+	if s.shizuku != nil && s.policy.AllowShizukuFallback {
+		err := s.shizuku.Swipe(ctx, req.StartX, req.StartY, req.EndX, req.EndY, req.DurationMS)
+		if err == nil {
+			result := InteractionResult{
+				Success:    true,
+				Operation:  OperationSwipe,
+				Strategy:   StrategyShizuku,
 				DisplayID:  req.DisplayID,
 				X:          &req.StartX,
 				Y:          &req.StartY,

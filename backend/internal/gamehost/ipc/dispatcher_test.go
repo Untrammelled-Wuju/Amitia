@@ -197,7 +197,7 @@ func (d *testDispatcher) Dispatch(ctx context.Context, peer Peer, envelope proto
 func TestNoopDispatcher(t *testing.T) {
 	disp := NewNoopDispatcher()
 
-	err := disp.Dispatch(context.Background(), Peer{}, protocol.Envelope{})
+	err := disp.Dispatch(context.Background(), DispatchSource{}, protocol.Envelope{})
 	if err != nil {
 		t.Errorf("noop dispatcher should never fail: %v", err)
 	}

@@ -193,3 +193,93 @@ func TestRelayBridgeRejectsOldGenerationEnvelope(t *testing.T) {
 		t.Fatalf("unexpected error for old generation: %v", err)
 	}
 }
+
+func TestRelayBridgeSingleOwnerInvariant(t *testing.T) {
+	bridge := &fakeRelayBridge{health: HealthReady}
+	handler := NewRelayHandler()
+	handler.RegisterBridge("android", bridge)
+
+	var lastGen uint64
+	for i := 0; i < 5; i++ {
+		gen := bridge.AttachRelaySession(nil)
+		if gen <= lastGen {
+			t.Fatalf("generation should increase monotonically: last=%d new=%d", lastGen, gen)
+		}
+		lastGen = gen
+		bridge.AttachRelaySession(nil)
+		bridge.DetachRelaySession(gen)
+	}
+
+	handler.SetEventSink("android", &fakeEventSink{})
+}
+
+type fakeEventSink struct {
+	events int
+}
+
+func (s *fakeEventSink) PublishNativeEvent(_ context.Context, _ string, _ uint64, _ json.RawMessage) error {
+	s.events++
+	return nil
+}
+
+func TestRelayEnvelopeResponseWithGenerationGate(t *testing.T) {
+	bridge := &fakeRelayBridge{health: HealthReady}
+	gen := bridge.AttachRelaySession(nil)
+
+	env := RelayEnvelope{
+		Type:       "native_bridge.response",
+		Generation: gen,
+		RequestID:  "req-001",
+		Payload:    json.RawMessage(`{"ok":true}`),
+	}
+	data, _ := json.Marshal(env)
+	if err := bridge.HandleRelayEnvelope(data); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	found := false
+	for _, e := range bridge.envelopes {
+		var r Response
+		if err := json.Unmarshal(e, &r); err == nil && r.RequestID == "req-001" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected response envelope recorded")
+	}
+}
+
+func TestRelayHandlerSetEventSinkNoPanic(t *testing.T) {
+	handler := NewRelayHandler()
+	bridge := &fakeRelayBridge{health: HealthReady}
+	handler.RegisterBridge("android", bridge)
+
+	sink := &fakeEventSink{}
+	handler.SetEventSink("android", sink)
+
+	handler.SetEventSink("ios", &fakeEventSink{})
+}
+
+func TestRelayHandlerGetSessionReturnsNilInitially(t *testing.T) {
+	handler := NewRelayHandler()
+	_, ok := handler.GetSession("android")
+	if ok {
+		t.Fatal("expected no session before any connection")
+	}
+}
+
+func TestRelayBridgeGenerationMismatchIgnoresHandler(t *testing.T) {
+	bridge := &fakeRelayBridge{health: HealthReady}
+	gen := bridge.AttachRelaySession(nil)
+	bridge.AttachRelaySession(nil)
+
+	env := RelayEnvelope{
+		Type:       "native_bridge.event",
+		Generation: gen,
+		Payload:    json.RawMessage(`{"stale":true}`),
+	}
+	data, _ := json.Marshal(env)
+	if err := bridge.HandleRelayEnvelope(data); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}

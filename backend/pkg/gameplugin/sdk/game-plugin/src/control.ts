@@ -120,7 +120,7 @@ export async function getAuthoritySnapshot(
   if (serviceId) {
     input.serviceId = serviceId;
   }
-  const envelope = await client.sendReservedRequest(METHOD_AUTHORITY_SNAPSHOT, input, undefined, ...opts);
+  const envelope = await client.sendReservedRequest(METHOD_AUTHORITY_SNAPSHOT, input, ...opts);
   return envelope.payload as AuthoritySnapshot;
 }
 
@@ -129,7 +129,7 @@ export async function registerControlSink(
   input: ControlSinkRegisterInput,
   opts: MessageOption[] = []
 ): Promise<ControlSinkRegisterResult> {
-  const envelope = await client.sendReservedRequest(METHOD_CONTROL_REGISTER_SINK, input, undefined, ...opts);
+  const envelope = await client.sendReservedRequest(METHOD_CONTROL_REGISTER_SINK, input, ...opts);
   return envelope.payload as ControlSinkRegisterResult;
 }
 
@@ -138,7 +138,7 @@ export async function submitControlOutput(
   input: ControlOutputInput,
   opts: MessageOption[] = []
 ): Promise<ControlOutputResult> {
-  const envelope = await client.sendReservedRequest(METHOD_CONTROL_OUTPUT, input, undefined, ...opts);
+  const envelope = await client.sendReservedRequest(METHOD_CONTROL_OUTPUT, input, ...opts);
   return envelope.payload as ControlOutputResult;
 }
 
@@ -148,7 +148,7 @@ export async function takeoverAuthority(
   _runtimeId: string,
   opts: MessageOption[] = []
 ): Promise<AuthorityTakeoverResult> {
-  const envelope = await client.sendReservedRequest(METHOD_CONTROL_AUTHORITY_TAKEOVER, input, undefined, ...opts);
+  const envelope = await client.sendReservedRequest(METHOD_CONTROL_AUTHORITY_TAKEOVER, input, ...opts);
   return envelope.payload as AuthorityTakeoverResult;
 }
 
@@ -158,7 +158,7 @@ export async function releaseAuthority(
   _runtimeId: string,
   opts: MessageOption[] = []
 ): Promise<AuthorityReleaseResult> {
-  const envelope = await client.sendReservedRequest(METHOD_CONTROL_AUTHORITY_RELEASE, input, undefined, ...opts);
+  const envelope = await client.sendReservedRequest(METHOD_CONTROL_AUTHORITY_RELEASE, input, ...opts);
   return envelope.payload as AuthorityReleaseResult;
 }
 
@@ -167,7 +167,7 @@ export async function getEmergencyStopStatus(
   input: EmergencyStopStatusInput = {},
   opts: MessageOption[] = []
 ): Promise<EmergencyStopStatusResult> {
-  const envelope = await client.sendReservedRequest(METHOD_EMERGENCY_STOP_STATUS, input, undefined, ...opts);
+  const envelope = await client.sendReservedRequest(METHOD_EMERGENCY_STOP_STATUS, input, ...opts);
   return envelope.payload as EmergencyStopStatusResult;
 }
 

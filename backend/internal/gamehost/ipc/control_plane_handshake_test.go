@@ -39,7 +39,8 @@ func TestControlPlane_HandshakeGate_BusinessBlockedBeforeHello(t *testing.T) {
 
 	resolver := &MockResolver{PluginID: "gate.plugin"}
 	mgr := newTestHandshakeManager()
-	controller := handshake.NewHandshakeControllerAdapter(mgr)
+	gate := handshake.NewReadyGate([]string{handshake.HelloMethod})
+	controller := handshake.NewHandshakeControllerAdapter(mgr, gate)
 
 	var dispatched []protocol.Envelope
 	var mu sync.Mutex
@@ -53,6 +54,7 @@ func TestControlPlane_HandshakeGate_BusinessBlockedBeforeHello(t *testing.T) {
 	}
 
 	cfg := ipc.ControlPlaneConfig{
+		Registry:            ipc.NewConnectionRegistry(),
 		Resolver:            resolver,
 		HandshakeController: controller,
 		Dispatcher:          dispatcher,
@@ -105,7 +107,8 @@ func TestControlPlane_HandshakeGate_HelloSucceedsAndUnlocksTraffic(t *testing.T)
 
 	resolver := &MockResolver{PluginID: "hello.plugin"}
 	mgr := newTestHandshakeManager()
-	controller := handshake.NewHandshakeControllerAdapter(mgr)
+	gate := handshake.NewReadyGate([]string{handshake.HelloMethod})
+	controller := handshake.NewHandshakeControllerAdapter(mgr, gate)
 
 	var dispatched []protocol.Envelope
 	var mu sync.Mutex
@@ -119,6 +122,7 @@ func TestControlPlane_HandshakeGate_HelloSucceedsAndUnlocksTraffic(t *testing.T)
 	}
 
 	cfg := ipc.ControlPlaneConfig{
+		Registry:            ipc.NewConnectionRegistry(),
 		Resolver:            resolver,
 		HandshakeController: controller,
 		Dispatcher:          dispatcher,
@@ -212,9 +216,11 @@ func TestControlPlane_HandshakeGate_ProtocolMismatchFails(t *testing.T) {
 
 	resolver := &MockResolver{PluginID: "mismatch.plugin"}
 	mgr := newTestHandshakeManager()
-	controller := handshake.NewHandshakeControllerAdapter(mgr)
+	gate := handshake.NewReadyGate([]string{handshake.HelloMethod})
+	controller := handshake.NewHandshakeControllerAdapter(mgr, gate)
 
 	cfg := ipc.ControlPlaneConfig{
+		Registry:            ipc.NewConnectionRegistry(),
 		Resolver:            resolver,
 		HandshakeController: controller,
 		Dispatcher:          ipc.NewNoopDispatcher(),
@@ -277,9 +283,11 @@ func TestControlPlane_HandshakeGate_NotReadyFailsDuplicateHello(t *testing.T) {
 
 	resolver := &MockResolver{PluginID: "duphello.plugin"}
 	mgr := newTestHandshakeManager()
-	controller := handshake.NewHandshakeControllerAdapter(mgr)
+	gate := handshake.NewReadyGate([]string{handshake.HelloMethod})
+	controller := handshake.NewHandshakeControllerAdapter(mgr, gate)
 
 	cfg := ipc.ControlPlaneConfig{
+		Registry:            ipc.NewConnectionRegistry(),
 		Resolver:            resolver,
 		HandshakeController: controller,
 		Dispatcher:          ipc.NewNoopDispatcher(),

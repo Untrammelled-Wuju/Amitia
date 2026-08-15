@@ -14,6 +14,8 @@ const (
 	IPCErrorPeerRoute   IPCErrorType = "peer_route"
 	IPCErrorLimit       IPCErrorType = "limit"
 	IPCErrorDuplicate   IPCErrorType = "duplicate"
+	IPCErrorTimeout     IPCErrorType = "timeout"
+	IPCErrorCancelled   IPCErrorType = "cancelled"
 )
 
 type IPCError struct {

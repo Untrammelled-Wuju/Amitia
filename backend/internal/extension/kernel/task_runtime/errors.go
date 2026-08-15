@@ -47,6 +47,8 @@ const (
 	ErrRemoteTaskExecutorUnavailable    TaskErrorCode = "remote_task_executor_unavailable"
 	ErrTaskExecutionAttemptInvalid      TaskErrorCode = "task_execution_attempt_invalid"
 	ErrTaskExecutionUnsupported         TaskErrorCode = "task_execution_unsupported"
+	ErrTaskRevisionConflict             TaskErrorCode = "task_revision_conflict"
+	ErrTaskStaleWrite                   TaskErrorCode = "task_stale_write"
 )
 
 type TaskError struct {
@@ -86,6 +88,15 @@ func IsRetryableErrorCode(code TaskErrorCode) bool {
 		return true
 	}
 	return false
+}
+
+func IsRevisionConflict(err error) bool {
+	return IsTaskErrorCode(err, ErrTaskRevisionConflict) ||
+		IsTaskErrorCode(err, ErrTaskStaleWrite)
+}
+
+func NextRevision(current int64) int64 {
+	return current + 1
 }
 
 func HTTPStatusForErrorCode(code TaskErrorCode) int {

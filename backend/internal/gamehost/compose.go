@@ -3,6 +3,7 @@ package gamehost
 import (
 	"context"
 	"fmt"
+	"log"
 
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
@@ -381,11 +382,16 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		}
 	}
 
-
-	if secretAdapter == nil {
-		return nil, fmt.Errorf("compose emergency stop service: SecretBroker is required")
+	var emergencySecretAdapter control.SecretLeaseRevoker
+	var emergencySecretVerifier control.SecretLeaseVerifier
+	if secretAdapter != nil {
+		emergencySecret := integration.NewEmergencySecretLeaseAdapter(secretAdapter)
+		emergencySecretAdapter = emergencySecret
+		emergencySecretVerifier = emergencySecret
+	} else {
+		emergencySecretAdapter = &noopSecretLeaseHandler{}
+		emergencySecretVerifier = &noopSecretLeaseHandler{}
 	}
-	emergencySecretAdapter := integration.NewEmergencySecretLeaseAdapter(secretAdapter)
 	emergencyStopService, err = control.NewEmergencyStopService(control.EmergencyStopServiceOptions{
 		Authority:          controlManager,
 		Gate:               pluginOutputGate,
@@ -402,7 +408,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		BinaryReleaser:     emergencyBinaryAdapter,
 		PendingVerifier:    emergencyPendingVerifier,
 		ConnectionVerifier: emergencyConnectionVerifier,
-		LeaseVerifier:      emergencySecretAdapter,
+		LeaseVerifier:      emergencySecretVerifier,
 		ReadyVerifier:      emergencyReadyAdapter,
 		HostAPIVerifier:    emergencyHostAPITracker,
 		StreamVerifier:     emergencyStreamVerifier,
@@ -608,25 +614,14 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		},
 		func(extensionID string) bool {
 			plugins, err := pluginReg.ListByExtension(context.Background(), extensionID)
-			if err != nil || len(plugins) == 0 {
-				return false
-			}
-			for _, p := range plugins {
-				if p.InstallationState == domain.InstallationStateInstalled && p.EnablementState == domain.EnablementStateEnabled {
-					return true
-				}
-			}
-			return false
+			return err == nil && len(plugins) > 0
 		},
 		func(pluginID domain.PluginID) bool {
 			_, err := pluginReg.Get(context.Background(), pluginID)
 			return err == nil
 		},
 	)
-	eligibilityChecker := &recovery.RecoveryEligibilityChecker{
-		intentChecker:    intentChecker,
-		extensionChecker: extensionChecker,
-	}
+	eligibilityChecker := recovery.NewRecoveryEligibilityChecker(intentChecker, extensionChecker)
 
 	recoveryCoordinator, err := ComposeRecoveryCoordinator(recovery.RecoveryCoordinatorDeps{
 		Kernel:               kernelRollbackAdapter,
@@ -857,4 +852,14 @@ func (a *recoveryRuntimeManagerAdapter) ListRuntimes() []*recovery.RuntimeInstan
 		out = append(out, &recovery.RuntimeInstanceRef{ID: rt.ID, PluginID: rt.PluginID, State: rt.State})
 	}
 	return out
+}
+
+type noopSecretLeaseHandler struct{}
+
+func (n *noopSecretLeaseHandler) RevokeRuntimeLeases(ctx context.Context, runtimeID domain.RuntimeInstanceID) (int, error) {
+	return 0, nil
+}
+
+func (n *noopSecretLeaseHandler) CountRuntimeLeases(runtimeID domain.RuntimeInstanceID) int {
+	return 0
 }

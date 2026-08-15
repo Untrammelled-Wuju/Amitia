@@ -182,6 +182,15 @@ func main() {
 
 	if policy.CoreBusinessServices {
 		productionCutover := initCutoverGate(db, services)
+		closureGate := NewStage2ClosureGate(services)
+		services.ProductionCutover = productionCutover
+		services.ClosureGate = closureGate
+
+		archReady := closureGate.ArchitectureReady()
+		if !archReady.Ready {
+			log.Info("Closure gate not ready:", archReady.Reasons)
+		}
+
 		checkResult, err := productionCutover.cutoverPlan.ComputeCutoverCheck(appCtx)
 		if err != nil {
 			log.Error("检查生产切换状态失败:", err)
@@ -196,6 +205,12 @@ func main() {
 		}
 
 		if checkResult.Incomplete {
+			canRun, reasons := closureGate.CanRunCutover()
+			if !canRun {
+				log.Error(closureGate.FailureMessage(reasons))
+				_ = bootstrap.StopAll(context.Background())
+				os.Exit(1)
+			}
 			log.Info("检测到未完成的生产切换，正在恢复执行...")
 			if err := productionCutover.RunCutover(appCtx); err != nil {
 				log.Error("生产切换执行失败:", err)
@@ -204,7 +219,15 @@ func main() {
 			}
 			log.Info("生产切换完成")
 		} else if !checkResult.Committed {
-			if !freshInstall {
+			if freshInstall {
+				log.Info("新安装数据库，等待Closure Gate通过后再执行cutover")
+			} else {
+				canRun, reasons := closureGate.CanRunCutover()
+				if !canRun {
+					log.Error(closureGate.FailureMessage(reasons))
+					_ = bootstrap.StopAll(context.Background())
+					os.Exit(1)
+				}
 				log.Info("执行生产切换...")
 				if err := productionCutover.RunCutover(appCtx); err != nil {
 					log.Error("生产切换执行失败:", err)
@@ -212,13 +235,6 @@ func main() {
 					os.Exit(1)
 				}
 				log.Info("生产切换完成")
-			} else {
-				log.Info("新安装数据库，初始化canonical已提交状态...")
-				if err := initializeCommittedCutoverState(db, services); err != nil {
-					log.Error("初始化canonical切换状态失败:", err)
-					_ = bootstrap.StopAll(context.Background())
-					os.Exit(1)
-				}
 			}
 		}
 
@@ -227,8 +243,6 @@ func main() {
 			_ = bootstrap.StopAll(context.Background())
 			os.Exit(1)
 		}
-
-		services.ProductionCutover = productionCutover
 	}
 
 	cleanup := func() {

@@ -2,23 +2,21 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import 'native_bridge_platform_dispatcher.dart';
+
 class RelayEnvelope {
   final String type;
   final String requestId;
   final String platform;
-  final String operation;
+  final int generation;
   final Map<String, dynamic>? payload;
-  final Map<String, dynamic>? result;
-  final Map<String, dynamic>? error;
 
   RelayEnvelope({
     required this.type,
     this.requestId = '',
     this.platform = '',
-    this.operation = '',
+    this.generation = 0,
     this.payload,
-    this.result,
-    this.error,
   });
 
   factory RelayEnvelope.fromMap(Map<String, dynamic> map) {
@@ -26,23 +24,19 @@ class RelayEnvelope {
       type: map['type'] as String? ?? '',
       requestId: map['requestId'] as String? ?? '',
       platform: map['platform'] as String? ?? '',
-      operation: map['operation'] as String? ?? '',
+      generation: (map['generation'] as int?) ?? 0,
       payload: map['payload'] as Map<String, dynamic>?,
-      result: map['result'] as Map<String, dynamic>?,
-      error: map['error'] as Map<String, dynamic>?,
     );
   }
 
   Map<String, dynamic> toMap() {
     final map = <String, dynamic>{
       'type': type,
+      'generation': generation,
     };
     if (requestId.isNotEmpty) map['requestId'] = requestId;
     if (platform.isNotEmpty) map['platform'] = platform;
-    if (operation.isNotEmpty) map['operation'] = operation;
     if (payload != null) map['payload'] = payload;
-    if (result != null) map['result'] = result;
-    if (error != null) map['error'] = error;
     return map;
   }
 
@@ -52,32 +46,32 @@ class RelayEnvelope {
 class NativeBridgeRelayClient {
   final String baseUrl;
   final String platform;
-  final Duration heartbeatInterval;
   final Duration reconnectDelay;
+  final NativeBridgePlatformDispatcher dispatcher;
 
   WebSocket? _socket;
-  final Map<String, Completer<RelayEnvelope>> _pendingRequests = {};
   final StreamController<RelayEnvelope> _eventController =
       StreamController<RelayEnvelope>.broadcast();
   final StreamController<bool> _connectionController =
       StreamController<bool>.broadcast();
 
-  Timer? _heartbeatTimer;
   Timer? _reconnectTimer;
   bool _disposed = false;
   bool _connecting = false;
-  int _requestCounter = 0;
+  int _currentGeneration = 0;
+  StreamSubscription<dynamic>? _nativeEventSub;
 
   NativeBridgeRelayClient({
     required this.baseUrl,
-    this.platform = 'ios',
-    this.heartbeatInterval = const Duration(seconds: 30),
+    required this.platform,
+    required this.dispatcher,
     this.reconnectDelay = const Duration(seconds: 3),
   });
 
   Stream<RelayEnvelope> get events => _eventController.stream;
   Stream<bool> get connectionState => _connectionController.stream;
   bool get isConnected => _socket != null && !_disposed;
+  int get currentGeneration => _currentGeneration;
 
   Future<void> connect() async {
     if (_disposed || _connecting) return;
@@ -92,7 +86,7 @@ class NativeBridgeRelayClient {
       _socket = socket;
       _connecting = false;
       _connectionController.add(true);
-      _startHeartbeat();
+      _nativeEventSub = dispatcher.eventStream.listen(_onNativeEvent);
 
       socket.listen(
         _handleMessage,
@@ -111,97 +105,89 @@ class NativeBridgeRelayClient {
     try {
       final data = jsonDecode(raw) as Map<String, dynamic>;
       final envelope = RelayEnvelope.fromMap(data);
-      if (envelope.type == 'native_bridge.response' &&
-          envelope.requestId.isNotEmpty) {
-        final completer = _pendingRequests.remove(envelope.requestId);
-        if (completer != null && !completer.isCompleted) {
-          completer.complete(envelope);
-        }
+      if (envelope.type == 'native_bridge.request' &&
+          envelope.requestId.isNotEmpty &&
+          envelope.payload != null) {
+        _handlePlatformRequest(envelope);
       } else {
         _eventController.add(envelope);
       }
     } catch (_) {}
   }
 
-  Future<RelayEnvelope> sendRequest({
-    required String operation,
-    Map<String, dynamic>? payload,
-    Duration timeout = const Duration(seconds: 30),
-  }) async {
-    final socket = _socket;
-    if (socket == null) {
-      throw StateError('relay client not connected');
-    }
-
-    final requestId = 'req_${++_requestCounter}_${DateTime.now().millisecondsSinceEpoch}';
-    final envelope = RelayEnvelope(
-      type: 'native_bridge.request',
-      requestId: requestId,
-      platform: platform,
-      operation: operation,
-      payload: payload,
-    );
-
-    final completer = Completer<RelayEnvelope>();
-    _pendingRequests[requestId] = completer;
-
-    socket.add(envelope.json());
-
-    Timer(timeout, () {
-      if (_pendingRequests.remove(requestId) != null &&
-          !completer.isCompleted) {
-        completer.complete(RelayEnvelope(
-          type: 'native_bridge.response',
-          requestId: requestId,
-          error: {'code': 'TIMEOUT', message: 'request timed out'},
-        ));
-      }
-    });
-
-    return completer.future;
-  }
-
-  void sendEvent({
-    required String operation,
-    Map<String, dynamic>? payload,
-  }) {
+  Future<void> _handlePlatformRequest(RelayEnvelope request) async {
     final socket = _socket;
     if (socket == null) return;
+    try {
+      final nativeResponse = await dispatcher.execute(request.payload!);
+      final responseEnvelope = RelayEnvelope(
+        type: 'native_bridge.response',
+        requestId: request.requestId,
+        platform: platform,
+        generation: _currentGeneration,
+        payload: nativeResponse,
+      );
+      socket.add(responseEnvelope.json());
+    } catch (e) {
+      final errorEnvelope = RelayEnvelope(
+        type: 'native_bridge.response',
+        requestId: request.requestId,
+        platform: platform,
+        generation: _currentGeneration,
+        payload: {
+          'protocolVersion': 1,
+          'requestID': request.requestId,
+          'status': 'error',
+          'error': {
+            'code': 'NATIVE_ERROR',
+            'message': e.toString(),
+          },
+        },
+      );
+      socket.add(errorEnvelope.json());
+    }
+  }
 
+  void _onNativeEvent(Map<String, dynamic> nativeEvent) {
+    final socket = _socket;
+    if (socket == null) return;
     final envelope = RelayEnvelope(
       type: 'native_bridge.event',
       platform: platform,
-      operation: operation,
-      payload: payload,
+      generation: _currentGeneration,
+      payload: nativeEvent,
     );
     socket.add(envelope.json());
   }
 
-  void _startHeartbeat() {
-    _heartbeatTimer?.cancel();
-    _heartbeatTimer = Timer.periodic(heartbeatInterval, (_) {
-      final socket = _socket;
-      if (socket == null) return;
-      socket.add(jsonEncode({'type': 'ping'}));
-    });
+  void updateGeneration(int generation) {
+    _currentGeneration = generation;
+  }
+
+  void sendHealthUpdate(Map<String, dynamic> healthData) {
+    final socket = _socket;
+    if (socket == null) return;
+    final envelope = RelayEnvelope(
+      type: 'native_bridge.health',
+      platform: platform,
+      generation: _currentGeneration,
+      payload: healthData,
+    );
+    socket.add(envelope.json());
   }
 
   void _handleDisconnect() {
     if (_disposed) return;
-    _heartbeatTimer?.cancel();
+    _cancelNativeEventSub();
+    _currentGeneration = 0;
     _socket = null;
     _connectionController.add(false);
-
-    for (final completer in _pendingRequests.values) {
-      if (!completer.isCompleted) {
-        completer.complete(RelayEnvelope(
-          type: 'native_bridge.response',
-          error: {'code': 'DISCONNECTED', message: 'relay disconnected'},
-        ));
-      }
-    }
-    _pendingRequests.clear();
     _scheduleReconnect();
+  }
+
+  void _cancelNativeEventSub() {
+    _nativeEventSub?.cancel();
+    _nativeEventSub = null;
   }
 
   void _scheduleReconnect() {
@@ -215,7 +201,6 @@ class NativeBridgeRelayClient {
   }
 
   void reconnect() {
-    _heartbeatTimer?.cancel();
     _reconnectTimer?.cancel();
     _socket?.close();
     _socket = null;
@@ -224,8 +209,8 @@ class NativeBridgeRelayClient {
 
   Future<void> dispose() async {
     _disposed = true;
-    _heartbeatTimer?.cancel();
     _reconnectTimer?.cancel();
+    _cancelNativeEventSub();
     await _socket?.close();
     _socket = null;
     await _eventController.close();

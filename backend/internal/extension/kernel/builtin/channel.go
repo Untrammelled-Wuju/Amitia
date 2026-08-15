@@ -10,9 +10,9 @@ const (
 	moduleIDQQChannel     domain.ModuleID = "channel-qq"
 	moduleIDWechatChannel domain.ModuleID = "channel-wechat"
 
-	providerIDWebChannel    = "web"
-	providerIDQQChannel     = "qq"
-	providerIDWechatChannel = "wechat"
+	providerIDWebChannel    = "builtin.channel.web"
+	providerIDQQChannel     = "builtin.channel.qq"
+	providerIDWechatChannel = "builtin.channel.wechat"
 
 	capabilityDeliverWeb    capability.CapabilityID = "channel.deliver.web"
 	capabilityDeliverQQ     capability.CapabilityID = "channel.deliver.qq"
@@ -26,7 +26,6 @@ const (
 func BuildWebChannelExtension(version string) Definition {
 	extID := domain.ExtensionID(PrefixBuiltin + "channel.web")
 	moduleID := moduleIDWebChannel
-	contributionID := domain.ContributionID(PrefixBuiltin + "channel.web/deliver")
 	ver := parseBuiltinVersion(version)
 
 	return Definition{
@@ -48,7 +47,7 @@ func BuildWebChannelExtension(version string) Definition {
 				PackageID: "builtin-channel-web",
 			},
 			Modules: []domain.ModuleDefinition{
-				buildChannelModule(extID, moduleID, contributionID, providerIDWebChannel, capabilityDeliverWeb, ver),
+				buildChannelModule(extID, moduleID, providerIDWebChannel, capabilityDeliverWeb, ver),
 			},
 			Compatibility: domain.ExtensionCompatibility{},
 			Integrity:     domain.ExtensionIntegrity{},
@@ -68,7 +67,6 @@ func BuildWebChannelExtension(version string) Definition {
 func BuildQQChannelExtension(version string) Definition {
 	extID := domain.ExtensionID(PrefixBuiltin + "channel.qq")
 	moduleID := moduleIDQQChannel
-	contributionID := domain.ContributionID(PrefixBuiltin + "channel.qq/deliver")
 	ver := parseBuiltinVersion(version)
 
 	return Definition{
@@ -90,7 +88,7 @@ func BuildQQChannelExtension(version string) Definition {
 				PackageID: "builtin-channel-qq",
 			},
 			Modules: []domain.ModuleDefinition{
-				buildChannelModule(extID, moduleID, contributionID, providerIDQQChannel, capabilityDeliverQQ, ver),
+				buildChannelModule(extID, moduleID, providerIDQQChannel, capabilityDeliverQQ, ver),
 			},
 			Compatibility: domain.ExtensionCompatibility{},
 			Integrity:     domain.ExtensionIntegrity{},
@@ -110,7 +108,6 @@ func BuildQQChannelExtension(version string) Definition {
 func BuildWechatChannelExtension(version string) Definition {
 	extID := domain.ExtensionID(PrefixBuiltin + "channel.wechat")
 	moduleID := moduleIDWechatChannel
-	contributionID := domain.ContributionID(PrefixBuiltin + "channel.wechat/deliver")
 	ver := parseBuiltinVersion(version)
 
 	return Definition{
@@ -132,7 +129,7 @@ func BuildWechatChannelExtension(version string) Definition {
 				PackageID: "builtin-channel-wechat",
 			},
 			Modules: []domain.ModuleDefinition{
-				buildChannelModule(extID, moduleID, contributionID, providerIDWechatChannel, capabilityDeliverWechat, ver),
+				buildChannelModule(extID, moduleID, providerIDWechatChannel, capabilityDeliverWechat, ver),
 			},
 			Compatibility: domain.ExtensionCompatibility{},
 			Integrity:     domain.ExtensionIntegrity{},
@@ -148,8 +145,7 @@ func BuildWechatChannelExtension(version string) Definition {
 func buildChannelModule(
 	extID domain.ExtensionID,
 	modID domain.ModuleID,
-	contributionID domain.ContributionID,
-	providerName string,
+	providerID string,
 	capID capability.CapabilityID,
 	ver domain.SemanticVersion,
 ) domain.ModuleDefinition {
@@ -157,41 +153,23 @@ func buildChannelModule(
 		ID:          modID,
 		ExtensionID: extID,
 		Name: domain.LocalizedText{
-			Default: "Channel Provider - " + providerName,
+			Default: "Channel Provider - " + providerID,
 		},
 		Description: domain.LocalizedText{
-			Default: "Provides channel delivery capability for " + providerName,
+			Default: "Provides channel delivery capability for " + providerID,
 		},
 		Type: domain.ModuleTypeBuiltin,
 		Runtime: &domain.RuntimeDefinition{
 			Type: domain.RuntimeTypeBuiltin,
 		},
-		Contributions: []domain.ContributionDefinition{
-			{
-				ID:          contributionID,
-				ModuleID:    modID,
-				ExtensionID: extID,
-				Kind:        domain.ContributionKindProvider,
-				Name: domain.LocalizedText{
-					Default: "Channel Deliver - " + providerName,
-				},
-				Description: domain.LocalizedText{
-					Default: "Deliver messages through the " + providerName + " channel",
-				},
-				RuntimeBinding: &domain.RuntimeBinding{
-					RuntimeType: domain.RuntimeTypeBuiltin,
-					InstanceID:  string(capID),
-				},
-			},
-		},
 		ProvidedCapabilities: []domain.ProvidedCapability{
 			{ID: string(capID), Version: ver.String()},
 		},
 		Provider: &domain.ProviderMetadata{
-			ID:       providerName,
+			ID:       providerID,
 			Priority: 100,
 			Metadata: map[string]any{
-				"channel": providerName,
+				"channel": providerID,
 			},
 		},
 	}

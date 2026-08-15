@@ -11,6 +11,14 @@ import (
 	"github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
+func defaultTestConfig() ipc.ControlPlaneConfig {
+	return ipc.ControlPlaneConfig{
+		Registry:            ipc.NewConnectionRegistry(),
+		Dispatcher:          ipc.NewNoopDispatcher(),
+		HandshakeController: ipc.NewNoopHandshakeController(),
+	}
+}
+
 func TestControlPlane_Attach_Success(t *testing.T) {
 	ctx := context.Background()
 
@@ -19,8 +27,10 @@ func TestControlPlane_Attach_Success(t *testing.T) {
 	}
 
 	cfg := ipc.ControlPlaneConfig{
-		Resolver:   resolver,
-		Dispatcher: ipc.NewNoopDispatcher(),
+		Registry:            ipc.NewConnectionRegistry(),
+		Resolver:            resolver,
+		Dispatcher:          ipc.NewNoopDispatcher(),
+		HandshakeController: ipc.NewNoopHandshakeController(),
 	}
 
 	cp, err := ipc.NewControlPlane(cfg)
@@ -66,8 +76,10 @@ func TestControlPlane_Attach_UnknownRuntime(t *testing.T) {
 	}
 
 	cfg := ipc.ControlPlaneConfig{
-		Resolver:   resolver,
-		Dispatcher: ipc.NewNoopDispatcher(),
+		Registry:            ipc.NewConnectionRegistry(),
+		Resolver:            resolver,
+		Dispatcher:          ipc.NewNoopDispatcher(),
+		HandshakeController: ipc.NewNoopHandshakeController(),
 	}
 
 	cp, err := ipc.NewControlPlane(cfg)
@@ -97,8 +109,10 @@ func TestControlPlane_Attach_UnknownService(t *testing.T) {
 	}
 
 	cfg := ipc.ControlPlaneConfig{
-		Resolver:   resolver,
-		Dispatcher: ipc.NewNoopDispatcher(),
+		Registry:            ipc.NewConnectionRegistry(),
+		Resolver:            resolver,
+		Dispatcher:          ipc.NewNoopDispatcher(),
+		HandshakeController: ipc.NewNoopHandshakeController(),
 	}
 
 	cp, err := ipc.NewControlPlane(cfg)
@@ -127,10 +141,8 @@ func TestControlPlane_Attach_PluginMismatch(t *testing.T) {
 		PluginID: "different.plugin",
 	}
 
-	cfg := ipc.ControlPlaneConfig{
-		Resolver:   resolver,
-		Dispatcher: ipc.NewNoopDispatcher(),
-	}
+	cfg := defaultTestConfig()
+	cfg.Resolver = resolver
 
 	cp, err := ipc.NewControlPlane(cfg)
 	if err != nil {
@@ -158,10 +170,8 @@ func TestControlPlane_Attach_DuplicatePeerConnection(t *testing.T) {
 		PluginID: "test.plugin",
 	}
 
-	cfg := ipc.ControlPlaneConfig{
-		Resolver:   resolver,
-		Dispatcher: ipc.NewNoopDispatcher(),
-	}
+	cfg := defaultTestConfig()
+	cfg.Resolver = resolver
 
 	cp, err := ipc.NewControlPlane(cfg)
 	if err != nil {
@@ -197,10 +207,8 @@ func TestControlPlane_Send_Success(t *testing.T) {
 		PluginID: "test.plugin",
 	}
 
-	cfg := ipc.ControlPlaneConfig{
-		Resolver:   resolver,
-		Dispatcher: ipc.NewNoopDispatcher(),
-	}
+	cfg := defaultTestConfig()
+	cfg.Resolver = resolver
 
 	cp, err := ipc.NewControlPlane(cfg)
 	if err != nil {
@@ -255,10 +263,8 @@ func TestControlPlane_Send_NoConnection(t *testing.T) {
 		PluginID: "test.plugin",
 	}
 
-	cfg := ipc.ControlPlaneConfig{
-		Resolver:   resolver,
-		Dispatcher: ipc.NewNoopDispatcher(),
-	}
+	cfg := defaultTestConfig()
+	cfg.Resolver = resolver
 
 	cp, err := ipc.NewControlPlane(cfg)
 	if err != nil {
@@ -291,10 +297,8 @@ func TestControlPlane_Detach_Idempotent(t *testing.T) {
 		PluginID: "test.plugin",
 	}
 
-	cfg := ipc.ControlPlaneConfig{
-		Resolver:   resolver,
-		Dispatcher: ipc.NewNoopDispatcher(),
-	}
+	cfg := defaultTestConfig()
+	cfg.Resolver = resolver
 
 	cp, err := ipc.NewControlPlane(cfg)
 	if err != nil {
@@ -332,10 +336,8 @@ func TestControlPlane_Shutdown(t *testing.T) {
 		PluginID: "test.plugin",
 	}
 
-	cfg := ipc.ControlPlaneConfig{
-		Resolver:   resolver,
-		Dispatcher: ipc.NewNoopDispatcher(),
-	}
+	cfg := defaultTestConfig()
+	cfg.Resolver = resolver
 
 	cp, err := ipc.NewControlPlane(cfg)
 	if err != nil {
@@ -377,10 +379,8 @@ func TestControlPlane_Attach_AfterShutdown(t *testing.T) {
 		PluginID: "test.plugin",
 	}
 
-	cfg := ipc.ControlPlaneConfig{
-		Resolver:   resolver,
-		Dispatcher: ipc.NewNoopDispatcher(),
-	}
+	cfg := defaultTestConfig()
+	cfg.Resolver = resolver
 
 	cp, err := ipc.NewControlPlane(cfg)
 	if err != nil {
@@ -424,11 +424,9 @@ func TestControlPlane_ReceiveLoop_EnvelopeValidation(t *testing.T) {
 		mu.Unlock()
 	}
 
-	cfg := ipc.ControlPlaneConfig{
-		Resolver:     resolver,
-		Dispatcher:   ipc.NewNoopDispatcher(),
-		EventHandler: handler,
-	}
+	cfg := defaultTestConfig()
+	cfg.Resolver = resolver
+	cfg.EventHandler = handler
 
 	cp, err := ipc.NewControlPlane(cfg)
 	if err != nil {
@@ -508,11 +506,9 @@ func TestControlPlane_PeerSpoofPrevention(t *testing.T) {
 		mu.Unlock()
 	}
 
-	cfg := ipc.ControlPlaneConfig{
-		Resolver:     resolver,
-		Dispatcher:   ipc.NewNoopDispatcher(),
-		EventHandler: handler,
-	}
+	cfg := defaultTestConfig()
+	cfg.Resolver = resolver
+	cfg.EventHandler = handler
 
 	cp, err := ipc.NewControlPlane(cfg)
 	if err != nil {
@@ -587,10 +583,9 @@ func TestControlPlane_CustomMethodNoBusinessInterpretation(t *testing.T) {
 		},
 	}
 
-	cfg := ipc.ControlPlaneConfig{
-		Resolver:   resolver,
-		Dispatcher: testDispatcher,
-	}
+	cfg := defaultTestConfig()
+	cfg.Resolver = resolver
+	cfg.Dispatcher = testDispatcher
 
 	cp, err := ipc.NewControlPlane(cfg)
 	if err != nil {
@@ -642,9 +637,9 @@ type recordingDispatcher struct {
 	recordFn func(peer ipc.Peer, envelope protocol.Envelope)
 }
 
-func (d *recordingDispatcher) Dispatch(ctx context.Context, peer ipc.Peer, envelope protocol.Envelope) error {
+func (d *recordingDispatcher) Dispatch(ctx context.Context, source ipc.DispatchSource, envelope protocol.Envelope) error {
 	if d.recordFn != nil {
-		d.recordFn(peer, envelope)
+		d.recordFn(source.Peer, envelope)
 	}
 	return nil
 }

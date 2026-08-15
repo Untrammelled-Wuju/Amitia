@@ -43,6 +43,17 @@ func (d Definition) WithMetadata() domain.ExtensionDefinition {
 	return d.Extension
 }
 
+func (d Definition) ShouldEnable() bool {
+	if d.Required {
+		return true
+	}
+	systemDefault, ok := d.Extension.Metadata["system.defaultEnabled"].(bool)
+	if ok {
+		return systemDefault
+	}
+	return !d.DisableAllowed
+}
+
 const (
 	PrefixBuiltin = "com.amitia.builtin."
 )
