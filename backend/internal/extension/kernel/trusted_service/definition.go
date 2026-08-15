@@ -99,12 +99,20 @@ type ServiceShutdownPolicy struct {
 	RemoveTempDir   bool          `json:"remove_temp_dir"`
 }
 
+type RecoveryDecisionMode string
+
+const (
+	RecoveryDecisionAutoRestart RecoveryDecisionMode = "auto_restart"
+	RecoveryDecisionExternal    RecoveryDecisionMode = "external"
+)
+
 type ServiceRecoveryPolicy struct {
-	MaxRestarts       int           `json:"max_restarts"`
-	RestartDelay      time.Duration `json:"restart_delay"`
-	BackoffMultiplier float64       `json:"backoff_multiplier"`
-	MaxRestartDelay   time.Duration `json:"max_restart_delay"`
-	QuarantineOnFail  bool          `json:"quarantine_on_fail"`
+	MaxRestarts          int                  `json:"max_restarts"`
+	RestartDelay         time.Duration        `json:"restart_delay"`
+	BackoffMultiplier    float64              `json:"backoff_multiplier"`
+	MaxRestartDelay      time.Duration        `json:"max_restart_delay"`
+	QuarantineOnFail     bool                 `json:"quarantine_on_fail"`
+	RecoveryDecisionMode RecoveryDecisionMode `json:"recovery_decision_mode"`
 }
 
 type ServiceResourceLimits struct {

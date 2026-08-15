@@ -262,7 +262,7 @@ func (c *UpgradeCoordinator) ExecuteUpgrade(ctx context.Context, req UpgradeRequ
 
 	configErrors := c.reconcileConfigs(ctx, currentSnapshots)
 	if len(configErrors) > 0 {
-		c.clearUpgradeIntent(runtimeSnapshots)
+		c.clearUpgradeIntent(currentSnapshots)
 		result.Error = fmt.Errorf("config validation failed: %v", configErrors)
 		result.Stage = UpgradeStateFailed
 		c.recordAudit(operationID, req, result, result.Error)
@@ -270,7 +270,7 @@ func (c *UpgradeCoordinator) ExecuteUpgrade(ctx context.Context, req UpgradeRequ
 	}
 
 	result.Stage = UpgradeStateResuming
-	c.logStage(operationID, req.ExtensionID, UpgradeStateResuming, fmt.Sprintf("runtimes=%d", len(runtimeSnapshots)))
+	c.logStage(operationID, req.ExtensionID, UpgradeStateResuming, fmt.Sprintf("runtimes=%d", len(currentSnapshots)))
 	resumeFailures := c.resumeRuntimes(ctx, currentSnapshots)
 	result.ResumedRuntimes = make([]domain.RuntimeInstanceID, 0)
 	result.FailedRuntimes = make([]domain.RuntimeInstanceID, 0)
@@ -285,6 +285,7 @@ func (c *UpgradeCoordinator) ExecuteUpgrade(ctx context.Context, req UpgradeRequ
 	}
 
 	if len(result.FailedRuntimes) > 0 {
+		c.clearUpgradeIntent(currentSnapshots)
 		result.Error = fmt.Errorf("partial resume failure: failed=%d", len(result.FailedRuntimes))
 		result.Stage = UpgradeStateFailed
 		result.Success = false
@@ -396,19 +397,19 @@ func (c *UpgradeCoordinator) ExecuteUpgradeByArchive(ctx context.Context, extens
 
 	configErrors := c.reconcileConfigs(ctx, currentSnapshots)
 	if len(configErrors) > 0 {
-		c.clearUpgradeIntent(runtimeSnapshots)
+		c.clearUpgradeIntent(currentSnapshots)
 		archiveErr := fmt.Errorf("config validation failed: %v", configErrors)
 		c.recordAudit(result.OperationID, UpgradeRequest{ExtensionID: extensionID}, result, archiveErr)
 		return archiveErr
 	}
 
 	result.Stage = UpgradeStateResuming
-	c.logStage(result.OperationID, extensionID, UpgradeStateResuming, fmt.Sprintf("runtimes=%d", len(runtimeSnapshots)))
+	c.logStage(result.OperationID, extensionID, UpgradeStateResuming, fmt.Sprintf("runtimes=%d", len(currentSnapshots)))
 	resumeFailures := c.resumeRuntimes(ctx, currentSnapshots)
 	for _, snap := range currentSnapshots {
 		if snap.WasRunning || snap.WasSuspended {
 			if _, failed := resumeFailures[snap.RuntimeID]; failed {
-				c.clearUpgradeIntent(runtimeSnapshots)
+				c.clearUpgradeIntent(currentSnapshots)
 				archiveErr := fmt.Errorf("partial resume failure: runtime=%s", snap.RuntimeID)
 				c.recordAudit(result.OperationID, UpgradeRequest{ExtensionID: extensionID}, result, archiveErr)
 				return archiveErr
@@ -418,7 +419,7 @@ func (c *UpgradeCoordinator) ExecuteUpgradeByArchive(ctx context.Context, extens
 
 	result.Stage = UpgradeStateCompleted
 	result.Success = true
-	c.clearUpgradeIntent(runtimeSnapshots)
+	c.clearUpgradeIntent(currentSnapshots)
 	c.logStage(result.OperationID, extensionID, UpgradeStateCompleted, "")
 	c.recordAudit(result.OperationID, UpgradeRequest{ExtensionID: extensionID}, result, nil)
 	return nil

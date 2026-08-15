@@ -67,11 +67,12 @@ func (m *DefinitionMapper) MapToDefinition(view ServiceRuntimeView) (*trusted_se
 			MaxConsecutiveFails: 3,
 		},
 		Recovery: trusted_service.ServiceRecoveryPolicy{
-			MaxRestarts:       3,
-			RestartDelay:      1 * time.Second,
-			BackoffMultiplier: 2.0,
-			MaxRestartDelay:   30 * time.Second,
-			QuarantineOnFail:  true,
+			MaxRestarts:          0,
+			RestartDelay:         1 * time.Second,
+			BackoffMultiplier:    2.0,
+			MaxRestartDelay:      30 * time.Second,
+			QuarantineOnFail:     false,
+			RecoveryDecisionMode: trusted_service.RecoveryDecisionExternal,
 		},
 		Shutdown: trusted_service.ServiceShutdownPolicy{
 			GracePeriod:     10 * time.Second,

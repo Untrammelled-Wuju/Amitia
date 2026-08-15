@@ -30,7 +30,7 @@ type AcquireRequest struct {
 
 	Capabilities []string
 
-	Cursor protocol.ResumeCursor
+	Cursor protocol.SessionCursor
 
 	Now time.Time
 }
@@ -42,7 +42,7 @@ type AcquireResult struct {
 
 type Service struct {
 	store      SessionStore
-	presence   PresencePort
+	presence   protocol.SessionLifecyclePort
 	idFactory  SessionIDFactory
 	sessionTTL time.Duration
 	events     SessionEventPublisher
@@ -51,7 +51,7 @@ type Service struct {
 }
 
 type ServiceOptions struct {
-	PresencePort     PresencePort
+	PresencePort     protocol.SessionLifecyclePort
 	SessionIDFactory SessionIDFactory
 	SessionTTL       time.Duration
 	Events           SessionEventPublisher
@@ -435,19 +435,6 @@ func (s *Service) Heartbeat(
 	session.ExpiresAt = expiresAt
 	session.UpdatedAt = now
 
-	presenceErr := s.presence.Heartbeat(ctx, PresenceSnapshot{
-		UserID:               session.UserID,
-		DeviceID:             session.DeviceID,
-		RuntimeID:            session.RuntimeID,
-		RuntimeSessionID:     session.ID,
-		Platform:             session.Platform,
-		ConnectionGeneration: session.ConnectionGeneration,
-		At:                   now,
-	})
-	if presenceErr != nil {
-		return session, fmt.Errorf("%w: %v", ErrPresenceProjectionFailed, presenceErr)
-	}
-
 	return session, nil
 }
 
@@ -524,7 +511,7 @@ func (s *Service) UpdateCursor(
 	ctx context.Context,
 	sessionID runtimeidentity.RuntimeSessionID,
 	generation int64,
-	cursor protocol.ResumeCursor,
+	cursor protocol.SessionCursor,
 	at time.Time,
 ) error {
 	now := s.normalizeTime(at)

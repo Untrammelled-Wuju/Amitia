@@ -3,11 +3,17 @@ package rpc
 import (
 	"context"
 	"sync"
+	"time"
 
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/ipc"
 	"github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
+
+type PeerKey struct {
+	RuntimeID domain.RuntimeInstanceID
+	ServiceID domain.ServiceID
+}
 
 type PendingRequestRegistry interface {
 	Register(req *PendingRequest) (bool, error)
@@ -24,10 +30,11 @@ type PendingRequestRegistry interface {
 }
 
 type pendingRequestRegistry struct {
-	mu       sync.Mutex
-	requests map[RequestKey]*PendingRequest
+	mu         sync.Mutex
+	requests   map[RequestKey]*PendingRequest
 	maxPerPeer int
-	peerCount map[RequestKey]int
+	maxGlobal  int
+	peerCount  map[PeerKey]int
 }
 
 type PendingRegistryConfig struct {
@@ -50,9 +57,10 @@ func NewPendingRequestRegistry(config PendingRegistryConfig) PendingRequestRegis
 		config.MaxGlobal = 4096
 	}
 	return &pendingRequestRegistry{
-		requests:  make(map[RequestKey]*PendingRequest),
+		requests:   make(map[RequestKey]*PendingRequest),
 		maxPerPeer: config.MaxPerPeer,
-		peerCount: make(map[RequestKey]int),
+		maxGlobal:  config.MaxGlobal,
+		peerCount:  make(map[PeerKey]int),
 	}
 }
 
@@ -78,7 +86,7 @@ func (r *pendingRequestRegistry) Register(req *PendingRequest) (bool, error) {
 		}
 	}
 
-	peerKey := req.Key
+	peerKey := PeerKey{RuntimeID: req.Key.RuntimeID, ServiceID: req.Key.ServiceID}
 	count := r.peerCount[peerKey]
 	if count >= r.maxPerPeer {
 		return false, NewRPCErrorWithCause(
@@ -89,7 +97,7 @@ func (r *pendingRequestRegistry) Register(req *PendingRequest) (bool, error) {
 		)
 	}
 
-	if len(r.requests) >= 4096 {
+	if len(r.requests) >= r.maxGlobal {
 		return false, NewRPCErrorWithCause(
 			"resource_exhausted",
 			domain.ErrResourceExhausted,
@@ -190,7 +198,7 @@ func (r *pendingRequestRegistry) Remove(key RequestKey) bool {
 	}
 
 	delete(r.requests, key)
-	peerKey := key
+	peerKey := PeerKey{RuntimeID: key.RuntimeID, ServiceID: key.ServiceID}
 	if r.peerCount[peerKey] > 0 {
 		r.peerCount[peerKey]--
 	}
@@ -202,12 +210,12 @@ func (r *pendingRequestRegistry) ListByPeer(runtimeID, serviceID string) []*Pend
 	defer r.mu.Unlock()
 
 	result := make([]*PendingRequest, 0)
-	rk := RequestKey{
+	peerKey := PeerKey{
 		RuntimeID: domain.RuntimeInstanceID(runtimeID),
 		ServiceID: domain.ServiceID(serviceID),
 	}
 	for k, req := range r.requests {
-		if k.RuntimeID == rk.RuntimeID && k.ServiceID == rk.ServiceID {
+		if k.RuntimeID == peerKey.RuntimeID && k.ServiceID == peerKey.ServiceID {
 			result = append(result, req)
 		}
 	}
@@ -299,7 +307,7 @@ func (r *pendingRequestRegistry) shutdownLocked() {
 		}
 		delete(r.requests, k)
 	}
-	r.peerCount = make(map[RequestKey]int)
+	r.peerCount = make(map[PeerKey]int)
 }
 
 type ConnectionEventType string
@@ -317,4 +325,3 @@ type ConnectionEvent struct {
 	ConnectionID string
 	Peer         ipc.Peer
 }
-

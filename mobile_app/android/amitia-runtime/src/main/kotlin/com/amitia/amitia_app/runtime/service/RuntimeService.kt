@@ -271,12 +271,13 @@ class RuntimeService : Service() {
             )
             return
         }
-        currentSessionRef.set(session)
-        currentSessionIdRef.set(session.sessionId)
+        val realSession = if (!session.isAlive()) component.currentSession() else session
+        currentSessionRef.set(realSession)
+        currentSessionIdRef.set(realSession.sessionId)
         currentSessionContextRef.set(
             ServiceSessionContext(
                 generation = generation,
-                session = session,
+                session = realSession,
                 launchStartId = startId,
             )
         )
@@ -395,6 +396,13 @@ class RuntimeService : Service() {
 
             ctx.terminalEvent = TerminalEventKind.UNEXPECTED_TERMINATION
 
+            val cleanupContext = startupFailureCleanupContextRef.get()
+            if (cleanupContext != null && cleanupContext.generation == event.generation) {
+                cleanupContext.processConfirmedDead = false
+                performStartupFailureCleanup(cleanupContext)
+                return
+            }
+
             val teardownReason = ServiceTeardownReason.UNEXPECTED_TERMINATION
             val stopId = ctx.stopStartId ?: ctx.launchStartId
             val teardownResult = performServiceTeardown(stopId, teardownReason)
@@ -503,9 +511,10 @@ class RuntimeService : Service() {
         return if (stopResult) {
             ServiceTeardownResult.FullyStopped(startId)
         } else {
-            if (reason == ServiceTeardownReason.STARTUP_FAILURE) {
+            if (reason == ServiceTeardownReason.STARTUP_FAILURE || reason == ServiceTeardownReason.EXPECTED_STOP) {
                 try { stopSelf() } catch (_: Exception) {}
-                ServiceTeardownResult.Failed
+                val recheck = try { stopSelfResult(startId) } catch (_: Exception) { false }
+                if (recheck) ServiceTeardownResult.FullyStopped(startId) else ServiceTeardownResult.Failed
             } else {
                 ServiceTeardownResult.Failed
             }
@@ -555,20 +564,22 @@ class RuntimeService : Service() {
         if (targetGeneration == Long.MIN_VALUE || targetGeneration <= 0L) {
             return
         }
-        val sessionContext = currentSessionContextRef.get() ?: return
-        if (sessionContext.generation != targetGeneration) {
-            return
-        }
-        val currentStopId = sessionContext.stopStartId
-        if (currentStopId != null && stopStartId < currentStopId) {
-            return
-        }
-        sessionContext.stopStartId = stopStartId
-        sessionContext.terminalEvent = TerminalEventKind.EXPECTED_STOPPED
-        val session = currentSessionRef.get()
-        if (session != null && session.isAlive()) {
-            session.requestStop()
-            session.stop(GRACEFUL_SHUTDOWN_TIMEOUT_MS)
+        lock.withLock {
+            val sessionContext = currentSessionContextRef.get() ?: return
+            if (sessionContext.generation != targetGeneration) {
+                return
+            }
+            val currentStopId = sessionContext.stopStartId
+            if (currentStopId != null && stopStartId < currentStopId) {
+                return
+            }
+            sessionContext.stopStartId = stopStartId
+            sessionContext.terminalEvent = TerminalEventKind.EXPECTED_STOPPED
+            val session = currentSessionRef.get()
+            if (session != null && session.isAlive()) {
+                session.requestStop()
+                session.stop(GRACEFUL_SHUTDOWN_TIMEOUT_MS)
+            }
         }
     }
 

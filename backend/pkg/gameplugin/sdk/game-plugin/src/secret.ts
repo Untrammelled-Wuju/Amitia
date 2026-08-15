@@ -63,7 +63,7 @@ export async function acquireSecret(
   input: SecretAcquireInput,
   opts: MessageOption[] = []
 ): Promise<SecretAcquireResult> {
-  const envelope = await client.sendRequest(METHOD_SECRET_ACQUIRE, input, ...opts);
+  const envelope = await client.sendReservedRequest(METHOD_SECRET_ACQUIRE, input, ...opts);
   return envelope.payload as SecretAcquireResult;
 }
 
@@ -72,7 +72,7 @@ export async function releaseSecret(
   input: SecretReleaseInput,
   opts: MessageOption[] = []
 ): Promise<SecretReleaseResult> {
-  const envelope = await client.sendRequest(METHOD_SECRET_RELEASE, input, ...opts);
+  const envelope = await client.sendReservedRequest(METHOD_SECRET_RELEASE, input, ...opts);
   return envelope.payload as SecretReleaseResult;
 }
 
@@ -81,6 +81,6 @@ export async function querySecretLease(
   input: SecretQueryInput,
   opts: MessageOption[] = []
 ): Promise<SecretQueryResult> {
-  const envelope = await client.sendRequest(METHOD_SECRET_QUERY, input, ...opts);
+  const envelope = await client.sendReservedRequest(METHOD_SECRET_QUERY, input, ...opts);
   return envelope.payload as SecretQueryResult;
 }

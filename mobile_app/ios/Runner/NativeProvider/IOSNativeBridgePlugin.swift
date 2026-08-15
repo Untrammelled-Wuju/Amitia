@@ -30,6 +30,8 @@ final class IOSNativeBridgePlugin {
             handleHealth(call: call, result: result)
         case "nativeBridge.execute":
             handleExecute(call: call, result: result)
+        case "nativeBridge.emitEvent":
+            handleEmitEvent(call: call, result: result)
         default:
             result(FlutterMethodNotImplemented)
         }
@@ -111,6 +113,54 @@ final class IOSNativeBridgePlugin {
             let map = self.serializeResponse(response)
             result(map)
         }
+    }
+
+    private func handleEmitEvent(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        guard let args = call.arguments as? [String: Any] else {
+            result(FlutterError(
+                code: "INVALID_ARGUMENT",
+                message: "emitEvent requires event payload",
+                details: nil
+            ))
+            return
+        }
+
+        let domain = args["domain"] as? String ?? "ios"
+        let event = args["event"] as? String ?? ""
+        let data = args["data"] as? [String: Any] ?? [:]
+
+        guard !event.isEmpty else {
+            result(FlutterError(
+                code: "INVALID_ARGUMENT",
+                message: "event name must not be empty",
+                details: nil
+            ))
+            return
+        }
+
+        let payload: [String: Any] = [
+            "domain": domain,
+            "event": event,
+            "timestamp": ISO8601DateFormatter().string(from: Date()),
+            "data": data
+        ]
+
+        guard let jsonData = try? JSONSerialization.data(withJSONObject: payload) else {
+            result(FlutterError(
+                code: "ENCODE_ERROR",
+                message: "failed to encode event payload",
+                details: nil
+            ))
+            return
+        }
+
+        NotificationCenter.default.post(
+            name: NSNotification.Name("com.amitia.iosnative.emitEvent"),
+            object: nil,
+            userInfo: ["payload": jsonData]
+        )
+
+        result(true)
     }
 
     private func serializeResponse(_ response: IOSNativeResponse) -> [String: Any] {

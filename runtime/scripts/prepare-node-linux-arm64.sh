@@ -187,6 +187,19 @@ EXECUTION_STATUS="NOT_EXECUTED"
 
 TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date +"%Y-%m-%dT%H:%M:%SZ")
 
+echo "[VALIDATOR] Running content validation (phase=content) before writing build record..."
+VALIDATOR_PATH="$RUNTIME_ROOT/validation/linux-arm64/node_artifact_validator.py"
+if [[ ! -f "$VALIDATOR_PATH" ]]; then
+    echo "[FATAL] Validator not found: $VALIDATOR_PATH" >&2
+    exit 1
+fi
+if ! python "$VALIDATOR_PATH" --output-dir "$CANDIDATE_ROOT" --lock-file "$LOCK_FILE" --phase content; then
+    echo "[FATAL] Content validation failed" >&2
+    exit 1
+fi
+echo "[PASS] Content validation passed"
+STATIC_VALIDATION_STATUS="PASS"
+
 cat > "$CANDIDATE_ROOT/node-build-record.json" << BUILDEOF
 {
   "schemaVersion": 1,
@@ -220,30 +233,12 @@ cat > "$CANDIDATE_ROOT/node-build-record.json" << BUILDEOF
 BUILDEOF
 echo "[RECORD] node-build-record.json generated (staticValidation=$STATIC_VALIDATION_STATUS)"
 
-echo "[VALIDATOR] Running node_artifact_validator.py against candidate root..."
-VALIDATOR_PATH="$RUNTIME_ROOT/validation/linux-arm64/node_artifact_validator.py"
-VALIDATOR_OK=false
-if [[ -f "$VALIDATOR_PATH" ]]; then
-    if python "$VALIDATOR_PATH" --output-dir "$CANDIDATE_ROOT" --lock-file "$LOCK_FILE"; then
-        STATIC_VALIDATION_STATUS="PASS"
-        VALIDATOR_OK=true
-        echo "[PASS] node_artifact_validator.py passed"
-    else
-        echo "[FATAL] node_artifact_validator.py failed" >&2
-        exit 1
-    fi
-else
-    echo "[FATAL] Validator not found: $VALIDATOR_PATH (static validation status remains $STATIC_VALIDATION_STATUS)" >&2
+echo "[VALIDATOR] Running final validation (phase=final) after build record written..."
+if ! python "$VALIDATOR_PATH" --output-dir "$CANDIDATE_ROOT" --lock-file "$LOCK_FILE" --phase final; then
+    echo "[FATAL] Final validation failed" >&2
     exit 1
 fi
-
-if [[ "$VALIDATOR_OK" == "true" ]]; then
-    echo "[RECORD] Updating staticValidation to PASS in build record..."
-    TMP_RECORD="$CANDIDATE_ROOT/node-build-record.json.tmp"
-    jq --arg sv "$STATIC_VALIDATION_STATUS" '.validation.staticValidation = $sv' "$CANDIDATE_ROOT/node-build-record.json" > "$TMP_RECORD"
-    mv "$TMP_RECORD" "$CANDIDATE_ROOT/node-build-record.json"
-    echo "[PASS] Build record updated: staticValidation=$STATIC_VALIDATION_STATUS"
-fi
+echo "[PASS] Final validation passed"
 
 echo "[EXEC] Attempting execution validation..."
 EXECUTION_STATUS="NOT_EXECUTED"

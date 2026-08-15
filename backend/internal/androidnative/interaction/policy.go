@@ -12,7 +12,7 @@ const (
 	DefaultMinVisionConfidence   = 0.85
 
 	DefaultAllowCoordinateFallback = true
-	DefaultAllowShizukuFallback    = false
+	DefaultAllowShizukuFallback    = true
 	DefaultAllowVisualFallback     = true
 	DefaultAllowRootFallback       = false
 	DefaultAllowADBFallback        = false

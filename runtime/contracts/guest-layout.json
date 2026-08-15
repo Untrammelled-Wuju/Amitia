@@ -1,0 +1,101 @@
+{
+  "schemaVersion": 1,
+  "root": "/opt/amitia",
+  "directories": [
+    "/opt/amitia",
+    "/etc/amitia",
+    "/var/lib/amitia",
+    "/var/cache/amitia",
+    "/var/log/amitia",
+    "/run/amitia",
+    "/home/amitia",
+    "/tmp"
+  ],
+  "structure": {
+    "program": {
+      "path": "/opt/amitia",
+      "subdirs": [
+        "backend",
+        "node",
+        "qdrant",
+        "sidecar",
+        "qq-sidecar",
+        "plugin-host",
+        "task-host",
+        "scripts",
+        "manifest",
+        "licenses"
+      ]
+    },
+    "backend": {
+      "path": "/opt/amitia/backend",
+      "files": ["amitia-server"]
+    },
+    "node": {
+      "path": "/opt/amitia/node",
+      "bin": ["bin/node", "bin/npm", "bin/npx"],
+      "npmCli": "lib/node_modules/npm/bin/npm-cli.js",
+      "npxCli": "lib/node_modules/npm/bin/npx-cli.js"
+    },
+    "qdrant": {
+      "path": "/opt/amitia/qdrant",
+      "bin": ["bin/qdrant"]
+    },
+    "pluginHost": {
+      "path": "/opt/amitia/plugin-host",
+      "entry": "dist/index.js"
+    },
+    "taskHost": {
+      "path": "/opt/amitia/task-host",
+      "entry": "dist/index.js"
+    },
+    "sidecar": {
+      "path": "/opt/amitia/sidecar",
+      "files": ["launcher.mjs", "bundle.mjs"]
+    },
+    "qqSidecar": {
+      "path": "/opt/amitia/qq-sidecar",
+      "files": ["launcher.mjs", "bundle.mjs"]
+    },
+    "scripts": {
+      "path": "/opt/amitia/scripts",
+      "nodeScripts": [
+        "node/amitia-node-prepare.sh",
+        "node/amitia-node-probe.sh"
+      ]
+    },
+    "manifest": {
+      "path": "/opt/amitia/manifest",
+      "files": ["guest-layout.json", "mount-contract.json"]
+    },
+    "config": {
+      "path": "/etc/amitia",
+      "providers": "providers"
+    },
+    "data": {
+      "path": "/var/lib/amitia",
+      "security": "security",
+      "providers": "providers",
+      "qdrantStorage": "providers/qdrant/storage"
+    },
+    "cache": {
+      "path": "/var/cache/amitia",
+      "npmCache": "npm"
+    },
+    "logs": {
+      "path": "/var/log/amitia"
+    },
+    "run": {
+      "path": "/run/amitia"
+    },
+    "home": {
+      "path": "/home/amitia"
+    },
+    "tmp": {
+      "path": "/tmp"
+    }
+  },
+  "environment": {
+    "PATH": "/opt/amitia/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+  }
+}

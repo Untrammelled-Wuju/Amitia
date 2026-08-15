@@ -36,6 +36,9 @@ public class SecurityScopedBookmarkStore: NSObject {
     }
 
     public func resolve(identifier: String) -> URL? {
+        if identifier.hasPrefix("/") {
+            return URL(fileURLWithPath: identifier)
+        }
         var result: URL?
         queue.sync {
             guard let data = self.bookmarks[identifier] else {

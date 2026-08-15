@@ -306,11 +306,21 @@ class GameCenterController extends StateNotifier<GameCenterState> {
 
   Future<bool> emergencyStop(String runtimeId) async {
     return _withRuntimeOp(runtimeId, () async {
-      final result = await api.emergencyStop(runtimeId);
-      if (result.success) {
+      final ok = await api.emergencyStop(runtimeId);
+      if (ok) {
         await selectRuntime(runtimeId);
       }
-      return result.success;
+      return ok;
+    });
+  }
+
+  Future<bool> rearm(String runtimeId) async {
+    return _withRuntimeOp(runtimeId, () async {
+      final ok = await api.rearm(runtimeId);
+      if (ok) {
+        await selectRuntime(runtimeId);
+      }
+      return ok;
     });
   }
 

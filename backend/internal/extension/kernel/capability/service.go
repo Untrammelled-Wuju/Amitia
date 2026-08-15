@@ -16,12 +16,85 @@ func NewCapabilityService(registry *ProviderRegistry) *CapabilityService {
 	}
 }
 
+type CapabilityDescriptor struct {
+	ID                      CapabilityID       `json:"id"`
+	ProviderCount           int                `json:"providerCount"`
+	ProviderInstanceCount   int                `json:"providerInstanceCount"`
+	ExecutableProviderCount int                `json:"executableProviderCount"`
+	Placements              []ProviderPlacement `json:"placements"`
+	ToolIDs                 []string           `json:"toolIds"`
+	Metadata                map[string]any     `json:"metadata"`
+}
+
+type AvailabilityState string
+
+const (
+	AvailabilityNotRegistered          AvailabilityState = "NOT_REGISTERED"
+	AvailabilityRegisteredNoProvider   AvailabilityState = "REGISTERED_NO_PROVIDER"
+	AvailabilityProviderDisabled       AvailabilityState = "REGISTERED_PROVIDER_DISABLED"
+	AvailabilityRuntimeUnavailable     AvailabilityState = "REGISTERED_RUNTIME_UNAVAILABLE"
+	AvailabilityDeviceOffline          AvailabilityState = "DEVICE_OFFLINE"
+	AvailabilityCredentialRequired     AvailabilityState = "CREDENTIAL_REQUIRED"
+	AvailabilityPermissionRequired     AvailabilityState = "PERMISSION_REQUIRED"
+	AvailabilityAvailable              AvailabilityState = "AVAILABLE"
+)
+
 func (s *CapabilityService) GetCapability(ctx context.Context, toolID string) (ToolDefinition, bool) {
 	return ToolDefinition{}, false
 }
 
 func (s *CapabilityService) ListCapabilities(ctx context.Context) []ToolDefinition {
 	return nil
+}
+
+func (s *CapabilityService) GetCapabilityDescriptor(toolID CapabilityID) (CapabilityDescriptor, bool) {
+	if s.registry == nil {
+		return CapabilityDescriptor{}, false
+	}
+	defs := s.registry.ListByCapability(toolID)
+	if len(defs) == 0 {
+		return CapabilityDescriptor{}, false
+	}
+	desc := CapabilityDescriptor{
+		ID:                      toolID,
+		ProviderCount:           len(defs),
+		ProviderInstanceCount:   s.registry.CountInstancesByCapability(toolID),
+		ExecutableProviderCount: s.registry.CountExecutableInstances(toolID),
+		Placements:              collectPlacements(defs),
+	}
+	return desc, true
+}
+
+func (s *CapabilityService) ListCapabilityDescriptors() []CapabilityDescriptor {
+	if s.registry == nil {
+		return nil
+	}
+	allDefs := s.registry.ListAllProviders()
+	capSet := make(map[CapabilityID]CapabilityDescriptor)
+	for _, def := range allDefs {
+		if def == nil {
+			continue
+		}
+		existing, ok := capSet[def.CapabilityID]
+		if !ok {
+			capSet[def.CapabilityID] = CapabilityDescriptor{
+				ID:            def.CapabilityID,
+				ProviderCount: 1,
+				Placements:    []ProviderPlacement{def.Placement},
+			}
+			continue
+		}
+		existing.ProviderCount++
+		existing.Placements = appendUniquePlacement(existing.Placements, def.Placement)
+		capSet[def.CapabilityID] = existing
+	}
+	result := make([]CapabilityDescriptor, 0, len(capSet))
+	for _, desc := range capSet {
+		desc.ProviderInstanceCount = s.registry.CountInstancesByCapability(desc.ID)
+		desc.ExecutableProviderCount = s.registry.CountExecutableInstances(desc.ID)
+		result = append(result, desc)
+	}
+	return result
 }
 
 func (s *CapabilityService) ListProviders() []*CapabilityProviderDefinition {
@@ -77,28 +150,78 @@ func (s *CapabilityService) HasExecutableProvider(toolID CapabilityID) bool {
 }
 
 type AvailabilityDescription struct {
-	CapabilityID   CapabilityID `json:"capabilityId"`
-	HasDefinition  bool         `json:"hasDefinition"`
-	HasProvider    bool         `json:"hasProvider"`
-	HasInstance    bool         `json:"hasInstance"`
-	Executable     bool         `json:"executable"`
-	ProviderCount  int          `json:"providerCount"`
-	InstanceCount  int          `json:"instanceCount"`
+	CapabilityID   CapabilityID       `json:"capabilityId"`
+	HasDefinition  bool               `json:"hasDefinition"`
+	HasProvider    bool               `json:"hasProvider"`
+	HasInstance    bool               `json:"hasInstance"`
+	Executable     bool               `json:"executable"`
+	ProviderCount  int                `json:"providerCount"`
+	InstanceCount  int                `json:"instanceCount"`
+	State          AvailabilityState  `json:"state"`
+	Reason         string             `json:"reason,omitempty"`
 }
 
 func (s *CapabilityService) DescribeAvailability(toolID CapabilityID) AvailabilityDescription {
 	desc := AvailabilityDescription{
 		CapabilityID: toolID,
+		State:        AvailabilityNotRegistered,
 	}
 	if s.registry == nil {
+		desc.RegistryUnavailable()
 		return desc
 	}
 	defs := s.registry.ListByCapability(toolID)
+	if len(defs) == 0 {
+		desc.State = AvailabilityNotRegistered
+		desc.Reason = "no provider definition registered"
+		return desc
+	}
 	desc.HasDefinition = true
-	desc.HasProvider = len(defs) > 0
+	desc.HasProvider = true
 	desc.ProviderCount = len(defs)
 	desc.InstanceCount = s.registry.CountInstancesByCapability(toolID)
 	desc.Executable = s.registry.CountExecutableInstances(toolID) > 0
 	desc.HasInstance = desc.InstanceCount > 0
+
+	if desc.Executable {
+		desc.State = AvailabilityAvailable
+		return desc
+	}
+	if !desc.HasInstance {
+		desc.State = AvailabilityRuntimeUnavailable
+		desc.Reason = "no executable provider instance available"
+		return desc
+	}
+	desc.State = AvailabilityRuntimeUnavailable
+	desc.Reason = "provider instances exist but none executable"
 	return desc
+}
+
+func (d *AvailabilityDescription) RegistryUnavailable() {
+	d.State = AvailabilityRuntimeUnavailable
+	d.Reason = "registry unavailable"
+}
+
+func collectPlacements(defs []*CapabilityProviderDefinition) []ProviderPlacement {
+	seen := make(map[ProviderPlacement]bool)
+	var result []ProviderPlacement
+	for _, def := range defs {
+		if def == nil {
+			continue
+		}
+		if !seen[def.Placement] {
+			seen[def.Placement] = true
+			result = append(result, def.Placement)
+		}
+	}
+	return result
+}
+
+func appendUniquePlacement(placements []ProviderPlacement, p ProviderPlacement) []ProviderPlacement {
+	for _, existing := range placements {
+		if existing == p {
+			return placements
+		}
+	}
+	return append(placements, p)
 }

@@ -3,9 +3,13 @@ package sdk
 import (
 	"context"
 	"encoding/json"
+	"sync"
+	"time"
 
 	"github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
+
+const DefaultRPCTimeoutMs = 30000
 
 type MessageOption func(*protocol.Envelope)
 
@@ -36,12 +40,32 @@ func WithMetadata(key string, value json.RawMessage) MessageOption {
 	}
 }
 
+func WithTimeout(timeoutMs int) MessageOption {
+	return func(e *protocol.Envelope) {
+		if e.Metadata == nil {
+			e.Metadata = make(map[string]json.RawMessage)
+		}
+		e.Metadata["__timeout"] = json.RawMessage(rune(timeoutMs))
+	}
+}
+
+type pendingRequest struct {
+	ID         string
+	Method     string
+	ResponseCh chan *protocol.Envelope
+	Timer      *time.Timer
+}
+
 type Client struct {
-	transport    Transport
-	idGenerator  IDGenerator
-	pluginID     string
-	runtimeID    string
-	serviceID    string
+	transport        Transport
+	idGenerator      IDGenerator
+	pluginID         string
+	runtimeID        string
+	serviceID        string
+	pending          map[string]*pendingRequest
+	pendingMu        sync.Mutex
+	pendingTimeoutMs time.Duration
+	onResponse       func(protocol.Envelope) bool
 }
 
 type ClientOption func(*Client)
@@ -70,10 +94,24 @@ func WithClientServiceID(id string) ClientOption {
 	}
 }
 
+func WithPendingTimeout(ms time.Duration) ClientOption {
+	return func(c *Client) {
+		c.pendingTimeoutMs = ms
+	}
+}
+
+func WithOnResponseHandler(fn func(protocol.Envelope) bool) ClientOption {
+	return func(c *Client) {
+		c.onResponse = fn
+	}
+}
+
 func NewClient(transport Transport, opts ...ClientOption) *Client {
 	c := &Client{
-		transport:   transport,
-		idGenerator: UUIDGenerator{},
+		transport:        transport,
+		idGenerator:      UUIDGenerator{},
+		pending:          make(map[string]*pendingRequest),
+		pendingTimeoutMs: DefaultRPCTimeoutMs * time.Millisecond,
 	}
 	for _, opt := range opts {
 		opt(c)
@@ -85,6 +123,92 @@ func (c *Client) Transport() Transport {
 	return c.transport
 }
 
+func (c *Client) registerPending(id string, method string) *pendingRequest {
+	timeoutMs := c.pendingTimeoutMs
+
+	ch := make(chan *protocol.Envelope, 1)
+	timer := time.AfterFunc(timeoutMs, func() {
+		c.removePending(id)
+	})
+
+	pr := &pendingRequest{
+		ID:         id,
+		Method:     method,
+		ResponseCh: ch,
+		Timer:      timer,
+	}
+
+	c.pendingMu.Lock()
+	c.pending[id] = pr
+	c.pendingMu.Unlock()
+
+	return pr
+}
+
+func (c *Client) removePending(id string) {
+	c.pendingMu.Lock()
+	pr, ok := c.pending[id]
+	if ok {
+		delete(c.pending, id)
+		pr.Timer.Stop()
+		close(pr.ResponseCh)
+	}
+	c.pendingMu.Unlock()
+}
+
+func (c *Client) GetPendingCount() int {
+	c.pendingMu.Lock()
+	defer c.pendingMu.Unlock()
+	return len(c.pending)
+}
+
+func (c *Client) CancelPendingRequests(reason string) {
+	c.pendingMu.Lock()
+	pending := make(map[string]*pendingRequest, len(c.pending))
+	for id, pr := range c.pending {
+		pending[id] = pr
+		delete(c.pending, id)
+	}
+	c.pendingMu.Unlock()
+
+	for id, pr := range pending {
+		pr.Timer.Stop()
+		close(pr.ResponseCh)
+	}
+}
+
+func (c *Client) DispatchIncomingResponse(envelope protocol.Envelope) bool {
+	if envelope.Type != protocol.MessageTypeResponse && envelope.Type != protocol.MessageTypeError {
+		return false
+	}
+
+	requestID := envelope.RequestID
+	if requestID == "" {
+		return false
+	}
+
+	c.pendingMu.Lock()
+	pr, ok := c.pending[requestID]
+	if ok {
+		delete(c.pending, requestID)
+		pr.Timer.Stop()
+	}
+	c.pendingMu.Unlock()
+
+	if !ok {
+		if c.onResponse != nil {
+			return c.onResponse(envelope)
+		}
+		return false
+	}
+
+	select {
+	case pr.ResponseCh <- &envelope:
+	default:
+	}
+	return true
+}
+
 func (c *Client) SendRequest(ctx context.Context, method string, payload any, opts ...MessageOption) (protocol.Envelope, error) {
 	if err := protocol.ValidatePluginMethod(method); err != nil {
 		return protocol.Envelope{}, NewValidationError("invalid method: %v", err)
@@ -93,18 +217,84 @@ func (c *Client) SendRequest(ctx context.Context, method string, payload any, op
 		return protocol.Envelope{}, NewValidationError("method '%s' uses reserved namespace", method)
 	}
 
-	return c.sendValidatedRequest(ctx, method, payload, opts...)
+	envelope, err := c.NewRequest(method, payload, opts...)
+	if err != nil {
+		return protocol.Envelope{}, err
+	}
+
+	pending := c.registerPending(envelope.ID, method)
+	defer c.removePending(envelope.ID)
+
+	timeoutMs := c.pendingTimeoutMs
+	if envelope.Metadata != nil {
+		if t, ok := envelope.Metadata["__timeout"]; ok {
+			var ms int
+			if json.Unmarshal(t, &ms) == nil && ms > 0 {
+				timeoutMs = time.Duration(ms) * time.Millisecond
+				pending.Timer.Stop()
+				pending.Timer = time.AfterFunc(timeoutMs, func() {
+					c.removePending(envelope.ID)
+				})
+			}
+		}
+	}
+
+	if err := c.transport.Send(ctx, envelope); err != nil {
+		return protocol.Envelope{}, NewTransportError("send request failed: %v", err)
+	}
+
+	select {
+	case resp := <-pending.ResponseCh:
+		return *resp, nil
+	case <-time.After(timeoutMs):
+		return protocol.Envelope{}, NewTransportError("request %s timed out after %v", envelope.ID, timeoutMs)
+	case <-ctx.Done():
+		return protocol.Envelope{}, NewTransportError("request %s cancelled: %v", envelope.ID, ctx.Err())
+	}
 }
 
-func (c *Client) sendHostRequest(ctx context.Context, method string, payload any, opts ...MessageOption) (protocol.Envelope, error) {
+func (c *Client) SendReservedRequest(ctx context.Context, method string, payload any, opts ...MessageOption) (protocol.Envelope, error) {
 	if err := protocol.ValidateMethod(method); err != nil {
 		return protocol.Envelope{}, NewValidationError("invalid method: %v", err)
 	}
 	if !protocol.IsReservedNamespace(method) {
-		return protocol.Envelope{}, NewValidationError("host method %q is not reserved", method)
+		return protocol.Envelope{}, NewValidationError("reserved request method %q is not in reserved namespace", method)
 	}
 
-	return c.sendValidatedRequest(ctx, method, payload, opts...)
+	envelope, err := c.NewRequest(method, payload, opts...)
+	if err != nil {
+		return protocol.Envelope{}, err
+	}
+
+	pending := c.registerPending(envelope.ID, method)
+	defer c.removePending(envelope.ID)
+
+	timeoutMs := c.pendingTimeoutMs
+	if envelope.Metadata != nil {
+		if t, ok := envelope.Metadata["__timeout"]; ok {
+			var ms int
+			if json.Unmarshal(t, &ms) == nil && ms > 0 {
+				timeoutMs = time.Duration(ms) * time.Millisecond
+				pending.Timer.Stop()
+				pending.Timer = time.AfterFunc(timeoutMs, func() {
+					c.removePending(envelope.ID)
+				})
+			}
+		}
+	}
+
+	if err := c.transport.Send(ctx, envelope); err != nil {
+		return protocol.Envelope{}, NewTransportError("send reserved request failed: %v", err)
+	}
+
+	select {
+	case resp := <-pending.ResponseCh:
+		return *resp, nil
+	case <-time.After(timeoutMs):
+		return protocol.Envelope{}, NewTransportError("reserved request %s timed out after %v", envelope.ID, timeoutMs)
+	case <-ctx.Done():
+		return protocol.Envelope{}, NewTransportError("reserved request %s cancelled: %v", envelope.ID, ctx.Err())
+	}
 }
 
 func (c *Client) sendValidatedRequest(ctx context.Context, method string, payload any, opts ...MessageOption) (protocol.Envelope, error) {
@@ -137,17 +327,6 @@ func (c *Client) SendNotification(ctx context.Context, method string, payload an
 	}
 	if protocol.IsReservedNamespace(method) {
 		return protocol.Envelope{}, NewValidationError("method '%s' uses reserved namespace", method)
-	}
-
-	return c.sendValidatedNotification(ctx, method, payload, opts...)
-}
-
-func (c *Client) sendHostNotification(ctx context.Context, method string, payload any, opts ...MessageOption) (protocol.Envelope, error) {
-	if err := protocol.ValidateMethod(method); err != nil {
-		return protocol.Envelope{}, NewValidationError("invalid method: %v", err)
-	}
-	if !protocol.IsReservedNamespace(method) {
-		return protocol.Envelope{}, NewValidationError("host notification method %q is not reserved", method)
 	}
 
 	return c.sendValidatedNotification(ctx, method, payload, opts...)
@@ -352,5 +531,6 @@ func (c *Client) Receive(ctx context.Context) (protocol.Envelope, error) {
 }
 
 func (c *Client) Close() error {
+	c.CancelPendingRequests("client closed")
 	return c.transport.Close()
 }

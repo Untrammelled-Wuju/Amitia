@@ -1046,6 +1046,11 @@ services := &AppServices{
 		}
 		tryRegisterIOSBridge(services.NativeBridgeRelay, bootstrap)
 	}
+	if services.NativeBridgeRelay != nil && services.KernelContainer != nil && services.KernelContainer.EventService != nil {
+		adapter := nativebridge.NewNativeEventSinkAdapter(services.KernelContainer.EventService)
+		services.NativeBridgeRelay.Handler().SetEventSink("android", adapter)
+		services.NativeBridgeRelay.Handler().SetEventSink("ios", adapter)
+	}
 	if err := runCanonicalBuildAssertions(services); err != nil {
 		return nil, fmt.Errorf("canonical build assertion failed: %w", err)
 	}

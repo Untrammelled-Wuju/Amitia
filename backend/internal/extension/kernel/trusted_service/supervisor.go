@@ -738,7 +738,13 @@ func (s *ProcessSupervisor) watchProcess(inst *ServiceInstance, cmd *exec.Cmd) {
 
 	if inst.Definition != nil {
 		policy := inst.Definition.Recovery
-		if inst.RestartCount < policy.MaxRestarts && inst.circuit.AllowStart() {
+		if policy.RecoveryDecisionMode == RecoveryDecisionExternal {
+			s.log("warn", "service crash recorded; recovery decision delegated to external authority", map[string]any{
+				"service":   inst.ServiceID,
+				"instance":  inst.InstanceID,
+				"exit_code": exitCode,
+			})
+		} else if inst.RestartCount < policy.MaxRestarts && inst.circuit.AllowStart() {
 			delay := s.calculateBackoff(policy, inst.RestartCount)
 			go func() {
 				timer := time.NewTimer(delay)

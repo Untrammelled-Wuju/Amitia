@@ -2,23 +2,62 @@ import Foundation
 import AppIntents
 
 @available(iOS 16.0, *)
-public struct AmitiaAppIntents: AppIntent {
-    public static var title: LocalizedStringResource = "Amitia Intent"
+public struct AmitiaChatIntent: AppIntent {
+    public static var title: LocalizedStringResource = "Chat with Amitia"
     public static var openAppWhenRun: Bool = false
 
-    @Parameter(title: "Action ID")
-    public var actionId: String
-
-    public init() {
-        self.actionId = ""
-    }
-
-    public init(actionId: String) {
-        self.actionId = actionId
-    }
+    public init() {}
 
     public func perform() async throws -> some IntentResult {
-        let result = await ShortcutActionGateway.shared.executeAction(actionId: actionId, payload: nil)
+        let result = await ShortcutActionGateway.shared.executeAction(actionId: "com.amitia.action.chat", payload: nil)
+        if let error = result["error"] as? String {
+            throw NSError(domain: "AmitiaAppIntents", code: 1, userInfo: [NSLocalizedDescriptionKey: error])
+        }
+        return .result()
+    }
+}
+
+@available(iOS 16.0, *)
+public struct AmitiaAlarmAddIntent: AppIntent {
+    public static var title: LocalizedStringResource = "Add Alarm"
+    public static var openAppWhenRun: Bool = false
+
+    public init() {}
+
+    public func perform() async throws -> some IntentResult {
+        let result = await ShortcutActionGateway.shared.executeAction(actionId: "com.amitia.action.alarm.add", payload: nil)
+        if let error = result["error"] as? String {
+            throw NSError(domain: "AmitiaAppIntents", code: 1, userInfo: [NSLocalizedDescriptionKey: error])
+        }
+        return .result()
+    }
+}
+
+@available(iOS 16.0, *)
+public struct AmitiaReminderAddIntent: AppIntent {
+    public static var title: LocalizedStringResource = "Add Reminder"
+    public static var openAppWhenRun: Bool = false
+
+    public init() {}
+
+    public func perform() async throws -> some IntentResult {
+        let result = await ShortcutActionGateway.shared.executeAction(actionId: "com.amitia.action.reminder.add", payload: nil)
+        if let error = result["error"] as? String {
+            throw NSError(domain: "AmitiaAppIntents", code: 1, userInfo: [NSLocalizedDescriptionKey: error])
+        }
+        return .result()
+    }
+}
+
+@available(iOS 16.0, *)
+public struct AmitiaMediaPickIntent: AppIntent {
+    public static var title: LocalizedStringResource = "Pick Media"
+    public static var openAppWhenRun: Bool = false
+
+    public init() {}
+
+    public func perform() async throws -> some IntentResult {
+        let result = await ShortcutActionGateway.shared.executeAction(actionId: "com.amitia.action.media.pick", payload: nil)
         if let error = result["error"] as? String {
             throw NSError(domain: "AmitiaAppIntents", code: 1, userInfo: [NSLocalizedDescriptionKey: error])
         }

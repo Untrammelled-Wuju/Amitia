@@ -61,12 +61,48 @@ func (s *ProviderInvocationService) Invoke(
 		return ProviderInvocationResult{CapabilityID: request.CapabilityID}, fmt.Errorf("resolve capability %s: %w", request.CapabilityID, err)
 	}
 
-	return ProviderInvocationResult{
+	result := ProviderInvocationResult{
 		CapabilityID:       request.CapabilityID,
 		ProviderID:         resolution.Provider.ID,
 		ProviderInstanceID: resolution.ProviderInstance.ID,
 		ExecutionTarget:    resolution.ExecutionTarget,
-	}, nil
+	}
+
+	if s.adapterRegistry == nil || !resolution.HasResult() {
+		return result, nil
+	}
+
+	route := RuntimeExecutionRoute{
+		Binding:                 resolution.Provider.Runtime,
+		Placement:               resolution.Provider.Placement,
+		ProviderID:              resolution.Provider.ID,
+		ProviderInstanceID:      resolution.ProviderInstance.ID,
+		ProviderRuntimeInstanceID: resolution.ProviderInstance.RuntimeInstanceID,
+		UserID:                  request.UserID,
+		DeviceID:                resolution.ProviderInstance.DeviceID,
+		RuntimeID:               resolution.ProviderInstance.RuntimeID,
+	}
+
+	adapter, ok := s.adapterRegistry.ResolveRoute(route)
+	if !ok {
+		return result, nil
+	}
+
+	invocation := NewToolInvocationContext(ToolInvocationOptions{
+		Source:          InvocationSourceProvider,
+		UserID:          request.UserID,
+		ExecutionTarget:  resolution.ExecutionTarget,
+	})
+
+	if routedAdapter, ok := adapter.(RoutedRuntimeAdapter); ok {
+		execResult := routedAdapter.ExecuteRoute(ctx, route, invocation, request.Input)
+		result.Output = execResult.Output
+	} else {
+		execResult := adapter.Execute(ctx, route.Binding, invocation, request.Input)
+		result.Output = execResult.Output
+	}
+
+	return result, nil
 }
 
 func (s *ProviderInvocationService) InvokeLocal(

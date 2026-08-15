@@ -47,7 +47,7 @@ func (c *Client) PublishState(ctx context.Context, input StatePublishInput, opts
 }
 
 func (c *Client) GetState(ctx context.Context, input StateGetInput, opts ...MessageOption) (StateGetOutput, error) {
-	envelope, err := c.sendHostRequest(ctx, MethodStateGet, input, opts...)
+	envelope, err := c.SendReservedRequest(ctx, MethodStateGet, input, opts...)
 	if err != nil {
 		return StateGetOutput{}, err
 	}

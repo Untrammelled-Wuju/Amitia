@@ -30,7 +30,7 @@ func HelloToAcquireRequest(
 		RuntimeVersion:         hello.RuntimeVersion,
 		RuntimeContractVersion: hello.RuntimeContractVersion,
 		Capabilities:           caps,
-		Cursor: protocol.ResumeCursor{
+		Cursor: protocol.SessionCursor{
 			LastAppliedStateRevision:     hello.LastAppliedDesiredRevision,
 			LastProcessedCommandSequence: hello.LastProcessedCommandSequence,
 			LastEventSequence:            hello.LastEventSequence,
@@ -53,8 +53,8 @@ func SessionResultToHelloAck(
 	}
 }
 
-func PresenceSnapshotFromSession(session deviceruntime.RuntimeSession) deviceruntime.PresenceSnapshot {
-	return deviceruntime.PresenceSnapshot{
+func PresenceSnapshotFromSession(session deviceruntime.RuntimeSession) protocol.PresenceSnapshot {
+	return protocol.PresenceSnapshot{
 		UserID:               session.UserID,
 		DeviceID:             session.DeviceID,
 		RuntimeID:            session.RuntimeID,

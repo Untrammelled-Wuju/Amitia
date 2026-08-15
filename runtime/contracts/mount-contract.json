@@ -1,0 +1,60 @@
+{
+  "schemaVersion": 1,
+  "binds": [
+    {
+      "role": "program",
+      "source": "${HOST_PROGRAM_ROOT}",
+      "target": "/opt/amitia",
+      "writable": false,
+      "description": "Active read-only program source mounted into guest"
+    },
+    {
+      "role": "config",
+      "source": "${HOST_CONFIG_ROOT}",
+      "target": "/etc/amitia",
+      "writable": true,
+      "description": "Persistent configuration directory"
+    },
+    {
+      "role": "data",
+      "source": "${HOST_DATA_ROOT}",
+      "target": "/var/lib/amitia",
+      "writable": true,
+      "description": "Persistent data directory (security, providers, storage)"
+    },
+    {
+      "role": "cache",
+      "source": "${HOST_CACHE_ROOT}",
+      "target": "/var/cache/amitia",
+      "writable": true,
+      "description": "Cache directory (npm cache)"
+    },
+    {
+      "role": "logs",
+      "source": "${HOST_LOG_ROOT}",
+      "target": "/var/log/amitia",
+      "writable": true,
+      "description": "Log directory"
+    },
+    {
+      "role": "run",
+      "source": "${HOST_RUN_ROOT}",
+      "target": "/run/amitia",
+      "writable": true,
+      "description": "Runtime state directory"
+    },
+    {
+      "role": "home",
+      "source": "${HOST_HOME_ROOT}",
+      "target": "/home/amitia",
+      "writable": true,
+      "description": "Guest home directory for runtime user"
+    }
+  ],
+  "environment": {
+    "TERM": "xterm-256color",
+    "HOME": "/home/amitia",
+    "PATH": "/opt/amitia/node/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+    "LANG": "C.UTF-8"
+  }
+}

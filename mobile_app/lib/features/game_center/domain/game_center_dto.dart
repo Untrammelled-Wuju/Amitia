@@ -37,6 +37,26 @@ class GamePluginSummary {
       managementTarget: (json['managementTarget'] ?? '').toString(),
     );
   }
+
+  factory GamePluginSummary.fromJsonChecked(Map<String, dynamic> json) {
+    final extensionId = (json['extensionId'] ?? '').toString();
+    final pluginId = (json['pluginId'] ?? '').toString();
+    if (extensionId.isEmpty || pluginId.isEmpty) {
+      throw StateError('GamePluginSummary: empty extensionId or pluginId');
+    }
+    return GamePluginSummary(
+      extensionId: extensionId,
+      pluginId: pluginId,
+      name: (json['name'] ?? '').toString(),
+      version: (json['version'] ?? '').toString(),
+      description: (json['description'] ?? '').toString(),
+      enabled: (json['enabled'] as bool?) ?? false,
+      installState: (json['installState'] ?? '').toString(),
+      health: (json['health'] ?? '').toString(),
+      runtimeCount: (json['runtimeCount'] as int?) ?? 0,
+      managementTarget: (json['managementTarget'] ?? '').toString(),
+    );
+  }
 }
 
 class GamePluginDetail {
@@ -97,6 +117,35 @@ class GamePluginDetail {
           : null,
     );
   }
+
+  factory GamePluginDetail.fromJsonChecked(Map<String, dynamic> json) {
+    final extensionId = (json['extensionId'] ?? '').toString();
+    final pluginId = (json['pluginId'] ?? '').toString();
+    if (extensionId.isEmpty || pluginId.isEmpty) {
+      throw StateError('GamePluginDetail: empty extensionId or pluginId');
+    }
+    return GamePluginDetail(
+      extensionId: extensionId,
+      pluginId: pluginId,
+      name: (json['name'] ?? '').toString(),
+      version: (json['version'] ?? '').toString(),
+      description: (json['description'] ?? '').toString(),
+      enabled: (json['enabled'] as bool?) ?? false,
+      installState: (json['installState'] ?? '').toString(),
+      packageRevision: json['packageRevision'] as String?,
+      descriptorRevision: json['descriptorRevision'] as String?,
+      managementTarget: (json['managementTarget'] ?? '').toString(),
+      capabilities: ((json['capabilities'] as List?) ?? []).map((e) => e.toString()).toList(),
+      permissions: ((json['permissions'] as List?) ?? []).map((e) => e.toString()).toList(),
+      provider: json['provider'] as String?,
+      runtimes: ((json['runtimes'] as List?) ?? [])
+          .map((e) => GameRuntimeSummary.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      healthSummary: json['healthSummary'] != null
+          ? HealthSummary.fromJson(json['healthSummary'] as Map<String, dynamic>)
+          : null,
+    );
+  }
 }
 
 class GameRuntimeSummary {
@@ -127,6 +176,25 @@ class GameRuntimeSummary {
   factory GameRuntimeSummary.fromJson(Map<String, dynamic> json) {
     return GameRuntimeSummary(
       runtimeId: (json['runtimeId'] ?? '').toString(),
+      pluginId: (json['pluginId'] ?? '').toString(),
+      extensionId: (json['extensionId'] ?? '').toString(),
+      state: (json['state'] ?? '').toString(),
+      health: (json['health'] ?? '').toString(),
+      serviceCount: (json['serviceCount'] as int?) ?? 0,
+      connected: (json['connected'] as bool?) ?? false,
+      ready: (json['ready'] as bool?) ?? false,
+      controlMode: (json['controlMode'] ?? '').toString(),
+      authorityEpoch: (json['authorityEpoch'] as int?) ?? 0,
+    );
+  }
+
+  factory GameRuntimeSummary.fromJsonChecked(Map<String, dynamic> json) {
+    final runtimeId = (json['runtimeId'] ?? '').toString();
+    if (runtimeId.isEmpty) {
+      throw StateError('GameRuntimeSummary: empty runtimeId');
+    }
+    return GameRuntimeSummary(
+      runtimeId: runtimeId,
       pluginId: (json['pluginId'] ?? '').toString(),
       extensionId: (json['extensionId'] ?? '').toString(),
       state: (json['state'] ?? '').toString(),
@@ -200,6 +268,40 @@ class GameRuntimeDetail {
           : null,
     );
   }
+
+  factory GameRuntimeDetail.fromJsonChecked(Map<String, dynamic> json) {
+    final runtimeId = (json['runtimeId'] ?? '').toString();
+    if (runtimeId.isEmpty) {
+      throw StateError('GameRuntimeDetail: empty runtimeId');
+    }
+    return GameRuntimeDetail(
+      runtimeId: runtimeId,
+      pluginId: (json['pluginId'] ?? '').toString(),
+      extensionId: (json['extensionId'] ?? '').toString(),
+      runtimeState: (json['runtimeState'] ?? '').toString(),
+      desiredState: json['desiredState'] as String?,
+      createdAt: json['createdAt'] != null ? DateTime.tryParse(json['createdAt']) : null,
+      updatedAt: json['updatedAt'] != null ? DateTime.tryParse(json['updatedAt']) : null,
+      process: json['process'] != null
+          ? ProcessSummary.fromJson(json['process'] as Map<String, dynamic>)
+          : null,
+      connection: json['connection'] != null
+          ? ConnectionSummary.fromJson(json['connection'] as Map<String, dynamic>)
+          : null,
+      handshake: json['handshake'] != null
+          ? HandshakeSummary.fromJson(json['handshake'] as Map<String, dynamic>)
+          : null,
+      services: ((json['services'] as List?) ?? [])
+          .map((e) => GameService.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      controlAuthority: json['controlAuthority'] != null
+          ? ControlAuthority.fromJsonChecked(json['controlAuthority'] as Map<String, dynamic>)
+          : null,
+      healthSummary: json['healthSummary'] != null
+          ? HealthSummary.fromJson(json['healthSummary'] as Map<String, dynamic>)
+          : null,
+    );
+  }
 }
 
 class GameService {
@@ -227,6 +329,24 @@ class GameService {
     return GameService(
       serviceId: (json['serviceId'] ?? '').toString(),
       runtimeId: (json['runtimeId'] ?? '').toString(),
+      definitionId: (json['definitionId'] ?? '').toString(),
+      moduleId: (json['moduleId'] ?? '').toString(),
+      state: (json['state'] ?? '').toString(),
+      health: (json['health'] ?? '').toString(),
+      connected: (json['connected'] as bool?) ?? false,
+      ready: (json['ready'] as bool?) ?? false,
+    );
+  }
+
+  factory GameService.fromJsonChecked(Map<String, dynamic> json) {
+    final serviceId = (json['serviceId'] ?? '').toString();
+    final runtimeId = (json['runtimeId'] ?? '').toString();
+    if (serviceId.isEmpty || runtimeId.isEmpty) {
+      throw StateError('GameService: empty serviceId or runtimeId');
+    }
+    return GameService(
+      serviceId: serviceId,
+      runtimeId: runtimeId,
       definitionId: (json['definitionId'] ?? '').toString(),
       moduleId: (json['moduleId'] ?? '').toString(),
       state: (json['state'] ?? '').toString(),
@@ -351,6 +471,19 @@ class ControlAuthority {
       updatedAt: json['updatedAt'] != null ? DateTime.tryParse(json['updatedAt']) : null,
     );
   }
+
+  factory ControlAuthority.fromJsonChecked(Map<String, dynamic> json) {
+    final runtimeId = (json['runtimeId'] ?? '').toString();
+    if (runtimeId.isEmpty) {
+      throw StateError('ControlAuthority: empty runtimeId');
+    }
+    return ControlAuthority(
+      runtimeId: runtimeId,
+      mode: (json['mode'] ?? '').toString(),
+      epoch: (json['epoch'] as int?) ?? 0,
+      updatedAt: json['updatedAt'] != null ? DateTime.tryParse(json['updatedAt']) : null,
+    );
+  }
 }
 
 class GameCenterPluginList {
@@ -440,6 +573,20 @@ class PackageMutationResult {
       warnings: json['warnings']?.toString(),
     );
   }
+
+  factory PackageMutationResult.fromJsonChecked(Map<String, dynamic> json) {
+    final extensionId = (json['extensionId'] ?? '').toString();
+    if (extensionId.isEmpty) {
+      throw StateError('PackageMutationResult: empty extensionId');
+    }
+    return PackageMutationResult(
+      extensionId: extensionId,
+      operation: (json['operation'] ?? '').toString(),
+      state: (json['state'] ?? '').toString(),
+      currentVersion: json['currentVersion']?.toString(),
+      warnings: json['warnings']?.toString(),
+    );
+  }
 }
 
 class RuntimeMutationResult {
@@ -454,6 +601,17 @@ class RuntimeMutationResult {
   factory RuntimeMutationResult.fromJson(Map<String, dynamic> json) {
     return RuntimeMutationResult(
       runtimeId: (json['runtimeId'] ?? '').toString(),
+      operation: (json['operation'] ?? '').toString(),
+    );
+  }
+
+  factory RuntimeMutationResult.fromJsonChecked(Map<String, dynamic> json) {
+    final runtimeId = (json['runtimeId'] ?? '').toString();
+    if (runtimeId.isEmpty) {
+      throw StateError('RuntimeMutationResult: empty runtimeId');
+    }
+    return RuntimeMutationResult(
+      runtimeId: runtimeId,
       operation: (json['operation'] ?? '').toString(),
     );
   }

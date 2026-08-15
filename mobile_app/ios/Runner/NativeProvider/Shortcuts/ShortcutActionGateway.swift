@@ -71,8 +71,19 @@ public class ShortcutActionGateway: NSObject {
         guard isCuratedAction(actionId) else { return false }
         guard #available(iOS 16.0, *) else { return false }
 
-        let intent = AmitiaAppIntents(actionId: actionId)
-        let interaction = INInteraction(intent: intent, response: nil)
+        let interaction: INInteraction
+        switch actionId {
+        case "com.amitia.action.chat":
+            interaction = INInteraction(intent: AmitiaChatIntent(), response: nil)
+        case "com.amitia.action.alarm.add":
+            interaction = INInteraction(intent: AmitiaAlarmAddIntent(), response: nil)
+        case "com.amitia.action.reminder.add":
+            interaction = INInteraction(intent: AmitiaReminderAddIntent(), response: nil)
+        case "com.amitia.action.media.pick":
+            interaction = INInteraction(intent: AmitiaMediaPickIntent(), response: nil)
+        default:
+            return false
+        }
 
         return await withCheckedContinuation { continuation in
             interaction.donate { error in
