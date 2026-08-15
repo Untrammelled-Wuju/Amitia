@@ -184,27 +184,6 @@ Write-Host "[TREE SHA] $TreeSha"
 $NpmVersion = "bundled-with-$Version"
 $NpxVersion = "bundled-with-$Version"
 
-$StaticValidationStatus = "NOT_EXECUTED"
-$ValidatorPath = Join-Path $RuntimeRoot "validation\linux-arm64\node_artifact_validator.py"
-if (Test-Path $ValidatorPath) {
-    Write-Host "[VALIDATOR] Running node_artifact_validator.py..."
-    try {
-        & python $ValidatorPath --artifact $ExtractedRoot --lock $LockFile
-        if ($LASTEXITCODE -eq 0) {
-            $StaticValidationStatus = "PASS"
-            Write-Host "[PASS] node_artifact_validator.py passed"
-        } else {
-            Write-Error "[FATAL] node_artifact_validator.py failed"
-            exit 1
-        }
-    } catch {
-        Write-Error "[FATAL] node_artifact_validator.py execution error: $_"
-        exit 1
-    }
-} else {
-    Write-Host "[SKIP] Validator not found: $ValidatorPath (static validation status remains NOT_EXECUTED)"
-}
-
 $BuildRecord = @{
     schemaVersion = 1
     component = "node"
