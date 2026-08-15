@@ -1,0 +1,44 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
+package sync
+
+import (
+	"gorm.io/gorm"
+)
+
+type Service struct {
+	ChangeLog  *ChangeLogService
+	Cursor     *CursorService
+	Pull       *PullService
+	Push       *PushService
+	Gap        *GapDetector
+	Replay     *ReplayService
+	Conflicts  *ConflictResolver
+	Apply      *ApplyService
+}
+
+func NewService(db *gorm.DB, applyFn ApplyFunc) *Service {
+	store := NewChangeLogStore(db)
+	seq := NewSequenceGenerator(db)
+	cursorStore := NewCursorStore(db)
+
+	changelog := NewChangeLogService(store, seq)
+	cursors := NewCursorService(cursorStore)
+	pull := NewPullService(changelog, cursors)
+	push := NewPushService(changelog, cursors, applyFn)
+	gap := NewGapDetector(changelog, store)
+	replay := NewReplayService(changelog)
+	conflicts := NewConflictResolver(StrategyServerWins)
+	apply := NewApplyService(conflicts)
+
+	return &Service{
+		ChangeLog:  changelog,
+		Cursor:     cursors,
+		Pull:       pull,
+		Push:       push,
+		Gap:        gap,
+		Replay:     replay,
+		Conflicts:  conflicts,
+		Apply:      apply,
+	}
+}
