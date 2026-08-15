@@ -12,13 +12,15 @@ from unittest import mock
 
 SCRIPT_DIR = pathlib.Path(__file__).resolve().parent
 sys.path.insert(0, str(SCRIPT_DIR))
-BUILD_ROOT = SCRIPT_DIR.parents[3]
+BUILD_ROOT = SCRIPT_DIR.parents[1]
 if str(BUILD_ROOT) not in sys.path:
     sys.path.insert(0, str(BUILD_ROOT))
 
-import build
-
-
+import importlib.util
+BuildSpec = importlib.util.spec_from_file_location("rootfs_linux_arm64_build", str(SCRIPT_DIR / "build.py"))
+BuildModule = importlib.util.module_from_spec(BuildSpec)
+sys.modules["rootfs_linux_arm64_build"] = BuildModule
+BuildSpec.loader.exec_module(BuildModule)
 def make_archive(base, name="rootfs.tar.xz", content=b"fake rootfs content"):
     archive_path = pathlib.Path(base) / name
     archive_path.write_bytes(content)
@@ -27,10 +29,7 @@ def make_archive(base, name="rootfs.tar.xz", content=b"fake rootfs content"):
 
 def make_lock(base, sha):
     lock_path = pathlib.Path(base) / "rootfs.lock.json"
-    lock_data = {
-        "schemaVersion": 1,
-        "rootfsSha256": sha,
-    }
+    lock_data = {"schemaVersion": 1, "rootfsSha256": sha}
     with open(lock_path, "w", encoding="utf-8") as f:
         json.dump(lock_data, f)
     return lock_path
@@ -49,20 +48,20 @@ class TestFreshBuild(unittest.TestCase):
 
     def test_fresh_build_returns_record(self):
         lock_path = make_lock(self.tmpdir, self.sha)
-        record = build.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
+        record = BuildModule.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
         self.assertIsNotNone(record)
         self.assertEqual(record.componentId, "rootfs")
         self.assertEqual(record.version, "1.0.0")
 
     def test_fresh_build_copies_archive(self):
         lock_path = make_lock(self.tmpdir, self.sha)
-        build.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
+        BuildModule.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
         dest = self.output_base / "rootfs" / "linux-arm64" / "1.0.0" / "rootfs.tar.xz"
         self.assertTrue(dest.exists())
 
     def test_fresh_build_saves_record(self):
         lock_path = make_lock(self.tmpdir, self.sha)
-        build.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
+        BuildModule.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
         record_path = self.output_base / "rootfs" / "linux-arm64" / "1.0.0" / "build-record.json"
         self.assertTrue(record_path.exists())
 
@@ -76,10 +75,10 @@ class TestMissingInput(unittest.TestCase):
     def tearDown(self):
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
-    def test_missing_archive_fakesha_fails(self):
+    def test_missing_archive_fails(self):
         lock_path = make_lock(self.tmpdir, "a" * 64)
         with self.assertRaises(Exception):
-            build.build("/nonexistent/archive.tar.xz", str(self.output_base), "1.0.0", str(lock_path))
+            BuildModule.build("/nonexistent/archive.tar.xz", str(self.output_base), "1.0.0", str(lock_path))
 
 
 class TestShaMismatch(unittest.TestCase):
@@ -95,7 +94,7 @@ class TestShaMismatch(unittest.TestCase):
     def test_sha_mismatch_fails(self):
         lock_path = make_lock(self.tmpdir, "f" * 64)
         with self.assertRaises(ValueError):
-            build.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
+            BuildModule.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
 
 
 class TestSameVersionSameBytes(unittest.TestCase):
@@ -111,8 +110,8 @@ class TestSameVersionSameBytes(unittest.TestCase):
 
     def test_same_version_same_bytes_produces_consistent_record(self):
         lock_path = make_lock(self.tmpdir, self.sha)
-        record1 = build.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
-        record2 = build.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
+        record1 = BuildModule.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
+        record2 = BuildModule.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
         self.assertEqual(record1.artifactSha256, record2.artifactSha256)
 
 
@@ -131,7 +130,7 @@ class TestSameVersionDifferentBytes(unittest.TestCase):
         lock_path = make_lock(self.tmpdir, self.sha)
         different_archive = make_archive(self.tmpdir, name="other.tar.xz", content=b"version2")
         with self.assertRaises(ValueError):
-            build.build(str(different_archive), str(self.output_base), "1.0.0", str(lock_path))
+            BuildModule.build(str(different_archive), str(self.output_base), "1.0.0", str(lock_path))
 
 
 class TestFailureBeforePublish(unittest.TestCase):
@@ -146,7 +145,7 @@ class TestFailureBeforePublish(unittest.TestCase):
     def test_failure_before_publish_leaves_output_intact(self):
         output_before = list(self.output_base.rglob("*"))
         with self.assertRaises(Exception):
-            build.build("/nonexistent", str(self.output_base), "1.0.0", "")
+            BuildModule.build("/nonexistent", str(self.output_base), "1.0.0", "")
         output_after = list(self.output_base.rglob("*"))
         self.assertEqual(output_before, output_after)
 
@@ -162,7 +161,7 @@ class TestFailureDuringCandidateMetadata(unittest.TestCase):
         shutil.rmtree(self.tmpdir, ignore_errors=True)
 
     def test_no_lock_skips_sha_check(self):
-        record = build.build(str(self.archive), str(self.output_base), "1.0.0", "")
+        record = BuildModule.build(str(self.archive), str(self.output_base), "1.0.0", "")
         self.assertIsNotNone(record)
 
 
@@ -273,10 +272,10 @@ class TestReproducibility(unittest.TestCase):
 
     def test_two_builds_same_sha(self):
         lock_path = make_lock(self.tmpdir, self.sha)
-        record1 = build.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
+        record1 = BuildModule.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
         output_base2 = pathlib.Path(self.tmpdir) / "output2"
         output_base2.mkdir()
-        record2 = build.build(str(self.archive), str(output_base2), "1.0.0", str(lock_path))
+        record2 = BuildModule.build(str(self.archive), str(output_base2), "1.0.0", str(lock_path))
         self.assertEqual(record1.artifactSha256, record2.artifactSha256)
 
 
@@ -293,11 +292,11 @@ class TestOffline(unittest.TestCase):
 
     def test_offline_mode_succeeds_with_lock(self):
         lock_path = make_lock(self.tmpdir, self.sha)
-        record = build.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
+        record = BuildModule.build(str(self.archive), str(self.output_base), "1.0.0", str(lock_path))
         self.assertIsNotNone(record)
 
     def test_offline_mode_succeeds_without_lock(self):
-        record = build.build(str(self.archive), str(self.output_base), "1.0.0", "")
+        record = BuildModule.build(str(self.archive), str(self.output_base), "1.0.0", "")
         self.assertIsNotNone(record)
 
 
