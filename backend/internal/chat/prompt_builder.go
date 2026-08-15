@@ -49,20 +49,20 @@ func (s *service) sys1Builder(profile *character.RoleRuntimeProfile, userMessage
 		characterID = strings.TrimSpace(profile.CharacterID)
 	}
 	var profileCtx, epiCtx, wbCtx string
-	if s.profileSvc != nil {
-		profilePrompt := s.profileSvc.ToSystemPrompt(characterID, characterID)
+	if s.profilePort != nil {
+		profilePrompt := s.profilePort.ToSystemPrompt(characterID, characterID)
 		if profilePrompt != "" {
 			profileCtx = profilePrompt
 		}
 	}
-	if s.episodicSvc != nil {
-		epiPrompt := s.episodicSvc.ToSystemPrompt(characterID)
+	if s.episodicPort != nil {
+		epiPrompt := s.episodicPort.ToSystemPrompt(characterID)
 		if epiPrompt != "" {
 			epiCtx = epiPrompt
 		}
 	}
-	if s.worldBookSvc != nil {
-		wbPrompt := s.worldBookSvc.ToSystemPrompt(userMessage, "")
+	if s.worldBookPort != nil {
+		wbPrompt := s.worldBookPort.ToSystemPrompt(userMessage, "")
 		if wbPrompt != "" {
 			wbCtx = wbPrompt
 		}
@@ -111,8 +111,8 @@ func (s *service) sys2Builder(convID, charID, requestID, channel, userMessage st
 			internalParts = append(internalParts, "【对话历史摘要】\n"+summary)
 		}
 	}
-	if s.memorySvc != nil && userMessage != "" {
-		results, err := s.memorySvc.HybridSearch(&memory.VectorSearchRequest{
+	if s.memoryPort != nil && userMessage != "" {
+		results, err := s.memoryPort.HybridSearch(&memory.VectorSearchRequest{
 			Query:          userMessage,
 			CharacterID:    charID,
 			ConversationID: convID,
@@ -142,7 +142,7 @@ func (s *service) sys2Builder(convID, charID, requestID, channel, userMessage st
 			}
 			memoryInjectRaw = s.buildMemoryInjectItems(results)
 			for _, r := range results {
-				go s.memorySvc.RecordUse(r.Memory.ID)
+				go s.memoryPort.RecordUse(r.Memory.ID)
 			}
 		}
 	}

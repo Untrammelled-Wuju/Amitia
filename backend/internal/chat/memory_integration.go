@@ -10,32 +10,32 @@ import (
 )
 
 func (s *service) detectEpisodicMoment(convID, charID string) {
-	if s.episodicSvc == nil {
+	if s.episodicPort == nil {
 		return
 	}
 	messages := s.loadHistory(convID)
 	if len(messages) == 0 {
 		return
 	}
-	s.episodicSvc.ExtractFromConversation(charID, convID, messages)
+	s.episodicPort.ExtractFromConversation(charID, convID, messages)
 }
 
 func (s *service) extractProfile(convID, charID string) {
-	if s.profileSvc == nil {
+	if s.profilePort == nil {
 		return
 	}
 	messages := s.loadHistory(convID)
 	if len(messages) == 0 {
 		return
 	}
-	s.profileSvc.ExtractFromConversation(s.profileExtractionUserID(convID, charID), convID, messages, charID)
+	s.profilePort.ExtractFromConversation(s.profileExtractionUserID(convID, charID), convID, messages, charID)
 }
 
 func (s *service) autoExtractMemories(convID, charID string) {
-	if s.memorySvc == nil {
+	if s.memoryPort == nil {
 		return
 	}
-	candidates, err := s.memorySvc.GenerateCandidates(convID)
+	candidates, err := s.memoryPort.GenerateCandidates(convID)
 	if err != nil || len(candidates) == 0 {
 		return
 	}
@@ -58,7 +58,7 @@ func (s *service) autoExtractMemories(convID, charID string) {
 			continue
 		}
 		existingKeys[c.Key+"|"+c.Value] = true
-		s.memorySvc.AcceptCandidate(c.ID)
+		s.memoryPort.AcceptCandidate(c.ID)
 	}
 }
 
