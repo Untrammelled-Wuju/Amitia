@@ -48,6 +48,8 @@ type ResumeContext struct {
 
 	Reason string `json:"reason,omitempty"`
 
+	Metadata map[string]any `json:"metadata,omitempty"`
+
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }
