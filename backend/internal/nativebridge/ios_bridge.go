@@ -44,7 +44,7 @@ func (b *IOSBridge) Execute(ctx context.Context, req Request) (Response, error) 
 	if session == nil {
 		return Response{
 			ProtocolVersion: req.ProtocolVersion,
-			RequestID:       req.RequestID,
+			RequestId:       req.RequestId,
 			Status:          "error",
 			Error: &Error{
 				Code:    ErrBridgeDisconnected,
@@ -53,10 +53,10 @@ func (b *IOSBridge) Execute(ctx context.Context, req Request) (Response, error) 
 		}, &bridgeError{Code: ErrBridgeDisconnected, Message: "ios native host is not connected"}
 	}
 
-	if req.RequestID == "" {
+	if req.RequestId == "" {
 		return Response{
 			ProtocolVersion: req.ProtocolVersion,
-			RequestID:       req.RequestID,
+			RequestId:       req.RequestId,
 			Status:          "error",
 			Error: &Error{
 				Code:    "INVALID_ARGUMENT",
@@ -69,7 +69,7 @@ func (b *IOSBridge) Execute(ctx context.Context, req Request) (Response, error) 
 	if err != nil {
 		return Response{
 			ProtocolVersion: req.ProtocolVersion,
-			RequestID:       req.RequestID,
+			RequestId:       req.RequestId,
 			Status:          "error",
 			Error: &Error{
 				Code:    ErrBridgeDisconnected,

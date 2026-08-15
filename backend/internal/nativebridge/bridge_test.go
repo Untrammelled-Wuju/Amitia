@@ -8,7 +8,7 @@ import (
 func TestRequestRoundTrip(t *testing.T) {
 	req := Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-req-1",
+		RequestId:       "test-req-1",
 		Platform:        "ios",
 		Operation:       "health.samples.query",
 		Payload: map[string]any{
@@ -29,7 +29,7 @@ func TestRequestRoundTrip(t *testing.T) {
 func TestResponseRoundTrip(t *testing.T) {
 	resp := Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-req-1",
+		RequestId:       "test-req-1",
 		Status:          "success",
 		Result: map[string]any{
 			"count": 42,
@@ -47,7 +47,7 @@ func TestResponseRoundTrip(t *testing.T) {
 func TestErrorMapping(t *testing.T) {
 	resp := Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-err-1",
+		RequestId:       "test-err-1",
 		Status:          "error",
 		Error: &Error{
 			Code:       ErrAuthorizationDenied,
@@ -96,7 +96,7 @@ func (f *fakeBridge) Execute(ctx context.Context, req Request) (Response, error)
 	}
 	return Response{
 		ProtocolVersion: req.ProtocolVersion,
-		RequestID:       req.RequestID,
+		RequestId:       req.RequestId,
 		Status:          "success",
 	}, nil
 }
@@ -116,7 +116,7 @@ func TestBridgeExecute(t *testing.T) {
 	bridge := &fakeBridge{}
 	resp, err := bridge.Execute(context.Background(), Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       "health.authorization.status",
 	})

@@ -21,7 +21,7 @@ func (f *fakeRelayBridge) Execute(ctx context.Context, req Request) (Response, e
 	}
 	return Response{
 		ProtocolVersion: req.ProtocolVersion,
-		RequestID:       req.RequestID,
+		RequestId:       req.RequestId,
 		Status:          "success",
 		Result:          map[string]any{"ok": true},
 	}, nil
@@ -60,10 +60,10 @@ func (f *fakeRelayBridge) HandleRelayEnvelope(payload []byte) error {
 	if err := json.Unmarshal(payload, &env); err != nil {
 		return err
 	}
-	if env.Type == "native_bridge.response" && env.RequestID != "" {
+	if env.Type == "native_bridge.response" && env.RequestId != "" {
 		resp := Response{
 			ProtocolVersion: 1,
-			RequestID:       env.RequestID,
+			RequestId:       env.RequestId,
 			Status:          "success",
 			Result:          map[string]any{"echo": true},
 		}
@@ -229,7 +229,7 @@ func TestRelayEnvelopeResponseWithGenerationGate(t *testing.T) {
 	env := RelayEnvelope{
 		Type:       "native_bridge.response",
 		Generation: gen,
-		RequestID:  "req-001",
+		RequestId:  "req-001",
 		Payload:    json.RawMessage(`{"ok":true}`),
 	}
 	data, _ := json.Marshal(env)
@@ -240,7 +240,7 @@ func TestRelayEnvelopeResponseWithGenerationGate(t *testing.T) {
 	found := false
 	for _, e := range bridge.envelopes {
 		var r Response
-		if err := json.Unmarshal(e, &r); err == nil && r.RequestID == "req-001" {
+		if err := json.Unmarshal(e, &r); err == nil && r.RequestId == "req-001" {
 			found = true
 		}
 	}

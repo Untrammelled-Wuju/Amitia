@@ -50,7 +50,7 @@ func (b *AndroidTransportBridge) Execute(ctx context.Context, req Request) (Resp
 	if session == nil {
 		return Response{
 			ProtocolVersion: req.ProtocolVersion,
-			RequestID:       req.RequestID,
+			RequestId:       req.RequestId,
 			Status:          "error",
 			Error: &Error{
 				Code:    ErrBridgeDisconnected,
@@ -59,10 +59,10 @@ func (b *AndroidTransportBridge) Execute(ctx context.Context, req Request) (Resp
 		}, &bridgeError{Code: ErrBridgeDisconnected, Message: "android native host is not connected"}
 	}
 
-	if req.RequestID == "" {
+	if req.RequestId == "" {
 		return Response{
 			ProtocolVersion: req.ProtocolVersion,
-			RequestID:       req.RequestID,
+			RequestId:       req.RequestId,
 			Status:          "error",
 			Error: &Error{
 				Code:    "INVALID_ARGUMENT",
@@ -75,7 +75,7 @@ func (b *AndroidTransportBridge) Execute(ctx context.Context, req Request) (Resp
 	if err != nil {
 		return Response{
 			ProtocolVersion: req.ProtocolVersion,
-			RequestID:       req.RequestID,
+			RequestId:       req.RequestId,
 			Status:          "error",
 			Error: &Error{
 				Code:    ErrBridgeDisconnected,
