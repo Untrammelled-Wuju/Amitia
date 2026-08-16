@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
-	"github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
 type DefinitionMapper struct{}
@@ -154,14 +153,16 @@ func CanonicalizeEnv(env map[string]string) []string {
 
 const DesktopPetProtocol = "amitia.desktop.pet/1"
 
+const TrustedServiceProtocol = "amitia-trusted-service/1"
+
 func resolveProtocol(view ServiceRuntimeView) string {
 	if view.Metadata != nil {
 		if proto, ok := view.Metadata["protocol"]; ok && proto != "" {
 			return proto
 		}
 	}
-	if view.RuntimeType == ServiceRuntimeType && view.EntryPoint != "" {
+	if view.RuntimeType == "desktop_pet" {
 		return DesktopPetProtocol
 	}
-	return protocol.ProtocolVersion
+	return TrustedServiceProtocol
 }
