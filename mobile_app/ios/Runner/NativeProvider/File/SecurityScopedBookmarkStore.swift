@@ -343,20 +343,19 @@ public class SecurityScopedBookmarkStore: NSObject {
         try FileManager.default.moveItem(at: resolved.resolvedURL, to: newURL)
     }
 
-    public func move(sourceMountId: String, sourceRelativePath: String, destMountId: String, destRelativePath: String) throws {
-        let sourceResolved = try resolvePath(mountId: sourceMountId, relativePath: sourceRelativePath)
-        let destResolved = try resolvePath(mountId: destMountId, relativePath: destRelativePath)
+    public func move(mountId: String, relativePath: String, newRelativePath: String) throws {
+        let sourceResolved = try resolvePath(mountId: mountId, relativePath: relativePath)
+        let destResolved = try resolvePath(mountId: mountId, relativePath: newRelativePath)
 
         var destRecord: MountRecord?
         queue.sync {
-            destRecord = self.mountRecords[destMountId]
+            destRecord = self.mountRecords[mountId]
         }
         if destRecord?.readOnly == true {
             throw BookmarkStoreError.readOnlyMount
         }
 
-        try ensureAccessing(mountId: sourceMountId)
-        try ensureAccessing(mountId: destMountId)
+        try ensureAccessing(mountId: mountId)
 
         let destParentURL = destResolved.resolvedURL.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: destParentURL, withIntermediateDirectories: true, attributes: nil)
@@ -364,20 +363,19 @@ public class SecurityScopedBookmarkStore: NSObject {
         try FileManager.default.moveItem(at: sourceResolved.resolvedURL, to: destResolved.resolvedURL)
     }
 
-    public func copy(sourceMountId: String, sourceRelativePath: String, destMountId: String, destRelativePath: String) throws -> String {
-        let sourceResolved = try resolvePath(mountId: sourceMountId, relativePath: sourceRelativePath)
-        let destResolved = try resolvePath(mountId: destMountId, relativePath: destRelativePath)
+    public func copy(mountId: String, relativePath: String, newRelativePath: String) throws -> String {
+        let sourceResolved = try resolvePath(mountId: mountId, relativePath: relativePath)
+        let destResolved = try resolvePath(mountId: mountId, relativePath: newRelativePath)
 
         var destRecord: MountRecord?
         queue.sync {
-            destRecord = self.mountRecords[destMountId]
+            destRecord = self.mountRecords[mountId]
         }
         if destRecord?.readOnly == true {
             throw BookmarkStoreError.readOnlyMount
         }
 
-        try ensureAccessing(mountId: sourceMountId)
-        try ensureAccessing(mountId: destMountId)
+        try ensureAccessing(mountId: mountId)
 
         let destParentURL = destResolved.resolvedURL.deletingLastPathComponent()
         try FileManager.default.createDirectory(at: destParentURL, withIntermediateDirectories: true, attributes: nil)
@@ -389,7 +387,7 @@ public class SecurityScopedBookmarkStore: NSObject {
             bookmarkData: try destResolved.resolvedURL.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil),
             displayName: destResolved.resolvedURL.lastPathComponent,
             readOnly: false,
-            providerHint: "copy-of-\(sourceMountId)",
+            providerHint: "copy-of-\(mountId)",
             createdAt: Date(),
             isSingleFile: true
         )
