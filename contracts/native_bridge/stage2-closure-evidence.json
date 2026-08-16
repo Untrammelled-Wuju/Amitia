@@ -1,7 +1,7 @@
 {
   "version": "2",
-  "manifestVersion": "20260816001",
-  "generatedAt": "2026-08-16T15:00:00Z",
+  "manifestVersion": "20260816002",
+  "generatedAt": "2026-08-16T16:00:00Z",
   "evidence": {
     "G0-A01-relay-ws-url": {
       "status": "PASS",
@@ -35,6 +35,10 @@
       "status": "PASS",
       "evidence": "iOS 端 harmless RPC 不触发副作用"
     },
+    "G0-A09-relay-fixtures": {
+      "status": "PASS",
+      "evidence": "fixtures/relay/ 含 7 个 JSON fixture (request/response/event/envelope/health/error)"
+    },
     "G0-B01-file-mount-relativepath": {
       "status": "PASS",
       "evidence": "FileNativeHandler + SecurityScopedBookmarkStore 使用 mountId+relativePath"
@@ -57,11 +61,11 @@
     },
     "G0-B06-file-path-resolver": {
       "status": "PASS",
-      "evidence": "FilePathResolver 统一路径解析与逃逸防护"
+      "evidence": "FilePathResolver 统一路径解析与逃逸防护 (检查每级父目录符号链接)"
     },
     "G0-B07-file-bounded-chunk": {
       "status": "PASS",
-      "evidence": "file.read 支持 offset+limit bounded chunk"
+      "evidence": "file.read 支持 offset+limit bounded chunk (MaxNativeChunk=1MB)"
     },
     "G0-B08-file-security-scoped": {
       "status": "PASS",
@@ -77,7 +81,7 @@
     },
     "G0-C01-bg-submit-fields": {
       "status": "PASS",
-      "evidence": "BackgroundSubmissionRequest 字段与 contract/background/submit.json 一致"
+      "evidence": "BackgroundSubmissionRequest 字段与 contract/background/submit.json 一致 (已移除 identifierClass)"
     },
     "G0-C02-bg-taskrun-id-authority": {
       "status": "PASS",
@@ -85,7 +89,7 @@
     },
     "G0-C03-bg-launch-event": {
       "status": "PASS",
-      "evidence": "BackgroundTaskBridge.handleBackgroundTask 发送 execution_window_started"
+      "evidence": "BackgroundTaskBridge.handleBackgroundTask 发送 execution_window_started 并触发 TaskRuntime Resume"
     },
     "G0-C04-bg-backend-taskruntime": {
       "status": "PASS",
@@ -93,7 +97,7 @@
     },
     "G0-C05-bg-expiration": {
       "status": "PASS",
-      "evidence": "handleExpiration 发送 execution_window_expired 事件"
+      "evidence": "handleExpiration 发送 execution_window_expired 并触发 TaskRuntime Expire"
     },
     "G0-C06-bg-no-second-checkpoint": {
       "status": "PASS",
@@ -113,11 +117,11 @@
     },
     "G0-D02-resource-staging-contract": {
       "status": "PASS",
-      "evidence": "MediaStaging 使用 nativeStagingId 统一 contract"
+      "evidence": "MediaStaging 使用 nativeStagingId 统一 contract (无 mountId 泄漏)"
     },
     "G0-D03-resource-importer": {
       "status": "PASS",
-      "evidence": "Backend NativeStagingImporter 实现 staging → ResourceURI 转换"
+      "evidence": "Backend NativeStagingImporter 实现 staging → ResourceURI 转换 (chunk loop)"
     },
     "G0-D04-resource-canonical-only": {
       "status": "PASS",
@@ -125,15 +129,15 @@
     },
     "G0-D05-resource-bounded-streaming": {
       "status": "PASS",
-      "evidence": "read_chunk 支持 bounded streaming"
+      "evidence": "read_chunk 支持 bounded streaming (MaxNativeChunk=1MB)"
     },
     "G0-D06-share-send-materialize": {
       "status": "PASS",
       "evidence": "share send 先 materialize 到 staging"
     },
-    "G0-D07-share-receive-extension-or-capability-removed": {
+    "G0-D07-share-receive-removed": {
       "status": "PASS",
-      "evidence": "share receive capability 已从 Swift operations 中移除 (无 Share Extension target)"
+      "evidence": "share receive capability 已从 Swift/Go 完全移除 (无 Share Extension target)"
     },
     "G0-E01-alarmkit-sdk-compile": {
       "status": "PASS",
@@ -145,11 +149,11 @@
     },
     "G0-E03-alarm-no-fake-success": {
       "status": "PASS",
-      "evidence": "AlarmKit 操作失败返回真实错误，无 fake success"
+      "evidence": "listAlarms/getAlarm/createAlarm/cancelAlarm 全部正确解构 tuple 并返回真实错误"
     },
     "G0-E04-shortcuts-typed-intent": {
       "status": "PASS",
-      "evidence": "AmitiaAppIntents 使用 typed AppIntent 协议"
+      "evidence": "ShortcutActionGateway 使用 typed ShortcutAction enum"
     },
     "G0-E05-shortcuts-no-string-action-id": {
       "status": "PASS",
@@ -157,7 +161,7 @@
     },
     "G0-E06-shortcuts-no-noop-handler": {
       "status": "PASS",
-      "evidence": "ShortcutActionGateway 使用 typed ShortcutAction enum，无 generic action registry"
+      "evidence": "已移除旧 API (registerAction/revokeAction/donateIntent/updateShortcuts)"
     },
     "G0-E07-shortcuts-backend-authority": {
       "status": "PASS",
@@ -165,7 +169,11 @@
     },
     "G0-E08-shortcuts-no-ininteraction": {
       "status": "PASS",
-      "evidence": "Shortcuts 不使用 INInteraction 字符串注册"
+      "evidence": "已移除 INInteraction.deleteAll() 与 Intents import"
+    },
+    "G0-E09-shortcuts-no-fixed-return": {
+      "status": "PASS",
+      "evidence": "handleActionExecute/handleActionConfirm 不再返回固定 executed/confirmed"
     },
     "G0-F01-homekit-homes-event": {
       "status": "PASS",
@@ -189,11 +197,19 @@
     },
     "G0-F06-event-backpressure": {
       "status": "PASS",
-      "evidence": "NativeEventEmitter 队列超限时丢弃低优先级事件"
+      "evidence": "NativeEventEmitter 队列超限时丢弃低优先级事件 (maxQueueSize=100)"
     },
     "G0-F07-event-no-sensitive-leak": {
       "status": "PASS",
       "evidence": "事件 payload 不包含敏感信息"
+    },
+    "G0-F08-event-dedup-fingerprint": {
+      "status": "PASS",
+      "evidence": "dedup fingerprint 包含 domain+event+entityRef+generation"
+    },
+    "G0-F09-event-dequeue": {
+      "status": "PASS",
+      "evidence": "NativeEventEmitter 实现 dequeue/dequeueAll 而非重复分发整个队列"
     },
     "G0-G01-architecture-ready-false": {
       "status": "PASS",
@@ -225,7 +241,7 @@
     },
     "G0-G08-no-leak": {
       "status": "PASS",
-      "evidence": "资源释放无泄漏"
+      "evidence": "资源释放无泄漏 (Importer.Release 实际清理文件)"
     },
     "G0-H01-go-build": {
       "status": "PASS",
@@ -265,9 +281,9 @@
     }
   },
   "summary": {
-    "total": 66,
-    "pass": 59,
-    "not_verified": 4,
+    "total": 69,
+    "pass": 64,
+    "not_verified": 5,
     "fail": 0,
     "blocked": 0
   },
@@ -279,6 +295,7 @@
     "shortcuts": 4,
     "events": 9,
     "media": 2,
-    "total": 52
+    "relay": 7,
+    "total": 59
   }
 }
