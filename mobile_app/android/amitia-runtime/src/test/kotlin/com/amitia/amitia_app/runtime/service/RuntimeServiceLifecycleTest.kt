@@ -15,6 +15,7 @@ import com.amitia.amitia_app.runtime.proot.ProotLaunchSpec
 import com.amitia.amitia_app.runtime.proot.ProotObserver
 import com.amitia.amitia_app.runtime.proot.ProotSession
 import com.amitia.amitia_app.runtime.proot.ProotStopResult
+import com.amitia.amitia_app.runtime.proot.ProotTerminationResult
 import com.amitia.amitia_app.runtime.proot.RuntimeEnvironment
 import com.amitia.amitia_app.runtime.proot.RuntimeEnvironmentRequest
 import com.amitia.amitia_app.runtime.proot.RuntimeEnvironmentResult
@@ -448,7 +449,7 @@ internal class LifecycleProotSession(
 
     override fun awaitExit(timeoutMillis: Long): Int? = exitRef.get()?.exitCode
 
-    fun markStarted() {
+    override fun activate() {
         if (started.compareAndSet(false, true)) {
             observer.onEvent(com.amitia.amitia_app.runtime.proot.ProotEvent.Started(sessionId, System.currentTimeMillis()))
         }
@@ -478,6 +479,10 @@ internal class LifecycleProotSession(
     }
 
     override val exit: com.amitia.amitia_app.runtime.proot.ProotExit? get() = exitRef.get()
+
+    override fun terminateAndConfirmExit(gracefulTimeoutMs: Long, forceTimeoutMs: Long): ProotTerminationResult {
+        return ProotTerminationResult.ConfirmedExited(exit?.exitCode)
+    }
 
     fun simulateExit() {
         alive.set(false)
@@ -529,6 +534,10 @@ internal class LifecycleDeadProotSession(private val gen: Long) : ProotSession {
         exitCode = 1,
         stopRequested = false,
     )
+
+    override fun terminateAndConfirmExit(gracefulTimeoutMs: Long, forceTimeoutMs: Long): ProotTerminationResult {
+        return ProotTerminationResult.ConfirmedExited(exit?.exitCode)
+    }
 }
 
 internal class WatcherFailureProotComponent : ProotComponent {
@@ -586,7 +595,7 @@ internal class LifecycleWatcherFailureSession(
 
     override fun awaitExit(timeoutMillis: Long): Int? = exitRef.get()?.exitCode
 
-    fun markStarted() {
+    override fun activate() {
         if (started.compareAndSet(false, true)) {
             observer.onEvent(com.amitia.amitia_app.runtime.proot.ProotEvent.Started(sessionId, System.currentTimeMillis()))
         }
@@ -615,6 +624,10 @@ internal class LifecycleWatcherFailureSession(
     }
 
     override val exit: com.amitia.amitia_app.runtime.proot.ProotExit? get() = exitRef.get()
+
+    override fun terminateAndConfirmExit(gracefulTimeoutMs: Long, forceTimeoutMs: Long): ProotTerminationResult {
+        return ProotTerminationResult.ConfirmedExited(exit?.exitCode)
+    }
 
     fun simulateWatcherFailure() {
         observer.onEvent(

@@ -38,9 +38,27 @@ public actor BGTaskIdentifierRegistry {
     private var catalog: [String: BGCatalogEntry] = [:]
     private var taskRunMappings: [String: TaskRunMapping] = [:]
     private var identifierToTaskRun: [String: String] = [:]
+    private let persistenceKey = "com.amitia.bgtaskidentifierregistry.mappings"
 
     private init() {
         registerDefaultCatalog()
+        loadPersistedMappings()
+    }
+
+    private func loadPersistedMappings() {
+        guard let data = UserDefaults.standard.data(forKey: persistenceKey) else { return }
+        if let decoded = try? JSONDecoder().decode([String: TaskRunMapping].self, from: data) {
+            taskRunMappings = decoded
+            identifierToTaskRun.removeAll()
+            for (taskRunId, mapping) in taskRunMappings {
+                identifierToTaskRun[mapping.identifier] = taskRunId
+            }
+        }
+    }
+
+    private func persistMappings() {
+        guard let data = try? JSONEncoder().encode(taskRunMappings) else { return }
+        UserDefaults.standard.set(data, forKey: persistenceKey)
     }
 
     private func registerDefaultCatalog() {
@@ -88,6 +106,7 @@ public actor BGTaskIdentifierRegistry {
         )
         taskRunMappings[taskRunId] = mapping
         identifierToTaskRun[identifier] = taskRunId
+        persistMappings()
     }
 
     public func mappingForTaskRun(taskRunId: String) -> TaskRunMapping? {
@@ -113,6 +132,7 @@ public actor BGTaskIdentifierRegistry {
         if var mapping = taskRunMappings[taskRunId] {
             mapping.generation = generation
             taskRunMappings[taskRunId] = mapping
+            persistMappings()
         }
     }
 
@@ -121,6 +141,7 @@ public actor BGTaskIdentifierRegistry {
             identifierToTaskRun.removeValue(forKey: mapping.identifier)
         }
         taskRunMappings.removeValue(forKey: taskRunId)
+        persistMappings()
     }
 
     public func removeMappingForIdentifier(identifier: String) {
@@ -128,6 +149,7 @@ public actor BGTaskIdentifierRegistry {
             taskRunMappings.removeValue(forKey: taskRunId)
         }
         identifierToTaskRun.removeValue(forKey: identifier)
+        persistMappings()
     }
 
     public func isIdentifierRegistered(_ identifier: String) -> Bool {

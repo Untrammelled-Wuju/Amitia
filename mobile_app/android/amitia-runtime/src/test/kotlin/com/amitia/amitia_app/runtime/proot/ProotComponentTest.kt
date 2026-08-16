@@ -71,6 +71,10 @@ object TestProotComponentFactory {
         override fun close() {}
         override fun requestStop() {}
         override val exit: ProotExit? = null
+
+        override fun terminateAndConfirmExit(gracefulTimeoutMs: Long, forceTimeoutMs: Long): ProotTerminationResult {
+            return ProotTerminationResult.ConfirmedExited(exit?.exitCode)
+        }
     }
     private object AlreadyRunningTestSession : ProotSession {
         override val sessionId: String = "already-running"
@@ -80,6 +84,10 @@ object TestProotComponentFactory {
         override fun close() {}
         override fun requestStop() {}
         override val exit: ProotExit? = null
+
+        override fun terminateAndConfirmExit(gracefulTimeoutMs: Long, forceTimeoutMs: Long): ProotTerminationResult {
+            return ProotTerminationResult.ConfirmedExited(exit?.exitCode)
+        }
     }
     private class AliveTestSession : ProotSession {
         override val sessionId: String = "test-alive"
@@ -89,6 +97,10 @@ object TestProotComponentFactory {
         override fun close() {}
         override fun requestStop() {}
         override val exit: ProotExit? = null
+
+        override fun terminateAndConfirmExit(gracefulTimeoutMs: Long, forceTimeoutMs: Long): ProotTerminationResult {
+            return ProotTerminationResult.ConfirmedExited(exit?.exitCode)
+        }
     }
 }
 
@@ -100,4 +112,8 @@ class TestSession : ProotSession {
     override fun close() {}
     override fun requestStop() {}
     override val exit: ProotExit? = null
+
+    override fun terminateAndConfirmExit(gracefulTimeoutMs: Long, forceTimeoutMs: Long): ProotTerminationResult {
+        return ProotTerminationResult.ConfirmedExited(exit?.exitCode)
+    }
 }

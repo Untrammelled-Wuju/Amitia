@@ -83,9 +83,18 @@ final class NativeEventEmitter {
     func emit(_ payload: NativeEventPayload) {
         lock.lock()
 
-        if eventQueue.count >= maxQueueSize && payload.priority <= .normal {
-            lock.unlock()
-            return
+        if eventQueue.count >= maxQueueSize {
+            if payload.priority <= .normal {
+                lock.unlock()
+                return
+            }
+            if let lowestIdx = eventQueue.lastIndex(where: { $0.priority <= .normal }) {
+                eventQueue.remove(at: lowestIdx)
+            } else if eventQueue.count >= maxQueueSize + 50 {
+                eventQueue.removeFirst()
+            } else {
+                eventQueue.removeFirst()
+            }
         }
 
         let fingerprint = computeFingerprint(payload)
