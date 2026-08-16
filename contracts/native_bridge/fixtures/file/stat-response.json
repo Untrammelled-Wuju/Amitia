@@ -1,17 +1,14 @@
 {
-  "protocolVersion": 1,
+  "protocolVersion": "1.0",
   "requestId": "req-stat-001",
   "status": "ok",
   "result": {
-    "stat": {
-      "size": 1048576,
-      "creationDate": 1700000000,
-      "modificationDate": 1700000100,
-      "isDirectory": false,
-      "isFile": true,
-      "name": "report.pdf",
-      "mountId": "mt-abc123",
-      "relativePath": "documents/report.pdf"
-    }
-  }
+    "exists": true,
+    "isDirectory": false,
+    "size": 2048576,
+    "modifiedAt": "2026-08-15T10:30:00Z",
+    "createdAt": "2026-08-10T08:00:00Z",
+    "mimeType": "application/pdf"
+  },
+  "error": null
 }

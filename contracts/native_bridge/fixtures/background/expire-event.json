@@ -1,9 +1,10 @@
 {
-  "domain": "background",
+  "protocolVersion": "1.0",
   "event": "execution_window_expired",
-  "timestamp": "2026-08-16T12:05:00Z",
-  "data": {
-    "taskRunId": "task-run-123",
-    "identifier": "com.amitia.background.processing"
+  "payload": {
+    "taskRunId": "run-20260816-001",
+    "identifier": "com.amitia.background.refresh",
+    "reason": "system_timeout",
+    "timestamp": "2026-08-16T16:05:00Z"
   }
 }

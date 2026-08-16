@@ -1,10 +1,15 @@
 {
-  "taskRunId": "task-run-123",
-  "systemClass": "processing",
-  "identifier": "com.amitia.background.processing",
-  "earliestBeginAt": "2026-08-16T12:00:00Z",
-  "networkRequired": false,
-  "externalPowerRequired": false,
-  "gpuRequired": false,
-  "reason": "user_scheduled"
+  "protocolVersion": "1.0",
+  "requestId": "bg-sub-001",
+  "operation": "background.submit",
+  "payload": {
+    "taskRunId": "run-20260816-001",
+    "systemClass": "app_refresh",
+    "identifier": "com.amitia.background.refresh",
+    "earliestBeginAt": "2026-08-16T16:00:00Z",
+    "networkRequired": true,
+    "externalPowerRequired": false,
+    "gpuRequired": false,
+    "reason": "memory_sync"
+  }
 }

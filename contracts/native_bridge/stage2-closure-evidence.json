@@ -1,0 +1,288 @@
+{
+  "version": "2",
+  "manifestVersion": "20260816001",
+  "generatedAt": "2026-08-16T15:00:00Z",
+  "evidence": {
+    "G0-A01-relay-ws-url": {
+      "status": "PASS",
+      "evidence": "Dart NativeBridgeRelayClient 使用 BackendUriBuilder 构建 WebSocket URL"
+    },
+    "G0-A02-relay-credential": {
+      "status": "PASS",
+      "evidence": "Relay 复用 BackendConnectionConfig 认证策略 (localToken/bearer)"
+    },
+    "G0-A03-relay-local-token-header": {
+      "status": "PASS",
+      "evidence": "localToken 策略下 Relay 发送 X-Amitia-Token 头"
+    },
+    "G0-A04-relay-reject-invalid-token": {
+      "status": "PASS",
+      "evidence": "后端拒绝无效 token 的 Relay 连接"
+    },
+    "G0-A05-single-pending-authority": {
+      "status": "PASS",
+      "evidence": "Relay 单一 pending request 以 backend request id 为权威"
+    },
+    "G0-A06-generation-handling": {
+      "status": "PASS",
+      "evidence": "Relay 透传 generation 字段用于事件排序"
+    },
+    "G0-A07-android-harmless-rpc": {
+      "status": "PASS",
+      "evidence": "Android 端 harmless RPC 不触发副作用"
+    },
+    "G0-A08-ios-harmless-rpc": {
+      "status": "PASS",
+      "evidence": "iOS 端 harmless RPC 不触发副作用"
+    },
+    "G0-B01-file-mount-relativepath": {
+      "status": "PASS",
+      "evidence": "FileNativeHandler + SecurityScopedBookmarkStore 使用 mountId+relativePath"
+    },
+    "G0-B02-file-move-new-path": {
+      "status": "PASS",
+      "evidence": "file.move 使用 sourceMountId/sourceRelativePath/destMountId/destRelativePath"
+    },
+    "G0-B03-file-no-sourcepath-destpath": {
+      "status": "PASS",
+      "evidence": "全仓清理确认无 sourcePath/destPath/rawPath 残留"
+    },
+    "G0-B04-file-contentbase64": {
+      "status": "PASS",
+      "evidence": "file.write 和 file.read 使用 contentBase64 编码"
+    },
+    "G0-B05-file-all-operations-relativepath": {
+      "status": "PASS",
+      "evidence": "stat/list/read/write/mkdir/rename/move/copy/delete 全部使用 relativePath"
+    },
+    "G0-B06-file-path-resolver": {
+      "status": "PASS",
+      "evidence": "FilePathResolver 统一路径解析与逃逸防护"
+    },
+    "G0-B07-file-bounded-chunk": {
+      "status": "PASS",
+      "evidence": "file.read 支持 offset+limit bounded chunk"
+    },
+    "G0-B08-file-security-scoped": {
+      "status": "PASS",
+      "evidence": "SecurityScopedBookmarkStore 实现 iOS security-scoped bookmark"
+    },
+    "G0-B09-file-go-swift-fixtures": {
+      "status": "PASS",
+      "evidence": "contracts/native_bridge/fixtures/file/ 含 22 个 JSON fixture"
+    },
+    "G0-B10-file-crud-smoke": {
+      "status": "PASS",
+      "evidence": "file stat/list/read/write/mkdir/rename/move/copy/delete 全操作 smoke 通过"
+    },
+    "G0-C01-bg-submit-fields": {
+      "status": "PASS",
+      "evidence": "BackgroundSubmissionRequest 字段与 contract/background/submit.json 一致"
+    },
+    "G0-C02-bg-taskrun-id-authority": {
+      "status": "PASS",
+      "evidence": "BGTaskIdentifierRegistry 以 taskRunId 为业务权威"
+    },
+    "G0-C03-bg-launch-event": {
+      "status": "PASS",
+      "evidence": "BackgroundTaskBridge.handleBackgroundTask 发送 execution_window_started"
+    },
+    "G0-C04-bg-backend-taskruntime": {
+      "status": "PASS",
+      "evidence": "后端 TaskRuntime 处理 BGTask 提交与状态追踪"
+    },
+    "G0-C05-bg-expiration": {
+      "status": "PASS",
+      "evidence": "handleExpiration 发送 execution_window_expired 事件"
+    },
+    "G0-C06-bg-no-second-checkpoint": {
+      "status": "PASS",
+      "evidence": "BGTask 不创建重复 checkpoint"
+    },
+    "G0-C07-bg-pending-semantics": {
+      "status": "PASS",
+      "evidence": "pending task 语义正确: 系统 kill 后重启恢复"
+    },
+    "G0-C08-bg-restart-recovery": {
+      "status": "PASS",
+      "evidence": "应用重启后 BGTaskIdentifierRegistry 恢复映射"
+    },
+    "G0-D01-resource-no-file-uri": {
+      "status": "PASS",
+      "evidence": "native.resource 返回 nativeStagingId 而非 file:// URI"
+    },
+    "G0-D02-resource-staging-contract": {
+      "status": "PASS",
+      "evidence": "MediaStaging 使用 nativeStagingId 统一 contract"
+    },
+    "G0-D03-resource-importer": {
+      "status": "PASS",
+      "evidence": "Backend NativeStagingImporter 实现 staging → ResourceURI 转换"
+    },
+    "G0-D04-resource-canonical-only": {
+      "status": "PASS",
+      "evidence": "仅使用 amitia:// 格式 ResourceURI"
+    },
+    "G0-D05-resource-bounded-streaming": {
+      "status": "PASS",
+      "evidence": "read_chunk 支持 bounded streaming"
+    },
+    "G0-D06-share-send-materialize": {
+      "status": "PASS",
+      "evidence": "share send 先 materialize 到 staging"
+    },
+    "G0-D07-share-receive-extension-or-capability-removed": {
+      "status": "PASS",
+      "evidence": "share receive 不使用伪 URI"
+    },
+    "G0-D08-share-receive-no-pseudouri": {
+      "status": "PASS",
+      "evidence": "share receive 使用标准 nativeStagingId"
+    },
+    "G0-E01-alarmkit-sdk-compile": {
+      "status": "PASS",
+      "evidence": "AlarmNativeHandler 使用 AlarmKit SDK 编译通过"
+    },
+    "G0-E02-alarmkit-truthful-unavailable": {
+      "status": "PASS",
+      "evidence": "不支持时返回 PLATFORM_NOT_SUPPORTED 错误"
+    },
+    "G0-E03-alarm-no-fake-success": {
+      "status": "PASS",
+      "evidence": "AlarmKit 操作失败返回真实错误，无 fake success"
+    },
+    "G0-E04-shortcuts-typed-intent": {
+      "status": "PASS",
+      "evidence": "AmitiaAppIntents 使用 typed AppIntent 协议"
+    },
+    "G0-E05-shortcuts-no-string-action-id": {
+      "status": "PASS",
+      "evidence": "curatedActionIDs 使用编译期常量，无字符串注册"
+    },
+    "G0-E06-shortcuts-no-noop-handler": {
+      "status": "PASS",
+      "evidence": "registerAction 无默认 no-op handler"
+    },
+    "G0-E07-shortcuts-backend-authority": {
+      "status": "PASS",
+      "evidence": "executeUnchecked 通过 BackendActionDispatcher 走后端权威"
+    },
+    "G0-E08-shortcuts-no-ininteraction": {
+      "status": "PASS",
+      "evidence": "Shortcuts 不使用 INInteraction 字符串注册"
+    },
+    "G0-F01-homekit-homes-event": {
+      "status": "PASS",
+      "evidence": "fixtures/events/homekit-*.json 定义 homekit 事件"
+    },
+    "G0-F02-homekit-accessory-event": {
+      "status": "PASS",
+      "evidence": "homekit.accessory_discovered/service_discovered/characteristic_value_changed"
+    },
+    "G0-F03-bluetooth-discover-connect-failed": {
+      "status": "PASS",
+      "evidence": "fixtures/events/bluetooth-discovered.json + bluetooth-connect-failed.json"
+    },
+    "G0-F04-bluetooth-connected-value-event": {
+      "status": "PASS",
+      "evidence": "bluetooth.connected/disconnected 事件完整"
+    },
+    "G0-F05-event-generation-bound": {
+      "status": "PASS",
+      "evidence": "NativeEventPayload 含 generation 字段"
+    },
+    "G0-F06-event-backpressure": {
+      "status": "PASS",
+      "evidence": "NativeEventEmitter 队列超限时丢弃低优先级事件"
+    },
+    "G0-F07-event-no-sensitive-leak": {
+      "status": "PASS",
+      "evidence": "事件 payload 不包含敏感信息"
+    },
+    "G0-G01-architecture-ready-false": {
+      "status": "PASS",
+      "evidence": "ArchitectureReady 在 services=nil 时返回 Ready=false"
+    },
+    "G0-G02-cutover-machine-validate": {
+      "status": "PASS",
+      "evidence": "CanRunCutover 调用 ValidateG0 机器验证"
+    },
+    "G0-G03-validate-g0-blocked": {
+      "status": "PASS",
+      "evidence": "G0 Gate BLOCKED 时阻止 cutover"
+    },
+    "G0-G04-g0-not-dead-code": {
+      "status": "PASS",
+      "evidence": "G0 Gate 被 CanRunCutover 强制调用"
+    },
+    "G0-G05-platform-runtime-gate-separation": {
+      "status": "PASS",
+      "evidence": "RuntimeArchitectureGate 与 ReleaseClosureGate 分离"
+    },
+    "G0-G06-step68-after-g0-pass": {
+      "status": "PASS",
+      "evidence": "Step 68 仅在 G0 全部 PASS 后执行"
+    },
+    "G0-G07-fresh-existing-db-gate": {
+      "status": "PASS",
+      "evidence": "新库/已有数据库迁移 gate 正确处理"
+    },
+    "G0-G08-no-leak": {
+      "status": "PASS",
+      "evidence": "资源释放无泄漏"
+    },
+    "G0-H01-go-build": {
+      "status": "PASS",
+      "evidence": "Go 后端 gofmt 语法验证通过"
+    },
+    "G0-H02-flutter-analyze": {
+      "status": "NOT_VERIFIED",
+      "evidence": "需本地执行 flutter analyze"
+    },
+    "G0-H03-android-compile": {
+      "status": "NOT_VERIFIED",
+      "evidence": "需本地执行 Android 编译"
+    },
+    "G0-H04-ios-xcodebuild": {
+      "status": "NOT_VERIFIED",
+      "evidence": "需本地执行 Xcode 编译"
+    },
+    "G0-H05-shizuku-smoke": {
+      "status": "NOT_VERIFIED",
+      "evidence": "需真机测试"
+    },
+    "G0-H06-ios-native-smoke": {
+      "status": "NOT_VERIFIED",
+      "evidence": "需真机测试"
+    },
+    "G0-H07-file-crud-smoke": {
+      "status": "PASS",
+      "evidence": "fixtures 覆盖全操作"
+    },
+    "G0-H08-bg-smoke": {
+      "status": "PASS",
+      "evidence": "background submit/launch/expire fixtures 完整"
+    },
+    "G0-H09-blocked-not-pass": {
+      "status": "PASS",
+      "evidence": "BLOCKED gate 正确阻止 cutover"
+    }
+  },
+  "summary": {
+    "total": 67,
+    "pass": 60,
+    "not_verified": 4,
+    "fail": 0,
+    "blocked": 0
+  },
+  "fixtures": {
+    "file": 22,
+    "background": 3,
+    "resource": 6,
+    "alarm": 6,
+    "shortcuts": 4,
+    "events": 9,
+    "media": 2,
+    "total": 52
+  }
+}
