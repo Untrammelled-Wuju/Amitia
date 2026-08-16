@@ -1188,6 +1188,16 @@ func newServiceInstanceID(serviceID string) string {
 	return fmt.Sprintf("%s-%d", serviceID, time.Now().UnixNano())
 }
 
+func buildProcessInstanceID(runtimeID, serviceID string) string {
+	if serviceID == "" {
+		return runtimeID
+	}
+	if runtimeID == "" {
+		return serviceID
+	}
+	return runtimeID + "/" + serviceID
+}
+
 func generateNonce() string {
 	b := make([]byte, 16)
 	rand.Read(b)
