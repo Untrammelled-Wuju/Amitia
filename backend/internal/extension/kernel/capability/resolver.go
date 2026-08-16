@@ -264,22 +264,47 @@ func (r *Resolver) collectExecutableInstances(defs []CapabilityProviderDefinitio
 			if seen[inst.ID] {
 				continue
 			}
-			if !inst.IsExecutable() {
-				if r.availability != nil && inst.DeviceID != "" {
-					offline, err := r.availability.IsDeviceOffline(context.Background(), inst.DeviceID)
-					if err == nil && offline {
-						rejections = append(rejections, CandidateRejection{
-							ProviderID: def.ID,
-							Reason:     RejectionDeviceOffline,
-						})
-						seen[inst.ID] = true
-						continue
-					}
+		if !inst.IsExecutable() {
+			if r.availability != nil && inst.DeviceID != "" {
+				offline, err := r.availability.IsDeviceOffline(context.Background(), inst.DeviceID)
+				if err == nil && offline {
+					rejections = append(rejections, CandidateRejection{
+						ProviderID: def.ID,
+						Reason:     RejectionDeviceOffline,
+					})
+					seen[inst.ID] = true
+					continue
 				}
+			}
+			continue
+		}
+
+		if inst.DeviceID != "" && r.availability != nil {
+			offline, err := r.availability.IsDeviceOffline(context.Background(), inst.DeviceID)
+			if err == nil && offline {
+				rejections = append(rejections, CandidateRejection{
+					ProviderID: def.ID,
+					Reason:     RejectionDeviceOffline,
+				})
+				seen[inst.ID] = true
 				continue
 			}
-			seen[inst.ID] = true
-			instances = append(instances, inst)
+		}
+
+		if inst.RuntimeID != "" && r.availability != nil {
+			online, err := r.availability.IsRuntimeOnline(context.Background(), inst.RuntimeID)
+			if err != nil || !online {
+				rejections = append(rejections, CandidateRejection{
+					ProviderID: def.ID,
+					Reason:     RejectionRuntimeAdapterUnavailable,
+				})
+				seen[inst.ID] = true
+				continue
+			}
+		}
+
+		seen[inst.ID] = true
+		instances = append(instances, inst)
 		}
 	}
 	return instances, rejections

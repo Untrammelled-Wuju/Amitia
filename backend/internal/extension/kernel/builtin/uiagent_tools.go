@@ -134,14 +134,14 @@ func uiagentModifyHandler(ctx context.Context, execCtx tool.ToolExecutionContext
 	}
 
 	operationsRaw, _ := json.Marshal(args["operations"])
-	var sourceOps []uiagent.SourceEditOperation
+	var sourceOps []source.SourceEditOperation
 	if err := json.Unmarshal(operationsRaw, &sourceOps); err != nil {
 		return tool.ErrorResult("invalid_operations", fmt.Sprintf("invalid operations: %v", err))
 	}
 
-	srcReq := uiagent.SourceEditRequest{
+	srcReq := source.SourceEditRequest{
 		WorkspaceID: workspaceID,
-		Operations:  convertSourceOps(sourceOps),
+		Operations:  sourceOps,
 		Transaction: true,
 	}
 
@@ -170,8 +170,7 @@ func uiagentModifyHandler(ctx context.Context, execCtx tool.ToolExecutionContext
 		return tool.ErrorResult("ui_agent_unavailable", "UI agent executor not configured")
 	}
 
-	sourceEditor := uiagent.NewUIExecutor(uiagent.WithSourceEditor(uiAgentSourceEditor))
-	result, err := sourceEditor.ApplySourceEdits(ctx, uiagent.UIChangePlan{
+	result, err := uiAgentExecutor.ApplySourceEdits(ctx, uiagent.UIChangePlan{
 		Intent: uiagent.UIIntent{
 			Target: uiagent.UITarget{
 				WorkspaceID: workspaceID,
@@ -225,23 +224,7 @@ func uiagentCreateHandler(ctx context.Context, execCtx tool.ToolExecutionContext
 	}
 }
 
-// sourceEditorAdapter is a deprecated adapter that always returns success without
-// making real changes. It now returns an error to prevent fake success.
-//
-// Deprecated: Use source.SourceEditor directly via SetUIAgentSourceEditor or SetUIAgentPreciseService.
-type sourceEditorAdapter struct {
-	req *uiagent.SourceEditRequest
-}
-
-func (a *sourceEditorAdapter) ApplyEdits(ctx context.Context, req uiagent.SourceEditRequest) (*uiagent.SourceEditResult, error) {
-	return nil, fmt.Errorf("sourceEditorAdapter is deprecated: use real source.SourceEditor instead")
-}
-
-func convertSourceOps(ops []uiagent.SourceEditOperation) []uiagent.SourceEditOperation {
-	return ops
-}
-
-func convertToUIOperations(ops []uiagent.SourceEditOperation) []uiagent.UIOperation {
+func convertToUIOperations(ops []source.SourceEditOperation) []uiagent.UIOperation {
 	result := make([]uiagent.UIOperation, 0, len(ops))
 	for _, op := range ops {
 		payload, _ := json.Marshal(op)
