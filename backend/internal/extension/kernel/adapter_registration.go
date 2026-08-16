@@ -288,3 +288,104 @@ func makeJSCallFunc(factory *javascript_main.RuntimeFactory) capability.JavaScri
 		return json.Marshal(result)
 	}
 }
+
+func makeJSHealthFunc(factory *javascript_main.RuntimeFactory) capability.JavaScriptHealthFunc {
+	return func(ctx context.Context, extensionID string, moduleID string) capability.HealthStatus {
+		if factory == nil {
+			return capability.HealthUnknown
+		}
+		instanceID := fmt.Sprintf("%s/%s", extensionID, moduleID)
+		if moduleID == "" {
+			instanceID = extensionID
+		}
+		host, err := factory.Get(instanceID)
+		if err != nil || host == nil {
+			return capability.HealthUnhealthy
+		}
+		return capability.HealthReady
+	}
+}
+
+func makeWASMCallFunc(factory *wasm_runtime.WASMRuntimeFactory, mgr *wasm_runtime.ModuleManager) capability.WASMCallFunc {
+	return func(ctx context.Context, moduleHash string, exportName string, input json.RawMessage) (json.RawMessage, error) {
+		if factory == nil || mgr == nil {
+			return nil, fmt.Errorf("WASM runtime not configured")
+		}
+		_, ok := mgr.Get(moduleHash)
+		if !ok {
+			return nil, fmt.Errorf("WASM module not found: %s", moduleHash)
+		}
+		result, err := factory.Invoke(ctx, moduleHash, input)
+		if err != nil {
+			return nil, err
+		}
+		if result == nil {
+			return nil, fmt.Errorf("WASM invocation returned nil result")
+		}
+		return result.Output, nil
+	}
+}
+
+func makeWASMHealthFunc(mgr *wasm_runtime.ModuleManager) capability.WASMHealthFunc {
+	return func(ctx context.Context, moduleHash string) capability.HealthStatus {
+		if mgr == nil {
+			return capability.HealthUnknown
+		}
+		_, ok := mgr.Get(moduleHash)
+		if !ok {
+			return capability.HealthUnhealthy
+		}
+		return capability.HealthReady
+	}
+}
+
+func makeTrustedServiceCallFunc(supervisor runtime_supervisor.Supervisor) capability.TrustedServiceCallFunc {
+	return func(ctx context.Context, serviceID string, handlerName string, input json.RawMessage) (json.RawMessage, error) {
+		if supervisor == nil {
+			return nil, fmt.Errorf("trusted service supervisor not configured")
+		}
+		request := runtime_supervisor.InvocationRequest{
+			InstanceID: serviceID,
+			Operation:  handlerName,
+			Input:      input,
+		}
+		result := supervisor.Invoke(ctx, request)
+		if result.Status != "success" {
+			return nil, fmt.Errorf("trusted service call failed: %s", result.Status)
+		}
+		return result.Output, nil
+	}
+}
+
+func makeTrustedServiceHealthFunc(supervisor runtime_supervisor.Supervisor) capability.TrustedServiceHealthFunc {
+	return func(ctx context.Context, serviceID string) capability.HealthStatus {
+		if supervisor == nil {
+			return capability.HealthUnknown
+		}
+		snapshot := supervisor.Snapshot(ctx, runtime_supervisor.DefinitionID(serviceID))
+		for _, inst := range snapshot.Instances {
+			if inst.InstanceID == serviceID {
+				return capability.HealthStatus(inst.Health)
+			}
+		}
+		return capability.HealthUnhealthy
+	}
+}
+
+func makeTaskEnqueueFunc(svc *task_runtime.TaskRuntimeService) capability.TaskEnqueueFunc {
+	return func(ctx context.Context, request capability.TaskAdapterEnqueueRequest) (string, error) {
+		if svc == nil {
+			return "", fmt.Errorf("task runtime service not configured")
+		}
+		return "", fmt.Errorf("task adapter enqueue not implemented")
+	}
+}
+
+func makeTaskStatusFunc(svc *task_runtime.TaskRuntimeService) capability.TaskStatusFunc {
+	return func(ctx context.Context, taskRunID string) (capability.TaskRunStatus, error) {
+		if svc == nil {
+			return capability.TaskRunStatus{}, fmt.Errorf("task runtime service not configured")
+		}
+		return capability.TaskRunStatus{}, fmt.Errorf("task adapter status not implemented")
+	}
+}

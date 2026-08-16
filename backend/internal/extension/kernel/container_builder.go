@@ -572,10 +572,10 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return nil, fmt.Errorf("kernel: create hook service: %w", err)
 	}
 
-	var eventSvc *event.Service
-	var eventBridge *event.RuntimeBridge
-	var hostEmitter *event.HostEventEmitter
-	var lifecycleEmitter *event.LifecycleEventEmitter
+var eventSvc *event.Service
+var eventBridge *event.RuntimeBridge
+var hostEmitter event.HostEventEmitter
+var lifecycleEmitter *event.LifecycleEventEmitter
 	var eventBridgePublisher *eventbridge.Publisher
 
 	if b.runtimePolicy.DurableEvents {

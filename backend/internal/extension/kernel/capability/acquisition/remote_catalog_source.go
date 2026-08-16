@@ -56,14 +56,14 @@ func (s *RemoteCatalogSource) Search(ctx context.Context, request AcquisitionReq
 
 	resp, err := s.fetchCatalog(ctx)
 	if err != nil {
-		return nil, nil
+		return nil, fmt.Errorf("remote catalog fetch: %w", err)
 	}
 
 	var entries []RemoteCatalogEntry
 	if err := json.Unmarshal(resp, &entries); err != nil {
 		var wrapped RemoteCatalogResponse
 		if err := json.Unmarshal(resp, &wrapped); err != nil {
-			return nil, nil
+			return nil, fmt.Errorf("remote catalog parse: %w", err)
 		}
 		entries = wrapped.Entries
 	}
@@ -131,7 +131,7 @@ func (s *RemoteCatalogSource) toCandidate(entry RemoteCatalogEntry) CapabilityCa
 	}
 	trustLevel := TrustLevel(entry.Trust)
 	if trustLevel == "" {
-		trustLevel = TrustVerified
+		trustLevel = TrustUnverified
 	}
 	return CapabilityCandidate{
 		ID:           entry.ExtensionID,
