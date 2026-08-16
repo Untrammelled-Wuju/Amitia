@@ -631,6 +631,7 @@ class RuntimeService : Service() {
             TerminalEventKind.UNEXPECTED_TERMINATION
         }
         ctx.terminalEvent = terminalKind
+        processOwnershipBarrier.set(ProcessOwnershipState.CONFIRMED_DEAD)
 
         val teardownReason = if (terminalKind == TerminalEventKind.EXPECTED_STOPPED) {
             ServiceTeardownReason.EXPECTED_STOP
@@ -653,6 +654,7 @@ class RuntimeService : Service() {
         if (session == null) {
             cleanupContext.processConfirmedDead = true
             cleanupContext.cleanupPhase = StartupFailureCleanupPhase.PROCESS_EXIT_CONFIRMED
+            processOwnershipBarrier.set(ProcessOwnershipState.CONFIRMED_DEAD)
             performStartupFailureCleanup(cleanupContext)
             return
         }
@@ -664,6 +666,7 @@ class RuntimeService : Service() {
             is ProotTerminationResult.ConfirmedExited -> {
                 cleanupContext.processConfirmedDead = true
                 cleanupContext.cleanupPhase = StartupFailureCleanupPhase.PROCESS_EXIT_CONFIRMED
+                processOwnershipBarrier.set(ProcessOwnershipState.CONFIRMED_DEAD)
                 performStartupFailureCleanup(cleanupContext)
             }
             is ProotTerminationResult.StillAlive -> {
@@ -688,6 +691,7 @@ class RuntimeService : Service() {
                 cleanupContext.cleanupPhase = StartupFailureCleanupPhase.PROCESS_EXIT_CONFIRMED
                 sessionContext.terminalEvent = TerminalEventKind.STARTUP_FAILURE_CLEANUP
                 sessionContext.processPhase = ProcessPhase.EXITED
+                processOwnershipBarrier.set(ProcessOwnershipState.CONFIRMED_DEAD)
                 performStartupFailureCleanup(cleanupContext)
                 return
             }
@@ -695,6 +699,7 @@ class RuntimeService : Service() {
             if (sessionContext.terminalEvent != null) return
 
             sessionContext.processPhase = ProcessPhase.EXITED
+            processOwnershipBarrier.set(ProcessOwnershipState.CONFIRMED_DEAD)
 
             val terminalKind = if (sessionContext.stopRequested) {
                 TerminalEventKind.EXPECTED_STOPPED
@@ -868,6 +873,7 @@ class RuntimeService : Service() {
             latestStartIdRef.set(stopStartId)
             stopRequestedRef.set(true)
             sessionContext.processPhase = ProcessPhase.EXITING
+            processOwnershipBarrier.set(ProcessOwnershipState.TERMINATING)
             val session = currentSessionRef.get()
             if (session != null && session.isAlive()) {
                 session.requestStop()
