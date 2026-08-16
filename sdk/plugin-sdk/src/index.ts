@@ -11,6 +11,7 @@ export * from "./storage";
 export * from "./secrets";
 export * from "./ui";
 export * from "./context";
+export * from "./control";
 
 export {
   defineExtension,
