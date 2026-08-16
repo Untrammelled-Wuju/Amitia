@@ -301,3 +301,38 @@ func (lc *MCPLifecycle) ReleaseOperationLock(bindingID string) {
 	lc.locks[bindingID] = false
 	lc.operations[bindingID] = ""
 }
+
+// ListInstallations returns all installations as a slice of generic interfaces
+// for consumption by the acquisition source system.
+func (lc *MCPLifecycle) ListInstallations() []interface{} {
+	result := make([]interface{}, 0, len(lc.installations))
+	for _, inst := range lc.installations {
+		result = append(result, &mcpInstallationAdapter{installation: inst})
+	}
+	return result
+}
+
+// mcpInstallationAdapter wraps MCPInstallation to provide the interface
+// expected by acquisition.MCPPackageSource.
+type mcpInstallationAdapter struct {
+	installation *MCPInstallation
+}
+
+func (a *mcpInstallationAdapter) GetBindingID() string {
+	return a.installation.BindingID
+}
+
+func (a *mcpInstallationAdapter) GetServerName() string {
+	return a.installation.BindingID
+}
+
+func (a *mcpInstallationAdapter) GetInstallState() string {
+	return string(a.installation.InstallState)
+}
+
+func (a *mcpInstallationAdapter) GetProvidedCapabilities() []string {
+	if a.installation.RuntimeState == MCPRuntimeReady {
+		return []string{"mcp.server." + a.installation.BindingID}
+	}
+	return []string{}
+}
