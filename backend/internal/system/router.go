@@ -61,6 +61,7 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	})
 
 	r.GET("/health", handler.Health)
+	r.GET("/readyz", handler.Readyz)
 	r.GET("/diagnostics", handler.Diagnostics)
 	r.POST("/diagnostics/run", handler.RunDiagnostics)
 	r.POST("/tools/route", handler.ToolRoute)
