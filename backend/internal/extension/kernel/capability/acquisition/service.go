@@ -89,11 +89,15 @@ func NewAcquisitionService(deps AcquisitionDependencies) (*AcquisitionService, e
 // pre-configured SourceRegistry. This is retained for test/compat purposes;
 // production code should use NewAcquisitionService with full AcquisitionDependencies.
 func NewAcquisitionServiceWithRegistry(registry *SourceRegistry, providerRegistry *capability.ProviderRegistry) (*AcquisitionService, error) {
+	installerReg, err := NewInstallerRegistry(nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create installer registry: %w", err)
+	}
 	deps := AcquisitionDependencies{
 		CapabilityService: nil,
 		ProviderRegistry:  providerRegistry,
 		SourceRegistry:    registry,
-		InstallerRegistry: NewInstallerRegistry(nil),
+		InstallerRegistry: installerReg,
 		PolicyEngine:      NewPolicyEngine(),
 		DeploymentPlanner: NewDeploymentPlanner(),
 	}

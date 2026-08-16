@@ -22,12 +22,41 @@ type InstallerRegistry struct {
 }
 
 // NewInstallerRegistry 创建 InstallerRegistry。如果 opts 提供了 port，则创建真实实现。
-func NewInstallerRegistry(opts *InstallerRegistryOpts) *InstallerRegistry {
+// 启动后若缺这四类正式 Installer，直接 Hard Gate 失败。
+func NewInstallerRegistry(opts *InstallerRegistryOpts) (*InstallerRegistry, error) {
 	r := &InstallerRegistry{
 		installers: make(map[InstallMethod]Installer),
 	}
 	r.registerDefaults(opts)
-	return r
+	if err := r.validateAllInstallersRegistered(); err != nil {
+		return nil, err
+	}
+	return r, nil
+}
+
+// validateAllInstallersRegistered 验证所有必需的 Installer 都已注册
+func (r *InstallerRegistry) validateAllInstallersRegistered() error {
+	required := map[InstallMethod]string{
+		InstallExtension:      "PackageInstallPort (Extension)",
+		InstallMCP:            "MCPInstallPort",
+		InstallSkill:          "SkillInstallPort",
+		InstallEnableExisting: "EnableExistingPort",
+	}
+	return r.checkRequiredInstallers(required)
+}
+
+// checkRequiredInstallers 检查必需的 Installer 是否都已注册
+func (r *InstallerRegistry) checkRequiredInstallers(required map[InstallMethod]string) error {
+	var missing []string
+	for method, name := range required {
+		if _, ok := r.installers[method]; !ok {
+			missing = append(missing, fmt.Sprintf("%s (%s)", method, name))
+		}
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("installer registry: missing required installers: %v", missing)
+	}
+	return nil
 }
 
 // Register 注册或覆盖指定方法的 Installer。
