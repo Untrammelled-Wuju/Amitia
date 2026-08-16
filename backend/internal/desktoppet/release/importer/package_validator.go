@@ -14,9 +14,9 @@ import (
 )
 
 type DefaultPackageValidator struct {
-	registry *security.PathRootRegistry
-	repo     security.ImportStagingRepository
-	reader   *packageformat.ArchiveReader
+	registry  *security.PathRootRegistry
+	repo      security.ImportStagingRepository
+	reader    *packageformat.ArchiveReader
 	validator *packageformat.Validator
 }
 
@@ -26,7 +26,7 @@ func NewDefaultPackageValidator(
 ) *DefaultPackageValidator {
 	return &DefaultPackageValidator{
 		registry: registry,
-		repo: repo,
+		repo:     repo,
 		reader: packageformat.NewArchiveReader(
 			packageformat.DefaultArchiveLimits(),
 		),
@@ -115,8 +115,7 @@ func (
 			len(manifest.Actions),
 		)
 
-	for _, action :=
-		range manifest.Actions {
+	for _, action := range manifest.Actions {
 		selectedActions = append(
 			selectedActions,
 			action.Key,
@@ -143,19 +142,19 @@ func (
 	compatibility := checkRuntimeCompatibility(manifest.Compatibility)
 
 	return &ImportValidationResult{
-		IsValid:             archiveValid,
-		IntegrityVerified:   integrityVerified,
-		Compatibility:       compatibility,
-		SourcePackageHash:   staging.SourceContentHash,
-		SourceManifestHash:  manifest.Integrity.ManifestHash,
-		SourceSchemaVersion: manifest.SchemaVersion,
-		Warnings:            allWarnings,
-		BindingDecision:     manifest.Binding.Policy,
-		LicenseDecision:     licenseDecision,
+		IsValid:              archiveValid,
+		IntegrityVerified:    integrityVerified,
+		Compatibility:        compatibility,
+		SourcePackageHash:    staging.SourceContentHash,
+		SourceManifestHash:   manifest.Integrity.ManifestHash,
+		SourceSchemaVersion:  manifest.SchemaVersion,
+		Warnings:             allWarnings,
+		BindingDecision:      manifest.Binding.Policy,
+		LicenseDecision:      licenseDecision,
 		RuntimeCompatibility: string(compatibility),
-		SelectedActions:     selectedActions,
-		Manifest:            manifest,
-		ValidationReport:    report,
+		SelectedActions:      selectedActions,
+		Manifest:             manifest,
+		ValidationReport:     report,
 	}, nil
 }
 
