@@ -421,7 +421,7 @@ func BuildBackgroundRemovalExtension(version string) Definition {
 			Version:         ver,
 			ManifestVersion: 1,
 			Domain:          domain.ExtensionDomainGeneral,
-			Placement:       domain.ExtensionPlacementCloud,
+			Placement:       domain.ExtensionPlacementCore,
 			Publisher: domain.PublisherReference{
 				PublisherID: "com.amitia",
 				DisplayName: "Amitia",
@@ -441,7 +441,7 @@ func BuildBackgroundRemovalExtension(version string) Definition {
 					},
 					Type: domain.ModuleTypeBuiltin,
 					Runtime: &domain.RuntimeDefinition{
-						Type: domain.RuntimeTypeBuiltin,
+						Type: domain.RuntimeTypeBackgroundRemoval,
 					},
 					ProvidedCapabilities: []domain.ProvidedCapability{
 						{ID: "image.background.remove", Version: "1.0.0"},

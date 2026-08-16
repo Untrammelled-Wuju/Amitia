@@ -31,6 +31,7 @@ const (
 	RuntimeTypeIOS_Native        RuntimeType = "ios_native"
 	RuntimeTypeDesktop_Extension RuntimeType = "desktop_extension"
 	RuntimeTypeMedia             RuntimeType = "media"
+	RuntimeTypeBackgroundRemoval RuntimeType = "background_removal"
 	RuntimeTypeWorkspace         RuntimeType = "workspace"
 )
 

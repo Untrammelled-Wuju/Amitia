@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
@@ -11,6 +12,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
+	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval"
 )
 
 type AdapterRegistrationDeps struct {
@@ -37,6 +39,7 @@ type AdapterRegistrationDeps struct {
 	WorkspaceCaller       capability.WorkspaceCallFunc
 	WorkspaceHealth       capability.WorkspaceHealthFunc
 	DeviceRuntimePort     capability.DeviceRuntimeInvocationPort
+	BackgroundRemoval     backgroundremoval.Registry
 }
 
 func RegisterProductionAdapters(registry *capability.RuntimeAdapterRegistry, deps AdapterRegistrationDeps) error {
@@ -147,7 +150,119 @@ func RegisterProductionAdapters(registry *capability.RuntimeAdapterRegistry, dep
 		registry.RegisterDeviceAdapter(deviceAdapter)
 	}
 
+	if deps.BackgroundRemoval != nil {
+		bgAdapter := capability.NewBackgroundRemovalRuntimeAdapter(
+			makeBackgroundRemovalCallFunc(deps.BackgroundRemoval),
+			makeBackgroundRemovalHealthFunc(deps.BackgroundRemoval),
+		)
+		registry.Register(capability.RuntimeTypeBackgroundRemoval, bgAdapter)
+	}
+
 	return nil
+}
+
+func makeBackgroundRemovalCallFunc(reg backgroundremoval.Registry) capability.BackgroundRemovalCallFunc {
+	return func(ctx context.Context, input json.RawMessage) (json.RawMessage, error) {
+		var req struct {
+			Image    []byte `json:"image"`
+			Width    int    `json:"width"`
+			Height   int    `json:"height"`
+			Mode     string `json:"mode"`
+			Provider string `json:"provider"`
+		}
+		if err := json.Unmarshal(input, &req); err != nil {
+			return nil, fmt.Errorf("invalid background removal input: %w", err)
+		}
+
+		bgPolicy := backgroundremoval.BackgroundPolicyConfig{
+			ProviderName: req.Provider,
+			Mode:         backgroundremoval.BackgroundMode(req.Mode),
+		}
+		inputDesc := backgroundremoval.ImageDescriptor{
+			Width:  req.Width,
+			Height: req.Height,
+			MIME:   "image/png",
+			Pixels: int64(req.Width) * int64(req.Height),
+		}
+
+		resolved, err := reg.Resolve(bgPolicy, inputDesc)
+		if err != nil {
+			return nil, fmt.Errorf("background removal resolve failed: %w", err)
+		}
+		if resolved.Provider == nil {
+			return nil, fmt.Errorf("no background removal provider available")
+		}
+
+		v2, ok := resolved.Provider.(backgroundremoval.BackgroundRemovalProviderV2)
+		if !ok {
+			return nil, fmt.Errorf("background removal provider does not support V2 API")
+		}
+
+		bgReq := backgroundremoval.BackgroundRemovalRequest{
+			RequestID: uuid.New().String(),
+			Image:     decodeNRGBA(req.Image, req.Width, req.Height),
+			Mode:      backgroundremoval.BackgroundMode(req.Mode),
+		}
+		result, err := v2.RemoveBackgroundV2(ctx, bgReq)
+		if err != nil {
+			return nil, fmt.Errorf("background removal failed: %w", err)
+		}
+
+		output := struct {
+			Image        []byte  `json:"image"`
+			Mask         []byte  `json:"mask"`
+			Width        int     `json:"width"`
+			Height       int     `json:"height"`
+			Provider     string  `json:"provider"`
+			Degraded     bool    `json:"degraded"`
+			RemovedRatio float64 `json:"removedRatio"`
+		}{
+			Width:        result.Width,
+			Height:       result.Height,
+			Provider:     result.Provider,
+			Degraded:     result.Degraded,
+			RemovedRatio: result.Measurements.RemovedRatio,
+		}
+		output.Image = encodeNRGBA(result.Foreground)
+		output.Mask = encodeGray(result.Mask)
+
+		return json.Marshal(output)
+	}
+}
+
+func makeBackgroundRemovalHealthFunc(reg backgroundremoval.Registry) func(ctx context.Context) capability.HealthStatus {
+	return func(ctx context.Context) capability.HealthStatus {
+		if reg == nil {
+			return capability.HealthUnknown
+		}
+		providers := reg.List()
+		if len(providers) == 0 {
+			return capability.HealthUnknown
+		}
+		return capability.HealthReady
+	}
+}
+
+func decodeNRGBA(data []byte, width, height int) *image.NRGBA {
+	img := image.NewNRGBA(image.Rect(0, 0, width, height))
+	if len(data) > 0 {
+		copy(img.Pix, data)
+	}
+	return img
+}
+
+func encodeNRGBA(img *image.NRGBA) []byte {
+	if img == nil {
+		return nil
+	}
+	return img.Pix
+}
+
+func encodeGray(img *image.Gray) []byte {
+	if img == nil {
+		return nil
+	}
+	return img.Pix
 }
 
 func makeJSCallFunc(factory *javascript_main.RuntimeFactory) capability.JavaScriptCallFunc {
@@ -171,149 +286,5 @@ func makeJSCallFunc(factory *javascript_main.RuntimeFactory) capability.JavaScri
 			return nil, err
 		}
 		return json.Marshal(result)
-	}
-}
-
-func makeJSHealthFunc(factory *javascript_main.RuntimeFactory) capability.JavaScriptHealthFunc {
-	return func(ctx context.Context, extensionID string, moduleID string) capability.HealthStatus {
-		if factory == nil {
-			return capability.HealthUnknown
-		}
-		instanceID := fmt.Sprintf("%s/%s", extensionID, moduleID)
-		if moduleID == "" {
-			instanceID = extensionID
-		}
-		_, err := factory.Get(instanceID)
-		if err != nil {
-			return capability.HealthUnknown
-		}
-		return capability.HealthReady
-	}
-}
-
-func makeWASMCallFunc(factory *wasm_runtime.WASMRuntimeFactory, mgr *wasm_runtime.ModuleManager) capability.WASMCallFunc {
-	return func(ctx context.Context, moduleHash string, exportName string, input json.RawMessage) (json.RawMessage, error) {
-		if factory == nil {
-			return nil, fmt.Errorf("wasm runtime factory not configured")
-		}
-		if mgr == nil {
-			return nil, fmt.Errorf("wasm module manager not configured")
-		}
-
-		_, ok := mgr.Get(moduleHash)
-		if !ok {
-			return nil, fmt.Errorf("wasm module not found: %s", moduleHash)
-		}
-
-		result, err := factory.Invoke(ctx, moduleHash, input)
-		if err != nil {
-			return nil, fmt.Errorf("wasm invoke failed for export %s: %w", exportName, err)
-		}
-
-		if result == nil {
-			return nil, fmt.Errorf("wasm invoke returned nil result for export %s", exportName)
-		}
-
-		output, err := json.Marshal(result)
-		if err != nil {
-			return nil, fmt.Errorf("wasm result marshal failed: %w", err)
-		}
-		return output, nil
-	}
-}
-
-func makeWASMHealthFunc(mgr *wasm_runtime.ModuleManager) capability.WASMHealthFunc {
-	return func(ctx context.Context, moduleHash string) capability.HealthStatus {
-		if mgr == nil {
-			return capability.HealthUnknown
-		}
-		_, ok := mgr.Get(moduleHash)
-		if !ok {
-			return capability.HealthUnknown
-		}
-		return capability.HealthReady
-	}
-}
-
-func makeTrustedServiceCallFunc(supervisor runtime_supervisor.Supervisor) capability.TrustedServiceCallFunc {
-	return func(ctx context.Context, serviceID string, handlerName string, input json.RawMessage) (json.RawMessage, error) {
-		if supervisor == nil {
-			return nil, fmt.Errorf("runtime supervisor not configured")
-		}
-
-		req := runtime_supervisor.InvocationRequest{
-			InstanceID:   serviceID,
-			Operation:    handlerName,
-			Input:        input,
-			InvocationID: fmt.Sprintf("ts-%s-%s", serviceID, uuid.NewString()),
-		}
-
-		result := supervisor.Invoke(ctx, req)
-		if result.Error != nil {
-			return nil, result.Error
-		}
-		return result.Output, nil
-	}
-}
-
-func makeTrustedServiceHealthFunc(supervisor runtime_supervisor.Supervisor) capability.TrustedServiceHealthFunc {
-	return func(ctx context.Context, serviceID string) capability.HealthStatus {
-		if supervisor == nil {
-			return capability.HealthUnknown
-		}
-		_, err := supervisor.GetInstance(ctx, serviceID)
-		if err != nil {
-			return capability.HealthUnknown
-		}
-		return capability.HealthReady
-	}
-}
-
-func makeTaskEnqueueFunc(svc *task_runtime.TaskRuntimeService) capability.TaskEnqueueFunc {
-	return func(ctx context.Context, request capability.TaskAdapterEnqueueRequest) (string, error) {
-		if svc == nil {
-			return "", fmt.Errorf("task runtime service not configured")
-		}
-
-		def, err := svc.GetTaskDefinition(ctx, request.TaskDefinitionID)
-		if err != nil {
-			return "", fmt.Errorf("task definition %s not found in repository: %w", request.TaskDefinitionID, err)
-		}
-		if def == nil {
-			return "", fmt.Errorf("task definition %s returned nil from repository", request.TaskDefinitionID)
-		}
-
-		req := task_runtime.EnqueueTaskRequest{
-			TaskDefinitionID: request.TaskDefinitionID,
-			Input:            request.Input,
-		}
-
-		result, err := svc.Enqueue(ctx, req, def)
-		if err != nil {
-			return "", err
-		}
-		return result.TaskRunID, nil
-	}
-}
-
-func makeTaskStatusFunc(svc *task_runtime.TaskRuntimeService) capability.TaskStatusFunc {
-	return func(ctx context.Context, taskRunID string) (capability.TaskRunStatus, error) {
-		if svc == nil {
-			return capability.TaskRunStatus{}, fmt.Errorf("task runtime service not configured")
-		}
-
-		run, err := svc.GetTaskRun(ctx, taskRunID)
-		if err != nil {
-			return capability.TaskRunStatus{}, err
-		}
-
-		status := capability.TaskRunStatus{
-			State:    string(run.Status),
-			Finished: run.Status.IsTerminal(),
-		}
-		if run.ErrorMessage != nil {
-			status.Error = *run.ErrorMessage
-		}
-		return status, nil
 	}
 }
