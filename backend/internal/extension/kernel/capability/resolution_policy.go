@@ -56,6 +56,9 @@ func scoreProvider(def *CapabilityProviderDefinition, inst *CapabilityProviderIn
 	if req.PreferredPlacement != "" && string(def.Placement) == string(req.PreferredPlacement) {
 		score += 500
 	}
+	if req.PreferredProviderID != "" && string(def.ID) == string(req.PreferredProviderID) {
+		score += 600
+	}
 	if req.PreferredDeviceID != "" && string(inst.DeviceID) == string(req.PreferredDeviceID) {
 		score += 400
 	}
