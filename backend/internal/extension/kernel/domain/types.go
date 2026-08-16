@@ -533,6 +533,7 @@ const (
 
 type RuntimeDefinition struct {
 	Type         RuntimeType       `json:"type"`
+	ServiceID    string            `json:"serviceId,omitempty"`
 	EntryPoint   string            `json:"entryPoint,omitempty"`
 	WorkerCount  int               `json:"workerCount,omitempty"`
 	Timeout      time.Duration     `json:"timeout,omitempty"`

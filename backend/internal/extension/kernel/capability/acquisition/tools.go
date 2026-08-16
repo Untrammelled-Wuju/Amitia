@@ -24,9 +24,10 @@ type FindCapabilitiesOutput struct {
 
 // AcquireInput defines the input parameters for the acquire_capability tool.
 type AcquireInput struct {
-	CandidateID   string `json:"candidateId" description:"The id of the candidate from find_capability result"`
-	Approval      bool   `json:"approval,omitempty" description:"Whether the AI should proceed with auto-install when user pre-approved"`
-	UserConfirmed bool   `json:"userConfirmed,omitempty" description:"Whether the explicit user approval was already granted"`
+	CapabilityID string `json:"capabilityId" description:"The canonical capability identifier to acquire (for example: search.web, browser.control, github.issue.manage)"`
+	CandidateID  string `json:"candidateId,omitempty" description:"Optional candidate id from find_capability result. If empty, the Planner selects the best candidate automatically."`
+	Approval     bool   `json:"approval,omitempty" description:"Whether the AI should proceed with auto-install when user pre-approved"`
+	UserConfirmed bool  `json:"userConfirmed,omitempty" description:"Whether the explicit user approval was already granted"`
 }
 
 // AcquireOutput defines the output returned by the acquire_capability tool.

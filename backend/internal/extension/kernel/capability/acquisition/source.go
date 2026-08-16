@@ -203,9 +203,15 @@ func (s *AgentSkillSource) buildCandidate(item agent_skill.AgentSkillDefinition,
 	capID := string(request.CapabilityID)
 	matchesQuery := capID == "" ||
 		containsString(item.Name, capID) ||
-		containsString(item.Description, capID)
+		containsString(item.Description, capID) ||
+		s.skillProvidesCapability(item, capID)
 
 	if !matchesQuery {
+		return nil
+	}
+
+	providedCaps := s.extractProvidedCapabilities(item)
+	if len(providedCaps) == 0 {
 		return nil
 	}
 
@@ -214,7 +220,7 @@ func (s *AgentSkillSource) buildCandidate(item agent_skill.AgentSkillDefinition,
 		Kind:         CandidateAgentSkill,
 		Name:         item.Name,
 		Description:  item.Description,
-		Capabilities: []capability.CapabilityID{capability.CapabilityID(item.ExtensionID)},
+		Capabilities: providedCaps,
 		Install: CandidateInstallDescriptor{
 			Method: InstallEnableExisting,
 		},
@@ -222,6 +228,34 @@ func (s *AgentSkillSource) buildCandidate(item agent_skill.AgentSkillDefinition,
 			Level: TrustVerified,
 		},
 	}
+}
+
+// skillProvidesCapability 检查 Skill 是否声明提供指定能力
+func (s *AgentSkillSource) skillProvidesCapability(item agent_skill.AgentSkillDefinition, capID string) bool {
+	for _, cap := range s.extractProvidedCapabilities(item) {
+		if string(cap) == capID {
+			return true
+		}
+	}
+	return false
+}
+
+// extractProvidedCapabilities 从 Skill 元数据中提取真实提供能力列表
+func (s *AgentSkillSource) extractProvidedCapabilities(item agent_skill.AgentSkillDefinition) []capability.CapabilityID {
+	if item.Metadata != nil {
+		if raw, ok := item.Metadata["providesCapabilities"].([]any); ok {
+			var caps []capability.CapabilityID
+			for _, r := range raw {
+				if s, ok := r.(string); ok && s != "" {
+					caps = append(caps, capability.CapabilityID(s))
+				}
+			}
+			if len(caps) > 0 {
+				return caps
+			}
+		}
+	}
+	return nil
 }
 
 // MCPPackageSource 从 MCP 包中搜索候选
@@ -278,24 +312,29 @@ func (s *MCPPackageSource) buildCandidate(item interface{}, request AcquisitionR
 		GetBindingID() string
 		GetServerName() string
 		GetInstallState() string
-		IsConnected() bool
+		GetProvidedCapabilities() []string
 	}
 
 	if inst, ok := item.(mcpInstallInterface); ok {
-		capID := string(request.CapabilityID)
-		matchesQuery := capID == "" ||
-			containsString(inst.GetServerName(), capID) ||
-			containsString(inst.GetBindingID(), capID)
+		providedCaps := inst.GetProvidedCapabilities()
+		if len(providedCaps) == 0 {
+			return nil
+		}
 
+		capID := string(request.CapabilityID)
+		matchesQuery := capID == "" || containsCapability(providedCaps, capID)
 		if !matchesQuery {
 			return nil
 		}
 
 		state := inst.GetInstallState()
-		desiredState := inst.IsConnected()
-
-		if state == "installed" && desiredState {
+		if state == "connected" {
 			return nil
+		}
+
+		var caps []capability.CapabilityID
+		for _, c := range providedCaps {
+			caps = append(caps, capability.CapabilityID(c))
 		}
 
 		return &CapabilityCandidate{
@@ -303,7 +342,7 @@ func (s *MCPPackageSource) buildCandidate(item interface{}, request AcquisitionR
 			Kind:         CandidateMCP,
 			Name:         inst.GetServerName(),
 			Description:  fmt.Sprintf("MCP server: %s (state: %s)", inst.GetServerName(), state),
-			Capabilities: []capability.CapabilityID{capability.CapabilityID("mcp.server." + inst.GetServerName())},
+			Capabilities: caps,
 			Install: CandidateInstallDescriptor{
 				Method: InstallMCP,
 				MCP: &MCPInstallDescriptor{
@@ -409,7 +448,7 @@ func (s *ExtensionCatalogSource) buildCandidate(card extension_center.ExtensionC
 		Name:         card.DisplayName,
 		Description:  card.Description,
 		Version:      card.Version,
-		Capabilities: []capability.CapabilityID{capability.CapabilityID(card.ExtensionID)},
+		Capabilities: nil,
 		Install: CandidateInstallDescriptor{
 			Method: method,
 		},
@@ -529,4 +568,14 @@ func toLower(b byte) byte {
 		return b + 32
 	}
 	return b
+}
+
+// containsCapability 检查 capID 是否在列表中
+func containsCapability(caps []string, capID string) bool {
+	for _, c := range caps {
+		if c == capID {
+			return true
+		}
+	}
+	return false
 }

@@ -62,13 +62,14 @@ func (b *AgentCapabilityBridge) FindCapabilities(ctx context.Context, input Find
 // AcquireCapability translates an AcquireInput into an AcquisitionRequest,
 // invokes the AcquisitionService.Acquire, and returns an AcquireOutput.
 func (b *AgentCapabilityBridge) AcquireCapability(ctx context.Context, input AcquireInput, userID string) (*AcquireOutput, error) {
-	if input.CandidateID == "" {
-		return nil, NewAcquisitionError("invalid_input", "candidateId is required", nil)
+	if input.CapabilityID == "" {
+		return nil, NewAcquisitionError("invalid_input", "capabilityId is required", nil)
 	}
 
 	request := AcquisitionRequest{
-		CapabilityID: capability.CapabilityID(input.CandidateID),
-		UserID:       runtimeidentity.UserID(userID),
+		CapabilityID:        capability.CapabilityID(input.CapabilityID),
+		RequestedCandidateID: input.CandidateID,
+		UserID:              runtimeidentity.UserID(userID),
 	}
 
 	yes := input.Approval || input.UserConfirmed

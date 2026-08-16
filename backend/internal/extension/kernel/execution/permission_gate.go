@@ -95,13 +95,5 @@ func (g *PermissionGate) buildRequirements(tool capability.ToolDefinition, scope
 		})
 	}
 
-	if tool.SideEffect == capability.SideEffectWrite || tool.SideEffect == capability.SideEffectDestructive {
-		reqs = append(reqs, permission.PermissionRequirement{PermissionID: "files.write", Scope: scope})
-	}
-
-	if tool.SideEffect == capability.SideEffectExternal {
-		reqs = append(reqs, permission.PermissionRequirement{PermissionID: "network.request", Scope: scope})
-	}
-
 	return reqs
 }

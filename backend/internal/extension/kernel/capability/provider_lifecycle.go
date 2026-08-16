@@ -96,6 +96,13 @@ func (s *ProviderLifecycleService) UnregisterProvider(id ProviderID) (bool, erro
 	}
 
 	oldInstances := s.registry.ListInstancesByProvider(id)
+	removedInstanceIDs := make([]ProviderInstanceID, 0, len(oldInstances))
+	for _, inst := range oldInstances {
+		if inst == nil {
+			continue
+		}
+		removedInstanceIDs = append(removedInstanceIDs, inst.ID)
+	}
 
 	removed, err := s.registry.DeregisterDefinitionCascade(id)
 	if err != nil {
@@ -103,23 +110,13 @@ func (s *ProviderLifecycleService) UnregisterProvider(id ProviderID) (bool, erro
 	}
 
 	now := time.Now().UTC()
-
-	for _, inst := range oldInstances {
-		if err := s.events.ProviderInstanceUnregistered(context.Background(), toInstanceEventPayload(inst, now)); err != nil {
-			s.registry.setDefinition(string(oldDef.ID), oldDef)
-			for _, restore := range oldInstances {
-				s.registry.setInstance(string(restore.ID), restore)
-			}
-			return false, err
-		}
-	}
-
 	err = s.events.ProviderUnregistered(context.Background(), ProviderUnregisteredPayload{
-		ProviderID:   oldDef.ID,
-		CapabilityID: oldDef.CapabilityID,
-		ExtensionID:  oldDef.ExtensionID,
-		ModuleID:     oldDef.ModuleID,
-		OccurredAt:   now,
+		ProviderID:         oldDef.ID,
+		CapabilityID:       oldDef.CapabilityID,
+		ExtensionID:        oldDef.ExtensionID,
+		ModuleID:           oldDef.ModuleID,
+		RemovedInstanceIDs: removedInstanceIDs,
+		OccurredAt:         now,
 	})
 	if err != nil {
 		s.registry.setDefinition(string(oldDef.ID), oldDef)
@@ -278,7 +275,7 @@ func (s *ProviderLifecycleService) Enable(providerID ProviderID) error {
 	}
 
 	instanceID := ProviderInstanceID(fmt.Sprintf("lc_%s_%d", providerID, time.Now().UnixNano()))
-	inst := &CapabilityProviderInstance{
+	inst := CapabilityProviderInstance{
 		ID:           instanceID,
 		ProviderID:   providerID,
 		CapabilityID: def.CapabilityID,

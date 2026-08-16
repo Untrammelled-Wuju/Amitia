@@ -899,7 +899,7 @@ func (s *ProcessSupervisor) Stop(ctx context.Context, req StopRequest) (*StopRes
 
 func (s *ProcessSupervisor) waitForProcessExit(inst *ServiceInstance, timeout time.Duration) bool {
 	if timeout <= 0 {
-		return s.procMgr.IsAlive(inst.PID)
+		return !s.procMgr.IsAlive(inst.PID)
 	}
 	deadline := time.Now().Add(timeout)
 	ticker := time.NewTicker(50 * time.Millisecond)
