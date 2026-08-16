@@ -7,6 +7,26 @@ import (
 	"github.com/u-ai/backend/internal/uiagent/schema"
 )
 
+// DiagnosticRunner runs external diagnostic tools (dart analyze, flutter analyze, tsc, etc.)
+type DiagnosticRunner interface {
+	RunDiagnostics(ctx context.Context, workspaceID string, paths []string) ([]string, []string, error)
+	Supports(platform string) bool
+}
+
+type defaultDiagnosticRunner struct{}
+
+func NewDiagnosticRunner() DiagnosticRunner {
+	return &defaultDiagnosticRunner{}
+}
+
+func (r *defaultDiagnosticRunner) RunDiagnostics(ctx context.Context, workspaceID string, paths []string) ([]string, []string, error) {
+	return []string{"external diagnostic runner not configured"}, nil, nil
+}
+
+func (r *defaultDiagnosticRunner) Supports(platform string) bool {
+	return false
+}
+
 type PreviewMode string
 
 const (
@@ -79,22 +99,56 @@ func (a *schemaPreviewAdapter) Generate(ctx context.Context, req PreviewRequest)
 	return d, nil
 }
 
-type webSourcePreviewAdapter struct{}
+type webSourcePreviewAdapter struct {
+	diagnosticRunner DiagnosticRunner
+}
 
 func NewWebSourcePreviewAdapter() PreviewAdapter {
-	return &webSourcePreviewAdapter{}
+	return &webSourcePreviewAdapter{diagnosticRunner: NewDiagnosticRunner()}
+}
+
+func NewWebSourcePreviewAdapterWithRunner(runner DiagnosticRunner) PreviewAdapter {
+	return &webSourcePreviewAdapter{diagnosticRunner: runner}
 }
 
 func (a *webSourcePreviewAdapter) Generate(ctx context.Context, req PreviewRequest) (*PreviewDiagnostics, error) {
-	return &PreviewDiagnostics{}, nil
+	d := &PreviewDiagnostics{}
+	if a.diagnosticRunner != nil && a.diagnosticRunner.Supports("web") {
+		compileErrors, warnings, err := a.diagnosticRunner.RunDiagnostics(ctx, req.Target.WorkspaceID, nil)
+		if err != nil {
+			return d, fmt.Errorf("web diagnostic failed: %w", err)
+		}
+		d.CompileErrors = compileErrors
+		d.SchemaWarnings = warnings
+	} else {
+		d.CompileErrors = append(d.CompileErrors, "web diagnostic runner not available")
+	}
+	return d, nil
 }
 
-type flutterSourcePreviewAdapter struct{}
+type flutterSourcePreviewAdapter struct {
+	diagnosticRunner DiagnosticRunner
+}
 
 func NewFlutterSourcePreviewAdapter() PreviewAdapter {
-	return &flutterSourcePreviewAdapter{}
+	return &flutterSourcePreviewAdapter{diagnosticRunner: NewDiagnosticRunner()}
+}
+
+func NewFlutterSourcePreviewAdapterWithRunner(runner DiagnosticRunner) PreviewAdapter {
+	return &flutterSourcePreviewAdapter{diagnosticRunner: runner}
 }
 
 func (a *flutterSourcePreviewAdapter) Generate(ctx context.Context, req PreviewRequest) (*PreviewDiagnostics, error) {
-	return &PreviewDiagnostics{}, nil
+	d := &PreviewDiagnostics{}
+	if a.diagnosticRunner != nil && a.diagnosticRunner.Supports("flutter") {
+		compileErrors, warnings, err := a.diagnosticRunner.RunDiagnostics(ctx, req.Target.WorkspaceID, nil)
+		if err != nil {
+			return d, fmt.Errorf("flutter diagnostic failed: %w", err)
+		}
+		d.CompileErrors = compileErrors
+		d.SchemaWarnings = warnings
+	} else {
+		d.CompileErrors = append(d.CompileErrors, "flutter diagnostic runner not available")
+	}
+	return d, nil
 }
