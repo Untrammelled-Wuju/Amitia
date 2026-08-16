@@ -210,7 +210,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
         ],
         ...node.children.map((child) => Padding(
           padding: const EdgeInsets.only(bottom: AppSpacing.componentGap),
-          child: _buildNode(context, child, 0),
+          child: _buildNode(context, child, depth + 1),
         )),
       ],
     );
@@ -219,7 +219,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   Widget _buildStack(BuildContext context, SchemaUINode node) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: node.children.map((child) => _buildNode(context, child, 0)).toList(),
+      children: node.children.map((child) => _buildNode(context, child, depth + 1)).toList(),
     );
   }
 
@@ -227,7 +227,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     return Wrap(
       spacing: AppSpacing.sm,
       runSpacing: AppSpacing.sm,
-      children: node.children.map((child) => _buildNode(context, child, 0)).toList(),
+      children: node.children.map((child) => _buildNode(context, child, depth + 1)).toList(),
     );
   }
 
@@ -239,16 +239,18 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       physics: const NeverScrollableScrollPhysics(),
       crossAxisSpacing: AppSpacing.sm,
       mainAxisSpacing: AppSpacing.sm,
-      children: node.children.map((child) => _buildNode(context, child, 0)).toList(),
+      children: node.children.map((child) => _buildNode(context, child, depth + 1)).toList(),
     );
   }
 
   Widget _buildTabs(BuildContext context, SchemaUINode node) {
     final tabs = node.children.where((c) => c.type == SchemaUI.nodeTabItem).toList();
     if (tabs.isEmpty) return const SizedBox.shrink();
-    return DefaultTabController(
+    final minHeight = (node.props?['minHeight'] as num?)?.toDouble();
+    final tabsWidget = DefaultTabController(
       length: tabs.length,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           TabBar(
             isScrollable: true,
@@ -257,19 +259,32 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
               return Tab(text: label);
             }).toList(),
           ),
-          SizedBox(
-            height: 200,
-            child: TabBarView(
-              children: tabs.map((t) {
-                if (t.children.isEmpty) return const SizedBox.shrink();
-                return SingleChildScrollView(
-                  padding: const EdgeInsets.all(AppSpacing.md),
-                  child: _buildNode(context, t.children.first, 0),
-                );
-              }).toList(),
-            ),
-          ),
+          if (minHeight != null)
+            SizedBox(
+              height: minHeight,
+              child: _buildTabViews(context, tabs),
+            )
+          else
+            _buildTabViews(context, tabs),
         ],
+      ),
+    );
+    return tabsWidget;
+  }
+
+  Widget _buildTabViews(BuildContext context, List<SchemaUINode> tabs) {
+    return Flexible(
+      child: TabBarView(
+        children: tabs.map((t) {
+          if (t.children.isEmpty) return const SizedBox.shrink();
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(AppSpacing.md),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: t.children.map((child) => _buildNode(context, child, 0)).toList(),
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -313,7 +328,44 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
 
   Widget _buildMarkdown(BuildContext context, SchemaUINode node) {
     final source = _resolveStringProp(node, 'source', '');
-    return Text(source, style: AppTypography.bodySmall(context));
+    final lines = source.split('\n');
+    final spans = <InlineSpan>[];
+    for (final line in lines) {
+      if (line.startsWith('## ')) {
+        spans.add(TextSpan(text: '${line.substring(3)}\n', style: AppTypography.sectionTitle(context).copyWith(fontSize: 18)));
+      } else if (line.startsWith('# ')) {
+        spans.add(TextSpan(text: '${line.substring(2)}\n', style: AppTypography.sectionTitle(context)));
+      } else if (line.startsWith('- ') || line.startsWith('* ')) {
+        spans.add(TextSpan(text: '• ${line.substring(2)}\n', style: AppTypography.bodySmall(context)));
+      } else {
+        spans.add(_parseInline(line, AppTypography.bodySmall(context)));
+        spans.add(const TextSpan(text: '\n'));
+      }
+    }
+    return RichText(text: TextSpan(children: spans, style: AppTypography.bodySmall(context)));
+  }
+
+  TextSpan _parseInline(String text, TextStyle baseStyle) {
+    final spans = <InlineSpan>[];
+    final regex = RegExp(r'\*\*(.+?)\*\*|\*(.+?)\*|`(.+?)`');
+    int lastEnd = 0;
+    for (final match in regex.allMatches(text)) {
+      if (match.start > lastEnd) {
+        spans.add(TextSpan(text: text.substring(lastEnd, match.start), style: baseStyle));
+      }
+      if (match.group(1) != null) {
+        spans.add(TextSpan(text: match.group(1), style: baseStyle.copyWith(fontWeight: FontWeight.bold)));
+      } else if (match.group(2) != null) {
+        spans.add(TextSpan(text: match.group(2), style: baseStyle.copyWith(fontStyle: FontStyle.italic)));
+      } else if (match.group(3) != null) {
+        spans.add(TextSpan(text: match.group(3), style: baseStyle.copyWith(fontFamily: 'monospace', backgroundColor: Colors.grey.withOpacity(0.15))));
+      }
+      lastEnd = match.end;
+    }
+    if (lastEnd < text.length) {
+      spans.add(TextSpan(text: text.substring(lastEnd), style: baseStyle));
+    }
+    return TextSpan(children: spans);
   }
 
   Widget _buildBadge(BuildContext context, SchemaUINode node) {

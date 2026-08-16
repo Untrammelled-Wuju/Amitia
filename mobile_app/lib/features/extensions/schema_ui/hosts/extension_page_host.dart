@@ -111,12 +111,14 @@ class ErrorBoundary extends StatefulWidget {
   final Widget child;
   final String extensionId;
   final String contributionId;
+  final String? moduleId;
 
   const ErrorBoundary({
     super.key,
     required this.child,
     required this.extensionId,
     required this.contributionId,
+    this.moduleId,
   });
 
   @override
@@ -125,15 +127,32 @@ class ErrorBoundary extends StatefulWidget {
 
 class _ErrorBoundaryState extends State<ErrorBoundary> {
   String? _error;
+  StackTrace? _stackTrace;
+  late FlutterErrorExceptionHandler _previousHandler;
 
   @override
   void initState() {
     super.initState();
-    FlutterError.onError = (details) {
-      setState(() {
-        _error = details.exceptionAsString();
-      });
+    _previousHandler = FlutterError.onError!;
+    FlutterError.onError = (FlutterErrorDetails details) {
+      if (details.library == 'widgets library' || details.library?.contains('schema_ui') == true) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() {
+              _error = details.exceptionAsString();
+              _stackTrace = details.stack;
+            });
+          }
+        });
+      }
+      _previousHandler(details);
     };
+  }
+
+  @override
+  void dispose() {
+    FlutterError.onError = _previousHandler;
+    super.dispose();
   }
 
   @override
