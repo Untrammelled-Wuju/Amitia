@@ -8,6 +8,20 @@ import (
 	"github.com/u-ai/backend/pkg/util"
 )
 
+func (h *Handler) Readyz(c *gin.Context) {
+	probe := NewDefaultRemoteCoreProbe(h.db)
+	result := probe.Probe()
+	if !result.Healthy {
+		c.JSON(503, gin.H{
+			"code": 503,
+			"data": result,
+			"msg":  "服务尚未就绪",
+		})
+		return
+	}
+	util.SuccessResponse(c, result)
+}
+
 func (h *Handler) Health(c *gin.Context) {
 	health := h.service.Health()
 	checks := map[string]interface{}{}
