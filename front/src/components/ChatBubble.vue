@@ -25,7 +25,10 @@ SPDX-License-Identifier: AGPL-3.0-only
         <span class="bubble-time" v-if="message.createdAt">{{
           fmtTime(message.createdAt)
         }}</span>
-        <span class="bubble-latency" v-if="message.latencyMs"
+        <span
+          class="bubble-latency"
+          v-if="message.latencyMs && isDevMode"
+          :title="`响应时间: ${message.latencyMs}ms`"
           >{{ message.latencyMs }}ms</span
         >
         <slot name="badges" :message="message" />
@@ -147,6 +150,8 @@ import MediaAttachmentPreview from "./chat-bubble/MediaAttachmentPreview.vue";
 import EmoteMessage from "./chat-bubble/EmoteMessage.vue";
 import { fmtTime } from "./chat-bubble/utils";
 import { useAppStore } from "@/stores/app";
+
+const isDevMode = import.meta.env.DEV;
 
 const props = defineProps<{
   message: {

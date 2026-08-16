@@ -119,11 +119,7 @@ public class AlarmKitAdapter {
         #if canImport(AlarmKit)
         if #available(iOS 26.0, *) {
             do {
-                let alarms = try await AlarmManager.shared.alarms
-                guard let target = alarms.first(where: { $0.id == id }) else {
-                    return (false, "ALARM_NOT_FOUND")
-                }
-                try await AlarmManager.shared.remove(alarm: target)
+                try await AlarmManager.shared.cancel(id: id)
                 return (true, nil)
             } catch {
                 return (false, error.localizedDescription)
@@ -204,14 +200,26 @@ public class AlarmKitAdapter {
     ) async -> (success: Bool, error: String?) {
         do {
             let manager = AlarmManager.shared
-            var alarm = Alarm(id: id, title: title)
-            alarm.schedule = buildAlarmSchedule(schedule)
-            alarm.presentation = buildAlarmPresentation(presentation)
-            try await manager.add(alarm: alarm)
+            let config = buildAlarmConfiguration(id: id, title: title, schedule: schedule, presentation: presentation, sound: sound)
+            try await manager.schedule(id: id, configuration: config)
             return (true, nil)
         } catch {
             return (false, error.localizedDescription)
         }
+    }
+
+    @available(iOS 26.0, *)
+    private func buildAlarmConfiguration(
+        id: String,
+        title: String,
+        schedule: AmitiaAlarmScheduleDTO,
+        presentation: AmitiaAlarmPresentationDTO,
+        sound: AmitiaAlarmSoundDTO?
+    ) -> AlarmKit.AlarmConfiguration {
+        var config = AlarmKit.AlarmConfiguration(title: title)
+        config.schedule = buildAlarmSchedule(schedule)
+        config.presentation = buildAlarmPresentation(presentation)
+        return config
     }
 
     @available(iOS 26.0, *)

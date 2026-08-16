@@ -528,6 +528,11 @@ func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.
 		AllowDevice:        true,
 		PreferredPlacement: capability.ProviderPlacementCore,
 	}
+	if def.RoutingMode == capability.RoutingModeProviderRequired || def.RoutingMode == capability.RoutingModeProviderPreferred {
+		if def.ProviderID != "" {
+			req.PreferredProviderID = capability.ProviderID(def.ProviderID)
+		}
+	}
 	result, err := f.capabilityResolver.Resolve(req)
 	if err != nil {
 		if def.CapabilityID != "" {
