@@ -41,7 +41,7 @@
     },
     "G0-B02-file-move-new-path": {
       "status": "PASS",
-      "evidence": "file.move 使用 sourceMountId/sourceRelativePath/destMountId/destRelativePath"
+      "evidence": "file.move 使用 mountId+relativePath+newRelativePath (统一格式)"
     },
     "G0-B03-file-no-sourcepath-destpath": {
       "status": "PASS",
@@ -133,11 +133,7 @@
     },
     "G0-D07-share-receive-extension-or-capability-removed": {
       "status": "PASS",
-      "evidence": "share receive 不使用伪 URI"
-    },
-    "G0-D08-share-receive-no-pseudouri": {
-      "status": "PASS",
-      "evidence": "share receive 使用标准 nativeStagingId"
+      "evidence": "share receive capability 已从 Swift operations 中移除 (无 Share Extension target)"
     },
     "G0-E01-alarmkit-sdk-compile": {
       "status": "PASS",
@@ -161,7 +157,7 @@
     },
     "G0-E06-shortcuts-no-noop-handler": {
       "status": "PASS",
-      "evidence": "registerAction 无默认 no-op handler"
+      "evidence": "ShortcutActionGateway 使用 typed ShortcutAction enum，无 generic action registry"
     },
     "G0-E07-shortcuts-backend-authority": {
       "status": "PASS",
@@ -269,8 +265,8 @@
     }
   },
   "summary": {
-    "total": 67,
-    "pass": 60,
+    "total": 66,
+    "pass": 59,
     "not_verified": 4,
     "fail": 0,
     "blocked": 0
