@@ -8,6 +8,7 @@ const (
 	StateUnprovisioned AgentState = "unprovisioned"
 	StateConnecting    AgentState = "connecting"
 	StateHandshaking   AgentState = "handshaking"
+	StateHelloAck      AgentState = "hello_ack"
 	StateReady         AgentState = "ready"
 	StateDegraded      AgentState = "degraded"
 	StateBackoff       AgentState = "backoff"

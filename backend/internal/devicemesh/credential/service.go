@@ -36,21 +36,11 @@ func (s *Service) WithClock(clock Clock) *Service {
 func (s *Service) Exchange(ctx context.Context, ticket *ExchangeTicketView) (*DeviceRuntimeCredential, string, error) {
 	now := s.clock.Now()
 
-	if ticket.Status != "active" {
+	if ticket.Status != "active" && ticket.Status != "consumed" {
 		return nil, "", errors.New("credential: ticket not active")
 	}
 	if now.After(ticket.ExpiresAt) {
 		return nil, "", errors.New("credential: ticket expired")
-	}
-
-	existing, err := s.repo.GetActiveByRuntime(ctx, ticket.UserID, ticket.DeviceID, ticket.RuntimeID)
-	if err != nil {
-		return nil, "", fmt.Errorf("credential: check existing: %w", err)
-	}
-	if existing != nil {
-		if err := s.repo.RevokeExisting(ctx, ticket.UserID, ticket.DeviceID, ticket.RuntimeID, now, "rebootstrap"); err != nil {
-			return nil, "", fmt.Errorf("credential: revoke existing: %w", err)
-		}
 	}
 
 	raw, err := GenerateRawCredential()
@@ -73,8 +63,8 @@ func (s *Service) Exchange(ctx context.Context, ticket *ExchangeTicketView) (*De
 		Revision:       1,
 	}
 
-	if err := s.repo.Create(ctx, cred); err != nil {
-		return nil, "", fmt.Errorf("credential: create: %w", err)
+	if err := s.repo.ExchangeAtomic(ctx, ticket.UserID, ticket.DeviceID, ticket.RuntimeID, now, cred); err != nil {
+		return nil, "", fmt.Errorf("credential: exchange atomic: %w", err)
 	}
 
 	return cred, raw, nil
