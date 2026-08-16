@@ -558,7 +558,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 			},
 			func(ctx context.Context, topology recovery.TopologyResult) (recovery.LifecycleResult, error) {
 				return recovery.LifecycleResult{
-					PlanID: topology.TopologyID + "-plan",
+					PlanID: topology.TopologyID,
 					Valid:  topology.Valid,
 				}, nil
 			},

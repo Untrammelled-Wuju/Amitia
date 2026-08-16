@@ -14,8 +14,9 @@ import (
 )
 
 type MeshRuntimePorts struct {
-	Hub           *server.ConnectionHub
-	SessionLookup meshSessionLookup
+	Hub                *server.ConnectionHub
+	SessionLookup      meshSessionLookup
+	PendingInvocations *PendingInvocationManager
 }
 
 type meshSessionLookup interface {
@@ -73,8 +74,9 @@ func (p *MeshDeviceRuntimeInvocationPort) Execute(ctx context.Context, request D
 		input = json.RawMessage(`{}`)
 	}
 
+	commandID := uuid.New().String()
 	cmdPayload := protocol.CommandPayload{
-		CommandID:       uuid.New().String(),
+		CommandID:       commandID,
 		CommandName:     route.Binding.HandlerName,
 		CommandSequence: time.Now().UnixNano(),
 		Payload:         input,
@@ -121,7 +123,29 @@ func (p *MeshDeviceRuntimeInvocationPort) Execute(ctx context.Context, request D
 		}
 	}
 
+	deadline := request.Invocation.DeadlineDuration
+	if deadline <= 0 {
+		deadline = 30 * time.Second
+	}
+
+	if p.ports.PendingInvocations != nil {
+		_, err := p.ports.PendingInvocations.Register(request, commandID, sessionID.String(), generation, deadline)
+		if err != nil {
+			return UnifiedToolResult{
+				InvocationID: request.Invocation.InvocationID,
+				Status:       ToolResultStatusFailed,
+				Error: &ToolError{
+					Code:    ErrorCodeInternalError,
+					Message: fmt.Sprintf("register pending invocation: %v", err),
+				},
+			}
+		}
+	}
+
 	if !p.ports.Hub.Send(sessionID, generation, envBytes) {
+		if p.ports.PendingInvocations != nil {
+			p.ports.PendingInvocations.Cancel(request.Invocation.InvocationID, "failed to send")
+		}
 		return UnifiedToolResult{
 			InvocationID: request.Invocation.InvocationID,
 			Status:       ToolResultStatusFailed,
@@ -133,14 +157,30 @@ func (p *MeshDeviceRuntimeInvocationPort) Execute(ctx context.Context, request D
 		}
 	}
 
-	return UnifiedToolResult{
-		InvocationID: request.Invocation.InvocationID,
-		Status:       ToolResultStatusSuccess,
-		Metadata: map[string]any{
-			"delivered": true,
-			"sessionId": sessionID.String(),
-		},
+	if p.ports.PendingInvocations == nil {
+		return UnifiedToolResult{
+			InvocationID: request.Invocation.InvocationID,
+			Status:       ToolResultStatusFailed,
+			Error: &ToolError{
+				Code:    ErrorCodeInternalError,
+				Message: "pending invocation manager not configured",
+			},
+		}
 	}
+
+	result, err := p.ports.PendingInvocations.WaitForResult(ctx, request.Invocation.InvocationID)
+	if err != nil {
+		return UnifiedToolResult{
+			InvocationID: request.Invocation.InvocationID,
+			Status:       ToolResultStatusFailed,
+			Error: &ToolError{
+				Code:      ErrorCodeTimeout,
+				Message:   fmt.Sprintf("invocation timed out: %v", err),
+				Retryable: true,
+			},
+		}
+	}
+	return result
 }
 
 func (p *MeshDeviceRuntimeInvocationPort) Health(ctx context.Context, route RuntimeExecutionRoute) HealthStatus {
@@ -151,10 +191,18 @@ func (p *MeshDeviceRuntimeInvocationPort) Health(ctx context.Context, route Runt
 	if !ok {
 		return HealthUnhealthy
 	}
-	if p.ports.Hub.Send(sessionID, generation, nil) {
-		return HealthReady
+	if !p.ports.Hub.IsSessionActive(sessionID, generation) {
+		return HealthUnhealthy
 	}
-	return HealthUnhealthy
+	pingPayload := protocol.PingPayload{Time: time.Now().UTC()}
+	pingBytes, err := json.Marshal(pingPayload)
+	if err != nil {
+		return HealthUnknown
+	}
+	if !p.ports.Hub.Send(sessionID, generation, pingBytes) {
+		return HealthUnhealthy
+	}
+	return HealthReady
 }
 
 func (p *MeshDeviceRuntimeInvocationPort) Cancel(ctx context.Context, request DeviceRuntimeInvocationRequest, reason ToolCancellationReason) error {
@@ -164,6 +212,9 @@ func (p *MeshDeviceRuntimeInvocationPort) Cancel(ctx context.Context, request De
 	route := request.Route
 	sessionID, generation, ok := p.resolveSession(ctx, route.UserID, route.DeviceID, route.RuntimeID)
 	if !ok {
+		if p.ports.PendingInvocations != nil {
+			p.ports.PendingInvocations.Cancel(request.Invocation.InvocationID, string(reason.Code))
+		}
 		return fmt.Errorf("device session not found")
 	}
 	cancelPayload := map[string]string{
@@ -172,7 +223,13 @@ func (p *MeshDeviceRuntimeInvocationPort) Cancel(ctx context.Context, request De
 	}
 	payloadBytes, _ := json.Marshal(cancelPayload)
 	if !p.ports.Hub.Send(sessionID, generation, payloadBytes) {
+		if p.ports.PendingInvocations != nil {
+			p.ports.PendingInvocations.Cancel(request.Invocation.InvocationID, string(reason.Code))
+		}
 		return fmt.Errorf("failed to send cancel to device")
+	}
+	if p.ports.PendingInvocations != nil {
+		p.ports.PendingInvocations.Cancel(request.Invocation.InvocationID, string(reason.Code))
 	}
 	return nil
 }

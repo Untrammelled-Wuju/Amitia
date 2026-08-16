@@ -37,6 +37,8 @@ import com.amitia.amitia_app.runtime.service.RuntimeServiceHost
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHostEvent
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHostListener
 import com.amitia.amitia_app.runtime.service.RuntimeServiceLifecycleSnapshot
+import com.amitia.amitia_app.runtime.service.RuntimeProcessPhase
+import com.amitia.amitia_app.runtime.service.RuntimeServicePhase
 import com.amitia.amitia_app.runtime.service.RuntimeServiceResult
 import com.amitia.amitia_app.runtime.service.RuntimeServiceTerminationCause
 import com.amitia.amitia_app.runtime.startup.DefaultRuntimeStartupDetector
@@ -112,6 +114,11 @@ internal class DefaultRuntimeController(
         if (current.generation <= 0) return false
         val liveSession = serviceHost.currentSession()
         if (liveSession != null && liveSession.isAlive()) return false
+        val serviceLifecycleSnapshot = serviceHost.lifecycleSnapshot()
+        if (serviceLifecycleSnapshot != null) {
+            if (serviceLifecycleSnapshot.processPhase == RuntimeProcessPhase.UNKNOWN) return false
+            if (serviceLifecycleSnapshot.servicePhase == RuntimeServicePhase.UNOBSERVABLE) return false
+        }
         return when (cause) {
             RuntimeServiceTerminationCause.EXIT_WATCHER_FAILED -> false
             else -> true
@@ -408,13 +415,18 @@ internal class DefaultRuntimeController(
     private fun executeRecoveryStart(failedGeneration: Long) {
         val current = stateStore.snapshot()
         if (current.state != RuntimeState.FAILED) return
-        if (current.generation != failedGeneration) return
+        if (current.generation != 0L && current.generation != failedGeneration) return
         cancelPendingRecoveryStartPrerequisites(failedGeneration)
     }
 
     private fun cancelPendingRecoveryStartPrerequisites(failedGeneration: Long): Boolean {
         val liveSession = serviceHost.currentSession()
         if (liveSession != null && liveSession.isAlive()) return false
+        val serviceLifecycleSnapshot = serviceHost.lifecycleSnapshot()
+        if (serviceLifecycleSnapshot != null) {
+            if (serviceLifecycleSnapshot.processPhase == RuntimeProcessPhase.UNKNOWN) return false
+            if (serviceLifecycleSnapshot.servicePhase == RuntimeServicePhase.UNOBSERVABLE) return false
+        }
         val currentGen = serviceHost.currentGeneration()
         if (currentGen != 0L && currentGen != failedGeneration) return false
         cancelPendingRecovery()

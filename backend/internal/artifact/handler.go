@@ -1,7 +1,6 @@
 package artifact
 
 import (
-	"bufio"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/middleware"
 )
 
 type Handler struct {
@@ -43,26 +43,18 @@ func (h *Handler) Upload(c *gin.Context) {
 	if sourceVal == "" {
 		sourceVal = string(SourceUserUpload)
 	}
-	ownerID, _ := c.Get("userID")
-	owner := ""
-	if ownerID != nil {
-		owner = fmt.Sprint(ownerID)
-	}
-	if owner == "" {
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil || actor == nil {
 		c.JSON(401, gin.H{"error": "artifact.unauthorized", "message": "authentication required"})
 		return
 	}
-	br := bufio.NewReader(file)
-	prefix, _ := br.Peek(512)
-	detected := http.DetectContentType(prefix)
-	combined := io.MultiReader(bytesReader(prefix), br)
+	owner := string(actor.UserID)
 	req := CreateRequest{
 		OwnerUserID: owner,
 		Kind:        Kind(kindVal),
-		MIMEType:    detected,
 		Filename:    header.Filename,
 		Source:      Source(sourceVal),
-		Reader:      combined,
+		Reader:      file,
 	}
 	if header.Size > 0 {
 		req.MaxBytes = 0
@@ -79,15 +71,12 @@ func (h *Handler) Upload(c *gin.Context) {
 
 func (h *Handler) GetMetadata(c *gin.Context) {
 	id := ID(c.Param("artifactId"))
-	ownerID, _ := c.Get("userID")
-	owner := ""
-	if ownerID != nil {
-		owner = fmt.Sprint(ownerID)
-	}
-	if owner == "" {
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil || actor == nil {
 		c.JSON(401, gin.H{"error": "artifact.unauthorized"})
 		return
 	}
+	owner := string(actor.UserID)
 	art, err := h.svc.GetOwned(c.Request.Context(), owner, id)
 	if err != nil {
 		handleArtifactError(c, err)
@@ -98,15 +87,12 @@ func (h *Handler) GetMetadata(c *gin.Context) {
 
 func (h *Handler) GetContent(c *gin.Context) {
 	id := ID(c.Param("artifactId"))
-	ownerID, _ := c.Get("userID")
-	owner := ""
-	if ownerID != nil {
-		owner = fmt.Sprint(ownerID)
-	}
-	if owner == "" {
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil || actor == nil {
 		c.JSON(401, gin.H{"error": "artifact.unauthorized"})
 		return
 	}
+	owner := string(actor.UserID)
 	art, err := h.svc.GetOwned(c.Request.Context(), owner, id)
 	if err != nil {
 		handleArtifactError(c, err)
@@ -138,15 +124,12 @@ func (h *Handler) GetContent(c *gin.Context) {
 
 func (h *Handler) Delete(c *gin.Context) {
 	id := ID(c.Param("artifactId"))
-	ownerID, _ := c.Get("userID")
-	owner := ""
-	if ownerID != nil {
-		owner = fmt.Sprint(ownerID)
-	}
-	if owner == "" {
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil || actor == nil {
 		c.JSON(401, gin.H{"error": "artifact.unauthorized"})
 		return
 	}
+	owner := string(actor.UserID)
 	err := h.svc.Delete(c.Request.Context(), owner, id)
 	if err != nil {
 		handleArtifactError(c, err)

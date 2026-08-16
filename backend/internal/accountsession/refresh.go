@@ -119,9 +119,13 @@ func (s *RefreshService) Rotate(rawRefreshToken string) (*RefreshResult, error) 
 		}
 
 		result = &RefreshResult{
+			AccessToken:      "",
 			RefreshToken:     newRaw,
 			RefreshExpiresAt: newExpiresAt,
 			SessionID:        existing.SessionID,
+			UserID:           fmt.Sprintf("%d", session.UserID),
+			Username:         session.Username,
+			Role:             session.Role,
 		}
 		return nil
 	})

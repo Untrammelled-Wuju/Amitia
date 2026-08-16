@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, reactive, computed, watch, onMounted, onErrorCaptured, provide } from "vue";
+import { ref, reactive, computed, watch, onMounted, onBeforeUnmount, onErrorCaptured, provide } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import type { UIContributionSummary } from "@/stores/extensionUI";
 import { useExtensionUIStore } from "@/stores/extensionUI";
@@ -172,6 +172,7 @@ async function loadSchema() {
 async function ensureSession(): Promise<string> {
   if (sessionId.value && sessionReady.value) return sessionId.value;
   const key = `${props.contribution.extensionId}/${props.contribution.contributionId}`;
+  const surfaceData = (props.context?.surface as Record<string, unknown> | undefined) ?? {};
   const res = await apiClient.post<{
     sessionId?: string;
     session_id?: string;
@@ -179,6 +180,9 @@ async function ensureSession(): Promise<string> {
     contractVersion?: number;
   }>("/api/extensions/ui/sessions", {
     contributionId: props.contribution.contributionId,
+    surface: String(surfaceData.role ?? "main"),
+    characterId: (props.context?.characterId as string) || "",
+    conversationId: (props.context?.conversationId as string) || "",
   });
   const data = res.data;
   const sid = data.sessionId ?? data.session_id ?? "";
@@ -329,6 +333,23 @@ watch(
     loadSchema();
   }
 );
+
+watch(
+  () => props.contribution.generation,
+  () => {
+    sessionId.value = "";
+    sessionReady.value = false;
+    ensureSession().catch(() => {});
+  }
+);
+
+onBeforeUnmount(() => {
+  if (sessionId.value) {
+    apiClient.delete(`/api/extensions/ui/sessions/${sessionId.value}`).catch(() => {});
+    sessionId.value = "";
+    sessionReady.value = false;
+  }
+});
 </script>
 
 <template>

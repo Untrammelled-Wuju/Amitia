@@ -431,6 +431,7 @@ func (c *RecoveryCoordinator) executeRuntimeReconstruction(ctx context.Context, 
 		cpInfo, err := c.checkpoint.Classify(ctx, req.RuntimeID, currentRevision)
 		if err != nil {
 			log.Printf("[recovery-coordinator] checkpoint classification error for %s: %v", req.RuntimeID, err)
+			c.recordAudit(op, "checkpoint_classification_error", err)
 		}
 		op.Checkpoint = &cpInfo
 
@@ -510,20 +511,24 @@ func (c *RecoveryCoordinator) reconcileAfterRollback(ctx context.Context, op *Re
 		}
 		if runtimeID == "" {
 			log.Printf("[recovery-coordinator] reconcileAfterRollback: no active runtime for plugin %s, skipping", op.PluginID)
+			c.recordAudit(op, "reconcile_no_active_runtime", fmt.Errorf("plugin %s has no active runtime", op.PluginID))
 			continue
 		}
 
 		if c.eligibility != nil && c.eligibility.ExtensionChecker != nil {
 			if !c.eligibility.ExtensionChecker.IsExtensionInstalled(op.ExtensionID) {
 				log.Printf("[recovery-coordinator] reconcileAfterRollback: extension %s no longer installed, skipping", op.ExtensionID)
+				c.recordAudit(op, "reconcile_extension_not_installed", fmt.Errorf("extension %s", op.ExtensionID))
 				continue
 			}
 			if !c.eligibility.ExtensionChecker.IsExtensionEnabled(op.ExtensionID) {
 				log.Printf("[recovery-coordinator] reconcileAfterRollback: extension %s disabled, skipping", op.ExtensionID)
+				c.recordAudit(op, "reconcile_extension_disabled", fmt.Errorf("extension %s", op.ExtensionID))
 				continue
 			}
 			if !c.eligibility.ExtensionChecker.IsPluginCurrent(op.PluginID) {
 				log.Printf("[recovery-coordinator] reconcileAfterRollback: plugin %s no longer current, skipping", op.PluginID)
+				c.recordAudit(op, "reconcile_plugin_not_current", fmt.Errorf("plugin %s", op.PluginID))
 				continue
 			}
 		}
@@ -532,6 +537,7 @@ func (c *RecoveryCoordinator) reconcileAfterRollback(ctx context.Context, op *Re
 			auth, err := c.authority.GetAuthority(runtimeID)
 			if err == nil && auth.Mode == "emergency" {
 				log.Printf("[recovery-coordinator] reconcileAfterRollback: runtime %s in emergency mode, skipping restart", runtimeID)
+				c.recordAudit(op, "reconcile_runtime_emergency", fmt.Errorf("runtime %s", runtimeID))
 				continue
 			}
 		}
@@ -539,6 +545,7 @@ func (c *RecoveryCoordinator) reconcileAfterRollback(ctx context.Context, op *Re
 		if c.runtimeExecutor != nil {
 			if err := c.runtimeExecutor.StopRuntime(ctx, runtimeID); err != nil {
 				log.Printf("[recovery-coordinator] reconcileAfterRollback: stop runtime %s failed: %v", runtimeID, err)
+				c.recordAudit(op, "reconcile_stop_failed", err)
 			}
 			if err := c.runtimeExecutor.StartRuntime(ctx, runtimeID); err != nil {
 				return fmt.Errorf("reconcileAfterRollback: start runtime %s failed: %w", runtimeID, err)

@@ -106,6 +106,8 @@ import {
 } from "@element-plus/icons-vue";
 import { useAppStore } from "@/stores/app";
 import { useBrandLogo } from "@/composables/useBrandLogo";
+import { useApi } from "@/composables/useApi";
+import { ElMessage } from "element-plus";
 import SearchModal from "./SearchModal.vue";
 
 const route = useRoute();
@@ -113,6 +115,7 @@ const router = useRouter();
 
 const appStore = useAppStore();
 const { logoUrl } = useBrandLogo();
+const { post } = useApi();
 const props = defineProps<{
   username?: string;
   avatar?: string;
@@ -124,15 +127,36 @@ const props = defineProps<{
 defineEmits<{ toggleTheme: [] }>();
 const searchModal = ref<InstanceType<typeof SearchModal> | null>(null);
 const statusTitle = computed(() => {
+  if (props.modelStatus === "unconfigured") return "模型未配置";
+  if (props.modelStatus === "error") return "核心服务异常";
   const channels = [props.wechatStatus === "connected" ? "微信" : "", props.qqStatus === "connected" || props.qqStatus === "online" ? "QQ" : ""].filter(Boolean);
   return channels.length ? `核心服务正常 · ${channels.join(" / ")} 已连接` : "核心服务正常";
 });
 
+async function createNewConversation() {
+  try {
+    const cachedChar = JSON.parse(localStorage.getItem("uai-default-char") || "{}");
+    if (!cachedChar?.id) {
+      ElMessage.warning("请先选择角色");
+      return null;
+    }
+    const created = await post<any>("/api/web-chat/conversations", {
+      characterId: cachedChar.id,
+      title: "",
+    });
+    return created?.id || null;
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.msg || "创建新对话失败");
+    return null;
+  }
+}
+
 async function handleNewChat() {
-  localStorage.removeItem("webchat-conv-id");
-  localStorage.removeItem("webchat-last-conv");
+  const newConvId = await createNewConversation();
+  if (!newConvId) return;
+  localStorage.setItem("webchat-conv-id", newConvId);
   if (route.path === "/chat") {
-    window.dispatchEvent(new CustomEvent("amitia:new-chat"));
+    window.dispatchEvent(new CustomEvent("amitia:new-chat", { detail: { conversationId: newConvId } }));
   } else {
     await router.push("/chat");
   }

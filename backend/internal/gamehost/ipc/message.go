@@ -62,4 +62,7 @@ func FillRouting(envelope *protocol.Envelope, peer Peer) {
 	if envelope.ServiceID == "" {
 		envelope.ServiceID = string(peer.ServiceID)
 	}
+	if envelope.Generation == 0 {
+		envelope.Generation = uint64(peer.Generation)
+	}
 }

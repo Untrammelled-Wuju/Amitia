@@ -66,7 +66,11 @@ async function createSession() {
       surface: surfaceRole,
       characterId: (uiContext.value.characterId as string) || "",
       conversationId: (uiContext.value.conversationId as string) || "",
-      theme: themeData.mode || (uiContext.value.hostTheme as string) || "",
+      theme: {
+        mode: themeData.mode || (uiContext.value.hostTheme as string) || "light",
+        density: themeData.density || "default",
+        tokens: themeData.tokens as Record<string, string> || buildThemeTokens(),
+      },
       locale: (uiContext.value.locale as string) || navigator.language || "en",
       uiContext: uiContext.value,
       sandbox: props.contribution.sandbox ?? "web_restricted",
@@ -144,11 +148,16 @@ async function handleBridgeMessage(msg: Record<string, unknown>) {
     return;
   }
   if (method === "ui.content.resize" || method === "ui.resize.request") {
-    const requested = Number((msg.input as Record<string, unknown> | undefined)?.preferredHeight);
+    const input = msg.input as Record<string, unknown> | undefined;
+    const requested = Number(input?.preferredHeight ?? input?.height);
     if (Number.isFinite(requested) && requested > 0) {
       const maximum = surfaceRole.value === "composer" ? 160 : surfaceRole.value === "message" ? 480 : 720;
       preferredHeight.value = Math.max(44, Math.min(Math.round(requested), maximum));
     }
+    sendBridgeResponse(msg, { ok: true });
+    return;
+  }
+  if (msg.type === "host.event") {
     sendBridgeResponse(msg, { ok: true });
     return;
   }

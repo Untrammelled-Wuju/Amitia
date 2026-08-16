@@ -91,6 +91,18 @@ internal class AndroidRuntimeServiceHost(
             return
         }
         if (snapshot.processPhase == RuntimeProcessPhase.STARTED && snapshot.terminalState == null) {
+            val listenerSnapshot = ArrayList(listeners)
+            for (listener in listenerSnapshot) {
+                try {
+                    listener.onServiceHostEvent(
+                        RuntimeServiceHostEvent.SessionReady(
+                            generation = snapshot.generation,
+                            sessionId = snapshot.sessionId ?: ""
+                        )
+                    )
+                } catch (_: Throwable) {
+                }
+            }
             return
         }
         if (snapshot.terminalState != null) {

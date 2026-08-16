@@ -45,6 +45,9 @@ sealed interface RuntimeServiceHostEvent {
         val launchStartId: Int,
         val phase: String,
     ) : RuntimeServiceHostEvent
+    data class SnapshotUpdated(
+        val snapshot: RuntimeServiceLifecycleSnapshot
+    ) : RuntimeServiceHostEvent
 }
 
 fun interface RuntimeServiceHostListener {

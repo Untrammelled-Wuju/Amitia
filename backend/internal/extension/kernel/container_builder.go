@@ -43,6 +43,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/internal/extension/kernel/javascript_main"
 	"github.com/u-ai/backend/internal/extension/kernel/lifecycle_manager"
+	kernelmcp "github.com/u-ai/backend/internal/extension/kernel/mcp"
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
 	"github.com/u-ai/backend/internal/extension/kernel/observability"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
@@ -798,6 +799,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	acquisitionSourceRegistry.Register(acquisition.NewGeneratedSkillSource(true))
 	acquisitionSourceRegistry.Register(acquisition.NewRemoteCatalogSource("https://amitia.untrammelled.top/api/catalog"))
 
+	mcpLifecycle := kernelmcp.NewMCPLifecycle(nil, nil)
+
 	acquisitionInstallerRegistry, err := acquisition.NewInstallerRegistry(&acquisition.InstallerRegistryOpts{
 		EnableExistingPort: acquisition.NewEnableExistingPortBridgeWithDeps(acquisition.EnableExistingDeps{
 			EnablementSvc:      enablementService,
@@ -808,8 +811,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 			AgentSkillCatalog:  agentSkillCatalog,
 			ProviderRegistry:   capabilityProviderRegistry,
 		}),
-		PackageInstallPort: acquisition.NewPackagePortBridge(lifecycleMgr),
-		MCPInstallPort:     acquisition.NewMCPRepositoryBridge(b.mcpRepository),
+		PackageInstallPort: acquisition.NewPackagePortBridgeFromManager(lifecycleMgr),
+		MCPInstallPort:     acquisition.NewMCPPortBridge(mcpLifecycle),
 		SkillInstallPort:   acquisition.NewSkillPortBridge(acquisition.NewSkillCatalogBridge(agentSkillCatalog)),
 	})
 	if err != nil {

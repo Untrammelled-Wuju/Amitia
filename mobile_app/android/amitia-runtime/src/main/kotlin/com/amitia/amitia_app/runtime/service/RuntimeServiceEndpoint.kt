@@ -7,4 +7,5 @@ internal interface RuntimeServiceEndpoint {
     fun removeListener(listener: RuntimeServiceHostListener)
     fun lifecycleSnapshot(): RuntimeServiceLifecycleSnapshot?
     fun updateLifecycleSnapshot(snapshot: RuntimeServiceLifecycleSnapshot)
+    fun notifySnapshotUpdated()
 }

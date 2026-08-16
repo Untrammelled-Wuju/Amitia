@@ -893,7 +893,15 @@ func (s *ProcessSupervisor) Stop(ctx context.Context, req StopRequest) (*StopRes
 
 	if !exited {
 		s.killProcessTree(inst)
-		s.waitForProcessExit(inst, killTimeout)
+		exited = s.waitForProcessExit(inst, killTimeout)
+	}
+
+	if !exited && s.procMgr.IsAlive(inst.PID) {
+		s.log("error", "service process still alive after kill", map[string]any{
+			"service": req.ServiceID,
+			"pid":     inst.PID,
+		})
+		return nil, fmt.Errorf("trusted_service: process %d for service %s still alive after kill", inst.PID, req.ServiceID)
 	}
 
 	if def.Shutdown.RemoveTempDir {

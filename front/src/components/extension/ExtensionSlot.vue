@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onErrorCaptured, onMounted, ref, watch } from "vue";
 import { useExtensionSlot, type ExtensionSurfaceContext, type ExtensionSurfaceRole } from "@/composables/useExtensionSlot";
-import type { UIContributionSummary } from "@/stores/extensionUI";
+import { useExtensionUIStore, type UIContributionSummary } from "@/stores/extensionUI";
 import ExtensionContributionRenderer from "./ExtensionContributionRenderer.vue";
 import ExtensionRenderState from "./ExtensionRenderState.vue";
 

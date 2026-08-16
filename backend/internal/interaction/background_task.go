@@ -23,6 +23,42 @@ type BackgroundTaskCoordinator struct {
 	now         func() time.Time
 }
 
+func (c *BackgroundTaskCoordinator) Resume(ctx context.Context, taskRunID string) error {
+	run, err := c.tasks.GetTaskRun(ctx, taskRunID)
+	if err != nil {
+		return fmt.Errorf("resume: load task run: %w", err)
+	}
+	if run == nil {
+		return nil
+	}
+	if run.Status.IsTerminal() {
+		return c.HandleTerminalTask(ctx, taskRunID)
+	}
+	return nil
+}
+
+func (c *BackgroundTaskCoordinator) SignalExpiration(ctx context.Context, taskRunID string) error {
+	run, err := c.tasks.GetTaskRun(ctx, taskRunID)
+	if err != nil {
+		return fmt.Errorf("expiration: load task run: %w", err)
+	}
+	if run == nil {
+		return nil
+	}
+	if !run.Status.IsTerminal() {
+		return nil
+	}
+	return c.HandleTerminalTask(ctx, taskRunID)
+}
+
+func (c *BackgroundTaskCoordinator) ResumeBackgroundTask(ctx context.Context, taskRunID string) error {
+	return c.Resume(ctx, taskRunID)
+}
+
+func (c *BackgroundTaskCoordinator) SignalBackgroundExpiration(ctx context.Context, taskRunID string) error {
+	return c.SignalExpiration(ctx, taskRunID)
+}
+
 func NewBackgroundTaskCoordinator(
 	tracker InteractionTracker,
 	recovery *RecoveryDescriptorService,

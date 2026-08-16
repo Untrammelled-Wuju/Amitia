@@ -261,6 +261,8 @@ func (s *AccountSessionService) createSessionAndTokens(userID int, username, rol
 		session := &Session{
 			PublicID:          sessionPublicID,
 			UserID:            int64(userID),
+			Username:          username,
+			Role:              role,
 			Status:            SessionStatusActive,
 			DeviceName:        parseDeviceName(ua),
 			IPAddress:         ip,

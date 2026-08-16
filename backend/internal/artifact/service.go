@@ -1,10 +1,8 @@
 package artifact
 
 import (
-	"bufio"
 	"context"
 	"io"
-	"net/http"
 	"time"
 
 	"github.com/google/uuid"
@@ -64,18 +62,13 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (Artifact, erro
 	filename := SanitizeFilename(req.Filename)
 	ext := ExtractExtension(filename)
 	mimeType := normalizeMIME(req.MIMEType)
-	br := bufio.NewReader(req.Reader)
-	prefix, err := br.Peek(512)
-	if err != nil && err != io.EOF {
-		return Artifact{}, ErrInvalidUpload("read failed")
+	if mimeType == "" {
+		mimeType = "application/octet-stream"
 	}
-	detected := http.DetectContentType(prefix)
-	if !isMIMECompatible(mimeType, detected) {
-		mimeType = detected
-		kind = DeriveKindFromMIME(detected)
+	if kind == "" {
+		kind = DeriveKindFromMIME(mimeType)
 	}
-	combined := io.MultiReader(bytesReader(prefix), br)
-	blobInfo, err := s.blobStore.Put(ctx, combined, maxBytes)
+	blobInfo, err := s.blobStore.Put(ctx, req.Reader, maxBytes)
 	if err != nil {
 		if err.Error() != "" {
 			if maxBytes > 0 && err.Error()[0:1] == "e" {
@@ -173,24 +166,6 @@ func (s *Service) RegisterReference(artifactID ID, refType string, refID string)
 	})
 }
 
-func bytesReader(b []byte) io.Reader {
-	return &byteReader{b: b}
-}
-
-type byteReader struct {
-	b   []byte
-	pos int
-}
-
-func (r *byteReader) Read(p []byte) (int, error) {
-	if r.pos >= len(r.b) {
-		return 0, io.EOF
-	}
-	n := copy(p, r.b[r.pos:])
-	r.pos += n
-	return n, nil
-}
-
 func normalizeMIME(mime string) string {
 	m := ""
 	for _, c := range mime {
@@ -202,34 +177,3 @@ func normalizeMIME(mime string) string {
 	return m
 }
 
-func isMIMECompatible(claimed, detected string) bool {
-	if claimed == "" {
-		return true
-	}
-	if claimed == detected {
-		return true
-	}
-	d := normalizeMIME(detected)
-	if d == "application/octet-stream" {
-		return true
-	}
-	claimedKind := DeriveKindFromMIME(claimed)
-	detectedKind := DeriveKindFromMIME(d)
-	if claimedKind == detectedKind {
-		return true
-	}
-	dangerousTypes := []string{
-		"application/x-executable",
-		"application/x-msdownload",
-		"application/x-dosexec",
-		"application/javascript",
-		"text/javascript",
-		"application/x-sh",
-	}
-	for _, danger := range dangerousTypes {
-		if d == danger {
-			return false
-		}
-	}
-	return true
-}
