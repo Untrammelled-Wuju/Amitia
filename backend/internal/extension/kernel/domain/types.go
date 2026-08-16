@@ -522,13 +522,14 @@ type Exposure struct {
 type RuntimeType string
 
 const (
-	RuntimeTypeBuiltin    RuntimeType = "builtin"
-	RuntimeTypeGo         RuntimeType = "go"
-	RuntimeTypeJavaScript RuntimeType = "javascript"
-	RuntimeTypeWASM       RuntimeType = "wasm"
-	RuntimeTypeService    RuntimeType = "service"
-	RuntimeTypeMCP        RuntimeType = "mcp"
-	RuntimeTypeTask       RuntimeType = "task"
+RuntimeTypeBuiltin           RuntimeType = "builtin"
+RuntimeTypeGo                RuntimeType = "go"
+RuntimeTypeJavaScript        RuntimeType = "javascript"
+RuntimeTypeWASM              RuntimeType = "wasm"
+RuntimeTypeService           RuntimeType = "service"
+RuntimeTypeMCP               RuntimeType = "mcp"
+RuntimeTypeTask              RuntimeType = "task"
+RuntimeTypeBackgroundRemoval RuntimeType = "background_removal"
 )
 
 type RuntimeDefinition struct {

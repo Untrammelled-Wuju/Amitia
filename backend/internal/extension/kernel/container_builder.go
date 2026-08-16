@@ -947,6 +947,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		BrowserCaller:         makeBrowserCallFunc(b.browserProvider),
 		BrowserHealth:         makeBrowserHealthFunc(b.browserProvider),
 		DeviceRuntimePort:     deviceRuntimePort,
+		BackgroundRemoval:     bgRegistry,
 	}); err != nil {
 		return nil, fmt.Errorf("kernel: register production adapters: %w", err)
 	}
