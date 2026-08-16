@@ -1,5 +1,5 @@
 {
-  "protocolVersion": "1.0",
+  "protocolVersion": 1,
   "requestId": "sc-exec-bad",
   "operation": "shortcuts.execute",
   "payload": {

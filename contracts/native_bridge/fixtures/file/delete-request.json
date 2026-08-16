@@ -1,5 +1,5 @@
 {
-  "protocolVersion": "1.0",
+  "protocolVersion": 1,
   "requestId": "req-delete-001",
   "operation": "file.delete",
   "payload": {

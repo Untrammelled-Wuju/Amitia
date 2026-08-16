@@ -1,11 +1,10 @@
 {
-  "protocolVersion": "1.0",
+  "protocolVersion": 1,
   "requestId": "req-move-001",
   "operation": "file.move",
   "payload": {
-    "sourceMountId": "mount-documents-001",
-    "sourceRelativePath": "projects/report.pdf",
-    "destMountId": "mount-archive-002",
-    "destRelativePath": "2026/report.pdf"
+    "mountId": "mount-documents-001",
+    "relativePath": "projects/report.pdf",
+    "newRelativePath": "2026/report.pdf"
   }
 }

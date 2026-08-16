@@ -1,5 +1,5 @@
 {
-  "protocolVersion": "1.0",
+  "protocolVersion": 1,
   "requestId": "res-read-001",
   "operation": "native.resource.read_chunk",
   "payload": {

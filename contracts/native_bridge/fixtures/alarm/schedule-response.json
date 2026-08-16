@@ -1,5 +1,5 @@
 {
-  "protocolVersion": "1.0",
+  "protocolVersion": 1,
   "requestId": "alm-sch-001",
   "status": "ok",
   "result": {

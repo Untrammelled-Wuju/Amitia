@@ -1,11 +1,10 @@
 {
-  "protocolVersion": "1.0",
+  "protocolVersion": 1,
   "requestId": "req-copy-001",
   "operation": "file.copy",
   "payload": {
-    "sourceMountId": "mount-documents-001",
-    "sourceRelativePath": "projects/report.pdf",
-    "destMountId": "mount-backup-003",
-    "destRelativePath": "backup/report.pdf"
+    "mountId": "mount-documents-001",
+    "relativePath": "projects/report.pdf",
+    "newRelativePath": "backup/report.pdf"
   }
 }

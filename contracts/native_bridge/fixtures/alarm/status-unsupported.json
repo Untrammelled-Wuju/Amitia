@@ -1,5 +1,5 @@
 {
-  "protocolVersion": "1.0",
+  "protocolVersion": 1,
   "requestId": "alm-stat-001",
   "operation": "media.alarms.status",
   "response": {

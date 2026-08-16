@@ -1,5 +1,5 @@
 {
-  "protocolVersion": "1.0",
+  "protocolVersion": 1,
   "requestId": "bg-sub-001",
   "operation": "background.submit",
   "payload": {
