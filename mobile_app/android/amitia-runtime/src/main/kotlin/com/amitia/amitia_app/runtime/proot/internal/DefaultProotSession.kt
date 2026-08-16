@@ -9,6 +9,11 @@ import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
 
+sealed interface ProotTerminationResult {
+    data class ConfirmedExited(val exitCode: Int?) : ProotTerminationResult
+    data object StillAlive : ProotTerminationResult
+}
+
 internal class DefaultProotSession(
     override val sessionId: String,
     private val process: Process,
@@ -104,6 +109,48 @@ internal class DefaultProotSession(
             try { if (process.isAlive) process.destroyForcibly() } catch (_: Throwable) {}
             shutdownWatcherExecutor()
         }
+    }
+
+    fun terminateAndConfirmExit(
+        gracefulTimeoutMs: Long,
+        forceTimeoutMs: Long,
+    ): ProotTerminationResult {
+        if (!process.isAlive) {
+            val code = try { process.exitValue() } catch (_: IllegalThreadStateException) { null }
+            return ProotTerminationResult.ConfirmedExited(code)
+        }
+
+        try { process.destroy() } catch (_: Throwable) {}
+        val gracefulExit = try {
+            exitDeferred.get(gracefulTimeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)?.exitCode
+        } catch (_: Exception) {
+            null
+        }
+        if (gracefulExit != null) {
+            return ProotTerminationResult.ConfirmedExited(gracefulExit)
+        }
+
+        if (!process.isAlive) {
+            val code = try { process.exitValue() } catch (_: IllegalThreadStateException) { null }
+            return ProotTerminationResult.ConfirmedExited(code)
+        }
+
+        try { process.destroyForcibly() } catch (_: Throwable) {}
+        val forcedExit = try {
+            exitDeferred.get(forceTimeoutMs, java.util.concurrent.TimeUnit.MILLISECONDS)?.exitCode
+        } catch (_: Exception) {
+            null
+        }
+        if (forcedExit != null) {
+            return ProotTerminationResult.ConfirmedExited(forcedExit)
+        }
+
+        if (!process.isAlive) {
+            val code = try { process.exitValue() } catch (_: IllegalThreadStateException) { null }
+            return ProotTerminationResult.ConfirmedExited(code)
+        }
+
+        return ProotTerminationResult.StillAlive
     }
 
     internal fun activate() {

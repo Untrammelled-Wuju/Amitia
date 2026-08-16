@@ -56,12 +56,20 @@ class RuntimeService : Service() {
         var teardownState: TeardownState = TeardownState.NOT_STARTED,
         var servicePhase: ServicePhase = ServicePhase.CREATED,
         var processPhase: ProcessPhase = ProcessPhase.CREATED,
+        var startupPhase: StartupPhase = StartupPhase.NOT_STARTED,
     )
 
     private enum class TerminalEventKind {
         EXPECTED_STOPPED,
         UNEXPECTED_TERMINATION,
         STARTUP_FAILURE_CLEANUP,
+    }
+
+    private fun toRuntimeTerminalState(kind: TerminalEventKind?): RuntimeTerminalState? = when (kind) {
+        TerminalEventKind.EXPECTED_STOPPED -> RuntimeTerminalState.EXPECTED_STOPPED
+        TerminalEventKind.UNEXPECTED_TERMINATION -> RuntimeTerminalState.UNEXPECTED_TERMINATION
+        TerminalEventKind.STARTUP_FAILURE_CLEANUP -> RuntimeTerminalState.STARTUP_FAILURE_CLEANUP
+        null -> null
     }
 
     private enum class StartupFailureCleanupPhase {
@@ -81,20 +89,27 @@ class RuntimeService : Service() {
         FAILED,
     }
 
-    private enum class ServicePhase {
-        CREATED,
-        FOREGROUND,
-        DESTROYED,
-        UNOBSERVABLE,
+    private fun toRuntimeServicePhase(phase: ServicePhase): RuntimeServicePhase = when (phase) {
+        ServicePhase.CREATED -> RuntimeServicePhase.CREATED
+        ServicePhase.FOREGROUND -> RuntimeServicePhase.FOREGROUND
+        ServicePhase.DESTROYED -> RuntimeServicePhase.DESTROYED
+        ServicePhase.UNOBSERVABLE -> RuntimeServicePhase.UNOBSERVABLE
     }
 
-    private enum class ProcessPhase {
-        CREATED,
-        STARTED,
-        READY,
-        EXITING,
-        EXITED,
-        UNKNOWN,
+    private fun toRuntimeProcessPhase(phase: ProcessPhase): RuntimeProcessPhase = when (phase) {
+        ProcessPhase.CREATED -> RuntimeProcessPhase.CREATED
+        ProcessPhase.STARTED -> RuntimeProcessPhase.STARTED
+        ProcessPhase.READY -> RuntimeProcessPhase.READY
+        ProcessPhase.EXITING -> RuntimeProcessPhase.EXITING
+        ProcessPhase.EXITED -> RuntimeProcessPhase.EXITED
+        ProcessPhase.UNKNOWN -> RuntimeProcessPhase.UNKNOWN
+    }
+
+    private fun toRuntimeStartupPhase(phase: StartupPhase): RuntimeStartupPhase = when (phase) {
+        StartupPhase.NOT_STARTED -> RuntimeStartupPhase.NOT_STARTED
+        StartupPhase.DETECTING -> RuntimeStartupPhase.DETECTING
+        StartupPhase.READY -> RuntimeStartupPhase.READY
+        StartupPhase.FAILED -> RuntimeStartupPhase.FAILED
     }
 
     private val currentSessionContextRef: AtomicReference<ServiceSessionContext?> = AtomicReference(null)
@@ -108,9 +123,9 @@ class RuntimeService : Service() {
         RuntimeServiceLifecycleSnapshot(
             generation = 0L,
             sessionId = null,
-            servicePhase = ServicePhase.CREATED,
-            processPhase = ProcessPhase.CREATED,
-            startupPhase = StartupPhase.NOT_STARTED,
+            servicePhase = RuntimeServicePhase.CREATED,
+            processPhase = RuntimeProcessPhase.CREATED,
+            startupPhase = RuntimeStartupPhase.NOT_STARTED,
             terminalState = null,
             latestStartId = 0,
             stopRequested = false,
@@ -128,24 +143,25 @@ class RuntimeService : Service() {
         val sessionId = currentSessionIdRef.get()
         val generation = currentGenerationRef.get()
         val servicePhase = when (serviceState.get()) {
-            ServiceHostState.CREATED -> if (ctx != null) ctx.servicePhase else ServicePhase.CREATED
-            ServiceHostState.FOREGROUND -> ServicePhase.FOREGROUND
-            ServiceHostState.DESTROYED -> ServicePhase.DESTROYED
+            ServiceHostState.CREATED -> if (ctx != null) toRuntimeServicePhase(ctx.servicePhase) else RuntimeServicePhase.CREATED
+            ServiceHostState.FOREGROUND -> RuntimeServicePhase.FOREGROUND
+            ServiceHostState.DESTROYED -> RuntimeServicePhase.DESTROYED
         }
-        val processPhase = ctx?.processPhase ?: ProcessPhase.CREATED
-        val terminalState = ctx?.terminalEvent
-        lifecycleSnapshotRef.set(
-            RuntimeServiceLifecycleSnapshot(
-                generation = generation,
-                sessionId = sessionId,
-                servicePhase = servicePhase,
-                processPhase = processPhase,
-                startupPhase = StartupPhase.NOT_STARTED,
-                terminalState = terminalState,
-                latestStartId = latestStartIdRef.get(),
-                stopRequested = stopRequestedRef.get(),
-            )
+        val processPhase = if (ctx != null) toRuntimeProcessPhase(ctx.processPhase) else RuntimeProcessPhase.CREATED
+        val terminalState = toRuntimeTerminalState(ctx?.terminalEvent)
+        val startupPhase = ctx?.startupPhase?.let { toRuntimeStartupPhase(it) } ?: RuntimeStartupPhase.NOT_STARTED
+        val snapshot = RuntimeServiceLifecycleSnapshot(
+            generation = generation,
+            sessionId = sessionId,
+            servicePhase = servicePhase,
+            processPhase = processPhase,
+            startupPhase = startupPhase,
+            terminalState = terminalState,
+            latestStartId = latestStartIdRef.get(),
+            stopRequested = stopRequestedRef.get(),
         )
+        lifecycleSnapshotRef.set(snapshot)
+        endpoint.updateLifecycleSnapshot(snapshot)
     }
 
     private fun currentLifecycleSnapshot(): RuntimeServiceLifecycleSnapshot = lifecycleSnapshotRef.get()
@@ -465,7 +481,12 @@ class RuntimeService : Service() {
         if (session != null && session.isAlive()) {
             session.requestStop()
             session.stop(GRACEFUL_SHUTDOWN_TIMEOUT_MS)
+        } else if (session != null && !session.isAlive()) {
+            cleanupContext.processConfirmedDead = true
+            cleanupContext.cleanupPhase = StartupFailureCleanupPhase.PROCESS_EXIT_CONFIRMED
+            performStartupFailureCleanup(cleanupContext)
         }
+    }
 
     private fun onProotEvent(event: ProotEvent, generation: Long) {
         val currentGen = currentGenerationRef.get()
@@ -516,24 +537,83 @@ class RuntimeService : Service() {
 
             val cleanupContext = startupFailureCleanupContextRef.get()
             if (cleanupContext != null && cleanupContext.generation == event.generation) {
-                cleanupContext.processConfirmedDead = false
-                cleanupContext.cleanupPhase = StartupFailureCleanupPhase.WAITING_FOR_PROCESS_EXIT
+                confirmProcessDeathForStartupFailure(cleanupContext)
                 return
             }
 
             val session = currentSessionRef.get()
             if (session != null) {
-                try {
-                    if (session.isAlive()) {
-                        session.requestStop()
-                        session.stop(GRACEFUL_SHUTDOWN_TIMEOUT_MS)
+                when (val result = session.terminateAndConfirmExit(
+                    gracefulTimeoutMs = GRACEFUL_SHUTDOWN_TIMEOUT_MS,
+                    forceTimeoutMs = FORCE_SHUTDOWN_TIMEOUT_MS
+                )) {
+                    is ProotTerminationResult.ConfirmedExited -> {
+                        ctx.processPhase = ProcessPhase.EXITED
+                        ctx.teardownState = TeardownState.IN_PROGRESS
+                        publishWatcherFailureTerminalEvent(ctx, event, result.exitCode)
                     }
-                } catch (_: Exception) {
+                    is ProotTerminationResult.StillAlive -> {
+                        ctx.teardownState = TeardownState.IN_PROGRESS
+                        updateLifecycleSnapshot()
+                    }
                 }
+            } else {
+                ctx.teardownState = TeardownState.IN_PROGRESS
+                updateLifecycleSnapshot()
             }
+        }
+    }
 
-            ctx.teardownState = TeardownState.IN_PROGRESS
-            updateLifecycleSnapshot()
+    private fun publishWatcherFailureTerminalEvent(
+        ctx: ServiceSessionContext,
+        event: ProotEvent.ExitWatcherFailed,
+        exitCode: Int?,
+    ) {
+        val terminalKind = if (ctx.stopRequested) {
+            TerminalEventKind.EXPECTED_STOPPED
+        } else {
+            TerminalEventKind.UNEXPECTED_TERMINATION
+        }
+        ctx.terminalEvent = terminalKind
+
+        val teardownReason = if (terminalKind == TerminalEventKind.EXPECTED_STOPPED) {
+            ServiceTeardownReason.EXPECTED_STOP
+        } else {
+            ServiceTeardownReason.UNEXPECTED_TERMINATION
+        }
+        val stopId = ctx.stopStartId ?: ctx.launchStartId
+        val teardownResult = performServiceTeardown(ctx, stopId, teardownReason)
+        updateLifecycleSnapshot()
+
+        publishTerminalEventForExpectedOrUnexpected(
+            ctx = ctx,
+            teardownResult = teardownResult,
+            unexpectedCause = RuntimeServiceTerminationCause.EXIT_WATCHER_FAILED,
+        )
+    }
+
+    private fun confirmProcessDeathForStartupFailure(cleanupContext: StartupFailureCleanupContext) {
+        val session = currentSessionRef.get()
+        if (session == null) {
+            cleanupContext.processConfirmedDead = true
+            cleanupContext.cleanupPhase = StartupFailureCleanupPhase.PROCESS_EXIT_CONFIRMED
+            performStartupFailureCleanup(cleanupContext)
+            return
+        }
+
+        when (val result = session.terminateAndConfirmExit(
+            gracefulTimeoutMs = GRACEFUL_SHUTDOWN_TIMEOUT_MS,
+            forceTimeoutMs = FORCE_SHUTDOWN_TIMEOUT_MS
+        )) {
+            is ProotTerminationResult.ConfirmedExited -> {
+                cleanupContext.processConfirmedDead = true
+                cleanupContext.cleanupPhase = StartupFailureCleanupPhase.PROCESS_EXIT_CONFIRMED
+                performStartupFailureCleanup(cleanupContext)
+            }
+            is ProotTerminationResult.StillAlive -> {
+                cleanupContext.processConfirmedDead = false
+                cleanupContext.cleanupPhase = StartupFailureCleanupPhase.WAITING_FOR_PROCESS_EXIT
+            }
         }
     }
 
@@ -877,21 +957,3 @@ internal data class RuntimeServiceSnapshot(
     val foreground: Boolean,
     val boundClients: Int
 )
-
-internal data class RuntimeServiceLifecycleSnapshot(
-    val generation: Long,
-    val sessionId: String?,
-    val servicePhase: ServicePhase,
-    val processPhase: ProcessPhase,
-    val startupPhase: StartupPhase,
-    val terminalState: TerminalEventKind?,
-    val latestStartId: Int,
-    val stopRequested: Boolean,
-)
-
-internal enum class StartupPhase {
-    NOT_STARTED,
-    DETECTING,
-    READY,
-    FAILED,
-}
