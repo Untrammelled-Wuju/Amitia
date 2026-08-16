@@ -209,12 +209,26 @@ func recordToolCallResult(intentID string, ctx ToolExecutionContext, name string
 	audit, _ := json.Marshal(result.Audit)
 	resultID := uuid.New().String()
 	status := string(result.Status)
-	_, _ = toolDB.Exec(
+	if _, err := toolDB.Exec(
 		"INSERT INTO tool_call_results (id, intent_id, request_id, conversation_id, character_id, channel, tool_call_id, tool_name, status, content, error_code, visible_text, side_effects_json, external_operation_id, idempotency_key, audit_json, confidence, force_voice, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
 		resultID, nullableString(intentID), ctx.RequestID, ctx.ConversationID, ctx.CharacterID, ctx.Channel, ctx.ToolCallID, name, status, result.Content, result.ErrorCode, result.VisibleText, string(sideEffects), result.ExternalOperationID, result.IdempotencyKey, string(audit), result.Confidence, boolInt(result.ForceVoice), now,
-	)
+	); err != nil {
+		applog.TraceError(traceFromExecutionContext(ctx).WithStage("tool_result_persist_failed"), err, applog.Fields{
+			"tool_name":    name,
+			"tool_call_id": ctx.ToolCallID,
+			"intent_id":    intentID,
+			"result_id":    resultID,
+			"status":       status,
+		}, "failed to persist tool result")
+		return
+	}
 	if intentID != "" {
-		_, _ = toolDB.Exec("UPDATE tool_call_intents SET status = ?, updated_at = ? WHERE id = ?", status, now, intentID)
+		if _, err := toolDB.Exec("UPDATE tool_call_intents SET status = ?, updated_at = ? WHERE id = ?", status, now, intentID); err != nil {
+			applog.TraceError(traceFromExecutionContext(ctx).WithStage("tool_intent_update_failed"), err, applog.Fields{
+				"intent_id": intentID,
+				"status":    status,
+			}, "failed to update tool intent status")
+		}
 	}
 	applog.TraceInfo(traceFromExecutionContext(ctx).WithStage("tool_result_persisted"), applog.Fields{
 		"tool_name":    name,

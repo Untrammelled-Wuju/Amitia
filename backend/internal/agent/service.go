@@ -338,8 +338,14 @@ func (s *service) callLLM(cfg map[string]string, messages []map[string]interface
 		"model": cfg["modelName"], "messages": messages,
 		"temperature": 0.7, "max_tokens": 4096, "stream": false,
 	}
-	jsonBody, _ := json.Marshal(reqBody)
-	req, _ := http.NewRequest("POST", baseURL+"/chat/completions", bytes.NewReader(jsonBody))
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", 0, fmt.Errorf("marshal request: %w", err)
+	}
+	req, err := http.NewRequest("POST", baseURL+"/chat/completions", bytes.NewReader(jsonBody))
+	if err != nil {
+		return "", 0, fmt.Errorf("create request: %w", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Authorization", "Bearer "+cfg["apiKey"])
 	resp, err := (&http.Client{Timeout: 180 * time.Second}).Do(req)
@@ -355,7 +361,9 @@ func (s *service) callLLM(cfg map[string]string, messages []map[string]interface
 		Choices []struct{ Message struct{ Content string } }
 		Usage   struct{ TotalTokens int }
 	}
-	json.Unmarshal(rb, &r)
+	if err := json.Unmarshal(rb, &r); err != nil {
+		return "", 0, fmt.Errorf("unmarshal response: %w", err)
+	}
 	if len(r.Choices) == 0 {
 		return "", 0, fmt.Errorf("no choices")
 	}
