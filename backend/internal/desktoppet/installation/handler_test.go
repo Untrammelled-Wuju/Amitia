@@ -13,8 +13,13 @@ import (
 
 	"github.com/gin-gonic/gin"
 	desktoppetAuth "github.com/u-ai/backend/internal/auth"
+	"github.com/u-ai/backend/internal/desktoppet/installation/binding"
 	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
+	"github.com/u-ai/backend/internal/desktoppet/installation/desired"
+	"github.com/u-ai/backend/internal/desktoppet/installation/device"
+	"github.com/u-ai/backend/internal/desktoppet/installation/journal"
 	"github.com/u-ai/backend/internal/desktoppet/installation/operation"
+	"github.com/u-ai/backend/internal/desktoppet/installation/projection"
 	"github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"gorm.io/gorm"
@@ -454,7 +459,173 @@ func (s *stubRepository) ListInstallationsByUserDevice(userID, deviceID string) 
 	return nil, nil
 }
 
-func (s *stubRepository) Transaction(ctx context.Context, fn func(repo RepositoryV2) error) error { return fn(s) }
+func (s *stubRepository) Transaction(ctx context.Context, fn func(repo RepositoryV2) error) error {
+	return fn(s)
+}
+
+func (s *stubRepository) AllocateDeviceDesiredRevisionCAS(tx *gorm.DB, userID, deviceID string) (int64, error) {
+	return 0, nil
+}
+
+func (s *stubRepository) GetInstallationForUserDevice(userID, deviceID, installationID string) (*Installation, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) ListInstallationsForUserDevice(userID, deviceID string) ([]*Installation, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) CreateInstallationTx(tx *gorm.DB, inst *Installation) error { return nil }
+
+func (s *stubRepository) UpdateInstallationTx(tx *gorm.DB, inst *Installation) error { return nil }
+
+func (s *stubRepository) GetInstallationByUserDevicePetTx(tx *gorm.DB, userID, deviceID, petID string) (*Installation, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) DeleteInstallationTx(tx *gorm.DB, id string) error { return nil }
+
+func (s *stubRepository) GetRuntimeSettingsForUserDevice(userID, deviceID, installationID string) (*RuntimeSettings, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) CreateRuntimeSettingsTx(tx *gorm.DB, settings *RuntimeSettings) error {
+	return nil
+}
+
+func (s *stubRepository) UpdateRuntimeSettingsCAS(tx *gorm.DB, installationID, userID, deviceID string, expectedRevision int, updates map[string]interface{}) (*RuntimeSettings, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) GetActiveBindingForUserDeviceTx(tx *gorm.DB, userID, deviceID string) (*binding.DeviceActiveInstallationBinding, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) UpsertActiveBindingTx(tx *gorm.DB, b *binding.DeviceActiveInstallationBinding) error {
+	return nil
+}
+
+func (s *stubRepository) DeleteActiveBindingTx(tx *gorm.DB, userID, deviceID string) error {
+	return nil
+}
+
+func (s *stubRepository) InsertBindingHistoryTx(tx *gorm.DB, entry *binding.BindingHistoryEntry) error {
+	return nil
+}
+
+func (s *stubRepository) GetRuntimeDesiredStateTx(tx *gorm.DB, userID, deviceID string) (*desired.RuntimeDesiredState, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) UpsertRuntimeDesiredStateCAS(tx *gorm.DB, userID, deviceID string, state *desired.RuntimeDesiredState, expectedRevision int64) (*desired.RuntimeDesiredState, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) GetDeviceDesiredRevisionCounterTx(tx *gorm.DB, userID, deviceID string) (*desired.DeviceDesiredRevisionCounter, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) CreateOutboxEventTx(tx *gorm.DB, event *desired.DesiredStateOutboxEvent) error {
+	return nil
+}
+
+func (s *stubRepository) ListPendingOutboxEvents(limit int) ([]*desired.DesiredStateOutboxEvent, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) MarkOutboxEventPublished(tx *gorm.DB, eventID string) error { return nil }
+
+func (s *stubRepository) MarkOutboxEventFailed(tx *gorm.DB, eventID, errorMsg string) error {
+	return nil
+}
+
+func (s *stubRepository) RequeueOutboxEventsBefore(tx *gorm.DB, availableBefore string) error {
+	return nil
+}
+
+func (s *stubRepository) CreateOperationTx(tx *gorm.DB, op *operation.InstallationOperation) error {
+	return nil
+}
+
+func (s *stubRepository) GetOperationTx(tx *gorm.DB, operationID string) (*operation.InstallationOperation, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) GetOperationByIdempotencyKeyTx(tx *gorm.DB, userID, deviceID, idempotencyKey, opType string) (*operation.InstallationOperation, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) UpdateOperationStatusCAS(tx *gorm.DB, operationID, expectedStatus, newStatus, executionID string) (*operation.InstallationOperation, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) ClaimOperationLeaseCAS(tx *gorm.DB, lease *operation.Lease, expectedStatuses []string) (*operation.InstallationOperation, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) RenewOperationLeaseTx(tx *gorm.DB, operationID, executionID string) error {
+	return nil
+}
+
+func (s *stubRepository) ListPendingOperations(limit int) ([]*operation.InstallationOperation, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) ListExpiredLeaseOperations(leaseTimeout string, limit int) ([]*operation.InstallationOperation, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) CreateCommitJournalTx(tx *gorm.DB, j *journal.InstallationCommitJournal) error {
+	return nil
+}
+
+func (s *stubRepository) GetCommitJournalTx(tx *gorm.DB, operationID string) (*journal.InstallationCommitJournal, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) CASUpdateCommitJournalStageTx(tx *gorm.DB, operationID, expectedStage, newStage, executionID string) (*journal.InstallationCommitJournal, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) ListPendingCommitJournals(limit int) ([]*journal.InstallationCommitJournal, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) CreateSwitchJournalTx(tx *gorm.DB, j *journal.InstallationSwitchJournal) error {
+	return nil
+}
+
+func (s *stubRepository) GetSwitchJournalTx(tx *gorm.DB, operationID string) (*journal.InstallationSwitchJournal, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) CASUpdateSwitchJournalStageTx(tx *gorm.DB, operationID, expectedStage, newStage, executionID string) (*journal.InstallationSwitchJournal, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) ListPendingSwitchJournals(limit int) ([]*journal.InstallationSwitchJournal, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) CreateTrashEntryTx(tx *gorm.DB, entry *TrashEntry) error { return nil }
+
+func (s *stubRepository) ListExpiredTrashEntries(retainBefore string, limit int) ([]*TrashEntry, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) MarkTrashEntryPurged(tx *gorm.DB, id string) error { return nil }
+
+func (s *stubRepository) GetRuntimeProjectionTx(tx *gorm.DB, userID, deviceID string) (*projection.InstallationRuntimeProjection, error) {
+	return nil, nil
+}
+
+func (s *stubRepository) UpsertRuntimeProjectionTx(tx *gorm.DB, p *projection.InstallationRuntimeProjection) error {
+	return nil
+}
+
+func (s *stubRepository) GetOrCreateDeviceContext(ctx context.Context, userID string, reqCtx device.RequestContext) (*device.DeviceContext, error) {
+	return nil, nil
+}
 
 type stubInstallGuard struct{}
 
