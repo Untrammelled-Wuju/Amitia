@@ -157,7 +157,7 @@ func (r *TaskRepository) PutTaskRun(ctx context.Context, run *task_runtime.TaskR
 			error_code = excluded.error_code, error_message = excluded.error_message,
 			generation = excluded.generation,
 			revision = excluded.revision
-		WHERE excluded.revision >= extension_task_runs.revision
+		WHERE excluded.revision = extension_task_runs.revision + 1
 	`,
 		run.TaskRunID, run.OperationID, run.InvocationID, run.TaskDefinitionID,
 		run.ExtensionID, run.ModuleID, string(run.Status), run.Priority,
