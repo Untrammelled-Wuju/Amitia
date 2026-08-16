@@ -27,6 +27,7 @@ func (s *ProviderLifecycleService) RegisterProvider(def CapabilityProviderDefini
 	now := time.Now().UTC()
 	old, found := s.registry.GetByID(def.ID)
 
+	snap := s.registry.snapshot()
 	if err := s.registry.RegisterDefinition(def); err != nil {
 		return err
 	}
@@ -54,11 +55,7 @@ func (s *ProviderLifecycleService) RegisterProvider(def CapabilityProviderDefini
 			OccurredAt:    now,
 		})
 		if err != nil {
-			if old != nil {
-				s.registry.setDefinition(string(old.ID), old)
-			} else {
-				s.registry.delDefinition(string(def.ID))
-			}
+			s.registry.restoreSnapshot(snap)
 			return err
 		}
 		return nil
@@ -76,10 +73,7 @@ func (s *ProviderLifecycleService) RegisterProvider(def CapabilityProviderDefini
 		OccurredAt:   now,
 	})
 	if err != nil {
-		s.registry.delDefinition(string(def.ID))
-		if old != nil {
-			s.registry.setDefinition(string(old.ID), old)
-		}
+		s.registry.restoreSnapshot(snap)
 		return err
 	}
 	return nil
@@ -104,6 +98,7 @@ func (s *ProviderLifecycleService) UnregisterProvider(id ProviderID) (bool, erro
 		removedInstanceIDs = append(removedInstanceIDs, inst.ID)
 	}
 
+	snap := s.registry.snapshot()
 	removed, err := s.registry.DeregisterDefinitionCascade(id)
 	if err != nil {
 		return removed, err
@@ -119,10 +114,7 @@ func (s *ProviderLifecycleService) UnregisterProvider(id ProviderID) (bool, erro
 		OccurredAt:         now,
 	})
 	if err != nil {
-		s.registry.setDefinition(string(oldDef.ID), oldDef)
-		for _, restore := range oldInstances {
-			s.registry.setInstance(string(restore.ID), restore)
-		}
+		s.registry.restoreSnapshot(snap)
 		return false, err
 	}
 	return true, nil
@@ -134,8 +126,9 @@ func (s *ProviderLifecycleService) RegisterInstance(inst CapabilityProviderInsta
 	}
 
 	now := time.Now().UTC()
-	old, found := s.registry.GetInstanceByID(inst.ID)
+	_, found := s.registry.GetInstanceByID(inst.ID)
 
+	snap := s.registry.snapshot()
 	if err := s.registry.RegisterInstance(inst); err != nil {
 		return err
 	}
@@ -149,7 +142,7 @@ func (s *ProviderLifecycleService) RegisterInstance(inst CapabilityProviderInsta
 		emitPayload := toInstanceEventPayload(newInst, now)
 		err := s.events.ProviderInstanceUpdated(context.Background(), emitPayload)
 		if err != nil {
-			s.registry.setInstance(string(old.ID), old)
+			s.registry.restoreSnapshot(snap)
 			return err
 		}
 		return nil
@@ -157,7 +150,7 @@ func (s *ProviderLifecycleService) RegisterInstance(inst CapabilityProviderInsta
 
 	err := s.events.ProviderInstanceRegistered(context.Background(), toInstanceEventPayload(newInst, now))
 	if err != nil {
-		s.registry.delInstance(string(inst.ID))
+		s.registry.restoreSnapshot(snap)
 		return err
 	}
 	return nil
@@ -173,6 +166,7 @@ func (s *ProviderLifecycleService) UnregisterInstance(id ProviderInstanceID) (bo
 		return false, nil
 	}
 
+	snap := s.registry.snapshot()
 	removed, err := s.registry.DeregisterInstance(id)
 	if err != nil {
 		return removed, err
@@ -182,7 +176,7 @@ func (s *ProviderLifecycleService) UnregisterInstance(id ProviderInstanceID) (bo
 	payload := toInstanceEventPayload(old, now)
 	err = s.events.ProviderInstanceUnregistered(context.Background(), payload)
 	if err != nil {
-		s.registry.setInstance(string(old.ID), old)
+		s.registry.restoreSnapshot(snap)
 		return false, err
 	}
 	return true, nil
@@ -202,8 +196,7 @@ func (s *ProviderLifecycleService) UpdateInstanceAvailability(id ProviderInstanc
 		return nil
 	}
 
-	oldClone := *old
-
+	snap := s.registry.snapshot()
 	if err := s.registry.UpdateInstanceAvailability(id, availability); err != nil {
 		return err
 	}
@@ -212,11 +205,11 @@ func (s *ProviderLifecycleService) UpdateInstanceAvailability(id ProviderInstanc
 	now := time.Now().UTC()
 	err := s.events.ProviderInstanceAvailabilityChanged(context.Background(), ProviderInstanceAvailabilityChangedPayload{
 		ProviderInstanceEventPayload: toInstanceEventPayload(newInst, now),
-		Previous:                     oldClone.Availability,
+		Previous:                     old.Availability,
 		Current:                      availability,
 	})
 	if err != nil {
-		s.registry.setInstance(string(old.ID), &oldClone)
+		s.registry.restoreSnapshot(snap)
 		return err
 	}
 	return nil
@@ -236,8 +229,7 @@ func (s *ProviderLifecycleService) UpdateInstanceHealth(id ProviderInstanceID, h
 		return nil
 	}
 
-	oldClone := *old
-
+	snap := s.registry.snapshot()
 	if err := s.registry.UpdateInstanceHealth(id, health); err != nil {
 		return err
 	}
@@ -246,17 +238,19 @@ func (s *ProviderLifecycleService) UpdateInstanceHealth(id ProviderInstanceID, h
 	now := time.Now().UTC()
 	err := s.events.ProviderInstanceHealthChanged(context.Background(), ProviderInstanceHealthChangedPayload{
 		ProviderInstanceEventPayload: toInstanceEventPayload(newInst, now),
-		Previous:                     oldClone.Health,
+		Previous:                     old.Health,
 		Current:                      health,
 	})
 	if err != nil {
-		s.registry.setInstance(string(old.ID), &oldClone)
+		s.registry.restoreSnapshot(snap)
 		return err
 	}
 	return nil
 }
 
-// Enable 启用指定的 Provider，如果不存在可执行的实例则创建一个
+// Enable 启用指定的 Provider。
+// 注意：此方法不再创建假实例。实例只能由真实的 Runtime health/reconciler 产生。
+// 如果不存在可执行的实例，返回错误而不是伪造。
 func (s *ProviderLifecycleService) Enable(providerID ProviderID) error {
 	if s.registry == nil {
 		return fmt.Errorf("provider registry not configured")
@@ -269,25 +263,12 @@ func (s *ProviderLifecycleService) Enable(providerID ProviderID) error {
 		}
 	}
 
-	def, found := s.registry.GetByID(providerID)
+	_, found := s.registry.GetByID(providerID)
 	if !found {
 		return fmt.Errorf("provider definition not found: %s", providerID)
 	}
 
-	instanceID := ProviderInstanceID(fmt.Sprintf("lc_%s_%d", providerID, time.Now().UnixNano()))
-	inst := CapabilityProviderInstance{
-		ID:           instanceID,
-		ProviderID:   providerID,
-		CapabilityID: def.CapabilityID,
-		Placement:    def.Placement,
-		ExtensionID:  def.ExtensionID,
-		ModuleID:     def.ModuleID,
-		Health:       HealthReady,
-		Availability: ProviderAvailabilityAvailable,
-		Revision:     def.Revision,
-	}
-
-	return s.RegisterInstance(inst)
+	return fmt.Errorf("provider %s has no executable instance; cannot enable without real runtime health/reconciler", providerID)
 }
 
 // Disable 禁用指定的 Provider，移除其实例

@@ -213,6 +213,53 @@ func (r *ProviderRegistry) cloneByCapability() map[string][]string {
 	return out
 }
 
+type providerRegistrySnapshot struct {
+	definitions  map[string]*CapabilityProviderDefinition
+	instances    map[string]*CapabilityProviderInstance
+	byProvider   map[string][]string
+	byCapability map[string][]string
+}
+
+func (r *ProviderRegistry) snapshot() *providerRegistrySnapshot {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	snap := &providerRegistrySnapshot{
+		definitions:  make(map[string]*CapabilityProviderDefinition, len(r.definitions)),
+		instances:    make(map[string]*CapabilityProviderInstance, len(r.instances)),
+		byProvider:   make(map[string][]string, len(r.byProvider)),
+		byCapability: make(map[string][]string, len(r.byCapability)),
+	}
+	for k, v := range r.definitions {
+		snap.definitions[k] = v
+	}
+	for k, v := range r.instances {
+		snap.instances[k] = v
+	}
+	for k, v := range r.byProvider {
+		cp := make([]string, len(v))
+		copy(cp, v)
+		snap.byProvider[k] = cp
+	}
+	for k, v := range r.byCapability {
+		cp := make([]string, len(v))
+		copy(cp, v)
+		snap.byCapability[k] = cp
+	}
+	return snap
+}
+
+func (r *ProviderRegistry) restoreSnapshot(snap *providerRegistrySnapshot) {
+	if snap == nil {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.definitions = snap.definitions
+	r.instances = snap.instances
+	r.byProvider = snap.byProvider
+	r.byCapability = snap.byCapability
+}
+
 func (r *ProviderRegistry) RegisterDefinition(def CapabilityProviderDefinition) error {
 	def = def.Normalize()
 	if err := def.Validate(); err != nil {
