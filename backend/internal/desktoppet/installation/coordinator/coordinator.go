@@ -25,15 +25,15 @@ type RuntimeDesiredStatePublisher interface {
 }
 
 type DesiredStateSnapshot struct {
-	DesiredRevision int64
-	DesiredHash     string
-	InstallationID  string
-	PetID           string
-	ReleaseID       string
-	UserID          string
-	DeviceID        string
-	RuntimeID       string
-	EnsureAbsent    bool
+	DesiredRevision  int64
+	DesiredHash      string
+	InstallationID   string
+	PetID            string
+	ReleaseID        string
+	UserID           string
+	DeviceID         string
+	RuntimeID        string
+	EnsureAbsent     bool
 	DefaultActionKey string
 }
 
@@ -536,8 +536,8 @@ func (c *Coordinator) executeSwitch(ctx context.Context, req SwitchRequest, idem
 	}
 
 	if err := c.runtimePublisher.PublishDesiredState(ctx, req.DeviceCtx, &DesiredStateSnapshot{
-		DesiredRevision: desiredRev,
-		InstallationID:  req.SourceInstallationID,
+		DesiredRevision:  desiredRev,
+		InstallationID:   req.SourceInstallationID,
 		ReleaseID:        req.TargetReleaseID,
 		UserID:           req.DeviceCtx.UserID,
 		DeviceID:         req.DeviceCtx.DeviceID,

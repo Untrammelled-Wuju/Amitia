@@ -145,6 +145,8 @@ func (w *RecoveryWorker) recoverOperation(ctx context.Context, op *operation.Ins
 		return w.recoverCommitOperation(ctx, op, lease)
 	case operation.TypeSwitch:
 		return w.recoverSwitchOperation(ctx, op, lease)
+	case operation.TypeUninstall, operation.TypeEnable, operation.TypeDisable, operation.TypeRecenter, operation.TypeSettings, operation.TypeDefaultAction:
+		return w.recoverDesiredStateOperation(ctx, op, lease)
 	default:
 		return nil
 	}
@@ -208,6 +210,18 @@ func (w *RecoveryWorker) recoverSwitchOperation(ctx context.Context, op *operati
 	}
 	if w.switchRecovery != nil {
 		return w.switchRecovery.Recover(ctx, op, journal)
+	}
+	return nil
+}
+
+func (w *RecoveryWorker) recoverDesiredStateOperation(ctx context.Context, op *operation.InstallationOperation, lease *operation.Lease) error {
+	if op.Stage == operation.OpStageWaitingRuntimeACK || op.Stage == operation.OpStageRuntimeCommandEnqueued {
+		if w.runtimeRecovery != nil {
+			return w.runtimeRecovery.Recover(ctx, op, &RecoveryCommitJournal{
+				OperationID: op.ID,
+				Stage:       op.Stage,
+			})
+		}
 	}
 	return nil
 }

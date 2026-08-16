@@ -69,22 +69,22 @@ type StepFunc func() error
 type BatchedStepFunc func(batchOffset, batchSize int) (processed int, conflicts int, err error)
 
 type MigrationOperation struct {
-	ID                  string         `json:"id"`
-	PlanID              string         `json:"planId"`
-	SourceVersion       string         `json:"sourceVersion"`
-	TargetVersion       string         `json:"targetVersion"`
-	Stage               MigrationStage `json:"stage"`
-	Checkpoint          string         `json:"checkpoint"`
-	ProcessedCount      int64          `json:"processedCount"`
-	ConflictCount       int64          `json:"conflictCount"`
-	BackupID            string         `json:"backupId,omitempty"`
-	Lease               string         `json:"lease,omitempty"`
-	VerifiedReadCutover bool           `json:"verifiedReadCutover"`
-	VerifiedWriteCutover bool          `json:"verifiedWriteCutover"`
-	Error               string         `json:"error,omitempty"`
-	StartedAt           string         `json:"startedAt"`
-	UpdatedAt           string         `json:"updatedAt"`
-	CompletedAt         string         `json:"completedAt,omitempty"`
+	ID                   string         `json:"id"`
+	PlanID               string         `json:"planId"`
+	SourceVersion        string         `json:"sourceVersion"`
+	TargetVersion        string         `json:"targetVersion"`
+	Stage                MigrationStage `json:"stage"`
+	Checkpoint           string         `json:"checkpoint"`
+	ProcessedCount       int64          `json:"processedCount"`
+	ConflictCount        int64          `json:"conflictCount"`
+	BackupID             string         `json:"backupId,omitempty"`
+	Lease                string         `json:"lease,omitempty"`
+	VerifiedReadCutover  bool           `json:"verifiedReadCutover"`
+	VerifiedWriteCutover bool           `json:"verifiedWriteCutover"`
+	Error                string         `json:"error,omitempty"`
+	StartedAt            string         `json:"startedAt"`
+	UpdatedAt            string         `json:"updatedAt"`
+	CompletedAt          string         `json:"completedAt,omitempty"`
 }
 
 type MigrationConflict struct {
