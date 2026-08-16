@@ -45,25 +45,22 @@ import { DragController } from "./drag-controller";
 import type { DragEvent, DragState } from "./drag-controller";
 import { ClickThroughController } from "./click-through-controller";
 import { PetLogger } from "./logger";
-import { RuntimeBridgeClient } from "./runtime-bridge-client";
 import { getRuntimeId, getDeviceId } from "./runtime-identity";
+import type { PetInstanceSummary } from "./runtime-bridge-client";
+import {
+  DesktopRuntimeHandlerV2,
+  type RuntimeHandlerConfig,
+  type RuntimeHandlerHooks,
+  type RuntimeHandlerState,
+} from "../../desktop-pet/runtime/runtime-handler-v2";
+import type { RuntimeCommandExecutionResult } from "./runtime-v2-command-adapter";
 import type {
-  RuntimeBridgeConfig,
-  RuntimeBridgeCallbacks,
-  PetInstanceSummary,
-  CommandResultPayload,
-  SpawnPayload,
-  SyncPayload,
-  RuntimeMessage,
-  WelcomePayload,
-} from "./runtime-bridge-client";
-import { getBackendSessionClient } from "../backend-session-client";
-import type {
+  RuntimeSessionContext,
   ClickPayload,
   DragPayload,
   PlaybackPayload,
-  RuntimeSessionContext,
 } from "../../shared/runtime-protocol";
+import { getBackendSessionClient } from "../backend-session-client";
 import type {
   ClickThroughMode,
   DesktopPetWindowOptions,
@@ -347,13 +344,17 @@ export class DesktopPetManager {
   private dragController: DragController | null = null;
   private clickThroughController: ClickThroughController | null = null;
 
-  private bridgeClient: RuntimeBridgeClient | null = null;
+  private runtimeHandler: DesktopRuntimeHandlerV2 | null = null;
   private bridgeReconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private bridgeStarted = false;
   private currentActionKey: string | null = null;
   private currentDragId: string | null = null;
   private currentPlaybackId: string | null = null;
   private currentCommandId: string | null = null;
+  private lastAppliedDesiredRevision = 0;
+  private petInstances: PetInstanceSummary[] = [];
+  private rendererHealthy = true;
+  private sessionContext: RuntimeSessionContext | null = null;
 
   private recoveryHandlersAttached = false;
   private recoveryInProgress = false;
