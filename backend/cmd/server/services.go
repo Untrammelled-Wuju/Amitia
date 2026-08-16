@@ -8,8 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
-	"runtime"
+		"path/filepath"
+	goRuntime "runtime"
 	"strings"
 	"sync"
 	"time"
@@ -433,10 +433,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	releaseEventPublisher := release.NewReleaseEventPublisher(releaseRepo)
 	newReleaseService := release.NewReleaseService(releaseRepo, gateReader, releaseStoragePort, releaseEventPublisher)
 
-	kernelBuilder.WithDesktopPetPluginCapabilities(integration.NewProductionCapabilities(integration.ProductionCapabilitiesOptions{
+		kernelBuilder.WithDesktopPetPluginCapabilities(integration.NewProductionCapabilities(integration.ProductionCapabilitiesOptions{
 		InstallationRepo: installationRepo,
-		ReleaseService:   newReleaseService,
-		RuntimeFacade:    runtimeV2Facade,
+		ReleaseService:   &integration.ReleaseServiceAdapter{Inner: newReleaseService},
+		RuntimeFacade:    &integration.RuntimeFacadeAdapter{Inner: runtimeV2Facade},
 	}))
 
 	if bootstrap != nil {
@@ -1144,8 +1144,8 @@ func newDeviceAgentServices(ctx *app.AppContext, graphSvc graph.Service, bootstr
 		log.Warn("kernel recovery warning: ", err)
 	}
 
-	// R19: Detect platform from runtime instead of hardcoding Windows
-	deviceAgentRuntime, err := devicemesh.NewDeviceAgentRuntime(config.AppCfg.Storage.DataDir, platformFromGOOS(runtime.GOOS))
+		// R19: Detect platform from runtime instead of hardcoding Windows
+	deviceAgentRuntime, err := devicemesh.NewDeviceAgentRuntime(config.AppCfg.Storage.DataDir, platformFromGOOS(goRuntime.GOOS))
 	if err != nil {
 		log.Warn("device-mesh agent runtime unavailable: ", err)
 	}
