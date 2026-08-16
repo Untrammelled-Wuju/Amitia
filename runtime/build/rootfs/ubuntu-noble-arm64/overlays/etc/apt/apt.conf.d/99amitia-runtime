@@ -1,6 +1,0 @@
-APT::Install-Recommends "false";
-APT::Install-Suggests "false";
-Acquire::Languages "none";
-Dpkg::Use-Pty "0";
-APT::Get::Assume-Yes "true";
-APT::Get::AllowUnauthenticated "false";
