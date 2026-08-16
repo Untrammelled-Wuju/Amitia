@@ -421,7 +421,7 @@ func BuildBackgroundRemovalExtension(version string) Definition {
 			Version:         ver,
 			ManifestVersion: 1,
 			Domain:          domain.ExtensionDomainGeneral,
-			Placement:       domain.ExtensionPlacementCore,
+			Placement:       domain.ExtensionPlacementCloud,
 			Publisher: domain.PublisherReference{
 				PublisherID: "com.amitia",
 				DisplayName: "Amitia",
