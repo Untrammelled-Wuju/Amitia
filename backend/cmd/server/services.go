@@ -389,7 +389,14 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithMediaService(mediaService).
 		WithWorkspaceService(workspaceService).
 		WithBrowserProvider(browserProvider).
-		WithRuntimeProfile(runtimeProfile)
+		WithRuntimeProfile(runtimeProfile).
+		WithBackgroundBootstrapFunc(func() (backgroundremoval.Registry, error) {
+			reg := backgroundremoval.NewRegistry()
+			if err := reg.Register(local.NewLocalProvider(), local.LocalCapabilities()); err != nil {
+				return nil, fmt.Errorf("register local background provider: %w", err)
+			}
+			return reg, nil
+		})
 
 	installationRepo := installation.NewRepository(ctx.DB, ctx)
 	runtimeConfig := runtime.DefaultRuntimeConfig()
@@ -549,11 +556,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 	runtimeQueue := queue.NewSQLiteRuntimeQueueStore(ctx.DB)
 	deliveryStore := delivery.NewSQLiteDeliveryStore(ctx.DB)
-	channelResolver := delivery.NewMapChannelResolverWith([]delivery.ChannelAdapter{
-		delivery.NewWebChannelAdapter(),
-		delivery.NewQQChannelAdapter("http://127.0.0.1:19877"),
-		delivery.NewWechatChannelAdapter("http://127.0.0.1:19876"),
-	})
+	channelResolver := delivery.BuildChannelResolverFromConfig()
 	deliveryWorker := delivery.NewWorker(deliveryStore, channelResolver, delivery.DefaultWorkerConfig())
 	deliveryAdapter := &chatDeliveryAdapter{store: deliveryStore}
 	chatSvc.SetDeliveryStore(deliveryAdapter)
