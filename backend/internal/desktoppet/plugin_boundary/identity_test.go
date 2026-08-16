@@ -97,12 +97,12 @@ func TestParseContributionRef(t *testing.T) {
 
 func TestContributionKindParsing(t *testing.T) {
 	cases := map[string]ContributionKind{
-		"pet_resource":              KindResource,
-		"pet_action":                KindAction,
-		"pet_runtime_capability":    KindRuntime,
+		"pet_resource":                   KindResource,
+		"pet_action":                     KindAction,
+		"pet_runtime_capability":         KindRuntime,
 		"pet_floating_window_capability": KindFloatingWindow,
-		"":                          KindUnknown,
-		"garbage":                   KindUnknown,
+		"":                               KindUnknown,
+		"garbage":                        KindUnknown,
 	}
 	for input, want := range cases {
 		if got := ParseContributionKind(input); got != want {

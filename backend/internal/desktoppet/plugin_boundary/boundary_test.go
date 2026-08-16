@@ -221,10 +221,18 @@ func TestBoundaryMissingProvider_NotCrash(t *testing.T) {
 	ctx := context.Background()
 
 	for _, fn := range []func() error{
-		func() error { return bound.ValidateActionInvocation(ctx, ContributionRef{ExtensionID: "com/x", PluginID: "p", ContributionID: "c"}) },
-		func() error { return bound.ValidateResourceAccess(ctx, ContributionRef{ExtensionID: "com/x", PluginID: "p", ContributionID: "c"}) },
-		func() error { return bound.ValidateRuntimeCapability(ctx, ContributionRef{ExtensionID: "com/x", PluginID: "p", ContributionID: "c"}) },
-		func() error { return bound.ValidateFloatingWindowScope(ctx, ContributionRef{ExtensionID: "com/x", PluginID: "p", ContributionID: "c"}, "show") },
+		func() error {
+			return bound.ValidateActionInvocation(ctx, ContributionRef{ExtensionID: "com/x", PluginID: "p", ContributionID: "c"})
+		},
+		func() error {
+			return bound.ValidateResourceAccess(ctx, ContributionRef{ExtensionID: "com/x", PluginID: "p", ContributionID: "c"})
+		},
+		func() error {
+			return bound.ValidateRuntimeCapability(ctx, ContributionRef{ExtensionID: "com/x", PluginID: "p", ContributionID: "c"})
+		},
+		func() error {
+			return bound.ValidateFloatingWindowScope(ctx, ContributionRef{ExtensionID: "com/x", PluginID: "p", ContributionID: "c"}, "show")
+		},
 	} {
 		if err := fn(); err == nil {
 			t.Error("expected validation error")
