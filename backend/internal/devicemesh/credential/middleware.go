@@ -6,9 +6,19 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/u-ai/backend/internal/devicemesh/bootstrap"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
+
+type TicketSnapshot struct {
+	UserID    runtimeidentity.UserID
+	DeviceID  runtimeidentity.DeviceID
+	RuntimeID runtimeidentity.RuntimeID
+	ExpiresAt time.Time
+}
+
+type BootstrapTicketValidator interface {
+	Validate(ctx context.Context, rawTicket string) (*TicketSnapshot, error)
+}
 
 type DeviceRuntimePrincipal struct {
 	CredentialID string
@@ -76,7 +86,7 @@ func DeviceAuthMiddleware(svc *Service) gin.HandlerFunc {
 	}
 }
 
-func BootstrapTicketAuthMiddleware(svc *Service, bootstrapSvc *bootstrap.Service) gin.HandlerFunc {
+func BootstrapTicketAuthMiddleware(svc *Service, validator BootstrapTicketValidator) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		header := c.GetHeader("Authorization")
 		var rawTicket string
@@ -88,7 +98,7 @@ func BootstrapTicketAuthMiddleware(svc *Service, bootstrapSvc *bootstrap.Service
 			return
 		}
 
-		ticket, err := bootstrapSvc.Validate(c.Request.Context(), rawTicket)
+		snapshot, err := validator.Validate(c.Request.Context(), rawTicket)
 		if err != nil {
 			code := "mesh.bootstrap_invalid"
 			if strings.Contains(err.Error(), "expired") {
@@ -103,16 +113,25 @@ func BootstrapTicketAuthMiddleware(svc *Service, bootstrapSvc *bootstrap.Service
 		}
 
 		principal := DeviceRuntimePrincipal{
-			UserID:    ticket.UserID,
-			DeviceID:  ticket.DeviceID,
-			RuntimeID: ticket.RuntimeID,
-			ExpiresAt: ticket.ExpiresAt,
+			UserID:    snapshot.UserID,
+			DeviceID:  snapshot.DeviceID,
+			RuntimeID: snapshot.RuntimeID,
+			ExpiresAt: snapshot.ExpiresAt,
 		}
 
 		c.Set(string(principalKey), principal)
-		c.Set(string(bootstrapTicketKey), ticket)
+		c.Set(string(bootstrapTicketKey), snapshot)
 		c.Next()
 	}
+}
+
+func GinBootstrapTicket(c *gin.Context) (*TicketSnapshot, bool) {
+	v, exists := c.Get(string(bootstrapTicketKey))
+	if !exists {
+		return nil, false
+	}
+	t, ok := v.(*TicketSnapshot)
+	return t, ok
 }
 
 func PrincipalFromContext(ctx context.Context) (DeviceRuntimePrincipal, bool) {
@@ -127,15 +146,6 @@ func GinPrincipal(c *gin.Context) (DeviceRuntimePrincipal, bool) {
 	}
 	p, ok := v.(DeviceRuntimePrincipal)
 	return p, ok
-}
-
-func GinBootstrapTicket(c *gin.Context) (*bootstrap.BootstrapTicket, bool) {
-	v, exists := c.Get(string(bootstrapTicketKey))
-	if !exists {
-		return nil, false
-	}
-	t, ok := v.(*bootstrap.BootstrapTicket)
-	return t, ok
 }
 
 func DeviceAuthCredentialWS(svc *Service, handler WSHandler) gin.HandlerFunc {

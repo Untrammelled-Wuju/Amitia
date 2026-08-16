@@ -7,18 +7,20 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/u-ai/backend/internal/devicemesh/credential"
-	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
+type CredExchangeFunc func(ctx context.Context, tx *sql.Tx, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, now time.Time, credHash string, expires time.Time) (string, string, error)
+
+type DeviceTrustFunc func(ctx context.Context, tx *sql.Tx, deviceID runtimeidentity.DeviceID) error
+
 type Service struct {
 	repo       *Repository
-	credRepo   *credential.Repository
-	deviceReg  *host_registry.Registry
 	db         *sql.DB
 	ticketTTL  time.Duration
-	credTTL     int64
+	credTTL    int64
+	exchangeFn CredExchangeFunc
+	trustFn    DeviceTrustFunc
 }
 
 func NewService(repo *Repository, ttlSeconds int) *Service {
@@ -28,12 +30,12 @@ func NewService(repo *Repository, ttlSeconds int) *Service {
 	}
 }
 
-func NewServiceWithDependencies(repo *Repository, db *sql.DB, credRepo *credential.Repository, deviceReg *host_registry.Registry, ticketTTL int, credTTL int64) *Service {
+func NewServiceWithDependencies(repo *Repository, db *sql.DB, exchangeFn CredExchangeFunc, trustFn DeviceTrustFunc, ticketTTL int, credTTL int64) *Service {
 	return &Service{
 		repo:      repo,
 		db:        db,
-		credRepo:  credRepo,
-		deviceReg: deviceReg,
+		exchangeFn: exchangeFn,
+		trustFn:    trustFn,
 		ticketTTL: time.Duration(ticketTTL) * time.Second,
 		credTTL:   credTTL,
 	}
@@ -102,7 +104,18 @@ func (s *Service) Consume(ctx context.Context, rawTicket string) (*BootstrapTick
 	return ticket, nil
 }
 
-func (s *Service) Validate(ctx context.Context, rawTicket string) (*BootstrapTicket, error) {
+type TicketSnapshot struct {
+	UserID    runtimeidentity.UserID
+	DeviceID  runtimeidentity.DeviceID
+	RuntimeID runtimeidentity.RuntimeID
+	ExpiresAt time.Time
+}
+
+type TicketValidator interface {
+	Validate(ctx context.Context, rawTicket string) (*TicketSnapshot, error)
+}
+
+func (s *Service) Validate(ctx context.Context, rawTicket string) (*TicketSnapshot, error) {
 	hash := HashRawTicket(rawTicket)
 	ticket, err := s.repo.GetByHash(ctx, hash)
 	if err != nil {
@@ -122,75 +135,63 @@ func (s *Service) Validate(ctx context.Context, rawTicket string) (*BootstrapTic
 	if ticket.Status == TicketRevoked {
 		return nil, fmt.Errorf("bootstrap: ticket revoked")
 	}
-	return ticket, nil
+	return &TicketSnapshot{
+		UserID:    ticket.UserID,
+		DeviceID:  ticket.DeviceID,
+		RuntimeID: ticket.RuntimeID,
+		ExpiresAt: ticket.ExpiresAt,
+	}, nil
 }
 
-func (s *Service) Exchange(ctx context.Context, rawTicket string, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (*credential.DeviceRuntimeCredential, string, error) {
-	if s.db == nil || s.credRepo == nil || s.deviceReg == nil {
-		return nil, "", fmt.Errorf("bootstrap: exchange not fully configured")
+func (s *Service) Exchange(ctx context.Context, rawTicket string, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (string, string, error) {
+	if s.db == nil || s.exchangeFn == nil || s.trustFn == nil {
+		return "", "", fmt.Errorf("bootstrap: exchange not fully configured")
 	}
 
 	hash := HashRawTicket(rawTicket)
 	ticket, err := s.repo.GetByHash(ctx, hash)
 	if err != nil {
-		return nil, "", err
+		return "", "", err
 	}
 	if ticket == nil {
-		return nil, "", fmt.Errorf("bootstrap: ticket not found")
+		return "", "", fmt.Errorf("bootstrap: ticket not found")
 	}
 
 	now := time.Now().UTC()
 	if ticket.Status != TicketActive {
-		return nil, "", fmt.Errorf("bootstrap: ticket not active")
+		return "", "", fmt.Errorf("bootstrap: ticket not active")
 	}
 	if now.After(ticket.ExpiresAt) {
-		return nil, "", fmt.Errorf("bootstrap: ticket expired")
+		return "", "", fmt.Errorf("bootstrap: ticket expired")
 	}
-
-	rawCred, err := credential.GenerateRawCredential()
-	if err != nil {
-		return nil, "", err
-	}
-	credHash := credential.HashRawCredential(rawCred)
 
 	expires := now.Add(time.Duration(s.credTTL) * time.Second)
-	newCred := &credential.DeviceRuntimeCredential{
-		ID:             uuid.New().String(),
-		UserID:         ticket.UserID,
-		DeviceID:       ticket.DeviceID,
-		RuntimeID:      ticket.RuntimeID,
-		CredentialHash: credHash,
-		Status:         credential.CredentialActive,
-		CreatedAt:      now,
-		ExpiresAt:      expires,
-		LastUsedAt:     now,
-		Revision:       1,
-	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
-		return nil, "", fmt.Errorf("bootstrap: begin tx: %w", err)
+		return "", "", fmt.Errorf("bootstrap: begin tx: %w", err)
 	}
 	defer tx.Rollback()
 
 	consumed, err := s.repo.ConsumeTx(ctx, tx, hash, now)
 	if err != nil {
-		return nil, "", fmt.Errorf("bootstrap: consume: %w", err)
+		return "", "", fmt.Errorf("bootstrap: consume: %w", err)
 	}
 	if !consumed {
-		return nil, "", fmt.Errorf("bootstrap: ticket already consumed")
+		return "", "", fmt.Errorf("bootstrap: ticket already consumed")
 	}
 
-	if err := s.credRepo.ExchangeAtomicTx(ctx, tx, ticket.UserID, ticket.DeviceID, ticket.RuntimeID, now, newCred); err != nil {
-		return nil, "", fmt.Errorf("credential: exchange: %w", err)
+	credID, rawCred, err := s.exchangeFn(ctx, tx, ticket.UserID, ticket.DeviceID, ticket.RuntimeID, now, hash, expires)
+	if err != nil {
+		return "", "", fmt.Errorf("credential: exchange: %w", err)
 	}
 
-	if err := s.deviceReg.MarkDeviceTrustedTx(ctx, tx, deviceID); err != nil {
-		return nil, "", fmt.Errorf("device: mark trusted: %w", err)
+	if err := s.trustFn(ctx, tx, deviceID); err != nil {
+		return "", "", fmt.Errorf("device: mark trusted: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return nil, "", fmt.Errorf("bootstrap: commit: %w", err)
+		return "", "", fmt.Errorf("bootstrap: commit: %w", err)
 	}
 
 	ticket.Status = TicketConsumed
@@ -198,7 +199,7 @@ func (s *Service) Exchange(ctx context.Context, rawTicket string, deviceID runti
 	ticket.ConsumedAt = &consumedAt
 	ticket.UpdatedAt = now
 
-	return newCred, rawCred, nil
+	return credID, rawCred, nil
 }
 
 func (s *Service) RevokeExpired(ctx context.Context) (int64, error) {
