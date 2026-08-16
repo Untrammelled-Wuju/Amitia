@@ -107,12 +107,12 @@ func (m *RequestLifecycleManager) HandleOutgoingRequest(
 	fp := ComputeRequestFingerprint(request)
 
 	if cached, ok := m.cache.Lookup(key, fp); ok {
-	return &PendingRequest{
-		Key:     key,
-		State:   RequestStateCompleted,
-		Request: request,
-		result:  clonedEnvelope(cached),
-	}, nil
+		return &PendingRequest{
+			Key:     key,
+			State:   RequestStateCompleted,
+			Request: request,
+			result:  clonedEnvelope(cached),
+		}, nil
 	}
 
 	deadline, _ := EffectiveDeadline(ctx, customTimeoutMS, m.timeoutCfg, time.Now().UTC())
@@ -133,9 +133,19 @@ func (m *RequestLifecycleManager) HandleOutgoingRequest(
 		Fingerprint: fp,
 	}
 
-	if _, err := m.pending.Register(req); err != nil {
+	registered, err := m.pending.Register(req)
+	if err != nil {
 		cancel()
 		return nil, err
+	}
+
+	if !registered {
+		cancel()
+		existing := m.findPendingByKey(key)
+		if existing != nil {
+			return existing, nil
+		}
+		return nil, NewLifecycleError(LifecycleErrorInternal, domain.ErrInternal, "register returned false without existing request", nil)
 	}
 
 	req.State = RequestStateRunning
@@ -238,15 +248,15 @@ func (m *RequestLifecycleManager) MarkCompleted(key RequestKey, err error) {
 	if err != nil {
 		m.pending.Fail(key, err)
 	} else {
-		m.pending.Remove(key)
+		m.pending.Complete(key, protocol.Envelope{})
 	}
 }
 
 func (m *RequestLifecycleManager) NotifyConnectionDetach(peer ipc.Peer) {
-	runtimeID := string(peer.RuntimeID)
-	serviceID := string(peer.ServiceID)
+	runtimeID := domain.RuntimeInstanceID(peer.RuntimeID)
+	serviceID := domain.ServiceID(peer.ServiceID)
 
-	m.pending.ListByPeer(runtimeID, serviceID)
+	m.pending.CancelByPeer(runtimeID, serviceID)
 }
 
 func (m *RequestLifecycleManager) Shutdown(ctx context.Context) error {
@@ -280,6 +290,17 @@ func keyToPeer(key RequestKey) *ipc.Peer {
 		RuntimeID: key.RuntimeID,
 		ServiceID: key.ServiceID,
 	}
+}
+
+func (m *RequestLifecycleManager) findPendingByKey(key RequestKey) *PendingRequest {
+	reg := m.pending
+	if reg == nil {
+		return nil
+	}
+	if r, ok := reg.(*pendingRequestRegistry); ok {
+		return r.Get(key)
+	}
+	return nil
 }
 
 func findPending(reg PendingRequestRegistry, key RequestKey) *PendingRequest {
