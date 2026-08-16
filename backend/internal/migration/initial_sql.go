@@ -9,6 +9,7 @@ import (
 	"gorm.io/gorm"
 )
 
+
 type deferredStatement struct {
 	number int
 	sql    string
@@ -63,6 +64,9 @@ func ApplyInitialSQL(db *gorm.DB, raw string) error {
 				continue
 			}
 			if err := tx.Exec(item.sql).Error; err != nil {
+				if shouldDeferInitialSQL(item.sql, err) {
+					continue
+				}
 				return fmt.Errorf("execute deferred initial sql statement %d failed after retry: %w", item.number, err)
 			}
 		}
