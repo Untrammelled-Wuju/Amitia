@@ -1,16 +1,18 @@
 import Foundation
 import Intents
 
-public typealias BackendActionDispatcher = @Sendable (String, [String: Any]?) async -> [String: Any]
+public protocol BackendActionDispatcher: AnyObject {
+    func executeAction(actionId: String, payload: [String: Any]?) async -> [String: Any]
+}
 
 public class ShortcutActionGateway: NSObject {
     public static let shared = ShortcutActionGateway()
 
-    private var actionRegistry: [String: ([String: Any]?) async -> [String: Any]] = [:]
+    private var actionRegistry: [String: () async -> [String: Any]] = [:]
     public private(set) var registeredActionIDs: [String] = []
     private var interactionCache: [String: INInteraction] = [:]
 
-    public var backendDispatcher: BackendActionDispatcher?
+    public weak var backendDispatcher: BackendActionDispatcher?
 
     private let curatedActionIDs: Set<String> = [
         "com.amitia.action.chat",
@@ -54,7 +56,7 @@ public class ShortcutActionGateway: NSObject {
         return actionTitles[actionId] ?? actionId
     }
 
-    public func registerAction(_ actionId: String, handler: @escaping ([String: Any]?) async -> [String: Any]) {
+    public func registerAction(_ actionId: String, handler: @escaping () async -> [String: Any]) {
         actionRegistry[actionId] = handler
         if !registeredActionIDs.contains(actionId) {
             registeredActionIDs.append(actionId)
@@ -104,20 +106,24 @@ public class ShortcutActionGateway: NSObject {
     public func executeAction(actionId: String, payload: [String: Any]?) async -> [String: Any] {
         guard let handler = actionRegistry[actionId] else {
             if let dispatcher = backendDispatcher {
-                return await dispatcher(actionId, payload)
+                return await dispatcher.executeAction(actionId: actionId, payload: payload)
             }
             return ["error": "action not found: \(actionId)"]
         }
-        return await handler(payload)
+        return await handler()
     }
 
-    public func executeUnchecked(actionId: String, payload: [String: Any]?) async -> [String: Any]? {
-        guard isCuratedAction(actionId) else { return nil }
-        let result = await executeAction(actionId, payload: payload)
-        if let error = result["error"] as? String {
-            return ["error": error]
+    public func executeUnchecked(actionId: String, payload: [String: Any]?) async -> [String: Any] {
+        guard isCuratedAction(actionId) else {
+            return ["error": "unsupported action: \(actionId)"]
         }
-        return result
+        if let handler = actionRegistry[actionId] {
+            return await handler()
+        }
+        if let dispatcher = backendDispatcher {
+            return await dispatcher.executeAction(actionId: actionId, payload: payload)
+        }
+        return ["error": "no backend dispatcher for action: \(actionId)"]
     }
 
     public func updateShortcuts() {
