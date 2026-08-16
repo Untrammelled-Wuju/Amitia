@@ -40,10 +40,10 @@ func (g *LoginGuardService) CheckBlocked(dimension, key string) bool {
 	return false
 }
 
-func (g *LoginGuardService) RecordFailure(dimension, key string) {
+func (g *LoginGuardService) RecordFailure(dimension, key string) error {
 	guard, err := g.repo.RecordFailure(dimension, key, g.windowDuration)
 	if err != nil || guard == nil {
-		return
+		return err
 	}
 	maxFailures := g.ipMaxFailures
 	if dimension == "username" {
@@ -51,12 +51,15 @@ func (g *LoginGuardService) RecordFailure(dimension, key string) {
 	}
 	if guard.FailureCount >= int64(maxFailures) {
 		until := time.Now().UTC().Add(g.blockDuration)
-		_ = g.repo.BlockGuard(dimension, key, until)
+		if err := g.repo.BlockGuard(dimension, key, until); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func (g *LoginGuardService) ClearFailures(dimension, key string) {
-	_ = g.repo.ClearGuard(dimension, key)
+func (g *LoginGuardService) ClearFailures(dimension, key string) error {
+	return g.repo.ClearGuard(dimension, key)
 }
 
 func GuardKey(dimension, value string) string {

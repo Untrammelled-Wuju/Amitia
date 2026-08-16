@@ -3,19 +3,19 @@ package accountsession
 import "fmt"
 
 type AuditLogger interface {
-	LogLoginSuccess(userID int, sessionID, ip, ua, username string)
-	LogLoginFailed(ip, ua, username, reason string)
-	LogLoginRateLimited(ip, ua, username string)
-	LogRefreshSuccess(sessionID string, userID int, ip, ua string)
-	LogRefreshFailed(sessionID string, userID int, ip, ua, reason string)
-	LogRefreshReuseDetected(sessionID string, userID int, ip, ua string)
-	LogSessionRevoked(sessionID string, userID int64, reason string)
-	LogSessionsRevoked(actorSessionID string, userID int64, count int)
-	LogLogoutAll(userID int64)
-	LogPasswordChanged(userID int64, sessionID string)
-	LogRecoveryCodesGenerated(userID int64, count int)
-	LogRecoveryCodeUsed(userID int64, codeID string)
-	LogRecoveryCodeFailed(userID int64, reason string)
+	LogLoginSuccess(userID int, sessionID, ip, ua, username string) error
+	LogLoginFailed(ip, ua, username, reason string) error
+	LogLoginRateLimited(ip, ua, username string) error
+	LogRefreshSuccess(sessionID string, userID int, ip, ua string) error
+	LogRefreshFailed(sessionID string, userID int, ip, ua, reason string) error
+	LogRefreshReuseDetected(sessionID string, userID int, ip, ua string) error
+	LogSessionRevoked(sessionID string, userID int64, reason string) error
+	LogSessionsRevoked(actorSessionID string, userID int64, count int) error
+	LogLogoutAll(userID int64) error
+	LogPasswordChanged(userID int64, sessionID string) error
+	LogRecoveryCodesGenerated(userID int64, count int) error
+	LogRecoveryCodeUsed(userID int64, codeID string) error
+	LogRecoveryCodeFailed(userID int64, reason string) error
 }
 
 type AuditRepository interface {
@@ -49,7 +49,7 @@ func NewAuditLogger(repo AuditRepository) AuditLogger {
 	return &auditLogger{repo: repo}
 }
 
-func (a *auditLogger) LogLoginSuccess(userID int, sessionID, ip, ua, username string) {
+func (a *auditLogger) LogLoginSuccess(userID int, sessionID, ip, ua, username string) error {
 	event := &AuditEvent{
 		EventID:    GeneratePublicID("ae_"),
 		EventType:  "auth.login_succeeded",
@@ -62,10 +62,10 @@ func (a *auditLogger) LogLoginSuccess(userID int, sessionID, ip, ua, username st
 		IPAddress:  ip,
 		UserAgent:  ua,
 	}
-	_ = a.repo.Insert(event)
+	return a.repo.Insert(event)
 }
 
-func (a *auditLogger) LogLoginFailed(ip, ua, username, reason string) {
+func (a *auditLogger) LogLoginFailed(ip, ua, username, reason string) error {
 	event := &AuditEvent{
 		EventID:    GeneratePublicID("ae_"),
 		EventType:  "auth.login_failed",
@@ -77,10 +77,10 @@ func (a *auditLogger) LogLoginFailed(ip, ua, username, reason string) {
 		UserAgent:  ua,
 		ReasonCode: reason,
 	}
-	_ = a.repo.Insert(event)
+	return a.repo.Insert(event)
 }
 
-func (a *auditLogger) LogLoginRateLimited(ip, ua, username string) {
+func (a *auditLogger) LogLoginRateLimited(ip, ua, username string) error {
 	event := &AuditEvent{
 		EventID:    GeneratePublicID("ae_"),
 		EventType:  "auth.login_rate_limited",
@@ -91,10 +91,10 @@ func (a *auditLogger) LogLoginRateLimited(ip, ua, username string) {
 		IPAddress:  ip,
 		UserAgent:  ua,
 	}
-	_ = a.repo.Insert(event)
+	return a.repo.Insert(event)
 }
 
-func (a *auditLogger) LogRefreshSuccess(sessionID string, userID int, ip, ua string) {
+func (a *auditLogger) LogRefreshSuccess(sessionID string, userID int, ip, ua string) error {
 	event := &AuditEvent{
 		EventID:    GeneratePublicID("ae_"),
 		EventType:  "auth.refresh_succeeded",
@@ -107,10 +107,10 @@ func (a *auditLogger) LogRefreshSuccess(sessionID string, userID int, ip, ua str
 		IPAddress:  ip,
 		UserAgent:  ua,
 	}
-	_ = a.repo.Insert(event)
+	return a.repo.Insert(event)
 }
 
-func (a *auditLogger) LogRefreshFailed(sessionID string, userID int, ip, ua, reason string) {
+func (a *auditLogger) LogRefreshFailed(sessionID string, userID int, ip, ua, reason string) error {
 	event := &AuditEvent{
 		EventID:    GeneratePublicID("ae_"),
 		EventType:  "auth.refresh_failed",
@@ -124,10 +124,10 @@ func (a *auditLogger) LogRefreshFailed(sessionID string, userID int, ip, ua, rea
 		UserAgent:  ua,
 		ReasonCode: reason,
 	}
-	_ = a.repo.Insert(event)
+	return a.repo.Insert(event)
 }
 
-func (a *auditLogger) LogRefreshReuseDetected(sessionID string, userID int, ip, ua string) {
+func (a *auditLogger) LogRefreshReuseDetected(sessionID string, userID int, ip, ua string) error {
 	event := &AuditEvent{
 		EventID:    GeneratePublicID("ae_"),
 		EventType:  "auth.refresh_reuse_detected",
@@ -140,10 +140,10 @@ func (a *auditLogger) LogRefreshReuseDetected(sessionID string, userID int, ip, 
 		IPAddress:  ip,
 		UserAgent:  ua,
 	}
-	_ = a.repo.Insert(event)
+	return a.repo.Insert(event)
 }
 
-func (a *auditLogger) LogSessionRevoked(sessionID string, userID int64, reason string) {
+func (a *auditLogger) LogSessionRevoked(sessionID string, userID int64, reason string) error {
 	event := &AuditEvent{
 		EventID:    GeneratePublicID("ae_"),
 		EventType:  "auth.session_revoked",
@@ -155,10 +155,10 @@ func (a *auditLogger) LogSessionRevoked(sessionID string, userID int64, reason s
 		AuthMethod: "jwt",
 		ReasonCode: reason,
 	}
-	_ = a.repo.Insert(event)
+	return a.repo.Insert(event)
 }
 
-func (a *auditLogger) LogSessionsRevoked(actorSessionID string, userID int64, count int) {
+func (a *auditLogger) LogSessionsRevoked(actorSessionID string, userID int64, count int) error {
 	event := &AuditEvent{
 		EventID:    GeneratePublicID("ae_"),
 		EventType:  "auth.sessions_revoked",
@@ -169,10 +169,10 @@ func (a *auditLogger) LogSessionsRevoked(actorSessionID string, userID int64, co
 		ActorType:  "user",
 		AuthMethod: "jwt",
 	}
-	_ = a.repo.Insert(event)
+	return a.repo.Insert(event)
 }
 
-func (a *auditLogger) LogLogoutAll(userID int64) {
+func (a *auditLogger) LogLogoutAll(userID int64) error {
 	event := &AuditEvent{
 		EventID:    GeneratePublicID("ae_"),
 		EventType:  "auth.logout_all",
@@ -182,10 +182,10 @@ func (a *auditLogger) LogLogoutAll(userID int64) {
 		ActorType:  "user",
 		AuthMethod: "jwt",
 	}
-	_ = a.repo.Insert(event)
+	return a.repo.Insert(event)
 }
 
-func (a *auditLogger) LogPasswordChanged(userID int64, sessionID string) {
+func (a *auditLogger) LogPasswordChanged(userID int64, sessionID string) error {
 	event := &AuditEvent{
 		EventID:    GeneratePublicID("ae_"),
 		EventType:  "auth.password_changed",
@@ -196,10 +196,10 @@ func (a *auditLogger) LogPasswordChanged(userID int64, sessionID string) {
 		ActorType:  "user",
 		AuthMethod: "jwt",
 	}
-	_ = a.repo.Insert(event)
+	return a.repo.Insert(event)
 }
 
-func (a *auditLogger) LogRecoveryCodesGenerated(userID int64, count int) {
+func (a *auditLogger) LogRecoveryCodesGenerated(userID int64, count int) error {
 	event := &AuditEvent{
 		EventID:    GeneratePublicID("ae_"),
 		EventType:  "auth.recovery_codes_generated",
@@ -209,10 +209,10 @@ func (a *auditLogger) LogRecoveryCodesGenerated(userID int64, count int) {
 		ActorType:  "user",
 		AuthMethod: "jwt",
 	}
-	_ = a.repo.Insert(event)
+	return a.repo.Insert(event)
 }
 
-func (a *auditLogger) LogRecoveryCodeUsed(userID int64, codeID string) {
+func (a *auditLogger) LogRecoveryCodeUsed(userID int64, codeID string) error {
 	event := &AuditEvent{
 		EventID:    GeneratePublicID("ae_"),
 		EventType:  "auth.recovery_code_used",
@@ -222,10 +222,10 @@ func (a *auditLogger) LogRecoveryCodeUsed(userID int64, codeID string) {
 		ActorType:  "user",
 		AuthMethod: "jwt",
 	}
-	_ = a.repo.Insert(event)
+	return a.repo.Insert(event)
 }
 
-func (a *auditLogger) LogRecoveryCodeFailed(userID int64, reason string) {
+func (a *auditLogger) LogRecoveryCodeFailed(userID int64, reason string) error {
 	event := &AuditEvent{
 		EventID:    GeneratePublicID("ae_"),
 		EventType:  "auth.recovery_code_failed",
@@ -236,7 +236,7 @@ func (a *auditLogger) LogRecoveryCodeFailed(userID int64, reason string) {
 		AuthMethod: "jwt",
 		ReasonCode: reason,
 	}
-	_ = a.repo.Insert(event)
+	return a.repo.Insert(event)
 }
 
 func itoa(i int) string {
