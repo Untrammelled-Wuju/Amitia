@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/devicemesh/agent"
 	"github.com/u-ai/backend/internal/devicemesh/bootstrap"
 	"github.com/u-ai/backend/internal/devicemesh/credential"
@@ -37,7 +38,33 @@ func NewCloudRuntimeWithHub(db *sql.DB, deviceReg *host_registry.Registry, hub *
 	bootstrapRepo := bootstrap.NewRepository(db)
 	credRepo := credential.NewRepository(db)
 	credSvc := credential.NewService(credRepo, DeviceCredentialTTL)
-	bootstrapSvc := bootstrap.NewServiceWithDependencies(bootstrapRepo, db, credRepo, deviceReg, BootstrapTicketTTL, DeviceCredentialTTL)
+
+	exchangeFn := func(ctx context.Context, tx *sql.Tx, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, now time.Time, credHash string, expires time.Time) (string, string, error) {
+		credID := uuid.New().String()
+		newCred := &credential.DeviceRuntimeCredential{
+			ID:             credID,
+			UserID:         userID,
+			DeviceID:       deviceID,
+			RuntimeID:      runtimeID,
+			CredentialHash: credHash,
+			Status:         credential.CredentialActive,
+			CreatedAt:      now,
+			ExpiresAt:      expires,
+			LastUsedAt:     now,
+			Revision:       1,
+		}
+		if err := credRepo.ExchangeAtomicTx(ctx, tx, userID, deviceID, runtimeID, now, newCred); err != nil {
+			return "", "", err
+		}
+		rawCred := credential.HashRawCredential(credHash)
+		return credID, rawCred, nil
+	}
+
+	trustFn := func(ctx context.Context, tx *sql.Tx, deviceID runtimeidentity.DeviceID) error {
+		return deviceReg.MarkDeviceTrustedTx(ctx, tx, deviceID)
+	}
+
+	bootstrapSvc := bootstrap.NewServiceWithDependencies(bootstrapRepo, db, exchangeFn, trustFn, BootstrapTicketTTL, DeviceCredentialTTL)
 
 	probe := server.NewProbeService(hub)
 
