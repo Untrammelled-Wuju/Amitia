@@ -161,6 +161,7 @@ func DefaultMigrations() []Migration {
 		AccountSessionSecurityMigration(),
 		SyncChangeLogMigration(),
 		SyncCursorMigration(),
+		SyncSequenceMigration(),
 		ExecutionResumeMigration(),
 	}
 }
@@ -189,6 +190,20 @@ func ExecutionResumeMigration() Migration {
 			s.CreateIndex("idx_execution_resumes_state", "execution_resumes", []string{"resume_state"}, false)
 			s.CreateIndex("idx_execution_resumes_root", "execution_resumes", []string{"root_execution_id"}, false)
 			s.CreateIndex("idx_execution_resumes_acq_txn", "execution_resumes", []string{"acquisition_transaction_id"}, false)
+			return nil
+		},
+	}
+}
+
+func SyncSequenceMigration() Migration {
+	return Migration{
+		Version: "20260817001",
+		Name:    "create_sync_sequence_table",
+		Up: func(s *Step) error {
+			s.CreateTable(`CREATE TABLE IF NOT EXISTS sync_sequence (
+				id INTEGER PRIMARY KEY CHECK (id = 1),
+				seq INTEGER NOT NULL DEFAULT 0
+			)`)
 			return nil
 		},
 	}
