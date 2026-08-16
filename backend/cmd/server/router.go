@@ -679,9 +679,8 @@ func registerImportStagingRoutes(r *gin.RouterGroup, reg *desktoppetsecurity.Pat
 }
 
 func registerSyncRouter(apiGroup *gin.RouterGroup, db *gorm.DB) {
-	syncSvc := sync.NewServiceFromFunc(db, func(mutation sync.ClientMutation) (int64, error) {
-		return 0, nil
-	})
+	syncApplier := sync.NewBusinessApplier(db)
+	syncSvc := sync.NewService(db, syncApplier)
 	syncHandler := sync.NewHandler(syncSvc)
 	syncGroup := apiGroup.Group("/v1/sync")
 	syncGroup.POST("/pull", syncHandler.HandlePull)
