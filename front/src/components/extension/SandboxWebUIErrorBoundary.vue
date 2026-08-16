@@ -3,6 +3,7 @@ import { ref, onErrorCaptured } from "vue";
 
 const error = ref<Error | null>(null);
 const showDetails = ref(false);
+const canShowDetails = import.meta.env.DEV;
 
 onErrorCaptured((err: unknown) => {
   error.value = err instanceof Error ? err : new Error(String(err));
@@ -21,7 +22,7 @@ function reset() {
     <div class="error-boundary__body">
       <div class="error-boundary__title">扩展组件发生错误</div>
       <div class="error-boundary__message">{{ error.message }}</div>
-      <button v-if="!showDetails" class="error-boundary__toggle" @click="showDetails = true">
+      <button v-if="canShowDetails && !showDetails" class="error-boundary__toggle" @click="showDetails = true">
         显示详情
       </button>
       <pre v-if="showDetails" class="error-boundary__details">{{ error.stack }}</pre>
@@ -32,13 +33,13 @@ function reset() {
 </template>
 
 <style scoped>
-.error-boundary { display: flex; align-items: flex-start; gap: 12px; padding: 16px; background: #fef2f2; border: 1px solid #fca5a5; border-radius: 8px; }
-.error-boundary__icon { display: flex; align-items: center; justify-content: center; width: 32px; height: 32px; border-radius: 50%; background: #dc2626; color: white; font-size: 18px; font-weight: bold; flex-shrink: 0; }
+.error-boundary { display: flex; align-items: flex-start; gap: 12px; padding: 12px; background: var(--ac-color-danger-bg); border: 1px solid color-mix(in srgb, var(--ac-color-danger) 32%, var(--plugin-surface-border)); border-radius: var(--radius-sm); }
+.error-boundary__icon { display: flex; align-items: center; justify-content: center; width: 28px; height: 28px; border-radius: 50%; background: var(--ac-color-danger); color: var(--ac-color-text-on-primary); font-size: 14px; font-weight: bold; flex-shrink: 0; }
 .error-boundary__body { flex: 1; min-width: 0; }
-.error-boundary__title { font-size: 14px; font-weight: 600; color: #991b1b; margin-bottom: 4px; }
-.error-boundary__message { font-size: 13px; color: #b91c1c; word-break: break-word; }
-.error-boundary__toggle { margin-top: 8px; padding: 2px 8px; font-size: 11px; color: #4a6cf7; background: transparent; border: none; cursor: pointer; }
-.error-boundary__details { margin-top: 8px; padding: 8px; background: #f5f5f5; border-radius: 4px; font-size: 11px; color: #666; overflow-x: auto; max-height: 200px; }
-.error-boundary__reset { padding: 6px 16px; font-size: 12px; color: #4a6cf7; background: white; border: 1px solid #ddd; border-radius: 4px; cursor: pointer; flex-shrink: 0; }
-.error-boundary__reset:hover { background: #f5f5f5; }
+.error-boundary__title { font-size: 13px; font-weight: 600; color: var(--ac-color-danger); margin-bottom: 4px; }
+.error-boundary__message { font-size: 12px; color: var(--ac-color-danger); word-break: break-word; }
+.error-boundary__toggle { margin-top: 8px; padding: 2px 8px; font-size: 11px; color: var(--ac-color-danger); background: transparent; border: none; cursor: pointer; }
+.error-boundary__details { margin-top: 8px; padding: 8px; background: var(--plugin-muted-bg); border-radius: var(--radius-xs); font-size: 11px; color: var(--text-secondary); overflow-x: auto; max-height: 200px; }
+.error-boundary__reset { padding: 6px 12px; font-size: 12px; color: var(--ac-color-danger); background: transparent; border: 1px solid currentColor; border-radius: var(--radius-xs); cursor: pointer; flex-shrink: 0; }
+.error-boundary__reset:hover { background: color-mix(in srgb, var(--ac-color-danger) 8%, transparent); }
 </style>

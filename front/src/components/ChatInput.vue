@@ -25,9 +25,10 @@ SPDX-License-Identifier: AGPL-3.0-only
         :character-id="currentCharacterId"
         :conversation-id="currentConversationId"
         channel="web"
-        platform="desktop"
+        :platform="hostPlatform"
         :conversation-state="generating ? 'generating' : 'idle'"
         :capabilities="agentSkillNames"
+        :draft="text"
       />
       <div v-if="replyTarget" class="reply-preview-bar">
         <div class="reply-preview-content">
@@ -125,7 +126,8 @@ SPDX-License-Identifier: AGPL-3.0-only
               :width="skillsPanelOpen ? 340 : 240"
               trigger="click"
               :hide-after="0"
-              :teleported="false"
+              :teleported="true"
+              append-to="#amitia-overlay-root"
               transition="composer-add-instant"
               popper-class="composer-add-popper"
               @hide="resetAddMenu"
@@ -393,15 +395,6 @@ SPDX-License-Identifier: AGPL-3.0-only
           </div>
         </div>
 
-        <el-button
-          :type="callActive ? 'danger' : 'default'"
-          :icon="Phone"
-          circle
-          :class="{ 'call-btn-outer': true, 'is-calling': callActive }"
-          :disabled="isInputDisabled"
-          @click="$emit('toggleCall')"
-          title="语音通话"
-        />
       </div>
     </div>
   </div>
@@ -417,7 +410,6 @@ import {
   CloseBold,
   MagicStick,
   Microphone,
-  Phone,
   Picture,
   Plus,
   Promotion,
@@ -509,6 +501,7 @@ const skillsLoading = ref(false);
 const voiceMode = ref(false);
 const currentCharacterId = ref<string>("");
 const currentConversationId = ref<string>("");
+const hostPlatform = window.amitiaDesktop ? "desktop" : "web";
 
 const agentSkillNames = computed(() =>
   agentSkills.value.map((s) => s.name).filter(Boolean),
@@ -808,12 +801,10 @@ defineExpose({ focus, setText, clear: clearText });
 .chat-input-bar {
   display: flex;
   align-items: flex-end;
-  gap: 8px;
-  padding: 10px 12px;
-  border-top: 1px solid var(--tp-glass-border);
-  -webkit-backdrop-filter: blur(var(--tp-glass-blur))
-    saturate(var(--tp-glass-saturate));
-  backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
+  justify-content: center;
+  padding: 12px 24px 16px;
+  border-top: 1px solid var(--surface-border);
+  background: var(--chat-surface-bg);
 }
 
 .hidden-input {
@@ -822,7 +813,8 @@ defineExpose({ focus, setText, clear: clearText });
 
 .composer-stack {
   min-width: 0;
-  flex: 1;
+  flex: 0 1 820px;
+  width: min(100%, 820px);
 }
 
 .composer-input-row {
@@ -839,18 +831,18 @@ defineExpose({ focus, setText, clear: clearText });
   flex: 1;
   gap: 6px;
   padding: 3px 9px;
-  border: 1px solid var(--ac-color-border);
-  border-radius: 18px;
-  background: var(--ac-color-surface);
+  border: 1px solid var(--composer-border);
+  border-radius: var(--radius-composer);
+  background: var(--composer-bg);
+  box-shadow: var(--composer-shadow);
   transition:
     border-color 0.18s ease,
     box-shadow 0.18s ease;
 }
 
 .input-wrapper:focus-within {
-  border-color: var(--ac-color-border-strong);
-  box-shadow: 0 0 0 2px
-    color-mix(in srgb, var(--ac-color-primary) 10%, transparent);
+  border-color: var(--composer-border-focus);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--composer-border-focus) 18%, transparent);
 }
 
 .input-left-actions,
@@ -1363,19 +1355,6 @@ defineExpose({ focus, setText, clear: clearText });
   color: var(--ac-color-text-muted);
   font-size: 12px;
   text-align: center;
-}
-
-.call-btn-outer {
-  width: 40px;
-  height: 40px;
-  flex-shrink: 0;
-  font-size: 18px;
-}
-
-.is-calling {
-  border-color: var(--el-color-success) !important;
-  background: var(--el-color-success-light-9) !important;
-  color: var(--el-color-success) !important;
 }
 
 @media (max-width: 768px) {

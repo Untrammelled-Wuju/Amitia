@@ -2,6 +2,52 @@
 /* SPDX-License-Identifier: AGPL-3.0-only */
 
 :root {
+  --workbench-bg: var(--tp-page);
+  --workbench-sidebar-bg: var(--tp-shell);
+  --workbench-sidebar-hover: var(--tp-control-hover);
+  --workbench-sidebar-active: var(--tp-primary-soft);
+  --surface-bg: var(--tp-panel);
+  --surface-bg-elevated: var(--tp-float);
+  --surface-border: var(--tp-border);
+  --surface-border-hover: var(--tp-border-strong);
+  --surface-border-focus: var(--tp-primary);
+  --chat-surface-bg: var(--tp-panel);
+  --chat-header-bg: var(--tp-panel);
+  --composer-bg: var(--tp-panel);
+  --composer-border: var(--tp-border);
+  --composer-border-focus: var(--tp-primary);
+  --composer-shadow: var(--tp-shadow-card);
+  --plugin-surface-bg: var(--tp-panel-soft);
+  --plugin-surface-border: var(--tp-border);
+  --plugin-muted-bg: var(--tp-control);
+  --overlay-bg: var(--tp-float);
+  --overlay-border: var(--tp-border);
+  --text-primary: var(--tp-text);
+  --text-secondary: var(--tp-text-secondary);
+  --text-muted: var(--tp-text-muted);
+  --control-hover-bg: var(--tp-control-hover);
+  --control-active-bg: var(--tp-primary-soft);
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-composer: 16px;
+  --amitia-bg-workbench: var(--workbench-bg);
+  --amitia-bg-surface: var(--surface-bg);
+  --amitia-bg-surface-elevated: var(--surface-bg-elevated);
+  --amitia-border: var(--surface-border);
+  --amitia-border-hover: var(--surface-border-hover);
+  --amitia-text-primary: var(--text-primary);
+  --amitia-text-secondary: var(--text-secondary);
+  --amitia-text-muted: var(--text-muted);
+  --amitia-control-hover: var(--control-hover-bg);
+  --amitia-control-active: var(--control-active-bg);
+  --amitia-radius-sm: var(--radius-sm);
+  --amitia-radius-md: var(--radius-md);
+  --amitia-radius-lg: var(--radius-lg);
+  --amitia-font-ui: var(--ac-font-family);
+  --amitia-font-size-sm: var(--ac-font-size-sm);
+  --amitia-font-size-md: var(--ac-font-size-base);
   --ac-color-primary: var(--tp-primary);
   --ac-color-primary-light: var(--tp-primary-light-3);
   --ac-color-primary-dark: var(--tp-primary-active);
@@ -128,6 +174,17 @@ body {
 #app {
   height: 100vh;
   overflow: hidden;
+}
+
+#amitia-overlay-root {
+  position: fixed;
+  z-index: 50;
+  inset: 0;
+  pointer-events: none;
+}
+
+#amitia-overlay-root > * {
+  pointer-events: auto;
 }
 
 .glass-surface {

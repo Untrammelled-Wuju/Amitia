@@ -6,6 +6,7 @@ import { useExtensionUIStore } from "@/stores/extensionUI";
 import { apiClient } from "@/composables/useApi";
 import { fetchSchemaDocument } from "@/api/extension";
 import SchemaUINode from "./SchemaUINode.vue";
+import ExtensionRenderState from "./ExtensionRenderState.vue";
 import {
   validateDocument,
   countNodes,
@@ -65,6 +66,8 @@ const performanceBudget = computed(() => schema.value?.performanceBudget ?? null
 const themeMode = computed<UITheme>(() => themeConfig.value?.mode ?? "auto");
 const effectiveTheme = computed<"light" | "dark">(() => {
   if (themeMode.value === "auto") {
+    const hostTheme = (props.context?.theme as { mode?: "light" | "dark" } | undefined)?.mode;
+    if (hostTheme === "light" || hostTheme === "dark") return hostTheme;
     if (typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches) {
       return "dark";
     }
@@ -323,24 +326,13 @@ watch(
     v-bind="accessibilityAttrs"
   >
     <template v-if="loading">
-      <div class="schema-ui-renderer__loading">
-        <span class="schema-ui-renderer__spinner"></span>
-        <span>加载中...</span>
-      </div>
+      <ExtensionRenderState state="loading" />
     </template>
     <template v-else-if="capturedError">
-      <div class="schema-ui-renderer__error">
-        <div class="schema-ui-renderer__error-title">渲染异常</div>
-        <div class="schema-ui-renderer__error-detail">{{ capturedError }}</div>
-        <button class="schema-ui-renderer__retry" @click="retry">重试</button>
-      </div>
+      <ExtensionRenderState state="error" :detail="capturedError" @retry="retry" />
     </template>
     <template v-else-if="error && !schema">
-      <div class="schema-ui-renderer__error">
-        <div class="schema-ui-renderer__error-title">加载失败</div>
-        <div class="schema-ui-renderer__error-detail">{{ error }}</div>
-        <button class="schema-ui-renderer__retry" @click="retry">重试</button>
-      </div>
+      <ExtensionRenderState state="error" :detail="error" @retry="retry" />
     </template>
     <template v-else-if="schema">
       <div
@@ -385,13 +377,11 @@ watch(
             />
           </template>
         </template>
-        <div v-else class="schema-ui-renderer__empty">
-          该贡献未提供可渲染的 schema 内容
-        </div>
+        <ExtensionRenderState v-else state="empty" detail="该贡献未提供可渲染的 schema 内容" />
       </div>
     </template>
     <template v-else>
-      <div class="schema-ui-renderer__empty">暂无 schema 数据</div>
+      <ExtensionRenderState state="empty" detail="暂无 schema 数据" />
     </template>
   </div>
 </template>
@@ -403,8 +393,9 @@ watch(
   display: flex;
   flex-direction: column;
   gap: 8px;
-  color: var(--amitia-color-text, inherit);
-  background: var(--amitia-color-surface, transparent);
+  max-width: 100%;
+  color: var(--amitia-text-primary, var(--amitia-color-text, inherit));
+  background: var(--amitia-bg-surface, var(--amitia-color-surface, transparent));
 }
 .schema-ui-renderer__loading {
   display: flex;
@@ -433,9 +424,9 @@ watch(
   gap: 6px;
   padding: 10px 12px;
   border-radius: 6px;
-  background: rgba(220, 60, 60, 0.08);
-  border: 1px solid rgba(220, 60, 60, 0.25);
-  color: rgb(180, 40, 40);
+  background: var(--ac-color-danger-bg);
+  border: 1px solid color-mix(in srgb, var(--ac-color-danger) 32%, var(--plugin-surface-border));
+  color: var(--ac-color-danger);
   font-size: 12px;
 }
 .schema-ui-renderer__error-title {
@@ -462,9 +453,9 @@ watch(
 .schema-ui-renderer__warning {
   padding: 6px 10px;
   border-radius: 4px;
-  background: rgba(220, 160, 40, 0.1);
-  border: 1px solid rgba(220, 160, 40, 0.3);
-  color: rgb(160, 100, 20);
+  background: var(--ac-color-warning-bg);
+  border: 1px solid color-mix(in srgb, var(--ac-color-warning) 30%, var(--plugin-surface-border));
+  color: var(--ac-color-warning);
   font-size: 11px;
   word-break: break-word;
 }

@@ -29,6 +29,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
       <p class="empty-text">你好，我是 {{ charName || "AI 陪伴角色" }}</p>
       <p class="empty-hint">随时可以和我聊聊天，我在这里陪你。</p>
+      <ChatEmptyStateExtensionHost :context="extensionContext" />
     </div>
 
     <div v-for="msg in messages" :key="msg.id" :data-message-id="msg.id">
@@ -75,6 +76,7 @@ import { ref } from "vue";
 import { ChatDotRound, ArrowDown, Loading } from "@element-plus/icons-vue";
 import ChatBubble from "./ChatBubble.vue";
 import MessageExtensionHost from "./extension/chat/MessageExtensionHost.vue";
+import ChatEmptyStateExtensionHost from "./extension/chat/ChatEmptyStateExtensionHost.vue";
 
 defineProps<{
   messages: any[];
@@ -86,6 +88,7 @@ defineProps<{
   pullReady: boolean;
   pullLoading: boolean;
   pullText: string;
+  extensionContext?: Record<string, unknown>;
 }>();
 
 defineEmits<{
@@ -122,7 +125,7 @@ defineExpose({ rootEl });
   min-height: 0;
   overflow-y: scroll;
   overscroll-behavior-y: contain;
-  padding: 12px 16px;
+  padding: 20px 24px;
   position: relative;
 }
 
@@ -153,6 +156,11 @@ defineExpose({ rootEl });
   color: var(--ac-color-text-muted);
   max-width: 280px;
 }
+
+.empty-chat :deep(.extension-slot) { width: min(100%, 680px); margin-top: 20px; }
+
+.messages-area > [data-message-id] { width: min(100%, 960px); margin: 0 auto; }
+@media (max-width: 768px) { .messages-area { padding: 12px 8px; } }
 
 .scroll-btn {
   position: sticky;

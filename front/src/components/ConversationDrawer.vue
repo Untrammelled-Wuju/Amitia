@@ -11,6 +11,7 @@ SPDX-License-Identifier: AGPL-3.0-only
     direction="ltr"
     :close-on-click-modal="true"
     :with-header="!!isMobile"
+    modal-class="workbench-drawer-modal"
   >
     <div :class="{ 'mobile-drawer-body': isMobile }">
       <div class="section-label">频道对话</div>

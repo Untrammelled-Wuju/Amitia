@@ -1,7 +1,9 @@
 <script setup lang="ts">
-import { computed, onErrorCaptured, ref, defineAsyncComponent } from "vue";
-import { useExtensionSlot } from "@/composables/useExtensionSlot";
+import { computed, onBeforeUnmount, onErrorCaptured, onMounted, ref, watch } from "vue";
+import { useExtensionSlot, type ExtensionSurfaceContext, type ExtensionSurfaceRole } from "@/composables/useExtensionSlot";
 import type { UIContributionSummary } from "@/stores/extensionUI";
+import ExtensionContributionRenderer from "./ExtensionContributionRenderer.vue";
+import ExtensionRenderState from "./ExtensionRenderState.vue";
 
 const props = withDefaults(
   defineProps<{
@@ -10,32 +12,79 @@ const props = withDefaults(
     fallback?: "none" | "skeleton" | "empty" | "default";
     layout?: "inline" | "stack" | "row" | "grid" | "tabs" | "panel" | "drawer" | "modal";
     maxItems?: number;
+    startIndex?: number;
+    surfaceRole?: ExtensionSurfaceRole;
   }>(),
   {
     fallback: undefined,
     layout: undefined,
     maxItems: undefined,
+    startIndex: 0,
+    surfaceRole: "main",
   }
 );
 
 const localContext = ref<Record<string, unknown>>(props.context ?? {});
+const rootRef = ref<HTMLElement>();
+const surface = ref<ExtensionSurfaceContext>({ role: props.surfaceRole, width: 0, height: 0, breakpoint: "xs" });
+let observer: ResizeObserver | null = null;
+let resizeFrame = 0;
 const {
   contributions,
   fallback: resolvedFallback,
   layout: resolvedLayout,
   isEmpty,
   reportError,
+  buildContext,
 } = useExtensionSlot({
   slotId: props.slotId,
   fallback: props.fallback,
   layout: props.layout,
+  context: localContext,
+  surface,
+});
+
+watch(() => props.context, (value) => { localContext.value = value ?? {}; }, { deep: true });
+watch(() => props.surfaceRole, (role) => { surface.value = { ...surface.value, role }; });
+
+const renderContext = computed<Record<string, unknown>>(() => ({ ...buildContext(), ...localContext.value }));
+
+function breakpointFor(width: number): ExtensionSurfaceContext["breakpoint"] {
+  if (width < 320) return "xs";
+  if (width < 480) return "sm";
+  if (width < 768) return "md";
+  if (width < 1024) return "lg";
+  return "xl";
+}
+
+function updateSurface(entry?: ResizeObserverEntry) {
+  const rect = entry?.contentRect ?? rootRef.value?.getBoundingClientRect();
+  if (!rect) return;
+  surface.value = { role: props.surfaceRole, width: Math.round(rect.width), height: Math.round(rect.height), breakpoint: breakpointFor(rect.width) };
+}
+
+onMounted(() => {
+  if (!rootRef.value || typeof ResizeObserver === "undefined") return;
+  observer = new ResizeObserver((entries) => {
+    const entry = entries[0];
+    cancelAnimationFrame(resizeFrame);
+    resizeFrame = requestAnimationFrame(() => updateSurface(entry));
+  });
+  observer.observe(rootRef.value);
+  updateSurface();
+});
+
+onBeforeUnmount(() => {
+  observer?.disconnect();
+  cancelAnimationFrame(resizeFrame);
 });
 
 const visibleContributions = computed<UIContributionSummary[]>(() => {
+  const contributionList = contributions.value.slice(props.startIndex);
   if (props.maxItems && props.maxItems > 0) {
-    return contributions.value.slice(0, props.maxItems);
+    return contributionList.slice(0, props.maxItems);
   }
-  return contributions.value;
+  return contributionList;
 });
 
 const layoutClass = computed(() => `extension-slot--layout-${resolvedLayout.value}`);
@@ -49,31 +98,10 @@ onErrorCaptured((err, instance) => {
   return false;
 });
 
-function contributionRenderer(contribution: UIContributionSummary) {
-  switch (contribution.kind) {
-    case "schema_page":
-    case "settings_section":
-    case "panel":
-    case "card":
-      return defineAsyncComponent(() => import("./SchemaUIRenderer.vue"));
-    case "web_page":
-      return defineAsyncComponent(() => import("./SandboxWebUIFrame.vue"));
-    case "action":
-    case "menu_item":
-    case "toolbar_item":
-    case "status_item":
-    case "message_action":
-    case "composer_action":
-    case "desktop_command":
-      return defineAsyncComponent(() => import("./HostNativeAction.vue"));
-    default:
-      return null;
-  }
-}
 </script>
 
 <template>
-  <div class="extension-slot" :class="layoutClass" :data-slot-id="slotId">
+  <div ref="rootRef" class="extension-slot" :class="[layoutClass, `extension-slot--${surfaceRole}`]" :data-slot-id="slotId">
     <template v-if="visibleContributions.length === 0 && resolvedFallback !== 'none'">
       <div v-if="resolvedFallback === 'skeleton'" class="extension-slot__skeleton">
         <div class="skeleton-pulse"></div>
@@ -94,15 +122,12 @@ function contributionRenderer(contribution: UIContributionSummary) {
           :data-extension-id="contribution.extensionId"
         >
           <template v-if="errorState[contribution.contributionId]">
-            <div class="extension-slot__error">
-              <span>{{ errorState[contribution.contributionId] }}</span>
-            </div>
+            <ExtensionRenderState state="error" :detail="errorState[contribution.contributionId]" />
           </template>
           <template v-else>
-            <component
-              :is="contributionRenderer(contribution)"
+            <ExtensionContributionRenderer
               :contribution="contribution"
-              :context="localContext"
+              :context="renderContext"
               :slot-id="slotId"
             />
           </template>
@@ -155,6 +180,9 @@ function contributionRenderer(contribution: UIContributionSummary) {
   min-width: 0;
   flex: 1 1 auto;
 }
+.extension-slot--header, .extension-slot--composer, .extension-slot--status { width: auto; }
+.extension-slot--sidebar { height: 100%; min-height: 0; overflow: auto; }
+.extension-slot--message .extension-slot__contribution { max-width: 100%; }
 .extension-slot__skeleton {
   width: 100%;
   height: 32px;
@@ -171,12 +199,5 @@ function contributionRenderer(contribution: UIContributionSummary) {
 @keyframes skeleton-pulse {
   0% { transform: translateX(-100%); }
   100% { transform: translateX(100%); }
-}
-.extension-slot__error {
-  padding: 8px 12px;
-  border-radius: 6px;
-  background: rgba(220, 50, 50, 0.08);
-  color: rgb(180, 40, 40);
-  font-size: 12px;
 }
 </style>

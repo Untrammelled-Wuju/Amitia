@@ -905,6 +905,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
 }
 .schema-ui-table {
   width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
 }
 .schema-ui-code {
   margin: 0;
@@ -1019,4 +1021,6 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
   flex-direction: column;
   gap: 8px;
 }
+.schema-ui-node :deep(.el-card), .schema-ui-node :deep(.el-table), .schema-ui-node :deep(.el-input__wrapper) { max-width: 100%; background: var(--amitia-bg-surface); border-color: var(--amitia-border); }
+.schema-ui-node :deep(.el-button:focus-visible), .schema-ui-node :deep(input:focus-visible) { outline: 2px solid var(--surface-border-focus); outline-offset: 2px; }
 </style>
