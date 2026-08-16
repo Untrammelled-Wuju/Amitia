@@ -415,8 +415,8 @@ internal class DefaultRuntimeController(
     private fun cancelPendingRecoveryStartPrerequisites(failedGeneration: Long): Boolean {
         val liveSession = serviceHost.currentSession()
         if (liveSession != null && liveSession.isAlive()) return false
-        val snapshot = serviceHost.currentGeneration()
-        if (snapshot != failedGeneration) return false
+        val currentGen = serviceHost.currentGeneration()
+        if (currentGen != 0L && currentGen != failedGeneration) return false
         cancelPendingRecovery()
         start(
             RuntimeStartRequest(reason = RuntimeStartReason.RECOVERY),
