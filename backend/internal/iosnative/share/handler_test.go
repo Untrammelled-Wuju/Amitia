@@ -39,7 +39,7 @@ func newMockShareBridge(resp nativebridge.Response, err error) *mockShareBridge 
 func baseShareRequest(operation string) nativebridge.Request {
 	return nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-share-001",
+		RequestId:       "test-share-001",
 		Platform:        "ios",
 		Operation:       operation,
 		Payload:         map[string]any{},
@@ -71,7 +71,7 @@ func TestHandler_Execute_UnknownOperation(t *testing.T) {
 func TestHandler_Status(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-share-001",
+		RequestId:       "test-share-001",
 		Status:          "ok",
 		Result:          map[string]any{"supported": true},
 	}
@@ -92,7 +92,7 @@ func TestHandler_Status(t *testing.T) {
 func TestHandler_Send_MissingFields(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-share-001",
+		RequestId:       "test-share-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -111,7 +111,7 @@ func TestHandler_Send_MissingFields(t *testing.T) {
 func TestHandler_Send_WithURL(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-share-001",
+		RequestId:       "test-share-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -144,7 +144,7 @@ func TestHandler_Send_InvalidURL(t *testing.T) {
 func TestHandler_Send_WithResources(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-share-001",
+		RequestId:       "test-share-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -173,7 +173,7 @@ func TestHandler_Send_WithResources(t *testing.T) {
 func TestHandler_Send_WithPreview(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-share-001",
+		RequestId:       "test-share-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -238,7 +238,7 @@ func TestHandler_Send_TooManyResources(t *testing.T) {
 func TestHandler_PreviewSupported(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-share-001",
+		RequestId:       "test-share-001",
 		Status:          "ok",
 		Result:          map[string]any{"supported": true},
 	}
@@ -256,7 +256,7 @@ func TestHandler_PreviewSupported(t *testing.T) {
 func TestHandler_ReceivePending(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-share-001",
+		RequestId:       "test-share-001",
 		Status:          "ok",
 		Result:          map[string]any{"shares": []any{}},
 	}
@@ -287,7 +287,7 @@ func TestHandler_ReceiveConsume_MissingID(t *testing.T) {
 func TestHandler_ReceiveConsume_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-share-001",
+		RequestId:       "test-share-001",
 		Status:          "ok",
 		Result:          map[string]any{"consumed": true},
 	}
@@ -329,7 +329,7 @@ func TestHandler_ReceiveDismiss_MissingID(t *testing.T) {
 func TestHandler_StagingCleanup(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-share-001",
+		RequestId:       "test-share-001",
 		Status:          "ok",
 		Result:          map[string]any{"removed": 0},
 	}
@@ -356,7 +356,7 @@ func TestHandler_StagingCleanup(t *testing.T) {
 func TestHandler_StagingCleanup_Defaults(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-share-001",
+		RequestId:       "test-share-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -407,7 +407,7 @@ func TestHandler_LimitedDelete_NotConfirmed(t *testing.T) {
 func TestHandler_LimitedDelete_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-share-001",
+		RequestId:       "test-share-001",
 		Status:          "ok",
 		Result:          map[string]any{"confirmed": true},
 	}

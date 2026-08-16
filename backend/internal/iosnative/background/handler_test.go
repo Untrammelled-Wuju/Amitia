@@ -39,7 +39,7 @@ func newMockBackgroundBridge(resp nativebridge.Response, err error) *mockBackgro
 func baseBackgroundRequest(operation string) nativebridge.Request {
 	return nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Platform:        "ios",
 		Operation:       operation,
 		Payload:         map[string]any{},
@@ -71,7 +71,7 @@ func TestHandler_Execute_UnknownOperation(t *testing.T) {
 func TestHandler_Status(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{"supported": true},
 	}
@@ -118,7 +118,7 @@ func TestHandler_TaskRegister_MissingIdentifier(t *testing.T) {
 func TestHandler_TaskRegister_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{"success": true},
 	}
@@ -187,7 +187,7 @@ func TestHandler_TaskSubmit_ContinuedMissingTaskRunID(t *testing.T) {
 func TestHandler_TaskSubmit_ContinuedSuccess(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{"submitted": true},
 	}
@@ -232,7 +232,7 @@ func TestHandler_TaskSubmit_RefreshMissingIDs(t *testing.T) {
 func TestHandler_TaskSubmit_RefreshWithTaskDefinitionID(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -264,7 +264,7 @@ func TestHandler_TaskCancel_InvalidClass(t *testing.T) {
 func TestHandler_TaskCancel_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -273,7 +273,7 @@ func TestHandler_TaskCancel_Success(t *testing.T) {
 
 	req := baseBackgroundRequest(OperationTaskCancel)
 	req.Payload["systemClass"] = string(BackgroundClassRefresh)
-	req.Payload["requestId"] = "req-001"
+	req.Payload["RequestId"] = "req-001"
 	resp := h.Execute(context.Background(), req)
 
 	if resp.Status != "ok" {
@@ -294,7 +294,7 @@ func TestHandler_TaskCancelAll_InvalidClass(t *testing.T) {
 func TestHandler_TaskCancelAll_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -313,7 +313,7 @@ func TestHandler_TaskCancelAll_Success(t *testing.T) {
 func TestHandler_TaskGetPending(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{"pending": []any{}},
 	}
@@ -347,7 +347,7 @@ func TestHandler_TaskProgress_Invalid(t *testing.T) {
 func TestHandler_TaskProgress_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -381,7 +381,7 @@ func TestHandler_TaskExpire_MissingTaskRunID(t *testing.T) {
 func TestHandler_TaskExpire_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -412,7 +412,7 @@ func TestHandler_TaskComplete_MissingTaskRunID(t *testing.T) {
 func TestHandler_TaskComplete_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -433,7 +433,7 @@ func TestHandler_TaskComplete_Success(t *testing.T) {
 func TestHandler_TaskReconcile(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{"reconciled": true},
 	}
@@ -453,7 +453,7 @@ func TestHandler_TaskReconcile(t *testing.T) {
 func TestHandler_RuntimeReadiness(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{"ready": true},
 	}
@@ -471,7 +471,7 @@ func TestHandler_RuntimeReadiness(t *testing.T) {
 func TestHandler_RuntimeEnsure(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -505,7 +505,7 @@ func TestHandler_CheckpointGet_MissingTaskRunID(t *testing.T) {
 func TestHandler_CheckpointGet_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{"generation": 1},
 	}
@@ -536,7 +536,7 @@ func TestHandler_CheckpointSet_Invalid(t *testing.T) {
 func TestHandler_CheckpointSet_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -569,7 +569,7 @@ func TestHandler_CheckpointClear_MissingTaskRunID(t *testing.T) {
 func TestHandler_CheckpointClear_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -598,7 +598,7 @@ func TestHandler_BindingGet_MissingTaskRunID(t *testing.T) {
 func TestHandler_BindingGet_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{"binding": map[string]any{}},
 	}
@@ -617,7 +617,7 @@ func TestHandler_BindingGet_Success(t *testing.T) {
 func TestHandler_FilePickImport(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{"resourceUri": "amitia://temp/file1"},
 	}
@@ -635,7 +635,7 @@ func TestHandler_FilePickImport(t *testing.T) {
 func TestHandler_FilePickDirectory(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{"rootUri": "amitia://workspace/@mount1"},
 	}
@@ -666,7 +666,7 @@ func TestHandler_FileMountReauthorize_MissingMountID(t *testing.T) {
 func TestHandler_FileMountReauthorize_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{"reauthorized": true},
 	}
@@ -700,7 +700,7 @@ func TestHandler_FileAccessStat_InvalidPath(t *testing.T) {
 func TestHandler_FileAccessStat_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{"name": "file.txt"},
 	}
@@ -731,7 +731,7 @@ func TestHandler_FileAccessList_InvalidMountID(t *testing.T) {
 func TestHandler_FileAccessList_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{"entries": []any{}},
 	}
@@ -762,7 +762,7 @@ func TestHandler_FileAccessRead_MissingMountID(t *testing.T) {
 func TestHandler_FileAccessRead_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{"content": "data"},
 	}
@@ -800,7 +800,7 @@ func TestHandler_FileAccessWrite_TooLarge(t *testing.T) {
 func TestHandler_FileAccessWrite_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -834,7 +834,7 @@ func TestHandler_FileAccessMkdir_InvalidPath(t *testing.T) {
 func TestHandler_FileAccessMkdir_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -870,7 +870,7 @@ func TestHandler_FileAccessRename_InvalidNewName(t *testing.T) {
 func TestHandler_FileAccessRename_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -904,7 +904,7 @@ func TestHandler_FileAccessMove_Traversal(t *testing.T) {
 func TestHandler_FileAccessMove_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -925,7 +925,7 @@ func TestHandler_FileAccessMove_Success(t *testing.T) {
 func TestHandler_FileAccessCopy_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -957,7 +957,7 @@ func TestHandler_FileAccessDelete_MissingMountID(t *testing.T) {
 func TestHandler_FileAccessDelete_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -992,7 +992,7 @@ func TestHandler_FileExport_MissingResourceURI(t *testing.T) {
 func TestHandler_FileExport_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -1013,7 +1013,7 @@ func TestHandler_FileExport_Success(t *testing.T) {
 func TestHandler_FileMountGet(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{"mount": map[string]any{}},
 	}
@@ -1032,7 +1032,7 @@ func TestHandler_FileMountGet(t *testing.T) {
 func TestHandler_FileMountList(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{"mounts": []any{}},
 	}
@@ -1061,7 +1061,7 @@ func TestHandler_FileMountRemove_MissingMountID(t *testing.T) {
 func TestHandler_FileMountRemove_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -1090,7 +1090,7 @@ func TestHandler_FileGetCapabilities_MissingMountID(t *testing.T) {
 func TestHandler_FileGetCapabilities_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bg-001",
+		RequestId:       "test-bg-001",
 		Status:          "ok",
 		Result:          map[string]any{"atomicWrite": true},
 	}

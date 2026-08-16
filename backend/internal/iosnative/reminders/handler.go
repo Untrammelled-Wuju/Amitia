@@ -43,7 +43,7 @@ func (h *RemindersHandler) Execute(ctx context.Context, request nativebridge.Req
 	default:
 		return nativebridge.Response{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Status:          "error",
 			Error: &nativebridge.Error{
 				Code:    nativebridge.ErrOperationNotSupported,
@@ -62,7 +62,7 @@ func (h *RemindersHandler) handleStatus(ctx context.Context, request nativebridg
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       OperationStatus,
 		})
@@ -90,7 +90,7 @@ func (h *RemindersHandler) handleAuthorizationStatus(ctx context.Context, reques
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       OperationAuthorizationStatus,
 		})
@@ -118,7 +118,7 @@ func (h *RemindersHandler) handleAuthorizationRequest(ctx context.Context, reque
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       OperationAuthorizationRequest,
 			Payload:         request.Payload,
@@ -147,7 +147,7 @@ func (h *RemindersHandler) handleListsList(ctx context.Context, request nativebr
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       OperationListsList,
 			Payload:         request.Payload,
@@ -195,7 +195,7 @@ func (h *RemindersHandler) handleQuery(ctx context.Context, request nativebridge
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       OperationQuery,
 			Payload:         request.Payload,
@@ -229,7 +229,7 @@ func (h *RemindersHandler) handleGet(ctx context.Context, request nativebridge.R
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       OperationGet,
 			Payload:         map[string]any{"reminderId": reminderID},
@@ -288,7 +288,7 @@ func (h *RemindersHandler) handleCreate(ctx context.Context, request nativebridg
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       OperationCreate,
 			Payload:         request.Payload,
@@ -348,7 +348,7 @@ func (h *RemindersHandler) handleUpdate(ctx context.Context, request nativebridg
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       OperationUpdate,
 			Payload:         request.Payload,
@@ -382,7 +382,7 @@ func (h *RemindersHandler) handleComplete(ctx context.Context, request nativebri
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       OperationComplete,
 			Payload:         request.Payload,
@@ -416,7 +416,7 @@ func (h *RemindersHandler) handleUncomplete(ctx context.Context, request nativeb
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       OperationUncomplete,
 			Payload:         map[string]any{"reminderId": reminderID},
@@ -450,7 +450,7 @@ func (h *RemindersHandler) handleDelete(ctx context.Context, request nativebridg
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       OperationDelete,
 			Payload:         map[string]any{"reminderId": reminderID},
@@ -473,7 +473,7 @@ func (h *RemindersHandler) handleDelete(ctx context.Context, request nativebridg
 func (h *RemindersHandler) errorResponse(request nativebridge.Request, code, message string) nativebridge.Response {
 	return nativebridge.Response{
 		ProtocolVersion: request.ProtocolVersion,
-		RequestID:       request.RequestID,
+		RequestId:       request.RequestId,
 		Status:          "error",
 		Error: &nativebridge.Error{
 			Code:       code,

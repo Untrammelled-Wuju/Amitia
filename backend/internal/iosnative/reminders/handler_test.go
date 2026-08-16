@@ -18,7 +18,7 @@ func (f *fakeRemindersBridge) Execute(ctx context.Context, req nativebridge.Requ
 	}
 	return nativebridge.Response{
 		ProtocolVersion: req.ProtocolVersion,
-		RequestID:       req.RequestID,
+		RequestId:       req.RequestId,
 		Status:          "success",
 	}, nil
 }
@@ -36,7 +36,7 @@ func TestRemindersHandler_UnknownOperation(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       "reminders.unknown",
 	})
@@ -54,7 +54,7 @@ func TestRemindersHandler_Status_NilBridge(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationStatus,
 	})
@@ -72,7 +72,7 @@ func TestRemindersHandler_AuthorizationStatus_NilBridge(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationAuthorizationStatus,
 	})
@@ -90,7 +90,7 @@ func TestRemindersHandler_AuthorizationRequest_NilBridge(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationAuthorizationRequest,
 	})
@@ -108,7 +108,7 @@ func TestRemindersHandler_ListsList_NilBridge(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationListsList,
 	})
@@ -127,7 +127,7 @@ func TestRemindersHandler_Query_InvalidStatus(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationQuery,
 		Payload:         map[string]any{"status": "invalid"},
@@ -147,7 +147,7 @@ func TestRemindersHandler_Query_InvalidDueDateFormat(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationQuery,
 		Payload:         map[string]any{"dueStart": "invalid-date"},
@@ -167,7 +167,7 @@ func TestRemindersHandler_Get_MissingReminderID(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationGet,
 		Payload:         map[string]any{},
@@ -187,7 +187,7 @@ func TestRemindersHandler_Create_EmptyTitle(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationCreate,
 		Payload:         map[string]any{"title": ""},
@@ -207,7 +207,7 @@ func TestRemindersHandler_Create_InvalidPriority(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationCreate,
 		Payload:         map[string]any{"title": "Test", "priority": "invalid"},
@@ -227,7 +227,7 @@ func TestRemindersHandler_Create_InvalidTimezone(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationCreate,
 		Payload:         map[string]any{"title": "Test", "timeZone": "Invalid/Timezone"},
@@ -247,7 +247,7 @@ func TestRemindersHandler_Create_InvalidURL(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationCreate,
 		Payload:         map[string]any{"title": "Test", "url": "javascript:alert(1)"},
@@ -267,7 +267,7 @@ func TestRemindersHandler_Update_MissingReminderID(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationUpdate,
 		Payload:         map[string]any{},
@@ -287,7 +287,7 @@ func TestRemindersHandler_Complete_MissingReminderID(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationComplete,
 		Payload:         map[string]any{},
@@ -307,7 +307,7 @@ func TestRemindersHandler_Uncomplete_MissingReminderID(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationUncomplete,
 		Payload:         map[string]any{},
@@ -327,7 +327,7 @@ func TestRemindersHandler_Delete_MissingReminderID(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationDelete,
 		Payload:         map[string]any{},

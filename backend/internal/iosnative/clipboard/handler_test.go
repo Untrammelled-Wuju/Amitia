@@ -39,7 +39,7 @@ func newMockClipboardBridge(resp nativebridge.Response, err error) *mockClipboar
 func baseClipboardRequest(operation string) nativebridge.Request {
 	return nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-cb-001",
+		RequestId:       "test-cb-001",
 		Platform:        "ios",
 		Operation:       operation,
 		Payload:         map[string]any{},
@@ -71,7 +71,7 @@ func TestHandler_Execute_UnknownOperation(t *testing.T) {
 func TestHandler_Status(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-cb-001",
+		RequestId:       "test-cb-001",
 		Status:          "ok",
 		Result:          map[string]any{"supported": true},
 	}
@@ -119,7 +119,7 @@ func TestHandler_Detect_InvalidPatterns(t *testing.T) {
 func TestHandler_Detect_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-cb-001",
+		RequestId:       "test-cb-001",
 		Status:          "ok",
 		Result:          map[string]any{"matches": []any{}},
 	}
@@ -147,7 +147,7 @@ func TestHandler_Detect_Success(t *testing.T) {
 func TestHandler_Read(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-cb-001",
+		RequestId:       "test-cb-001",
 		Status:          "ok",
 		Result:          map[string]any{"items": []any{}},
 	}
@@ -179,7 +179,7 @@ func TestHandler_Read(t *testing.T) {
 func TestHandler_Read_Defaults(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-cb-001",
+		RequestId:       "test-cb-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -233,7 +233,7 @@ func TestHandler_Write_InvalidType(t *testing.T) {
 func TestHandler_Write_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-cb-001",
+		RequestId:       "test-cb-001",
 		Status:          "ok",
 		Result:          map[string]any{"written": true},
 	}
@@ -263,7 +263,7 @@ func TestHandler_Write_Success(t *testing.T) {
 func TestHandler_Write_WithURL(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-cb-001",
+		RequestId:       "test-cb-001",
 		Status:          "ok",
 		Result:          map[string]any{"written": true},
 	}
@@ -284,7 +284,7 @@ func TestHandler_Write_WithURL(t *testing.T) {
 func TestHandler_Write_WithResourceURI(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-cb-001",
+		RequestId:       "test-cb-001",
 		Status:          "ok",
 		Result:          map[string]any{"written": true},
 	}
@@ -305,7 +305,7 @@ func TestHandler_Write_WithResourceURI(t *testing.T) {
 func TestHandler_Clear(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-cb-001",
+		RequestId:       "test-cb-001",
 		Status:          "ok",
 		Result:          map[string]any{"cleared": true},
 	}

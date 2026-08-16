@@ -18,7 +18,7 @@ func (f *fakeHealthBridge) Execute(ctx context.Context, req nativebridge.Request
 	}
 	return nativebridge.Response{
 		ProtocolVersion: req.ProtocolVersion,
-		RequestID:       req.RequestID,
+		RequestId:       req.RequestId,
 		Status:          "success",
 	}, nil
 }
@@ -36,7 +36,7 @@ func TestHealthHandler_UnknownOperation(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       "health.unknown",
 	})
@@ -54,7 +54,7 @@ func TestHealthHandler_AuthorizationStatus_NilBridge(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       "health.authorization.status",
 	})
@@ -73,7 +73,7 @@ func TestHealthHandler_SamplesQuery_MissingType(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       "health.samples.query",
 		Payload:         map[string]any{},
@@ -93,7 +93,7 @@ func TestHealthHandler_SamplesQuery_UnsupportedType(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       "health.samples.query",
 		Payload:         map[string]any{"type": "unknown_type"},
@@ -112,7 +112,7 @@ func TestHealthHandler_SamplesQuery_ValidType(t *testing.T) {
 		executeFunc: func(ctx context.Context, req nativebridge.Request) (nativebridge.Response, error) {
 			return nativebridge.Response{
 				ProtocolVersion: req.ProtocolVersion,
-				RequestID:       req.RequestID,
+				RequestId:       req.RequestId,
 				Status:          "success",
 				Result: map[string]any{
 					"samples": []any{},
@@ -124,7 +124,7 @@ func TestHealthHandler_SamplesQuery_ValidType(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       "health.samples.query",
 		Payload:         map[string]any{"type": "stepCount"},
@@ -141,7 +141,7 @@ func TestHealthHandler_WorkoutsDetail_MissingID(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       "health.workouts.detail",
 		Payload:         map[string]any{},

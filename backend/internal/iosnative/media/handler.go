@@ -60,7 +60,7 @@ func (h *MediaHandler) bridgeCall(ctx context.Context, request nativebridge.Requ
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       operation,
 			Payload:         payload,

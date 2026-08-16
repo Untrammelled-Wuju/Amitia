@@ -18,7 +18,7 @@ func NewIOSBridgeAdapter(provider *Provider) *IOSBridgeAdapter {
 func (a *IOSBridgeAdapter) Execute(ctx context.Context, request capability.IOSBridgeRequest) capability.IOSBridgeResponse {
 	req := nativebridge.Request{
 		ProtocolVersion: request.ProtocolVersion,
-		RequestID:       request.RequestID,
+		RequestId:       request.RequestID,
 		Platform:        "ios",
 		Operation:       request.Operation,
 		Payload:         request.Payload,
@@ -28,7 +28,7 @@ func (a *IOSBridgeAdapter) Execute(ctx context.Context, request capability.IOSBr
 
 	return capability.IOSBridgeResponse{
 		ProtocolVersion: resp.ProtocolVersion,
-		RequestID:       resp.RequestID,
+		RequestID:       resp.RequestId,
 		Status:          resp.Status,
 		Result:          resp.Result,
 		Error: func() *capability.IOSError {

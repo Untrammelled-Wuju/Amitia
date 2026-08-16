@@ -69,7 +69,7 @@ func MapCodeToMessage(code string) string {
 func NewClipboardError(request nativebridge.Request, code, message string) nativebridge.Response {
 	return nativebridge.Response{
 		ProtocolVersion: request.ProtocolVersion,
-		RequestID:       request.RequestID,
+		RequestId:       request.RequestId,
 		Status:          "error",
 		Error: &nativebridge.Error{
 			Code:    code,

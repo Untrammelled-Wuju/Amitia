@@ -39,7 +39,7 @@ func newMockBluetoothBridge(resp nativebridge.Response, err error) *mockBluetoot
 func baseBluetoothRequest(operation string) nativebridge.Request {
 	return nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-bt-001",
+		RequestId:       "test-bt-001",
 		Platform:        "ios",
 		Operation:       operation,
 		Payload:         map[string]any{},
@@ -71,7 +71,7 @@ func TestHandler_Execute_UnknownOperation(t *testing.T) {
 func TestHandler_Status(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bt-001",
+		RequestId:       "test-bt-001",
 		Status:          "ok",
 		Result:          map[string]any{"poweredOn": true},
 	}
@@ -95,7 +95,7 @@ func TestHandler_Status(t *testing.T) {
 func TestHandler_ScanStart(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bt-001",
+		RequestId:       "test-bt-001",
 		Status:          "ok",
 		Result:          map[string]any{"scanId": "scan-001"},
 	}
@@ -122,7 +122,7 @@ func TestHandler_ScanStart(t *testing.T) {
 func TestHandler_ScanStart_Defaults(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bt-001",
+		RequestId:       "test-bt-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -147,7 +147,7 @@ func TestHandler_ScanStart_Defaults(t *testing.T) {
 func TestHandler_ScanStart_WithServiceUUIDs(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bt-001",
+		RequestId:       "test-bt-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -174,7 +174,7 @@ func TestHandler_ScanStart_WithServiceUUIDs(t *testing.T) {
 func TestHandler_ScanStop(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bt-001",
+		RequestId:       "test-bt-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -205,7 +205,7 @@ func TestHandler_PeripheralGet_MissingID(t *testing.T) {
 func TestHandler_PeripheralGet_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bt-001",
+		RequestId:       "test-bt-001",
 		Status:          "ok",
 		Result:          map[string]any{"peripheralId": "dev-001"},
 	}
@@ -227,7 +227,7 @@ func TestHandler_PeripheralGet_Success(t *testing.T) {
 func TestHandler_PeripheralConnected(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bt-001",
+		RequestId:       "test-bt-001",
 		Status:          "ok",
 		Result:          map[string]any{"count": 2},
 	}
@@ -258,7 +258,7 @@ func TestHandler_Connect_MissingID(t *testing.T) {
 func TestHandler_Connect_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bt-001",
+		RequestId:       "test-bt-001",
 		Status:          "ok",
 		Result:          map[string]any{"state": "connected"},
 	}
@@ -302,7 +302,7 @@ func TestHandler_Disconnect_MissingID(t *testing.T) {
 func TestHandler_Disconnect_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bt-001",
+		RequestId:       "test-bt-001",
 		Status:          "ok",
 		Result:          map[string]any{"state": "disconnected"},
 	}
@@ -334,7 +334,7 @@ func TestHandler_ServicesDiscover_MissingID(t *testing.T) {
 func TestHandler_ServicesDiscover_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bt-001",
+		RequestId:       "test-bt-001",
 		Status:          "ok",
 		Result:          map[string]any{"count": 3},
 	}
@@ -381,7 +381,7 @@ func TestHandler_CharacteristicsDiscover_MissingRef(t *testing.T) {
 func TestHandler_CharacteristicsDiscover_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bt-001",
+		RequestId:       "test-bt-001",
 		Status:          "ok",
 		Result:          map[string]any{"count": 5},
 	}
@@ -429,7 +429,7 @@ func TestHandler_CharacteristicRead_MissingRef(t *testing.T) {
 func TestHandler_CharacteristicRead_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bt-001",
+		RequestId:       "test-bt-001",
 		Status:          "ok",
 		Result:          map[string]any{"value": "AQID"},
 	}
@@ -491,7 +491,7 @@ func TestHandler_CharacteristicWrite_InvalidEncoding(t *testing.T) {
 func TestHandler_CharacteristicWrite_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bt-001",
+		RequestId:       "test-bt-001",
 		Status:          "ok",
 		Result:          map[string]any{"accepted": true},
 	}
@@ -582,7 +582,7 @@ func TestHandler_RSSIRead_MissingID(t *testing.T) {
 func TestHandler_RSSIRead_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bt-001",
+		RequestId:       "test-bt-001",
 		Status:          "ok",
 		Result:          map[string]any{"rssi": -65},
 	}
@@ -601,7 +601,7 @@ func TestHandler_RSSIRead_Success(t *testing.T) {
 func TestHandler_PeripheralRoleStart(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bt-001",
+		RequestId:       "test-bt-001",
 		Status:          "ok",
 		Result:          map[string]any{"started": true},
 	}
@@ -623,7 +623,7 @@ func TestHandler_PeripheralRoleStart(t *testing.T) {
 func TestHandler_PeripheralRoleStop(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-bt-001",
+		RequestId:       "test-bt-001",
 		Status:          "ok",
 		Result:          map[string]any{"stopped": true},
 	}

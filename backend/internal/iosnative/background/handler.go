@@ -238,8 +238,8 @@ func (h *BackgroundHandler) handleTaskCancel(ctx context.Context, request native
 	payload := map[string]any{
 		"systemClass": string(systemClass),
 	}
-	if reqID := getString(request.Payload, "requestId"); reqID != "" {
-		payload["requestId"] = reqID
+	if reqID := getString(request.Payload, "RequestId"); reqID != "" {
+		payload["RequestId"] = reqID
 	}
 	return h.bridgeCall(ctx, request, OperationTaskCancel, payload)
 }

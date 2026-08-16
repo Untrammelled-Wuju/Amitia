@@ -39,7 +39,7 @@ func newMockAlarmBridge(resp nativebridge.Response, err error) *mockAlarmBridge 
 func baseAlarmRequest(operation string) nativebridge.Request {
 	return nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-alarm-001",
+		RequestId:       "test-alarm-001",
 		Platform:        "ios",
 		Operation:       operation,
 		Payload:         map[string]any{},
@@ -71,7 +71,7 @@ func TestHandler_Execute_UnknownOperation(t *testing.T) {
 func TestHandler_Status(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-alarm-001",
+		RequestId:       "test-alarm-001",
 		Status:          "ok",
 		Result:          map[string]any{"supported": true},
 	}
@@ -92,7 +92,7 @@ func TestHandler_Status(t *testing.T) {
 func TestHandler_AuthorizationStatus(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-alarm-001",
+		RequestId:       "test-alarm-001",
 		Status:          "ok",
 		Result:          map[string]any{"authorized": true},
 	}
@@ -110,7 +110,7 @@ func TestHandler_AuthorizationStatus(t *testing.T) {
 func TestHandler_AuthorizationRequest(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-alarm-001",
+		RequestId:       "test-alarm-001",
 		Status:          "ok",
 		Result:          map[string]any{"authorized": true},
 	}
@@ -128,7 +128,7 @@ func TestHandler_AuthorizationRequest(t *testing.T) {
 func TestHandler_List(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-alarm-001",
+		RequestId:       "test-alarm-001",
 		Status:          "ok",
 		Result:          map[string]any{"alarms": []any{}},
 	}
@@ -159,7 +159,7 @@ func TestHandler_Get_MissingID(t *testing.T) {
 func TestHandler_Get_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-alarm-001",
+		RequestId:       "test-alarm-001",
 		Status:          "ok",
 		Result:          map[string]any{"alarmId": "alarm-001"},
 	}
@@ -246,7 +246,7 @@ func TestHandler_Schedule_InvalidFlashMode(t *testing.T) {
 func TestHandler_Schedule_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-alarm-001",
+		RequestId:       "test-alarm-001",
 		Status:          "ok",
 		Result:          map[string]any{"alarmId": "alarm-001"},
 	}
@@ -280,7 +280,7 @@ func TestHandler_Schedule_Success(t *testing.T) {
 func TestHandler_Schedule_Timer(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-alarm-001",
+		RequestId:       "test-alarm-001",
 		Status:          "ok",
 		Result:          map[string]any{"alarmId": "timer-001"},
 	}
@@ -302,7 +302,7 @@ func TestHandler_Schedule_Timer(t *testing.T) {
 func TestHandler_Schedule_Fixed(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-alarm-001",
+		RequestId:       "test-alarm-001",
 		Status:          "ok",
 		Result:          map[string]any{"alarmId": "fixed-001"},
 	}
@@ -340,7 +340,7 @@ func TestHandler_Stop_MissingID(t *testing.T) {
 func TestHandler_Stop_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-alarm-001",
+		RequestId:       "test-alarm-001",
 		Status:          "ok",
 		Result:          map[string]any{"state": "stopped"},
 	}
@@ -372,7 +372,7 @@ func TestHandler_Cancel_MissingID(t *testing.T) {
 func TestHandler_Cancel_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-alarm-001",
+		RequestId:       "test-alarm-001",
 		Status:          "ok",
 		Result:          map[string]any{"cancelled": true},
 	}

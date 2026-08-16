@@ -47,7 +47,7 @@ func (h *HealthHandler) Execute(ctx context.Context, request nativebridge.Reques
 	default:
 		return nativebridge.Response{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Status:          "error",
 			Error: &nativebridge.Error{
 				Code:    nativebridge.ErrOperationNotSupported,
@@ -66,14 +66,14 @@ func (h *HealthHandler) handleAuthorizationStatus(ctx context.Context, request n
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       "health.authorization.status",
 		})
 		if err != nil {
 			done <- nativebridge.Response{
 				ProtocolVersion: request.ProtocolVersion,
-				RequestID:       request.RequestID,
+				RequestId:       request.RequestId,
 				Status:          "error",
 				Error: &nativebridge.Error{
 					Code:    nativebridge.ErrBridgeTimeout,
@@ -89,7 +89,7 @@ func (h *HealthHandler) handleAuthorizationStatus(ctx context.Context, request n
 	case <-ctx.Done():
 		return nativebridge.Response{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Status:          "error",
 			Error: &nativebridge.Error{
 				Code:    nativebridge.ErrBridgeTimeout,
@@ -110,7 +110,7 @@ func (h *HealthHandler) handleAuthorizationRequest(ctx context.Context, request 
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       "health.authorization.request",
 			Payload:         request.Payload,
@@ -118,7 +118,7 @@ func (h *HealthHandler) handleAuthorizationRequest(ctx context.Context, request 
 		if err != nil {
 			done <- nativebridge.Response{
 				ProtocolVersion: request.ProtocolVersion,
-				RequestID:       request.RequestID,
+				RequestId:       request.RequestId,
 				Status:          "error",
 				Error: &nativebridge.Error{
 					Code:    nativebridge.ErrBridgeTimeout,
@@ -134,7 +134,7 @@ func (h *HealthHandler) handleAuthorizationRequest(ctx context.Context, request 
 	case <-ctx.Done():
 		return nativebridge.Response{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Status:          "error",
 			Error: &nativebridge.Error{
 				Code:    nativebridge.ErrBridgeTimeout,
@@ -155,14 +155,14 @@ func (h *HealthHandler) handleProfileRead(ctx context.Context, request nativebri
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       "health.profile.read",
 		})
 		if err != nil {
 			done <- nativebridge.Response{
 				ProtocolVersion: request.ProtocolVersion,
-				RequestID:       request.RequestID,
+				RequestId:       request.RequestId,
 				Status:          "error",
 				Error: &nativebridge.Error{
 					Code:    nativebridge.ErrBridgeTimeout,
@@ -178,7 +178,7 @@ func (h *HealthHandler) handleProfileRead(ctx context.Context, request nativebri
 	case <-ctx.Done():
 		return nativebridge.Response{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Status:          "error",
 			Error: &nativebridge.Error{
 				Code:    nativebridge.ErrBridgeTimeout,
@@ -228,7 +228,7 @@ func (h *HealthHandler) handleSamplesQuery(ctx context.Context, request nativebr
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       "health.samples.query",
 			Payload:         payload,
@@ -236,7 +236,7 @@ func (h *HealthHandler) handleSamplesQuery(ctx context.Context, request nativebr
 		if err != nil {
 			done <- nativebridge.Response{
 				ProtocolVersion: request.ProtocolVersion,
-				RequestID:       request.RequestID,
+				RequestId:       request.RequestId,
 				Status:          "error",
 				Error: &nativebridge.Error{
 					Code:    nativebridge.ErrBridgeTimeout,
@@ -252,7 +252,7 @@ func (h *HealthHandler) handleSamplesQuery(ctx context.Context, request nativebr
 	case <-ctx.Done():
 		return nativebridge.Response{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Status:          "error",
 			Error: &nativebridge.Error{
 				Code:    nativebridge.ErrBridgeTimeout,
@@ -300,7 +300,7 @@ func (h *HealthHandler) handleStatisticsQuery(ctx context.Context, request nativ
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       "health.statistics.query",
 			Payload:         payload,
@@ -308,7 +308,7 @@ func (h *HealthHandler) handleStatisticsQuery(ctx context.Context, request nativ
 		if err != nil {
 			done <- nativebridge.Response{
 				ProtocolVersion: request.ProtocolVersion,
-				RequestID:       request.RequestID,
+				RequestId:       request.RequestId,
 				Status:          "error",
 				Error: &nativebridge.Error{
 					Code:    nativebridge.ErrBridgeTimeout,
@@ -324,7 +324,7 @@ func (h *HealthHandler) handleStatisticsQuery(ctx context.Context, request nativ
 	case <-ctx.Done():
 		return nativebridge.Response{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Status:          "error",
 			Error: &nativebridge.Error{
 				Code:    nativebridge.ErrBridgeTimeout,
@@ -356,7 +356,7 @@ func (h *HealthHandler) handleWorkoutsQuery(ctx context.Context, request nativeb
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       "health.workouts.query",
 			Payload:         payload,
@@ -364,7 +364,7 @@ func (h *HealthHandler) handleWorkoutsQuery(ctx context.Context, request nativeb
 		if err != nil {
 			done <- nativebridge.Response{
 				ProtocolVersion: request.ProtocolVersion,
-				RequestID:       request.RequestID,
+				RequestId:       request.RequestId,
 				Status:          "error",
 				Error: &nativebridge.Error{
 					Code:    nativebridge.ErrBridgeTimeout,
@@ -380,7 +380,7 @@ func (h *HealthHandler) handleWorkoutsQuery(ctx context.Context, request nativeb
 	case <-ctx.Done():
 		return nativebridge.Response{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Status:          "error",
 			Error: &nativebridge.Error{
 				Code:    nativebridge.ErrBridgeTimeout,
@@ -406,7 +406,7 @@ func (h *HealthHandler) handleWorkoutsDetail(ctx context.Context, request native
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       "health.workouts.detail",
 			Payload:         map[string]any{"workoutId": workoutID},
@@ -414,7 +414,7 @@ func (h *HealthHandler) handleWorkoutsDetail(ctx context.Context, request native
 		if err != nil {
 			done <- nativebridge.Response{
 				ProtocolVersion: request.ProtocolVersion,
-				RequestID:       request.RequestID,
+				RequestId:       request.RequestId,
 				Status:          "error",
 				Error: &nativebridge.Error{
 					Code:    nativebridge.ErrBridgeTimeout,
@@ -430,7 +430,7 @@ func (h *HealthHandler) handleWorkoutsDetail(ctx context.Context, request native
 	case <-ctx.Done():
 		return nativebridge.Response{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Status:          "error",
 			Error: &nativebridge.Error{
 				Code:    nativebridge.ErrBridgeTimeout,
@@ -462,7 +462,7 @@ func (h *HealthHandler) handleSleepQuery(ctx context.Context, request nativebrid
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       "health.sleep.query",
 			Payload:         payload,
@@ -470,7 +470,7 @@ func (h *HealthHandler) handleSleepQuery(ctx context.Context, request nativebrid
 		if err != nil {
 			done <- nativebridge.Response{
 				ProtocolVersion: request.ProtocolVersion,
-				RequestID:       request.RequestID,
+				RequestId:       request.RequestId,
 				Status:          "error",
 				Error: &nativebridge.Error{
 					Code:    nativebridge.ErrBridgeTimeout,
@@ -486,7 +486,7 @@ func (h *HealthHandler) handleSleepQuery(ctx context.Context, request nativebrid
 	case <-ctx.Done():
 		return nativebridge.Response{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Status:          "error",
 			Error: &nativebridge.Error{
 				Code:    nativebridge.ErrBridgeTimeout,
@@ -512,7 +512,7 @@ func (h *HealthHandler) handleActivityQuery(ctx context.Context, request nativeb
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       "health.activity.query",
 			Payload:         payload,
@@ -520,7 +520,7 @@ func (h *HealthHandler) handleActivityQuery(ctx context.Context, request nativeb
 		if err != nil {
 			done <- nativebridge.Response{
 				ProtocolVersion: request.ProtocolVersion,
-				RequestID:       request.RequestID,
+				RequestId:       request.RequestId,
 				Status:          "error",
 				Error: &nativebridge.Error{
 					Code:    nativebridge.ErrBridgeTimeout,
@@ -536,7 +536,7 @@ func (h *HealthHandler) handleActivityQuery(ctx context.Context, request nativeb
 	case <-ctx.Done():
 		return nativebridge.Response{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Status:          "error",
 			Error: &nativebridge.Error{
 				Code:    nativebridge.ErrBridgeTimeout,
@@ -551,7 +551,7 @@ func (h *HealthHandler) handleActivityQuery(ctx context.Context, request nativeb
 func (h *HealthHandler) errorResponse(request nativebridge.Request, code, message string) nativebridge.Response {
 	return nativebridge.Response{
 		ProtocolVersion: request.ProtocolVersion,
-		RequestID:       request.RequestID,
+		RequestId:       request.RequestId,
 		Status:          "error",
 		Error: &nativebridge.Error{
 			Code:       code,

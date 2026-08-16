@@ -54,7 +54,7 @@ func (h *ContactsHandler) bridgeCall(ctx context.Context, request nativebridge.R
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       operation,
 			Payload:         payload,
@@ -62,7 +62,7 @@ func (h *ContactsHandler) bridgeCall(ctx context.Context, request nativebridge.R
 		if err != nil {
 			done <- nativebridge.Response{
 				ProtocolVersion: request.ProtocolVersion,
-				RequestID:       request.RequestID,
+				RequestId:       request.RequestId,
 				Status:          "error",
 				Error: &nativebridge.Error{
 					Code:    nativebridge.ErrBridgeTimeout,
@@ -385,7 +385,7 @@ func (h *ContactsHandler) handlePhotoRemove(ctx context.Context, request nativeb
 func (h *ContactsHandler) errorResponse(request nativebridge.Request, code, message string) nativebridge.Response {
 	return nativebridge.Response{
 		ProtocolVersion: request.ProtocolVersion,
-		RequestID:       request.RequestID,
+		RequestId:       request.RequestId,
 		Status:          "error",
 		Error: &nativebridge.Error{
 			Code:       code,

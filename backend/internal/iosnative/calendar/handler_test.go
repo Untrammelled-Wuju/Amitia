@@ -18,7 +18,7 @@ func (f *fakeCalendarBridge) Execute(ctx context.Context, req nativebridge.Reque
 	}
 	return nativebridge.Response{
 		ProtocolVersion: req.ProtocolVersion,
-		RequestID:       req.RequestID,
+		RequestId:       req.RequestId,
 		Status:          "success",
 	}, nil
 }
@@ -36,7 +36,7 @@ func TestCalendarHandler_UnknownOperation(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       "calendar.unknown",
 	})
@@ -54,7 +54,7 @@ func TestCalendarHandler_Status_NilBridge(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationStatus,
 	})
@@ -72,7 +72,7 @@ func TestCalendarHandler_AuthorizationStatus_NilBridge(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationAuthorizationStatus,
 	})
@@ -91,7 +91,7 @@ func TestCalendarHandler_AuthorizationRequest_MissingAccess(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationAuthorizationRequest,
 		Payload:         map[string]any{},
@@ -111,7 +111,7 @@ func TestCalendarHandler_AuthorizationRequest_InvalidAccess(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationAuthorizationRequest,
 		Payload:         map[string]any{"access": "invalid"},
@@ -130,7 +130,7 @@ func TestCalendarHandler_AuthorizationRequest_ValidAccess(t *testing.T) {
 		executeFunc: func(ctx context.Context, req nativebridge.Request) (nativebridge.Response, error) {
 			return nativebridge.Response{
 				ProtocolVersion: req.ProtocolVersion,
-				RequestID:       req.RequestID,
+				RequestId:       req.RequestId,
 				Status:          "success",
 				Result: map[string]any{
 					"level":   "full_access",
@@ -143,7 +143,7 @@ func TestCalendarHandler_AuthorizationRequest_ValidAccess(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationAuthorizationRequest,
 		Payload:         map[string]any{"access": "full_access"},
@@ -160,7 +160,7 @@ func TestCalendarHandler_EventsQuery_MissingStartAt(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationEventsQuery,
 		Payload:         map[string]any{},
@@ -180,7 +180,7 @@ func TestCalendarHandler_EventsQuery_EndBeforeStart(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationEventsQuery,
 		Payload: map[string]any{
@@ -203,7 +203,7 @@ func TestCalendarHandler_EventsQuery_RangeTooLarge(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationEventsQuery,
 		Payload: map[string]any{
@@ -226,7 +226,7 @@ func TestCalendarHandler_EventsCreate_EmptyTitle(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationEventsCreate,
 		Payload: map[string]any{
@@ -250,7 +250,7 @@ func TestCalendarHandler_EventsCreate_EndBeforeStart(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationEventsCreate,
 		Payload: map[string]any{
@@ -274,7 +274,7 @@ func TestCalendarHandler_EventsCreate_InvalidTimezone(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationEventsCreate,
 		Payload: map[string]any{
@@ -299,7 +299,7 @@ func TestCalendarHandler_EventsCreate_InvalidURL(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationEventsCreate,
 		Payload: map[string]any{
@@ -324,7 +324,7 @@ func TestCalendarHandler_EventsGet_MissingEventID(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationEventsGet,
 		Payload:         map[string]any{},
@@ -344,7 +344,7 @@ func TestCalendarHandler_EventsUpdate_MissingEventID(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationEventsUpdate,
 		Payload:         map[string]any{},
@@ -364,7 +364,7 @@ func TestCalendarHandler_EventsDelete_MissingEventID(t *testing.T) {
 
 	resp := h.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       OperationEventsDelete,
 		Payload:         map[string]any{},
