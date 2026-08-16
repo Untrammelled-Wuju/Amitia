@@ -109,7 +109,9 @@ func (s *ProjectionStore) InvalidateOwnRef(ref string) {
 
 func generateOpaqueRef(prefix string) string {
 	buf := make([]byte, 16)
-	_, _ = rand.Read(buf)
+	if _, err := rand.Read(buf); err != nil {
+		return ""
+	}
 	encoded := base64.RawURLEncoding.EncodeToString(buf)
 	return fmt.Sprintf("%s%s", prefix, encoded)
 }
