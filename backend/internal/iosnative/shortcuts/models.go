@@ -12,21 +12,21 @@ const (
 type ShortcutExposure string
 
 const (
-	ShortcutExposureNone      ShortcutExposure = "none"
-	ShortcutExposureSiri      ShortcutExposure = "siri"
-	ShortcutExposureShortcuts ShortcutExposure = "shortcuts"
-	ShortcutExposureSpotlight ShortcutExposure = "spotlight"
+	ShortcutExposureNone        ShortcutExposure = "none"
+	ShortcutExposureSiri        ShortcutExposure = "siri"
+	ShortcutExposureShortcuts   ShortcutExposure = "shortcuts"
+	ShortcutExposureSpotlight   ShortcutExposure = "spotlight"
 	ShortcutExposureAppShortcut ShortcutExposure = "app_shortcut"
-	ShortcutExposureAll       ShortcutExposure = "all"
+	ShortcutExposureAll         ShortcutExposure = "all"
 )
 
 type ShortcutExecutionMode string
 
 const (
-	ShortcutExecutionModeBackgroundSafe ShortcutExecutionMode = "background_safe"
-	ShortcutExecutionModeForegroundDynamic ShortcutExecutionMode = "foreground_dynamic"
+	ShortcutExecutionModeBackgroundSafe      ShortcutExecutionMode = "background_safe"
+	ShortcutExecutionModeForegroundDynamic   ShortcutExecutionMode = "foreground_dynamic"
 	ShortcutExecutionModeForegroundImmediate ShortcutExecutionMode = "foreground_immediate"
-	ShortcutExecutionModeForegroundDeferred ShortcutExecutionMode = "foreground_deferred"
+	ShortcutExecutionModeForegroundDeferred  ShortcutExecutionMode = "foreground_deferred"
 )
 
 type ShortcutRiskLevel string
@@ -41,20 +41,20 @@ const (
 type ShortcutCanonicalTarget string
 
 const (
-	ShortcutCanonicalTargetService    ShortcutCanonicalTarget = "service"
-	ShortcutCanonicalTargetNativeCore ShortcutCanonicalTarget = "native_core"
-	ShortcutCanonicalTargetTool       ShortcutCanonicalTarget = "tool"
+	ShortcutCanonicalTargetService     ShortcutCanonicalTarget = "service"
+	ShortcutCanonicalTargetNativeCore  ShortcutCanonicalTarget = "native_core"
+	ShortcutCanonicalTargetTool        ShortcutCanonicalTarget = "tool"
 	ShortcutCanonicalTargetInteraction ShortcutCanonicalTarget = "interaction"
 )
 
 type ShortcutRuntimeRequirement string
 
 const (
-	ShortcutRuntimeRequirementNativeOnly       ShortcutRuntimeRequirement = "native_only"
-	ShortcutRuntimeRequirementBackendRead      ShortcutRuntimeRequirement = "backend_read"
+	ShortcutRuntimeRequirementNativeOnly         ShortcutRuntimeRequirement = "native_only"
+	ShortcutRuntimeRequirementBackendRead        ShortcutRuntimeRequirement = "backend_read"
 	ShortcutRuntimeRequirementBackendInteraction ShortcutRuntimeRequirement = "backend_interaction"
-	ShortcutRuntimeRequirementBackendTool      ShortcutRuntimeRequirement = "backend_tool"
-	ShortcutRuntimeRequirementForegroundUI     ShortcutRuntimeRequirement = "foreground_ui"
+	ShortcutRuntimeRequirementBackendTool        ShortcutRuntimeRequirement = "backend_tool"
+	ShortcutRuntimeRequirementForegroundUI       ShortcutRuntimeRequirement = "foreground_ui"
 )
 
 type EntityPrivacyLevel string
@@ -67,48 +67,48 @@ const (
 )
 
 type ShortcutsStatus struct {
-	Supported           bool             `json:"supported"`
-	Enabled             bool             `json:"enabled"`
-	State               ShortcutsState   `json:"state"`
-	SiriAvailable       bool             `json:"siriAvailable"`
-	ShortcutsAvailable  bool             `json:"shortcutsAvailable"`
-	SpotlightAvailable  bool             `json:"spotlightAvailable"`
-	NativeHostReady     bool             `json:"nativeHostReady"`
-	BackendReady        bool             `json:"backendReady"`
-	IntentCount         int              `json:"intentCount"`
-	AppShortcutCount    int              `json:"appShortcutCount"`
-	CatalogCount        int              `json:"catalogCount"`
-	SchemaVersion       int              `json:"schemaVersion"`
-	Locale              string           `json:"locale"`
+	Supported          bool           `json:"supported"`
+	Enabled            bool           `json:"enabled"`
+	State              ShortcutsState `json:"state"`
+	SiriAvailable      bool           `json:"siriAvailable"`
+	ShortcutsAvailable bool           `json:"shortcutsAvailable"`
+	SpotlightAvailable bool           `json:"spotlightAvailable"`
+	NativeHostReady    bool           `json:"nativeHostReady"`
+	BackendReady       bool           `json:"backendReady"`
+	IntentCount        int            `json:"intentCount"`
+	AppShortcutCount   int            `json:"appShortcutCount"`
+	CatalogCount       int            `json:"catalogCount"`
+	SchemaVersion      int            `json:"schemaVersion"`
+	Locale             string         `json:"locale"`
 }
 
 type ShortcutInvocationScope struct {
-	Trigger         string `json:"trigger"`
-	RequestID       string `json:"requestId"`
-	CorrelationID   string `json:"correlationId"`
-	CausationID     string `json:"causationId"`
-	UserID          string `json:"userId"`
-	CharacterID     string `json:"characterId,omitempty"`
-	ConversationID  string `json:"conversationId,omitempty"`
-	SessionID       string `json:"sessionId,omitempty"`
-	ToolCallID      string `json:"toolCallId,omitempty"`
+	Trigger        string `json:"trigger"`
+	RequestID      string `json:"requestId"`
+	CorrelationID  string `json:"correlationId"`
+	CausationID    string `json:"causationId"`
+	UserID         string `json:"userId"`
+	CharacterID    string `json:"characterId,omitempty"`
+	ConversationID string `json:"conversationId,omitempty"`
+	SessionID      string `json:"sessionId,omitempty"`
+	ToolCallID     string `json:"toolCallId,omitempty"`
 }
 
 type ShortcutInvocationMetadata struct {
-	InvocationID    string `json:"invocationId"`
-	IdempotencyKey  string `json:"idempotencyKey"`
-	ExecutionMode   ShortcutExecutionMode `json:"executionMode"`
-	IsForeground    bool   `json:"isForeground"`
-	UserInitiated   bool   `json:"userInitiated"`
-	SiriPhrase      string `json:"siriPhrase,omitempty"`
-	AutomationID    string `json:"automationId,omitempty"`
+	InvocationID   string                `json:"invocationId"`
+	IdempotencyKey string                `json:"idempotencyKey"`
+	ExecutionMode  ShortcutExecutionMode `json:"executionMode"`
+	IsForeground   bool                  `json:"isForeground"`
+	UserInitiated  bool                  `json:"userInitiated"`
+	SiriPhrase     string                `json:"siriPhrase,omitempty"`
+	AutomationID   string                `json:"automationId,omitempty"`
 }
 
 type ShortcutActionRequest struct {
-	ActionID    string                 `json:"actionId"`
-	Parameters  map[string]any         `json:"parameters"`
-	Scope       ShortcutInvocationScope `json:"scope"`
-	Invocation  ShortcutInvocationMetadata `json:"invocation"`
+	ActionID   string                     `json:"actionId"`
+	Parameters map[string]any             `json:"parameters"`
+	Scope      ShortcutInvocationScope    `json:"scope"`
+	Invocation ShortcutInvocationMetadata `json:"invocation"`
 }
 
 type ShortcutActionResult struct {
@@ -123,19 +123,19 @@ type ShortcutActionResult struct {
 }
 
 type ShortcutActionDescriptor struct {
-	ID                  string                 `json:"id"`
-	DisplayName         string                 `json:"displayName"`
-	Description         string                 `json:"description"`
-	Exposure            ShortcutExposure       `json:"exposure"`
-	ExecutionMode       ShortcutExecutionMode  `json:"executionMode"`
-	RiskLevel           ShortcutRiskLevel      `json:"riskLevel"`
-	RequiresConfirmation bool                  `json:"requiresConfirmation"`
-	RequiresForeground  bool                   `json:"requiresForeground"`
-	RequiresRuntime     ShortcutRuntimeRequirement `json:"requiresRuntime"`
-	CanonicalTarget     ShortcutCanonicalTarget `json:"canonicalTarget"`
-	CanonicalRef        string                 `json:"canonicalRef,omitempty"`
-	ParameterSchema     map[string]any         `json:"parameterSchema,omitempty"`
-	Enabled             bool                   `json:"enabled"`
+	ID                   string                     `json:"id"`
+	DisplayName          string                     `json:"displayName"`
+	Description          string                     `json:"description"`
+	Exposure             ShortcutExposure           `json:"exposure"`
+	ExecutionMode        ShortcutExecutionMode      `json:"executionMode"`
+	RiskLevel            ShortcutRiskLevel          `json:"riskLevel"`
+	RequiresConfirmation bool                       `json:"requiresConfirmation"`
+	RequiresForeground   bool                       `json:"requiresForeground"`
+	RequiresRuntime      ShortcutRuntimeRequirement `json:"requiresRuntime"`
+	CanonicalTarget      ShortcutCanonicalTarget    `json:"canonicalTarget"`
+	CanonicalRef         string                     `json:"canonicalRef,omitempty"`
+	ParameterSchema      map[string]any             `json:"parameterSchema,omitempty"`
+	Enabled              bool                       `json:"enabled"`
 }
 
 type ShortcutActionEntity struct {
@@ -153,35 +153,35 @@ type ShortcutActionCatalog struct {
 }
 
 type CharacterEntity struct {
-	ID          string `json:"id"`
-	DisplayName string `json:"displayName"`
-	AvatarURI   string `json:"avatarUri,omitempty"`
+	ID          string             `json:"id"`
+	DisplayName string             `json:"displayName"`
+	AvatarURI   string             `json:"avatarUri,omitempty"`
 	Privacy     EntityPrivacyLevel `json:"privacy"`
 }
 
 type ConversationEntity struct {
-	ID                  string `json:"id"`
-	Title               string `json:"title"`
-	CharacterID         string `json:"characterId"`
-	CharacterDisplayName string `json:"characterDisplayName"`
-	LastUsedAt          string `json:"lastUsedAt,omitempty"`
-	Privacy             EntityPrivacyLevel `json:"privacy"`
+	ID                   string             `json:"id"`
+	Title                string             `json:"title"`
+	CharacterID          string             `json:"characterId"`
+	CharacterDisplayName string             `json:"characterDisplayName"`
+	LastUsedAt           string             `json:"lastUsedAt,omitempty"`
+	Privacy              EntityPrivacyLevel `json:"privacy"`
 }
 
 type AlarmEntity struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	State       string `json:"state"`
-	NextFireAt  string `json:"nextFireAt,omitempty"`
-	Privacy     EntityPrivacyLevel `json:"privacy"`
+	ID         string             `json:"id"`
+	Title      string             `json:"title"`
+	State      string             `json:"state"`
+	NextFireAt string             `json:"nextFireAt,omitempty"`
+	Privacy    EntityPrivacyLevel `json:"privacy"`
 }
 
 type ReminderEntity struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	DueAt       string `json:"dueAt,omitempty"`
-	Completed   bool   `json:"completed"`
-	Privacy     EntityPrivacyLevel `json:"privacy"`
+	ID        string             `json:"id"`
+	Title     string             `json:"title"`
+	DueAt     string             `json:"dueAt,omitempty"`
+	Completed bool               `json:"completed"`
+	Privacy   EntityPrivacyLevel `json:"privacy"`
 }
 
 type EntityQueryRequest struct {
@@ -193,34 +193,34 @@ type EntityQueryRequest struct {
 }
 
 type CharacterQueryRequest struct {
-	IDs       []string `json:"ids,omitempty"`
-	Query     string   `json:"query,omitempty"`
-	Limit     int      `json:"limit,omitempty"`
-	Offset    int      `json:"offset,omitempty"`
-	Privacy   EntityPrivacyLevel `json:"privacy"`
+	IDs     []string           `json:"ids,omitempty"`
+	Query   string             `json:"query,omitempty"`
+	Limit   int                `json:"limit,omitempty"`
+	Offset  int                `json:"offset,omitempty"`
+	Privacy EntityPrivacyLevel `json:"privacy"`
 }
 
 type ConversationQueryRequest struct {
-	IDs          []string `json:"ids,omitempty"`
-	CharacterID  string   `json:"characterId,omitempty"`
-	Query        string   `json:"query,omitempty"`
-	Limit        int      `json:"limit,omitempty"`
-	Offset       int      `json:"offset,omitempty"`
+	IDs          []string           `json:"ids,omitempty"`
+	CharacterID  string             `json:"characterId,omitempty"`
+	Query        string             `json:"query,omitempty"`
+	Limit        int                `json:"limit,omitempty"`
+	Offset       int                `json:"offset,omitempty"`
 	Privacy      EntityPrivacyLevel `json:"privacy"`
-	IncludeTitle bool     `json:"includeTitle"`
+	IncludeTitle bool               `json:"includeTitle"`
 }
 
 type EntityQueryResult struct {
-	Found  []any  `json:"found"`
-	Count  int    `json:"count"`
-	Error  string `json:"error,omitempty"`
+	Found []any  `json:"found"`
+	Count int    `json:"count"`
+	Error string `json:"error,omitempty"`
 }
 
 type DynamicOptionsRequest struct {
-	ParameterType string `json:"parameterType"`
+	ParameterType string         `json:"parameterType"`
 	Dependencies  map[string]any `json:"dependencies,omitempty"`
-	Query         string `json:"query,omitempty"`
-	Limit         int    `json:"limit,omitempty"`
+	Query         string         `json:"query,omitempty"`
+	Limit         int            `json:"limit,omitempty"`
 }
 
 type DynamicOptionsResult struct {
@@ -231,14 +231,14 @@ type DynamicOptionsResult struct {
 }
 
 type ShortcutRuntimeStatus struct {
-	Ready             bool   `json:"ready"`
-	NativeHostReady   bool   `json:"nativeHostReady"`
-	BackendReady      bool   `json:"backendReady"`
-	PermissionReady   bool   `json:"permissionReady"`
-	InteractionReady  bool   `json:"interactionReady"`
-	CanBackground     bool   `json:"canBackground"`
-	CanForeground     bool   `json:"canForeground"`
-	Error             string `json:"error,omitempty"`
+	Ready            bool   `json:"ready"`
+	NativeHostReady  bool   `json:"nativeHostReady"`
+	BackendReady     bool   `json:"backendReady"`
+	PermissionReady  bool   `json:"permissionReady"`
+	InteractionReady bool   `json:"interactionReady"`
+	CanBackground    bool   `json:"canBackground"`
+	CanForeground    bool   `json:"canForeground"`
+	Error            string `json:"error,omitempty"`
 }
 
 type ShortcutRuntimeEnsureRequest struct {
@@ -247,13 +247,13 @@ type ShortcutRuntimeEnsureRequest struct {
 }
 
 type ShortcutContribution struct {
-	ActionID            string         `json:"actionId"`
-	Title               string         `json:"title"`
-	Description         string         `json:"description"`
-	Exposure            ShortcutExposure `json:"exposure"`
+	ActionID            string            `json:"actionId"`
+	Title               string            `json:"title"`
+	Description         string            `json:"description"`
+	Exposure            ShortcutExposure  `json:"exposure"`
 	Risk                ShortcutRiskLevel `json:"risk"`
-	ParameterSchema     map[string]any `json:"parameterSchema,omitempty"`
-	RequiredPermissions []string       `json:"requiredPermissions,omitempty"`
+	ParameterSchema     map[string]any    `json:"parameterSchema,omitempty"`
+	RequiredPermissions []string          `json:"requiredPermissions,omitempty"`
 }
 
 type ShortcutContributionResult struct {
@@ -263,29 +263,16 @@ type ShortcutContributionResult struct {
 }
 
 type EntitySnapshot struct {
-	Version       int                    `json:"version"`
-	GeneratedAt   string                 `json:"generatedAt"`
-	Characters    []CharacterEntity      `json:"characters,omitempty"`
-	Conversations []ConversationEntity   `json:"conversations,omitempty"`
-	Schedule      *SnapshotSchedule      `json:"schedule,omitempty"`
+	Version       int                  `json:"version"`
+	GeneratedAt   string               `json:"generatedAt"`
+	Characters    []CharacterEntity    `json:"characters,omitempty"`
+	Conversations []ConversationEntity `json:"conversations,omitempty"`
+	Schedule      *SnapshotSchedule    `json:"schedule,omitempty"`
 }
 
 type SnapshotSchedule struct {
 	NextRefreshAt string `json:"nextRefreshAt,omitempty"`
 	TTLSeconds    int    `json:"ttlSeconds"`
-}
-
-type IntentDonationRequest struct {
-	IntentID   string         `json:"intentId"`
-	ActionID   string         `json:"actionId,omitempty"`
-	Parameters map[string]any `json:"parameters,omitempty"`
-	Timestamp  string         `json:"timestamp"`
-}
-
-type IntentDonationResult struct {
-	Success   bool   `json:"success"`
-	DonationID string `json:"donationId,omitempty"`
-	Error     string `json:"error,omitempty"`
 }
 
 type AppShortcutProviderRequest struct {
@@ -301,21 +288,16 @@ type AppShortcutEntry struct {
 }
 
 type ShortcutSettings struct {
-	Enabled                   bool `json:"enabled"`
-	AskAmitiaEnabled          bool `json:"askAmitiaEnabled"`
-	VoiceEnabled              bool `json:"voiceEnabled"`
-	AlarmEnabled              bool `json:"alarmEnabled"`
-	ReminderEnabled           bool `json:"reminderEnabled"`
-	CalendarEnabled           bool `json:"calendarEnabled"`
-	ShareEnabled              bool `json:"shareEnabled"`
-	ExposeConversationTitles  bool `json:"exposeConversationTitles"`
-	SafeToolModeDefault       bool `json:"safeToolModeDefault"`
-	BackgroundAutomationSafe  bool `json:"backgroundAutomationSafe"`
-}
-
-type AppShortcutUpdateRequest struct {
-	RefreshParams bool     `json:"refreshParams"`
-	ActionIDs     []string `json:"actionIds,omitempty"`
+	Enabled                  bool `json:"enabled"`
+	AskAmitiaEnabled         bool `json:"askAmitiaEnabled"`
+	VoiceEnabled             bool `json:"voiceEnabled"`
+	AlarmEnabled             bool `json:"alarmEnabled"`
+	ReminderEnabled          bool `json:"reminderEnabled"`
+	CalendarEnabled          bool `json:"calendarEnabled"`
+	ShareEnabled             bool `json:"shareEnabled"`
+	ExposeConversationTitles bool `json:"exposeConversationTitles"`
+	SafeToolModeDefault      bool `json:"safeToolModeDefault"`
+	BackgroundAutomationSafe bool `json:"backgroundAutomationSafe"`
 }
 
 type ParameterSummaryRequest struct {
@@ -324,8 +306,8 @@ type ParameterSummaryRequest struct {
 }
 
 type ParameterSummaryResult struct {
-	Summary     string `json:"summary"`
-	Parameters  []ParameterDescriptor `json:"parameters"`
+	Summary    string                `json:"summary"`
+	Parameters []ParameterDescriptor `json:"parameters"`
 }
 
 type ParameterDescriptor struct {

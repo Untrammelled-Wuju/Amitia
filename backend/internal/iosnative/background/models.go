@@ -65,7 +65,6 @@ type BackgroundSubmissionRequest struct {
 	TaskDefinitionID      string                `json:"taskDefinitionId,omitempty"`
 	SystemClass           BackgroundSystemClass `json:"systemClass"`
 	Identifier            string                `json:"identifier"`
-	IdentifierClass       string                `json:"identifierClass,omitempty"`
 	EarliestBeginAt       *time.Time            `json:"earliestBeginAt,omitempty"`
 	NetworkRequired       bool                  `json:"networkRequired"`
 	ExternalPowerRequired bool                  `json:"externalPowerRequired"`
@@ -95,7 +94,6 @@ type BackgroundCancelAllRequest struct {
 
 type BackgroundTaskProgress struct {
 	TaskRunID      string `json:"taskRunId"`
-	IdentifierClass string `json:"identifierClass,omitempty"`
 	TotalUnits     int64  `json:"totalUnits"`
 	CompletedUnits int64  `json:"completedUnits"`
 	Phase          string `json:"phase"`

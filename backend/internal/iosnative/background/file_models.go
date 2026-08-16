@@ -59,7 +59,7 @@ type IOSFileReadRequest struct {
 type IOSFileWriteRequest struct {
 	MountID      string `json:"mountId"`
 	RelativePath string `json:"relativePath"`
-	Content      []byte `json:"content"`
+	ContentBase64 string `json:"contentBase64"`
 	Atomic       bool   `json:"atomic"`
 }
 
@@ -92,14 +92,15 @@ type IOSFileDeleteRequest struct {
 }
 
 type IOSFileStatResult struct {
-	Name         string `json:"name"`
-	SizeBytes    int64  `json:"sizeBytes"`
-	IsDirectory  bool   `json:"isDirectory"`
-	IsUbiquitous bool   `json:"isUbiquitous"`
-	IsMaterialized bool `json:"isMaterialized"`
-	ModifiedAt   string `json:"modifiedAt,omitempty"`
-	DisplayName  string `json:"displayName,omitempty"`
-	MIMEType     string `json:"mimeType,omitempty"`
+	Name           string `json:"name"`
+	RelativePath   string `json:"relativePath"`
+	Size           int64  `json:"size"`
+	IsDirectory    bool   `json:"isDirectory"`
+	IsSymbolicLink bool   `json:"isSymbolicLink"`
+	IsMaterialized bool   `json:"isMaterialized"`
+	MIMEType       string `json:"mimeType,omitempty"`
+	ModifiedAt     string `json:"modifiedAt,omitempty"`
+	CreatedAt      string `json:"createdAt,omitempty"`
 }
 
 type IOSFileListResult struct {
@@ -108,9 +109,10 @@ type IOSFileListResult struct {
 }
 
 type IOSFileReadResult struct {
-	Content  []byte `json:"content"`
-	Size     int64  `json:"size"`
-	Finished bool   `json:"finished"`
+	ContentBase64 string `json:"contentBase64"`
+	Offset        int64  `json:"offset"`
+	Size          int64  `json:"size"`
+	Finished      bool   `json:"finished"`
 }
 
 type IOSFileExportRequest struct {

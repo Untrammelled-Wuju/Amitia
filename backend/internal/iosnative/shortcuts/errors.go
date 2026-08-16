@@ -1,10 +1,10 @@
 package shortcuts
 
 const (
-	ErrShortcutsUnavailable        = "SHORTCUTS_UNAVAILABLE"
-	ErrShortcutsIntentUnsupported  = "SHORTCUTS_INTENT_UNSUPPORTED"
-	ErrShortcutsActionUnsupported  = "SHORTCUTS_ACTION_UNSUPPORTED"
-	ErrShortcutsActionNotExposed   = "SHORTCUTS_ACTION_NOT_EXPOSED"
+	ErrShortcutsUnavailable       = "SHORTCUTS_UNAVAILABLE"
+	ErrShortcutsIntentUnsupported = "SHORTCUTS_INTENT_UNSUPPORTED"
+	ErrShortcutsActionUnsupported = "SHORTCUTS_ACTION_UNSUPPORTED"
+	ErrShortcutsActionNotExposed  = "SHORTCUTS_ACTION_NOT_EXPOSED"
 
 	ErrShortcutsEntityNotFound     = "SHORTCUTS_ENTITY_NOT_FOUND"
 	ErrShortcutsEntityQueryFailed  = "SHORTCUTS_ENTITY_QUERY_FAILED"

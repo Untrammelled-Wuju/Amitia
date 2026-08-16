@@ -39,7 +39,7 @@ func newMockShortcutsBridge(resp nativebridge.Response, err error) *mockShortcut
 func baseShortcutsRequest(operation string) nativebridge.Request {
 	return nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-shortcuts-001",
+		RequestId:       "test-shortcuts-001",
 		Platform:        "ios",
 		Operation:       operation,
 		Payload:         map[string]any{},
@@ -71,7 +71,7 @@ func TestHandler_Execute_UnknownOperation(t *testing.T) {
 func TestHandler_Status(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-shortcuts-001",
+		RequestId:       "test-shortcuts-001",
 		Status:          "ok",
 		Result:          map[string]any{"supported": true},
 	}
@@ -89,84 +89,10 @@ func TestHandler_Status(t *testing.T) {
 	}
 }
 
-func TestHandler_IntentRegister_MissingID(t *testing.T) {
-	h := NewShortcutsHandler(newMockShortcutsBridge(nativebridge.Response{}, nil))
-	req := baseShortcutsRequest(OperationIntentRegister)
-	resp := h.Execute(context.Background(), req)
-
-	if resp.Status != "error" {
-		t.Errorf("expected error status, got %s", resp.Status)
-	}
-	if resp.Error.Code != ErrShortcutsParameterRequired {
-		t.Errorf("expected ErrShortcutsParameterRequired, got %s", resp.Error.Code)
-	}
-}
-
-func TestHandler_IntentRegister_Success(t *testing.T) {
-	expected := nativebridge.Response{
-		ProtocolVersion: 1,
-		RequestID:       "test-shortcuts-001",
-		Status:          "ok",
-		Result:          map[string]any{},
-	}
-	bridge := newMockShortcutsBridge(expected, nil)
-	h := NewShortcutsHandler(bridge)
-
-	req := baseShortcutsRequest(OperationIntentRegister)
-	req.Payload["intentId"] = "ask_amitia"
-	resp := h.Execute(context.Background(), req)
-
-	if resp.Status != "ok" {
-		t.Errorf("expected ok status, got %s", resp.Status)
-	}
-	if bridge.calls[0].Payload["intentId"] != "ask_amitia" {
-		t.Error("expected intentId in payload")
-	}
-}
-
-func TestHandler_IntentRevoke_MissingID(t *testing.T) {
-	h := NewShortcutsHandler(newMockShortcutsBridge(nativebridge.Response{}, nil))
-	req := baseShortcutsRequest(OperationIntentRevoke)
-	resp := h.Execute(context.Background(), req)
-
-	if resp.Status != "error" {
-		t.Errorf("expected error status, got %s", resp.Status)
-	}
-}
-
-func TestHandler_IntentDonate_MissingIntentID(t *testing.T) {
-	h := NewShortcutsHandler(newMockShortcutsBridge(nativebridge.Response{}, nil))
-	req := baseShortcutsRequest(OperationIntentDonate)
-	resp := h.Execute(context.Background(), req)
-
-	if resp.Status != "error" {
-		t.Errorf("expected error status, got %s", resp.Status)
-	}
-	if resp.Error.Code != ErrShortcutsParameterRequired {
-		t.Errorf("expected ErrShortcutsParameterRequired, got %s", resp.Error.Code)
-	}
-}
-
-func TestHandler_IntentDonate_TooManyParams(t *testing.T) {
-	h := NewShortcutsHandler(newMockShortcutsBridge(nativebridge.Response{}, nil))
-	req := baseShortcutsRequest(OperationIntentDonate)
-	req.Payload["intentId"] = "ask_amitia"
-	params := map[string]any{}
-	for i := 0; i < MaxIntentDonationParameters+1; i++ {
-		params[string(rune('a'+i))] = "value"
-	}
-	req.Payload["parameters"] = params
-	resp := h.Execute(context.Background(), req)
-
-	if resp.Status != "error" {
-		t.Errorf("expected error status, got %s", resp.Status)
-	}
-}
-
 func TestHandler_EntitiesCharacters(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-shortcuts-001",
+		RequestId:       "test-shortcuts-001",
 		Status:          "ok",
 		Result:          map[string]any{"characters": []any{}},
 	}
@@ -188,7 +114,7 @@ func TestHandler_EntitiesCharacters(t *testing.T) {
 func TestHandler_EntitiesCharacters_DefaultLimit(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-shortcuts-001",
+		RequestId:       "test-shortcuts-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -209,7 +135,7 @@ func TestHandler_EntitiesCharacters_DefaultLimit(t *testing.T) {
 func TestHandler_EntitiesConversations_WithCharacterFilter(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-shortcuts-001",
+		RequestId:       "test-shortcuts-001",
 		Status:          "ok",
 		Result:          map[string]any{"conversations": []any{}},
 	}
@@ -246,7 +172,7 @@ func TestHandler_EntityResolve_MissingID(t *testing.T) {
 func TestHandler_EntityResolve_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-shortcuts-001",
+		RequestId:       "test-shortcuts-001",
 		Status:          "ok",
 		Result:          map[string]any{"found": true},
 	}
@@ -266,7 +192,7 @@ func TestHandler_EntityResolve_Success(t *testing.T) {
 func TestHandler_EntitySuggestions(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-shortcuts-001",
+		RequestId:       "test-shortcuts-001",
 		Status:          "ok",
 		Result:          map[string]any{"suggestions": []any{}},
 	}
@@ -286,7 +212,7 @@ func TestHandler_EntitySuggestions(t *testing.T) {
 func TestHandler_ActionsCatalog(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-shortcuts-001",
+		RequestId:       "test-shortcuts-001",
 		Status:          "ok",
 		Result:          map[string]any{"actions": []any{}},
 	}
@@ -317,7 +243,7 @@ func TestHandler_ActionDescribe_MissingID(t *testing.T) {
 func TestHandler_ActionDescribe_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-shortcuts-001",
+		RequestId:       "test-shortcuts-001",
 		Status:          "ok",
 		Result:          map[string]any{"id": "create_alarm"},
 	}
@@ -378,7 +304,7 @@ func TestHandler_ActionExecute_ShortIdempotencyKey(t *testing.T) {
 func TestHandler_ActionExecute_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-shortcuts-001",
+		RequestId:       "test-shortcuts-001",
 		Status:          "ok",
 		Result:          map[string]any{"status": "completed"},
 	}
@@ -436,7 +362,7 @@ func TestHandler_ActionConfirm_MissingTitle(t *testing.T) {
 func TestHandler_ActionConfirm_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-shortcuts-001",
+		RequestId:       "test-shortcuts-001",
 		Status:          "ok",
 		Result:          map[string]any{"confirmed": true},
 	}
@@ -463,7 +389,7 @@ func TestHandler_ActionConfirm_Success(t *testing.T) {
 func TestHandler_RuntimeReadiness(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-shortcuts-001",
+		RequestId:       "test-shortcuts-001",
 		Status:          "ok",
 		Result:          map[string]any{"ready": true},
 	}
@@ -481,7 +407,7 @@ func TestHandler_RuntimeReadiness(t *testing.T) {
 func TestHandler_RuntimeEnsure_DefaultRequirement(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-shortcuts-001",
+		RequestId:       "test-shortcuts-001",
 		Status:          "ok",
 		Result:          map[string]any{"ready": true},
 	}
@@ -502,7 +428,7 @@ func TestHandler_RuntimeEnsure_DefaultRequirement(t *testing.T) {
 func TestHandler_RuntimeEnsure_WithTimeout(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-shortcuts-001",
+		RequestId:       "test-shortcuts-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -529,7 +455,7 @@ func TestHandler_RuntimeEnsure_WithTimeout(t *testing.T) {
 func TestHandler_SnapshotGet(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-shortcuts-001",
+		RequestId:       "test-shortcuts-001",
 		Status:          "ok",
 		Result:          map[string]any{"version": 1},
 	}
@@ -548,7 +474,7 @@ func TestHandler_SnapshotGet(t *testing.T) {
 func TestHandler_SnapshotRefresh(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-shortcuts-001",
+		RequestId:       "test-shortcuts-001",
 		Status:          "ok",
 		Result:          map[string]any{"refreshed": true},
 	}
@@ -566,7 +492,7 @@ func TestHandler_SnapshotRefresh(t *testing.T) {
 func TestHandler_ShortcutsProvider(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-shortcuts-001",
+		RequestId:       "test-shortcuts-001",
 		Status:          "ok",
 		Result:          map[string]any{"shortcuts": []any{}},
 	}
@@ -597,7 +523,7 @@ func TestHandler_ShortcutsPhrase_MissingPhrase(t *testing.T) {
 func TestHandler_ShortcutsPhrase_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-shortcuts-001",
+		RequestId:       "test-shortcuts-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -613,30 +539,10 @@ func TestHandler_ShortcutsPhrase_Success(t *testing.T) {
 	}
 }
 
-func TestHandler_ShortcutsUpdate(t *testing.T) {
-	expected := nativebridge.Response{
-		ProtocolVersion: 1,
-		RequestID:       "test-shortcuts-001",
-		Status:          "ok",
-		Result:          map[string]any{"updated": true},
-	}
-	bridge := newMockShortcutsBridge(expected, nil)
-	h := NewShortcutsHandler(bridge)
-
-	req := baseShortcutsRequest(OperationShortcutsUpdate)
-	req.Payload["refreshParams"] = true
-	req.Payload["actionIds"] = []any{"ask_amitia", "create_alarm"}
-	resp := h.Execute(context.Background(), req)
-
-	if resp.Status != "ok" {
-		t.Errorf("expected ok status, got %s", resp.Status)
-	}
-}
-
 func TestHandler_SettingsGet(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-shortcuts-001",
+		RequestId:       "test-shortcuts-001",
 		Status:          "ok",
 		Result:          map[string]any{"enabled": true},
 	}
@@ -654,7 +560,7 @@ func TestHandler_SettingsGet(t *testing.T) {
 func TestHandler_SettingsUpdate(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-shortcuts-001",
+		RequestId:       "test-shortcuts-001",
 		Status:          "ok",
 		Result:          map[string]any{"updated": true},
 	}
@@ -776,7 +682,7 @@ func TestValidateMessage(t *testing.T) {
 
 func TestValidateActionRequest(t *testing.T) {
 	err := ValidateActionRequest(ShortcutActionRequest{
-		ActionID: "create_alarm",
+		ActionID:   "create_alarm",
 		Parameters: map[string]any{"title": "Morning"},
 		Invocation: ShortcutInvocationMetadata{IdempotencyKey: "unique-key-1234567890"},
 	})
@@ -839,20 +745,6 @@ func TestValidateContribution(t *testing.T) {
 	})
 	if err == nil {
 		t.Error("expected error for invalid risk level")
-	}
-}
-
-func TestValidateDonation(t *testing.T) {
-	err := ValidateDonation(IntentDonationRequest{
-		IntentID: "ask_amitia",
-	})
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
-	}
-
-	err = ValidateDonation(IntentDonationRequest{})
-	if err == nil {
-		t.Error("expected error for missing intentId")
 	}
 }
 

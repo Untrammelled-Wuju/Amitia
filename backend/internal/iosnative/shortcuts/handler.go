@@ -19,12 +19,6 @@ func (h *ShortcutsHandler) Execute(ctx context.Context, request nativebridge.Req
 	switch request.Operation {
 	case OperationStatus:
 		return h.handleStatus(ctx, request)
-	case OperationIntentRegister:
-		return h.handleIntentRegister(ctx, request)
-	case OperationIntentRevoke:
-		return h.handleIntentRevoke(ctx, request)
-	case OperationIntentDonate:
-		return h.handleIntentDonate(ctx, request)
 	case OperationEntitiesCharacters:
 		return h.handleEntitiesCharacters(ctx, request)
 	case OperationEntitiesConversations:
@@ -59,8 +53,6 @@ func (h *ShortcutsHandler) Execute(ctx context.Context, request nativebridge.Req
 		return h.handleShortcutsProvider(ctx, request)
 	case OperationShortcutsPhrase:
 		return h.handleShortcutsPhrase(ctx, request)
-	case OperationShortcutsUpdate:
-		return h.handleShortcutsUpdate(ctx, request)
 	case OperationSettingsGet:
 		return h.handleSettingsGet(ctx, request)
 	case OperationSettingsUpdate:
@@ -78,7 +70,7 @@ func (h *ShortcutsHandler) bridgeCall(ctx context.Context, request nativebridge.
 	go func() {
 		resp, err := h.bridge.Execute(ctx, nativebridge.Request{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Platform:        "ios",
 			Operation:       operation,
 			Payload:         payload,
@@ -139,50 +131,6 @@ func (h *ShortcutsHandler) handleStatus(ctx context.Context, request nativebridg
 	return h.bridgeCall(ctx, request, OperationStatus, map[string]any{})
 }
 
-func (h *ShortcutsHandler) handleIntentRegister(ctx context.Context, request nativebridge.Request) nativebridge.Response {
-	intentID := getString(request.Payload, "intentId")
-	if intentID == "" {
-		return NewShortcutsError(request, ErrShortcutsParameterRequired, "intentId is required")
-	}
-	return h.bridgeCall(ctx, request, OperationIntentRegister, map[string]any{
-		"intentId": intentID,
-	})
-}
-
-func (h *ShortcutsHandler) handleIntentRevoke(ctx context.Context, request nativebridge.Request) nativebridge.Response {
-	intentID := getString(request.Payload, "intentId")
-	if intentID == "" {
-		return NewShortcutsError(request, ErrShortcutsParameterRequired, "intentId is required")
-	}
-	return h.bridgeCall(ctx, request, OperationIntentRevoke, map[string]any{
-		"intentId": intentID,
-	})
-}
-
-func (h *ShortcutsHandler) handleIntentDonate(ctx context.Context, request nativebridge.Request) nativebridge.Response {
-	donation := IntentDonationRequest{
-		IntentID:  getString(request.Payload, "intentId"),
-		ActionID:  getString(request.Payload, "actionId"),
-		Timestamp: getString(request.Payload, "timestamp"),
-	}
-	if params, ok := request.Payload["parameters"].(map[string]any); ok {
-		donation.Parameters = params
-	}
-	if err := ValidateDonation(donation); err != nil {
-		code, msg := MapErrorToNativeBridge(err)
-		return NewShortcutsError(request, code, msg)
-	}
-	payload := map[string]any{
-		"intentId":  donation.IntentID,
-		"actionId":  donation.ActionID,
-		"timestamp": donation.Timestamp,
-	}
-	if len(donation.Parameters) > 0 {
-		payload["parameters"] = donation.Parameters
-	}
-	return h.bridgeCall(ctx, request, OperationIntentDonate, payload)
-}
-
 func (h *ShortcutsHandler) handleEntitiesCharacters(ctx context.Context, request nativebridge.Request) nativebridge.Response {
 	limit := getInt(request.Payload, "limit", DefaultListLimit)
 	limit = ClampLimit(limit)
@@ -241,7 +189,7 @@ func (h *ShortcutsHandler) handleEntityResolve(ctx context.Context, request nati
 		return NewShortcutsError(request, code, msg)
 	}
 	return h.bridgeCall(ctx, request, OperationEntityResolve, map[string]any{
-		"entityId": entityID,
+		"entityId":   entityID,
 		"entityType": getString(request.Payload, "entityType"),
 	})
 }
@@ -326,10 +274,10 @@ func (h *ShortcutsHandler) handleActionExecute(ctx context.Context, request nati
 
 func (h *ShortcutsHandler) handleActionConfirm(ctx context.Context, request nativebridge.Request) nativebridge.Response {
 	confirmReq := ConfirmationRequest{
-		ActionID:   getString(request.Payload, "actionId"),
-		Title:      getString(request.Payload, "title"),
-		Message:    getString(request.Payload, "message"),
-		ObjectName: getString(request.Payload, "objectName"),
+		ActionID:    getString(request.Payload, "actionId"),
+		Title:       getString(request.Payload, "title"),
+		Message:     getString(request.Payload, "message"),
+		ObjectName:  getString(request.Payload, "objectName"),
 		Consequence: getString(request.Payload, "consequence"),
 	}
 	if err := ValidateConfirmationRequest(confirmReq); err != nil {
@@ -394,14 +342,6 @@ func (h *ShortcutsHandler) handleShortcutsPhrase(ctx context.Context, request na
 	}
 	return h.bridgeCall(ctx, request, OperationShortcutsPhrase, map[string]any{
 		"phrase": phrase,
-	})
-}
-
-func (h *ShortcutsHandler) handleShortcutsUpdate(ctx context.Context, request nativebridge.Request) nativebridge.Response {
-	actionIDs := getStringSlice(request.Payload, "actionIds")
-	return h.bridgeCall(ctx, request, OperationShortcutsUpdate, map[string]any{
-		"refreshParams": getBool(request.Payload, "refreshParams"),
-		"actionIds":     actionIDs,
 	})
 }
 
