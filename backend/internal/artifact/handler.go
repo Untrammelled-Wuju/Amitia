@@ -118,7 +118,7 @@ func (h *Handler) GetContent(c *gin.Context) {
 	c.Header("Content-Disposition", fmt.Sprintf(`%s; filename="%s"`, disposition, sanitizeDispositionFilename(filename)))
 	c.Header("Cache-Control", "private, max-age=86400")
 	c.Header("X-Content-Type-Options", "nosniff")
-	http.ServeContent(c.Writer, c.Request, filename, art.UpdatedAt, &readSeekerAdapter{rc: rc, size: info.SizeBytes})
+	http.ServeContent(c.Writer, c.Request, filename, art.UpdatedAt, newReadSeeker(rc, info.SizeBytes))
 	c.Status(200)
 }
 
@@ -171,6 +171,13 @@ func sanitizeDispositionFilename(name string) string {
 	return name
 }
 
+func newReadSeeker(rc io.Reader, size int64) io.ReadSeeker {
+	if rs, ok := rc.(io.ReadSeeker); ok {
+		return rs
+	}
+	return &readSeekerAdapter{rc: rc, size: size}
+}
+
 type readSeekerAdapter struct {
 	rc   io.Reader
 	pos  int64
@@ -184,6 +191,9 @@ func (a *readSeekerAdapter) Read(p []byte) (int, error) {
 }
 
 func (a *readSeekerAdapter) Seek(offset int64, whence int) (int64, error) {
+	if rs, ok := a.rc.(io.ReadSeeker); ok {
+		return rs.Seek(offset, whence)
+	}
 	if whence == io.SeekStart && offset == 0 && a.pos == 0 {
 		return 0, nil
 	}
