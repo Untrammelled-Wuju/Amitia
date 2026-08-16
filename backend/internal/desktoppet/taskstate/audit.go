@@ -35,7 +35,9 @@ type AuditRecord struct {
 
 func NewAuditID() string {
 	b := make([]byte, 12)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		return ""
+	}
 	return "ta_" + hex.EncodeToString(b) + time.Now().Format("20060102150405")
 }
 
