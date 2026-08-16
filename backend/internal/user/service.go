@@ -61,7 +61,9 @@ func NewService(repo Repository, ctx *app.AppContext) Service {
 
 func hashPassword(password string) string {
 	rawSalt := make([]byte, saltLen)
-	rand.Read(rawSalt)
+	if _, err := rand.Read(rawSalt); err != nil {
+		return ""
+	}
 	saltHex := hex.EncodeToString(rawSalt)
 	dk, _ := scrypt.Key([]byte(password), []byte(saltHex), scryptN, scryptR, scryptP, keyLen)
 	return saltHex + ":" + hex.EncodeToString(dk)
