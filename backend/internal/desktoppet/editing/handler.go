@@ -12,10 +12,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 	desktoppetAuth "github.com/u-ai/backend/internal/auth"
-	"github.com/u-ai/backend/pkg/util"
 	"github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/pkg/comment/response"
+	"github.com/u-ai/backend/pkg/util"
 )
 
 type Handler struct {

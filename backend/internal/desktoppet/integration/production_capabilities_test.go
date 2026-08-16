@@ -221,10 +221,10 @@ func TestTransactionalAttach_Rollback_OnStepFailure(t *testing.T) {
 }
 
 type fakeActionPort struct {
-	mu            sync.RWMutex
-	bindings      map[string]ExistingPetActionBinding
-	failOnAttach  bool
-	failOnDetach  bool
+	mu           sync.RWMutex
+	bindings     map[string]ExistingPetActionBinding
+	failOnAttach bool
+	failOnDetach bool
 }
 
 func newFakeActionPort() *fakeActionPort {
