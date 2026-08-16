@@ -590,6 +590,7 @@ func (m ModuleMeta) ToDomain(extID domain.ExtensionID) (domain.ModuleDefinition,
 		timeout, _ := time.ParseDuration(m.Runtime.Timeout)
 		rd := domain.RuntimeDefinition{
 			Type:         domain.RuntimeType(m.Runtime.Type),
+			ServiceID:    m.Runtime.ServiceID,
 			EntryPoint:   m.Runtime.EntryPoint,
 			WorkerCount:  m.Runtime.WorkerCount,
 			Timeout:      timeout,
