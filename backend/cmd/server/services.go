@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -1143,7 +1144,8 @@ func newDeviceAgentServices(ctx *app.AppContext, graphSvc graph.Service, bootstr
 		log.Warn("kernel recovery warning: ", err)
 	}
 
-	deviceAgentRuntime, err := devicemesh.NewDeviceAgentRuntime(config.AppCfg.Storage.DataDir, runtimeidentity.PlatformWindows)
+	// R19: Detect platform from runtime instead of hardcoding Windows
+	deviceAgentRuntime, err := devicemesh.NewDeviceAgentRuntime(config.AppCfg.Storage.DataDir, platformFromGOOS(runtime.GOOS))
 	if err != nil {
 		log.Warn("device-mesh agent runtime unavailable: ", err)
 	}
@@ -1635,3 +1637,21 @@ func (s *BehaviorRuntimeEventSink) resolveCharacterAndPet(event runtime.RuntimeD
 
 var _ runtime.RuntimeEventSink = (*runtimeEventSinkHolder)(nil)
 var _ runtime.RuntimeEventSink = (*BehaviorRuntimeEventSink)(nil)
+
+// R19: platformFromGOOS converts runtime.GOOS to runtimeidentity.Platform
+func platformFromGOOS(goos string) runtimeidentity.Platform {
+	switch goos {
+	case "windows":
+		return runtimeidentity.PlatformWindows
+	case "darwin":
+		return runtimeidentity.PlatformDarwin
+	case "linux":
+		return runtimeidentity.PlatformLinux
+	case "android":
+		return runtimeidentity.PlatformAndroid
+	case "ios":
+		return runtimeidentity.PlatformIOS
+	default:
+		return runtimeidentity.PlatformUnknown
+	}
+}
