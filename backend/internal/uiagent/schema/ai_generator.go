@@ -12,17 +12,24 @@ import (
 // It receives a JSON prompt and returns JSON output.
 type LLMSchemaCallFunc func(ctx interface{}, promptJSON []byte) ([]byte, error)
 
-// AISchemaGenerator produces SchemaUIDocuments using an LLM,
-// falling back to heuristic generation when no LLM is available.
+// AISchemaGenerator produces SchemaUIDocuments using an LLM.
+// Heuristic fallback is prohibited in production paths.
 type AISchemaGenerator struct {
-	catalog *ComponentCatalog
-	llmCall LLMSchemaCallFunc
+	catalog       *ComponentCatalog
+	llmCall       LLMSchemaCallFunc
+	allowHeuristic bool
 }
 
-// NewAISchemaGenerator creates an AI-backed generator.
-// If llmCall is nil, generation falls back to heuristic rules.
+// NewAISchemaGenerator creates an AI-backed generator for production use.
+// Heuristic fallback is disabled; if LLM is unavailable, Generate returns an error.
 func NewAISchemaGenerator(catalog *ComponentCatalog, llmCall LLMSchemaCallFunc) *AISchemaGenerator {
-	return &AISchemaGenerator{catalog: catalog, llmCall: llmCall}
+	return &AISchemaGenerator{catalog: catalog, llmCall: llmCall, allowHeuristic: false}
+}
+
+// NewAISchemaGeneratorWithHeuristic creates a generator that permits heuristic fallback.
+// Intended for development and tests only.
+func NewAISchemaGeneratorWithHeuristic(catalog *ComponentCatalog, llmCall LLMSchemaCallFunc) *AISchemaGenerator {
+	return &AISchemaGenerator{catalog: catalog, llmCall: llmCall, allowHeuristic: true}
 }
 
 // Generate produces a SchemaUIDocument from a description.
@@ -42,7 +49,11 @@ func (g *AISchemaGenerator) Generate(
 		}
 	}
 
-	return g.generateHeuristic(desc, availableComps)
+	if g.allowHeuristic {
+		return g.generateHeuristic(desc, availableComps)
+	}
+
+	return nil, fmt.Errorf("schema generation requires an available LLM provider")
 }
 
 func (g *AISchemaGenerator) generateWithLLM(description string, availableComps []SchemaComponentType) (*SchemaUIDocument, error) {

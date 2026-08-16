@@ -5,6 +5,7 @@ import (
 
 	"github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	"github.com/u-ai/backend/internal/uiagent/preview"
 )
 
 type UIOperation struct {
@@ -41,11 +42,14 @@ func (p UIChangePlan) NeedsCapability(capID capability.CapabilityID) bool {
 }
 
 type UIResult struct {
-	State           string   `json:"state"`
-	ChangedFiles    []string `json:"changedFiles,omitempty"`
-	ContributionIDs []string `json:"contributionIds,omitempty"`
-	PreviewRefs     []string `json:"previewRefs,omitempty"`
-	DiffSummary     string   `json:"diffSummary,omitempty"`
-	RollbackToken   string   `json:"rollbackToken,omitempty"`
-	Warnings        []string `json:"warnings,omitempty"`
+	State           string                `json:"state"`
+	ChangedFiles    []string              `json:"changedFiles,omitempty"`
+	ContributionIDs []string              `json:"contributionIds,omitempty"`
+	PreviewRefs     []string              `json:"previewRefs,omitempty"`
+	DiffSummary     string                `json:"diffSummary,omitempty"`
+	RollbackToken   string                `json:"rollbackToken,omitempty"`
+	Warnings        []string              `json:"warnings,omitempty"`
+	PreviewState    string                `json:"previewState,omitempty"`
+	RefineResult    *preview.RefineResult `json:"refineResult,omitempty"`
+	ObserveIssues   []string              `json:"observeIssues,omitempty"`
 }
