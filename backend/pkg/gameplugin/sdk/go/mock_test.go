@@ -68,6 +68,12 @@ func (m *MockTransport) GetSentMessages() []protocol.Envelope {
 	return result
 }
 
+func (m *MockTransport) GetSentMessagesLen() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.messages)
+}
+
 func (m *MockTransport) SetSendError(err error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

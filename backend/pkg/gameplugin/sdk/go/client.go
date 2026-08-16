@@ -50,11 +50,40 @@ func WithTimeout(timeoutMs int) MessageOption {
 	}
 }
 
+type pendingState int
+
+const (
+	statePending pendingState = iota
+	stateCompleted
+	stateTimedOut
+	stateCancelled
+)
+
 type pendingRequest struct {
-	ID         string
-	Method     string
-	ResponseCh chan *protocol.Envelope
-	Timer      *time.Timer
+	ID       string
+	Method   string
+	Done     chan struct{}
+	Response protocol.Envelope
+	Err      error
+	state    pendingState
+	timer    *time.Timer
+	mu       sync.Mutex
+}
+
+func (pr *pendingRequest) terminal(state pendingState, resp protocol.Envelope, err error) bool {
+	pr.mu.Lock()
+	defer pr.mu.Unlock()
+	if pr.state != statePending {
+		return false
+	}
+	pr.state = state
+	pr.Response = resp
+	pr.Err = err
+	if pr.timer != nil {
+		pr.timer.Stop()
+	}
+	close(pr.Done)
+	return true
 }
 
 type Client struct {
@@ -124,20 +153,16 @@ func (c *Client) Transport() Transport {
 	return c.transport
 }
 
-func (c *Client) registerPending(id string, method string) *pendingRequest {
-	timeoutMs := c.pendingTimeoutMs
-
-	ch := make(chan *protocol.Envelope, 1)
-	timer := time.AfterFunc(timeoutMs, func() {
-		c.removePending(id)
-	})
-
+func (c *Client) registerPending(id string, method string, timeoutMs time.Duration) *pendingRequest {
 	pr := &pendingRequest{
-		ID:         id,
-		Method:     method,
-		ResponseCh: ch,
-		Timer:      timer,
+		ID:     id,
+		Method: method,
+		Done:   make(chan struct{}),
+		state:  statePending,
 	}
+	pr.timer = time.AfterFunc(timeoutMs, func() {
+		c.onPendingTimeout(id)
+	})
 
 	c.pendingMu.Lock()
 	c.pending[id] = pr
@@ -146,15 +171,34 @@ func (c *Client) registerPending(id string, method string) *pendingRequest {
 	return pr
 }
 
+func (c *Client) onPendingTimeout(id string) {
+	c.pendingMu.Lock()
+	pr, ok := c.pending[id]
+	if ok {
+		delete(c.pending, id)
+	}
+	c.pendingMu.Unlock()
+
+	if ok && pr != nil {
+		pr.terminal(stateTimedOut, protocol.Envelope{}, NewTransportError("request %s timed out", id))
+	}
+}
+
 func (c *Client) removePending(id string) {
 	c.pendingMu.Lock()
 	pr, ok := c.pending[id]
 	if ok {
 		delete(c.pending, id)
-		pr.Timer.Stop()
-		close(pr.ResponseCh)
 	}
 	c.pendingMu.Unlock()
+
+	if ok && pr != nil {
+		pr.mu.Lock()
+		if pr.timer != nil {
+			pr.timer.Stop()
+		}
+		pr.mu.Unlock()
+	}
 }
 
 func (c *Client) GetPendingCount() int {
@@ -172,9 +216,8 @@ func (c *Client) CancelPendingRequests(reason string) {
 	}
 	c.pendingMu.Unlock()
 
-	for _, pr := range pending {
-		pr.Timer.Stop()
-		close(pr.ResponseCh)
+	for id, pr := range pending {
+		pr.terminal(stateCancelled, protocol.Envelope{}, NewTransportError("request %s cancelled: %s", id, reason))
 	}
 }
 
@@ -192,7 +235,6 @@ func (c *Client) DispatchIncomingResponse(envelope protocol.Envelope) bool {
 	pr, ok := c.pending[requestID]
 	if ok {
 		delete(c.pending, requestID)
-		pr.Timer.Stop()
 	}
 	c.pendingMu.Unlock()
 
@@ -203,11 +245,7 @@ func (c *Client) DispatchIncomingResponse(envelope protocol.Envelope) bool {
 		return false
 	}
 
-	select {
-	case pr.ResponseCh <- &envelope:
-	default:
-	}
-	return true
+	return pr.terminal(stateCompleted, envelope, nil)
 }
 
 func (c *Client) SendRequest(ctx context.Context, method string, payload any, opts ...MessageOption) (protocol.Envelope, error) {
@@ -223,32 +261,41 @@ func (c *Client) SendRequest(ctx context.Context, method string, payload any, op
 		return protocol.Envelope{}, err
 	}
 
-	pending := c.registerPending(envelope.ID, method)
-	defer c.removePending(envelope.ID)
-
 	timeoutMs := c.pendingTimeoutMs
 	if envelope.Metadata != nil {
 		if t, ok := envelope.Metadata["__timeout"]; ok {
 			var ms int
 			if json.Unmarshal(t, &ms) == nil && ms > 0 {
 				timeoutMs = time.Duration(ms) * time.Millisecond
-				pending.Timer.Stop()
-				pending.Timer = time.AfterFunc(timeoutMs, func() {
-					c.removePending(envelope.ID)
-				})
 			}
 		}
 	}
+
+	pending := c.registerPending(envelope.ID, method, timeoutMs)
+	defer c.removePending(envelope.ID)
 
 	if err := c.transport.Send(ctx, envelope); err != nil {
 		return protocol.Envelope{}, NewTransportError("send request failed: %v", err)
 	}
 
 	select {
-	case resp := <-pending.ResponseCh:
-		return *resp, nil
-	case <-time.After(timeoutMs):
-		return protocol.Envelope{}, NewTransportError("request %s timed out after %v", envelope.ID, timeoutMs)
+	case <-pending.Done:
+		pending.mu.Lock()
+		st := pending.state
+		resp := pending.Response
+		pErr := pending.Err
+		pending.mu.Unlock()
+
+		switch st {
+		case stateCompleted:
+			return resp, pErr
+		case stateTimedOut:
+			return protocol.Envelope{}, pErr
+		case stateCancelled:
+			return protocol.Envelope{}, pErr
+		default:
+			return protocol.Envelope{}, NewTransportError("request %s in unexpected state %d", envelope.ID, st)
+		}
 	case <-ctx.Done():
 		return protocol.Envelope{}, NewTransportError("request %s cancelled: %v", envelope.ID, ctx.Err())
 	}
@@ -267,32 +314,41 @@ func (c *Client) SendReservedRequest(ctx context.Context, method string, payload
 		return protocol.Envelope{}, err
 	}
 
-	pending := c.registerPending(envelope.ID, method)
-	defer c.removePending(envelope.ID)
-
 	timeoutMs := c.pendingTimeoutMs
 	if envelope.Metadata != nil {
 		if t, ok := envelope.Metadata["__timeout"]; ok {
 			var ms int
 			if json.Unmarshal(t, &ms) == nil && ms > 0 {
 				timeoutMs = time.Duration(ms) * time.Millisecond
-				pending.Timer.Stop()
-				pending.Timer = time.AfterFunc(timeoutMs, func() {
-					c.removePending(envelope.ID)
-				})
 			}
 		}
 	}
+
+	pending := c.registerPending(envelope.ID, method, timeoutMs)
+	defer c.removePending(envelope.ID)
 
 	if err := c.transport.Send(ctx, envelope); err != nil {
 		return protocol.Envelope{}, NewTransportError("send reserved request failed: %v", err)
 	}
 
 	select {
-	case resp := <-pending.ResponseCh:
-		return *resp, nil
-	case <-time.After(timeoutMs):
-		return protocol.Envelope{}, NewTransportError("reserved request %s timed out after %v", envelope.ID, timeoutMs)
+	case <-pending.Done:
+		pending.mu.Lock()
+		st := pending.state
+		resp := pending.Response
+		pErr := pending.Err
+		pending.mu.Unlock()
+
+		switch st {
+		case stateCompleted:
+			return resp, pErr
+		case stateTimedOut:
+			return protocol.Envelope {}, pErr
+		case stateCancelled:
+			return protocol.Envelope{}, pErr
+		default:
+			return protocol.Envelope{}, NewTransportError("reserved request %s in unexpected state %d", envelope.ID, st)
+		}
 	case <-ctx.Done():
 		return protocol.Envelope{}, NewTransportError("reserved request %s cancelled: %v", envelope.ID, ctx.Err())
 	}

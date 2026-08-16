@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
@@ -284,24 +285,61 @@ func TestDeterministicIDGenerator(t *testing.T) {
 
 func TestSendRequestWithTransport(t *testing.T) {
 	transport := NewMockTransport()
-	idGen := NewFixedIDGenerator("msg-001")
-	client := NewClient(transport, WithIDGenerator(idGen))
+	idGen := NewFixedIDGenerator("msg-001", "msg-002")
+	client := NewClient(transport, WithIDGenerator(idGen), WithPendingTimeout(5*time.Second))
 
 	ctx := context.Background()
-	_, err := client.SendRequest(ctx, "minecraft.agent.submit_goal", map[string]any{
-		"goal": "mine diamonds",
-	})
-	if err != nil {
-		t.Fatalf("SendRequest failed: %v", err)
+
+	done := make(chan struct{})
+	var resp protocol.Envelope
+	var sendErr error
+	go func() {
+		resp, sendErr = client.SendRequest(ctx, "minecraft.agent.submit_goal", map[string]any{
+			"goal": "mine diamonds",
+		})
+		close(done)
+	}()
+
+	deadline := time.Now().Add(2 * time.Second)
+	for transport.GetSentMessagesLen() == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
 	}
 
 	messages := transport.GetSentMessages()
 	if len(messages) != 1 {
 		t.Fatalf("expected 1 sent message, got %d", len(messages))
 	}
-
 	if messages[0].Method != "minecraft.agent.submit_goal" {
 		t.Fatalf("expected method 'minecraft.agent.submit_goal', got '%s'", messages[0].Method)
+	}
+
+	go func() {
+		respEnv, err := client.Receive(ctx)
+		if err != nil {
+			return
+		}
+		client.DispatchIncomingResponse(respEnv)
+	}()
+
+	transport.QueueMessage(protocol.Envelope{
+		Protocol:  protocol.ProtocolVersion,
+		Type:      protocol.MessageTypeResponse,
+		ID:        "msg-002",
+		RequestID: "msg-001",
+		Payload:   json.RawMessage(`{"status":"accepted"}`),
+	})
+
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatal("SendRequest did not complete after response was queued")
+	}
+
+	if sendErr != nil {
+		t.Fatalf("SendRequest failed: %v", sendErr)
+	}
+	if resp.RequestID != "msg-001" {
+		t.Fatalf("expected response RequestID 'msg-001', got '%s'", resp.RequestID)
 	}
 }
 
