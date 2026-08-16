@@ -218,6 +218,8 @@ func main() {
 				os.Exit(1)
 			}
 			log.Info("生产切换完成")
+		} else if checkResult.NeverRun {
+			log.Info("数据库无cutover记录，跳过生产切换")
 		} else if !checkResult.Committed {
 			if freshInstall {
 				log.Info("新安装数据库，等待Closure Gate通过后再执行cutover")
