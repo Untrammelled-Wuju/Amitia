@@ -15,6 +15,7 @@ import {
   isCommandTerminal,
   computePayloadHash,
 } from "./protocol-v2";
+import type { RuntimeCommandExecutionResult } from "../../main/pet/runtime-v2-command-adapter";
 
 export type RuntimeHandlerState =
   | "disconnected"
@@ -60,7 +61,7 @@ export interface RuntimeHandlerHooks {
   onEvent: (envelope: RuntimeEnvelope) => void;
   onError: (err: Error) => void;
   onDesiredSync: (revision: number) => void;
-  onCommand: (command: unknown) => void;
+  onCommand: (command: unknown, envelope: RuntimeEnvelope) => Promise<RuntimeCommandExecutionResult>;
 }
 
 export interface RuntimeCommandAttempt {
@@ -357,8 +358,19 @@ export class DesktopRuntimeHandlerV2 {
     await this.sendCommandAck(command.commandId, command.commandSequence ?? 0, "runtime_received");
 
     try {
-      this.hooks.onCommand(envelope.payload);
-      await this.sendCommandAck(command.commandId, command.commandSequence ?? 0, "renderer_accepted");
+      const result = await this.hooks.onCommand(envelope.payload, envelope);
+      const ackStatus = this.mapCommandExecutionStatus(result.status);
+      if (result.status === "failed" || result.status === "rejected") {
+        await this.sendCommandAck(
+          command.commandId,
+          command.commandSequence ?? 0,
+          ackStatus,
+          result.errorCode || "RENDERER_REJECTED",
+          result.errorMessage || "command execution failed",
+        );
+      } else {
+        await this.sendCommandAck(command.commandId, command.commandSequence ?? 0, ackStatus);
+      }
     } catch (err) {
       await this.sendCommandAck(
         command.commandId,
@@ -426,6 +438,27 @@ export class DesktopRuntimeHandlerV2 {
       rejectReason: rejectReason || undefined,
     };
     await this.sendEnvelope("command_ack", "command_ack", payload);
+  }
+
+  private mapCommandExecutionStatus(status: string): CommandStatus {
+    switch (status) {
+      case "applied":
+        return "renderer_accepted";
+      case "accepted":
+        return "runtime_accepted";
+      case "failed":
+        return "failed_terminal";
+      case "rejected":
+        return "failed_terminal";
+      case "duplicate":
+        return "superseded";
+      case "expired":
+        return "expired";
+      case "cancelled":
+        return "cancelled";
+      default:
+        return "renderer_accepted";
+    }
   }
 
   private handleClose(code: number, reason: string): void {

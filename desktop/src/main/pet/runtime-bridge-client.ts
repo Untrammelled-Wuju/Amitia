@@ -1,7 +1,3 @@
-import { app } from "electron";
-import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
 import {
   type ClickPayload,
   type DragPayload,
@@ -16,6 +12,10 @@ import {
   type RuntimeHandlerHooks,
   type RuntimeHandlerState,
 } from "../../desktop-pet/runtime/runtime-handler-v2";
+import { randomUUID } from "node:crypto";
+import type { RuntimeEnvelope } from "../../desktop-pet/runtime/protocol-v2";
+import type { RuntimeCommandExecutionResult } from "./runtime-v2-command-adapter";
+import { getRuntimeId, getDeviceId } from "./runtime-identity";
 
 export type MessageKind = "control" | "command" | "result" | "event";
 
@@ -188,44 +188,6 @@ let messageSeq = 0;
 
 function nextMessageId(): string {
   return randomUUID();
-}
-
-export function getRuntimeId(): string {
-  const dataDir = app.getPath("userData");
-  const idFile = join(dataDir, "runtime-id.txt");
-  try {
-    if (existsSync(idFile)) {
-      const id = readFileSync(idFile, "utf8").trim();
-      if (id) return id;
-    }
-    if (!existsSync(dataDir)) {
-      mkdirSync(dataDir, { recursive: true });
-    }
-    const newId = "rt_" + randomUUID();
-    writeFileSync(idFile, newId, "utf8");
-    return newId;
-  } catch {
-    return "rt_" + randomUUID();
-  }
-}
-
-export function getDeviceId(): string {
-  const dataDir = app.getPath("userData");
-  const idFile = join(dataDir, "device-id.txt");
-  try {
-    if (existsSync(idFile)) {
-      const id = readFileSync(idFile, "utf8").trim();
-      if (id) return id;
-    }
-    if (!existsSync(dataDir)) {
-      mkdirSync(dataDir, { recursive: true });
-    }
-    const newId = "dev_" + randomUUID();
-    writeFileSync(idFile, newId, "utf8");
-    return newId;
-  } catch {
-    return "dev_" + randomUUID();
-  }
 }
 
 function buildRuntimeMessage(
@@ -491,13 +453,13 @@ export class RuntimeBridgeClient {
       onDesiredSync: (revision: number) => {
         this.lastAppliedDesiredRevision = revision;
       },
-      onCommand: (command: unknown) => {
-        void this.handleCommand(command);
+      onCommand: async (command: unknown, envelope: RuntimeEnvelope): Promise<RuntimeCommandExecutionResult> => {
+        return this.handleCommand(command, envelope);
       },
     };
   }
 
-  private async handleCommand(command: unknown): Promise<void> {
+  private async handleCommand(command: unknown, envelope: RuntimeEnvelope): Promise<RuntimeCommandExecutionResult> {
     const cmd = command as {
       commandId?: string;
       commandType?: string;
@@ -517,7 +479,15 @@ export class RuntimeBridgeClient {
       };
     };
 
-    if (!cmd?.commandId || !cmd.commandType) return;
+    if (!cmd?.commandId || !cmd.commandType) {
+      return {
+        commandId: cmd?.commandId ?? "",
+        status: "failed",
+        errorCode: "INVALID_COMMAND",
+        errorMessage: "missing commandId or commandType",
+        appliedRevision: 0,
+      };
+    }
 
     const msg = buildRuntimeMessage("command", cmd.commandType, command);
     msg.commandId = cmd.commandId;
@@ -667,5 +637,7 @@ export class RuntimeBridgeClient {
         appliedRevision: cmd.desiredRevision ?? 0,
       };
     }
+    void envelope;
+    return result;
   }
 }
