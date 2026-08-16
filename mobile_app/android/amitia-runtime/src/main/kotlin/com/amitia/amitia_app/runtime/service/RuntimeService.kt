@@ -808,6 +808,7 @@ class RuntimeService : Service() {
         }
         cleanupContext.cleanupPhase = StartupFailureCleanupPhase.SERVICE_TEARDOWN
         serviceState.set(ServiceHostState.CREATED)
+        processOwnershipBarrier.set(ProcessOwnershipState.CONFIRMED_DEAD)
         clearSessionState()
         startupFailureCleanupContextRef.set(null)
         cleanupContext.cleanupPhase = StartupFailureCleanupPhase.COMPLETE
