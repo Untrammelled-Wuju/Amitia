@@ -34,6 +34,29 @@ class RuntimeService : Service() {
         STARTUP_FAILURE,
     }
 
+    private enum class ServicePhase {
+        CREATED,
+        FOREGROUND,
+        DESTROYED,
+        UNOBSERVABLE,
+    }
+
+    private enum class ProcessPhase {
+        CREATED,
+        STARTED,
+        READY,
+        EXITING,
+        EXITED,
+        UNKNOWN,
+    }
+
+    private enum class StartupPhase {
+        NOT_STARTED,
+        DETECTING,
+        READY,
+        FAILED,
+    }
+
     private data class StartupFailureCleanupContext(
         val generation: Long,
         val sessionId: String?,
