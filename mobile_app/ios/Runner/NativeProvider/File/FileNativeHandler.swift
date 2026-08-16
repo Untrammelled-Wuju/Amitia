@@ -371,18 +371,20 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleAccessMove(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        guard let sourceMountId = request.payload?["sourceMountId"] as? String,
-              let sourceRelativePath = request.payload?["sourceRelativePath"] as? String,
-              let destMountId = request.payload?["destMountId"] as? String,
-              let destRelativePath = request.payload?["destRelativePath"] as? String else {
-            return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing required fields: sourceMountId, sourceRelativePath, destMountId, destRelativePath")
+        guard let mountId = request.payload?["mountId"] as? String else {
+            return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing mountId")
+        }
+        guard let relativePath = request.payload?["relativePath"] as? String else {
+            return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing relativePath")
+        }
+        guard let newRelativePath = request.payload?["newRelativePath"] as? String else {
+            return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing newRelativePath")
         }
         do {
             try SecurityScopedBookmarkStore.shared.move(
-                sourceMountId: sourceMountId,
-                sourceRelativePath: sourceRelativePath,
-                destMountId: destMountId,
-                destRelativePath: destRelativePath
+                mountId: mountId,
+                relativePath: relativePath,
+                newRelativePath: newRelativePath
             )
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
@@ -390,10 +392,9 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
                 status: "ok",
                 result: [
                     "moved": true,
-                    "sourceMountId": sourceMountId,
-                    "sourceRelativePath": sourceRelativePath,
-                    "destMountId": destMountId,
-                    "destRelativePath": destRelativePath
+                    "mountId": mountId,
+                    "relativePath": relativePath,
+                    "newRelativePath": newRelativePath
                 ],
                 error: nil
             )
@@ -405,18 +406,20 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleAccessCopy(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        guard let sourceMountId = request.payload?["sourceMountId"] as? String,
-              let sourceRelativePath = request.payload?["sourceRelativePath"] as? String,
-              let destMountId = request.payload?["destMountId"] as? String,
-              let destRelativePath = request.payload?["destRelativePath"] as? String else {
-            return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing required fields: sourceMountId, sourceRelativePath, destMountId, destRelativePath")
+        guard let mountId = request.payload?["mountId"] as? String else {
+            return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing mountId")
+        }
+        guard let relativePath = request.payload?["relativePath"] as? String else {
+            return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing relativePath")
+        }
+        guard let newRelativePath = request.payload?["newRelativePath"] as? String else {
+            return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing newRelativePath")
         }
         do {
             let newMountId = try SecurityScopedBookmarkStore.shared.copy(
-                sourceMountId: sourceMountId,
-                sourceRelativePath: sourceRelativePath,
-                destMountId: destMountId,
-                destRelativePath: destRelativePath
+                mountId: mountId,
+                relativePath: relativePath,
+                newRelativePath: newRelativePath
             )
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
@@ -425,10 +428,8 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
                 result: [
                     "copied": true,
                     "mountId": newMountId,
-                    "sourceMountId": sourceMountId,
-                    "sourceRelativePath": sourceRelativePath,
-                    "destMountId": destMountId,
-                    "destRelativePath": destRelativePath
+                    "relativePath": relativePath,
+                    "newRelativePath": newRelativePath
                 ],
                 error: nil
             )
