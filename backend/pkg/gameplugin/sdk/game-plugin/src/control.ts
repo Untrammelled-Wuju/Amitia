@@ -56,8 +56,8 @@ export interface ControlOutputResult {
   outputId: string;
   allowed: boolean;
   reason?: string;
-  currentEpoch?: number;
-  generation?: number;
+  currentEpoch: number;
+  generation: number;
 }
 
 export interface AuthorityTakeoverInput {

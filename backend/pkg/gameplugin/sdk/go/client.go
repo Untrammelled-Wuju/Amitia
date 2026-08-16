@@ -55,6 +55,7 @@ type pendingState int
 const (
 	statePending pendingState = iota
 	stateCompleted
+	stateFailed
 	stateTimedOut
 	stateCancelled
 )
@@ -245,7 +246,19 @@ func (c *Client) DispatchIncomingResponse(envelope protocol.Envelope) bool {
 		return false
 	}
 
+	if envelope.Type == protocol.MessageTypeError {
+		err := newErrorFromEnvelope(envelope)
+		return pr.terminal(stateFailed, envelope, err)
+	}
+
 	return pr.terminal(stateCompleted, envelope, nil)
+}
+
+func newErrorFromEnvelope(envelope protocol.Envelope) error {
+	if envelope.Error != nil {
+		return NewProtocolError("%s - %s", string(envelope.Error.Code), envelope.Error.Message)
+	}
+	return NewProtocolError("request failed with error envelope")
 }
 
 func (c *Client) SendRequest(ctx context.Context, method string, payload any, opts ...MessageOption) (protocol.Envelope, error) {
@@ -289,6 +302,8 @@ func (c *Client) SendRequest(ctx context.Context, method string, payload any, op
 		switch st {
 		case stateCompleted:
 			return resp, pErr
+		case stateFailed:
+			return protocol.Envelope{}, pErr
 		case stateTimedOut:
 			return protocol.Envelope{}, pErr
 		case stateCancelled:
@@ -342,8 +357,10 @@ func (c *Client) SendReservedRequest(ctx context.Context, method string, payload
 		switch st {
 		case stateCompleted:
 			return resp, pErr
+		case stateFailed:
+			return protocol.Envelope{}, pErr
 		case stateTimedOut:
-			return protocol.Envelope {}, pErr
+			return protocol.Envelope{}, pErr
 		case stateCancelled:
 			return protocol.Envelope{}, pErr
 		default:

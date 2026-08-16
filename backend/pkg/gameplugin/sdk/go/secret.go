@@ -6,9 +6,9 @@ import (
 )
 
 const (
-	MethodSecretAcquire    = "secret.acquire"
-	MethodSecretRelease    = "secret.release"
-	MethodSecretQuery      = "secret.query"
+	MethodSecretAcquire = "secret.acquire"
+	MethodSecretRelease = "secret.release"
+	MethodSecretQuery   = "secret.query"
 )
 
 const (
@@ -17,10 +17,10 @@ const (
 )
 
 const (
-	LeaseStatusGranted  = "granted"
-	LeaseStatusDenied   = "denied"
-	LeaseStatusRevoked  = "revoked"
-	LeaseStatusExpired  = "expired"
+	LeaseStatusGranted = "granted"
+	LeaseStatusDenied  = "denied"
+	LeaseStatusRevoked = "revoked"
+	LeaseStatusExpired = "expired"
 )
 
 type SecretRef string
@@ -70,7 +70,7 @@ type SecretQueryResult struct {
 }
 
 func (c *Client) AcquireSecret(ctx context.Context, input SecretAcquireInput, opts ...MessageOption) (SecretAcquireResult, error) {
-	envelope, err := c.SendRequest(ctx, MethodSecretAcquire, input, opts...)
+	envelope, err := c.SendReservedRequest(ctx, MethodSecretAcquire, input, opts...)
 	if err != nil {
 		return SecretAcquireResult{}, err
 	}
@@ -84,7 +84,7 @@ func (c *Client) AcquireSecret(ctx context.Context, input SecretAcquireInput, op
 }
 
 func (c *Client) ReleaseSecret(ctx context.Context, input SecretReleaseInput, opts ...MessageOption) (SecretReleaseResult, error) {
-	envelope, err := c.SendRequest(ctx, MethodSecretRelease, input, opts...)
+	envelope, err := c.SendReservedRequest(ctx, MethodSecretRelease, input, opts...)
 	if err != nil {
 		return SecretReleaseResult{}, err
 	}
@@ -98,7 +98,7 @@ func (c *Client) ReleaseSecret(ctx context.Context, input SecretReleaseInput, op
 }
 
 func (c *Client) QuerySecretLease(ctx context.Context, input SecretQueryInput, opts ...MessageOption) (SecretQueryResult, error) {
-	envelope, err := c.SendRequest(ctx, MethodSecretQuery, input, opts...)
+	envelope, err := c.SendReservedRequest(ctx, MethodSecretQuery, input, opts...)
 	if err != nil {
 		return SecretQueryResult{}, err
 	}
