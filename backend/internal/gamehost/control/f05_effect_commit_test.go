@@ -14,10 +14,11 @@ import (
 )
 
 type CommitCaptureSink struct {
-	mu      sync.Mutex
-	commits []SinkEffectCommitInput
-	errors  []error
-	result  contracts.SinkEffectCommitResult
+	mu            sync.Mutex
+	commits       []SinkEffectCommitInput
+	errors        []error
+	result        contracts.SinkEffectCommitResult
+	seenOutputIDs map[string]contracts.SinkEffectCommitResult
 }
 
 type SinkEffectCommitInput struct {
@@ -35,40 +36,61 @@ func NewCommitCaptureSink() *CommitCaptureSink {
 			EffectID:   "",
 			Generation: 1,
 		},
+		seenOutputIDs: make(map[string]contracts.SinkEffectCommitResult),
 	}
 }
 
 func (s *CommitCaptureSink) ExecuteAuthorized(ctx context.Context, runtimeID domain.RuntimeInstanceID, serviceID domain.ServiceID, pluginID domain.PluginID, permit OutputPermit, payload []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+
+	if cached, ok := s.seenOutputIDs[permit.OutputID]; ok {
+		s.commits = append(s.commits, SinkEffectCommitInput{
+			OutputID:   permit.OutputID,
+			Generation: permit.Generation,
+			Epoch:      permit.OutputEpoch,
+			Payload:    payload,
+		})
+		if !cached.Accepted {
+			return fmt.Errorf("effect not accepted by plugin")
+		}
+		if !cached.Committed {
+			if cached.ErrorCode != "" {
+				return fmt.Errorf("effect commit failed: %s - %s", cached.ErrorCode, cached.Message)
+			}
+			return fmt.Errorf("effect not committed by plugin")
+		}
+		return nil
+	}
+
 	s.commits = append(s.commits, SinkEffectCommitInput{
 		OutputID:   permit.OutputID,
 		Generation: permit.Generation,
 		Epoch:      permit.OutputEpoch,
 		Payload:    payload,
 	})
+
+	var err error
 	if !s.result.Accepted {
-		return fmt.Errorf("effect not accepted by plugin")
-	}
-	if !s.result.Committed {
+		err = fmt.Errorf("effect not accepted by plugin")
+	} else if !s.result.Committed {
 		if s.result.ErrorCode != "" {
-			return fmt.Errorf("effect commit failed: %s - %s", s.result.ErrorCode, s.result.Message)
+			err = fmt.Errorf("effect commit failed: %s - %s", s.result.ErrorCode, s.result.Message)
+		} else {
+			err = fmt.Errorf("effect not committed by plugin")
 		}
-		return fmt.Errorf("effect not committed by plugin")
+	} else if s.result.EffectID == "" {
+		err = fmt.Errorf("effect commit failed: effectId is required and must not be empty")
+	} else if s.result.EffectID != permit.OutputID {
+		err = fmt.Errorf("effect commit mismatch: expected %s, got %s", permit.OutputID, s.result.EffectID)
+	} else if s.result.Generation == 0 {
+		err = fmt.Errorf("effect commit failed: generation is required and must not be zero")
+	} else if s.result.Generation != permit.Generation {
+		err = fmt.Errorf("effect commit generation mismatch: expected %d, got %d", permit.Generation, s.result.Generation)
 	}
-	if s.result.EffectID == "" {
-		return fmt.Errorf("effect commit failed: effectId is required and must not be empty")
-	}
-	if s.result.EffectID != permit.OutputID {
-		return fmt.Errorf("effect commit mismatch: expected %s, got %s", permit.OutputID, s.result.EffectID)
-	}
-	if s.result.Generation == 0 {
-		return fmt.Errorf("effect commit failed: generation is required and must not be zero")
-	}
-	if s.result.Generation != permit.Generation {
-		return fmt.Errorf("effect commit generation mismatch: expected %d, got %d", permit.Generation, s.result.Generation)
-	}
-	return nil
+
+	s.seenOutputIDs[permit.OutputID] = s.result
+	return err
 }
 
 func (s *CommitCaptureSink) Calls() int {
