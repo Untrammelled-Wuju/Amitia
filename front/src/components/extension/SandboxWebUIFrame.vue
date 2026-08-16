@@ -46,6 +46,9 @@ async function createSession() {
   ready.value = false;
   iframeLoaded.value = false;
   try {
+    const surfaceData = (uiContext.value.surface as Record<string, unknown> | undefined) ?? {};
+    const surfaceRole = String(surfaceData.role ?? "main");
+    const themeData = (uiContext.value.theme as Record<string, unknown> | undefined) ?? {};
     const res = await apiClient.post<{
       sessionId: string;
       nonce: string;
@@ -60,6 +63,11 @@ async function createSession() {
       moduleId: props.contribution.moduleId,
       slotId: props.slotId,
       generation: props.contribution.generation,
+      surface: surfaceRole,
+      characterId: (uiContext.value.characterId as string) || "",
+      conversationId: (uiContext.value.conversationId as string) || "",
+      theme: themeData.mode || (uiContext.value.hostTheme as string) || "",
+      locale: (uiContext.value.locale as string) || navigator.language || "en",
       uiContext: uiContext.value,
       sandbox: props.contribution.sandbox ?? "web_restricted",
       entryPath: props.contribution.entryPath ?? "index.html",
@@ -175,9 +183,30 @@ function onIframeLoad() {
 function postUIContext() {
   if (!bridgePort || !ready.value) return;
   const surface = (uiContext.value.surface as Record<string, unknown> | undefined) ?? {};
+  const themeData = buildThemeTokens();
   bridgePort.postMessage({ type: "host.event", method: "ui.host.context", payload: uiContext.value });
-  bridgePort.postMessage({ type: "host.event", method: "ui.host.theme", payload: uiContext.value.theme ?? {} });
+  bridgePort.postMessage({ type: "host.event", method: "ui.host.theme", payload: themeData });
   bridgePort.postMessage({ type: "host.event", method: "ui.host.resize", payload: { width: surface.width ?? 0, height: surface.height ?? 0, breakpoint: surface.breakpoint ?? "xs", surfaceRole: surface.role ?? "main" } });
+}
+
+function buildThemeTokens() {
+  const themeData = (uiContext.value.theme as Record<string, unknown> | undefined) ?? {};
+  const mode = themeData.mode || (uiContext.value.hostTheme as string) || "light";
+  return {
+    mode,
+    surface: getComputedStyle(document.documentElement).getPropertyValue("--amitia-color-surface").trim() || "transparent",
+    text: getComputedStyle(document.documentElement).getPropertyValue("--amitia-text-primary").trim() || "inherit",
+    textSecondary: getComputedStyle(document.documentElement).getPropertyValue("--amitia-text-secondary").trim() || "inherit",
+    border: getComputedStyle(document.documentElement).getPropertyValue("--amitia-color-border").trim() || "transparent",
+    control: getComputedStyle(document.documentElement).getPropertyValue("--amitia-control-bg").trim() || "transparent",
+    radius: getComputedStyle(document.documentElement).getPropertyValue("--amitia-radius-base").trim() || "6px",
+    font: getComputedStyle(document.documentElement).getPropertyValue("--amitia-font-family").trim() || "system-ui",
+    fontSize: getComputedStyle(document.documentElement).getPropertyValue("--amitia-font-size-base").trim() || "14px",
+    accent: getComputedStyle(document.documentElement).getPropertyValue("--amitia-color-accent").trim() || "#4a6cf7",
+    success: getComputedStyle(document.documentElement).getPropertyValue("--amitia-color-success").trim() || "#67c23a",
+    warning: getComputedStyle(document.documentElement).getPropertyValue("--amitia-color-warning").trim() || "#e6a23c",
+    danger: getComputedStyle(document.documentElement).getPropertyValue("--amitia-color-danger").trim() || "#f56c6c",
+  };
 }
 
 onMounted(async () => {
@@ -191,6 +220,11 @@ onBeforeUnmount(() => {
 });
 
 watch(() => props.contribution.contributionId, async () => {
+  await destroySession();
+  await createSession();
+});
+
+watch(() => props.contribution.generation, async () => {
   await destroySession();
   await createSession();
 });
