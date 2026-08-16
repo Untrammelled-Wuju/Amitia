@@ -39,7 +39,7 @@ func newMockMediaBridge(resp nativebridge.Response, err error) *mockMediaBridge 
 func baseMediaRequest(operation string) nativebridge.Request {
 	return nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-media-001",
+		RequestId:       "test-media-001",
 		Platform:        "ios",
 		Operation:       operation,
 		Payload:         map[string]any{},
@@ -71,7 +71,7 @@ func TestHandler_Execute_UnknownOperation(t *testing.T) {
 func TestHandler_Status(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-media-001",
+		RequestId:       "test-media-001",
 		Status:          "ok",
 		Result:          map[string]any{"supported": true},
 	}
@@ -92,7 +92,7 @@ func TestHandler_Status(t *testing.T) {
 func TestHandler_PhotosPick_Defaults(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-media-001",
+		RequestId:       "test-media-001",
 		Status:          "ok",
 		Result:          map[string]any{"items": []any{}},
 	}
@@ -118,7 +118,7 @@ func TestHandler_PhotosPick_Defaults(t *testing.T) {
 func TestHandler_PhotosPick_WithKinds(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-media-001",
+		RequestId:       "test-media-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -154,7 +154,7 @@ func TestHandler_PhotosPick_WithKinds(t *testing.T) {
 func TestHandler_PhotosStatus(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-media-001",
+		RequestId:       "test-media-001",
 		Status:          "ok",
 		Result:          map[string]any{"authorized": true},
 	}
@@ -172,7 +172,7 @@ func TestHandler_PhotosStatus(t *testing.T) {
 func TestHandler_PhotosList(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-media-001",
+		RequestId:       "test-media-001",
 		Status:          "ok",
 		Result:          map[string]any{"assets": []any{}},
 	}
@@ -204,7 +204,7 @@ func TestHandler_PhotosList(t *testing.T) {
 func TestHandler_PhotosList_Defaults(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-media-001",
+		RequestId:       "test-media-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -239,7 +239,7 @@ func TestHandler_PhotosGet_MissingAssetRef(t *testing.T) {
 func TestHandler_PhotosGet_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-media-001",
+		RequestId:       "test-media-001",
 		Status:          "ok",
 		Result:          map[string]any{"assetRef": "asset-001"},
 	}
@@ -274,7 +274,7 @@ func TestHandler_PhotosExport_MissingAssetRef(t *testing.T) {
 func TestHandler_PhotosExport_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-media-001",
+		RequestId:       "test-media-001",
 		Status:          "ok",
 		Result:          map[string]any{"resourceUri": "amitia://temp/abc"},
 	}
@@ -303,7 +303,7 @@ func TestHandler_PhotosExport_Success(t *testing.T) {
 func TestHandler_PhotosExport_Defaults(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-media-001",
+		RequestId:       "test-media-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -342,7 +342,7 @@ func TestHandler_PhotosSave_MissingResourceURI(t *testing.T) {
 func TestHandler_PhotosSave_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-media-001",
+		RequestId:       "test-media-001",
 		Status:          "ok",
 		Result:          map[string]any{"saved": true},
 	}
@@ -383,7 +383,7 @@ func TestHandler_PhotosDelete_MissingAssetRefs(t *testing.T) {
 func TestHandler_PhotosDelete_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-media-001",
+		RequestId:       "test-media-001",
 		Status:          "ok",
 		Result:          map[string]any{"deleted": true},
 	}
@@ -407,7 +407,7 @@ func TestHandler_PhotosDelete_Success(t *testing.T) {
 func TestHandler_PhotosManageLimited(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-media-001",
+		RequestId:       "test-media-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -425,7 +425,7 @@ func TestHandler_PhotosManageLimited(t *testing.T) {
 func TestHandler_CameraStatus(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-media-001",
+		RequestId:       "test-media-001",
 		Status:          "ok",
 		Result:          map[string]any{"available": true},
 	}
@@ -443,7 +443,7 @@ func TestHandler_CameraStatus(t *testing.T) {
 func TestHandler_CameraDevices(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-media-001",
+		RequestId:       "test-media-001",
 		Status:          "ok",
 		Result:          map[string]any{"devices": []any{}},
 	}
@@ -461,7 +461,7 @@ func TestHandler_CameraDevices(t *testing.T) {
 func TestHandler_CameraCapturePhoto(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-media-001",
+		RequestId:       "test-media-001",
 		Status:          "ok",
 		Result:          map[string]any{"resourceUri": "amitia://temp/photo.jpg"},
 	}
@@ -498,7 +498,7 @@ func TestHandler_CameraCapturePhoto(t *testing.T) {
 func TestHandler_CameraCapturePhoto_Defaults(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-media-001",
+		RequestId:       "test-media-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}
@@ -539,7 +539,7 @@ func TestHandler_CameraRecordVideo_MissingDuration(t *testing.T) {
 func TestHandler_CameraRecordVideo_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-media-001",
+		RequestId:       "test-media-001",
 		Status:          "ok",
 		Result:          map[string]any{"resourceUri": "amitia://temp/video.mp4"},
 	}
@@ -569,7 +569,7 @@ func TestHandler_CameraRecordVideo_Success(t *testing.T) {
 func TestHandler_AudioStatus(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-media-001",
+		RequestId:       "test-media-001",
 		Status:          "ok",
 		Result:          map[string]any{"available": true},
 	}
@@ -600,7 +600,7 @@ func TestHandler_AudioRecord_MissingDuration(t *testing.T) {
 func TestHandler_AudioRecord_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-media-001",
+		RequestId:       "test-media-001",
 		Status:          "ok",
 		Result:          map[string]any{"resourceUri": "amitia://temp/audio.m4a"},
 	}
@@ -636,7 +636,7 @@ func TestHandler_AudioRecord_Success(t *testing.T) {
 func TestHandler_AudioRecord_Defaults(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-media-001",
+		RequestId:       "test-media-001",
 		Status:          "ok",
 		Result:          map[string]any{},
 	}

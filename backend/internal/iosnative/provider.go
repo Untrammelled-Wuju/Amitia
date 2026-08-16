@@ -45,7 +45,7 @@ func (p *Provider) Execute(ctx context.Context, request nativebridge.Request) na
 	if p.bridge == nil {
 		return nativebridge.Response{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Status:          "error",
 			Error: &nativebridge.Error{
 				Code:    nativebridge.ErrProviderUnavailable,
@@ -61,7 +61,7 @@ func (p *Provider) Execute(ctx context.Context, request nativebridge.Request) na
 	if !ok {
 		return nativebridge.Response{
 			ProtocolVersion: request.ProtocolVersion,
-			RequestID:       request.RequestID,
+			RequestId:       request.RequestId,
 			Status:          "error",
 			Error: &nativebridge.Error{
 				Code:    nativebridge.ErrOperationNotSupported,
@@ -89,6 +89,6 @@ func (p *Provider) Health(ctx context.Context) nativebridge.Health {
 	}
 }
 
-func (p *Provider) Cancel(ctx context.Context, requestID string, reason string) error {
+func (p *Provider) Cancel(ctx context.Context, RequestId string, reason string) error {
 	return nil
 }

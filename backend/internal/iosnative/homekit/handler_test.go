@@ -39,7 +39,7 @@ func newMockHomeKitBridge(resp nativebridge.Response, err error) *mockHomeKitBri
 func baseHomeKitRequest(operation string) nativebridge.Request {
 	return nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-hk-001",
+		RequestId:       "test-hk-001",
 		Platform:        "ios",
 		Operation:       operation,
 		Payload:         map[string]any{},
@@ -72,7 +72,7 @@ func TestHandler_Execute_UnknownOperation(t *testing.T) {
 func TestHandler_Status(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-hk-001",
+		RequestId:       "test-hk-001",
 		Status:          "ok",
 		Result:          map[string]any{"state": "authorized"},
 	}
@@ -96,7 +96,7 @@ func TestHandler_Status(t *testing.T) {
 func TestHandler_HomesList(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-hk-001",
+		RequestId:       "test-hk-001",
 		Status:          "ok",
 		Result:          map[string]any{"count": 2},
 	}
@@ -131,7 +131,7 @@ func TestHandler_HomesGet_MissingID(t *testing.T) {
 func TestHandler_HomesGet_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-hk-001",
+		RequestId:       "test-hk-001",
 		Status:          "ok",
 		Result:          map[string]any{"homeId": "h-001"},
 	}
@@ -153,7 +153,7 @@ func TestHandler_HomesGet_Success(t *testing.T) {
 func TestHandler_AccessoriesList(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-hk-001",
+		RequestId:       "test-hk-001",
 		Status:          "ok",
 		Result:          map[string]any{"count": 5},
 	}
@@ -224,7 +224,7 @@ func TestHandler_CharacteristicsRead_MissingCharID(t *testing.T) {
 func TestHandler_CharacteristicsRead_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-hk-001",
+		RequestId:       "test-hk-001",
 		Status:          "ok",
 		Result:          map[string]any{"value": "on"},
 	}
@@ -259,7 +259,7 @@ func TestHandler_CharacteristicsWrite_MissingValue(t *testing.T) {
 func TestHandler_CharacteristicsWrite_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-hk-001",
+		RequestId:       "test-hk-001",
 		Status:          "ok",
 		Result:          map[string]any{"accepted": true},
 	}
@@ -280,7 +280,7 @@ func TestHandler_CharacteristicsWrite_Success(t *testing.T) {
 func TestHandler_ScenesList(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-hk-001",
+		RequestId:       "test-hk-001",
 		Status:          "ok",
 		Result:          map[string]any{"count": 3},
 	}
@@ -324,7 +324,7 @@ func TestHandler_ScenesExecute_MissingID(t *testing.T) {
 func TestHandler_AutomationsList(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-hk-001",
+		RequestId:       "test-hk-001",
 		Status:          "ok",
 		Result:          map[string]any{"count": 2},
 	}

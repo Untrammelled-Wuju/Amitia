@@ -39,7 +39,7 @@ func newMockBridge(resp nativebridge.Response, err error) *mockContactsBridge {
 func baseRequest(operation string) nativebridge.Request {
 	return nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-req-001",
+		RequestId:       "test-req-001",
 		Platform:        "ios",
 		Operation:       operation,
 		Payload:         map[string]any{},
@@ -87,7 +87,7 @@ func TestHandler_Status_BridgeUnavailable(t *testing.T) {
 func TestHandler_AuthorizationStatus(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-req-001",
+		RequestId:       "test-req-001",
 		Status:          "ok",
 		Result:          map[string]any{"level": "authorized"},
 	}
@@ -111,7 +111,7 @@ func TestHandler_AuthorizationStatus(t *testing.T) {
 func TestHandler_AuthorizationRequest(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-req-001",
+		RequestId:       "test-req-001",
 		Status:          "ok",
 		Result:          map[string]any{"granted": true},
 	}
@@ -160,7 +160,7 @@ func TestHandler_Search_InvalidField(t *testing.T) {
 func TestHandler_Search_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-req-001",
+		RequestId:       "test-req-001",
 		Status:          "ok",
 		Result:          map[string]any{"count": 5},
 	}
@@ -190,7 +190,7 @@ func TestHandler_Search_Success(t *testing.T) {
 func TestHandler_List_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-req-001",
+		RequestId:       "test-req-001",
 		Status:          "ok",
 		Result:          map[string]any{"count": 50},
 	}
@@ -225,7 +225,7 @@ func TestHandler_Get_MissingContactID(t *testing.T) {
 func TestHandler_Get_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-req-001",
+		RequestId:       "test-req-001",
 		Status:          "ok",
 		Result:          map[string]any{"contactId": "c-001"},
 	}
@@ -264,7 +264,7 @@ func TestHandler_Create_MissingIdentity(t *testing.T) {
 func TestHandler_Create_WithPhone(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-req-001",
+		RequestId:       "test-req-001",
 		Status:          "ok",
 		Result:          map[string]any{"contactId": "new-001"},
 	}
@@ -296,7 +296,7 @@ func TestHandler_Update_MissingContactID(t *testing.T) {
 func TestHandler_Update_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-req-001",
+		RequestId:       "test-req-001",
 		Status:          "ok",
 		Result:          map[string]any{"contactId": "c-001"},
 	}
@@ -329,7 +329,7 @@ func TestHandler_Delete_MissingContactID(t *testing.T) {
 func TestHandler_Delete_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-req-001",
+		RequestId:       "test-req-001",
 		Status:          "ok",
 		Result:          map[string]any{"deleted": true},
 	}
@@ -348,7 +348,7 @@ func TestHandler_Delete_Success(t *testing.T) {
 func TestHandler_ContainersList_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-req-001",
+		RequestId:       "test-req-001",
 		Status:          "ok",
 		Result:          map[string]any{"count": 3},
 	}
@@ -369,7 +369,7 @@ func TestHandler_ContainersList_Success(t *testing.T) {
 func TestHandler_GroupsList_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-req-001",
+		RequestId:       "test-req-001",
 		Status:          "ok",
 		Result:          map[string]any{"count": 5},
 	}
@@ -404,7 +404,7 @@ func TestHandler_PhotoGet_MissingContactID(t *testing.T) {
 func TestHandler_PhotoGet_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-req-001",
+		RequestId:       "test-req-001",
 		Status:          "ok",
 		Result:          map[string]any{"hasImage": true},
 	}
@@ -450,7 +450,7 @@ func TestHandler_PhotoSet_MissingResourceURI(t *testing.T) {
 func TestHandler_PhotoSet_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-req-001",
+		RequestId:       "test-req-001",
 		Status:          "ok",
 		Result:          map[string]any{"hasImage": true},
 	}
@@ -486,7 +486,7 @@ func TestHandler_PhotoRemove_MissingContactID(t *testing.T) {
 func TestHandler_PhotoRemove_Success(t *testing.T) {
 	expected := nativebridge.Response{
 		ProtocolVersion: 1,
-		RequestID:       "test-req-001",
+		RequestId:       "test-req-001",
 		Status:          "ok",
 		Result:          map[string]any{"hasImage": false},
 	}

@@ -112,8 +112,8 @@ func ValidateSubmission(req BackgroundSubmissionRequest) error {
 	if !IsValidSystemClass(req.SystemClass) {
 		return fmt.Errorf("%v: invalid system class %q", ErrBackgroundIdentifierInvalid, req.SystemClass)
 	}
-	if req.IdentifierClass == "" {
-		return fmt.Errorf("%v: identifierClass is required", ErrBackgroundIdentifierInvalid)
+	if req.Identifier == "" {
+		return fmt.Errorf("%v: identifier is required", ErrBackgroundIdentifierInvalid)
 	}
 
 	if req.SystemClass == BackgroundClassContinued {
@@ -182,8 +182,8 @@ func ValidateWriteRequest(req IOSFileWriteRequest) error {
 	if err := ValidateRelativePath(req.RelativePath); err != nil {
 		return err
 	}
-	if int64(len(req.Content)) > MaxContentBytes {
-		return fmt.Errorf("%v: content size %d exceeds max %d", ErrFileSizeLimitExceeded, len(req.Content), MaxContentBytes)
+	if int64(len(req.ContentBase64)) > MaxContentBytes {
+		return fmt.Errorf("%v: content size %d exceeds max %d", ErrFileSizeLimitExceeded, len(req.ContentBase64), MaxContentBytes)
 	}
 	return nil
 }

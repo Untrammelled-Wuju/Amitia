@@ -19,7 +19,7 @@ func (m *mockNativeBridge) Execute(ctx context.Context, req nativebridge.Request
 	}
 	return nativebridge.Response{
 		ProtocolVersion: req.ProtocolVersion,
-		RequestID:       req.RequestID,
+		RequestId:       req.RequestId,
 		Status:          "success",
 	}, nil
 }
@@ -37,7 +37,7 @@ func TestProvider_Execute_UnknownOperation(t *testing.T) {
 
 	resp := p.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       "health.unknown",
 	})
@@ -55,7 +55,7 @@ func TestProvider_Execute_NilBridge(t *testing.T) {
 
 	resp := p.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       "health.authorization.status",
 	})
@@ -77,7 +77,7 @@ func TestProvider_Execute_RegisteredHandler(t *testing.T) {
 
 	resp := p.Execute(context.Background(), nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestID:       "test-1",
+		RequestId:       "test-1",
 		Platform:        "ios",
 		Operation:       health.OpHealthAuthorizationStatus,
 	})
@@ -113,7 +113,7 @@ type testHandler struct{}
 func (h *testHandler) Execute(ctx context.Context, req nativebridge.Request) nativebridge.Response {
 	return nativebridge.Response{
 		ProtocolVersion: req.ProtocolVersion,
-		RequestID:       req.RequestID,
+		RequestId:       req.RequestId,
 		Status:          "success",
 	}
 }

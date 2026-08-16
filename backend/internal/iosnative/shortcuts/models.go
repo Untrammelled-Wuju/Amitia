@@ -84,7 +84,7 @@ type ShortcutsStatus struct {
 
 type ShortcutInvocationScope struct {
 	Trigger        string `json:"trigger"`
-	RequestID      string `json:"requestId"`
+	RequestId      string `json:"RequestId"`
 	CorrelationID  string `json:"correlationId"`
 	CausationID    string `json:"causationId"`
 	UserID         string `json:"userId"`
