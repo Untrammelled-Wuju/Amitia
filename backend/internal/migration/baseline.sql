@@ -5839,8 +5839,8 @@ CREATE TABLE IF NOT EXISTS sync_changes (
     created_at DATETIME NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_changes_seq ON sync_changes(seq);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_changes_mutation ON sync_changes(mutation_id);
 CREATE INDEX IF NOT EXISTS idx_sync_changes_entity ON sync_changes(entity_type, entity_id);
-CREATE INDEX IF NOT EXISTS idx_sync_changes_mutation ON sync_changes(mutation_id);
 CREATE INDEX IF NOT EXISTS idx_sync_changes_origin ON sync_changes(origin_device);
 CREATE TABLE IF NOT EXISTS sync_cursors (
     device_id TEXT PRIMARY KEY,

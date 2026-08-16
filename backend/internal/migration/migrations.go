@@ -163,6 +163,19 @@ func DefaultMigrations() []Migration {
 		SyncCursorMigration(),
 		SyncSequenceMigration(),
 		ExecutionResumeMigration(),
+		SyncMutationIdempotentMigration(),
+	}
+}
+
+func SyncMutationIdempotentMigration() Migration {
+	return Migration{
+		Version: "20260817002",
+		Name:    "sync_mutation_idempotent_unique_index",
+		Up: func(s *Step) error {
+			s.Execute("DROP INDEX IF EXISTS idx_sync_changes_mutation")
+			s.CreateIndex("idx_sync_changes_mutation", "sync_changes", []string{"mutation_id"}, true)
+			return nil
+		},
 	}
 }
 
