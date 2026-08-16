@@ -43,6 +43,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/javascript_main"
 	"github.com/u-ai/backend/internal/extension/kernel/lifecycle_manager"
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
+	"github.com/u-ai/backend/internal/mcp"
 	"github.com/u-ai/backend/internal/extension/kernel/observability"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
@@ -108,6 +109,8 @@ type ContainerBuilder struct {
 	desktopPetPluginCapabilities *integration.DesktopPetPluginCapabilities
 	runtimeProfile               runtimeprofile.Profile
 	runtimePolicy                runtimeprofile.Policy
+
+	mcpRepository *mcp.Repository
 
 	backgroundBootstrapFunc func() (backgroundremoval.Registry, error)
 }
