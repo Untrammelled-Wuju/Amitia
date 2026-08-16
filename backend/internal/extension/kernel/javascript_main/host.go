@@ -908,7 +908,9 @@ func isHostEntryExt(path string) bool {
 
 func generateNonce() string {
 	buf := make([]byte, 16)
-	_, _ = rand.Read(buf)
+	if _, err := rand.Read(buf); err != nil {
+		return ""
+	}
 	return hex.EncodeToString(buf)
 }
 

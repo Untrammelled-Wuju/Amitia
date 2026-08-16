@@ -9,6 +9,8 @@ type CapabilityResolutionRequest struct {
 
 	UserID runtimeidentity.UserID
 
+	PreferredProviderID ProviderID
+
 	PreferredPlacement ProviderPlacement
 	RequiredPlacement  ProviderPlacement
 

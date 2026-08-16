@@ -2,6 +2,7 @@ package event
 
 import (
 	"context"
+	"errors"
 )
 
 type EventPermissionChecker interface {
@@ -206,6 +207,8 @@ func (r *DefaultEffectiveResolver) ResolveForDelivery(ctx context.Context, def E
 
 type NoopEffectiveResolver struct{}
 
+var ErrNoopEffectiveResolver = errors.New("event: NoopEffectiveResolver must not be used in production configuration")
+
 func NewNoopEffectiveResolver() *NoopEffectiveResolver {
 	return &NoopEffectiveResolver{}
 }
@@ -214,11 +217,12 @@ func (r *NoopEffectiveResolver) Resolve(_ context.Context, def EventSubscription
 	return SubscriptionEffectiveState{
 		Enabled:           def.Enabled,
 		Generation:        def.Generation,
-		PermissionGranted: true,
-		ScopeValid:        true,
-		DependenciesReady: true,
-		RuntimeAvailable:  true,
-		CircuitState:      CircuitClosed,
+		PermissionGranted: false,
+		ScopeValid:        false,
+		DependenciesReady: false,
+		RuntimeAvailable:  false,
+		CircuitState:      CircuitOpen,
+		Reason:            ErrNoopEffectiveResolver.Error(),
 	}
 }
 

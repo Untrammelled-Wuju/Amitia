@@ -494,9 +494,11 @@ func (s *Service) CleanupOldRecords(ctx context.Context, maxAge time.Duration) e
 	return err
 }
 
+var ErrNoRuntimeBinding = errors.New("event: delivery handler has no runtime binding entry")
+
 func defaultDeliveryHandler(ctx context.Context, delivery Delivery, envelope EventEnvelope, sub *ResolvedSubscription) error {
 	if sub.Definition.RuntimeBinding.Entry == "" {
-		return nil
+		return ErrNoRuntimeBinding
 	}
-	return nil
+	return ErrNoRuntimeBinding
 }

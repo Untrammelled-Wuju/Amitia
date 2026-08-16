@@ -103,6 +103,8 @@ func (NoopAuditWriter) RecordReadinessEvent(context.Context, ReadinessAuditEvent
 
 func newID(prefix string) string {
 	b := make([]byte, 8)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		return ""
+	}
 	return prefix + "_" + hex.EncodeToString(b)
 }

@@ -30,7 +30,7 @@ func NewResolver(catalog ProviderCatalog) *Resolver {
 	return &Resolver{
 		catalog:      catalog,
 		policy:       ProductionRoutingPolicy(),
-		availability: &noopRuntimeAvailability{},
+		availability: &strictRuntimeAvailability{},
 	}
 }
 
@@ -38,7 +38,7 @@ func NewResolverWithPolicy(catalog ProviderCatalog, policy RoutingPolicy) *Resol
 	return &Resolver{
 		catalog:      catalog,
 		policy:       policy,
-		availability: &noopRuntimeAvailability{},
+		availability: &strictRuntimeAvailability{},
 	}
 }
 
@@ -60,14 +60,16 @@ func (r *Resolver) SetAvailability(availability RuntimeAvailabilityPort) {
 	}
 }
 
-type noopRuntimeAvailability struct{}
+type strictRuntimeAvailability struct{}
 
-func (n *noopRuntimeAvailability) IsRuntimeOnline(_ context.Context, _ runtimeidentity.RuntimeID) (bool, error) {
-	return true, nil
+var ErrRuntimeAvailabilityCheck = errors.New("capability: runtime availability checker not configured")
+
+func (n *strictRuntimeAvailability) IsRuntimeOnline(_ context.Context, _ runtimeidentity.RuntimeID) (bool, error) {
+	return false, ErrRuntimeAvailabilityCheck
 }
 
-func (n *noopRuntimeAvailability) IsDeviceOffline(_ context.Context, _ runtimeidentity.DeviceID) (bool, error) {
-	return false, nil
+func (n *strictRuntimeAvailability) IsDeviceOffline(_ context.Context, _ runtimeidentity.DeviceID) (bool, error) {
+	return false, ErrRuntimeAvailabilityCheck
 }
 
 func (r *Resolver) Resolve(request CapabilityResolutionRequest) (CapabilityResolution, error) {

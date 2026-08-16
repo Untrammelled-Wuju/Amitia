@@ -4,8 +4,11 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/enablement"
 	"github.com/u-ai/backend/internal/extension/kernel/mcp"
+	legacymcp "github.com/u-ai/backend/internal/mcp"
 )
 
 // NewMCPPortBridge 创建 MCP 安装端口桥接
@@ -101,34 +104,139 @@ func NewPackagePortBridge(installer PackageInstallPort) PackageInstallPort {
 
 // ---------------------------------------------------------------------------
 
+// EnableExistingDeps 定义 EnableExistingPort 所需的依赖。
+type EnableExistingDeps struct {
+	EnablementSvc      *enablement.EnablementService
+	InstallRepo        domain.InstallationRepository
+	DefinitionRepo     domain.DefinitionRepository
+	InstanceReconciler capability.ProviderInstanceReconciler
+	MCPRepository      *legacymcp.Repository
+	AgentSkillCatalog  *agent_skill.AgentSkillCatalog
+	ProviderRegistry   *capability.ProviderRegistry
+}
+
 // NewEnableExistingPortBridge 创建启用现有能力端口桥接
 func NewEnableExistingPortBridge(enablementSvc *enablement.EnablementService) EnableExistingPort {
 	return &enableExistingPortBridge{enablementSvc: enablementSvc}
 }
 
+// NewEnableExistingPortBridgeWithDeps 创建带完整依赖的启用现有能力端口桥接
+func NewEnableExistingPortBridgeWithDeps(deps EnableExistingDeps) EnableExistingPort {
+	return &enableExistingPortBridge{
+		enablementSvc:      deps.EnablementSvc,
+		installRepo:        deps.InstallRepo,
+		definitionRepo:     deps.DefinitionRepo,
+		instanceReconciler: deps.InstanceReconciler,
+		mcpRepository:      deps.MCPRepository,
+		agentSkillCatalog:  deps.AgentSkillCatalog,
+		providerRegistry:   deps.ProviderRegistry,
+	}
+}
+
 type enableExistingPortBridge struct {
-	enablementSvc *enablement.EnablementService
+	enablementSvc      *enablement.EnablementService
+	installRepo        domain.InstallationRepository
+	definitionRepo     domain.DefinitionRepository
+	instanceReconciler capability.ProviderInstanceReconciler
+	mcpRepository      *legacymcp.Repository
+	agentSkillCatalog  *agent_skill.AgentSkillCatalog
+	providerRegistry   *capability.ProviderRegistry
 }
 
 func (b *enableExistingPortBridge) EnableExtension(ctx context.Context, extID string) error {
 	if b.enablementSvc == nil {
 		return fmt.Errorf("enablement service not configured")
 	}
-	return b.enablementSvc.Enable(ctx, enablement.StateSubject{Kind: enablement.SubjectExtension, ID: extID})
+
+	if extID == "" {
+		return fmt.Errorf("enable extension: empty extensionId")
+	}
+
+	// 验证扩展是否真实安装
+	if b.installRepo != nil {
+		_, err := b.installRepo.GetInstallation(ctx, domain.ExtensionID(extID))
+		if err != nil {
+			return fmt.Errorf("enable extension %s: not installed or not found: %w", extID, err)
+		}
+	}
+
+	// 持久化启用状态
+	if err := b.enablementSvc.Enable(ctx, enablement.StateSubject{Kind: enablement.SubjectExtension, ID: extID}); err != nil {
+		return fmt.Errorf("enable extension %s: %w", extID, err)
+	}
+
+	// 触发 ProviderInstance 协调：若 placement 未生成则生成真实 ProviderInstance
+	if b.instanceReconciler != nil && b.definitionRepo != nil && b.providerRegistry != nil {
+		def, err := b.definitionRepo.GetExtension(ctx, domain.ExtensionID(extID), domain.SemanticVersion{})
+		if err == nil && def.ID != "" {
+			providerDefs := b.providerRegistry.ListByExtension(extID)
+			hasInstances := false
+			for _, pd := range providerDefs {
+				if pd == nil {
+					continue
+				}
+				if insts := b.providerRegistry.ListInstancesByProvider(pd.ID); len(insts) > 0 {
+					hasInstances = true
+					break
+				}
+			}
+			if !hasInstances {
+				_, _ = b.instanceReconciler.ActivateExtension(def, nil)
+			}
+		}
+	}
+
+	return nil
 }
 
 func (b *enableExistingPortBridge) EnableSkill(ctx context.Context, skillID string) error {
 	if b.enablementSvc == nil {
 		return fmt.Errorf("enablement service not configured")
 	}
-	return b.enablementSvc.Enable(ctx, enablement.StateSubject{Kind: enablement.SubjectAgentSkill, ID: skillID})
+
+	if skillID == "" {
+		return fmt.Errorf("enable skill: empty skillId")
+	}
+
+	// 验证技能是否存在
+	if b.agentSkillCatalog != nil {
+		_, exists := b.agentSkillCatalog.Get(skillID)
+		if !exists {
+			return fmt.Errorf("enable skill %s: not found", skillID)
+		}
+	}
+
+	// 持久化启用状态
+	if err := b.enablementSvc.Enable(ctx, enablement.StateSubject{Kind: enablement.SubjectAgentSkill, ID: skillID}); err != nil {
+		return fmt.Errorf("enable skill %s: %w", skillID, err)
+	}
+
+	return nil
 }
 
 func (b *enableExistingPortBridge) EnableMCP(ctx context.Context, serverName string) error {
 	if b.enablementSvc == nil {
 		return fmt.Errorf("enablement service not configured")
 	}
-	return b.enablementSvc.Enable(ctx, enablement.StateSubject{Kind: enablement.SubjectMCPServer, ID: serverName})
+
+	if serverName == "" {
+		return fmt.Errorf("enable MCP: empty server name")
+	}
+
+	// 验证 MCP 服务是否存在
+	if b.mcpRepository != nil {
+		_, err := b.mcpRepository.GetServer(ctx, serverName)
+		if err != nil {
+			return fmt.Errorf("enable MCP %s: not found: %w", serverName, err)
+		}
+	}
+
+	// 持久化启用状态
+	if err := b.enablementSvc.Enable(ctx, enablement.StateSubject{Kind: enablement.SubjectMCPServer, ID: serverName}); err != nil {
+		return fmt.Errorf("enable MCP %s: %w", serverName, err)
+	}
+
+	return nil
 }
 
 // ---------------------------------------------------------------------------

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -51,7 +52,9 @@ func (api *DevModeAPI) Stop() {
 		if cancel, ok := api.watchCancel[id]; ok {
 			cancel()
 		}
-		_ = api.watcher.Stop(id)
+		if err := api.watcher.Stop(id); err != nil {
+			log.Printf("dev_mode_api: stop watcher failed for %s: %v", id, err)
+		}
 		if ch, exists := api.watchEvents[id]; exists {
 			close(ch)
 		}
@@ -117,7 +120,9 @@ func extensionDevelopmentModeEnabled() bool {
 
 func generateWorkspaceID() dev_mode.WorkspaceID {
 	b := make([]byte, 8)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		return dev_mode.WorkspaceID("")
+	}
 	return dev_mode.WorkspaceID("ws-" + hex.EncodeToString(b))
 }
 

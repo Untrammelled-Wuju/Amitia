@@ -141,7 +141,7 @@ type ToolDefinition struct {
 	ExecutionPolicy ToolExecutionPolicy `json:"executionPolicy"`
 	ResultPolicy    ToolResultPolicy    `json:"resultPolicy,omitempty"`
 	Runtime         RuntimeBinding      `json:"runtime"`
-	RoutingMode     ProviderRoutingMode `json:"routingMode,omitempty"`
+	RoutingMode     RoutingMode `json:"routingMode,omitempty"`
 	ProviderID      string              `json:"providerId,omitempty"`
 }
 
