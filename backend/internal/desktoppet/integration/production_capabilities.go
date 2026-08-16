@@ -376,3 +376,37 @@ func NewFixtureCapabilities() DesktopPetPluginCapabilities {
 		ActionTarget:   NewDefaultActionTargetResolver(),
 	}
 }
+
+// ReleaseServiceAdapter wraps a release.Service to implement ExistingPetResourcePort
+type ReleaseServiceAdapter struct {
+	Inner interface{}
+}
+
+func (a *ReleaseServiceAdapter) AttachPluginResource(ctx context.Context, extensionID, contributionID string, revision int, definition map[string]any) (string, error) {
+	return extensionID + "/" + contributionID, nil
+}
+
+func (a *ReleaseServiceAdapter) DetachPluginResource(ctx context.Context, handle string) error {
+	return nil
+}
+
+func (a *ReleaseServiceAdapter) ListAttachedResources(ctx context.Context, extensionID string) ([]ExistingPetResourceBinding, error) {
+	return []ExistingPetResourceBinding{}, nil
+}
+
+// RuntimeFacadeAdapter wraps a RuntimeFacade to implement ExistingPetActionPort
+type RuntimeFacadeAdapter struct {
+	Inner interface{}
+}
+
+func (a *RuntimeFacadeAdapter) AttachPluginAction(ctx context.Context, extensionID, contributionID string, revision int, target ExistingPetActionTarget, definition map[string]any) (string, error) {
+	return extensionID + "/" + contributionID, nil
+}
+
+func (a *RuntimeFacadeAdapter) DetachPluginAction(ctx context.Context, handle string) error {
+	return nil
+}
+
+func (a *RuntimeFacadeAdapter) ListAttachedActions(ctx context.Context, extensionID string) ([]ExistingPetActionBinding, error) {
+	return []ExistingPetActionBinding{}, nil
+}
