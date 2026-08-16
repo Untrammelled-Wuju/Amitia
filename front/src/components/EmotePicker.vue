@@ -12,7 +12,7 @@
       ><el-button
         circle
         size="small"
-        :icon="PictureRounded"
+        :icon="ChatDotRound"
         :disabled="disabled"
         title="发送表情"
         aria-label="发送表情"
@@ -66,7 +66,7 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { PictureRounded, Search } from "@element-plus/icons-vue";
+import { ChatDotRound, Search } from "@element-plus/icons-vue";
 import { useApi } from "@/composables/useApi";
 import { useAssetUrl } from "@/composables/useAssetUrl";
 

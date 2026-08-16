@@ -38,9 +38,9 @@ SPDX-License-Identifier: AGPL-3.0-only
       @toggle-profiles="toggleProfiles"
       @toggle-mem-inject="toggleMemInject"
       @toggle-call="handleToggleCall"
-    ><template #extension-actions><ChatHeaderExtensionHost :context="chatExtensionContext" /></template></ChatHeaderBar>
+    ><template #extension-actions><button v-if="hasSidebarExtensions && isSmallViewport" type="button" class="sidebar-toggle-btn" aria-label="展开插件侧栏" @click="sidebarDrawerOpen = true"><el-icon><MenuIcon /></el-icon></button><ChatHeaderExtensionHost :context="chatExtensionContext" /></template></ChatHeaderBar>
     </div>
-    <div class="chat-body-wrapper">
+      <div class="chat-body-wrapper">
       <ProfileSummaryPanel
         :visible="showProfiles"
         @close="showProfiles = false"
@@ -72,8 +72,11 @@ SPDX-License-Identifier: AGPL-3.0-only
         @reply="handleSetReply"
         @scroll-to-bottom="scrollToBottom(true)"
       />
-      <aside v-if="hasSidebarExtensions" class="chat-sidebar-region"><ChatSidebarExtensionHost :context="chatExtensionContext" /></aside>
+      <aside v-if="hasSidebarExtensions && !isSmallViewport" class="chat-sidebar-region"><ChatSidebarExtensionHost :context="chatExtensionContext" /></aside>
     </div>
+    <el-drawer v-if="hasSidebarExtensions && isSmallViewport" v-model="sidebarDrawerOpen" direction="rtl" size="320px" :with-header="false" modal-class="sidebar-drawer-modal">
+      <ChatSidebarExtensionHost :context="chatExtensionContext" />
+    </el-drawer>
     <div v-if="callActive || hasStatusExtensions" class="chat-status-region">
       <ChatStatusExtensionHost :context="chatExtensionContext" />
     <RealtimeCallWidget
@@ -139,6 +142,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { ref, computed, onMounted, onUnmounted, nextTick, watch, inject } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
+import { Menu as MenuIcon } from "@element-plus/icons-vue";
 import { useApi, isLoggedIn } from "../../composables/useApi";
 import { useCachedApi } from "../../composables/useCachedApi";
 import { useWebChatSSE } from "../../composables/useWebChatSSE";
@@ -258,6 +262,12 @@ function detectOS(): "windows" | "macos" | "linux" | "unknown" {
 }
 const hasSidebarExtensions = computed(() => extensionUIStore.getVisibleContributions("chat.sidebar.panel").length > 0);
 const hasStatusExtensions = computed(() => extensionUIStore.getVisibleContributions("chat.status.item").length > 0);
+const sidebarDrawerOpen = ref(false);
+const isSmallViewport = ref(window.innerWidth < 1024);
+
+function updateViewport() {
+  isSmallViewport.value = window.innerWidth < 1024;
+}
 
 const msgAreaRef = ref<InstanceType<typeof MessagesArea>>();
 const inputRef = ref<InstanceType<typeof ChatInput>>();
@@ -485,6 +495,8 @@ onMounted(async () => {
   });
 
   window.addEventListener("amitia:new-chat", handleNewChat);
+  window.addEventListener("resize", updateViewport);
+  updateViewport();
 
   const h = await get<any>("/api/health").catch(() => null);
   if (h?.deployMode === "cloud-web" && !isLoggedIn()) {
@@ -588,6 +600,7 @@ onUnmounted(() => {
   cleanupSSE();
   disconnectProactiveSSE();
   window.removeEventListener("amitia:new-chat", handleNewChat);
+  window.removeEventListener("resize", updateViewport);
 });
 </script>
 <style scoped>
@@ -617,6 +630,8 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
 }
-.chat-sidebar-region { width: min(320px, 32%); min-width: 220px; padding: 12px; border-left: 1px solid var(--surface-border); overflow: auto; }
+.chat-sidebar-region { width: min(320px, 32%); min-width: 220px; padding: 12px; border-left: 1px solid var(--surface-border); }
 @media (min-width: 1024px) { .chat-body-wrapper { flex-direction: row; } }
+.sidebar-toggle-btn { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text-secondary); cursor: pointer; }
+.sidebar-toggle-btn:hover { border-color: var(--surface-border); background: var(--control-hover-bg); color: var(--text-primary); }
 </style>

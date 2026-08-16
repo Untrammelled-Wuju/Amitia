@@ -92,11 +92,23 @@ const layoutClass = computed(() => `extension-slot--layout-${resolvedLayout.valu
 const errorState = ref<Record<string, string>>({});
 
 onErrorCaptured((err, instance) => {
-  const contributionId = (instance?.$props as { contribution?: string })?.contribution ?? "unknown";
+  const props = instance?.$props as { contribution?: UIContributionSummary | string | { contributionId?: string } };
+  let contributionId = "unknown";
+  if (props?.contribution && typeof props.contribution === "object") {
+    contributionId = (props.contribution as UIContributionSummary).contributionId ?? "unknown";
+  } else if (typeof props?.contribution === "string") {
+    contributionId = props.contribution;
+  }
   errorState.value[contributionId] = err instanceof Error ? err.message : String(err);
   reportError(contributionId, errorState.value[contributionId], true);
   return false;
 });
+
+function retryContribution(contributionId: string) {
+  delete errorState.value[contributionId];
+  const store = useExtensionUIStore();
+  store.clearErrors(contributionId);
+}
 
 </script>
 
@@ -122,7 +134,7 @@ onErrorCaptured((err, instance) => {
           :data-extension-id="contribution.extensionId"
         >
           <template v-if="errorState[contribution.contributionId]">
-            <ExtensionRenderState state="error" :detail="errorState[contribution.contributionId]" />
+            <ExtensionRenderState state="error" :detail="errorState[contribution.contributionId]" @retry="retryContribution(contribution.contributionId)" />
           </template>
           <template v-else>
             <ExtensionContributionRenderer

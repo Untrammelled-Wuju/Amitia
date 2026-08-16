@@ -79,7 +79,21 @@ const effectiveTheme = computed<"light" | "dark">(() => {
 const themeOverridesStyle = computed(() => {
   const overrides = themeConfig.value?.overrides;
   if (!overrides) return undefined;
-  const entries = Object.entries(overrides).map(([k, v]) => `${k}: ${v}`);
+  const allowedPrefix = "--amitia-";
+  const forbiddenKeys = new Set(["position", "z-index", "zIndex", "display", "top", "left", "right", "bottom", "width", "height", "max-width", "max-height", "min-width", "min-height", "overflow", "pointer-events", "visibility", "opacity", "transform", "transition", "animation"]);
+  const entries: string[] = [];
+  for (const [k, v] of Object.entries(overrides)) {
+    if (!k.startsWith(allowedPrefix)) {
+      if (import.meta.env.DEV) console.warn(`[SchemaUI] theme override ignored (not in whitelist): ${k}`);
+      continue;
+    }
+    const propName = k.slice(allowedPrefix.length);
+    if (forbiddenKeys.has(propName)) {
+      if (import.meta.env.DEV) console.warn(`[SchemaUI] theme override ignored (forbidden): ${k}`);
+      continue;
+    }
+    entries.push(`${k}: ${v}`);
+  }
   return entries.length > 0 ? entries.join("; ") : undefined;
 });
 

@@ -7,8 +7,9 @@ SPDX-License-Identifier: AGPL-3.0-only
     <div class="brand">
       <img class="brand-mark" :src="logoUrl" alt="Amitia" />
       <div v-show="!appStore.sidebarCollapsed" class="brand-name">Amitia</div>
-      <button class="side-collapse" type="button" :aria-label="appStore.sidebarCollapsed ? '展开导航' : '收起导航'" @click="appStore.toggleSidebar"><el-icon><DArrowRight v-if="appStore.sidebarCollapsed" /><DArrowLeft v-else /></el-icon></button>
     </div>
+    <button v-show="appStore.sidebarCollapsed" class="side-collapse side-collapse--collapsed" type="button" aria-label="展开导航" @click="appStore.toggleSidebar"><el-icon><DArrowRight /></el-icon></button>
+    <button v-show="!appStore.sidebarCollapsed" class="side-collapse" type="button" aria-label="收起导航" @click="appStore.toggleSidebar"><el-icon><DArrowLeft /></el-icon></button>
     <button v-show="!appStore.sidebarCollapsed" type="button" class="nav-search" @click="searchModal?.open()"><el-icon><Search /></el-icon><span>搜索功能、角色、会话、记忆</span></button>
     <button class="new-chat" type="button" @click="handleNewChat"><el-icon><Plus /></el-icon><span v-show="!appStore.sidebarCollapsed">新对话</span></button>
     <el-menu
@@ -238,6 +239,8 @@ function openUserProfile() {
 .side-collapse { display: grid; place-items: center; width: 28px; height: 28px; margin-left: auto; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--text-muted); cursor: pointer; }
 .side-collapse:hover, .side-collapse:focus-visible { background: var(--workbench-sidebar-hover); color: var(--text-primary); outline: none; }
 .side-nav.is-collapsed .side-collapse { margin-left: 0; }
+.side-collapse--collapsed { width: 36px; height: 36px; margin: 0 auto 12px; border: 1px solid var(--surface-border); border-radius: var(--radius-sm); }
+.side-collapse--collapsed:hover { border-color: var(--surface-border-hover); }
 .new-chat { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 38px; margin: 0 12px 12px; border: 1px solid var(--surface-border); border-radius: var(--radius-sm); background: var(--surface-bg); color: var(--text-primary); cursor: pointer; font: inherit; }
 .new-chat:hover, .new-chat:focus-visible { border-color: var(--surface-border-hover); background: var(--control-hover-bg); outline: none; }
 .side-nav.is-collapsed .new-chat { width: 40px; margin: 0 auto 12px; }
