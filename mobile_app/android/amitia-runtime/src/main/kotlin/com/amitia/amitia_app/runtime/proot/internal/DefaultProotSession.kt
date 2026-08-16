@@ -5,14 +5,10 @@ import com.amitia.amitia_app.runtime.proot.ProotExit
 import com.amitia.amitia_app.runtime.proot.ProotObserver
 import com.amitia.amitia_app.runtime.proot.ProotSession
 import com.amitia.amitia_app.runtime.proot.ProotStopResult
+import com.amitia.amitia_app.runtime.proot.ProotTerminationResult
 import java.util.concurrent.CompletableFuture
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
-
-sealed interface ProotTerminationResult {
-    data class ConfirmedExited(val exitCode: Int?) : ProotTerminationResult
-    data object StillAlive : ProotTerminationResult
-}
 
 internal class DefaultProotSession(
     override val sessionId: String,
@@ -111,7 +107,7 @@ internal class DefaultProotSession(
         }
     }
 
-    fun terminateAndConfirmExit(
+    override fun terminateAndConfirmExit(
         gracefulTimeoutMs: Long,
         forceTimeoutMs: Long,
     ): ProotTerminationResult {
@@ -153,7 +149,7 @@ internal class DefaultProotSession(
         return ProotTerminationResult.StillAlive
     }
 
-    internal fun activate() {
+    override fun activate() {
         if (!activated.compareAndSet(false, true)) return
         startExitWatcher()
         if (isProcessDead()) {
@@ -168,15 +164,11 @@ internal class DefaultProotSession(
             publishTerminalOnce(exit)
             exitDeferred.complete(exit)
         } else {
-            markStarted()
-        }
-    }
-
-    internal fun markStarted() {
-        if (started.compareAndSet(false, true)) {
-            safeNotify(ProotEvent.Started(sessionId, System.currentTimeMillis()))
-            stdoutPump.start()
-            stderrPump.start()
+            if (started.compareAndSet(false, true)) {
+                safeNotify(ProotEvent.Started(sessionId, System.currentTimeMillis()))
+                stdoutPump.start()
+                stderrPump.start()
+            }
         }
     }
 

@@ -244,4 +244,20 @@ public class MediaStaging {
     public static func isNativeStagingId(_ value: String) -> Bool {
         return value.hasPrefix("nativeStaging:")
     }
+
+    public static func urlForStagedResource(_ resourceUri: String) -> URL? {
+        if resourceUri.hasPrefix("file://") {
+            return URL(string: resourceUri)
+        }
+        if isNativeStagingId(resourceUri) {
+            return nativeStagingURL(resourceUri)
+        }
+        return nil
+    }
+
+    public static func deleteStagedResource(_ resourceUri: String) {
+        if isNativeStagingId(resourceUri) {
+            _ = release(resourceUri)
+        }
+    }
 }

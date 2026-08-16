@@ -19,14 +19,20 @@ type meshSessionLookup interface {
 }
 
 type MeshRemoteTaskExecutor struct {
-	hub           *server.ConnectionHub
-	sessionLookup meshSessionLookup
+	hub                *server.ConnectionHub
+	sessionLookup      meshSessionLookup
+	PendingTasks       *PendingTaskManager
+	HeartbeatInterval  time.Duration
+	LeaseDuration      time.Duration
 }
 
 func NewMeshRemoteTaskExecutor(hub *server.ConnectionHub, lookup meshSessionLookup) *MeshRemoteTaskExecutor {
 	return &MeshRemoteTaskExecutor{
-		hub:           hub,
-		sessionLookup: lookup,
+		hub:               hub,
+		sessionLookup:     lookup,
+		PendingTasks:      NewPendingTaskManager(),
+		HeartbeatInterval: 30 * time.Second,
+		LeaseDuration:     5 * time.Minute,
 	}
 }
 
@@ -80,6 +86,25 @@ func (e *MeshRemoteTaskExecutor) executeOnDevice(ctx context.Context, request Ta
 		}, err
 	}
 
+	deadline := e.LeaseDuration
+	if request.Run.DeadlineAt != nil {
+		remaining := time.Until(*request.Run.DeadlineAt)
+		if remaining > 0 && remaining < deadline {
+			deadline = remaining
+		}
+	}
+
+	if e.PendingTasks != nil {
+		_, err := e.PendingTasks.Register(request, sessionID.String(), generation, deadline)
+		if err != nil {
+			return TaskExecutionOutcome{
+				Status:       RunStatusFailed,
+				ErrorCode:    string(ErrTaskExecutionAttemptInvalid),
+				ErrorMessage: fmt.Sprintf("register pending task: %v", err),
+			}, err
+		}
+	}
+
 	taskCmd := MeshTaskCommand{
 		TaskRunID:        request.Run.TaskRunID,
 		TaskDefinitionID: request.Run.TaskDefinitionID,
@@ -91,6 +116,9 @@ func (e *MeshRemoteTaskExecutor) executeOnDevice(ctx context.Context, request Ta
 
 	inputBytes, err := json.Marshal(taskCmd)
 	if err != nil {
+		if e.PendingTasks != nil {
+			e.PendingTasks.Cancel(request.Run.TaskRunID, "marshal failed")
+		}
 		return TaskExecutionOutcome{
 			Status:       RunStatusFailed,
 			ErrorCode:    string(ErrTaskExecutionAttemptInvalid),
@@ -107,6 +135,9 @@ func (e *MeshRemoteTaskExecutor) executeOnDevice(ctx context.Context, request Ta
 
 	payloadBytes, err := json.Marshal(cmdPayload)
 	if err != nil {
+		if e.PendingTasks != nil {
+			e.PendingTasks.Cancel(request.Run.TaskRunID, "marshal failed")
+		}
 		return TaskExecutionOutcome{
 			Status:       RunStatusFailed,
 			ErrorCode:    string(ErrTaskExecutionAttemptInvalid),
@@ -133,6 +164,9 @@ func (e *MeshRemoteTaskExecutor) executeOnDevice(ctx context.Context, request Ta
 
 	envBytes, err := json.Marshal(env)
 	if err != nil {
+		if e.PendingTasks != nil {
+			e.PendingTasks.Cancel(request.Run.TaskRunID, "marshal failed")
+		}
 		return TaskExecutionOutcome{
 			Status:       RunStatusFailed,
 			ErrorCode:    string(ErrTaskExecutionAttemptInvalid),
@@ -141,6 +175,9 @@ func (e *MeshRemoteTaskExecutor) executeOnDevice(ctx context.Context, request Ta
 	}
 
 	if !e.hub.Send(sessionID, generation, envBytes) {
+		if e.PendingTasks != nil {
+			e.PendingTasks.Cancel(request.Run.TaskRunID, "send failed")
+		}
 		return TaskExecutionOutcome{
 			Status:       RunStatusRecoveryRequired,
 			ErrorCode:    string(ErrRemoteTaskExecutorUnavailable),
@@ -148,9 +185,35 @@ func (e *MeshRemoteTaskExecutor) executeOnDevice(ctx context.Context, request Ta
 		}, NewTaskError(ErrRemoteTaskExecutorUnavailable, "failed to send task to device")
 	}
 
+	if e.PendingTasks == nil {
+		return TaskExecutionOutcome{
+			Status:       RunStatusFailed,
+			ErrorCode:    string(ErrRemoteTaskExecutorUnavailable),
+			ErrorMessage: "pending task manager not configured",
+		}, NewTaskError(ErrRemoteTaskExecutorUnavailable, "pending task manager not configured")
+	}
+
+	claimResult, err := e.PendingTasks.WaitForClaim(ctx, request.Run.TaskRunID)
+	if err != nil || !claimResult.Success {
+		errMsg := "task claim timed out"
+		if err != nil {
+			errMsg = err.Error()
+		}
+		if claimResult.Error != "" {
+			errMsg = claimResult.Error
+		}
+		return TaskExecutionOutcome{
+			Status:       RunStatusFailed,
+			ErrorCode:    string(ErrTaskExecutionAttemptInvalid),
+			ErrorMessage: "worker claim failed: " + errMsg,
+		}, NewTaskError(ErrTaskExecutionAttemptInvalid, "worker claim failed: "+errMsg)
+	}
+
 	return TaskExecutionOutcome{
 		Status:          RunStatusRunning,
 		RemoteReference: request.Run.TaskRunID,
+		LeaseID:         claimResult.LeaseID,
+		LeaseExpiresAt:  &claimResult.LeaseExp,
 	}, nil
 }
 

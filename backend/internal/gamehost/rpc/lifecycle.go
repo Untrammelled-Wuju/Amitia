@@ -166,11 +166,17 @@ func (m *RequestLifecycleManager) HandleIncomingResponse(
 	if correlation, ok := m.correlation.ByDownstream(sourcePeer, response.RequestID); ok {
 		upstreamKey := correlation.Upstream
 
+		existingReq := m.findPendingByKey(upstreamKey)
+		var fp RequestFingerprint
+		if existingReq != nil {
+			fp = existingReq.Fingerprint
+		}
+
 		ok, _ := m.pending.Complete(upstreamKey, response)
 		if ok {
 			cachedReq := &CompletedRequest{
 				Key:         upstreamKey,
-				Fingerprint: "",
+				Fingerprint: fp,
 				Response:    cloneEnvelope(response),
 				FinishedAt:  time.Now().UTC(),
 			}
@@ -190,6 +196,12 @@ func (m *RequestLifecycleManager) HandleIncomingResponse(
 		return nil
 	}
 
+	existingReq := findPending(m.pending, targetKey)
+	var fp RequestFingerprint
+	if existingReq != nil {
+		fp = existingReq.Fingerprint
+	}
+
 	ok, _ := m.pending.Complete(targetKey, response)
 
 	if !ok {
@@ -200,6 +212,7 @@ func (m *RequestLifecycleManager) HandleIncomingResponse(
 
 	m.cache.Save(CompletedRequest{
 		Key:        targetKey,
+		Fingerprint: fp,
 		Response:   cloneEnvelope(response),
 		FinishedAt: time.Now().UTC(),
 	})

@@ -39,6 +39,18 @@ internal class DefaultRuntimeServiceEndpoint(
         lifecycleSnapshotRef.set(snapshot)
     }
 
+    override fun notifySnapshotUpdated() {
+        val snapshot = lifecycleSnapshotRef.get() ?: return
+        val event = RuntimeServiceHostEvent.SnapshotUpdated(snapshot)
+        val listenerSnapshot = ArrayList(listeners)
+        for (listener in listenerSnapshot) {
+            try {
+                listener.onServiceHostEvent(event)
+            } catch (_: Throwable) {
+            }
+        }
+    }
+
     fun notify(event: RuntimeServiceHostEvent) {
         val snapshot = ArrayList(listeners)
         for (listener in snapshot) {

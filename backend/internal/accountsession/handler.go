@@ -145,21 +145,25 @@ func (h *Handler) Refresh(c *gin.Context) {
 		return
 	}
 
+	userID := int64(0)
+	if result.UserID != "" {
+		fmt.Sscanf(result.UserID, "%d", &userID)
+	}
 	tokenSvc := NewTokenService()
-	_, _, err = tokenSvc.SignAccessToken(0, "", "", result.SessionID)
+	accessToken, accessExpiresAt, err := tokenSvc.SignAccessToken(int(userID), result.Username, result.Role, result.SessionID)
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, "签发令牌失败", nil)
 		return
 	}
 
-	if err := h.audit.LogRefreshSuccess(result.SessionID, 0, c.ClientIP(), c.Request.UserAgent()); err != nil {
+	if err := h.audit.LogRefreshSuccess(result.SessionID, userID, c.ClientIP(), c.Request.UserAgent()); err != nil {
 		util.ErrorResponse(c, response.InternalError, "记录审计日志失败", nil)
 		return
 	}
 
 	resp := gin.H{
-		"accessToken":           result.AccessToken,
-		"accessTokenExpiresAt":  result.AccessExpiresAt.Format(time.RFC3339),
+		"accessToken":           accessToken,
+		"accessTokenExpiresAt":  accessExpiresAt.Format(time.RFC3339),
 		"refreshToken":          result.RefreshToken,
 		"refreshTokenExpiresAt": result.RefreshExpiresAt.Format(time.RFC3339),
 	}

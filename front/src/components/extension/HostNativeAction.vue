@@ -17,8 +17,9 @@ const isAvailable = computed(() => props.contribution.kind !== "desktop_command"
 
 async function invokeAction(actionId: string) {
   try {
-    const res = await apiClient.post(`/api/extensions/ui/action/${props.contribution.contributionId}/${actionId}`, {
+    const res = await apiClient.post(`/api/extension/action/${props.contribution.contributionId}/${actionId}`, {
       context: props.context ?? {},
+      input: {},
     });
     const result = res.data?.result ?? res.data;
     if (result?.clientExecute === true && typeof result.text === "string") {

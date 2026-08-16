@@ -34,6 +34,8 @@ type Session struct {
 	ID               int64      `gorm:"column:id;primaryKey;autoIncrement" json:"-"`
 	PublicID         string     `gorm:"column:public_id;uniqueIndex;size:64;not null" json:"sessionId"`
 	UserID           int64      `gorm:"column:user_id;not null;index:idx_session_user_status" json:"-"`
+	Username         string     `gorm:"column:username;size:100;not null;default:''" json:"username"`
+	Role             string     `gorm:"column:role;size:20;not null;default:'user'" json:"role"`
 	Status           string     `gorm:"column:status;size:20;not null;index:idx_session_user_status" json:"status"`
 	DeviceName       string     `gorm:"column:device_name;size:100" json:"deviceName"`
 	IPAddress        string     `gorm:"column:ip_address;size:50" json:"ipAddress"`

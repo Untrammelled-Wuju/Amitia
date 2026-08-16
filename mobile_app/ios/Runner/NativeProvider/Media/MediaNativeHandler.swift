@@ -19,7 +19,10 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         "media.camera.capture_photo",
         "media.camera.record_video",
         "media.audio.status",
-        "media.audio.record"
+        "media.audio.record",
+        "native.resource.stat",
+        "native.resource.read_chunk",
+        "native.resource.release"
     ]
 
     public override init() {
@@ -61,13 +64,19 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         case "media.camera.devices":
             return handleCameraDevices(request)
         case "media.camera.capture_photo":
-            return handleCameraCapturePhoto(request)
+            return await handleCameraCapturePhoto(request)
         case "media.camera.record_video":
-            return handleCameraRecordVideo(request)
+            return await handleCameraRecordVideo(request)
         case "media.audio.status":
             return handleAudioStatus(request)
         case "media.audio.record":
-            return handleAudioRecord(request)
+            return await handleAudioRecord(request)
+        case "native.resource.stat":
+            return handleResourceStat(request)
+        case "native.resource.read_chunk":
+            return handleResourceReadChunk(request)
+        case "native.resource.release":
+            return handleResourceRelease(request)
         default:
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
@@ -316,7 +325,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
             sourceURL = URL(string: resourceUri)!
         }
 
-        guard let imageData = try? Data(contentsOf: sourceURL),
+        guard let imageData = readDataChunked(from: sourceURL),
               let image = UIImage(data: imageData) else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
@@ -478,7 +487,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         )
     }
 
-    private func handleCameraCapturePhoto(_ request: IOSNativeRequest) -> IOSNativeResponse {
+    private func handleCameraCapturePhoto(_ request: IOSNativeRequest) async -> IOSNativeResponse {
         let authStatus = AVCaptureDevice.authorizationStatus(for: .video)
         var authorized = authStatus == .authorized
 
@@ -515,7 +524,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         )
     }
 
-    private func handleCameraRecordVideo(_ request: IOSNativeRequest) -> IOSNativeResponse {
+    private func handleCameraRecordVideo(_ request: IOSNativeRequest) async -> IOSNativeResponse {
         let videoAuth = AVCaptureDevice.authorizationStatus(for: .video)
         var videoAuthorized = videoAuth == .authorized
 
@@ -572,7 +581,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         )
     }
 
-    private func handleAudioRecord(_ request: IOSNativeRequest) -> IOSNativeResponse {
+    private func handleAudioRecord(_ request: IOSNativeRequest) async -> IOSNativeResponse {
         let authStatus = AVCaptureDevice.authorizationStatus(for: .audio)
         var authorized = authStatus == .authorized
 
@@ -607,5 +616,56 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
             result: nil,
             error: IOSNativeError(code: "FOREGROUND_REQUIRED", message: "audio recording requires presenting recording UI in foreground scene")
         )
+    }
+
+    private func handleResourceStat(_ request: IOSNativeRequest) -> IOSNativeResponse {
+        guard let nativeStagingId = request.payload?["nativeStagingId"] as? String else {
+            return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing nativeStagingId")
+        }
+        guard let info = MediaStaging.stat(nativeStagingId: nativeStagingId) else {
+            return errorResponse(request, code: "NOT_FOUND", message: "staged resource not found: \(nativeStagingId)")
+        }
+        return successResponse(request, result: info.statDictionary)
+    }
+
+    private func handleResourceReadChunk(_ request: IOSNativeRequest) -> IOSNativeResponse {
+        guard let nativeStagingId = request.payload?["nativeStagingId"] as? String else {
+            return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing nativeStagingId")
+        }
+        let offset = Int64(request.payload?["offset"] as? Int ?? 0)
+        let length = Int64(request.payload?["length"] as? Int ?? 1048576)
+        guard let data = MediaStaging.readChunk(nativeStagingId: nativeStagingId, offset: offset, length: length) else {
+            return errorResponse(request, code: "READ_FAILED", message: "failed to read chunk from \(nativeStagingId)")
+        }
+        return successResponse(request, result: [
+            "nativeStagingId": nativeStagingId,
+            "offset": offset,
+            "length": data.count,
+            "data": data.base64EncodedString()
+        ])
+    }
+
+    private func handleResourceRelease(_ request: IOSNativeRequest) -> IOSNativeResponse {
+        guard let nativeStagingId = request.payload?["nativeStagingId"] as? String else {
+            return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing nativeStagingId")
+        }
+        let released = MediaStaging.release(nativeStagingId: nativeStagingId)
+        return successResponse(request, result: ["released": released, "nativeStagingId": nativeStagingId])
+    }
+
+    private func readDataChunked(from url: URL, maxBytes: Int64 = 104857600) -> Data? {
+        guard let handle = try? FileHandle(forReadingFrom: url) else {
+            return nil
+        }
+        defer { handle.closeFile() }
+        var result = Data()
+        var totalRead: Int64 = 0
+        while totalRead < maxBytes {
+            let chunk = handle.readData(ofLength: 1048576)
+            if chunk.isEmpty { break }
+            result.append(chunk)
+            totalRead += Int64(chunk.count)
+        }
+        return result.isEmpty ? nil : result
     }
 }

@@ -71,10 +71,11 @@ public final class FilePathResolver {
                    attributes[.type] as? FileAttributeType == .typeSymbolicLink {
                     let destination = try? FileManager.default.destinationOfSymbolicLink(atPath: resolvedURL.path)
                     if let dest = destination {
-                        let absoluteDest = (resolvedURL.path as NSString).deletingLastPathComponent + "/" + dest
-                        let standardizedDest = URL(fileURLWithPath: absoluteDest).standardizedFileURL.path
-                        let rootPath = rootURL.standardizedFileURL.path
-                        guard standardizedDest.hasPrefix(rootPath) || standardizedDest == rootPath else {
+                        let parentDir = (resolvedURL.path as NSString).deletingLastPathComponent
+                        let absoluteDest = (dest as NSString).hasPrefix("/") ? dest : parentDir + "/" + dest
+                        let destURL = URL(fileURLWithPath: absoluteDest).standardizedFileURL
+                        let rootStandardized = rootURL.standardizedFileURL
+                        if !isWithinRoot(destURL.path, rootPath: rootStandardized.path) {
                             throw PathResolverError.symlinkEscape
                         }
                     }
@@ -85,11 +86,7 @@ public final class FilePathResolver {
         let resolvedPath = resolvedURL.standardizedFileURL.path
         let rootPath = rootURL.standardizedFileURL.path
 
-        guard resolvedPath.hasPrefix(rootPath) else {
-            throw PathResolverError.escapesRoot
-        }
-
-        if resolvedPath.count + 1 == rootPath.count {
+        guard isWithinRoot(resolvedPath, rootPath: rootPath) else {
             throw PathResolverError.escapesRoot
         }
 
