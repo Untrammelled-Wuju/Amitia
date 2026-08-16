@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -227,6 +228,36 @@ func (p *coordinatorRuntimePublisher) PublishDesiredState(ctx context.Context, d
 			return nil
 		}
 		return fmt.Errorf("create durable command: %w", err)
+	}
+	return nil
+}
+
+func (p *coordinatorRuntimePublisher) PublishRecenter(ctx context.Context, deviceCtx device.DeviceContext, installationID string) error {
+	if p.facade == nil {
+		return fmt.Errorf("runtime v2 unavailable")
+	}
+	if !deviceCtx.IsValid() {
+		return fmt.Errorf("invalid device context")
+	}
+	payload := map[string]interface{}{
+		"installationId": installationID,
+	}
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal recenter payload: %w", err)
+	}
+	_, err = p.facade.Commands().CreateEphemeralCommand(
+		deviceCtx.UserID,
+		deviceCtx.DeviceID,
+		string(runtimev2.CommandTypeRecenterOnce),
+		fmt.Sprintf("recenter:%s:%s", deviceCtx.DeviceID, installationID),
+		payloadBytes,
+	)
+	if err != nil {
+		if err == runtimev2.ErrCommandDuplication {
+			return nil
+		}
+		return fmt.Errorf("create recenter command: %w", err)
 	}
 	return nil
 }
