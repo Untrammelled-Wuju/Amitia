@@ -76,6 +76,8 @@ func (p OutputPermit) IsGenerationCurrent(generation uint64) bool {
 
 func generatePermitID() string {
 	var b [16]byte
-	_, _ = rand.Read(b[:])
+	if _, err := rand.Read(b[:]); err != nil {
+		return ""
+	}
 	return "permit-" + hex.EncodeToString(b[:])
 }
