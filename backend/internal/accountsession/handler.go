@@ -156,7 +156,7 @@ func (h *Handler) Refresh(c *gin.Context) {
 		return
 	}
 
-	if err := h.audit.LogRefreshSuccess(result.SessionID, userID, c.ClientIP(), c.Request.UserAgent()); err != nil {
+	if err := h.audit.LogRefreshSuccess(result.SessionID, int(userID), c.ClientIP(), c.Request.UserAgent()); err != nil {
 		util.ErrorResponse(c, response.InternalError, "记录审计日志失败", nil)
 		return
 	}
