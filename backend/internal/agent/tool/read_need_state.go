@@ -101,7 +101,10 @@ func readNeedState(callCtx context.Context, execCtx ToolExecutionContext, args m
 		return TextResult("当前角色暂无需求状态数据")
 	}
 
-	raw, _ := json.Marshal(output)
+	raw, err := json.Marshal(output)
+	if err != nil {
+		return TextResult(""), fmt.Errorf("marshal need state: %w", err)
+	}
 
 	var lines []string
 	lines = append(lines, fmt.Sprintf("内在需求状态 (%d项):", len(output.Needs)))

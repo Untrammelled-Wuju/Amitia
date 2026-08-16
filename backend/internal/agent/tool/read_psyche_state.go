@@ -137,7 +137,10 @@ func readPsycheState(callCtx context.Context, execCtx ToolExecutionContext, args
 		}
 	}
 
-	raw, _ := json.Marshal(output)
+	raw, err := json.Marshal(output)
+	if err != nil {
+		return nil, fmt.Errorf("marshal psyche state: %w", err)
+	}
 
 	var lines []string
 	lines = append(lines, fmt.Sprintf("情感状态 — 效价: %.2f, 唤醒度: %.2f, 支配感: %.2f",
