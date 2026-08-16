@@ -315,6 +315,17 @@ class RuntimeService : Service() {
     }
 
     private fun startProotSessionLocked(generation: Long, profile: String, startId: Int) {
+        if (!canLaunchProot()) {
+            teardownAfterStartupFailure(
+                generation = generation,
+                sessionId = currentSessionIdRef.get(),
+                launchStartId = startId,
+                cause = RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR,
+                phase = "process_ownership_barrier_blocked"
+            )
+            return
+        }
+
         currentGenerationRef.set(generation)
 
         val component = AndroidRuntimeModule.prootComponent
@@ -826,7 +837,14 @@ class RuntimeService : Service() {
         currentGenerationRef.set(0L)
         latestStartIdRef.set(0)
         stopRequestedRef.set(false)
+        processOwnershipBarrier.set(ProcessOwnershipState.NONE)
         updateLifecycleSnapshot()
+    }
+
+    private fun canLaunchProot(): Boolean {
+        val barrier = processOwnershipBarrier.get()
+        return barrier == ProcessOwnershipState.NONE ||
+            barrier == ProcessOwnershipState.CONFIRMED_DEAD
     }
 
     private fun handleStopHost(targetGeneration: Long, stopStartId: Int) {
