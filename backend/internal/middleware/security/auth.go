@@ -184,6 +184,13 @@ func handleNetworkAuth(c *gin.Context, cfg AuthConfig) {
 			c.Abort()
 			return
 		}
+		if result.Session != nil {
+			if err := cfg.AccountSessions.TouchSession(result.Session.PublicID); err != nil {
+				util.ErrorResponse(c, response.InternalError, "更新会话失败", nil)
+				c.Abort()
+				return
+			}
+		}
 	}
 
 	actorType := auth.ActorTypeUser
