@@ -4,12 +4,10 @@
   "operation": "background.submit",
   "payload": {
     "taskRunId": "run-20260816-001",
-    "systemClass": "app_refresh",
-    "identifier": "com.amitia.background.refresh",
+    "systemClass": "processing",
+    "identifier": "com.amitia.background.processing",
     "earliestBeginAt": "2026-08-16T16:00:00Z",
-    "networkRequired": true,
-    "externalPowerRequired": false,
-    "gpuRequired": false,
-    "reason": "memory_sync"
+    "networkRequired": false,
+    "externalPowerRequired": false
   }
 }
