@@ -128,16 +128,16 @@ const (
 )
 
 const (
-	ImportJournalStageCreated             = "import_created"
-	ImportJournalStageValidated           = "import_validated"
-	ImportJournalStageWorkspaceBuilt      = "import_workspace_built"
-	ImportJournalStageDatabasePrepared    = "import_database_prepared"
-	ImportJournalStageFilesPublished      = "import_files_published"
-	ImportJournalStageDatabaseFinalized   = "import_database_finalized"
-	ImportJournalStageSnapshotCommitted   = "import_snapshot_committed"
-	ImportJournalStageCompleted           = "import_completed"
-	ImportJournalStageFailed              = "import_failed"
-	ImportJournalStageManualReview        = "import_manual_review"
+	ImportJournalStageCreated           = "import_created"
+	ImportJournalStageValidated         = "import_validated"
+	ImportJournalStageWorkspaceBuilt    = "import_workspace_built"
+	ImportJournalStageDatabasePrepared  = "import_database_prepared"
+	ImportJournalStageFilesPublished    = "import_files_published"
+	ImportJournalStageDatabaseFinalized = "import_database_finalized"
+	ImportJournalStageSnapshotCommitted = "import_snapshot_committed"
+	ImportJournalStageCompleted         = "import_completed"
+	ImportJournalStageFailed            = "import_failed"
+	ImportJournalStageManualReview      = "import_manual_review"
 )
 
 type LegacyPackageMapping struct {
@@ -305,12 +305,12 @@ type ImportPackageSnapshot struct {
 func (ImportPackageSnapshot) TableName() string { return "desktop_pet_import_package_snapshots" }
 
 const (
-	ImportSnapshotPreparing         = "preparing"
-	ImportSnapshotPublished         = "published"
-	ImportSnapshotCompleted         = "completed"
-	ImportSnapshotFailedRetryable   = "failed_retryable"
-	ImportSnapshotFailedTerminal    = "failed_terminal"
-	ImportSnapshotManualReview      = "manual_review"
+	ImportSnapshotPreparing       = "preparing"
+	ImportSnapshotPublished       = "published"
+	ImportSnapshotCompleted       = "completed"
+	ImportSnapshotFailedRetryable = "failed_retryable"
+	ImportSnapshotFailedTerminal  = "failed_terminal"
+	ImportSnapshotManualReview    = "manual_review"
 )
 
 type ReleaseFrameSnapshot struct {
