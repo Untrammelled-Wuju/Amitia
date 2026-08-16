@@ -599,6 +599,21 @@ export class DesktopPetManager {
     await this.callPlayActionApi(actionKey);
   }
 
+  stopAction(): void {
+    if (this.scheduler) {
+      this.scheduler.forceInterrupt("resource_invalid");
+    }
+    this.actionPlayer?.stop();
+  }
+
+  pauseAction(): void {
+    this.actionPlayer?.pause?.();
+  }
+
+  resumeAction(): void {
+    this.actionPlayer?.resume?.();
+  }
+
   async recenter(): Promise<void> {
     if (this.state !== "enabled" || !this.windowAdapter) {
       throw new Error("PET_NOT_ENABLED");
@@ -2426,6 +2441,52 @@ export class DesktopPetManager {
                 errorMessage: "",
                 appliedRevision: cmd.settingsRevision ?? desiredRevision,
                 actualState: this.collectPetInstanceSummary(),
+              };
+            }
+            case "runtime.command.reload_release": {
+              const reloadInstallationId = cmd.payload?.installation?.installationId
+                ?? cmd.installationId
+                ?? "";
+              if (reloadInstallationId) {
+                await this.enableInstallation(reloadInstallationId);
+              }
+              return {
+                commandId,
+                status: "applied",
+                errorCode: "",
+                errorMessage: "",
+                appliedRevision: desiredRevision,
+                actualState: this.collectPetInstanceSummary(),
+              };
+            }
+            case "runtime.command.stop_action": {
+              this.stopAction();
+              return {
+                commandId,
+                status: "applied",
+                errorCode: "",
+                errorMessage: "",
+                appliedRevision: desiredRevision,
+              };
+            }
+            case "runtime.command.pause_action": {
+              this.pauseAction();
+              return {
+                commandId,
+                status: "applied",
+                errorCode: "",
+                errorMessage: "",
+                appliedRevision: desiredRevision,
+              };
+            }
+            case "runtime.command.resume_action": {
+              this.resumeAction();
+              return {
+                commandId,
+                status: "applied",
+                errorCode: "",
+                errorMessage: "",
+                appliedRevision: desiredRevision,
               };
             }
             case "sync": {
