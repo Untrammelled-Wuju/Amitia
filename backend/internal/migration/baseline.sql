@@ -5852,6 +5852,11 @@ CREATE TABLE IF NOT EXISTS sync_cursors (
 );
 CREATE INDEX IF NOT EXISTS idx_sync_cursors_user ON sync_cursors(user_id);
 
+CREATE TABLE IF NOT EXISTS sync_sequence (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    seq INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE IF NOT EXISTS execution_resumes (
     resume_id TEXT PRIMARY KEY,
     root_execution_id TEXT,
