@@ -239,6 +239,7 @@ type UnifiedToolResult struct {
 	SideEffects   []RecordedSideEffect `json:"sideEffects,omitempty"`
 	DurationMS    int64                `json:"durationMs,omitempty"`
 	ResourceUsage *ResourceUsage       `json:"resourceUsage,omitempty"`
+	Generation    int64                `json:"generation,omitempty"`
 	Metadata      map[string]any       `json:"metadata,omitempty"`
 }
 

@@ -67,6 +67,9 @@ func (m *PendingInvocationManager) Complete(invocationID string, result UnifiedT
 	if !ok {
 		return false
 	}
+	if result.Generation != 0 && pi.Generation != 0 && result.Generation != pi.Generation {
+		return false
+	}
 	delete(m.pending, invocationID)
 	pi.CancelFunc()
 	select {
