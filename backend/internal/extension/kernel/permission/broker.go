@@ -320,16 +320,16 @@ func (b *DefaultPermissionBroker) validateApprovalRecord(permissionID string, re
 		}
 	}
 
-	if record.ScopeSnapshotID != "" && request.ScopeSnapshotID != "" {
+	if record.ScopeSnapshotID != "" || request.ScopeSnapshotID != "" {
 		if record.ScopeSnapshotID != request.ScopeSnapshotID {
 			return false
 		}
 	}
 
-	if record.ExecutionBindingKey != "" && !record.ExecutionContext.IsEmpty() {
+	if record.ExecutionBindingKey != "" || !request.ExecutionContext.IsEmpty() {
 		currentKey := request.ExecutionContext.BindingKey()
-		if currentKey == "" {
-			currentKey = record.ExecutionBindingKey
+		if record.ExecutionBindingKey == "" || currentKey == "" {
+			return false
 		}
 		if currentKey != record.ExecutionBindingKey {
 			return false
