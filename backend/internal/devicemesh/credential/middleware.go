@@ -20,7 +20,10 @@ type DeviceRuntimePrincipal struct {
 
 type contextKey string
 
-const principalKey contextKey = "device_runtime_principal"
+const (
+	principalKey  contextKey = "device_runtime_principal"
+	bootstrapTicketKey contextKey = "bootstrap_ticket_snapshot"
+)
 
 func DeviceAuthMiddleware(svc *Service) gin.HandlerFunc {
 	return func(c *gin.Context) {
@@ -103,9 +106,11 @@ func BootstrapTicketAuthMiddleware(svc *Service, bootstrapSvc *bootstrap.Service
 			UserID:    ticket.UserID,
 			DeviceID:  ticket.DeviceID,
 			RuntimeID: ticket.RuntimeID,
+			ExpiresAt: ticket.ExpiresAt,
 		}
 
 		c.Set(string(principalKey), principal)
+		c.Set(string(bootstrapTicketKey), ticket)
 		c.Next()
 	}
 }
@@ -122,6 +127,15 @@ func GinPrincipal(c *gin.Context) (DeviceRuntimePrincipal, bool) {
 	}
 	p, ok := v.(DeviceRuntimePrincipal)
 	return p, ok
+}
+
+func GinBootstrapTicket(c *gin.Context) (*bootstrap.BootstrapTicket, bool) {
+	v, exists := c.Get(string(bootstrapTicketKey))
+	if !exists {
+		return nil, false
+	}
+	t, ok := v.(*bootstrap.BootstrapTicket)
+	return t, ok
 }
 
 func DeviceAuthCredentialWS(svc *Service, handler WSHandler) gin.HandlerFunc {

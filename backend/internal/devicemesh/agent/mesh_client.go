@@ -166,6 +166,8 @@ func (c *MeshClient) connectAndServe() error {
 		return fmt.Errorf("handshake timeout: no HelloAck received")
 	}
 
+	c.setState(StateHelloAck)
+
 	c.setState(StateReady)
 	c.backoff.Reset()
 
