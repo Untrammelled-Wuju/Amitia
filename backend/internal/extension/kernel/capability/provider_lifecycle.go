@@ -220,7 +220,6 @@ func (s *ProviderLifecycleService) UpdateInstanceAvailability(id ProviderInstanc
 	})
 	if err != nil {
 		s.registry.setInstance(string(old.ID), &oldClone)
-		s.registry.rebuildProviderInstanceIndex()
 		return err
 	}
 	return nil
@@ -255,7 +254,6 @@ func (s *ProviderLifecycleService) UpdateInstanceHealth(id ProviderInstanceID, h
 	})
 	if err != nil {
 		s.registry.setInstance(string(old.ID), &oldClone)
-		s.registry.rebuildProviderInstanceIndex()
 		return err
 	}
 	return nil
