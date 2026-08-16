@@ -20,8 +20,8 @@ type packagePortBridge struct {
 	manager *lifecycle_manager.Manager
 }
 
-// NewPackagePortBridge creates a PackageInstallPort backed by the lifecycle Manager.
-func NewPackagePortBridge(manager *lifecycle_manager.Manager) PackageInstallPort {
+// NewPackagePortBridgeFromManager creates a PackageInstallPort backed by the lifecycle Manager.
+func NewPackagePortBridgeFromManager(manager *lifecycle_manager.Manager) PackageInstallPort {
 	return &packagePortBridge{manager: manager}
 }
 

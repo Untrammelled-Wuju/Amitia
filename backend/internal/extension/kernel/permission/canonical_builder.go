@@ -95,7 +95,7 @@ func BuildEvaluationRequestFromInvocation(subject PermissionSubject, requirement
 		WithIsBackground(inv.IsBackground).
 		WithScopeSnapshotID(inv.ScopeSnapshotID).
 		WithApprovalMode(string(inv.ApprovalMode)).
-		WithGeneration(int(inv.Generation)).
+		WithGeneration(int64(inv.Generation)).
 		WithExecutionContext(ExecutionContextFromInvocation(inv)).
 		Build()
 }
