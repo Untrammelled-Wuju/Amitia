@@ -29,3 +29,16 @@ func (p *domainMigrationBackupPort) CreateBackup(ctx context.Context) (string, e
 	}
 	return time.Now().UTC().Format("20060102T150405"), nil
 }
+
+func (p *domainMigrationBackupPort) BackupExists(ctx context.Context, backupID string) (bool, error) {
+	if backupID == "" {
+		return false, nil
+	}
+	var record struct {
+		ID string `gorm:"column:id"`
+	}
+	if err := p.db.WithContext(ctx).Raw("SELECT id FROM backup_records WHERE id = ? LIMIT 1", backupID).Scan(&record).Error; err != nil {
+		return false, err
+	}
+	return record.ID != "", nil
+}

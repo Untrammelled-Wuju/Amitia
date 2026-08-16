@@ -80,8 +80,6 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/management"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/imagegen"
-	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval"
-	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval/local"
 	"github.com/u-ai/backend/internal/interaction"
 	iosnative_background "github.com/u-ai/backend/internal/iosnative/background"
 	"github.com/u-ai/backend/internal/localmodel/llamacpp"
@@ -398,14 +396,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithWorkspaceService(workspaceService).
 		WithBrowserProvider(browserProvider).
 		WithRuntimeProfile(runtimeProfile).
-		WithMeshHub(meshHub).
-		WithBackgroundBootstrapFunc(func() (backgroundremoval.Registry, error) {
-			reg := backgroundremoval.NewRegistry()
-			if err := reg.Register(local.NewLocalProvider(), local.LocalCapabilities()); err != nil {
-				return nil, fmt.Errorf("register local background provider: %w", err)
-			}
-			return reg, nil
-		})
+		WithMeshHub(meshHub)
 
 	installationRepo := installation.NewRepository(ctx.DB, ctx)
 	runtimeConfig := runtime.DefaultRuntimeConfig()
@@ -1162,14 +1153,7 @@ func newDeviceAgentServices(ctx *app.AppContext, graphSvc graph.Service, bootstr
 		WithExtensionRoot(kernelRoot).
 		WithNodeEnvironmentResolver(nodeResolver).
 		WithHostArtifactResolver(artifactResolver).
-		WithRuntimeProfile(runtimeProfile).
-		WithBackgroundBootstrapFunc(func() (backgroundremoval.Registry, error) {
-			reg := backgroundremoval.NewRegistry()
-			if err := reg.Register(local.NewLocalProvider(), local.LocalCapabilities()); err != nil {
-				return nil, fmt.Errorf("register local background provider: %w", err)
-			}
-			return reg, nil
-		})
+		WithRuntimeProfile(runtimeProfile)
 	if bootstrap != nil {
 		kernelBuilder.WithRuntimeHost(bootstrap.RuntimeHost())
 	}
