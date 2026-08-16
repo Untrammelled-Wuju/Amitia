@@ -1,7 +1,0 @@
-.cache/
-.work/
-__pycache__/
-*.pyc
-*.pyo
-test-reports/
-*.partial
