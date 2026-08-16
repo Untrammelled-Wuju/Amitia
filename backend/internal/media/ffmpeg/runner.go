@@ -167,7 +167,9 @@ func (r *Runner) CancelAll() {
 
 func generateProcessID(prefix string) runtimehost.ProcessID {
 	b := make([]byte, 4)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		return runtimehost.ProcessID("")
+	}
 	id := fmt.Sprintf("%s.%s.%s", prefix, hex.EncodeToString(b), shortTimestamp())
 	return runtimehost.ProcessID(id)
 }
