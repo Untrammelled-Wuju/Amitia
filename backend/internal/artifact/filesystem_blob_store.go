@@ -60,6 +60,23 @@ func (s *FilesystemBlobStore) Put(ctx context.Context, reader io.Reader, limit i
 		os.Remove(tmpName)
 		return BlobInfo{}, fmt.Errorf("artifact: rename failed: %w", err)
 	}
+	verifyFile, err := os.Open(canonicalPath)
+	if err != nil {
+		os.Remove(canonicalPath)
+		return BlobInfo{}, fmt.Errorf("artifact: verify open failed: %w", err)
+	}
+	verifyHash := sha256.New()
+	_, err = io.Copy(verifyHash, verifyFile)
+	verifyFile.Close()
+	if err != nil {
+		os.Remove(canonicalPath)
+		return BlobInfo{}, fmt.Errorf("artifact: verify read failed: %w", err)
+	}
+	verifyDigest := BlobDigest("sha256:" + hex.EncodeToString(verifyHash.Sum(nil)))
+	if verifyDigest != digest {
+		os.Remove(canonicalPath)
+		return BlobInfo{}, fmt.Errorf("artifact: integrity mismatch: expected %s, got %s", digest, verifyDigest)
+	}
 	return BlobInfo{Digest: digest, SizeBytes: written}, nil
 }
 
