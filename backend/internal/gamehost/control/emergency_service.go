@@ -815,6 +815,8 @@ func verificationErrors(reasons []string) []error {
 
 func generateEmergencyOperationID() string {
 	var b [12]byte
-	_, _ = rand.Read(b[:])
+	if _, err := rand.Read(b[:]); err != nil {
+		return ""
+	}
 	return "emg-" + hex.EncodeToString(b[:])
 }

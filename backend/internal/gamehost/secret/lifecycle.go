@@ -24,7 +24,9 @@ type RuntimeSecretLeaseSession = contracts.RuntimeSecretLeaseSession
 
 func newSessionID() string {
 	buf := make([]byte, 12)
-	_, _ = rand.Read(buf)
+	if _, err := rand.Read(buf); err != nil {
+		return ""
+	}
 	return "sess-" + hex.EncodeToString(buf)
 }
 
