@@ -355,16 +355,16 @@ func main() {
 			os.Exit(1)
 		}
 		srv.Handler = r
-	if err := startCoreWorkers(appCtx, services, srv); err != nil {
-		log.Error("核心Worker启动失败:", err)
-		cleanup()
-		os.Exit(1)
-	}
-	if services.DeviceMesh != nil {
-		if err := services.DeviceMesh.Start(); err != nil {
-			log.Warn("device-mesh runtime start failed: ", err)
+		if err := startCoreWorkers(appCtx, services, srv); err != nil {
+			log.Error("核心Worker启动失败:", err)
+			cleanup()
+			os.Exit(1)
 		}
-	}
+		if services.DeviceMesh != nil {
+			if err := services.DeviceMesh.Start(); err != nil {
+				log.Warn("device-mesh runtime start failed: ", err)
+			}
+		}
 		runCoreServer(appCtx, srv, serverErr, services, srv)
 		return
 	}

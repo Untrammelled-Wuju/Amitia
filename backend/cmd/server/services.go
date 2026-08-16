@@ -8,7 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
-		"path/filepath"
+	"path/filepath"
 	goRuntime "runtime"
 	"strings"
 	"sync"
@@ -32,9 +32,6 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/behavior/wiring"
 	"github.com/u-ai/backend/internal/desktoppet/device"
 	"github.com/u-ai/backend/internal/desktoppet/editing"
-	"github.com/u-ai/backend/internal/devicemesh"
-	"github.com/u-ai/backend/internal/devicemesh/server"
-	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/desktoppet/editing/baseline"
 	"github.com/u-ai/backend/internal/desktoppet/editing/revisioncommit"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
@@ -68,11 +65,14 @@ import (
 	runtimev2 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v2"
 	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/desktoppet/worker"
+	"github.com/u-ai/backend/internal/devicemesh"
+	"github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/builtin"
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	extensionmcp "github.com/u-ai/backend/internal/extension/kernel/mcp"
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
@@ -85,13 +85,13 @@ import (
 	"github.com/u-ai/backend/internal/interaction"
 	iosnative_background "github.com/u-ai/backend/internal/iosnative/background"
 	"github.com/u-ai/backend/internal/localmodel/llamacpp"
-	"github.com/u-ai/backend/internal/nativebridge"
 	"github.com/u-ai/backend/internal/mcp"
 	"github.com/u-ai/backend/internal/media"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/middleware/security"
 	migrationcore "github.com/u-ai/backend/internal/migration"
 	"github.com/u-ai/backend/internal/mindruntime"
+	"github.com/u-ai/backend/internal/nativebridge"
 	newoutbox "github.com/u-ai/backend/internal/outbox"
 	"github.com/u-ai/backend/internal/personality"
 	"github.com/u-ai/backend/internal/pipelinecheckpoint"
@@ -101,6 +101,7 @@ import (
 	"github.com/u-ai/backend/internal/psyche/budget"
 	"github.com/u-ai/backend/internal/qdrant"
 	"github.com/u-ai/backend/internal/queue"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/safety"
@@ -191,11 +192,11 @@ type AppServices struct {
 	WorkspaceRegistry            *workspace.Registry
 	WorkspaceService             *workspace.Service
 	ProductionCutover            *cutoverComposition
-	ClosureGate                 *Stage2ClosureGate
+	ClosureGate                  *Stage2ClosureGate
 	NativeBridgeRelay            *nativeBridgeRelay
-	BackgroundTaskRuntimeWired  bool
-	Artifact                    *ArtifactRuntime
-	DeviceMesh                 *devicemesh.Runtime
+	BackgroundTaskRuntimeWired   bool
+	Artifact                     *ArtifactRuntime
+	DeviceMesh                   *devicemesh.Runtime
 }
 
 type RuntimeOrchestrator interface {
@@ -440,7 +441,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	releaseEventPublisher := release.NewReleaseEventPublisher(releaseRepo)
 	newReleaseService := release.NewReleaseService(releaseRepo, gateReader, releaseStoragePort, releaseEventPublisher)
 
-		kernelBuilder.WithDesktopPetPluginCapabilities(integration.NewProductionCapabilities(integration.ProductionCapabilitiesOptions{
+	kernelBuilder.WithDesktopPetPluginCapabilities(integration.NewProductionCapabilities(integration.ProductionCapabilitiesOptions{
 		InstallationRepo: installationRepo,
 		ReleaseService:   integration.NewInstallationResourcePort(installationRepo),
 		RuntimeFacade:    integration.NewInstallationActionPort(installationRepo),
@@ -594,7 +595,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	runtimeQueue := queue.NewSQLiteRuntimeQueueStore(ctx.DB)
 	deliveryStore := delivery.NewSQLiteDeliveryStore(ctx.DB)
 	channelResolver := delivery.BuildChannelResolverFromConfig()
-	deliveryWorker := delivery.NewWorker(deliveryStore, channelResolver, delivery.DefaultWorkerConfig())
+	channelAvailability := newChannelProviderAvailability(kernelContainer)
+	deliveryWorker := delivery.NewWorkerWithAvailability(deliveryStore, channelResolver, channelAvailability, delivery.DefaultWorkerConfig())
 	deliveryAdapter := &chatDeliveryAdapter{store: deliveryStore}
 	chatSvc.SetDeliveryStore(deliveryAdapter)
 	emoteSvc := emote.NewService(ctx.DB, deliveryStore)
@@ -1024,11 +1026,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		return nil, fmt.Errorf("build data portability coordinator: %w", err)
 	}
 
-services := &AppServices{
-	DB:                           ctx.DB,
-	RuntimeProfile:               runtimeProfile,
-	RuntimePolicy:                policy,
-	DataPortability:              dpCoord,
+	services := &AppServices{
+		DB:                           ctx.DB,
+		RuntimeProfile:               runtimeProfile,
+		RuntimePolicy:                policy,
+		DataPortability:              dpCoord,
 		Graph:                        graphSvc,
 		ChatDeliveryAdapter:          deliveryAdapter,
 		Memory:                       memSvc,
@@ -1180,21 +1182,21 @@ func newDeviceAgentServices(ctx *app.AppContext, graphSvc graph.Service, bootstr
 		log.Warn("kernel recovery warning: ", err)
 	}
 
-		// R19: Detect platform from runtime instead of hardcoding Windows
+	// R19: Detect platform from runtime instead of hardcoding Windows
 	deviceAgentRuntime, err := devicemesh.NewDeviceAgentRuntime(config.AppCfg.Storage.DataDir, platformFromGOOS(goRuntime.GOOS))
 	if err != nil {
 		log.Warn("device-mesh agent runtime unavailable: ", err)
 	}
 
 	services := &AppServices{
-		DB:               ctx.DB,
-		RuntimeProfile:   runtimeProfile,
-		RuntimePolicy:    policy,
-		Graph:            nil,
-		Chat:             nil,
-		Extension:        extensionRuntime,
-		KernelContainer:  kernelContainer,
-		DeviceMesh:       deviceAgentRuntime,
+		DB:              ctx.DB,
+		RuntimeProfile:  runtimeProfile,
+		RuntimePolicy:   policy,
+		Graph:           nil,
+		Chat:            nil,
+		Extension:       extensionRuntime,
+		KernelContainer: kernelContainer,
+		DeviceMesh:      deviceAgentRuntime,
 	}
 	return services, nil
 }
@@ -1443,6 +1445,37 @@ func (a *chatDeliveryAdapter) ReleaseOutputLease(leaseID, ownerToken string) err
 func (a *chatDeliveryAdapter) PreemptActiveOutputLeases(characterID string) error {
 	_, err := a.store.PreemptActiveLeasesByCharacter(characterID)
 	return err
+}
+
+type channelProviderAvailability struct {
+	kernel *kernel.Container
+}
+
+func newChannelProviderAvailability(kernel *kernel.Container) *channelProviderAvailability {
+	return &channelProviderAvailability{kernel: kernel}
+}
+
+func (c *channelProviderAvailability) IsProviderAvailable(providerInstanceID string) bool {
+	if c.kernel == nil || c.kernel.CapabilityProviders == nil {
+		return true
+	}
+	instances := c.kernel.CapabilityProviders.SnapshotInstances()
+	for _, inst := range instances {
+		if inst == nil || string(inst.ID) != providerInstanceID {
+			continue
+		}
+		return inst.Availability == capability.ProviderAvailabilityAvailable
+	}
+	return false
+}
+
+func (c *channelProviderAvailability) MarkProviderUnavailable(providerInstanceID string, reason string) {
+	if c.kernel == nil || c.kernel.ProviderLifecycle == nil {
+		return
+	}
+	if err := c.kernel.ProviderLifecycle.UpdateInstanceAvailability(capability.ProviderInstanceID(providerInstanceID), capability.ProviderAvailabilityUnavailable); err != nil {
+		log.Error("channel provider mark unavailable failed", "provider", providerInstanceID, "error", err)
+	}
 }
 
 type reflectionOutboxServiceAdapter struct {
