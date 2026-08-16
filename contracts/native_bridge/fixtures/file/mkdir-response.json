@@ -1,5 +1,5 @@
 {
-  "protocolVersion": "1.0",
+  "protocolVersion": 1,
   "requestId": "req-mkdir-001",
   "status": "ok",
   "result": {

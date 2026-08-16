@@ -1,5 +1,5 @@
 {
-  "protocolVersion": "1.0",
+  "protocolVersion": 1,
   "event": "execution_window_started",
   "payload": {
     "taskRunId": "run-20260816-001",
