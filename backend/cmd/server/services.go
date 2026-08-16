@@ -33,6 +33,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/device"
 	"github.com/u-ai/backend/internal/desktoppet/editing"
 	"github.com/u-ai/backend/internal/devicemesh"
+	"github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/desktoppet/editing/baseline"
 	"github.com/u-ai/backend/internal/desktoppet/editing/revisioncommit"
@@ -71,6 +72,7 @@ import (
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/extension/kernel"
+	"github.com/u-ai/backend/internal/extension/kernel/builtin"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	extensionmcp "github.com/u-ai/backend/internal/extension/kernel/mcp"
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
@@ -106,6 +108,8 @@ import (
 	"github.com/u-ai/backend/internal/search"
 	"github.com/u-ai/backend/internal/system/dataportability"
 	"github.com/u-ai/backend/internal/temporal"
+	"github.com/u-ai/backend/internal/uiagent"
+	"github.com/u-ai/backend/internal/uiagent/schema"
 	"github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/workspace"
 	"github.com/u-ai/backend/internal/worldbook"
@@ -373,6 +377,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		browserProvider = browser.NewDisabledProvider()
 	}
 
+	meshHub := server.NewConnectionHub()
+
 	kernelBuilder := kernel.NewContainerBuilder().
 		WithDBPath(kernelDBPath).
 		WithExtensionRoot(kernelRoot).
@@ -391,6 +397,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithWorkspaceService(workspaceService).
 		WithBrowserProvider(browserProvider).
 		WithRuntimeProfile(runtimeProfile).
+		WithMeshHub(meshHub).
 		WithBackgroundBootstrapFunc(func() (backgroundremoval.Registry, error) {
 			reg := backgroundremoval.NewRegistry()
 			if err := reg.Register(local.NewLocalProvider(), local.LocalCapabilities()); err != nil {
@@ -525,6 +532,33 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		baseURL := "http://" + config.AppCfg.Server.Addr()
 		toolFacade.SetSkillResourceHandler(extension.NewSkillResourceAdapter(extensionRuntime.AgentSkills, baseURL))
 	}
+
+	schemaCatalog := schema.DefaultCatalog
+	llmCall := func(ctx interface{}, promptJSON []byte) ([]byte, error) {
+		ctxVal := context.Background()
+		if c, ok := ctx.(context.Context); ok && c != nil {
+			ctxVal = c
+		}
+		var prompt schema.AIPrompt
+		if err := json.Unmarshal(promptJSON, &prompt); err != nil {
+			return nil, fmt.Errorf("schema generator: invalid prompt: %w", err)
+		}
+		systemPrompt := "You are a UI schema generator. Generate a valid SchemaUIDocument JSON based on the user description."
+		userPrompt := fmt.Sprintf("Task: %s\nDescription: %s\nAvailable Components: %s\nInstructions: %s",
+			prompt.Task, prompt.Description, strings.Join(prompt.AvailableComp, ", "), prompt.Instructions)
+		reply, _, _, err := chatSvc.GenerateWorkshopJSON(ctxVal, systemPrompt, userPrompt)
+		if err != nil {
+			return nil, fmt.Errorf("schema generator: %w", err)
+		}
+		return []byte(reply), nil
+	}
+	schemaGen := schema.NewAISchemaGenerator(schemaCatalog, llmCall)
+	builtin.SetUIAgentSchemaGenerator(schemaGen)
+	uiAgentExecutor := uiagent.NewUIExecutor(
+		uiagent.WithPolicy(uiagent.DefaultPolicy()),
+		uiagent.WithSchemaGenerator(schemaGen),
+	)
+	builtin.SetUIAgentExecutor(uiAgentExecutor)
 	chatSvc.SetToolRuntime(newChatToolRuntimeAdapter(toolFacade))
 	actionMaterializer := interaction.NewActionMaterializer(toolFacade)
 	actionDispatcher := interaction.NewActionDispatcher(toolFacade)
@@ -1059,7 +1093,7 @@ services := &AppServices{
 		DeviceMesh:                   nil,
 	}
 	if runtimeProfile == runtimeprofile.ProfileCloudCore && kernelContainer != nil {
-		deviceMeshRuntime, err := devicemesh.NewCloudRuntime(kernelContainer.Store.DB(), kernelContainer.DeviceRegistry)
+		deviceMeshRuntime, err := devicemesh.NewCloudRuntimeWithHub(kernelContainer.Store.DB(), kernelContainer.DeviceRegistry, meshHub)
 		if err != nil {
 			log.Warn("device-mesh cloud runtime unavailable: ", err)
 		} else {
