@@ -97,6 +97,13 @@ func (f *ToolFacade) SetRecoveryService(svc *acquisition.RecoveryService) {
 	f.recoveryService = svc
 }
 
+func (f *ToolFacade) TryRecoverMissingCapability(ctx context.Context, err error, invocation capability.ToolInvocationContext) (*acquisition.AcquisitionResult, error) {
+	if f.recoveryService == nil {
+		return nil, fmt.Errorf("recovery service not configured")
+	}
+	return f.recoveryService.RecoverFromError(ctx, err, invocation)
+}
+
 func (f *ToolFacade) PrepareAgentSkillPrompt(ctx context.Context, scope LegacyScope, message string) (string, []LegacyActivatedSkill, []string) {
 	f.counters.IncPrepareAgentSkillPrompt()
 	if f.agentSkillBackend != nil {
