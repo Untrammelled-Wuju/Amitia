@@ -19,17 +19,22 @@ type HostIdentityProvider interface {
 }
 
 type ProcessCleanupProvider interface {
-	CleanupOwnedProcess(ctx context.Context, runtimeID domain.RuntimeInstanceID, pid int) error
+	CleanupOwnedProcess(ctx context.Context, instanceID string, pid int) error
 	ListOrphanCandidates(ctx context.Context) ([]ProcessCandidate, error)
 }
 
 type ProcessCandidate struct {
-	PID         int
-	RuntimeID   domain.RuntimeInstanceID
-	PluginID    domain.PluginID
-	ExtensionID string
-	Generation  uint64
-	Output      string
+	PID              int
+	ProcessInstanceID string
+	RuntimeID        domain.RuntimeInstanceID
+	PluginID         domain.PluginID
+	ExtensionID      string
+	ServiceID        string
+	ModuleID         string
+	Generation       uint64
+	HostInstanceID   string
+	HostSessionID    string
+	Output           string
 }
 
 type TempCleanupProvider interface {
@@ -272,16 +277,17 @@ func (c *StartupRecoveryCoordinator) classifyOrphans(ctx context.Context, report
 					pc.PID, pc.RuntimeID, pc.ExtensionID, result)
 				continue
 			}
-			candidates = append(candidates, &OrphanResource{
-				Type:        ResourceOrphanProcess,
-				ResourceID:  fmt.Sprintf("pid-%d", pc.PID),
-				ExtensionID: pc.ExtensionID,
-				PluginID:    pc.PluginID,
-				RuntimeID:   pc.RuntimeID,
-				Generation:  pc.Generation,
-				Ownership:   proof,
-				Path:        pc.Output,
-			})
+		candidates = append(candidates, &OrphanResource{
+			Type:        ResourceOrphanProcess,
+			ResourceID:  fmt.Sprintf("pid-%d", pc.PID),
+			ExtensionID: pc.ExtensionID,
+			PluginID:    pc.PluginID,
+			RuntimeID:   pc.RuntimeID,
+			ServiceName: pc.ProcessInstanceID,
+			Generation:  pc.Generation,
+			Ownership:   proof,
+			Path:        pc.Output,
+		})
 		}
 	}
 
@@ -455,7 +461,11 @@ func (c *StartupRecoveryCoordinator) cleanupProcessCandidate(ctx context.Context
 	if c.deps.ProcessCleanup != nil {
 		pid := extractPID(candidate.ResourceID)
 		if pid > 0 {
-			err := c.deps.ProcessCleanup.CleanupOwnedProcess(ctx, candidate.RuntimeID, pid)
+			instanceID := candidate.ServiceName
+			if instanceID == "" {
+				instanceID = string(candidate.RuntimeID)
+			}
+			err := c.deps.ProcessCleanup.CleanupOwnedProcess(ctx, instanceID, pid)
 			if err != nil {
 				log.Printf("[startup-recovery] process cleanup failed for %s: %v", candidate.ResourceID, err)
 				return CleanupFailed

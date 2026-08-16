@@ -106,6 +106,7 @@ type RuntimeFailureEvent struct {
 
 type RecoveryRequest struct {
 	RuntimeID      domain.RuntimeInstanceID
+	ServiceID      string
 	FailureClass   FailureClass
 	TriggeredBy    string
 	IdempotencyKey string

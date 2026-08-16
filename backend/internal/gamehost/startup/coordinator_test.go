@@ -23,7 +23,7 @@ type fakeProcessCleanup struct {
 	cleanedPIDs []int
 }
 
-func (f *fakeProcessCleanup) CleanupOwnedProcess(ctx context.Context, runtimeID domain.RuntimeInstanceID, pid int) error {
+func (f *fakeProcessCleanup) CleanupOwnedProcess(ctx context.Context, instanceID string, pid int) error {
 	f.cleanedPIDs = append(f.cleanedPIDs, pid)
 	return nil
 }
