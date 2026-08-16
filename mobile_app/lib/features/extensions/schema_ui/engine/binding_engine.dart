@@ -57,10 +57,49 @@ bool evaluateCondition(dynamic value, String op, dynamic expected) {
     case '!=':
     case 'ne':
       return value != expected;
+    case '>':
+    case 'gt':
+      if (value is num && expected is num) return value > expected;
+      if (value is String && expected is String) return value.compareTo(expected) > 0;
+      return false;
+    case '<':
+    case 'lt':
+      if (value is num && expected is num) return value < expected;
+      if (value is String && expected is String) return value.compareTo(expected) < 0;
+      return false;
+    case '>=':
+    case 'gte':
+      if (value is num && expected is num) return value >= expected;
+      if (value is String && expected is String) return value.compareTo(expected) >= 0;
+      return false;
+    case '<=':
+    case 'lte':
+      if (value is num && expected is num) return value <= expected;
+      if (value is String && expected is String) return value.compareTo(expected) <= 0;
+      return false;
     case 'in':
       if (expected is List) return expected.contains(value);
       if (expected is String && value is String) {
         return expected.split(',').map((s) => s.trim()).contains(value);
+      }
+      return false;
+    case 'not_in':
+      if (expected is List) return !expected.contains(value);
+      if (expected is String && value is String) {
+        return !expected.split(',').map((s) => s.trim()).contains(value);
+      }
+      return true;
+    case 'contains':
+      if (value is String && expected is String) return value.contains(expected);
+      if (value is List) return value.contains(expected);
+      return false;
+    case 'regex':
+      if (value is String && expected is String) {
+        try {
+          return RegExp(expected).hasMatch(value);
+        } catch (_) {
+          return false;
+        }
       }
       return false;
     case 'not_null':
