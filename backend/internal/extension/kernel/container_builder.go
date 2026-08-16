@@ -745,6 +745,12 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	extensionCenterService := extension_center.NewCenterService(extension_center.NewKernelCardProvider(defRepo, instRepo))
 	acquisitionSourceRegistry.Register(acquisition.NewExtensionCatalogSource(extensionCenterService))
 
+	if b.mcpRepository != nil {
+		mcpAdapter := acquisition.NewMCPRepositoryAdapter(b.mcpRepository)
+		acquisitionSourceRegistry.Register(acquisition.NewMCPPackageSource(mcpAdapter))
+	}
+	acquisitionSourceRegistry.Register(acquisition.NewGeneratedSkillSource(true))
+
 	acquisitionInstallerRegistry := acquisition.NewInstallerRegistry(&acquisition.InstallerRegistryOpts{
 		EnableExistingPort: acquisition.NewEnableExistingPortBridge(enablementService),
 	})

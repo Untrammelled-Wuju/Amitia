@@ -608,6 +608,7 @@ func (s *TaskRuntimeService) applyExecutionOutcome(ctx context.Context, run *Tas
 	next := cloneTaskRun(current)
 	next.Status = outcome.Status
 	next.FinishedAt = &now
+	next.Revision = NextRevision(current.Revision)
 	if outcome.ErrorCode != "" {
 		ec := outcome.ErrorCode
 		next.ErrorCode = &ec
@@ -623,8 +624,12 @@ func (s *TaskRuntimeService) applyExecutionOutcome(ctx context.Context, run *Tas
 	}
 
 	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
-		if err := s.store.PutTaskRun(txCtx, next); err != nil {
-			return err
+		ok, casErr := s.store.UpdateTaskRunCAS(txCtx, next, current.Status, current.Generation, current.Revision)
+		if casErr != nil {
+			return fmt.Errorf("task_runtime: apply outcome cas: %w", casErr)
+		}
+		if !ok {
+			return NewTaskError(ErrTaskPauseInProgress, "concurrent state change, retry outcome")
 		}
 		if next.Status.IsTerminal() {
 			if err := s.store.RemoveFromQueue(txCtx, next.TaskRunID); err != nil {

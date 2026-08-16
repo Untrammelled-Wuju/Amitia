@@ -437,6 +437,7 @@ class RuntimeService : Service() {
                 )
             )
             latestStartIdRef.set(startId)
+            processOwnershipBarrier.set(ProcessOwnershipState.ACTIVE)
             updateLifecycleSnapshot()
             session.activate()
             session.markStarted()
