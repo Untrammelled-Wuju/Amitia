@@ -453,8 +453,12 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 	startingRun.Revision = NextRevision(existingRevision)
 
 	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
-		if err := s.store.PutTaskRun(txCtx, startingRun); err != nil {
-			return err
+		ok, casErr := s.store.UpdateTaskRunCAS(txCtx, startingRun, RunStatusQueued, current.Generation, current.Revision)
+		if casErr != nil {
+			return fmt.Errorf("task_runtime: starting cas: %w", casErr)
+		}
+		if !ok {
+			return NewTaskError(ErrTaskPauseInProgress, "concurrent state change, retry start")
 		}
 		return s.publishTaskEvent(txCtx, TaskEventStarting, startingRun, "", "")
 	}); err != nil {
@@ -472,8 +476,12 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 			resumingRun.Status = RunStatusResuming
 			resumingRun.Revision = NextRevision(startingRun.Revision)
 			if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
-				if err := s.store.PutTaskRun(txCtx, resumingRun); err != nil {
-					return err
+				ok, casErr := s.store.UpdateTaskRunCAS(txCtx, resumingRun, RunStatusStarting, startingRun.Generation, startingRun.Revision)
+				if casErr != nil {
+					return fmt.Errorf("task_runtime: resuming cas: %w", casErr)
+				}
+				if !ok {
+					return NewTaskError(ErrTaskPauseInProgress, "concurrent state change, retry resume")
 				}
 				return s.publishTaskEvent(txCtx, TaskEventResuming, resumingRun, "", "")
 			}); err != nil {
@@ -488,8 +496,12 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 	runningRun.Status = RunStatusRunning
 	runningRun.Revision = NextRevision(run.Revision)
 	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
-		if err := s.store.PutTaskRun(txCtx, runningRun); err != nil {
-			return err
+		ok, casErr := s.store.UpdateTaskRunCAS(txCtx, runningRun, RunStatusResuming, run.Generation, run.Revision)
+		if casErr != nil {
+			return fmt.Errorf("task_runtime: running cas: %w", casErr)
+		}
+		if !ok {
+			return NewTaskError(ErrTaskPauseInProgress, "concurrent state change, retry running")
 		}
 		return s.publishTaskEvent(txCtx, TaskEventRunning, runningRun, "", "")
 	}); err != nil {
