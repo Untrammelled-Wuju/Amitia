@@ -454,7 +454,7 @@ func (s *stubRepository) ListInstallationsByUserDevice(userID, deviceID string) 
 	return nil, nil
 }
 
-func (s *stubRepository) Transaction(fn func(tx *gorm.DB) error) error { return fn(nil) }
+func (s *stubRepository) Transaction(ctx context.Context, fn func(repo RepositoryV2) error) error { return fn(s) }
 
 type stubInstallGuard struct{}
 

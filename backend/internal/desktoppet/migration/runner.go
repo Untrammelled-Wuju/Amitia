@@ -29,14 +29,16 @@ type Runner struct {
 	plans     map[string]DomainMigrationOperationPlan
 	leaseTTL  time.Duration
 	backupDir string
+	leaseLost chan struct{}
 }
 
 func NewRunner(repo *DBRepository) *Runner {
 	return &Runner{
-		repo:     repo,
-		plans:    make(map[string]DomainMigrationOperationPlan),
-		leaseTTL: 5 * time.Minute,
-		lockName: "desktop_pet_migration",
+		repo:      repo,
+		plans:     make(map[string]DomainMigrationOperationPlan),
+		leaseTTL:  5 * time.Minute,
+		lockName:  "desktop_pet_migration",
+		leaseLost: make(chan struct{}),
 	}
 }
 
@@ -86,11 +88,25 @@ type ParityCheck struct {
 
 const batchSize = 500
 
+func (r *Runner) checkLeaseLost(ctx context.Context, operationID string, op *MigrationOperation) bool {
+	select {
+	case <-r.leaseLost:
+		r.repo.UpdateOperationStageCAS(ctx, operationID, MigrationStage(op.Stage), StageFailedTerminal, func(o *MigrationOperation) {
+			o.Error = "lease ownership lost, migration terminated"
+		})
+		return true
+	default:
+		return false
+	}
+}
+
 func (r *Runner) RunPlan(ctx context.Context, planID string) (string, error) {
 	plan, ok := r.plans[planID]
 	if !ok {
 		return "", &RunnerError{Code: "PLAN_NOT_FOUND", Message: "迁移计划未注册: " + planID}
 	}
+
+	r.leaseLost = make(chan struct{})
 
 	op := &MigrationOperation{
 		ID:            uuid.New().String(),
@@ -128,6 +144,13 @@ func (r *Runner) executePlan(operationID string, plan *DomainMigrationOperationP
 			return
 		}
 		cancel()
+		r.lock.SetLeaseLostHandler(func(string) {
+			select {
+			case <-r.leaseLost:
+			default:
+				close(r.leaseLost)
+			}
+		})
 		_ = r.lock.StartHeartbeat(r.lockName, 30*time.Second, r.leaseTTL)
 		defer r.lock.Release(r.lockName)
 	}
@@ -154,6 +177,9 @@ func (r *Runner) executePlan(operationID string, plan *DomainMigrationOperationP
 	}
 
 	for i := 0; i < len(stages); i++ {
+		if r.checkLeaseLost(ctx, operationID, op) {
+			return
+		}
 		op, err = r.repo.GetOperation(ctx, operationID)
 		if err != nil || op == nil {
 			return
@@ -442,11 +468,14 @@ func (r *Runner) RequestCutover(ctx context.Context, operationID, direction stri
 			return &RunnerError{Code: "READ_CUTOVER_RECORD_FAILED", Message: "记录读切转失败: " + err.Error()}
 		}
 		for _, step := range plan.CutoverSteps {
+			if r.checkLeaseLost(ctx, operationID, op) {
+				return &RunnerError{Code: "LEASE_LOST", Message: "lease lost during read cutover"}
+			}
 			if err := step(); err != nil {
 				return &RunnerError{Code: "READ_CUTOVER_STEP_FAILED", Message: "读切转步骤执行失败: " + err.Error()}
 			}
 		}
-		if err := r.repo.MarkReadCutoverVerified(ctx, operationID, "cutover"); err != nil {
+		if err := r.repo.MarkReadCutoverVerified(ctx, operationID, op.PlanID); err != nil {
 			return &RunnerError{Code: "READ_CUTOVER_VERIFY_FAILED", Message: "标记读切转已验证失败: " + err.Error()}
 		}
 	case "write":
@@ -472,11 +501,14 @@ func (r *Runner) RequestCutover(ctx context.Context, operationID, direction stri
 			return &RunnerError{Code: "WRITE_CUTOVER_RECORD_FAILED", Message: "记录写切转失败: " + err.Error()}
 		}
 		for _, step := range plan.LegacyWriteBlockSteps {
+			if r.checkLeaseLost(ctx, operationID, op) {
+				return &RunnerError{Code: "LEASE_LOST", Message: "lease lost during write cutover"}
+			}
 			if err := step(); err != nil {
 				return &RunnerError{Code: "LEGACY_BLOCK_FAILED", Message: "旧写阻断失败: " + err.Error()}
 			}
 		}
-		if err := r.repo.MarkWriteCutoverVerified(ctx, operationID, "cutover"); err != nil {
+		if err := r.repo.MarkWriteCutoverVerified(ctx, operationID, op.PlanID); err != nil {
 			return &RunnerError{Code: "WRITE_CUTOVER_VERIFY_FAILED", Message: "标记写切转已验证失败: " + err.Error()}
 		}
 		if _, err := r.repo.UpdateOperationStageCAS(ctx, operationID, StageWriteCutover, StageCompleted, nil); err != nil {

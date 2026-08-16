@@ -68,6 +68,13 @@ func (p *installationResourcePort) ListAttachedResources(ctx context.Context, ex
 	return result, nil
 }
 
+func (p *installationResourcePort) RebuildFromExisting() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.binds = make(map[string]ExistingPetResourceBinding)
+	return nil
+}
+
 type installationActionPort struct {
 	mu    sync.RWMutex
 	repo  installation.Repository
@@ -123,6 +130,13 @@ func (p *installationActionPort) ListAttachedActions(ctx context.Context, extens
 		}
 	}
 	return result, nil
+}
+
+func (p *installationActionPort) RebuildFromExisting() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.binds = make(map[string]ExistingPetActionBinding)
+	return nil
 }
 
 type installationRuntimePort struct {
@@ -181,6 +195,13 @@ func (p *installationRuntimePort) ListAttachedRuntimes(ctx context.Context, exte
 	return result, nil
 }
 
+func (p *installationRuntimePort) RebuildFromExisting() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.binds = make(map[string]ExistingPetRuntimeBinding)
+	return nil
+}
+
 type installationWindowPort struct {
 	mu    sync.RWMutex
 	repo  installation.Repository
@@ -229,6 +250,13 @@ func (p *installationWindowPort) ListAttachedWindows(ctx context.Context, extens
 		}
 	}
 	return result, nil
+}
+
+func (p *installationWindowPort) RebuildFromExisting() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.binds = make(map[string]ExistingPetWindowBinding)
+	return nil
 }
 
 func cloneDef(m map[string]any) map[string]any {
