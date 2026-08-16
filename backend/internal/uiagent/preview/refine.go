@@ -35,15 +35,49 @@ type AutoRefiner interface {
 	Refine(ctx context.Context, req RefineRequest) (*RefineResult, error)
 }
 
+// PatchGenerator generates a patch/schema delta based on observation errors.
+type PatchGenerator interface {
+	GeneratePatch(ctx context.Context, obs *ObservationResult) (*Patch, error)
+}
+
+// Applier applies a patch to the session.
+type Applier interface {
+	ApplyPatch(ctx context.Context, sessionID string, patch *Patch) (string, error)
+}
+
+// Patch represents a schema delta or fix to be applied.
+type Patch struct {
+	SessionID    string   `json:"sessionId"`
+	Fixes        []Fix    `json:"fixes"`
+	TargetPaths  []string `json:"targetPaths"`
+}
+
+type Fix struct {
+	Path    string `json:"path"`
+	Type    string `json:"type"`
+	Content string `json:"content"`
+}
+
 type defaultAutoRefiner struct {
-	sessionManager SessionManager
-	observer       Observer
+	sessionManager  SessionManager
+	observer        Observer
+	patchGenerator  PatchGenerator
+	applier         Applier
 }
 
 func NewAutoRefiner(mgr SessionManager, obs Observer) AutoRefiner {
 	return &defaultAutoRefiner{
 		sessionManager: mgr,
 		observer:       obs,
+	}
+}
+
+func NewAutoRefinerWithPatch(mgr SessionManager, obs Observer, pg PatchGenerator, ap Applier) AutoRefiner {
+	return &defaultAutoRefiner{
+		sessionManager: mgr,
+		observer:       obs,
+		patchGenerator: pg,
+		applier:        ap,
 	}
 }
 
@@ -92,6 +126,31 @@ func (r *defaultAutoRefiner) Refine(ctx context.Context, req RefineRequest) (*Re
 				Converged:     true,
 				RollbackToken: generateRollbackToken(req.SessionID, i+1),
 			}, nil
+		}
+
+		if r.patchGenerator != nil && r.applier != nil {
+			patch, err := r.patchGenerator.GeneratePatch(ctx, obs)
+			if err == nil && patch != nil {
+				txID, applyErr := r.applier.ApplyPatch(ctx, req.SessionID, patch)
+				if applyErr == nil && txID != "" {
+					obs, err = r.observer.Capture(ctx, req.SessionID)
+					if err != nil {
+						return &RefineResult{State: "error", Iterations: i}, err
+					}
+					prevObservation = obs
+					lastObservation = obs
+					if len(obs.Errors) == 0 {
+						return &RefineResult{
+							State:         "refined",
+							Observation:   obs,
+							Iterations:    i + 1,
+							Converged:     true,
+							TransactionID: txID,
+							RollbackToken: generateRollbackToken(req.SessionID, i+1),
+						}, nil
+					}
+				}
+			}
 		}
 	}
 
