@@ -232,10 +232,30 @@ const chatExtensionContext = computed(() => ({
   characterId: characterId.value,
   conversationId: convId.value,
   channel: isWechatActive.value ? "wechat" : isQQActive.value ? "qq" : "web",
-  platform: window.amitiaDesktop ? "desktop" : "web",
+  platform: detectPlatform(),
+  host: window.amitiaDesktop ? "desktop" : "web",
+  os: detectOS(),
   conversationState: sending.value ? "generating" : isOffline.value ? "offline" : "idle",
   capabilities: window.amitiaDesktop ? ["browser", "desktop", "clipboard-host"] : ["browser"],
 }));
+
+function detectPlatform(): "windows" | "macos" | "linux" | "web" {
+  if (typeof navigator === "undefined") return "web";
+  const ua = navigator.userAgent.toLowerCase();
+  if (ua.includes("win")) return "windows";
+  if (ua.includes("mac")) return "macos";
+  if (ua.includes("linux")) return "linux";
+  return "web";
+}
+
+function detectOS(): "windows" | "macos" | "linux" | "unknown" {
+  if (typeof navigator === "undefined") return "unknown";
+  const ua = navigator.userAgent.toLowerCase();
+  if (ua.includes("win")) return "windows";
+  if (ua.includes("mac")) return "macos";
+  if (ua.includes("linux")) return "linux";
+  return "unknown";
+}
 const hasSidebarExtensions = computed(() => extensionUIStore.getVisibleContributions("chat.sidebar.panel").length > 0);
 const hasStatusExtensions = computed(() => extensionUIStore.getVisibleContributions("chat.status.item").length > 0);
 
