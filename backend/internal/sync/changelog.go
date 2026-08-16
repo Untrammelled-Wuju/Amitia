@@ -82,7 +82,9 @@ type sqliteSequenceGenerator struct {
 
 func NewSequenceGenerator(db *gorm.DB) SequenceGenerator {
 	gen := &sqliteSequenceGenerator{db: db}
-	_ = gen.EnsureSequenceTable()
+	if err := gen.EnsureSequenceTable(); err != nil {
+		panic(fmt.Sprintf("sync: failed to ensure sequence table: %v", err))
+	}
 	return gen
 }
 
@@ -96,12 +98,17 @@ func (g *sqliteSequenceGenerator) NextSequence() (Sequence, error) {
 }
 
 func (g *sqliteSequenceGenerator) fallbackNextSequence() (Sequence, error) {
-	var maxSeq int64
-	err := g.db.Model(&ChangeRecord{}).Select("COALESCE(MAX(seq), 0)").Scan(&maxSeq).Error
+	var nextSeq int64
+	err := g.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Exec("INSERT INTO sync_sequence (id, seq) VALUES (1, 1) ON CONFLICT(id) DO UPDATE SET seq = seq + 1").Error; err != nil {
+			return err
+		}
+		return tx.Raw("SELECT seq FROM sync_sequence WHERE id = 1").Scan(&nextSeq).Error
+	})
 	if err != nil {
 		return 0, err
 	}
-	return Sequence(maxSeq + 1), nil
+	return Sequence(nextSeq), nil
 }
 
 func (g *sqliteSequenceGenerator) EnsureSequenceTable() error {
