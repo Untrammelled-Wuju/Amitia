@@ -7,10 +7,6 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
         "share.status",
         "share.send",
         "share.preview.supported",
-        "share.receive.pending",
-        "share.receive.consume",
-        "share.receive.peek",
-        "share.receive.dismiss",
         "share.staging.cleanup",
         "share.limited.delete"
     ]
@@ -44,16 +40,6 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
             return await handleSend(request)
         case "share.preview.supported":
             return handlePreviewSupported(request)
-        case "share.receive.pending":
-            return handleReceivePending(request)
-        case "share.receive.consume":
-            return handleReceiveConsume(request)
-        case "share.receive.peek":
-            return handleReceivePeek(request)
-        case "share.receive.dismiss":
-            return handleReceiveDismiss(request)
-        case "share.staging.cleanup":
-            return handleStagingCleanup(request)
         case "share.limited.delete":
             return await handleLimitedDelete(request)
         default:
