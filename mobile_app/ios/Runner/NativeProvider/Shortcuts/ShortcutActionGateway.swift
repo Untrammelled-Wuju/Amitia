@@ -1,5 +1,4 @@
 import Foundation
-import Intents
 
 public protocol BackendActionDispatcher: AnyObject {
     func executeAction(actionId: String, payload: [String: Any]?) async -> [String: Any]
@@ -121,11 +120,5 @@ public class ShortcutActionGateway: NSObject {
             return ["error": "ACTION_NOT_AVAILABLE", "actionId": actionId]
         }
         return await executeAction(action, payload: payload)
-    }
-
-    public func clearAllDonations() {
-        if #available(iOS 16.0, *) {
-            INInteraction.deleteAll()
-        }
     }
 }

@@ -165,12 +165,21 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         let availability = AlarmKitAdapter.shared.checkAvailability()
         switch availability {
         case .available:
-            let alarms = await AlarmKitAdapter.shared.listAlarms()
+            let (alarms, error) = await AlarmKitAdapter.shared.listAlarms()
+            if let error = error {
+                return IOSNativeResponse(
+                    protocolVersion: request.protocolVersion,
+                    requestId: request.requestId,
+                    status: "error",
+                    result: nil,
+                    error: IOSNativeError(code: "ALARMKIT_ERROR", message: error)
+                )
+            }
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestId: request.requestId,
                 status: "ok",
-                result: alarms,
+                result: ["alarms": alarms],
                 error: nil
             )
         case .unsupported(let reason):
@@ -198,15 +207,17 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         let availability = AlarmKitAdapter.shared.checkAvailability()
         switch availability {
         case .available:
-            if let alarm = await AlarmKitAdapter.shared.getAlarm(id: alarmId) {
+            let (alarm, error) = await AlarmKitAdapter.shared.getAlarm(id: alarmId)
+            if let error = error {
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
                     requestId: request.requestId,
-                    status: "ok",
-                    result: ["alarm": alarm],
-                    error: nil
+                    status: "error",
+                    result: nil,
+                    error: IOSNativeError(code: "ALARMKIT_ERROR", message: error)
                 )
-            } else {
+            }
+            guard let alarm = alarm else {
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
                     requestId: request.requestId,
@@ -215,6 +226,13 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
                     error: IOSNativeError(code: "NOT_FOUND", message: "alarm not found: \(alarmId)")
                 )
             }
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestId: request.requestId,
+                status: "ok",
+                result: ["alarm": alarm],
+                error: nil
+            )
         case .unsupported(let reason):
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
@@ -276,7 +294,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
                 if let ownerRef = metaRaw["ownerRef"] as? String { metadata?.ownerRef = ownerRef }
             }
 
-            let success = await AlarmKitAdapter.shared.createAlarm(
+            let (success, error) = await AlarmKitAdapter.shared.createAlarm(
                 id: alarmId,
                 title: title,
                 schedule: schedule,
@@ -299,7 +317,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
                     requestId: request.requestId,
                     status: "error",
                     result: nil,
-                    error: IOSNativeError(code: "SCHEDULE_FAILED", message: "failed to schedule alarm \(alarmId)")
+                    error: IOSNativeError(code: "SCHEDULE_FAILED", message: error ?? "failed to schedule alarm \(alarmId)")
                 )
             }
         case .unsupported(let reason):
@@ -327,7 +345,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         let availability = AlarmKitAdapter.shared.checkAvailability()
         switch availability {
         case .available:
-            let success = await AlarmKitAdapter.shared.cancelAlarm(id: alarmId)
+            let (success, error) = await AlarmKitAdapter.shared.cancelAlarm(id: alarmId)
             if success {
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
@@ -342,7 +360,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
                     requestId: request.requestId,
                     status: "error",
                     result: nil,
-                    error: IOSNativeError(code: "NOT_FOUND", message: "alarm not found: \(alarmId)")
+                    error: IOSNativeError(code: "CANCEL_FAILED", message: error ?? "alarm not found: \(alarmId)")
                 )
             }
         case .unsupported(let reason):
@@ -370,7 +388,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         let availability = AlarmKitAdapter.shared.checkAvailability()
         switch availability {
         case .available:
-            let success = await AlarmKitAdapter.shared.cancelAlarm(id: alarmId)
+            let (success, error) = await AlarmKitAdapter.shared.cancelAlarm(id: alarmId)
             if success {
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
@@ -385,7 +403,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
                     requestId: request.requestId,
                     status: "error",
                     result: nil,
-                    error: IOSNativeError(code: "NOT_FOUND", message: "alarm not found: \(alarmId)")
+                    error: IOSNativeError(code: "CANCEL_FAILED", message: error ?? "alarm not found: \(alarmId)")
                 )
             }
         case .unsupported(let reason):

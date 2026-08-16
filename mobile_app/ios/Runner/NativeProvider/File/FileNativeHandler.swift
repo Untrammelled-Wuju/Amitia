@@ -220,7 +220,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
                 protocolVersion: request.protocolVersion,
                 requestId: request.requestId,
                 status: "ok",
-                result: ["stat": attributes],
+                result: attributes,
                 error: nil
             )
         } catch let error as BookmarkStoreError {
@@ -236,12 +236,12 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         }
         let relativePath = request.payload?["relativePath"] as? String ?? ""
         do {
-            let items = try SecurityScopedBookmarkStore.shared.list(mountId: mountId, relativePath: relativePath)
+            let entries = try SecurityScopedBookmarkStore.shared.list(mountId: mountId, relativePath: relativePath)
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestId: request.requestId,
                 status: "ok",
-                result: ["items": items, "mountId": mountId, "relativePath": relativePath],
+                result: ["entries": entries],
                 error: nil
             )
         } catch let error as BookmarkStoreError {
@@ -265,15 +265,16 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
                 offset: offset,
                 length: length
             )
+            let finished = data.count < Int(min(length, Int64(MaxNativeChunk)))
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestId: request.requestId,
                 status: "ok",
                 result: [
+                    "contentBase64": data.base64EncodedString(),
+                    "offset": offset,
                     "size": data.count,
-                    "mountId": mountId,
-                    "relativePath": relativePath,
-                    "contentBase64": data.base64EncodedString()
+                    "finished": finished
                 ],
                 error: nil
             )
@@ -318,21 +319,17 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
         guard let mountId = request.payload?["mountId"] as? String else {
             return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing mountId")
         }
-        let parentRelativePath = request.payload?["parentRelativePath"] as? String ?? ""
-        guard let name = request.payload?["name"] as? String else {
-            return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing name")
-        }
+        let relativePath = request.payload?["relativePath"] as? String ?? ""
         do {
-            let newMountId = try SecurityScopedBookmarkStore.shared.mkdir(
+            try SecurityScopedBookmarkStore.shared.mkdir(
                 mountId: mountId,
-                parentRelativePath: parentRelativePath,
-                name: name
+                relativePath: relativePath
             )
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestId: request.requestId,
                 status: "ok",
-                result: ["mountId": newMountId, "name": name],
+                result: ["created": true, "relativePath": relativePath],
                 error: nil
             )
         } catch let error as BookmarkStoreError {
@@ -416,7 +413,7 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
             return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing newRelativePath")
         }
         do {
-            let newMountId = try SecurityScopedBookmarkStore.shared.copy(
+            try SecurityScopedBookmarkStore.shared.copy(
                 mountId: mountId,
                 relativePath: relativePath,
                 newRelativePath: newRelativePath
@@ -427,8 +424,6 @@ public class FileNativeHandler: NSObject, IOSNativeOperationHandler {
                 status: "ok",
                 result: [
                     "copied": true,
-                    "mountId": newMountId,
-                    "relativePath": relativePath,
                     "newRelativePath": newRelativePath
                 ],
                 error: nil

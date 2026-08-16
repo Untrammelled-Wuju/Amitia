@@ -22,8 +22,11 @@ class BackendConnectivityProbe {
       if (readyResp.statusCode == 200) {
         return BackendConnectivityResult.ready;
       }
+      if (readyResp.statusCode != 404 && readyResp.statusCode != 405) {
+        return BackendConnectivityResult.unreachable;
+      }
     } catch (_) {
-      // fall through
+      return BackendConnectivityResult.unreachable;
     }
 
     try {

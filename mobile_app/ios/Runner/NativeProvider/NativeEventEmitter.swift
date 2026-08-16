@@ -6,13 +6,15 @@ public struct NativeEventPayload: Sendable {
     public let data: [String: Any]
     public let generation: Int?
     public let priority: NativeEventPriority
+    public let entityRef: String?
 
-    public init(domain: String, event: String, data: [String: Any] = [:], generation: Int? = nil, priority: NativeEventPriority = .normal) {
+    public init(domain: String, event: String, data: [String: Any] = [:], generation: Int? = nil, priority: NativeEventPriority = .normal, entityRef: String? = nil) {
         self.domain = domain
         self.event = event
         self.data = data
         self.generation = generation
         self.priority = priority
+        self.entityRef = entityRef
     }
 
     public func toDictionary() -> [String: Any] {
@@ -27,6 +29,9 @@ public struct NativeEventPayload: Sendable {
         }
         if let gen = generation {
             dict["generation"] = gen
+        }
+        if let ref = entityRef {
+            dict["entityRef"] = ref
         }
         return dict
     }
@@ -96,13 +101,30 @@ final class NativeEventEmitter {
         eventQueue.append(payload)
         eventQueue.sort { $0.priority > $1.priority }
 
-        let snapshot = eventQueue
         let sinksSnapshot = sinks
         lock.unlock()
 
-        for item in snapshot {
-            dispatchEvent(item, sinks: sinksSnapshot)
-        }
+        dispatchEvent(payload, sinks: sinksSnapshot)
+    }
+
+    func dequeue() -> NativeEventPayload? {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard !eventQueue.isEmpty else { return nil }
+
+        let highestPriority = eventQueue.first!
+        eventQueue.removeFirst()
+        return highestPriority
+    }
+
+    func dequeueAll() -> [NativeEventPayload] {
+        lock.lock()
+        defer { lock.unlock() }
+
+        let all = eventQueue
+        eventQueue.removeAll()
+        return all
     }
 
     private func dispatchEvent(_ payload: NativeEventPayload, sinks: [NativeEventEmitter.WeakSink]) {
@@ -123,6 +145,9 @@ final class NativeEventEmitter {
 
     private func computeFingerprint(_ payload: NativeEventPayload) -> String {
         var components = [payload.domain, payload.event]
+        if let ref = payload.entityRef {
+            components.append("ref:\(ref)")
+        }
         if let gen = payload.generation {
             components.append("gen:\(gen)")
         }

@@ -63,6 +63,23 @@ public final class FilePathResolver {
         var resolvedURL = rootURL
         for component in components {
             resolvedURL.appendPathComponent(component)
+
+            var isDirectory: ObjCBool = false
+            let exists = FileManager.default.fileExists(atPath: resolvedURL.path, isDirectory: &isDirectory)
+            if exists {
+                if let attributes = try? FileManager.default.attributesOfItem(atPath: resolvedURL.path),
+                   attributes[.type] as? FileAttributeType == .typeSymbolicLink {
+                    let destination = try? FileManager.default.destinationOfSymbolicLink(atPath: resolvedURL.path)
+                    if let dest = destination {
+                        let absoluteDest = (resolvedURL.path as NSString).deletingLastPathComponent + "/" + dest
+                        let standardizedDest = URL(fileURLWithPath: absoluteDest).standardizedFileURL.path
+                        let rootPath = rootURL.standardizedFileURL.path
+                        guard standardizedDest.hasPrefix(rootPath) || standardizedDest == rootPath else {
+                            throw PathResolverError.symlinkEscape
+                        }
+                    }
+                }
+            }
         }
 
         let resolvedPath = resolvedURL.standardizedFileURL.path
@@ -77,23 +94,12 @@ public final class FilePathResolver {
         }
 
         var isDirectory: ObjCBool = false
-        let exists = FileManager.default.fileExists(atPath: resolvedPath, isDirectory: &isDirectory)
+        _ = FileManager.default.fileExists(atPath: resolvedPath, isDirectory: &isDirectory)
 
         var isSymlink = false
-        if exists {
-            if let attributes = try? FileManager.default.attributesOfItem(atPath: resolvedPath),
-               attributes[.type] as? FileAttributeType == .typeSymbolicLink {
-                isSymlink = true
-
-                let destination = try? FileManager.default.destinationOfSymbolicLink(atPath: resolvedPath)
-                if let dest = destination {
-                    let absoluteDest = (resolvedPath as NSString).deletingLastPathComponent + "/" + dest
-                    let standardizedDest = URL(fileURLWithPath: absoluteDest).standardizedFileURL.path
-                    guard standardizedDest.hasPrefix(rootPath) else {
-                        throw PathResolverError.symlinkEscape
-                    }
-                }
-            }
+        if let attributes = try? FileManager.default.attributesOfItem(atPath: resolvedPath),
+           attributes[.type] as? FileAttributeType == .typeSymbolicLink {
+            isSymlink = true
         }
 
         return ResolvedFileReference(
