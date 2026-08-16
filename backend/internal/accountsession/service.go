@@ -55,7 +55,9 @@ func (defaultPasswordVerifier) VerifyPassword(password, storedHash string) bool 
 
 func (defaultPasswordVerifier) HashPassword(password string) string {
 	rawSalt := make([]byte, saltLen)
-	rand.Read(rawSalt)
+	if _, err := rand.Read(rawSalt); err != nil {
+		return ""
+	}
 	saltHex := hex.EncodeToString(rawSalt)
 	dk, _ := scrypt.Key([]byte(password), []byte(saltHex), scryptN, scryptR, scryptP, keyLen)
 	return saltHex + ":" + hex.EncodeToString(dk)
@@ -151,12 +153,16 @@ func (s *AccountSessionService) Login(req LoginRequestInternal, svc AccountUserS
 	if s.guard != nil {
 		ipKey := guardIPKey(req.IPAddress)
 		if blocked := s.guard.CheckBlocked("ip", ipKey); blocked {
-			s.audit.LogLoginRateLimited(req.IPAddress, req.UserAgent, "")
+			if auditErr := s.audit.LogLoginRateLimited(req.IPAddress, req.UserAgent, ""); auditErr != nil {
+				return nil, fmt.Errorf("记录审计日志失败: %w", auditErr)
+			}
 			return nil, ErrLoginRateLimited
 		}
 		usernameKey := guardUsernameKey(req.Username)
 		if blocked := s.guard.CheckBlocked("username", usernameKey); blocked {
-			s.audit.LogLoginRateLimited(req.IPAddress, req.UserAgent, req.Username)
+			if auditErr := s.audit.LogLoginRateLimited(req.IPAddress, req.UserAgent, req.Username); auditErr != nil {
+				return nil, fmt.Errorf("记录审计日志失败: %w", auditErr)
+			}
 			return nil, ErrLoginRateLimited
 		}
 	}
@@ -164,26 +170,42 @@ func (s *AccountSessionService) Login(req LoginRequestInternal, svc AccountUserS
 	user, err := svc.FindByUsername(req.Username)
 	if err != nil {
 		if s.guard != nil {
-			s.guard.RecordFailure("ip", guardIPKey(req.IPAddress))
-			s.guard.RecordFailure("username", guardUsernameKey(req.Username))
+			if guardErr := s.guard.RecordFailure("ip", guardIPKey(req.IPAddress)); guardErr != nil {
+				return nil, fmt.Errorf("记录登录失败失败: %w", guardErr)
+			}
+			if guardErr := s.guard.RecordFailure("username", guardUsernameKey(req.Username)); guardErr != nil {
+				return nil, fmt.Errorf("记录登录失败失败: %w", guardErr)
+			}
 		}
-		s.audit.LogLoginFailed(req.IPAddress, req.UserAgent, req.Username, "invalid_credentials")
+		if auditErr := s.audit.LogLoginFailed(req.IPAddress, req.UserAgent, req.Username, "invalid_credentials"); auditErr != nil {
+			return nil, fmt.Errorf("记录审计日志失败: %w", auditErr)
+		}
 		return nil, ErrInvalidCredentials
 	}
 
 	verifier := defaultPasswordVerifier{}
 	if !verifier.VerifyPassword(req.Password, user.PasswordHash) {
 		if s.guard != nil {
-			s.guard.RecordFailure("ip", guardIPKey(req.IPAddress))
-			s.guard.RecordFailure("username", guardUsernameKey(req.Username))
+			if guardErr := s.guard.RecordFailure("ip", guardIPKey(req.IPAddress)); guardErr != nil {
+				return nil, fmt.Errorf("记录登录失败失败: %w", guardErr)
+			}
+			if guardErr := s.guard.RecordFailure("username", guardUsernameKey(req.Username)); guardErr != nil {
+				return nil, fmt.Errorf("记录登录失败失败: %w", guardErr)
+			}
 		}
-		s.audit.LogLoginFailed(req.IPAddress, req.UserAgent, req.Username, "invalid_credentials")
+		if auditErr := s.audit.LogLoginFailed(req.IPAddress, req.UserAgent, req.Username, "invalid_credentials"); auditErr != nil {
+			return nil, fmt.Errorf("记录审计日志失败: %w", auditErr)
+		}
 		return nil, ErrInvalidCredentials
 	}
 
 	if s.guard != nil {
-		s.guard.ClearFailures("ip", guardIPKey(req.IPAddress))
-		s.guard.ClearFailures("username", guardUsernameKey(req.Username))
+		if guardErr := s.guard.ClearFailures("ip", guardIPKey(req.IPAddress)); guardErr != nil {
+			return nil, fmt.Errorf("清除登录失败记录失败: %w", guardErr)
+		}
+		if guardErr := s.guard.ClearFailures("username", guardUsernameKey(req.Username)); guardErr != nil {
+			return nil, fmt.Errorf("清除登录失败记录失败: %w", guardErr)
+		}
 	}
 
 	result, err := s.createSessionAndTokens(user.ID, user.Username, user.Role, req.IPAddress, req.UserAgent)
@@ -192,10 +214,12 @@ func (s *AccountSessionService) Login(req LoginRequestInternal, svc AccountUserS
 	}
 
 	if err := svc.UpdateLoginTime(user.ID); err != nil {
-		_ = err
+		return nil, fmt.Errorf("更新登录时间失败: %w", err)
 	}
 
-	s.audit.LogLoginSuccess(user.ID, result.SessionPublicID, req.IPAddress, req.UserAgent, req.Username)
+	if err := s.audit.LogLoginSuccess(user.ID, result.SessionPublicID, req.IPAddress, req.UserAgent, req.Username); err != nil {
+		return nil, fmt.Errorf("记录审计日志失败: %w", err)
+	}
 	return result, nil
 }
 
@@ -270,8 +294,12 @@ func (s *AccountSessionService) createSessionAndTokens(userID int, username, rol
 
 	accessToken, accessExpiresAt, err := tokenSvc.SignAccessToken(userID, username, role, sessionPublicID)
 	if err != nil {
-		_ = s.sessions.Revoke(sessionPublicID, "token_sign_failure")
-		_ = s.refresh.RevokeBySession(sessionPublicID)
+		if revokeErr := s.sessions.Revoke(sessionPublicID, "token_sign_failure"); revokeErr != nil {
+			return nil, fmt.Errorf("令牌签名失败且撤销会话失败: %v: %w", revokeErr, err)
+		}
+		if revokeErr := s.refresh.RevokeBySession(sessionPublicID); revokeErr != nil {
+			return nil, fmt.Errorf("令牌签名失败且撤销刷新令牌失败: %v: %w", revokeErr, err)
+		}
 		return nil, err
 	}
 
@@ -295,7 +323,9 @@ func (s *AccountSessionService) RevokeCurrentSession(sessionPublicID string, use
 		if err := s.refresh.RevokeBySession(sessionPublicID); err != nil {
 			return err
 		}
-		s.audit.LogSessionRevoked(sessionPublicID, userID, "logout")
+		if auditErr := s.audit.LogSessionRevoked(sessionPublicID, userID, "logout"); auditErr != nil {
+			return auditErr
+		}
 		return nil
 	})
 }
@@ -318,7 +348,9 @@ func (s *AccountSessionService) RevokeOtherSessions(currentSessionID string, use
 				}
 			}
 		}
-		s.audit.LogSessionsRevoked(currentSessionID, userID, count)
+		if auditErr := s.audit.LogSessionsRevoked(currentSessionID, userID, count); auditErr != nil {
+			return auditErr
+		}
 		return nil
 	})
 	return count, err
@@ -338,7 +370,9 @@ func (s *AccountSessionService) RevokeAllSessions(userID int64) error {
 				return err
 			}
 		}
-		s.audit.LogLogoutAll(userID)
+		if auditErr := s.audit.LogLogoutAll(userID); auditErr != nil {
+			return auditErr
+		}
 		return nil
 	})
 }

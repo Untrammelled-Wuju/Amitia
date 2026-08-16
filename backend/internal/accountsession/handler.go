@@ -102,7 +102,12 @@ func (h *Handler) Refresh(c *gin.Context) {
 	clientType := detectClientType(c)
 
 	if clientType == "web" {
-		rawToken, _ = c.Cookie("AmitiaRefresh")
+		var cookieErr error
+		rawToken, cookieErr = c.Cookie("AmitiaRefresh")
+		if cookieErr != nil && rawToken == "" {
+			util.ErrorResponse(c, response.Unauthorized, "缺少刷新令牌", gin.H{"errorCode": "auth.refresh_invalid"})
+			return
+		}
 	} else {
 		var req refreshRequestBody
 		if err := c.ShouldBindJSON(&req); err == nil && req.RefreshToken != "" {
@@ -141,15 +146,16 @@ func (h *Handler) Refresh(c *gin.Context) {
 	}
 
 	tokenSvc := NewTokenService()
-	accessToken, accessExpiresAt, err := tokenSvc.SignAccessToken(0, "", "", result.SessionID)
+	_, _, err = tokenSvc.SignAccessToken(0, "", "", result.SessionID)
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, "签发令牌失败", nil)
 		return
 	}
-	_ = accessToken
-	_ = accessExpiresAt
 
-	h.audit.LogRefreshSuccess(result.SessionID, 0, c.ClientIP(), c.Request.UserAgent())
+	if err := h.audit.LogRefreshSuccess(result.SessionID, 0, c.ClientIP(), c.Request.UserAgent()); err != nil {
+		util.ErrorResponse(c, response.InternalError, "记录审计日志失败", nil)
+		return
+	}
 
 	resp := gin.H{
 		"accessToken":           result.AccessToken,
@@ -178,7 +184,10 @@ func (h *Handler) Logout(c *gin.Context) {
 	if sessionID != "" && actor.UserID != "" {
 		var userID int64
 		fmt.Sscanf(string(actor.UserID), "%d", &userID)
-		_ = h.svc.RevokeCurrentSession(sessionID, userID)
+		if err := h.svc.RevokeCurrentSession(sessionID, userID); err != nil {
+			util.ErrorResponse(c, response.InternalError, "登出失败", nil)
+			return
+		}
 	}
 
 	h.clearRefreshCookie(c, detectClientType(c))
@@ -239,7 +248,10 @@ func (h *Handler) RevokeSession(c *gin.Context) {
 	var userID int64
 	fmt.Sscanf(string(actor.UserID), "%d", &userID)
 
-	_ = h.svc.RevokeCurrentSession(sessionID, userID)
+	if err := h.svc.RevokeCurrentSession(sessionID, userID); err != nil {
+		util.ErrorResponse(c, response.InternalError, "撤销会话失败", nil)
+		return
+	}
 	util.SuccessResponse(c, nil)
 }
 
@@ -269,7 +281,10 @@ func (h *Handler) LogoutAll(c *gin.Context) {
 
 	var userID int64
 	fmt.Sscanf(string(actor.UserID), "%d", &userID)
-	_ = h.svc.RevokeAllSessions(userID)
+	if err := h.svc.RevokeAllSessions(userID); err != nil {
+		util.ErrorResponse(c, response.InternalError, "退出全部设备失败", nil)
+		return
+	}
 	h.clearRefreshCookie(c, detectClientType(c))
 	util.SuccessMsgResponse(c, "已退出全部设备", nil)
 }

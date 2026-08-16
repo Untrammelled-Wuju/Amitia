@@ -97,13 +97,17 @@ func (s RecoveryService) ConsumeGrant(rawToken string) (string, bool) {
 	if grant.ExpiresAt.Before(time.Now().UTC()) {
 		return "", false
 	}
-	_ = s.grants.Consume(grant.GrantID)
+	if err := s.grants.Consume(grant.GrantID); err != nil {
+		return "", false
+	}
 	return fmt.Sprintf("%d", grant.UserID), true
 }
 
 func generateRecoveryCode() string {
 	b := make([]byte, 20)
-	rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		return ""
+	}
 	parts := make([]string, 4)
 	for i := 0; i < 4; i++ {
 		var val uint64

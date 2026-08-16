@@ -73,6 +73,6 @@ func (v *Validator) ValidateAccessSession(sessionPublicID string, claimsUserID i
 	return ValidationResult{Valid: true, Session: session}
 }
 
-func (v *Validator) TouchSession(sessionPublicID string) {
-	_ = v.sessions.TouchLastActive(sessionPublicID)
+func (v *Validator) TouchSession(sessionPublicID string) error {
+	return v.sessions.TouchLastActive(sessionPublicID)
 }
