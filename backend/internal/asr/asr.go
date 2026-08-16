@@ -175,9 +175,15 @@ func fetchAudioData(audioURL string) ([]byte, string, error) {
 
 func submitVolcengine(cfg *AsrConfig, audioURL string, language string) (string, error) {
 	reqBody := AsrSubmitReq{Audio: AsrAudio{URL: audioURL, Language: language}, User: AsrUser{UID: "u-ai-user"}}
-	jsonBody, _ := json.Marshal(reqBody)
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("marshal ASR request: %w", err)
+	}
 	taskID := uuid.New().String()
-	req, _ := http.NewRequest("POST", asrSubmitUri, bytes.NewReader(jsonBody))
+	req, err := http.NewRequest("POST", asrSubmitUri, bytes.NewReader(jsonBody))
+	if err != nil {
+		return "", fmt.Errorf("create ASR request: %w", err)
+	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("X-Api-Key", cfg.ApiKey)
 	resourceId := cfg.ResourceId
@@ -371,7 +377,10 @@ func submitAliyun(cfg *AsrConfig, audioURL string, language string) (string, err
 	if language != "" {
 		reqBody["language"] = language
 	}
-	jsonBody, _ := json.Marshal(reqBody)
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("marshal ASR request: %w", err)
+	}
 
 	url := fmt.Sprintf("%s/rest/v1/auc/submit", baseURL)
 	req, err := http.NewRequest("POST", url, bytes.NewReader(jsonBody))
