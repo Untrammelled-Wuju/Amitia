@@ -42,6 +42,7 @@ type AcquisitionPlan struct {
 	Steps               []AcquisitionPlanStep `json:"steps"`
 	RequiredPermissions []string              `json:"requiredPermissions,omitempty"`
 	Warnings            []string              `json:"warnings,omitempty"`
+	InstalledCapability InstalledCapability   `json:"installedCapability,omitempty"`
 }
 
 func (p AcquisitionPlan) IsAutoAllowed() bool {

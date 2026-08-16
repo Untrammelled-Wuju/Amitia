@@ -336,8 +336,6 @@ func (s *AcquisitionService) ResumeAcquire(ctx context.Context, resumeToken stri
 
 // executePlan runs the ordered steps of an acquisition plan.
 func (s *AcquisitionService) executePlan(ctx context.Context, plan *AcquisitionPlan) error {
-	var installed InstalledCapability
-
 	for i := range plan.Steps {
 		step := &plan.Steps[i]
 		if err := ctx.Err(); err != nil {
@@ -350,7 +348,7 @@ func (s *AcquisitionService) executePlan(ctx context.Context, plan *AcquisitionP
 			if err != nil {
 				return errors.Join(ErrInstallFailed, err)
 			}
-			installed = result
+			plan.InstalledCapability = result
 		case "enable":
 			if err := s.executeEnable(ctx, plan.Candidate); err != nil {
 				return errors.Join(ErrEnableFailed, err)
@@ -360,14 +358,11 @@ func (s *AcquisitionService) executePlan(ctx context.Context, plan *AcquisitionP
 				return errors.Join(ErrReconcileFailed, err)
 			}
 		case "await_approval":
-			// Approval is handled at the AcquisitionService.Acquire level.
-			// If execution reaches here, approval has already been granted.
 		}
 
 		step.Completed = true
 	}
 
-	_, _ = installed, installed
 	return nil
 }
 
@@ -504,18 +499,13 @@ func (s *AcquisitionService) rollbackPlan(ctx context.Context, plan *Acquisition
 
 		switch step.Action {
 		case "install":
-			if installerReg != nil && s.providerRegistry != nil {
+			if installerReg != nil {
 				installer, err := installerReg.Resolve(plan.Candidate.Install.Method)
 				if err == nil {
-					_ = installer.Rollback(ctx, InstalledCapability{
-						Candidate: plan.Candidate,
-						Target:    plan.Target,
-					})
+					_ = installer.Rollback(ctx, plan.InstalledCapability)
 				}
 			}
 		case "enable":
-			// Deliberately no-op: do not re-disable providers that may have
-			// been enabled by the user outside this transaction.
 		}
 	}
 	return nil

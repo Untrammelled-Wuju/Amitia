@@ -93,10 +93,10 @@ func (s *RecoveryService) Recover(
 	return result, nil
 }
 
-// recoverFromError is a convenience entry point that detects a missing-capability
+// RecoverFromError is a convenience entry point that detects a missing-capability
 // condition from an execution error and, when detected, attempts automatic
 // recovery in a single step.
-func (s *RecoveryService) recoverFromError(
+func (s *RecoveryService) RecoverFromError(
 	ctx context.Context,
 	err error,
 	invocation capability.ToolInvocationContext,
@@ -112,10 +112,10 @@ func (s *RecoveryService) recoverFromError(
 	return s.Recover(ctx, *resumeCtx)
 }
 
-// recoverFromResolution is a convenience entry point that detects a
+// RecoverFromResolution is a convenience entry point that detects a
 // missing-capability condition from a resolution failure and, when detected,
 // attempts automatic recovery in a single step.
-func (s *RecoveryService) recoverFromResolution(
+func (s *RecoveryService) RecoverFromResolution(
 	ctx context.Context,
 	failure capability.ResolutionFailure,
 	invocation capability.ToolInvocationContext,
