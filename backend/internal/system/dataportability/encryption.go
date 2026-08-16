@@ -22,15 +22,17 @@ const (
 	saltSize  = 32
 )
 
-func DeriveKey(passphrase string, salt []byte) []byte {
+func DeriveKey(passphrase string, salt []byte) ([]byte, error) {
 	if salt == nil {
 		salt = make([]byte, saltSize)
-		rand.Read(salt)
+		if _, err := rand.Read(salt); err != nil {
+			return nil, err
+		}
 	}
 	h := sha256.New()
 	h.Write(salt)
 	h.Write([]byte(passphrase))
-	return h.Sum(nil)
+	return h.Sum(nil), nil
 }
 
 func EncryptStream(dst io.Writer, passphrase string) (io.WriteCloser, *EncryptionMetadata, error) {
@@ -39,7 +41,10 @@ func EncryptStream(dst io.Writer, passphrase string) (io.WriteCloser, *Encryptio
 		return nil, nil, err
 	}
 
-	key := DeriveKey(passphrase, salt)
+	key, err := DeriveKey(passphrase, salt)
+	if err != nil {
+		return nil, nil, err
+	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, nil, err
@@ -84,7 +89,10 @@ func DecryptStream(src io.Reader, passphrase string, meta *EncryptionMetadata) (
 		return nil, ErrRestoreDecryptFailed
 	}
 
-	key := DeriveKey(passphrase, meta.Salt)
+	key, err := DeriveKey(passphrase, meta.Salt)
+	if err != nil {
+		return nil, err
+	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err

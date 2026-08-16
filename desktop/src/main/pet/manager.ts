@@ -51,8 +51,8 @@ import {
   DesktopRuntimeHandlerV2,
   type RuntimeHandlerConfig,
   type RuntimeHandlerHooks,
-  type RuntimeHandlerState,
 } from "../../desktop-pet/runtime/runtime-handler-v2";
+import type { RuntimeEnvelope, HelloAckPayload } from "../../desktop-pet/runtime/protocol-v2";
 import type { RuntimeCommandExecutionResult } from "./runtime-v2-command-adapter";
 import type {
   RuntimeSessionContext,
@@ -1196,34 +1196,30 @@ export class DesktopPetManager {
     switch (event.type) {
       case "playback.action_started":
         if (event.actionKey) {
-          this.bridgeClient?.reportPlayback({
-            actionKey: event.actionKey,
-            playbackId: this.currentPlaybackId ?? "",
-            commandId: this.currentCommandId ?? undefined,
-            frameIndex: this.actionPlayer?.getCurrentFrameIndex() ?? 0,
-            cycleIndex: this.actionPlayer?.getLoopCount() ?? 0,
-            startedAt: new Date().toISOString(),
-          });
+          void this.runtimeHandler?.sendPlaybackStarted(
+            this.currentPlaybackId ?? "",
+            this.currentCommandId ?? "",
+          );
         }
         break;
       case "playback.action_completed":
-        this.bridgeClient?.reportPlayback({
-          actionKey: event.actionKey ?? "",
-          playbackId: this.currentPlaybackId ?? "",
-          commandId: this.currentCommandId ?? undefined,
-          frameIndex: this.actionPlayer?.getCurrentFrameIndex() ?? 0,
-          cycleIndex: this.actionPlayer?.getLoopCount() ?? 0,
-          completedAt: new Date().toISOString(),
-        });
+        void this.runtimeHandler?.sendPlaybackEnded(
+          this.currentPlaybackId ?? "",
+          this.currentCommandId ?? "",
+          event.actionKey ?? "",
+          0,
+          "completed",
+        );
         break;
       case "playback.action_interrupted":
-        this.bridgeClient?.reportPlayback({
+        void this.runtimeHandler?.sendRuntimeEvent("playback.interrupted", {
           actionKey: event.actionKey ?? "",
-          playbackId: this.currentPlaybackId ?? "",
+          playbackInstanceId: this.currentPlaybackId ?? "",
           commandId: this.currentCommandId ?? undefined,
+          interruptReason: "higher_priority_action",
           frameIndex: this.actionPlayer?.getCurrentFrameIndex() ?? 0,
           cycleIndex: this.actionPlayer?.getLoopCount() ?? 0,
-          interruptReason: "higher_priority_action",
+          interruptedAt: new Date().toISOString(),
         });
         break;
       case "playback.action_failed":
@@ -1232,14 +1228,13 @@ export class DesktopPetManager {
           event.actionKey,
           event.reason,
         );
-        this.bridgeClient?.reportPlayback({
-          actionKey: event.actionKey ?? "",
-          playbackId: this.currentPlaybackId ?? "",
-          commandId: this.currentCommandId ?? undefined,
-          frameIndex: this.actionPlayer?.getCurrentFrameIndex() ?? 0,
-          cycleIndex: this.actionPlayer?.getLoopCount() ?? 0,
-          errorCode: event.reason ?? "playback_failed",
-        });
+        void this.runtimeHandler?.sendPlaybackFailed(
+          this.currentPlaybackId ?? "",
+          this.currentCommandId ?? "",
+          event.actionKey ?? "",
+          event.reason ?? "playback_failed",
+          "playback execution failed",
+        );
         break;
     }
   }
@@ -1300,7 +1295,7 @@ export class DesktopPetManager {
   }
 
   private handleClick(x: number, y: number): void {
-    this.bridgeClient?.reportClick({
+    void this.runtimeHandler?.sendRuntimeEvent("click.reported", {
       button: "left",
       clickCount: 1,
       canvasX: x,
@@ -1313,7 +1308,7 @@ export class DesktopPetManager {
   }
 
   private handleDoubleClick(x: number, y: number): void {
-    this.bridgeClient?.reportClick({
+    void this.runtimeHandler?.sendRuntimeEvent("click.reported", {
       button: "left",
       clickCount: 2,
       canvasX: x,
@@ -1326,16 +1321,11 @@ export class DesktopPetManager {
   }
 
   private handleHover(x: number, y: number): void {
-    this.bridgeClient?.reportDrag({
-      dragId: "",
-      phase: "moved",
-      startX: x,
-      startY: y,
-      currentX: x,
-      currentY: y,
-      deltaX: 0,
-      deltaY: 0,
-      displayId: "",
+    void this.runtimeHandler?.sendRuntimeEvent("hover.moved", {
+      x,
+      y,
+      actionKey: this.currentActionKey ?? "",
+      frameIndex: this.actionPlayer?.getCurrentFrameIndex() ?? 0,
     });
   }
 
@@ -1388,28 +1378,22 @@ export class DesktopPetManager {
     if (event === "drag-start") {
       this.currentDragId = randomUUID();
       this.petLogger.logDragStart(this.activeInstallationId ?? undefined);
-      this.bridgeClient?.reportDrag({
+      void this.runtimeHandler?.sendRuntimeEvent("drag.started", {
         dragId: this.currentDragId,
-        phase: "started",
         startX: state.startX,
         startY: state.startY,
         currentX: state.currentX,
         currentY: state.currentY,
-        deltaX: state.currentX - state.startX,
-        deltaY: state.currentY - state.startY,
         displayId: state.startScreenId,
       });
     } else if (event === "drag-end") {
       this.petLogger.logDragEnd(this.activeInstallationId ?? undefined);
-      this.bridgeClient?.reportDrag({
+      void this.runtimeHandler?.sendRuntimeEvent("drag.completed", {
         dragId: this.currentDragId ?? "",
-        phase: "completed",
         startX: state.startX,
         startY: state.startY,
         currentX: state.currentX,
         currentY: state.currentY,
-        deltaX: state.currentX - state.startX,
-        deltaY: state.currentY - state.startY,
         displayId: state.currentScreenId,
       });
       this.currentDragId = null;
@@ -1490,7 +1474,7 @@ export class DesktopPetManager {
         void 0;
       }
     }
-    this.syncBridgeState();
+    this.syncRuntimeState();
   }
 
   private resolveAbsolutePath(relPath: string): string {
@@ -2175,21 +2159,18 @@ export class DesktopPetManager {
       clearTimeout(this.bridgeReconnectTimer);
       this.bridgeReconnectTimer = null;
     }
-    if (this.bridgeClient) {
+    if (this.runtimeHandler) {
       try {
-        this.bridgeClient.disconnect();
+        this.runtimeHandler.disconnect();
       } catch {
         void 0;
       }
-      this.bridgeClient = null;
+      this.runtimeHandler = null;
     }
   }
 
   private async connectBridge(): Promise<void> {
     if (!this.bridgeStarted) return;
-
-    const endpoint =
-      `ws://${this.coreHost}:${this.corePort}${RUNTIME_BRIDGE_WS_PATH}`;
 
     const runtimeId = getRuntimeId();
     const deviceId = getDeviceId();
@@ -2200,18 +2181,23 @@ export class DesktopPetManager {
         runtimeId,
       );
 
-      const config: RuntimeBridgeConfig = {
-        endpoint,
-        bootstrapTicket: issued.ticket,
+      const wsUrl = this.buildRuntimeV2URL(issued.ticket, runtimeId, deviceId);
+      const handlerConfig: RuntimeHandlerConfig = {
+        url: wsUrl,
         userId: issued.userId,
-        runtimeId,
         deviceId,
-        appVersion: app.getVersion(),
+        runtimeId,
+        contractVersion: "2.0.0",
+        runtimeVersion: "2.0.0",
+        autoReconnect: false,
+        heartbeatIntervalMs: 15000,
+        maxReconnectAttempts: 0,
       };
 
-      const callbacks = this.buildBridgeCallbacks();
-      this.bridgeClient = new RuntimeBridgeClient(config, callbacks);
-      this.bridgeClient.connect();
+      const hooks = this.buildRuntimeHooks();
+      this.runtimeHandler = new DesktopRuntimeHandlerV2(handlerConfig, hooks);
+
+      await this.runtimeHandler.connect("initial");
     } catch (error) {
       console.warn(
         "[DesktopPetManager] runtime ticket 获取失败:",
@@ -2220,6 +2206,15 @@ export class DesktopPetManager {
       this.scheduleBridgeReconnect();
       return;
     }
+  }
+
+  private buildRuntimeV2URL(ticket: string, runtimeId: string, deviceId: string): string {
+    const wsBase = `ws://${this.coreHost}:${this.corePort}${RUNTIME_BRIDGE_WS_PATH}`;
+    const url = new URL(wsBase);
+    url.searchParams.set("ticket", ticket);
+    url.searchParams.set("deviceId", deviceId);
+    url.searchParams.set("runtimeId", runtimeId);
+    return url.toString();
   }
 
   private scheduleBridgeReconnect(): void {
@@ -2245,308 +2240,238 @@ export class DesktopPetManager {
     });
   }
 
-  private buildBridgeCallbacks(): RuntimeBridgeCallbacks {
+  private buildRuntimeHooks(): RuntimeHandlerHooks {
     return {
-      onConnected: (welcome: WelcomePayload) => {
-        console.log(
-          "[DesktopPetManager] runtime bridge connected session=",
-          welcome.sessionId,
-        );
-        if (this.bridgeClient) {
-          const ctx: RuntimeSessionContext = {
-            userId: this.userId,
-            deviceId: this.bridgeClient.getDeviceId(),
-            installationId: this.activeInstallationId ?? "",
-            petId: this.activeInstallation?.characterId ?? this.activeInstallationId ?? "",
-            releaseId: this.loadedInstallation?.manifest.packageId ?? "",
-            runtimeInstanceId: this.bridgeClient.getRuntimeId(),
-          };
-          this.bridgeClient.setSessionContext(ctx);
+      onState: (state) => {
+        if (state === "disconnected") {
+          console.warn("[DesktopPetManager] runtime disconnected");
+          if (this.bridgeStarted) {
+            this.scheduleBridgeReconnect();
+          }
         }
-        this.syncBridgeState();
       },
-      onDisconnected: (notification) => {
-        console.warn(
-          "[DesktopPetManager] runtime bridge disconnected:",
-          notification?.reason,
+      onHelloAck: (ack: HelloAckPayload) => {
+        console.log(
+          "[DesktopPetManager] runtime connected session=",
+          ack.sessionId,
         );
-        if (this.bridgeStarted) {
-          this.scheduleBridgeReconnect();
-        }
+        this.lastAppliedDesiredRevision = ack.currentDesiredRevision ?? 0;
+        this.syncRuntimeState();
       },
       onError: (err: Error) => {
-        console.warn("[DesktopPetManager] runtime bridge error:", err.message);
+        console.warn("[DesktopPetManager] runtime error:", err.message);
       },
-      onSpawn: async (
-        _msg: RuntimeMessage,
-        payload: SpawnPayload,
-      ): Promise<CommandResultPayload> => {
-        try {
-          const installationId = payload.installation?.installationId;
-          if (!installationId) {
-            return {
-              commandId: _msg.commandId || "",
-              status: "rejected",
-              errorCode: "MISSING_INSTALLATION_ID",
-              errorMessage: "spawn payload missing installationId",
-              appliedRevision: payload.desiredRevision || 0,
+      onEvent: (_envelope: RuntimeEnvelope) => {
+      },
+      onDesiredSync: (revision: number) => {
+        this.lastAppliedDesiredRevision = revision;
+      },
+      onCommand: async (
+        command: unknown,
+        _envelope: RuntimeEnvelope,
+      ): Promise<RuntimeCommandExecutionResult> => {
+        const cmd = command as {
+          commandId?: string;
+          commandType?: string;
+          desiredRevision?: number;
+          installationId?: string;
+          settingsRevision?: number;
+          actionKey?: string;
+          payload?: {
+            installation?: { installationId?: string };
+            desiredPet?: { installation?: { installationId?: string } };
+            ensureAbsent?: boolean;
+            settings?: {
+              alwaysOnTop?: boolean;
+              scale?: number;
+              positionX?: number;
+              positionY?: number;
+              screenId?: string;
+              clickThroughMode?: string;
+              soundEnabled?: boolean;
             };
-          }
-          await this.enableInstallation(installationId);
-          this.bridgeClient?.setLastAppliedDesiredRevision(
-            payload.desiredRevision || 0,
-          );
-          return {
-            commandId: _msg.commandId || "",
-            status: "applied",
-            errorCode: "",
-            errorMessage: "",
-            appliedRevision: payload.desiredRevision || 0,
-            actualState: this.collectPetInstanceSummary(),
           };
-        } catch (err) {
-          return {
-            commandId: _msg.commandId || "",
-            status: "failed",
-            errorCode: "SPAWN_FAILED",
-            errorMessage: this.errorMessage(err),
-            appliedRevision: payload.desiredRevision || 0,
-          };
-        }
-      },
-      onDestroy: async (
-        msg: RuntimeMessage,
-        desiredRevision: number,
-        _reason: string,
-      ): Promise<CommandResultPayload> => {
+        };
+
+        const commandId = cmd.commandId ?? "";
+        const commandType = cmd.commandType ?? "";
+        const desiredRevision = cmd.desiredRevision ?? 0;
+
         try {
-          await this.disableInstallation();
-          this.bridgeClient?.setLastAppliedDesiredRevision(desiredRevision);
-          return {
-            commandId: msg.commandId || "",
-            status: "applied",
-            errorCode: "",
-            errorMessage: "",
-            appliedRevision: desiredRevision,
-          };
-        } catch (err) {
-          return {
-            commandId: msg.commandId || "",
-            status: "failed",
-            errorCode: "DESTROY_FAILED",
-            errorMessage: this.errorMessage(err),
-            appliedRevision: desiredRevision,
-          };
-        }
-      },
-      onShow: async (
-        msg: RuntimeMessage,
-        desiredRevision: number,
-      ): Promise<CommandResultPayload> => {
-        try {
-          const win = this.windowAdapter?.getNativeWindow();
-          if (win && !win.isDestroyed()) {
-            win.show();
-          }
-          this.bridgeClient?.setLastAppliedDesiredRevision(desiredRevision);
-          return {
-            commandId: msg.commandId || "",
-            status: "applied",
-            errorCode: "",
-            errorMessage: "",
-            appliedRevision: desiredRevision,
-            actualState: this.collectPetInstanceSummary(),
-          };
-        } catch (err) {
-          return {
-            commandId: msg.commandId || "",
-            status: "failed",
-            errorCode: "SHOW_FAILED",
-            errorMessage: this.errorMessage(err),
-            appliedRevision: desiredRevision,
-          };
-        }
-      },
-      onHide: async (
-        msg: RuntimeMessage,
-        desiredRevision: number,
-      ): Promise<CommandResultPayload> => {
-        try {
-          const win = this.windowAdapter?.getNativeWindow();
-          if (win && !win.isDestroyed()) {
-            win.hide();
-          }
-          this.bridgeClient?.setLastAppliedDesiredRevision(desiredRevision);
-          return {
-            commandId: msg.commandId || "",
-            status: "applied",
-            errorCode: "",
-            errorMessage: "",
-            appliedRevision: desiredRevision,
-            actualState: this.collectPetInstanceSummary(),
-          };
-        } catch (err) {
-          return {
-            commandId: msg.commandId || "",
-            status: "failed",
-            errorCode: "HIDE_FAILED",
-            errorMessage: this.errorMessage(err),
-            appliedRevision: desiredRevision,
-          };
-        }
-      },
-      onPlayAction: async (
-        msg: RuntimeMessage,
-        actionKey: string,
-        _actionSpecHash: string,
-      ): Promise<CommandResultPayload> => {
-        try {
-          this.currentCommandId = msg.commandId ?? null;
-          await this.playAction(actionKey);
-          return {
-            commandId: msg.commandId || "",
-            status: "applied",
-            errorCode: "",
-            errorMessage: "",
-            appliedRevision: this.bridgeClient?.getRuntimeId() ? 0 : 0,
-            acceptedAction: actionKey,
-          };
-        } catch (err) {
-          return {
-            commandId: msg.commandId || "",
-            status: "failed",
-            errorCode: "PLAY_ACTION_FAILED",
-            errorMessage: this.errorMessage(err),
-            appliedRevision: 0,
-          };
-        }
-      },
-      onUpdateSettings: async (
-        msg: RuntimeMessage,
-        settingsRevision: number,
-        settings: SpawnPayload["settings"],
-      ): Promise<CommandResultPayload> => {
-        try {
-          const updates: Partial<RuntimeSettingsInfo> = {};
-          if (typeof settings.alwaysOnTop === "boolean") {
-            updates.alwaysOnTop = settings.alwaysOnTop;
-          }
-          if (typeof settings.scale === "number") {
-            updates.scale = settings.scale;
-          }
-          if (typeof settings.positionX === "number") {
-            updates.positionX = settings.positionX;
-          }
-          if (typeof settings.positionY === "number") {
-            updates.positionY = settings.positionY;
-          }
-          if (typeof settings.screenId === "string") {
-            updates.screenId = settings.screenId;
-          }
-          if (typeof settings.clickThroughMode === "string") {
-            updates.clickThroughMode = normalizeClickThroughMode(
-              settings.clickThroughMode,
-            );
-          }
-          if (typeof settings.soundEnabled === "boolean") {
-            updates.soundEnabled = settings.soundEnabled;
-          }
-          await this.updateSettings(updates);
-          return {
-            commandId: msg.commandId || "",
-            status: "applied",
-            errorCode: "",
-            errorMessage: "",
-            appliedRevision: settingsRevision,
-            actualState: this.collectPetInstanceSummary(),
-          };
-        } catch (err) {
-          return {
-            commandId: msg.commandId || "",
-            status: "failed",
-            errorCode: "UPDATE_SETTINGS_FAILED",
-            errorMessage: this.errorMessage(err),
-            appliedRevision: settingsRevision,
-          };
-        }
-      },
-      onRecenter: async (
-        msg: RuntimeMessage,
-        settingsRevision: number,
-        _screenId: string,
-      ): Promise<CommandResultPayload> => {
-        try {
-          await this.recenter();
-          return {
-            commandId: msg.commandId || "",
-            status: "applied",
-            errorCode: "",
-            errorMessage: "",
-            appliedRevision: settingsRevision,
-            actualState: this.collectPetInstanceSummary(),
-          };
-        } catch (err) {
-          return {
-            commandId: msg.commandId || "",
-            status: "failed",
-            errorCode: "RECENTER_FAILED",
-            errorMessage: this.errorMessage(err),
-            appliedRevision: settingsRevision,
-          };
-        }
-      },
-      onSync: async (
-        _msg: RuntimeMessage,
-        payload: SyncPayload,
-      ): Promise<CommandResultPayload> => {
-        try {
-          if (payload.ensureAbsent && this.activeInstallationId) {
-            await this.disableInstallation();
-          } else if (
-            payload.desiredPet &&
-            payload.desiredPet.installation?.installationId
-          ) {
-            const installationId =
-              payload.desiredPet.installation.installationId;
-            if (
-              this.activeInstallationId !== installationId ||
-              this.state !== "enabled"
-            ) {
+          switch (commandType) {
+            case "spawn":
+            case "runtime.command.sync_desired_state": {
+              const installationId = cmd.payload?.installation?.installationId
+                ?? cmd.installationId
+                ?? "";
+              if (!installationId) {
+                return {
+                  commandId,
+                  status: "rejected",
+                  errorCode: "MISSING_INSTALLATION_ID",
+                  errorMessage: "spawn payload missing installationId",
+                  appliedRevision: desiredRevision,
+                };
+              }
               await this.enableInstallation(installationId);
+              this.lastAppliedDesiredRevision = desiredRevision;
+              return {
+                commandId,
+                status: "applied",
+                errorCode: "",
+                errorMessage: "",
+                appliedRevision: desiredRevision,
+                actualState: this.collectPetInstanceSummary(),
+              };
+            }
+            case "destroy":
+            case "runtime.command.ensure_absent": {
+              await this.disableInstallation();
+              this.lastAppliedDesiredRevision = desiredRevision;
+              return {
+                commandId,
+                status: "applied",
+                errorCode: "",
+                errorMessage: "",
+                appliedRevision: desiredRevision,
+              };
+            }
+            case "show": {
+              const win = this.windowAdapter?.getNativeWindow();
+              if (win && !win.isDestroyed()) {
+                win.show();
+              }
+              this.lastAppliedDesiredRevision = desiredRevision;
+              return {
+                commandId,
+                status: "applied",
+                errorCode: "",
+                errorMessage: "",
+                appliedRevision: desiredRevision,
+                actualState: this.collectPetInstanceSummary(),
+              };
+            }
+            case "hide": {
+              const win = this.windowAdapter?.getNativeWindow();
+              if (win && !win.isDestroyed()) {
+                win.hide();
+              }
+              this.lastAppliedDesiredRevision = desiredRevision;
+              return {
+                commandId,
+                status: "applied",
+                errorCode: "",
+                errorMessage: "",
+                appliedRevision: desiredRevision,
+                actualState: this.collectPetInstanceSummary(),
+              };
+            }
+            case "play_action":
+            case "runtime.command.play_action": {
+              const actionKey = cmd.actionKey ?? "";
+              this.currentCommandId = commandId;
+              await this.playAction(actionKey);
+              return {
+                commandId,
+                status: "applied",
+                errorCode: "",
+                errorMessage: "",
+                appliedRevision: desiredRevision,
+                acceptedAction: actionKey,
+              };
+            }
+            case "update_settings": {
+              const settings = cmd.payload?.settings;
+              const updates: Partial<RuntimeSettingsInfo> = {};
+              if (typeof settings?.alwaysOnTop === "boolean") {
+                updates.alwaysOnTop = settings.alwaysOnTop;
+              }
+              if (typeof settings?.scale === "number") {
+                updates.scale = settings.scale;
+              }
+              if (typeof settings?.positionX === "number") {
+                updates.positionX = settings.positionX;
+              }
+              if (typeof settings?.positionY === "number") {
+                updates.positionY = settings.positionY;
+              }
+              if (typeof settings?.screenId === "string") {
+                updates.screenId = settings.screenId;
+              }
+              if (typeof settings?.clickThroughMode === "string") {
+                updates.clickThroughMode = normalizeClickThroughMode(
+                  settings.clickThroughMode,
+                );
+              }
+              if (typeof settings?.soundEnabled === "boolean") {
+                updates.soundEnabled = settings.soundEnabled;
+              }
+              await this.updateSettings(updates);
+              return {
+                commandId,
+                status: "applied",
+                errorCode: "",
+                errorMessage: "",
+                appliedRevision: cmd.settingsRevision ?? desiredRevision,
+                actualState: this.collectPetInstanceSummary(),
+              };
+            }
+            case "recenter":
+            case "runtime.command.recenter_once": {
+              await this.recenter();
+              return {
+                commandId,
+                status: "applied",
+                errorCode: "",
+                errorMessage: "",
+                appliedRevision: cmd.settingsRevision ?? desiredRevision,
+                actualState: this.collectPetInstanceSummary(),
+              };
+            }
+            case "sync": {
+              const payload = cmd.payload;
+              if (payload?.ensureAbsent && this.activeInstallationId) {
+                await this.disableInstallation();
+              } else if (
+                payload?.desiredPet?.installation?.installationId
+              ) {
+                const installationId = payload.desiredPet.installation.installationId;
+                if (
+                  this.activeInstallationId !== installationId ||
+                  this.state !== "enabled"
+                ) {
+                  await this.enableInstallation(installationId);
+                }
+              }
+              this.lastAppliedDesiredRevision = desiredRevision;
+              return {
+                commandId,
+                status: "applied",
+                errorCode: "",
+                errorMessage: "",
+                appliedRevision: desiredRevision,
+                actualState: this.collectPetInstanceSummary(),
+              };
+            }
+            default: {
+              return {
+                commandId,
+                status: "rejected",
+                errorCode: "UNKNOWN_COMMAND_TYPE",
+                errorMessage: `unknown command type: ${commandType}`,
+                appliedRevision: desiredRevision,
+              };
             }
           }
-          this.bridgeClient?.setLastAppliedDesiredRevision(
-            payload.desiredRevision || 0,
-          );
-          return {
-            commandId: "sync_" + (this.bridgeClient?.getSessionId() || ""),
-            status: "applied",
-            errorCode: "",
-            errorMessage: "",
-            appliedRevision: payload.desiredRevision || 0,
-            actualState: this.collectPetInstanceSummary(),
-          };
         } catch (err) {
           return {
-            commandId: "sync_" + (this.bridgeClient?.getSessionId() || ""),
+            commandId,
             status: "failed",
-            errorCode: "SYNC_FAILED",
+            errorCode: "COMMAND_EXECUTION_FAILED",
             errorMessage: this.errorMessage(err),
-            appliedRevision: payload.desiredRevision || 0,
+            appliedRevision: desiredRevision,
           };
         }
-      },
-      onStateProbe: (_msg: RuntimeMessage): PetInstanceSummary[] => {
-        const summary = this.collectPetInstanceSummary();
-        return summary ? [summary] : [];
-      },
-      onShutdown: (
-        _msg: RuntimeMessage,
-        _deadline: string,
-        _reason: string,
-      ): void => {
-        console.log("[DesktopPetManager] runtime bridge shutdown received");
-        void this.shutdown();
       },
     };
   }
@@ -2569,10 +2494,10 @@ export class DesktopPetManager {
     };
   }
 
-  private syncBridgeState(): void {
-    if (!this.bridgeClient) return;
+  private syncRuntimeState(): void {
     const summary = this.collectPetInstanceSummary();
-    this.bridgeClient.updatePetInstances(summary ? [summary] : []);
+    this.petInstances = summary ? [summary] : [];
+    void this.runtimeHandler?.sendRendererHealth(this.rendererHealthy);
   }
 }
 
