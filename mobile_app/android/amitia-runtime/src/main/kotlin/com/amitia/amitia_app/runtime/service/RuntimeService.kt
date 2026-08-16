@@ -587,6 +587,7 @@ class RuntimeService : Service() {
 
             ctx.servicePhase = ServicePhase.UNOBSERVABLE
             ctx.processPhase = ProcessPhase.UNKNOWN
+            processOwnershipBarrier.set(ProcessOwnershipState.UNOBSERVABLE)
             stopRequestedRef.set(false)
             updateLifecycleSnapshot()
 
