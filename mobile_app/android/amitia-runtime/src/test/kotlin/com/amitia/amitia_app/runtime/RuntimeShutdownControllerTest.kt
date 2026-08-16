@@ -12,6 +12,7 @@ import com.amitia.amitia_app.runtime.api.RuntimeStopRequest
 import com.amitia.amitia_app.runtime.internal.DefaultRuntimeController
 import com.amitia.amitia_app.runtime.internal.RuntimeStateStore
 import com.amitia.amitia_app.runtime.proot.ProotSession
+import com.amitia.amitia_app.runtime.proot.ProotTerminationResult
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHost
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHostEvent
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHostListener
@@ -103,6 +104,10 @@ internal class FakeProotSession(override val sessionId: String) : ProotSession {
     override fun close() { alive.set(false) }
     override fun requestStop() {}
     override val exit: com.amitia.amitia_app.runtime.proot.ProotExit? = null
+
+    override fun terminateAndConfirmExit(gracefulTimeoutMs: Long, forceTimeoutMs: Long): ProotTerminationResult {
+        return ProotTerminationResult.ConfirmedExited(exit?.exitCode)
+    }
 }
 
 class RuntimeShutdownControllerTest {

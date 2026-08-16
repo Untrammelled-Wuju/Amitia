@@ -11,6 +11,7 @@ import com.amitia.amitia_app.runtime.proot.ProotLaunchRequest
 import com.amitia.amitia_app.runtime.proot.ProotObserver
 import com.amitia.amitia_app.runtime.proot.ProotSession
 import com.amitia.amitia_app.runtime.proot.ProotStopResult
+import com.amitia.amitia_app.runtime.proot.ProotTerminationResult
 import com.amitia.amitia_app.runtime.proot.internal.ProotEnvironmentAssembler
 import org.junit.After
 import org.junit.Assert.assertEquals
@@ -259,6 +260,10 @@ class TestProotSession : ProotSession {
     override fun close() {}
     override fun requestStop() {}
     override val exit: com.amitia.amitia_app.runtime.proot.ProotExit? = null
+
+    override fun terminateAndConfirmExit(gracefulTimeoutMs: Long, forceTimeoutMs: Long): ProotTerminationResult {
+        return ProotTerminationResult.ConfirmedExited(exit?.exitCode)
+    }
 }
 
 class TestProotEnvironmentAssembler : ProotEnvironmentAssembler(

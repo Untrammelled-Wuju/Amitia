@@ -11,6 +11,7 @@ import com.amitia.amitia_app.runtime.proot.ProotLaunchSpec
 import com.amitia.amitia_app.runtime.proot.ProotObserver
 import com.amitia.amitia_app.runtime.proot.ProotSession
 import com.amitia.amitia_app.runtime.proot.ProotStopResult
+import com.amitia.amitia_app.runtime.proot.ProotTerminationResult
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -62,7 +63,10 @@ internal class CountingProotSession(
     private val alive = java.util.concurrent.atomic.AtomicBoolean(true)
     override fun isAlive(): Boolean = alive.get()
     override fun awaitExit(timeoutMillis: Long): Int? = if (alive.get()) null else 0
-    fun markStarted() {}
+    override fun activate() {}
+    override fun terminateAndConfirmExit(gracefulTimeoutMs: Long, forceTimeoutMs: Long): ProotTerminationResult {
+        return ProotTerminationResult.ConfirmedExited(exit?.exitCode)
+    }
     override fun stop(graceMillis: Long): ProotStopResult {
         alive.set(false)
         return ProotStopResult.Graceful(sessionId, 0)

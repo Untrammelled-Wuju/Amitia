@@ -15,6 +15,7 @@ import com.amitia.amitia_app.runtime.proot.ProotLaunchRequest
 import com.amitia.amitia_app.runtime.proot.ProotObserver
 import com.amitia.amitia_app.runtime.proot.ProotSession
 import com.amitia.amitia_app.runtime.proot.ProotStopResult
+import com.amitia.amitia_app.runtime.proot.ProotTerminationResult
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHost
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHostListener
 import com.amitia.amitia_app.runtime.service.RuntimeServiceResult
@@ -37,6 +38,10 @@ class RuntimeStartupControllerIntegrationTest {
         override fun close() {}
         override fun requestStop() {}
         override val exit: com.amitia.amitia_app.runtime.proot.ProotExit? = null
+
+        override fun terminateAndConfirmExit(gracefulTimeoutMs: Long, forceTimeoutMs: Long): ProotTerminationResult {
+            return ProotTerminationResult.ConfirmedExited(exit?.exitCode)
+        }
     }
 
     private fun createStoppedStateStore(): RuntimeStateStore {

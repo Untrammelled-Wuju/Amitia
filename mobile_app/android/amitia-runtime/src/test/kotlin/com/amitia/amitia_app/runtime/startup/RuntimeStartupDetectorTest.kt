@@ -4,6 +4,7 @@ import com.amitia.amitia_app.runtime.connection.BackendEndpointPolicy
 import com.amitia.amitia_app.runtime.connection.embeddedAndroidBackendPolicy
 import com.amitia.amitia_app.runtime.internal.SystemRuntimeClock
 import com.amitia.amitia_app.runtime.proot.ProotSession
+import com.amitia.amitia_app.runtime.proot.ProotTerminationResult
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -22,6 +23,10 @@ class RuntimeStartupDetectorTest {
         override fun close() {}
         override fun requestStop() {}
         override val exit: com.amitia.amitia_app.runtime.proot.ProotExit? = null
+
+        override fun terminateAndConfirmExit(gracefulTimeoutMs: Long, forceTimeoutMs: Long): ProotTerminationResult {
+            return ProotTerminationResult.ConfirmedExited(exit?.exitCode)
+        }
     }
 
     private fun createLiveThenDeadSession(aliveForProbes: Int): ProotSession {
@@ -35,6 +40,10 @@ class RuntimeStartupDetectorTest {
             override fun close() {}
             override fun requestStop() {}
             override val exit: com.amitia.amitia_app.runtime.proot.ProotExit? = null
+
+            override fun terminateAndConfirmExit(gracefulTimeoutMs: Long, forceTimeoutMs: Long): ProotTerminationResult {
+                return ProotTerminationResult.ConfirmedExited(exit?.exitCode)
+            }
         }
     }
 
@@ -47,6 +56,10 @@ class RuntimeStartupDetectorTest {
         override fun close() {}
         override fun requestStop() {}
         override val exit: com.amitia.amitia_app.runtime.proot.ProotExit? = null
+
+        override fun terminateAndConfirmExit(gracefulTimeoutMs: Long, forceTimeoutMs: Long): ProotTerminationResult {
+            return ProotTerminationResult.ConfirmedExited(exit?.exitCode)
+        }
     }
 
     private fun createFakeReadinessProbe(responses: List<RuntimeHealthProbeResult>): RuntimeHealthProbe {

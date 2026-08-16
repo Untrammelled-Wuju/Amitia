@@ -36,7 +36,7 @@ class DefaultProotSessionTest {
     fun session_holdsRealProcess() {
         val process = execProcess(sleepCmd(10))
         val session = DefaultProotSession("test-1", process, ProotObserver {}, testGeneration)
-        session.markStarted()
+        session.activate()
         assertTrue(session.isAlive())
         session.close()
     }
@@ -45,7 +45,7 @@ class DefaultProotSessionTest {
     fun session_isAlive_falseAfterExit() {
         val process = execProcess("exit 0")
         val session = DefaultProotSession("test-2", process, ProotObserver {}, testGeneration)
-        session.markStarted()
+        session.activate()
         process.waitFor(5, TimeUnit.SECONDS)
         Thread.sleep(100)
         assertFalse(session.isAlive())
@@ -57,7 +57,7 @@ class DefaultProotSessionTest {
         val process = execProcess("exit 42")
         val events = mutableListOf<ProotEvent>()
         val session = DefaultProotSession("test-3", process, ProotObserver { events.add(it) }, testGeneration)
-        session.markStarted()
+        session.activate()
         val exitCode = session.awaitExit(5000)
         assertEquals(42, exitCode)
         session.close()
@@ -67,7 +67,7 @@ class DefaultProotSessionTest {
     fun session_awaitExit_returnsNullOnTimeout() {
         val process = execProcess(sleepCmd(60))
         val session = DefaultProotSession("test-4", process, ProotObserver {}, testGeneration)
-        session.markStarted()
+        session.activate()
         Thread.sleep(200)
         assertTrue("Process should still be alive", session.isAlive())
         val result = session.awaitExit(200)
@@ -79,7 +79,7 @@ class DefaultProotSessionTest {
     fun session_stop_gracefulReturnsGracefulResult() {
         val process = execProcess(sleepCmd(60))
         val session = DefaultProotSession("test-5", process, ProotObserver {}, testGeneration)
-        session.markStarted()
+        session.activate()
         assertTrue(session.isAlive())
         val result = session.stop(2000)
         assertTrue(result is ProotStopResult.Graceful || result is ProotStopResult.Forced)
@@ -91,7 +91,7 @@ class DefaultProotSessionTest {
     fun session_stop_idempotent() {
         val process = execProcess(sleepCmd(60))
         val session = DefaultProotSession("test-6", process, ProotObserver {}, testGeneration)
-        session.markStarted()
+        session.activate()
         session.stop(2000)
         val secondResult = session.stop(1000)
         assertTrue(secondResult is ProotStopResult.AlreadyStopped)
@@ -101,7 +101,7 @@ class DefaultProotSessionTest {
     fun session_close_idempotent() {
         val process = execProcess(sleepCmd(60))
         val session = DefaultProotSession("test-7", process, ProotObserver {}, testGeneration)
-        session.markStarted()
+        session.activate()
         session.close()
         session.close()
     }
@@ -113,7 +113,7 @@ class DefaultProotSessionTest {
         val session = DefaultProotSession("test-8", process, ProotObserver { event ->
             if (event is ProotEvent.Exited) exitCount.incrementAndGet()
         }, testGeneration)
-        session.markStarted()
+        session.activate()
         Thread.sleep(500)
         session.awaitExit(1000)
         Thread.sleep(200)
@@ -132,7 +132,7 @@ class DefaultProotSessionTest {
                 exited.set(true)
             }
         }, testGeneration)
-        session.markStarted()
+        session.activate()
         Thread.sleep(800)
         session.awaitExit(3000)
         Thread.sleep(300)
@@ -145,7 +145,7 @@ class DefaultProotSessionTest {
     fun session_immediateExit_detected() {
         val process = execProcess("exit 1")
         val session = DefaultProotSession("test-immediate", process, ProotObserver {}, testGeneration)
-        session.markStarted()
+        session.activate()
         process.waitFor(5, TimeUnit.SECONDS)
         Thread.sleep(200)
         assertFalse(session.isAlive())
@@ -159,7 +159,7 @@ class DefaultProotSessionTest {
         val session = DefaultProotSession("test-stdout", process, ProotObserver { event ->
             if (event is ProotEvent.Stdout) lines.add(event.data)
         }, testGeneration)
-        session.markStarted()
+        session.activate()
         Thread.sleep(500)
         assertNotNull(lines)
         session.close()
@@ -172,7 +172,7 @@ class DefaultProotSessionTest {
         val session = DefaultProotSession("test-stderr", process, ProotObserver { event ->
             if (event is ProotEvent.Stderr) errLines.add(event.data)
         }, testGeneration)
-        session.markStarted()
+        session.activate()
         Thread.sleep(500)
         assertNotNull(errLines)
         session.close()
@@ -182,7 +182,7 @@ class DefaultProotSessionTest {
     fun waitForOwner_isSession() {
         val process = execProcess("exit 0")
         val session = DefaultProotSession("test-wait", process, ProotObserver {}, testGeneration)
-        session.markStarted()
+        session.activate()
         process.waitFor(5, TimeUnit.SECONDS)
         Thread.sleep(100)
         val result = session.awaitExit(3000)
@@ -198,7 +198,7 @@ class DefaultProotSessionTest {
         val session = DefaultProotSession("test-gen", process, ProotObserver { event ->
             if (event is ProotEvent.Exited) capturedExit.set(event.exit)
         }, testGeneration)
-        session.markStarted()
+        session.activate()
         Thread.sleep(800)
         session.awaitExit(3000)
         Thread.sleep(300)
@@ -214,7 +214,7 @@ class DefaultProotSessionTest {
     fun watcher_startsExactlyOnce() {
         val process = execProcess(sleepCmd(10))
         val session = DefaultProotSession("test-watcher-once", process, ProotObserver {}, testGeneration)
-        session.markStarted()
+        session.activate()
         Thread.sleep(500)
         session.close()
     }
@@ -223,7 +223,7 @@ class DefaultProotSessionTest {
     fun awaitExit_sharedTerminalResult() {
         val process = execProcess("exit 99")
         val session = DefaultProotSession("test-shared", process, ProotObserver {}, testGeneration)
-        session.markStarted()
+        session.activate()
         process.waitFor(5, TimeUnit.SECONDS)
         Thread.sleep(100)
         val r1 = session.awaitExit(1000)
@@ -237,7 +237,7 @@ class DefaultProotSessionTest {
     fun awaitExit_zeroTimeout_nonBlocking() {
         val process = execProcess(sleepCmd(30))
         val session = DefaultProotSession("test-nonblock", process, ProotObserver {}, testGeneration)
-        session.markStarted()
+        session.activate()
         Thread.sleep(200)
         val result = session.awaitExit(0)
         assertNull("Should return null for zero timeout when process is alive", result)
@@ -251,7 +251,7 @@ class DefaultProotSessionTest {
         val session = DefaultProotSession("test-natural", process, ProotObserver { event ->
             if (event is ProotEvent.Exited) capturedExit.set(event.exit)
         }, testGeneration)
-        session.markStarted()
+        session.activate()
         Thread.sleep(800)
         session.awaitExit(3000)
         Thread.sleep(300)
@@ -269,7 +269,7 @@ class DefaultProotSessionTest {
         val session = DefaultProotSession("test-stop-flag", process, ProotObserver { event ->
             if (event is ProotEvent.Exited) capturedExit.set(event.exit)
         }, testGeneration)
-        session.markStarted()
+        session.activate()
         Thread.sleep(300)
         session.requestStop()
         val result = session.stop(2000)
@@ -288,7 +288,7 @@ class DefaultProotSessionTest {
         val session = DefaultProotSession("test-race", process, ProotObserver { event ->
             if (event is ProotEvent.Exited) exitCount.incrementAndGet()
         }, testGeneration)
-        session.markStarted()
+        session.activate()
         Thread.sleep(100)
         session.requestStop()
         process.waitFor(5, TimeUnit.SECONDS)
@@ -306,7 +306,7 @@ class DefaultProotSessionTest {
         val session = DefaultProotSession("test-double-stop", process, ProotObserver { event ->
             if (event is ProotEvent.Exited) exitCount.incrementAndGet()
         }, testGeneration)
-        session.markStarted()
+        session.activate()
         Thread.sleep(300)
         session.stop(1000)
         session.stop(1000)
@@ -321,7 +321,7 @@ class DefaultProotSessionTest {
     fun exitProperty_availableAfterExit() {
         val process = execProcess("exit 77")
         val session = DefaultProotSession("test-exit-prop", process, ProotObserver {}, testGeneration)
-        session.markStarted()
+        session.activate()
         Thread.sleep(800)
         session.awaitExit(3000)
         Thread.sleep(300)
@@ -340,7 +340,7 @@ class DefaultProotSessionTest {
         val session = DefaultProotSession("test-survives", process, ProotObserver { event ->
             if (event is ProotEvent.Exited) exitCount.incrementAndGet()
         }, testGeneration)
-        session.markStarted()
+        session.activate()
         Thread.sleep(200)
         val zeroResult = session.awaitExit(0)
         assertNull(zeroResult)
@@ -355,7 +355,7 @@ class DefaultProotSessionTest {
         val session = DefaultProotSession("test-interrupt-alive", process, ProotObserver { event ->
             if (event is ProotEvent.Exited) exitCount.incrementAndGet()
         }, testGeneration)
-        session.markStarted()
+        session.activate()
         Thread.sleep(200)
 
         val watcherThread = Thread.getAllStackTraces().keys.firstOrNull { it.name == "proot-exit-watcher-test-interrupt-alive" }
@@ -375,7 +375,7 @@ class DefaultProotSessionTest {
     fun watcherExecutorTerminatesAfterSessionTerminal() {
         val process = execProcess("exit 0")
         val session = DefaultProotSession("test-executor-terminate", process, ProotObserver {}, testGeneration)
-        session.markStarted()
+        session.activate()
         process.waitFor(5, TimeUnit.SECONDS)
         Thread.sleep(500)
         session.close()
@@ -392,7 +392,7 @@ class DefaultProotSessionTest {
         val session = DefaultProotSession("test-interrupt-after-exit", process, ProotObserver { event ->
             if (event is ProotEvent.Exited) capturedExit.set(event.exit)
         }, testGeneration)
-        session.markStarted()
+        session.activate()
         process.waitFor(5, TimeUnit.SECONDS)
 
         val watcherThread = Thread.getAllStackTraces().keys.firstOrNull { it.name == "proot-exit-watcher-test-interrupt-after-exit" }

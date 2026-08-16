@@ -745,6 +745,17 @@ public final class BluetoothCentralStore: NSObject, CBCentralManagerDelegate, CB
         peripheralRSSI[peripheral.identifier] = RSSI
         advertisementData[peripheral.identifier] = advertisementData
         lock.unlock()
+        NativeEventEmitter.shared.emit(NativeEventPayload(
+            domain: "bluetooth",
+            event: "peripheral.discovered",
+            data: [
+                "id": peripheral.identifier.uuidString,
+                "name": peripheral.name ?? NSNull(),
+                "rssi": RSSI.intValue,
+                "advertisementData": advertisementData
+            ],
+            entityRef: peripheral.identifier.uuidString
+        ))
     }
 
     public func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
@@ -771,6 +782,16 @@ public final class BluetoothCentralStore: NSObject, CBCentralManagerDelegate, CB
         if let op = op {
             op.continuation?.resume(throwing: error ?? NSError(domain: "BluetoothCentralStore", code: 500, userInfo: [NSLocalizedDescriptionKey: "connection failed"]))
         }
+        NativeEventEmitter.shared.emit(NativeEventPayload(
+            domain: "bluetooth",
+            event: "peripheral.connect_failed",
+            data: [
+                "id": peripheral.identifier.uuidString,
+                "name": peripheral.name ?? NSNull(),
+                "error": error?.localizedDescription ?? "connection failed"
+            ],
+            entityRef: peripheral.identifier.uuidString
+        ))
     }
 
     public func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
