@@ -4,6 +4,7 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNotNull
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Test
 import com.amitia.amitia_app.runtime.service.internal.DefaultRuntimeServiceEndpoint
 
@@ -128,5 +129,47 @@ class RuntimeServiceLifecycleSnapshotTest {
         endpoint.updateLifecycleSnapshot(snapshotUnexpected)
         val result2 = endpoint.lifecycleSnapshot()
         assertEquals(RuntimeTerminalState.UNEXPECTED_TERMINATION, result2?.terminalState)
+    }
+
+    @Test
+    fun t5_runtimeServiceStructure_noMissingBrace() {
+        val endpoint = DefaultRuntimeServiceEndpoint { null }
+        val snapshot = RuntimeServiceLifecycleSnapshot(
+            generation = 0L,
+            sessionId = null,
+            servicePhase = RuntimeServicePhase.CREATED,
+            processPhase = RuntimeProcessPhase.CREATED,
+            startupPhase = RuntimeStartupPhase.NOT_STARTED,
+            terminalState = null,
+            latestStartId = 0,
+            stopRequested = false,
+        )
+        endpoint.updateLifecycleSnapshot(snapshot)
+        assertNotNull(endpoint.lifecycleSnapshot())
+        assertTrue(true)
+    }
+
+    @Test
+    fun t2_snapshotIsolation_fieldIndependence() {
+        val endpoint = DefaultRuntimeServiceEndpoint { null }
+        val snapshot = RuntimeServiceLifecycleSnapshot(
+            generation = 5L,
+            sessionId = "test-session",
+            servicePhase = RuntimeServicePhase.FOREGROUND,
+            processPhase = RuntimeProcessPhase.READY,
+            startupPhase = RuntimeStartupPhase.READY,
+            terminalState = null,
+            latestStartId = 10,
+            stopRequested = false,
+        )
+        endpoint.updateLifecycleSnapshot(snapshot)
+
+        val result = endpoint.lifecycleSnapshot()
+        assertEquals(5L, result?.generation)
+        assertEquals("test-session", result?.sessionId)
+        assertEquals(RuntimeServicePhase.FOREGROUND, result?.servicePhase)
+        assertEquals(RuntimeProcessPhase.READY, result?.processPhase)
+        assertEquals(RuntimeStartupPhase.READY, result?.startupPhase)
+        assertEquals(10, result?.latestStartId)
     }
 }

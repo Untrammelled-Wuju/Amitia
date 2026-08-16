@@ -193,7 +193,7 @@ function openUserProfile() {
 }
 
 .side-nav.is-collapsed {
-  width: 72px;
+  width: 60px;
 }
 
 .brand {
@@ -206,6 +206,7 @@ function openUserProfile() {
 
 .side-nav.is-collapsed .brand {
   justify-content: center;
+  padding: 0 10px 14px;
 }
 
 .brand-mark {
@@ -226,7 +227,7 @@ function openUserProfile() {
 }
 .side-collapse { display: grid; place-items: center; width: 28px; height: 28px; margin-left: auto; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--text-muted); cursor: pointer; }
 .side-collapse:hover, .side-collapse:focus-visible { background: var(--workbench-sidebar-hover); color: var(--text-primary); outline: none; }
-.side-nav.is-collapsed .side-collapse { display: none; }
+.side-nav.is-collapsed .side-collapse { margin-left: 0; }
 .new-chat { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 38px; margin: 0 12px 12px; border: 1px solid var(--surface-border); border-radius: var(--radius-sm); background: var(--surface-bg); color: var(--text-primary); cursor: pointer; font: inherit; }
 .new-chat:hover, .new-chat:focus-visible { border-color: var(--surface-border-hover); background: var(--control-hover-bg); outline: none; }
 .side-nav.is-collapsed .new-chat { width: 40px; margin: 0 auto 12px; }

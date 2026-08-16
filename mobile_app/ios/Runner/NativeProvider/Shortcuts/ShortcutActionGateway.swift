@@ -5,139 +5,127 @@ public protocol BackendActionDispatcher: AnyObject {
     func executeAction(actionId: String, payload: [String: Any]?) async -> [String: Any]
 }
 
+public enum ShortcutAction: String, Sendable {
+    case openConversation
+    case sendMessage
+    case createReminder
+    case startTask
+    case addAlarm
+    case removeAlarm
+    case addCalendarEvent
+    case pickMedia
+    case exportMedia
+    case search
+    case settings
+    case status
+
+    public var actionId: String {
+        switch self {
+        case .openConversation: return "com.amitia.action.chat"
+        case .sendMessage: return "com.amitia.action.send_message"
+        case .createReminder: return "com.amitia.action.reminder.add"
+        case .startTask: return "com.amitia.action.task.start"
+        case .addAlarm: return "com.amitia.action.alarm.add"
+        case .removeAlarm: return "com.amitia.action.alarm.remove"
+        case .addCalendarEvent: return "com.amitia.action.calendar.add"
+        case .pickMedia: return "com.amitia.action.media.pick"
+        case .exportMedia: return "com.amitia.action.media.export"
+        case .search: return "com.amitia.action.search"
+        case .settings: return "com.amitia.action.settings"
+        case .status: return "com.amitia.action.status"
+        }
+    }
+
+    public var title: String {
+        switch self {
+        case .openConversation: return "Chat with Amitia"
+        case .sendMessage: return "Send Message"
+        case .createReminder: return "Add Reminder"
+        case .startTask: return "Start Task"
+        case .addAlarm: return "Add Alarm"
+        case .removeAlarm: return "Remove Alarm"
+        case .addCalendarEvent: return "Add Calendar Event"
+        case .pickMedia: return "Pick Media"
+        case .exportMedia: return "Export Media"
+        case .search: return "Search Memories"
+        case .settings: return "Open Settings"
+        case .status: return "Check Status"
+        }
+    }
+
+    public static func from(actionId: String) -> ShortcutAction? {
+        switch actionId {
+        case "com.amitia.action.chat": return .openConversation
+        case "com.amitia.action.send_message": return .sendMessage
+        case "com.amitia.action.reminder.add": return .createReminder
+        case "com.amitia.action.task.start": return .startTask
+        case "com.amitia.action.alarm.add": return .addAlarm
+        case "com.amitia.action.alarm.remove": return .removeAlarm
+        case "com.amitia.action.calendar.add": return .addCalendarEvent
+        case "com.amitia.action.media.pick": return .pickMedia
+        case "com.amitia.action.media.export": return .exportMedia
+        case "com.amitia.action.search": return .search
+        case "com.amitia.action.settings": return .settings
+        case "com.amitia.action.status": return .status
+        default: return nil
+        }
+    }
+}
+
 public class ShortcutActionGateway: NSObject {
     public static let shared = ShortcutActionGateway()
 
-    private var actionRegistry: [String: () async -> [String: Any]] = [:]
-    public private(set) var registeredActionIDs: [String] = []
-    private var interactionCache: [String: INInteraction] = [:]
-
+    public private(set) var registeredActions: [ShortcutAction] = []
     public weak var backendDispatcher: BackendActionDispatcher?
-
-    private let curatedActionIDs: Set<String> = [
-        "com.amitia.action.chat",
-        "com.amitia.action.alarm.add",
-        "com.amitia.action.alarm.remove",
-        "com.amitia.action.reminder.add",
-        "com.amitia.action.calendar.add",
-        "com.amitia.action.media.pick",
-        "com.amitia.action.media.export",
-        "com.amitia.action.search",
-        "com.amitia.action.settings",
-        "com.amitia.action.status"
-    ]
-
-    private let actionTitles: [String: String] = [
-        "com.amitia.action.chat": "Chat with Amitia",
-        "com.amitia.action.alarm.add": "Add Alarm",
-        "com.amitia.action.alarm.remove": "Remove Alarm",
-        "com.amitia.action.reminder.add": "Add Reminder",
-        "com.amitia.action.calendar.add": "Add Calendar Event",
-        "com.amitia.action.media.pick": "Pick Media",
-        "com.amitia.action.media.export": "Export Media",
-        "com.amitia.action.search": "Search Memories",
-        "com.amitia.action.settings": "Open Settings",
-        "com.amitia.action.status": "Check Status"
-    ]
 
     private override init() {
         super.init()
+        registeredActions = [
+            .openConversation,
+            .createReminder,
+            .addAlarm,
+            .addCalendarEvent,
+            .pickMedia,
+            .search,
+            .settings,
+            .status
+        ]
     }
 
-    public func isCuratedAction(_ actionId: String) -> Bool {
-        return curatedActionIDs.contains(actionId)
+    public func isCuratedAction(_ action: ShortcutAction) -> Bool {
+        return registeredActions.contains(action)
     }
 
-    public var availableActions: [String] {
-        return Array(curatedActionIDs)
+    public var availableActions: [ShortcutAction] {
+        return registeredActions
     }
 
-    public func titleForAction(_ actionId: String) -> String {
-        return actionTitles[actionId] ?? actionId
+    public func titleForAction(_ action: ShortcutAction) -> String {
+        return action.title
     }
 
-    public func registerAction(_ actionId: String, handler: @escaping () async -> [String: Any]) {
-        actionRegistry[actionId] = handler
-        if !registeredActionIDs.contains(actionId) {
-            registeredActionIDs.append(actionId)
-        }
-    }
-
-    public func revokeAction(_ actionId: String) {
-        actionRegistry.removeValue(forKey: actionId)
-        registeredActionIDs.removeAll { $0 == actionId }
-        if let interaction = interactionCache[actionId] {
-            interaction.donate { error in
-            }
-            interactionCache.removeValue(forKey: actionId)
-        }
-    }
-
-    public func donateIntent(actionId: String) async -> Bool {
-        guard isCuratedAction(actionId) else { return false }
-        guard #available(iOS 16.0, *) else { return false }
-
-        let interaction: INInteraction
-        switch actionId {
-        case "com.amitia.action.chat":
-            interaction = INInteraction(intent: AmitiaChatIntent(), response: nil)
-        case "com.amitia.action.alarm.add":
-            interaction = INInteraction(intent: AmitiaAlarmAddIntent(), response: nil)
-        case "com.amitia.action.reminder.add":
-            interaction = INInteraction(intent: AmitiaReminderAddIntent(), response: nil)
-        case "com.amitia.action.media.pick":
-            interaction = INInteraction(intent: AmitiaMediaPickIntent(), response: nil)
-        default:
-            return false
+    public func executeAction(_ action: ShortcutAction, payload: [String: Any]?) async -> [String: Any] {
+        guard isCuratedAction(action) else {
+            return ["error": "ACTION_NOT_AVAILABLE", "actionId": action.actionId]
         }
 
-        return await withCheckedContinuation { continuation in
-            interaction.donate { error in
-                if let error = error {
-                    continuation.resume(returning: false)
-                } else {
-                    self.interactionCache[actionId] = interaction
-                    continuation.resume(returning: true)
-                }
-            }
+        guard let dispatcher = backendDispatcher else {
+            return ["error": "no backend dispatcher for action: \(action.actionId)"]
         }
-    }
 
-    public func executeAction(actionId: String, payload: [String: Any]?) async -> [String: Any] {
-        guard let handler = actionRegistry[actionId] else {
-            if let dispatcher = backendDispatcher {
-                return await dispatcher.executeAction(actionId: actionId, payload: payload)
-            }
-            return ["error": "action not found: \(actionId)"]
-        }
-        return await handler()
+        return await dispatcher.executeAction(actionId: action.actionId, payload: payload)
     }
 
     public func executeUnchecked(actionId: String, payload: [String: Any]?) async -> [String: Any] {
-        guard isCuratedAction(actionId) else {
-            return ["error": "unsupported action: \(actionId)"]
+        guard let action = ShortcutAction.from(actionId: actionId) else {
+            return ["error": "ACTION_NOT_AVAILABLE", "actionId": actionId]
         }
-        if let handler = actionRegistry[actionId] {
-            return await handler()
-        }
-        if let dispatcher = backendDispatcher {
-            return await dispatcher.executeAction(actionId: actionId, payload: payload)
-        }
-        return ["error": "no backend dispatcher for action: \(actionId)"]
-    }
-
-    public func updateShortcuts() {
-        if #available(iOS 16.0, *) {
-            for (_, interaction) in interactionCache {
-                interaction.donate { _ in }
-            }
-        }
+        return await executeAction(action, payload: payload)
     }
 
     public func clearAllDonations() {
         if #available(iOS 16.0, *) {
             INInteraction.deleteAll()
-            interactionCache.removeAll()
         }
     }
 }
