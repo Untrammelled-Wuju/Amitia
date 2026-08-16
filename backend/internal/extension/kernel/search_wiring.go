@@ -196,6 +196,7 @@ func RegisterWebSearchTool(deps SearchToolsDeps) error {
 	definition := capability.ToolDefinition{
 		ID:           "internal/search/web",
 		ModelName:    "web_search",
+		CapabilityID: "search.web",
 		Source:       capability.ToolSourceInternal,
 		Name:         "Web Search",
 		Description:  "Search the web using the configured provider.",
@@ -216,6 +217,8 @@ func RegisterWebSearchTool(deps SearchToolsDeps) error {
 			RuntimeID:   "default",
 			HandlerName: "search.general",
 		},
+		RoutingMode: capability.RoutingModeProviderRequired,
+		ProviderID:  "com.amitia.builtin.search.provider",
 		ExecutionPolicy: capability.ToolExecutionPolicy{
 			Timeout:     30 * time.Second,
 			Idempotent:  true,
