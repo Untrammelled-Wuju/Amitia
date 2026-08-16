@@ -9,7 +9,6 @@ import (
 	"gorm.io/gorm"
 )
 
-
 type deferredStatement struct {
 	number int
 	sql    string

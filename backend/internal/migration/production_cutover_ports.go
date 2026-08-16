@@ -10,9 +10,9 @@ import (
 )
 
 type SnapshotDependencies struct {
-	DB              *gorm.DB
-	CreateBackup    func(ctx context.Context, operationID string) (string, error)
-	VerifyBackup    func(ctx context.Context, snapshotID string) error
+	DB           *gorm.DB
+	CreateBackup func(ctx context.Context, operationID string) (string, error)
+	VerifyBackup func(ctx context.Context, snapshotID string) error
 }
 
 type cutoverSnapshotPort struct {
@@ -70,8 +70,8 @@ func (p *cutoverSnapshotPort) VerifyPortableSnapshot(ctx context.Context, snapsh
 }
 
 type MigrationDependencies struct {
-	DB           *gorm.DB
-	MigrateFn    func(ctx context.Context, operationID string) error
+	DB        *gorm.DB
+	MigrateFn func(ctx context.Context, operationID string) error
 }
 
 type cutoverMigrationPort struct {
@@ -173,8 +173,8 @@ func (p *cutoverReadSwitchPort) VerifyReadCanonical(ctx context.Context) error {
 }
 
 type WriteLockoutDependencies struct {
-	LockoutFn   func(ctx context.Context) error
-	VerifyFn    func(ctx context.Context) error
+	LockoutFn func(ctx context.Context) error
+	VerifyFn  func(ctx context.Context) error
 }
 
 type cutoverWriteLockoutPort struct {
@@ -201,7 +201,7 @@ func (p *cutoverWriteLockoutPort) VerifyLegacyWriteLockout(ctx context.Context) 
 
 type WorkerCutoffDependencies struct {
 	GetStatusFn func() LegacyWorkerStatus
-	StopFn     func(ctx context.Context) error
+	StopFn      func(ctx context.Context) error
 }
 
 type cutoverWorkerCutoffPort struct {
@@ -254,11 +254,11 @@ func (p *cutoverSmokePort) RunSmokeChecks(ctx context.Context) error {
 }
 
 type LegacyVerifierDependencies struct {
-	CheckMCPManager   func() bool
-	CheckPluginWorkers func() bool
+	CheckMCPManager      func() bool
+	CheckPluginWorkers   func() bool
 	CheckMemoryRawWriter func() bool
-	CountRuntimeActive func() int
-	CountWriteEnabled func() int
+	CountRuntimeActive   func() int
+	CountWriteEnabled    func() int
 }
 
 type cutoverLegacyVerifier struct {
