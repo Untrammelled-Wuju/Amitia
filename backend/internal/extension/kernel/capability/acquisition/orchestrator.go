@@ -98,17 +98,17 @@ func resolveInstallMethod(candidate CapabilityCandidate) InstallMethod {
 func toAcquisitionResult(installed InstalledCapability) *AcquisitionResult {
 	now := time.Now().UTC()
 	result := &AcquisitionResult{
-		State:                  StateReady,
-		TransactionID:          installed.TransactionID,
-		CandidateID:            installed.Candidate.ID,
-		Installed:              true,
-		Enabled:                true,
-		Target:                 installed.Target,
-		CapabilityIDs:          installed.CapabilityIDs,
-		ProviderIDs:            installed.ProviderIDs,
-		ProviderInstanceIDs:    installed.ProviderInstanceIDs,
-		CreatedAt:              now,
-		UpdatedAt:              now,
+		State:               StateReady,
+		TransactionID:       installed.TransactionID,
+		CandidateID:         installed.Candidate.ID,
+		Installed:           true,
+		Enabled:             true,
+		Target:              installed.Target,
+		CapabilityIDs:       installed.CapabilityIDs,
+		ProviderIDs:         installed.ProviderIDs,
+		ProviderInstanceIDs: installed.ProviderInstanceIDs,
+		CreatedAt:           now,
+		UpdatedAt:           now,
 	}
 
 	// If the installer set the enableOnly flag, the capability was not

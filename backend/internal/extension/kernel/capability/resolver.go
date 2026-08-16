@@ -19,10 +19,10 @@ type RuntimeAvailabilityPort interface {
 }
 
 type Resolver struct {
-	catalog    ProviderCatalog
-	runtime    RuntimeCatalog
-	host       RoutingHostContext
-	policy     RoutingPolicy
+	catalog      ProviderCatalog
+	runtime      RuntimeCatalog
+	host         RoutingHostContext
+	policy       RoutingPolicy
 	availability RuntimeAvailabilityPort
 }
 
@@ -342,7 +342,7 @@ func buildExecutionTarget(def *CapabilityProviderDefinition, inst *CapabilityPro
 }
 
 var (
-	ErrCapabilityNotRegistered       = errors.New("capability: not registered")
-	ErrNoAvailableProvider           = errors.New("capability: no available provider")
+	ErrCapabilityNotRegistered        = errors.New("capability: not registered")
+	ErrNoAvailableProvider            = errors.New("capability: no available provider")
 	ErrCapabilityPlacementUnavailable = errors.New("capability: placement unavailable")
 )

@@ -476,9 +476,9 @@ const (
 	ContributionKindBackgroundTask    ContributionKind = "background_task"
 	ContributionKindBackgroundService ContributionKind = "background_task"
 	// Deprecated: legacy manifest input only. Production definitions must use Module.Provider.
-	ContributionKindProvider          ContributionKind = "provider"
-	ContributionKindGamePlugin        ContributionKind = "game_plugin"
-	ContributionKindDesktopPetPlugin  ContributionKind = "desktop_pet_plugin"
+	ContributionKindProvider         ContributionKind = "provider"
+	ContributionKindGamePlugin       ContributionKind = "game_plugin"
+	ContributionKindDesktopPetPlugin ContributionKind = "desktop_pet_plugin"
 )
 
 type ContributionDefinition struct {

@@ -66,10 +66,10 @@ func (r *SourceRegistry) SearchAll(ctx context.Context, request AcquisitionReque
 	}
 
 	var (
-		mu        sync.Mutex
+		mu         sync.Mutex
 		candidates []CapabilityCandidate
 		errors     []SourceError
-		wg        sync.WaitGroup
+		wg         sync.WaitGroup
 	)
 
 	for _, src := range sources {

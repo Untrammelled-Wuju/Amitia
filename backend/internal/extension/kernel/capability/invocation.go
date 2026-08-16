@@ -87,22 +87,22 @@ type ToolInvocationContext struct {
 
 	ExecContext *execution.ExecutionContext `json:"-"`
 
-	ParentID       string `json:"parentId,omitempty"`
-	RootID         string `json:"rootId,omitempty"`
-	ExternalCallID string `json:"externalCallId,omitempty"`
-	UserID         string `json:"userId"`
-	CharacterID    string `json:"characterId,omitempty"`
-	ConversationID string `json:"conversationId,omitempty"`
-	Channel        string `json:"channel,omitempty"`
-	SessionID      string `json:"sessionId,omitempty"`
-	ExtensionID    string `json:"extensionId,omitempty"`
-	ModuleID       string `json:"moduleId,omitempty"`
-	Generation     int64  `json:"generation,omitempty"`
+	ParentID       string           `json:"parentId,omitempty"`
+	RootID         string           `json:"rootId,omitempty"`
+	ExternalCallID string           `json:"externalCallId,omitempty"`
+	UserID         string           `json:"userId"`
+	CharacterID    string           `json:"characterId,omitempty"`
+	ConversationID string           `json:"conversationId,omitempty"`
+	Channel        string           `json:"channel,omitempty"`
+	SessionID      string           `json:"sessionId,omitempty"`
+	ExtensionID    string           `json:"extensionId,omitempty"`
+	ModuleID       string           `json:"moduleId,omitempty"`
+	Generation     int64            `json:"generation,omitempty"`
 	Source         InvocationSource `json:"source"`
 	ApprovalMode   ApprovalMode     `json:"approvalMode,omitempty"`
 	ExpiresAt      time.Time        `json:"expiresAt,omitempty"`
 	IdempotencyKey string           `json:"idempotencyKey,omitempty"`
-	TraceID        string `json:"traceId,omitempty"`
+	TraceID        string           `json:"traceId,omitempty"`
 	OperationID    string           `json:"operationId,omitempty"`
 	CorrelationID  string           `json:"correlationId,omitempty"`
 	CausationID    string           `json:"causationId,omitempty"`

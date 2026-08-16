@@ -66,9 +66,9 @@ func BuildAIExtension(protocolFamily, version string) Definition {
 					Runtime: &domain.RuntimeDefinition{
 						Type: domain.RuntimeTypeBuiltin,
 					},
-ProvidedCapabilities: []domain.ProvidedCapability{
-					{ID: string(capID), Version: "1.0.0"},
-				},
+					ProvidedCapabilities: []domain.ProvidedCapability{
+						{ID: string(capID), Version: "1.0.0"},
+					},
 					Provider: &domain.ProviderMetadata{
 						ID:       "builtin.ai." + protocolFamily,
 						Priority: 100,
@@ -82,9 +82,9 @@ ProvidedCapabilities: []domain.ProvidedCapability{
 			Integrity:     domain.ExtensionIntegrity{},
 			Policies:      domain.ExtensionPolicies{},
 		},
-		SystemManaged:  true,
-		Required:        true,
-		DisableAllowed:  false,
+		SystemManaged:     true,
+		Required:          true,
+		DisableAllowed:    false,
 		BootstrapRevision: 1,
 	}
 }
@@ -145,9 +145,9 @@ func BuildTTSExtension(version string) Definition {
 			Integrity:     domain.ExtensionIntegrity{},
 			Policies:      domain.ExtensionPolicies{},
 		},
-		SystemManaged:  true,
-		Required:        false,
-		DisableAllowed:  true,
+		SystemManaged:     true,
+		Required:          false,
+		DisableAllowed:    true,
 		BootstrapRevision: 1,
 	}
 }
@@ -193,10 +193,10 @@ func BuildASRExtension(version string) Definition {
 					Runtime: &domain.RuntimeDefinition{
 						Type: domain.RuntimeTypeBuiltin,
 					},
-ProvidedCapabilities: []domain.ProvidedCapability{
-					{ID: "speech.asr.transcribe", Version: "1.0.0"},
-					{ID: "speech.asr.stream", Version: "1.0.0"},
-				},
+					ProvidedCapabilities: []domain.ProvidedCapability{
+						{ID: "speech.asr.transcribe", Version: "1.0.0"},
+						{ID: "speech.asr.stream", Version: "1.0.0"},
+					},
 					Provider: &domain.ProviderMetadata{
 						ID:       "builtin.asr",
 						Priority: 100,
@@ -208,9 +208,9 @@ ProvidedCapabilities: []domain.ProvidedCapability{
 			Integrity:     domain.ExtensionIntegrity{},
 			Policies:      domain.ExtensionPolicies{},
 		},
-		SystemManaged:  true,
-		Required:        false,
-		DisableAllowed:  true,
+		SystemManaged:     true,
+		Required:          false,
+		DisableAllowed:    true,
 		BootstrapRevision: 1,
 	}
 }
@@ -272,9 +272,9 @@ func BuildMediaExtension(version string) Definition {
 			Integrity:     domain.ExtensionIntegrity{},
 			Policies:      domain.ExtensionPolicies{},
 		},
-		SystemManaged:  true,
-		Required:        false,
-		DisableAllowed:  true,
+		SystemManaged:     true,
+		Required:          false,
+		DisableAllowed:    true,
 		BootstrapRevision: 1,
 	}
 }
@@ -381,9 +381,9 @@ func BuildImageExtension(version string) Definition {
 					Runtime: &domain.RuntimeDefinition{
 						Type: domain.RuntimeTypeBuiltin,
 					},
-ProvidedCapabilities: []domain.ProvidedCapability{
-					{ID: "image.generate", Version: "1.0.0"},
-				},
+					ProvidedCapabilities: []domain.ProvidedCapability{
+						{ID: "image.generate", Version: "1.0.0"},
+					},
 					Provider: &domain.ProviderMetadata{
 						ID:       "builtin.image",
 						Priority: 100,
@@ -395,9 +395,9 @@ ProvidedCapabilities: []domain.ProvidedCapability{
 			Integrity:     domain.ExtensionIntegrity{},
 			Policies:      domain.ExtensionPolicies{},
 		},
-		SystemManaged:  true,
-		Required:        false,
-		DisableAllowed:  true,
+		SystemManaged:     true,
+		Required:          false,
+		DisableAllowed:    true,
 		BootstrapRevision: 1,
 	}
 }
@@ -457,9 +457,9 @@ func BuildBackgroundRemovalExtension(version string) Definition {
 			Integrity:     domain.ExtensionIntegrity{},
 			Policies:      domain.ExtensionPolicies{},
 		},
-		SystemManaged:  true,
-		Required:        false,
-		DisableAllowed:  true,
+		SystemManaged:     true,
+		Required:          false,
+		DisableAllowed:    true,
 		BootstrapRevision: 1,
 	}
 }
@@ -519,10 +519,9 @@ func BuildVisionExtension(version string) Definition {
 			Integrity:     domain.ExtensionIntegrity{},
 			Policies:      domain.ExtensionPolicies{},
 		},
-		SystemManaged:  true,
-		Required:        false,
-		DisableAllowed:  false,
+		SystemManaged:     true,
+		Required:          false,
+		DisableAllowed:    false,
 		BootstrapRevision: 1,
 	}
 }
-

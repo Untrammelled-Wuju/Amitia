@@ -23,20 +23,20 @@ type PermissionTarget struct {
 }
 
 type PermissionEvaluationRequest struct {
-	Subject           PermissionSubject          `json:"subject"`
-	Requirements      []PermissionRequirement    `json:"requirements"`
-	InvocationID      string                     `json:"invocationId,omitempty"`
-	Input             json.RawMessage            `json:"input,omitempty"`
-	Target            PermissionTarget           `json:"target,omitempty"`
-	RiskLevel         string                     `json:"riskLevel,omitempty"`
-	SideEffects       []ExpectedSideEffect       `json:"sideEffects,omitempty"`
-	IsBackground      bool                       `json:"isBackground"`
-	ParentGrants      []PermissionGrant          `json:"parentGrants,omitempty"`
-	ScopeSnapshotID   string                     `json:"scopeSnapshotId,omitempty"`
-	ApprovalMode      string                     `json:"approvalMode,omitempty"`
-	Generation        int64                      `json:"generation,omitempty"`
-	ExecutionContext  PermissionExecutionContext `json:"executionContext,omitempty"`
-	ApprovalRecordID  string                     `json:"approvalRecordId,omitempty"`
+	Subject          PermissionSubject          `json:"subject"`
+	Requirements     []PermissionRequirement    `json:"requirements"`
+	InvocationID     string                     `json:"invocationId,omitempty"`
+	Input            json.RawMessage            `json:"input,omitempty"`
+	Target           PermissionTarget           `json:"target,omitempty"`
+	RiskLevel        string                     `json:"riskLevel,omitempty"`
+	SideEffects      []ExpectedSideEffect       `json:"sideEffects,omitempty"`
+	IsBackground     bool                       `json:"isBackground"`
+	ParentGrants     []PermissionGrant          `json:"parentGrants,omitempty"`
+	ScopeSnapshotID  string                     `json:"scopeSnapshotId,omitempty"`
+	ApprovalMode     string                     `json:"approvalMode,omitempty"`
+	Generation       int64                      `json:"generation,omitempty"`
+	ExecutionContext PermissionExecutionContext `json:"executionContext,omitempty"`
+	ApprovalRecordID string                     `json:"approvalRecordId,omitempty"`
 }
 
 type ApprovalRequest struct {

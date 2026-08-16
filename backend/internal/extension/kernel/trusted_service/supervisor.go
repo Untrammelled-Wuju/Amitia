@@ -48,16 +48,16 @@ func (f NotifyFunc) Notify(ctx context.Context, extensionID, instanceID, service
 
 type ProcessExitEvent struct {
 	ProcessInstanceID string
-	ServiceID        string
-	RuntimeID        string
-	InstanceID       string
-	ExtensionID      string
-	PluginID         string
-	Generation       int64
-	ExitCode         int
-	Expected         bool
-	OccurredAt       time.Time
-	RestartCount     int
+	ServiceID         string
+	RuntimeID         string
+	InstanceID        string
+	ExtensionID       string
+	PluginID          string
+	Generation        int64
+	ExitCode          int
+	Expected          bool
+	OccurredAt        time.Time
+	RestartCount      int
 }
 
 type ProcessExitObserver interface {
@@ -718,13 +718,18 @@ func (s *ProcessSupervisor) watchProcess(inst *ServiceInstance, cmd *exec.Cmd) {
 	stopped := inst.State_()
 	expected := stopped == ServiceStateStopping || stopped == ServiceStateStopped
 
+	pluginID := inst.Definition.ExtensionID
+	if inst.Definition.Publisher != "" {
+		pluginID = inst.Definition.Publisher + "/" + inst.Definition.ExtensionID
+	}
+
 	s.notifyProcessExit(ProcessExitEvent{
 		ProcessInstanceID: buildProcessInstanceID(inst.RuntimeID, inst.ServiceID),
 		ServiceID:         inst.ServiceID,
 		RuntimeID:         inst.RuntimeID,
 		InstanceID:        inst.InstanceID,
 		ExtensionID:       inst.Definition.ExtensionID,
-		PluginID:          inst.Definition.ExtensionID,
+		PluginID:          pluginID,
 		Generation:        inst.Generation,
 		ExitCode:          exitCode,
 		Expected:          expected,

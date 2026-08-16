@@ -37,10 +37,10 @@ func finalizeDef(def domain.ExtensionDefinition) Definition {
 		}
 	}
 	return Definition{
-		Extension:       def,
-		SystemManaged:   true,
-		Required:        true,
-		DisableAllowed:  false,
+		Extension:      def,
+		SystemManaged:  true,
+		Required:       true,
+		DisableAllowed: false,
 	}
 }
 

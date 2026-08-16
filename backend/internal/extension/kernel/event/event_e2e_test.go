@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	_ "github.com/glebarez/sqlite"
+	"github.com/u-ai/backend/internal/extension/kernel/permission"
 )
 
 type mockPermissionChecker struct {

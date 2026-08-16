@@ -46,10 +46,14 @@ func (b *DefaultPermissionBroker) RecordApproval(ctx context.Context, request Pe
 		return PermissionApprovalRecord{}, fmt.Errorf("invalid approval decision: %s", request.Decision)
 	}
 
-	bindingKey := request.ExecutionBindingKey
-	if bindingKey == "" && !request.ExecutionContext.IsEmpty() {
-		bindingKey = request.ExecutionContext.BindingKey()
+	if request.ExecutionBindingKey == "" {
+		return PermissionApprovalRecord{}, fmt.Errorf("execution binding key is required")
 	}
+	if request.ScopeSnapshotID == "" {
+		return PermissionApprovalRecord{}, fmt.Errorf("scope snapshot ID is required")
+	}
+
+	bindingKey := request.ExecutionBindingKey
 
 	recordID := generateApprovalRecordID(request, bindingKey)
 

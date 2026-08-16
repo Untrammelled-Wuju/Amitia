@@ -9,10 +9,10 @@ import (
 // RuntimeState provides a unified snapshot of the kernel's runtime state,
 // aggregating status from execution, capabilities, providers, and UI systems.
 type RuntimeState struct {
-	mu       sync.RWMutex
-	status   RuntimeStatus
-	summary  RuntimeSummary
-	issues   []RuntimeIssue
+	mu        sync.RWMutex
+	status    RuntimeStatus
+	summary   RuntimeSummary
+	issues    []RuntimeIssue
 	updatedAt time.Time
 }
 
@@ -20,20 +20,20 @@ type RuntimeState struct {
 type RuntimeStatus string
 
 const (
-	RuntimeStatusHealthy    RuntimeStatus = "healthy"
-	RuntimeStatusDegraded   RuntimeStatus = "degrated"
-	RuntimeStatusStarting   RuntimeStatus = "starting"
-	RuntimeStatusUnhealthy  RuntimeStatus = "unhealthy"
+	RuntimeStatusHealthy   RuntimeStatus = "healthy"
+	RuntimeStatusDegraded  RuntimeStatus = "degrated"
+	RuntimeStatusStarting  RuntimeStatus = "starting"
+	RuntimeStatusUnhealthy RuntimeStatus = "unhealthy"
 )
 
 // RuntimeSummary provides aggregated counters.
 type RuntimeSummary struct {
-	ActiveExecutions      int `json:"activeExecutions"`
-	ActiveResumes         int `json:"activeResumes"`
-	RegisteredTools       int `json:"registeredTools"`
-	RegisteredProviders   int `json:"registeredProviders"`
-	ActiveOperations      int `json:"activeOperations"`
-	PendingOperations     int `json:"pendingOperations"`
+	ActiveExecutions    int `json:"activeExecutions"`
+	ActiveResumes       int `json:"activeResumes"`
+	RegisteredTools     int `json:"registeredTools"`
+	RegisteredProviders int `json:"registeredProviders"`
+	ActiveOperations    int `json:"activeOperations"`
+	PendingOperations   int `json:"pendingOperations"`
 }
 
 // RuntimeIssue records a runtime-level concern.

@@ -2,7 +2,6 @@ package execution
 
 import (
 	"context"
-	"encoding/json"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
@@ -52,24 +51,12 @@ func (g *PermissionGate) evaluateWithBroker(ctx context.Context, tool capability
 		scope = permission.ScopeGlobalOnly()
 	}
 
-	requirements := g.buildRequirements(tool, scope)
+	requirements := permission.BuildRequirements(tool, scope)
 	if len(requirements) == 0 {
 		return PermissionAllow
 	}
 
-	var input json.RawMessage
-	request := permission.PermissionEvaluationRequest{
-		Subject:          subject,
-		Requirements:     requirements,
-		InvocationID:     inv.InvocationID,
-		Input:            input,
-		RiskLevel:        string(tool.RiskLevel),
-		IsBackground:     inv.IsBackground,
-		ScopeSnapshotID:  inv.ScopeSnapshotID,
-		ApprovalMode:     string(inv.ApprovalMode),
-		Generation:       inv.Generation,
-		ExecutionContext: permission.ExecutionContextFromInvocation(inv),
-	}
+	request := permission.BuildEvaluationRequestFromInvocation(subject, requirements, inv, string(tool.RiskLevel))
 
 	result := g.Broker.Evaluate(ctx, request)
 
@@ -83,17 +70,4 @@ func (g *PermissionGate) evaluateWithBroker(ctx context.Context, tool capability
 	default:
 		return PermissionDeny
 	}
-}
-
-func (g *PermissionGate) buildRequirements(tool capability.ToolDefinition, scope permission.PermissionScope) []permission.PermissionRequirement {
-	reqs := make([]permission.PermissionRequirement, 0)
-
-	for _, p := range tool.Permissions {
-		reqs = append(reqs, permission.PermissionRequirement{
-			PermissionID: p.Capability,
-			Scope:        scope,
-		})
-	}
-
-	return reqs
 }

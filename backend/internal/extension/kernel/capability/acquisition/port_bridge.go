@@ -22,8 +22,8 @@ func (b *mcpInstallPortBridge) InstallMCP(ctx context.Context, serverName string
 		return "", fmt.Errorf("MCP lifecycle not configured")
 	}
 	binding := mcp.MCPBinding{
-		ID: serverName,
-		Owner: mcp.ExtensionOwnerRef{Type: "user"},
+		ID:        serverName,
+		Owner:     mcp.ExtensionOwnerRef{Type: "user"},
 		Transport: mcp.MCPTransportSpec{Kind: transport},
 		Launcher: &mcp.MCPLauncherSpec{
 			Kind:    string(mcp.MCPLauncherNPX),

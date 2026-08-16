@@ -18,8 +18,8 @@ type AcquisitionResult struct {
 	Installed bool `json:"installed"`
 	Enabled   bool `json:"enabled"`
 
-	CapabilityIDs      []capability.CapabilityID      `json:"capabilityIds,omitempty"`
-	ProviderIDs        []capability.ProviderID        `json:"providerIds,omitempty"`
+	CapabilityIDs       []capability.CapabilityID       `json:"capabilityIds,omitempty"`
+	ProviderIDs         []capability.ProviderID         `json:"providerIds,omitempty"`
 	ProviderInstanceIDs []capability.ProviderInstanceID `json:"providerInstanceIds,omitempty"`
 
 	Target DeploymentTarget `json:"target"`

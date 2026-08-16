@@ -470,8 +470,7 @@ func (s *ExtensionCatalogSource) buildCandidate(card extension_center.ExtensionC
 
 func (s *ExtensionCatalogSource) extractProvidedCapabilities(card extension_center.ExtensionCard) []capability.CapabilityID {
 	var caps []capability.CapabilityID
-	for _, tag := range card.ContributionTags {
-		capID := string(tag)
+	for _, capID := range card.ProvidedCapabilities {
 		if capID != "" {
 			caps = append(caps, capability.CapabilityID(capID))
 		}
@@ -531,26 +530,6 @@ func (s *GeneratedSkillSource) Search(ctx context.Context, request AcquisitionRe
 	}, nil
 }
 
-// RemoteCatalogSource 从远程目录中搜索候选
-// 当前未正式接入远程 catalog，保留接口但不影响候选计数
-type RemoteCatalogSource struct{}
-
-// NewRemoteCatalogSource 创建 RemoteCatalogSource 实例
-func NewRemoteCatalogSource() *RemoteCatalogSource {
-	return &RemoteCatalogSource{}
-}
-
-func (s *RemoteCatalogSource) ID() string {
-	return "remote_catalog"
-}
-
-func (s *RemoteCatalogSource) Kind() CandidateKind {
-	return CandidateExtensionPackage
-}
-
-func (s *RemoteCatalogSource) Search(ctx context.Context, request AcquisitionRequest) ([]CapabilityCandidate, error) {
-	return nil, nil
-}
 
 // containsString 检查 substr 是否包含在 s 中（大小写不敏感）
 func containsString(s, substr string) bool {

@@ -459,19 +459,21 @@ func (r *ProviderRegistry) FlushInstancesByProvider(providerID ProviderID) (int,
 	}
 
 	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	ids := r.byProvider[string(normalized)]
-	r.mu.Unlock()
+	if len(ids) == 0 {
+		return 0, nil
+	}
 
 	count := 0
 	for _, id := range ids {
-		ok, err := r.DeregisterInstance(ProviderInstanceID(id))
-		if err != nil {
-			return count, err
-		}
-		if ok {
+		if _, found := r.instances[id]; found {
+			delete(r.instances, id)
 			count++
 		}
 	}
+	delete(r.byProvider, string(normalized))
 	return count, nil
 }
 
@@ -481,21 +483,20 @@ func (r *ProviderRegistry) FlushInstancesByCapability(capabilityID CapabilityID)
 		return 0, ErrProviderInvalid
 	}
 
-	allInsts := r.cloneInstances()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
-	result := filterInstances(mapValues(allInsts), capabilityFilter(normalized))
 	count := 0
-	for _, inst := range result {
-		if inst == nil {
+	for id, inst := range r.instances {
+		if inst == nil || inst.CapabilityID != normalized {
 			continue
 		}
-		ok, err := r.DeregisterInstance(inst.ID)
-		if err != nil {
-			return count, err
+		delete(r.instances, id)
+		r.byProvider[string(inst.ProviderID)] = removeIDLocked(r.byProvider[string(inst.ProviderID)], id)
+		if len(r.byProvider[string(inst.ProviderID)]) == 0 {
+			delete(r.byProvider, string(inst.ProviderID))
 		}
-		if ok {
-			count++
-		}
+		count++
 	}
 	return count, nil
 }
@@ -505,21 +506,20 @@ func (r *ProviderRegistry) FlushInstancesByPlacement(placement ProviderPlacement
 		return 0, ErrProviderInstanceInvalid
 	}
 
-	allInsts := r.cloneInstances()
+	r.mu.Lock()
+	defer r.mu.Unlock()
 
-	result := filterInstances(mapValues(allInsts), placementFilter(placement))
 	count := 0
-	for _, inst := range result {
-		if inst == nil {
+	for id, inst := range r.instances {
+		if inst == nil || inst.Placement != placement {
 			continue
 		}
-		ok, err := r.DeregisterInstance(inst.ID)
-		if err != nil {
-			return count, err
+		delete(r.instances, id)
+		r.byProvider[string(inst.ProviderID)] = removeIDLocked(r.byProvider[string(inst.ProviderID)], id)
+		if len(r.byProvider[string(inst.ProviderID)]) == 0 {
+			delete(r.byProvider, string(inst.ProviderID))
 		}
-		if ok {
-			count++
-		}
+		count++
 	}
 	return count, nil
 }
@@ -1206,7 +1206,7 @@ func removeIDLocked(list []string, id string) []string {
 	return result
 }
 
-func appendToSliceMap(m map[string][]string, key, id string) map[string] []string {
+func appendToSliceMap(m map[string][]string, key, id string) map[string][]string {
 	for _, existing := range m[key] {
 		if existing == id {
 			return m

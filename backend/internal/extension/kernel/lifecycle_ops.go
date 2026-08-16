@@ -9,13 +9,13 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/enablement"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
-	"github.com/u-ai/backend/internal/extension/kernel/capability"
 )
 
 type moduleEnablementSnapshot struct {
@@ -25,20 +25,20 @@ type moduleEnablementSnapshot struct {
 }
 
 type enableTransaction struct {
-	runtime                *Runtime
-	extID                  domain.ExtensionID
-	extensionID            string
-	operationID            string
-	sagaRepo               *LifecycleSagaRepository
-	prevInst               domain.ExtensionInstallation
-	prevExtEnablement      enablement.EnablementState
-	prevExtDesired         enablement.DesiredRuntimeState
-	moduleSnapshots        []moduleEnablementSnapshot
-	startedInstanceIDs     []string
-	instCommitted          bool
-	extEnablementCommitted bool
-	modulesCommitted       int
-	contributionsActivated bool
+	runtime                    *Runtime
+	extID                      domain.ExtensionID
+	extensionID                string
+	operationID                string
+	sagaRepo                   *LifecycleSagaRepository
+	prevInst                   domain.ExtensionInstallation
+	prevExtEnablement          enablement.EnablementState
+	prevExtDesired             enablement.DesiredRuntimeState
+	moduleSnapshots            []moduleEnablementSnapshot
+	startedInstanceIDs         []string
+	instCommitted              bool
+	extEnablementCommitted     bool
+	modulesCommitted           int
+	contributionsActivated     bool
 	providerInstancesActivated bool
 	providerInstanceIDs        []capability.ProviderInstanceID
 	uiRegistered               bool

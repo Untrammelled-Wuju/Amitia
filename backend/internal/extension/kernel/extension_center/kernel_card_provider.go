@@ -44,14 +44,15 @@ func (p *KernelCardProvider) ListCards(ctx context.Context) ([]ExtensionCard, er
 		inst, installed := instMap[string(ext.ID)]
 
 		card := ExtensionCard{
-			ExtensionID:      string(ext.ID),
-			DisplayName:      ext.Name.Default,
-			Description:      ext.Description.Default,
-			Version:          ext.Version.String(),
-			Status:           ExtensionStatusNotInstalled,
-			Enabled:          false,
-			ContributionTags: contributionTags(ext),
-			Platforms:        ext.Compatibility.Platforms,
+			ExtensionID:          string(ext.ID),
+			DisplayName:          ext.Name.Default,
+			Description:          ext.Description.Default,
+			Version:              ext.Version.String(),
+			Status:               ExtensionStatusNotInstalled,
+			Enabled:              false,
+			ContributionTags:     contributionTags(ext),
+			ProvidedCapabilities: providedCapabilities(ext),
+			Platforms:            ext.Compatibility.Platforms,
 		}
 
 		if ext.Publisher.PublisherID != "" {
@@ -112,6 +113,22 @@ func (p *KernelCardProvider) installationMap(ctx context.Context) (map[string]do
 		m[string(inst.ExtensionID)] = inst
 	}
 	return m, nil
+}
+
+func providedCapabilities(ext domain.ExtensionDefinition) []string {
+	capSet := make(map[string]bool)
+	for _, mod := range ext.Modules {
+		for _, cap := range mod.ProvidedCapabilities {
+			if cap.ID != "" {
+				capSet[cap.ID] = true
+			}
+		}
+	}
+	caps := make([]string, 0, len(capSet))
+	for c := range capSet {
+		caps = append(caps, c)
+	}
+	return caps
 }
 
 func contributionTags(ext domain.ExtensionDefinition) []ContributionTag {

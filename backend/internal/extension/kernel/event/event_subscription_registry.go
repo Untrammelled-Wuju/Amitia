@@ -524,7 +524,6 @@ func defaultFilterFields(typeDef EventTypeDefinition) []string {
 	return []string{"eventTypeId", "aggregateId", "partitionKey", "depth"}
 }
 
-
 func (d EventSubscriptionDefinition) ProducerPolicyFor(extensionID string) bool {
 	return d.ExtensionID == extensionID
 }

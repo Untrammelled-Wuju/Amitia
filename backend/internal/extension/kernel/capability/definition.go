@@ -135,14 +135,14 @@ type ToolDefinition struct {
 	TimeoutMS        int64                   `json:"timeoutMs"`
 	Metadata         map[string]any          `json:"metadata,omitempty"`
 
-	ToolVersion        ToolVersion         `json:"toolVersion"`
-	State              ToolState           `json:"state"`
-	ModelExposure      ModelExposureRule   `json:"modelExposure"`
-	ExecutionPolicy    ToolExecutionPolicy `json:"executionPolicy"`
-	ResultPolicy       ToolResultPolicy    `json:"resultPolicy,omitempty"`
-	Runtime            RuntimeBinding      `json:"runtime"`
-	RoutingMode        ProviderRoutingMode `json:"routingMode,omitempty"`
-	ProviderID         string              `json:"providerId,omitempty"`
+	ToolVersion     ToolVersion         `json:"toolVersion"`
+	State           ToolState           `json:"state"`
+	ModelExposure   ModelExposureRule   `json:"modelExposure"`
+	ExecutionPolicy ToolExecutionPolicy `json:"executionPolicy"`
+	ResultPolicy    ToolResultPolicy    `json:"resultPolicy,omitempty"`
+	Runtime         RuntimeBinding      `json:"runtime"`
+	RoutingMode     ProviderRoutingMode `json:"routingMode,omitempty"`
+	ProviderID      string              `json:"providerId,omitempty"`
 }
 
 func (td ToolDefinition) CapabilitySource() CapabilitySource {

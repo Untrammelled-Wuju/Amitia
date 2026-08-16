@@ -40,8 +40,8 @@ type CapabilityResolution struct {
 	RejectedCount  int
 	ReasonCodes    []string
 
-	Decision       RoutingDecision
-	Trace          *RoutingTrace
+	Decision RoutingDecision
+	Trace    *RoutingTrace
 }
 
 func (r CapabilityResolution) HasResult() bool {

@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/agent/tool"
-	"github.com/u-ai/backend/internal/extension/kernel/capability/acquisition"
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	"github.com/u-ai/backend/internal/extension/kernel/capability/acquisition"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/hook"
 )
@@ -238,22 +238,22 @@ type ResolvedToolReference struct {
 	Generation      int64
 }
 
-	func (f *ToolFacade) ResolveModelTool(modelName string) (ResolvedToolReference, error) {
-		if f.toolRegistry == nil {
-			return ResolvedToolReference{}, fmt.Errorf("tool registry not configured")
-		}
-		def, ok := f.toolRegistry.GetByModelName(context.Background(), modelName)
-		if !ok {
-			return ResolvedToolReference{}, fmt.Errorf("tool not found: %s", modelName)
-		}
-		resolvedID := capability.CapabilityID(def.ID)
-		if def.CapabilityID != "" {
-			resolvedID = def.CapabilityID
-		}
-		return ResolvedToolReference{
-			ID:              resolvedID,
-			ModelName:       def.ModelName,
-			ExtensionID:     def.ExtensionID,
+func (f *ToolFacade) ResolveModelTool(modelName string) (ResolvedToolReference, error) {
+	if f.toolRegistry == nil {
+		return ResolvedToolReference{}, fmt.Errorf("tool registry not configured")
+	}
+	def, ok := f.toolRegistry.GetByModelName(context.Background(), modelName)
+	if !ok {
+		return ResolvedToolReference{}, fmt.Errorf("tool not found: %s", modelName)
+	}
+	resolvedID := capability.CapabilityID(def.ID)
+	if def.CapabilityID != "" {
+		resolvedID = def.CapabilityID
+	}
+	return ResolvedToolReference{
+		ID:              resolvedID,
+		ModelName:       def.ModelName,
+		ExtensionID:     def.ExtensionID,
 		ModuleID:        def.ModuleID,
 		RuntimeType:     def.Runtime.RuntimeType,
 		RuntimeID:       def.Runtime.RuntimeID,
@@ -501,8 +501,8 @@ func (f *ToolFacade) buildKernelModelTools(ctx context.Context, scope LegacyScop
 }
 
 type resolvedExecution struct {
-	target           capability.InvocationExecutionTarget
-	legacyUnresolved bool
+	target            capability.InvocationExecutionTarget
+	legacyUnresolved  bool
 	missingCapability capability.CapabilityID
 }
 
@@ -568,21 +568,21 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 		metadata["execution_mode"] = "legacy_unresolved_provider"
 	}
 	invocation := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
-		ExternalCallID: externalCallID,
-		UserID:         scope.UserID,
-		CharacterID:    scope.CharacterID,
-		ConversationID: scope.ConversationID,
-		Channel:        scope.Channel,
-		SessionID:      scope.SessionID,
-		ExtensionID:    def.ExtensionID,
-		ModuleID:       def.ModuleID,
-		Source:         capability.InvocationSourceModel,
-		IdempotencyKey: idempotencyKey,
-		TraceID:        scope.TraceID,
-		OperationID:    scope.RequestID,
-		IsBackground:   isBackground,
+		ExternalCallID:  externalCallID,
+		UserID:          scope.UserID,
+		CharacterID:     scope.CharacterID,
+		ConversationID:  scope.ConversationID,
+		Channel:         scope.Channel,
+		SessionID:       scope.SessionID,
+		ExtensionID:     def.ExtensionID,
+		ModuleID:        def.ModuleID,
+		Source:          capability.InvocationSourceModel,
+		IdempotencyKey:  idempotencyKey,
+		TraceID:         scope.TraceID,
+		OperationID:     scope.RequestID,
+		IsBackground:    isBackground,
 		ExecutionTarget: resolved.target,
-		Metadata:       metadata,
+		Metadata:        metadata,
 	})
 	execToolID := capability.CapabilityID(def.ID)
 	if def.CapabilityID != "" {
@@ -627,21 +627,21 @@ func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName strin
 		streamMetadata["execution_mode"] = "legacy_unresolved_provider"
 	}
 	invocation := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
-		ExternalCallID: scope.ToolCallID,
-		UserID:         scope.UserID,
-		CharacterID:    scope.CharacterID,
-		ConversationID: scope.ConversationID,
-		Channel:        scope.Channel,
-		SessionID:      scope.SessionID,
-		ExtensionID:    def.ExtensionID,
-		ModuleID:       def.ModuleID,
-		Source:         capability.InvocationSourceModel,
-		IdempotencyKey: idempotencyKey,
-		TraceID:        scope.TraceID,
-		OperationID:    scope.RequestID,
-		IsBackground:   isBackground,
+		ExternalCallID:  scope.ToolCallID,
+		UserID:          scope.UserID,
+		CharacterID:     scope.CharacterID,
+		ConversationID:  scope.ConversationID,
+		Channel:         scope.Channel,
+		SessionID:       scope.SessionID,
+		ExtensionID:     def.ExtensionID,
+		ModuleID:        def.ModuleID,
+		Source:          capability.InvocationSourceModel,
+		IdempotencyKey:  idempotencyKey,
+		TraceID:         scope.TraceID,
+		OperationID:     scope.RequestID,
+		IsBackground:    isBackground,
 		ExecutionTarget: resolved.target,
-		Metadata:       streamMetadata,
+		Metadata:        streamMetadata,
 	})
 	execToolID := capability.CapabilityID(def.ID)
 	if def.CapabilityID != "" {

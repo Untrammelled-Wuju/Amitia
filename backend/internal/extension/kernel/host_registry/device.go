@@ -2,6 +2,7 @@ package host_registry
 
 import (
 	"context"
+	"database/sql"
 	"time"
 
 	"github.com/u-ai/backend/internal/runtimeidentity"
@@ -96,6 +97,11 @@ func (r *Registry) RequireDeviceOwnedBy(ctx context.Context, userID runtimeident
 func (r *Registry) MarkDeviceTrusted(ctx context.Context, deviceID runtimeidentity.DeviceID) error {
 	now := time.Now().UTC()
 	return r.repo.UpdateDeviceTrust(ctx, deviceID, DeviceTrustTrusted, &now)
+}
+
+func (r *Registry) MarkDeviceTrustedTx(ctx context.Context, tx *sql.Tx, deviceID runtimeidentity.DeviceID) error {
+	now := time.Now().UTC()
+	return r.repo.UpdateDeviceTrustTx(ctx, tx, deviceID, DeviceTrustTrusted, &now)
 }
 
 func (r *Registry) MarkDeviceSeen(ctx context.Context, deviceID runtimeidentity.DeviceID) error {

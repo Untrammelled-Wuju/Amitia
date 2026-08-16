@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/u-ai/backend/internal/androidmedia/camera"
 	"github.com/u-ai/backend/internal/androidnative/accessibility"
 	"github.com/u-ai/backend/internal/androidnative/adb"
 	"github.com/u-ai/backend/internal/androidnative/display"
@@ -11,7 +12,6 @@ import (
 	"github.com/u-ai/backend/internal/androidnative/root"
 	"github.com/u-ai/backend/internal/androidnative/uitree"
 	"github.com/u-ai/backend/internal/androidnative/virtualdisplay"
-	"github.com/u-ai/backend/internal/androidmedia/camera"
 	"github.com/u-ai/backend/internal/androidsystem/clipboard"
 	"github.com/u-ai/backend/internal/androidsystem/externalautomation"
 	"github.com/u-ai/backend/internal/androidsystem/notification"

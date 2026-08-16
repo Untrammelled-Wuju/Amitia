@@ -13,15 +13,16 @@ import (
 	"github.com/u-ai/backend/internal/browser"
 	"github.com/u-ai/backend/internal/desktoppet/integration"
 	"github.com/u-ai/backend/internal/desktoppet/plugin_boundary"
-	"github.com/u-ai/backend/internal/deviceruntime"
 	"github.com/u-ai/backend/internal/devicemesh/server"
+	"github.com/u-ai/backend/internal/deviceruntime"
+	coreexec "github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
-	"github.com/u-ai/backend/internal/extension/kernel/capability/acquisition"
 	"github.com/u-ai/backend/internal/extension/kernel/authority"
 	"github.com/u-ai/backend/internal/extension/kernel/builtin"
 	"github.com/u-ai/backend/internal/extension/kernel/canary"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	"github.com/u-ai/backend/internal/extension/kernel/capability/acquisition"
 	"github.com/u-ai/backend/internal/extension/kernel/chat_ui_extension"
 	"github.com/u-ai/backend/internal/extension/kernel/contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/dependency"
@@ -35,7 +36,6 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/eventbridge"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_center"
-	coreexec "github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
 	"github.com/u-ai/backend/internal/extension/kernel/hook"
@@ -44,7 +44,6 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/javascript_main"
 	"github.com/u-ai/backend/internal/extension/kernel/lifecycle_manager"
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
-	"github.com/u-ai/backend/internal/mcp"
 	"github.com/u-ai/backend/internal/extension/kernel/observability"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
@@ -71,12 +70,13 @@ import (
 	"github.com/u-ai/backend/internal/imageintelligence"
 	"github.com/u-ai/backend/internal/imageprovider"
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval"
+	"github.com/u-ai/backend/internal/mcp"
 	"github.com/u-ai/backend/internal/media"
 	"github.com/u-ai/backend/internal/platform/process"
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/internal/runtimeidentity"
-	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
+	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/search"
 	"github.com/u-ai/backend/internal/uiagent"
 	"github.com/u-ai/backend/internal/uiagent/source"
@@ -585,10 +585,18 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	genResolver := NewEventGenerationResolverAdapter(instRepo)
 	eventSvc.SetGenerationResolver(genResolver)
 	eventSvc.GetDispatcher().SetGenerationResolver(genResolver)
-	eventBridge := event.NewRuntimeBridge(eventSvc)
-	eventBridge.Attach()
-	hostEmitter := event.NewHostEventEmitter(eventSvc)
-	lifecycleEmitter := event.NewLifecycleEventEmitter(hostEmitter)
+
+	var eventBridge *event.RuntimeBridge
+	var hostEmitter *event.HostEventEmitter
+	var lifecycleEmitter *event.LifecycleEventEmitter
+	var eventBridgePublisher *eventbridge.Publisher
+
+	if b.runtimePolicy.DurableEvents {
+		eventBridge = event.NewRuntimeBridge(eventSvc)
+		eventBridge.Attach()
+		hostEmitter = event.NewHostEventEmitter(eventSvc)
+		lifecycleEmitter = event.NewLifecycleEventEmitter(hostEmitter)
+	}
 
 	var petPluginSource plugin_boundary.KernelContributionSource
 	if contribRepo != nil && instRepo != nil {
@@ -605,11 +613,15 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 	jsFactory := javascript_main.NewRuntimeFactory()
 	eventDeliveryAdapter := javascript_main.NewEventDeliveryAdapter(jsFactory)
-	eventBridge.SetDeliveryCallback(eventDeliveryAdapter.HandleDelivery)
+	if eventBridge != nil {
+		eventBridge.SetDeliveryCallback(eventDeliveryAdapter.HandleDelivery)
+	}
 
-	eventBridgePublisher, err := eventbridge.NewPublisher(eventSvc)
-	if err != nil {
-		return nil, fmt.Errorf("kernel: create eventbridge publisher: %w", err)
+	if b.runtimePolicy.DurableEvents {
+		eventBridgePublisher, err = eventbridge.NewPublisher(eventSvc)
+		if err != nil {
+			return nil, fmt.Errorf("kernel: create eventbridge publisher: %w", err)
+		}
 	}
 
 	if b.runtimePolicy.DurableEvents && taskRuntimeService != nil {
@@ -764,9 +776,13 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		acquisitionSourceRegistry.Register(acquisition.NewMCPPackageSource(mcpAdapter))
 	}
 	acquisitionSourceRegistry.Register(acquisition.NewGeneratedSkillSource(true))
+	acquisitionSourceRegistry.Register(acquisition.NewRemoteCatalogSource("https://amitia.untrammelled.top/api/catalog"))
 
 	acquisitionInstallerRegistry, err := acquisition.NewInstallerRegistry(&acquisition.InstallerRegistryOpts{
 		EnableExistingPort: acquisition.NewEnableExistingPortBridge(enablementService),
+		PackageInstallPort: acquisition.NewPackagePortBridge(lifecycleMgr),
+		MCPInstallPort:     acquisition.NewMCPRepositoryBridge(b.mcpRepository),
+		SkillInstallPort:   acquisition.NewSkillPortBridge(acquisition.NewSkillCatalogBridge(agentSkillCatalog)),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("kernel: create installer registry: %w", err)
@@ -1271,14 +1287,14 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		EnablementService:      enablementService,
 		EnablementResolver:     enablementResolver,
 
-	ToolRegistry:    toolRegistry,
-	AdapterRegistry: adapterRegistry,
-	ToolFacade:      toolFacade,
+		ToolRegistry:    toolRegistry,
+		AdapterRegistry: adapterRegistry,
+		ToolFacade:      toolFacade,
 
-	ExecutionService: execService,
-	RuntimeState:     runtimeState,
+		ExecutionService: execService,
+		RuntimeState:     runtimeState,
 
-	HostCommandRegistry: hostCmdRegistry,
+		HostCommandRegistry: hostCmdRegistry,
 
 		TaskRepository:     taskRepo,
 		TaskRuntimeService: taskRuntimeService,
@@ -1365,30 +1381,30 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		CanaryShadowManager:     canaryShadowMgr,
 		CanaryOwnershipResolver: canaryOwnershipResolver,
 
-		RuntimeProfile:            b.runtimeProfile,
-		RuntimePolicy:             b.runtimePolicy,
-		DeviceRegistry:            deviceRegistry,
-		DeviceRuntimePresence:     deviceRuntimePresence,
-		DeviceRuntimeSessions:     sessionService,
-		CapabilityProviders:       capabilityProviderRegistry,
-		ProviderLifecycle:         providerLifecycle,
-		ProviderExecutionResolver: providerExecutionResolver,
+		RuntimeProfile:              b.runtimeProfile,
+		RuntimePolicy:               b.runtimePolicy,
+		DeviceRegistry:              deviceRegistry,
+		DeviceRuntimePresence:       deviceRuntimePresence,
+		DeviceRuntimeSessions:       sessionService,
+		CapabilityProviders:         capabilityProviderRegistry,
+		ProviderLifecycle:           providerLifecycle,
+		ProviderExecutionResolver:   providerExecutionResolver,
 		ExtensionProviderReconciler: extensionProviderReconciler,
 		ProviderInstanceReconciler:  providerInstanceReconciler,
-		CapabilityService:          capabilityService,
+		CapabilityService:           capabilityService,
 
-		BuiltinCatalog:        builtinCatalog,
-		BuiltinBootstrapper:   builtinBootstrapper,
+		BuiltinCatalog:         builtinCatalog,
+		BuiltinBootstrapper:    builtinBootstrapper,
 		BuiltinHandlerRegistry: builtinHandlerRegistry,
 
 		ProviderInvocationService: providerInvocationService,
-		ProviderInvoker:          kernelProviderInvoker,
+		ProviderInvoker:           kernelProviderInvoker,
 
 		AcquisitionService: acquisitionService,
 
 		BackgroundRemovalRegistry: bgRegistry,
 
-		EventBridgePublisher:      eventBridgePublisher,
+		EventBridgePublisher: eventBridgePublisher,
 	}
 
 	if b.iosNativeProvider != nil {
