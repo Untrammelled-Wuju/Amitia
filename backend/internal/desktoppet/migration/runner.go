@@ -327,7 +327,7 @@ func (r *Runner) runReadCutover(op *MigrationOperation) error {
 	if err := r.repo.RecordReadCutover(ctx, op.ID, op.PlanID); err != nil {
 		return &RunnerError{Code: "READ_CUTOVER_RECORD_FAILED", Message: "记录读切换失败: " + err.Error()}
 	}
-	if err := r.repo.MarkReadCutoverVerified(ctx, op.ID); err != nil {
+	if err := r.repo.MarkReadCutoverVerified(ctx, op.ID, op.PlanID); err != nil {
 		return &RunnerError{Code: "READ_CUTOVER_VERIFY_FAILED", Message: "标记读切换已验证失败: " + err.Error()}
 	}
 	return nil
@@ -353,7 +353,7 @@ func (r *Runner) runWriteCutover(op *MigrationOperation) error {
 	if err := r.repo.RecordWriteCutover(ctx, op.ID, op.PlanID); err != nil {
 		return &RunnerError{Code: "WRITE_CUTOVER_RECORD_FAILED", Message: "记录写切换失败: " + err.Error()}
 	}
-	if err := r.repo.MarkWriteCutoverVerified(ctx, op.ID); err != nil {
+	if err := r.repo.MarkWriteCutoverVerified(ctx, op.ID, op.PlanID); err != nil {
 		return &RunnerError{Code: "WRITE_CUTOVER_VERIFY_FAILED", Message: "标记写切换已验证失败: " + err.Error()}
 	}
 	return nil
@@ -446,7 +446,7 @@ func (r *Runner) RequestCutover(ctx context.Context, operationID, direction stri
 				return &RunnerError{Code: "READ_CUTOVER_STEP_FAILED", Message: "读切转步骤执行失败: " + err.Error()}
 			}
 		}
-		if err := r.repo.MarkReadCutoverVerified(ctx, operationID); err != nil {
+		if err := r.repo.MarkReadCutoverVerified(ctx, operationID, "cutover"); err != nil {
 			return &RunnerError{Code: "READ_CUTOVER_VERIFY_FAILED", Message: "标记读切转已验证失败: " + err.Error()}
 		}
 	case "write":
@@ -476,7 +476,7 @@ func (r *Runner) RequestCutover(ctx context.Context, operationID, direction stri
 				return &RunnerError{Code: "LEGACY_BLOCK_FAILED", Message: "旧写阻断失败: " + err.Error()}
 			}
 		}
-		if err := r.repo.MarkWriteCutoverVerified(ctx, operationID); err != nil {
+		if err := r.repo.MarkWriteCutoverVerified(ctx, operationID, "cutover"); err != nil {
 			return &RunnerError{Code: "WRITE_CUTOVER_VERIFY_FAILED", Message: "标记写切转已验证失败: " + err.Error()}
 		}
 		if _, err := r.repo.UpdateOperationStageCAS(ctx, operationID, StageWriteCutover, StageCompleted, nil); err != nil {

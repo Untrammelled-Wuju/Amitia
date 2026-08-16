@@ -459,47 +459,47 @@ func (s *stubRepository) Transaction(fn func(tx *gorm.DB) error) error { return 
 type stubInstallGuard struct{}
 
 func (s *stubInstallGuard) RequireCharacter(ctx context.Context, actor *desktoppetAuth.ActorContext, characterID string) (*security.CharacterScope, error) {
-	return &security.CharacterScope{UserID: actor.UserID}, nil
+	return &security.CharacterScope{UserID: string(actor.UserID)}, nil
 }
 func (s *stubInstallGuard) RequireGenerationTask(ctx context.Context, actor *desktoppetAuth.ActorContext, taskID string) (*security.GenerationTaskScope, error) {
-	return &security.GenerationTaskScope{UserID: actor.UserID}, nil
+	return &security.GenerationTaskScope{UserID: string(actor.UserID)}, nil
 }
 func (s *stubInstallGuard) RequireProcessingTask(ctx context.Context, actor *desktoppetAuth.ActorContext, taskID string) (*security.ProcessingTaskScope, error) {
-	return &security.ProcessingTaskScope{UserID: actor.UserID}, nil
+	return &security.ProcessingTaskScope{UserID: string(actor.UserID)}, nil
 }
 func (s *stubInstallGuard) RequireActionRevision(ctx context.Context, actor *desktoppetAuth.ActorContext, revisionID string) (*security.ActionRevisionScope, error) {
-	return &security.ActionRevisionScope{UserID: actor.UserID}, nil
+	return &security.ActionRevisionScope{UserID: string(actor.UserID)}, nil
 }
 func (s *stubInstallGuard) RequireActionStream(ctx context.Context, actor *desktoppetAuth.ActorContext, streamID string) (*security.ActionStreamScope, error) {
-	return &security.ActionStreamScope{UserID: actor.UserID}, nil
+	return &security.ActionStreamScope{UserID: string(actor.UserID)}, nil
 }
 func (s *stubInstallGuard) RequireQualityEvaluation(ctx context.Context, actor *desktoppetAuth.ActorContext, evaluationID string) (*security.QualityScope, error) {
-	return &security.QualityScope{UserID: actor.UserID}, nil
+	return &security.QualityScope{UserID: string(actor.UserID)}, nil
 }
 func (s *stubInstallGuard) RequireRelease(ctx context.Context, actor *desktoppetAuth.ActorContext, releaseID string) (*security.ReleaseScope, error) {
-	return &security.ReleaseScope{UserID: actor.UserID}, nil
+	return &security.ReleaseScope{UserID: string(actor.UserID)}, nil
 }
 func (s *stubInstallGuard) RequireInstallation(ctx context.Context, actor *desktoppetAuth.ActorContext, deviceID, installationID string) (*security.InstallationScope, error) {
-	return &security.InstallationScope{UserID: actor.UserID}, nil
+	return &security.InstallationScope{UserID: string(actor.UserID)}, nil
 }
 
 func (s *stubInstallGuard) RequireInstallationStrict(ctx context.Context, actor *desktoppetAuth.ActorContext, deviceID, installationID string) (*security.InstallationScope, error) {
-	return &security.InstallationScope{UserID: actor.UserID}, nil
+	return &security.InstallationScope{UserID: string(actor.UserID)}, nil
 }
 func (s *stubInstallGuard) RequireEditSession(ctx context.Context, actor *desktoppetAuth.ActorContext, sessionID string) (*security.EditSessionScope, error) {
-	return &security.EditSessionScope{UserID: actor.UserID}, nil
+	return &security.EditSessionScope{UserID: string(actor.UserID)}, nil
 }
 func (s *stubInstallGuard) RequireRegenerationJob(ctx context.Context, actor *desktoppetAuth.ActorContext, jobID string) (*security.RegenerationJobScope, error) {
-	return &security.RegenerationJobScope{UserID: actor.UserID}, nil
+	return &security.RegenerationJobScope{UserID: string(actor.UserID)}, nil
 }
 func (s *stubInstallGuard) RequireCandidate(ctx context.Context, actor *desktoppetAuth.ActorContext, candidateID string) (*security.CandidateScope, error) {
-	return &security.CandidateScope{UserID: actor.UserID}, nil
+	return &security.CandidateScope{UserID: string(actor.UserID)}, nil
 }
 func (s *stubInstallGuard) RequireRuntimeCommand(ctx context.Context, actor *desktoppetAuth.ActorContext, commandID string) (*security.RuntimeCommandScope, error) {
-	return &security.RuntimeCommandScope{UserID: actor.UserID}, nil
+	return &security.RuntimeCommandScope{UserID: string(actor.UserID)}, nil
 }
 func (s *stubInstallGuard) RequireBehaviorBinding(ctx context.Context, actor *desktoppetAuth.ActorContext, bindingID string) (*security.BehaviorBindingScope, error) {
-	return &security.BehaviorBindingScope{UserID: actor.UserID}, nil
+	return &security.BehaviorBindingScope{UserID: string(actor.UserID)}, nil
 }
 
 func doRequest(t *testing.T, r *gin.Engine, method, path string, body interface{}) *httptest.ResponseRecorder {

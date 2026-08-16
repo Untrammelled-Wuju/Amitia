@@ -310,15 +310,15 @@ func (r *DBRepository) RecordWriteCutover(ctx context.Context, operationID, step
 	return r.db.WithContext(ctx).Create(&record).Error
 }
 
-func (r *DBRepository) MarkReadCutoverVerified(ctx context.Context, operationID string) error {
+func (r *DBRepository) MarkReadCutoverVerified(ctx context.Context, operationID, stepName string) error {
 	return r.db.WithContext(ctx).Model(&readCutoverRecord{}).
-		Where("operation_id = ?", operationID).
+		Where("operation_id = ? AND step_name = ?", operationID, stepName).
 		Update("verified", 1).Error
 }
 
-func (r *DBRepository) MarkWriteCutoverVerified(ctx context.Context, operationID string) error {
+func (r *DBRepository) MarkWriteCutoverVerified(ctx context.Context, operationID, stepName string) error {
 	return r.db.WithContext(ctx).Model(&writeCutoverRecord{}).
-		Where("operation_id = ?", operationID).
+		Where("operation_id = ? AND step_name = ?", operationID, stepName).
 		Update("verified", 1).Error
 }
 
