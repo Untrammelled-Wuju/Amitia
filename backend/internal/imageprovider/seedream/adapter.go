@@ -258,7 +258,9 @@ func (a *Adapter) doRequest(ctx context.Context, config imageprovider.ImageModel
 	raw, _ := io.ReadAll(resp.Body)
 	var parsed map[string]any
 	if len(raw) > 0 {
-		_ = json.Unmarshal(raw, &parsed)
+		if err := json.Unmarshal(raw, &parsed); err != nil {
+			return nil, requestID, fmt.Errorf("unmarshal response: %w", err)
+		}
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return nil, requestID, mapHTTPError(resp.StatusCode, parsed, raw)
