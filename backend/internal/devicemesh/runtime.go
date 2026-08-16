@@ -35,10 +35,9 @@ func NewCloudRuntimeWithHub(db *sql.DB, deviceReg *host_registry.Registry, hub *
 	}
 
 	bootstrapRepo := bootstrap.NewRepository(db)
-	bootstrapSvc := bootstrap.NewService(bootstrapRepo, BootstrapTicketTTL)
-
 	credRepo := credential.NewRepository(db)
 	credSvc := credential.NewService(credRepo, DeviceCredentialTTL)
+	bootstrapSvc := bootstrap.NewServiceWithDependencies(bootstrapRepo, db, credRepo, deviceReg, BootstrapTicketTTL, DeviceCredentialTTL)
 
 	probe := server.NewProbeService(hub)
 
@@ -105,6 +104,7 @@ func (rt *Runtime) autoRecoverCredential(handler *agent.LocalHandler) {
 		Identity:     identity,
 		Cursor:       cursor,
 	})
+	meshClient.SetCredentialStore(handler.CredentialStore())
 	handler.SetMeshClient(meshClient)
 	meshClient.Start()
 }

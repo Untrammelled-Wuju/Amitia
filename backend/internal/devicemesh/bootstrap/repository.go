@@ -65,10 +65,25 @@ func (r *Repository) Consume(ctx context.Context, hash string, consumedAt time.T
 	}
 	defer tx.Rollback()
 
+	ok, err := r.ConsumeTx(ctx, tx, hash, consumedAt)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		return false, nil
+	}
+
+	if err := tx.Commit(); err != nil {
+		return false, fmt.Errorf("bootstrap: commit: %w", err)
+	}
+	return true, nil
+}
+
+func (r *Repository) ConsumeTx(ctx context.Context, tx *sql.Tx, hash string, consumedAt time.Time) (bool, error) {
 	var ticketID string
 	var status string
 	var expiresStr string
-	err = tx.QueryRowContext(ctx,
+	err := tx.QueryRowContext(ctx,
 		`SELECT ticket_id, status, expires_at FROM kernel_device_mesh_bootstrap_tickets
 		WHERE ticket_hash = ?`,
 		hash,
@@ -110,10 +125,6 @@ func (r *Repository) Consume(ctx context.Context, hash string, consumedAt time.T
 	rows, err := res.RowsAffected()
 	if err != nil {
 		return false, fmt.Errorf("bootstrap: rows affected: %w", err)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return false, fmt.Errorf("bootstrap: commit: %w", err)
 	}
 
 	return rows == 1, nil
