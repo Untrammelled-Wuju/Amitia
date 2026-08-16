@@ -128,6 +128,7 @@ function onMessage(event: MessageEvent) {
       token: sessionToken.value,
       generation: props.contribution.generation,
       uiContext: uiContext.value,
+      theme: buildThemeTokens(),
     },
     sessionOrigin.value || "*",
     [channel.port2],
