@@ -34,26 +34,6 @@ export interface HostAPIInvokeResult {
   error?: HostAPIError;
 }
 
-export interface HostAPIQueryCapsInput {
-  method: string;
-}
-
-export interface HostAPIQueryCapsResult {
-  method: string;
-  registered: boolean;
-  permissionId?: string;
-  rateLimitMax?: number;
-  timeoutMs?: number;
-  sideEffect?: string;
-  versions?: number[];
-}
-
-export interface HostAPIRateLimitStatusResult {
-  limit: number;
-  remaining: number;
-  resetAt: number;
-}
-
 export async function invokeHostAPI(
   client: Client,
   input: HostAPIInvokeInput,
@@ -61,28 +41,4 @@ export async function invokeHostAPI(
 ): Promise<HostAPIInvokeResult> {
   const envelope = await client.sendReservedRequest(METHOD_HOST_INVOKE, input, ...opts);
   return envelope.payload as HostAPIInvokeResult;
-}
-
-export async function queryHostAPICapabilities(
-  client: Client,
-  input: HostAPIQueryCapsInput,
-  opts: MessageOption[] = []
-): Promise<HostAPIQueryCapsResult> {
-  const envelope = await client.sendReservedRequest(METHOD_HOST_INVOKE, {
-    method: 'host_api.query_capabilities',
-    input: { method: input.method },
-  }, ...opts);
-  return envelope.payload as HostAPIQueryCapsResult;
-}
-
-export async function queryHostAPIRateLimit(
-  client: Client,
-  method: string,
-  opts: MessageOption[] = []
-): Promise<HostAPIRateLimitStatusResult> {
-  const envelope = await client.sendReservedRequest(METHOD_HOST_INVOKE, {
-    method: 'host_api.rate_limit_status',
-    input: { method },
-  }, ...opts);
-  return envelope.payload as HostAPIRateLimitStatusResult;
 }
