@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart' hide ActionDispatcher;
-import '../../../../../app/theme/app_colors.dart';
-import '../../../../../app/theme/app_spacing.dart';
-import '../../../../../app/theme/app_radius.dart';
-import '../../../../../app/theme/app_typography.dart';
-import '../../../../../core/widgets/amitia_misc.dart';
-import '../../../../../core/widgets/amitia_button.dart';
-import '../../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_spacing.dart';
+import '../../../../app/theme/app_radius.dart';
+import '../../../../app/theme/app_typography.dart';
+import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/widgets/amitia_button.dart';
+import '../../../../core/widgets/amitia_scaffold.dart';
 import '../models/schema_ui_types.dart';
 import '../engine/binding_engine.dart';
 import '../engine/action_dispatcher.dart';
