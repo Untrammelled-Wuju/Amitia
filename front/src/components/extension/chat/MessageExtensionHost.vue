@@ -37,16 +37,6 @@ const isCustomMessage = computed(() => !!props.message.extensionType);
 
 <template>
   <div class="message-extension-host" :data-message-id="message.messageId">
-    <div class="message-extension-host__badges">
-      <ExtensionSlot
-        slot-id="chat.message.badge"
-        :context="messageContext"
-        fallback="none"
-        layout="inline"
-        surface-role="message"
-      />
-    </div>
-
     <div class="message-extension-host__content">
       <template v-if="isCustomMessage">
         <ExtensionSlot
@@ -68,15 +58,6 @@ const isCustomMessage = computed(() => !!props.message.extensionType);
       </template>
     </div>
 
-    <div class="message-extension-host__actions">
-      <ExtensionSlot
-        slot-id="chat.message.action"
-        :context="messageContext"
-        fallback="none"
-        layout="inline"
-        surface-role="message"
-      />
-    </div>
   </div>
 </template>
 
@@ -87,24 +68,9 @@ const isCustomMessage = computed(() => !!props.message.extensionType);
   gap: 4px;
   min-width: 0;
 }
-.message-extension-host__badges {
-  display: flex;
-  gap: 4px;
-  flex-wrap: wrap;
-}
 .message-extension-host__content {
   display: flex;
   flex-direction: column;
   min-width: 0;
 }
-.message-extension-host__actions {
-  display: flex;
-  gap: 4px;
-  opacity: 0;
-  transition: opacity 0.15s;
-}
-.message-extension-host:hover .message-extension-host__actions {
-  opacity: 1;
-}
-@media (hover: none) { .message-extension-host__actions { opacity: 1; } }
 </style>

@@ -21,6 +21,7 @@ const renderKey = ref<number>(0);
 
 const hasError = computed(() => error.value !== null);
 const canRetry = computed(() => retryCount.value < props.maxRetries);
+const showDebug = import.meta.env.DEV;
 
 onErrorCaptured((err: unknown) => {
   const message = err instanceof Error ? err.message : String(err);
@@ -56,7 +57,7 @@ onUnmounted(() => {
       <div class="extension-error-boundary__error">
         <div class="extension-error-boundary__error-title">扩展渲染异常</div>
         <div class="extension-error-boundary__error-detail">{{ error }}</div>
-        <div class="extension-error-boundary__error-meta">
+        <div v-if="showDebug" class="extension-error-boundary__error-meta">
           槽位: {{ slotId }} · 贡献: {{ contributionId }} · 已重试: {{ retryCount }}/{{ maxRetries }}
         </div>
         <button

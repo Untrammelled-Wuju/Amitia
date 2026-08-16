@@ -21,10 +21,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 
     <div class="composer-stack">
       <ComposerExtensionHost
-        v-if="currentCharacterId"
-        :character-id="currentCharacterId"
-        :conversation-id="currentConversationId"
-        channel="web"
+        v-if="characterId"
+        :character-id="characterId"
+        :conversation-id="conversationId"
+        :channel="channel"
         :platform="hostPlatform"
         :conversation-state="generating ? 'generating' : 'idle'"
         :capabilities="agentSkillNames"
@@ -424,7 +424,7 @@ import type { AgentSkillDefinition } from "../views/extensions/types";
 import EmotePicker from "./EmotePicker.vue";
 import ComposerExtensionHost from "./extension/chat/ComposerExtensionHost.vue";
 
-const props = defineProps<{
+const props = withDefaults(defineProps<{
   isWechatActive?: boolean;
   isQQActive?: boolean;
   disabled?: boolean;
@@ -433,7 +433,14 @@ const props = defineProps<{
   isSubmitting?: boolean;
   callActive?: boolean;
   replyTarget?: any;
-}>();
+  characterId?: string;
+  conversationId?: string;
+  channel?: string;
+}>(), {
+  characterId: "",
+  conversationId: "",
+  channel: "web",
+});
 
 const emit = defineEmits<{
   send: [text: string, imageBase64?: string, videoBase64?: string];
@@ -499,8 +506,6 @@ const slashRange = ref<{ start: number; end: number } | null>(null);
 const slashActiveIndex = ref(0);
 const skillsLoading = ref(false);
 const voiceMode = ref(false);
-const currentCharacterId = ref<string>("");
-const currentConversationId = ref<string>("");
 const hostPlatform = window.amitiaDesktop ? "desktop" : "web";
 
 const agentSkillNames = computed(() =>
@@ -566,10 +571,9 @@ const filteredSlashSkills = computed(() => {
 async function loadAgentSkills() {
   skillsLoading.value = true;
   try {
-    const characterId = await resolveCharacterId();
-    if (!characterId) return;
-    currentCharacterId.value = characterId;
-    const page = await fetchAgentSkills(characterId, { pageSize: 100 });
+    const targetCharacterId = props.characterId || await resolveCharacterId();
+    if (!targetCharacterId) return;
+    const page = await fetchAgentSkills(targetCharacterId, { pageSize: 100 });
     agentSkills.value = (page.items || []).filter(
       (skill) => skill.enabled && skill.compatibilityStatus !== "blocked",
     );
@@ -784,6 +788,11 @@ watch(
   (value) => {
     if (!value) loadAgentSkills();
   },
+);
+
+watch(
+  () => props.characterId,
+  () => { loadAgentSkills(); },
 );
 
 onMounted(() => {

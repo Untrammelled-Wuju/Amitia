@@ -37,13 +37,12 @@ SPDX-License-Identifier: AGPL-3.0-only
         :message="msg"
         :char-name="charName"
         :char-avatar="charAvatar"
+        :character-id="characterId"
         :status="msg.status"
         @retry="$emit('retry', $event)"
         @reply="$emit('reply', $event)"
         @scroll-to-message="(id) => scrollToMessage(id)"
-      />
-      <MessageExtensionHost
-        :message="{
+      ><template #badges><MessageBadgeExtensionHost :message-id="msg.id" :message-type="msg.type || 'text'" :direction="msg.role === 'user' ? 'outgoing' : msg.role === 'assistant' ? 'incoming' : 'system'" :sender-type="msg.role === 'user' ? 'user' : msg.role === 'assistant' ? 'character' : 'system'" :character-id="characterId" :conversation-id="msg.conversationId || ''" /></template><template #extension-content><MessageExtensionHost :message="{
           messageId: msg.id,
           type: msg.type || 'text',
           direction: msg.role === 'user' ? 'outgoing' : msg.role === 'assistant' ? 'incoming' : 'system',
@@ -53,9 +52,9 @@ SPDX-License-Identifier: AGPL-3.0-only
           hasText: !!(msg.content || msg.text),
           attachmentTypes: msg.attachments?.map((a: any) => a.type) || [],
         }"
-        :character-id="charName"
+        :character-id="characterId"
         :conversation-id="msg.conversationId || ''"
-      />
+      /></template><template #actions><MessageActionExtensionHost :message-id="msg.id" :message-type="msg.type || 'text'" :direction="msg.role === 'user' ? 'outgoing' : msg.role === 'assistant' ? 'incoming' : 'system'" :sender-type="msg.role === 'user' ? 'user' : msg.role === 'assistant' ? 'character' : 'system'" :character-id="characterId" :conversation-id="msg.conversationId || ''" /></template></ChatBubble>
     </div>
 
     <transition name="fade">
@@ -77,11 +76,14 @@ import { ChatDotRound, ArrowDown, Loading } from "@element-plus/icons-vue";
 import ChatBubble from "./ChatBubble.vue";
 import MessageExtensionHost from "./extension/chat/MessageExtensionHost.vue";
 import ChatEmptyStateExtensionHost from "./extension/chat/ChatEmptyStateExtensionHost.vue";
+import MessageActionExtensionHost from "./extension/chat/MessageActionExtensionHost.vue";
+import MessageBadgeExtensionHost from "./extension/chat/MessageBadgeExtensionHost.vue";
 
 defineProps<{
   messages: any[];
   charName: string;
   charAvatar: string;
+  characterId: string;
   sending: boolean;
   showScrollBtn: boolean;
   isPulling: boolean;

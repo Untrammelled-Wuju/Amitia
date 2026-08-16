@@ -9,6 +9,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <div v-show="!appStore.sidebarCollapsed" class="brand-name">Amitia</div>
       <button class="side-collapse" type="button" :aria-label="appStore.sidebarCollapsed ? '展开导航' : '收起导航'" @click="appStore.toggleSidebar"><el-icon><DArrowLeft /></el-icon></button>
     </div>
+    <button v-show="!appStore.sidebarCollapsed" type="button" class="nav-search" @click="searchModal?.open()"><el-icon><Search /></el-icon><span>搜索功能、角色、会话、记忆</span></button>
     <button class="new-chat" type="button" @click="router.push('/chat')"><el-icon><Plus /></el-icon><span v-show="!appStore.sidebarCollapsed">新对话</span></button>
     <el-menu
       :default-active="activeIndex"
@@ -76,12 +77,14 @@ SPDX-License-Identifier: AGPL-3.0-only
           <span>当前用户</span>
         </span>
       </button>
+      <button v-show="!appStore.sidebarCollapsed" type="button" class="theme-entry" :aria-label="theme === 'dark' ? '切换为亮色主题' : '切换为暗色主题'" @click="$emit('toggleTheme')"><el-icon><Moon v-if="theme === 'light'" /><Sunny v-else /></el-icon><span>{{ theme === 'dark' ? '暗色主题' : '亮色主题' }}</span></button>
     </div>
+    <SearchModal ref="searchModal" />
   </nav>
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
 
 import { useRoute, useRouter } from "vue-router";
 import {
@@ -95,9 +98,13 @@ import {
   MagicStick,
   Plus,
   DArrowLeft,
+  Search,
+  Moon,
+  Sunny,
 } from "@element-plus/icons-vue";
 import { useAppStore } from "@/stores/app";
 import { useBrandLogo } from "@/composables/useBrandLogo";
+import SearchModal from "./SearchModal.vue";
 
 const route = useRoute();
 const router = useRouter();
@@ -110,7 +117,10 @@ const props = defineProps<{
   wechatStatus?: string;
   qqStatus?: string;
   modelStatus?: string;
+  theme?: "light" | "dark";
 }>();
+defineEmits<{ toggleTheme: [] }>();
+const searchModal = ref<InstanceType<typeof SearchModal> | null>(null);
 const statusTitle = computed(() => {
   const channels = [props.wechatStatus === "connected" ? "微信" : "", props.qqStatus === "connected" || props.qqStatus === "online" ? "QQ" : ""].filter(Boolean);
   return channels.length ? `核心服务正常 · ${channels.join(" / ")} 已连接` : "核心服务正常";
@@ -219,6 +229,8 @@ function openUserProfile() {
 .new-chat { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 38px; margin: 0 12px 12px; border: 1px solid var(--surface-border); border-radius: var(--radius-sm); background: var(--surface-bg); color: var(--text-primary); cursor: pointer; font: inherit; }
 .new-chat:hover, .new-chat:focus-visible { border-color: var(--surface-border-hover); background: var(--control-hover-bg); outline: none; }
 .side-nav.is-collapsed .new-chat { width: 40px; margin: 0 auto 12px; }
+.nav-search, .theme-entry { display: flex; align-items: center; gap: 8px; width: calc(100% - 24px); min-height: 34px; margin: 0 12px 10px; padding: 0 10px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); cursor: pointer; font: inherit; font-size: 12px; text-align: left; }
+.nav-search:hover, .nav-search:focus-visible, .theme-entry:hover, .theme-entry:focus-visible { border-color: var(--surface-border); background: var(--control-hover-bg); color: var(--text-primary); outline: none; }
 
 .side-menu {
   border-right: none;
@@ -287,6 +299,7 @@ function openUserProfile() {
 .side-status { display: flex; align-items: center; gap: 7px; min-height: 28px; padding: 0 10px 8px; color: var(--text-muted); font-size: 11px; overflow: hidden; white-space: nowrap; }
 .side-status__dot { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--ac-color-success); }
 .side-status__dot.is-off { background: var(--ac-color-warning); }
+.theme-entry { margin: 0 0 4px; width: 100%; }
 
 .side-nav.is-collapsed .side-nav-bottom {
   margin: 0 8px;

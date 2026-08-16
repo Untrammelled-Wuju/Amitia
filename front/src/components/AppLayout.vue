@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <div class="app-shell" :class="{ 'is-mobile': isMobile }">
     <div class="app-body workbench">
-      <SideNav v-if="!isMobile" :username="authUsername" :avatar="authAvatar" :wechat-status="health.wechat" :qq-status="health.qq" :model-status="health.model" />
+      <SideNav v-if="!isMobile" :username="authUsername" :avatar="authAvatar" :wechat-status="health.wechat" :qq-status="health.qq" :model-status="health.model" :theme="resolvedTheme" @toggle-theme="toggleTheme" />
 
       <div class="app-main workspace">
         <main class="app-content workspace-surface" :class="{ 'is-login': isLoginPage, 'workspace-surface--chat': isChatPage }">
@@ -55,6 +55,7 @@ let electronNavCleanup: (() => void) | null = null;
 const {
   state: theme,
   resolvedMode: resolvedTheme,
+  toggleLightDark: toggleTheme,
 } = useTheme();
 
 const windowWidth = ref(window.innerWidth);
