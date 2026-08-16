@@ -59,6 +59,17 @@ type OutputLease struct {
 type ChannelAdapter interface {
 	Deliver(intent DeliveryIntent) error
 	Name() string
+	ProviderInstanceID() string
+}
+
+// ProviderAvailabilityChecker is the interface the delivery worker uses to
+// verify and update ProviderInstance availability. It bridges the delivery
+// subsystem with the kernel Provider system without importing the kernel package.
+type ProviderAvailabilityChecker interface {
+	// IsProviderAvailable returns true if the ProviderInstance is available for use.
+	IsProviderAvailable(providerInstanceID string) bool
+	// MarkProviderUnavailable marks the ProviderInstance as unavailable with a reason.
+	MarkProviderUnavailable(providerInstanceID string, reason string)
 }
 
 type IntentStore interface {

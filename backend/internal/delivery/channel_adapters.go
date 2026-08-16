@@ -10,6 +10,12 @@ import (
 	applog "github.com/u-ai/backend/log"
 )
 
+const (
+	ProviderInstanceIDWebChannel    = "builtin.channel.web"
+	ProviderInstanceIDQQChannel     = "builtin.channel.qq"
+	ProviderInstanceIDWechatChannel = "builtin.channel.wechat"
+)
+
 type QQChannelAdapter struct {
 	sidecarURL string
 }
@@ -20,6 +26,10 @@ func NewQQChannelAdapter(sidecarURL string) *QQChannelAdapter {
 
 func (a *QQChannelAdapter) Name() string {
 	return "qq"
+}
+
+func (a *QQChannelAdapter) ProviderInstanceID() string {
+	return ProviderInstanceIDQQChannel
 }
 
 func (a *QQChannelAdapter) Deliver(intent DeliveryIntent) error {
@@ -59,6 +69,10 @@ func (a *WechatChannelAdapter) Name() string {
 	return "wechat"
 }
 
+func (a *WechatChannelAdapter) ProviderInstanceID() string {
+	return ProviderInstanceIDWechatChannel
+}
+
 func (a *WechatChannelAdapter) Deliver(intent DeliveryIntent) error {
 	if intent.ContentType == "emote" {
 		return deliverEmoteHTTP(a.sidecarURL+"/api/send-image", intent, true)
@@ -91,6 +105,10 @@ type WebChannelAdapter struct{}
 func NewWebChannelAdapter() *WebChannelAdapter { return &WebChannelAdapter{} }
 
 func (a *WebChannelAdapter) Name() string { return "web" }
+
+func (a *WebChannelAdapter) ProviderInstanceID() string {
+	return ProviderInstanceIDWebChannel
+}
 
 func (a *WebChannelAdapter) Deliver(intent DeliveryIntent) error {
 	if intent.ContentType != "text" && intent.ContentType != "emote" && intent.ContentType != "audio" {

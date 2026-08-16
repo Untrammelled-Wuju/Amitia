@@ -17,6 +17,8 @@ type orderedPlanAdapter struct {
 
 func (a *orderedPlanAdapter) Name() string { return "qq" }
 
+func (a *orderedPlanAdapter) ProviderInstanceID() string { return ProviderInstanceIDQQChannel }
+
 func (a *orderedPlanAdapter) Deliver(intent DeliveryIntent) error {
 	a.delivered = append(a.delivered, intent.ContentType)
 	if intent.ContentType == "emote" {
