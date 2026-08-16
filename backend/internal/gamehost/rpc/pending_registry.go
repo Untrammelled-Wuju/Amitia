@@ -204,7 +204,26 @@ func (r *pendingRequestRegistry) transitionLocked(
 		}
 	}
 
+	r.removeLocked(key)
+
 	return true, nil
+}
+
+func (r *pendingRequestRegistry) removeLocked(key RequestKey) {
+	req, ok := r.requests[key]
+	if !ok {
+		return
+	}
+
+	if req.CancelFunc != nil {
+		req.CancelFunc()
+	}
+
+	delete(r.requests, key)
+	peerKey := PeerKey{RuntimeID: key.RuntimeID, ServiceID: key.ServiceID}
+	if r.peerCount[peerKey] > 0 {
+		r.peerCount[peerKey]--
+	}
 }
 
 func extractGenerationFromEnvelope(env *protocol.Envelope) uint64 {
@@ -297,6 +316,7 @@ func (r *pendingRequestRegistry) CancelByPeer(runtimeID domain.RuntimeInstanceID
 					close(req.done)
 				}
 			}
+			r.removeLocked(k)
 			count++
 		}
 	}
@@ -327,6 +347,7 @@ func (r *pendingRequestRegistry) CancelByRuntime(runtimeID domain.RuntimeInstanc
 					close(req.done)
 				}
 			}
+			r.removeLocked(k)
 			count++
 		}
 	}
