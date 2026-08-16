@@ -442,13 +442,15 @@ func (s *ExtensionCatalogSource) buildCandidate(card extension_center.ExtensionC
 		method = InstallEnableExisting
 	}
 
+	providedCaps := s.extractProvidedCapabilities(card)
+
 	return CapabilityCandidate{
 		ID:           card.ExtensionID,
 		Kind:         CandidateExtensionPackage,
 		Name:         card.DisplayName,
 		Description:  card.Description,
 		Version:      card.Version,
-		Capabilities: nil,
+		Capabilities: providedCaps,
 		Install: CandidateInstallDescriptor{
 			Method: method,
 		},
@@ -464,6 +466,17 @@ func (s *ExtensionCatalogSource) buildCandidate(card extension_center.ExtensionC
 			"signatureStatus":  string(card.Trust),
 		},
 	}
+}
+
+func (s *ExtensionCatalogSource) extractProvidedCapabilities(card extension_center.ExtensionCard) []capability.CapabilityID {
+	var caps []capability.CapabilityID
+	for _, tag := range card.ContributionTags {
+		capID := string(tag)
+		if capID != "" {
+			caps = append(caps, capability.CapabilityID(capID))
+		}
+	}
+	return caps
 }
 
 // GeneratedSkillSource 搜索可生成的 Skill 候选

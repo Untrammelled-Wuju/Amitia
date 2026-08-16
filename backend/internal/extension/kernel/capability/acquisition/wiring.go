@@ -107,9 +107,13 @@ func inputSchemaAcquireCapability() json.RawMessage {
 	return json.RawMessage(`{
   "type": "object",
   "properties": {
+    "capabilityId": {
+      "type": "string",
+      "description": "The identifier of the capability to acquire (for example: browser.control, search.web, mcp.server.filesystem)"
+    },
     "candidateId": {
       "type": "string",
-      "description": "The id of the candidate from find_capability result"
+      "description": "Optional: the id of the candidate from find_capability result. If empty, Planner will auto-select."
     },
     "approval": {
       "type": "boolean",
@@ -120,6 +124,6 @@ func inputSchemaAcquireCapability() json.RawMessage {
       "description": "Whether the explicit user approval was already granted"
     }
   },
-  "required": ["candidateId"]
+  "required": ["capabilityId"]
 }`)
 }
