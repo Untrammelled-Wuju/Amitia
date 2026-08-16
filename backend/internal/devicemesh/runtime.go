@@ -3,6 +3,7 @@ package devicemesh
 import (
 	"context"
 	"database/sql"
+	"time"
 
 	"github.com/u-ai/backend/internal/devicemesh/agent"
 	"github.com/u-ai/backend/internal/devicemesh/bootstrap"
@@ -64,9 +65,44 @@ func (rt *Runtime) Stop() error {
 func NewDeviceAgentRuntime(dataDir string, platform runtimeidentity.Platform) (*Runtime, error) {
 	localHandler := agent.NewLocalHandler(dataDir, platform)
 
-	return &Runtime{
+	rt := &Runtime{
 		LocalHandler: localHandler,
-	}, nil
+	}
+
+	// R21: Auto-recover credential on restart
+	rt.autoRecoverCredential(localHandler)
+
+	return rt, nil
+}
+
+// R21: autoRecoverCredential attempts to restore credential and auto-connect
+func (rt *Runtime) autoRecoverCredential(handler *agent.LocalHandler) {
+	cred, err := handler.LoadCredential()
+	if err != nil || cred == nil {
+		return
+	}
+
+	// Skip expired credentials
+	if cred.ExpiresAt.Before(time.Now()) {
+		return
+	}
+
+	identity, err := handler.LoadIdentity()
+	if err != nil || identity == nil {
+		return
+	}
+
+	cursor, _ := handler.LoadCursor()
+
+	meshClient := agent.NewMeshClient(agent.MeshClientConfig{
+		CloudBaseURL: cred.CloudBaseUrl,
+		Credential:   cred.Credential,
+		UserID:       cred.UserID,
+		Identity:     identity,
+		Cursor:       cursor,
+	})
+	handler.SetMeshClient(meshClient)
+	meshClient.Start()
 }
 
 var _ = runtimeidentity.PlatformWindows

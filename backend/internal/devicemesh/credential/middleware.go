@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/devicemesh/bootstrap"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
@@ -65,6 +66,43 @@ func DeviceAuthMiddleware(svc *Service) gin.HandlerFunc {
 				c.AbortWithStatusJSON(401, gin.H{"code": "mesh.identity_mismatch", "message": "runtime id mismatch"})
 				return
 			}
+		}
+
+		c.Set(string(principalKey), principal)
+		c.Next()
+	}
+}
+
+func BootstrapTicketAuthMiddleware(svc *Service, bootstrapSvc *bootstrap.Service) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		header := c.GetHeader("Authorization")
+		var rawTicket string
+		if strings.HasPrefix(header, "AmitiaBootstrap ") {
+			rawTicket = strings.TrimPrefix(header, "AmitiaBootstrap ")
+		}
+		if rawTicket == "" {
+			c.AbortWithStatusJSON(401, gin.H{"code": "mesh.bootstrap_invalid", "message": "missing bootstrap ticket"})
+			return
+		}
+
+		ticket, err := bootstrapSvc.Consume(c.Request.Context(), rawTicket)
+		if err != nil {
+			code := "mesh.bootstrap_invalid"
+			if strings.Contains(err.Error(), "expired") {
+				code = "mesh.bootstrap_expired"
+			} else if strings.Contains(err.Error(), "consumed") {
+				code = "mesh.bootstrap_consumed"
+			} else if strings.Contains(err.Error(), "revoked") {
+				code = "mesh.bootstrap_revoked"
+			}
+			c.AbortWithStatusJSON(401, gin.H{"code": code, "message": err.Error()})
+			return
+		}
+
+		principal := DeviceRuntimePrincipal{
+			UserID:    ticket.UserID,
+			DeviceID:  ticket.DeviceID,
+			RuntimeID: ticket.RuntimeID,
 		}
 
 		c.Set(string(principalKey), principal)
