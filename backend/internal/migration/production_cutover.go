@@ -620,6 +620,7 @@ type CutoverCheck struct {
 	Committed  bool
 	Incomplete bool
 	Failed     bool
+	NeverRun   bool
 	State      *CutoverState
 }
 
@@ -638,7 +639,7 @@ func (p *CutoverPlan) ComputeCutoverCheck(ctx context.Context) (*CutoverCheck, e
 		return nil, err
 	}
 	if state == nil {
-		return &CutoverCheck{}, nil
+		return &CutoverCheck{NeverRun: true}, nil
 	}
 	if state.Status == "committed" {
 		return &CutoverCheck{Committed: true, State: state}, nil
