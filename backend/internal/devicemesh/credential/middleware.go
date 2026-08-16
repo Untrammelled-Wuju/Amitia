@@ -88,7 +88,7 @@ func BootstrapTicketAuthMiddleware(svc *Service, bootstrapSvc *bootstrap.Service
 			return
 		}
 
-		ticket, err := bootstrapSvc.Consume(c.Request.Context(), rawTicket)
+		ticket, err := bootstrapSvc.Validate(c.Request.Context(), rawTicket)
 		if err != nil {
 			code := "mesh.bootstrap_invalid"
 			if strings.Contains(err.Error(), "expired") {

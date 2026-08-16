@@ -44,6 +44,10 @@ func (h *LocalHandler) LoadCursor() (*SessionCursor, error) {
 	return h.credStore.LoadCursor()
 }
 
+func (h *LocalHandler) CredentialStore() *CredentialStore {
+	return h.credStore
+}
+
 func (h *LocalHandler) RegisterRoutes(r *gin.Engine, authMW gin.HandlerFunc) {
 	dm := r.Group("/internal/device-mesh")
 	dm.Use(authMW)
@@ -127,6 +131,7 @@ func (h *LocalHandler) handleBootstrap(c *gin.Context) {
 		Identity:     id,
 		Cursor:       cursor,
 	})
+	h.mesh.SetCredentialStore(h.credStore)
 	h.mesh.Start()
 
 	c.JSON(200, gin.H{

@@ -37,18 +37,17 @@ type MeshClient struct {
 	stopCh   chan struct{}
 	backoff  *Backoff
 
-	// R15: handshake synchronization
 	handshakeOnce  sync.Once
 	handshakeDone  chan struct{}
 	handshakeErr   error
 
-	// R17: bidirectional monotonic sequences
 	localSequence  int64
 	remoteSequence int64
 
-	// R16/R18: session state after HelloAck
 	sessionID      runtimeidentity.RuntimeSessionID
 	connectionGen  int64
+
+	credentialStore *CredentialStore
 }
 
 func NewMeshClient(conf MeshClientConfig) *MeshClient {
@@ -64,6 +63,10 @@ func NewMeshClient(conf MeshClientConfig) *MeshClient {
 		backoff:       NewBackoff(),
 		handshakeDone: make(chan struct{}),
 	}
+}
+
+func (c *MeshClient) SetCredentialStore(store *CredentialStore) {
+	c.credentialStore = store
 }
 
 func (c *MeshClient) Start() {
@@ -135,13 +138,11 @@ func (c *MeshClient) connectAndServe() error {
 	c.conn = conn
 	c.mu.Unlock()
 
-	// R18: deferred generation-aware close
 	defer func() {
 		gen := c.connectionGen
 		c.closeSocketWithGen(websocket.CloseGoingAway, "", gen)
 	}()
 
-	// R15: Reset handshake channel for this connection
 	c.handshakeOnce = sync.Once{}
 	c.handshakeDone = make(chan struct{})
 	c.handshakeErr = nil
@@ -154,7 +155,6 @@ func (c *MeshClient) connectAndServe() error {
 		return err
 	}
 
-	// R15: Wait for HelloAck before becoming Ready
 	select {
 	case <-c.handshakeDone:
 		if c.handshakeErr != nil {
@@ -217,8 +217,7 @@ func (c *MeshClient) sendHello() error {
 		return err
 	}
 
-	// R17: First outbound message uses sequence 1
-	c.localSequence = 1
+	c.localSequence = c.nextLocalSequence()
 
 	env := protocol.Envelope{
 		EnvelopeVersion:      meshprotocol.EnvelopeVersion,
@@ -230,7 +229,7 @@ func (c *MeshClient) sendHello() error {
 		RuntimeID:            c.conf.Identity.RuntimeID,
 		RuntimeSessionID:     lastSessionID,
 		ConnectionGeneration: lastGen,
-		Sequence:             int64(c.localSequence),
+		Sequence:             c.localSequence,
 		PayloadSchemaVersion: 1,
 		PayloadHash:          protocol.ComputePayloadHash(payloadBytes),
 		SentAt:               time.Now().UTC(),
@@ -238,6 +237,11 @@ func (c *MeshClient) sendHello() error {
 	}
 
 	return c.writeEnvelope(env)
+}
+
+func (c *MeshClient) nextLocalSequence() int64 {
+	c.localSequence++
+	return c.localSequence
 }
 
 func (c *MeshClient) readLoop() error {
@@ -283,7 +287,6 @@ func (c *MeshClient) readLoop() error {
 			continue
 		}
 
-		// R17: Validate bidirectional monotonic sequence (except HelloAck which sets initial)
 		if env.MessageType != protocol.MessageTypeHelloAck {
 			if env.Sequence > 0 {
 				if env.Sequence <= c.remoteSequence {
@@ -320,7 +323,6 @@ func (c *MeshClient) handleHelloAck(env *protocol.Envelope) {
 		return
 	}
 
-	// R17: Validate remote sequence (first message should be sequence 1)
 	if env.Sequence < 1 {
 		c.completeHandshake(fmt.Errorf("invalid remote sequence: %d", env.Sequence))
 		return
@@ -328,7 +330,6 @@ func (c *MeshClient) handleHelloAck(env *protocol.Envelope) {
 	c.remoteSequence = int64(env.Sequence)
 
 	if ack.ResumeMode == protocol.ResumeModeFull {
-		// R16: Full reset creates fresh cursor
 		c.conf.Cursor = &SessionCursor{
 			ConnectionGeneration: env.ConnectionGeneration,
 			RuntimeSessionID:     ack.SessionID,
@@ -336,11 +337,11 @@ func (c *MeshClient) handleHelloAck(env *protocol.Envelope) {
 		c.sessionID = ack.SessionID
 		c.connectionGen = env.ConnectionGeneration
 		c.setState(StateDegraded)
+		c.persistCursor()
 		c.completeHandshake(nil)
 		return
 	}
 
-	// R16: First Ack creates cursor if nil, always updates SessionID
 	if c.conf.Cursor == nil {
 		c.conf.Cursor = &SessionCursor{
 			ConnectionGeneration: env.ConnectionGeneration,
@@ -353,7 +354,17 @@ func (c *MeshClient) handleHelloAck(env *protocol.Envelope) {
 	c.sessionID = ack.SessionID
 	c.connectionGen = env.ConnectionGeneration
 
+	c.persistCursor()
 	c.completeHandshake(nil)
+}
+
+func (c *MeshClient) persistCursor() {
+	if c.credentialStore == nil || c.conf.Cursor == nil {
+		return
+	}
+	if err := c.credentialStore.SaveCursor(c.conf.Cursor); err != nil {
+		log.Printf("devicemesh: agent: save cursor failed: %v", err)
+	}
 }
 
 func (c *MeshClient) handlePing(env *protocol.Envelope) {
@@ -365,8 +376,7 @@ func (c *MeshClient) handlePing(env *protocol.Envelope) {
 	pong := protocol.PongPayload{Time: ping.Time}
 	payloadBytes, _ := json.Marshal(pong)
 
-	// R17: Pong carries monotonic sequence
-	c.localSequence++
+	c.localSequence = c.nextLocalSequence()
 
 	pongEnv := protocol.Envelope{
 		EnvelopeVersion:      meshprotocol.EnvelopeVersion,
@@ -394,7 +404,6 @@ func (c *MeshClient) handleError(env *protocol.Envelope) {
 		return
 	}
 
-	// R17: Validate remote sequence on error too
 	if env.Sequence > 0 {
 		if env.Sequence <= c.remoteSequence {
 			return
@@ -406,7 +415,6 @@ func (c *MeshClient) handleError(env *protocol.Envelope) {
 	case "mesh.credential_revoked", "mesh.credential_expired":
 		c.setState(StateRevoked)
 	case "mesh.session_superseded":
-		// R18: generation-aware close
 		c.closeSocketGen(websocket.CloseNormalClosure, "superseded", env.ConnectionGeneration)
 	case "mesh.cursor_reset_required":
 		c.conf.Cursor = &SessionCursor{}
@@ -418,8 +426,7 @@ func (c *MeshClient) sendPing() error {
 	ping := protocol.PingPayload{Time: time.Now().UTC()}
 	payloadBytes, _ := json.Marshal(ping)
 
-		// R17: Increment local sequence for each outbound message
-	c.localSequence++
+	c.localSequence = c.nextLocalSequence()
 
 	env := protocol.Envelope{
 		EnvelopeVersion:      meshprotocol.EnvelopeVersion,
@@ -442,25 +449,21 @@ func (c *MeshClient) sendPing() error {
 }
 
 func (c *MeshClient) sendUnsupportedCommand(env *protocol.Envelope) {
-	// R22: Parse and handle command, then send ack
 	var cmd protocol.CommandPayload
 	if err := json.Unmarshal(env.Payload, &cmd); err != nil {
 		c.sendCommandReject(env, "invalid_command", "failed to parse command")
 		return
 	}
 
-	// R22: Execute the command based on its type
 	result, err := c.executeCommand(cmd)
 	if err != nil {
 		c.sendCommandReject(env, "command_failed", err.Error())
 		return
 	}
 
-	// R22: Send positive ack with execution result
 	c.sendCommandAck(&cmd, result)
 }
 
-// R22: executeCommand dispatches command execution
 func (c *MeshClient) executeCommand(cmd protocol.CommandPayload) (*CommandResult, error) {
 	switch cmd.CommandName {
 	case "status":
@@ -487,7 +490,6 @@ type CommandResult struct {
 	CompletedAt     time.Time
 }
 
-// R22: execStatusCommand returns runtime status information
 func (c *MeshClient) execStatusCommand(cmd protocol.CommandPayload) (*CommandResult, error) {
 	result := map[string]interface{}{
 		"state":             string(c.state.Get()),
@@ -509,7 +511,6 @@ func (c *MeshClient) execStatusCommand(cmd protocol.CommandPayload) (*CommandRes
 	}, nil
 }
 
-// R22: sendCommandAck sends a positive command acknowledgment
 func (c *MeshClient) sendCommandAck(cmd *protocol.CommandPayload, result *CommandResult) {
 	ack := protocol.CommandAckPayload{
 		CommandID:        result.CommandID,
@@ -522,8 +523,7 @@ func (c *MeshClient) sendCommandAck(cmd *protocol.CommandPayload, result *Comman
 	resultBytes, _ := json.Marshal(result.Result)
 	ack.PayloadHash = protocol.ComputePayloadHash(resultBytes)
 
-	// R17: Increment sequence for outbound message
-	c.localSequence++
+	c.localSequence = c.nextLocalSequence()
 
 	env := protocol.Envelope{
 		EnvelopeVersion:      meshprotocol.EnvelopeVersion,
@@ -545,10 +545,8 @@ func (c *MeshClient) sendCommandAck(cmd *protocol.CommandPayload, result *Comman
 	_ = c.writeEnvelope(env)
 }
 
-// R22: sendCommandReject sends a negative command acknowledgment
 func (c *MeshClient) sendCommandReject(env *protocol.Envelope, code, reason string) {
-	// R17: Increment sequence for outbound message
-	c.localSequence++
+	c.localSequence = c.nextLocalSequence()
 
 	errPayload := protocol.ErrorPayload{
 		Code:    code,
@@ -607,13 +605,11 @@ func (c *MeshClient) closeSocket(code int, reason string) {
 	}
 }
 
-// R18: closeSocketWithGen performs generation-aware close on connection teardown
 func (c *MeshClient) closeSocketWithGen(code int, reason string, gen int64) {
 	c.connectionGen = gen
 	c.closeSocketGen(code, reason, gen)
 }
 
-// R18: closeSocketGen sends close frame with generation context
 func (c *MeshClient) closeSocketGen(code int, reason string, gen int64) {
 	c.mu.Lock()
 	defer c.mu.Unlock()

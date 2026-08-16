@@ -77,6 +77,17 @@ func (r *Repository) ExchangeAtomic(ctx context.Context, userID runtimeidentity.
 	}
 	defer tx.Rollback()
 
+	if err := r.ExchangeAtomicTx(ctx, tx, userID, deviceID, runtimeID, now, newCred); err != nil {
+		return err
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("credential: commit: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) ExchangeAtomicTx(ctx context.Context, tx *sql.Tx, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, now time.Time, newCred *DeviceRuntimeCredential) error {
 	if _, err := tx.ExecContext(ctx,
 		`UPDATE kernel_device_runtime_credentials
 		SET status = ?, revoked_at = ?, revision = revision + 1
@@ -106,9 +117,6 @@ func (r *Repository) ExchangeAtomic(ctx context.Context, userID runtimeidentity.
 		return fmt.Errorf("credential: create: %w", err)
 	}
 
-	if err := tx.Commit(); err != nil {
-		return fmt.Errorf("credential: commit: %w", err)
-	}
 	return nil
 }
 
