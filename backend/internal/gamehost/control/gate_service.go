@@ -400,9 +400,16 @@ func (g *PluginOutputGate) finalRevalidate(ctx context.Context, req OutputCheckR
 	if !ok || runtimePluginID != identity.PluginID {
 		return OutputDenied(OutputDeniedInvalidPeer, 0, "", now)
 	}
+	if intent.ServiceID != "" && !g.topology.ServiceBelongsToRuntime(intent.RuntimeID, intent.ServiceID) {
+		return OutputDenied(OutputDeniedServiceNotFound, 0, "", now)
+	}
 
 	isActive, err := g.runtimeReader.IsRuntimeActive(ctx, intent.RuntimeID)
 	if err != nil || !isActive {
+		return OutputDenied(OutputDeniedNotEligible, 0, "", now)
+	}
+	isStopping, err := g.runtimeReader.IsRuntimeStopping(ctx, intent.RuntimeID)
+	if err != nil || isStopping {
 		return OutputDenied(OutputDeniedNotEligible, 0, "", now)
 	}
 	isReady, err := g.runtimeReader.IsRuntimeReady(ctx, intent.RuntimeID)
@@ -414,7 +421,7 @@ func (g *PluginOutputGate) finalRevalidate(ctx context.Context, req OutputCheckR
 	if err != nil {
 		return OutputDenied(OutputDeniedStaleGeneration, 0, "", now)
 	}
-	if permit.Generation != currentGeneration {
+	if permit.Generation != currentGeneration || identity.Generation != currentGeneration {
 		return OutputDenied(OutputDeniedStaleGeneration, 0, "", now)
 	}
 
@@ -422,8 +429,21 @@ func (g *PluginOutputGate) finalRevalidate(ctx context.Context, req OutputCheckR
 	if err != nil {
 		return OutputDenied(OutputDeniedRuntimeNotFound, 0, "", now)
 	}
+	if !isAuthorityModeAllowedForOutput(snap.Mode) {
+		return OutputDenied(OutputDeniedAuthorityMode, snap.Epoch, snap.Mode, now)
+	}
 	if intent.AuthorityEpoch != snap.Epoch {
 		return OutputDenied(OutputDeniedStaleEpoch, snap.Epoch, snap.Mode, now)
+	}
+
+	permResult, err := g.permChecker.CheckControlOutput(ctx, intent.RuntimeID, intent.ServiceID, identity.PluginID)
+	if err != nil || !permResult.Allowed {
+		return OutputDenied(OutputDeniedPermission, snap.Epoch, snap.Mode, now)
+	}
+
+	policyResult, err := g.policyChecker.AllowPluginControl(ctx, intent.RuntimeID, snap.Mode)
+	if err != nil || !policyResult.Allowed {
+		return OutputDenied(OutputDeniedHostPolicy, snap.Epoch, snap.Mode, now)
 	}
 
 	return OutputAllowed(snap.Epoch, snap.Mode, now)

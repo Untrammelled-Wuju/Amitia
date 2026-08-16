@@ -44,11 +44,10 @@ describe('G47-F15 Lifecycle (Backend Driver)', () => {
 
     await driver.enablePlugin(extensionId);
     const runtimes = await driver.listRuntimes({ pluginId: plugin.pluginId });
-    if (runtimes.length > 0) {
-      runtimeId = runtimes[0].runtimeId;
-      await driver.startRuntime(runtimeId);
-      await driver.waitForRuntimeReady(runtimeId, 30000);
-    }
+    expect(runtimes.length).toBeGreaterThan(0);
+    runtimeId = runtimes[0].runtimeId;
+    await driver.startRuntime(runtimeId);
+    await driver.waitForRuntimeReady(runtimeId, 30000);
   }, 60000);
 
   it('stop runtime reaches idle state', async () => {
@@ -60,13 +59,12 @@ describe('G47-F15 Lifecycle (Backend Driver)', () => {
     await driver.enablePlugin(extensionId);
 
     const runtimes = await driver.listRuntimes({ pluginId: plugin.pluginId });
-    if (runtimes.length > 0) {
-      runtimeId = runtimes[0].runtimeId;
-      await driver.startRuntime(runtimeId);
-      await driver.waitForRuntimeReady(runtimeId, 30000);
-      await driver.stopRuntime(runtimeId);
-      await driver.waitForRuntimeState(runtimeId, 'stopped', 15000);
-    }
+    expect(runtimes.length).toBeGreaterThan(0);
+    runtimeId = runtimes[0].runtimeId;
+    await driver.startRuntime(runtimeId);
+    await driver.waitForRuntimeReady(runtimeId, 30000);
+    await driver.stopRuntime(runtimeId);
+    await driver.waitForRuntimeState(runtimeId, 'stopped', 15000);
   }, 90000);
 
   it('restart runtime preserves fresh generation', async () => {
@@ -78,13 +76,12 @@ describe('G47-F15 Lifecycle (Backend Driver)', () => {
     await driver.enablePlugin(extensionId);
 
     const runtimes = await driver.listRuntimes({ pluginId: plugin.pluginId });
-    if (runtimes.length > 0) {
-      runtimeId = runtimes[0].runtimeId;
-      await driver.startRuntime(runtimeId);
-      await driver.waitForRuntimeReady(runtimeId, 30000);
-      await driver.restartRuntime(runtimeId);
-      await driver.waitForRuntimeReady(runtimeId, 30000);
-    }
+    expect(runtimes.length).toBeGreaterThan(0);
+    runtimeId = runtimes[0].runtimeId;
+    await driver.startRuntime(runtimeId);
+    await driver.waitForRuntimeReady(runtimeId, 30000);
+    await driver.restartRuntime(runtimeId);
+    await driver.waitForRuntimeReady(runtimeId, 30000);
   }, 90000);
 
   it('uninstall plugin leaves zero residue', async () => {
@@ -96,11 +93,10 @@ describe('G47-F15 Lifecycle (Backend Driver)', () => {
     await driver.enablePlugin(extensionId);
 
     const runtimes = await driver.listRuntimes({ pluginId: plugin.pluginId });
-    if (runtimes.length > 0) {
-      runtimeId = runtimes[0].runtimeId;
-      await driver.startRuntime(runtimeId);
-      await driver.stopRuntime(runtimeId);
-    }
+    expect(runtimes.length).toBeGreaterThan(0);
+    runtimeId = runtimes[0].runtimeId;
+    await driver.startRuntime(runtimeId);
+    await driver.stopRuntime(runtimeId);
 
     await driver.uninstallPlugin(extensionId);
     extensionId = null;
