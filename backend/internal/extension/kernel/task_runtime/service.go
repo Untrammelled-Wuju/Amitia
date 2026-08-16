@@ -246,7 +246,7 @@ func (s *TaskRuntimeService) BindExecutionTarget(
 	}
 
 	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
-		if err := s.store.UpdateExecutionTarget(txCtx, next.TaskRunID, next.ExecutionPlacement, next.ExecutionTarget, *next.ExecutionResolvedAt, next.ExecutionResolvedBy, existingRevision); err != nil {
+		if err := s.store.UpdateExecutionTarget(txCtx, next.TaskRunID, next.ExecutionPlacement, next.ExecutionTarget, *next.ExecutionResolvedAt, next.ExecutionResolvedBy, NextRevision(existingRevision), existingRevision); err != nil {
 			return fmt.Errorf("task_runtime: update execution target: %w", err)
 		}
 		next.Revision = NextRevision(existingRevision)
@@ -284,7 +284,7 @@ func (s *TaskRuntimeService) ClearExecutionConnectionBinding(
 
 	return s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
 		now := time.Now().UTC()
-		if err := s.store.UpdateExecutionConnectionBinding(txCtx, taskRunID, emptyRuntimeSessionID(""), 0, now, existingRevision); err != nil {
+		if err := s.store.UpdateExecutionConnectionBinding(txCtx, taskRunID, emptyRuntimeSessionID(""), 0, now, NextRevision(existingRevision), existingRevision); err != nil {
 			return err
 		}
 		next.Revision = NextRevision(existingRevision)
@@ -382,7 +382,7 @@ func (s *TaskRuntimeService) persistExecutionAttempt(
 
 	return s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
 		now := time.Now().UTC()
-		if err := s.store.UpdateExecutionAttempt(txCtx, run.TaskRunID, attemptID, runtimeInstanceID, now, existingRevision); err != nil {
+		if err := s.store.UpdateExecutionAttempt(txCtx, run.TaskRunID, attemptID, runtimeInstanceID, now, NextRevision(existingRevision), existingRevision); err != nil {
 			return err
 		}
 		next := cloneTaskRun(current)

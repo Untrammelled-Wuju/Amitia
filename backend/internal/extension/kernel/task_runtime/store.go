@@ -26,6 +26,7 @@ type TaskStore interface {
 		target TaskExecutionTarget,
 		resolvedAt time.Time,
 		resolvedBy string,
+		nextRevision int64,
 		expectedRevision int64,
 	) error
 
@@ -35,6 +36,7 @@ type TaskStore interface {
 		runtimeSessionID interface{ String() string },
 		generation int64,
 		at time.Time,
+		nextRevision int64,
 		expectedRevision int64,
 	) error
 
@@ -44,6 +46,7 @@ type TaskStore interface {
 		attemptID TaskExecutionAttemptID,
 		runtimeInstanceID string,
 		at time.Time,
+		nextRevision int64,
 		expectedRevision int64,
 	) error
 
