@@ -2,6 +2,7 @@ package delivery
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	applog "github.com/u-ai/backend/log"
@@ -32,7 +33,7 @@ func NewWorker(store *SQLiteDeliveryStore, resolver ChannelResolver, cfg WorkerC
 	return &Worker{
 		store:        store,
 		resolver:     resolver,
-		availability: noopAvailabilityChecker{},
+		availability: NewInMemoryAvailabilityChecker(),
 		batchSize:    cfg.BatchSize,
 		interval:     cfg.Interval,
 		done:         make(chan struct{}),
@@ -50,10 +51,34 @@ func NewWorkerWithAvailability(store *SQLiteDeliveryStore, resolver ChannelResol
 	}
 }
 
-type noopAvailabilityChecker struct{}
+type InMemoryAvailabilityChecker struct {
+	mu          sync.RWMutex
+	unavailable map[string]string
+}
 
-func (noopAvailabilityChecker) IsProviderAvailable(providerInstanceID string) bool { return true }
-func (noopAvailabilityChecker) MarkProviderUnavailable(providerInstanceID string, reason string) {
+func NewInMemoryAvailabilityChecker() *InMemoryAvailabilityChecker {
+	return &InMemoryAvailabilityChecker{
+		unavailable: make(map[string]string),
+	}
+}
+
+func (c *InMemoryAvailabilityChecker) IsProviderAvailable(providerInstanceID string) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	_, exists := c.unavailable[providerInstanceID]
+	return !exists
+}
+
+func (c *InMemoryAvailabilityChecker) MarkProviderUnavailable(providerInstanceID string, reason string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.unavailable[providerInstanceID] = reason
+}
+
+func (c *InMemoryAvailabilityChecker) MarkProviderAvailable(providerInstanceID string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.unavailable, providerInstanceID)
 }
 
 func (w *Worker) Start(ctx context.Context) {
