@@ -3,8 +3,7 @@ import os
 import re
 from dataclasses import dataclass, field, asdict
 from datetime import datetime, timezone
-from pathlib import Path
-from typing import List, Optional
+from typing import List
 
 SCHEMA_VERSION = 1
 
@@ -30,6 +29,33 @@ class FrozenArtifactRecord:
     buildMode: str
     schemaVersion: int = SCHEMA_VERSION
     createdAt: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+
+    def to_dict(self) -> dict:
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data: dict) -> "FrozenArtifactRecord":
+        return cls(
+            schemaVersion=data.get("schemaVersion", SCHEMA_VERSION),
+            componentId=data["componentId"],
+            version=data["version"],
+            platform=data["platform"],
+            architecture=data["architecture"],
+            artifactType=data["artifactType"],
+            artifactRelativePath=data["artifactRelativePath"],
+            artifactSha256=data["artifactSha256"],
+            treeSha256=data["treeSha256"],
+            sourceRevision=data["sourceRevision"],
+            buildMode=data["buildMode"],
+            createdAt=data.get("createdAt", datetime.now(timezone.utc).isoformat()),
+        )
+
+    def write(self, path: str) -> None:
+        write_canonical_json(self, path)
+
+    @classmethod
+    def load(cls, path: str) -> "FrozenArtifactRecord":
+        return load(path)
 
 
 def validate(record: FrozenArtifactRecord) -> List[str]:
