@@ -66,8 +66,7 @@ func InternalOriginMiddleware(
 				http.StatusServiceUnavailable,
 				gin.H{
 					"code": 503,
-					"msg":
-						"safe mode controller missing",
+					"msg":  "safe mode controller missing",
 				},
 			)
 			return
@@ -80,9 +79,8 @@ func InternalOriginMiddleware(
 			c.AbortWithStatusJSON(
 				http.StatusServiceUnavailable,
 				gin.H{
-					"code": 503,
-					"msg":
-						"desktop pet safe mode",
+					"code":   503,
+					"msg":    "desktop pet safe mode",
 					"reason": reason,
 				},
 			)
@@ -94,8 +92,7 @@ func InternalOriginMiddleware(
 				http.StatusServiceUnavailable,
 				gin.H{
 					"code": 503,
-					"msg":
-						"runtime service not started",
+					"msg":  "runtime service not started",
 				},
 			)
 			return
