@@ -45,12 +45,12 @@ const (
 )
 
 var maintenanceAllowedPaths = map[string]bool{
-	"/api/health":       true,
-	"/api/doctor":       true,
-	"/api/migration":    true,
-	"/api/backup":       true,
-	"/api/export":       true,
-	"/api/maintenance":  true,
+	"/api/health":      true,
+	"/api/doctor":      true,
+	"/api/migration":   true,
+	"/api/backup":      true,
+	"/api/export":      true,
+	"/api/maintenance": true,
 }
 
 var ErrNotFound = errors.New("not found")
@@ -498,8 +498,7 @@ func RequireAuthMethod(
 		}
 
 		if _, ok :=
-			allowedSet[actor.AuthMethod];
-			!ok {
+			allowedSet[actor.AuthMethod]; !ok {
 			util.ErrorResponse(
 				c,
 				response.Forbidden,
