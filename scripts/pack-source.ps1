@@ -8,126 +8,82 @@ $parentDir = Split-Path $workspace -Parent
 $folderName = Split-Path $workspace -Leaf
 $outputFile = Join-Path $workspace "$OutputName.tar.gz"
 
-Set-Location $workspace
-
-if (-not (Test-Path (Join-Path $workspace ".git"))) {
-    Write-Error "Not a git repository. Cannot use git archive."
-    exit 1
-}
-
-Write-Host "Scanning for polluted paths..."
-$pollutedPatterns = @(
-    '^[A-Za-z]:[/\\]',
-    '\\[A-Za-z]:[/\\]',
-    '[^\x00-\x7F]'
-)
-
-$trackedFiles = & git ls-files -co --exclude-standard 2>$null
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "git ls-files failed"
-    exit 1
-}
-
-$pollutedFiles = @()
-foreach ($f in $trackedFiles) {
-    foreach ($pattern in $pollutedPatterns) {
-        if ($f -match $pattern) {
-            $pollutedFiles += $f
-            break
-        }
-    }
-}
-
-if ($pollutedFiles.Count -gt 0) {
-    Write-Error "Polluted paths found in $($pollutedFiles.Count) file(s):"
-    foreach ($pf in $pollutedFiles) {
-        Write-Error "  $pf"
-    }
-    Write-Error "Aborting pack due to source pollution."
-    exit 1
-}
-
-$buildLogTmpPatterns = @(
-    '^build[/\\]',
-    '^tmp[/\\]',
-    '[/\\]build[/\\]',
-    '[/\\]tmp[/\\]',
-    '[/\\]logs?[/\\]',
-    '\.log$'
-)
-
-$contaminatedFiles = @()
-foreach ($f in $trackedFiles) {
-    foreach ($pattern in $buildLogTmpPatterns) {
-        if ($f -match $pattern) {
-            $contaminatedFiles += $f
-            break
-        }
-    }
-}
-
-if ($contaminatedFiles.Count -gt 0) {
-    Write-Error "Build/log/tmp contamination found in $($contaminatedFiles.Count) file(s):"
-    foreach ($cf in $contaminatedFiles) {
-        Write-Error "  $cf"
-    }
-    Write-Error "Aborting pack due to contamination."
-    exit 1
-}
-
-Write-Host "No pollution detected. Packing via git archive..."
-
 if (Test-Path $outputFile) { Remove-Item $outputFile -Force }
 
-$tempTar = Join-Path $workspace "$OutputName.tar"
-if (Test-Path $tempTar) { Remove-Item $tempTar -Force }
+$excludes = @(
+    "--exclude=node_modules"
+    "--exclude=.git"
+    "--exclude=*.exe"
+    "--exclude=*.log"
+    "--exclude=dist"
+    "--exclude=build"
+    "--exclude=release"
+    "--exclude=*.db"
+    "--exclude=*.db-shm"
+    "--exclude=*.db-wal"
+    "--exclude=*.db-journal"
+    "--exclude=qdrant/storage"
+    "--exclude=surrealdb/surreal.exe"
+    "--exclude=desktop/release"
+    "--exclude=desktop/build"
+    "--exclude=desktop/dist-types"
+    "--exclude=desktop/resources/core"
+    "--exclude=sdk/plugin-sdk/dist"
+    "--exclude=sdk/plugin-sdk/node_modules"
+    "--exclude=*.pyc"
+    "--exclude=__pycache__"
+    "--exclude=.DS_Store"
+    "--exclude=Thumbs.db"
+    "--exclude=*.bak"
+    "--exclude=*.tmp"
+    "--exclude=*.orig"
+    "--exclude=.vscode"
+    "--exclude=.idea"
+    "--exclude=.env"
+    "--exclude=.env.local"
+    "--exclude=.publish-config.json"
+    "--exclude=backend/data"
+    "--exclude=backend/cmd/data"
+    "--exclude=data"
+    "--exclude=logs"
+    "--exclude=runtime/out"
+    "--exclude=backend/server_linux_amd64"
+    "--exclude=backend/server_linux_arm64"
+    "--exclude=backend/server"
+    "--exclude=backend/surrealdb/surreal.zip"
+    "--exclude=backend/qdrant/qdrant.zip"
+    "--exclude=backend/node/node.exe.zip"
+    "--exclude=desktop/resources/qdrant/qdrant.zip"
+    "--exclude=desktop/resources/surrealdb/surrealdb/surreal.zip"
+    "--exclude=desktop/resources/surrealdb/surreal.zip"
+    "--exclude=desktop/resources/core/node/node.zip"
+    "--exclude=mobile_app/android/app/src/main/assets/runtime-package"
+    "--exclude=backend/server.exe"
+    "--exclude=backend/server.exe~"
+    "--exclude=backend/cmd/server/server.exe"
+    "--exclude=backend/cmd/server/backend.exe"
+    "--exclude=backend/cmd/server/backend"
+    "--exclude=backend/amitia-ext.exe"
+    "--exclude=backend/amitiax.exe"
+    "--exclude=backend/extension.test.exe"
+    "--exclude=backend/kernel.test.exe"
+    "--exclude=backend/legacy-package-migrate.exe"
+    "--exclude=backend/worker.test.exe"
+    "--exclude=backend/server_*.exe"
+    "--exclude=*.tar"
+    "--exclude=AmitiaData"
+)
 
-& git archive --format=tar --prefix="$folderName/" HEAD > $tempTar 2>$null
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "git archive failed"
-    if (Test-Path $tempTar) { Remove-Item $tempTar -Force }
-    exit 1
-}
+Set-Location $parentDir
 
-& gzip -f $tempTar
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "gzip failed"
-    if (Test-Path $tempTar) { Remove-Item $tempTar -Force }
-    exit 1
-}
+Write-Host "Packing source: $folderName -> $outputFile"
+$startTime = Get-Date
 
-$finalTarGz = "$tempTar.gz"
-if (Test-Path $finalTarGz) {
-    Move-Item $finalTarGz $outputFile -Force
-}
+& tar -czf $outputFile @excludes $folderName
 
-Write-Host "Verifying archive contents..."
-$verifyOutput = & tar -tzf $outputFile 2>$null
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Archive verification failed"
-    exit 1
-}
-
-$verifyPolluted = @()
-foreach ($entry in $verifyOutput) {
-    foreach ($pattern in $pollutedPatterns) {
-        if ($entry -match $pattern) {
-            $verifyPolluted += $entry
-            break
-        }
-    }
-}
-
-if ($verifyPolluted.Count -gt 0) {
-    Write-Error "Polluted paths found in archive:"
-    foreach ($vp in $verifyPolluted) {
-        Write-Error "  $vp"
-    }
-    Write-Error "Archive verification failed."
-    exit 1
-}
-
+$elapsed = (Get-Date) - $startTime
 $size = (Get-Item $outputFile).Length
-Write-Host "Done. Output: $outputFile"
+
+Write-Host "Done in $($elapsed.ToString('mm\:ss'))"
+Write-Host "Output: $outputFile"
 Write-Host "Size: $([math]::Round($size / 1MB, 2)) MB"
-Write-Host "Entries: $($verifyOutput.Count)"
