@@ -320,7 +320,9 @@ func (s *service) callLLM(cfg map[string]interface{}, messages []map[string]inte
 		Choices []struct{ Message struct{ Content string } }
 		Usage   struct{ TotalTokens int }
 	}
-	json.Unmarshal(rb, &result)
+	if err := json.Unmarshal(rb, &result); err != nil {
+		return "", 0, fmt.Errorf("unmarshal response: %w", err)
+	}
 	if len(result.Choices) == 0 {
 		return "", 0, fmt.Errorf("no choices")
 	}
