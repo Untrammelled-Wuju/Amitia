@@ -32,7 +32,7 @@ export async function registerService(
   if (input.metadata) {
     payload.metadata = input.metadata;
   }
-  const envelope = await client.sendRequest(METHOD_SERVICE_REGISTER, payload, ...opts);
+  const envelope = await client.sendReservedRequest(METHOD_SERVICE_REGISTER, payload, ...opts);
   return envelope.payload as ServiceRegisterOutput;
 }
 
@@ -41,5 +41,5 @@ export async function unregisterService(
   input: ServiceUnregisterInput,
   opts: MessageOption[] = []
 ): Promise<void> {
-  await client.sendRequest(METHOD_SERVICE_UNREGISTER, input, ...opts);
+  await client.sendReservedRequest(METHOD_SERVICE_UNREGISTER, input, ...opts);
 }

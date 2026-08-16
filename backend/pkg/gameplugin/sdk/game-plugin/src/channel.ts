@@ -36,7 +36,7 @@ export async function channelPublish(
   if (input.metadata) {
     payload.metadata = input.metadata;
   }
-  return client.sendNotification(METHOD_CHANNEL_PUBLISH, payload, ...opts);
+  return client.sendReservedNotification(METHOD_CHANNEL_PUBLISH, payload, ...opts);
 }
 
 export async function channelSubscribe(

@@ -23,5 +23,5 @@ export async function publishEvent(
   if (input.metadata) {
     payload.metadata = input.metadata;
   }
-  return client.sendNotification(METHOD_EVENT_PUBLISH, payload, ...opts);
+  return client.sendReservedNotification(METHOD_EVENT_PUBLISH, payload, ...opts);
 }

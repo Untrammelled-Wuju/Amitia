@@ -39,7 +39,7 @@ export async function publishState(
   if (input.metadata) {
     payload.metadata = input.metadata;
   }
-  return client.sendNotification(METHOD_STATE_PUBLISH, payload, ...opts);
+  return client.sendReservedNotification(METHOD_STATE_PUBLISH, payload, ...opts);
 }
 
 export async function getState(

@@ -1,8 +1,6 @@
 import { Client, MessageOption } from './client';
 
-export const METHOD_HOST_API_INVOKE = 'host_api.invoke';
-export const METHOD_HOST_API_QUERY_CAPS = 'host_api.query_capabilities';
-export const METHOD_HOST_API_RATE_LIMIT = 'host_api.rate_limit_status';
+export const METHOD_HOST_INVOKE = 'host.invoke';
 
 export const HOST_API_SIDE_EFFECT_READ = 'read';
 export const HOST_API_SIDE_EFFECT_WRITE = 'write';
@@ -61,7 +59,7 @@ export async function invokeHostAPI(
   input: HostAPIInvokeInput,
   opts: MessageOption[] = []
 ): Promise<HostAPIInvokeResult> {
-  const envelope = await client.sendRequest(METHOD_HOST_API_INVOKE, input, ...opts);
+  const envelope = await client.sendReservedRequest(METHOD_HOST_INVOKE, input, ...opts);
   return envelope.payload as HostAPIInvokeResult;
 }
 
@@ -70,7 +68,10 @@ export async function queryHostAPICapabilities(
   input: HostAPIQueryCapsInput,
   opts: MessageOption[] = []
 ): Promise<HostAPIQueryCapsResult> {
-  const envelope = await client.sendRequest(METHOD_HOST_API_QUERY_CAPS, input, ...opts);
+  const envelope = await client.sendReservedRequest(METHOD_HOST_INVOKE, {
+    method: 'host_api.query_capabilities',
+    input: { method: input.method },
+  }, ...opts);
   return envelope.payload as HostAPIQueryCapsResult;
 }
 
@@ -79,6 +80,9 @@ export async function queryHostAPIRateLimit(
   method: string,
   opts: MessageOption[] = []
 ): Promise<HostAPIRateLimitStatusResult> {
-  const envelope = await client.sendRequest(METHOD_HOST_API_RATE_LIMIT, { method }, ...opts);
+  const envelope = await client.sendReservedRequest(METHOD_HOST_INVOKE, {
+    method: 'host_api.rate_limit_status',
+    input: { method },
+  }, ...opts);
   return envelope.payload as HostAPIRateLimitStatusResult;
 }
