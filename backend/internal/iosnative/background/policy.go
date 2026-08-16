@@ -6,7 +6,20 @@ import (
 	"unicode/utf8"
 )
 
+type ContinuedTaskStrategy string
+type TaskInitiator string
+
 const (
+	BackgroundClassContinued   BackgroundSystemClass = "continued"
+	BackgroundClassCleanup     BackgroundSystemClass = "cleanup"
+
+	ContinuedStrategyQueueIfNeeded    ContinuedTaskStrategy = "queue_if_needed"
+	ContinuedStrategyFailIfNotImmediate ContinuedTaskStrategy = "fail_if_not_immediate"
+
+	InitiatorUser                 TaskInitiator = "user"
+	InitiatorForegroundShortcut   TaskInitiator = "foreground_shortcut"
+	InitiatorExplicitAppIntent    TaskInitiator = "explicit_app_intent"
+
 	DefaultListLimit             = 50
 	MaxListLimit                 = 200
 	MaxMaxPendingPerClass        = 1
