@@ -10,7 +10,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <button class="side-collapse" type="button" :aria-label="appStore.sidebarCollapsed ? '展开导航' : '收起导航'" @click="appStore.toggleSidebar"><el-icon><DArrowRight v-if="appStore.sidebarCollapsed" /><DArrowLeft v-else /></el-icon></button>
     </div>
     <button v-show="!appStore.sidebarCollapsed" type="button" class="nav-search" @click="searchModal?.open()"><el-icon><Search /></el-icon><span>搜索功能、角色、会话、记忆</span></button>
-    <button class="new-chat" type="button" @click="router.push('/chat')"><el-icon><Plus /></el-icon><span v-show="!appStore.sidebarCollapsed">新对话</span></button>
+    <button class="new-chat" type="button" @click="handleNewChat"><el-icon><Plus /></el-icon><span v-show="!appStore.sidebarCollapsed">新对话</span></button>
     <el-menu
       :default-active="activeIndex"
       :collapse="appStore.sidebarCollapsed"
@@ -126,6 +126,16 @@ const statusTitle = computed(() => {
   const channels = [props.wechatStatus === "connected" ? "微信" : "", props.qqStatus === "connected" || props.qqStatus === "online" ? "QQ" : ""].filter(Boolean);
   return channels.length ? `核心服务正常 · ${channels.join(" / ")} 已连接` : "核心服务正常";
 });
+
+async function handleNewChat() {
+  localStorage.removeItem("webchat-conv-id");
+  localStorage.removeItem("webchat-last-conv");
+  if (route.path === "/chat") {
+    window.dispatchEvent(new CustomEvent("amitia:new-chat"));
+  } else {
+    await router.push("/chat");
+  }
+}
 
 const CHAR_PATHS = [
   "/character",

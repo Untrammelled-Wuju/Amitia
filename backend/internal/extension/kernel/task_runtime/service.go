@@ -959,8 +959,16 @@ func (s *TaskRuntimeService) Cancel(ctx context.Context, taskRunID, reason strin
 
 	next := cloneTaskRun(current)
 	next.Status = RunStatusCancelling
+	next.Revision = NextRevision(current.Revision)
 	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
-		return s.store.PutTaskRun(txCtx, next)
+		ok, casErr := s.store.UpdateTaskRunCAS(txCtx, next, RunStatusRunning, current.Generation, current.Revision)
+		if casErr != nil {
+			return fmt.Errorf("task_runtime: cancel cas: %w", casErr)
+		}
+		if !ok {
+			return NewTaskError(ErrTaskPauseInProgress, "concurrent state change, retry cancel")
+		}
+		return nil
 	}); err != nil {
 		return err
 	}

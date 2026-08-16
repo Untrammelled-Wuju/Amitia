@@ -96,11 +96,11 @@ public class AlarmKitAdapter {
         presentation: AmitiaAlarmPresentationDTO,
         sound: AmitiaAlarmSoundDTO?,
         metadata: AmitiaAlarmMetadataDTO?
-    ) async -> Bool {
-        guard isAlarmKitAvailable() else { return false }
+    ) async -> (success: Bool, error: String?) {
+        guard isAlarmKitAvailable() else { return (false, "PLATFORM_NOT_SUPPORTED") }
         #if canImport(AlarmKit)
         if #available(iOS 26.0, *) {
-            return await createAlarmInternal(
+            let result = await createAlarmInternal(
                 id: id,
                 title: title,
                 schedule: schedule,
@@ -108,32 +108,33 @@ public class AlarmKitAdapter {
                 sound: sound,
                 metadata: metadata
             )
+            return result
         }
         #endif
-        return false
+        return (false, "PLATFORM_NOT_SUPPORTED")
     }
 
-    public func cancelAlarm(id: String) async -> Bool {
-        guard isAlarmKitAvailable() else { return false }
+    public func cancelAlarm(id: String) async -> (success: Bool, error: String?) {
+        guard isAlarmKitAvailable() else { return (false, "PLATFORM_NOT_SUPPORTED") }
         #if canImport(AlarmKit)
         if #available(iOS 26.0, *) {
             do {
                 let alarms = try await AlarmManager.shared.alarms
                 guard let target = alarms.first(where: { $0.id == id }) else {
-                    return false
+                    return (false, "ALARM_NOT_FOUND")
                 }
                 try await AlarmManager.shared.remove(alarm: target)
-                return true
+                return (true, nil)
             } catch {
-                return false
+                return (false, error.localizedDescription)
             }
         }
         #endif
-        return false
+        return (false, "PLATFORM_NOT_SUPPORTED")
     }
 
-    public func listAlarms() async -> [String: Any] {
-        guard isAlarmKitAvailable() else { return ["alarms": []] }
+    public func listAlarms() async -> (alarms: [[String: Any]], error: String?) {
+        guard isAlarmKitAvailable() else { return ([], "PLATFORM_NOT_SUPPORTED") }
         #if canImport(AlarmKit)
         if #available(iOS 26.0, *) {
             do {
@@ -148,23 +149,23 @@ public class AlarmKitAdapter {
                     }
                     return item
                 }
-                return ["alarms": result]
+                return (result, nil)
             } catch {
-                return ["alarms": []]
+                return ([], error.localizedDescription)
             }
         }
         #endif
-        return ["alarms": []]
+        return ([], "PLATFORM_NOT_SUPPORTED")
     }
 
-    public func getAlarm(id: String) async -> [String: Any]? {
-        guard isAlarmKitAvailable() else { return nil }
+    public func getAlarm(id: String) async -> (alarm: [String: Any]?, error: String?) {
+        guard isAlarmKitAvailable() else { return (nil, "PLATFORM_NOT_SUPPORTED") }
         #if canImport(AlarmKit)
         if #available(iOS 26.0, *) {
             do {
                 let alarms = try await AlarmManager.shared.alarms
                 guard let target = alarms.first(where: { $0.id == id }) else {
-                    return nil
+                    return (nil, "ALARM_NOT_FOUND")
                 }
                 var item: [String: Any] = [
                     "id": target.id,
@@ -173,13 +174,13 @@ public class AlarmKitAdapter {
                 if let state = target.state {
                     item["state"] = String(describing: state)
                 }
-                return item
+                return (item, nil)
             } catch {
-                return nil
+                return (nil, error.localizedDescription)
             }
         }
         #endif
-        return nil
+        return (nil, "PLATFORM_NOT_SUPPORTED")
     }
 
     private func isAlarmKitAvailable() -> Bool {
@@ -200,16 +201,16 @@ public class AlarmKitAdapter {
         presentation: AmitiaAlarmPresentationDTO,
         sound: AmitiaAlarmSoundDTO?,
         metadata: AmitiaAlarmMetadataDTO?
-    ) async -> Bool {
+    ) async -> (success: Bool, error: String?) {
         do {
             let manager = AlarmManager.shared
             var alarm = Alarm(id: id, title: title)
             alarm.schedule = buildAlarmSchedule(schedule)
             alarm.presentation = buildAlarmPresentation(presentation)
             try await manager.add(alarm: alarm)
-            return true
+            return (true, nil)
         } catch {
-            return false
+            return (false, error.localizedDescription)
         }
     }
 
