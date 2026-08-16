@@ -103,7 +103,7 @@ func readNeedState(callCtx context.Context, execCtx ToolExecutionContext, args m
 
 	raw, err := json.Marshal(output)
 	if err != nil {
-		return TextResult(""), fmt.Errorf("marshal need state: %w", err)
+		return TextResult("序列化需求状态失败: " + err.Error())
 	}
 
 	var lines []string

@@ -139,7 +139,7 @@ func readPsycheState(callCtx context.Context, execCtx ToolExecutionContext, args
 
 	raw, err := json.Marshal(output)
 	if err != nil {
-		return nil, fmt.Errorf("marshal psyche state: %w", err)
+		return TextResult("序列化心灵状态失败: " + err.Error())
 	}
 
 	var lines []string
