@@ -374,4 +374,3 @@ func TaskRunPauseColumnsMigration() Migration {
 		},
 	}
 }
-
