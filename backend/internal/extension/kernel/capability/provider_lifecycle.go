@@ -2,6 +2,7 @@ package capability
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"time"
 )
@@ -109,8 +110,6 @@ func (s *ProviderLifecycleService) UnregisterProvider(id ProviderID) (bool, erro
 			for _, restore := range oldInstances {
 				s.registry.setInstance(string(restore.ID), restore)
 			}
-			s.registry.rebuildProviderInstanceIndex()
-			s.registry.rebuildCapabilityIndex()
 			return false, err
 		}
 	}
@@ -262,6 +261,58 @@ func (s *ProviderLifecycleService) UpdateInstanceHealth(id ProviderInstanceID, h
 		s.registry.setInstance(string(old.ID), &oldClone)
 		s.registry.rebuildProviderInstanceIndex()
 		return err
+	}
+	return nil
+}
+
+// Enable 启用指定的 Provider，如果不存在可执行的实例则创建一个
+func (s *ProviderLifecycleService) Enable(providerID ProviderID) error {
+	if s.registry == nil {
+		return fmt.Errorf("provider registry not configured")
+	}
+
+	existing := s.registry.ListInstancesByProvider(providerID)
+	for _, inst := range existing {
+		if inst != nil && inst.IsExecutable() {
+			return nil
+		}
+	}
+
+	def, found := s.registry.GetByID(providerID)
+	if !found {
+		return fmt.Errorf("provider definition not found: %s", providerID)
+	}
+
+	instanceID := ProviderInstanceID(fmt.Sprintf("lc_%s_%d", providerID, time.Now().UnixNano()))
+	inst := &CapabilityProviderInstance{
+		ID:           instanceID,
+		ProviderID:   providerID,
+		CapabilityID: def.CapabilityID,
+		Placement:    def.Placement,
+		ExtensionID:  def.ExtensionID,
+		ModuleID:     def.ModuleID,
+		Health:       HealthReady,
+		Availability: ProviderAvailabilityAvailable,
+		Revision:     def.Revision,
+	}
+
+	return s.RegisterInstance(inst)
+}
+
+// Disable 禁用指定的 Provider，移除其实例
+func (s *ProviderLifecycleService) Disable(providerID ProviderID) error {
+	if s.registry == nil {
+		return fmt.Errorf("provider registry not configured")
+	}
+
+	instances := s.registry.ListInstancesByProvider(providerID)
+	for _, inst := range instances {
+		if inst == nil {
+			continue
+		}
+		if _, err := s.UnregisterInstance(inst.ID); err != nil {
+			return err
+		}
 	}
 	return nil
 }

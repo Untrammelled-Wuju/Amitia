@@ -2,6 +2,7 @@ package runtimeorchestrator
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
@@ -53,17 +54,17 @@ func NewRuntimeStateService(runtimePort RuntimeStatePort, instancePort ProviderI
 
 func (s *RuntimeStateService) IsRuntimeOnline(ctx context.Context, runtimeID runtimeidentity.RuntimeID) (bool, error) {
 	if s.runtimePort == nil {
-		return true, nil
+		return false, fmt.Errorf("runtime state service: runtime port not configured")
 	}
 	return s.runtimePort.IsRuntimeOnline(ctx, runtimeID)
 }
 
 func (s *RuntimeStateService) IsDeviceOffline(ctx context.Context, deviceID runtimeidentity.DeviceID) (bool, error) {
+	if s.runtimePort == nil {
+		return false, fmt.Errorf("runtime state service: runtime port not configured")
+	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if s.runtimePort == nil {
-		return false, nil
-	}
 	rtInfo, err := s.runtimePort.GetRuntimeForDevice(ctx, deviceID)
 	if err != nil || rtInfo == nil {
 		return true, err

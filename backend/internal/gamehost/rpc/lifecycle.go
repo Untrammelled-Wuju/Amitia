@@ -284,7 +284,7 @@ func keyToPeer(key RequestKey) *ipc.Peer {
 
 func findPending(reg PendingRequestRegistry, key RequestKey) *PendingRequest {
 	if r, ok := reg.(*pendingRequestRegistry); ok {
-		return r.get(key)
+		return r.Get(key)
 	}
 	return nil
 }

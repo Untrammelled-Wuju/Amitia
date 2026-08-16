@@ -88,7 +88,13 @@ func (h *ControlHandler) handleControlOutput(ctx context.Context, request rpc.RP
 	}
 
 	if input.OutputID == "" {
-		input.OutputID = request.ID
+		return rpc.RPCResponse{
+			RequestID: request.ID,
+			Error: &rpc.RPCRoutedError{
+				Code:    string(domain.ErrInvalidArgument),
+				Message: "outputId is required and must not be empty",
+			},
+		}, nil
 	}
 
 	sinkDesc, sink, found := h.sinkRegistry.ResolveEffect(request.RuntimeID, domain.ServiceID(input.ServiceID), input.SinkID)
@@ -192,6 +198,7 @@ func (h *ControlHandler) handleSinkRegister(ctx context.Context, request rpc.RPC
 		ServiceID:  domain.ServiceID(input.ServiceID),
 		Kind:       kind,
 		Generation: uint64(request.Generation),
+		Metadata:   input.Metadata,
 	}
 
 	var effectSink ControlEffectSink

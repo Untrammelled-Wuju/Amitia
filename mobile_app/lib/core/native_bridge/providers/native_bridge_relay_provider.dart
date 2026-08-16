@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../native_bridge_relay_client.dart';
 import '../native_bridge_platform_dispatcher.dart';
+import '../../backend_connection/backend_connection_config.dart';
 
 final nativeBridgePlatformDispatcherProvider =
     Provider<NativeBridgePlatformDispatcher>((ref) {
@@ -28,20 +29,24 @@ class NativeBridgeRelayClientNotifier extends StateNotifier<AsyncValue<void>> {
   NativeBridgeRelayClientNotifier({required this.dispatcher})
       : super(const AsyncValue.loading());
 
-  void attachBackend(String baseUrl, {required bool isAndroid, required bool isIOS}) {
+  void attachBackend(BackendConnectionConfig? connectionConfig, {required bool isAndroid, required bool isIOS}) {
     _isAndroid = isAndroid;
     _isIOS = isIOS;
     if (!_isAndroid && !_isIOS) {
       _disposeClient();
       return;
     }
+    if (connectionConfig == null) {
+      _disposeClient();
+      return;
+    }
     final platform = _isAndroid ? 'android' : 'ios';
-    if (_client != null && _client!.baseUrl == baseUrl && _client!.isConnected) {
+    if (_client != null && _client!.currentGeneration == connectionConfig.generation && _client!.isConnected) {
       return;
     }
     _disposeClient();
     _client = NativeBridgeRelayClient(
-      baseUrl: baseUrl,
+      connectionConfig: connectionConfig,
       platform: platform,
       dispatcher: dispatcher,
     );

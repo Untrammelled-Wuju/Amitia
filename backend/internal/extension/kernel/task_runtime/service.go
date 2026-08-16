@@ -333,14 +333,17 @@ func (s *TaskRuntimeService) dispatchOnce(ctx context.Context) {
 
 		run, err := s.store.GetTaskRun(ctx, entry.TaskRunID)
 		if err != nil || run.Status.IsTerminal() {
-			_ = s.queue.Remove(ctx, entry.TaskRunID)
+			if removeErr := s.queue.Remove(ctx, entry.TaskRunID); removeErr != nil {
+				return
+			}
 			continue
 		}
 
-		canStart, reason, err := s.limiter.CanStart(ctx, run)
+		canStart, _, err := s.limiter.CanStart(ctx, run)
 		if err != nil || !canStart {
-			_ = s.queue.ReenqueueWithDelay(ctx, run, 5*time.Second)
-			_ = reason
+			if reenqueueErr := s.queue.ReenqueueWithDelay(ctx, run, 5*time.Second); reenqueueErr != nil {
+				return
+			}
 			return
 		}
 
@@ -675,7 +678,9 @@ func (s *TaskRuntimeService) handleProgress(ctx context.Context, taskRunID strin
 		UpdatedAt:  time.Now().UTC(),
 	}
 	progJSON, _ := json.Marshal(prog)
-	_ = s.store.PutProgress(ctx, taskRunID, seq, progJSON)
+	if err := s.store.PutProgress(ctx, taskRunID, seq, progJSON); err != nil {
+		return
+	}
 }
 
 func (s *TaskRuntimeService) handleCheckpoint(ctx context.Context, run *TaskRun, def *TaskDefinition, payload json.RawMessage, hash string, version int64) {
@@ -704,15 +709,9 @@ func (s *TaskRuntimeService) handleCheckpoint(ctx context.Context, run *TaskRun,
 
 	cpID := cp.CheckpointID
 	run.CheckpointID = &cpID
-	wasPausing := run.Status == RunStatusPausing
-	run.Status = RunStatusCheckpointing
-	_ = s.store.PutTaskRun(ctx, run)
-
-	if wasPausing {
+	if err := s.store.PutTaskRun(ctx, run); err != nil {
 		return
 	}
-	run.Status = RunStatusRunning
-	_ = s.store.PutTaskRun(ctx, run)
 }
 
 func (s *TaskRuntimeService) handleFinished(ctx context.Context, run *TaskRun, status string, result json.RawMessage, artifactID string, errCode, errMsg string) {
@@ -934,53 +933,19 @@ func (s *TaskRuntimeService) Cancel(ctx context.Context, taskRunID, reason strin
 	now := time.Now().UTC()
 	current.CancelRequestedAt = &now
 
-	if current.Status == RunStatusQueued || current.Status == RunStatusPaused {
+	if current.Status == RunStatusQueued || current.Status == RunStatusPaused || current.Status == RunStatusPausing {
 		previousStatus := current.Status
-		previousRevision := current.Revision
-		next := cloneTaskRun(current)
-		next.Status = RunStatusCancelling
-		if ok, casErr := s.store.UpdateTaskRunCAS(ctx, next, previousStatus, current.Generation, previousRevision); casErr != nil {
-			return fmt.Errorf("task_runtime: cancel cas: %w", casErr)
-		} else if !ok {
-			return NewTaskError(ErrTaskPauseInProgress, "concurrent state change, retry cancel")
-		}
-
-		cancelledRun := cloneTaskRun(next)
+		cancelledRun := cloneTaskRun(current)
 		cancelledRun.Status = RunStatusCancelled
 		cancelledRun.FinishedAt = &now
-		cancelledRun.Revision = next.Revision
+		cancelledRun.Revision = NextRevision(current.Revision)
 		if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
-			if err := s.store.PutTaskRun(txCtx, cancelledRun); err != nil {
-				return err
+			ok, casErr := s.store.UpdateTaskRunCAS(txCtx, cancelledRun, previousStatus, current.Generation, current.Revision)
+			if casErr != nil {
+				return fmt.Errorf("task_runtime: cancel cas: %w", casErr)
 			}
-			if err := s.store.RemoveFromQueue(txCtx, taskRunID); err != nil {
-				return err
-			}
-			return s.publishTaskEvent(txCtx, TaskEventCancelled, cancelledRun, reason, "")
-		}); err != nil {
-			return err
-		}
-		return nil
-	}
-
-	if current.Status == RunStatusPausing {
-		previousStatus := current.Status
-		previousRevision := current.Revision
-		next := cloneTaskRun(current)
-		next.Status = RunStatusCancelling
-		if ok, casErr := s.store.UpdateTaskRunCAS(ctx, next, previousStatus, current.Generation, previousRevision); casErr != nil {
-			return fmt.Errorf("task_runtime: cancel pausing cas: %w", casErr)
-		} else if !ok {
-			return NewTaskError(ErrTaskPauseInProgress, "concurrent state change, retry cancel")
-		}
-
-		cancelledRun := cloneTaskRun(next)
-		cancelledRun.Status = RunStatusCancelled
-		cancelledRun.FinishedAt = &now
-		cancelledRun.Revision = next.Revision
-		if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
-			if err := s.store.PutTaskRun(txCtx, cancelledRun); err != nil {
-				return err
+			if !ok {
+				return NewTaskError(ErrTaskPauseInProgress, "concurrent state change, retry cancel")
 			}
 			if err := s.store.RemoveFromQueue(txCtx, taskRunID); err != nil {
 				return err
@@ -1136,8 +1101,14 @@ func (s *TaskRuntimeService) Recover(ctx context.Context, taskRunID string) (*Ta
 	run.ExecutionAttemptID = ""
 	run.RuntimeInstanceID = nil
 
-	_ = s.store.PutTaskRun(ctx, run)
-	_ = s.queue.Enqueue(ctx, run)
+	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
+		if err := s.store.PutTaskRun(txCtx, run); err != nil {
+			return err
+		}
+		return s.queue.Enqueue(txCtx, run)
+	}); err != nil {
+		return nil, err
+	}
 
 	go s.tryDispatch()
 	return run, nil
@@ -1181,22 +1152,25 @@ func (s *TaskRuntimeService) StartupRecovery(ctx context.Context) error {
 			return fmt.Errorf("task_runtime: recovery list %s: %w", status, err)
 		}
 		for _, run := range runs {
-			s.recoverRun(ctx, run)
+			if err := s.recoverRun(ctx, run); err != nil {
+				return err
+			}
 		}
 	}
 
-	_, _ = s.queue.ReclaimExpired(ctx)
+	if _, reclaimErr := s.queue.ReclaimExpired(ctx); reclaimErr != nil {
+		return reclaimErr
+	}
 	return nil
 }
 
-func (s *TaskRuntimeService) recoverRun(ctx context.Context, run *TaskRun) {
+func (s *TaskRuntimeService) recoverRun(ctx context.Context, run *TaskRun) error {
 	def, err := s.store.GetTaskDefinition(ctx, run.TaskDefinitionID)
 	if err != nil {
 		run.Status = RunStatusManualIntervention
 		msg := "definition not found during recovery"
 		run.ErrorMessage = &msg
-		_ = s.store.PutTaskRun(ctx, run)
-		return
+		return s.store.PutTaskRun(ctx, run)
 	}
 
 	recoverability := def.Recoverability
@@ -1232,7 +1206,9 @@ func (s *TaskRuntimeService) recoverRun(ctx context.Context, run *TaskRun) {
 			run.Status = RunStatusQueued
 			now := time.Now().UTC()
 			run.QueuedAt = &now
-			_ = s.queue.Enqueue(ctx, run)
+			if err := s.queue.Enqueue(ctx, run); err != nil {
+				return err
+			}
 		} else {
 			run.Status = RunStatusManualIntervention
 		}
@@ -1248,7 +1224,7 @@ func (s *TaskRuntimeService) recoverRun(ctx context.Context, run *TaskRun) {
 		}
 	}
 
-	_ = s.store.PutTaskRun(ctx, run)
+	return s.store.PutTaskRun(ctx, run)
 }
 
 func (s *TaskRuntimeService) leaseReclaimLoop() {

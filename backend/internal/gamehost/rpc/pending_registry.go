@@ -17,6 +17,7 @@ type PeerKey struct {
 
 type PendingRequestRegistry interface {
 	Register(req *PendingRequest) (bool, error)
+	Get(key RequestKey) *PendingRequest
 	Complete(key RequestKey, result protocol.Envelope) (bool, error)
 	Fail(key RequestKey, err error) (bool, error)
 	Timeout(key RequestKey) (bool, error)
@@ -29,8 +30,9 @@ type PendingRequestRegistry interface {
 	Count() int
 	CountByRuntime(runtimeID domain.RuntimeInstanceID) int
 	Shutdown()
-	get(key RequestKey) *PendingRequest
 }
+
+var _ PendingRequestRegistry = (*pendingRequestRegistry)(nil)
 
 type pendingRequestRegistry struct {
 	mu         sync.Mutex
@@ -171,7 +173,24 @@ func (r *pendingRequestRegistry) transitionLocked(
 	if result != nil {
 		req.result = *result
 	}
-	req.err = err
+
+	if err != nil {
+		req.err = err
+	} else if targetState == RequestStateTimedOut {
+		req.err = NewRPCErrorWithCause(
+			"request_timed_out",
+			domain.ErrTimeout,
+			"request timed out waiting for response",
+			nil,
+		)
+	} else if targetState == RequestStateCancelled {
+		req.err = NewRPCErrorWithCause(
+			"request_cancelled",
+			domain.ErrCancelled,
+			"request was cancelled",
+			nil,
+		)
+	}
 
 	if req.CancelFunc != nil {
 		req.CancelFunc()
@@ -292,6 +311,12 @@ func (r *pendingRequestRegistry) CancelByRuntime(runtimeID domain.RuntimeInstanc
 	for k, req := range r.requests {
 		if k.RuntimeID == runtimeID && !req.State.IsTerminal() {
 			req.State = RequestStateCancelled
+			req.err = NewRPCErrorWithCause(
+				"request_cancelled",
+				domain.ErrCancelled,
+				"runtime cancelled all pending requests",
+				nil,
+			)
 			if req.CancelFunc != nil {
 				req.CancelFunc()
 			}
@@ -327,7 +352,7 @@ func (r *pendingRequestRegistry) CountByRuntime(runtimeID domain.RuntimeInstance
 	return count
 }
 
-func (r *pendingRequestRegistry) get(key RequestKey) *PendingRequest {
+func (r *pendingRequestRegistry) Get(key RequestKey) *PendingRequest {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	return r.requests[key]

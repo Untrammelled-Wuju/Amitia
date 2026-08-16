@@ -1,0 +1,25 @@
+{
+  "protocolVersion": 1,
+  "requestId": "req-list-001",
+  "status": "ok",
+  "result": {
+    "items": [
+      {
+        "name": "report.pdf",
+        "isDirectory": false,
+        "size": 1048576,
+        "modificationDate": 1700000100,
+        "isSymlink": false
+      },
+      {
+        "name": "images",
+        "isDirectory": true,
+        "size": 0,
+        "modificationDate": 1700000000,
+        "isSymlink": false
+      }
+    ],
+    "mountId": "mt-abc123",
+    "relativePath": "documents"
+  }
+}

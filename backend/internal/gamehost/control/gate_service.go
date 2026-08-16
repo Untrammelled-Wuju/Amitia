@@ -296,6 +296,11 @@ func (g *PluginOutputGate) AuthorizeAndDispatch(ctx context.Context, req OutputC
 			g.recordAudit(req.Intent, req.Peer, "", false, g.clock())
 			return
 		}
+		if finalDecision := g.finalRevalidate(ctx, req, *permit, g.clock()); finalDecision.Deny() {
+			dispatchErr = g.mapDecisionToError(finalDecision)
+			g.recordAudit(req.Intent, req.Peer, finalDecision.Reason, false, g.clock())
+			return
+		}
 		g.recordAudit(req.Intent, req.Peer, "", true, g.clock())
 	}); err != nil {
 		return decision, err
@@ -372,6 +377,53 @@ func (g *PluginOutputGate) revalidatePermit(ctx context.Context, req OutputCheck
 	policyResult, err := g.policyChecker.AllowPluginControl(ctx, intent.RuntimeID, snap.Mode)
 	if err != nil || !policyResult.Allowed {
 		return OutputDenied(OutputDeniedHostPolicy, snap.Epoch, snap.Mode, now)
+	}
+
+	return OutputAllowed(snap.Epoch, snap.Mode, now)
+}
+
+func (g *PluginOutputGate) finalRevalidate(ctx context.Context, req OutputCheckRequest, permit OutputPermit, now time.Time) OutputDecision {
+	intent := req.Intent
+	identity := req.Peer
+
+	g.mu.RLock()
+	_, gateClosed := g.closedFlags[intent.RuntimeID]
+	g.mu.RUnlock()
+	if gateClosed {
+		return OutputDenied(OutputDeniedGateClosed, 0, "", now)
+	}
+
+	if !g.topology.HasRuntime(intent.RuntimeID) {
+		return OutputDenied(OutputDeniedRuntimeNotFound, 0, "", now)
+	}
+	runtimePluginID, ok := g.topology.GetPluginID(intent.RuntimeID)
+	if !ok || runtimePluginID != identity.PluginID {
+		return OutputDenied(OutputDeniedInvalidPeer, 0, "", now)
+	}
+
+	isActive, err := g.runtimeReader.IsRuntimeActive(ctx, intent.RuntimeID)
+	if err != nil || !isActive {
+		return OutputDenied(OutputDeniedNotEligible, 0, "", now)
+	}
+	isReady, err := g.runtimeReader.IsRuntimeReady(ctx, intent.RuntimeID)
+	if err != nil || !isReady {
+		return OutputDenied(OutputDeniedNotReady, 0, "", now)
+	}
+
+	currentGeneration, err := g.generationReader.CurrentGeneration(ctx, intent.RuntimeID)
+	if err != nil {
+		return OutputDenied(OutputDeniedStaleGeneration, 0, "", now)
+	}
+	if permit.Generation != currentGeneration {
+		return OutputDenied(OutputDeniedStaleGeneration, 0, "", now)
+	}
+
+	snap, err := g.authority.GetSnapshot(ctx, intent.RuntimeID)
+	if err != nil {
+		return OutputDenied(OutputDeniedRuntimeNotFound, 0, "", now)
+	}
+	if intent.AuthorityEpoch != snap.Epoch {
+		return OutputDenied(OutputDeniedStaleEpoch, snap.Epoch, snap.Mode, now)
 	}
 
 	return OutputAllowed(snap.Epoch, snap.Mode, now)

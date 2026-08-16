@@ -565,6 +565,11 @@ func (s *Service) GetActiveSession(
 	return s.store.GetActiveByRuntime(ctx, userID, deviceID, runtimeID)
 }
 
+// ListActiveSessions 返回所有活动的 Session 列表
+func (s *Service) ListActiveSessions(ctx context.Context) ([]RuntimeSession, error) {
+	return s.store.ListActive(ctx)
+}
+
 func (s *Service) RecoverStartup(ctx context.Context, at time.Time) error {
 	now := s.normalizeTime(at)
 	return s.store.CloseActiveOnStartup(ctx, now, "core_restart")

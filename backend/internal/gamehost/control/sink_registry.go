@@ -1,6 +1,7 @@
 package control
 
 import (
+	"encoding/json"
 	"fmt"
 	"sync"
 
@@ -14,6 +15,7 @@ type ControlSinkDescriptor struct {
 	ServiceID  domain.ServiceID
 	Kind       ControlOutputKind
 	Generation uint64
+	Metadata   json.RawMessage
 }
 
 type registeredControlSink struct {

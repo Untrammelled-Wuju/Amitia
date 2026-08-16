@@ -2,6 +2,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 
+import '../backend_connection/backend_connection_config.dart';
+import '../backend_connection/backend_uri_builder.dart';
+import '../backend_transport/auth/backend_auth_header.dart';
 import 'native_bridge_platform_dispatcher.dart';
 
 class RelayEnvelope {
@@ -44,10 +47,11 @@ class RelayEnvelope {
 }
 
 class NativeBridgeRelayClient {
-  final String baseUrl;
+  final BackendConnectionConfig connectionConfig;
   final String platform;
   final Duration reconnectDelay;
   final NativeBridgePlatformDispatcher dispatcher;
+  final BackendUriBuilder _uriBuilder;
 
   WebSocket? _socket;
   final StreamController<RelayEnvelope> _eventController =
@@ -62,11 +66,12 @@ class NativeBridgeRelayClient {
   StreamSubscription<dynamic>? _nativeEventSub;
 
   NativeBridgeRelayClient({
-    required this.baseUrl,
+    required this.connectionConfig,
     required this.platform,
     required this.dispatcher,
+    BackendUriBuilder? uriBuilder,
     this.reconnectDelay = const Duration(seconds: 3),
-  });
+  }) : _uriBuilder = uriBuilder ?? BackendUriBuilder();
 
   Stream<RelayEnvelope> get events => _eventController.stream;
   Stream<bool> get connectionState => _connectionController.stream;
@@ -78,13 +83,32 @@ class NativeBridgeRelayClient {
     _connecting = true;
 
     try {
-      final uri = Uri.parse('$baseUrl/api/native-bridge/relay?platform=$platform');
+      final uri = _uriBuilder.webSocket(
+        connectionConfig,
+        '/api/native-bridge/relay',
+        queryParameters: {
+          'platform': platform,
+          'protocolVersion': '1',
+        },
+      );
+      final token = connectionConfig.credential.revealForTransport();
+      final headers = <String, String>{
+        'User-Agent': 'Amitia-Mobile',
+      };
+      switch (connectionConfig.authStrategy) {
+        case BackendAuthStrategy.localToken:
+          headers[BackendAuthHeader.localToken] = token;
+        case BackendAuthStrategy.bearer:
+          headers[BackendAuthHeader.authorization] = 'Bearer $token';
+      }
       final socket = await WebSocket.connect(
         uri.toString(),
         protocols: ['native-bridge-relay'],
+        headers: headers,
       );
       _socket = socket;
       _connecting = false;
+      _currentGeneration = connectionConfig.generation;
       _connectionController.add(true);
       _nativeEventSub = dispatcher.eventStream.listen(_onNativeEvent);
 

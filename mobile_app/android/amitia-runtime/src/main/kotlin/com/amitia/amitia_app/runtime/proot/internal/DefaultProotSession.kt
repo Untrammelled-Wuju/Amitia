@@ -28,13 +28,13 @@ internal class DefaultProotSession(
     private val stdoutPump: StreamPump
     private val stderrPump: StreamPump
     private val started = AtomicBoolean(false)
+    private val activated = AtomicBoolean(false)
     private val watcherStarted = AtomicBoolean(false)
     private val watcherFailureRef = AtomicReference<String?>(null)
 
     init {
         stdoutPump = InputStreamPump(process.inputStream) { data, seq -> if (!closed.get()) safeNotify(ProotEvent.Stdout(sessionId, data, seq)) }
         stderrPump = InputStreamPump(process.errorStream) { data, seq -> if (!closed.get()) safeNotify(ProotEvent.Stderr(sessionId, data, seq)) }
-        startExitWatcher()
     }
 
     override fun isAlive(): Boolean {
@@ -103,6 +103,25 @@ internal class DefaultProotSession(
             try { stderrPump.stop() } catch (_: Throwable) {}
             try { if (process.isAlive) process.destroyForcibly() } catch (_: Throwable) {}
             shutdownWatcherExecutor()
+        }
+    }
+
+    internal fun activate() {
+        if (!activated.compareAndSet(false, true)) return
+        startExitWatcher()
+        if (isProcessDead()) {
+            val exitCode = process.exitValue()
+            val exit = ProotExit(
+                generation = generation,
+                sessionId = sessionId,
+                exitCode = exitCode,
+                stopRequested = stopRequested.get(),
+            )
+            exitRef.set(exit)
+            publishTerminalOnce(exit)
+            exitDeferred.complete(exit)
+        } else {
+            markStarted()
         }
     }
 

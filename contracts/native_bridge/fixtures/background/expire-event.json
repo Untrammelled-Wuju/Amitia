@@ -1,0 +1,9 @@
+{
+  "domain": "background",
+  "event": "execution_window_expired",
+  "timestamp": "2026-08-16T12:05:00Z",
+  "data": {
+    "taskRunId": "task-run-123",
+    "identifier": "com.amitia.background.processing"
+  }
+}

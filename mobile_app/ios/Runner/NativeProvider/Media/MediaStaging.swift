@@ -2,34 +2,135 @@ import Foundation
 import Photos
 import UIKit
 
+public struct StagedResourceInfo {
+    public let nativeStagingId: String
+    public let mimeType: String
+    public let size: Int64
+    public let width: Double?
+    public let height: Double?
+    public let filename: String
+    public let createdAt: TimeInterval
+    public let mountId: String?
+
+    public var statDictionary: [String: Any] {
+        var dict: [String: Any] = [
+            "nativeStagingId": nativeStagingId,
+            "mimeType": mimeType,
+            "size": size,
+            "filename": filename,
+            "createdAt": createdAt
+        ]
+        if let w = width { dict["width"] = w }
+        if let h = height { dict["height"] = h }
+        if let m = mountId { dict["mountId"] = m }
+        return dict
+    }
+}
+
 public class MediaStaging {
     private static let stagingDir: URL = {
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
-        let dir = caches.appendingPathComponent("AmitiaMediaStaging", isDirectory: true)
+        let dir = caches.appendingPathComponent("AmitiaNativeStaging", isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true, attributes: nil)
         return dir
     }()
 
-    public static func urlForStagedResource(_ stagingId: String) -> URL? {
-        if stagingId.hasPrefix("file://") {
+    private static let metadataKey = "AmitiaStagingMetadata"
+    private static var metadata: [String: [String: Any]] = [:]
+    private static let lock = NSLock()
+
+    public static func nativeStagingURL(_ nativeStagingId: String) -> URL? {
+        guard nativeStagingId.hasPrefix("nativeStaging:") else {
             return nil
         }
-        if stagingId.hasPrefix("nativeStaging:") {
-            let filename = String(stagingId.dropFirst("nativeStaging:".count))
-            let url = stagingDir.appendingPathComponent(filename)
-            return FileManager.default.fileExists(atPath: url.path) ? url : nil
+        let filename = String(nativeStagingId.dropFirst("nativeStaging:".count))
+        guard !filename.isEmpty,
+              !filename.contains("/"),
+              !filename.contains(".."),
+              !filename.contains(":") else {
+            return nil
         }
-        return nil
+        let url = stagingDir.appendingPathComponent(filename)
+        return FileManager.default.fileExists(atPath: url.path) ? url : nil
     }
 
-    public static func deleteStagedResource(_ stagingId: String) {
-        if let url = urlForStagedResource(stagingId) {
-            try? FileManager.default.removeItem(at: url)
+    public static func registerResource(nativeStagingId: String, info: [String: Any]) {
+        lock.lock()
+        metadata[nativeStagingId] = info
+        lock.unlock()
+    }
+
+    public static func stat(nativeStagingId: String) -> StagedResourceInfo? {
+        guard let url = nativeStagingURL(nativeStagingId) else {
+            return nil
+        }
+        do {
+            let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+            let size = attributes[.size] as? Int64 ?? 0
+            let createdAt = (attributes[.creationDate] as? Date)?.timeIntervalSince1970 ?? 0
+
+            lock.lock()
+            let meta = metadata[nativeStagingId]
+            lock.unlock()
+
+            return StagedResourceInfo(
+                nativeStagingId: nativeStagingId,
+                mimeType: meta?["mimeType"] as? String ?? "application/octet-stream",
+                size: size,
+                width: meta?["width"] as? Double,
+                height: meta?["height"] as? Double,
+                filename: url.lastPathComponent,
+                createdAt: createdAt,
+                mountId: meta?["mountId"] as? String
+            )
+        } catch {
+            return nil
+        }
+    }
+
+    public static func readChunk(nativeStagingId: String, offset: Int64, length: Int64) -> Data? {
+        guard let url = nativeStagingURL(nativeStagingId) else {
+            return nil
+        }
+        do {
+            let handle = try FileHandle(forReadingFrom: url)
+            if offset > 0 {
+                handle.seek(toOffset: UInt64(offset))
+            }
+            let data: Data
+            if length > 0 {
+                data = handle.readData(ofLength: Int(length))
+            } else {
+                data = handle.readDataToEndOfFile()
+            }
+            handle.closeFile()
+            return data
+        } catch {
+            return nil
+        }
+    }
+
+    public static func release(nativeStagingId: String) -> Bool {
+        guard let url = nativeStagingURL(nativeStagingId) else {
+            return false
+        }
+        do {
+            try FileManager.default.removeItem(at: url)
+            lock.lock()
+            metadata.removeValue(forKey: nativeStagingId)
+            lock.unlock()
+            return true
+        } catch {
+            lock.lock()
+            metadata.removeValue(forKey: nativeStagingId)
+            lock.unlock()
+            return false
         }
     }
 
     public static func exportAsset(asset: PHAsset, representation: String, localId: String, request: IOSNativeRequest) async -> IOSNativeResponse {
-        let filename = "\(localId)_\(UUID().uuidString).jpg"
+        let stagingId = UUID().uuidString
+        let filename = "\(localId)_\(stagingId).jpg"
         let targetURL = stagingDir.appendingPathComponent(filename)
 
         let imageManager = PHImageManager.default()
@@ -66,18 +167,27 @@ public class MediaStaging {
                 do {
                     try data.write(to: targetURL)
                     let fileSize = (try? FileManager.default.attributesOfItem(atPath: targetURL.path)[.size] as? Int64) ?? 0
-                    let resourceUri = targetURL.absoluteString.hasPrefix("file://") ? targetURL.absoluteString : "file://" + targetURL.absoluteString
+                    let nativeStagingId = "nativeStaging:\(filename)"
+
+                    MediaStaging.registerResource(nativeStagingId: nativeStagingId, info: [
+                        "mimeType": "image/jpeg",
+                        "width": Double(image.size.width),
+                        "height": Double(image.size.height),
+                        "filename": filename
+                    ])
+
                     continuation.resume(returning: IOSNativeResponse(
                         protocolVersion: request.protocolVersion,
                         requestId: request.requestId,
                         status: "ok",
                         result: [
-                            "resourceUri": resourceUri,
-                            "fileSize": fileSize,
+                            "nativeStagingId": nativeStagingId,
+                            "size": fileSize,
                             "mimeType": "image/jpeg",
-                            "width": image.size.width,
-                            "height": image.size.height,
-                            "filename": filename
+                            "width": Double(image.size.width),
+                            "height": Double(image.size.height),
+                            "filename": filename,
+                            "originalLocalId": localId
                         ],
                         error: nil
                     ))
@@ -103,6 +213,10 @@ public class MediaStaging {
             return (0, 0)
         }
 
+        lock.lock()
+        let currentFilenames = Set(metadata.values.compactMap { $0["filename"] as? String })
+        lock.unlock()
+
         for case let fileURL as URL in enumerator {
             scanned += 1
             do {
@@ -111,6 +225,16 @@ public class MediaStaging {
                    let modDate = resourceValues.contentModificationDate,
                    modDate < cutoff {
                     try FileManager.default.removeItem(at: fileURL)
+                    let fn = fileURL.lastPathComponent
+                    let toRemove = currentFilenames.contains(fn) ? metadata.keys.first(where: { key in
+                        guard let m = metadata[key], let mfn = m["filename"] as? String else { return false }
+                        return mfn == fn
+                    }) : nil
+                    if let key = toRemove {
+                        lock.lock()
+                        metadata.removeValue(forKey: key)
+                        lock.unlock()
+                    }
                     removed += 1
                 }
             } catch {
@@ -119,5 +243,9 @@ public class MediaStaging {
         }
 
         return (removed, scanned)
+    }
+
+    public static func isNativeStagingId(_ value: String) -> Bool {
+        return value.hasPrefix("nativeStaging:")
     }
 }

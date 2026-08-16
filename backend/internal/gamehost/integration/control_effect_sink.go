@@ -121,11 +121,19 @@ func (s *ProtocolControlEffectSink) ExecuteAuthorized(
 		return fmt.Errorf("effect not committed by plugin")
 	}
 
-	if commit.EffectID != "" && commit.EffectID != outputID {
+	if commit.EffectID == "" {
+		return fmt.Errorf("effect commit failed: effectId is required and must not be empty")
+	}
+
+	if commit.EffectID != outputID {
 		return fmt.Errorf("effect commit mismatch: expected %s, got %s", outputID, commit.EffectID)
 	}
 
-	if commit.Generation > 0 && commit.Generation != permit.Generation {
+	if commit.Generation == 0 {
+		return fmt.Errorf("effect commit failed: generation is required and must not be zero")
+	}
+
+	if commit.Generation != permit.Generation {
 		return fmt.Errorf("effect commit generation mismatch: expected %d, got %d", permit.Generation, commit.Generation)
 	}
 

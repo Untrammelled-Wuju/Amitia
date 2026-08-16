@@ -108,6 +108,21 @@ type IDGenerator interface {
 	Generate() ConnectionID
 }
 
+type TerminalState int
+
+const (
+	TerminalCompleted TerminalState = iota
+	TerminalFailed
+	TerminalTimedOut
+	TerminalCancelled
+)
+
+type TerminalKey struct {
+	RuntimeID domain.RuntimeInstanceID
+	ServiceID domain.ServiceID
+	RequestID string
+}
+
 type PendingRequestHandle interface {
 	DoneCh() chan struct{}
 	Result() (protocol.Envelope, error)
@@ -118,6 +133,7 @@ type ResponseCorrelator interface {
 	HandleResponse(peer Peer, envelope *protocol.Envelope) bool
 	CancelByPeer(peer Peer)
 	CancelByRuntime(runtimeID string)
+	Terminalize(key TerminalKey, state TerminalState, err error)
 }
 
 type ControlPlaneConfig struct {
@@ -327,14 +343,33 @@ func (cp *controlPlane) SendRequest(ctx context.Context, peer Peer, envelope pro
 		return nil, NewIPCError(IPCErrorProtocol, domain.ErrInternal, "response correlator not configured")
 	}
 
-	handle, ok := cp.responseCorrelator.RegisterPending(peer, envelope.ID, envelope.Generation)
-	if !ok {
-		return nil, NewIPCError(IPCErrorProtocol, domain.ErrInvalidState, "duplicate or rejected request id")
+	requestKey := TerminalKey{
+		RuntimeID: domain.RuntimeInstanceID(peer.RuntimeID),
+		ServiceID: domain.ServiceID(peer.ServiceID),
+		RequestID: envelope.ID,
+	}
+
+	handle, registered := cp.responseCorrelator.RegisterPending(peer, envelope.ID, envelope.Generation)
+	if !registered {
+		if handle == nil {
+			return nil, NewIPCError(IPCErrorProtocol, domain.ErrInvalidState, "duplicate or rejected request id")
+		}
+		select {
+		case <-handle.DoneCh():
+			env, err := handle.Result()
+			if err != nil {
+				return nil, err
+			}
+			return &env, nil
+		case <-ctx.Done():
+			return nil, NewIPCError(IPCErrorCancelled, domain.ErrCancelled, "request cancelled")
+		}
 	}
 
 	FillRouting(&envelope, peer)
 
 	if err := conn.Transport().Send(ctx, envelope); err != nil {
+		cp.responseCorrelator.Terminalize(requestKey, TerminalFailed, NewIPCErrorWithCause(IPCErrorTransport, domain.ErrRuntimeUnavailable, "send failed", err))
 		return nil, NewIPCErrorWithCause(IPCErrorTransport, domain.ErrRuntimeUnavailable, "send failed", err)
 	}
 
@@ -349,8 +384,10 @@ func (cp *controlPlane) SendRequest(ctx context.Context, peer Peer, envelope pro
 		}
 		return &env, nil
 	case <-timer.C:
+		cp.responseCorrelator.Terminalize(requestKey, TerminalTimedOut, nil)
 		return nil, NewIPCError(IPCErrorTimeout, domain.ErrTimeout, "request timed out")
 	case <-ctx.Done():
+		cp.responseCorrelator.Terminalize(requestKey, TerminalCancelled, nil)
 		return nil, NewIPCError(IPCErrorCancelled, domain.ErrCancelled, "request cancelled")
 	}
 }

@@ -112,16 +112,16 @@ type ProviderRegistry struct {
 	mu           sync.RWMutex
 	definitions  map[string]*CapabilityProviderDefinition
 	instances    map[string]*CapabilityProviderInstance
-	byProvider   map[string][]*CapabilityProviderInstance
-	byCapability map[string][]*CapabilityProviderDefinition
+	byProvider   map[string][]string
+	byCapability map[string][]string
 }
 
 func NewProviderRegistry() *ProviderRegistry {
 	return &ProviderRegistry{
 		definitions:  make(map[string]*CapabilityProviderDefinition),
 		instances:    make(map[string]*CapabilityProviderInstance),
-		byProvider:   make(map[string][]*CapabilityProviderInstance),
-		byCapability: make(map[string][]*CapabilityProviderDefinition),
+		byProvider:   make(map[string][]string),
+		byCapability: make(map[string][]string),
 	}
 }
 
@@ -189,24 +189,24 @@ func (r *ProviderRegistry) cloneInstances() map[string]*CapabilityProviderInstan
 	return out
 }
 
-func (r *ProviderRegistry) cloneByProvider() map[string][]*CapabilityProviderInstance {
+func (r *ProviderRegistry) cloneByProvider() map[string][]string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	out := make(map[string][]*CapabilityProviderInstance, len(r.byProvider))
+	out := make(map[string][]string, len(r.byProvider))
 	for k, v := range r.byProvider {
-		cp := make([]*CapabilityProviderInstance, len(v))
+		cp := make([]string, len(v))
 		copy(cp, v)
 		out[k] = cp
 	}
 	return out
 }
 
-func (r *ProviderRegistry) cloneByCapability() map[string][]*CapabilityProviderDefinition {
+func (r *ProviderRegistry) cloneByCapability() map[string][]string {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
-	out := make(map[string][]*CapabilityProviderDefinition, len(r.byCapability))
+	out := make(map[string][]string, len(r.byCapability))
 	for k, v := range r.byCapability {
-		cp := make([]*CapabilityProviderDefinition, len(v))
+		cp := make([]string, len(v))
 		copy(cp, v)
 		out[k] = cp
 	}
@@ -229,7 +229,7 @@ func (r *ProviderRegistry) RegisterDefinition(def CapabilityProviderDefinition) 
 	}
 
 	if found && existing.CapabilityID != def.CapabilityID {
-		r.byCapability = r.removeCapabilityIndexLocked(r.byCapability, ProviderID(normalizedID))
+		r.byCapability = removeFromSliceMap(r.byCapability, string(existing.CapabilityID), normalizedID)
 	}
 
 	if found {
@@ -238,7 +238,7 @@ func (r *ProviderRegistry) RegisterDefinition(def CapabilityProviderDefinition) 
 		def.Revision = 1
 	}
 	r.definitions[normalizedID] = &def
-	r.byCapability = r.upsertCapabilityIndexLocked(r.byCapability, def)
+	r.byCapability = appendToSliceMap(r.byCapability, string(def.CapabilityID), normalizedID)
 	return nil
 }
 
@@ -251,11 +251,12 @@ func (r *ProviderRegistry) DeregisterDefinition(id ProviderID) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
-	if _, existed := r.definitions[string(normalized)]; !existed {
+	def, existed := r.definitions[string(normalized)]
+	if !existed {
 		return false, nil
 	}
 	delete(r.definitions, string(normalized))
-	r.byCapability = r.removeCapabilityIndexLocked(r.byCapability, normalized)
+	r.byCapability = removeFromSliceMap(r.byCapability, string(def.CapabilityID), string(normalized))
 	return true, nil
 }
 
@@ -264,24 +265,24 @@ func (r *ProviderRegistry) DeregisterDefinitionCascade(id ProviderID) (bool, err
 	if normalized == "" {
 		return false, ErrProviderInvalid
 	}
-	_, existed := r.getDefinition(string(normalized))
+
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
+	def, existed := r.definitions[string(normalized)]
 	if !existed {
 		return false, nil
 	}
+	capID := string(def.CapabilityID)
+	delete(r.definitions, string(normalized))
+	r.byCapability = removeFromSliceMap(r.byCapability, capID, string(normalized))
 
-	r.delDefinition(string(normalized))
-
-	r.mu.Lock()
-	r.byCapability = r.removeCapabilityIndexLocked(r.byCapability, normalized)
-	if instances, ok := r.byProvider[string(normalized)]; ok {
-		for _, inst := range instances {
-			if inst != nil {
-				delete(r.instances, string(inst.ID))
-			}
+	if instanceIDs, ok := r.byProvider[string(normalized)]; ok {
+		for _, instID := range instanceIDs {
+			delete(r.instances, instID)
 		}
 		delete(r.byProvider, string(normalized))
 	}
-	r.mu.Unlock()
 
 	return true, nil
 }
@@ -319,18 +320,8 @@ func (r *ProviderRegistry) RegisterInstance(inst CapabilityProviderInstance) err
 	}
 
 	r.instances[string(inst.ID)] = &inst
-	r.byProvider[string(inst.ProviderID)] = r.appendInstanceLocked(r.byProvider[string(inst.ProviderID)], &inst)
+	r.byProvider[string(inst.ProviderID)] = appendIDLocked(r.byProvider[string(inst.ProviderID)], string(inst.ID))
 	return nil
-}
-
-func (r *ProviderRegistry) appendInstanceLocked(list []*CapabilityProviderInstance, inst *CapabilityProviderInstance) []*CapabilityProviderInstance {
-	for i := range list {
-		if list[i] != nil && list[i].ID == inst.ID {
-			list[i] = inst
-			return list
-		}
-	}
-	return append(list, inst)
 }
 
 func (r *ProviderRegistry) UpdateInstanceHealth(instanceID ProviderInstanceID, health HealthStatus) error {
@@ -359,14 +350,6 @@ func (r *ProviderRegistry) UpdateInstanceHealth(instanceID ProviderInstanceID, h
 	updated.Revision = current.Revision + 1
 
 	r.instances[string(updated.ID)] = updated
-	list := r.byProvider[string(updated.ProviderID)]
-	for i := range list {
-		if list[i] != nil && list[i].ID == normalized {
-			list[i] = updated
-			break
-		}
-	}
-	r.byProvider[string(updated.ProviderID)] = list
 	return nil
 }
 
@@ -396,14 +379,6 @@ func (r *ProviderRegistry) UpdateInstanceAvailability(instanceID ProviderInstanc
 	updated.Revision = current.Revision + 1
 
 	r.instances[string(updated.ID)] = updated
-	list := r.byProvider[string(updated.ProviderID)]
-	for i := range list {
-		if list[i] != nil && list[i].ID == normalized {
-			list[i] = updated
-			break
-		}
-	}
-	r.byProvider[string(updated.ProviderID)] = list
 	return nil
 }
 
@@ -423,19 +398,9 @@ func (r *ProviderRegistry) DeregisterInstance(instanceID ProviderInstanceID) (bo
 	providerID := current.ProviderID
 
 	delete(r.instances, string(normalized))
-	if list, ok := r.byProvider[string(providerID)]; ok {
-		newList := make([]*CapabilityProviderInstance, 0, len(list))
-		for _, inst := range list {
-			if inst == nil || inst.ID == normalized {
-				continue
-			}
-			newList = append(newList, inst)
-		}
-		if len(newList) == 0 {
-			delete(r.byProvider, string(providerID))
-		} else {
-			r.byProvider[string(providerID)] = newList
-		}
+	r.byProvider[string(providerID)] = removeIDLocked(r.byProvider[string(providerID)], string(normalized))
+	if len(r.byProvider[string(providerID)]) == 0 {
+		delete(r.byProvider, string(providerID))
 	}
 	return true, nil
 }
@@ -446,19 +411,13 @@ func (r *ProviderRegistry) FlushInstancesByProvider(providerID ProviderID) (int,
 		return 0, ErrProviderInvalid
 	}
 
-	r.byProviderMuRead()(func() {
-	})
-
 	r.mu.Lock()
-	list := r.byProvider[string(normalized)]
+	ids := r.byProvider[string(normalized)]
 	r.mu.Unlock()
 
 	count := 0
-	for _, inst := range list {
-		if inst == nil {
-			continue
-		}
-		ok, err := r.DeregisterInstance(inst.ID)
+	for _, id := range ids {
+		ok, err := r.DeregisterInstance(ProviderInstanceID(id))
 		if err != nil {
 			return count, err
 		}
@@ -467,14 +426,6 @@ func (r *ProviderRegistry) FlushInstancesByProvider(providerID ProviderID) (int,
 		}
 	}
 	return count, nil
-}
-
-func (r *ProviderRegistry) byProviderMuRead() func(fn func()) {
-	return func(fn func()) {
-		r.mu.RLock()
-		defer r.mu.RUnlock()
-		fn()
-	}
 }
 
 func (r *ProviderRegistry) FlushInstancesByCapability(capabilityID CapabilityID) (int, error) {
@@ -560,18 +511,19 @@ func (r *ProviderRegistry) DrainByProvider(providerID ProviderID) (int, error) {
 	}
 
 	r.mu.Lock()
-	list := r.byProvider[string(normalized)]
+	ids := r.byProvider[string(normalized)]
 	r.mu.Unlock()
 
 	count := 0
-	for _, inst := range list {
-		if inst == nil {
+	for _, id := range ids {
+		inst, found := r.getInstance(id)
+		if !found {
 			continue
 		}
 		if inst.Availability == ProviderAvailabilityDraining {
 			continue
 		}
-		if err := r.UpdateInstanceAvailability(inst.ID, ProviderAvailabilityDraining); err != nil {
+		if err := r.UpdateInstanceAvailability(ProviderInstanceID(id), ProviderAvailabilityDraining); err != nil {
 			return count, err
 		}
 		count++
@@ -689,13 +641,19 @@ func (r *ProviderRegistry) ListByCapability(capabilityID CapabilityID) []*Capabi
 	if normalized == "" {
 		return nil
 	}
-	caps := r.cloneByCapability()
-	list := caps[string(normalized)]
-	if len(list) == 0 {
+	r.mu.RLock()
+	ids := r.byCapability[string(normalized)]
+	r.mu.RUnlock()
+	if len(ids) == 0 {
 		return nil
 	}
-	result := make([]*CapabilityProviderDefinition, len(list))
-	copy(result, list)
+	result := make([]*CapabilityProviderDefinition, 0, len(ids))
+	for _, id := range ids {
+		if def, ok := r.getDefinition(id); ok {
+			result = append(result, def)
+		}
+	}
+	sortDefs(result)
 	return result
 }
 
@@ -822,13 +780,21 @@ func (r *ProviderRegistry) ListInstancesByProvider(providerID ProviderID) []*Cap
 	if normalized == "" {
 		return nil
 	}
-	bp := r.cloneByProvider()
-	list := bp[string(normalized)]
-	if len(list) == 0 {
+	r.mu.RLock()
+	ids := r.byProvider[string(normalized)]
+	r.mu.RUnlock()
+	if len(ids) == 0 {
 		return nil
 	}
-	result := make([]*CapabilityProviderInstance, len(list))
-	copy(result, list)
+	result := make([]*CapabilityProviderInstance, 0, len(ids))
+	for _, id := range ids {
+		if inst, ok := r.getInstance(id); ok {
+			result = append(result, inst)
+		}
+	}
+	sort.Slice(result, func(i, j int) bool {
+		return result[i].ID < result[j].ID
+	})
 	return result
 }
 
@@ -1039,77 +1005,6 @@ func (r *ProviderRegistry) SnapshotBindings() map[ProviderID]RuntimeBinding {
 	return out
 }
 
-func (r *ProviderRegistry) upsertCapabilityIndexLocked(entries map[string][]*CapabilityProviderDefinition, def CapabilityProviderDefinition) map[string][]*CapabilityProviderDefinition {
-	key := string(def.CapabilityID)
-	existing := entries[key]
-	for i := range existing {
-		if existing[i] != nil && existing[i].ID == def.ID {
-			existing[i] = &def
-			entries[key] = existing
-			return entries
-		}
-	}
-	entries[key] = append(existing, &def)
-	return entries
-}
-
-func (r *ProviderRegistry) removeCapabilityIndexLocked(entries map[string][]*CapabilityProviderDefinition, id ProviderID) map[string][]*CapabilityProviderDefinition {
-	for key, defs := range entries {
-		kept := make([]*CapabilityProviderDefinition, 0, len(defs))
-		for _, d := range defs {
-			if d == nil {
-				continue
-			}
-			if d.ID == id {
-				continue
-			}
-			kept = append(kept, d)
-		}
-		if len(kept) == 0 {
-			delete(entries, key)
-		} else {
-			entries[key] = kept
-		}
-	}
-	return entries
-}
-
-func (r *ProviderRegistry) rebuildProviderInstanceIndex() {
-	all := r.cloneInstances()
-	index := make(map[string][]*CapabilityProviderInstance)
-	for _, inst := range all {
-		if inst == nil {
-			continue
-		}
-		index[string(inst.ProviderID)] = append(index[string(inst.ProviderID)], inst)
-	}
-	for id := range index {
-		sort.Slice(index[id], func(i, j int) bool {
-			return index[id][i].ID < index[id][j].ID
-		})
-	}
-
-	r.mu.Lock()
-	r.byProvider = index
-	r.mu.Unlock()
-}
-
-func (r *ProviderRegistry) rebuildCapabilityIndex() {
-	all := r.cloneDefinitions()
-	index := make(map[string][]*CapabilityProviderDefinition)
-	for _, def := range all {
-		if def == nil {
-			continue
-		}
-		key := string(def.CapabilityID)
-		index[key] = append(index[key], def)
-	}
-
-	r.mu.Lock()
-	r.byCapability = index
-	r.mu.Unlock()
-}
-
 func mapValues[T any](m map[string]T) []T {
 	if len(m) == 0 {
 		return nil
@@ -1242,4 +1137,50 @@ func platformFilterFn(platform runtimeidentity.Platform) func(*CapabilityProvide
 		}
 		return matchPlatform(def.Platforms, platform)
 	}
+}
+
+func appendIDLocked(list []string, id string) []string {
+	for _, existing := range list {
+		if existing == id {
+			return list
+		}
+	}
+	return append(list, id)
+}
+
+func removeIDLocked(list []string, id string) []string {
+	result := make([]string, 0, len(list))
+	for _, existing := range list {
+		if existing == id {
+			continue
+		}
+		result = append(result, existing)
+	}
+	return result
+}
+
+func appendToSliceMap(m map[string][]string, key, id string) map[string] []string {
+	for _, existing := range m[key] {
+		if existing == id {
+			return m
+		}
+	}
+	m[key] = append(m[key], id)
+	return m
+}
+
+func removeFromSliceMap(m map[string][]string, key, id string) map[string][]string {
+	result := make([]string, 0, len(m[key]))
+	for _, existing := range m[key] {
+		if existing == id {
+			continue
+		}
+		result = append(result, existing)
+	}
+	if len(result) == 0 {
+		delete(m, key)
+	} else {
+		m[key] = result
+	}
+	return m
 }

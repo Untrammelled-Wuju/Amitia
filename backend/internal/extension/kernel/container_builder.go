@@ -33,6 +33,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/extension/kernel/eventbridge"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
+	"github.com/u-ai/backend/internal/extension/kernel/extension_center"
 	coreexec "github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
@@ -670,7 +671,14 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	capabilityResolver := capability.NewResolver(capability.NewProviderCatalogAdapter(capabilityProviderRegistry))
 	capabilityResolver.SetRuntimeCatalog(capability.NewRuntimeAdapterCatalogAdapter(adapterRegistry))
 
-	runtimeStateService := runtimeorchestrator.NewRuntimeStateService(nil, nil)
+	var runtimeStateService *runtimeorchestrator.RuntimeStateService
+	if sessionService != nil {
+		runtimeStateAdapter := NewRuntimeStateServiceBridge(sessionService, deviceRegistry)
+		instanceAdapter := NewProviderInstanceBridge(capabilityProviderRegistry)
+		runtimeStateService = runtimeorchestrator.NewRuntimeStateService(runtimeStateAdapter, instanceAdapter)
+	} else {
+		runtimeStateService = runtimeorchestrator.NewRuntimeStateService(nil, nil)
+	}
 	runtimeAvailabilityAdapter := capability.NewRuntimeAvailabilityAdapter(runtimeStateService)
 	capabilityResolver.SetAvailability(runtimeAvailabilityAdapter)
 
@@ -723,7 +731,15 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	kernelProviderInvoker := NewKernelProviderInvoker(providerInvocationService)
 
 	acquisitionSourceRegistry := acquisition.NewSourceRegistry()
-	acquisitionInstallerRegistry := acquisition.NewInstallerRegistry(&acquisition.InstallerRegistryOpts{})
+	acquisitionSourceRegistry.Register(acquisition.NewInstalledSource(capabilityService, capabilityProviderRegistry))
+	acquisitionSourceRegistry.Register(acquisition.NewAgentSkillSource(agentSkillCatalog))
+
+	extensionCenterService := extension_center.NewCenterService(extension_center.NewKernelCardProvider(defRepo, instRepo))
+	acquisitionSourceRegistry.Register(acquisition.NewExtensionCatalogSource(extensionCenterService))
+
+	acquisitionInstallerRegistry := acquisition.NewInstallerRegistry(&acquisition.InstallerRegistryOpts{
+		EnableExistingPort: acquisition.NewEnableExistingPortBridge(enablementService),
+	})
 	acquisitionService, err := acquisition.NewAcquisitionService(acquisition.AcquisitionDependencies{
 		CapabilityService: capabilityService,
 		ProviderRegistry:  capabilityProviderRegistry,

@@ -1,0 +1,9 @@
+{
+  "protocolVersion": 1,
+  "requestId": "req-list-001",
+  "operation": "file.access.list",
+  "payload": {
+    "mountId": "mt-abc123",
+    "relativePath": "documents"
+  }
+}

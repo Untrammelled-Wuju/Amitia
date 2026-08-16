@@ -192,7 +192,6 @@ func (r *TaskRepository) PutTaskRun(ctx context.Context, run *task_runtime.TaskR
 
 func (r *TaskRepository) UpdateTaskRunCAS(ctx context.Context, run *task_runtime.TaskRun, expectedStatus task_runtime.TaskRunStatus, expectedGeneration int64, expectedRevision int64) (bool, error) {
 	ex := getExecutor(ctx, r.db)
-	nextRevision := expectedRevision + 1
 	res, err := ex.ExecContext(ctx, `
 		UPDATE extension_task_runs
 		SET status = ?, priority = ?,
@@ -218,7 +217,7 @@ func (r *TaskRepository) UpdateTaskRunCAS(ctx context.Context, run *task_runtime
 		nullableString(run.PauseReason), nullableTime(run.PauseRequestedAt), nullableTime(run.PausedAt), nullableTime(run.ResumedAt),
 		nullableString(run.ErrorCode), nullableString(run.ErrorMessage),
 		run.Generation,
-		nextRevision,
+		run.Revision,
 		run.TaskRunID, string(expectedStatus), expectedGeneration, expectedRevision,
 	)
 	if err != nil {
@@ -228,7 +227,6 @@ func (r *TaskRepository) UpdateTaskRunCAS(ctx context.Context, run *task_runtime
 	if n == 0 {
 		return false, nil
 	}
-	run.Revision = nextRevision
 	return true, nil
 }
 
