@@ -1,0 +1,6 @@
+{
+  "description": "Generation tracking for ordering and stale event suppression",
+  "currentGeneration": 5,
+  "staleThreshold": 3,
+  "policy": "drop events with generation < (current - threshold)"
+}

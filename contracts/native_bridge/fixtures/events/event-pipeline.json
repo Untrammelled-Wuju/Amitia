@@ -1,0 +1,9 @@
+{
+  "description": "Event pipeline contract: dedup by fingerprint, priority-ordered dispatch, generation-aware filtering",
+  "pipeline": [
+    "fingerprint_dedup",
+    "priority_queue",
+    "generation_check",
+    "dispatch"
+  ]
+}
