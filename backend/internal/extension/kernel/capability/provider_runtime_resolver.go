@@ -115,11 +115,11 @@ func (r *ProviderRuntimeExecutionResolver) ResolveRuntimeExecution(
 		return RuntimeExecutionRoute{}, ErrProviderExecutionBindingMismatch
 	}
 
-	if definition.CapabilityID != CapabilityID(tool.ID) {
+	if definition.CapabilityID != tool.CapabilityID {
 		return RuntimeExecutionRoute{}, ErrProviderExecutionCapabilityMismatch
 	}
 
-	if instance.CapabilityID != CapabilityID(tool.ID) {
+	if instance.CapabilityID != tool.CapabilityID {
 		return RuntimeExecutionRoute{}, ErrProviderExecutionCapabilityMismatch
 	}
 

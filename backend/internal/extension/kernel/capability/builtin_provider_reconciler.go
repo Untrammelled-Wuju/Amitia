@@ -35,7 +35,7 @@ func (r *BuiltinProviderReconciler) reconcileSearchWeb() error {
 		ExtensionID:  "com.amitia.builtin.search",
 		ModuleID:     "search-runtime",
 		Runtime: RuntimeBinding{
-			RuntimeType:  RuntimeTypeBuiltin,
+			RuntimeType:  RuntimeTypeSearch,
 			RuntimeID:    "search-runtime",
 			HandlerName:  "search.general",
 		},
