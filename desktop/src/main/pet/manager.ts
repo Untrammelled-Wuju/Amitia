@@ -45,11 +45,8 @@ import { DragController } from "./drag-controller";
 import type { DragEvent, DragState } from "./drag-controller";
 import { ClickThroughController } from "./click-through-controller";
 import { PetLogger } from "./logger";
-import {
-  RuntimeBridgeClient,
-  getRuntimeId,
-  getDeviceId,
-} from "./runtime-bridge-client";
+import { RuntimeBridgeClient } from "./runtime-bridge-client";
+import { getRuntimeId, getDeviceId } from "./runtime-identity";
 import type {
   RuntimeBridgeConfig,
   RuntimeBridgeCallbacks,
