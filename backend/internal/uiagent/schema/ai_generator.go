@@ -93,14 +93,14 @@ func (g *AISchemaGenerator) generateHeuristic(description string, availableComps
 	return gen.Generate(description, availableComps)
 }
 
-type aiPrompt struct {
+type AIPrompt struct {
 	Task          string   `json:"task"`
 	Description   string   `json:"description"`
 	AvailableComp []string `json:"availableComponents"`
 	Instructions  string   `json:"instructions"`
 }
 
-func buildAIPrompt(description string, availableComps []SchemaComponentType) aiPrompt {
+func buildAIPrompt(description string, availableComps []SchemaComponentType) AIPrompt {
 	comps := make([]string, len(availableComps))
 	for i, c := range availableComps {
 		comps[i] = string(c)
@@ -109,7 +109,7 @@ func buildAIPrompt(description string, availableComps []SchemaComponentType) aiP
 		comps = []string{"page", "section", "text", "button", "field", "card", "list", "table"}
 	}
 
-	return aiPrompt{
+	return AIPrompt{
 		Task:          "generate_schema_ui",
 		Description:   description,
 		AvailableComp: comps,
