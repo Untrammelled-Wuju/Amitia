@@ -62,6 +62,13 @@ func (f *fakeResourcePort) ListAttachedResources(ctx context.Context, extensionI
 	return result, nil
 }
 
+func (f *fakeResourcePort) RebuildFromExisting() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.bindings = make(map[string]ExistingPetResourceBinding)
+	return nil
+}
+
 type fakeRepo struct {
 	installation.Repository
 }
@@ -270,6 +277,13 @@ func (f *fakeActionPort) ListAttachedActions(ctx context.Context, extensionID st
 	return result, nil
 }
 
+func (f *fakeActionPort) RebuildFromExisting() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.bindings = make(map[string]ExistingPetActionBinding)
+	return nil
+}
+
 type fakeRuntimePort struct {
 	mu       sync.RWMutex
 	bindings map[string]ExistingPetRuntimeBinding
@@ -311,6 +325,13 @@ func (f *fakeRuntimePort) ListAttachedRuntimes(ctx context.Context, extensionID 
 	return result, nil
 }
 
+func (f *fakeRuntimePort) RebuildFromExisting() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.bindings = make(map[string]ExistingPetRuntimeBinding)
+	return nil
+}
+
 type fakeWindowPort struct {
 	mu       sync.RWMutex
 	bindings map[string]ExistingPetWindowBinding
@@ -347,6 +368,13 @@ func (f *fakeWindowPort) ListAttachedWindows(ctx context.Context, extensionID st
 		}
 	}
 	return result, nil
+}
+
+func (f *fakeWindowPort) RebuildFromExisting() error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.bindings = make(map[string]ExistingPetWindowBinding)
+	return nil
 }
 
 func TestTransactionalAttach_Success_AllSteps(t *testing.T) {

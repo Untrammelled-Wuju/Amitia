@@ -16,6 +16,7 @@ type ExistingPetResourcePort interface {
 	AttachPluginResource(ctx context.Context, extensionID, contributionID string, revision int, definition map[string]any) (string, error)
 	DetachPluginResource(ctx context.Context, handle string) error
 	ListAttachedResources(ctx context.Context, extensionID string) ([]ExistingPetResourceBinding, error)
+	RebuildFromExisting() error
 }
 
 type ExistingPetResourceBinding struct {
@@ -30,6 +31,7 @@ type ExistingPetActionPort interface {
 	AttachPluginAction(ctx context.Context, extensionID, contributionID string, revision int, target ExistingPetActionTarget, definition map[string]any) (string, error)
 	DetachPluginAction(ctx context.Context, handle string) error
 	ListAttachedActions(ctx context.Context, extensionID string) ([]ExistingPetActionBinding, error)
+	RebuildFromExisting() error
 }
 
 type ExistingPetActionBinding struct {
@@ -44,6 +46,7 @@ type ExistingPetRuntimePort interface {
 	AttachPluginRuntime(ctx context.Context, extensionID, contributionID string, revision int, definition map[string]any) (string, error)
 	DetachPluginRuntime(ctx context.Context, handle string) error
 	ListAttachedRuntimes(ctx context.Context, extensionID string) ([]ExistingPetRuntimeBinding, error)
+	RebuildFromExisting() error
 }
 
 type ExistingPetRuntimeBinding struct {
@@ -57,6 +60,7 @@ type ExistingPetWindowPort interface {
 	PublishFloatingWindowContribution(ctx context.Context, extensionID, contributionID string, definition map[string]any) error
 	RetractFloatingWindowContribution(ctx context.Context, extensionID, contributionID string) error
 	ListAttachedWindows(ctx context.Context, extensionID string) ([]ExistingPetWindowBinding, error)
+	RebuildFromExisting() error
 }
 
 type ExistingPetWindowBinding struct {
@@ -123,6 +127,9 @@ func (c *productionResourceCapability) DetachPluginResource(ctx context.Context,
 func (c *productionResourceCapability) RebuildFromExisting() error {
 	if c.release == nil {
 		return fmt.Errorf("RebuildFromExisting: Existing pet resource port unavailable")
+	}
+	if err := c.release.RebuildFromExisting(); err != nil {
+		return fmt.Errorf("RebuildFromExisting: Existing owner rebuild failed: %w", err)
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -222,6 +229,9 @@ func (c *productionActionCapability) RebuildFromExisting() error {
 	if c.facade == nil {
 		return fmt.Errorf("RebuildFromExisting: Existing pet action port unavailable")
 	}
+	if err := c.facade.RebuildFromExisting(); err != nil {
+		return fmt.Errorf("RebuildFromExisting: Existing owner rebuild failed: %w", err)
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.cache = make(map[PetActionHandle]PluginActionAttachRequest)
@@ -283,6 +293,9 @@ func (c *productionRuntimeCapability) RebuildFromExisting() error {
 	if c.facade == nil {
 		return fmt.Errorf("RebuildFromExisting: Existing pet runtime port unavailable")
 	}
+	if err := c.facade.RebuildFromExisting(); err != nil {
+		return fmt.Errorf("RebuildFromExisting: Existing owner rebuild failed: %w", err)
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.cache = make(map[PetRuntimeHandle]PluginRuntimeAttachRequest)
@@ -341,6 +354,9 @@ func (c *productionFloatingWindowCapability) DetachPluginFloatingWindow(ctx cont
 func (c *productionFloatingWindowCapability) RebuildFromExisting() error {
 	if c.publisher == nil {
 		return fmt.Errorf("RebuildFromExisting: Existing pet window port unavailable")
+	}
+	if err := c.publisher.RebuildFromExisting(); err != nil {
+		return fmt.Errorf("RebuildFromExisting: Existing owner rebuild failed: %w", err)
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()

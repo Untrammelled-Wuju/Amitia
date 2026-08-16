@@ -311,15 +311,29 @@ func (r *DBRepository) RecordWriteCutover(ctx context.Context, operationID, step
 }
 
 func (r *DBRepository) MarkReadCutoverVerified(ctx context.Context, operationID, stepName string) error {
-	return r.db.WithContext(ctx).Model(&readCutoverRecord{}).
+	result := r.db.WithContext(ctx).Model(&readCutoverRecord{}).
 		Where("operation_id = ? AND step_name = ?", operationID, stepName).
-		Update("verified", 1).Error
+		Update("verified", 1)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return fmt.Errorf("migration: mark read cutover verified expected 1 row affected, got %d", result.RowsAffected)
+	}
+	return nil
 }
 
 func (r *DBRepository) MarkWriteCutoverVerified(ctx context.Context, operationID, stepName string) error {
-	return r.db.WithContext(ctx).Model(&writeCutoverRecord{}).
+	result := r.db.WithContext(ctx).Model(&writeCutoverRecord{}).
 		Where("operation_id = ? AND step_name = ?", operationID, stepName).
-		Update("verified", 1).Error
+		Update("verified", 1)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return fmt.Errorf("migration: mark write cutover verified expected 1 row affected, got %d", result.RowsAffected)
+	}
+	return nil
 }
 
 func (r *DBRepository) HasVerifiedReadCutover(ctx context.Context, operationID string) (bool, error) {

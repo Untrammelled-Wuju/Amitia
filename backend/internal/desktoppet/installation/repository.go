@@ -46,7 +46,7 @@ type Repository interface {
 	GetInstallationByUserDevicePet(userID, deviceID, petID string) (*Installation, error)
 	ListInstallationsByUserDevice(userID, deviceID string) ([]*Installation, error)
 
-	Transaction(fn func(tx *gorm.DB) error) error
+	Transaction(ctx context.Context, fn func(repo RepositoryV2) error) error
 }
 
 type repository struct {
@@ -58,8 +58,211 @@ func NewRepository(db *gorm.DB, ctx *app.AppContext) Repository {
 	return &repository{db: db, ctx: ctx}
 }
 
-func (r *repository) Transaction(fn func(tx *gorm.DB) error) error {
-	return r.db.Transaction(fn)
+var _ RepositoryV2 = (*repository)(nil)
+
+func (r *repository) Transaction(ctx context.Context, fn func(repo RepositoryV2) error) error {
+	return r.TransactionV2(ctx, fn)
+}
+
+func (r *repository) TransactionV2(ctx context.Context, fn func(repo RepositoryV2) error) error {
+	tx := r.db.WithContext(ctx).Begin()
+	if tx.Error != nil {
+		return tx.Error
+	}
+	txRepo := &txRepositoryAdapter{db: r.db, tx: tx, repo: r}
+	if err := fn(txRepo); err != nil {
+		tx.Rollback()
+		return err
+	}
+	return tx.Commit().Error
+}
+
+type txRepositoryAdapter struct {
+	db   *gorm.DB
+	tx   *gorm.DB
+	repo *repository
+}
+
+func (a *txRepositoryAdapter) DB() *gorm.DB { return a.tx }
+
+func (a *txRepositoryAdapter) GetInstallationForUserDevice(userID, deviceID, installationID string) (*Installation, error) {
+	return a.repo.GetInstallationForUserDevice(userID, deviceID, installationID)
+}
+
+func (a *txRepositoryAdapter) ListInstallationsForUserDevice(userID, deviceID string) ([]*Installation, error) {
+	return a.repo.ListInstallationsForUserDevice(userID, deviceID)
+}
+
+func (a *txRepositoryAdapter) CreateInstallationTx(tx *gorm.DB, installation *Installation) error {
+	return a.repo.CreateInstallationTx(tx, installation)
+}
+
+func (a *txRepositoryAdapter) UpdateInstallationTx(tx *gorm.DB, installation *Installation) error {
+	return a.repo.UpdateInstallationTx(tx, installation)
+}
+
+func (a *txRepositoryAdapter) GetInstallationByUserDevicePetTx(tx *gorm.DB, userID, deviceID, petID string) (*Installation, error) {
+	return a.repo.GetInstallationByUserDevicePetTx(tx, userID, deviceID, petID)
+}
+
+func (a *txRepositoryAdapter) DeleteInstallationTx(tx *gorm.DB, id string) error {
+	return a.repo.DeleteInstallationTx(tx, id)
+}
+
+func (a *txRepositoryAdapter) GetRuntimeSettingsForUserDevice(userID, deviceID, installationID string) (*RuntimeSettings, error) {
+	return a.repo.GetRuntimeSettingsForUserDevice(userID, deviceID, installationID)
+}
+
+func (a *txRepositoryAdapter) CreateRuntimeSettingsTx(tx *gorm.DB, settings *RuntimeSettings) error {
+	return a.repo.CreateRuntimeSettingsTx(tx, settings)
+}
+
+func (a *txRepositoryAdapter) UpdateRuntimeSettingsCAS(tx *gorm.DB, installationID, userID, deviceID string, expectedRevision int, updates map[string]interface{}) (*RuntimeSettings, error) {
+	return a.repo.UpdateRuntimeSettingsCAS(tx, installationID, userID, deviceID, expectedRevision, updates)
+}
+
+func (a *txRepositoryAdapter) GetActiveBindingForUserDeviceTx(tx *gorm.DB, userID, deviceID string) (*binding.DeviceActiveInstallationBinding, error) {
+	return a.repo.GetActiveBindingForUserDeviceTx(tx, userID, deviceID)
+}
+
+func (a *txRepositoryAdapter) UpsertActiveBindingTx(tx *gorm.DB, b *binding.DeviceActiveInstallationBinding) error {
+	return a.repo.UpsertActiveBindingTx(tx, b)
+}
+
+func (a *txRepositoryAdapter) DeleteActiveBindingTx(tx *gorm.DB, userID, deviceID string) error {
+	return a.repo.DeleteActiveBindingTx(tx, userID, deviceID)
+}
+
+func (a *txRepositoryAdapter) InsertBindingHistoryTx(tx *gorm.DB, entry *binding.BindingHistoryEntry) error {
+	return a.repo.InsertBindingHistoryTx(tx, entry)
+}
+
+func (a *txRepositoryAdapter) GetRuntimeDesiredStateTx(tx *gorm.DB, userID, deviceID string) (*desired.RuntimeDesiredState, error) {
+	return a.repo.GetRuntimeDesiredStateTx(tx, userID, deviceID)
+}
+
+func (a *txRepositoryAdapter) UpsertRuntimeDesiredStateCAS(tx *gorm.DB, userID, deviceID string, state *desired.RuntimeDesiredState, expectedRevision int64) (*desired.RuntimeDesiredState, error) {
+	return a.repo.UpsertRuntimeDesiredStateCAS(tx, userID, deviceID, state, expectedRevision)
+}
+
+func (a *txRepositoryAdapter) AllocateDeviceDesiredRevisionCAS(tx *gorm.DB, userID, deviceID string) (int64, error) {
+	return a.repo.AllocateDeviceDesiredRevisionCAS(tx, userID, deviceID)
+}
+
+func (a *txRepositoryAdapter) GetDeviceDesiredRevisionCounterTx(tx *gorm.DB, userID, deviceID string) (*desired.DeviceDesiredRevisionCounter, error) {
+	return a.repo.GetDeviceDesiredRevisionCounterTx(tx, userID, deviceID)
+}
+
+func (a *txRepositoryAdapter) CreateOutboxEventTx(tx *gorm.DB, event *desired.DesiredStateOutboxEvent) error {
+	return a.repo.CreateOutboxEventTx(tx, event)
+}
+
+func (a *txRepositoryAdapter) ListPendingOutboxEvents(limit int) ([]*desired.DesiredStateOutboxEvent, error) {
+	return a.repo.ListPendingOutboxEvents(limit)
+}
+
+func (a *txRepositoryAdapter) MarkOutboxEventPublished(tx *gorm.DB, eventID string) error {
+	return a.repo.MarkOutboxEventPublished(tx, eventID)
+}
+
+func (a *txRepositoryAdapter) MarkOutboxEventFailed(tx *gorm.DB, eventID, errorMsg string) error {
+	return a.repo.MarkOutboxEventFailed(tx, eventID, errorMsg)
+}
+
+func (a *txRepositoryAdapter) RequeueOutboxEventsBefore(tx *gorm.DB, availableBefore string) error {
+	return a.repo.RequeueOutboxEventsBefore(tx, availableBefore)
+}
+
+func (a *txRepositoryAdapter) CreateOperationTx(tx *gorm.DB, op *operation.InstallationOperation) error {
+	return a.repo.CreateOperationTx(tx, op)
+}
+
+func (a *txRepositoryAdapter) GetOperationTx(tx *gorm.DB, operationID string) (*operation.InstallationOperation, error) {
+	return a.repo.GetOperationTx(tx, operationID)
+}
+
+func (a *txRepositoryAdapter) GetOperationByIdempotencyKeyTx(tx *gorm.DB, userID, deviceID, idempotencyKey, opType string) (*operation.InstallationOperation, error) {
+	return a.repo.GetOperationByIdempotencyKeyTx(tx, userID, deviceID, idempotencyKey, opType)
+}
+
+func (a *txRepositoryAdapter) UpdateOperationStatusCAS(tx *gorm.DB, operationID, expectedStatus, newStatus, executionID string) (*operation.InstallationOperation, error) {
+	return a.repo.UpdateOperationStatusCAS(tx, operationID, expectedStatus, newStatus, executionID)
+}
+
+func (a *txRepositoryAdapter) ClaimOperationLeaseCAS(tx *gorm.DB, lease *operation.Lease, expectedStatuses []string) (*operation.InstallationOperation, error) {
+	return a.repo.ClaimOperationLeaseCAS(tx, lease, expectedStatuses)
+}
+
+func (a *txRepositoryAdapter) RenewOperationLeaseTx(tx *gorm.DB, operationID, executionID string) error {
+	return a.repo.RenewOperationLeaseTx(tx, operationID, executionID)
+}
+
+func (a *txRepositoryAdapter) ListPendingOperations(limit int) ([]*operation.InstallationOperation, error) {
+	return a.repo.ListPendingOperations(limit)
+}
+
+func (a *txRepositoryAdapter) ListExpiredLeaseOperations(leaseTimeout string, limit int) ([]*operation.InstallationOperation, error) {
+	return a.repo.ListExpiredLeaseOperations(leaseTimeout, limit)
+}
+
+func (a *txRepositoryAdapter) CreateCommitJournalTx(tx *gorm.DB, journal *journal.InstallationCommitJournal) error {
+	return a.repo.CreateCommitJournalTx(tx, journal)
+}
+
+func (a *txRepositoryAdapter) GetCommitJournalTx(tx *gorm.DB, operationID string) (*journal.InstallationCommitJournal, error) {
+	return a.repo.GetCommitJournalTx(tx, operationID)
+}
+
+func (a *txRepositoryAdapter) CASUpdateCommitJournalStageTx(tx *gorm.DB, operationID, expectedStage, newStage, executionID string) (*journal.InstallationCommitJournal, error) {
+	return a.repo.CASUpdateCommitJournalStageTx(tx, operationID, expectedStage, newStage, executionID)
+}
+
+func (a *txRepositoryAdapter) ListPendingCommitJournals(limit int) ([]*journal.InstallationCommitJournal, error) {
+	return a.repo.ListPendingCommitJournals(limit)
+}
+
+func (a *txRepositoryAdapter) CreateSwitchJournalTx(tx *gorm.DB, j *journal.InstallationSwitchJournal) error {
+	return a.repo.CreateSwitchJournalTx(tx, j)
+}
+
+func (a *txRepositoryAdapter) GetSwitchJournalTx(tx *gorm.DB, operationID string) (*journal.InstallationSwitchJournal, error) {
+	return a.repo.GetSwitchJournalTx(tx, operationID)
+}
+
+func (a *txRepositoryAdapter) CASUpdateSwitchJournalStageTx(tx *gorm.DB, operationID, expectedStage, newStage, executionID string) (*journal.InstallationSwitchJournal, error) {
+	return a.repo.CASUpdateSwitchJournalStageTx(tx, operationID, expectedStage, newStage, executionID)
+}
+
+func (a *txRepositoryAdapter) ListPendingSwitchJournals(limit int) ([]*journal.InstallationSwitchJournal, error) {
+	return a.repo.ListPendingSwitchJournals(limit)
+}
+
+func (a *txRepositoryAdapter) CreateTrashEntryTx(tx *gorm.DB, entry *TrashEntry) error {
+	return a.repo.CreateTrashEntryTx(tx, entry)
+}
+
+func (a *txRepositoryAdapter) ListExpiredTrashEntries(retainBefore string, limit int) ([]*TrashEntry, error) {
+	return a.repo.ListExpiredTrashEntries(retainBefore, limit)
+}
+
+func (a *txRepositoryAdapter) MarkTrashEntryPurged(tx *gorm.DB, id string) error {
+	return a.repo.MarkTrashEntryPurged(tx, id)
+}
+
+func (a *txRepositoryAdapter) GetRuntimeProjectionTx(tx *gorm.DB, userID, deviceID string) (*projection.InstallationRuntimeProjection, error) {
+	return a.repo.GetRuntimeProjectionTx(tx, userID, deviceID)
+}
+
+func (a *txRepositoryAdapter) UpsertRuntimeProjectionTx(tx *gorm.DB, p *projection.InstallationRuntimeProjection) error {
+	return a.repo.UpsertRuntimeProjectionTx(tx, p)
+}
+
+func (a *txRepositoryAdapter) GetOrCreateDeviceContext(ctx context.Context, userID string, reqCtx device.RequestContext) (*device.DeviceContext, error) {
+	return a.repo.GetOrCreateDeviceContext(ctx, userID, reqCtx)
+}
+
+func (a *txRepositoryAdapter) Transaction(ctx context.Context, fn func(repo RepositoryV2) error) error {
+	return a.repo.TransactionV2(ctx, fn)
 }
 
 func (r *repository) DB() *gorm.DB { return r.db }
@@ -300,7 +503,7 @@ func (r *repository) ListInstallationsByUserDevice(userID, deviceID string) ([]*
 	return installations, err
 }
 
-func (r *repository) GetInstallationForUserDeviceV2(userID, deviceID, installationID string) (*Installation, error) {
+func (r *repository) GetInstallationForUserDevice(userID, deviceID, installationID string) (*Installation, error) {
 	var inst Installation
 	err := r.db.Where("id = ? AND user_id = ? AND (device_id = ? OR (device_id = '' AND ? = ''))",
 		installationID, userID, deviceID, deviceID).First(&inst).Error
@@ -313,7 +516,7 @@ func (r *repository) GetInstallationForUserDeviceV2(userID, deviceID, installati
 	return &inst, nil
 }
 
-func (r *repository) ListInstallationsForUserDeviceV2(userID, deviceID string) ([]*Installation, error) {
+func (r *repository) ListInstallationsForUserDevice(userID, deviceID string) ([]*Installation, error) {
 	var list []*Installation
 	tx := r.db.Where("user_id = ?", userID)
 	if deviceID != "" {
@@ -524,11 +727,11 @@ func (r *repository) RequeueOutboxEventsBefore(tx *gorm.DB, availableBefore stri
 		Updates(map[string]interface{}{"attempt_count": gorm.Expr("attempt_count + 1"), "available_at": now}).Error
 }
 
-func (r *repository) CreateOperationTxV2(tx *gorm.DB, op *operation.InstallationOperation) error {
+func (r *repository) CreateOperationTx(tx *gorm.DB, op *operation.InstallationOperation) error {
 	return tx.Create(op).Error
 }
 
-func (r *repository) GetOperationTxV2(tx *gorm.DB, operationID string) (*operation.InstallationOperation, error) {
+func (r *repository) GetOperationTx(tx *gorm.DB, operationID string) (*operation.InstallationOperation, error) {
 	var op operation.InstallationOperation
 	err := tx.Where("id = ?", operationID).First(&op).Error
 	if err != nil {
@@ -649,11 +852,11 @@ func (r *repository) ListExpiredLeaseOperations(leaseTimeout string, limit int) 
 	return ops, nil
 }
 
-func (r *repository) CreateCommitJournalTxV2(tx *gorm.DB, journal *journal.InstallationCommitJournal) error {
+func (r *repository) CreateCommitJournalTx(tx *gorm.DB, journal *journal.InstallationCommitJournal) error {
 	return tx.Create(journal).Error
 }
 
-func (r *repository) GetCommitJournalTxV2(tx *gorm.DB, operationID string) (*journal.InstallationCommitJournal, error) {
+func (r *repository) GetCommitJournalTx(tx *gorm.DB, operationID string) (*journal.InstallationCommitJournal, error) {
 	var j journal.InstallationCommitJournal
 	err := tx.Where("operation_id = ?", operationID).First(&j).Error
 	if err != nil {
@@ -689,11 +892,11 @@ func (r *repository) CASUpdateCommitJournalStageTx(tx *gorm.DB, operationID, exp
 	return &j, nil
 }
 
-func (r *repository) CreateSwitchJournalTxV2(tx *gorm.DB, j *journal.InstallationSwitchJournal) error {
+func (r *repository) CreateSwitchJournalTx(tx *gorm.DB, j *journal.InstallationSwitchJournal) error {
 	return tx.Create(j).Error
 }
 
-func (r *repository) GetSwitchJournalTxV2(tx *gorm.DB, operationID string) (*journal.InstallationSwitchJournal, error) {
+func (r *repository) GetSwitchJournalTx(tx *gorm.DB, operationID string) (*journal.InstallationSwitchJournal, error) {
 	var j journal.InstallationSwitchJournal
 	err := tx.Where("operation_id = ?", operationID).First(&j).Error
 	if err != nil {
@@ -727,6 +930,17 @@ func (r *repository) CASUpdateSwitchJournalStageTx(tx *gorm.DB, operationID, exp
 	j.Stage = newStage
 	j.UpdatedAt = now
 	return &j, nil
+}
+
+func (r *repository) ListPendingCommitJournals(limit int) ([]*journal.InstallationCommitJournal, error) {
+	var journals []*journal.InstallationCommitJournal
+	err := r.db.Where("stage NOT IN (?, ?, ?)",
+		journal.JournalStageCompleted, journal.JournalStageFailedRetryable, journal.JournalStageFailedTerminal).
+		Order("created_at asc").Limit(limit).Find(&journals).Error
+	if err != nil {
+		return nil, err
+	}
+	return journals, nil
 }
 
 func (r *repository) ListPendingSwitchJournals(limit int) ([]*journal.InstallationSwitchJournal, error) {

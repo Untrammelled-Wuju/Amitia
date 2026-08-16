@@ -60,8 +60,13 @@ func NewDesktopPetV2CutoverPlan(deps Dependencies) migration.DomainMigrationOper
 				if deps.DB == nil {
 					return fmt.Errorf("数据库未初始化")
 				}
-				if err := deps.DB.Exec("INSERT OR REPLACE INTO desktop_pet_migration_flags (flag_name, flag_value, updated_at) VALUES (?, ?, datetime('now'))", "v2_read_path_enabled", "true").Error; err != nil {
-					return fmt.Errorf("enable v2 read path failed: %w", err)
+				var desiredStateCount int64
+				if err := deps.DB.Raw("SELECT COUNT(*) FROM desktop_pet_runtime_desired_states").Count(&desiredStateCount).Error; err != nil {
+					return fmt.Errorf("read probe failed: cannot query V2 desired states: %w", err)
+				}
+				var bindingCount int64
+				if err := deps.DB.Raw("SELECT COUNT(*) FROM desktop_pet_device_active_installation_bindings").Count(&bindingCount).Error; err != nil {
+					return fmt.Errorf("read probe failed: cannot query V2 bindings: %w", err)
 				}
 				return nil
 			},
