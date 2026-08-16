@@ -9,6 +9,7 @@ import (
 	"github.com/u-ai/backend/internal/uiagent"
 	"github.com/u-ai/backend/internal/uiagent/schema"
 	"github.com/u-ai/backend/internal/uiagent/source"
+	"github.com/u-ai/backend/internal/workspace"
 )
 
 var (
@@ -16,6 +17,7 @@ var (
 	uiAgentExecutor   *uiagent.UIExecutor
 	uiAgentSchemaGen  *schema.AISchemaGenerator
 	uiAgentPreviewMgr uiagent.PreviewManager
+	uiAgentSourceEditor source.SourceEditor
 )
 
 func SetUIAgentInspector(inspector source.SourceInspector) {
@@ -32,6 +34,14 @@ func SetUIAgentSchemaGenerator(gen *schema.AISchemaGenerator) {
 
 func SetUIAgentPreviewManager(mgr uiagent.PreviewManager) {
 	uiAgentPreviewMgr = mgr
+}
+
+func SetUIAgentSourceEditor(editor source.SourceEditor) {
+	uiAgentSourceEditor = editor
+}
+
+func SetUIAgentPreciseService(svc workspace.PreciseEditingService) {
+	uiAgentSourceEditor = source.NewSourceEditor(svc)
 }
 
 func init() {
@@ -123,10 +133,6 @@ func uiagentModifyHandler(ctx context.Context, execCtx tool.ToolExecutionContext
 		return tool.ErrorResult("invalid_input", "workspaceId is required")
 	}
 
-	if uiAgentExecutor == nil {
-		return tool.ErrorResult("ui_agent_unavailable", "UI agent executor not configured")
-	}
-
 	operationsRaw, _ := json.Marshal(args["operations"])
 	var sourceOps []uiagent.SourceEditOperation
 	if err := json.Unmarshal(operationsRaw, &sourceOps); err != nil {
@@ -139,7 +145,32 @@ func uiagentModifyHandler(ctx context.Context, execCtx tool.ToolExecutionContext
 		Transaction: true,
 	}
 
-	sourceEditor := uiagent.NewUIExecutor(uiagent.WithSourceEditor(&sourceEditorAdapter{req: &srcReq}))
+	// Use the real source editor if available
+	if uiAgentSourceEditor != nil {
+		result, err := uiAgentSourceEditor.ApplyEdits(ctx, srcReq)
+		if err != nil {
+			return tool.ErrorResult("modify_failed", fmt.Sprintf("modification failed: %v", err))
+		}
+
+		// No real file changes = not a success
+		if len(result.ChangedFiles) == 0 {
+			return tool.ErrorResult("no_changes", "no files were modified")
+		}
+
+		resultJSON, _ := json.Marshal(result)
+		return tool.ToolCallResult{
+			Status:      tool.ToolStatusSuccess,
+			Content:     string(resultJSON),
+			VisibleText: fmt.Sprintf("Applied %d operations to workspace %s (%d files changed)", result.AppliedOperations, workspaceID, len(result.ChangedFiles)),
+		}
+	}
+
+	// Fallback to UI executor
+	if uiAgentExecutor == nil {
+		return tool.ErrorResult("ui_agent_unavailable", "UI agent executor not configured")
+	}
+
+	sourceEditor := uiagent.NewUIExecutor(uiagent.WithSourceEditor(uiAgentSourceEditor))
 	result, err := sourceEditor.ApplySourceEdits(ctx, uiagent.UIChangePlan{
 		Intent: uiagent.UIIntent{
 			Target: uiagent.UITarget{
@@ -194,16 +225,16 @@ func uiagentCreateHandler(ctx context.Context, execCtx tool.ToolExecutionContext
 	}
 }
 
+// sourceEditorAdapter is a deprecated adapter that always returns success without
+// making real changes. It now returns an error to prevent fake success.
+//
+// Deprecated: Use source.SourceEditor directly via SetUIAgentSourceEditor or SetUIAgentPreciseService.
 type sourceEditorAdapter struct {
 	req *uiagent.SourceEditRequest
 }
 
 func (a *sourceEditorAdapter) ApplyEdits(ctx context.Context, req uiagent.SourceEditRequest) (*uiagent.SourceEditResult, error) {
-	return &uiagent.SourceEditResult{
-		ChangedFiles:      []string{},
-		Success:           true,
-		AppliedOperations: len(req.Operations),
-	}, nil
+	return nil, fmt.Errorf("sourceEditorAdapter is deprecated: use real source.SourceEditor instead")
 }
 
 func convertSourceOps(ops []uiagent.SourceEditOperation) []uiagent.SourceEditOperation {

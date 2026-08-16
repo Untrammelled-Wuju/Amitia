@@ -572,27 +572,28 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return nil, fmt.Errorf("kernel: create hook service: %w", err)
 	}
 
-	eventSvc, err := event.NewService(event.DefaultServiceConfig().WithDB(db))
-	if err != nil {
-		return nil, fmt.Errorf("kernel: create event service: %w", err)
-	}
-	if err := eventSvc.RegisterDefaultEventTypes(ctx); err != nil {
-		return nil, fmt.Errorf("kernel: register default event types: %w", err)
-	}
-	eventResolver := BuildEventEffectiveResolver(permBroker, scopeManager, dependencyResolver, supervisor, eventSvc.GetDispatcher(), enablementResolver, instRepo)
-	if err := eventSvc.SetEffectiveResolver(eventResolver); err != nil {
-		return nil, fmt.Errorf("kernel: set event effective resolver: %w", err)
-	}
-	genResolver := NewEventGenerationResolverAdapter(instRepo)
-	eventSvc.SetGenerationResolver(genResolver)
-	eventSvc.GetDispatcher().SetGenerationResolver(genResolver)
-
+	var eventSvc *event.Service
 	var eventBridge *event.RuntimeBridge
 	var hostEmitter *event.HostEventEmitter
 	var lifecycleEmitter *event.LifecycleEventEmitter
 	var eventBridgePublisher *eventbridge.Publisher
 
 	if b.runtimePolicy.DurableEvents {
+		eventSvc, err = event.NewService(event.DefaultServiceConfig().WithDB(db))
+		if err != nil {
+			return nil, fmt.Errorf("kernel: create event service: %w", err)
+		}
+		if err := eventSvc.RegisterDefaultEventTypes(ctx); err != nil {
+			return nil, fmt.Errorf("kernel: register default event types: %w", err)
+		}
+		eventResolver := BuildEventEffectiveResolver(permBroker, scopeManager, dependencyResolver, supervisor, eventSvc.GetDispatcher(), enablementResolver, instRepo)
+		if err := eventSvc.SetEffectiveResolver(eventResolver); err != nil {
+			return nil, fmt.Errorf("kernel: set event effective resolver: %w", err)
+		}
+		genResolver := NewEventGenerationResolverAdapter(instRepo)
+		eventSvc.SetGenerationResolver(genResolver)
+		eventSvc.GetDispatcher().SetGenerationResolver(genResolver)
+
 		eventBridge = event.NewRuntimeBridge(eventSvc)
 		eventBridge.Attach()
 		hostEmitter = event.NewHostEventEmitter(eventSvc)
@@ -796,7 +797,6 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		mcpAdapter := acquisition.NewMCPRepositoryAdapter(b.mcpRepository)
 		acquisitionSourceRegistry.Register(acquisition.NewMCPPackageSource(mcpAdapter))
 	}
-	acquisitionSourceRegistry.Register(acquisition.NewGeneratedSkillSource(true))
 	acquisitionSourceRegistry.Register(acquisition.NewRemoteCatalogSource("https://amitia.untrammelled.top/api/catalog"))
 
 	mcpLifecycle := kernelmcp.NewMCPLifecycle(nil, nil)
@@ -808,6 +808,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 			DefinitionRepo:     defRepo,
 			InstanceReconciler: providerInstanceReconciler,
 			MCPRepository:      b.mcpRepository,
+			MCPLifecycle:       mcpLifecycle,
 			AgentSkillCatalog:  agentSkillCatalog,
 			ProviderRegistry:   capabilityProviderRegistry,
 		}),
@@ -1513,6 +1514,12 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return nil, fmt.Errorf("kernel: compose gamehost: %w", err)
 	}
 	container.GameHost = gameHost
+
+	permBroker.OnPermissionRevoked = func(extensionID, runtimeID string) {
+		if gameHost != nil && gameHost.SecretSubscriptions != nil {
+			gameHost.SecretSubscriptions.OnPermissionRevoked(extensionID, runtimeID)
+		}
+	}
 
 	return container, nil
 }

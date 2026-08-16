@@ -22,6 +22,10 @@ type AcquisitionResult struct {
 	ProviderIDs         []capability.ProviderID         `json:"providerIds,omitempty"`
 	ProviderInstanceIDs []capability.ProviderInstanceID `json:"providerInstanceIds,omitempty"`
 
+	// InstalledCapability stores the full installed capability metadata for rollback.
+	// This must be persisted with the Acquisition Transaction to enable proper rollback.
+	InstalledCapability InstalledCapability `json:"installedCapability,omitempty"`
+
 	Target DeploymentTarget `json:"target"`
 
 	ResumeToken string   `json:"resumeToken,omitempty"`

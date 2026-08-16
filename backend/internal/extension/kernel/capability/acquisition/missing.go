@@ -47,12 +47,23 @@ func (d *defaultMissingDetector) DetectFromError(ctx context.Context, err error,
 }
 
 // DetectFromResolution inspects a capability resolution failure and, when the
-// failure is actionable (i.e. not ResolutionFailureNone), returns a
+// failure is actionable (i.e. not ResolutionFailureNone and recoverable), returns a
 // CapabilityResumeContext in the ResumePending state.
+// Non-recoverable failures (device_offline, credential_required, permission_denied)
+// do NOT trigger recovery to avoid repeated install attempts.
 func (d *defaultMissingDetector) DetectFromResolution(ctx context.Context, failure capability.ResolutionFailure, invocation capability.ToolInvocationContext) (*CapabilityResumeContext, error) {
 	if failure == capability.ResolutionFailureNone {
 		return nil, nil
 	}
+
+	// Non-recoverable failures: do NOT trigger recovery
+	switch failure {
+	case capability.ResolutionFailureDeviceOffline,
+		capability.ResolutionFailureDeviceUnavailable,
+		capability.ResolutionFailureRuntimeUnavailable:
+		return nil, nil
+	}
+
 	return &CapabilityResumeContext{
 		ConversationID: conversationIDFromContext(ctx),
 		State:          ResumePending,

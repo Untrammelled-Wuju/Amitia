@@ -3,6 +3,7 @@ package acquisition
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
@@ -108,31 +109,64 @@ func (b *mcpRepositoryBridge) RemoveMCP(ctx context.Context, serverName string) 
 
 // skillCatalogBridge wraps agent_skill.AgentSkillCatalog to implement SkillServicePort.
 type skillCatalogBridge struct {
-	catalog *agent_skill.AgentSkillCatalog
+	catalog  *agent_skill.AgentSkillCatalog
+	builder  *agent_skill.SkillDefinitionBuilder
 }
 
 // NewSkillCatalogBridge creates a SkillServicePort backed by AgentSkillCatalog.
 func NewSkillCatalogBridge(catalog *agent_skill.AgentSkillCatalog) SkillServicePort {
-	return &skillCatalogBridge{catalog: catalog}
+	return &skillCatalogBridge{
+		catalog: catalog,
+		builder: agent_skill.NewSkillDefinitionBuilder("1.0.0", "windows"),
+	}
+}
+
+// readSkillSource reads the skill source content from the given URI.
+// Supports file:// scheme and plain file paths.
+func (b *skillCatalogBridge) readSkillSource(sourceURI string) ([]byte, error) {
+	if sourceURI == "" {
+		return nil, fmt.Errorf("skill catalog bridge: source URI is empty")
+	}
+	path := sourceURI
+	if len(path) >= 7 && path[:7] == "file://" {
+		path = path[7:]
+	}
+	content, err := os.ReadFile(path)
+	if err != nil {
+		return nil, fmt.Errorf("skill catalog bridge: read source %s: %w", sourceURI, err)
+	}
+	return content, nil
 }
 
 func (b *skillCatalogBridge) ImportSkill(ctx context.Context, sourceURI string, skillName string, hash string) (string, error) {
 	if b.catalog == nil {
 		return "", fmt.Errorf("skill catalog bridge: catalog not configured")
 	}
-	extID := "imported.skill." + skillName
-	def := agent_skill.AgentSkillDefinition{
-		ExtensionID: extID,
-		Name:        skillName,
-		Description: fmt.Sprintf("Imported from %s", sourceURI),
-		Metadata: map[string]any{
-			"sourceURI": sourceURI,
-			"hash":      hash,
-		},
+
+	// Step 1: Source read — must actually read the source file
+	raw, err := b.readSkillSource(sourceURI)
+	if err != nil {
+		return "", err
 	}
-	if err := b.catalog.Register(def); err != nil {
+
+	// Step 2: Parser + Step 3: Validator
+	extID := "imported.skill." + skillName
+	def, err := b.builder.Build(raw, extID)
+	if err != nil {
+		// Validator failure must NOT write to the formal Skill Registry
+		return "", fmt.Errorf("skill catalog bridge: build skill %s: %w", skillName, err)
+	}
+
+	// Step 4: Install
+	if err := b.catalog.Register(*def); err != nil {
 		return "", fmt.Errorf("skill catalog bridge: register skill %s: %w", skillName, err)
 	}
+
+	// Step 5: Scope Enable
+	if err := b.catalog.SetEnabled(extID, true); err != nil {
+		return "", fmt.Errorf("skill catalog bridge: enable skill %s: %w", skillName, err)
+	}
+
 	return extID, nil
 }
 

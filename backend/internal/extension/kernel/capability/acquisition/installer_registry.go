@@ -12,6 +12,7 @@ type InstallerRegistryOpts struct {
 	MCPInstallPort     MCPInstallPort
 	SkillInstallPort   SkillInstallPort
 	EnableExistingPort EnableExistingPort
+	WorkshopPort       WorkshopGeneratePort
 }
 
 // InstallerRegistry 管理所有 Installer 的注册与查找。
@@ -99,7 +100,9 @@ func (r *InstallerRegistry) registerDefaults(opts *InstallerRegistryOpts) {
 		}
 		if opts.SkillInstallPort != nil {
 			r.installers[InstallSkill] = NewSkillInstaller(opts.SkillInstallPort)
-			r.installers[InstallGeneratedSkill] = NewGeneratedSkillInstaller(opts.SkillInstallPort)
+			if opts.WorkshopPort != nil {
+				r.installers[InstallGeneratedSkill] = NewGeneratedSkillInstallerWithWorkshop(opts.SkillInstallPort, opts.WorkshopPort)
+			}
 		}
 		if opts.EnableExistingPort != nil {
 			r.installers[InstallEnableExisting] = NewEnableExistingInstaller(opts.EnableExistingPort)
