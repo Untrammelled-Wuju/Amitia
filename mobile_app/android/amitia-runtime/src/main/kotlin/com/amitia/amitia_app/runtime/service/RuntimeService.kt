@@ -57,6 +57,14 @@ class RuntimeService : Service() {
         FAILED,
     }
 
+    private enum class ProcessOwnershipState {
+        NONE,
+        ACTIVE,
+        UNOBSERVABLE,
+        TERMINATING,
+        CONFIRMED_DEAD,
+    }
+
     private data class StartupFailureCleanupContext(
         val generation: Long,
         val sessionId: String?,
@@ -142,6 +150,7 @@ class RuntimeService : Service() {
     private val currentIntent: AtomicReference<Intent?> = AtomicReference(null)
     private val currentStartIdRef = AtomicReference(0)
     private val startupFailureCleanupContextRef = AtomicReference<StartupFailureCleanupContext?>(null)
+    private val processOwnershipBarrier = AtomicReference(ProcessOwnershipState.NONE)
     private val lifecycleSnapshotRef = AtomicReference<RuntimeServiceLifecycleSnapshot>(
         RuntimeServiceLifecycleSnapshot(
             generation = 0L,
