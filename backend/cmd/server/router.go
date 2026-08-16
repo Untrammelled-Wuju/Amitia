@@ -14,7 +14,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/config"
-	"gorm.io/gorm"
 	"github.com/u-ai/backend/internal/accountsession"
 	"github.com/u-ai/backend/internal/agent"
 	"github.com/u-ai/backend/internal/asr"
@@ -36,8 +35,8 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/release/importer"
 	"github.com/u-ai/backend/internal/desktoppet/runtime"
 	runtimev2 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v2"
-	devicemeshserver "github.com/u-ai/backend/internal/devicemesh/server"
 	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
+	devicemeshserver "github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/embedding_config"
 	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
@@ -73,6 +72,7 @@ import (
 	"github.com/u-ai/backend/internal/worldbook"
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
+	"gorm.io/gorm"
 )
 
 func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error) {
@@ -266,18 +266,18 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 					return
 				}
 				platform, parseErr := runtimeidentity.ParsePlatform(request.Platform)
-			if parseErr != nil {
-				c.JSON(400, gin.H{"code": 400, "msg": "invalid platform"})
-				return
-			}
-			err := services.DeviceRepository.RegisterOrTouch(c.Request.Context(), device.Identity{
+				if parseErr != nil {
+					c.JSON(400, gin.H{"code": 400, "msg": "invalid platform"})
+					return
+				}
+				err := services.DeviceRepository.RegisterOrTouch(c.Request.Context(), device.Identity{
 					UserID:            actor.UserID,
 					DeviceID:          runtimeidentity.ParseDeviceID(request.DeviceID),
 					DesktopInstanceID: request.DesktopInstanceID,
 					Platform:          platform,
 					AppVersion:        request.AppVersion,
 				})
-			if err != nil {
+				if err != nil {
 					log.Error("failed to register device identity", "error", err)
 					c.JSON(500, gin.H{"code": 500, "msg": "failed to register device"})
 					return
@@ -489,42 +489,42 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 				gameCenterMutationHandler := management.NewMutationHandler(packageSvc, runtimeSvc)
 				management.RegisterGameCenterMutationRouter(apiGroup, gameCenterMutationHandler)
 
-		if services.KernelContainer.GameHost != nil && services.KernelContainer.GameHost.TakeoverService != nil {
-			controlHandler := management.NewControlHandlerFromFuncs(management.ControlServiceOptions{
-				TakeoverFn: func(ctx context.Context, runtimeID string) (management.TakeoverResult, error) {
-					_, err := services.KernelContainer.GameHost.TakeoverService.Takeover(ctx, control.TakeoverRequest{
-						RuntimeID: domain.RuntimeInstanceID(runtimeID),
-						Actor:     "game_center_user",
+				if services.KernelContainer.GameHost != nil && services.KernelContainer.GameHost.TakeoverService != nil {
+					controlHandler := management.NewControlHandlerFromFuncs(management.ControlServiceOptions{
+						TakeoverFn: func(ctx context.Context, runtimeID string) (management.TakeoverResult, error) {
+							_, err := services.KernelContainer.GameHost.TakeoverService.Takeover(ctx, control.TakeoverRequest{
+								RuntimeID: domain.RuntimeInstanceID(runtimeID),
+								Actor:     "game_center_user",
+							})
+							if err != nil {
+								return management.TakeoverResult{}, err
+							}
+							return management.TakeoverResult{Success: true}, nil
+						},
+						ReleaseFn: func(ctx context.Context, runtimeID string, targetMode string, expectedEpoch uint64) (management.ReleaseResult, error) {
+							_, err := services.KernelContainer.GameHost.TakeoverService.Release(ctx, control.ReleaseRequest{
+								RuntimeID:     domain.RuntimeInstanceID(runtimeID),
+								TargetMode:    domain.ControlMode(targetMode),
+								Actor:         "game_center_user",
+								ExpectedEpoch: expectedEpoch,
+								UseExpected:   expectedEpoch > 0,
+							})
+							if err != nil {
+								return management.ReleaseResult{}, err
+							}
+							return management.ReleaseResult{Success: true}, nil
+						},
+						EmergencyStopFn: func(ctx context.Context, runtimeID string) (control.EmergencyStopResult, error) {
+							return services.KernelContainer.GameHost.EmergencyStopService.Execute(ctx, domain.RuntimeInstanceID(runtimeID))
+						},
+						RearmFn: func(ctx context.Context, runtimeID string) error {
+							return services.KernelContainer.GameHost.EmergencyStopService.ClearEmergencyLatch(ctx, domain.RuntimeInstanceID(runtimeID), "game_center_user")
+						},
 					})
-					if err != nil {
-						return management.TakeoverResult{}, err
-					}
-					return management.TakeoverResult{Success: true}, nil
-				},
-				ReleaseFn: func(ctx context.Context, runtimeID string, targetMode string, expectedEpoch uint64) (management.ReleaseResult, error) {
-					_, err := services.KernelContainer.GameHost.TakeoverService.Release(ctx, control.ReleaseRequest{
-						RuntimeID:     domain.RuntimeInstanceID(runtimeID),
-						TargetMode:    domain.ControlMode(targetMode),
-						Actor:         "game_center_user",
-						ExpectedEpoch: expectedEpoch,
-						UseExpected:   expectedEpoch > 0,
-					})
-					if err != nil {
-						return management.ReleaseResult{}, err
-					}
-					return management.ReleaseResult{Success: true}, nil
-				},
-				EmergencyStopFn: func(ctx context.Context, runtimeID string) (control.EmergencyStopResult, error) {
-					return services.KernelContainer.GameHost.EmergencyStopService.Execute(ctx, domain.RuntimeInstanceID(runtimeID))
-				},
-				RearmFn: func(ctx context.Context, runtimeID string) error {
-					return services.KernelContainer.GameHost.EmergencyStopService.ClearEmergencyLatch(ctx, domain.RuntimeInstanceID(runtimeID), "game_center_user")
-				},
-			})
-			management.RegisterGameCenterControlRouter(apiGroup, controlHandler)
+					management.RegisterGameCenterControlRouter(apiGroup, controlHandler)
+				}
+			}
 		}
-		}
-	}
 		emote.RegisterRouter(apiGroup, services.Emote)
 		temporal.RegisterRouter(apiGroup, services.Temporal, services.RelTimeCoordinator)
 		mood.RegisterMoodRouter(apiGroup, ctx)
