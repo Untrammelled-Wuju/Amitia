@@ -55,17 +55,17 @@ func NewDesktopPetV2CutoverPlan(deps Dependencies) migration.DomainMigrationOper
 				return true, ""
 			},
 		},
-		CutoverSteps: []migration.StepFunc{
-			func() error {
-				if deps.DB == nil {
-					return fmt.Errorf("数据库未初始化")
-				}
-				if err := deps.DB.Exec("PRAGMA user_version = user_version;").Error; err != nil {
-					return fmt.Errorf("enable v2 write path failed: %w", err)
-				}
-				return nil
-			},
+	CutoverSteps: []migration.StepFunc{
+		func() error {
+			if deps.DB == nil {
+				return fmt.Errorf("数据库未初始化")
+			}
+			if err := deps.DB.Exec("INSERT OR REPLACE INTO desktop_pet_migration_flags (flag_name, flag_value, updated_at) VALUES (?, ?, datetime('now'))", "v2_read_path_enabled", "true").Error; err != nil {
+				return fmt.Errorf("enable v2 read path failed: %w", err)
+			}
+			return nil
 		},
+	},
 		LegacyWriteBlockSteps: []migration.StepFunc{
 			func() error {
 				if deps.DB == nil {
