@@ -6,9 +6,7 @@ import (
 )
 
 const (
-	MethodHostInvoke       = "host.invoke"
-	MethodHostQueryCaps    = "host_api.query_capabilities"
-	MethodHostRateLimit    = "host_api.rate_limit_status"
+	MethodHostInvoke = "host.invoke"
 )
 
 const (
@@ -95,13 +93,17 @@ func (c *Client) InvokeHostAPI(ctx context.Context, input HostInvokeInput, opts 
 }
 
 func (c *Client) QueryHostAPICapabilities(ctx context.Context, input HostAPIQueryCapsInput, opts ...MessageOption) (HostAPIQueryCapsResult, error) {
-	envelope, err := c.SendReservedRequest(ctx, MethodHostQueryCaps, input, opts...)
+	result, err := c.InvokeHostMethod(ctx, HostInvokeInput{
+		Method:    "host_api.query_capabilities",
+		Input:     mustMarshalMap(map[string]any{"method": input.Method}),
+		ServiceID: c.serviceID,
+	}, opts...)
 	if err != nil {
 		return HostAPIQueryCapsResult{}, err
 	}
 	var out HostAPIQueryCapsResult
-	if len(envelope.Payload) > 0 {
-		if err := json.Unmarshal(envelope.Payload, &out); err != nil {
+	if len(result.Output) > 0 {
+		if err := json.Unmarshal(result.Output, &out); err != nil {
 			return HostAPIQueryCapsResult{}, NewEncodeError("unmarshal host api query caps response: %v", err)
 		}
 	}
@@ -109,16 +111,27 @@ func (c *Client) QueryHostAPICapabilities(ctx context.Context, input HostAPIQuer
 }
 
 func (c *Client) QueryHostAPIRateLimit(ctx context.Context, method string, opts ...MessageOption) (HostAPIRateLimitStatusResult, error) {
-	input := map[string]any{"method": method}
-	envelope, err := c.SendReservedRequest(ctx, MethodHostRateLimit, input, opts...)
+	result, err := c.InvokeHostMethod(ctx, HostInvokeInput{
+		Method:    "host_api.rate_limit_status",
+		Input:     mustMarshalMap(map[string]any{"method": method}),
+		ServiceID: c.serviceID,
+	}, opts...)
 	if err != nil {
 		return HostAPIRateLimitStatusResult{}, err
 	}
 	var out HostAPIRateLimitStatusResult
-	if len(envelope.Payload) > 0 {
-		if err := json.Unmarshal(envelope.Payload, &out); err != nil {
+	if len(result.Output) > 0 {
+		if err := json.Unmarshal(result.Output, &out); err != nil {
 			return HostAPIRateLimitStatusResult{}, NewEncodeError("unmarshal host api rate limit response: %v", err)
 		}
 	}
 	return out, nil
+}
+
+func mustMarshalMap(v map[string]any) json.RawMessage {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return json.RawMessage("{}")
+	}
+	return data
 }
