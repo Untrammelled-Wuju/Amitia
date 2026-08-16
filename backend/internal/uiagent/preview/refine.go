@@ -4,15 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
-
-	"github.com/u-ai/backend/internal/uiagent"
 )
 
 type RefineRequest struct {
 	SessionID     string             `json:"sessionId"`
 	Observation   *ObservationResult `json:"observation"`
 	Feedback      string             `json:"feedback"`
-	Target        *uiagent.UITarget  `json:"target"`
+	Target        *PreviewTarget     `json:"target"`
 	ChangedPaths  []string           `json:"changedPaths,omitempty"`
 	MaxIterations int                `json:"maxIterations"`
 	PreviousTxID  string             `json:"previousTxId,omitempty"`

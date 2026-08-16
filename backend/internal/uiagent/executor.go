@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/u-ai/backend/internal/uiagent/preview"
 	"github.com/u-ai/backend/internal/uiagent/schema"
 )
 
@@ -56,14 +57,17 @@ type PreviewSessionRef struct {
 	ID string `json:"id"`
 }
 
-// UIExecutor orchestrates the concrete operations behind a UI change plan.
+// UIExecutor orchestrates the concrete operations behind a change plan.
 type UIExecutor struct {
-	sourceEditor sourceEditorAdapter
-	schemaGen    *schema.AISchemaGenerator
-	renderer     *schema.FlutterSchemaProjection
-	validator    schema.SchemaValidator
-	previewMgr   PreviewManager
-	policy       Policy
+	sourceEditor  sourceEditorAdapter
+	schemaGen     *schema.AISchemaGenerator
+	renderer      *schema.FlutterSchemaProjection
+	validator     schema.SchemaValidator
+	previewMgr    PreviewManager
+	policy        Policy
+	observer      preview.Observer
+	autoRefiner   preview.AutoRefiner
+	maxRefineIter int
 }
 
 type sourceEditorAdapter struct {
@@ -110,10 +114,30 @@ func WithPolicy(p Policy) UIExecutorOption {
 	return func(e *UIExecutor) { e.policy = p }
 }
 
+// WithObserver wires the preview observer for closed-loop validation.
+func WithObserver(obs preview.Observer) UIExecutorOption {
+	return func(e *UIExecutor) { e.observer = obs }
+}
+
+// WithAutoRefiner wires the auto refiner for preview issue resolution.
+func WithAutoRefiner(r preview.AutoRefiner) UIExecutorOption {
+	return func(e *UIExecutor) { e.autoRefiner = r }
+}
+
+// WithRefineIterations sets the maximum refine iterations (default 2).
+func WithRefineIterations(n int) UIExecutorOption {
+	return func(e *UIExecutor) {
+		if n > 0 {
+			e.maxRefineIter = n
+		}
+	}
+}
+
 // NewUIExecutor creates a UIExecutor with the given options.
 func NewUIExecutor(opts ...UIExecutorOption) *UIExecutor {
 	e := &UIExecutor{
-		policy: DefaultPolicy(),
+		policy:        DefaultPolicy(),
+		maxRefineIter: preview.MaxRefineIterations,
 	}
 	for _, opt := range opts {
 		opt(e)
@@ -206,7 +230,8 @@ func (e *UIExecutor) ApplySchema(ctx context.Context, plan UIChangePlan) (*Schem
 	}, nil
 }
 
-// CreatePreview creates a preview session for the result.
+// CreatePreview creates a preview session and runs the closed-loop
+// Observe → Refine cycle to validate and repair schema issues.
 func (e *UIExecutor) CreatePreview(ctx context.Context, plan UIChangePlan, result *UIResult) (string, error) {
 	if e.previewMgr == nil {
 		return "", fmt.Errorf("preview manager not configured")
@@ -215,5 +240,47 @@ func (e *UIExecutor) CreatePreview(ctx context.Context, plan UIChangePlan, resul
 	if err != nil {
 		return "", err
 	}
+
+	if e.observer != nil {
+		obsResult, obsErr := e.observer.Capture(ctx, session.ID)
+		if obsErr != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("preview observe: %v", obsErr))
+		} else {
+			result.ObserveIssues = obsResult.Errors
+			if len(obsResult.Errors) == 0 {
+				result.PreviewState = "clean"
+			} else if obsResult.CanRefine && e.autoRefiner != nil {
+				result.PreviewState = "refining"
+				refineReq := preview.RefineRequest{
+					SessionID:     session.ID,
+					Observation:   obsResult,
+					ChangedPaths:  obsResult.ChangedPaths,
+					MaxIterations: e.maxRefineIter,
+					Revision:      plan.ExecutionID,
+				}
+				if plan.Intent.Target.WorkspaceID != "" {
+					refineReq.Target = &preview.PreviewTarget{
+						WorkspaceID: plan.Intent.Target.WorkspaceID,
+						Platform:    plan.Intent.Target.Platform,
+						SourceType:  string(plan.Intent.Target.Type),
+					}
+				}
+				refineResult, refineErr := e.autoRefiner.Refine(ctx, refineReq)
+				if refineErr != nil {
+					result.Warnings = append(result.Warnings, fmt.Sprintf("preview refine: %v", refineErr))
+					result.PreviewState = "needs_manual"
+				} else {
+					result.RefineResult = refineResult
+					result.PreviewState = refineResult.State
+					if refineResult.RollbackToken != "" {
+						result.RollbackToken = refineResult.RollbackToken
+					}
+				}
+			} else {
+				result.PreviewState = "needs_manual"
+			}
+		}
+	}
+
 	return session.ID, nil
 }
