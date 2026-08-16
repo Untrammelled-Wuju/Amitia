@@ -1,4 +1,4 @@
-﻿package workspace
+package workspace
 
 import (
 	"fmt"
@@ -212,7 +212,6 @@ func removeDirWithRetry(dir string, maxAttempts int) error {
 	}
 	return lastErr
 }
-
 
 func removeDirNoSymlinksLocal(path string) error {
 	info, err := os.Lstat(path)
