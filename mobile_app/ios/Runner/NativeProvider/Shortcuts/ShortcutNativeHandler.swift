@@ -216,17 +216,27 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
             )
         }
 
-        guard ShortcutActionGateway.shared.isCuratedAction(actionId) else {
+        guard let action = ShortcutAction.from(actionId: actionId) else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestId: request.requestId,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "action not in curated catalog: \(actionId)")
+                error: IOSNativeError(code: "ACTION_NOT_AVAILABLE", message: "unknown action: \(actionId)")
             )
         }
 
-        let result = await ShortcutActionGateway.shared.executeAction(actionId: actionId, payload: request.payload)
+        guard ShortcutActionGateway.shared.isCuratedAction(action) else {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestId: request.requestId,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "ACTION_NOT_AVAILABLE", message: "action not in curated catalog: \(actionId)")
+            )
+        }
+
+        let result = await ShortcutActionGateway.shared.executeAction(action, payload: request.payload)
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
             requestId: request.requestId,
@@ -247,13 +257,23 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
             )
         }
 
-        guard ShortcutActionGateway.shared.isCuratedAction(actionId) else {
+        guard let action = ShortcutAction.from(actionId: actionId) else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestId: request.requestId,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "action not in curated catalog: \(actionId)")
+                error: IOSNativeError(code: "ACTION_NOT_AVAILABLE", message: "unknown action: \(actionId)")
+            )
+        }
+
+        guard ShortcutActionGateway.shared.isCuratedAction(action) else {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestId: request.requestId,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "ACTION_NOT_AVAILABLE", message: "action not in curated catalog: \(actionId)")
             )
         }
 
