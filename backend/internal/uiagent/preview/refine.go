@@ -72,10 +72,10 @@ func (r *defaultAutoRefiner) Refine(ctx context.Context, req RefineRequest) (*Re
 
 		if prevObservation != nil && sameObservationErrors(obs, prevObservation) {
 			return &RefineResult{
-				State:              "converged",
+				State:              "no_progress",
 				Observation:        obs,
 				Iterations:         i,
-				Converged:          true,
+				Converged:          false,
 				NoopSinceLastCycle: true,
 				RollbackToken:      generateRollbackToken(req.SessionID, i),
 			}, nil
