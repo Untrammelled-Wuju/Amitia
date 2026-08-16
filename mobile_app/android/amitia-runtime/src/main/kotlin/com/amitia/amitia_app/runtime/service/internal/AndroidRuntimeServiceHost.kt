@@ -7,8 +7,13 @@ import com.amitia.amitia_app.runtime.service.RuntimeService
 import com.amitia.amitia_app.runtime.service.RuntimeServiceContract
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHost
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHostListener
-import com.amitia.amitia_app.runtime.service.RuntimeServiceResult
 import com.amitia.amitia_app.runtime.service.RuntimeServiceLifecycleSnapshot
+import com.amitia.amitia_app.runtime.service.RuntimeProcessPhase
+import com.amitia.amitia_app.runtime.service.RuntimeServicePhase
+import com.amitia.amitia_app.runtime.service.RuntimeTerminalState
+import com.amitia.amitia_app.runtime.service.RuntimeServiceResult
+import com.amitia.amitia_app.runtime.service.ServiceTeardownResult
+import com.amitia.amitia_app.runtime.service.RuntimeServiceTerminationCause
 import java.util.concurrent.CopyOnWriteArrayList
 
 internal class AndroidRuntimeServiceHost(
@@ -20,7 +25,10 @@ internal class AndroidRuntimeServiceHost(
     private val serviceConnection = RuntimeServiceConnection(
         onConnected = { endpoint ->
             endpoint.addListener(internalEndpointListener)
-            replaySnapshot(endpoint)
+            val snapshot = endpoint.lifecycleSnapshot()
+            if (snapshot != null) {
+                reconcileLifecycleSnapshot(snapshot)
+            }
         },
         onDisconnected = { }
     )
@@ -74,25 +82,42 @@ internal class AndroidRuntimeServiceHost(
         return RuntimeService.currentGeneration(context)
     }
 
-    private fun replaySnapshot(endpoint: RuntimeServiceEndpoint) {
-        if (endpoint !is DefaultRuntimeServiceEndpoint) return
-        val fullSnapshot = endpoint.fullSnapshot()
-        if (fullSnapshot != null) {
-            val snapshot = ArrayList(listeners)
-            for (listener in snapshot) {
-                try {
-                    fullSnapshot.forEach { event -> listener.onServiceHostEvent(event) }
-                } catch (_: Throwable) {
-                }
-            }
+    override fun lifecycleSnapshot(): RuntimeServiceLifecycleSnapshot? {
+        return serviceConnection.endpoint()?.lifecycleSnapshot()
+    }
+
+    private fun reconcileLifecycleSnapshot(snapshot: RuntimeServiceLifecycleSnapshot) {
+        if (snapshot.generation <= 0) {
             return
         }
-        val last = endpoint.lastEvent() ?: return
-        val snapshot = ArrayList(listeners)
-        for (listener in snapshot) {
-            try {
-                listener.onServiceHostEvent(last)
-            } catch (_: Throwable) {
+        if (snapshot.processPhase == RuntimeProcessPhase.STARTED && snapshot.terminalState == null) {
+            return
+        }
+        if (snapshot.terminalState != null) {
+            val event = when (snapshot.terminalState) {
+                RuntimeTerminalState.EXPECTED_STOPPED -> RuntimeServiceHostEvent.ExpectedStopped(
+                    generation = snapshot.generation,
+                    result = ServiceTeardownResult.SupersededByNewStart
+                )
+                RuntimeTerminalState.UNEXPECTED_TERMINATION -> RuntimeServiceHostEvent.UnexpectedTermination(
+                    generation = snapshot.generation,
+                    cause = RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
+                )
+                RuntimeTerminalState.STARTUP_FAILURE_CLEANUP -> RuntimeServiceHostEvent.StartupFailed(
+                    generation = snapshot.generation,
+                    cause = RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR,
+                    message = "startup failure cleanup",
+                    sessionId = snapshot.sessionId,
+                    launchStartId = snapshot.latestStartId,
+                    phase = "startup_failure"
+                )
+            }
+            val listenerSnapshot = ArrayList(listeners)
+            for (listener in listenerSnapshot) {
+                try {
+                    listener.onServiceHostEvent(event)
+                } catch (_: Throwable) {
+                }
             }
         }
     }

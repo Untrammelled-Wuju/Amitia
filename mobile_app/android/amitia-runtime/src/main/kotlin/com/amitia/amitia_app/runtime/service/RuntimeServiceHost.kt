@@ -10,4 +10,5 @@ interface RuntimeServiceHost {
     fun removeListener(listener: RuntimeServiceHostListener)
     fun currentSession(): ProotSession?
     fun currentGeneration(): Long
+    fun lifecycleSnapshot(): RuntimeServiceLifecycleSnapshot?
 }
