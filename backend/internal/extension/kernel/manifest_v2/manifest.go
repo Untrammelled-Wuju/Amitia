@@ -94,6 +94,7 @@ type ModulePolicies struct {
 
 type RuntimeMeta struct {
 	Type         string            `json:"type"`
+	ServiceID    string            `json:"serviceId,omitempty"`
 	EntryPoint   string            `json:"entryPoint,omitempty"`
 	WorkerCount  int               `json:"workerCount,omitempty"`
 	Timeout      string            `json:"timeout,omitempty"`

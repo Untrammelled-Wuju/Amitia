@@ -501,10 +501,21 @@ class RuntimeService : Service() {
         cleanupContext.cleanupPhase = StartupFailureCleanupPhase.WAITING_FOR_PROCESS_EXIT
 
         val session = currentSessionRef.get()
-        if (session != null && session.isAlive()) {
-            session.requestStop()
-            session.stop(GRACEFUL_SHUTDOWN_TIMEOUT_MS)
-        } else if (session != null && !session.isAlive()) {
+        if (session != null) {
+            when (val result = session.terminateAndConfirmExit(
+                gracefulTimeoutMs = GRACEFUL_SHUTDOWN_TIMEOUT_MS,
+                forceTimeoutMs = FORCE_SHUTDOWN_TIMEOUT_MS
+            )) {
+                is ProotTerminationResult.ConfirmedExited -> {
+                    cleanupContext.processConfirmedDead = true
+                    cleanupContext.cleanupPhase = StartupFailureCleanupPhase.PROCESS_EXIT_CONFIRMED
+                    performStartupFailureCleanup(cleanupContext)
+                }
+                is ProotTerminationResult.StillAlive -> {
+                    cleanupContext.processConfirmedDead = false
+                }
+            }
+        } else {
             cleanupContext.processConfirmedDead = true
             cleanupContext.cleanupPhase = StartupFailureCleanupPhase.PROCESS_EXIT_CONFIRMED
             performStartupFailureCleanup(cleanupContext)
