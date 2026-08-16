@@ -365,13 +365,17 @@ func negotiateFeatures(runtime, host map[string]bool) map[string]bool {
 
 func newSessionID() string {
 	buf := make([]byte, 16)
-	_, _ = rand.Read(buf)
+	if _, err := rand.Read(buf); err != nil {
+		return ""
+	}
 	return "sess_" + hex.EncodeToString(buf)
 }
 
 func newSessionToken() string {
 	buf := make([]byte, 24)
-	_, _ = rand.Read(buf)
+	if _, err := rand.Read(buf); err != nil {
+		return ""
+	}
 	return "tok_" + hex.EncodeToString(buf)
 }
 

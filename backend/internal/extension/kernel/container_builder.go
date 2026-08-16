@@ -670,7 +670,33 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return nil, fmt.Errorf("kernel: load device registry: %w", err)
 	}
 
-	deviceRuntimePresence := host_registry.NewDeviceRuntimePresenceAdapter(deviceRegistry)
+	var providerEventSink capability.ProviderEventSink
+	if b.runtimePolicy.DurableEvents {
+		providerEventSink = eventbridge.NewProviderEventEmitter(eventBridgePublisher)
+	}
+	providerLifecycle := capability.NewProviderLifecycleService(capabilityProviderRegistry, providerEventSink)
+
+	deviceRuntimePresence := host_registry.NewDeviceRuntimePresenceAdapterWithCallback(deviceRegistry, func(userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) {
+		allInstances := capabilityProviderRegistry.SnapshotInstances()
+		for _, inst := range allInstances {
+			if inst == nil {
+				continue
+			}
+			if inst.Availability != capability.ProviderAvailabilityAvailable {
+				continue
+			}
+			if userID != "" && inst.UserID != userID {
+				continue
+			}
+			if deviceID != "" && inst.DeviceID != deviceID {
+				continue
+			}
+			if runtimeID != "" && inst.RuntimeID != runtimeID {
+				continue
+			}
+			_ = providerLifecycle.UpdateInstanceAvailability(inst.ID, capability.ProviderAvailabilityUnavailable)
+		}
+	})
 	providerExecutionResolver.SetSessionResolver(capability.NewHostRegistryDeviceSessionResolver(deviceRegistry))
 
 	var sessionStore *deviceruntime.SQLiteSessionStore
@@ -693,12 +719,6 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if b.meshHub != nil && taskRuntimeService != nil {
 		taskRuntimeService.SetRemoteExecutor(task_runtime.NewMeshRemoteTaskExecutor(b.meshHub, sessionService))
 	}
-
-	var providerEventSink capability.ProviderEventSink
-	if b.runtimePolicy.DurableEvents {
-		providerEventSink = eventbridge.NewProviderEventEmitter(eventBridgePublisher)
-	}
-	providerLifecycle := capability.NewProviderLifecycleService(capabilityProviderRegistry, providerEventSink)
 	extensionProviderReconciler := capability.NewExtensionProviderReconciler(providerLifecycle, capabilityProviderRegistry)
 	providerInstanceReconciler := capability.NewProviderInstanceReconciler(providerLifecycle, capabilityProviderRegistry, runtimeidentity.Identity{})
 	builtinProviderReconciler := capability.NewBuiltinProviderReconciler(capabilityProviderRegistry, providerLifecycle)
@@ -779,7 +799,15 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	acquisitionSourceRegistry.Register(acquisition.NewRemoteCatalogSource("https://amitia.untrammelled.top/api/catalog"))
 
 	acquisitionInstallerRegistry, err := acquisition.NewInstallerRegistry(&acquisition.InstallerRegistryOpts{
-		EnableExistingPort: acquisition.NewEnableExistingPortBridge(enablementService),
+		EnableExistingPort: acquisition.NewEnableExistingPortBridgeWithDeps(acquisition.EnableExistingDeps{
+			EnablementSvc:      enablementService,
+			InstallRepo:        instRepo,
+			DefinitionRepo:     defRepo,
+			InstanceReconciler: providerInstanceReconciler,
+			MCPRepository:      b.mcpRepository,
+			AgentSkillCatalog:  agentSkillCatalog,
+			ProviderRegistry:   capabilityProviderRegistry,
+		}),
 		PackageInstallPort: acquisition.NewPackagePortBridge(lifecycleMgr),
 		MCPInstallPort:     acquisition.NewMCPRepositoryBridge(b.mcpRepository),
 		SkillInstallPort:   acquisition.NewSkillPortBridge(acquisition.NewSkillCatalogBridge(agentSkillCatalog)),
@@ -953,7 +981,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	recoveryService := acquisition.NewRecoveryService(acquisitionService)
 	toolFacade.SetRecoveryService(recoveryService)
 
-	builtin.SetUIAgentInspector(source.NewSourceInspector())
+	builtin.SetUIAgentInspector(source.NewSourceInspectorWithWorkspace(b.workspaceService))
 	uiAgentExecutor := uiagent.NewUIExecutor(
 		uiagent.WithPolicy(uiagent.DefaultPolicy()),
 	)

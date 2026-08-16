@@ -17,14 +17,6 @@ const (
 	RoutingTransportUnresolved  RoutingDecision = "transport_unresolved"
 )
 
-type ProviderRoutingMode string
-
-const (
-	RoutingModeLegacy            ProviderRoutingMode = "legacy"
-	RoutingModeProviderPreferred ProviderRoutingMode = "provider_preferred"
-	RoutingModeProviderRequired  ProviderRoutingMode = "provider_required"
-)
-
 type RoutingPolicy struct {
 	AllowCore        bool
 	AllowDevice      bool

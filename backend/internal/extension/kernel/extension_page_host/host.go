@@ -715,7 +715,9 @@ func ParseDeepLink(raw string) (*DeepLink, error) {
 
 func newSessionID() string {
 	b := make([]byte, 16)
-	_, _ = rand.Read(b)
+	if _, err := rand.Read(b); err != nil {
+		return ""
+	}
 	return "pgs_" + hex.EncodeToString(b)
 }
 

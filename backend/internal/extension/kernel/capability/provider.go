@@ -99,11 +99,21 @@ func ParseProviderPlacement(raw string) ProviderPlacement {
 	return ProviderPlacement(strings.TrimSpace(raw))
 }
 
+type RoutingMode string
+
+const (
+	RoutingModeLegacy          RoutingMode = "legacy"
+	RoutingModeProviderPreferred RoutingMode = "provider_preferred"
+	RoutingModeProviderRequired  RoutingMode = "provider_required"
+)
+
 type CapabilityProviderDefinition struct {
 	ID           ProviderID        `json:"id"`
 	CapabilityID CapabilityID      `json:"capabilityId"`
 	Kind         ProviderKind      `json:"kind"`
 	Placement    ProviderPlacement `json:"placement"`
+
+	RoutingMode RoutingMode `json:"routingMode,omitempty"`
 
 	ExtensionID string `json:"extensionId,omitempty"`
 	ModuleID    string `json:"moduleId,omitempty"`

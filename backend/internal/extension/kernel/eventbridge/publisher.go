@@ -69,7 +69,7 @@ func (NoopPublisher) Publish(
 	payload any,
 	opts event.PublishOptions,
 ) (event.PublishResult, error) {
-	return event.PublishResult{}, nil
+	return event.PublishResult{}, ErrDurableEventPublishFailed
 }
 
 func (NoopPublisher) PublishTx(
@@ -80,5 +80,5 @@ func (NoopPublisher) PublishTx(
 	payload any,
 	opts event.PublishOptions,
 ) (event.PublishResult, error) {
-	return event.PublishResult{}, nil
+	return event.PublishResult{}, ErrDurableEventPublishFailed
 }

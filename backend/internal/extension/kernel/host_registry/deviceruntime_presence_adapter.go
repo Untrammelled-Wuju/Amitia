@@ -8,12 +8,22 @@ import (
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
+type ProviderInstanceUnavailableFunc func(userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID)
+
 type DeviceRuntimePresenceAdapter struct {
-	registry *Registry
+	registry    *Registry
+	onDisconnected ProviderInstanceUnavailableFunc
 }
 
 func NewDeviceRuntimePresenceAdapter(registry *Registry) *DeviceRuntimePresenceAdapter {
 	return &DeviceRuntimePresenceAdapter{registry: registry}
+}
+
+func NewDeviceRuntimePresenceAdapterWithCallback(registry *Registry, onDisconnected ProviderInstanceUnavailableFunc) *DeviceRuntimePresenceAdapter {
+	return &DeviceRuntimePresenceAdapter{
+		registry:       registry,
+		onDisconnected: onDisconnected,
+	}
 }
 
 func (a *DeviceRuntimePresenceAdapter) Acquire(
@@ -57,7 +67,7 @@ func (a *DeviceRuntimePresenceAdapter) SessionReady(ctx context.Context, snapsho
 }
 
 func (a *DeviceRuntimePresenceAdapter) SessionDisconnected(ctx context.Context, snapshot protocol.PresenceSnapshot, reason string) error {
-	return a.registry.DisconnectRuntimeSession(ctx, RuntimeSessionBinding{
+	err := a.registry.DisconnectRuntimeSession(ctx, RuntimeSessionBinding{
 		UserID:               snapshot.UserID,
 		DeviceID:             snapshot.DeviceID,
 		RuntimeID:            snapshot.RuntimeID,
@@ -66,6 +76,12 @@ func (a *DeviceRuntimePresenceAdapter) SessionDisconnected(ctx context.Context, 
 		ConnectionGeneration: snapshot.ConnectionGeneration,
 		At:                   snapshot.At,
 	})
+
+	if err == nil && a.onDisconnected != nil {
+		a.onDisconnected(snapshot.UserID, snapshot.DeviceID, snapshot.RuntimeID)
+	}
+
+	return err
 }
 
 var _ protocol.SessionLifecyclePort = (*DeviceRuntimePresenceAdapter)(nil)
