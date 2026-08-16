@@ -28,6 +28,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         <span class="bubble-latency" v-if="message.latencyMs"
           >{{ message.latencyMs }}ms</span
         >
+        <slot name="badges" :message="message" />
       </div>
       <EmoteMessage v-if="isEmote" :message="message" />
       <MediaAttachmentPreview
@@ -99,6 +100,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           <el-icon><Refresh /></el-icon> 重试
         </el-button>
       </div>
+      <slot name="extension-content" :message="message" />
       <div
         class="text-toggle"
         v-if="hasAudio && message.content"
@@ -111,12 +113,13 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
       <div
         class="bubble-actions"
-        v-if="message.role === 'assistant' && typingDone"
+        v-if="typingDone"
       >
-        <el-button v-if="!isEmote" text size="small" @click="copyContent">
+        <el-button v-if="message.role === 'assistant' && !isEmote" text size="small" @click="copyContent">
           <el-icon><DocumentCopy /></el-icon>
         </el-button>
         <el-button
+          v-if="message.role === 'assistant'"
           text
           size="small"
           @click="$emit('reply', message)"
