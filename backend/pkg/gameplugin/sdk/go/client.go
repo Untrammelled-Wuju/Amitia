@@ -2,6 +2,8 @@ package sdk
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -93,13 +95,91 @@ type Client struct {
 	pluginID         string
 	runtimeID        string
 	serviceID        string
+	generation       uint64
 	pending          map[string]*pendingRequest
 	pendingMu        sync.Mutex
 	pendingTimeoutMs time.Duration
 	onResponse       func(protocol.Envelope) bool
+	completedCache   *CompletedResponseCache
 }
 
 type ClientOption func(*Client)
+
+const DefaultCompletedCacheSize = 256
+
+type completedEntry struct {
+	response  protocol.Envelope
+	err       error
+	fingerprint string
+	createdAt time.Time
+}
+
+type CompletedResponseCache struct {
+	mu       sync.Mutex
+	entries  map[string]*completedEntry
+	maxSize  uint64
+	order    []string
+}
+
+func NewCompletedResponseCache() *CompletedResponseCache {
+	return &CompletedResponseCache{
+		entries: make(map[string]*completedEntry),
+		maxSize: DefaultCompletedCacheSize,
+		order:   make([]string, 0, DefaultCompletedCacheSize),
+	}
+}
+
+func (c *CompletedResponseCache) ComputeFingerprint(method string, payload []byte) string {
+	h := sha256.New()
+	h.Write([]byte(method))
+	h.Write(payload)
+	return hex.EncodeToString(h.Sum(nil))
+}
+
+func (c *CompletedResponseCache) Get(fingerprint string) (protocol.Envelope, error, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	entry, ok := c.entries[fingerprint]
+	if !ok {
+		return protocol.Envelope{}, nil, false
+	}
+	return entry.response, entry.err, true
+}
+
+func (c *CompletedResponseCache) Put(fingerprint string, response protocol.Envelope, err error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if _, exists := c.entries[fingerprint]; exists {
+		c.entries[fingerprint] = &completedEntry{response: response, err: err, fingerprint: fingerprint, createdAt: time.Now()}
+		return
+	}
+	if uint64(len(c.entries)) >= c.maxSize {
+		oldest := c.order[0]
+		c.order = c.order[1:]
+		delete(c.entries, oldest)
+	}
+	c.entries[fingerprint] = &completedEntry{response: response, err: err, fingerprint: fingerprint, createdAt: time.Now()}
+	c.order = append(c.order, fingerprint)
+}
+
+func (c *CompletedResponseCache) Invalidate(fingerprint string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	delete(c.entries, fingerprint)
+}
+
+func (c *CompletedResponseCache) Clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.entries = make(map[string]*completedEntry)
+	c.order = make([]string, 0, c.maxSize)
+}
+
+func WithCompletedResponseCache(cache *CompletedResponseCache) ClientOption {
+	return func(c *Client) {
+		c.completedCache = cache
+	}
+}
 
 func WithIDGenerator(g IDGenerator) ClientOption {
 	return func(c *Client) {
@@ -122,6 +202,12 @@ func WithClientRuntimeID(id string) ClientOption {
 func WithClientServiceID(id string) ClientOption {
 	return func(c *Client) {
 		c.serviceID = id
+	}
+}
+
+func WithClientGeneration(generation uint64) ClientOption {
+	return func(c *Client) {
+		c.generation = generation
 	}
 }
 
@@ -148,6 +234,32 @@ func NewClient(transport Transport, opts ...ClientOption) *Client {
 		opt(c)
 	}
 	return c
+}
+
+func (c *Client) SetGeneration(generation uint64) {
+	c.generation = generation
+}
+
+func (c *Client) GetGeneration() uint64 {
+	return c.generation
+}
+
+func (c *Client) FillRouting(envelope *protocol.Envelope) {
+	if envelope == nil {
+		return
+	}
+	if envelope.PluginID == "" {
+		envelope.PluginID = c.pluginID
+	}
+	if envelope.RuntimeID == "" {
+		envelope.RuntimeID = c.runtimeID
+	}
+	if envelope.ServiceID == "" {
+		envelope.ServiceID = c.serviceID
+	}
+	if envelope.Generation == 0 {
+		envelope.Generation = c.generation
+	}
 }
 
 func (c *Client) Transport() Transport {
@@ -274,6 +386,13 @@ func (c *Client) SendRequest(ctx context.Context, method string, payload any, op
 		return protocol.Envelope{}, err
 	}
 
+	if c.completedCache != nil && len(envelope.Payload) > 0 {
+		fp := c.completedCache.ComputeFingerprint(method, envelope.Payload)
+		if cachedResp, cachedErr, hit := c.completedCache.Get(fp); hit {
+			return cachedResp, cachedErr
+		}
+	}
+
 	timeoutMs := c.pendingTimeoutMs
 	if envelope.Metadata != nil {
 		if t, ok := envelope.Metadata["__timeout"]; ok {
@@ -298,6 +417,11 @@ func (c *Client) SendRequest(ctx context.Context, method string, payload any, op
 		resp := pending.Response
 		pErr := pending.Err
 		pending.mu.Unlock()
+
+		if c.completedCache != nil && st == stateCompleted && len(envelope.Payload) > 0 {
+			fp := c.completedCache.ComputeFingerprint(method, envelope.Payload)
+			c.completedCache.Put(fp, resp, pErr)
+		}
 
 		switch st {
 		case stateCompleted:
@@ -329,6 +453,13 @@ func (c *Client) SendReservedRequest(ctx context.Context, method string, payload
 		return protocol.Envelope{}, err
 	}
 
+	if c.completedCache != nil && len(envelope.Payload) > 0 {
+		fp := c.completedCache.ComputeFingerprint(method, envelope.Payload)
+		if cachedResp, cachedErr, hit := c.completedCache.Get(fp); hit {
+			return cachedResp, cachedErr
+		}
+	}
+
 	timeoutMs := c.pendingTimeoutMs
 	if envelope.Metadata != nil {
 		if t, ok := envelope.Metadata["__timeout"]; ok {
@@ -353,6 +484,11 @@ func (c *Client) SendReservedRequest(ctx context.Context, method string, payload
 		resp := pending.Response
 		pErr := pending.Err
 		pending.mu.Unlock()
+
+		if c.completedCache != nil && st == stateCompleted && len(envelope.Payload) > 0 {
+			fp := c.completedCache.ComputeFingerprint(method, envelope.Payload)
+			c.completedCache.Put(fp, resp, pErr)
+		}
 
 		switch st {
 		case stateCompleted:
@@ -461,14 +597,15 @@ func (c *Client) NewRequest(method string, payload any, opts ...MessageOption) (
 	}
 
 	envelope := protocol.Envelope{
-		Protocol:  protocol.ProtocolVersion,
-		Type:      protocol.MessageTypeRequest,
-		ID:        id,
-		Method:    method,
-		Payload:   rawPayload,
-		PluginID:  c.pluginID,
-		RuntimeID: c.runtimeID,
-		ServiceID: c.serviceID,
+		Protocol:   protocol.ProtocolVersion,
+		Type:       protocol.MessageTypeRequest,
+		ID:         id,
+		Method:     method,
+		Payload:    rawPayload,
+		PluginID:   c.pluginID,
+		RuntimeID:  c.runtimeID,
+		ServiceID:  c.serviceID,
+		Generation: c.generation,
 	}
 
 	for _, opt := range opts {
@@ -502,14 +639,15 @@ func (c *Client) NewResponse(request protocol.Envelope, payload any, opts ...Mes
 	}
 
 	envelope := protocol.Envelope{
-		Protocol:  protocol.ProtocolVersion,
-		Type:      protocol.MessageTypeResponse,
-		ID:        id,
-		RequestID: request.ID,
-		Payload:   rawPayload,
-		PluginID:  c.pluginID,
-		RuntimeID: c.runtimeID,
-		ServiceID: c.serviceID,
+		Protocol:   protocol.ProtocolVersion,
+		Type:       protocol.MessageTypeResponse,
+		ID:         id,
+		RequestID:  request.ID,
+		Payload:    rawPayload,
+		PluginID:   c.pluginID,
+		RuntimeID:  c.runtimeID,
+		ServiceID:  c.serviceID,
+		Generation: c.generation,
 	}
 
 	for _, opt := range opts {
@@ -543,14 +681,15 @@ func (c *Client) NewNotification(method string, payload any, opts ...MessageOpti
 	}
 
 	envelope := protocol.Envelope{
-		Protocol:  protocol.ProtocolVersion,
-		Type:      protocol.MessageTypeNotification,
-		ID:        id,
-		Method:    method,
-		Payload:   rawPayload,
-		PluginID:  c.pluginID,
-		RuntimeID: c.runtimeID,
-		ServiceID: c.serviceID,
+		Protocol:   protocol.ProtocolVersion,
+		Type:       protocol.MessageTypeNotification,
+		ID:         id,
+		Method:     method,
+		Payload:    rawPayload,
+		PluginID:   c.pluginID,
+		RuntimeID:  c.runtimeID,
+		ServiceID:  c.serviceID,
+		Generation: c.generation,
 	}
 
 	for _, opt := range opts {
