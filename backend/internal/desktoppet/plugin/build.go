@@ -8,7 +8,7 @@ import (
 )
 
 const (
-	PetSupportedProtocol = "amitia.desktop.pet/1"
+	PetSupportedProtocol  = "amitia.desktop.pet/1"
 	RendererServiceSuffix = "/renderer"
 )
 

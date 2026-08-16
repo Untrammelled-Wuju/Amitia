@@ -24,7 +24,7 @@ func (a *noopAdapter) Register(ctx context.Context, ref ContributionRef, def map
 		Definition: cloneMap(def),
 	}, nil
 }
-func (a *noopAdapter) Detach(ctx context.Context, reg ContributionRegistration) error  { return nil }
+func (a *noopAdapter) Detach(ctx context.Context, reg ContributionRegistration) error { return nil }
 func (a *noopAdapter) Validate(ctx context.Context, ref ContributionRef, def map[string]any) error {
 	return nil
 }
