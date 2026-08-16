@@ -439,56 +439,14 @@ func (s *AcquisitionService) executeEnable(ctx context.Context, candidate Capabi
 }
 
 // enableProviderViaLifecycle enables a provider definition by delegating to the
-// authoritative ProviderLifecyclePort. It does NOT fabricate HealthReady or
-// ProviderAvailabilityAvailable; those states are owned by the lifecycle.
+// authoritative ProviderLifecyclePort. It does NOT fabricate ProviderInstance
+// directly; Enable owns instance creation and state assignment.
 func (s *AcquisitionService) enableProviderViaLifecycle(def *capability.CapabilityProviderDefinition, candidate CapabilityCandidate, lc ProviderLifecyclePort) error {
-	s.mu.RLock()
-	reg := s.providerRegistry
-	s.mu.RUnlock()
-
-	if reg == nil {
-		return ErrProviderRegistryUnavailable
-	}
-
-	// Check if an executable instance already exists for this provider.
-	existing := reg.ListInstancesByProvider(def.ID)
-	for _, inst := range existing {
-		if inst != nil && inst.IsExecutable() {
-			return nil
-		}
-	}
-
 	if lc == nil {
 		return fmt.Errorf("provider lifecycle not available for provider %s", def.ID)
 	}
 
-	instanceID := capability.ProviderInstanceID(fmt.Sprintf("acq_%s_%d", def.ID, time.Now().UnixNano()))
-
-	inst := capability.CapabilityProviderInstance{
-		ID:          instanceID,
-		ProviderID:  def.ID,
-		CapabilityID: def.CapabilityID,
-		Placement:   def.Placement,
-		ExtensionID: def.ExtensionID,
-		ModuleID:    def.ModuleID,
-	}
-
-	if def.Placement == capability.ProviderPlacementDevice {
-		if candidate.Metadata != nil {
-			if devID, ok := candidate.Metadata["deviceId"].(string); ok && devID != "" {
-				inst.DeviceID = runtimeidentity.DeviceID(devID)
-			}
-			if rtID, ok := candidate.Metadata["runtimeId"].(string); ok && rtID != "" {
-				inst.RuntimeID = runtimeidentity.RuntimeID(rtID)
-			}
-		}
-	}
-
-	if err := lc.RegisterInstance(inst); err != nil {
-		return fmt.Errorf("register instance for provider %s: %w", def.ID, err)
-	}
-
-	return nil
+	return lc.Enable(def.ID)
 }
 
 // executeReconcile waits for the authoritative state to produce an executable
