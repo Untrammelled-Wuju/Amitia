@@ -3,6 +3,7 @@ package accountsession
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"time"
 
 	"gorm.io/gorm"
@@ -28,6 +29,9 @@ type RefreshResult struct {
 	AccessExpiresAt  time.Time
 	RefreshExpiresAt time.Time
 	SessionID        string
+	UserID           string
+	Username         string
+	Role             string
 }
 
 func (s *RefreshService) Rotate(rawRefreshToken string) (*RefreshResult, error) {
