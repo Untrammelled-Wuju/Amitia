@@ -12,14 +12,66 @@ type FloatingWindowEventPublisher interface {
 	PublishFloatingWindowContribution(ctx context.Context, extensionID, contributionID string, definition map[string]any) error
 }
 
+type ExistingPetResourcePort interface {
+	AttachPluginResource(ctx context.Context, extensionID, contributionID string, revision int, definition map[string]any) (string, error)
+	DetachPluginResource(ctx context.Context, handle string) error
+	ListAttachedResources(ctx context.Context, extensionID string) ([]ExistingPetResourceBinding, error)
+}
+
+type ExistingPetResourceBinding struct {
+	Handle         string
+	ExtensionID    string
+	ContributionID string
+	Revision       int
+	Definition     map[string]any
+}
+
+type ExistingPetActionPort interface {
+	AttachPluginAction(ctx context.Context, extensionID, contributionID string, revision int, target ExistingPetActionTarget, definition map[string]any) (string, error)
+	DetachPluginAction(ctx context.Context, handle string) error
+	ListAttachedActions(ctx context.Context, extensionID string) ([]ExistingPetActionBinding, error)
+}
+
+type ExistingPetActionBinding struct {
+	Handle         string
+	ExtensionID    string
+	ContributionID string
+	Revision       int
+	Target         ExistingPetActionTarget
+}
+
+type ExistingPetRuntimePort interface {
+	AttachPluginRuntime(ctx context.Context, extensionID, contributionID string, revision int, definition map[string]any) (string, error)
+	DetachPluginRuntime(ctx context.Context, handle string) error
+	ListAttachedRuntimes(ctx context.Context, extensionID string) ([]ExistingPetRuntimeBinding, error)
+}
+
+type ExistingPetRuntimeBinding struct {
+	Handle         string
+	ExtensionID    string
+	ContributionID string
+	Revision       int
+}
+
+type ExistingPetWindowPort interface {
+	PublishFloatingWindowContribution(ctx context.Context, extensionID, contributionID string, definition map[string]any) error
+	RetractFloatingWindowContribution(ctx context.Context, extensionID, contributionID string) error
+	ListAttachedWindows(ctx context.Context, extensionID string) ([]ExistingPetWindowBinding, error)
+}
+
+type ExistingPetWindowBinding struct {
+	ExtensionID    string
+	ContributionID string
+}
+
 type productionResourceCapability struct {
 	mu        sync.RWMutex
 	installed installation.Repository
-	release   interface{}
+	release   ExistingPetResourcePort
 	cache     map[PetResourceHandle]PluginResourceAttachRequest
 }
 
-func NewProductionResourceCapability(installed installation.Repository, releaseSvc interface{}) PetResourceCapability {
+func NewProductionResourceCapability(installed installation.Repository, releaseSvc ExistingPetResourcePort) PetResourceCapability {
 	return &productionResourceCapability{
 		installed: installed,
 		release:   releaseSvc,
@@ -34,7 +86,14 @@ func (c *productionResourceCapability) AttachPluginResource(ctx context.Context,
 	if c.installed == nil {
 		return "", fmt.Errorf("AttachPluginResource: installation repository unavailable")
 	}
-	handle := PetResourceHandle(req.ExtensionID + "/" + req.ContributionID)
+	if c.release == nil {
+		return "", fmt.Errorf("AttachPluginResource: Existing pet resource port unavailable")
+	}
+	canonical, err := c.release.AttachPluginResource(ctx, req.ExtensionID, req.ContributionID, req.Revision, req.Definition)
+	if err != nil {
+		return "", fmt.Errorf("AttachPluginResource: Existing owner attach failed: %w", err)
+	}
+	handle := PetResourceHandle(canonical)
 	c.mu.Lock()
 	c.cache[handle] = req
 	c.mu.Unlock()
@@ -43,15 +102,28 @@ func (c *productionResourceCapability) AttachPluginResource(ctx context.Context,
 
 func (c *productionResourceCapability) DetachPluginResource(ctx context.Context, handle PetResourceHandle) error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if _, ok := c.cache[handle]; !ok {
+	req, ok := c.cache[handle]
+	c.mu.Unlock()
+	if !ok {
 		return fmt.Errorf("DetachPluginResource: handle %s not found", handle)
 	}
+	if c.release == nil {
+		return fmt.Errorf("DetachPluginResource: Existing pet resource port unavailable")
+	}
+	if err := c.release.DetachPluginResource(ctx, string(handle)); err != nil {
+		return fmt.Errorf("DetachPluginResource: Existing owner detach failed: %w", err)
+	}
+	c.mu.Lock()
 	delete(c.cache, handle)
+	_ = req
+	c.mu.Unlock()
 	return nil
 }
 
 func (c *productionResourceCapability) RebuildFromExisting() error {
+	if c.release == nil {
+		return fmt.Errorf("RebuildFromExisting: Existing pet resource port unavailable")
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.cache = make(map[PetResourceHandle]PluginResourceAttachRequest)
@@ -88,12 +160,12 @@ func (r *productionActionTargetResolver) ResolveActionTarget(ctx context.Context
 
 type productionActionCapability struct {
 	mu       sync.RWMutex
-	facade   interface{}
+	facade   ExistingPetActionPort
 	resolver ActionTargetResolver
 	cache    map[PetActionHandle]PluginActionAttachRequest
 }
 
-func NewProductionActionCapability(facade interface{}, resolver ActionTargetResolver) PetActionCapability {
+func NewProductionActionCapability(facade ExistingPetActionPort, resolver ActionTargetResolver) PetActionCapability {
 	return &productionActionCapability{
 		facade:   facade,
 		resolver: resolver,
@@ -113,9 +185,13 @@ func (c *productionActionCapability) AttachPluginAction(ctx context.Context, req
 		req.Target = target
 	}
 	if c.facade == nil {
-		return "", fmt.Errorf("AttachPluginAction: runtime facade unavailable")
+		return "", fmt.Errorf("AttachPluginAction: Existing pet action port unavailable")
 	}
-	handle := PetActionHandle(req.ExtensionID + "/" + req.ContributionID)
+	canonical, err := c.facade.AttachPluginAction(ctx, req.ExtensionID, req.ContributionID, req.Revision, req.Target, req.Definition)
+	if err != nil {
+		return "", fmt.Errorf("AttachPluginAction: Existing owner attach failed: %w", err)
+	}
+	handle := PetActionHandle(canonical)
 	c.mu.Lock()
 	c.cache[handle] = req
 	c.mu.Unlock()
@@ -124,15 +200,28 @@ func (c *productionActionCapability) AttachPluginAction(ctx context.Context, req
 
 func (c *productionActionCapability) DetachPluginAction(ctx context.Context, handle PetActionHandle) error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if _, ok := c.cache[handle]; !ok {
+	req, ok := c.cache[handle]
+	c.mu.Unlock()
+	if !ok {
 		return fmt.Errorf("DetachPluginAction: handle %s not found", handle)
 	}
+	if c.facade == nil {
+		return fmt.Errorf("DetachPluginAction: Existing pet action port unavailable")
+	}
+	if err := c.facade.DetachPluginAction(ctx, string(handle)); err != nil {
+		return fmt.Errorf("DetachPluginAction: Existing owner detach failed: %w", err)
+	}
+	c.mu.Lock()
 	delete(c.cache, handle)
+	_ = req
+	c.mu.Unlock()
 	return nil
 }
 
 func (c *productionActionCapability) RebuildFromExisting() error {
+	if c.facade == nil {
+		return fmt.Errorf("RebuildFromExisting: Existing pet action port unavailable")
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.cache = make(map[PetActionHandle]PluginActionAttachRequest)
@@ -141,11 +230,11 @@ func (c *productionActionCapability) RebuildFromExisting() error {
 
 type productionRuntimeCapability struct {
 	mu     sync.RWMutex
-	facade interface{}
+	facade ExistingPetRuntimePort
 	cache  map[PetRuntimeHandle]PluginRuntimeAttachRequest
 }
 
-func NewProductionRuntimeCapability(facade interface{}) PetRuntimeCapability {
+func NewProductionRuntimeCapability(facade ExistingPetRuntimePort) PetRuntimeCapability {
 	return &productionRuntimeCapability{
 		facade: facade,
 		cache:  make(map[PetRuntimeHandle]PluginRuntimeAttachRequest),
@@ -157,9 +246,13 @@ func (c *productionRuntimeCapability) AttachPluginRuntime(ctx context.Context, r
 		return "", fmt.Errorf("AttachPluginRuntime: ExtensionID and ContributionID required")
 	}
 	if c.facade == nil {
-		return "", fmt.Errorf("AttachPluginRuntime: runtime facade unavailable")
+		return "", fmt.Errorf("AttachPluginRuntime: Existing pet runtime port unavailable")
 	}
-	handle := PetRuntimeHandle(req.ExtensionID + "/" + req.ContributionID)
+	canonical, err := c.facade.AttachPluginRuntime(ctx, req.ExtensionID, req.ContributionID, req.Revision, req.Definition)
+	if err != nil {
+		return "", fmt.Errorf("AttachPluginRuntime: Existing owner attach failed: %w", err)
+	}
+	handle := PetRuntimeHandle(canonical)
 	c.mu.Lock()
 	c.cache[handle] = req
 	c.mu.Unlock()
@@ -168,15 +261,28 @@ func (c *productionRuntimeCapability) AttachPluginRuntime(ctx context.Context, r
 
 func (c *productionRuntimeCapability) DetachPluginRuntime(ctx context.Context, handle PetRuntimeHandle) error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if _, ok := c.cache[handle]; !ok {
+	req, ok := c.cache[handle]
+	c.mu.Unlock()
+	if !ok {
 		return fmt.Errorf("DetachPluginRuntime: handle %s not found", handle)
 	}
+	if c.facade == nil {
+		return fmt.Errorf("DetachPluginRuntime: Existing pet runtime port unavailable")
+	}
+	if err := c.facade.DetachPluginRuntime(ctx, string(handle)); err != nil {
+		return fmt.Errorf("DetachPluginRuntime: Existing owner detach failed: %w", err)
+	}
+	c.mu.Lock()
 	delete(c.cache, handle)
+	_ = req
+	c.mu.Unlock()
 	return nil
 }
 
 func (c *productionRuntimeCapability) RebuildFromExisting() error {
+	if c.facade == nil {
+		return fmt.Errorf("RebuildFromExisting: Existing pet runtime port unavailable")
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.cache = make(map[PetRuntimeHandle]PluginRuntimeAttachRequest)
@@ -185,11 +291,11 @@ func (c *productionRuntimeCapability) RebuildFromExisting() error {
 
 type productionFloatingWindowCapability struct {
 	mu        sync.RWMutex
-	publisher FloatingWindowEventPublisher
+	publisher ExistingPetWindowPort
 	cache     map[PetFloatingWindowHandle]PluginFloatingWindowAttachRequest
 }
 
-func NewProductionFloatingWindowCapability(publisher FloatingWindowEventPublisher) PetFloatingWindowCapability {
+func NewProductionFloatingWindowCapability(publisher ExistingPetWindowPort) PetFloatingWindowCapability {
 	return &productionFloatingWindowCapability{
 		publisher: publisher,
 		cache:     make(map[PetFloatingWindowHandle]PluginFloatingWindowAttachRequest),
@@ -200,10 +306,11 @@ func (c *productionFloatingWindowCapability) AttachPluginFloatingWindow(ctx cont
 	if req.ExtensionID == "" || req.ContributionID == "" {
 		return "", fmt.Errorf("AttachPluginFloatingWindow: ExtensionID and ContributionID required")
 	}
-	if c.publisher != nil {
-		if err := c.publisher.PublishFloatingWindowContribution(ctx, req.ExtensionID, req.ContributionID, req.Definition); err != nil {
-			return "", fmt.Errorf("AttachPluginFloatingWindow: publish contribution failed: %w", err)
-		}
+	if c.publisher == nil {
+		return "", fmt.Errorf("AttachPluginFloatingWindow: composition error: window publisher is nil")
+	}
+	if err := c.publisher.PublishFloatingWindowContribution(ctx, req.ExtensionID, req.ContributionID, req.Definition); err != nil {
+		return "", fmt.Errorf("AttachPluginFloatingWindow: publish contribution failed: %w", err)
 	}
 	handle := PetFloatingWindowHandle(req.ExtensionID + "/" + req.ContributionID)
 	c.mu.Lock()
@@ -214,15 +321,27 @@ func (c *productionFloatingWindowCapability) AttachPluginFloatingWindow(ctx cont
 
 func (c *productionFloatingWindowCapability) DetachPluginFloatingWindow(ctx context.Context, handle PetFloatingWindowHandle) error {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	if _, ok := c.cache[handle]; !ok {
+	req, ok := c.cache[handle]
+	c.mu.Unlock()
+	if !ok {
 		return fmt.Errorf("DetachPluginFloatingWindow: handle %s not found", handle)
 	}
+	if c.publisher == nil {
+		return fmt.Errorf("DetachPluginFloatingWindow: composition error: window publisher is nil")
+	}
+	if err := c.publisher.RetractFloatingWindowContribution(ctx, req.ExtensionID, req.ContributionID); err != nil {
+		return fmt.Errorf("DetachPluginFloatingWindow: retract contribution failed: %w", err)
+	}
+	c.mu.Lock()
 	delete(c.cache, handle)
+	c.mu.Unlock()
 	return nil
 }
 
 func (c *productionFloatingWindowCapability) RebuildFromExisting() error {
+	if c.publisher == nil {
+		return fmt.Errorf("RebuildFromExisting: Existing pet window port unavailable")
+	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.cache = make(map[PetFloatingWindowHandle]PluginFloatingWindowAttachRequest)
@@ -231,9 +350,10 @@ func (c *productionFloatingWindowCapability) RebuildFromExisting() error {
 
 type ProductionCapabilitiesOptions struct {
 	InstallationRepo installation.Repository
-	ReleaseService   interface{}
-	RuntimeFacade    interface{}
-	FloatingWindow   FloatingWindowEventPublisher
+	ReleaseService   ExistingPetResourcePort
+	RuntimeFacade    ExistingPetActionPort
+	RuntimePort      ExistingPetRuntimePort
+	FloatingWindow   ExistingPetWindowPort
 }
 
 func NewProductionCapabilities(opts ProductionCapabilitiesOptions) DesktopPetPluginCapabilities {
@@ -241,7 +361,7 @@ func NewProductionCapabilities(opts ProductionCapabilitiesOptions) DesktopPetPlu
 	return DesktopPetPluginCapabilities{
 		Resource:       NewProductionResourceCapability(opts.InstallationRepo, opts.ReleaseService),
 		Action:         NewProductionActionCapability(opts.RuntimeFacade, resolver),
-		Runtime:        NewProductionRuntimeCapability(opts.RuntimeFacade),
+		Runtime:        NewProductionRuntimeCapability(opts.RuntimePort),
 		FloatingWindow: NewProductionFloatingWindowCapability(opts.FloatingWindow),
 		ActionTarget:   resolver,
 	}
