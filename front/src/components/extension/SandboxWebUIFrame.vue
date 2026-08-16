@@ -143,7 +143,7 @@ async function handleBridgeMessage(msg: Record<string, unknown>) {
     sendBridgeResponse(msg, { ok: true, sessionId: sessionId.value });
     return;
   }
-  if (method === "ui.content.resize") {
+  if (method === "ui.content.resize" || method === "ui.resize.request") {
     const requested = Number((msg.input as Record<string, unknown> | undefined)?.preferredHeight);
     if (Number.isFinite(requested) && requested > 0) {
       const maximum = surfaceRole.value === "composer" ? 160 : surfaceRole.value === "message" ? 480 : 720;
