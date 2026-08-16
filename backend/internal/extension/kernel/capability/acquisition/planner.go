@@ -3,6 +3,8 @@ package acquisition
 import (
 	"context"
 	"errors"
+
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 )
 
 // CandidateSearcher defines the interface used by the Planner to discover
@@ -77,6 +79,26 @@ func (p *Planner) Plan(ctx context.Context, request AcquisitionRequest) (*Acquis
 		})
 	}
 
+	// 如果指定了 RequestedCandidateID，必须锁定该候选
+	if request.RequestedCandidateID != "" {
+		candidates = filterCandidatesByID(candidates, request.RequestedCandidateID)
+		if len(candidates) == 0 {
+			return nil, errors.Join(ErrNoCandidate, &AcquisitionError{
+				Code:    "candidate_not_found",
+				Message: "requested candidate not found: " + request.RequestedCandidateID,
+			})
+		}
+	}
+
+	// 过滤掉不提供目标 Capability 的候选
+	candidates = filterCandidatesByCapability(candidates, request.CapabilityID)
+	if len(candidates) == 0 {
+		return nil, errors.Join(ErrNoCompatibleCandidate, &AcquisitionError{
+			Code:    "no_compatible_candidate",
+			Message: "no candidate provides capability: " + string(request.CapabilityID),
+		})
+	}
+
 	ranked := p.rankedCandidates(request, candidates)
 	if len(ranked) == 0 {
 		return nil, ErrNoCompatibleCandidate
@@ -84,6 +106,31 @@ func (p *Planner) Plan(ctx context.Context, request AcquisitionRequest) (*Acquis
 
 	plan := p.buildPlan(ctx, request, ranked)
 	return plan, nil
+}
+
+// filterCandidatesByID 按 CandidateID 过滤候选列表
+func filterCandidatesByID(candidates []CapabilityCandidate, candidateID string) []CapabilityCandidate {
+	var filtered []CapabilityCandidate
+	for _, c := range candidates {
+		if c.ID == candidateID {
+			filtered = append(filtered, c)
+		}
+	}
+	return filtered
+}
+
+// filterCandidatesByCapability 过滤出真正提供目标 Capability 的候选
+func filterCandidatesByCapability(candidates []CapabilityCandidate, capID capability.CapabilityID) []CapabilityCandidate {
+	if capID == "" {
+		return candidates
+	}
+	var filtered []CapabilityCandidate
+	for _, c := range candidates {
+		if c.HasExactCapability(capID) {
+			filtered = append(filtered, c)
+		}
+	}
+	return filtered
 }
 
 // rankedCandidates returns the candidates sorted by descending score.

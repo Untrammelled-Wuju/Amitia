@@ -203,7 +203,7 @@ func (td ToolDefinition) ModelToolView() ModelToolView {
 		Name:         td.ModelName,
 		Description:  td.Description,
 		InputSchema:  td.InputSchema,
-		CapabilityID: td.ID,
+		CapabilityID: string(td.CapabilityID),
 	}
 }
 

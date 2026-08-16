@@ -13,6 +13,8 @@ type AcquisitionContext struct {
 type AcquisitionRequest struct {
 	CapabilityID capability.CapabilityID `json:"capabilityId"`
 
+	RequestedCandidateID string `json:"candidateId,omitempty"`
+
 	UserID runtimeidentity.UserID `json:"userId"`
 
 	ExecContext *execution.ExecutionContext `json:"-"`

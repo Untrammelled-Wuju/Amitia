@@ -38,6 +38,7 @@ type ToolFacade struct {
 	runSkillScriptHandler RunSkillScriptHandler
 	skillResourceHandler  SkillResourceHandler
 	acquisitionBridge     *acquisition.AgentCapabilityBridge
+	recoveryService       *acquisition.RecoveryService
 	counters              *ToolFacadeCounters
 	config                ToolFacadeConfig
 }
@@ -90,6 +91,10 @@ func (f *ToolFacade) SetAcquisitionBridge(bridge *acquisition.AgentCapabilityBri
 
 func (f *ToolFacade) SetCapabilityResolver(resolver capability.CapabilityResolver) {
 	f.capabilityResolver = resolver
+}
+
+func (f *ToolFacade) SetRecoveryService(svc *acquisition.RecoveryService) {
+	f.recoveryService = svc
 }
 
 func (f *ToolFacade) PrepareAgentSkillPrompt(ctx context.Context, scope LegacyScope, message string) (string, []LegacyActivatedSkill, []string) {
@@ -489,8 +494,9 @@ func (f *ToolFacade) buildKernelModelTools(ctx context.Context, scope LegacyScop
 }
 
 type resolvedExecution struct {
-	target        capability.InvocationExecutionTarget
+	target           capability.InvocationExecutionTarget
 	legacyUnresolved bool
+	missingCapability capability.CapabilityID
 }
 
 func (f *ToolFacade) SetCapabilityService(svc *capability.CapabilityService) {
@@ -517,9 +523,15 @@ func (f *ToolFacade) resolveExecutionTarget(ctx context.Context, def capability.
 	}
 	result, err := f.capabilityResolver.Resolve(req)
 	if err != nil {
+		if def.CapabilityID != "" {
+			return resolvedExecution{missingCapability: def.CapabilityID}
+		}
 		return resolvedExecution{legacyUnresolved: true}
 	}
 	if !result.HasResult() {
+		if def.CapabilityID != "" {
+			return resolvedExecution{missingCapability: def.CapabilityID}
+		}
 		return resolvedExecution{legacyUnresolved: true}
 	}
 	return resolvedExecution{target: result.ExecutionTarget}
@@ -531,6 +543,19 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 	}
 	isBackground := def.Runtime.RuntimeType == capability.RuntimeTypeTask && def.ExecutionPolicy.AllowBackground
 	resolved := f.resolveExecutionTarget(ctx, def)
+
+	if resolved.missingCapability != "" {
+		return LegacyToolResult{
+			Status:      "FAILED",
+			VisibleText: fmt.Sprintf("capability not available: %s", resolved.missingCapability),
+			Error: &LegacyToolError{
+				Code:    "CAPABILITY_NOT_REGISTERED",
+				Message: string(resolved.missingCapability),
+				Detail:  fmt.Sprintf("capability %s has no executable provider", resolved.missingCapability),
+			},
+		}
+	}
+
 	metadata := map[string]any{}
 	if resolved.legacyUnresolved {
 		metadata["execution_mode"] = "legacy_unresolved_provider"

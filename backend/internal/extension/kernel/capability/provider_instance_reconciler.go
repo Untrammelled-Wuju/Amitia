@@ -51,7 +51,7 @@ func (r *providerInstanceReconciler) ActivateExtension(def domain.ExtensionDefin
 		}
 
 		if d.Placement == ProviderPlacementDevice {
-			if r.runtimeIdent.DeviceID == "" || r.runtimeIdent.RuntimeID == "" || r.runtimeIdent.RuntimeSessionID == "" {
+			if r.runtimeIdent.DeviceID == "" || r.runtimeIdent.RuntimeID == "" {
 				continue
 			}
 		}

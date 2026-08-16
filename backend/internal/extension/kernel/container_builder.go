@@ -875,14 +875,6 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if err := registerDeepSearchSystemTask(ctx, taskRuntimeService, b.deepSearchTaskEntry); err != nil {
 		return nil, fmt.Errorf("kernel: register deep search system task: %w", err)
 	}
-	if imageIntelligenceHandler != nil {
-		if err := toolRegistry.BatchRegister(ctx, imageintelligence.BuildToolDefinitions(imageIntelligenceHandler)); err != nil {
-			return nil, err
-		}
-		if err := toolRegistry.Register(ctx, imageintelligence.BuildInternalStatusToolDefinition()); err != nil {
-			return nil, err
-		}
-	}
 	registerWorkflowStepHandlers(workflowExecutor, executionKernel, adapterRegistry)
 
 	if b.host != nil && b.androidLinuxProvider != nil {
@@ -900,6 +892,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if hookService != nil {
 		toolFacade.SetHookService(hookService)
 	}
+
+	recoveryService := acquisition.NewRecoveryService(acquisitionService)
+	toolFacade.SetRecoveryService(recoveryService)
 
 	resumeRepo := coreexec.NewSQLiteResumeRepository(db)
 	if err := resumeRepo.InitTable(ctx); err != nil {

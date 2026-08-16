@@ -191,6 +191,7 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 		SideEffect   string          `json:"sideEffect,omitempty"`
 		Permissions  json.RawMessage `json:"permissions,omitempty"`
 		Scope        json.RawMessage `json:"scope,omitempty"`
+		Internal     bool            `json:"internal,omitempty"`
 	}
 	if err := json.Unmarshal(defData, &def); err != nil {
 		return installOp{}, fmt.Errorf("unmarshal tool definition: %w", err)
@@ -236,6 +237,7 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 		InputSchema:  def.InputSchema,
 		OutputSchema: def.OutputSchema,
 		Enabled:      false,
+		Internal:     def.Internal,
 		RiskLevel:    capability.RiskLevel(def.RiskLevel),
 		SideEffect:   capability.SideEffectLevel(def.SideEffect),
 		Permissions:  perms,
@@ -851,6 +853,7 @@ func (i *TypedContributionInstaller) activateTool(ctx context.Context, contrib d
 		SideEffect   string          `json:"sideEffect,omitempty"`
 		Permissions  json.RawMessage `json:"permissions,omitempty"`
 		Scope        json.RawMessage `json:"scope,omitempty"`
+		Internal     bool            `json:"internal,omitempty"`
 	}
 	_ = json.Unmarshal(defData, &def)
 	toolID := def.ToolID
@@ -891,6 +894,7 @@ func (i *TypedContributionInstaller) activateTool(ctx context.Context, contrib d
 		InputSchema:  def.InputSchema,
 		OutputSchema: def.OutputSchema,
 		Enabled:      true,
+		Internal:     def.Internal,
 		RiskLevel:    capability.RiskLevel(def.RiskLevel),
 		SideEffect:   capability.SideEffectLevel(def.SideEffect),
 		Permissions:  perms,

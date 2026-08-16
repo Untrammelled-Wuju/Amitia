@@ -245,7 +245,7 @@ func (b *DefaultPermissionBroker) Evaluate(ctx context.Context, request Permissi
 	if hasHardDeny {
 		b.determineDenyOrApproval(&result, request)
 	} else if hasForcedApprovalMissing {
-		b.determineDenyOrApproval(&result, request)
+		b.determineForcedApproval(&result, request)
 	} else if hasNormalMissing {
 		b.determineDenyOrApproval(&result, request)
 	} else {
@@ -316,6 +316,22 @@ func (b *DefaultPermissionBroker) validateApprovalRecord(permissionID string, re
 
 	if request.RiskLevel != "" && record.RiskLevel != "" {
 		if riskRank(request.RiskLevel) > riskRank(record.RiskLevel) {
+			return false
+		}
+	}
+
+	if record.ScopeSnapshotID != "" && request.ScopeSnapshotID != "" {
+		if record.ScopeSnapshotID != request.ScopeSnapshotID {
+			return false
+		}
+	}
+
+	if record.ExecutionBindingKey != "" && !record.ExecutionContext.IsEmpty() {
+		currentKey := request.ExecutionContext.BindingKey()
+		if currentKey == "" {
+			currentKey = record.ExecutionBindingKey
+		}
+		if currentKey != record.ExecutionBindingKey {
 			return false
 		}
 	}
@@ -563,6 +579,39 @@ func (b *DefaultPermissionBroker) matchGrants(grants []PermissionGrant, scope Pe
 		}
 	}
 	return matched
+}
+
+func (b *DefaultPermissionBroker) determineForcedApproval(result *PermissionEvaluationResult, request PermissionEvaluationRequest) {
+	hasApprovalPath := false
+	hasHardDenyInMissing := false
+	for _, req := range result.Missing {
+		if req.Optional {
+			continue
+		}
+		def, ok := b.registry.Get(req.PermissionID)
+		if !ok {
+			continue
+		}
+		if def.DefaultApproval == ApprovalDeny {
+			hasHardDenyInMissing = true
+			continue
+		}
+		if def.DefaultApproval == ApprovalManual || def.DefaultApproval == ApprovalFullControl {
+			hasApprovalPath = true
+		}
+	}
+
+	if hasHardDenyInMissing && !hasApprovalPath {
+		result.Decision = DecisionDeny
+	} else if hasApprovalPath {
+		result.Decision = DecisionRequireApproval
+	} else {
+		result.Decision = DecisionRequireApproval
+	}
+
+	if result.Decision == DecisionRequireApproval || result.Decision == DecisionDeny {
+		result.ApprovalRequest = b.buildApprovalRequest(request, result.Missing)
+	}
 }
 
 func (b *DefaultPermissionBroker) determineDenyOrApproval(result *PermissionEvaluationResult, request PermissionEvaluationRequest) {
