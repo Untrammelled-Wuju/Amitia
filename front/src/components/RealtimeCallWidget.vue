@@ -333,9 +333,9 @@ onUnmounted(() => {
   align-items: center;
   justify-content: space-between;
   padding: 8px 14px;
-  border-radius: 6px;
-  background: var(--el-fill-color-light);
-  border: 1px solid var(--el-border-color);
+  border-radius: var(--radius-sm);
+  background: var(--plugin-muted-bg);
+  border: 1px solid var(--surface-border);
   transition:
     border-color 0.3s,
     background 0.3s;

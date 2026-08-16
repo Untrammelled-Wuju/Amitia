@@ -3,6 +3,10 @@
 
 html[data-theme="dark"] {
   --tp-page: #0b0b0c;
+  --workbench-bg: #0b0b0c;
+  --workbench-sidebar-bg: #121214;
+  --surface-bg: #18181b;
+  --surface-bg-elevated: #1c1c20;
   --tp-shell: rgba(18, 18, 20, 0.88);
   --tp-panel: #18181b;
   --tp-panel-soft: #141416;

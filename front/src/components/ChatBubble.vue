@@ -299,7 +299,7 @@ async function copyContent() {
   flex-shrink: 0;
 }
 .bubble-body {
-  max-width: 80%;
+  max-width: min(80%, 760px);
   min-width: 60px;
 }
 .chat-bubble.is-emote .bubble-body {
@@ -344,9 +344,9 @@ async function copyContent() {
   border-top-right-radius: 2px;
 }
 .chat-bubble.assistant .bubble-content {
-  background: var(--ac-color-bg-primary);
-  border: 1px solid var(--ac-color-border-light);
-  border-top-left-radius: 2px;
+  background: transparent;
+  border: 0;
+  border-top-left-radius: var(--radius-xs);
 }
 
 .quote-block {
@@ -439,6 +439,7 @@ async function copyContent() {
 .chat-bubble:hover .bubble-actions {
   opacity: 1;
 }
+.bubble-actions :deep(.el-button:focus-visible) { outline: 2px solid var(--surface-border-focus); outline-offset: 2px; }
 
 @media (max-width: 768px) {
   .bubble-body {

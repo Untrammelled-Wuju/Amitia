@@ -75,7 +75,9 @@ const maxHeader = computed(() => props.maxHeaderActions ?? 4);
 
 <style scoped>
 .chat-extension-host {
-  display: contents;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
 }
 .chat-extension-host__header-actions {
   display: inline-flex;

@@ -13,9 +13,9 @@ export function useSessionManager() {
       accessToken: result.accessToken,
       accessTokenExpiresAt: result.accessTokenExpiresAt,
       sessionId: result.session?.sessionId,
-      userId: result.user?.id ?? null,
-      username: result.user?.username ?? null,
-      role: result.user?.role ?? null,
+      userId: result.user?.id,
+      username: result.user?.username,
+      role: result.user?.role,
       refreshToken: result.refreshToken,
       clientType: "web",
     });

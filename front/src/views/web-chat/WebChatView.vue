@@ -4,6 +4,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <div class="webchat-page">
+    <section class="chat-surface">
     <ChatBanners
       :model-missing="modelMissing"
       :is-offline="isOffline"
@@ -17,8 +18,10 @@ SPDX-License-Identifier: AGPL-3.0-only
       @toggle-summary="showSummary = !showSummary"
     />
 
+    <div class="chat-header-region">
     <ChatHeaderBar
       :char-name="charName"
+      :char-avatar="charAvatar"
       :char-identity="charIdentity"
       :conv-title="convTitle"
       :can-regenerate="canRegenerate"
@@ -26,6 +29,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       :conv-id="convId"
       :show-profiles="showProfiles"
       :show-mem-inject="showMemInject"
+      :call-active="callActive"
       @toggle-drawer="showDrawer = true"
       @regenerate="handleRegenerate"
       @clear="handleClear"
@@ -33,7 +37,9 @@ SPDX-License-Identifier: AGPL-3.0-only
       @toggle-char-picker="showCharPicker = true"
       @toggle-profiles="toggleProfiles"
       @toggle-mem-inject="toggleMemInject"
-    />
+      @toggle-call="handleToggleCall"
+    ><template #extension-actions><ChatHeaderExtensionHost :context="chatExtensionContext" /></template></ChatHeaderBar>
+    </div>
     <div class="chat-body-wrapper">
       <ProfileSummaryPanel
         :visible="showProfiles"
@@ -55,6 +61,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         :pull-ready="pullReady"
         :pull-loading="pullLoading"
         :pull-text="pullText"
+        :extension-context="chatExtensionContext"
         @scroll="onScroll"
         @wheel="onWheel"
         @touch-start="onMsgTouchStart"
@@ -64,7 +71,10 @@ SPDX-License-Identifier: AGPL-3.0-only
         @reply="handleSetReply"
         @scroll-to-bottom="scrollToBottom(true)"
       />
+      <aside v-if="hasSidebarExtensions" class="chat-sidebar-region"><ChatSidebarExtensionHost :context="chatExtensionContext" /></aside>
     </div>
+    <div v-if="callActive || hasStatusExtensions" class="chat-status-region">
+      <ChatStatusExtensionHost :context="chatExtensionContext" />
     <RealtimeCallWidget
       v-if="callActive"
       :visible="callActive"
@@ -73,13 +83,13 @@ SPDX-License-Identifier: AGPL-3.0-only
       :resource-id="ttsResourceId"
       :conversation-id="convId"
     />
-    <ChatInput
+    </div>
+    <div class="composer-region"><ChatInput
       ref="inputRef"
       :disabled="modelMissing"
       :sending="sending"
       :generating="generating"
       :is-submitting="isSubmitting"
-      :call-active="callActive"
       :reply-target="replyTarget"
       @send="handleSend"
       @image="onImageAttached"
@@ -89,10 +99,9 @@ SPDX-License-Identifier: AGPL-3.0-only
       @voiceText="handleVoiceText"
       @video="onVideoAttached"
       @removeVideo="onVideoRemoved"
-      @toggleCall="handleToggleCall"
       @cancel-reply="replyTarget = null"
       @emote="handleEmoteSend"
-    />
+    /></div>
 
     <ConversationDrawer
       v-model:visible="showDrawer"
@@ -119,10 +128,11 @@ SPDX-License-Identifier: AGPL-3.0-only
     />
 
     <MemoryPanel v-model:visible="showMemories" :memories="memories" />
+    </section>
   </div>
 </template>
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted, nextTick, watch, inject } from "vue";
+import { ref, computed, onMounted, onUnmounted, nextTick, watch, inject } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { useApi, isLoggedIn } from "../../composables/useApi";
@@ -142,6 +152,10 @@ import RealtimeCallWidget from "../../components/RealtimeCallWidget.vue";
 import ProfileSummaryPanel from "./components/ProfileSummaryPanel.vue";
 import MemoryInjectPanel from "./components/MemoryInjectPanel.vue";
 import { normalizeRealtimeMessage } from "@/utils/message-order";
+import ChatHeaderExtensionHost from "@/components/extension/chat/ChatHeaderExtensionHost.vue";
+import ChatStatusExtensionHost from "@/components/extension/chat/ChatStatusExtensionHost.vue";
+import ChatSidebarExtensionHost from "@/components/extension/chat/ChatSidebarExtensionHost.vue";
+import { useExtensionUIStore } from "@/stores/extensionUI";
 
 const router = useRouter();
 const callActive = ref(false);
@@ -179,6 +193,7 @@ async function handleToggleCall() {
 const { get, post } = useApi();
 const { cachedGet, invalidateCache } = useCachedApi();
 const currentCharName = inject<any>("currentCharName", null);
+const extensionUIStore = useExtensionUIStore();
 
 const messages = ref<any[]>([]);
 const convId = ref("");
@@ -209,6 +224,16 @@ const showImportDetail = ref(false);
 const convSummary = ref("");
 const showSummary = ref(false);
 const replyTarget = ref<any>(null);
+const chatExtensionContext = computed(() => ({
+  characterId: characterId.value,
+  conversationId: convId.value,
+  channel: isWechatActive.value ? "wechat" : isQQActive.value ? "qq" : "web",
+  platform: window.amitiaDesktop ? "desktop" : "web",
+  conversationState: sending.value ? "generating" : isOffline.value ? "offline" : "idle",
+  capabilities: window.amitiaDesktop ? ["browser", "desktop", "clipboard-host"] : ["browser"],
+}));
+const hasSidebarExtensions = computed(() => extensionUIStore.getVisibleContributions("chat.sidebar.panel").length > 0);
+const hasStatusExtensions = computed(() => extensionUIStore.getVisibleContributions("chat.status.item").length > 0);
 
 const msgAreaRef = ref<InstanceType<typeof MessagesArea>>();
 const inputRef = ref<InstanceType<typeof ChatInput>>();
@@ -522,17 +547,26 @@ onUnmounted(() => {
   height: 100%;
   width: 100%;
 }
+.chat-surface { display: flex; flex-direction: column; width: min(100%, 1440px); height: 100%; min-height: 0; margin: 0 auto; overflow: hidden; border: 1px solid var(--surface-border); border-radius: var(--radius-lg); background: var(--chat-surface-bg); }
+.chat-header-region { order: 1; flex: 0 0 auto; }
+.chat-status-region { order: 2; display: flex; flex-direction: column; gap: 6px; padding: 0 14px; }
+.composer-region { order: 4; flex: 0 0 auto; }
 @media (max-width: 768px) {
   .webchat-page {
     max-width: 100%;
   }
+  .chat-surface { border: 0; border-radius: 0; }
+  .chat-sidebar-region { display: none; }
 }
 
 .chat-body-wrapper {
+  order: 3;
   position: relative;
   flex: 1 1 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
 }
+.chat-sidebar-region { width: min(320px, 32%); min-width: 220px; padding: 12px; border-left: 1px solid var(--surface-border); overflow: auto; }
+@media (min-width: 1024px) { .chat-body-wrapper { flex-direction: row; } }
 </style>

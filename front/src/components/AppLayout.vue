@@ -4,22 +4,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <div class="app-shell" :class="{ 'is-mobile': isMobile }">
-    <div class="app-body">
-      <SideNav v-if="!isMobile" :username="authUsername" :avatar="authAvatar" />
+    <div class="app-body workbench">
+      <SideNav v-if="!isMobile" :username="authUsername" :avatar="authAvatar" :wechat-status="health.wechat" :qq-status="health.qq" :model-status="health.model" />
 
-      <div class="app-main">
-        <StatusBar
-          v-if="!isMobile"
-          :deploy-mode="health.deployMode"
-          :wechat-status="health.wechat"
-          :qq-status="health.qq"
-          :model-status="health.model"
-          :character-name="currentCharName"
-          :theme="resolvedTheme"
-          @toggle-theme="toggleTheme"
-        />
-
-        <main class="app-content" :class="{ 'is-login': isLoginPage }">
+      <div class="app-main workspace">
+        <main class="app-content workspace-surface" :class="{ 'is-login': isLoginPage, 'workspace-surface--chat': isChatPage }">
           <header v-if="isMobile && !isLoginPage" class="mobile-header">
             <span class="mobile-title">{{ pageTitle }}</span>
             <span class="mobile-status">
@@ -39,13 +28,13 @@ SPDX-License-Identifier: AGPL-3.0-only
     </div>
 
     <MobileNav v-if="isMobile && !isLoginPage" />
+    <div id="amitia-overlay-root" aria-live="polite"></div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, provide } from "vue";
 import { useRouter } from "vue-router";
-import StatusBar from "./StatusBar.vue";
 import SideNav from "./SideNav.vue";
 import MobileNav from "./MobileNav.vue";
 import { useTheme } from "../composables/useTheme";
@@ -66,7 +55,6 @@ let electronNavCleanup: (() => void) | null = null;
 const {
   state: theme,
   resolvedMode: resolvedTheme,
-  toggleLightDark: toggleTheme,
 } = useTheme();
 
 const windowWidth = ref(window.innerWidth);
@@ -221,7 +209,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   height: 100vh;
-  background: var(--tp-page-glow, none), var(--console-bg);
+  background: var(--workbench-bg);
 }
 
 .app-body {
@@ -236,7 +224,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: transparent;
+  background: var(--workbench-bg);
 }
 
 .app-content {
@@ -244,7 +232,7 @@ onMounted(() => {
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  background: transparent;
+  background: var(--workbench-bg);
 }
 
 .app-content.is-login {
@@ -258,12 +246,22 @@ onMounted(() => {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 24px 32px;
+  padding: 20px 24px;
   background: transparent;
 }
 
 .content-scroll.no-padding {
   padding: 0;
+}
+
+.workspace-surface--chat .content-scroll {
+  display: flex;
+  min-height: 0;
+}
+
+.workspace-surface--chat .content-scroll > * {
+  min-width: 0;
+  flex: 1;
 }
 
 .mobile-header {

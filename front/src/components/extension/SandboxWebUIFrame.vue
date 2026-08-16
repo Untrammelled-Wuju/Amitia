@@ -1,7 +1,8 @@
 <script setup lang="ts">
-import { ref, onMounted, onBeforeUnmount, watch } from "vue";
+import { ref, onMounted, onBeforeUnmount, watch, computed } from "vue";
 import type { UIContributionSummary } from "@/stores/extensionUI";
 import { apiClient } from "@/composables/useApi";
+import ExtensionRenderState from "./ExtensionRenderState.vue";
 
 const props = defineProps<{
   contribution: UIContributionSummary;
@@ -26,9 +27,18 @@ const loading = ref(true);
 const error = ref<string | null>(null);
 const iframeLoaded = ref(false);
 const ready = ref(false);
+const preferredHeight = ref<number | null>(null);
 let bridgePort: MessagePort | null = null;
 
 const PROTOCOL_VERSION = "amitia-webui-bridge-v1";
+
+const uiContext = computed(() => props.context ?? {});
+const surfaceRole = computed(() => String((uiContext.value.surface as Record<string, unknown> | undefined)?.role ?? "main"));
+const iframeStyle = computed(() => {
+  const height = preferredHeight.value;
+  if (!height || ["sidebar", "main"].includes(surfaceRole.value)) return undefined;
+  return { height: `${height}px` };
+});
 
 async function createSession() {
   loading.value = true;
@@ -50,6 +60,7 @@ async function createSession() {
       moduleId: props.contribution.moduleId,
       slotId: props.slotId,
       generation: props.contribution.generation,
+      uiContext: uiContext.value,
       sandbox: props.contribution.sandbox ?? "web_restricted",
       entryPath: props.contribution.entryPath ?? "index.html",
       allowedActions: (props.contribution.actions ?? []).map((a) => a.actionId),
@@ -108,6 +119,7 @@ function onMessage(event: MessageEvent) {
       nonce: sessionNonce.value,
       token: sessionToken.value,
       generation: props.contribution.generation,
+      uiContext: uiContext.value,
     },
     sessionOrigin.value || "*",
     [channel.port2],
@@ -120,6 +132,15 @@ async function handleBridgeMessage(msg: Record<string, unknown>) {
     ready.value = true;
     emit("ready", sessionId.value);
     sendBridgeResponse(msg, { ok: true, sessionId: sessionId.value });
+    return;
+  }
+  if (method === "ui.content.resize") {
+    const requested = Number((msg.input as Record<string, unknown> | undefined)?.preferredHeight);
+    if (Number.isFinite(requested) && requested > 0) {
+      const maximum = surfaceRole.value === "composer" ? 160 : surfaceRole.value === "message" ? 480 : 720;
+      preferredHeight.value = Math.max(44, Math.min(Math.round(requested), maximum));
+    }
+    sendBridgeResponse(msg, { ok: true });
     return;
   }
   if (method === "ui.action.invoke") {
@@ -151,6 +172,14 @@ function onIframeLoad() {
   iframeLoaded.value = true;
 }
 
+function postUIContext() {
+  if (!bridgePort || !ready.value) return;
+  const surface = (uiContext.value.surface as Record<string, unknown> | undefined) ?? {};
+  bridgePort.postMessage({ type: "host.event", method: "ui.host.context", payload: uiContext.value });
+  bridgePort.postMessage({ type: "host.event", method: "ui.host.theme", payload: uiContext.value.theme ?? {} });
+  bridgePort.postMessage({ type: "host.event", method: "ui.host.resize", payload: { width: surface.width ?? 0, height: surface.height ?? 0, breakpoint: surface.breakpoint ?? "xs", surfaceRole: surface.role ?? "main" } });
+}
+
 onMounted(async () => {
   window.addEventListener("message", onMessage);
   await createSession();
@@ -165,25 +194,18 @@ watch(() => props.contribution.contributionId, async () => {
   await destroySession();
   await createSession();
 });
+
+watch(uiContext, postUIContext, { deep: true });
+watch(ready, (value) => { if (value) postUIContext(); });
 </script>
 
 <template>
   <div class="sandbox-webui-frame" :data-contribution-id="contribution.contributionId">
     <template v-if="loading">
-      <div class="sandbox-webui-frame__loading">
-        <div class="sandbox-webui-frame__spinner" />
-        <span>加载扩展界面...</span>
-      </div>
+      <ExtensionRenderState state="loading" />
     </template>
     <template v-else-if="error">
-      <div class="sandbox-webui-frame__error">
-        <div class="sandbox-webui-frame__error-icon">!</div>
-        <div class="sandbox-webui-frame__error-text">
-          <div class="sandbox-webui-frame__error-title">加载失败</div>
-          <div class="sandbox-webui-frame__error-detail">{{ error }}</div>
-        </div>
-        <button class="sandbox-webui-frame__retry" @click="createSession">重试</button>
-      </div>
+      <ExtensionRenderState state="error" :detail="error" @retry="createSession" />
     </template>
     <template v-else>
       <div class="sandbox-webui-frame__container">
@@ -194,6 +216,8 @@ watch(() => props.contribution.contributionId, async () => {
           ref="iframeRef"
           :src="resourceUrl"
           class="sandbox-webui-frame__iframe"
+          :class="`sandbox-webui-frame__iframe--${surfaceRole}`"
+          :style="iframeStyle"
           sandbox="allow-scripts"
           referrerpolicy="no-referrer"
           :data-session-id="sessionId"
@@ -214,14 +238,19 @@ watch(() => props.contribution.contributionId, async () => {
 .sandbox-webui-frame__container {
   position: relative;
   width: 100%;
+  min-height: 0;
 }
 .sandbox-webui-frame__iframe {
   width: 100%;
-  min-height: 240px;
+  min-height: 0;
+  height: 100%;
   border: none;
   border-radius: 6px;
   background: transparent;
 }
+.sandbox-webui-frame__iframe--composer { min-height: 44px; max-height: 160px; }
+.sandbox-webui-frame__iframe--message { min-height: 44px; max-height: 480px; }
+.sandbox-webui-frame__iframe--sidebar, .sandbox-webui-frame__iframe--main { display: block; min-height: 0; }
 .sandbox-webui-frame__loading {
   display: flex;
   align-items: center;

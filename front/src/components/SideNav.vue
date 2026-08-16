@@ -7,7 +7,9 @@ SPDX-License-Identifier: AGPL-3.0-only
     <div class="brand">
       <img class="brand-mark" :src="logoUrl" alt="Amitia" />
       <div v-show="!appStore.sidebarCollapsed" class="brand-name">Amitia</div>
+      <button class="side-collapse" type="button" :aria-label="appStore.sidebarCollapsed ? '展开导航' : '收起导航'" @click="appStore.toggleSidebar"><el-icon><DArrowLeft /></el-icon></button>
     </div>
+    <button class="new-chat" type="button" @click="router.push('/chat')"><el-icon><Plus /></el-icon><span v-show="!appStore.sidebarCollapsed">新对话</span></button>
     <el-menu
       :default-active="activeIndex"
       :collapse="appStore.sidebarCollapsed"
@@ -15,68 +17,50 @@ SPDX-License-Identifier: AGPL-3.0-only
       router
       class="side-menu"
     >
-      <el-sub-menu index="/dashboard">
-        <template #title>
-          <el-icon><Odometer /></el-icon>
-          <span>概览</span>
-        </template>
-        <el-menu-item index="/dashboard/run">运行</el-menu-item>
-        <el-menu-item index="/dashboard/data">数据</el-menu-item>
-      </el-sub-menu>
-
       <el-menu-item index="/chat">
         <el-icon><ChatDotRound /></el-icon>
         <span>聊天</span>
       </el-menu-item>
-
-      <div class="menu-divider"></div>
-
-      <el-menu-item index="/wechat">
-        <el-icon><Connection /></el-icon>
-        <span>微信连接</span>
-      </el-menu-item>
-      <el-menu-item index="/qq">
-        <el-icon><ChatDotSquare /></el-icon>
-        <span>QQ 连接</span>
-      </el-menu-item>
-
-      <el-sub-menu index="char-memory">
+      <el-sub-menu index="character">
         <template #title>
           <el-icon><UserFilled /></el-icon>
-          <span>角色与记忆</span>
+          <span>角色</span>
         </template>
         <el-menu-item index="/character">角色管理</el-menu-item>
         <el-menu-item index="/reminders">日程提醒</el-menu-item>
+        <el-menu-item index="/profiles">用户画像</el-menu-item>
+        <el-menu-item index="/world-book">世界书</el-menu-item>
+      </el-sub-menu>
+      <el-sub-menu index="memory">
+        <template #title>
+          <el-icon><Grid /></el-icon>
+          <span>记忆</span>
+        </template>
         <el-menu-item index="/memory-manager">记忆总览</el-menu-item>
-        <el-menu-item index="/emotes">表情包管理</el-menu-item>
         <el-menu-item index="/episodic">情景记忆</el-menu-item>
         <el-menu-item index="/graph">记忆图谱</el-menu-item>
         <el-menu-item index="/memory-timeline">时间线</el-menu-item>
-        <el-menu-item index="/profiles">用户画像</el-menu-item>
-        <el-menu-item index="/world-book">世界书</el-menu-item>
         <el-menu-item index="/logs">聊天记录</el-menu-item>
         <el-menu-item index="/import">导入记录</el-menu-item>
       </el-sub-menu>
-
-      <el-menu-item index="/extensions">
-        <el-icon><Grid /></el-icon>
-        <span>扩展中心</span>
-      </el-menu-item>
-
-      <el-menu-item index="/creative-workshop">
-        <el-icon><MagicStick /></el-icon>
-        <span>创意工坊</span>
-      </el-menu-item>
-
-      <div class="menu-divider"></div>
-
-      <el-menu-item index="/settings">
-        <el-icon><Setting /></el-icon>
-        <span>设置</span>
-      </el-menu-item>
+      <el-sub-menu index="more">
+        <template #title><el-icon><Odometer /></el-icon><span>更多</span></template>
+        <el-menu-item index="/dashboard/run">运行概览</el-menu-item>
+        <el-menu-item index="/dashboard/data">运行数据</el-menu-item>
+        <el-menu-item index="/wechat"><el-icon><Connection /></el-icon>微信连接</el-menu-item>
+        <el-menu-item index="/qq"><el-icon><ChatDotSquare /></el-icon>QQ 连接</el-menu-item>
+        <el-menu-item index="/emotes">表情包管理</el-menu-item>
+        <el-menu-item index="/extensions">扩展中心</el-menu-item>
+        <el-menu-item index="/creative-workshop"><el-icon><MagicStick /></el-icon>创意工坊</el-menu-item>
+        <el-menu-item index="/settings"><el-icon><Setting /></el-icon>设置</el-menu-item>
+      </el-sub-menu>
     </el-menu>
 
     <div class="side-nav-bottom">
+      <div class="side-status" :title="statusTitle">
+        <span class="side-status__dot" :class="{ 'is-off': modelStatus !== 'configured' }"></span>
+        <span v-show="!appStore.sidebarCollapsed">{{ statusTitle }}</span>
+      </div>
       <button
         class="user-profile"
         type="button"
@@ -109,6 +93,8 @@ import {
   Setting,
   Grid,
   MagicStick,
+  Plus,
+  DArrowLeft,
 } from "@element-plus/icons-vue";
 import { useAppStore } from "@/stores/app";
 import { useBrandLogo } from "@/composables/useBrandLogo";
@@ -116,13 +102,19 @@ import { useBrandLogo } from "@/composables/useBrandLogo";
 const route = useRoute();
 const router = useRouter();
 
-defineProps<{
-  username?: string;
-  avatar?: string;
-}>();
-
 const appStore = useAppStore();
 const { logoUrl } = useBrandLogo();
+const props = defineProps<{
+  username?: string;
+  avatar?: string;
+  wechatStatus?: string;
+  qqStatus?: string;
+  modelStatus?: string;
+}>();
+const statusTitle = computed(() => {
+  const channels = [props.wechatStatus === "connected" ? "微信" : "", props.qqStatus === "connected" || props.qqStatus === "online" ? "QQ" : ""].filter(Boolean);
+  return channels.length ? `核心服务正常 · ${channels.join(" / ")} 已连接` : "核心服务正常";
+});
 
 const CHAR_PATHS = [
   "/character",
@@ -170,15 +162,12 @@ function openUserProfile() {
 .side-nav {
   width: var(--ac-sidebar-width);
   height: 100%;
-  background: var(--tp-glass-bg-strong);
-  border-right: 1px solid var(--tp-glass-border);
-  -webkit-backdrop-filter: blur(var(--tp-glass-blur))
-    saturate(var(--tp-glass-saturate));
-  backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
+  background: var(--workbench-sidebar-bg);
+  border-right: 1px solid var(--surface-border);
   box-shadow: none;
   display: flex;
   flex-direction: column;
-  padding: 24px 0 0;
+  padding: 16px 0 0;
   user-select: none;
   flex-shrink: 0;
   transition: width 0.3s ease;
@@ -200,7 +189,7 @@ function openUserProfile() {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 0 14px 24px;
+  padding: 0 14px 14px;
   flex-shrink: 0;
 }
 
@@ -218,12 +207,18 @@ function openUserProfile() {
 
 .brand-name {
   color: var(--console-text);
-  font-size: 24px;
-  font-weight: 700;
+  font-size: 18px;
+  font-weight: 650;
   letter-spacing: 0;
   white-space: nowrap;
   overflow: hidden;
 }
+.side-collapse { display: grid; place-items: center; width: 28px; height: 28px; margin-left: auto; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--text-muted); cursor: pointer; }
+.side-collapse:hover, .side-collapse:focus-visible { background: var(--workbench-sidebar-hover); color: var(--text-primary); outline: none; }
+.side-nav.is-collapsed .side-collapse { display: none; }
+.new-chat { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 38px; margin: 0 12px 12px; border: 1px solid var(--surface-border); border-radius: var(--radius-sm); background: var(--surface-bg); color: var(--text-primary); cursor: pointer; font: inherit; }
+.new-chat:hover, .new-chat:focus-visible { border-color: var(--surface-border-hover); background: var(--control-hover-bg); outline: none; }
+.side-nav.is-collapsed .new-chat { width: 40px; margin: 0 auto 12px; }
 
 .side-menu {
   border-right: none;
@@ -241,17 +236,17 @@ function openUserProfile() {
   font-size: calc(var(--ac-font-size-base) - 1px);
   margin: 0 12px;
   padding: 0 20px 0 12px !important;
-  border-radius: 7px;
+  border-radius: var(--radius-sm);
 }
 
 .side-menu :deep(.el-menu-item:hover),
 .side-menu :deep(.el-sub-menu__title:hover) {
-  background: var(--nav-hover-bg);
+  background: var(--workbench-sidebar-hover);
   color: var(--nav-hover-color);
 }
 
 .side-menu :deep(.el-menu-item.is-active) {
-  background: var(--nav-active-bg);
+  background: var(--workbench-sidebar-active);
   color: var(--nav-active-color);
   font-weight: 600;
 }
@@ -288,6 +283,10 @@ function openUserProfile() {
   margin: 0 12px;
   padding: 8px 0;
 }
+
+.side-status { display: flex; align-items: center; gap: 7px; min-height: 28px; padding: 0 10px 8px; color: var(--text-muted); font-size: 11px; overflow: hidden; white-space: nowrap; }
+.side-status__dot { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--ac-color-success); }
+.side-status__dot.is-off { background: var(--ac-color-warning); }
 
 .side-nav.is-collapsed .side-nav-bottom {
   margin: 0 8px;

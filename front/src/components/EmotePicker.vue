@@ -4,7 +4,8 @@
     placement="top-start"
     :width="360"
     trigger="click"
-    :teleported="false"
+    :teleported="true"
+    append-to="#amitia-overlay-root"
     @show="loadAll"
   >
     <template #reference

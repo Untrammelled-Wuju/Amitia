@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed } from "vue";
 import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
 import { apiClient } from "@/composables/useApi";
 
@@ -10,9 +10,9 @@ const props = defineProps<{
   platform: string;
   conversationState: "idle" | "generating" | "offline";
   capabilities: string[];
+  draft: string;
 }>();
 
-const draft = ref<string>("");
 const composerContext = computed(() => ({
   characterId: props.characterId,
   conversationId: props.conversationId,
@@ -20,13 +20,14 @@ const composerContext = computed(() => ({
   platform: props.platform,
   conversationState: props.conversationState,
   capabilities: props.capabilities,
+  draft: props.draft,
   scope: "composer",
 }));
 
 async function invokeComposerAction(actionId: string) {
   try {
     await apiClient.post(`/api/extensions/ui/composer/action/${actionId}`, {
-      draft: draft.value,
+      draft: props.draft,
       context: composerContext.value,
     });
   } catch (e) {
@@ -43,6 +44,7 @@ async function invokeComposerAction(actionId: string) {
         :context="composerContext"
         fallback="none"
         layout="inline"
+        surface-role="composer"
       />
     </div>
     <div class="composer-extension-host__attachments">
@@ -51,6 +53,7 @@ async function invokeComposerAction(actionId: string) {
         :context="composerContext"
         fallback="none"
         layout="inline"
+        surface-role="composer"
       />
     </div>
     <div class="composer-extension-host__hint">
@@ -59,6 +62,7 @@ async function invokeComposerAction(actionId: string) {
         :context="composerContext"
         fallback="none"
         layout="inline"
+        surface-role="composer"
       />
     </div>
   </div>
@@ -66,9 +70,9 @@ async function invokeComposerAction(actionId: string) {
 
 <style scoped>
 .composer-extension-host {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 6px 8px;
   min-width: 0;
 }
 .composer-extension-host__actions,
@@ -77,7 +81,10 @@ async function invokeComposerAction(actionId: string) {
   gap: 4px;
   align-items: center;
 }
+.composer-extension-host__attachments { grid-row: 1; grid-column: 1 / -1; flex-wrap: wrap; }
+.composer-extension-host__actions { grid-row: 2; }
 .composer-extension-host__hint {
+  grid-row: 2;
   margin-left: auto;
   opacity: 0.7;
 }

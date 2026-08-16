@@ -43,6 +43,7 @@ const isCustomMessage = computed(() => !!props.message.extensionType);
         :context="messageContext"
         fallback="none"
         layout="inline"
+        surface-role="message"
       />
     </div>
 
@@ -51,16 +52,18 @@ const isCustomMessage = computed(() => !!props.message.extensionType);
         <ExtensionSlot
           slot-id="chat.message.custom_renderer"
           :context="messageContext"
-          fallback="default"
-          layout="stack"
+        fallback="default"
+        layout="stack"
+        surface-role="message"
         />
       </template>
       <template v-if="hasAttachments">
         <ExtensionSlot
           slot-id="chat.message.attachment_renderer"
           :context="messageContext"
-          fallback="none"
-          layout="stack"
+        fallback="none"
+        layout="stack"
+        surface-role="message"
         />
       </template>
     </div>
@@ -71,6 +74,7 @@ const isCustomMessage = computed(() => !!props.message.extensionType);
         :context="messageContext"
         fallback="none"
         layout="inline"
+        surface-role="message"
       />
     </div>
   </div>
@@ -102,4 +106,5 @@ const isCustomMessage = computed(() => !!props.message.extensionType);
 .message-extension-host:hover .message-extension-host__actions {
   opacity: 1;
 }
+@media (hover: none) { .message-extension-host__actions { opacity: 1; } }
 </style>

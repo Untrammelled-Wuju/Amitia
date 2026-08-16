@@ -1,5 +1,15 @@
 import { ref, computed, type Ref } from "vue";
 import { useExtensionUIStore, type UIContributionSummary } from "@/stores/extensionUI";
+import { useTheme } from "@/composables/useTheme";
+
+export type ExtensionSurfaceRole = "header" | "status" | "sidebar" | "message" | "composer" | "main" | "overlay";
+
+export interface ExtensionSurfaceContext {
+  role: ExtensionSurfaceRole;
+  width: number;
+  height: number;
+  breakpoint: "xs" | "sm" | "md" | "lg" | "xl";
+}
 
 export interface SlotContext {
   slotId: string;
@@ -8,6 +18,10 @@ export interface SlotContext {
   theme: { mode: "light" | "dark"; density: "comfortable" | "compact" };
   locale: string;
   data: Record<string, unknown>;
+  host: "web" | "desktop";
+  os: "windows" | "macos" | "linux" | "unknown";
+  surface: ExtensionSurfaceContext;
+  capabilities: string[];
 }
 
 export interface UseExtensionSlotOptions {
@@ -15,12 +29,14 @@ export interface UseExtensionSlotOptions {
   context?: Ref<Record<string, unknown>>;
   fallback?: "none" | "skeleton" | "empty" | "default";
   layout?: "inline" | "stack" | "row" | "grid" | "tabs" | "panel" | "drawer" | "modal";
+  surface?: Ref<ExtensionSurfaceContext>;
 }
 
 export function useExtensionSlot(options: UseExtensionSlotOptions) {
   const store = useExtensionUIStore();
   const { slotId } = options;
   const contextRef = options.context ?? ref({});
+  const { resolvedMode } = useTheme();
 
   const slotSnapshot = computed(() => store.slotsById.get(slotId) ?? null);
   const contributions = computed<UIContributionSummary[]>(() => store.getVisibleContributions(slotId));
@@ -34,24 +50,42 @@ export function useExtensionSlot(options: UseExtensionSlotOptions) {
   const slotErrors = computed(() => store.errors.filter((e) => e.slotId === slotId));
 
   function buildContext(): SlotContext {
-    const theme = { mode: "light" as const, density: "comfortable" as const };
+    const os = detectOS();
+    const host = isDesktopShell() ? "desktop" : "web";
+    const surface = options.surface?.value ?? {
+      role: "main" as const,
+      width: 0,
+      height: 0,
+      breakpoint: "xs" as const,
+    };
+    const capabilities = Array.isArray(contextRef.value.capabilities)
+      ? contextRef.value.capabilities.filter((item): item is string => typeof item === "string")
+      : [];
     return {
       slotId,
       contractVersion: slotSnapshot.value?.contractVersion ?? 1,
-      platform: detectPlatform(),
-      theme,
+      platform: os === "unknown" ? "web" : os,
+      theme: { mode: resolvedMode.value, density: surface.breakpoint === "xs" || surface.breakpoint === "sm" ? "compact" : "comfortable" },
       locale: detectLocale(),
       data: { ...contextRef.value },
+      host,
+      os,
+      surface,
+      capabilities,
     };
   }
 
-  function detectPlatform(): "windows" | "macos" | "linux" | "web" {
-    if (typeof navigator === "undefined") return "web";
+  function detectOS(): "windows" | "macos" | "linux" | "unknown" {
+    if (typeof navigator === "undefined") return "unknown";
     const ua = navigator.userAgent.toLowerCase();
     if (ua.includes("win")) return "windows";
     if (ua.includes("mac")) return "macos";
     if (ua.includes("linux")) return "linux";
-    return "web";
+    return "unknown";
+  }
+
+  function isDesktopShell() {
+    return typeof window !== "undefined" && !!window.amitiaDesktop;
   }
 
   function detectLocale(): string {

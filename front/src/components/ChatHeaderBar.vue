@@ -12,6 +12,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       class="menu-btn"
       @click="$emit('toggleDrawer')"
     />
+    <el-avatar class="header-avatar" :size="34" :src="charAvatar || undefined">{{ (charName || "A").charAt(0) }}</el-avatar>
     <div class="header-info">
       <span class="header-char-name">{{ charName || "选择角色" }}</span>
       <span class="header-char-desc" v-if="charName">{{
@@ -20,6 +21,10 @@ SPDX-License-Identifier: AGPL-3.0-only
       <span class="header-conv-title" v-if="convTitle">{{ convTitle }}</span>
     </div>
     <div class="header-actions">
+      <slot name="extension-actions" />
+      <button class="fa-btn" :class="{ active: callActive }" type="button" :aria-label="callActive ? '结束语音通话' : '开始语音通话'" :title="callActive ? '结束语音通话' : '开始语音通话'" @click="$emit('toggleCall')">
+        <el-icon :size="18"><Phone /></el-icon>
+      </button>
       <button
         class="fa-btn"
         :class="{ active: showProfiles }"
@@ -72,16 +77,19 @@ import {
   Switch,
   User,
   Connection,
+  Phone,
 } from "@element-plus/icons-vue";
 
 defineProps<{
   charName: string;
+  charAvatar?: string;
   charIdentity: string;
   convTitle: string;
   messagesCount: number;
   convId: string;
   showProfiles: boolean;
   showMemInject: boolean;
+  callActive: boolean;
 }>();
 
 defineEmits<{
@@ -91,6 +99,7 @@ defineEmits<{
   toggleCharPicker: [];
   toggleProfiles: [];
   toggleMemInject: [];
+  toggleCall: [];
 }>();
 </script>
 
@@ -100,14 +109,17 @@ defineEmits<{
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 6px 10px;
+  min-height: 58px;
+  padding: 8px 14px;
+  background: var(--chat-header-bg);
   flex-shrink: 0;
-  border-bottom: 1px solid var(--ac-color-border-light);
+  border-bottom: 1px solid var(--surface-border);
 }
 
 .menu-btn {
   flex-shrink: 0;
 }
+.header-avatar { flex: 0 0 auto; background: var(--control-active-bg); color: var(--text-primary); }
 .header-info {
   display: flex;
   flex-direction: column;
@@ -152,15 +164,14 @@ defineEmits<{
 }
 
 .fa-btn {
-  width: 30px;
-  height: 30px;
-  border-radius: 50%;
-  border: 1px solid var(--ac-color-border);
-  background: var(--ac-color-surface);
-  color: var(--ac-color-text-muted);
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-secondary);
   cursor: pointer;
   font-size: 14px;
-  box-shadow: var(--ac-shadow-sm);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -168,9 +179,11 @@ defineEmits<{
 }
 
 .fa-btn:hover {
-  color: var(--ac-color-text);
-  border-color: var(--ac-color-text-muted);
+  color: var(--text-primary);
+  border-color: var(--surface-border);
+  background: var(--control-hover-bg);
 }
+.fa-btn:focus-visible { outline: 2px solid var(--surface-border-focus); outline-offset: 2px; }
 
 .fa-btn.active {
   background: var(--ac-color-primary-bg);

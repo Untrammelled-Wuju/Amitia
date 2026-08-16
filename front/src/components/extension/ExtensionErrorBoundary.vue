@@ -85,8 +85,8 @@ onUnmounted(() => {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  color: var(--amitia-color-text, inherit);
-  background: var(--amitia-color-surface, transparent);
+  color: var(--amitia-text-primary, var(--amitia-color-text, inherit));
+  background: var(--amitia-bg-surface, var(--amitia-color-surface, transparent));
 }
 .extension-error-boundary__content {
   width: 100%;
@@ -99,10 +99,10 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 6px;
   padding: 10px 12px;
-  border-radius: 6px;
-  background: rgba(220, 60, 60, 0.08);
-  border: 1px solid rgba(220, 60, 60, 0.25);
-  color: rgb(180, 40, 40);
+  border-radius: var(--radius-sm);
+  background: var(--ac-color-danger-bg);
+  border: 1px solid color-mix(in srgb, var(--ac-color-danger) 32%, var(--plugin-surface-border));
+  color: var(--ac-color-danger);
   font-size: 12px;
 }
 .extension-error-boundary__error-title {
@@ -120,10 +120,10 @@ onUnmounted(() => {
 .extension-error-boundary__retry {
   align-self: flex-start;
   padding: 3px 10px;
-  border: 1px solid rgba(220, 60, 60, 0.4);
-  border-radius: 4px;
+  border: 1px solid currentColor;
+  border-radius: var(--radius-xs);
   background: transparent;
-  color: rgb(180, 40, 40);
+  color: inherit;
   font-size: 12px;
   cursor: pointer;
 }

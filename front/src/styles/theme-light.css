@@ -4,6 +4,10 @@
 :root,
 html[data-theme="light"] {
   --tp-page: #f3f2ee;
+  --workbench-bg: #f3f2ee;
+  --workbench-sidebar-bg: #f8f7f4;
+  --surface-bg: #fcfbf8;
+  --surface-bg-elevated: #fffdf9;
   --tp-shell: rgba(250, 249, 246, 0.92);
   --tp-panel: #fcfbf8;
   --tp-panel-soft: #f6f3ed;

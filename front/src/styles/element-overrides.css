@@ -256,13 +256,13 @@
 .el-dialog,
 .el-drawer,
 .el-popper {
-  background: var(--tp-glass-bg-strong);
-  border-color: var(--tp-glass-border);
-  -webkit-backdrop-filter: blur(var(--tp-glass-blur))
-    saturate(var(--tp-glass-saturate));
-  backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
+  background: var(--overlay-bg);
+  border-color: var(--overlay-border);
   box-shadow: var(--tp-shadow-float);
 }
+
+.el-popper { z-index: 30; }
+.el-overlay { z-index: 40; }
 
 .el-dialog {
   border-radius: var(--ac-radius-lg);
