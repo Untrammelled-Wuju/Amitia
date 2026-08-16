@@ -6,11 +6,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"sync"
 
 	"github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
 const HelloMethod = "control.handshake.hello"
+
+const DefaultWorkerPoolSize = 8
 
 type SDKInfo struct {
 	Name    string `json:"name,omitempty"`
@@ -43,6 +46,7 @@ type RunnerConfig struct {
 	DefaultServiceID string
 	Hello            HelloConfiguration
 	OnReady          func(ctx context.Context, client *Client) func(ctx context.Context)
+	WorkerPoolSize   int
 }
 
 type ServiceRegistry struct {
@@ -50,18 +54,34 @@ type ServiceRegistry struct {
 	Registry  *HandlerRegistry
 }
 
+type handlerTask struct {
+	ctx      context.Context
+	client   *Client
+	envelope protocol.Envelope
+	registry *HandlerRegistry
+}
+
 type Runner struct {
-	client    *Client
-	config    RunnerConfig
-	services  map[string]*HandlerRegistry
-	running   bool
+	client       *Client
+	config       RunnerConfig
+	services     map[string]*HandlerRegistry
+	running      bool
+	workerSize   int
+	workerSem    chan struct{}
+	workerWg     sync.WaitGroup
 }
 
 func NewRunner(client *Client, config RunnerConfig) *Runner {
+	workerSize := config.WorkerPoolSize
+	if workerSize <= 0 {
+		workerSize = DefaultWorkerPoolSize
+	}
 	return &Runner{
-		client:   client,
-		config:   config,
-		services: make(map[string]*HandlerRegistry),
+		client:     client,
+		config:     config,
+		services:   make(map[string]*HandlerRegistry),
+		workerSize: workerSize,
+		workerSem:  make(chan struct{}, workerSize),
 	}
 }
 
@@ -209,6 +229,29 @@ func (r *Runner) findRegistryForNotification(notification protocol.Envelope) *Ha
 	return nil
 }
 
+func (r *Runner) dispatchHandlerTask(task handlerTask) {
+	r.workerWg.Add(1)
+	go func() {
+		defer r.workerWg.Done()
+		switch task.envelope.Type {
+		case protocol.MessageTypeRequest:
+			task.registry.HandleRequest(task.ctx, task.client, task.envelope)
+		case protocol.MessageTypeNotification:
+			task.registry.HandleNotification(task.ctx, task.client, task.envelope)
+		}
+		<-r.workerSem
+	}()
+}
+
+func (r *Runner) acquireWorker() bool {
+	select {
+	case r.workerSem <- struct{}{}:
+		return true
+	default:
+		return false
+	}
+}
+
 func (r *Runner) Run(ctx context.Context, defaultRegistry *HandlerRegistry) error {
 	if _, err := r.performHandshake(ctx); err != nil {
 		return fmt.Errorf("handshake failed: %w", err)
@@ -226,6 +269,7 @@ func (r *Runner) Run(ctx context.Context, defaultRegistry *HandlerRegistry) erro
 	for {
 		select {
 		case <-ctx.Done():
+			r.workerWg.Wait()
 			return nil
 		default:
 		}
@@ -233,9 +277,11 @@ func (r *Runner) Run(ctx context.Context, defaultRegistry *HandlerRegistry) erro
 		envelope, err := r.client.Transport().Receive(ctx)
 		if err != nil {
 			if err == io.EOF {
+				r.workerWg.Wait()
 				return nil
 			}
 			if ctx.Err() != nil {
+				r.workerWg.Wait()
 				return nil
 			}
 			fmt.Fprintf(os.Stderr, "receive failed: %v\n", err)
@@ -251,7 +297,16 @@ func (r *Runner) Run(ctx context.Context, defaultRegistry *HandlerRegistry) erro
 				registry = defaultRegistry
 			}
 			if registry != nil {
-				registry.HandleRequest(ctx, r.client, envelope)
+				if r.acquireWorker() {
+					r.dispatchHandlerTask(handlerTask{
+						ctx:      ctx,
+						client:   r.client,
+						envelope: envelope,
+						registry: registry,
+					})
+				} else {
+					r.sendPoolBusyErrorResponse(ctx, r.client, envelope)
+				}
 			}
 		case protocol.MessageTypeNotification:
 			registry := r.findRegistryForNotification(envelope)
@@ -259,7 +314,14 @@ func (r *Runner) Run(ctx context.Context, defaultRegistry *HandlerRegistry) erro
 				registry = defaultRegistry
 			}
 			if registry != nil {
-				registry.HandleNotification(ctx, r.client, envelope)
+				if r.acquireWorker() {
+					r.dispatchHandlerTask(handlerTask{
+						ctx:      ctx,
+						client:   r.client,
+						envelope: envelope,
+						registry: registry,
+					})
+				}
 			}
 		default:
 			fmt.Fprintf(os.Stderr, "unexpected message type: %s\n", envelope.Type)
@@ -267,6 +329,13 @@ func (r *Runner) Run(ctx context.Context, defaultRegistry *HandlerRegistry) erro
 	}
 }
 
+func (r *Runner) sendPoolBusyErrorResponse(ctx context.Context, client *Client, request protocol.Envelope) {
+	if _, err := client.SendError(ctx, request, protocol.ErrorResourceExhausted, "handler pool exhausted, try again later", true, nil); err != nil {
+		fmt.Fprintf(os.Stderr, "send pool busy error failed: %v\n", err)
+	}
+}
+
 func (r *Runner) Stop() {
 	r.running = false
+	r.workerWg.Wait()
 }
