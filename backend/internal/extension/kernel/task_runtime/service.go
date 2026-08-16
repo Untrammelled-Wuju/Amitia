@@ -1097,10 +1097,12 @@ func (s *TaskRuntimeService) Recover(ctx context.Context, taskRunID string) (*Ta
 		run.CheckpointID = &cpID
 	}
 
+	previousStatus := run.Status
 	run.Status = RunStatusQueued
 	now := time.Now().UTC()
 	run.QueuedAt = &now
 	run.Generation++
+	run.Revision = NextRevision(run.Revision)
 
 	if run.EffectiveExecutionPlacement() == TaskExecutionPlacementDevice {
 		run.ClearTransientConnectionBinding()
@@ -1110,8 +1112,12 @@ func (s *TaskRuntimeService) Recover(ctx context.Context, taskRunID string) (*Ta
 	run.RuntimeInstanceID = nil
 
 	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
-		if err := s.store.PutTaskRun(txCtx, run); err != nil {
-			return err
+		ok, casErr := s.store.UpdateTaskRunCAS(txCtx, run, previousStatus, run.Generation-1, run.Revision-1)
+		if casErr != nil {
+			return fmt.Errorf("task_runtime: recover cas: %w", casErr)
+		}
+		if !ok {
+			return NewTaskError(ErrTaskPauseInProgress, "concurrent state change, retry recover")
 		}
 		return s.queue.Enqueue(txCtx, run)
 	}); err != nil {
