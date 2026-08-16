@@ -567,6 +567,7 @@ onMounted(async () => {
 onUnmounted(() => {
   cleanupSSE();
   disconnectProactiveSSE();
+  window.removeEventListener("amitia:new-chat", handleNewChat);
 });
 </script>
 <style scoped>
