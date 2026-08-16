@@ -7,7 +7,9 @@
   "scripts": {
     "build": "tsc",
     "test": "jest",
-    "lint": "eslint src/**/*.ts"
+    "lint": "eslint src/**/*.ts",
+    "prepare": "tsc",
+    "prepack": "tsc"
   },
   "dependencies": {
     "uuid": "^9.0.0"
@@ -22,7 +24,9 @@
   },
   "files": [
     "dist",
-    "src"
+    "src",
+    "package.json",
+    "README.md"
   ],
   "license": "MIT"
 }

@@ -1,7 +1,7 @@
 import { Envelope } from './protocol';
 import { Transport } from './transport';
 import { SDKError, createEncodeError, createTransportError, createValidationError } from './errors';
-import { validateMessageId, validatePluginMethod } from './validation';
+import { validateMessageId, validatePluginMethod, validateMethod } from './validation';
 import { v4 as uuidv4 } from 'uuid';
 
 export interface PendingRequest {
@@ -216,6 +216,19 @@ export class Client {
     ...opts: MessageOption[]
   ): Promise<Envelope> {
     const err = validatePluginMethod(method);
+    if (err) throw createValidationError(err);
+
+    const envelope = this.newNotification(method, payload, ...opts);
+    await this.transport.send(envelope);
+    return envelope;
+  }
+
+  async sendReservedNotification(
+    method: string,
+    payload?: unknown,
+    ...opts: MessageOption[]
+  ): Promise<Envelope> {
+    const err = validateMethod(method);
     if (err) throw createValidationError(err);
 
     const envelope = this.newNotification(method, payload, ...opts);
