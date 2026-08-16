@@ -19,15 +19,18 @@ SPDX-License-Identifier: AGPL-3.0-only
       @change="handleVideoInput"
     />
 
-    <div class="composer-stack">
+        <div class="composer-stack">
       <ComposerExtensionHost
         v-if="characterId"
         :character-id="characterId"
         :conversation-id="conversationId"
         :channel="channel"
-        :platform="hostPlatform"
+        :platform="detectPlatform()"
+        :host="window.amitiaDesktop ? 'desktop' : 'web'"
+        :os="detectOS()"
         :conversation-state="generating ? 'generating' : 'idle'"
-        :capabilities="agentSkillNames"
+        :capabilities="hostCapabilities"
+        :available-skills="agentSkillNames"
         :draft="text"
       />
       <div v-if="replyTarget" class="reply-preview-bar">
@@ -511,6 +514,32 @@ const hostPlatform = window.amitiaDesktop ? "desktop" : "web";
 const agentSkillNames = computed(() =>
   agentSkills.value.map((s) => s.name).filter(Boolean),
 );
+
+const hostCapabilities = computed(() => {
+  const caps = ["text", "browser"];
+  if (window.amitiaDesktop) {
+    caps.push("desktop", "clipboard-host");
+  }
+  return caps;
+});
+
+function detectPlatform(): "windows" | "macos" | "linux" | "web" {
+  if (typeof navigator === "undefined") return "web";
+  const ua = navigator.userAgent.toLowerCase();
+  if (ua.includes("win")) return "windows";
+  if (ua.includes("mac")) return "macos";
+  if (ua.includes("linux")) return "linux";
+  return "web";
+}
+
+function detectOS(): "windows" | "macos" | "linux" | "unknown" {
+  if (typeof navigator === "undefined") return "unknown";
+  const ua = navigator.userAgent.toLowerCase();
+  if (ua.includes("win")) return "windows";
+  if (ua.includes("mac")) return "macos";
+  if (ua.includes("linux")) return "linux";
+  return "unknown";
+}
 
 const { holding, startHold, endHold, cancelHold } = useVoiceInput(
   (blob: Blob, duration?: number) =>

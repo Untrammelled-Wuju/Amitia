@@ -642,11 +642,11 @@ func (r *TaskRepository) UpdateExecutionTarget(
 	target task_runtime.TaskExecutionTarget,
 	resolvedAt time.Time,
 	resolvedBy string,
+	nextRevision int64,
 	expectedRevision int64,
 ) error {
 	ex := getExecutor(ctx, r.db)
 	now := time.Now().UTC()
-	nextRevision := expectedRevision + 1
 	res, err := ex.ExecContext(ctx, `
 		UPDATE extension_task_runs
 		SET execution_placement = ?,
@@ -682,11 +682,11 @@ func (r *TaskRepository) UpdateExecutionConnectionBinding(
 	runtimeSessionID interface{ String() string },
 	generation int64,
 	at time.Time,
+	nextRevision int64,
 	expectedRevision int64,
 ) error {
 	ex := getExecutor(ctx, r.db)
 	now := time.Now().UTC()
-	nextRevision := expectedRevision + 1
 	res, err := ex.ExecContext(ctx, `
 		UPDATE extension_task_runs
 		SET execution_target_json = json_set(
@@ -721,11 +721,11 @@ func (r *TaskRepository) UpdateExecutionAttempt(
 	attemptID task_runtime.TaskExecutionAttemptID,
 	runtimeInstanceID string,
 	at time.Time,
+	nextRevision int64,
 	expectedRevision int64,
 ) error {
 	ex := getExecutor(ctx, r.db)
 	now := time.Now().UTC()
-	nextRevision := expectedRevision + 1
 	res, err := ex.ExecContext(ctx, `
 		UPDATE extension_task_runs
 		SET execution_attempt_id = ?,
