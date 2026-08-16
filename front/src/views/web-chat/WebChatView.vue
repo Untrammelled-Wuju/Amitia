@@ -248,6 +248,29 @@ const pendingImageBase64 = ref<string | null>(null);
 const pendingAudioUrl = ref<string | null>(null);
 const pendingVideoUrl = ref<string | null>(null);
 
+async function handleNewChat() {
+  if (!characterId.value) return;
+  try {
+    const created = await post<any>("/api/web-chat/conversations", {
+      characterId: characterId.value,
+      title: "",
+    });
+    if (created?.id) {
+      localStorage.removeItem("webchat-conv-id");
+      disconnectSSE();
+      convId.value = created.id;
+      convTitle.value = "";
+      messages.value = [];
+      replyTarget.value = null;
+      nextTick(() => scrollToBottom(true));
+      connectSSE();
+      ElMessage.success("已创建新对话");
+    }
+  } catch (e: any) {
+    ElMessage.error(e?.response?.data?.msg || "创建新对话失败");
+  }
+}
+
 async function handleEmoteSend(emote: any) {
   if (!convId.value || !characterId.value) {
     ElMessage.warning("请先选择角色和会话");
@@ -440,6 +463,8 @@ onMounted(async () => {
     isOffline.value = true;
     ElMessage.warning("网络已断开");
   });
+
+  window.addEventListener("amitia:new-chat", handleNewChat);
 
   const h = await get<any>("/api/health").catch(() => null);
   if (h?.deployMode === "cloud-web" && !isLoggedIn()) {

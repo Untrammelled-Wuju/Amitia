@@ -253,6 +253,11 @@ func (b *ContainerBuilder) WithBackgroundBootstrapFunc(fn func() (backgroundremo
 	return b
 }
 
+func (b *ContainerBuilder) WithMCPRepository(repo *mcp.Repository) *ContainerBuilder {
+	b.mcpRepository = repo
+	return b
+}
+
 func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	nodeResolver := b.nodeEnvironmentResolver
 	if nodeResolver == nil {
