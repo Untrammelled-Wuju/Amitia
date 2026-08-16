@@ -870,6 +870,25 @@ class RuntimeService : Service() {
             serviceState.set(ServiceHostState.DESTROYED)
             val sessionContext = currentSessionContextRef.get()
             if (sessionContext != null && sessionContext.terminalEvent == null) {
+                val session = currentSessionRef.get()
+                val processConfirmedDead = if (session != null) {
+                    when (val result = session.terminateAndConfirmExit(
+                        gracefulTimeoutMs = GRACEFUL_SHUTDOWN_TIMEOUT_MS,
+                        forceTimeoutMs = FORCE_SHUTDOWN_TIMEOUT_MS
+                    )) {
+                        is ProotTerminationResult.ConfirmedExited -> {
+                            sessionContext.processPhase = ProcessPhase.EXITED
+                            true
+                        }
+                        is ProotTerminationResult.StillAlive -> {
+                            sessionContext.processPhase = ProcessPhase.UNKNOWN
+                            false
+                        }
+                    }
+                } else {
+                    true
+                }
+
                 sessionContext.terminalEvent = TerminalEventKind.UNEXPECTED_TERMINATION
                 sessionContext.servicePhase = ServicePhase.DESTROYED
                 sessionContext.teardownState = TeardownState.COMPLETE
@@ -879,8 +898,13 @@ class RuntimeService : Service() {
                     stopForeground(STOP_FOREGROUND_REMOVE)
                 } catch (_: Exception) {
                 }
+
+                if (processConfirmedDead) {
+                    clearSessionState()
+                }
+            } else {
+                clearSessionState()
             }
-            clearSessionState()
             startupFailureCleanupContextRef.set(null)
             updateLifecycleSnapshot()
         }
