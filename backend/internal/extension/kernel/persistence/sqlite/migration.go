@@ -2256,9 +2256,11 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 				continue
 			}
 			if existing != checksum {
-				if isIdempotentDDL(ddl) {
+				if isIdempotentDDL(ddl) || isAlterTableAddColumn(ddl) {
 					if _, err := tx.ExecContext(ctx, ddl); err != nil {
-						return fmt.Errorf("sqlite: re-verify migration %d (checksum mismatch): %w", version, err)
+						if !(isAlterTableAddColumn(ddl) && isDuplicateColumnError(err)) {
+							return fmt.Errorf("sqlite: re-verify migration %d (checksum mismatch): %w", version, err)
+						}
 					}
 					if _, err := tx.ExecContext(ctx, `UPDATE schema_migrations SET checksum = ? WHERE version = ?`, checksum, version); err != nil {
 						return fmt.Errorf("sqlite: normalize checksum for migration %d: %w", version, err)
@@ -2314,7 +2316,8 @@ func isIdempotentDDL(ddl string) bool {
 	upper := strings.ToUpper(strings.TrimSpace(ddl))
 	return strings.HasPrefix(upper, "CREATE TABLE IF NOT EXISTS") ||
 		strings.HasPrefix(upper, "CREATE INDEX IF NOT EXISTS") ||
-		strings.HasPrefix(upper, "CREATE UNIQUE INDEX IF NOT EXISTS")
+		strings.HasPrefix(upper, "CREATE UNIQUE INDEX IF NOT EXISTS") ||
+		strings.HasPrefix(upper, "UPDATE ")
 }
 
 func isAlterTableAddColumn(ddl string) bool {
@@ -2340,6 +2343,8 @@ var schemaColumnAdditions = []columnAddition{
 	{"extension_event_deliveries", "subscription_generation", "INTEGER NOT NULL DEFAULT 0"},
 	{"extension_event_deliveries", "target_generation", "INTEGER NOT NULL DEFAULT 0"},
 	{"extension_event_deliveries", "producer_generation", "INTEGER NOT NULL DEFAULT 0"},
+	{"extension_event_outbox", "event_domain", "TEXT NOT NULL DEFAULT ''"},
+	{"extension_event_outbox", "causation_id", "TEXT NOT NULL DEFAULT ''"},
 	{"kernel_scope_snapshots", "generation", "INTEGER NOT NULL DEFAULT 0"},
 	{"extension_invocations", "parent_invocation_id", "TEXT NOT NULL DEFAULT ''"},
 	{"extension_workflow_executions", "invocation_id", "TEXT NOT NULL DEFAULT ''"},
