@@ -183,6 +183,13 @@ func (r *Resolver) applyHardFilter(defs []CapabilityProviderDefinition, request 
 			})
 			continue
 		}
+		if def.RoutingMode == RoutingModeProviderRequired && request.PreferredProviderID != "" && string(def.ID) != string(request.PreferredProviderID) {
+			rejections = append(rejections, CandidateRejection{
+				ProviderID: def.ID,
+				Reason:     RejectionProviderUnavailable,
+			})
+			continue
+		}
 		if r.policy.RequireAvailable || r.policy.RequireHealthy {
 			insts := r.catalog.ListInstancesByProvider(def.ID)
 			hasHealthy := false
