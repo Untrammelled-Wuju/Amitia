@@ -178,8 +178,8 @@ export async function getEmergencyStopStatus(
 export interface SinkEffectCommitResult {
   accepted: boolean;
   committed: boolean;
-  effectId?: string;
-  generation?: number;
+  effectId: string;
+  generation: number;
   errorCode?: string;
   message?: string;
 }

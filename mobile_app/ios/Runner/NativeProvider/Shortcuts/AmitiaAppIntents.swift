@@ -9,7 +9,9 @@ public struct AmitiaChatIntent: AppIntent {
     public init() {}
 
     public func perform() async throws -> some IntentResult {
-        let result = await ShortcutActionGateway.shared.executeAction(actionId: "com.amitia.action.chat", payload: nil)
+        guard let result = await ShortcutActionGateway.shared.executeUnchecked(actionId: "com.amitia.action.chat", payload: nil) else {
+            throw NSError(domain: "AmitiaAppIntents", code: 2, userInfo: [NSLocalizedDescriptionKey: "Action not in curated list"])
+        }
         if let error = result["error"] as? String {
             throw NSError(domain: "AmitiaAppIntents", code: 1, userInfo: [NSLocalizedDescriptionKey: error])
         }
@@ -25,7 +27,9 @@ public struct AmitiaAlarmAddIntent: AppIntent {
     public init() {}
 
     public func perform() async throws -> some IntentResult {
-        let result = await ShortcutActionGateway.shared.executeAction(actionId: "com.amitia.action.alarm.add", payload: nil)
+        guard let result = await ShortcutActionGateway.shared.executeUnchecked(actionId: "com.amitia.action.alarm.add", payload: nil) else {
+            throw NSError(domain: "AmitiaAppIntents", code: 2, userInfo: [NSLocalizedDescriptionKey: "Action not in curated list"])
+        }
         if let error = result["error"] as? String {
             throw NSError(domain: "AmitiaAppIntents", code: 1, userInfo: [NSLocalizedDescriptionKey: error])
         }
@@ -41,7 +45,9 @@ public struct AmitiaReminderAddIntent: AppIntent {
     public init() {}
 
     public func perform() async throws -> some IntentResult {
-        let result = await ShortcutActionGateway.shared.executeAction(actionId: "com.amitia.action.reminder.add", payload: nil)
+        guard let result = await ShortcutActionGateway.shared.executeUnchecked(actionId: "com.amitia.action.reminder.add", payload: nil) else {
+            throw NSError(domain: "AmitiaAppIntents", code: 2, userInfo: [NSLocalizedDescriptionKey: "Action not in curated list"])
+        }
         if let error = result["error"] as? String {
             throw NSError(domain: "AmitiaAppIntents", code: 1, userInfo: [NSLocalizedDescriptionKey: error])
         }
@@ -57,7 +63,9 @@ public struct AmitiaMediaPickIntent: AppIntent {
     public init() {}
 
     public func perform() async throws -> some IntentResult {
-        let result = await ShortcutActionGateway.shared.executeAction(actionId: "com.amitia.action.media.pick", payload: nil)
+        guard let result = await ShortcutActionGateway.shared.executeUnchecked(actionId: "com.amitia.action.media.pick", payload: nil) else {
+            throw NSError(domain: "AmitiaAppIntents", code: 2, userInfo: [NSLocalizedDescriptionKey: "Action not in curated list"])
+        }
         if let error = result["error"] as? String {
             throw NSError(domain: "AmitiaAppIntents", code: 1, userInfo: [NSLocalizedDescriptionKey: error])
         }

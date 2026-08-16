@@ -3,6 +3,8 @@ package sdk
 import (
 	"context"
 	"encoding/json"
+	"sync"
+	"time"
 
 	"github.com/u-ai/backend/pkg/gameplugin/protocol/contracts"
 )
@@ -219,3 +221,98 @@ func (c *Client) GetEmergencyStopStatus(ctx context.Context, input EmergencyStop
 	}
 	return out, nil
 }
+
+const EffectCommitCacheTTL = 5 * time.Minute
+
+type EffectCommitCacheEntry struct {
+	Result    SinkEffectCommitResult
+	Timestamp time.Time
+}
+
+type EffectCommitCache struct {
+	mu      sync.Mutex
+	entries map[string]EffectCommitCacheEntry
+	ttl     time.Duration
+}
+
+func NewEffectCommitCache() *EffectCommitCache {
+	return &EffectCommitCache{
+		entries: make(map[string]EffectCommitCacheEntry),
+		ttl:     EffectCommitCacheTTL,
+	}
+}
+
+func (c *EffectCommitCache) Get(outputID string) (SinkEffectCommitResult, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	entry, ok := c.entries[outputID]
+	if !ok {
+		return SinkEffectCommitResult{}, false
+	}
+	if time.Since(entry.Timestamp) > c.ttl {
+		delete(c.entries, outputID)
+		return SinkEffectCommitResult{}, false
+	}
+	return entry.Result, true
+}
+
+func (c *EffectCommitCache) Put(outputID string, result SinkEffectCommitResult) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.entries[outputID] = EffectCommitCacheEntry{
+		Result:    result,
+		Timestamp: time.Now(),
+	}
+}
+
+func (c *EffectCommitCache) Clear() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.entries = make(map[string]EffectCommitCacheEntry)
+}
+
+type SinkEffectDispatchPayload = contracts.SinkEffectDispatchPayload
+
+type SinkEffectCommitResult = contracts.SinkEffectCommitResult
+
+type SinkDispatchHandler func(payload SinkEffectDispatchPayload) (SinkEffectCommitResult, error)
+
+func RegisterSinkDispatchHandler(registry interface {
+	Register(method string, handler func(request interface{}) (interface{}, error))
+}, handler SinkDispatchHandler, cache *EffectCommitCache) {
+	registry.Register(MethodSinkDispatch, func(request interface{}) (interface{}, error) {
+		payload, ok := request.(SinkEffectDispatchPayload)
+		if !ok {
+			return SinkEffectCommitResult{
+				Accepted:   false,
+				Committed:  false,
+				EffectID:   "",
+				Generation: 0,
+				ErrorCode:  "invalid_argument",
+				Message:    "invalid sink dispatch payload",
+			}, nil
+		}
+		if cache != nil {
+			if cached, hit := cache.Get(payload.OutputID); hit {
+				return cached, nil
+			}
+		}
+		result, err := handler(payload)
+		if err != nil {
+			return SinkEffectCommitResult{
+				Accepted:   false,
+				Committed:  false,
+				EffectID:   "",
+				Generation: 0,
+				ErrorCode:  "handler_error",
+				Message:    err.Error(),
+			}, nil
+		}
+		if cache != nil && result.Committed {
+			cache.Put(payload.OutputID, result)
+		}
+		return result, nil
+	})
+}
+
+const MethodSinkDispatch = contracts.MethodSinkDispatch

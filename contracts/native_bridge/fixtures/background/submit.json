@@ -1,0 +1,10 @@
+{
+  "taskRunId": "task-run-123",
+  "systemClass": "processing",
+  "identifier": "com.amitia.background.processing",
+  "earliestBeginAt": "2026-08-16T12:00:00Z",
+  "networkRequired": false,
+  "externalPowerRequired": false,
+  "gpuRequired": false,
+  "reason": "user_scheduled"
+}

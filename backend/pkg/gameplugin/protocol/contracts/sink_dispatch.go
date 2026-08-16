@@ -14,10 +14,10 @@ type SinkEffectDispatchPayload struct {
 }
 
 type SinkEffectCommitResult struct {
-	Accepted  bool   `json:"accepted"`
-	Committed bool   `json:"committed"`
-	EffectID  string `json:"effectId,omitempty"`
-	Generation uint64 `json:"generation,omitempty"`
-	ErrorCode string `json:"errorCode,omitempty"`
-	Message   string `json:"message,omitempty"`
+	Accepted   bool   `json:"accepted"`
+	Committed  bool   `json:"committed"`
+	EffectID   string `json:"effectId"`
+	Generation uint64 `json:"generation"`
+	ErrorCode  string `json:"errorCode,omitempty"`
+	Message    string `json:"message,omitempty"`
 }

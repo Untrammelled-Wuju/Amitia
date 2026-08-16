@@ -8,6 +8,7 @@ import com.amitia.amitia_app.runtime.service.RuntimeServiceContract
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHost
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHostListener
 import com.amitia.amitia_app.runtime.service.RuntimeServiceResult
+import com.amitia.amitia_app.runtime.service.RuntimeServiceLifecycleSnapshot
 import java.util.concurrent.CopyOnWriteArrayList
 
 internal class AndroidRuntimeServiceHost(
@@ -75,6 +76,17 @@ internal class AndroidRuntimeServiceHost(
 
     private fun replaySnapshot(endpoint: RuntimeServiceEndpoint) {
         if (endpoint !is DefaultRuntimeServiceEndpoint) return
+        val fullSnapshot = endpoint.fullSnapshot()
+        if (fullSnapshot != null) {
+            val snapshot = ArrayList(listeners)
+            for (listener in snapshot) {
+                try {
+                    fullSnapshot.forEach { event -> listener.onServiceHostEvent(event) }
+                } catch (_: Throwable) {
+                }
+            }
+            return
+        }
         val last = endpoint.lastEvent() ?: return
         val snapshot = ArrayList(listeners)
         for (listener in snapshot) {

@@ -6,13 +6,16 @@ public protocol BackgroundTaskBridgeDelegate: AnyObject {
     func backgroundTaskBridge(_ bridge: BackgroundTaskBridge, taskDidExpire task: BGTask)
 }
 
+public typealias BackgroundEventEmitter = @Sendable ([String: Any]) -> Void
+
 public class BackgroundTaskBridge: NSObject {
     public static let shared = BackgroundTaskBridge()
 
     public weak var delegate: BackgroundTaskBridgeDelegate?
+    public var eventEmitter: BackgroundEventEmitter?
 
     private var taskHandlers: [String: (BGTask) -> Void] = [:]
-    private var pendingCompletions: [String: BGTask] = [:]
+    private var pendingTasks: [String: BGTask] = [:]
     private let queue = DispatchQueue(label: "com.amitia.backgroundtaskbridge", attributes: .concurrent)
 
     private override init() {
@@ -29,7 +32,7 @@ public class BackgroundTaskBridge: NSObject {
         let identifier = task.identifier
 
         queue.async(flags: .barrier) {
-            self.pendingCompletions[identifier] = task
+            self.pendingTasks[identifier] = task
         }
 
         task.expirationHandler = { [weak self, weak task] in
@@ -44,6 +47,23 @@ public class BackgroundTaskBridge: NSObject {
                 self.delegate?.backgroundTaskBridge(self, didReceiveTask: task)
             }
         }
+
+        Task {
+            if let taskRunId = await BGTaskIdentifierRegistry.shared.taskRunId(forIdentifier: identifier) {
+                let event: [String: Any] = [
+                    "domain": "background",
+                    "event": "execution_window_started",
+                    "timestamp": ISO8601DateFormatter().string(from: Date()),
+                    "data": [
+                        "taskRunId": taskRunId,
+                        "identifier": identifier
+                    ]
+                ]
+                await MainActor.run {
+                    self.eventEmitter?(event)
+                }
+            }
+        }
     }
 
     private func handleExpiration(task: BGTask) {
@@ -51,27 +71,73 @@ public class BackgroundTaskBridge: NSObject {
 
         delegate?.backgroundTaskBridge(self, taskDidExpire: task)
 
+        Task {
+            if let taskRunId = await BGTaskIdentifierRegistry.shared.taskRunId(forIdentifier: identifier) {
+                let event: [String: Any] = [
+                    "domain": "background",
+                    "event": "execution_window_expired",
+                    "timestamp": ISO8601DateFormatter().string(from: Date()),
+                    "data": [
+                        "taskRunId": taskRunId,
+                        "identifier": identifier
+                    ]
+                ]
+                await MainActor.run {
+                    self.eventEmitter?(event)
+                }
+            }
+        }
+
         queue.async(flags: .barrier) {
-            self.pendingCompletions.removeValue(forKey: identifier)
+            self.pendingTasks.removeValue(forKey: identifier)
         }
     }
 
     public func completeTask(_ task: BGTask, success: Bool) {
         task.setTaskCompleted(success: success)
         queue.async(flags: .barrier) {
-            self.pendingCompletions.removeValue(forKey: task.identifier)
+            self.pendingTasks.removeValue(forKey: task.identifier)
         }
     }
 
-    public func markTaskCompleted(_ identifier: String, success: Bool) {
-        queue.sync(flags: .barrier) {
-            if let task = self.pendingCompletions.removeValue(forKey: identifier) {
-                task.setTaskCompleted(success: success)
+    public func markTaskRunCompleted(_ taskRunId: String, success: Bool) {
+        Task {
+            if let identifier = await BGTaskIdentifierRegistry.shared.identifier(forTaskRunId: taskRunId) {
+                queue.sync(flags: .barrier) {
+                    if let task = self.pendingTasks.removeValue(forKey: identifier) {
+                        task.setTaskCompleted(success: success)
+                    }
+                }
             }
+            await BGTaskIdentifierRegistry.shared.removeMapping(taskRunId: taskRunId)
         }
     }
 
-    public func hasPendingTask(_ identifier: String) -> Bool {
-        return queue.sync { pendingCompletions[identifier] != nil }
+    public func markTaskRunExpired(_ taskRunId: String) {
+        Task {
+            if let identifier = await BGTaskIdentifierRegistry.shared.identifier(forTaskRunId: taskRunId) {
+                queue.sync(flags: .barrier) {
+                    if let task = self.pendingTasks.removeValue(forKey: identifier) {
+                        task.setTaskCompleted(success: false)
+                    }
+                }
+            }
+            await BGTaskIdentifierRegistry.shared.removeMapping(taskRunId: taskRunId)
+        }
+    }
+
+    public func hasPendingTaskRun(_ taskRunId: String) async -> Bool {
+        var result = false
+        if let identifier = await BGTaskIdentifierRegistry.shared.identifier(forTaskRunId: taskRunId) {
+            result = queue.sync(execute: { self.pendingTasks[identifier] != nil })
+        }
+        return result
+    }
+
+    public func taskRunIdForPendingTask(_ identifier: String) async -> String? {
+        if queue.sync(execute: { self.pendingTasks[identifier] != nil }) {
+            return await BGTaskIdentifierRegistry.shared.taskRunId(forIdentifier: identifier)
+        }
+        return nil
     }
 }

@@ -1,0 +1,9 @@
+{
+  "protocolVersion": 1,
+  "requestId": "req-stat-001",
+  "operation": "file.access.stat",
+  "payload": {
+    "mountId": "mt-abc123",
+    "relativePath": "documents/report.pdf"
+  }
+}

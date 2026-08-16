@@ -16,9 +16,8 @@ import (
 // trigger provider enablement without fabricating ProviderInstance directly.
 // The real implementation lives in capability.ProviderLifecycleService.
 type ProviderLifecyclePort interface {
-	RegisterInstance(inst capability.CapabilityProviderInstance) error
-	UpdateInstanceHealth(id capability.ProviderInstanceID, health capability.HealthStatus) error
-	UpdateInstanceAvailability(id capability.ProviderInstanceID, availability capability.ProviderAvailabilityState) error
+	Enable(providerID capability.ProviderID) error
+	Disable(providerID capability.ProviderID) error
 }
 
 // AcquisitionDependencies holds all required dependencies for constructing

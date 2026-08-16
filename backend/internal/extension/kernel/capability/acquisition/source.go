@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_center"
 )
@@ -151,15 +152,11 @@ func (s *InstalledSource) searchAllInstalled() ([]CapabilityCandidate, error) {
 
 // AgentSkillSource 从已有但未启用的 Skill 中搜索候选
 type AgentSkillSource struct {
-	catalog interface {
-		List(filter interface{}) []interface{}
-	}
+	catalog *agent_skill.AgentSkillCatalog
 }
 
 // NewAgentSkillSource 创建 AgentSkillSource 实例
-func NewAgentSkillSource(catalog interface {
-	List(filter interface{}) []interface{}
-}) *AgentSkillSource {
+func NewAgentSkillSource(catalog *agent_skill.AgentSkillCatalog) *AgentSkillSource {
 	return &AgentSkillSource{
 		catalog: catalog,
 	}
@@ -178,7 +175,7 @@ func (s *AgentSkillSource) Search(ctx context.Context, request AcquisitionReques
 		return nil, fmt.Errorf("agent_skill source: catalog not configured")
 	}
 
-	items := s.catalog.List(nil)
+	items := s.catalog.List(agent_skill.CatalogFilter{})
 	if len(items) == 0 {
 		return nil, nil
 	}
@@ -198,43 +195,33 @@ func (s *AgentSkillSource) Search(ctx context.Context, request AcquisitionReques
 }
 
 // buildCandidate 根据 AgentSkill 条目构造候选对象
-func (s *AgentSkillSource) buildCandidate(item interface{}, request AcquisitionRequest) *CapabilityCandidate {
-	type skillEntry interface {
-		GetExtensionID() string
-		GetName() string
-		GetDescription() string
-		IsEnabled() bool
+func (s *AgentSkillSource) buildCandidate(item agent_skill.AgentSkillDefinition, request AcquisitionRequest) *CapabilityCandidate {
+	if item.Enabled {
+		return nil
 	}
 
-	if entry, ok := item.(skillEntry); ok {
-		if entry.IsEnabled() {
-			return nil
-		}
+	capID := string(request.CapabilityID)
+	matchesQuery := capID == "" ||
+		containsString(item.Name, capID) ||
+		containsString(item.Description, capID)
 
-		capID := string(request.CapabilityID)
-		matchesQuery := capID == "" ||
-			containsString(entry.GetName(), capID) ||
-			containsString(entry.GetDescription(), capID)
-
-		if !matchesQuery {
-			return nil
-		}
-
-		return &CapabilityCandidate{
-			ID:           entry.GetExtensionID(),
-			Kind:         CandidateAgentSkill,
-			Name:         entry.GetName(),
-			Description:  entry.GetDescription(),
-			Capabilities: []capability.CapabilityID{capability.CapabilityID(entry.GetExtensionID())},
-			Install: CandidateInstallDescriptor{
-				Method: InstallEnableExisting,
-			},
-			Trust: CandidateTrust{
-				Level: TrustVerified,
-			},
-		}
+	if !matchesQuery {
+		return nil
 	}
-	return nil
+
+	return &CapabilityCandidate{
+		ID:           item.ExtensionID,
+		Kind:         CandidateAgentSkill,
+		Name:         item.Name,
+		Description:  item.Description,
+		Capabilities: []capability.CapabilityID{capability.CapabilityID(item.ExtensionID)},
+		Install: CandidateInstallDescriptor{
+			Method: InstallEnableExisting,
+		},
+		Trust: CandidateTrust{
+			Level: TrustVerified,
+		},
+	}
 }
 
 // MCPPackageSource 从 MCP 包中搜索候选

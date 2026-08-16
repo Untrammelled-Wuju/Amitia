@@ -107,6 +107,23 @@ internal class DefaultRuntimeController(
         return generation > 0 && generation == stateStore.snapshot().generation
     }
 
+    private fun isRecoveryEligible(current: RuntimeSnapshot, cause: RuntimeServiceTerminationCause): Boolean {
+        if (current.generation <= 0) return false
+        val liveSession = serviceHost.currentSession()
+        if (liveSession != null && liveSession.isAlive()) return false
+        return when (cause) {
+            RuntimeServiceTerminationCause.EXIT_WATCHER_FAILED -> false
+            else -> true
+        }
+    }
+
+    private fun isStartupFailedRecoveryEligible(current: RuntimeSnapshot, cause: RuntimeServiceTerminationCause): Boolean {
+        if (current.generation <= 0) return false
+        val liveSession = serviceHost.currentSession()
+        if (liveSession != null && liveSession.isAlive()) return false
+        return true
+    }
+
     private fun clearExpectedStop(generation: Long) {
         while (true) {
             val current = expectedStopRef.get() ?: return
@@ -135,8 +152,9 @@ internal class DefaultRuntimeController(
             }
             is RuntimeServiceHostEvent.UnexpectedTermination -> {
                 cancelStartupDetector()
+                if (!isCurrentGeneration(event.generation)) return
                 val current = stateStore.snapshot()
-                if (current.generation != event.generation) return
+                if (!isRecoveryEligible(current, event.cause)) return
                 val target = RuntimeStateMachine.unexpectedTerminationTarget(current.state)
                 if (target != null && target != current.state) {
                     val error = mapTerminationCauseToError(event.cause)
@@ -152,6 +170,7 @@ internal class DefaultRuntimeController(
                 cancelStartupDetector()
                 if (!isCurrentGeneration(event.generation)) return
                 val current = stateStore.snapshot()
+                if (!isStartupFailedRecoveryEligible(current, event.cause)) return
                 val target = RuntimeStateMachine.unexpectedTerminationTarget(current.state)
                 if (target != null && target != current.state) {
                     val error = mapTerminationCauseToError(event.cause, event.message)
@@ -389,15 +408,22 @@ internal class DefaultRuntimeController(
         val current = stateStore.snapshot()
         if (current.state != RuntimeState.FAILED) return
         if (current.generation != failedGeneration) return
-        cancelPendingRecovery()
+        cancelPendingRecoveryStartPrerequisites(failedGeneration)
+    }
+
+    private fun cancelPendingRecoveryStartPrerequisites(failedGeneration: Long): Boolean {
         val liveSession = serviceHost.currentSession()
-        if (liveSession != null && liveSession.isAlive()) return
+        if (liveSession != null && liveSession.isAlive()) return false
+        val snapshot = serviceHost.currentGeneration()
+        if (snapshot != failedGeneration) return false
+        cancelPendingRecovery()
         start(
             RuntimeStartRequest(reason = RuntimeStartReason.RECOVERY),
             object : RuntimeOperationCallback {
                 override fun onCompleted(result: RuntimeOperationResult) {}
             }
         )
+        return true
     }
 
     private fun cancelPendingRecovery() {
@@ -498,6 +524,23 @@ internal class DefaultRuntimeController(
     }
 
     override fun snapshot(): RuntimeSnapshot = stateStore.snapshot()
+
+    fun lifecycleSnapshot(): com.amitia.amitia_app.runtime.service.RuntimeServiceLifecycleSnapshot? {
+        return serviceHost.let { host ->
+            (host as? com.amitia.amitia_app.runtime.service.internal.AndroidRuntimeServiceHost)?.let {
+                com.amitia.amitia_app.runtime.service.internal.RuntimeServiceLifecycleSnapshot(
+                    generation = stateStore.snapshot().generation,
+                    sessionId = null,
+                    servicePhase = com.amitia.amitia_app.runtime.service.internal.ServicePhase.CREATED,
+                    processPhase = com.amitia.amitia_app.runtime.service.internal.ProcessPhase.CREATED,
+                    startupPhase = com.amitia.amitia_app.runtime.service.internal.StartupPhase.NOT_STARTED,
+                    terminalState = null,
+                    latestStartId = 0,
+                    stopRequested = false,
+                )
+            }
+        }
+    }
 
     override fun subscribe(listener: RuntimeListener): RuntimeSubscription = stateStore.subscribe(listener)
 

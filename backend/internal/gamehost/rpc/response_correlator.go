@@ -40,7 +40,16 @@ func (c *rpcResponseCorrelator) RegisterPending(peer ipc.Peer, requestID string,
 		Generation:  RequestGeneration(generation),
 	}
 
-	if _, err := c.registry.Register(req); err != nil {
+	registered, err := c.registry.Register(req)
+	if err != nil {
+		return nil, false
+	}
+
+	if !registered {
+		existing := c.registry.Get(key)
+		if existing != nil {
+			return existing, false
+		}
 		return nil, false
 	}
 
@@ -75,6 +84,30 @@ func (c *rpcResponseCorrelator) CancelByPeer(peer ipc.Peer) {
 
 func (c *rpcResponseCorrelator) CancelByRuntime(runtimeID string) {
 	c.registry.CancelByRuntime(domain.RuntimeInstanceID(runtimeID))
+}
+
+func (c *rpcResponseCorrelator) Terminalize(key ipc.TerminalKey, state ipc.TerminalState, err error) {
+	requestKey := RequestKey{
+		RuntimeID: domain.RuntimeInstanceID(key.RuntimeID),
+		ServiceID: domain.ServiceID(key.ServiceID),
+		RequestID: key.RequestID,
+	}
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	switch state {
+	case ipc.TerminalCompleted:
+		c.registry.Complete(requestKey, protocol.Envelope{})
+	case ipc.TerminalFailed:
+		c.registry.Fail(requestKey, err)
+	case ipc.TerminalTimedOut:
+		c.registry.Timeout(requestKey)
+	case ipc.TerminalCancelled:
+		c.registry.Cancel(requestKey)
+	}
+
+	c.registry.Remove(requestKey)
 }
 
 var _ ipc.ResponseCorrelator = (*rpcResponseCorrelator)(nil)

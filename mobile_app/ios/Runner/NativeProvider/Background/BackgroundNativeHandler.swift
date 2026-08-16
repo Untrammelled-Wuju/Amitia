@@ -18,7 +18,7 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
         "background.binding.get"
     ]
 
-    private var activeBGTaskIdentifiers: Set<String> = []
+    private var activeTaskRunIds: Set<String> = []
     private let queue = DispatchQueue(label: "com.amitia.backgroundnative", attributes: .concurrent)
 
     public override init() {
@@ -74,27 +74,19 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
         case "background.binding.get":
             return handleBindingGet(request)
         default:
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestId: request.requestId,
-                status: "error",
-                result: nil,
-                error: IOSNativeError(code: "OPERATION_NOT_SUPPORTED", message: "unsupported operation: \(request.operation)")
-            )
+            return errorResponse(request, code: "OPERATION_NOT_SUPPORTED", message: "unsupported operation: \(request.operation)")
         }
     }
 
     private func handleStatus(_ request: IOSNativeRequest) -> IOSNativeResponse {
         let available = #available(iOS 13.0, *)
-        let pendingCount = pendingTaskCount()
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
             requestId: request.requestId,
             status: "ok",
             result: [
-                "available": available,
-                "message": "BGTaskScheduler available",
-                "pendingCount": pendingCount,
+                "supported": available,
+                "pendingCount": activeTaskCount(),
                 "activeTaskCount": activeTaskCount()
             ],
             error: nil
@@ -103,362 +95,293 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
 
     private func handleTaskRegister(_ request: IOSNativeRequest) -> IOSNativeResponse {
         guard let identifier = request.payload?["identifier"] as? String else {
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestId: request.requestId,
-                status: "error",
-                result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing identifier")
-            )
+            return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing identifier")
         }
+        let systemClass = request.payload?["systemClass"] as? String ?? "app_refresh"
 
         if #available(iOS 13.0, *) {
             let success = BGTaskScheduler.shared.register(forTaskWithIdentifier: identifier, using: nil) { task in
                 BackgroundTaskBridge.shared.handleBackgroundTask(task)
             }
             if success {
-                markTaskActive(identifier)
-                return IOSNativeResponse(
-                    protocolVersion: request.protocolVersion,
-                    requestId: request.requestId,
-                    status: "ok",
-                    result: ["registered": success, "identifier": identifier],
-                    error: nil
-                )
-            } else {
-                return IOSNativeResponse(
-                    protocolVersion: request.protocolVersion,
-                    requestId: request.requestId,
-                    status: "error",
-                    result: nil,
-                    error: IOSNativeError(code: "REGISTRATION_FAILED", message: "failed to register background task: \(identifier)")
-                )
+                Task {
+                    await BGTaskIdentifierRegistry.shared.register(
+                        systemClass: systemClass,
+                        identifier: identifier
+                    )
+                }
+                return successResponse(request, result: [
+                    "success": true,
+                    "identifier": identifier,
+                    "systemClass": systemClass
+                ])
             }
+            return errorResponse(request, code: "REGISTRATION_FAILED", message: "failed to register identifier")
         }
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestId: request.requestId,
-            status: "error",
-            result: nil,
-            error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "iOS 13.0+ required")
-        )
+        return errorResponse(request, code: "PLATFORM_NOT_SUPPORTED", message: "iOS 13.0+ required")
     }
 
     private func handleTaskSubmit(_ request: IOSNativeRequest) async -> IOSNativeResponse {
-        guard let identifier = request.payload?["identifier"] as? String else {
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestId: request.requestId,
-                status: "error",
-                result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing identifier")
-            )
+        guard let taskRunId = request.payload?["taskRunId"] as? String else {
+            return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing taskRunId")
+        }
+        let systemClass = request.payload?["systemClass"] as? String ?? "app_refresh"
+
+        var identifier = request.payload?["identifier"] as? String
+        if identifier == nil {
+            identifier = await BGTaskIdentifierRegistry.shared.resolveIdentifier(systemClass: systemClass)
+        }
+        guard let resolvedIdentifier = identifier else {
+            return errorResponse(request, code: "IDENTIFIER_NOT_FOUND", message: "no identifier registered for systemClass: \(systemClass)")
         }
 
         if #available(iOS 13.0, *) {
-            let taskType = request.payload?["taskType"] as? String ?? "refresh"
-
-            let request_bg: BGTaskRequest
-            if taskType == "processing" {
-                let bgRequest = BGProcessingTaskRequest(identifier: identifier)
-                bgRequest.earliestBeginDate = request.payload?["earliestBeginDate"] as? Date
-                if let requiresExternalPower = request.payload?["requiresExternalPower"] as? Bool {
-                    bgRequest.requiresExternalPower = requiresExternalPower
+            let bgRequest: BGTaskRequest
+            if systemClass == "processing" {
+                let procRequest = BGProcessingTaskRequest(identifier: resolvedIdentifier)
+                if let earliestBeginAt = parseDate(request.payload?["earliestBeginAt"]) {
+                    procRequest.earliestBeginDate = earliestBeginAt
                 }
-                if let requiresNetworkConnectivity = request.payload?["requiresNetworkConnectivity"] as? Bool {
-                    bgRequest.requiresNetworkConnectivity = requiresNetworkConnectivity
-                }
-                request_bg = bgRequest
+                procRequest.requiresExternalPower = request.payload?["externalPowerRequired"] as? Bool ?? true
+                procRequest.requiresNetworkConnectivity = request.payload?["networkRequired"] as? Bool ?? true
+                bgRequest = procRequest
             } else {
-                let bgRequest = BGAppRefreshTaskRequest(identifier: identifier)
-                bgRequest.earliestBeginDate = request.payload?["earliestBeginDate"] as? Date
-                request_bg = bgRequest
+                let refreshRequest = BGAppRefreshTaskRequest(identifier: resolvedIdentifier)
+                if let earliestBeginAt = parseDate(request.payload?["earliestBeginAt"]) {
+                    refreshRequest.earliestBeginDate = earliestBeginAt
+                }
+                bgRequest = refreshRequest
             }
 
             do {
-                try BGTaskScheduler.shared.submit(request_bg)
-                return IOSNativeResponse(
-                    protocolVersion: request.protocolVersion,
-                    requestId: request.requestId,
-                    status: "ok",
-                    result: ["submitted": true, "identifier": identifier, "taskType": taskType],
-                    error: nil
+                try BGTaskScheduler.shared.submit(bgRequest)
+                await BGTaskIdentifierRegistry.shared.createMapping(
+                    taskRunId: taskRunId,
+                    systemClass: systemClass,
+                    identifier: resolvedIdentifier
                 )
+                markTaskActive(taskRunId)
+                return successResponse(request, result: [
+                    "submitted": true,
+                    "taskRunId": taskRunId,
+                    "identifier": resolvedIdentifier,
+                    "systemClass": systemClass
+                ])
             } catch {
-                return IOSNativeResponse(
-                    protocolVersion: request.protocolVersion,
-                    requestId: request.requestId,
-                    status: "error",
-                    result: nil,
-                    error: IOSNativeError(code: "SUBMIT_FAILED", message: error.localizedDescription)
-                )
+                return errorResponse(request, code: "SUBMIT_FAILED", message: error.localizedDescription)
             }
         }
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestId: request.requestId,
-            status: "error",
-            result: nil,
-            error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "iOS 13.0+ required")
-        )
+        return errorResponse(request, code: "PLATFORM_NOT_SUPPORTED", message: "iOS 13.0+ required")
     }
 
     private func handleTaskCancel(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        guard let identifier = request.payload?["identifier"] as? String else {
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestId: request.requestId,
-                status: "error",
-                result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing identifier")
-            )
+        guard let taskRunId = request.payload?["taskRunId"] as? String else {
+            return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing taskRunId")
         }
-
-        if #available(iOS 13.0, *) {
-            BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: identifier)
-            markTaskInactive(identifier)
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestId: request.requestId,
-                status: "ok",
-                result: ["cancelled": true, "identifier": identifier],
-                error: nil
-            )
+        Task {
+            if let identifier = await BGTaskIdentifierRegistry.shared.identifier(forTaskRunId: taskRunId) {
+                if #available(iOS 13.0, *) {
+                    BGTaskScheduler.shared.cancel(taskRequestWithIdentifier: identifier)
+                }
+            }
+            await BGTaskIdentifierRegistry.shared.removeMapping(taskRunId: taskRunId)
         }
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestId: request.requestId,
-            status: "error",
-            result: nil,
-            error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "iOS 13.0+ required")
-        )
+        markTaskInactive(taskRunId)
+        return successResponse(request, result: ["cancelled": true, "taskRunId": taskRunId])
     }
 
     private func handleTaskCancelAll(_ request: IOSNativeRequest) -> IOSNativeResponse {
         if #available(iOS 13.0, *) {
             BGTaskScheduler.shared.cancelAllTaskRequests()
-            clearAllActiveTasks()
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestId: request.requestId,
-                status: "ok",
-                result: ["cancelled": true],
-                error: nil
-            )
         }
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestId: request.requestId,
-            status: "error",
-            result: nil,
-            error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "iOS 13.0+ required")
-        )
+        clearAllActiveTasks()
+        return successResponse(request, result: ["cancelled": true])
     }
 
     private func handleTaskGetPending(_ request: IOSNativeRequest) async -> IOSNativeResponse {
         if #available(iOS 13.0, *) {
             let requests = await BGTaskScheduler.shared.pendingTaskRequests()
-            let pending = requests.map { req in
-                ["identifier": req.identifier, "taskType": String(describing: type(of: req))]
+            let pending = requests.map { req -> [String: Any] in
+                var info: [String: Any] = ["identifier": req.identifier]
+                if let mapping = await BGTaskIdentifierRegistry.shared.mappingForIdentifier(req.identifier) {
+                    info["taskRunId"] = mapping.taskRunId
+                    info["systemClass"] = mapping.systemClass
+                }
+                return info
             }
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestId: request.requestId,
-                status: "ok",
-                result: ["pending": pending],
-                error: nil
-            )
+            return successResponse(request, result: ["pending": pending])
         }
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestId: request.requestId,
-            status: "error",
-            result: nil,
-            error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "iOS 13.0+ required")
-        )
+        return errorResponse(request, code: "PLATFORM_NOT_SUPPORTED", message: "iOS 13.0+ required")
     }
 
     private func handleTaskProgress(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        guard let identifier = request.payload?["identifier"] as? String,
+        guard let taskRunId = request.payload?["taskRunId"] as? String,
               let completedUnits = request.payload?["completedUnits"] as? Int,
               let totalUnits = request.payload?["totalUnits"] as? Int else {
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestId: request.requestId,
-                status: "error",
-                result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing required progress parameters")
-            )
+            return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing required progress parameters")
         }
         let phase = request.payload?["phase"] as? String ?? ""
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestId: request.requestId,
-            status: "ok",
-            result: [
-                "identifier": identifier,
-                "completedUnits": completedUnits,
-                "totalUnits": totalUnits,
-                "phase": phase,
-                "recorded": true
-            ],
-            error: nil
-        )
+        return successResponse(request, result: [
+            "taskRunId": taskRunId,
+            "completedUnits": completedUnits,
+            "totalUnits": totalUnits,
+            "phase": phase,
+            "recorded": true
+        ])
     }
 
     private func handleTaskExpire(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        guard let identifier = request.payload?["identifier"] as? String else {
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestId: request.requestId,
-                status: "error",
-                result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing identifier")
-            )
+        guard let taskRunId = request.payload?["taskRunId"] as? String else {
+            return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing taskRunId")
         }
-        markTaskInactive(identifier)
-        BackgroundTaskBridge.shared.markTaskCompleted(identifier, success: false)
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestId: request.requestId,
-            status: "ok",
-            result: ["expired": true, "identifier": identifier, "success": false],
-            error: nil
-        )
+        markTaskInactive(taskRunId)
+        BackgroundTaskBridge.shared.markTaskRunExpired(taskRunId)
+        return successResponse(request, result: [
+            "expired": true,
+            "taskRunId": taskRunId,
+            "success": false
+        ])
     }
 
     private func handleTaskComplete(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        guard let identifier = request.payload?["identifier"] as? String,
+        guard let taskRunId = request.payload?["taskRunId"] as? String,
               let success = request.payload?["success"] as? Bool else {
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestId: request.requestId,
-                status: "error",
-                result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing identifier or success flag")
-            )
+            return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing taskRunId or success flag")
         }
-        markTaskInactive(identifier)
-        BackgroundTaskBridge.shared.markTaskCompleted(identifier, success: success)
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestId: request.requestId,
-            status: "ok",
-            result: ["completed": true, "identifier": identifier, "success": success],
-            error: nil
-        )
+        markTaskInactive(taskRunId)
+        BackgroundTaskBridge.shared.markTaskRunCompleted(taskRunId, success: success)
+        return successResponse(request, result: [
+            "completed": true,
+            "taskRunId": taskRunId,
+            "success": success
+        ])
     }
 
     private func handleTaskReconcile(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        guard let identifier = request.payload?["identifier"] as? String else {
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestId: request.requestId,
-                status: "error",
-                result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing identifier")
-            )
+        guard let taskRunId = request.payload?["taskRunId"] as? String else {
+            return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing taskRunId")
         }
-        let stillPending = BackgroundTaskBridge.shared.hasPendingTask(identifier)
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestId: request.requestId,
-            status: "ok",
-            result: ["identifier": identifier, "stillPending": stillPending],
-            error: nil
-        )
+        let stillPending = isTaskActive(taskRunId)
+        return successResponse(request, result: [
+            "taskRunId": taskRunId,
+            "stillPending": stillPending
+        ])
     }
 
     private func handleRuntimeReadiness(_ request: IOSNativeRequest) -> IOSNativeResponse {
         let available = #available(iOS 13.0, *)
         let activeCount = activeTaskCount()
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestId: request.requestId,
-            status: "ok",
-            result: [
-                "ready": available,
-                "activeTaskCount": activeCount,
-                "canAcceptNewTask": available && activeCount < 4
-            ],
-            error: nil
-        )
+        return successResponse(request, result: [
+            "ready": available,
+            "activeTaskCount": activeCount,
+            "canAcceptNewTask": available && activeCount < 4
+        ])
     }
 
     private func handleRuntimeEnsure(_ request: IOSNativeRequest) -> IOSNativeResponse {
         let available = #available(iOS 13.0, *)
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestId: request.requestId,
-            status: "ok",
-            result: [
-                "ensured": available,
-                "platformSupported": available
-            ],
-            error: nil
-        )
+        return successResponse(request, result: [
+            "ensured": available,
+            "platformSupported": available
+        ])
     }
 
     private func handleBindingGet(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        guard let identifier = request.payload?["identifier"] as? String else {
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestId: request.requestId,
-                status: "error",
-                result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing identifier")
-            )
+        guard let taskRunId = request.payload?["taskRunId"] as? String else {
+            return errorResponse(request, code: "INVALID_ARGUMENT", message: "missing taskRunId")
         }
-        let isActive = isTaskActive(identifier)
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestId: request.requestId,
-            status: "ok",
-            result: ["identifier": identifier, "active": isActive],
-            error: nil
-        )
+        let isActive = isTaskActive(taskRunId)
+        var result: [String: Any] = [
+            "taskRunId": taskRunId,
+            "active": isActive
+        ]
+        Task {
+            if let mapping = await BGTaskIdentifierRegistry.shared.mappingForTaskRun(taskRunId) {
+                result["identifier"] = mapping.identifier
+                result["systemClass"] = mapping.systemClass
+            }
+        }
+        return successResponse(request, result: result)
     }
 
-    private func markTaskActive(_ identifier: String) {
+    private func parseDate(_ value: Any?) -> Date? {
+        if let date = value as? Date {
+            return date
+        }
+        if let timestamp = value as? Double {
+            return Date(timeIntervalSince1970: timestamp)
+        }
+        if let timestamp = value as? Int {
+            return Date(timeIntervalSince1970: TimeInterval(timestamp))
+        }
+        if let isoString = value as? String {
+            let formatter = ISO8601DateFormatter()
+            return formatter.date(from: isoString)
+        }
+        return nil
+    }
+
+    private func markTaskActive(_ taskRunId: String) {
         queue.async(flags: .barrier) {
-            self.activeBGTaskIdentifiers.insert(identifier)
+            self.activeTaskRunIds.insert(taskRunId)
         }
     }
 
-    private func markTaskInactive(_ identifier: String) {
+    private func markTaskInactive(_ taskRunId: String) {
         queue.async(flags: .barrier) {
-            self.activeBGTaskIdentifiers.remove(identifier)
+            self.activeTaskRunIds.remove(taskRunId)
         }
     }
 
     private func clearAllActiveTasks() {
         queue.async(flags: .barrier) {
-            self.activeBGTaskIdentifiers.removeAll()
+            self.activeTaskRunIds.removeAll()
         }
     }
 
-    private func isTaskActive(_ identifier: String) -> Bool {
-        return queue.sync { activeBGTaskIdentifiers.contains(identifier) }
+    private func isTaskActive(_ taskRunId: String) -> Bool {
+        return queue.sync { activeTaskRunIds.contains(taskRunId) }
     }
 
     private func activeTaskCount() -> Int {
-        return queue.sync { activeBGTaskIdentifiers.count }
+        return queue.sync { activeTaskRunIds.count }
     }
 
-    private func pendingTaskCount() -> Int {
-        if #available(iOS 13.0, *) {
-            return BGTaskScheduler.shared.pendingTaskRequests().count
-        }
-        return 0
+    private func successResponse(_ request: IOSNativeRequest, result: [String: Any]) -> IOSNativeResponse {
+        return IOSNativeResponse(
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            status: "ok",
+            result: result,
+            error: nil
+        )
+    }
+
+    private func errorResponse(_ request: IOSNativeRequest, code: String, message: String) -> IOSNativeResponse {
+        return IOSNativeResponse(
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            status: "error",
+            result: nil,
+            error: IOSNativeError(code: code, message: message)
+        )
     }
 }
 
 extension BackgroundNativeHandler: BackgroundTaskBridgeDelegate {
     public func backgroundTaskBridge(_ bridge: BackgroundTaskBridge, didReceiveTask task: BGTask) {
-        markTaskActive(task.identifier)
+        Task {
+            if let taskRunId = await BGTaskIdentifierRegistry.shared.taskRunId(forIdentifier: task.identifier) {
+                markTaskActive(taskRunId)
+            }
+        }
     }
 
     public func backgroundTaskBridge(_ bridge: BackgroundTaskBridge, taskDidExpire task: BGTask) {
-        markTaskInactive(task.identifier)
+        Task {
+            if let taskRunId = await BGTaskIdentifierRegistry.shared.taskRunId(forIdentifier: task.identifier) {
+                markTaskInactive(taskRunId)
+            }
+        }
     }
 }

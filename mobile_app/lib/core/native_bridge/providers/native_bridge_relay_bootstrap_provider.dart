@@ -4,8 +4,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../backend_connection/backend_connection_availability.dart';
-import '../../backend_connection/backend_connection_endpoint.dart';
-import '../../backend_connection/backend_uri_builder.dart';
 import '../../backend_connection/providers/backend_connection_providers.dart';
 import '../../backend_transport/providers/backend_transport_providers.dart';
 import 'native_bridge_relay_provider.dart';
@@ -17,6 +15,7 @@ final nativeBridgeRelayBootstrapProvider = Provider((ref) {
 
   final connection = connectionAsync.asData?.value;
   if (connection is! BackendConnectionAvailable) {
+    relayNotifier.attachBackend(null, isAndroid: Platform.isAndroid, isIOS: Platform.isIOS);
     return;
   }
   if (kIsWeb) {
@@ -27,24 +26,11 @@ final nativeBridgeRelayBootstrapProvider = Provider((ref) {
   if (!isAndroid && !isIOS) {
     return;
   }
-  final wsBaseUri = _computeWebSocketBaseUri(connection.config);
-  if (wsBaseUri.isEmpty) {
-    return;
-  }
   relayNotifier.attachBackend(
-    wsBaseUri,
+    connection.config,
     isAndroid: isAndroid,
     isIOS: isIOS,
   );
 
   return transportGeneration;
 });
-
-String _computeWebSocketBaseUri(BackendConnectionConfig config) {
-  final endpoint = config.endpoint;
-  final host = endpoint.host;
-  final port = endpoint.port;
-  if (host.isEmpty || port == 0) return '';
-  final wsScheme = endpoint.webSocketScheme;
-  return '$wsScheme://$host:$port';
-}
