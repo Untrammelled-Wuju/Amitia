@@ -25,6 +25,11 @@ type Runtime struct {
 }
 
 func NewCloudRuntime(db *sql.DB, deviceReg *host_registry.Registry) (*Runtime, error) {
+	hub := server.NewConnectionHub()
+	return NewCloudRuntimeWithHub(db, deviceReg, hub)
+}
+
+func NewCloudRuntimeWithHub(db *sql.DB, deviceReg *host_registry.Registry, hub *server.ConnectionHub) (*Runtime, error) {
 	if err := EnsureSchema(context.Background(), db); err != nil {
 		return nil, err
 	}
@@ -35,7 +40,6 @@ func NewCloudRuntime(db *sql.DB, deviceReg *host_registry.Registry) (*Runtime, e
 	credRepo := credential.NewRepository(db)
 	credSvc := credential.NewService(credRepo, DeviceCredentialTTL)
 
-	hub := server.NewConnectionHub()
 	probe := server.NewProbeService(hub)
 
 	return &Runtime{
