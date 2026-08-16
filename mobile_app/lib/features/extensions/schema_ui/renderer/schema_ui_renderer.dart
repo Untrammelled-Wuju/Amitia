@@ -686,6 +686,30 @@ class SchemaUIThemeResolver extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return child;
+    if (theme == null) return child;
+    final mode = theme!.mode;
+    Brightness brightness;
+    switch (mode) {
+      case 'light':
+        brightness = Brightness.light;
+        break;
+      case 'dark':
+        brightness = Brightness.dark;
+        break;
+      default:
+        brightness = Theme.of(context).brightness;
+    }
+    if (brightness == Theme.of(context).brightness && theme!.overrides == null) {
+      return child;
+    }
+    return Theme(
+      data: Theme.of(context).copyWith(
+        brightness: brightness,
+        colorScheme: Theme.of(context).colorScheme.copyWith(
+          brightness: brightness,
+        ),
+      ),
+      child: child,
+    );
   }
 }
