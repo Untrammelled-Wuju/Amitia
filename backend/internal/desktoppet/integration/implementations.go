@@ -189,4 +189,3 @@ func (r *defaultActionTargetResolver) ResolveActionTarget(ctx context.Context, e
 	}
 	return ExistingPetActionTarget{}, fmt.Errorf("ResolveActionTarget: fixture resolver has no desktop pet target")
 }
-

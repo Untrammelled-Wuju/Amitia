@@ -18,7 +18,7 @@ import (
 type AssemblyDeps struct {
 	DB                *gorm.DB
 	ActivePetPort     behavior.ActivePetPort
-	RuntimeActionPort  behavior.RuntimeActionPort
+	RuntimeActionPort behavior.RuntimeActionPort
 	InstallRepo       installation.Repository
 	PsycheStore       psyche.PsycheStore
 	DataDir           string
