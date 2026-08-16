@@ -54,7 +54,7 @@ func (s *defaultSourceInspector) Inspect(ctx context.Context, workspaceID string
 	}
 
 	uri := "ws://" + workspaceID + "/"
-	listOpts := workspace.ListOptions{Recursive: true}
+	listOpts := workspace.ListOptions{}
 	listResult, err := s.workspaceSvc.List(ctx, uri, listOpts)
 	if err != nil {
 		return result, nil
@@ -67,7 +67,7 @@ func (s *defaultSourceInspector) Inspect(ctx context.Context, workspaceID string
 	libHints := map[string]bool{"vue": true, "react": true, "svelte": true, "flutter": true, "angular": true}
 
 	for _, entry := range listResult.Entries {
-		if entry.IsDir {
+		if entry.Type == workspace.WorkspaceEntryTypeDirectory {
 			continue
 		}
 		ext := strings.ToLower(filepath.Ext(entry.Name))
