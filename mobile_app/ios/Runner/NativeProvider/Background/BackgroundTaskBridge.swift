@@ -62,6 +62,25 @@ public class BackgroundTaskBridge: NSObject {
                 await MainActor.run {
                     self.eventEmitter?(event)
                 }
+                await self.resumeTaskRuntime(taskRunId: taskRunId, identifier: identifier)
+            }
+        }
+    }
+
+    private func resumeTaskRuntime(taskRunId: String, identifier: String) async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let resumeEvent: [String: Any] = [
+                "domain": "background",
+                "event": "task_runtime_resume",
+                "timestamp": ISO8601DateFormatter().string(from: Date()),
+                "data": [
+                    "taskRunId": taskRunId,
+                    "identifier": identifier
+                ]
+            ]
+            Task { @MainActor in
+                self.eventEmitter?(resumeEvent)
+                continuation.resume()
             }
         }
     }
@@ -85,11 +104,30 @@ public class BackgroundTaskBridge: NSObject {
                 await MainActor.run {
                     self.eventEmitter?(event)
                 }
+                await self.expireTaskRuntime(taskRunId: taskRunId, identifier: identifier)
             }
         }
 
         queue.async(flags: .barrier) {
             self.pendingTasks.removeValue(forKey: identifier)
+        }
+    }
+
+    private func expireTaskRuntime(taskRunId: String, identifier: String) async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let expireEvent: [String: Any] = [
+                "domain": "background",
+                "event": "task_runtime_expire",
+                "timestamp": ISO8601DateFormatter().string(from: Date()),
+                "data": [
+                    "taskRunId": taskRunId,
+                    "identifier": identifier
+                ]
+            ]
+            Task { @MainActor in
+                self.eventEmitter?(expireEvent)
+                continuation.resume()
+            }
         }
     }
 
@@ -102,6 +140,7 @@ public class BackgroundTaskBridge: NSObject {
 
     public func markTaskRunCompleted(_ taskRunId: String, success: Bool) {
         Task {
+            await self.persistTaskRunCompletion(taskRunId: taskRunId, success: success)
             if let identifier = await BGTaskIdentifierRegistry.shared.identifier(forTaskRunId: taskRunId) {
                 queue.sync(flags: .barrier) {
                     if let task = self.pendingTasks.removeValue(forKey: identifier) {
@@ -110,6 +149,24 @@ public class BackgroundTaskBridge: NSObject {
                 }
             }
             await BGTaskIdentifierRegistry.shared.removeMapping(taskRunId: taskRunId)
+        }
+    }
+
+    private func persistTaskRunCompletion(taskRunId: String, success: Bool) async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let completeEvent: [String: Any] = [
+                "domain": "background",
+                "event": "task_runtime_complete",
+                "timestamp": ISO8601DateFormatter().string(from: Date()),
+                "data": [
+                    "taskRunId": taskRunId,
+                    "success": success
+                ]
+            ]
+            Task { @MainActor in
+                self.eventEmitter?(completeEvent)
+                continuation.resume()
+            }
         }
     }
 

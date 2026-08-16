@@ -199,14 +199,15 @@ public class SecurityScopedBookmarkStore: NSObject {
 
         let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
         var result: [String: Any] = [:]
-        result["size"] = attributes[.size] as? Int ?? 0
-        result["creationDate"] = (attributes[.creationDate] as? Date)?.timeIntervalSince1970 ?? 0
-        result["modificationDate"] = (attributes[.modificationDate] as? Date)?.timeIntervalSince1970 ?? 0
-        result["isDirectory"] = (attributes[.type] as? FileAttributeType) == .typeDirectory
-        result["isFile"] = (attributes[.type] as? FileAttributeType) == .typeRegular
         result["name"] = url.lastPathComponent
-        result["mountId"] = mountId
         result["relativePath"] = relativePath
+        result["size"] = attributes[.size] as? Int ?? 0
+        result["isDirectory"] = (attributes[.type] as? FileAttributeType) == .typeDirectory
+        result["isSymbolicLink"] = resolved.isSymlink
+        result["isMaterialized"] = true
+        result["mimeType"] = mimeTypeForPath(url.path)
+        result["modifiedAt"] = ISO8601DateFormatter().string(from: (attributes[.modificationDate] as? Date) ?? Date())
+        result["createdAt"] = ISO8601DateFormatter().string(from: (attributes[.creationDate] as? Date) ?? Date())
         return result
     }
 
@@ -225,11 +226,13 @@ public class SecurityScopedBookmarkStore: NSObject {
         return contents.map { item in
             var info: [String: Any] = [:]
             info["name"] = item.lastPathComponent
+            let entryRelativePath = relativePath.isEmpty ? item.lastPathComponent : "\(relativePath)/\(item.lastPathComponent)"
+            info["relativePath"] = entryRelativePath
             if let values = try? item.resourceValues(forKeys: [.isDirectoryKey, .fileSizeKey, .contentModificationDateKey, .isSymbolicLinkKey]) {
                 info["isDirectory"] = values.isDirectory ?? false
                 info["size"] = values.fileSize ?? 0
-                info["modificationDate"] = values.contentModificationDate?.timeIntervalSince1970 ?? 0
-                info["isSymlink"] = values.isSymbolicLink ?? false
+                info["isSymbolicLink"] = values.isSymbolicLink ?? false
+                info["modifiedAt"] = ISO8601DateFormatter().string(from: values.contentModificationDate ?? Date())
             }
             return info
         }
@@ -241,16 +244,16 @@ public class SecurityScopedBookmarkStore: NSObject {
 
         try ensureAccessing(mountId: mountId)
 
+        if length <= 0 {
+            throw BookmarkStoreError.invalidArgument
+        }
+        let boundedLength = min(length, Int64(MaxNativeChunk))
+
         let handle = try FileHandle(forReadingFrom: url)
         if offset > 0 {
             handle.seek(toOffset: UInt64(offset))
         }
-        let data: Data
-        if length > 0 {
-            data = handle.readData(ofLength: Int(length))
-        } else {
-            data = handle.readDataToEndOfFile()
-        }
+        let data = handle.readData(ofLength: Int(boundedLength))
         handle.closeFile()
         return data
     }
@@ -291,8 +294,8 @@ public class SecurityScopedBookmarkStore: NSObject {
         return true
     }
 
-    public func mkdir(mountId: String, parentRelativePath: String, name: String) throws -> String {
-        let parentResolved = try resolvePath(mountId: mountId, relativePath: parentRelativePath)
+    public func mkdir(mountId: String, relativePath: String) throws {
+        let resolved = try resolvePath(mountId: mountId, relativePath: relativePath)
 
         var record: MountRecord?
         queue.sync {
@@ -302,26 +305,8 @@ public class SecurityScopedBookmarkStore: NSObject {
             throw BookmarkStoreError.readOnlyMount
         }
 
-        let newDirURL = parentResolved.resolvedURL.appendingPathComponent(name)
-
         try ensureAccessing(mountId: mountId)
-        try FileManager.default.createDirectory(at: newDirURL, withIntermediateDirectories: false, attributes: nil)
-
-        let mountRecord = MountRecord(
-            mountId: UUID().uuidString,
-            bookmarkData: try newDirURL.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil),
-            displayName: name,
-            readOnly: false,
-            providerHint: "child-of-\(mountId)",
-            createdAt: Date(),
-            isSingleFile: false
-        )
-
-        queue.async(flags: .barrier) {
-            self.mountRecords[mountRecord.mountId] = mountRecord
-        }
-
-        return mountRecord.mountId
+        try FileManager.default.createDirectory(at: resolved.resolvedURL, withIntermediateDirectories: false, attributes: nil)
     }
 
     public func rename(mountId: String, relativePath: String, newName: String) throws {
@@ -363,7 +348,7 @@ public class SecurityScopedBookmarkStore: NSObject {
         try FileManager.default.moveItem(at: sourceResolved.resolvedURL, to: destResolved.resolvedURL)
     }
 
-    public func copy(mountId: String, relativePath: String, newRelativePath: String) throws -> String {
+    public func copy(mountId: String, relativePath: String, newRelativePath: String) throws {
         let sourceResolved = try resolvePath(mountId: mountId, relativePath: relativePath)
         let destResolved = try resolvePath(mountId: mountId, relativePath: newRelativePath)
 
@@ -381,22 +366,6 @@ public class SecurityScopedBookmarkStore: NSObject {
         try FileManager.default.createDirectory(at: destParentURL, withIntermediateDirectories: true, attributes: nil)
 
         try FileManager.default.copyItem(at: sourceResolved.resolvedURL, to: destResolved.resolvedURL)
-
-        let newMount = MountRecord(
-            mountId: UUID().uuidString,
-            bookmarkData: try destResolved.resolvedURL.bookmarkData(options: .withSecurityScope, includingResourceValuesForKeys: nil, relativeTo: nil),
-            displayName: destResolved.resolvedURL.lastPathComponent,
-            readOnly: false,
-            providerHint: "copy-of-\(mountId)",
-            createdAt: Date(),
-            isSingleFile: true
-        )
-
-        queue.async(flags: .barrier) {
-            self.mountRecords[newMount.mountId] = newMount
-        }
-
-        return newMount.mountId
     }
 
     public func delete(mountId: String, relativePath: String) throws {
@@ -466,5 +435,28 @@ public class SecurityScopedBookmarkStore: NSObject {
                 self.accessingURLs.insert(mountId)
             }
         }
+    }
+}
+
+let MaxNativeChunk = 1048576
+
+func mimeTypeForPath(_ path: String) -> String {
+    let ext = (path as NSString).pathExtension.lowercased()
+    switch ext {
+    case "jpg", "jpeg": return "image/jpeg"
+    case "png": return "image/png"
+    case "gif": return "image/gif"
+    case "webp": return "image/webp"
+    case "mp4": return "video/mp4"
+    case "mov": return "video/quicktime"
+    case "mp3": return "audio/mpeg"
+    case "wav": return "audio/wav"
+    case "pdf": return "application/pdf"
+    case "txt": return "text/plain"
+    case "html", "htm": return "text/html"
+    case "json": return "application/json"
+    case "xml": return "application/xml"
+    case "zip": return "application/zip"
+    default: return "application/octet-stream"
     }
 }

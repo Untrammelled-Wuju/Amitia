@@ -1,13 +1,9 @@
 import Foundation
-import Intents
 
 @available(iOS 16.0, *)
 public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
     public let operations: Set<String> = [
         "shortcuts.status",
-        "shortcuts.intent.register",
-        "shortcuts.intent.revoke",
-        "shortcuts.intent.donate",
         "shortcuts.entities.characters",
         "shortcuts.entities.conversations",
         "shortcuts.entities.alarms",
@@ -25,7 +21,6 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
         "shortcuts.snapshot.refresh",
         "shortcuts.shortcuts.provider",
         "shortcuts.shortcuts.phrase",
-        "shortcuts.shortcuts.update",
         "shortcuts.settings.get",
         "shortcuts.settings.update"
     ]
@@ -57,12 +52,6 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
         switch request.operation {
         case "shortcuts.status":
             return handleStatus(request)
-        case "shortcuts.intent.register":
-            return handleIntentRegister(request)
-        case "shortcuts.intent.revoke":
-            return handleIntentRevoke(request)
-        case "shortcuts.intent.donate":
-            return await handleIntentDonate(request)
         case "shortcuts.entities.characters":
             return handleEntitiesCharacters(request)
         case "shortcuts.entities.conversations":
@@ -97,8 +86,6 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
             return handleShortcutsProvider(request)
         case "shortcuts.shortcuts.phrase":
             return handleShortcutsPhrase(request)
-        case "shortcuts.shortcuts.update":
-            return handleShortcutsUpdate(request)
         case "shortcuts.settings.get":
             return handleSettingsGet(request)
         case "shortcuts.settings.update":
@@ -122,102 +109,10 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
             status: "ok",
             result: [
                 "available": available,
-                "registeredActions": ShortcutActionGateway.shared.registeredActionIDs
+                "actions": ShortcutActionGateway.shared.registeredActions.map { $0.actionId }
             ],
             error: nil
         )
-    }
-
-    private func handleIntentRegister(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        guard let actionId = request.payload?["actionId"] as? String else {
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestId: request.requestId,
-                status: "error",
-                result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing actionId")
-            )
-        }
-
-        guard ShortcutActionGateway.shared.isCuratedAction(actionId) else {
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestId: request.requestId,
-                status: "error",
-                result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "action not in curated catalog: \(actionId)")
-            )
-        }
-
-        ShortcutActionGateway.shared.registerAction(actionId)
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestId: request.requestId,
-            status: "ok",
-            result: ["registered": true, "actionId": actionId],
-            error: nil
-        )
-    }
-
-    private func handleIntentRevoke(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        guard let actionId = request.payload?["actionId"] as? String else {
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestId: request.requestId,
-                status: "error",
-                result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing actionId")
-            )
-        }
-        ShortcutActionGateway.shared.revokeAction(actionId)
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestId: request.requestId,
-            status: "ok",
-            result: ["revoked": true, "actionId": actionId],
-            error: nil
-        )
-    }
-
-    private func handleIntentDonate(_ request: IOSNativeRequest) async -> IOSNativeResponse {
-        guard let actionId = request.payload?["actionId"] as? String else {
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestId: request.requestId,
-                status: "error",
-                result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing actionId")
-            )
-        }
-
-        guard ShortcutActionGateway.shared.isCuratedAction(actionId) else {
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestId: request.requestId,
-                status: "error",
-                result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "action not in curated catalog: \(actionId)")
-            )
-        }
-
-        let donated = await ShortcutActionGateway.shared.donateIntent(actionId: actionId)
-        if donated {
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestId: request.requestId,
-                status: "ok",
-                result: ["donated": true, "actionId": actionId],
-                error: nil
-            )
-        } else {
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestId: request.requestId,
-                status: "error",
-                result: nil,
-                error: IOSNativeError(code: "DONATION_FAILED", message: "failed to donate intent for \(actionId)")
-            )
-        }
     }
 
     private func handleEntitiesCharacters(_ request: IOSNativeRequest) -> IOSNativeResponse {
@@ -336,7 +231,7 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
             protocolVersion: request.protocolVersion,
             requestId: request.requestId,
             status: "ok",
-            result: ["executed": true, "actionId": actionId, "result": result],
+            result: ["actionId": actionId, "backendResult": result],
             error: nil
         )
     }
@@ -351,11 +246,22 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
                 error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing actionId")
             )
         }
+
+        guard ShortcutActionGateway.shared.isCuratedAction(actionId) else {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestId: request.requestId,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "action not in curated catalog: \(actionId)")
+            )
+        }
+
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
             requestId: request.requestId,
             status: "ok",
-            result: ["confirmed": true, "actionId": actionId],
+            result: ["actionId": actionId, "confirmable": true],
             error: nil
         )
     }
@@ -429,26 +335,6 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
             status: "ok",
             result: ["phrases": []],
             error: nil
-        )
-    }
-
-    private func handleShortcutsUpdate(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        if #available(iOS 16.0, *) {
-            ShortcutActionGateway.shared.updateShortcuts()
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestId: request.requestId,
-                status: "ok",
-                result: ["updated": true],
-                error: nil
-            )
-        }
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestId: request.requestId,
-            status: "error",
-            result: nil,
-            error: IOSNativeError(code: "PLATFORM_NOT_SUPPORTED", message: "iOS 16.0+ required")
         )
     }
 

@@ -10,7 +10,6 @@ public struct StagedResourceInfo {
     public let height: Double?
     public let filename: String
     public let createdAt: TimeInterval
-    public let mountId: String?
 
     public var statDictionary: [String: Any] {
         var dict: [String: Any] = [
@@ -22,7 +21,6 @@ public struct StagedResourceInfo {
         ]
         if let w = width { dict["width"] = w }
         if let h = height { dict["height"] = h }
-        if let m = mountId { dict["mountId"] = m }
         return dict
     }
 }
@@ -80,8 +78,7 @@ public class MediaStaging {
                 width: meta?["width"] as? Double,
                 height: meta?["height"] as? Double,
                 filename: url.lastPathComponent,
-                createdAt: createdAt,
-                mountId: meta?["mountId"] as? String
+                createdAt: createdAt
             )
         } catch {
             return nil
@@ -92,17 +89,16 @@ public class MediaStaging {
         guard let url = nativeStagingURL(nativeStagingId) else {
             return nil
         }
+        guard length > 0 else {
+            return nil
+        }
+        let boundedLength = min(length, Int64(MaxNativeChunk))
         do {
             let handle = try FileHandle(forReadingFrom: url)
             if offset > 0 {
                 handle.seek(toOffset: UInt64(offset))
             }
-            let data: Data
-            if length > 0 {
-                data = handle.readData(ofLength: Int(length))
-            } else {
-                data = handle.readDataToEndOfFile()
-            }
+            let data = handle.readData(ofLength: Int(boundedLength))
             handle.closeFile()
             return data
         } catch {
