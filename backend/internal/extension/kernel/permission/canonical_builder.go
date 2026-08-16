@@ -47,7 +47,7 @@ func (b *EvaluationRequestBuilder) WithApprovalMode(mode string) *EvaluationRequ
 	return b
 }
 
-func (b *EvaluationRequestBuilder) WithGeneration(generation int) *EvaluationRequestBuilder {
+func (b *EvaluationRequestBuilder) WithGeneration(generation int64) *EvaluationRequestBuilder {
 	b.request.Generation = generation
 	return b
 }
