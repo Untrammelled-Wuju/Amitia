@@ -53,9 +53,9 @@ func BuildWebChannelExtension(version string) Definition {
 			Integrity:     domain.ExtensionIntegrity{},
 			Policies:      domain.ExtensionPolicies{},
 		},
-		SystemManaged:    true,
-		Required:         true,
-		DisableAllowed:   false,
+		SystemManaged:     true,
+		Required:          true,
+		DisableAllowed:    false,
 		BootstrapRevision: 1,
 	}
 }
@@ -94,9 +94,9 @@ func BuildQQChannelExtension(version string) Definition {
 			Integrity:     domain.ExtensionIntegrity{},
 			Policies:      domain.ExtensionPolicies{},
 		},
-		SystemManaged:    true,
-		Required:         false,
-		DisableAllowed:   true,
+		SystemManaged:     true,
+		Required:          false,
+		DisableAllowed:    true,
 		BootstrapRevision: 1,
 	}
 }
@@ -135,9 +135,9 @@ func BuildWechatChannelExtension(version string) Definition {
 			Integrity:     domain.ExtensionIntegrity{},
 			Policies:      domain.ExtensionPolicies{},
 		},
-		SystemManaged:    true,
-		Required:         false,
-		DisableAllowed:   true,
+		SystemManaged:     true,
+		Required:          false,
+		DisableAllowed:    true,
 		BootstrapRevision: 1,
 	}
 }

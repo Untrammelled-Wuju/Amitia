@@ -6,16 +6,16 @@ import (
 )
 
 const (
-	GameHostExtensionID    = domain.ExtensionID("com.amitia.builtin.game-host")
-	GameHostModuleID       = domain.ModuleID("game-host-runtime")
-	GameHostProviderID     = capability.ProviderID("com.amitia.builtin.game-host.provider")
+	GameHostExtensionID = domain.ExtensionID("com.amitia.builtin.game-host")
+	GameHostModuleID    = domain.ModuleID("game-host-runtime")
+	GameHostProviderID  = capability.ProviderID("com.amitia.builtin.game-host.provider")
 
-	GameHostCapSessionManage  capability.CapabilityID = "game.session.manage"
+	GameHostCapSessionManage   capability.CapabilityID = "game.session.manage"
 	GameHostCapSessionTransfer capability.CapabilityID = "game.session.transfer"
-	GameHostCapAssetManage    capability.CapabilityID = "game.asset.manage"
-	GameHostCapPluginManage   capability.CapabilityID = "game.plugin.manage"
-	GameHostCapScriptExecute  capability.CapabilityID = "game.script.execute"
-	GameHostCapDeviceManage   capability.CapabilityID = "game.device.manage"
+	GameHostCapAssetManage     capability.CapabilityID = "game.asset.manage"
+	GameHostCapPluginManage    capability.CapabilityID = "game.plugin.manage"
+	GameHostCapScriptExecute   capability.CapabilityID = "game.script.execute"
+	GameHostCapDeviceManage    capability.CapabilityID = "game.device.manage"
 )
 
 // BuildGameHostExtension constructs a Built-in Extension definition for the Game Host.
@@ -124,14 +124,14 @@ func buildGameHostContributions(extID domain.ExtensionID, modID domain.ModuleID)
 }
 
 const (
-	DesktopPetExtensionID    = domain.ExtensionID("com.amitia.builtin.desktop-pet")
-	DesktopPetModuleID       = domain.ModuleID("desktop-pet-runtime")
-	DesktopPetProviderID     = capability.ProviderID("com.amitia.builtin.desktop-pet.provider")
+	DesktopPetExtensionID = domain.ExtensionID("com.amitia.builtin.desktop-pet")
+	DesktopPetModuleID    = domain.ModuleID("desktop-pet-runtime")
+	DesktopPetProviderID  = capability.ProviderID("com.amitia.builtin.desktop-pet.provider")
 
-	DesktopPetCapRender  capability.CapabilityID = "desktoppet.render"
+	DesktopPetCapRender   capability.CapabilityID = "desktoppet.render"
 	DesktopPetCapInteract capability.CapabilityID = "desktoppet.interact"
-	DesktopPetCapNotify  capability.CapabilityID = "desktoppet.notify"
-	DesktopPetCapAnimate capability.CapabilityID = "desktoppet.animate"
+	DesktopPetCapNotify   capability.CapabilityID = "desktoppet.notify"
+	DesktopPetCapAnimate  capability.CapabilityID = "desktoppet.animate"
 )
 
 // BuildDesktopPetExtension constructs a Built-in Extension definition for the Desktop Pet.

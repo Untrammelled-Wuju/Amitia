@@ -196,10 +196,10 @@ type ProviderMetadataMeta struct {
 }
 
 type SecretRefMeta struct {
-	Ref      string `json:"ref"`
+	Ref       string `json:"ref"`
 	ServiceID string `json:"serviceId,omitempty"`
-	Purpose  string `json:"purpose,omitempty"`
-	Required bool   `json:"required,omitempty"`
+	Purpose   string `json:"purpose,omitempty"`
+	Required  bool   `json:"required,omitempty"`
 }
 
 type LocalizedText struct {

@@ -6,12 +6,12 @@ import (
 )
 
 const (
-	UIAgentExtensionID          = domain.ExtensionID("com.amitia.builtin.uiagent")
-	UIAgentModuleID             = domain.ModuleID("uiagent-runtime")
-	UIAgentInspectCapabilityID  = capability.CapabilityID("ui.inspect")
-	UIAgentModifyCapabilityID   = capability.CapabilityID("ui.modify")
-	UIAgentCreateCapabilityID   = capability.CapabilityID("ui.create")
-	UIAgentProviderID           = capability.ProviderID("com.amitia.builtin.uiagent.provider")
+	UIAgentExtensionID         = domain.ExtensionID("com.amitia.builtin.uiagent")
+	UIAgentModuleID            = domain.ModuleID("uiagent-runtime")
+	UIAgentInspectCapabilityID = capability.CapabilityID("ui.inspect")
+	UIAgentModifyCapabilityID  = capability.CapabilityID("ui.modify")
+	UIAgentCreateCapabilityID  = capability.CapabilityID("ui.create")
+	UIAgentProviderID          = capability.ProviderID("com.amitia.builtin.uiagent.provider")
 )
 
 func buildUIAgentInspectInputSchema() string {
@@ -45,8 +45,8 @@ func BuildUIAgentExtension(version string) Definition {
 	}
 
 	extDef := domain.ExtensionDefinition{
-		ID:      UIAgentExtensionID,
-		Name:    domain.LocalizedText{Default: "UI Agent"},
+		ID:   UIAgentExtensionID,
+		Name: domain.LocalizedText{Default: "UI Agent"},
 		Description: domain.LocalizedText{
 			Default: "Provides UI inspection, modification, and creation capabilities for workspace files.",
 		},

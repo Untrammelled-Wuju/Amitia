@@ -13,8 +13,8 @@ func BuildImageIntelligenceExtension(version string) Definition {
 	ver := parseBuiltinVersion(version)
 
 	extDef := domain.ExtensionDefinition{
-		ID:      ImageIntelligenceExtensionID,
-		Name:    domain.LocalizedText{Default: "Image Intelligence"},
+		ID:   ImageIntelligenceExtensionID,
+		Name: domain.LocalizedText{Default: "Image Intelligence"},
 		Description: domain.LocalizedText{
 			Default: "Image analysis, OCR, and generation capabilities",
 		},
@@ -76,10 +76,10 @@ func BuildImageIntelligenceExtension(version string) Definition {
 	}
 
 	return Definition{
-		Extension:        extDef,
-		SystemManaged:    true,
-		Required:         false,
-		DisableAllowed:   true,
+		Extension:         extDef,
+		SystemManaged:     true,
+		Required:          false,
+		DisableAllowed:    true,
 		BootstrapRevision: 1,
 	}
 }

@@ -5,20 +5,20 @@ import (
 )
 
 const (
-	MetadataKeyBuiltin       = "system.builtin"
-	MetadataKeyManaged       = "system.managed"
-	MetadataKeyRequired      = "system.required"
-	MetadataKeyDisableAllowed = "system.disableAllowed"
-	MetadataKeyComponent     = "system.component"
+	MetadataKeyBuiltin           = "system.builtin"
+	MetadataKeyManaged           = "system.managed"
+	MetadataKeyRequired          = "system.required"
+	MetadataKeyDisableAllowed    = "system.disableAllowed"
+	MetadataKeyComponent         = "system.component"
 	MetadataKeyBootstrapRevision = "system.bootstrapRevision"
 )
 
 type Definition struct {
 	Extension domain.ExtensionDefinition
 
-	SystemManaged  bool
-	Required       bool
-DisableAllowed  bool
+	SystemManaged     bool
+	Required          bool
+	DisableAllowed    bool
 	BootstrapRevision int64
 }
 

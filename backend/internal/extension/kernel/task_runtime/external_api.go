@@ -93,13 +93,13 @@ func (s *TaskRuntimeService) HandleExternalProgress(ctx context.Context, taskRun
 	totalFloat := float64(totalUnits)
 	seq := now.UnixNano()
 	prog := TaskRunProgress{
-		TaskRunID:  taskRunID,
-		Sequence:   seq,
-		Current:    &completedFloat,
-		Total:      &totalFloat,
-		Stage:      phase,
-		Message:    phase,
-		UpdatedAt:  now.UTC(),
+		TaskRunID: taskRunID,
+		Sequence:  seq,
+		Current:   &completedFloat,
+		Total:     &totalFloat,
+		Stage:     phase,
+		Message:   phase,
+		UpdatedAt: now.UTC(),
 	}
 	progJSON, _ := json.Marshal(prog)
 	return s.store.PutProgress(ctx, taskRunID, seq, progJSON)

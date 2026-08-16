@@ -121,14 +121,14 @@ type SkillInstallDescriptor struct {
 }
 
 type GeneratedSkillDescriptor struct {
-	PromptStub    string   `json:"promptStub"`
-	ToolsNeeded   []string `json:"toolsNeeded"`
-	StoresNeeded  []string `json:"storesNeeded"`
-	Description   string   `json:"description,omitempty"`
+	PromptStub   string   `json:"promptStub"`
+	ToolsNeeded  []string `json:"toolsNeeded"`
+	StoresNeeded []string `json:"storesNeeded"`
+	Description  string   `json:"description,omitempty"`
 }
 
 type CandidateInstallDescriptor struct {
-	Method           InstallMethod            `json:"method"`
+	Method           InstallMethod               `json:"method"`
 	ExtensionPackage *ExtensionInstallDescriptor `json:"extensionPackage,omitempty"`
 	MCP              *MCPInstallDescriptor       `json:"mcp,omitempty"`
 	Skill            *SkillInstallDescriptor     `json:"skill,omitempty"`
@@ -142,20 +142,20 @@ type CandidateMatch struct {
 }
 
 type CapabilityCandidate struct {
-	ID           string                    `json:"id"`
-	Kind         CandidateKind             `json:"kind"`
-	Name         string                    `json:"name"`
-	Description  string                    `json:"description"`
-	Version      string                    `json:"version"`
-	Capabilities []capability.CapabilityID `json:"capabilities"`
-	Source       CandidateSource           `json:"source"`
-	Runtime      CandidateRuntimeSupport   `json:"runtime"`
-	Permissions  []string                  `json:"permissions,omitempty"`
-	Dependencies []CandidateDependency     `json:"dependencies,omitempty"`
-	Trust        CandidateTrust            `json:"trust"`
+	ID           string                     `json:"id"`
+	Kind         CandidateKind              `json:"kind"`
+	Name         string                     `json:"name"`
+	Description  string                     `json:"description"`
+	Version      string                     `json:"version"`
+	Capabilities []capability.CapabilityID  `json:"capabilities"`
+	Source       CandidateSource            `json:"source"`
+	Runtime      CandidateRuntimeSupport    `json:"runtime"`
+	Permissions  []string                   `json:"permissions,omitempty"`
+	Dependencies []CandidateDependency      `json:"dependencies,omitempty"`
+	Trust        CandidateTrust             `json:"trust"`
 	Install      CandidateInstallDescriptor `json:"install"`
-	Match        CandidateMatch            `json:"match,omitempty"`
-	Metadata     map[string]any            `json:"metadata,omitempty"`
+	Match        CandidateMatch             `json:"match,omitempty"`
+	Metadata     map[string]any             `json:"metadata,omitempty"`
 }
 
 func (c CapabilityCandidate) IsGenerated() bool {

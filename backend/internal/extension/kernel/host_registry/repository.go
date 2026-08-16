@@ -399,6 +399,20 @@ func (r *registryRepository) UpdateDeviceTrust(ctx context.Context, deviceID run
 	return err
 }
 
+func (r *registryRepository) UpdateDeviceTrustTx(ctx context.Context, tx *sql.Tx, deviceID runtimeidentity.DeviceID, state DeviceTrustState, trustedAt *time.Time) error {
+	var trustedAtVal sql.NullString
+	if trustedAt != nil {
+		trustedAtVal = sql.NullString{String: trustedAt.Format(time.RFC3339Nano), Valid: true}
+	}
+	_, err := tx.ExecContext(ctx,
+		`UPDATE kernel_devices SET trust_state = ?, trusted_at = ?, revision = revision + 1 WHERE device_id = ?`,
+		string(state),
+		trustedAtVal,
+		deviceID.String(),
+	)
+	return err
+}
+
 func (r *registryRepository) UpdateDeviceLastSeen(ctx context.Context, deviceID runtimeidentity.DeviceID, at time.Time) error {
 	if r.db == nil {
 		return nil
@@ -601,4 +615,3 @@ func (r *registryRepository) MigrateSessionTokens(ctx context.Context) error {
 	}
 	return nil
 }
-

@@ -19,8 +19,8 @@ func BuildBrowserExtension(version string) Definition {
 	}
 
 	extDef := domain.ExtensionDefinition{
-		ID:      BrowserExtensionID,
-		Name:    domain.LocalizedText{Default: "Browser"},
+		ID:   BrowserExtensionID,
+		Name: domain.LocalizedText{Default: "Browser"},
 		Description: domain.LocalizedText{
 			Default: "Provides browser control capabilities including navigation, interaction, and page inspection.",
 		},
@@ -97,19 +97,19 @@ func BuildBrowserExtension(version string) Definition {
 }
 
 type browserToolSpec struct {
-	id          string
-	name        string
-	description string
-	modelName   string
-	handlerName string
-	inputSchema string
+	id           string
+	name         string
+	description  string
+	modelName    string
+	handlerName  string
+	inputSchema  string
 	outputSchema string
-	riskLevel   string
-	sideEffect  string
-	idempotent  bool
-	retryable   bool
-	timeoutMs   int64
-	permissions []map[string]any
+	riskLevel    string
+	sideEffect   string
+	idempotent   bool
+	retryable    bool
+	timeoutMs    int64
+	permissions  []map[string]any
 }
 
 func buildBrowserContributions(extID domain.ExtensionID, modID domain.ModuleID) []domain.ContributionDefinition {

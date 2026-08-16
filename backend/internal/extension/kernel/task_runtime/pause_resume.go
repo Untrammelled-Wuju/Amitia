@@ -73,15 +73,13 @@ func (s *TaskRuntimeService) PauseTask(ctx context.Context, req PauseTaskRequest
 	pausedRun.PausedAt = &now
 	pausedRun.Revision = NextRevision(current.Revision)
 
-	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
-		ok, casErr := s.store.UpdateTaskRunCAS(txCtx, pausedRun, current.Status, current.Generation, current.Revision)
-		if casErr != nil {
-			return fmt.Errorf("task_runtime: pause cas: %w", casErr)
-		}
-		if !ok {
-			return NewTaskError(ErrTaskPauseInProgress, "concurrent state change, retry pause")
-		}
-		return s.publishTaskEvent(txCtx, TaskEventPaused, pausedRun, reason, "")
+	if err := s.mutateTaskRun(ctx, taskMutationParams{
+		next:       pausedRun,
+		expected:   current.Status,
+		generation: current.Generation,
+		revision:   current.Revision,
+		eventType:  TaskEventPaused,
+		eventMsg:   reason,
 	}); err != nil {
 		return err
 	}
@@ -151,18 +149,19 @@ func (s *TaskRuntimeService) ResumeTask(ctx context.Context, req ResumeTaskReque
 	}
 	resumedRun.Revision = NextRevision(current.Revision)
 
-	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
-		ok, casErr := s.store.UpdateTaskRunCAS(txCtx, resumedRun, current.Status, current.Generation, current.Revision)
-		if casErr != nil {
-			return fmt.Errorf("task_runtime: resume cas: %w", casErr)
-		}
-		if !ok {
-			return NewTaskError(ErrTaskPauseInProgress, "concurrent state change, retry resume")
-		}
-		if failMsg != "" {
-			return s.publishTaskEvent(txCtx, TaskEventFailed, resumedRun, failMsg, "")
-		}
-		return s.publishTaskEvent(txCtx, TaskEventResumed, resumedRun, "", "")
+	eventType := TaskEventResumed
+	eventMsg := ""
+	if failMsg != "" {
+		eventType = TaskEventFailed
+		eventMsg = failMsg
+	}
+	if err := s.mutateTaskRun(ctx, taskMutationParams{
+		next:       resumedRun,
+		expected:   current.Status,
+		generation: current.Generation,
+		revision:   current.Revision,
+		eventType:  eventType,
+		eventMsg:   eventMsg,
 	}); err != nil {
 		return err
 	}

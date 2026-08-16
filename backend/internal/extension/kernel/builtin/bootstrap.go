@@ -30,7 +30,7 @@ func NewBootstrapper(
 ) *Bootstrapper {
 	return &Bootstrapper{
 		catalog:       catalog,
-		definitions:    definitions,
+		definitions:   definitions,
 		installations: installations,
 	}
 }

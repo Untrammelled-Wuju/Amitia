@@ -58,14 +58,14 @@ type Installer interface {
 // It is the internal representation passed between install stages and is later
 // translated into a user-facing AcquisitionResult by the orchestrator.
 type InstalledCapability struct {
-	Candidate           CapabilityCandidate       `json:"candidate"`
-	Target              DeploymentTarget          `json:"target"`
-	ExtensionIDs        []string                  `json:"extensionIds,omitempty"`
-	ProviderIDs         []capability.ProviderID   `json:"providerIds,omitempty"`
+	Candidate           CapabilityCandidate             `json:"candidate"`
+	Target              DeploymentTarget                `json:"target"`
+	ExtensionIDs        []string                        `json:"extensionIds,omitempty"`
+	ProviderIDs         []capability.ProviderID         `json:"providerIds,omitempty"`
 	ProviderInstanceIDs []capability.ProviderInstanceID `json:"providerInstanceIds,omitempty"`
-	CapabilityIDs       []capability.CapabilityID `json:"capabilityIds,omitempty"`
-	TransactionID       string                    `json:"transactionId"`
-	InstalledAt         time.Time                 `json:"installedAt"`
+	CapabilityIDs       []capability.CapabilityID       `json:"capabilityIds,omitempty"`
+	TransactionID       string                          `json:"transactionId"`
+	InstalledAt         time.Time                       `json:"installedAt"`
 }
 
 // ---------------------------------------------------------------------------

@@ -31,17 +31,17 @@ func (c CapabilityResumeContext) HasFailedToolCall() bool {
 }
 
 type CapabilityRecoveryBudget struct {
-	MaxAcquisitionsPerTask int `json:"maxAcquisitionsPerTask"`
-	MaxAttemptsPerCapability int `json:"maxAttemptsPerCapability"`
-	CurrentAcquisitions    int `json:"currentAcquisitions"`
-	AttemptedCapabilities  map[string]int `json:"attemptedCapabilities"`
+	MaxAcquisitionsPerTask   int            `json:"maxAcquisitionsPerTask"`
+	MaxAttemptsPerCapability int            `json:"maxAttemptsPerCapability"`
+	CurrentAcquisitions      int            `json:"currentAcquisitions"`
+	AttemptedCapabilities    map[string]int `json:"attemptedCapabilities"`
 }
 
 func NewCapabilityRecoveryBudget() CapabilityRecoveryBudget {
 	return CapabilityRecoveryBudget{
-		MaxAcquisitionsPerTask:  3,
+		MaxAcquisitionsPerTask:   3,
 		MaxAttemptsPerCapability: 1,
-		AttemptedCapabilities:   make(map[string]int),
+		AttemptedCapabilities:    make(map[string]int),
 	}
 }
 

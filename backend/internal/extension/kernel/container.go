@@ -7,6 +7,7 @@ import (
 
 	"github.com/u-ai/backend/internal/desktoppet/plugin_boundary"
 	"github.com/u-ai/backend/internal/deviceruntime"
+	coreexec "github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/builtin"
@@ -25,7 +26,6 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/extension/kernel/eventbridge"
 	"github.com/u-ai/backend/internal/extension/kernel/execution"
-	coreexec "github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
 	"github.com/u-ai/backend/internal/extension/kernel/hook"
@@ -216,26 +216,26 @@ type Container struct {
 
 	GameHost *gamehost.GameHostContainer
 
-	RuntimeProfile            runtimeprofile.Profile
-	RuntimePolicy             runtimeprofile.Policy
-	DeviceRegistry            *host_registry.Registry
-	DeviceRuntimePresence     *host_registry.DeviceRuntimePresenceAdapter
-	DeviceRuntimeSessions     *deviceruntime.Service
-	CapabilityProviders       *capability.ProviderRegistry
-	ProviderLifecycle         *capability.ProviderLifecycleService
-	ProviderExecutionResolver *capability.ProviderRuntimeExecutionResolver
+	RuntimeProfile              runtimeprofile.Profile
+	RuntimePolicy               runtimeprofile.Policy
+	DeviceRegistry              *host_registry.Registry
+	DeviceRuntimePresence       *host_registry.DeviceRuntimePresenceAdapter
+	DeviceRuntimeSessions       *deviceruntime.Service
+	CapabilityProviders         *capability.ProviderRegistry
+	ProviderLifecycle           *capability.ProviderLifecycleService
+	ProviderExecutionResolver   *capability.ProviderRuntimeExecutionResolver
 	ExtensionProviderReconciler *capability.ExtensionProviderReconciler
 	ProviderInstanceReconciler  capability.ProviderInstanceReconciler
-	CapabilityService          *capability.CapabilityService
+	CapabilityService           *capability.CapabilityService
 
-	BuiltinCatalog       *builtin.Catalog
-	BuiltinBootstrapper  *builtin.Bootstrapper
+	BuiltinCatalog         *builtin.Catalog
+	BuiltinBootstrapper    *builtin.Bootstrapper
 	BuiltinHandlerRegistry *builtin.HandlerRegistry
 
 	ProviderInvocationService *capability.ProviderInvocationService
-	ProviderInvoker          *KernelProviderInvoker
+	ProviderInvoker           *KernelProviderInvoker
 
-	EventBridgePublisher      *eventbridge.Publisher
+	EventBridgePublisher *eventbridge.Publisher
 
 	AcquisitionService *acquisition.AcquisitionService
 

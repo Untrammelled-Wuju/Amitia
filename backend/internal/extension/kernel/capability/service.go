@@ -5,9 +5,9 @@ import (
 )
 
 type CapabilityService struct {
-	registry    *ProviderRegistry
-	catalog     ProviderCatalog
-	resolver    *Resolver
+	registry     *ProviderRegistry
+	catalog      ProviderCatalog
+	resolver     *Resolver
 	toolRegistry *ToolRegistry
 }
 
@@ -29,26 +29,26 @@ func (s *CapabilityService) Catalog() ProviderCatalog {
 }
 
 type CapabilityDescriptor struct {
-	ID                      CapabilityID       `json:"id"`
-	ProviderCount           int                `json:"providerCount"`
-	ProviderInstanceCount   int                `json:"providerInstanceCount"`
-	ExecutableProviderCount int                `json:"executableProviderCount"`
+	ID                      CapabilityID        `json:"id"`
+	ProviderCount           int                 `json:"providerCount"`
+	ProviderInstanceCount   int                 `json:"providerInstanceCount"`
+	ExecutableProviderCount int                 `json:"executableProviderCount"`
 	Placements              []ProviderPlacement `json:"placements"`
-	ToolIDs                 []string           `json:"toolIds"`
-	Metadata                map[string]any     `json:"metadata"`
+	ToolIDs                 []string            `json:"toolIds"`
+	Metadata                map[string]any      `json:"metadata"`
 }
 
 type AvailabilityState string
 
 const (
-	AvailabilityNotRegistered          AvailabilityState = "NOT_REGISTERED"
-	AvailabilityRegisteredNoProvider   AvailabilityState = "REGISTERED_NO_PROVIDER"
-	AvailabilityProviderDisabled       AvailabilityState = "REGISTERED_PROVIDER_DISABLED"
-	AvailabilityRuntimeUnavailable     AvailabilityState = "REGISTERED_RUNTIME_UNAVAILABLE"
-	AvailabilityDeviceOffline          AvailabilityState = "DEVICE_OFFLINE"
-	AvailabilityCredentialRequired     AvailabilityState = "CREDENTIAL_REQUIRED"
-	AvailabilityPermissionRequired     AvailabilityState = "PERMISSION_REQUIRED"
-	AvailabilityAvailable              AvailabilityState = "AVAILABLE"
+	AvailabilityNotRegistered        AvailabilityState = "NOT_REGISTERED"
+	AvailabilityRegisteredNoProvider AvailabilityState = "REGISTERED_NO_PROVIDER"
+	AvailabilityProviderDisabled     AvailabilityState = "REGISTERED_PROVIDER_DISABLED"
+	AvailabilityRuntimeUnavailable   AvailabilityState = "REGISTERED_RUNTIME_UNAVAILABLE"
+	AvailabilityDeviceOffline        AvailabilityState = "DEVICE_OFFLINE"
+	AvailabilityCredentialRequired   AvailabilityState = "CREDENTIAL_REQUIRED"
+	AvailabilityPermissionRequired   AvailabilityState = "PERMISSION_REQUIRED"
+	AvailabilityAvailable            AvailabilityState = "AVAILABLE"
 )
 
 // GetCapability is deprecated. Use GetCapabilityDescriptor for capability queries
@@ -179,15 +179,15 @@ func (s *CapabilityService) HasExecutableProvider(toolID CapabilityID) bool {
 }
 
 type AvailabilityDescription struct {
-	CapabilityID   CapabilityID       `json:"capabilityId"`
-	HasDefinition  bool               `json:"hasDefinition"`
-	HasProvider    bool               `json:"hasProvider"`
-	HasInstance    bool               `json:"hasInstance"`
-	Executable     bool               `json:"executable"`
-	ProviderCount  int                `json:"providerCount"`
-	InstanceCount  int                `json:"instanceCount"`
-	State          AvailabilityState  `json:"state"`
-	Reason         string             `json:"reason,omitempty"`
+	CapabilityID  CapabilityID      `json:"capabilityId"`
+	HasDefinition bool              `json:"hasDefinition"`
+	HasProvider   bool              `json:"hasProvider"`
+	HasInstance   bool              `json:"hasInstance"`
+	Executable    bool              `json:"executable"`
+	ProviderCount int               `json:"providerCount"`
+	InstanceCount int               `json:"instanceCount"`
+	State         AvailabilityState `json:"state"`
+	Reason        string            `json:"reason,omitempty"`
 }
 
 func (s *CapabilityService) DescribeAvailability(toolID CapabilityID) AvailabilityDescription {

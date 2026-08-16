@@ -6,12 +6,12 @@ import (
 )
 
 const (
-	WorkspaceExtensionID       = domain.ExtensionID("com.amitia.builtin.workspace")
-	WorkspaceModuleID          = domain.ModuleID("workspace-runtime")
-	WorkspaceReadCapabilityID  = capability.CapabilityID("workspace.read")
-	WorkspaceWriteCapabilityID = capability.CapabilityID("workspace.write")
+	WorkspaceExtensionID        = domain.ExtensionID("com.amitia.builtin.workspace")
+	WorkspaceModuleID           = domain.ModuleID("workspace-runtime")
+	WorkspaceReadCapabilityID   = capability.CapabilityID("workspace.read")
+	WorkspaceWriteCapabilityID  = capability.CapabilityID("workspace.write")
 	WorkspaceManageCapabilityID = capability.CapabilityID("workspace.manage")
-	WorkspaceProviderID        = capability.ProviderID("com.amitia.builtin.workspace.provider")
+	WorkspaceProviderID         = capability.ProviderID("com.amitia.builtin.workspace.provider")
 )
 
 func BuildWorkspaceExtension(version string) Definition {
@@ -21,8 +21,8 @@ func BuildWorkspaceExtension(version string) Definition {
 	}
 
 	extDef := domain.ExtensionDefinition{
-		ID:      WorkspaceExtensionID,
-		Name:    domain.LocalizedText{Default: "Workspace"},
+		ID:   WorkspaceExtensionID,
+		Name: domain.LocalizedText{Default: "Workspace"},
 		Description: domain.LocalizedText{
 			Default: "Provides workspace file management capabilities including read, write, and directory operations.",
 		},

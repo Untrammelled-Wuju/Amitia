@@ -35,8 +35,8 @@ func BuildSearchExtension(version string) Definition {
 	}
 
 	extDef := domain.ExtensionDefinition{
-		ID:      SearchExtensionID,
-		Name:    domain.LocalizedText{Default: "Search"},
+		ID:   SearchExtensionID,
+		Name: domain.LocalizedText{Default: "Search"},
 		Description: domain.LocalizedText{
 			Default: "Provides web search capability using configured search providers.",
 		},
@@ -68,56 +68,56 @@ func BuildSearchExtension(version string) Definition {
 					EntryPoint:  "search.general",
 					WorkerCount: 2,
 				},
-			Contributions: []domain.ContributionDefinition{
-				{
-					ID:          "web_search",
-					ModuleID:    SearchModuleID,
-					ExtensionID: SearchExtensionID,
-					Kind:        domain.ContributionKindTool,
-					Name:        domain.LocalizedText{Default: "Web Search"},
-					Description: domain.LocalizedText{
-						Default: "Search the web using the configured provider.",
-					},
-					Definition: map[string]any{
-						"capabilityId": string(SearchCapabilityID),
-						"modelName":    "web_search",
-						"inputSchema":  buildSearchInputSchema(),
-						"outputSchema": buildSearchOutputSchema(),
-						"riskLevel":    "medium",
-						"sideEffect":   "external",
-						"permissions": []map[string]any{
-							{"capability": "network.request", "description": "Sends query to external search provider"},
+				Contributions: []domain.ContributionDefinition{
+					{
+						ID:          "web_search",
+						ModuleID:    SearchModuleID,
+						ExtensionID: SearchExtensionID,
+						Kind:        domain.ContributionKindTool,
+						Name:        domain.LocalizedText{Default: "Web Search"},
+						Description: domain.LocalizedText{
+							Default: "Search the web using the configured provider.",
 						},
-						"timeoutMs":     int64(30000),
-						"idempotent":    true,
-						"retryable":     true,
-						"hasSideEffects": true,
-						"executionPolicy": map[string]any{
-							"timeout":    "30s",
-							"idempotent": true,
-							"retryPolicy": map[string]any{
-								"maxRetries":   1,
-								"backoffBase":  "1s",
+						Definition: map[string]any{
+							"capabilityId": string(SearchCapabilityID),
+							"modelName":    "web_search",
+							"inputSchema":  buildSearchInputSchema(),
+							"outputSchema": buildSearchOutputSchema(),
+							"riskLevel":    "medium",
+							"sideEffect":   "external",
+							"permissions": []map[string]any{
+								{"capability": "network.request", "description": "Sends query to external search provider"},
+							},
+							"timeoutMs":      int64(30000),
+							"idempotent":     true,
+							"retryable":      true,
+							"hasSideEffects": true,
+							"executionPolicy": map[string]any{
+								"timeout":    "30s",
+								"idempotent": true,
+								"retryPolicy": map[string]any{
+									"maxRetries":  1,
+									"backoffBase": "1s",
+								},
+							},
+							"resultPolicy": map[string]any{
+								"sanitizeError":  true,
+								"maxOutputBytes": 131072,
+								"streaming": map[string]any{
+									"enabled": false,
+								},
+							},
+							"runtime": map[string]any{
+								"runtimeType": "search",
+								"runtimeId":   "default",
+								"handlerName": "search.general",
 							},
 						},
-						"resultPolicy": map[string]any{
-							"sanitizeError":  true,
-							"maxOutputBytes": 131072,
-							"streaming": map[string]any{
-								"enabled": false,
-							},
+						Metadata: map[string]any{
+							"system.builtin": true,
 						},
-						"runtime": map[string]any{
-							"runtimeType": "search",
-							"runtimeId":   "default",
-							"handlerName": "search.general",
-						},
-					},
-					Metadata: map[string]any{
-						"system.builtin": true,
 					},
 				},
-			},
 				ProvidedCapabilities: []domain.ProvidedCapability{
 					{
 						ID:      string(SearchCapabilityID),
@@ -148,19 +148,19 @@ func BuildSearchExtension(version string) Definition {
 	}
 
 	return Definition{
-		Extension:        extDef,
-		SystemManaged:    true,
-		Required:         true,
-		DisableAllowed:   false,
+		Extension:         extDef,
+		SystemManaged:     true,
+		Required:          true,
+		DisableAllowed:    false,
 		BootstrapRevision: 1,
 	}
 }
 
 const (
-	DeepSearchExtensionID    = domain.ExtensionID("com.amitia.builtin.deep-search")
-	DeepSearchModuleID       = domain.ModuleID("deep-search-runtime")
-	DeepSearchCapabilityID   = capability.CapabilityID("search.deep")
-	DeepSearchProviderID     = capability.ProviderID("com.amitia.builtin.deep-search.provider")
+	DeepSearchExtensionID  = domain.ExtensionID("com.amitia.builtin.deep-search")
+	DeepSearchModuleID     = domain.ModuleID("deep-search-runtime")
+	DeepSearchCapabilityID = capability.CapabilityID("search.deep")
+	DeepSearchProviderID   = capability.ProviderID("com.amitia.builtin.deep-search.provider")
 )
 
 func BuildDeepSearchExtension(version string) Definition {
@@ -170,8 +170,8 @@ func BuildDeepSearchExtension(version string) Definition {
 	}
 
 	extDef := domain.ExtensionDefinition{
-		ID:      DeepSearchExtensionID,
-		Name:    domain.LocalizedText{Default: "Deep Search"},
+		ID:   DeepSearchExtensionID,
+		Name: domain.LocalizedText{Default: "Deep Search"},
 		Description: domain.LocalizedText{
 			Default: "Provides multi-round deep web search that aggregates, deduplicates, and ranks results.",
 		},
@@ -223,9 +223,9 @@ func BuildDeepSearchExtension(version string) Definition {
 							"permissions": []map[string]any{
 								{"capability": "network.request", "description": "Sends queries to external search providers"},
 							},
-							"timeoutMs":    int64(120000),
-							"idempotent":   true,
-							"retryable":    true,
+							"timeoutMs":  int64(120000),
+							"idempotent": true,
+							"retryable":  true,
 							"runtime": map[string]any{
 								"runtimeType": "task",
 								"runtimeId":   "default",
@@ -267,10 +267,10 @@ func BuildDeepSearchExtension(version string) Definition {
 	}
 
 	return Definition{
-		Extension:        extDef,
-		SystemManaged:    true,
-		Required:         false,
-		DisableAllowed:   true,
+		Extension:         extDef,
+		SystemManaged:     true,
+		Required:          false,
+		DisableAllowed:    true,
 		BootstrapRevision: 1,
 	}
 }

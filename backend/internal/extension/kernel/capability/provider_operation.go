@@ -78,14 +78,14 @@ func (s *ProviderInvocationService) Invoke(
 	}
 
 	route := RuntimeExecutionRoute{
-		Binding:                 resolution.Provider.Runtime,
-		Placement:               resolution.Provider.Placement,
-		ProviderID:              resolution.Provider.ID,
-		ProviderInstanceID:      resolution.ProviderInstance.ID,
+		Binding:                   resolution.Provider.Runtime,
+		Placement:                 resolution.Provider.Placement,
+		ProviderID:                resolution.Provider.ID,
+		ProviderInstanceID:        resolution.ProviderInstance.ID,
 		ProviderRuntimeInstanceID: resolution.ProviderInstance.RuntimeInstanceID,
-		UserID:                  request.UserID,
-		DeviceID:                resolution.ProviderInstance.DeviceID,
-		RuntimeID:               resolution.ProviderInstance.RuntimeID,
+		UserID:                    request.UserID,
+		DeviceID:                  resolution.ProviderInstance.DeviceID,
+		RuntimeID:                 resolution.ProviderInstance.RuntimeID,
 	}
 
 	adapter, ok := s.adapterRegistry.ResolveRoute(route)
@@ -98,7 +98,7 @@ func (s *ProviderInvocationService) Invoke(
 	invocation := NewToolInvocationContext(ToolInvocationOptions{
 		Source:          InvocationSourceUser,
 		UserID:          string(request.UserID),
-		ExecutionTarget:  resolution.ExecutionTarget,
+		ExecutionTarget: resolution.ExecutionTarget,
 	})
 
 	var execResult UnifiedToolResult

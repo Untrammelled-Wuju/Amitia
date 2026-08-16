@@ -22,11 +22,11 @@ const (
 // lifecycle event occurs.
 type AcquisitionEvent struct {
 	Kind        AcquisitionEventKind `json:"kind"`
-	Request     *AcquisitionRequest `json:"request,omitempty"`
-	CandidateID string              `json:"candidateId,omitempty"`
-	Result      *AcquisitionResult  `json:"result,omitempty"`
-	Error       string              `json:"error,omitempty"`
-	Timestamp   time.Time           `json:"timestamp"`
+	Request     *AcquisitionRequest  `json:"request,omitempty"`
+	CandidateID string               `json:"candidateId,omitempty"`
+	Result      *AcquisitionResult   `json:"result,omitempty"`
+	Error       string               `json:"error,omitempty"`
+	Timestamp   time.Time            `json:"timestamp"`
 }
 
 // AcquisitionHook is the interface that all acquisition lifecycle hooks must

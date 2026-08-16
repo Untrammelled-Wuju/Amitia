@@ -23,14 +23,14 @@ type ProviderLifecyclePort interface {
 // AcquisitionDependencies holds all required dependencies for constructing
 // an AcquisitionService. All fields must be non-nil for production use.
 type AcquisitionDependencies struct {
-	CapabilityService     *capability.CapabilityService
-	ProviderRegistry      *capability.ProviderRegistry
-	SourceRegistry        *SourceRegistry
-	InstallerRegistry     *InstallerRegistry
-	PolicyEngine          *PolicyEngine
-	DeploymentPlanner     *DeploymentPlanner
-	ProviderLifecycle     ProviderLifecyclePort
-	Execution             ExecutionPort
+	CapabilityService *capability.CapabilityService
+	ProviderRegistry  *capability.ProviderRegistry
+	SourceRegistry    *SourceRegistry
+	InstallerRegistry *InstallerRegistry
+	PolicyEngine      *PolicyEngine
+	DeploymentPlanner *DeploymentPlanner
+	ProviderLifecycle ProviderLifecyclePort
+	Execution         ExecutionPort
 }
 
 // AcquisitionService orchestrates the full capability acquisition lifecycle:
@@ -222,11 +222,11 @@ func (s *AcquisitionService) Acquire(ctx context.Context, request AcquisitionReq
 	}
 
 	result := &AcquisitionResult{
-		State:     StatePlanned,
+		State:       StatePlanned,
 		CandidateID: plan.Candidate.ID,
-		Target:    plan.Target,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		Target:      plan.Target,
+		CreatedAt:   time.Now(),
+		UpdatedAt:   time.Now(),
 	}
 
 	// Step 5: If policy = Deny → return error.
@@ -247,8 +247,8 @@ func (s *AcquisitionService) Acquire(ctx context.Context, request AcquisitionReq
 
 		s.mu.Lock()
 		s.resumeContexts[resumeToken] = CapabilityResumeContext{
-			State:                  ResumePending,
-			CapabilityID:           plan.Request.CapabilityID,
+			State:                    ResumePending,
+			CapabilityID:             plan.Request.CapabilityID,
 			AcquisitionTransactionID: result.TransactionID,
 		}
 		s.mu.Unlock()

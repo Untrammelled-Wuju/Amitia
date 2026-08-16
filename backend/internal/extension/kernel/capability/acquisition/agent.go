@@ -67,9 +67,9 @@ func (b *AgentCapabilityBridge) AcquireCapability(ctx context.Context, input Acq
 	}
 
 	request := AcquisitionRequest{
-		CapabilityID:        capability.CapabilityID(input.CapabilityID),
+		CapabilityID:         capability.CapabilityID(input.CapabilityID),
 		RequestedCandidateID: input.CandidateID,
-		UserID:              runtimeidentity.UserID(userID),
+		UserID:               runtimeidentity.UserID(userID),
 	}
 
 	yes := input.Approval || input.UserConfirmed
