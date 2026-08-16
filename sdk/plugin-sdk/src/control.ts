@@ -15,7 +15,8 @@ export interface ControlSinkRegisterResult {
 
 export interface ControlOutputResult {
   readonly outputId: string;
-  readonly committed: boolean;
+  readonly allowed: boolean;
+  readonly reason?: string;
   readonly generation: number;
   readonly currentEpoch: number;
 }
@@ -77,10 +78,11 @@ export async function submitControlOutput(
     data: payload,
     epoch,
   });
-  const r = (result ?? {}) as { outputId?: string; committed?: boolean; generation?: number; currentEpoch?: number };
+  const r = (result ?? {}) as { outputId?: string; allowed?: boolean; reason?: string; generation?: number; currentEpoch?: number };
   return {
     outputId: r.outputId ?? outputId,
-    committed: r.committed ?? false,
+    allowed: r.allowed ?? false,
+    reason: r.reason,
     generation: r.generation ?? 0,
     currentEpoch: r.currentEpoch ?? 0,
   };
