@@ -259,8 +259,13 @@ func (p *RuntimeGraphProvisioner) buildBootService(kp KernelGamePlugin) (bootSer
 		name = string(kp.Contribution.ID)
 	}
 
+	serviceID := module.Runtime.ServiceID
+	if serviceID == "" {
+		serviceID = string(module.ID)
+	}
+
 	return bootServiceInfo{
-		ID:         ghdomain.ServiceID(kp.Contribution.ID),
+		ID:         ghdomain.ServiceID(serviceID),
 		ModuleID:   runtimeModuleID,
 		Name:       name,
 		EntryPoint: module.Runtime.EntryPoint,

@@ -315,8 +315,12 @@ func (c *RecoveryCoordinator) executeRecoveryFlow(ctx context.Context, op *Recov
 	restartCount := 0
 	maxRestarts := 3
 	if c.supervisor != nil {
-		restartCount = c.supervisor.GetRestartCount(string(req.RuntimeID))
-		maxRestarts = c.supervisor.GetMaxRestarts(string(req.RuntimeID))
+		budgetKey := req.ServiceID
+		if budgetKey == "" {
+			budgetKey = string(req.RuntimeID)
+		}
+		restartCount = c.supervisor.GetRestartCount(budgetKey)
+		maxRestarts = c.supervisor.GetMaxRestarts(budgetKey)
 		if maxRestarts <= 0 {
 			maxRestarts = 3
 		}

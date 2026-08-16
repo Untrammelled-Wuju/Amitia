@@ -38,9 +38,13 @@ func (h *HostIdentity) GetHostSessionID() string {
 }
 
 type ProcessCleanupProcessAdapter struct {
-	mu         sync.Mutex
-	cleaned    map[string]bool
-	supervisor *trusted_service.ProcessSupervisor
+	mu              sync.Mutex
+	cleaned         map[string]bool
+	supervisor      *trusted_service.ProcessSupervisor
+	hostIdentity    *HostIdentity
+	runtimeResolver interface {
+		GetRuntime(runtimeID domain.RuntimeInstanceID) (*runtime.RuntimeInstanceRef, error)
+	}
 }
 
 func NewProcessCleanupAdapter(supervisor *trusted_service.ProcessSupervisor) *ProcessCleanupProcessAdapter {
@@ -50,21 +54,32 @@ func NewProcessCleanupAdapter(supervisor *trusted_service.ProcessSupervisor) *Pr
 	}
 }
 
-func (a *ProcessCleanupProcessAdapter) CleanupOwnedProcess(ctx context.Context, runtimeID domain.RuntimeInstanceID, pid int) error {
+func NewProcessCleanupAdapterWithIdentity(supervisor *trusted_service.ProcessSupervisor, hostIdentity *HostIdentity, runtimeResolver interface {
+	GetRuntime(runtimeID domain.RuntimeInstanceID) (*runtime.RuntimeInstanceRef, error)
+}) *ProcessCleanupProcessAdapter {
+	return &ProcessCleanupProcessAdapter{
+		cleaned:         make(map[string]bool),
+		supervisor:      supervisor,
+		hostIdentity:    hostIdentity,
+		runtimeResolver: runtimeResolver,
+	}
+}
+
+func (a *ProcessCleanupProcessAdapter) CleanupOwnedProcess(ctx context.Context, instanceID string, pid int) error {
 	a.mu.Lock()
-	a.cleaned[string(runtimeID)] = true
+	a.cleaned[instanceID] = true
 	a.mu.Unlock()
 	if a.supervisor != nil {
 		_, err := a.supervisor.Stop(ctx, trusted_service.StopRequest{
-			ServiceID: string(runtimeID),
+			ServiceID: instanceID,
 			Reason:    "startup_recovery_cleanup",
 			Force:     pid > 0,
 		})
 		if err != nil {
-			log.Printf("[startup-recovery] process supervisor stop: runtime=%s err=%v", runtimeID, err)
+			return fmt.Errorf("process supervisor stop for instance %s: %w", instanceID, err)
 		}
 	}
-	log.Printf("[startup-recovery] process cleanup: runtime=%s pid=%d", runtimeID, pid)
+	log.Printf("[startup-recovery] process cleanup: instance=%s pid=%d", instanceID, pid)
 	return nil
 }
 
@@ -86,15 +101,39 @@ func (a *ProcessCleanupProcessAdapter) ListOrphanCandidates(ctx context.Context)
 			log.Printf("[startup-recovery] skip process candidate pid=%d: no owner metadata (RuntimeID empty)", inst.PID)
 			continue
 		}
+		pluginID := resolvePluginID(a.runtimeResolver, domain.RuntimeInstanceID(runtimeID))
+		hostInstanceID, hostSessionID := "", ""
+		if a.hostIdentity != nil {
+			hostInstanceID = a.hostIdentity.GetHostInstanceID()
+			hostSessionID = a.hostIdentity.GetHostSessionID()
+		}
 		candidates = append(candidates, ProcessCandidate{
-			PID:         inst.PID,
-			RuntimeID:   domain.RuntimeInstanceID(runtimeID),
-			PluginID:    domain.PluginID(inst.Definition.ModuleID),
-			ExtensionID: inst.Definition.ExtensionID,
-			Generation:  uint64(inst.Generation),
+			PID:              inst.PID,
+			ProcessInstanceID: inst.InstanceID,
+			RuntimeID:        domain.RuntimeInstanceID(runtimeID),
+			PluginID:         pluginID,
+			ExtensionID:      inst.Definition.ExtensionID,
+			ServiceID:        inst.ServiceID,
+			ModuleID:         inst.Definition.ModuleID,
+			Generation:       uint64(inst.Generation),
+			HostInstanceID:   hostInstanceID,
+			HostSessionID:    hostSessionID,
 		})
 	}
 	return candidates, nil
+}
+
+func resolvePluginID(resolver interface {
+	GetRuntime(runtimeID domain.RuntimeInstanceID) (*runtime.RuntimeInstanceRef, error)
+}, runtimeID domain.RuntimeInstanceID) domain.PluginID {
+	if resolver == nil {
+		return ""
+	}
+	ref, err := resolver.GetRuntime(runtimeID)
+	if err != nil {
+		return ""
+	}
+	return ref.PluginID
 }
 
 type TempCleanupDirAdapter struct {

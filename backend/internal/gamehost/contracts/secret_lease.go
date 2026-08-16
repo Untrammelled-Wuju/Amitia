@@ -5,9 +5,11 @@ import (
 )
 
 type RuntimeSecretLeaseSession struct {
-	SessionID  string
-	RuntimeID  string
-	ServiceID  string
-	Generation int64
-	LeaseIDs   []kernelsecret.LeaseID
+	SessionID   string
+	ExtensionID string
+	PluginID    string
+	RuntimeID   string
+	ServiceID   string
+	Generation  int64
+	LeaseIDs    []kernelsecret.LeaseID
 }

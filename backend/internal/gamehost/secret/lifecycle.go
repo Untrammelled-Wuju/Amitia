@@ -74,11 +74,12 @@ func (o *LifecycleOrchestrator) PrepareServiceStart(ctx context.Context, execCtx
 	}
 
 	manifest := RuntimeSecretManifest{
-		RuntimeID:  string(execCtx.RuntimeID),
-		PluginID:   string(execCtx.PluginID),
-		ServiceID:  string(execCtx.ServiceID),
-		Generation: execCtx.Generation,
-		Startup:    startup,
+		RuntimeID:   string(execCtx.RuntimeID),
+		ExtensionID: execCtx.ExtensionID,
+		PluginID:    string(execCtx.PluginID),
+		ServiceID:   string(execCtx.ServiceID),
+		Generation:  execCtx.Generation,
+		Startup:     startup,
 	}
 	handle := o.AcquireRuntimeStartup(ctx, manifest)
 	if handle.Failed {
@@ -117,11 +118,13 @@ func (o *LifecycleOrchestrator) registerStartupSession(manifest RuntimeSecretMan
 		return nil
 	}
 	sess := &RuntimeSecretLeaseSession{
-		SessionID:  newSessionID(),
-		RuntimeID:  manifest.RuntimeID,
-		ServiceID:  manifest.ServiceID,
-		Generation: manifest.Generation,
-		LeaseIDs:   leaseIDs,
+		SessionID:   newSessionID(),
+		ExtensionID: manifest.ExtensionID,
+		PluginID:    manifest.PluginID,
+		RuntimeID:   manifest.RuntimeID,
+		ServiceID:   manifest.ServiceID,
+		Generation:  manifest.Generation,
+		LeaseIDs:    leaseIDs,
 	}
 	o.mu.Lock()
 	if o.sessions == nil {
@@ -194,12 +197,13 @@ func (o *LifecycleOrchestrator) RevokeRuntimeGenerationLeases(runtimeID string, 
 }
 
 type RuntimeSecretManifest struct {
-	RuntimeID  string
-	PluginID   string
-	ServiceID  string
-	Generation int64
-	Startup    []ServiceSecretManifest
-	Runtime    []ServiceSecretManifest
+	RuntimeID   string
+	ExtensionID string
+	PluginID    string
+	ServiceID   string
+	Generation  int64
+	Startup     []ServiceSecretManifest
+	Runtime     []ServiceSecretManifest
 }
 
 type StartupHandle struct {

@@ -119,6 +119,7 @@ func (b *processExitBridgeImpl) OnProcessExit(event trusted_service.ProcessExitE
 
 	req := recovery.RecoveryRequest{
 		RuntimeID:    runtimeID,
+		ServiceID:    event.ServiceID,
 		FailureClass: recovery.FailureProcessCrash,
 		TriggeredBy:  "process_exit_bridge",
 		MaxAttempts:  3,
