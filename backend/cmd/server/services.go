@@ -435,8 +435,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 		kernelBuilder.WithDesktopPetPluginCapabilities(integration.NewProductionCapabilities(integration.ProductionCapabilitiesOptions{
 		InstallationRepo: installationRepo,
-		ReleaseService:   &integration.ReleaseServiceAdapter{Inner: newReleaseService},
-		RuntimeFacade:    &integration.RuntimeFacadeAdapter{Inner: runtimeV2Facade},
+		ReleaseService:   integration.NewInstallationResourcePort(installationRepo),
+		RuntimeFacade:    integration.NewInstallationActionPort(installationRepo),
+		RuntimePort:      integration.NewInstallationRuntimePort(installationRepo),
+		FloatingWindow:   integration.NewInstallationWindowPort(installationRepo),
 	}))
 
 	if bootstrap != nil {
