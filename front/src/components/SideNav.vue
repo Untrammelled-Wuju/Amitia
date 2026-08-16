@@ -7,7 +7,7 @@ SPDX-License-Identifier: AGPL-3.0-only
     <div class="brand">
       <img class="brand-mark" :src="logoUrl" alt="Amitia" />
       <div v-show="!appStore.sidebarCollapsed" class="brand-name">Amitia</div>
-      <button class="side-collapse" type="button" :aria-label="appStore.sidebarCollapsed ? '展开导航' : '收起导航'" @click="appStore.toggleSidebar"><el-icon><DArrowLeft /></el-icon></button>
+      <button class="side-collapse" type="button" :aria-label="appStore.sidebarCollapsed ? '展开导航' : '收起导航'" @click="appStore.toggleSidebar"><el-icon><DArrowRight v-if="appStore.sidebarCollapsed" /><DArrowLeft v-else /></el-icon></button>
     </div>
     <button v-show="!appStore.sidebarCollapsed" type="button" class="nav-search" @click="searchModal?.open()"><el-icon><Search /></el-icon><span>搜索功能、角色、会话、记忆</span></button>
     <button class="new-chat" type="button" @click="router.push('/chat')"><el-icon><Plus /></el-icon><span v-show="!appStore.sidebarCollapsed">新对话</span></button>
@@ -98,6 +98,7 @@ import {
   MagicStick,
   Plus,
   DArrowLeft,
+  DArrowRight,
   Search,
   Moon,
   Sunny,
