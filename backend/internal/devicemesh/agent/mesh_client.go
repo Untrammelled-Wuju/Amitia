@@ -36,6 +36,19 @@ type MeshClient struct {
 	state    *ConnectionManager
 	stopCh   chan struct{}
 	backoff  *Backoff
+
+	// R15: handshake synchronization
+	handshakeOnce  sync.Once
+	handshakeDone  chan struct{}
+	handshakeErr   error
+
+	// R17: bidirectional monotonic sequences
+	localSequence  int64
+	remoteSequence int64
+
+	// R16/R18: session state after HelloAck
+	sessionID      runtimeidentity.RuntimeSessionID
+	connectionGen  int64
 }
 
 func NewMeshClient(conf MeshClientConfig) *MeshClient {
@@ -46,9 +59,10 @@ func NewMeshClient(conf MeshClientConfig) *MeshClient {
 			TLSClientConfig:  &tls.Config{},
 			Proxy:            http.ProxyFromEnvironment,
 		},
-		state:  NewConnectionManager(),
-		stopCh: make(chan struct{}),
-		backoff: NewBackoff(),
+		state:         NewConnectionManager(),
+		stopCh:        make(chan struct{}),
+		backoff:       NewBackoff(),
+		handshakeDone: make(chan struct{}),
 	}
 }
 
@@ -121,17 +135,48 @@ func (c *MeshClient) connectAndServe() error {
 	c.conn = conn
 	c.mu.Unlock()
 
-	defer c.closeSocket(websocket.CloseGoingAway, "")
+	// R18: deferred generation-aware close
+	defer func() {
+		gen := c.connectionGen
+		c.closeSocketWithGen(websocket.CloseGoingAway, "", gen)
+	}()
+
+	// R15: Reset handshake channel for this connection
+	c.handshakeOnce = sync.Once{}
+	c.handshakeDone = make(chan struct{})
+	c.handshakeErr = nil
+	c.localSequence = 0
+	c.remoteSequence = 0
 
 	c.setState(StateHandshaking)
 	if err := c.sendHello(); err != nil {
-		return fmt.Errorf("hello: %w", err)
+		c.completeHandshake(fmt.Errorf("hello: %w", err))
+		return err
+	}
+
+	// R15: Wait for HelloAck before becoming Ready
+	select {
+	case <-c.handshakeDone:
+		if c.handshakeErr != nil {
+			return c.handshakeErr
+		}
+	case <-c.stopCh:
+		return nil
+	case <-time.After(meshprotocol.HelloTimeoutSeconds * time.Second):
+		return fmt.Errorf("handshake timeout: no HelloAck received")
 	}
 
 	c.setState(StateReady)
 	c.backoff.Reset()
 
 	return c.readLoop()
+}
+
+func (c *MeshClient) completeHandshake(err error) {
+	c.handshakeOnce.Do(func() {
+		c.handshakeErr = err
+		close(c.handshakeDone)
+	})
 }
 
 func (c *MeshClient) sendHello() error {
@@ -170,8 +215,11 @@ func (c *MeshClient) sendHello() error {
 		return err
 	}
 
+	// R17: First outbound message uses sequence 1
+	c.localSequence = 1
+
 	env := protocol.Envelope{
-			EnvelopeVersion:      meshprotocol.EnvelopeVersion,
+		EnvelopeVersion:      meshprotocol.EnvelopeVersion,
 		Protocol:             meshprotocol.ProtocolName,
 		MessageType:          protocol.MessageTypeHello,
 		MessageID:            uuid.New().String(),
@@ -180,7 +228,7 @@ func (c *MeshClient) sendHello() error {
 		RuntimeID:            c.conf.Identity.RuntimeID,
 		RuntimeSessionID:     lastSessionID,
 		ConnectionGeneration: lastGen,
-		Sequence:             0,
+		Sequence:             int64(c.localSequence),
 		PayloadSchemaVersion: 1,
 		PayloadHash:          protocol.ComputePayloadHash(payloadBytes),
 		SentAt:               time.Now().UTC(),
@@ -233,6 +281,16 @@ func (c *MeshClient) readLoop() error {
 			continue
 		}
 
+		// R17: Validate bidirectional monotonic sequence (except HelloAck which sets initial)
+		if env.MessageType != protocol.MessageTypeHelloAck {
+			if env.Sequence > 0 {
+				if env.Sequence <= c.remoteSequence {
+					continue
+				}
+				c.remoteSequence = env.Sequence
+			}
+		}
+
 		switch env.MessageType {
 		case protocol.MessageTypeHelloAck:
 			c.handleHelloAck(&env)
@@ -250,23 +308,50 @@ func (c *MeshClient) readLoop() error {
 func (c *MeshClient) handleHelloAck(env *protocol.Envelope) {
 	var ack protocol.HelloAckPayload
 	if err := json.Unmarshal(env.Payload, &ack); err != nil {
+		c.completeHandshake(fmt.Errorf("helloAck parse: %w", err))
 		return
 	}
 
 	if !ack.Accepted {
+		c.completeHandshake(fmt.Errorf("hello rejected by server"))
+		c.setState(StateBackoff)
 		return
 	}
+
+	// R17: Validate remote sequence (first message should be sequence 1)
+	if env.Sequence < 1 {
+		c.completeHandshake(fmt.Errorf("invalid remote sequence: %d", env.Sequence))
+		return
+	}
+	c.remoteSequence = int64(env.Sequence)
 
 	if ack.ResumeMode == protocol.ResumeModeFull {
-		c.conf.Cursor = &SessionCursor{}
+		// R16: Full reset creates fresh cursor
+		c.conf.Cursor = &SessionCursor{
+			ConnectionGeneration: env.ConnectionGeneration,
+			RuntimeSessionID:     ack.SessionID,
+		}
+		c.sessionID = ack.SessionID
+		c.connectionGen = env.ConnectionGeneration
 		c.setState(StateDegraded)
+		c.completeHandshake(nil)
 		return
 	}
 
-	if c.conf.Cursor != nil && ack.SessionID != "" {
+	// R16: First Ack creates cursor if nil, always updates SessionID
+	if c.conf.Cursor == nil {
+		c.conf.Cursor = &SessionCursor{
+			ConnectionGeneration: env.ConnectionGeneration,
+			RuntimeSessionID:     ack.SessionID,
+		}
+	} else {
 		c.conf.Cursor.RuntimeSessionID = ack.SessionID
 		c.conf.Cursor.ConnectionGeneration = env.ConnectionGeneration
 	}
+	c.sessionID = ack.SessionID
+	c.connectionGen = env.ConnectionGeneration
+
+	c.completeHandshake(nil)
 }
 
 func (c *MeshClient) handlePing(env *protocol.Envelope) {
@@ -278,6 +363,9 @@ func (c *MeshClient) handlePing(env *protocol.Envelope) {
 	pong := protocol.PongPayload{Time: ping.Time}
 	payloadBytes, _ := json.Marshal(pong)
 
+	// R17: Pong carries monotonic sequence
+	c.localSequence++
+
 	pongEnv := protocol.Envelope{
 		EnvelopeVersion:      meshprotocol.EnvelopeVersion,
 		Protocol:             meshprotocol.ProtocolName,
@@ -286,9 +374,9 @@ func (c *MeshClient) handlePing(env *protocol.Envelope) {
 		UserID:               c.conf.UserID,
 		DeviceID:             c.conf.Identity.DeviceID,
 		RuntimeID:            c.conf.Identity.RuntimeID,
-		RuntimeSessionID:     env.RuntimeSessionID,
-		ConnectionGeneration: env.ConnectionGeneration,
-		Sequence:             0,
+		RuntimeSessionID:     c.sessionID,
+		ConnectionGeneration: c.connectionGen,
+		Sequence:             c.localSequence,
 		PayloadSchemaVersion: 1,
 		PayloadHash:          protocol.ComputePayloadHash(payloadBytes),
 		SentAt:               time.Now().UTC(),
@@ -304,11 +392,20 @@ func (c *MeshClient) handleError(env *protocol.Envelope) {
 		return
 	}
 
+	// R17: Validate remote sequence on error too
+	if env.Sequence > 0 {
+		if env.Sequence <= c.remoteSequence {
+			return
+		}
+		c.remoteSequence = env.Sequence
+	}
+
 	switch errPayload.Code {
 	case "mesh.credential_revoked", "mesh.credential_expired":
 		c.setState(StateRevoked)
 	case "mesh.session_superseded":
-		c.closeSocket(websocket.CloseNormalClosure, "superseded")
+		// R18: generation-aware close
+		c.closeSocketGen(websocket.CloseNormalClosure, "superseded", env.ConnectionGeneration)
 	case "mesh.cursor_reset_required":
 		c.conf.Cursor = &SessionCursor{}
 		c.setState(StateDegraded)
@@ -319,6 +416,9 @@ func (c *MeshClient) sendPing() error {
 	ping := protocol.PingPayload{Time: time.Now().UTC()}
 	payloadBytes, _ := json.Marshal(ping)
 
+		// R17: Increment local sequence for each outbound message
+	c.localSequence++
+
 	env := protocol.Envelope{
 		EnvelopeVersion:      meshprotocol.EnvelopeVersion,
 		Protocol:             meshprotocol.ProtocolName,
@@ -327,8 +427,9 @@ func (c *MeshClient) sendPing() error {
 		UserID:               c.conf.UserID,
 		DeviceID:             c.conf.Identity.DeviceID,
 		RuntimeID:            c.conf.Identity.RuntimeID,
-		ConnectionGeneration: 1,
-		Sequence:             0,
+		RuntimeSessionID:     c.sessionID,
+		ConnectionGeneration: c.connectionGen,
+		Sequence:             c.localSequence,
 		PayloadSchemaVersion: 1,
 		PayloadHash:          protocol.ComputePayloadHash(payloadBytes),
 		SentAt:               time.Now().UTC(),
@@ -339,9 +440,117 @@ func (c *MeshClient) sendPing() error {
 }
 
 func (c *MeshClient) sendUnsupportedCommand(env *protocol.Envelope) {
+	// R22: Parse and handle command, then send ack
+	var cmd protocol.CommandPayload
+	if err := json.Unmarshal(env.Payload, &cmd); err != nil {
+		c.sendCommandReject(env, "invalid_command", "failed to parse command")
+		return
+	}
+
+	// R22: Execute the command based on its type
+	result, err := c.executeCommand(cmd)
+	if err != nil {
+		c.sendCommandReject(env, "command_failed", err.Error())
+		return
+	}
+
+	// R22: Send positive ack with execution result
+	c.sendCommandAck(&cmd, result)
+}
+
+// R22: executeCommand dispatches command execution
+func (c *MeshClient) executeCommand(cmd protocol.CommandPayload) (*CommandResult, error) {
+	switch cmd.CommandName {
+	case "status":
+		return c.execStatusCommand(cmd)
+	case "ping":
+		return &CommandResult{
+			CommandID:       cmd.CommandID,
+			CommandName:     cmd.CommandName,
+			CommandSequence: cmd.CommandSequence,
+			Status:          "completed",
+			CompletedAt:     time.Now().UTC(),
+		}, nil
+	default:
+		return nil, fmt.Errorf("unknown command: %s", cmd.CommandName)
+	}
+}
+
+type CommandResult struct {
+	CommandID       string
+	CommandName     string
+	CommandSequence int64
+	Status          string
+	Result          map[string]interface{}
+	CompletedAt     time.Time
+}
+
+// R22: execStatusCommand returns runtime status information
+func (c *MeshClient) execStatusCommand(cmd protocol.CommandPayload) (*CommandResult, error) {
+	result := map[string]interface{}{
+		"state":             string(c.state.Get()),
+		"connectionGen":     c.connectionGen,
+		"localSequence":     c.localSequence,
+		"remoteSequence":    c.remoteSequence,
+		"runtimeSessionId":  c.sessionID.String(),
+		"deviceId":          c.conf.Identity.DeviceID.String(),
+		"runtimeId":         c.conf.Identity.RuntimeID.String(),
+	}
+
+	return &CommandResult{
+		CommandID:       cmd.CommandID,
+		CommandName:     cmd.CommandName,
+		CommandSequence: cmd.CommandSequence,
+		Status:          "completed",
+		Result:          result,
+		CompletedAt:     time.Now().UTC(),
+	}, nil
+}
+
+// R22: sendCommandAck sends a positive command acknowledgment
+func (c *MeshClient) sendCommandAck(cmd *protocol.CommandPayload, result *CommandResult) {
+	ack := protocol.CommandAckPayload{
+		CommandID:        result.CommandID,
+		CommandSequence:  result.CommandSequence,
+		Status:           "completed",
+		RuntimeSessionID: c.sessionID,
+		ReceivedAt:       time.Now().UTC(),
+	}
+
+	resultBytes, _ := json.Marshal(result.Result)
+	ack.PayloadHash = protocol.ComputePayloadHash(resultBytes)
+
+	// R17: Increment sequence for outbound message
+	c.localSequence++
+
+	env := protocol.Envelope{
+		EnvelopeVersion:      meshprotocol.EnvelopeVersion,
+		Protocol:             meshprotocol.ProtocolName,
+		MessageType:          protocol.MessageTypeCommandAck,
+		MessageID:            uuid.New().String(),
+		UserID:               c.conf.UserID,
+		DeviceID:             c.conf.Identity.DeviceID,
+		RuntimeID:            c.conf.Identity.RuntimeID,
+		RuntimeSessionID:     c.sessionID,
+		ConnectionGeneration: c.connectionGen,
+		Sequence:             c.localSequence,
+		PayloadSchemaVersion: 1,
+		PayloadHash:          protocol.ComputePayloadHash(mustMarshal(ack)),
+		SentAt:               time.Now().UTC(),
+		Payload:              mustMarshal(ack),
+	}
+
+	_ = c.writeEnvelope(env)
+}
+
+// R22: sendCommandReject sends a negative command acknowledgment
+func (c *MeshClient) sendCommandReject(env *protocol.Envelope, code, reason string) {
+	// R17: Increment sequence for outbound message
+	c.localSequence++
+
 	errPayload := protocol.ErrorPayload{
-		Code:    "mesh.unsupported_command",
-		Message: "commands not supported in G21",
+		Code:    code,
+		Message: reason,
 	}
 	payloadBytes, _ := json.Marshal(errPayload)
 
@@ -353,9 +562,9 @@ func (c *MeshClient) sendUnsupportedCommand(env *protocol.Envelope) {
 		UserID:               c.conf.UserID,
 		DeviceID:             c.conf.Identity.DeviceID,
 		RuntimeID:            c.conf.Identity.RuntimeID,
-		RuntimeSessionID:     env.RuntimeSessionID,
-		ConnectionGeneration: env.ConnectionGeneration,
-		Sequence:             0,
+		RuntimeSessionID:     c.sessionID,
+		ConnectionGeneration: c.connectionGen,
+		Sequence:             c.localSequence,
 		PayloadSchemaVersion: 1,
 		PayloadHash:          protocol.ComputePayloadHash(payloadBytes),
 		SentAt:               time.Now().UTC(),
@@ -363,6 +572,11 @@ func (c *MeshClient) sendUnsupportedCommand(env *protocol.Envelope) {
 	}
 
 	_ = c.writeEnvelope(resp)
+}
+
+func mustMarshal(v interface{}) json.RawMessage {
+	data, _ := json.Marshal(v)
+	return data
 }
 
 func (c *MeshClient) writeEnvelope(env protocol.Envelope) error {
@@ -385,6 +599,29 @@ func (c *MeshClient) closeSocket(code int, reason string) {
 	if c.conn != nil {
 		_ = c.conn.WriteControl(websocket.CloseMessage,
 			websocket.FormatCloseMessage(code, reason),
+			time.Now().Add(2*time.Second))
+		_ = c.conn.Close()
+		c.conn = nil
+	}
+}
+
+// R18: closeSocketWithGen performs generation-aware close on connection teardown
+func (c *MeshClient) closeSocketWithGen(code int, reason string, gen int64) {
+	c.connectionGen = gen
+	c.closeSocketGen(code, reason, gen)
+}
+
+// R18: closeSocketGen sends close frame with generation context
+func (c *MeshClient) closeSocketGen(code int, reason string, gen int64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.conn != nil {
+		closeReason := reason
+		if gen > 0 {
+			closeReason = fmt.Sprintf("gen=%d;%s", gen, reason)
+		}
+		_ = c.conn.WriteControl(websocket.CloseMessage,
+			websocket.FormatCloseMessage(code, closeReason),
 			time.Now().Add(2*time.Second))
 		_ = c.conn.Close()
 		c.conn = nil

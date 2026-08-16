@@ -29,6 +29,21 @@ func (h *LocalHandler) SetMeshClient(c *MeshClient) {
 	h.mesh = c
 }
 
+// R21: LoadCredential exposes credential loading for auto-recovery
+func (h *LocalHandler) LoadCredential() (*StoredCredential, error) {
+	return h.credStore.LoadCredential()
+}
+
+// R21: LoadIdentity exposes identity loading for auto-recovery
+func (h *LocalHandler) LoadIdentity() (*LocalIdentity, error) {
+	return h.identity.Load()
+}
+
+// R21: LoadCursor exposes cursor loading for auto-recovery
+func (h *LocalHandler) LoadCursor() (*SessionCursor, error) {
+	return h.credStore.LoadCursor()
+}
+
 func (h *LocalHandler) RegisterRoutes(r *gin.Engine, authMW gin.HandlerFunc) {
 	dm := r.Group("/internal/device-mesh")
 	dm.Use(authMW)
