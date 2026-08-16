@@ -22,7 +22,7 @@ func NewRPCResponseCorrelator(registry PendingRequestRegistry) *rpcResponseCorre
 	}
 }
 
-func (c *rpcResponseCorrelator) RegisterPending(peer ipc.Peer, requestID string, generation uint64) (ipc.PendingRequestHandle, bool) {
+func (c *rpcResponseCorrelator) RegisterPending(peer ipc.Peer, requestID string, generation uint64, method string, payload []byte) (ipc.PendingRequestHandle, bool) {
 	key := RequestKey{
 		RuntimeID: domain.RuntimeInstanceID(peer.RuntimeID),
 		ServiceID: domain.ServiceID(peer.ServiceID),
@@ -32,12 +32,16 @@ func (c *rpcResponseCorrelator) RegisterPending(peer ipc.Peer, requestID string,
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
+	fingerprint := ComputeFingerprint(method, payload)
+
 	req := &PendingRequest{
 		Key:         key,
 		RequestID:   requestID,
+		Method:      Method(method),
 		State:       RequestStatePending,
 		done:        make(chan struct{}),
 		Generation:  RequestGeneration(generation),
+		Fingerprint: fingerprint,
 	}
 
 	registered, err := c.registry.Register(req)
