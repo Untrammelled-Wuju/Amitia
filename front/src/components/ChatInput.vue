@@ -33,91 +33,92 @@ SPDX-License-Identifier: AGPL-3.0-only
         :available-skills="agentSkillNames"
         :draft="text"
       />
-      <div v-if="replyTarget" class="reply-preview-bar">
-        <div class="reply-preview-content">
-          <span class="reply-preview-label"
-            >正在引用{{
-              replyTarget.role === "assistant" ? "" : "自己"
-            }}：</span
-          >
-          <span class="reply-preview-excerpt">{{ replyTargetExcerpt }}</span>
-        </div>
-        <el-button
-          :icon="CloseBold"
-          circle
-          size="small"
-          class="preview-remove"
-          @click="$emit('cancelReply')"
-        />
-      </div>
 
-      <div v-if="hasComposerContext" class="composer-context">
-        <div v-if="attachedImage" class="attachment-card image-attachment">
-          <span
-            class="attachment-thumb"
-            :style="{
-              backgroundImage: attachedImagePreview
-                ? `url(${attachedImagePreview})`
-                : undefined,
-            }"
-          ></span>
-          <span class="attachment-copy">
-            <strong>{{ attachedImage?.name || "图片" }}</strong>
-            <small v-if="processingImage">图片处理中...</small>
-            <small v-else>图片</small>
-          </span>
-          <button
-            type="button"
-            class="context-remove"
-            aria-label="移除图片"
-            @click="clearImage"
-          >
-            <el-icon><CloseBold /></el-icon>
-          </button>
-        </div>
+      <div ref="inputWrapperRef" class="input-wrapper">
+          <div v-if="replyTarget" class="reply-preview-bar">
+            <div class="reply-preview-content">
+              <span class="reply-preview-label"
+                >正在引用{{
+                  replyTarget.role === "assistant" ? "" : "自己"
+                }}：</span
+              >
+              <span class="reply-preview-excerpt">{{ replyTargetExcerpt }}</span>
+            </div>
+            <el-button
+              :icon="CloseBold"
+              circle
+              size="small"
+              class="preview-remove"
+              @click="$emit('cancelReply')"
+            />
+          </div>
 
-        <div v-if="attachedVideo" class="attachment-card video-attachment">
-          <span class="attachment-icon"
-            ><el-icon><VideoCamera /></el-icon
-          ></span>
-          <span class="attachment-copy">
-            <strong>{{ attachedVideo.name }}</strong>
-            <small v-if="uploadingVideo">上传中...</small>
-            <small v-else-if="attachedVideoUrl" class="is-ready"
-              >视频已就绪</small
+          <div v-if="hasComposerContext" class="composer-context">
+            <div v-if="attachedImage" class="attachment-card image-attachment">
+              <span
+                class="attachment-thumb"
+                :style="{
+                  backgroundImage: attachedImagePreview
+                    ? `url(${attachedImagePreview})`
+                    : undefined,
+                }"
+              ></span>
+              <span class="attachment-copy">
+                <strong>{{ attachedImage?.name || "图片" }}</strong>
+                <small v-if="processingImage">图片处理中...</small>
+                <small v-else>图片</small>
+              </span>
+              <button
+                type="button"
+                class="context-remove"
+                aria-label="移除图片"
+                @click="clearImage"
+              >
+                <el-icon><CloseBold /></el-icon>
+              </button>
+            </div>
+
+            <div v-if="attachedVideo" class="attachment-card video-attachment">
+              <span class="attachment-icon"
+                ><el-icon><VideoCamera /></el-icon
+              ></span>
+              <span class="attachment-copy">
+                <strong>{{ attachedVideo.name }}</strong>
+                <small v-if="uploadingVideo">上传中...</small>
+                <small v-else-if="attachedVideoUrl" class="is-ready"
+                  >视频已就绪</small
+                >
+                <small v-else>等待上传</small>
+              </span>
+              <button
+                type="button"
+                class="context-remove"
+                aria-label="移除视频"
+                :disabled="uploadingVideo"
+                @click="clearVideo"
+              >
+                <el-icon><CloseBold /></el-icon>
+              </button>
+            </div>
+
+            <div
+              v-for="name in selectedSkillNames"
+              :key="name"
+              class="skill-context-chip"
             >
-            <small v-else>等待上传</small>
-          </span>
-          <button
-            type="button"
-            class="context-remove"
-            aria-label="移除视频"
-            :disabled="uploadingVideo"
-            @click="clearVideo"
-          >
-            <el-icon><CloseBold /></el-icon>
-          </button>
-        </div>
+              <el-icon><MagicStick /></el-icon>
+              <span>${{ name }}</span>
+              <button
+                type="button"
+                :aria-label="`移除技能 ${name}`"
+                @click="removeSkill(name)"
+              >
+                <el-icon><CloseBold /></el-icon>
+              </button>
+            </div>
+          </div>
 
-        <div
-          v-for="name in selectedSkillNames"
-          :key="name"
-          class="skill-context-chip"
-        >
-          <el-icon><MagicStick /></el-icon>
-          <span>${{ name }}</span>
-          <button
-            type="button"
-            :aria-label="`移除技能 ${name}`"
-            @click="removeSkill(name)"
-          >
-            <el-icon><CloseBold /></el-icon>
-          </button>
-        </div>
-      </div>
-
-      <div class="composer-input-row">
-        <div ref="inputWrapperRef" class="input-wrapper">
+          <div class="input-row">
           <div class="input-left-actions">
             <EmotePicker
               :disabled="!!disabled"
@@ -364,7 +365,7 @@ SPDX-License-Identifier: AGPL-3.0-only
             </div>
           </div>
 
-          <div class="input-actions">
+                    <div class="input-actions">
             <el-button
               :icon="Microphone"
               circle
@@ -396,7 +397,7 @@ SPDX-License-Identifier: AGPL-3.0-only
               :title="generating ? '停止生成' : '发送 (Enter)'"
             />
           </div>
-        </div>
+          </div>
 
       </div>
     </div>
@@ -855,20 +856,12 @@ defineExpose({ focus, setText, clear: clearText });
   width: min(100%, 820px);
 }
 
-.composer-input-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
 .input-wrapper {
   display: flex;
-  align-items: flex-end;
+  flex-direction: column;
   min-width: 0;
-  flex: 1;
-  gap: 6px;
-  padding: 3px 9px;
+  gap: 2px;
+  padding: 8px 9px;
   border: 1px solid var(--composer-border);
   border-radius: var(--radius-composer);
   background: var(--composer-bg);
@@ -881,6 +874,14 @@ defineExpose({ focus, setText, clear: clearText });
 .input-wrapper:focus-within {
   border-color: var(--composer-border-focus);
   box-shadow: 0 0 0 2px color-mix(in srgb, var(--composer-border-focus) 18%, transparent);
+}
+
+.input-row {
+  display: flex;
+  align-items: flex-end;
+  min-width: 0;
+  flex: 1;
+  gap: 6px;
 }
 
 .input-left-actions,
@@ -1062,7 +1063,7 @@ defineExpose({ focus, setText, clear: clearText });
   align-items: center;
   flex-wrap: wrap;
   gap: 7px;
-  padding: 0 4px 8px;
+  padding: 0 2px 6px;
 }
 
 .attachment-card {
@@ -1187,7 +1188,7 @@ defineExpose({ focus, setText, clear: clearText });
   display: flex;
   align-items: center;
   gap: 8px;
-  margin: 0 4px 8px;
+  margin: 0 0 4px;
   padding: 7px 9px 7px 11px;
   border-left: 3px solid var(--ac-color-primary);
   border-radius: 8px;
