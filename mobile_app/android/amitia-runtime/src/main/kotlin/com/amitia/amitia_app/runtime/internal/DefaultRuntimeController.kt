@@ -36,6 +36,7 @@ import com.amitia.amitia_app.runtime.recovery.RuntimeRecoveryScheduler
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHost
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHostEvent
 import com.amitia.amitia_app.runtime.service.RuntimeServiceHostListener
+import com.amitia.amitia_app.runtime.service.RuntimeServiceLifecycleSnapshot
 import com.amitia.amitia_app.runtime.service.RuntimeServiceResult
 import com.amitia.amitia_app.runtime.service.RuntimeServiceTerminationCause
 import com.amitia.amitia_app.runtime.startup.DefaultRuntimeStartupDetector
@@ -525,22 +526,8 @@ internal class DefaultRuntimeController(
 
     override fun snapshot(): RuntimeSnapshot = stateStore.snapshot()
 
-    fun lifecycleSnapshot(): com.amitia.amitia_app.runtime.service.RuntimeServiceLifecycleSnapshot? {
-        return serviceHost.let { host ->
-            (host as? com.amitia.amitia_app.runtime.service.internal.AndroidRuntimeServiceHost)?.let {
-                com.amitia.amitia_app.runtime.service.internal.RuntimeServiceLifecycleSnapshot(
-                    generation = stateStore.snapshot().generation,
-                    sessionId = null,
-                    servicePhase = com.amitia.amitia_app.runtime.service.internal.ServicePhase.CREATED,
-                    processPhase = com.amitia.amitia_app.runtime.service.internal.ProcessPhase.CREATED,
-                    startupPhase = com.amitia.amitia_app.runtime.service.internal.StartupPhase.NOT_STARTED,
-                    terminalState = null,
-                    latestStartId = 0,
-                    stopRequested = false,
-                )
-            }
-        }
-    }
+    fun lifecycleSnapshot(): RuntimeServiceLifecycleSnapshot? =
+        serviceHost.lifecycleSnapshot()
 
     override fun subscribe(listener: RuntimeListener): RuntimeSubscription = stateStore.subscribe(listener)
 
