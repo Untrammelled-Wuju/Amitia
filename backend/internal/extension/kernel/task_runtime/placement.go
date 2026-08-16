@@ -3,6 +3,7 @@ package task_runtime
 import (
 	"context"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -223,6 +224,8 @@ type TaskExecutionOutcome struct {
 	ErrorCode       string
 	ErrorMessage    string
 	RemoteReference string
+	LeaseID         string
+	LeaseExpiresAt  *time.Time
 }
 
 type TaskExecutorKind string

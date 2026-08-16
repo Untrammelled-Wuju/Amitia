@@ -272,6 +272,8 @@ func (s *AcquisitionService) Acquire(ctx context.Context, request AcquisitionReq
 		result.State = StateFailed
 		result.Error = execErr.Error()
 		result.UpdatedAt = time.Now()
+		// Persist the installed capability to the result for rollback
+		result.InstalledCapability = plan.InstalledCapability
 
 		// Attempt rollback.
 		if rollbackErr := s.rollbackPlan(ctx, plan); rollbackErr != nil {
@@ -283,6 +285,9 @@ func (s *AcquisitionService) Acquire(ctx context.Context, request AcquisitionReq
 		}
 		return result, execErr
 	}
+
+	// Persist the installed capability to the result
+	result.InstalledCapability = plan.InstalledCapability
 
 	// Step 7b: Verify the capability is executable via authoritative state.
 	if capSvc != nil && capSvc.HasExecutableProvider(request.CapabilityID) {

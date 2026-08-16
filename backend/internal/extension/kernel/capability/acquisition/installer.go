@@ -3,6 +3,8 @@ package acquisition
 import (
 	"context"
 	"fmt"
+	"os"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
@@ -359,10 +361,27 @@ func (i *SkillInstaller) Rollback(
 // GeneratedSkillInstaller
 // ---------------------------------------------------------------------------
 
+// WorkshopGeneratePort defines the interface for generating skill content via Workshop.
+// This avoids circular dependencies between acquisition and extension packages.
+type WorkshopGeneratePort interface {
+	GenerateInstruction(ctx context.Context, requirement string) (WorkshopInstructionDraft, error)
+}
+
+// WorkshopInstructionDraft represents a generated skill instruction draft.
+type WorkshopInstructionDraft struct {
+	Name        string            `json:"name"`
+	Description string            `json:"description"`
+	Body        string            `json:"body"`
+	References  map[string]string `json:"references"`
+	Assets      map[string]string `json:"assets"`
+	DisplayName string            `json:"displayName"`
+}
+
 // GeneratedSkillInstaller handles the InstallGeneratedSkill method. It generates
-// a skill via Workshop and delegates to SkillInstaller for registration.
+// a skill via Workshop, validates it, then delegates to SkillInstallPort for registration.
 type GeneratedSkillInstaller struct {
-	skillPort SkillInstallPort
+	skillPort     SkillInstallPort
+	workshopPort  WorkshopGeneratePort
 }
 
 // NewGeneratedSkillInstaller creates a GeneratedSkillInstaller with real dependencies.
@@ -370,7 +389,27 @@ func NewGeneratedSkillInstaller(skillPort SkillInstallPort) *GeneratedSkillInsta
 	return &GeneratedSkillInstaller{skillPort: skillPort}
 }
 
+// NewGeneratedSkillInstallerWithWorkshop creates a GeneratedSkillInstaller with Workshop support.
+func NewGeneratedSkillInstallerWithWorkshop(skillPort SkillInstallPort, workshopPort WorkshopGeneratePort) *GeneratedSkillInstaller {
+	return &GeneratedSkillInstaller{skillPort: skillPort, workshopPort: workshopPort}
+}
+
 func (*GeneratedSkillInstaller) Method() InstallMethod { return InstallGeneratedSkill }
+
+// buildSkillMarkdown converts a WorkshopInstructionDraft into SKILL.md format.
+func buildSkillMarkdown(draft WorkshopInstructionDraft) []byte {
+	var sb strings.Builder
+	sb.WriteString("---\n")
+	sb.WriteString(fmt.Sprintf("name: %s\n", draft.Name))
+	sb.WriteString(fmt.Sprintf("description: %s\n", draft.Description))
+	sb.WriteString(fmt.Sprintf("displayName: %s\n", draft.DisplayName))
+	sb.WriteString("version: 1.0.0\n")
+	sb.WriteString("schemaVersion: 2\n")
+	sb.WriteString("---\n\n")
+	sb.WriteString(draft.Body)
+	sb.WriteString("\n")
+	return []byte(sb.String())
+}
 
 func (i *GeneratedSkillInstaller) Install(
 	ctx context.Context,
@@ -387,7 +426,42 @@ func (i *GeneratedSkillInstaller) Install(
 
 	desc := candidate.Install.GeneratedSkill
 
-	skillID, err := i.skillPort.ImportSkill(ctx, desc.PromptStub, candidate.Name, "")
+	// Step 1: Workshop Generate - must use real Workshop, not PromptStub directly
+	if i.workshopPort == nil {
+		return InstalledCapability{}, fmt.Errorf("generated skill installer: workshop port not configured, cannot generate skill")
+	}
+
+	requirement := desc.PromptStub
+	if requirement == "" {
+		requirement = desc.Description
+	}
+	if requirement == "" {
+		return InstalledCapability{}, fmt.Errorf("generated skill installer: no requirement available for generation")
+	}
+
+	draft, err := i.workshopPort.GenerateInstruction(ctx, requirement)
+	if err != nil {
+		return InstalledCapability{}, fmt.Errorf("generated skill installer: workshop generate: %w", err)
+	}
+
+	// Step 2: Convert draft to SKILL.md format
+	skillMarkdown := buildSkillMarkdown(draft)
+
+	// Step 3: Write to temp file for source reading
+	tmpFile, err := os.CreateTemp("", "generated_skill_*.md")
+	if err != nil {
+		return InstalledCapability{}, fmt.Errorf("generated skill installer: create temp file: %w", err)
+	}
+	defer os.Remove(tmpFile.Name())
+
+	if _, err := tmpFile.Write(skillMarkdown); err != nil {
+		tmpFile.Close()
+		return InstalledCapability{}, fmt.Errorf("generated skill installer: write temp file: %w", err)
+	}
+	tmpFile.Close()
+
+	// Step 4: Import via SkillInstallPort (which now reads source → parser → validator → install)
+	skillID, err := i.skillPort.ImportSkill(ctx, tmpFile.Name(), draft.Name, "")
 	if err != nil {
 		return InstalledCapability{}, fmt.Errorf("generated skill installer: import generated skill: %w", err)
 	}
@@ -404,6 +478,7 @@ func (i *GeneratedSkillInstaller) Install(
 	}
 	installed.Candidate.Metadata["skillId"] = skillID
 	installed.Candidate.Metadata["generated"] = true
+	installed.Candidate.Metadata["generatedFrom"] = requirement
 
 	return installed, nil
 }

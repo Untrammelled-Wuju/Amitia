@@ -39,6 +39,8 @@ type DefaultPermissionBroker struct {
 
 	SystemPolicy    func(ctx context.Context, subject PermissionSubject, permissionID string, scope PermissionScope) (PermissionDecision, bool)
 	ExecutionPolicy func(ctx context.Context, request PermissionEvaluationRequest, requirement PermissionRequirement, definition PermissionDefinition) (PermissionDecision, bool)
+
+	OnPermissionRevoked func(extensionID, runtimeID string)
 }
 
 func NewDefaultPermissionBroker(registry *PermissionDefinitionRegistry, storage PermissionStorage) *DefaultPermissionBroker {
@@ -415,6 +417,10 @@ func (b *DefaultPermissionBroker) Revoke(ctx context.Context, grantID string) er
 	b.cache.InvalidateAll()
 	b.auditRec.RecordRevoke(ctx, grantID)
 
+	if b.OnPermissionRevoked != nil {
+		b.OnPermissionRevoked("", "")
+	}
+
 	return nil
 }
 
@@ -435,6 +441,19 @@ func (b *DefaultPermissionBroker) RevokeBySubject(ctx context.Context, subject P
 	}
 
 	b.cache.InvalidateAll()
+
+	if count > 0 && b.OnPermissionRevoked != nil {
+		extID := subject.ExtensionID
+		if extID == "" {
+			extID = subject.ID
+		}
+		runtimeID := ""
+		if subject.Type == SubjectRuntime {
+			runtimeID = subject.ID
+		}
+		b.OnPermissionRevoked(extID, runtimeID)
+	}
+
 	return count, nil
 }
 

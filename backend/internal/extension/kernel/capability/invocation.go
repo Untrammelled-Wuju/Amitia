@@ -114,6 +114,8 @@ type ToolInvocationContext struct {
 
 	IsBackground bool `json:"isBackground,omitempty"`
 
+	DeadlineDuration time.Duration `json:"-"`
+
 	ExecutionTarget InvocationExecutionTarget `json:"executionTarget,omitempty"`
 
 	Metadata map[string]any `json:"metadata,omitempty"`

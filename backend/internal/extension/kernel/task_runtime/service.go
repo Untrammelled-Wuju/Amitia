@@ -94,7 +94,7 @@ func (s *TaskRuntimeService) publishTaskEvent(ctx context.Context, eventType Tas
 type taskMutationParams struct {
 	current    *TaskRun
 	next       *TaskRun
-	expected   string
+	expected   TaskRunStatus
 	generation int64
 	revision   int64
 	removeQ    bool

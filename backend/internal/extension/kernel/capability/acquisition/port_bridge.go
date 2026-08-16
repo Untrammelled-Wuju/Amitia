@@ -112,6 +112,7 @@ type EnableExistingDeps struct {
 	DefinitionRepo     domain.DefinitionRepository
 	InstanceReconciler capability.ProviderInstanceReconciler
 	MCPRepository      *legacymcp.Repository
+	MCPLifecycle       *mcp.MCPLifecycle
 	AgentSkillCatalog  *agent_skill.AgentSkillCatalog
 	ProviderRegistry   *capability.ProviderRegistry
 }
@@ -129,6 +130,7 @@ func NewEnableExistingPortBridgeWithDeps(deps EnableExistingDeps) EnableExisting
 		definitionRepo:     deps.DefinitionRepo,
 		instanceReconciler: deps.InstanceReconciler,
 		mcpRepository:      deps.MCPRepository,
+		mcpLifecycle:       deps.MCPLifecycle,
 		agentSkillCatalog:  deps.AgentSkillCatalog,
 		providerRegistry:   deps.ProviderRegistry,
 	}
@@ -140,6 +142,7 @@ type enableExistingPortBridge struct {
 	definitionRepo     domain.DefinitionRepository
 	instanceReconciler capability.ProviderInstanceReconciler
 	mcpRepository      *legacymcp.Repository
+	mcpLifecycle       *mcp.MCPLifecycle
 	agentSkillCatalog  *agent_skill.AgentSkillCatalog
 	providerRegistry   *capability.ProviderRegistry
 }
@@ -229,6 +232,37 @@ func (b *enableExistingPortBridge) EnableMCP(ctx context.Context, serverName str
 		_, err := b.mcpRepository.GetServer(ctx, serverName)
 		if err != nil {
 			return fmt.Errorf("enable MCP %s: not found: %w", serverName, err)
+		}
+	}
+
+	// MCP existing 必须执行 MCP Lifecycle Start/Connect/Discovery
+	if b.mcpLifecycle != nil {
+		// 确保 binding 已注册
+		if _, err := b.mcpLifecycle.GetInstallation(serverName); err != nil {
+			// 如果未注册，先注册 binding
+			binding := mcp.MCPBinding{
+				ID:        serverName,
+				Owner:     mcp.ExtensionOwnerRef{Type: "user"},
+				Transport: mcp.MCPTransportSpec{Kind: "stdio"},
+			}
+			if _, regErr := b.mcpLifecycle.RegisterBinding(binding); regErr != nil {
+				return fmt.Errorf("enable MCP %s: register binding: %w", serverName, regErr)
+			}
+		}
+
+		// Step 1: Enable
+		if err := b.mcpLifecycle.Enable(serverName); err != nil {
+			return fmt.Errorf("enable MCP %s: lifecycle enable: %w", serverName, err)
+		}
+
+		// Step 2: Start
+		if err := b.mcpLifecycle.Start(serverName); err != nil {
+			return fmt.Errorf("enable MCP %s: lifecycle start: %w", serverName, err)
+		}
+
+		// Step 3: MarkReady (Connect + Discovery 完成后调用)
+		if err := b.mcpLifecycle.MarkReady(serverName); err != nil {
+			return fmt.Errorf("enable MCP %s: lifecycle mark ready: %w", serverName, err)
 		}
 	}
 
