@@ -42,7 +42,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         @retry="$emit('retry', $event)"
         @reply="$emit('reply', $event)"
         @scroll-to-message="(id) => scrollToMessage(id)"
-      ><template #badges><MessageBadgeExtensionHost :message-id="msg.id" :message-type="msg.type || 'text'" :direction="msg.role === 'user' ? 'outgoing' : msg.role === 'assistant' ? 'incoming' : 'system'" :sender-type="msg.role === 'user' ? 'user' : msg.role === 'assistant' ? 'character' : 'system'" :character-id="characterId" :conversation-id="msg.conversationId || ''" /></template><template #extension-content><MessageExtensionHost :message="{
+            ><template #badges><MessageBadgeExtensionHost :message-id="msg.id" :message-type="msg.type || 'text'" :direction="msg.role === 'user' ? 'outgoing' : msg.role === 'assistant' ? 'incoming' : 'system'" :sender-type="msg.role === 'user' ? 'user' : msg.role === 'assistant' ? 'character' : 'system'" :character-id="characterId" :conversation-id="msg.conversationId || ''" /></template><template #extension-content><MessageExtensionHost :message="{
           messageId: msg.id,
           type: msg.type || 'text',
           direction: msg.role === 'user' ? 'outgoing' : msg.role === 'assistant' ? 'incoming' : 'system',
@@ -51,6 +51,9 @@ SPDX-License-Identifier: AGPL-3.0-only
           status: msg.status || 'sent',
           hasText: !!(msg.content || msg.text),
           attachmentTypes: msg.attachments?.map((a: any) => a.type) || [],
+          extensionType: msg.extensionType || msg.extension_type || '',
+          content: msg.content || msg.text || '',
+          metadata: msg.metadata || {},
         }"
         :character-id="characterId"
         :conversation-id="msg.conversationId || ''"
