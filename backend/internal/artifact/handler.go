@@ -130,7 +130,7 @@ func (h *Handler) Delete(c *gin.Context) {
 		return
 	}
 	owner := string(actor.UserID)
-	err := h.svc.Delete(c.Request.Context(), owner, id)
+	err = h.svc.Delete(c.Request.Context(), owner, id)
 	if err != nil {
 		handleArtifactError(c, err)
 		return
