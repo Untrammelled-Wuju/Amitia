@@ -14,6 +14,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/integration"
 	"github.com/u-ai/backend/internal/desktoppet/plugin_boundary"
 	"github.com/u-ai/backend/internal/deviceruntime"
+	"github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/capability/acquisition"
@@ -77,6 +78,8 @@ import (
 	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/search"
+	"github.com/u-ai/backend/internal/uiagent"
+	"github.com/u-ai/backend/internal/uiagent/source"
 	"github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/workspace"
 	"github.com/u-ai/backend/pkg/resourceuri"
@@ -111,6 +114,8 @@ type ContainerBuilder struct {
 	runtimePolicy                runtimeprofile.Policy
 
 	mcpRepository *mcp.Repository
+
+	meshHub *server.ConnectionHub
 
 	backgroundBootstrapFunc func() (backgroundremoval.Registry, error)
 }
@@ -152,6 +157,11 @@ func (b *ContainerBuilder) WithConversationReader(r ConversationReader) *Contain
 
 func (b *ContainerBuilder) WithMemoryQueryService(s MemoryQueryService) *ContainerBuilder {
 	b.memoryQueryService = s
+	return b
+}
+
+func (b *ContainerBuilder) WithMeshHub(hub *server.ConnectionHub) *ContainerBuilder {
+	b.meshHub = hub
 	return b
 }
 
@@ -668,6 +678,10 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		}
 	}
 
+	if b.meshHub != nil && taskRuntimeService != nil {
+		taskRuntimeService.SetRemoteExecutor(task_runtime.NewMeshRemoteTaskExecutor(b.meshHub, sessionService))
+	}
+
 	var providerEventSink capability.ProviderEventSink
 	if b.runtimePolicy.DurableEvents {
 		providerEventSink = eventbridge.NewProviderEventEmitter(eventBridgePublisher)
@@ -751,9 +765,12 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 	acquisitionSourceRegistry.Register(acquisition.NewGeneratedSkillSource(true))
 
-	acquisitionInstallerRegistry := acquisition.NewInstallerRegistry(&acquisition.InstallerRegistryOpts{
+	acquisitionInstallerRegistry, err := acquisition.NewInstallerRegistry(&acquisition.InstallerRegistryOpts{
 		EnableExistingPort: acquisition.NewEnableExistingPortBridge(enablementService),
 	})
+	if err != nil {
+		return nil, fmt.Errorf("kernel: create installer registry: %w", err)
+	}
 	acquisitionService, err := acquisition.NewAcquisitionService(acquisition.AcquisitionDependencies{
 		CapabilityService: capabilityService,
 		ProviderRegistry:  capabilityProviderRegistry,
@@ -856,6 +873,15 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	workspaceCaller := makeWorkspaceCallFunc(b.workspaceService)
 	workspaceHealth := makeWorkspaceHealthFunc(b.workspaceService)
 
+	var deviceRuntimePort capability.DeviceRuntimeInvocationPort
+	if b.meshHub != nil && sessionService != nil {
+		meshPorts := &capability.MeshRuntimePorts{
+			Hub:           b.meshHub,
+			SessionLookup: sessionService,
+		}
+		deviceRuntimePort = capability.NewMeshDeviceRuntimeInvocationPort(meshPorts)
+	}
+
 	if err := RegisterProductionAdapters(adapterRegistry, AdapterRegistrationDeps{
 		JSGlobalFactory:       jsFactory,
 		WASMFactory:           wasmFactory,
@@ -876,6 +902,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		WorkspaceHealth:       workspaceHealth,
 		BrowserCaller:         makeBrowserCallFunc(b.browserProvider),
 		BrowserHealth:         makeBrowserHealthFunc(b.browserProvider),
+		DeviceRuntimePort:     deviceRuntimePort,
 	}); err != nil {
 		return nil, fmt.Errorf("kernel: register production adapters: %w", err)
 	}
@@ -909,6 +936,12 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 	recoveryService := acquisition.NewRecoveryService(acquisitionService)
 	toolFacade.SetRecoveryService(recoveryService)
+
+	builtin.SetUIAgentInspector(source.NewSourceInspector())
+	uiAgentExecutor := uiagent.NewUIExecutor(
+		uiagent.WithPolicy(uiagent.DefaultPolicy()),
+	)
+	builtin.SetUIAgentExecutor(uiAgentExecutor)
 
 	resumeRepo := coreexec.NewSQLiteResumeRepository(db)
 	if err := resumeRepo.InitTable(ctx); err != nil {
