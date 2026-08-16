@@ -73,6 +73,7 @@ func (s *sqliteChangeLogStore) Count() (int64, error) {
 
 type SequenceGenerator interface {
 	NextSequence() (Sequence, error)
+	EnsureSequenceTable() error
 }
 
 type sqliteSequenceGenerator struct {
@@ -80,16 +81,49 @@ type sqliteSequenceGenerator struct {
 }
 
 func NewSequenceGenerator(db *gorm.DB) SequenceGenerator {
-	return &sqliteSequenceGenerator{db: db}
+	gen := &sqliteSequenceGenerator{db: db}
+	_ = gen.EnsureSequenceTable()
+	return gen
 }
 
 func (g *sqliteSequenceGenerator) NextSequence() (Sequence, error) {
+	var nextSeq int64
+	err := g.db.Raw("UPDATE sync_sequence SET seq = seq + 1 RETURNING seq").Scan(&nextSeq).Error
+	if err != nil {
+		return g.fallbackNextSequence()
+	}
+	return Sequence(nextSeq), nil
+}
+
+func (g *sqliteSequenceGenerator) fallbackNextSequence() (Sequence, error) {
 	var maxSeq int64
 	err := g.db.Model(&ChangeRecord{}).Select("COALESCE(MAX(seq), 0)").Scan(&maxSeq).Error
 	if err != nil {
 		return 0, err
 	}
 	return Sequence(maxSeq + 1), nil
+}
+
+func (g *sqliteSequenceGenerator) EnsureSequenceTable() error {
+	err := g.db.Exec(`CREATE TABLE IF NOT EXISTS sync_sequence (
+		id INTEGER PRIMARY KEY CHECK (id = 1),
+		seq INTEGER NOT NULL DEFAULT 0
+	)`).Error
+	if err != nil {
+		return err
+	}
+	var count int64
+	err = g.db.Model(&struct {
+		ID  int64 `gorm:"column:id"`
+		Seq int64 `gorm:"column:seq"`
+	}{}).Table("sync_sequence").Count(&count).Error
+	if err != nil {
+		return err
+	}
+	if count == 0 {
+		err = g.db.Exec("INSERT INTO sync_sequence (id, seq) VALUES (1, 0)").Error
+	}
+	return err
 }
 
 func computeChecksum(payload []byte) string {

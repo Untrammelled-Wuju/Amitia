@@ -17,7 +17,7 @@ type Service struct {
 	Apply      *ApplyService
 }
 
-func NewService(db *gorm.DB, applyFn ApplyFunc) *Service {
+func NewService(db *gorm.DB, applier EntityMutationApplier) *Service {
 	store := NewChangeLogStore(db)
 	seq := NewSequenceGenerator(db)
 	cursorStore := NewCursorStore(db)
@@ -25,7 +25,7 @@ func NewService(db *gorm.DB, applyFn ApplyFunc) *Service {
 	changelog := NewChangeLogService(store, seq)
 	cursors := NewCursorService(cursorStore)
 	pull := NewPullService(changelog, cursors)
-	push := NewPushService(changelog, cursors, applyFn)
+	push := NewPushService(changelog, cursors, applier)
 	gap := NewGapDetector(changelog, store)
 	replay := NewReplayService(changelog)
 	conflicts := NewConflictResolver(StrategyServerWins)
@@ -41,4 +41,8 @@ func NewService(db *gorm.DB, applyFn ApplyFunc) *Service {
 		Conflicts:  conflicts,
 		Apply:      apply,
 	}
+}
+
+func NewServiceFromFunc(db *gorm.DB, applyFn ApplyFunc) *Service {
+	return NewService(db, &funcApplier{fn: applyFn})
 }
