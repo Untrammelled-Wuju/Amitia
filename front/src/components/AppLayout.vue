@@ -48,6 +48,7 @@ import {
 } from "../composables/useApi";
 import { getPageTitle } from "@/navigation/app-nav";
 import { useAppStore } from "@/stores/app";
+import { useExtensionUIStore } from "@/stores/extensionUI";
 
 const router = useRouter();
 const { connect: connectUIHost, disconnect: disconnectUIHost } = useUIHostSSE();
@@ -80,6 +81,8 @@ const currentCharName = ref("");
 const authUsername = ref("");
 const appStore = useAppStore();
 const authAvatar = computed(() => appStore.avatar);
+const extensionUIStore = useExtensionUIStore();
+const extensionRuntimeAvailable = ref(false);
 
 const modelClass = computed(() =>
   health.value.model === "configured" ? "status-on" : "status-off",
@@ -179,6 +182,9 @@ onMounted(() => {
       void window.amitiaDesktop.setAuthToken(token);
     }
     connectUIHost();
+    extensionUIStore.refreshSnapshot(true).then(() => {
+      extensionRuntimeAvailable.value = true;
+    });
   }
 
   if (window.amitiaDesktop?.onUINavigate) {
@@ -196,6 +202,7 @@ onMounted(() => {
   onUnmounted(() => {
     clearInterval(interval);
     disconnectUIHost();
+    extensionUIStore.invalidateSnapshot();
     if (electronNavCleanup) {
       electronNavCleanup();
       electronNavCleanup = null;
