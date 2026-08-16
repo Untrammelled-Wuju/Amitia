@@ -187,7 +187,6 @@ func (h *BackgroundHandler) handleTaskSubmit(ctx context.Context, request native
 		SystemClass:           BackgroundSystemClass(getString(request.Payload, "systemClass")),
 		TaskRunID:             getString(request.Payload, "taskRunId"),
 		TaskDefinitionID:      getString(request.Payload, "taskDefinitionID"),
-		IdentifierClass:       getString(request.Payload, "identifierClass"),
 		Reason:                getString(request.Payload, "reason"),
 		Strategy:              ContinuedTaskStrategy(getString(request.Payload, "strategy")),
 		Initiator:             TaskInitiator(getString(request.Payload, "initiator")),
@@ -203,7 +202,6 @@ func (h *BackgroundHandler) handleTaskSubmit(ctx context.Context, request native
 	}
 	payload := map[string]any{
 		"systemClass":           string(req.SystemClass),
-		"identifierClass":       req.IdentifierClass,
 		"networkRequired":       req.NetworkRequired,
 		"externalPowerRequired": req.ExternalPowerRequired,
 		"gpuRequired":           req.GPURequired,
@@ -264,11 +262,10 @@ func (h *BackgroundHandler) handleTaskGetPending(ctx context.Context, request na
 
 func (h *BackgroundHandler) handleTaskProgress(ctx context.Context, request nativebridge.Request) nativebridge.Response {
 	progress := BackgroundTaskProgress{
-		TaskRunID:       getString(request.Payload, "taskRunId"),
-		IdentifierClass: getString(request.Payload, "identifierClass"),
-		TotalUnits:      getInt64(request.Payload, "totalUnits", 0),
-		CompletedUnits:  getInt64(request.Payload, "completedUnits", 0),
-		Phase:           getString(request.Payload, "phase"),
+		TaskRunID:      getString(request.Payload, "taskRunId"),
+		TotalUnits:     getInt64(request.Payload, "totalUnits", 0),
+		CompletedUnits: getInt64(request.Payload, "completedUnits", 0),
+		Phase:          getString(request.Payload, "phase"),
 	}
 	if err := ValidateProgress(progress); err != nil {
 		code, msg := MapErrorToNativeBridge(err)
@@ -280,11 +277,10 @@ func (h *BackgroundHandler) handleTaskProgress(ctx context.Context, request nati
 		}
 	}
 	return h.bridgeCall(ctx, request, OperationTaskProgress, map[string]any{
-		"taskRunId":       progress.TaskRunID,
-		"identifierClass": progress.IdentifierClass,
-		"totalUnits":      progress.TotalUnits,
-		"completedUnits":  progress.CompletedUnits,
-		"phase":           progress.Phase,
+		"taskRunId":      progress.TaskRunID,
+		"totalUnits":     progress.TotalUnits,
+		"completedUnits": progress.CompletedUnits,
+		"phase":          progress.Phase,
 	})
 }
 
@@ -304,9 +300,8 @@ func (h *BackgroundHandler) handleTaskExpire(ctx context.Context, request native
 		}
 	}
 	return h.bridgeCall(ctx, request, OperationTaskExpire, map[string]any{
-		"systemClass":    string(systemClass),
-		"taskRunId":      taskRunID,
-		"identifierClass": getString(request.Payload, "identifierClass"),
+		"systemClass": string(systemClass),
+		"taskRunId":   taskRunID,
 	})
 }
 
@@ -332,10 +327,9 @@ func (h *BackgroundHandler) handleTaskComplete(ctx context.Context, request nati
 		}
 	}
 	return h.bridgeCall(ctx, request, OperationTaskComplete, map[string]any{
-		"systemClass":     string(systemClass),
-		"taskRunId":       taskRunID,
-		"identifierClass": getString(request.Payload, "identifierClass"),
-		"success":         success,
+		"systemClass": string(systemClass),
+		"taskRunId":   taskRunID,
+		"success":     success,
 	})
 }
 
@@ -546,18 +540,18 @@ func (h *BackgroundHandler) handleFileAccessWrite(ctx context.Context, request n
 		RelativePath: getString(request.Payload, "relativePath"),
 		Atomic:       getBool(request.Payload, "atomic"),
 	}
-	if data, ok := request.Payload["content"].([]byte); ok {
-		req.Content = data
+	if data, ok := request.Payload["contentBase64"].(string); ok {
+		req.ContentBase64 = data
 	}
 	if err := ValidateWriteRequest(req); err != nil {
 		code, msg := MapErrorToNativeBridge(err)
 		return NewBackgroundError(request, code, msg)
 	}
 	return h.bridgeCall(ctx, request, OperationFileAccessWrite, map[string]any{
-		"mountId":      req.MountID,
-		"relativePath": req.RelativePath,
-		"content":      req.Content,
-		"atomic":       req.Atomic,
+		"mountId":        req.MountID,
+		"relativePath":   req.RelativePath,
+		"contentBase64":  req.ContentBase64,
+		"atomic":         req.Atomic,
 	})
 }
 

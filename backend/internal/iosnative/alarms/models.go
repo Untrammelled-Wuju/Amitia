@@ -25,26 +25,26 @@ const (
 )
 
 type AlarmStatus struct {
-	Supported              bool               `json:"supported"`
-	Authorization          AuthorizationStatus `json:"authorization"`
-	Count                  int                `json:"count"`
-	LimitReached           bool               `json:"limitReached"`
-	LiveActivitySupported  bool               `json:"liveActivitySupported"`
-	SilentModeOverride     bool               `json:"silentModeOverride"`
-	FocusModeOverride      bool               `json:"focusModeOverride"`
-	CanAdd                 bool               `json:"canAdd"`
-	CanRead                bool               `json:"canRead"`
-	CanUpdate              bool               `json:"canUpdate"`
-	CanRemove              bool               `json:"canRemove"`
-	Generation             uint64             `json:"generation"`
+	Supported             bool                `json:"supported"`
+	Authorization         AuthorizationStatus `json:"authorization"`
+	Count                 int                 `json:"count"`
+	LimitReached          bool                `json:"limitReached"`
+	LiveActivitySupported bool                `json:"liveActivitySupported"`
+	SilentModeOverride    bool                `json:"silentModeOverride"`
+	FocusModeOverride     bool                `json:"focusModeOverride"`
+	CanAdd                bool                `json:"canAdd"`
+	CanRead               bool                `json:"canRead"`
+	CanUpdate             bool                `json:"canUpdate"`
+	CanRemove             bool                `json:"canRemove"`
+	Generation            uint64              `json:"generation"`
 }
 
 type IOSAlarmSchedule struct {
-	FireAt    *string `json:"fireAt,omitempty"`
-	Hour      *int    `json:"hour,omitempty"`
-	Minute    *int    `json:"minute,omitempty"`
-	Recurrence string `json:"recurrence,omitempty"`
-	Weekdays  []string `json:"weekdays,omitempty"`
+	FireAt     *string  `json:"fireAt,omitempty"`
+	Hour       *int     `json:"hour,omitempty"`
+	Minute     *int     `json:"minute,omitempty"`
+	Recurrence string   `json:"recurrence,omitempty"`
+	Weekdays   []string `json:"weekdays,omitempty"`
 }
 
 type IOSAlarmCountdown struct {
@@ -53,11 +53,11 @@ type IOSAlarmCountdown struct {
 }
 
 type IOSAlarmPresentation struct {
-	AlertTitle       string `json:"alertTitle"`
-	CountdownTitle   string `json:"countdownTitle,omitempty"`
-	PausedTitle      string `json:"pausedTitle,omitempty"`
-	TintColor        string `json:"tintColor,omitempty"`
-	SecondaryAction  string `json:"secondaryAction,omitempty"`
+	AlertTitle      string `json:"alertTitle"`
+	CountdownTitle  string `json:"countdownTitle,omitempty"`
+	PausedTitle     string `json:"pausedTitle,omitempty"`
+	TintColor       string `json:"tintColor,omitempty"`
+	SecondaryAction string `json:"secondaryAction,omitempty"`
 }
 
 type IOSAlarmSound struct {
@@ -66,20 +66,20 @@ type IOSAlarmSound struct {
 }
 
 type IOSAlarmMetadata struct {
-	Kind      string `json:"kind"`
-	Icon      string `json:"icon,omitempty"`
-	OwnerRef  string `json:"ownerRef,omitempty"`
+	Kind     string `json:"kind"`
+	Icon     string `json:"icon,omitempty"`
+	OwnerRef string `json:"ownerRef,omitempty"`
 }
 
 type IOSAlarmScheduleRequest struct {
-	Kind         string              `json:"kind"`
-	Title        string              `json:"title"`
-	Schedule     *IOSAlarmSchedule   `json:"schedule,omitempty"`
-	Countdown    *IOSAlarmCountdown  `json:"countdown,omitempty"`
+	Kind         string               `json:"kind"`
+	Title        string               `json:"title"`
+	Schedule     *IOSAlarmSchedule    `json:"schedule,omitempty"`
+	Countdown    *IOSAlarmCountdown   `json:"countdown,omitempty"`
 	Presentation IOSAlarmPresentation `json:"presentation"`
-	Sound        IOSAlarmSound       `json:"sound,omitempty"`
-	Action       string              `json:"action,omitempty"`
-	Metadata     *IOSAlarmMetadata   `json:"metadata,omitempty"`
+	Sound        IOSAlarmSound        `json:"sound,omitempty"`
+	Action       string               `json:"action,omitempty"`
+	Metadata     *IOSAlarmMetadata    `json:"metadata,omitempty"`
 }
 
 type IOSAlarmInfo struct {
@@ -106,9 +106,9 @@ type IOSAlarmCountdownInfo struct {
 }
 
 type AlarmLifecycleResult struct {
-	AlarmID         string   `json:"alarmId"`
-	State           string   `json:"state"`
-	StateChanged    bool     `json:"stateChanged"`
+	AlarmID          string   `json:"alarmId"`
+	State            string   `json:"state"`
+	StateChanged     bool     `json:"stateChanged"`
 	SupportedActions []string `json:"supportedActions"`
 }
 

@@ -23,14 +23,6 @@ func (h *ShareHandler) Execute(ctx context.Context, request nativebridge.Request
 		return h.handleSend(ctx, request)
 	case OperationPreviewSupported:
 		return h.handlePreviewSupported(ctx, request)
-	case OperationReceivePending:
-		return h.handleReceivePending(ctx, request)
-	case OperationReceiveConsume:
-		return h.handleReceiveConsume(ctx, request)
-	case OperationReceivePeek:
-		return h.handleReceivePeek(ctx, request)
-	case OperationReceiveDismiss:
-		return h.handleReceiveDismiss(ctx, request)
 	case OperationStagingCleanup:
 		return h.handleStagingCleanup(ctx, request)
 	case OperationLimitedDelete:
@@ -149,40 +141,6 @@ func (h *ShareHandler) handleSend(ctx context.Context, request nativebridge.Requ
 
 func (h *ShareHandler) handlePreviewSupported(ctx context.Context, request nativebridge.Request) nativebridge.Response {
 	return h.bridgeCall(ctx, request, OperationPreviewSupported, map[string]any{})
-}
-
-func (h *ShareHandler) handleReceivePending(ctx context.Context, request nativebridge.Request) nativebridge.Response {
-	return h.bridgeCall(ctx, request, OperationReceivePending, map[string]any{})
-}
-
-func (h *ShareHandler) handleReceiveConsume(ctx context.Context, request nativebridge.Request) nativebridge.Response {
-	shareID, ok := request.Payload["shareId"].(string)
-	if !ok || shareID == "" {
-		return NewShareError(request, ErrShareReceivedNotFound, "missing required field: shareId")
-	}
-	return h.bridgeCall(ctx, request, OperationReceiveConsume, map[string]any{
-		"shareId": shareID,
-	})
-}
-
-func (h *ShareHandler) handleReceivePeek(ctx context.Context, request nativebridge.Request) nativebridge.Response {
-	shareID, ok := request.Payload["shareId"].(string)
-	if !ok || shareID == "" {
-		return NewShareError(request, ErrShareReceivedNotFound, "missing required field: shareId")
-	}
-	return h.bridgeCall(ctx, request, OperationReceivePeek, map[string]any{
-		"shareId": shareID,
-	})
-}
-
-func (h *ShareHandler) handleReceiveDismiss(ctx context.Context, request nativebridge.Request) nativebridge.Response {
-	shareID, ok := request.Payload["shareId"].(string)
-	if !ok || shareID == "" {
-		return NewShareError(request, ErrShareReceivedNotFound, "missing required field: shareId")
-	}
-	return h.bridgeCall(ctx, request, OperationReceiveDismiss, map[string]any{
-		"shareId": shareID,
-	})
 }
 
 func (h *ShareHandler) handleStagingCleanup(ctx context.Context, request nativebridge.Request) nativebridge.Response {

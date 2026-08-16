@@ -7,25 +7,24 @@ import (
 )
 
 const (
-	DefaultListLimit              = 20
-	MaxListLimit                  = 100
-	MaxSuggestedEntities          = 10
-	MaxDynamicOptionsLimit        = 50
-	MaxActionIDLength             = 128
-	MaxParameterBytes             = 64 * 1024
-	MaxMessageBytes               = 32 * 1024
-	MaxResultBytes                = 32 * 1024
-	MaxConfirmationMessageChars   = 512
-	MaxObjectNameChars            = 256
-	MaxSiriPhraseChars            = 256
-	MinIdempotencyKeyLength       = 16
-	DefaultSnapshotTTLSeconds     = 300
-	MaxSnapshotEntities           = 50
-	MaxCatalogActions             = 200
-	MaxIntentDonationParameters   = 10
-	EntityQueryTimeoutSec         = 3
-	DefaultActionTimeoutSec       = 30
-	ShortcutsSchemaVersion        = 1
+	DefaultListLimit            = 20
+	MaxListLimit                = 100
+	MaxSuggestedEntities        = 10
+	MaxDynamicOptionsLimit      = 50
+	MaxActionIDLength           = 128
+	MaxParameterBytes           = 64 * 1024
+	MaxMessageBytes             = 32 * 1024
+	MaxResultBytes              = 32 * 1024
+	MaxConfirmationMessageChars = 512
+	MaxObjectNameChars          = 256
+	MaxSiriPhraseChars          = 256
+	MinIdempotencyKeyLength     = 16
+	DefaultSnapshotTTLSeconds   = 300
+	MaxSnapshotEntities         = 50
+	MaxCatalogActions           = 200
+	EntityQueryTimeoutSec       = 3
+	DefaultActionTimeoutSec     = 30
+	ShortcutsSchemaVersion      = 1
 )
 
 var AllowedCanonicalTargets = []ShortcutCanonicalTarget{
@@ -50,14 +49,14 @@ var AllowedRiskLevels = []ShortcutRiskLevel{
 }
 
 var HighRiskActions = map[string]bool{
-	"cancel_alarm":       true,
+	"cancel_alarm":           true,
 	"cancel_repeating_alarm": true,
-	"delete_alarm":       true,
-	"homekit_write":      true,
-	"bluetooth_write":    true,
-	"workspace_delete":   true,
-	"memory_delete":      true,
-	"limited_photo_delete": true,
+	"delete_alarm":           true,
+	"homekit_write":          true,
+	"bluetooth_write":        true,
+	"workspace_delete":       true,
+	"memory_delete":          true,
+	"limited_photo_delete":   true,
 }
 
 func IsValidCanonicalTarget(target ShortcutCanonicalTarget) bool {
@@ -218,16 +217,6 @@ func ValidateContribution(contrib ShortcutContribution) error {
 	}
 	if utf8.RuneCountInString(contrib.Title) > MaxObjectNameChars {
 		return fmt.Errorf("%v: contribution title too long", ErrShortcutsParameterInvalid)
-	}
-	return nil
-}
-
-func ValidateDonation(req IntentDonationRequest) error {
-	if req.IntentID == "" {
-		return fmt.Errorf("%v: intentId is required for donation", ErrShortcutsParameterRequired)
-	}
-	if len(req.Parameters) > MaxIntentDonationParameters {
-		return fmt.Errorf("%v: donation parameters too many, max %d", ErrShortcutsParameterInvalid, MaxIntentDonationParameters)
 	}
 	return nil
 }

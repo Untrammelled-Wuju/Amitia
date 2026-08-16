@@ -5,11 +5,14 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
 )
+
+const MaxChunkSize = 1048576
 
 type StagingImportRequest struct {
 	NativeStagingID string `json:"nativeStagingId"`
@@ -47,11 +50,6 @@ func (i *StagingImporter) Import(req StagingImportRequest) (*StagingImportResult
 		return nil, fmt.Errorf("missing contentBase64")
 	}
 
-	data, err := decodeBase64(req.ContentBase64)
-	if err != nil {
-		return nil, fmt.Errorf("decode contentBase64: %w", err)
-	}
-
 	now := time.Now().UTC()
 	filename := req.Filename
 	if filename == "" {
@@ -63,33 +61,87 @@ func (i *StagingImporter) Import(req StagingImportRequest) (*StagingImportResult
 	}
 
 	dateDir := now.Format("2006/01/02")
-	targetDir := filepath.Join(i.baseDir, "native", "staging", dateDir)
+	targetDir := filepath.Join(i.baseDir, "resources", "blobs", dateDir)
 	if err := os.MkdirAll(targetDir, 0755); err != nil {
 		return nil, fmt.Errorf("create target dir: %w", err)
 	}
 
 	targetPath := filepath.Join(targetDir, safeFilename)
-	if err := os.WriteFile(targetPath, data, 0644); err != nil {
-		return nil, fmt.Errorf("write file: %w", err)
+	tmpPath := targetPath + ".tmp"
+
+	f, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("create temp file: %w", err)
 	}
 
-	checksum := sha256.Sum256(data)
+	reader := base64.NewDecoder(base64.StdEncoding, strings.NewReader(req.ContentBase64))
+	hash := sha256.New()
+	var totalWritten int64
+	buf := make([]byte, MaxChunkSize)
+	for {
+		n, readErr := reader.Read(buf)
+		if n > 0 {
+			wn, werr := f.Write(buf[:n])
+			if werr != nil {
+				f.Close()
+				os.Remove(tmpPath)
+				return nil, fmt.Errorf("write chunk: %w", werr)
+			}
+			hash.Write(buf[:n])
+			totalWritten += int64(wn)
+		}
+		if readErr == io.EOF {
+			break
+		}
+		if readErr != nil {
+			f.Close()
+			os.Remove(tmpPath)
+			return nil, fmt.Errorf("decode chunk: %w", readErr)
+		}
+	}
+	f.Close()
+
+	if err := os.Rename(tmpPath, targetPath); err != nil {
+		os.Remove(tmpPath)
+		return nil, fmt.Errorf("rename temp file: %w", err)
+	}
+
+	checksum := hex.EncodeToString(hash.Sum(nil))
+	resourceURI := fmt.Sprintf("amitia://resources/blobs/%s/%s", dateDir, safeFilename)
 
 	return &StagingImportResult{
-		ResourceURI: fmt.Sprintf("amitia://native/staging/%s/%s", dateDir, safeFilename),
-		Size:        int64(len(data)),
+		ResourceURI: resourceURI,
+		Size:        totalWritten,
 		MimeType:    req.MimeType,
 		ImportedAt:  now.Format(time.RFC3339),
-		Checksum:    hex.EncodeToString(checksum[:]),
+		Checksum:    checksum,
 	}, nil
 }
 
 func (i *StagingImporter) Release(nativeStagingID string) error {
-	return nil
-}
-
-func decodeBase64(encoded string) ([]byte, error) {
-	return base64.StdEncoding.DecodeString(encoded)
+	if nativeStagingID == "" {
+		return fmt.Errorf("missing nativeStagingId")
+	}
+	if !strings.HasPrefix(nativeStagingID, "nativeStaging:") {
+		return fmt.Errorf("invalid nativeStagingId format")
+	}
+	filename := strings.TrimPrefix(nativeStagingID, "nativeStaging:")
+	safeFilename := sanitizeFilename(filename)
+	if safeFilename == "" {
+		return fmt.Errorf("invalid staging filename")
+	}
+	pattern := filepath.Join(i.baseDir, "resources", "blobs", "*", safeFilename)
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return fmt.Errorf("glob staging files: %w", err)
+	}
+	var lastErr error
+	for _, match := range matches {
+		if err := os.Remove(match); err != nil {
+			lastErr = err
+		}
+	}
+	return lastErr
 }
 
 func sanitizeFilename(name string) string {
