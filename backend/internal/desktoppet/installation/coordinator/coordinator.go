@@ -22,6 +22,7 @@ type ReleaseStager interface {
 
 type RuntimeDesiredStatePublisher interface {
 	PublishDesiredState(ctx context.Context, deviceCtx device.DeviceContext, snapshot *DesiredStateSnapshot) error
+	PublishRecenter(ctx context.Context, deviceCtx device.DeviceContext, installationID string) error
 }
 
 type DesiredStateSnapshot struct {
@@ -825,13 +826,7 @@ func (c *Coordinator) executeRecenter(ctx context.Context, req RecenterRequest, 
 		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_CREATE_FAILED"}, err
 	}
 
-	if err := c.runtimePublisher.PublishDesiredState(ctx, req.DeviceCtx, &DesiredStateSnapshot{
-		InstallationID: req.InstallationID,
-		UserID:         req.DeviceCtx.UserID,
-		DeviceID:       req.DeviceCtx.DeviceID,
-		RuntimeID:      req.DeviceCtx.RuntimeID,
-		EnsureAbsent:   false,
-	}); err != nil {
+	if err := c.runtimePublisher.PublishRecenter(ctx, req.DeviceCtx, req.InstallationID); err != nil {
 		op.Status = operation.OpStatusFailedTerminal
 		op.ErrorCode = "PUBLISH_FAILED"
 		op.ErrorMessage = err.Error()

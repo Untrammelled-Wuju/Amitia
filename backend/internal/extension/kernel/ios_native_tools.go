@@ -190,16 +190,12 @@ func buildIOSToolDefinitions() []capability.ToolDefinition {
 		makeIOSNativeTool(rt, alarms.ToolIDPause, "", alarms.OperationPause, "Pause Alarm", "Pause an alarm", genericInput, genericOutput, []capability.PermissionRequirement{{Capability: "ios.alarms.write", Risk: "medium"}}, capability.RiskMedium, true),
 		makeIOSNativeTool(rt, alarms.ToolIDResume, "", alarms.OperationResume, "Resume Alarm", "Resume an alarm", genericInput, genericOutput, []capability.PermissionRequirement{{Capability: "ios.alarms.write", Risk: "medium"}}, capability.RiskMedium, true),
 
-		// === SHARE (9 tools) ===
-		makeIOSNativeTool(rt, share.ToolIDStatus, "", share.OperationStatus, "Share Status", "Query share availability", genericInput, statusOutput, []capability.PermissionRequirement{{Capability: "ios.share.send", Risk: "low"}}, capability.RiskLow, false),
-		makeIOSNativeTool(rt, share.ToolIDSend, "", share.OperationSend, "Send Share", "Send share content", genericInput, genericOutput, []capability.PermissionRequirement{{Capability: "ios.share.send", Risk: "medium"}}, capability.RiskMedium, true),
-		makeIOSNativeTool(rt, share.ToolIDPreviewSupported, "", share.OperationPreviewSupported, "Preview Supported", "Check if preview is supported", genericInput, genericOutput, []capability.PermissionRequirement{{Capability: "ios.share.send", Risk: "low"}}, capability.RiskLow, false),
-		makeIOSNativeTool(rt, share.ToolIDReceivePending, "", share.OperationReceivePending, "Get Pending Received Items", "Get pending received share items", genericInput, genericOutput, []capability.PermissionRequirement{{Capability: "ios.share.send", Risk: "low"}}, capability.RiskLow, false),
-		makeIOSNativeTool(rt, share.ToolIDReceiveConsume, "", share.OperationReceiveConsume, "Consume Received Item", "Consume a received share item", genericInput, genericOutput, []capability.PermissionRequirement{{Capability: "ios.share.send", Risk: "medium"}}, capability.RiskMedium, true),
-		makeIOSNativeTool(rt, share.ToolIDReceivePeek, "", share.OperationReceivePeek, "Peek Received Item", "Peek at a received share item", genericInput, genericOutput, []capability.PermissionRequirement{{Capability: "ios.share.send", Risk: "low"}}, capability.RiskLow, false),
-		makeIOSNativeTool(rt, share.ToolIDReceiveDismiss, "", share.OperationReceiveDismiss, "Dismiss Received Item", "Dismiss a received share item", genericInput, genericOutput, []capability.PermissionRequirement{{Capability: "ios.share.send", Risk: "medium"}}, capability.RiskMedium, true),
-		makeIOSNativeTool(rt, share.ToolIDStagingCleanup, "", share.OperationStagingCleanup, "Cleanup Share Staging", "Cleanup share staging area", genericInput, genericOutput, []capability.PermissionRequirement{{Capability: "ios.share.send", Risk: "medium"}}, capability.RiskMedium, true),
-		makeIOSNativeTool(rt, share.ToolIDLimitedDelete, "", share.OperationLimitedDelete, "Delete Limited Share Item", "Delete a limited share item", genericInput, genericOutput, []capability.PermissionRequirement{{Capability: "ios.share.send", Risk: "medium"}}, capability.RiskMedium, true),
+	// === SHARE (5 tools) ===
+	makeIOSNativeTool(rt, share.ToolIDStatus, "", share.OperationStatus, "Share Status", "Query share availability", genericInput, statusOutput, []capability.PermissionRequirement{{Capability: "ios.share.send", Risk: "low"}}, capability.RiskLow, false),
+	makeIOSNativeTool(rt, share.ToolIDSend, "", share.OperationSend, "Send Share", "Send share content", genericInput, genericOutput, []capability.PermissionRequirement{{Capability: "ios.share.send", Risk: "medium"}}, capability.RiskMedium, true),
+	makeIOSNativeTool(rt, share.ToolIDPreviewSupported, "", share.OperationPreviewSupported, "Preview Supported", "Check if preview is supported", genericInput, genericOutput, []capability.PermissionRequirement{{Capability: "ios.share.send", Risk: "low"}}, capability.RiskLow, false),
+	makeIOSNativeTool(rt, share.ToolIDStagingCleanup, "", share.OperationStagingCleanup, "Cleanup Share Staging", "Cleanup share staging area", genericInput, genericOutput, []capability.PermissionRequirement{{Capability: "ios.share.send", Risk: "medium"}}, capability.RiskMedium, true),
+	makeIOSNativeTool(rt, share.ToolIDLimitedDelete, "", share.OperationLimitedDelete, "Delete Limited Share Item", "Delete a limited share item", genericInput, genericOutput, []capability.PermissionRequirement{{Capability: "ios.share.send", Risk: "medium"}}, capability.RiskMedium, true),
 	}
 	return defs
 }

@@ -278,17 +278,22 @@ const pendingImageBase64 = ref<string | null>(null);
 const pendingAudioUrl = ref<string | null>(null);
 const pendingVideoUrl = ref<string | null>(null);
 
-async function handleNewChat() {
+async function handleNewChat(event?: CustomEvent) {
   if (!characterId.value) return;
+  const providedId = event?.detail?.conversationId;
   try {
-    const created = await post<any>("/api/web-chat/conversations", {
-      characterId: characterId.value,
-      title: "",
-    });
-    if (created?.id) {
+    let newConvId = providedId;
+    if (!newConvId) {
+      const created = await post<any>("/api/web-chat/conversations", {
+        characterId: characterId.value,
+        title: "",
+      });
+      newConvId = created?.id;
+    }
+    if (newConvId) {
       localStorage.removeItem("webchat-conv-id");
       disconnectSSE();
-      convId.value = created.id;
+      convId.value = newConvId;
       convTitle.value = "";
       messages.value = [];
       replyTarget.value = null;
@@ -630,7 +635,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
 }
-.chat-sidebar-region { width: min(320px, 32%); min-width: 220px; padding: 12px; border-left: 1px solid var(--surface-border); }
+.chat-sidebar-region { width: min(320px, 32%); min-width: 220px; padding: 12px; border-left: 1px solid var(--surface-border); height: 100%; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
 @media (min-width: 1024px) { .chat-body-wrapper { flex-direction: row; } }
 .sidebar-toggle-btn { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text-secondary); cursor: pointer; }
 .sidebar-toggle-btn:hover { border-color: var(--surface-border); background: var(--control-hover-bg); color: var(--text-primary); }

@@ -208,6 +208,21 @@ export const useExtensionUIStore = defineStore("extensionUI", () => {
     unregisterSession(contributionId);
   }
 
+  async function notifyExtensionChanged(changeType: "install" | "uninstall" | "enable" | "disable" | "update"): Promise<void> {
+    if (loading.value) return;
+    snapshot.value = null;
+    lastFetchAt.value = 0;
+    await refreshSnapshot(true);
+  }
+
+  function setupExtensionChangeListener(): () => void {
+    const handler = () => {
+      void notifyExtensionChanged("update");
+    };
+    window.addEventListener("amitia:extension-state-changed", handler);
+    return () => window.removeEventListener("amitia:extension-state-changed", handler);
+  }
+
   return {
     snapshot,
     loading,
@@ -230,5 +245,7 @@ export const useExtensionUIStore = defineStore("extensionUI", () => {
     loadAllContributions,
     startSession,
     endSession,
+    notifyExtensionChanged,
+    setupExtensionChangeListener,
   };
 });
