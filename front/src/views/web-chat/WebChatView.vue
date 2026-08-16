@@ -203,6 +203,10 @@ const { cachedGet, invalidateCache } = useCachedApi();
 const currentCharName = inject<any>("currentCharName", null);
 const extensionUIStore = useExtensionUIStore();
 
+function onNewChatEvent(e: Event) {
+  void handleNewChat(e as CustomEvent);
+}
+
 const messages = ref<any[]>([]);
 const convId = ref("");
 const convTitle = ref("");
@@ -499,7 +503,7 @@ onMounted(async () => {
     ElMessage.warning("网络已断开");
   });
 
-  window.addEventListener("amitia:new-chat", handleNewChat);
+  window.addEventListener("amitia:new-chat", onNewChatEvent);
   window.addEventListener("resize", updateViewport);
   updateViewport();
 
@@ -604,7 +608,7 @@ onMounted(async () => {
 onUnmounted(() => {
   cleanupSSE();
   disconnectProactiveSSE();
-  window.removeEventListener("amitia:new-chat", handleNewChat);
+  window.removeEventListener("amitia:new-chat", onNewChatEvent);
   window.removeEventListener("resize", updateViewport);
 });
 </script>
