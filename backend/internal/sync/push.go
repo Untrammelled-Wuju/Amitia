@@ -11,15 +11,38 @@ type ApplyFunc func(mutation ClientMutation) (int64, error)
 type PushService struct {
 	changelog *ChangeLogService
 	cursors   *CursorService
-	applyFn   ApplyFunc
+	applier   EntityMutationApplier
 }
 
-func NewPushService(changelog *ChangeLogService, cursors *CursorService, applyFn ApplyFunc) *PushService {
+func NewPushService(changelog *ChangeLogService, cursors *CursorService, applier EntityMutationApplier) *PushService {
 	return &PushService{
 		changelog: changelog,
 		cursors:   cursors,
-		applyFn:   applyFn,
+		applier:   applier,
 	}
+}
+
+func NewPushServiceFromFunc(changelog *ChangeLogService, cursors *CursorService, applyFn ApplyFunc) *PushService {
+	return &PushService{
+		changelog: changelog,
+		cursors:   cursors,
+		applier:   &funcApplier{fn: applyFn},
+	}
+}
+
+type funcApplier struct {
+	fn ApplyFunc
+}
+
+func (f *funcApplier) Apply(mutation ClientMutation) (int64, error) {
+	if f.fn == nil {
+		return 0, &ApplierError{Code: "no_apply_handler", Message: "no apply handler configured"}
+	}
+	return f.fn(mutation)
+}
+
+func (f *funcApplier) Supports(entityType EntityType) bool {
+	return f.fn != nil
 }
 
 func (s *PushService) Push(req PushRequest) (*PushResult, error) {
@@ -59,7 +82,7 @@ func (s *PushService) Push(req PushRequest) (*PushResult, error) {
 }
 
 func (s *PushService) applyMutation(deviceID, userID string, mutation ClientMutation) MutationResult {
-	if s.applyFn == nil {
+	if s.applier == nil {
 		return MutationResult{
 			MutationID: mutation.MutationID,
 			Success:    false,
@@ -68,7 +91,7 @@ func (s *PushService) applyMutation(deviceID, userID string, mutation ClientMuta
 		}
 	}
 
-	revision, err := s.applyFn(mutation)
+	revision, err := s.applier.Apply(mutation)
 	if err != nil {
 		return MutationResult{
 			MutationID: mutation.MutationID,
