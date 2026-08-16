@@ -126,8 +126,6 @@ func (s *ProviderLifecycleService) UnregisterProvider(id ProviderID) (bool, erro
 		for _, restore := range oldInstances {
 			s.registry.setInstance(string(restore.ID), restore)
 		}
-		s.registry.rebuildProviderInstanceIndex()
-		s.registry.rebuildCapabilityIndex()
 		return false, err
 	}
 	return true, nil
@@ -155,7 +153,6 @@ func (s *ProviderLifecycleService) RegisterInstance(inst CapabilityProviderInsta
 		err := s.events.ProviderInstanceUpdated(context.Background(), emitPayload)
 		if err != nil {
 			s.registry.setInstance(string(old.ID), old)
-			s.registry.rebuildProviderInstanceIndex()
 			return err
 		}
 		return nil
@@ -189,7 +186,6 @@ func (s *ProviderLifecycleService) UnregisterInstance(id ProviderInstanceID) (bo
 	err = s.events.ProviderInstanceUnregistered(context.Background(), payload)
 	if err != nil {
 		s.registry.setInstance(string(old.ID), old)
-		s.registry.rebuildProviderInstanceIndex()
 		return false, err
 	}
 	return true, nil
