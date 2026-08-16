@@ -2,6 +2,7 @@ package runtime
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"sync"
 	"time"
@@ -86,11 +87,16 @@ func (b *processExitBridgeImpl) OnProcessExit(event trusted_service.ProcessExitE
 		return
 	}
 
-	runtimeID, ok := b.resolveRuntimeID(event.ServiceID)
-	if !ok {
-		log.Printf("[process-exit-bridge] could not resolve runtime ID for service %s", event.ServiceID)
-		return
+	runtimeID := domain.RuntimeInstanceID(event.RuntimeID)
+	if runtimeID == "" {
+		resolved, ok := b.resolveRuntimeID(event.ServiceID)
+		if !ok {
+			log.Printf("[process-exit-bridge] could not resolve runtime ID for service %s (ProcessInstanceID=%s)", event.ServiceID, event.ProcessInstanceID)
+			return
+		}
+		runtimeID = resolved
 	}
+
 	state, err := b.registry.GetRuntimeState(runtimeID)
 	if err == nil && (state == domain.RuntimeStateRestarting || state == domain.RuntimeStateStopping || state == domain.RuntimeStateStopped) {
 		return
@@ -106,11 +112,19 @@ func (b *processExitBridgeImpl) OnProcessExit(event trusted_service.ProcessExitE
 		return
 	}
 
-	generation, generationErr := b.registry.GetCurrentGeneration(runtimeID)
+	generation := event.Generation
+	if generation == 0 {
+		var genErr error
+		generation, genErr = b.registry.GetCurrentGeneration(runtimeID)
+		if genErr != nil {
+			log.Printf("[process-exit-bridge] could not determine generation for runtime %s: %v", runtimeID, genErr)
+		}
+	}
+
 	b.mu.Lock()
 	revoker := b.leaseRevoker
 	b.mu.Unlock()
-	if generationErr == nil && revoker != nil && generation > 0 {
+	if revoker != nil && generation > 0 {
 		revoker.RevokeRuntimeGenerationLeases(string(runtimeID), generation, "unexpected process exit")
 	}
 
@@ -118,11 +132,12 @@ func (b *processExitBridgeImpl) OnProcessExit(event trusted_service.ProcessExitE
 	defer cancel()
 
 	req := recovery.RecoveryRequest{
-		RuntimeID:    runtimeID,
-		ServiceID:    event.ServiceID,
-		FailureClass: recovery.FailureProcessCrash,
-		TriggeredBy:  "process_exit_bridge",
-		MaxAttempts:  3,
+		RuntimeID:      runtimeID,
+		ServiceID:      event.ServiceID,
+		FailureClass:   recovery.FailureProcessCrash,
+		TriggeredBy:    "process_exit_bridge",
+		IdempotencyKey: string(runtimeID) + ":" + event.ServiceID + ":" + fmt.Sprintf("%d", generation),
+		MaxAttempts:    3,
 	}
 
 	resp, err := b.recovery.ExecuteRecovery(ctx, req)
