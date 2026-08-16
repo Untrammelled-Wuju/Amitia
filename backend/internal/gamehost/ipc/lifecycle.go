@@ -129,7 +129,7 @@ type PendingRequestHandle interface {
 }
 
 type ResponseCorrelator interface {
-	RegisterPending(peer Peer, requestID string, generation uint64) (PendingRequestHandle, bool)
+	RegisterPending(peer Peer, requestID string, generation uint64, method string, payload []byte) (PendingRequestHandle, bool)
 	HandleResponse(peer Peer, envelope *protocol.Envelope) bool
 	CancelByPeer(peer Peer)
 	CancelByRuntime(runtimeID string)
@@ -349,7 +349,7 @@ func (cp *controlPlane) SendRequest(ctx context.Context, peer Peer, envelope pro
 		RequestID: envelope.ID,
 	}
 
-	handle, registered := cp.responseCorrelator.RegisterPending(peer, envelope.ID, envelope.Generation)
+	handle, registered := cp.responseCorrelator.RegisterPending(peer, envelope.ID, envelope.Generation, envelope.Method, envelope.Payload)
 	if !registered {
 		if handle == nil {
 			return nil, NewIPCError(IPCErrorProtocol, domain.ErrInvalidState, "duplicate or rejected request id")

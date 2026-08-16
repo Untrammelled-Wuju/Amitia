@@ -382,7 +382,7 @@ func TestF02_SendRequestTerminalPaths(t *testing.T) {
 		ServiceID: "test-service",
 	}
 
-	handle, registered := correlator.RegisterPending(peer, "req-1", 1)
+	handle, registered := correlator.RegisterPending(peer, "req-1", 1, "test.method", []byte(`{"key":"value"}`))
 	if !registered {
 		t.Fatal("register should succeed")
 	}
@@ -415,7 +415,7 @@ func TestF02_HandleResponseCorrelator(t *testing.T) {
 		ServiceID: "test-service",
 	}
 
-	handle, registered := correlator.RegisterPending(peer, "req-1", 1)
+	handle, registered := correlator.RegisterPending(peer, "req-1", 1, "test.method", []byte(`{"key":"value"}`))
 	if !registered {
 		t.Fatal("register should succeed")
 	}
