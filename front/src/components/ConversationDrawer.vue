@@ -157,8 +157,7 @@ function onSelectQQ() {
 }
 
 .channel-pinned.active {
-  background: var(--ac-color-primary-bg);
-  border-left: 3px solid var(--ac-color-primary);
+  background: var(--ac-color-surface-hover);
 }
 
 .channel-icon {
@@ -212,8 +211,7 @@ function onSelectQQ() {
 }
 
 .char-item.active {
-  background: var(--ac-color-primary-bg);
-  border-left: 3px solid var(--ac-color-primary);
+  background: var(--ac-color-surface-hover);
 }
 
 .char-info {

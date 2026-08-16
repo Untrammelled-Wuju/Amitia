@@ -35,11 +35,13 @@ import MCPInteractionGuard from "./components/MCPInteractionGuard.vue";
 import { useTheme } from "./ui-index";
 import { isDesktopShell } from "./runtime/runtime-capabilities";
 import NotFoundView from "./views/NotFoundView.vue";
+import { useExtensionUIStore } from "./stores/extensionUI";
 
 const router = useRouter();
 const route = useRoute();
 const renderError = ref(false);
 const capturedError = ref<string | null>(null);
+const extensionUIStore = useExtensionUIStore();
 
 const TOKEN_KEY = "ai-companion-token";
 
@@ -105,6 +107,8 @@ onMounted(async () => {
         if (!userData?.id) {
           localStorage.removeItem(TOKEN_KEY);
           router.replace("/login");
+        } else {
+          extensionUIStore.refreshSnapshot(true).catch(() => {});
         }
       } catch {
         localStorage.removeItem(TOKEN_KEY);
