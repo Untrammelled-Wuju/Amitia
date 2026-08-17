@@ -390,6 +390,12 @@ func NewGeneratedSkillInstaller(skillPort SkillInstallPort, workshopPort Worksho
 	return &GeneratedSkillInstaller{skillPort: skillPort, workshopPort: workshopPort}
 }
 
+// NewGeneratedSkillInstallerWithWorkshop creates a GeneratedSkillInstaller with real dependencies.
+// Both skillPort and workshopPort must be provided.
+func NewGeneratedSkillInstallerWithWorkshop(skillPort SkillInstallPort, workshopPort WorkshopGeneratePort) *GeneratedSkillInstaller {
+	return &GeneratedSkillInstaller{skillPort: skillPort, workshopPort: workshopPort}
+}
+
 func (*GeneratedSkillInstaller) Method() InstallMethod { return InstallGeneratedSkill }
 
 // buildSkillMarkdown converts a WorkshopInstructionDraft into SKILL.md format.
