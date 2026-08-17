@@ -13,7 +13,6 @@ import (
 	"strings"
 
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/u-ai/backend/internal/accountsession"
 	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/runtimeidentity"
@@ -215,7 +214,33 @@ func handleNetworkAuth(c *gin.Context, cfg AuthConfig) {
 	applyActorToContext(c, actor)
 }
 
+var localPublicPathPrefixes = []string{
+	"/api/auth/login",
+	"/api/auth/setup",
+	"/api/auth/status",
+	"/api/health",
+	"/api/health/circuit-breakers",
+	"/api/onboarding/status",
+	"/api/onboarding/complete",
+	"/api/tts/voices",
+	"/api/public",
+}
+
+func isLocalPublicPath(path string) bool {
+	for _, prefix := range localPublicPathPrefixes {
+		if path == prefix || strings.HasPrefix(path, prefix+"/") {
+			return true
+		}
+	}
+	return false
+}
+
 func handleLocalSingleUserAuth(c *gin.Context, cfg AuthConfig) {
+	if isLocalPublicPath(c.Request.URL.Path) {
+		c.Next()
+		return
+	}
+
 	if !isLoopback(c.Request.RemoteAddr) || !isLoopback(cfg.ListenAddress) {
 		util.ErrorResponse(c, response.Unauthorized, "本地单用户模式仅允许回环访问", nil)
 		c.Abort()
@@ -330,31 +355,14 @@ func extractBearerToken(c *gin.Context) string {
 }
 
 func parseAndValidateJWT(tokenStr, secret, issuer, audience string) (*AccessClaims, error) {
-	claims := &AccessClaims{}
-	token, err := jwt.ParseWithClaims(tokenStr, claims, func(t *jwt.Token) (interface{}, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-		}
-		return []byte(secret), nil
-	},
-		jwt.WithValidMethods([]string{"HS256", "HS384", "HS512"}),
-		jwt.WithIssuedAt(),
-		jwt.WithIssuer(issuer),
-		jwt.WithAudience(audience),
-	)
-
+	tokenSvc := accountsession.NewTokenServiceFromParams(secret, issuer, audience)
+	claims, err := tokenSvc.ParseAccessToken(tokenStr)
 	if err != nil {
 		return nil, err
 	}
-
-	if !token.Valid {
-		return nil, errors.New("invalid token")
-	}
-
 	if claims.UserID <= 0 {
 		return nil, errors.New("invalid user id")
 	}
-
 	return claims, nil
 }
 
