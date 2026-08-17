@@ -28,11 +28,9 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	handler.SetArtifactService(artifactSvc)
 	svc.AttachTemporalService(temporalSvc)
 
-	if dpCoord == nil {
-		return
+	if dpCoord != nil {
+		svc.SetDataPortabilityCoordinator(dpCoord)
 	}
-	svc.SetDataPortabilityCoordinator(dpCoord)
-	_ = dpCoord
 
 	modelerror.SetReporter(handler.publishModelError)
 
