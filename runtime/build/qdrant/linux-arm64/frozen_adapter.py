@@ -140,7 +140,7 @@ def export_frozen_record(input_dir, output_path, source_revision=None):
     if out_dir:
         os.makedirs(out_dir, exist_ok=True)
 
-    record.write_canonical_json(output_path)
+    record.write(output_path)
 
     return record
 

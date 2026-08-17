@@ -188,7 +188,7 @@ def build_node(input_dir, output_dir, lock_path=None):
         )
         validate(tree_record)
         frozen_path = os.path.join(staging, "node-frozen-record.json")
-        tree_record.write_canonical_json(frozen_path)
+        tree_record.write(frozen_path)
 
         if os.path.exists(output_dir):
             shutil.rmtree(output_dir)
