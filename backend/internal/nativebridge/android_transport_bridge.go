@@ -152,7 +152,7 @@ func (b *AndroidTransportBridge) HandleRelayEnvelope(payload []byte) error {
 			return fmt.Errorf("no active relay session")
 		}
 		if gen != env.Generation {
-			return nil
+			return fmt.Errorf("generation mismatch: expected %d, got %d", gen, env.Generation)
 		}
 		session.handleIncomingEnvelope(env)
 		return nil
@@ -162,7 +162,7 @@ func (b *AndroidTransportBridge) HandleRelayEnvelope(payload []byte) error {
 		gen := b.generation.Load()
 		b.mu.RUnlock()
 		if gen != env.Generation {
-			return nil
+			return fmt.Errorf("generation mismatch: expected %d, got %d", gen, env.Generation)
 		}
 		if sink != nil {
 			return sink.PublishNativeEvent(context.Background(), "android", env.Generation, env.Payload)
@@ -173,7 +173,7 @@ func (b *AndroidTransportBridge) HandleRelayEnvelope(payload []byte) error {
 		gen := b.generation.Load()
 		b.mu.RUnlock()
 		if gen != env.Generation {
-			return nil
+			return fmt.Errorf("generation mismatch: expected %d, got %d", gen, env.Generation)
 		}
 		return b.updateHostHealthFromEnvelope(env)
 	default:

@@ -3,6 +3,7 @@ package nativebridge
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"sync"
 	"sync/atomic"
@@ -78,6 +79,7 @@ func (h *RelayHandler) HandleWebSocket(c *gin.Context) {
 
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "websocket upgrade failed: " + err.Error()})
 		return
 	}
 
@@ -181,10 +183,10 @@ func (s *relayEventSink) PublishNativeEvent(ctx context.Context, platform string
 	bridge, ok := s.handler.bridges[platform]
 	s.handler.mu.RUnlock()
 	if !ok {
-		return nil
+		return fmt.Errorf("nativebridge: no bridge for platform %s", platform)
 	}
 	if bridge.Generation() != generation {
-		return nil
+		return fmt.Errorf("nativebridge: generation mismatch for platform %s: expected %d, got %d", platform, bridge.Generation(), generation)
 	}
-	return nil
+	return bridge.HandleRelayEnvelope(payload)
 }
