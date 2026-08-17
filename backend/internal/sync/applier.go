@@ -41,8 +41,9 @@ func (c *CompositeApplier) Supports(entityType EntityType) bool {
 }
 
 type ApplierError struct {
-	Code    string
-	Message string
+	Code            string
+	Message         string
+	ServerRevision  int64
 }
 
 func (e *ApplierError) Error() string {

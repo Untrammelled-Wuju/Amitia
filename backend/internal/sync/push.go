@@ -109,12 +109,19 @@ func (s *PushService) applyMutation(tx *gorm.DB, deviceID, userID string, mutati
 
 	revision, err := s.applier.Apply(tx, mutation)
 	if err != nil {
-		return MutationResult{
+		result := MutationResult{
 			MutationID: mutation.MutationID,
 			Success:    false,
 			ErrorCode:  "apply_failed",
 			Message:    err.Error(),
 		}
+		if appErr, ok := err.(*ApplierError); ok {
+			result.ErrorCode = appErr.Code
+			if appErr.Code == "conflict" {
+				result.ServerRevision = appErr.ServerRevision
+			}
+		}
+		return result
 	}
 
 	record, err := s.changelog.AppendTx(

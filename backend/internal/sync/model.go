@@ -116,6 +116,7 @@ type MutationResult struct {
 	Revision   int64      `json:"revision,omitempty"`
 	ErrorCode  string     `json:"errorCode,omitempty"`
 	Message    string     `json:"message,omitempty"`
+	ServerRevision int64  `json:"serverRevision,omitempty"`
 }
 
 type Conflict struct {
