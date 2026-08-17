@@ -4,6 +4,7 @@ package chat
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
@@ -17,13 +18,34 @@ import (
 	"github.com/u-ai/backend/config"
 )
 
+var globalArtifactResolver ArtifactResolver
+
+func SetGlobalArtifactResolver(resolver ArtifactResolver) {
+	globalArtifactResolver = resolver
+}
+
 func analyzeImageInternal(imageUrl string) (string, string) {
 	cfg, err := getVisionModelConfig()
 	if err != nil {
 		return "", err.Error()
 	}
 	imageData := imageUrl
-	if strings.HasPrefix(imageUrl, "/images/") {
+	if strings.HasPrefix(imageUrl, "amitia://artifacts/") {
+		if globalArtifactResolver != nil {
+			rc, res, openErr := globalArtifactResolver.Open(context.Background(), "", imageUrl)
+			if openErr == nil {
+				defer rc.Close()
+				data, readErr := io.ReadAll(rc)
+				if readErr == nil {
+					mimeType := res.MIMEType
+					if mimeType == "" {
+						mimeType = "image/png"
+					}
+					imageData = "data:" + mimeType + ";base64," + base64.StdEncoding.EncodeToString(data)
+				}
+			}
+		}
+	} else if strings.HasPrefix(imageUrl, "/images/") {
 		ext := filepath.Ext(imageUrl)
 		mimeType := "image/png"
 		switch ext {
@@ -61,6 +83,20 @@ func analyzeVideoInternal(videoUrl string) (string, string) {
 		}
 		return callDoubaoVision(cfg.BaseUrl, cfg.ApiKey, cfg.ModelName, content)
 	}
+	if strings.HasPrefix(videoUrl, "amitia://artifacts/") {
+		if globalArtifactResolver != nil {
+			fileID, uploadErr := uploadArtifactToArk(cfg.BaseUrl, cfg.ApiKey, globalArtifactResolver, videoUrl)
+			if uploadErr != nil {
+				return "", fmt.Sprintf("视频上传失败: %s", uploadErr.Error())
+			}
+			content := []map[string]interface{}{
+				{"type": "input_video", "file_id": fileID},
+				{"type": "input_text", "text": "请详细描述这段视频的内容，包括场景、人物动作、事件发展、关键画面等所有可见信息，严禁描述不存在于视频中的信息"},
+			}
+			return callDoubaoVision(cfg.BaseUrl, cfg.ApiKey, cfg.ModelName, content)
+		}
+		return "", "artifact resolver not configured"
+	}
 	if strings.HasPrefix(videoUrl, "/videos/") {
 		filePath := filepath.Join(config.AppCfg.Storage.DataDir, "videos", filepath.Base(videoUrl))
 		fileID, err := uploadFileToArk(cfg.BaseUrl, cfg.ApiKey, filePath)
@@ -75,6 +111,19 @@ func analyzeVideoInternal(videoUrl string) (string, string) {
 		return callDoubaoVision(cfg.BaseUrl, cfg.ApiKey, cfg.ModelName, content)
 	}
 	return "", fmt.Sprintf("不支持的视频URL格式: %s", videoUrl[:min(len(videoUrl), 100)])
+}
+
+func uploadArtifactToArk(baseURL, apiKey string, resolver ArtifactResolver, resourceURI string) (string, error) {
+	rc, res, openErr := resolver.Open(context.Background(), "", resourceURI)
+	if openErr != nil {
+		return "", openErr
+	}
+	defer rc.Close()
+	fileName := res.Filename
+	if fileName == "" {
+		fileName = string(res.ID)
+	}
+	return uploadStreamToArk(baseURL, apiKey, rc, fileName)
 }
 
 func callDoubaoVision(baseURL, apiKey, modelName string, content []map[string]interface{}) (string, string) {
