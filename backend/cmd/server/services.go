@@ -34,6 +34,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/editing/revisioncommit"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
+	installationrecovery "github.com/u-ai/backend/internal/desktoppet/installation/recovery"
 	"github.com/u-ai/backend/internal/desktoppet/maintenance"
 	"github.com/u-ai/backend/internal/desktoppet/migration"
 	migrationplans "github.com/u-ai/backend/internal/desktoppet/migration/plans"
@@ -61,7 +62,9 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/runtime"
 	runtimev2 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v2"
 	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
+	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/desktoppet/worker"
+	"github.com/u-ai/backend/internal/devicemesh"
 	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
@@ -96,6 +99,7 @@ import (
 	"github.com/u-ai/backend/internal/safety"
 	"github.com/u-ai/backend/internal/scriptruntime/commandenv"
 	"github.com/u-ai/backend/internal/search"
+	"github.com/u-ai/backend/internal/system/dataportability"
 	"github.com/u-ai/backend/internal/temporal"
 	"github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/workspace"
@@ -109,6 +113,9 @@ import (
 type AppServices struct {
 	RuntimeProfile               runtimeprofile.Profile
 	RuntimePolicy                runtimeprofile.Policy
+	DB                           *gorm.DB
+	DeviceMesh                   *devicemesh.Runtime
+	ClosureGate                  *Stage2ClosureGate
 	DeliveryStore                *delivery.SQLiteDeliveryStore
 	ChatDeliveryAdapter          chat.DeliveryStore
 	DeliveryWorker               *delivery.Worker
@@ -175,6 +182,8 @@ type AppServices struct {
 	WorkspaceRegistry            *workspace.Registry
 	WorkspaceService             *workspace.Service
 	ProductionCutover            *cutoverComposition
+	DataPortability              *dataportability.Coordinator
+	Artifact                     *artifact.Service
 }
 
 type RuntimeOrchestrator interface {
@@ -915,11 +924,21 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	migrationLock := migrationcore.NewPersistentLock(ctx.DB, lockDir)
 	migrationRunner.SetLock(migrationLock)
 	migrationRunner.SetBackupDir(backupDir)
-	backupPort := migration.NewDomainMigrationBackupPort(ctx.DB, backupDir)
+	backupPort := newDomainMigrationBackupPort(ctx.DB, backupDir)
 	migrationRunner.SetBackupPort(backupPort)
 	migrationRunner.RegisterPlan(migrationplans.NewDesktopPetV2CutoverPlan(migrationplans.Dependencies{DB: ctx.DB}))
 
 	maintenanceHandler := maintenance.NewHandler(migrationRunner, nil, nil, nil)
+
+	artifactRuntime, artifactErr := BuildArtifactRuntime(ctx.DB, "")
+	if artifactErr != nil {
+		return nil, fmt.Errorf("failed to build artifact runtime: %w", artifactErr)
+	}
+	chatSvc.SetArtifactResolver(&chatArtifactAdapter{resolver: artifactRuntime.Resolver})
+	chat.SetGlobalArtifactResolver(&chatArtifactAdapter{resolver: artifactRuntime.Resolver})
+
+	installationRecoveryRepo := installationrecovery.NewInstallRepoAdapter(ctx.DB)
+	installationRecoveryWorker := installationrecovery.NewRecoveryWorker(installationRecoveryRepo)
 
 	services := &AppServices{
 		RuntimeProfile:               profile,
@@ -953,6 +972,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		EditingService:               editingSvc,
 		RegenerationWorker:           regenerationWorker,
 		BridgeRecoveryWorker:         bridgeRecoveryWorker,
+		InstallationRecoveryWorker:   installationRecoveryWorker,
 		BehaviorService:              behaviorSvc,
 		AdapterManager:               adapterManager,
 		Reconciliation:               reconciliationEngine,
@@ -983,11 +1003,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		MediaService:                 mediaService,
 		WorkspaceRegistry:            workspaceRegistry,
 		WorkspaceService:             workspaceService,
+		Artifact:                     artifactRuntime,
 	}
 	if err := runCanonicalBuildAssertions(services); err != nil {
 		return nil, fmt.Errorf("canonical build assertion failed: %w", err)
 	}
-	desktoppet.RefreshLegacyWriteFlagsFromDB(ctx.DB)
 	return services, nil
 }
 
