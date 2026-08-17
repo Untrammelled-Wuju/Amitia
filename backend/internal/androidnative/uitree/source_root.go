@@ -2,8 +2,11 @@ package uitree
 
 import (
 	"context"
+	"fmt"
+	"log"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/androidnative/root"
 )
 
@@ -35,9 +38,10 @@ func (s *RootSource) Snapshot(ctx context.Context, request SnapshotRequest) (Raw
 		return RawSnapshot{}, &Error{Code: UI_TREE_ROOT_UNAVAILABLE, Message: "root executor not configured"}
 	}
 
+	dumpPath := fmt.Sprintf("/data/local/tmp/uitree_dump_%s.xml", uuid.NewString())
 	execReq := root.ExecuteRequest{
 		Executable: "uiautomator",
-		Args:       []string{"dump", "/data/local/tmp/uitree_dump.xml"},
+		Args:       []string{"dump", dumpPath},
 		TimeoutMS:  int(s.policy.SnapshotTimeout.Milliseconds()),
 		Mode:       "structured",
 	}
@@ -56,7 +60,7 @@ func (s *RootSource) Snapshot(ctx context.Context, request SnapshotRequest) (Raw
 
 	readReq := root.ExecuteRequest{
 		Executable: "cat",
-		Args:       []string{"/data/local/tmp/uitree_dump.xml"},
+		Args:       []string{dumpPath},
 		TimeoutMS:  int(s.policy.SnapshotTimeout.Milliseconds()),
 		Mode:       "structured",
 	}
@@ -71,11 +75,13 @@ func (s *RootSource) Snapshot(ctx context.Context, request SnapshotRequest) (Raw
 
 	cleanReq := root.ExecuteRequest{
 		Executable: "rm",
-		Args:       []string{"-f", "/data/local/tmp/uitree_dump.xml"},
+		Args:       []string{"-f", dumpPath},
 		TimeoutMS:  1000,
 		Mode:       "structured",
 	}
-	_, _ = s.executor.ExecuteRoot(ctx, cleanReq, root.InternalExecuteOptions{Timeout: 1000})
+	if _, err := s.executor.ExecuteRoot(ctx, cleanReq, root.InternalExecuteOptions{Timeout: 1000}); err != nil {
+		log.Printf("uitree: root source: cleanup failed: %v", err)
+	}
 
 	return RawSnapshot{
 		Source:     SourceTypeRoot,

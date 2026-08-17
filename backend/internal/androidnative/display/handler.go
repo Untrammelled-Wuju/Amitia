@@ -86,7 +86,9 @@ func (s *DisplayService) Handle(ctx context.Context, req capability.AndroidBridg
 func (s *DisplayService) handleStatus(ctx context.Context, req capability.AndroidBridgeRequest) capability.AndroidBridgeResponse {
 	var reqData DisplayStatusRequest
 	if len(req.Payload) > 0 {
-		_ = decodePayloadDisplay(req.Payload, &reqData)
+		if err := decodePayloadDisplay(req.Payload, &reqData); err != nil {
+			return errorResponseDisplay(req, ErrDisplayInvalidRequest, "invalid payload: "+err.Error())
+		}
 	}
 
 	if err := s.refreshDisplays(ctx); err != nil {
@@ -142,7 +144,9 @@ func (s *DisplayService) handleStatus(ctx context.Context, req capability.Androi
 func (s *DisplayService) handleList(ctx context.Context, req capability.AndroidBridgeRequest) capability.AndroidBridgeResponse {
 	var reqData DisplayListRequest
 	if len(req.Payload) > 0 {
-		_ = decodePayloadDisplay(req.Payload, &reqData)
+		if err := decodePayloadDisplay(req.Payload, &reqData); err != nil {
+			return errorResponseDisplay(req, ErrDisplayInvalidRequest, "invalid payload: "+err.Error())
+		}
 	}
 
 	if err := s.refreshDisplays(ctx); err != nil {
@@ -164,7 +168,9 @@ func (s *DisplayService) handleGet(ctx context.Context, req capability.AndroidBr
 	var reqData DisplayGetRequest
 	hasDisplayID := false
 	if len(req.Payload) > 0 {
-		_ = decodePayloadDisplay(req.Payload, &reqData)
+		if err := decodePayloadDisplay(req.Payload, &reqData); err != nil {
+			return errorResponseDisplay(req, ErrDisplayInvalidRequest, "invalid payload: "+err.Error())
+		}
 		_, hasDisplayID = req.Payload["displayId"]
 	}
 
@@ -201,7 +207,9 @@ func (s *DisplayService) handleResolve(ctx context.Context, req capability.Andro
 	var reqData DisplayResolveRequest
 	hasDisplayID := false
 	if len(req.Payload) > 0 {
-		_ = decodePayloadDisplay(req.Payload, &reqData)
+		if err := decodePayloadDisplay(req.Payload, &reqData); err != nil {
+			return errorResponseDisplay(req, ErrDisplayInvalidRequest, "invalid payload: "+err.Error())
+		}
 		_, hasDisplayID = req.Payload["displayId"]
 	}
 
