@@ -142,7 +142,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         let availability = AlarmKitAdapter.shared.checkAvailability()
         switch availability {
         case .available:
-            let (granted, error) = await AlarmKitAdapter.shared.requestAuthorization()
+            let (state, error) = await AlarmKitAdapter.shared.requestAuthorization()
             if let error = error {
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
@@ -156,7 +156,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
                 protocolVersion: request.protocolVersion,
                 requestId: request.requestId,
                 status: "ok",
-                result: ["granted": granted],
+                result: ["granted": state == .authorized, "state": "\(state)"],
                 error: nil
             )
         case .unsupported(let reason):

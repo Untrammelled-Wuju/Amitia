@@ -12,7 +12,6 @@ public enum AlarmAuthorizationStatus {
     case authorized
     case denied
     case notDetermined
-    case restricted
 }
 
 public struct AmitiaAlarmScheduleDTO: Codable {
@@ -67,7 +66,6 @@ public class AlarmKitAdapter {
             case .authorized: return .authorized
             case .denied: return .denied
             case .notDetermined: return .notDetermined
-            case .restricted: return .restricted
             @unknown default: return .notDetermined
             }
         }
@@ -75,19 +73,24 @@ public class AlarmKitAdapter {
         return .notDetermined
     }
 
-    public func requestAuthorization() async -> (granted: Bool, error: String?) {
-        guard isAlarmKitAvailable() else { return (false, "PLATFORM_NOT_SUPPORTED") }
+    public func requestAuthorization() async -> (state: AlarmAuthorizationStatus, error: String?) {
+        guard isAlarmKitAvailable() else { return (.notDetermined, "PLATFORM_NOT_SUPPORTED") }
         #if canImport(AlarmKit)
         if #available(iOS 26.0, *) {
             do {
-                let granted = try await AlarmManager.shared.requestAuthorization()
-                return (granted, nil)
+                let result = try await AlarmManager.shared.requestAuthorization()
+                switch result {
+                case .authorized: return (.authorized, nil)
+                case .denied: return (.denied, nil)
+                case .notDetermined: return (.notDetermined, nil)
+                @unknown default: return (.notDetermined, nil)
+                }
             } catch {
-                return (false, error.localizedDescription)
+                return (.denied, error.localizedDescription)
             }
         }
         #endif
-        return (false, "PLATFORM_NOT_SUPPORTED")
+        return (.notDetermined, "PLATFORM_NOT_SUPPORTED")
     }
 
     public func createAlarm(

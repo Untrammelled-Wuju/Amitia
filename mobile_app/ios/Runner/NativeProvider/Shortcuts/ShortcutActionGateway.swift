@@ -91,6 +91,10 @@ public class ShortcutActionGateway: NSObject {
         ]
     }
 
+    public func setupBackendDispatcher(_ dispatcher: BackendActionDispatcher) {
+        backendDispatcher = dispatcher
+    }
+
     public func isCuratedAction(_ action: ShortcutAction) -> Bool {
         return registeredActions.contains(action)
     }

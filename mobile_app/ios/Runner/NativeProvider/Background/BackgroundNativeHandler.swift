@@ -79,13 +79,14 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleStatus(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        let available = #available(iOS 13.0, *)
+        var supported = false
+        if #available(iOS 13.0, *) { supported = true }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
             requestId: request.requestId,
             status: "ok",
             result: [
-                "supported": available,
+                "supported": supported,
                 "pendingCount": activeTaskCount(),
                 "activeTaskCount": activeTaskCount()
             ],
@@ -269,7 +270,8 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleRuntimeReadiness(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        let available = #available(iOS 13.0, *)
+        var available = false
+        if #available(iOS 13.0, *) { available = true }
         let activeCount = activeTaskCount()
         return successResponse(request, result: [
             "ready": available,
@@ -279,7 +281,8 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleRuntimeEnsure(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        let available = #available(iOS 13.0, *)
+        var available = false
+        if #available(iOS 13.0, *) { available = true }
         return successResponse(request, result: [
             "ensured": available,
             "platformSupported": available

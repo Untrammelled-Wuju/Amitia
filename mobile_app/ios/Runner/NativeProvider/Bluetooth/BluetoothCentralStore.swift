@@ -770,7 +770,8 @@ public final class BluetoothCentralStore: NSObject, CBCentralManagerDelegate, CB
         NativeEventEmitter.shared.emit(NativeEventPayload(
             domain: "bluetooth",
             event: "peripheral.connected",
-            data: ["id": peripheral.identifier.uuidString, "name": peripheral.name ?? NSNull()]
+            data: ["id": peripheral.identifier.uuidString, "name": peripheral.name ?? NSNull()],
+            entityRef: peripheral.identifier.uuidString
         ))
     }
 
@@ -810,7 +811,8 @@ public final class BluetoothCentralStore: NSObject, CBCentralManagerDelegate, CB
         NativeEventEmitter.shared.emit(NativeEventPayload(
             domain: "bluetooth",
             event: "peripheral.disconnected",
-            data: ["id": peripheral.identifier.uuidString, "name": peripheral.name ?? NSNull(), "error": error?.localizedDescription ?? NSNull()]
+            data: ["id": peripheral.identifier.uuidString, "name": peripheral.name ?? NSNull(), "error": error?.localizedDescription ?? NSNull()],
+            entityRef: peripheral.identifier.uuidString
         ))
     }
 
@@ -857,7 +859,8 @@ public final class BluetoothCentralStore: NSObject, CBCentralManagerDelegate, CB
                     "serviceUUID": characteristic.service?.uuid.uuidString ?? "",
                     "characteristicUUID": characteristic.uuid.uuidString,
                     "value": (characteristic.value ?? Data()).base64EncodedString()
-                ]
+                ],
+                entityRef: peripheral.identifier.uuidString
             ))
         }
     }
