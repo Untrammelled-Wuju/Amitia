@@ -53,7 +53,7 @@ func (r *repository) Create(user *AuthUser) error {
 }
 
 func (r *repository) UpdateLoginTime(id int) error {
-	return r.db.Model(&AuthUser{}).Where("id = ?", id).Update("last_login_at", gorm.Expr("NOW()")).Error
+	return r.db.Model(&AuthUser{}).Where("id = ?", id).Update("last_login_at", gorm.Expr("datetime('now')")).Error
 }
 
 func (r *repository) UpdatePassword(id int, hash string) error {
