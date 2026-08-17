@@ -133,5 +133,6 @@ internal class AndroidProotComponent(
         override fun close() {}
         override fun requestStop() {}
         override val exit: com.amitia.amitia_app.runtime.proot.ProotExit? = null
+        override fun activate() {}
     }
 }

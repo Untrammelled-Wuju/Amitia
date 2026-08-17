@@ -104,6 +104,7 @@ internal class FakeProotSession(override val sessionId: String) : ProotSession {
     override fun close() { alive.set(false) }
     override fun requestStop() {}
     override val exit: com.amitia.amitia_app.runtime.proot.ProotExit? = null
+    override fun activate() {}
 
     override fun terminateAndConfirmExit(gracefulTimeoutMs: Long, forceTimeoutMs: Long): ProotTerminationResult {
         return ProotTerminationResult.ConfirmedExited(exit?.exitCode)
