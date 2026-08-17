@@ -35,7 +35,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
 	installationrecovery "github.com/u-ai/backend/internal/desktoppet/installation/recovery"
-	
+
 	"github.com/u-ai/backend/internal/desktoppet/maintenance"
 	"github.com/u-ai/backend/internal/desktoppet/migration"
 	migrationplans "github.com/u-ai/backend/internal/desktoppet/migration/plans"
@@ -99,8 +99,8 @@ import (
 	"github.com/u-ai/backend/internal/safety"
 	"github.com/u-ai/backend/internal/scriptruntime/commandenv"
 	"github.com/u-ai/backend/internal/search"
-	"github.com/u-ai/backend/internal/system/dataportability"
 	syncpkg "github.com/u-ai/backend/internal/sync"
+	"github.com/u-ai/backend/internal/system/dataportability"
 	"github.com/u-ai/backend/internal/temporal"
 	"github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/workspace"
@@ -188,6 +188,7 @@ type AppServices struct {
 	Artifact                     *ArtifactRuntime
 	Sync                         *syncpkg.Service
 	AccountSession               *AccountSessionRuntime
+	NativeBridgeRelay            *nativeBridgeRelay
 }
 
 type RuntimeOrchestrator interface {
@@ -365,7 +366,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithMediaService(mediaService).
 		WithWorkspaceService(workspaceService).
 		WithBrowserProvider(browserProvider).
-		WithRuntimeProfile(runtimeProfile)
+		WithRuntimeProfile(runtimeProfile).
+		WithBackgroundBootstrapFunc(func() (backgroundremoval.Registry, error) {
+			reg := backgroundremoval.NewRegistry()
+			reg.Register(local.NewLocalProvider(), local.LocalCapabilities())
+			return reg, nil
+		})
 
 	if bootstrap != nil {
 		kernelBuilder.WithRuntimeHost(bootstrap.RuntimeHost())
@@ -948,38 +954,38 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	syncService := syncpkg.NewService(ctx.DB, syncApplier)
 
 	services := &AppServices{
-		RuntimeProfile:               runtimeProfile,
-		RuntimePolicy:                policy,
-		Graph:                        graphSvc,
-		ChatDeliveryAdapter:          deliveryAdapter,
-		Memory:                       memSvc,
-		Profile:                      profSvc,
-		Episodic:                     epiSvc,
-		WorldBook:                    wbSvc,
-		Vision:                       visionSvc,
-		Companion:                    compSvc,
-		Chat:                         chatSvc,
-		UnifiedEntry:                 entry,
-		DataLifecycle:                dataLifecycle,
-		RuntimeQueue:                 runtimeQueue,
-		NewOutbox:                    newOutboxStore,
-		DeliveryStore:                deliveryStore,
-		DeliveryWorker:               deliveryWorker,
-		OutboxWorker:                 newOutboxWorker,
-		DesktopPetWorker:             desktopPetWorker,
-		ProcessingWorker:             processingWorker,
-		QualityService:               qualitySvc,
-		QualityWorker:                qualityWorker,
-		InstallationCoordinator:      installationCoordinator,
-		InstallationRepo:             installationRepo,
-		NewReleaseService:            newReleaseService,
-		ReleaseRecoveryWorker:        releaseRecoveryWorker,
-		ReleaseEventPublisher:        releaseEventPublisher,
-		DesktopPetRuntimeV2:          runtimeV2Facade,
-		EditingService:               editingSvc,
-		RegenerationWorker:           regenerationWorker,
-		BridgeRecoveryWorker:         bridgeRecoveryWorker,
-		
+		RuntimeProfile:          runtimeProfile,
+		RuntimePolicy:           policy,
+		Graph:                   graphSvc,
+		ChatDeliveryAdapter:     deliveryAdapter,
+		Memory:                  memSvc,
+		Profile:                 profSvc,
+		Episodic:                epiSvc,
+		WorldBook:               wbSvc,
+		Vision:                  visionSvc,
+		Companion:               compSvc,
+		Chat:                    chatSvc,
+		UnifiedEntry:            entry,
+		DataLifecycle:           dataLifecycle,
+		RuntimeQueue:            runtimeQueue,
+		NewOutbox:               newOutboxStore,
+		DeliveryStore:           deliveryStore,
+		DeliveryWorker:          deliveryWorker,
+		OutboxWorker:            newOutboxWorker,
+		DesktopPetWorker:        desktopPetWorker,
+		ProcessingWorker:        processingWorker,
+		QualityService:          qualitySvc,
+		QualityWorker:           qualityWorker,
+		InstallationCoordinator: installationCoordinator,
+		InstallationRepo:        installationRepo,
+		NewReleaseService:       newReleaseService,
+		ReleaseRecoveryWorker:   releaseRecoveryWorker,
+		ReleaseEventPublisher:   releaseEventPublisher,
+		DesktopPetRuntimeV2:     runtimeV2Facade,
+		EditingService:          editingSvc,
+		RegenerationWorker:      regenerationWorker,
+		BridgeRecoveryWorker:    bridgeRecoveryWorker,
+
 		BehaviorService:              behaviorSvc,
 		AdapterManager:               adapterManager,
 		Reconciliation:               reconciliationEngine,
@@ -1013,6 +1019,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		Artifact:                     artifactRuntime,
 		Sync:                         syncService,
 		DB:                           ctx.DB,
+		NativeBridgeRelay:            newNativeBridgeRelay(),
 	}
 	if err := runCanonicalBuildAssertions(services); err != nil {
 		return nil, fmt.Errorf("canonical build assertion failed: %w", err)

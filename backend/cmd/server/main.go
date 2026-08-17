@@ -348,7 +348,7 @@ func main() {
 	serverErr := make(chan error, 1)
 
 	if policy.FullHTTPAPI {
-		r, errSetup := setupRouter(ctx, services)
+		r, errSetup := setupRouter(ctx, services, bootstrap)
 		if errSetup != nil {
 			log.Error("路由和安全服务初始化失败:", errSetup)
 			cleanup()

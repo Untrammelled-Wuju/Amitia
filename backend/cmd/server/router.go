@@ -42,6 +42,8 @@ import (
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_center"
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
+	iosnativebackground "github.com/u-ai/backend/internal/iosnative/background"
+	"github.com/u-ai/backend/internal/nativebridge"
 	"github.com/u-ai/backend/internal/feedback"
 	"github.com/u-ai/backend/internal/gamehost/control"
 	"github.com/u-ai/backend/internal/gamehost/domain"
@@ -70,7 +72,7 @@ import (
 	"github.com/u-ai/backend/pkg/app"
 )
 
-func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error) {
+func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeBootstrap) (*gin.Engine, error) {
 	if config.AppCfg.Server.Mode == "release" {
 		gin.SetMode(gin.ReleaseMode)
 	}
@@ -534,6 +536,19 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 				AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
 				SessionService:   sessionSvc,
 			}))
+		}
+
+		if services.NativeBridgeRelay != nil && bootstrap != nil {
+			tryRegisterAndroidBridge(services.NativeBridgeRelay, bootstrap)
+			tryRegisterIOSBridge(services.NativeBridgeRelay, bootstrap)
+			setupNativeBridgeRelayRoutes(services.NativeBridgeRelay, apiGroup)
+
+			if services.KernelContainer != nil && services.KernelContainer.TaskRuntimeService != nil {
+				eventSinkRouter := iosnativebackground.NewTaskRuntimeEventSinkRouter(services.KernelContainer.TaskRuntimeService)
+				evtSink := nativebridge.NewNativeEventSinkAdapterWithRouter(services.KernelContainer.EventService, eventSinkRouter)
+				services.NativeBridgeRelay.Handler().SetEventSink("android", evtSink)
+				services.NativeBridgeRelay.Handler().SetEventSink("ios", evtSink)
+			}
 		}
 	}
 

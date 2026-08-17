@@ -48,7 +48,6 @@ func (p *coordinatorReleaseValidator) ValidateRelease(ctx context.Context, userI
 	}, nil
 }
 
-
 type coordinatorRuntimePublisher struct {
 	facade *runtimev2.RuntimeFacade
 }
