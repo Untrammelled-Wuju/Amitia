@@ -49,3 +49,10 @@ func RegisterGameCenterControlRouter(group *gin.RouterGroup, controlHandler *Con
 		gameCenter.POST("/runtimes/:runtimeId/rearm", controlHandler.Rearm)
 	}
 }
+
+func RegisterRPCRouter(group *gin.RouterGroup, rpcHandler *RPCHandler) {
+	gameCenter := group.Group("/game-center")
+	{
+		gameCenter.POST("/runtimes/:runtimeId/services/:serviceId/rpc", rpcHandler.InvokeRPC)
+	}
+}
