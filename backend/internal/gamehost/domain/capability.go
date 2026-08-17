@@ -45,6 +45,7 @@ const (
 	CapabilityCustomRPC       Capability = "custom_rpc"
 	CapabilityHostAPI         Capability = "host_api"
 	CapabilitySharedControl   Capability = "shared_control"
+	CapabilityCustomUI        Capability = "custom_ui"
 	CapabilityMultiService    Capability = "multi_service"
 )
 
