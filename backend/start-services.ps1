@@ -6,7 +6,7 @@ Start-Process -FilePath "$backendDir\qdrant\qdrant.exe" -WorkingDirectory "$back
 Start-Sleep -Seconds 3
 
 Write-Host "Starting SurrealDB..."
-Start-Process -FilePath "$backendDir\surrealdb\surreal.exe" -WorkingDirectory "$backendDir\surrealdb" -WindowStyle Hidden -ArgumentList "start","--log","trace","--user","root","--pass","root","file://data/data.sdb"
+Start-Process -FilePath "$backendDir\surrealdb\surreal.exe" -WorkingDirectory "$backendDir\surrealdb" -WindowStyle Hidden -ArgumentList "start","--log","trace","--user","root","--pass","root","rocksdb://data/data.sdb","--bind","127.0.0.1:18000"
 
 Start-Sleep -Seconds 3
 
