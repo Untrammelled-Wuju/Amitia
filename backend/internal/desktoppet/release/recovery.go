@@ -16,17 +16,17 @@ import (
 )
 
 type ReleaseRecoveryWorker struct {
-	repo             ReleaseRepository
-	stagingRepo      security.ImportStagingRepository
-	leaseManager     LeaseManagerPort
-	journalManager   JournalManagerPort
-	storage          ReleaseStoragePort
-	eventPublisher   EventPublisher
-	checkInterval    time.Duration
-	stopCh           chan struct{}
-	wg               sync.WaitGroup
-	mu               sync.Mutex
-	running          bool
+	repo           ReleaseRepository
+	stagingRepo    security.ImportStagingRepository
+	leaseManager   LeaseManagerPort
+	journalManager JournalManagerPort
+	storage        ReleaseStoragePort
+	eventPublisher EventPublisher
+	checkInterval  time.Duration
+	stopCh         chan struct{}
+	wg             sync.WaitGroup
+	mu             sync.Mutex
+	running        bool
 }
 
 type LeaseManagerPort interface {
