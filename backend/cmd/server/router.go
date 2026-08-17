@@ -142,6 +142,10 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 
 		public.GET("/onboarding/status", systemHandler.OnboardingStatus)
 		public.POST("/onboarding/complete", systemHandler.OnboardingComplete)
+		public.GET("/health", systemHandler.Health)
+
+		chatHandler := chat.NewHandlerWithUnifiedEntry(services.Chat, services.UnifiedEntry)
+		public.POST("/model/detect-models", chatHandler.DetectModels)
 	}
 
 	sessionSvc, err := security.NewDesktopSessionService(ctx.DB, config.AppCfg.Storage.DataDir, localCredentialStore)
