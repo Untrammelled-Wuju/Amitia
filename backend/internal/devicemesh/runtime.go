@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/deviceruntime"
 	"github.com/u-ai/backend/internal/devicemesh/agent"
 	"github.com/u-ai/backend/internal/devicemesh/bootstrap"
 	"github.com/u-ai/backend/internal/devicemesh/credential"
@@ -23,6 +24,7 @@ type Runtime struct {
 	Probe         *server.ProbeService
 	DeviceReg     *host_registry.Registry
 	LocalHandler  *agent.LocalHandler
+	sessions      *deviceruntime.Service
 }
 
 func NewCloudRuntime(db *sql.DB, deviceReg *host_registry.Registry) (*Runtime, error) {
@@ -78,10 +80,17 @@ func NewCloudRuntimeWithHub(db *sql.DB, deviceReg *host_registry.Registry, hub *
 	}, nil
 }
 
-func (rt *Runtime) SetSessions(sessions interface{}) {
+func (rt *Runtime) SetSessions(sessions *deviceruntime.Service) {
+	rt.sessions = sessions
 }
 
 func (rt *Runtime) Start() error {
+	if rt.Hub == nil {
+		rt.Hub = server.NewConnectionHub()
+	}
+	if rt.Probe == nil && rt.Hub != nil {
+		rt.Probe = server.NewProbeService(rt.Hub)
+	}
 	return nil
 }
 
