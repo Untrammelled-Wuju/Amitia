@@ -443,9 +443,9 @@ export class DesktopRuntimeHandlerV2 {
   private mapCommandExecutionStatus(status: string): CommandStatus {
     switch (status) {
       case "applied":
-        return "renderer_accepted";
+        return "completed";
       case "accepted":
-        return "runtime_accepted";
+        return "renderer_accepted";
       case "failed":
         return "failed_terminal";
       case "rejected":
@@ -457,7 +457,7 @@ export class DesktopRuntimeHandlerV2 {
       case "cancelled":
         return "cancelled";
       default:
-        return "renderer_accepted";
+        return "failed_terminal";
     }
   }
 
