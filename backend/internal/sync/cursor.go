@@ -9,11 +9,17 @@ import (
 	"gorm.io/gorm"
 )
 
+type CursorIdentity struct {
+	UserID   string
+	Scope    CursorScope
+	DeviceID string
+}
+
 type CursorStore interface {
-	Get(deviceID string) (*SyncCursor, error)
+	Get(identity CursorIdentity) (*SyncCursor, error)
 	Save(cursor *SyncCursor) error
-	UpdateApplied(deviceID string, seq Sequence) error
-	UpdatePushed(deviceID string, seq Sequence) error
+	UpdateApplied(identity CursorIdentity, seq Sequence) error
+	UpdatePushed(identity CursorIdentity, seq Sequence) error
 	ListByUser(userID string) ([]SyncCursor, error)
 }
 
@@ -25,9 +31,9 @@ func NewCursorStore(db *gorm.DB) CursorStore {
 	return &sqliteCursorStore{db: db}
 }
 
-func (s *sqliteCursorStore) Get(deviceID string) (*SyncCursor, error) {
+func (s *sqliteCursorStore) Get(identity CursorIdentity) (*SyncCursor, error) {
 	var cursor SyncCursor
-	err := s.db.Where("device_id = ?", deviceID).First(&cursor).Error
+	err := s.db.Where("user_id = ? AND scope = ? AND device_id = ?", identity.UserID, identity.Scope, identity.DeviceID).First(&cursor).Error
 	if err == gorm.ErrRecordNotFound {
 		return nil, nil
 	}
@@ -36,29 +42,29 @@ func (s *sqliteCursorStore) Get(deviceID string) (*SyncCursor, error) {
 
 func (s *sqliteCursorStore) Save(cursor *SyncCursor) error {
 	cursor.UpdatedAt = time.Now().UTC()
-	existing, err := s.Get(cursor.DeviceID)
+	existing, err := s.Get(CursorIdentity{UserID: cursor.UserID, Scope: cursor.Scope, DeviceID: cursor.DeviceID})
 	if err != nil {
 		return err
 	}
 	if existing == nil {
 		return s.db.Create(cursor).Error
 	}
-	return s.db.Model(&SyncCursor{}).Where("device_id = ?", cursor.DeviceID).Updates(map[string]interface{}{
+	return s.db.Model(&SyncCursor{}).Where("user_id = ? AND scope = ? AND device_id = ?", cursor.UserID, cursor.Scope, cursor.DeviceID).Updates(map[string]interface{}{
 		"last_applied": cursor.LastApplied,
 		"last_pushed":  cursor.LastPushed,
 		"updated_at":   cursor.UpdatedAt,
 	}).Error
 }
 
-func (s *sqliteCursorStore) UpdateApplied(deviceID string, seq Sequence) error {
-	return s.db.Model(&SyncCursor{}).Where("device_id = ?", deviceID).Updates(map[string]interface{}{
+func (s *sqliteCursorStore) UpdateApplied(identity CursorIdentity, seq Sequence) error {
+	return s.db.Model(&SyncCursor{}).Where("user_id = ? AND scope = ? AND device_id = ?", identity.UserID, identity.Scope, identity.DeviceID).Updates(map[string]interface{}{
 		"last_applied": seq,
 		"updated_at":   time.Now().UTC(),
 	}).Error
 }
 
-func (s *sqliteCursorStore) UpdatePushed(deviceID string, seq Sequence) error {
-	return s.db.Model(&SyncCursor{}).Where("device_id = ?", deviceID).Updates(map[string]interface{}{
+func (s *sqliteCursorStore) UpdatePushed(identity CursorIdentity, seq Sequence) error {
+	return s.db.Model(&SyncCursor{}).Where("user_id = ? AND scope = ? AND device_id = ?", identity.UserID, identity.Scope, identity.DeviceID).Updates(map[string]interface{}{
 		"last_pushed": seq,
 		"updated_at":  time.Now().UTC(),
 	}).Error
@@ -78,8 +84,8 @@ func NewCursorService(store CursorStore) *CursorService {
 	return &CursorService{store: store}
 }
 
-func (s *CursorService) GetOrCreate(deviceID, userID string, scope CursorScope) (*SyncCursor, error) {
-	cursor, err := s.store.Get(deviceID)
+func (s *CursorService) GetOrCreate(identity CursorIdentity) (*SyncCursor, error) {
+	cursor, err := s.store.Get(identity)
 	if err != nil {
 		return nil, fmt.Errorf("cursor: get: %w", err)
 	}
@@ -88,9 +94,9 @@ func (s *CursorService) GetOrCreate(deviceID, userID string, scope CursorScope) 
 	}
 
 	cursor = &SyncCursor{
-		DeviceID:    deviceID,
-		UserID:      userID,
-		Scope:       scope,
+		DeviceID:    identity.DeviceID,
+		UserID:      identity.UserID,
+		Scope:       identity.Scope,
 		LastApplied: 0,
 		LastPushed:  0,
 		UpdatedAt:   time.Now().UTC(),
@@ -101,22 +107,23 @@ func (s *CursorService) GetOrCreate(deviceID, userID string, scope CursorScope) 
 	return cursor, nil
 }
 
-func (s *CursorService) MarkApplied(deviceID string, seq Sequence) error {
-	return s.store.UpdateApplied(deviceID, seq)
+func (s *CursorService) MarkApplied(identity CursorIdentity, seq Sequence) error {
+	return s.store.UpdateApplied(identity, seq)
 }
 
-func (s *CursorService) MarkPushed(deviceID string, seq Sequence) error {
-	return s.store.UpdatePushed(deviceID, seq)
+func (s *CursorService) MarkPushed(identity CursorIdentity, seq Sequence) error {
+	return s.store.UpdatePushed(identity, seq)
 }
 
-func (s *CursorService) GetStatus(deviceID string, serverSeq Sequence) (*CursorStatus, error) {
-	cursor, err := s.store.Get(deviceID)
+func (s *CursorService) GetStatus(identity CursorIdentity, serverSeq Sequence) (*CursorStatus, error) {
+	cursor, err := s.store.Get(identity)
 	if err != nil {
 		return nil, fmt.Errorf("cursor: get: %w", err)
 	}
 	if cursor == nil {
 		return &CursorStatus{
-			DeviceID:       deviceID,
+			DeviceID:       identity.DeviceID,
+			UserID:         identity.UserID,
 			LastApplied:    0,
 			LastPushed:     0,
 			ServerSequence: serverSeq,

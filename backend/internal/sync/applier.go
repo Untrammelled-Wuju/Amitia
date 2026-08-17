@@ -2,8 +2,12 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 package sync
 
+import (
+	"gorm.io/gorm"
+)
+
 type EntityMutationApplier interface {
-	Apply(mutation ClientMutation) (int64, error)
+	Apply(tx *gorm.DB, mutation ClientMutation) (int64, error)
 	Supports(entityType EntityType) bool
 }
 
@@ -15,10 +19,10 @@ func NewCompositeApplier(appliers ...EntityMutationApplier) *CompositeApplier {
 	return &CompositeApplier{appliers: appliers}
 }
 
-func (c *CompositeApplier) Apply(mutation ClientMutation) (int64, error) {
+func (c *CompositeApplier) Apply(tx *gorm.DB, mutation ClientMutation) (int64, error) {
 	for _, a := range c.appliers {
 		if a.Supports(mutation.EntityType) {
-			return a.Apply(mutation)
+			return a.Apply(tx, mutation)
 		}
 	}
 	return 0, &ApplierError{

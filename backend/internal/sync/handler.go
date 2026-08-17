@@ -3,25 +3,33 @@
 package sync
 
 import (
+	"context"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/middleware/security"
 )
 
+type DeviceOwnershipValidator interface {
+	RequireOwned(ctx context.Context, userID string, deviceID string) error
+}
+
 type Handler struct {
-	svc *Service
+	svc        *Service
+	ownDevices DeviceOwnershipValidator
 }
 
-func NewHandler(svc *Service) *Handler {
-	return &Handler{svc: svc}
+func NewHandler(svc *Service, ownDevices DeviceOwnershipValidator) *Handler {
+	return &Handler{svc: svc, ownDevices: ownDevices}
 }
 
-func (h *Handler) RegisterRoutes(r *gin.Engine, authMW gin.HandlerFunc) {
+func (h *Handler) RegisterRoutes(r *gin.RouterGroup, authMW gin.HandlerFunc) {
 	sync := r.Group("/api/v1/sync")
 	sync.Use(authMW)
 
 	sync.POST("/pull", h.HandlePull)
 	sync.POST("/push", h.HandlePush)
+	sync.POST("/ack", h.HandleAck)
 	sync.GET("/status", h.HandleStatus)
 	sync.GET("/gap", h.HandleGap)
 }
@@ -31,6 +39,20 @@ func (h *Handler) HandlePull(c *gin.Context) {
 	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(400, gin.H{"code": "invalid_request", "message": err.Error()})
 		return
+	}
+
+	actor := security.GetActor(c)
+	if actor == nil || actor.UserID == "" {
+		c.JSON(401, gin.H{"code": "unauthorized", "message": "authentication required"})
+		return
+	}
+	req.UserID = string(actor.UserID)
+
+	if req.DeviceID != "" && h.ownDevices != nil {
+		if err := h.ownDevices.RequireOwned(c.Request.Context(), req.UserID, req.DeviceID); err != nil {
+			c.JSON(403, gin.H{"code": "forbidden", "message": "device not owned by user"})
+			return
+		}
 	}
 
 	result, err := h.svc.Pull.Pull(req)
@@ -49,6 +71,20 @@ func (h *Handler) HandlePush(c *gin.Context) {
 		return
 	}
 
+	actor := security.GetActor(c)
+	if actor == nil || actor.UserID == "" {
+		c.JSON(401, gin.H{"code": "unauthorized", "message": "authentication required"})
+		return
+	}
+	req.UserID = string(actor.UserID)
+
+	if req.DeviceID != "" && h.ownDevices != nil {
+		if err := h.ownDevices.RequireOwned(c.Request.Context(), req.UserID, req.DeviceID); err != nil {
+			c.JSON(403, gin.H{"code": "forbidden", "message": "device not owned by user"})
+			return
+		}
+	}
+
 	result, err := h.svc.Push.Push(req)
 	if err != nil {
 		c.JSON(500, gin.H{"code": "push_failed", "message": err.Error()})
@@ -58,6 +94,37 @@ func (h *Handler) HandlePush(c *gin.Context) {
 	c.JSON(200, result)
 }
 
+func (h *Handler) HandleAck(c *gin.Context) {
+	var req struct {
+		DeviceID  string `json:"deviceId" binding:"required"`
+		LastApplied Sequence `json:"lastApplied" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"code": "invalid_request", "message": err.Error()})
+		return
+	}
+
+	actor := security.GetActor(c)
+	if actor == nil || actor.UserID == "" {
+		c.JSON(401, gin.H{"code": "unauthorized", "message": "authentication required"})
+		return
+	}
+
+	if req.DeviceID != "" && h.ownDevices != nil {
+		if err := h.ownDevices.RequireOwned(c.Request.Context(), string(actor.UserID), req.DeviceID); err != nil {
+			c.JSON(403, gin.H{"code": "forbidden", "message": "device not owned by user"})
+			return
+		}
+	}
+
+	if err := h.svc.Pull.MarkApplied(string(actor.UserID), req.DeviceID, ScopeDevice, req.LastApplied); err != nil {
+		c.JSON(500, gin.H{"code": "ack_failed", "message": err.Error()})
+		return
+	}
+
+	c.JSON(200, gin.H{"code": "ok"})
+}
+
 func (h *Handler) HandleStatus(c *gin.Context) {
 	deviceID := c.Query("deviceId")
 	if deviceID == "" {
@@ -65,7 +132,20 @@ func (h *Handler) HandleStatus(c *gin.Context) {
 		return
 	}
 
-	status, err := h.svc.Pull.GetStatus(deviceID)
+	actor := security.GetActor(c)
+	if actor == nil || actor.UserID == "" {
+		c.JSON(401, gin.H{"code": "unauthorized", "message": "authentication required"})
+		return
+	}
+
+	if h.ownDevices != nil {
+		if err := h.ownDevices.RequireOwned(c.Request.Context(), string(actor.UserID), deviceID); err != nil {
+			c.JSON(403, gin.H{"code": "forbidden", "message": "device not owned by user"})
+			return
+		}
+	}
+
+	status, err := h.svc.Pull.GetStatus(string(actor.UserID), deviceID, ScopeDevice)
 	if err != nil {
 		c.JSON(500, gin.H{"code": "status_failed", "message": err.Error()})
 		return
