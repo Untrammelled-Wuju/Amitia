@@ -1,17 +1,23 @@
 package artifact
 
 import (
+	"database/sql"
+	"time"
+
 	"gorm.io/gorm"
 )
 
 type Repository interface {
 	Create(tx *gorm.DB, artifact *Artifact) error
+	CreateSqlTx(tx *sql.Tx, artifact *Artifact) error
 	GetByID(id ID) (*Artifact, error)
 	GetByOwnerAndID(ownerUserID string, id ID) (*Artifact, error)
 	SoftDelete(tx *gorm.DB, id ID) error
+	SoftDeleteSqlTx(tx *sql.Tx, id ID) error
 	InsertReference(tx *gorm.DB, ref *ArtifactReference) error
 	CountReferences(artifactID ID) (int64, error)
 	DB() *gorm.DB
+	SqlDB() (*sql.DB, error)
 }
 
 type sqliteRepository struct {
@@ -26,8 +32,28 @@ func (r *sqliteRepository) DB() *gorm.DB {
 	return r.db
 }
 
+func (r *sqliteRepository) SqlDB() (*sql.DB, error) {
+	return r.db.DB()
+}
+
 func (r *sqliteRepository) Create(tx *gorm.DB, artifact *Artifact) error {
 	return tx.Create(artifact).Error
+}
+
+func (r *sqliteRepository) CreateSqlTx(tx *sql.Tx, artifact *Artifact) error {
+	_, err := tx.Exec(
+		`INSERT INTO artifacts (
+			artifact_id, owner_user_id, workspace_id, kind, blob_digest,
+			size_bytes, mime_type, filename, file_extension, status,
+			source, width, height, duration_ms, revision,
+			created_at, updated_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		artifact.ID, artifact.OwnerUserID, artifact.WorkspaceID, artifact.Kind, artifact.BlobDigest,
+		artifact.SizeBytes, artifact.MIMEType, artifact.Filename, artifact.Extension, artifact.Status,
+		artifact.Source, artifact.Width, artifact.Height, artifact.DurationMS, artifact.Revision,
+		artifact.CreatedAt, artifact.UpdatedAt,
+	)
+	return err
 }
 
 func (r *sqliteRepository) GetByID(id ID) (*Artifact, error) {
@@ -49,6 +75,15 @@ func (r *sqliteRepository) SoftDelete(tx *gorm.DB, id ID) error {
 		"deleted_at": now,
 		"revision":   gorm.Expr("revision + 1"),
 	}).Error
+}
+
+func (r *sqliteRepository) SoftDeleteSqlTx(tx *sql.Tx, id ID) error {
+	now := time.Now().Unix()
+	_, err := tx.Exec(
+		`UPDATE artifacts SET status = ?, deleted_at = datetime(?, 'unixepoch'), revision = revision + 1 WHERE artifact_id = ?`,
+		StatusDeleted, now, id,
+	)
+	return err
 }
 
 func (r *sqliteRepository) InsertReference(tx *gorm.DB, ref *ArtifactReference) error {

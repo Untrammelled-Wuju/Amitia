@@ -1,39 +1,36 @@
-// SPDX-FileCopyrightText: 2026 彭旭
-// SPDX-License-Identifier: AGPL-3.0-only
 package artifact
 
 import (
+	"context"
+	"database/sql"
 	"encoding/json"
-	"log"
+
+	"github.com/u-ai/backend/internal/extension/kernel/event"
 )
 
 type ArtifactEvent struct {
-	Type       string    `json:"type"`
-	ArtifactID ID        `json:"artifactID"`
-	OwnerID    string    `json:"ownerID"`
-	Kind       Kind      `json:"kind"`
-	SizeBytes  int64     `json:"sizeBytes"`
-	MimeType   string    `json:"mimeType"`
-	Filename   string    `json:"filename"`
+	Type       string `json:"type"`
+	ArtifactID ID     `json:"artifactID"`
+	OwnerID    string `json:"ownerID"`
+	Kind       Kind   `json:"kind"`
+	SizeBytes  int64  `json:"sizeBytes"`
+	MimeType   string `json:"mimeType"`
+	Filename   string `json:"filename"`
 }
 
 type RealEventSink struct {
-	publisher EventPublisher
+	publisher event.DurableEventPublisher
 }
 
-type EventPublisher interface {
-	Publish(eventType string, payload []byte) error
-}
-
-func NewRealEventSink(publisher EventPublisher) *RealEventSink {
+func NewRealEventSink(publisher event.DurableEventPublisher) *RealEventSink {
 	return &RealEventSink{publisher: publisher}
 }
 
-func (s *RealEventSink) ArtifactCreated(artifact *Artifact) {
+func (s *RealEventSink) PublishCreated(ctx context.Context, tx *sql.Tx, artifact *Artifact) error {
 	if s.publisher == nil {
-		return
+		return nil
 	}
-	event := ArtifactEvent{
+	evt := ArtifactEvent{
 		Type:       "artifact.created",
 		ArtifactID: artifact.ID,
 		OwnerID:    artifact.OwnerUserID,
@@ -42,21 +39,25 @@ func (s *RealEventSink) ArtifactCreated(artifact *Artifact) {
 		MimeType:   artifact.MIMEType,
 		Filename:   artifact.Filename,
 	}
-	payload, err := json.Marshal(event)
+	payload, err := json.Marshal(evt)
 	if err != nil {
-		log.Printf("artifact: marshal created event: %v", err)
-		return
+		return err
 	}
-	if err := s.publisher.Publish("artifact.created", payload); err != nil {
-		log.Printf("artifact: publish created event: %v", err)
-	}
+	_, err = s.publisher.PublishTx(ctx, tx, "artifact.created", 1, payload, event.PublishOptions{
+		ProducerID:    "artifact-service",
+		ProducerType:  event.EventProducerTypeSystem,
+		AggregateType: "artifact",
+		AggregateID:   string(artifact.ID),
+		PartitionKey:  artifact.OwnerUserID,
+	})
+	return err
 }
 
-func (s *RealEventSink) ArtifactDeleted(artifact *Artifact) {
+func (s *RealEventSink) PublishDeleted(ctx context.Context, tx *sql.Tx, artifact *Artifact) error {
 	if s.publisher == nil {
-		return
+		return nil
 	}
-	event := ArtifactEvent{
+	evt := ArtifactEvent{
 		Type:       "artifact.deleted",
 		ArtifactID: artifact.ID,
 		OwnerID:    artifact.OwnerUserID,
@@ -65,19 +66,16 @@ func (s *RealEventSink) ArtifactDeleted(artifact *Artifact) {
 		MimeType:   artifact.MIMEType,
 		Filename:   artifact.Filename,
 	}
-	payload, err := json.Marshal(event)
+	payload, err := json.Marshal(evt)
 	if err != nil {
-		log.Printf("artifact: marshal deleted event: %v", err)
-		return
+		return err
 	}
-	if err := s.publisher.Publish("artifact.deleted", payload); err != nil {
-		log.Printf("artifact: publish deleted event: %v", err)
-	}
-}
-
-type LoggingEventPublisher struct{}
-
-func (p *LoggingEventPublisher) Publish(eventType string, payload []byte) error {
-	log.Printf("artifact: event %s: %s", eventType, string(payload))
-	return nil
+	_, err = s.publisher.PublishTx(ctx, tx, "artifact.deleted", 1, payload, event.PublishOptions{
+		ProducerID:    "artifact-service",
+		ProducerType:  event.EventProducerTypeSystem,
+		AggregateType: "artifact",
+		AggregateID:   string(artifact.ID),
+		PartitionKey:  artifact.OwnerUserID,
+	})
+	return err
 }
