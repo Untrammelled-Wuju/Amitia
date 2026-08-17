@@ -7,6 +7,7 @@ import (
 func RegisterPublicRoutes(group *gin.RouterGroup, handler *Handler) {
 	group.POST("/auth/login", handler.Login)
 	group.POST("/auth/refresh", handler.Refresh)
+	group.POST("/auth/logout/revoke", handler.RevokeRefresh)
 }
 
 func RegisterAuthenticatedRoutes(group *gin.RouterGroup, handler *Handler) {

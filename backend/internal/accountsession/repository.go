@@ -34,6 +34,7 @@ type RefreshRepository interface {
 	MarkUsed(tokenID string, replacedBy string) error
 	RevokeBySession(sessionID string) error
 	RevokeByID(tokenID string) error
+	RevokeByTokenID(tokenID string) error
 	ExpireTokens(before time.Time) (int64, error)
 }
 
@@ -237,6 +238,15 @@ func (r *refreshRepository) RevokeBySession(sessionID string) error {
 func (r *refreshRepository) RevokeByID(tokenID string) error {
 	now := time.Now().UTC()
 	return r.db.Model(&RefreshToken{}).Where("token_id = ? AND (status = ? OR status = ?)", tokenID, RefreshStatusActive, RefreshStatusUsed).
+		Updates(map[string]interface{}{
+			"status":     RefreshStatusRevoked,
+			"revoked_at": now,
+		}).Error
+}
+
+func (r *refreshRepository) RevokeByTokenID(tokenID string) error {
+	now := time.Now().UTC()
+	return r.db.Model(&RefreshToken{}).Where("token_id = ? AND status = ?", tokenID, RefreshStatusActive).
 		Updates(map[string]interface{}{
 			"status":     RefreshStatusRevoked,
 			"revoked_at": now,

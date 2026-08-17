@@ -145,6 +145,21 @@ func (s *RefreshService) RevokeAllForSession(sessionID string) error {
 	return s.refresh.RevokeBySession(sessionID)
 }
 
+func (s *RefreshService) RevokeByToken(rawToken string) error {
+	tokenHash := hashRefreshToken(rawToken)
+	record, err := s.refresh.GetByHash(tokenHash)
+	if err != nil {
+		return ErrRefreshInvalid
+	}
+	if record == nil {
+		return nil
+	}
+	if record.Status != RefreshStatusActive {
+		return nil
+	}
+	return s.refresh.RevokeByTokenID(record.TokenID)
+}
+
 func hashRefreshToken(raw string) string {
 	h := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(h[:])
