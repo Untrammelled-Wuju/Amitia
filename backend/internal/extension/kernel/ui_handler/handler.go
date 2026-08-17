@@ -554,14 +554,37 @@ func (h *HTTPHandler) handleWebUISessionCollection(w http.ResponseWriter, r *htt
 		return
 	}
 	resourceURL := fmt.Sprintf("/api/extension/webui/resource/%s/%s", result.SessionID, def.Entry.Path)
+	capabilities := []string{"browser"}
+	if req.Host == "desktop" {
+		capabilities = append(capabilities, "desktop")
+	}
+	if req.CharacterID != "" {
+		capabilities = append(capabilities, "character")
+	}
+	if req.ConversationID != "" {
+		capabilities = append(capabilities, "conversation")
+	}
+	for _, perm := range auth.GrantedPerms {
+		if perm != "" {
+			capabilities = append(capabilities, "perm:"+perm)
+		}
+	}
+	for _, scope := range auth.GrantedScopes {
+		if scope != "" {
+			capabilities = append(capabilities, "scope:"+scope)
+		}
+	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"sessionId":   result.SessionID,
-		"entryUrl":    result.EntryURL,
-		"resourceUrl": resourceURL,
-		"origin":      result.Origin,
-		"nonce":       result.Nonce,
-		"token":       result.Token,
-		"csp":         result.CSP,
+		"sessionId":      result.SessionID,
+		"entryUrl":       result.EntryURL,
+		"resourceUrl":    resourceURL,
+		"origin":         result.Origin,
+		"nonce":          result.Nonce,
+		"token":          result.Token,
+		"csp":            result.CSP,
+		"capabilities":   capabilities,
+		"grantedPerms":   auth.GrantedPerms,
+		"grantedScopes":  auth.GrantedScopes,
 	})
 }
 

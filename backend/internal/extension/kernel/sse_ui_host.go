@@ -274,3 +274,18 @@ func (n *SSEUIHostNotifier) HasPendingDialog(dialogID string) bool {
 	_, ok := n.pendingDialogs[dialogID]
 	return ok
 }
+
+func (n *SSEUIHostNotifier) BroadcastExtensionChange(eventType string, extensionID string, extra map[string]interface{}) {
+	if n.hub == nil || !n.hub.HasClients() {
+		return
+	}
+	payload := map[string]interface{}{
+		"extensionId": extensionID,
+		"timestamp":   time.Now().UTC().Format(time.RFC3339Nano),
+	}
+	for k, v := range extra {
+		payload[k] = v
+	}
+	envelope := NewSSEEventEnvelope(eventType, extensionID, payload, defaultEventTTL)
+	n.hub.Broadcast(eventType, envelope.ToMap())
+}

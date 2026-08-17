@@ -409,6 +409,9 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	if err := r.FinalizePackageOperation(ctx, operationID, session.ExtensionID, leaseGuard, guard); err != nil {
 		return KernelInstallResult{}, err
 	}
+	if r.container.UIHostNotifier != nil {
+		r.container.UIHostNotifier.BroadcastExtensionChange("extension_installed", session.ExtensionID, nil)
+	}
 	return KernelInstallResult{ExtensionID: session.ExtensionID, Version: session.Version,
 		InstallationID: installationID, PackageHash: artifact.ArchiveHash,
 		ContentTreeHash: artifact.ContentTreeHash, ArtifactPath: artifact.ArchivePath,
