@@ -2,6 +2,7 @@
 import { ref, onMounted, onBeforeUnmount, watch, computed } from "vue";
 import type { UIContributionSummary } from "@/stores/extensionUI";
 import { apiClient } from "@/composables/useApi";
+import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
 import ExtensionRenderState from "./ExtensionRenderState.vue";
 
 const props = defineProps<{
@@ -48,20 +49,10 @@ let serverCapabilities: string[] = [];
 let serverGrantedPerms: string[] = [];
 let serverGrantedScopes: string[] = [];
 
-function detectOS(): "windows" | "macos" | "linux" | "unknown" {
-  if (typeof navigator === "undefined") return "unknown";
-  const ua = navigator.userAgent.toLowerCase();
-  if (ua.includes("win")) return "windows";
-  if (ua.includes("mac")) return "macos";
-  if (ua.includes("linux")) return "linux";
-  return "unknown";
-}
+let restartToken = 0;
 
-function isDesktopShell(): boolean {
-  return typeof window !== "undefined" && !!(window as unknown as Record<string, unknown>).amitiaDesktop;
-}
-
-async function createSession() {
+async function createSession(expectedToken: number) {
+  if (expectedToken !== restartToken) return;
   loading.value = true;
   error.value = null;
   ready.value = false;
@@ -73,9 +64,7 @@ async function createSession() {
     const surfaceData = (uiContext.value.surface as Record<string, unknown> | undefined) ?? {};
     const surfaceRole = String(surfaceData.role ?? "main");
     const themeData = (uiContext.value.theme as Record<string, unknown> | undefined) ?? {};
-    const	os = detectOS();
-    const platform = os === "unknown" ? "web" : os;
-    const host = isDesktopShell() ? "desktop" : "web";
+    const env = resolveHostEnvironment();
     const res = await apiClient.post<{
       sessionId: string;
       nonce: string;
@@ -95,9 +84,9 @@ async function createSession() {
       generation: props.contribution.generation,
       surface: surfaceRole,
       surfaceRole,
-      host,
-      os,
-      platform,
+      host: env.host,
+      os: env.os,
+      platform: env.platform,
       characterId: (uiContext.value.characterId as string) || "",
       conversationId: (uiContext.value.conversationId as string) || "",
       theme: {
@@ -111,6 +100,13 @@ async function createSession() {
       entryPath: props.contribution.entryPath ?? "index.html",
       allowedActions: (props.contribution.actions ?? []).map((a) => a.actionId),
     });
+    if (expectedToken !== restartToken) {
+      const staleSid = res.data?.sessionId ?? "";
+      if (staleSid) {
+        apiClient.delete(`/api/extension/webui/session/${staleSid}`).catch(() => {});
+      }
+      return;
+    }
     const data = res.data;
     sessionId.value = data.sessionId;
     sessionNonce.value = data.nonce;
@@ -122,10 +118,13 @@ async function createSession() {
     serverGrantedPerms = data.grantedPerms || [];
     serverGrantedScopes = data.grantedScopes || [];
   } catch (e) {
+    if (expectedToken !== restartToken) return;
     error.value = e instanceof Error ? e.message : String(e);
     emit("error", error.value);
   } finally {
-    loading.value = false;
+    if (expectedToken === restartToken) {
+      loading.value = false;
+    }
   }
 }
 
@@ -146,6 +145,31 @@ async function destroySession() {
   ready.value = false;
 }
 
+async function disposeSession() {
+  bridgePort?.close();
+  bridgePort = null;
+  if (!sessionId.value) return;
+  const oldSessionId = sessionId.value;
+  sessionId.value = "";
+  sessionNonce.value = "";
+  sessionToken.value = "";
+  serverCapabilities = [];
+  serverGrantedPerms = [];
+  serverGrantedScopes = [];
+  ready.value = false;
+  try {
+    await apiClient.delete(`/api/extension/webui/session/${oldSessionId}`);
+  } catch {
+  }
+}
+
+async function restartSession() {
+  const token = ++restartToken;
+  await disposeSession();
+  if (token !== restartToken) return;
+  await createSession(token);
+}
+
 function onMessage(event: MessageEvent) {
   if (event.source !== iframeRef.value?.contentWindow) return;
   const data = event.data;
@@ -164,6 +188,7 @@ function onMessage(event: MessageEvent) {
     void handleBridgeMessage(message as Record<string, unknown>);
   };
   bridgePort.start();
+  const env = resolveHostEnvironment();
   iframeRef.value?.contentWindow?.postMessage(
     {
       type: "amitia.extension.init",
@@ -174,9 +199,9 @@ function onMessage(event: MessageEvent) {
       uiContext: {
         theme: buildThemeTokens(),
         locale: (uiContext.value.locale as string) || navigator.language || "en",
-        platform: (uiContext.value.platform as string) || "web",
-        host: (uiContext.value.host as string) || "web",
-        os: (uiContext.value.os as string) || "unknown",
+        platform: env.platform,
+        host: env.host,
+        os: env.os,
         surface: (uiContext.value.surface as Record<string, unknown> | undefined)?.role ?? "main",
         slotId: props.slotId,
       },
@@ -192,7 +217,7 @@ function onMessage(event: MessageEvent) {
 
 async function handleBridgeMessage(msg: Record<string, unknown>) {
   const method = msg.method as string;
-  if (method === "ui.ready") {
+  if (method === "ui_ready") {
     ready.value = true;
     emit("ready", sessionId.value);
     sendBridgeResponse(msg, { ok: true, sessionId: sessionId.value });
@@ -246,12 +271,13 @@ function postUIContext() {
   const surface = (uiContext.value.surface as Record<string, unknown> | undefined) ?? {};
   const surfaceRole = String(surface.role ?? "main");
   const themeSnapshot = buildThemeSnapshot();
+  const env = resolveHostEnvironment();
   const contextPayload = {
     theme: themeSnapshot,
     locale: (uiContext.value.locale as string) || navigator.language || "en",
-    platform: (uiContext.value.platform as string) || "web",
-    host: (uiContext.value.host as string) || "web",
-    os: (uiContext.value.os as string) || "unknown",
+    platform: env.platform,
+    host: env.host,
+    os: env.os,
     surface: surfaceRole,
     slotId: props.slotId,
     characterId: (uiContext.value.characterId as string) || "",
@@ -314,17 +340,17 @@ function buildThemeTokens() {
 
 onMounted(async () => {
   window.addEventListener("message", onMessage);
-  await createSession();
+  await restartSession();
 });
 
 onBeforeUnmount(() => {
   window.removeEventListener("message", onMessage);
-  void destroySession();
+  ++restartToken;
+  void disposeSession();
 });
 
 watch(sessionScopeKey, async () => {
-  await destroySession();
-  await createSession();
+  await restartSession();
 });
 
 watch(() => buildThemeSnapshot(), () => {
@@ -356,7 +382,7 @@ watch(() => uiContext.value.locale, () => {
       <ExtensionRenderState state="loading" />
     </template>
     <template v-else-if="error">
-      <ExtensionRenderState state="error" :detail="error" @retry="createSession" />
+      <ExtensionRenderState state="error" :detail="error" @retry="restartSession" />
     </template>
     <template v-else>
       <div class="sandbox-webui-frame__container">

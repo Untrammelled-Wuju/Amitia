@@ -1,10 +1,9 @@
 {
   "domain": "bluetooth",
   "event": "disconnected",
+  "timestamp": "2026-08-16T16:05:00Z",
   "data": {
     "deviceId": "bt-001",
     "reason": "link_loss"
-  },
-  "generation": 4,
-  "priority": "normal"
+  }
 }

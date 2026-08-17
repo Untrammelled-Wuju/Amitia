@@ -15,7 +15,10 @@ type Repository interface {
 	SoftDelete(tx *gorm.DB, id ID) error
 	SoftDeleteSqlTx(tx *sql.Tx, id ID) error
 	InsertReference(tx *gorm.DB, ref *ArtifactReference) error
+	InsertReferenceSqlTx(tx *sql.Tx, ref *ArtifactReference) error
+	RemoveReferenceSqlTx(tx *sql.Tx, artifactID ID, refType string, refID string) error
 	CountReferences(artifactID ID) (int64, error)
+	CountReferencesSqlTx(tx *sql.Tx, artifactID ID) (int64, error)
 	DB() *gorm.DB
 	SqlDB() (*sql.DB, error)
 }
@@ -90,8 +93,33 @@ func (r *sqliteRepository) InsertReference(tx *gorm.DB, ref *ArtifactReference) 
 	return tx.Create(ref).Error
 }
 
+func (r *sqliteRepository) InsertReferenceSqlTx(tx *sql.Tx, ref *ArtifactReference) error {
+	_, err := tx.Exec(
+		`INSERT INTO artifact_references (artifact_id, reference_type, reference_id, created_at) VALUES (?, ?, ?, ?)`,
+		ref.ArtifactID, ref.ReferenceType, ref.ReferenceID, ref.CreatedAt,
+	)
+	return err
+}
+
+func (r *sqliteRepository) RemoveReferenceSqlTx(tx *sql.Tx, artifactID ID, refType string, refID string) error {
+	_, err := tx.Exec(
+		`DELETE FROM artifact_references WHERE artifact_id = ? AND reference_type = ? AND reference_id = ?`,
+		artifactID, refType, refID,
+	)
+	return err
+}
+
 func (r *sqliteRepository) CountReferences(artifactID ID) (int64, error) {
 	var count int64
 	err := r.db.Model(&ArtifactReference{}).Where("artifact_id = ?", artifactID).Count(&count).Error
+	return count, err
+}
+
+func (r *sqliteRepository) CountReferencesSqlTx(tx *sql.Tx, artifactID ID) (int64, error) {
+	var count int64
+	err := tx.QueryRow(
+		`SELECT COUNT(*) FROM artifact_references WHERE artifact_id = ?`,
+		artifactID,
+	).Scan(&count)
 	return count, err
 }

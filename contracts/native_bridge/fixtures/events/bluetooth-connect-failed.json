@@ -1,11 +1,10 @@
 {
   "domain": "bluetooth",
   "event": "connect_failed",
+  "timestamp": "2026-08-16T16:01:00Z",
   "data": {
     "deviceId": "bt-001",
     "error": "timeout",
     "code": "CONNECTION_TIMEOUT"
-  },
-  "generation": 2,
-  "priority": "high"
+  }
 }

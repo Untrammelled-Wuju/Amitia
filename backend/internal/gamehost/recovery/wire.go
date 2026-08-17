@@ -62,7 +62,7 @@ func (a *SupervisorViewAdapter) GetMaxRestarts(serviceID string) int {
 	if a.getMaxRestartsFn != nil {
 		return a.getMaxRestartsFn(serviceID)
 	}
-	return 3
+	return -1
 }
 
 type AuditSinkAdapter struct {

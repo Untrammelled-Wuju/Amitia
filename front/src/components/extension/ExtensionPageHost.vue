@@ -4,6 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 import type { UIContributionSummary } from "@/stores/extensionUI";
 import { openExtensionPage, pollPageSessionStatus, closePageSession } from "@/api/extension";
+import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
 
 const SchemaUIRenderer = defineAsyncComponent(() => import("./SchemaUIRenderer.vue"));
 const SandboxWebUIFrame = defineAsyncComponent(() => import("./SandboxWebUIFrame.vue"));
@@ -106,15 +107,20 @@ const pageContribution = computed<UIContributionSummary | null>(() => {
   };
 });
 
-const pageContext = computed<Record<string, unknown>>(() => ({
-  extensionId: extensionId.value,
-  pageId: pageId.value,
-  sessionId: sessionId.value,
-  scope: pageSpec.value?.scope ?? "global",
-  params: route.query,
-  platform: detectPlatform(),
-  locale: navigator.language ?? "en",
-}));
+const pageContext = computed<Record<string, unknown>>(() => {
+  const env = resolveHostEnvironment();
+  return {
+    extensionId: extensionId.value,
+    pageId: pageId.value,
+    sessionId: sessionId.value,
+    scope: pageSpec.value?.scope ?? "global",
+    params: route.query,
+    platform: env.platform,
+    host: env.host,
+    os: env.os,
+    locale: navigator.language ?? "en",
+  };
+});
 
 async function openPage() {
   if (!extensionId.value || !pageId.value) return;
@@ -181,19 +187,14 @@ async function closePage() {
 }
 
 function buildScopeSnapshot(): string {
+  const env = resolveHostEnvironment();
   return JSON.stringify({
-    platform: detectPlatform(),
+    platform: env.platform,
+    host: env.host,
+    os: env.os,
     locale: navigator.language ?? "en",
     timestamp: Date.now(),
   });
-}
-
-function detectPlatform(): string {
-  const ua = navigator.userAgent.toLowerCase();
-  if (ua.includes("win")) return "windows";
-  if (ua.includes("mac")) return "macos";
-  if (ua.includes("linux")) return "linux";
-  return "web";
 }
 
 async function retry() {

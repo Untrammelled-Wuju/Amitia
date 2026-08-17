@@ -1,9 +1,11 @@
 package artifact
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"io"
+	"net/http"
 	"time"
 
 	"github.com/google/uuid"
@@ -62,13 +64,22 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (Artifact, erro
 	filename := SanitizeFilename(req.Filename)
 	ext := ExtractExtension(filename)
 	mimeType := normalizeMIME(req.MIMEType)
+	sniffReader := req.Reader
+	if mimeType == "" {
+		var buf [512]byte
+		n, _ := io.ReadFull(sniffReader, buf[:])
+		if n > 0 {
+			mimeType = http.DetectContentType(buf[:n])
+			sniffReader = io.MultiReader(bytes.NewReader(buf[:n]), sniffReader)
+		}
+	}
 	if mimeType == "" {
 		mimeType = "application/octet-stream"
 	}
 	if kind == "" {
 		kind = DeriveKindFromMIME(mimeType)
 	}
-	blobInfo, err := s.blobStore.Put(ctx, req.Reader, maxBytes)
+	blobInfo, err := s.blobStore.Put(ctx, sniffReader, maxBytes)
 	if err != nil {
 		if isBlobTooLarge(err) {
 			return Artifact{}, ErrTooLarge(maxBytes)
@@ -200,14 +211,53 @@ func (s *Service) OpenBlob(ctx context.Context, digest BlobDigest) (io.ReadClose
 }
 
 func (s *Service) RegisterReference(artifactID ID, refType string, refID string) error {
-	return s.repo.DB().Transaction(func(tx *gorm.DB) error {
-		return s.repo.InsertReference(tx, &ArtifactReference{
-			ArtifactID:    artifactID,
-			ReferenceType: refType,
-			ReferenceID:   refID,
-			CreatedAt:     time.Now(),
-		})
+	sqlDB, err := s.repo.SqlDB()
+	if err != nil {
+		return ErrMetadataWriteFailed(err)
+	}
+	tx, err := sqlDB.BeginTx(context.Background(), nil)
+	if err != nil {
+		return ErrMetadataWriteFailed(err)
+	}
+	defer tx.Rollback()
+	if err := s.repo.InsertReferenceSqlTx(tx, &ArtifactReference{
+		ArtifactID:    artifactID,
+		ReferenceType: refType,
+		ReferenceID:   refID,
+		CreatedAt:     time.Now(),
+	}); err != nil {
+		return ErrMetadataWriteFailed(err)
+	}
+	return tx.Commit()
+}
+
+func (s *Service) RegisterReferenceSqlTx(tx *sql.Tx, artifactID ID, refType string, refID string) error {
+	return s.repo.InsertReferenceSqlTx(tx, &ArtifactReference{
+		ArtifactID:    artifactID,
+		ReferenceType: refType,
+		ReferenceID:   refID,
+		CreatedAt:     time.Now(),
 	})
+}
+
+func (s *Service) UnregisterReference(artifactID ID, refType string, refID string) error {
+	sqlDB, err := s.repo.SqlDB()
+	if err != nil {
+		return ErrMetadataWriteFailed(err)
+	}
+	tx, err := sqlDB.BeginTx(context.Background(), nil)
+	if err != nil {
+		return ErrMetadataWriteFailed(err)
+	}
+	defer tx.Rollback()
+	if err := s.repo.RemoveReferenceSqlTx(tx, artifactID, refType, refID); err != nil {
+		return ErrMetadataWriteFailed(err)
+	}
+	return tx.Commit()
+}
+
+func (s *Service) UnregisterReferenceSqlTx(tx *sql.Tx, artifactID ID, refType string, refID string) error {
+	return s.repo.RemoveReferenceSqlTx(tx, artifactID, refType, refID)
 }
 
 func normalizeMIME(mime string) string {

@@ -629,13 +629,17 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
         let offset = Int64(request.payload?["offset"] as? Int ?? 0)
         let length = Int64(request.payload?["length"] as? Int ?? 1048576)
         guard let data = MediaStaging.readChunk(nativeStagingId: nativeStagingId, offset: offset, length: length) else {
-            return errorResponse(request, code: "READ_FAILED", message: "failed to read chunk from \(nativeStagingId)")
+            return errorResponse(request, code: "READ_FAILED", message: "failed to read chunk")
         }
+        let stat = MediaStaging.stat(nativeStagingId: nativeStagingId)
+        let totalSize = stat?.size ?? 0
+        let finished = (offset + Int64(data.count)) >= totalSize || data.isEmpty
         return successResponse(request, result: [
             "nativeStagingId": nativeStagingId,
             "offset": offset,
             "length": data.count,
-            "data": data.base64EncodedString()
+            "contentBase64": data.base64EncodedString(),
+            "finished": finished
         ])
     }
 

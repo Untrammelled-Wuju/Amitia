@@ -92,7 +92,7 @@ def load_backend_build_record(input_dir):
     return data if isinstance(data, dict) else None
 
 
-def create_backend_frozen_record(input_dir, source_revision=None):
+def create_backend_frozen_record(input_dir, source_revision=None, offline=False):
     artifact_path = resolve_backend_artifact(input_dir)
 
     artifact_sha = sha256_file(artifact_path)
@@ -126,15 +126,17 @@ def create_backend_frozen_record(input_dir, source_revision=None):
         artifactSha256=artifact_sha,
         treeSha256=tree_sha,
         sourceRevision=source_revision if source_revision else "unknown",
-        buildMode="release",
+        buildMode="offline" if offline else "release",
     )
 
-    validate(record)
+    validation_errors = validate(record)
+    if validation_errors:
+        raise BuildError(f"Backend record validation failed: {'; '.join(validation_errors)}")
     return record, artifact_path
 
 
-def export_frozen_record(input_dir, output_path, source_revision=None):
-    record, artifact_path = create_backend_frozen_record(input_dir, source_revision=source_revision)
+def export_frozen_record(input_dir, output_path, source_revision=None, offline=False):
+    record, artifact_path = create_backend_frozen_record(input_dir, source_revision=source_revision, offline=offline)
 
     out_dir = os.path.dirname(output_path)
     if out_dir:
@@ -154,13 +156,9 @@ def main():
     parser.add_argument("--source-revision", default=None, help="Source revision")
     args = parser.parse_args()
 
-    if args.offline:
-        print("Backend frozen adapter: offline mode - checks skipped")
-        return 0
-
     try:
-        record = export_frozen_record(args.input, args.output, source_revision=args.source_revision)
-        print(f"Backend frozen adapter: exported {record.component_id} v{record.version}")
+        record = export_frozen_record(args.input, args.output, source_revision=args.source_revision, offline=args.offline)
+        print(f"Backend frozen adapter: exported {record.componentId} v{record.version}")
         return 0
     except BuildError as e:
         print(f"Backend frozen adapter: ERROR - {e}", file=sys.stderr)

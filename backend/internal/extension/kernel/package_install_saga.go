@@ -411,6 +411,8 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	}
 	if r.container.UIHostNotifier != nil {
 		r.container.UIHostNotifier.BroadcastExtensionChange("extension_installed", session.ExtensionID, nil)
+		r.container.UIHostNotifier.BroadcastExtensionChange("extension_generation_changed", session.ExtensionID, map[string]interface{}{"generation": generation})
+		r.container.UIHostNotifier.BroadcastExtensionChange("extension_contributions_changed", session.ExtensionID, nil)
 	}
 	return KernelInstallResult{ExtensionID: session.ExtensionID, Version: session.Version,
 		InstallationID: installationID, PackageHash: artifact.ArchiveHash,

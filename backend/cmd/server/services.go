@@ -35,6 +35,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
 	installationrecovery "github.com/u-ai/backend/internal/desktoppet/installation/recovery"
+	"github.com/u-ai/backend/internal/desktoppet/integration"
 
 	"github.com/u-ai/backend/internal/desktoppet/maintenance"
 	"github.com/u-ai/backend/internal/desktoppet/migration"
@@ -349,6 +350,24 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		browserProvider = browser.NewDisabledProvider()
 	}
 
+	archiveUpdater := kernel.NewProductionArchiveUpdater()
+
+	installationRepo := installation.NewRepository(ctx.DB, ctx)
+	resourcePort := integration.NewSQLiteResourcePort(ctx.DB)
+	actionPort := integration.NewSQLiteActionPort(ctx.DB)
+	runtimePort := integration.NewSQLiteRuntimePort(ctx.DB)
+	windowPort := integration.NewSQLiteWindowPort(ctx.DB)
+	petPluginCaps := integration.NewProductionCapabilities(integration.ProductionCapabilitiesOptions{
+		InstallationRepo: installationRepo,
+		ReleaseService:   resourcePort,
+		RuntimeFacade:    actionPort,
+		RuntimePort:      runtimePort,
+		FloatingWindow:   windowPort,
+	})
+	if err := petPluginCaps.Validate(); err != nil {
+		log.Error("desktoppet plugin capabilities validation failed:", err)
+	}
+
 	kernelBuilder := kernel.NewContainerBuilder().
 		WithDBPath(kernelDBPath).
 		WithExtensionRoot(kernelRoot).
@@ -367,6 +386,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithWorkspaceService(workspaceService).
 		WithBrowserProvider(browserProvider).
 		WithRuntimeProfile(runtimeProfile).
+		WithGameHostArchiveUpdater(archiveUpdater).
+		WithDesktopPetPluginCapabilities(petPluginCaps).
 		WithBackgroundBootstrapFunc(func() (backgroundremoval.Registry, error) {
 			reg := backgroundremoval.NewRegistry()
 			reg.Register(local.NewLocalProvider(), local.LocalCapabilities())
@@ -385,6 +406,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		log.Error("failed to initialize kernel container:", err)
 		panic("failed to initialize kernel container")
 	}
+	archiveUpdater.SetContainer(kernelContainer)
 	extensionRuntime.Kernel.SetContainer(kernelContainer)
 	if err := extensionRuntime.Kernel.RecoverPackageOperations(context.Background()); err != nil {
 		log.Error("package operation recovery failed: ", err)
@@ -690,7 +712,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 	qualityWorker := qualityworker.NewWorker(ctx.DB, qualitySvc, processingDataDir)
 
-	installationRepo := installation.NewRepository(ctx.DB, ctx)
 	var installationCoordinator coordinator.InstallationCoordinator
 
 	runtimeConfig := runtime.DefaultRuntimeConfig()

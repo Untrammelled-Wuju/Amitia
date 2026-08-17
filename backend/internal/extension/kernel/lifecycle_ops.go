@@ -350,6 +350,8 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 
 	if r.container != nil && r.container.UIHostNotifier != nil {
 		r.container.UIHostNotifier.BroadcastExtensionChange("extension_enabled", extensionID, nil)
+		r.container.UIHostNotifier.BroadcastExtensionChange("extension_generation_changed", extensionID, map[string]interface{}{"generation": candidateGeneration})
+		r.container.UIHostNotifier.BroadcastExtensionChange("extension_contributions_changed", extensionID, nil)
 	}
 
 	return nil
@@ -712,12 +714,15 @@ func (r *Runtime) Disable(ctx context.Context, extensionID string) error {
 	inst.EnablementState = finalState
 	inst.UpdatedAt = time.Now().UTC()
 	inst.Generation++
+	newGeneration := inst.Generation
 	if err := r.container.InstallationRepository.PutInstallation(ctx, inst); err != nil {
 		return fmt.Errorf("kernel: update installation: %w", err)
 	}
 
 	if r.container.UIHostNotifier != nil {
 		r.container.UIHostNotifier.BroadcastExtensionChange("extension_disabled", extensionID, nil)
+		r.container.UIHostNotifier.BroadcastExtensionChange("extension_generation_changed", extensionID, map[string]interface{}{"generation": newGeneration})
+		r.container.UIHostNotifier.BroadcastExtensionChange("extension_contributions_changed", extensionID, nil)
 	}
 
 	return nil
@@ -895,6 +900,7 @@ func (r *Runtime) Uninstall(ctx context.Context, extensionID string) error {
 
 	if r.container.UIHostNotifier != nil {
 		r.container.UIHostNotifier.BroadcastExtensionChange("extension_uninstalled", extensionID, nil)
+		r.container.UIHostNotifier.BroadcastExtensionChange("extension_contributions_changed", extensionID, nil)
 	}
 
 	return nil

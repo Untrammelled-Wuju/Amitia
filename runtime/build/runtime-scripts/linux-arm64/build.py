@@ -74,7 +74,9 @@ def build_runtime_scripts(input_dir, output_root):
             sourceRevision="unknown",
             buildMode="release",
         )
-        validate(record)
+        validation_errors = validate(record)
+        if validation_errors:
+            raise BuildError(f"Runtime scripts record validation failed: {'; '.join(validation_errors)}")
 
         frozen_path = os.path.join(staging, FROZEN_RECORD_NAME)
         record.write(frozen_path)
@@ -97,14 +99,9 @@ def build_runtime_scripts(input_dir, output_root):
 
 def main():
     parser = argparse.ArgumentParser(description="Runtime Scripts Linux ARM64 Builder")
-    parser.add_argument("--offline", action="store_true", help="Run in offline mode")
     parser.add_argument("--input", default=None, help="Input directory")
-    parser.add_argument("--output", default=None, help="Output directory")
+    parser.add_argument("--output", required=True, help="Output directory")
     args = parser.parse_args()
-
-    if args.offline:
-        print("Runtime scripts builder: offline mode - checks skipped")
-        return 0
 
     if not args.output:
         print("Runtime scripts builder: ERROR - --output directory required", file=sys.stderr)

@@ -17,7 +17,7 @@ from atomic_publish import atomic_publish_dir
 from tree_manifest import compute_tree_manifest, write_tree_manifest
 from hashing import sha256_file
 
-SIDECAR_ROOT = os.path.join(SCRIPT_DIR, "..", "..", "..", "..", "..", "backend", "sidecar")
+SIDECAR_ROOT = os.path.join(SCRIPT_DIR, "..", "..", "..", "..", "backend", "sidecar")
 SRC_DIR = os.path.join(SIDECAR_ROOT, "src")
 TS_CONFIG = os.path.join(SIDECAR_ROOT, "tsconfig.json")
 PACKAGE_JSON = os.path.join(SIDECAR_ROOT, "package.json")
@@ -108,7 +108,9 @@ def build_sidecar(input_dir, output_root, node_bin=None):
             sourceRevision=_read_source_revision(),
             buildMode="release",
         )
-        validate(record)
+        validation_errors = validate(record)
+        if validation_errors:
+            raise BuildError(f"Sidecar record validation failed: {'; '.join(validation_errors)}")
 
         frozen_path = os.path.join(staging, FROZEN_RECORD_NAME)
         record.write(frozen_path)
@@ -144,15 +146,10 @@ def _read_source_revision():
 
 def main():
     parser = argparse.ArgumentParser(description="Sidecar Linux ARM64 Builder")
-    parser.add_argument("--offline", action="store_true", help="Run in offline mode")
     parser.add_argument("--input", default=None, help="Input directory")
-    parser.add_argument("--output", default=None, help="Output directory")
+    parser.add_argument("--output", required=True, help="Output directory")
     parser.add_argument("--node-bin", default=None, help="Path to node binary")
     args = parser.parse_args()
-
-    if args.offline:
-        print("Sidecar builder: offline mode - checks skipped")
-        return 0
 
     if not args.output:
         print("Sidecar builder: ERROR - --output directory required", file=sys.stderr)

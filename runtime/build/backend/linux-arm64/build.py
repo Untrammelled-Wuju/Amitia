@@ -25,13 +25,9 @@ def main():
     parser.add_argument("--source-revision", default=None, help="Source revision")
     args = parser.parse_args()
 
-    if args.offline:
-        print("Backend builder: offline mode - checks skipped")
-        return 0
-
     try:
-        record = export_frozen_record(args.input, args.output, source_revision=args.source_revision)
-        print(f"Backend builder: exported {record.component_id} v{record.version}")
+        record = export_frozen_record(args.input, args.output, source_revision=args.source_revision, offline=args.offline)
+        print(f"Backend builder: exported {record.componentId} v{record.version}")
         return 0
     except BuildError as e:
         print(f"Backend builder: ERROR - {e}", file=sys.stderr)

@@ -18,7 +18,7 @@ from atomic_publish import atomic_publish_dir
 from tree_manifest import compute_tree_manifest, write_tree_manifest
 from hashing import sha256_file
 
-ROOTFS_SCRIPTS_DIR = os.path.join(SCRIPT_DIR, "..", "..", "..", "..", "scripts", "prepare")
+ROOTFS_SCRIPTS_DIR = os.path.join(SCRIPT_DIR, "..", "..", "..", "scripts", "prepare")
 PREPARE_SH = os.path.join(ROOTFS_SCRIPTS_DIR, "prepare-ubuntu-rootfs-arm64.sh")
 PREPARE_PS1 = os.path.join(ROOTFS_SCRIPTS_DIR, "prepare-ubuntu-rootfs-arm64.ps1")
 
@@ -90,7 +90,9 @@ def build_rootfs(input_dir, output_root, cache_dir=None, staging_dir=None, dev_m
             sourceRevision="unknown",
             buildMode="release",
         )
-        validate(record)
+        validation_errors = validate(record)
+        if validation_errors:
+            raise BuildError(f"Rootfs record validation failed: {'; '.join(validation_errors)}")
 
         frozen_path = os.path.join(staging, FROZEN_RECORD_NAME)
         record.write(frozen_path)
@@ -110,18 +112,13 @@ def build_rootfs(input_dir, output_root, cache_dir=None, staging_dir=None, dev_m
 
 def main():
     parser = argparse.ArgumentParser(description="Rootfs Linux ARM64 Builder")
-    parser.add_argument("--offline", action="store_true", help="Run in offline mode")
     parser.add_argument("--input", default=None, help="Input directory")
-    parser.add_argument("--output", default=None, help="Output directory")
+    parser.add_argument("--output", required=True, help="Output directory")
     parser.add_argument("--cache-dir", default=None, help="Cache directory")
     parser.add_argument("--staging-dir", default=None, help="Staging directory")
     parser.add_argument("--dev-mode", action="store_true", help="Enable dev mode")
     parser.add_argument("--skip-verify", action="store_true", help="Skip verification")
     args = parser.parse_args()
-
-    if args.offline:
-        print("Rootfs builder: offline mode - checks skipped")
-        return 0
 
     if not args.output:
         print("Rootfs builder: ERROR - --output directory required", file=sys.stderr)
