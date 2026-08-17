@@ -46,7 +46,7 @@ func (v *HandshakeRuntimeValidator) ServiceBelongsToRuntime(runtimeID, serviceID
 		return err
 	}
 	for _, svc := range snap.Services {
-		if string(svc.ID) == serviceID {
+		if string(svc.ServiceID) == serviceID && string(svc.RuntimeID) == runtimeID {
 			if string(svc.PluginID) != pluginID {
 				return &runtime.TopologyError{
 					Code:      runtime.ErrNotFound,
