@@ -491,18 +491,18 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 					management.RegisterGameCenterControlRouter(apiGroup, controlHandler)
 				}
 
-		if services.KernelContainer.GameHost != nil && services.KernelContainer.GameHost.ControlPlane != nil {
-			rpcInvoker := management.NewControlPlaneRPCInvoker(
-				services.KernelContainer.GameHost.ControlPlane,
-				management.NewGameHostTopologyStore(services.KernelContainer.GameHost.RuntimeTopologyStore),
-				management.NewGameHostPluginRegistry(services.KernelContainer.GameHost.PluginRegistry),
-			)
-			rpcHandler := management.NewRPCHandler(rpcInvoker)
-			management.RegisterRPCRouter(apiGroup, rpcHandler)
+				if services.KernelContainer.GameHost != nil && services.KernelContainer.GameHost.ControlPlane != nil {
+					rpcInvoker := management.NewControlPlaneRPCInvoker(
+						services.KernelContainer.GameHost.ControlPlane,
+						management.NewGameHostTopologyStore(services.KernelContainer.GameHost.RuntimeTopologyStore),
+						management.NewGameHostPluginRegistry(services.KernelContainer.GameHost.PluginRegistry),
+					)
+					rpcHandler := management.NewRPCHandler(rpcInvoker)
+					management.RegisterRPCRouter(apiGroup, rpcHandler)
 
-			debugHandler := management.NewDebugHandler(services.KernelContainer.GameHost)
-			management.RegisterDebugRouter(apiGroup, debugHandler)
-		}
+					debugHandler := management.NewDebugHandler(services.KernelContainer.GameHost)
+					management.RegisterDebugRouter(apiGroup, debugHandler)
+				}
 			}
 		}
 		emote.RegisterRouter(apiGroup, services.Emote)

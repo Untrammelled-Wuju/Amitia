@@ -52,7 +52,7 @@ func (h *DebugHandler) GetResidueReport(c *gin.Context) {
 	}
 
 	if h.container.RPCLifecycle != nil {
-		report.PendingRPCCount = h.container.RPCLifecycle.PendingCount()
+		report.PendingRPCCount = h.container.RPCLifecycle.Registry().Count()
 	}
 
 	if h.container.ChannelRegistry != nil {
@@ -64,7 +64,7 @@ func (h *DebugHandler) GetResidueReport(c *gin.Context) {
 	}
 
 	if h.container.BinaryObjectRegistry != nil {
-		report.BinaryCount = h.container.BinaryObjectRegistry.Count()
+		report.BinaryCount = h.container.BinaryObjectRegistry.CountActive()
 	}
 
 	if h.container.SecretLeaseAdapter != nil {
