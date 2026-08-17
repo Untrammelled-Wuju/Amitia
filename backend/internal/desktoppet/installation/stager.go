@@ -54,7 +54,7 @@ func (s *releaseStager) PrepareStagingCopy(ctx context.Context, releaseID, insta
 		ContentRootHash string `gorm:"column:content_root_hash"`
 		ManifestJSON    string `gorm:"column:manifest_json"`
 	}
-	if err := s.db.WithContext(ctx).Table("desktop_pet_release_data").
+	if err := s.db.WithContext(ctx).Table("desktop_pet_package_releases").
 		Where("id = ?", releaseID).
 		Take(&releaseData).Error; err != nil {
 		if err == gorm.ErrRecordNotFound {
@@ -99,7 +99,7 @@ func (s *releaseStager) VerifyStagingCopy(ctx context.Context, releaseID, instal
 		ManifestHash    string `gorm:"column:manifest_hash"`
 		ManifestJSON    string `gorm:"column:manifest_json"`
 	}
-	if err := s.db.WithContext(ctx).Table("desktop_pet_release_data").
+	if err := s.db.WithContext(ctx).Table("desktop_pet_package_releases").
 		Where("id = ?", releaseID).
 		Take(&releaseData).Error; err != nil {
 		return fmt.Errorf("stager: query release for verify: %w", err)

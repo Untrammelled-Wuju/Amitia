@@ -133,9 +133,9 @@ func NewDesktopPetV2CutoverPlan(deps Dependencies) migration.DomainMigrationOper
 						ContentRootHash     string
 					}
 					var rows []releaseRow
-					if err := deps.DB.WithContext(ctx).Raw("SELECT id, lifecycle, integrity_status, compatibility_status, storage_key, manifest_hash, content_root_hash FROM desktop_pet_releases WHERE lifecycle = ?", "ready").Scan(&rows).Error; err != nil {
-						return false, "", err
-					}
+if err := deps.DB.WithContext(ctx).Raw("SELECT id, lifecycle, integrity_status, compatibility_status, storage_key, manifest_hash, content_root_hash FROM desktop_pet_package_releases WHERE lifecycle = ?", "ready").Scan(&rows).Error; err != nil {
+					return false, "", err
+				}
 					for _, r := range rows {
 						if r.IntegrityStatus != "verified" {
 							return false, fmt.Sprintf("release %s: integrity not verified", r.ID), nil
