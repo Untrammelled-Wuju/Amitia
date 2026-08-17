@@ -26,7 +26,7 @@ func NewPackagePortBridgeFromManager(manager *lifecycle_manager.Manager) Package
 	return &packagePortBridge{manager: manager}
 }
 
-func (b *packagePortBridge) InstallPackage(ctx context.Context, extID string, version string) (string, error) {
+func (b *packagePortBridge) InstallPackage(ctx context.Context, extID string, version string, packageID string, hash string) (string, error) {
 	if b.manager == nil {
 		return "", fmt.Errorf("package port bridge: manager not configured")
 	}
@@ -38,7 +38,11 @@ func (b *packagePortBridge) InstallPackage(ctx context.Context, extID string, ve
 		Kind:          lifecycle_manager.CmdInstall,
 		ExtensionID:   domain.ExtensionID(extID),
 		TargetVersion: ver,
+		PackageID:     packageID,
 		RequestID:     fmt.Sprintf("acq_install_%d", time.Now().UnixNano()),
+		Metadata: map[string]any{
+			"hash": hash,
+		},
 	}
 	result, err := b.manager.Execute(ctx, cmd)
 	if err != nil {

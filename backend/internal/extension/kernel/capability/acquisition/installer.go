@@ -15,7 +15,7 @@ import (
 type (
 	// PackageInstallPort invokes the real package install saga.
 	PackageInstallPort interface {
-		InstallPackage(ctx context.Context, extID string, version string) (string, error)
+		InstallPackage(ctx context.Context, extID string, version string, packageID string, hash string) (string, error)
 		UninstallPackage(ctx context.Context, extID string) error
 	}
 
@@ -102,8 +102,14 @@ func (i *ExtensionPackageInstaller) Install(
 	}
 
 	version := candidate.Version
+	packageID := ""
+	hash := ""
+	if candidate.Install.ExtensionPackage != nil {
+		packageID = candidate.Install.ExtensionPackage.PackageURI
+		hash = candidate.Install.ExtensionPackage.Hash
+	}
 
-	installID, err := i.packagePort.InstallPackage(ctx, extID, version)
+	installID, err := i.packagePort.InstallPackage(ctx, extID, version, packageID, hash)
 	if err != nil {
 		return InstalledCapability{}, fmt.Errorf("extension installer: install package %s: %w", extID, err)
 	}
