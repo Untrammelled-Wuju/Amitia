@@ -148,16 +148,14 @@ func (s *TaskRuntimeService) HandleExternalCheckpoint(ctx context.Context, taskR
 		PayloadHash:  actualHash,
 		CreatedAt:    time.Now().UTC(),
 	}
-	if err := s.store.PutCheckpoint(ctx, cp); err != nil {
-		return err
-	}
-
-	cpID := cp.CheckpointID
-	current.CheckpointID = &cpID
-	if err := s.store.PutTaskRun(ctx, current); err != nil {
-		return err
-	}
-	return nil
+	return s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
+		if err := s.store.PutCheckpoint(txCtx, cp); err != nil {
+			return err
+		}
+		cpID := cp.CheckpointID
+		current.CheckpointID = &cpID
+		return s.store.PutTaskRun(txCtx, current)
+	})
 }
 
 func (s *TaskRuntimeService) ClearLatestCheckpoint(ctx context.Context, taskRunID string) error {

@@ -46,6 +46,8 @@ const (
 	ErrTaskRuntimeSessionBindingInvalid TaskErrorCode = "task_runtime_session_binding_invalid"
 	ErrRemoteTaskExecutorUnavailable    TaskErrorCode = "remote_task_executor_unavailable"
 	ErrTaskExecutionAttemptInvalid      TaskErrorCode = "task_execution_attempt_invalid"
+	ErrTaskCheckpointTooLarge           TaskErrorCode = "task_checkpoint_too_large"
+	ErrTaskCheckpointHashMismatch       TaskErrorCode = "task_checkpoint_hash_mismatch"
 	ErrTaskExecutionUnsupported         TaskErrorCode = "task_execution_unsupported"
 	ErrTaskRevisionConflict             TaskErrorCode = "task_revision_conflict"
 	ErrTaskStaleWrite                   TaskErrorCode = "task_stale_write"

@@ -728,7 +728,11 @@ var lifecycleEmitter *event.LifecycleEventEmitter
 	}
 
 	if b.meshHub != nil && taskRuntimeService != nil {
-		taskRuntimeService.SetRemoteExecutor(task_runtime.NewMeshRemoteTaskExecutor(b.meshHub, sessionService))
+		executor := task_runtime.NewMeshRemoteTaskExecutor(b.meshHub, sessionService)
+		executor.SetProgressHandler(taskRuntimeService)
+		executor.SetCheckpointHandler(taskRuntimeService)
+		executor.SetCompletionHandler(taskRuntimeService)
+		taskRuntimeService.SetRemoteExecutor(executor)
 	}
 	extensionProviderReconciler := capability.NewExtensionProviderReconciler(providerLifecycle, capabilityProviderRegistry)
 	providerInstanceReconciler := capability.NewProviderInstanceReconciler(providerLifecycle, capabilityProviderRegistry, runtimeidentity.Identity{})
