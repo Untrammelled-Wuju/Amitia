@@ -8,6 +8,7 @@ $workspace = Split-Path -Parent $scriptDir
 $parentDir = Split-Path $workspace -Parent
 $folderName = Split-Path $workspace -Leaf
 $outputFile = Join-Path $workspace "$OutputName.tar.gz"
+$tempDir = Join-Path $env:TEMP "pack-source-$([guid]::NewGuid().ToString('N'))"
 
 if (Test-Path $outputFile) { Remove-Item $outputFile -Force }
 
@@ -88,9 +89,85 @@ $startTime = Get-Date
 
 & tar -czf $outputFile @excludes $folderName
 
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "ERROR: tar command failed with exit code $LASTEXITCODE" -ForegroundColor Red
+    if (Test-Path $tempDir) { Remove-Item $tempDir -Recurse -Force }
+    exit 1
+}
+
 $elapsed = (Get-Date) - $startTime
 $size = (Get-Item $outputFile).Length
 
 Write-Host "Done in $($elapsed.ToString('mm\:ss'))"
 Write-Host "Output: $outputFile"
 Write-Host "Size: $([math]::Round($size / 1MB, 2)) MB"
+
+Write-Host "`nValidating archive contents..."
+
+if (-not (Test-Path $tempDir)) {
+    New-Item -ItemType Directory -Path $tempDir | Out-Null
+}
+
+try {
+    & tar -tzf $outputFile | Out-File -FilePath "$tempDir/filelist.txt" -Encoding utf8
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "ERROR: failed to list archive contents" -ForegroundColor Red
+        exit 1
+    }
+
+    $violations = @()
+
+    $sensitivePatterns = @(
+        "node_modules/",
+        "\.git/",
+        "\.exe$",
+        "\.log$",
+        "\.db$",
+        "\.db-shm$",
+        "\.db-wal$",
+        "\.db-journal$",
+        "qdrant/storage/",
+        "surreal\.exe$",
+        "desktop/release/",
+        "desktop/build/",
+        "desktop/dist-types/",
+        "desktop/resources/core/",
+        "\.pyc$",
+        "__pycache__/",
+        "\.env$",
+        "\.env\.local$",
+        "\.publish-config\.json$",
+        "backend/data/",
+        "backend/cmd/data/",
+        "/data/",
+        "/logs/"
+    )
+
+    $fileList = Get-Content "$tempDir/filelist.txt"
+    foreach ($file in $fileList) {
+        foreach ($pattern in $sensitivePatterns) {
+            if ($file -match $pattern) {
+                $violations += "$file (matched: $pattern)"
+                break
+            }
+        }
+    }
+
+    if ($violations.Count -gt 0) {
+        Write-Host "`nWARNING: archive contains potentially sensitive files:" -ForegroundColor Yellow
+        foreach ($v in $violations) {
+            Write-Host "  - $v" -ForegroundColor Yellow
+        }
+        Write-Host "`nTotal violations: $($violations.Count)" -ForegroundColor Yellow
+    } else {
+        Write-Host "Validation passed: no sensitive files detected" -ForegroundColor Green
+    }
+
+    $totalFiles = $fileList.Count
+    Write-Host "Total files in archive: $totalFiles"
+} finally {
+    if (Test-Path $tempDir) {
+        Remove-Item $tempDir -Recurse -Force
+        Write-Host "Cleaned up temporary files"
+    }
+}
