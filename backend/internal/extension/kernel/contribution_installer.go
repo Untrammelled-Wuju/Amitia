@@ -185,6 +185,7 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 		ToolID       string          `json:"toolId"`
 		ModelName    string          `json:"modelName"`
 		CapabilityID string          `json:"capabilityId,omitempty"`
+		HandlerName  string          `json:"handlerName,omitempty"`
 		InputSchema  json.RawMessage `json:"inputSchema"`
 		OutputSchema json.RawMessage `json:"outputSchema"`
 		RiskLevel    string          `json:"riskLevel,omitempty"`
@@ -242,7 +243,7 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 		SideEffect:   capability.SideEffectLevel(def.SideEffect),
 		Permissions:  perms,
 		Scope:        scope,
-		Runtime:      i.buildRuntimeBinding(contrib),
+		Runtime:      i.buildRuntimeBindingWithHandler(contrib, def.HandlerName, toolID),
 	}
 
 	permIDs := make([]string, 0)
@@ -760,6 +761,10 @@ func (i *TypedContributionInstaller) registerPage(ctx context.Context, uiDef ui_
 }
 
 func (i *TypedContributionInstaller) buildRuntimeBinding(contrib domain.ContributionDefinition) capability.RuntimeBinding {
+	return i.buildRuntimeBindingWithHandler(contrib, "", "")
+}
+
+func (i *TypedContributionInstaller) buildRuntimeBindingWithHandler(contrib domain.ContributionDefinition, handlerName string, toolID string) capability.RuntimeBinding {
 	rb := capability.RuntimeBinding{
 		HandlerName: string(contrib.ModuleID),
 		Metadata: map[string]any{
@@ -772,6 +777,18 @@ func (i *TypedContributionInstaller) buildRuntimeBinding(contrib domain.Contribu
 		rb.RuntimeID = string(contrib.RuntimeBinding.RuntimeID)
 		if contrib.RuntimeBinding.InstanceID != "" {
 			rb.HandlerName = contrib.RuntimeBinding.InstanceID
+		}
+	}
+	if handlerName != "" {
+		rb.HandlerName = handlerName
+		rb.Metadata["handlerName"] = handlerName
+	} else if toolID != "" {
+		switch rb.RuntimeType {
+		case capability.RuntimeTypeBrowser,
+			capability.RuntimeTypeWorkspace,
+			capability.RuntimeTypeInternal:
+			rb.HandlerName = toolID
+			rb.Metadata["handlerName"] = toolID
 		}
 	}
 	return rb
