@@ -173,8 +173,9 @@ async function loadSchema() {
   }
 }
 
-async function ensureSession(): Promise<string> {
-  if (sessionId.value && sessionReady.value) return sessionId.value;
+let restartToken = 0;
+
+async function createSession(): Promise<string> {
   const key = `${props.contribution.extensionId}/${props.contribution.contributionId}`;
   const surfaceData = (props.context?.surface as Record<string, unknown> | undefined) ?? {};
   const res = await apiClient.post<{
@@ -204,6 +205,36 @@ async function ensureSession(): Promise<string> {
   return sid;
 }
 
+async function disposeSession() {
+  if (!sessionId.value) return;
+  const oldSessionId = sessionId.value;
+  sessionId.value = "";
+  sessionReady.value = false;
+  try {
+    await apiClient.delete(`/api/extensions/ui/sessions/${oldSessionId}`);
+  } catch {
+  }
+}
+
+async function restartSession() {
+  const token = ++restartToken;
+  if (sessionId.value) {
+    const oldSessionId = sessionId.value;
+    sessionId.value = "";
+    sessionReady.value = false;
+    try {
+      await apiClient.delete(`/api/extensions/ui/sessions/${oldSessionId}`);
+    } catch {
+    }
+  }
+  if (token !== restartToken) return;
+  try {
+    await createSession();
+  } catch {
+    if (token !== restartToken) return;
+  }
+}
+
 async function invokeAction(payload: { action: SchemaUIActionBinding; node: SchemaUINodeType }) {
   const { action, node } = payload;
   if (!action?.action_id) {
@@ -223,8 +254,10 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
   }
   actionLoading[action.action_id] = true;
   try {
-    const sid = await ensureSession();
-    const res = await fetch(`/api/extensions/ui/sessions/${sid}/bridge`, {
+    if (!sessionId.value || !sessionReady.value) {
+      await createSession();
+    }
+    const res = await fetch(`/api/extensions/ui/sessions/${sessionId.value}/bridge`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -315,7 +348,7 @@ function retry() {
 
 onMounted(() => {
   loadSchema();
-  ensureSession().catch(() => {});
+  restartSession().catch(() => {});
 });
 
 watch(
@@ -323,24 +356,13 @@ watch(
   async () => {
     for (const k of Object.keys(formState)) delete formState[k];
     for (const k of Object.keys(localContextOverride)) delete localContextOverride[k];
-    if (sessionId.value) {
-      await apiClient.delete(`/api/extensions/ui/sessions/${sessionId.value}`).catch(() => {});
-    }
-    sessionId.value = "";
-    sessionReady.value = false;
     capturedError.value = null;
-    loadSchema();
-    ensureSession().catch(() => {});
+    await loadSchema();
   }
 );
 
 watch(sessionScopeKey, async () => {
-  if (sessionId.value) {
-    await apiClient.delete(`/api/extensions/ui/sessions/${sessionId.value}`).catch(() => {});
-  }
-  sessionId.value = "";
-  sessionReady.value = false;
-  ensureSession().catch(() => {});
+  await restartSession();
 });
 
 watch(
@@ -352,22 +374,13 @@ watch(
 
 watch(
   () => props.contribution.generation,
-  async () => {
-    if (sessionId.value) {
-      await apiClient.delete(`/api/extensions/ui/sessions/${sessionId.value}`).catch(() => {});
-    }
-    sessionId.value = "";
-    sessionReady.value = false;
-    ensureSession().catch(() => {});
+  () => {
+    loadSchema();
   }
 );
 
 onBeforeUnmount(() => {
-  if (sessionId.value) {
-    apiClient.delete(`/api/extensions/ui/sessions/${sessionId.value}`).catch(() => {});
-    sessionId.value = "";
-    sessionReady.value = false;
-  }
+  disposeSession();
 });
 </script>
 

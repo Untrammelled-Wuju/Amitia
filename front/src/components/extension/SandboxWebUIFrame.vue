@@ -346,9 +346,7 @@ watch(ready, (value) => { if (value) postUIContext(); });
 
 watch(() => uiContext.value.locale, () => {
   if (!bridgePort || !ready.value) return;
-  bridgePort.postMessage({ type: "host.event", method: "ui.host.context", payload: {
-    locale: (uiContext.value.locale as string) || navigator.language || "en",
-  } });
+  postUIContext();
 });
 </script>
 

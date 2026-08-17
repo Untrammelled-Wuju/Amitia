@@ -210,6 +210,8 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
       eventSource.onopen = () => {
         isConnected.value = true;
         reconnectAttempts = 0;
+        const store = useExtensionUIStore();
+        store.refreshSnapshot(true).catch(() => {});
       };
       eventSource.onerror = () => {
         isConnected.value = false;
