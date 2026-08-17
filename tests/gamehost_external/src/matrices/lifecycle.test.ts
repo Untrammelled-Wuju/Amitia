@@ -266,20 +266,32 @@ describe('G47-F15 E2E Full Flow', () => {
     await driver.startRuntime(runtimeId);
     await driver.waitForRuntimeReady(runtimeId, 30000);
 
-    // 15. Upgrade (re-install same version to simulate update)
-    await driver.uninstallPlugin(extensionId);
-    extensionId = null;
-    runtimeId = null;
+    // 15. Upgrade (real upgrade flow via updatePlugin)
+    const archivePathV2 = process.env.MOCK_PLUGIN_ARCHIVE_PATH_V2;
+    if (archivePathV2 && extensionId) {
+      const v1Version = (await driver.getRuntime(runtimeId)).pluginId ? plugin.version : undefined;
+      await driver.updatePlugin(extensionId, archivePathV2);
+      const upgradeDeadline = Date.now() + 60000;
+      let upgradedVersion = v1Version;
+      while (Date.now() < upgradeDeadline) {
+        const current = await driver.waitForPluginByExtension('mock-developer/mock-amitiax-game-plugin', 5000).catch(() => null);
+        if (current && current.version !== v1Version) {
+          upgradedVersion = current.version;
+          break;
+        }
+        await new Promise(r => setTimeout(r, 500));
+      }
+      expect(upgradedVersion).not.toBe(v1Version);
 
-    await driver.installPlugin(archivePath);
-    const upgradedPlugin = await driver.waitForPluginByExtension('mock-developer/mock-amitiax-game-plugin', 30000);
-    extensionId = upgradedPlugin.extensionId;
-    await driver.enablePlugin(extensionId);
+      if (runtimeId) {
+        await driver.waitForRuntimeReady(runtimeId, 60000);
+      }
+    }
 
     // 16. Backend Restart is handled by test infrastructure (server remains running)
 
     // 17. Disable
-    const newRuntimes = await driver.listRuntimes({ pluginId: upgradedPlugin.pluginId });
+    const newRuntimes = await driver.listRuntimes({ pluginId: plugin.pluginId });
     if (newRuntimes.length > 0) {
       runtimeId = newRuntimes[0].runtimeId;
       await driver.stopRuntime(runtimeId);
