@@ -227,7 +227,6 @@ func (b *enableExistingPortBridge) EnableMCP(ctx context.Context, serverName str
 		return fmt.Errorf("enable MCP: empty server name")
 	}
 
-	// 验证 MCP 服务是否存在
 	if b.mcpRepository != nil {
 		_, err := b.mcpRepository.GetServer(ctx, serverName)
 		if err != nil {
@@ -235,11 +234,8 @@ func (b *enableExistingPortBridge) EnableMCP(ctx context.Context, serverName str
 		}
 	}
 
-	// MCP existing 必须执行 MCP Lifecycle Start/Connect/Discovery
 	if b.mcpLifecycle != nil {
-		// 确保 binding 已注册
 		if _, err := b.mcpLifecycle.GetInstallation(serverName); err != nil {
-			// 如果未注册，先注册 binding
 			binding := mcp.MCPBinding{
 				ID:        serverName,
 				Owner:     mcp.ExtensionOwnerRef{Type: "user"},
@@ -250,28 +246,39 @@ func (b *enableExistingPortBridge) EnableMCP(ctx context.Context, serverName str
 			}
 		}
 
-		// Step 1: Enable
 		if err := b.mcpLifecycle.Enable(serverName); err != nil {
 			return fmt.Errorf("enable MCP %s: lifecycle enable: %w", serverName, err)
 		}
 
-		// Step 2: Start
 		if err := b.mcpLifecycle.Start(serverName); err != nil {
 			return fmt.Errorf("enable MCP %s: lifecycle start: %w", serverName, err)
 		}
 
-		// Step 3: MarkReady (Connect + Discovery 完成后调用)
+		if !b.isMCPConnected(ctx, serverName) {
+			return fmt.Errorf("enable MCP %s: server not connected", serverName)
+		}
+
 		if err := b.mcpLifecycle.MarkReady(serverName); err != nil {
 			return fmt.Errorf("enable MCP %s: lifecycle mark ready: %w", serverName, err)
 		}
 	}
 
-	// 持久化启用状态
 	if err := b.enablementSvc.Enable(ctx, enablement.StateSubject{Kind: enablement.SubjectMCPServer, ID: serverName}); err != nil {
 		return fmt.Errorf("enable MCP %s: %w", serverName, err)
 	}
 
 	return nil
+}
+
+func (b *enableExistingPortBridge) isMCPConnected(ctx context.Context, serverName string) bool {
+	if b.mcpRepository == nil {
+		return false
+	}
+	server, err := b.mcpRepository.GetServer(ctx, serverName)
+	if err != nil {
+		return false
+	}
+	return server.Status == "running" || server.Status == "connected"
 }
 
 // ---------------------------------------------------------------------------

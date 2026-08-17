@@ -4,6 +4,7 @@ import "context"
 
 type PermissionStorage interface {
 	Save(ctx context.Context, grant StoredGrant) error
+	GetByGrantID(ctx context.Context, grantID string) (StoredGrant, bool, error)
 	List(ctx context.Context, filter PermissionGrantFilter) ([]StoredGrant, error)
 	ListBySubject(ctx context.Context, subject PermissionSubject) ([]StoredGrant, error)
 	MarkRevoked(ctx context.Context, grantID string) error
@@ -23,6 +24,11 @@ func NewMemoryPermissionStorage() *MemoryPermissionStorage {
 func (s *MemoryPermissionStorage) Save(ctx context.Context, grant StoredGrant) error {
 	s.grants[grant.GrantID] = grant
 	return nil
+}
+
+func (s *MemoryPermissionStorage) GetByGrantID(ctx context.Context, grantID string) (StoredGrant, bool, error) {
+	g, ok := s.grants[grantID]
+	return g, ok, nil
 }
 
 func (s *MemoryPermissionStorage) List(ctx context.Context, filter PermissionGrantFilter) ([]StoredGrant, error) {

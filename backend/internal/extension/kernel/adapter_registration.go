@@ -195,7 +195,38 @@ func makeBackgroundRemovalCallFunc(reg backgroundremoval.Registry) capability.Ba
 
 		v2, ok := resolved.Provider.(backgroundremoval.BackgroundRemovalProviderV2)
 		if !ok {
-			return nil, fmt.Errorf("background removal provider does not support V2 API")
+			v1, ok := resolved.Provider.(backgroundremoval.BackgroundRemovalProvider)
+			if !ok {
+				return nil, fmt.Errorf("background removal provider does not support V1 or V2 API")
+			}
+			input := backgroundremoval.ImageInput{
+				Image:  decodeNRGBA(req.Image, req.Width, req.Height),
+				Width:  req.Width,
+				Height: req.Height,
+				Mode:   backgroundremoval.BackgroundMode(req.Mode),
+			}
+			output, err := v1.RemoveBackground(ctx, input)
+			if err != nil {
+				return nil, fmt.Errorf("background removal failed (v1): %w", err)
+			}
+			v1Output := struct {
+				Image        []byte  `json:"image"`
+				Mask         []byte  `json:"mask"`
+				Width        int     `json:"width"`
+				Height       int     `json:"height"`
+				Provider     string  `json:"provider"`
+				Degraded     bool    `json:"degraded"`
+				RemovedRatio float64 `json:"removedRatio"`
+			}{
+				Width:        output.Width,
+				Height:       output.Height,
+				Provider:     output.Provider,
+				Degraded:     output.Degraded,
+				RemovedRatio: output.Measurements.RemovedRatio,
+			}
+			v1Output.Image = encodeNRGBA(output.Foreground)
+			v1Output.Mask = encodeGray(output.Mask)
+			return json.Marshal(v1Output)
 		}
 
 		bgReq := backgroundremoval.BackgroundRemovalRequest{

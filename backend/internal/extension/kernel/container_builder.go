@@ -44,6 +44,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/javascript_main"
 	"github.com/u-ai/backend/internal/extension/kernel/lifecycle_manager"
 	kernelmcp "github.com/u-ai/backend/internal/extension/kernel/mcp"
+	kernelmcpinstaller "github.com/u-ai/backend/internal/extension/kernel/mcp/installer"
 	"github.com/u-ai/backend/internal/extension/kernel/migration"
 	"github.com/u-ai/backend/internal/extension/kernel/observability"
 	"github.com/u-ai/backend/internal/extension/kernel/package_security"
@@ -812,7 +813,10 @@ var lifecycleEmitter *event.LifecycleEventEmitter
 	}
 	acquisitionSourceRegistry.Register(acquisition.NewRemoteCatalogSource("https://amitia.untrammelled.top/api/catalog"))
 
-	mcpLifecycle := kernelmcp.NewMCPLifecycle(nil, nil)
+	mcpProvisioner := kernelmcpinstaller.NewDefaultProvisioner()
+	mcpInstaller := kernelmcpinstaller.NewDefaultInstaller()
+	mcpLifecycle := kernelmcp.NewMCPLifecycle(mcpProvisioner, mcpInstaller)
+	workshopPort := acquisition.NewDefaultWorkshop()
 
 	acquisitionInstallerRegistry, err := acquisition.NewInstallerRegistry(&acquisition.InstallerRegistryOpts{
 		EnableExistingPort: acquisition.NewEnableExistingPortBridgeWithDeps(acquisition.EnableExistingDeps{
@@ -828,6 +832,7 @@ var lifecycleEmitter *event.LifecycleEventEmitter
 		PackageInstallPort: acquisition.NewPackagePortBridgeFromManager(lifecycleMgr),
 		MCPInstallPort:     acquisition.NewMCPPortBridge(mcpLifecycle),
 		SkillInstallPort:   acquisition.NewSkillPortBridge(acquisition.NewSkillCatalogBridge(agentSkillCatalog)),
+		WorkshopPort:       workshopPort,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("kernel: create installer registry: %w", err)
@@ -1003,10 +1008,14 @@ var lifecycleEmitter *event.LifecycleEventEmitter
 	builtin.SetUIAgentInspector(source.NewSourceInspectorWithWorkspace(b.workspaceService))
 	preciseEditingSvc := workspace.NewDefaultPreciseEditingService(b.workspaceService)
 	builtin.SetUIAgentPreciseService(preciseEditingSvc)
+	schemaGenerator := schema.NewSchemaUIGenerator(schema.DefaultCatalog)
+	builtin.SetUIAgentSchemaGenerator(schemaGenerator)
 	previewSessionMgr := preview.NewSessionManager()
 	previewValidator := schema.NewSchemaValidator(schema.DefaultCatalog)
 	previewObserver := preview.NewObserver(previewSessionMgr, previewValidator)
-	previewRefiner := preview.NewAutoRefiner(previewSessionMgr, previewObserver)
+	patchGenerator := preview.NewDefaultPatchGenerator(previewValidator)
+	patchApplier := preview.NewDefaultApplier(previewSessionMgr)
+	previewRefiner := preview.NewAutoRefinerWithPatch(previewSessionMgr, previewObserver, patchGenerator, patchApplier)
 	uiAgentExecutor := uiagent.NewUIExecutor(
 		uiagent.WithPolicy(uiagent.DefaultPolicy()),
 		uiagent.WithSourceEditor(source.NewSourceEditor(preciseEditingSvc)),

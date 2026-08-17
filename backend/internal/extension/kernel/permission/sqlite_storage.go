@@ -144,6 +144,25 @@ func (s *SQLitePermissionStorage) Save(ctx context.Context, grant StoredGrant) e
 	return nil
 }
 
+func (s *SQLitePermissionStorage) GetByGrantID(ctx context.Context, grantID string) (StoredGrant, bool, error) {
+	rows, err := s.db.QueryContext(ctx,
+		"SELECT "+permissionGrantSelectColumns+" FROM kernel_permission_grants WHERE grant_id = ?",
+		grantID,
+	)
+	if err != nil {
+		return StoredGrant{}, false, fmt.Errorf("sqlite: get permission grant by id: %w", err)
+	}
+	defer rows.Close()
+	if !rows.Next() {
+		return StoredGrant{}, false, rows.Err()
+	}
+	grant, err := scanStoredGrant(rows)
+	if err != nil {
+		return StoredGrant{}, false, err
+	}
+	return grant, true, nil
+}
+
 func (s *SQLitePermissionStorage) List(ctx context.Context, filter PermissionGrantFilter) ([]StoredGrant, error) {
 	var conditions []string
 	var args []any
