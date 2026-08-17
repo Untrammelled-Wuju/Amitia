@@ -34,7 +34,7 @@ type ProjectionBridge struct {
 	service   *Service
 	runtimeID string
 	userID    string
-	deviceID   string
+	deviceID  string
 	stopCh    chan struct{}
 	doneCh    chan struct{}
 }
