@@ -182,7 +182,8 @@ import {
   SwitchButton,
   UserFilled,
 } from "@element-plus/icons-vue";
-import { apiClient, removeToken } from "@/composables/useApi";
+import { apiClient } from "@/composables/useApi";
+import { forceCleanupSession } from "@/stores/refresh-coordinator";
 import { useAppStore } from "@/stores/app";
 
 type UserInfo = {
@@ -329,7 +330,7 @@ async function handleLogout() {
   try {
     await apiClient.post("/api/auth/logout");
   } catch {}
-  removeToken();
+  forceCleanupSession();
   await router.replace("/login");
 }
 

@@ -16,8 +16,6 @@ export function useSessionManager() {
       userId: result.user?.id,
       username: result.user?.username,
       role: result.user?.role,
-      refreshToken: result.refreshToken,
-      clientType: "web",
     });
     if (result.accessTokenExpiresAt) {
       initRefreshCoordinator(result.accessTokenExpiresAt);

@@ -589,10 +589,9 @@ async function submitClone() {
       "/api/tts/voice-clone" +
       (apiKey ? "?apiKey=" + encodeURIComponent(apiKey) : "");
 
-    const token = localStorage.getItem("ai-companion-token");
     const resp = await fetch(url, {
       method: "POST",
-      headers: token ? { Authorization: "Bearer " + token } : {},
+      headers: {},
       body: formData,
     });
     const json = await resp.json();

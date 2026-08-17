@@ -21,20 +21,7 @@ const state = ref<SessionState>({
   role: null,
 });
 
-const TOKEN_KEY = "ai-companion-token";
 let revoking = false;
-
-export function getStoredToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
-}
-
-export function setStoredToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token);
-}
-
-export function clearStoredToken(): void {
-  localStorage.removeItem(TOKEN_KEY);
-}
 
 export function revokeOnServer(): void {
   if (revoking) {
@@ -56,8 +43,6 @@ export function useSessionStore() {
     userId?: string;
     username?: string;
     role?: string;
-    refreshToken?: string;
-    clientType?: string;
   }) {
     state.value = {
       accessToken: data.accessToken,
@@ -67,9 +52,6 @@ export function useSessionStore() {
       username: data.username ?? null,
       role: data.role ?? null,
     };
-    if (data.refreshToken && data.clientType !== "web") {
-      setStoredToken(data.refreshToken);
-    }
   }
 
   function setAccessToken(token: string, expiresAt?: string) {
@@ -86,7 +68,6 @@ export function useSessionStore() {
       username: null,
       role: null,
     };
-    clearStoredToken();
     revokeOnServer();
   }
 

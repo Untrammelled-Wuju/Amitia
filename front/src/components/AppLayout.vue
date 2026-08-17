@@ -42,10 +42,8 @@ import { useUIHostSSE } from "../composables/useUIHostSSE";
 import { isNavigationAllowed } from "../navigation/nav-whitelist";
 import {
   apiClient,
-  getToken,
-  removeToken,
-  isLoggedIn,
 } from "../composables/useApi";
+import { getAccessToken } from "../stores/refresh-coordinator";
 import { getPageTitle } from "@/navigation/app-nav";
 import { useAppStore } from "@/stores/app";
 import { useExtensionUIStore } from "@/stores/extensionUI";
@@ -157,16 +155,14 @@ async function fetchActiveCharacter() {
 }
 
 async function fetchUserInfo() {
-  if (!isLoggedIn()) return;
+  if (!getAccessToken()) return;
   try {
     const res = await apiClient.get("/api/auth/me");
     const user = res.data?.data || res.data;
     if (user?.username) {
       authUsername.value = user.username;
     }
-  } catch {
-    removeToken();
-  }
+  } catch {}
 }
 
 onMounted(() => {
@@ -175,13 +171,9 @@ onMounted(() => {
   });
   fetchHealth();
   fetchQQStatus();
-  if (isLoggedIn()) {
+  if (getAccessToken()) {
     fetchActiveCharacter();
     fetchUserInfo();
-    const token = getToken();
-    if (token && window.amitiaDesktop?.setAuthToken) {
-      void window.amitiaDesktop.setAuthToken(token);
-    }
     connectUIHost();
     extensionUIStore.refreshSnapshot(true).then(() => {
       extensionRuntimeAvailable.value = true;

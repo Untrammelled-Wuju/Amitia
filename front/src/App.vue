@@ -43,8 +43,6 @@ const renderError = ref(false);
 const capturedError = ref<string | null>(null);
 const extensionUIStore = useExtensionUIStore();
 
-const TOKEN_KEY = "ai-companion-token";
-
 const publicPaths = [
   "/onboarding",
   "/login",
@@ -55,10 +53,6 @@ const publicPaths = [
 const isPublicPage = computed(() =>
   publicPaths.some((p) => route.path === p || route.path.startsWith(p + "/")),
 );
-
-function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
-}
 
 onErrorCaptured((err, _instance, info) => {
   console.error("[App] render error:", err, info);
@@ -77,8 +71,6 @@ onMounted(async () => {
     return;
   }
 
-  const token = getToken();
-
   try {
     const onboardingRes = await apiClient.get("/api/public/onboarding/status");
     const onboardingData = onboardingRes.data?.data || onboardingRes.data;
@@ -86,50 +78,28 @@ onMounted(async () => {
       router.replace("/onboarding");
       return;
     }
+  } catch {}
 
-    try {
-      const authRes = await apiClient.get("/api/public/auth/status");
-      const authData = authRes.data?.data || authRes.data;
-
-      if (!authData?.hasAdmin) {
-        router.replace("/setup");
-        return;
-      }
-
-      if (!token) {
-        router.replace("/login");
-        return;
-      }
-
-      try {
-        const meRes = await apiClient.get("/api/auth/me");
-        const userData = meRes.data?.data || meRes.data;
-        if (!userData?.id) {
-          localStorage.removeItem(TOKEN_KEY);
-          router.replace("/login");
-        } else {
-          extensionUIStore.refreshSnapshot(true).catch(() => {});
-        }
-      } catch {
-        localStorage.removeItem(TOKEN_KEY);
-        router.replace("/login");
-      }
-    } catch {
-      if (token) {
-        try {
-          const meRes = await apiClient.get("/api/auth/me");
-          const userData = meRes.data?.data || meRes.data;
-          if (!userData?.id) {
-            localStorage.removeItem(TOKEN_KEY);
-            router.replace("/login");
-          }
-        } catch {
-          localStorage.removeItem(TOKEN_KEY);
-          router.replace("/login");
-        }
-      }
+  try {
+    const authRes = await apiClient.get("/api/public/auth/status");
+    const authData = authRes.data?.data || authRes.data;
+    if (!authData?.hasAdmin) {
+      router.replace("/setup");
+      return;
     }
   } catch {}
+
+  try {
+    const meRes = await apiClient.get("/api/auth/me");
+    const userData = meRes.data?.data || meRes.data;
+    if (!userData?.id) {
+      router.replace("/login");
+    } else {
+      extensionUIStore.refreshSnapshot(true).catch(() => {});
+    }
+  } catch {
+    router.replace("/login");
+  }
 });
 
 onUnmounted(() => {});

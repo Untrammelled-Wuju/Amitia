@@ -37,10 +37,6 @@ export { useTheme } from "./composables/useTheme";
 export {
   useApi,
   apiClient,
-  setToken,
-  removeToken,
-  getToken,
-  isLoggedIn,
 } from "./composables/useApi";
 export {
   request,

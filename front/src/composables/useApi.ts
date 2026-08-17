@@ -7,7 +7,6 @@ import type { ApiResponse } from "@/types";
 import { getRuntimeConnection, getDeploymentConfig, getBackendAuthHeaders } from "@/runtime/runtime-adapter";
 import { getDeviceTimezone } from "@/utils/requestEnvelope";
 import { classifyError, displayError } from "./request";
-import { getStoredToken, setStoredToken, clearStoredToken } from "@/stores/session-store";
 import { ensureValidToken, initRefreshCoordinator, stopRefreshCoordinator, forceCleanupSession } from "@/stores/refresh-coordinator";
 
 const BASE_URL = (import.meta as any).env?.VITE_API_URL || "";
@@ -45,15 +44,11 @@ apiClient.interceptors.request.use(async (config) => {
     for (const [key, value] of Object.entries(desktopHeaders)) {
       config.headers[key] = value;
     }
-    const token = getStoredToken();
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
-  } else {
-    const token = await ensureValidToken();
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
+  }
+
+  const token = await ensureValidToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
   }
 
   const deviceTimezone = getDeviceTimezone();
@@ -64,7 +59,6 @@ apiClient.interceptors.request.use(async (config) => {
   return config;
 });
 
-// Response interceptor: unwrap and handle errors
 apiClient.interceptors.response.use(
   (response) => {
     const body = response.data as ApiResponse;
@@ -158,20 +152,4 @@ export function useApi() {
   return { loading, get, post, postUpload, put, del };
 }
 
-// Auth helpers (legacy compatibility - prefer session-manager)
-export function getToken(): string | null {
-  return getStoredToken();
-}
-
-export function setToken(token: string): void {
-  setStoredToken(token);
-}
-
-export function removeToken(): void {
-  clearStoredToken();
-  stopRefreshCoordinator();
-}
-
-export function isLoggedIn(): boolean {
-  return !!getStoredToken();
-}
+export { ensureValidToken, initRefreshCoordinator, stopRefreshCoordinator, forceCleanupSession };

@@ -81,7 +81,7 @@ import { ref, reactive, onMounted } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { ElMessage } from "element-plus";
 import { apiClient } from "../../composables/useApi";
-import { useSessionStore, getStoredToken, setStoredToken } from "../../stores/session-store";
+import { useSessionStore } from "../../stores/session-store";
 
 const router = useRouter();
 const route = useRoute();
@@ -133,12 +133,7 @@ async function handleLogin() {
         userId: data.user?.id?.toString() || null,
         username: data.user?.username || data.username || name,
         role: data.user?.role || data.role || null,
-        refreshToken: data.refreshToken || null,
-        clientType: "web",
       });
-      if (data.refreshToken) {
-        setStoredToken(data.refreshToken);
-      }
       if (window.amitiaDesktop?.setAuthToken) {
         void window.amitiaDesktop.setAuthToken(data.accessToken || data.token);
       }

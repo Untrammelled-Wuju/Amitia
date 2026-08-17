@@ -8,14 +8,10 @@ import axios, {
 import { ElMessage, ElMessageBox } from "element-plus";
 import { ERR, type ApiResponse } from "@/types";
 import { getRuntimeConnection } from "@/runtime/runtime-adapter";
-import { forceCleanupSession } from "@/stores/refresh-coordinator";
+import { forceCleanupSession, getAccessToken } from "@/stores/refresh-coordinator";
 
 const BASE_URL = (import.meta as any).env?.VITE_API_URL || "";
-const TOKEN_KEY = "ai-companion-token";
 
-// ============================================================
-// Error severity
-// ============================================================
 export type ErrorSeverity = "toast" | "banner" | "panel" | "fatal";
 
 export interface RequestError {
@@ -26,10 +22,6 @@ export interface RequestError {
   action?: { label: string; handler: () => void };
   raw?: any;
 }
-
-// ============================================================
-// Error classification
-// ============================================================
 
 export function classifyError(
   body: ApiResponse | null,
@@ -50,7 +42,6 @@ export function classifyError(
     "Network error";
   const detail = problem?.detail;
 
-  // Network / server not reachable
   if (!body && axiosError) {
     if (
       axiosError.code === "ECONNABORTED" ||
@@ -79,7 +70,6 @@ export function classifyError(
     return { code: ERR.INTERNAL, message: "Unknown error", severity: "toast" };
   }
 
-  // Auth errors: 401, 403, 700-702
   if (
     code === 401 ||
     code === 403 ||
@@ -106,28 +96,20 @@ export function classifyError(
     return { code, message, detail, severity: "toast" };
   }
 
-  // 5xx server errors
   if (code >= 500 && code < 600) {
     return { code, message, detail, severity: "panel" };
   }
 
-  // 4xx client errors
   if (code >= 400 && code < 500) {
     return { code, message, detail, severity: "toast" };
   }
 
-  // Business errors (600-699)
   if (code >= 600 && code < 700) {
     return { code, message, detail, severity: "banner" };
   }
 
-  // Default
   return { code, message, detail, severity: "toast" };
 }
-
-// ============================================================
-// Error callbacks (set by app entry)
-// ============================================================
 
 let onStartCoreRequest: (() => void) | null = null;
 let onErrorPanel: ((err: RequestError) => void) | null = null;
@@ -142,10 +124,6 @@ export function setErrorPanelHandler(fn: (err: RequestError) => void) {
 export function setErrorBannerHandler(fn: (err: RequestError) => void) {
   onErrorBanner = fn;
 }
-
-// ============================================================
-// Display error based on severity
-// ============================================================
 
 export function displayError(err: RequestError) {
   switch (err.severity) {
@@ -168,30 +146,23 @@ export function displayError(err: RequestError) {
         });
       break;
     case "fatal":
-      // Already handled (redirect to login)
       break;
   }
 }
-
-// ============================================================
-// Axios instance
-// ============================================================
 
 export const request: AxiosInstance = axios.create({
   baseURL: BASE_URL,
   timeout: 30000,
 });
 
-// Request interceptor: attach token
 request.interceptors.request.use(async (config) => {
   const runtime = await getRuntimeConnection();
   config.baseURL = runtime.apiBaseURL;
-  const token = localStorage.getItem(TOKEN_KEY);
+  const token = getAccessToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
 
-// Response interceptor: unwrap and handle errors
 request.interceptors.response.use(
   (response: AxiosResponse) => {
     const body = response.data as ApiResponse;
@@ -217,10 +188,6 @@ request.interceptors.response.use(
   },
 );
 
-// ============================================================
-// Convenience methods
-// ============================================================
-
 export async function get<T>(url: string, params?: any): Promise<T> {
   const res = await request.get(url, { params });
   return res as unknown as T;
@@ -239,18 +206,4 @@ export async function put<T>(url: string, data?: any): Promise<T> {
 export async function del<T>(url: string): Promise<T> {
   const res = await request.delete(url);
   return res as unknown as T;
-}
-
-// Auth helpers
-export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY);
-}
-export function setToken(token: string): void {
-  localStorage.setItem(TOKEN_KEY, token);
-}
-export function removeToken(): void {
-  localStorage.removeItem(TOKEN_KEY);
-}
-export function isLoggedIn(): boolean {
-  return !!localStorage.getItem(TOKEN_KEY);
 }

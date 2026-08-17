@@ -7,17 +7,16 @@
  * testing, and migration to Extension Kernel.
  */
 import { createRouter, createWebHashHistory, createWebHistory } from "vue-router"
+import { getAccessToken } from "../stores/refresh-coordinator"
 import { apiClient } from "../ui-index"
 import { shouldUseHashRouting } from "../runtime/runtime-capabilities"
 
-const TOKEN_KEY = "ai-companion-token"
-
-function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY)
+function isLoggedIn(): boolean {
+  return !!getAccessToken()
 }
 
-function isLoggedIn(): boolean {
-  return !!getToken()
+function getToken(): string | null {
+  return getAccessToken()
 }
 
 const router = createRouter({
@@ -187,11 +186,9 @@ router.beforeEach(async (to, _from, next) => {
     const res = await apiClient.get("/api/auth/me")
     const userData = res.data?.data || res.data
     if (!(userData?.id || userData?.userId)) {
-      localStorage.removeItem(TOKEN_KEY)
       return next("/login")
     }
   } catch {
-    localStorage.removeItem(TOKEN_KEY)
     return next("/login")
   }
 

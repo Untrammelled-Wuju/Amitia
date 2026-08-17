@@ -1,7 +1,8 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
 import { ref, computed } from "vue";
-import { useApi, isLoggedIn, getToken } from "./useApi";
+import { useApi } from "./useApi";
+import { getAccessToken } from "../stores/refresh-coordinator";
 import type { ApiResponse } from "@/types";
 import { resolveApiUrl } from "../runtime/runtime-adapter";
 import { createRequestEnvelope } from "../utils/requestEnvelope";
@@ -127,7 +128,7 @@ export function useChat() {
       const headers: Record<string, string> = {
         "Content-Type": "application/json",
       };
-      const token = getToken();
+      const token = getAccessToken();
       if (token) {
         headers["Authorization"] = "Bearer " + token;
       }

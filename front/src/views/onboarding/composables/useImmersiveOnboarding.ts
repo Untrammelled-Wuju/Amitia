@@ -1,7 +1,8 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { useApi, setToken } from "../../../composables/useApi";
+import { useApi } from "../../../composables/useApi";
+import { useSessionStore } from "../../../stores/session-store";
 import { getApiBaseURL } from "@/runtime/runtime-adapter";
 
 export function useImmersiveOnboarding() {
@@ -421,8 +422,16 @@ export function useImmersiveOnboarding() {
         username: data.username,
         password: data.password,
       });
-      if (loginRes?.token) {
-        setToken(loginRes.token);
+      if (loginRes?.token || loginRes?.accessToken) {
+        const { setSession } = useSessionStore();
+        setSession({
+          accessToken: loginRes.accessToken || loginRes.token,
+          accessTokenExpiresAt: loginRes.accessTokenExpiresAt || null,
+          sessionId: loginRes.sessionId || (loginRes.session?.sessionId) || null,
+          userId: loginRes.userId?.toString() || null,
+          username: loginRes.username || data.username || null,
+          role: loginRes.role || null,
+        });
       }
 
       accountDone.value = true;

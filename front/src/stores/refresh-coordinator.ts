@@ -1,6 +1,6 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
-import { useSessionStore, clearStoredToken, revokeOnServer } from "./session-store";
+import { useSessionStore, revokeOnServer } from "./session-store";
 import { refreshToken } from "./session-client";
 
 let refreshPromise: Promise<string> | null = null;
@@ -65,7 +65,6 @@ export function getAccessToken(): string | null {
 export function forceCleanupSession(): void {
   clearRefreshTimer();
   refreshPromise = null;
-  clearStoredToken();
   revokeOnServer();
 }
 
@@ -73,17 +72,17 @@ export async function ensureValidToken(): Promise<string | null> {
   const { state, clearSession } = useSessionStore();
   const token = state.value.accessToken;
   const expiresAt = state.value.accessTokenExpiresAt;
-  if (!token) return null;
-  if (!expiresAt) return token;
-  const expiry = new Date(expiresAt).getTime();
-  if (Date.now() >= expiry - 30000) {
-    try {
-      const newToken = await performRefresh();
-      return newToken;
-    } catch {
-      clearSession();
-      return null;
+  if (token && expiresAt) {
+    const expiry = new Date(expiresAt).getTime();
+    if (Date.now() < expiry - 30000) {
+      return token;
     }
   }
-  return token;
+  try {
+    const newToken = await performRefresh();
+    return newToken;
+  } catch {
+    clearSession();
+    return null;
+  }
 }
