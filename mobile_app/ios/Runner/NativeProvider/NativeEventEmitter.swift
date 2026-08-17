@@ -59,6 +59,8 @@ final class NativeEventEmitter {
     private var eventQueue: [NativeEventPayload] = []
     private var seenFingerprints: Set<String> = []
     private var maxQueueSize = 100
+    private var absoluteMaxQueueSize = 200
+    private var maxDedupCacheSize = 1000
     private var sinks: [WeakSink] = []
 
     private struct WeakSink {
@@ -83,14 +85,14 @@ final class NativeEventEmitter {
     func emit(_ payload: NativeEventPayload) {
         lock.lock()
 
-        if eventQueue.count >= maxQueueSize {
+        if eventQueue.count >= absoluteMaxQueueSize {
             if payload.priority <= .normal {
                 lock.unlock()
                 return
             }
             if let lowestIdx = eventQueue.lastIndex(where: { $0.priority <= .normal }) {
                 eventQueue.remove(at: lowestIdx)
-            } else if eventQueue.count >= maxQueueSize + 50 {
+            } else if eventQueue.count >= absoluteMaxQueueSize + 50 {
                 eventQueue.removeFirst()
             } else {
                 eventQueue.removeFirst()
@@ -103,7 +105,7 @@ final class NativeEventEmitter {
             return
         }
         seenFingerprints.insert(fingerprint)
-        if seenFingerprints.count > 500 {
+        if seenFingerprints.count > maxDedupCacheSize {
             seenFingerprints.removeAll()
         }
 
@@ -159,6 +161,8 @@ final class NativeEventEmitter {
         }
         if let gen = payload.generation {
             components.append("gen:\(gen)")
+        } else {
+            components.append("gen:none")
         }
         if let dataKey = payload.data["idempotencyKey"] as? String {
             components.append("id:\(dataKey)")

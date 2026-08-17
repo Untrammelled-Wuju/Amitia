@@ -98,12 +98,6 @@ class RuntimeService : Service() {
         FAILED,
     }
 
-    private fun toRuntimeServicePhase(phase: RuntimeServicePhase): RuntimeServicePhase = phase
-
-    private fun toRuntimeProcessPhase(phase: RuntimeProcessPhase): RuntimeProcessPhase = phase
-
-    private fun toRuntimeStartupPhase(phase: RuntimeStartupPhase): RuntimeStartupPhase = phase
-
     private val currentSessionContextRef: AtomicReference<ServiceSessionContext?> = AtomicReference(null)
     private val currentSessionRef: AtomicReference<ProotSession?> = AtomicReference(null)
     private val currentSessionIdRef: AtomicReference<String?> = AtomicReference(null)
@@ -136,13 +130,13 @@ class RuntimeService : Service() {
         val sessionId = currentSessionIdRef.get()
         val generation = currentGenerationRef.get()
         val servicePhase = when (serviceState.get()) {
-            ServiceHostState.CREATED -> if (ctx != null) toRuntimeServicePhase(ctx.servicePhase) else RuntimeServicePhase.CREATED
+            ServiceHostState.CREATED -> if (ctx != null) ctx.servicePhase else RuntimeServicePhase.CREATED
             ServiceHostState.FOREGROUND -> RuntimeServicePhase.FOREGROUND
             ServiceHostState.DESTROYED -> RuntimeServicePhase.DESTROYED
         }
-        val processPhase = if (ctx != null) toRuntimeProcessPhase(ctx.processPhase) else RuntimeProcessPhase.CREATED
+        val processPhase = if (ctx != null) ctx.processPhase else RuntimeProcessPhase.CREATED
         val terminalState = toRuntimeTerminalState(ctx?.terminalEvent)
-        val startupPhase = ctx?.startupPhase?.let { toRuntimeStartupPhase(it) } ?: RuntimeStartupPhase.NOT_STARTED
+        val startupPhase = ctx?.startupPhase ?: RuntimeStartupPhase.NOT_STARTED
         val snapshot = RuntimeServiceLifecycleSnapshot(
             generation = generation,
             sessionId = sessionId,

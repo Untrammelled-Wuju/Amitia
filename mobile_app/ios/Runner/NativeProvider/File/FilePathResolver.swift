@@ -67,24 +67,21 @@ public final class FilePathResolver {
             var isDirectory: ObjCBool = false
             let exists = FileManager.default.fileExists(atPath: resolvedURL.path, isDirectory: &isDirectory)
             if exists {
-                if let attributes = try? FileManager.default.attributesOfItem(atPath: resolvedURL.path),
-                   attributes[.type] as? FileAttributeType == .typeSymbolicLink {
-                    let destination = try? FileManager.default.destinationOfSymbolicLink(atPath: resolvedURL.path)
-                    if let dest = destination {
-                        let parentDir = (resolvedURL.path as NSString).deletingLastPathComponent
-                        let absoluteDest = (dest as NSString).hasPrefix("/") ? dest : parentDir + "/" + dest
-                        let destURL = URL(fileURLWithPath: absoluteDest).standardizedFileURL
-                        let rootStandardized = rootURL.standardizedFileURL
-                        if !isWithinRoot(destURL.path, rootPath: rootStandardized.path) {
-                            throw PathResolverError.symlinkEscape
-                        }
+                let attributes = try? FileManager.default.attributesOfItem(atPath: resolvedURL.path)
+                if attributes?[.type] as? FileAttributeType == .typeSymbolicLink {
+                    let canonicalURL = try resolveSymlinkChain(at: resolvedURL, rootURL: rootURL)
+                    let rootCanonical = rootURL.resolvingSymlinksInPath()
+                    if !isWithinRoot(canonicalURL.path, rootPath: rootCanonical.path) {
+                        throw PathResolverError.symlinkEscape
                     }
                 }
             }
         }
 
-        let resolvedPath = resolvedURL.standardizedFileURL.path
-        let rootPath = rootURL.standardizedFileURL.path
+        let finalURL = try resolveSymlinkChain(at: resolvedURL, rootURL: rootURL)
+        let rootCanonical = rootURL.resolvingSymlinksInPath()
+        let resolvedPath = finalURL.path
+        let rootPath = rootCanonical.path
 
         guard isWithinRoot(resolvedPath, rootPath: rootPath) else {
             throw PathResolverError.escapesRoot
@@ -102,7 +99,7 @@ public final class FilePathResolver {
         return ResolvedFileReference(
             mountId: mountId,
             relativePath: normalized,
-            resolvedURL: resolvedURL,
+            resolvedURL: finalURL,
             isDirectory: isDirectory.boolValue,
             isSymlink: isSymlink
         )
@@ -172,14 +169,58 @@ public final class FilePathResolver {
     }
 
     public func isWithinRoot(_ resolvedPath: String, rootPath: String) -> Bool {
-        let standardizedResolved = URL(fileURLWithPath: resolvedPath).standardizedFileURL.path
-        let standardizedRoot = URL(fileURLWithPath: rootPath).standardizedFileURL.path
+        let resolvedURL = URL(fileURLWithPath: resolvedPath)
+        let rootURL = URL(fileURLWithPath: rootPath)
 
-        if standardizedResolved == standardizedRoot {
+        let canonicalResolved = resolvedURL.resolvingSymlinksInPath().path
+        let canonicalRoot = rootURL.resolvingSymlinksInPath().path
+
+        let normalizedResolved = canonicalResolved.hasSuffix("/") ? String(canonicalResolved.dropLast()) : canonicalResolved
+        let normalizedRoot = canonicalRoot.hasSuffix("/") ? String(canonicalRoot.dropLast()) : canonicalRoot
+
+        if normalizedResolved == normalizedRoot {
             return true
         }
 
-        let rootWithSlash = standardizedRoot.hasSuffix("/") ? standardizedRoot : standardizedRoot + "/"
-        return standardizedResolved.hasPrefix(rootWithSlash)
+        let rootWithSlash = normalizedRoot + "/"
+        guard normalizedResolved.hasPrefix(rootWithSlash) else {
+            return false
+        }
+
+        let remaining = String(normalizedResolved.dropFirst(rootWithSlash.count))
+        let pathComponents = remaining.split(separator: "/", omittingEmptySubsequences: true).map(String.init)
+        for component in pathComponents {
+            if component == ".." || component == "." {
+                return false
+            }
+        }
+
+        return true
+    }
+
+    public func canonicalizePath(_ path: String) -> String {
+        return URL(fileURLWithPath: path).resolvingSymlinksInPath().path
+    }
+
+    public func resolveSymlinkChain(at url: URL, rootURL: URL, depth: Int = 0) throws -> URL {
+        let maxDepth = 32
+        if depth > maxDepth {
+            throw PathResolverError.symlinkEscape
+        }
+
+        let resourceValues = try url.resourceValues(forKeys: [.isSymbolicLinkKey])
+        if resourceValues.isSymbolicLink == true {
+            let destination = try FileManager.default.destinationOfSymbolicLink(atPath: url.path)
+            let destinationURL: URL
+            if destination.hasPrefix("/") {
+                destinationURL = URL(fileURLWithPath: destination)
+            } else {
+                let parentDir = (url.path as NSString).deletingLastPathComponent
+                destinationURL = URL(fileURLWithPath: parentDir).appendingPathComponent(destination)
+            }
+            return try resolveSymlinkChain(at: destinationURL, rootURL: rootURL, depth: depth + 1)
+        }
+
+        return url.resolvingSymlinksInPath()
     }
 }
