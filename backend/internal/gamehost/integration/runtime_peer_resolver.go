@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/u-ai/backend/internal/gamehost/domain"
-	"github.com/u-ai/backend/internal/gamehost/runtime"
 )
 
 type RuntimePeerResolver struct {
@@ -32,7 +31,7 @@ func (r *RuntimePeerResolver) ResolveService(
 		return "", err
 	}
 	for _, service := range snapshot.Services {
-		if service.ID == runtime.ServiceInstanceID(serviceID) {
+		if string(service.ServiceID) == string(serviceID) && string(service.RuntimeID) == string(runtimeID) {
 			return service.PluginID, nil
 		}
 	}
