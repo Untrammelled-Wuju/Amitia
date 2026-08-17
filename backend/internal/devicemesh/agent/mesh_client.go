@@ -76,6 +76,10 @@ func (c *MeshClient) SetCredentialStore(store *CredentialStore) {
 	c.credentialStore = store
 }
 
+func (c *MeshClient) SetTaskWorker(w TaskWorkerIface) {
+	c.conf.TaskWorker = w
+}
+
 func (c *MeshClient) Start() {
 	go c.runLoop()
 }

@@ -11,10 +11,15 @@ import (
 	protocol "github.com/u-ai/backend/internal/deviceruntime/protocol"
 )
 
+type TaskRuntimeExecutor interface {
+	Execute(ctx context.Context, taskType string, input map[string]interface{}) (json.RawMessage, error)
+}
+
 type defaultTaskWorker struct {
-	client     *MeshClient
-	mu         sync.Mutex
-	cancelFns  map[string]context.CancelFunc
+	client      *MeshClient
+	taskRuntime TaskRuntimeExecutor
+	mu          sync.Mutex
+	cancelFns   map[string]context.CancelFunc
 	progressSeq map[string]int64
 }
 
@@ -24,6 +29,10 @@ func NewTaskWorker(client *MeshClient) *defaultTaskWorker {
 		cancelFns:   make(map[string]context.CancelFunc),
 		progressSeq: make(map[string]int64),
 	}
+}
+
+func (w *defaultTaskWorker) SetTaskRuntime(tr TaskRuntimeExecutor) {
+	w.taskRuntime = tr
 }
 
 func (w *defaultTaskWorker) ExecuteTask(ctx context.Context, dispatch protocol.TaskDispatchPayload) error {
@@ -141,6 +150,12 @@ func (w *defaultTaskWorker) executeTaskByType(ctx context.Context, dispatch prot
 }
 
 func (w *defaultTaskWorker) dispatchTaskExecution(ctx context.Context, taskType string, input map[string]interface{}) (json.RawMessage, error) {
+	if w.taskRuntime != nil {
+		if result, err := w.taskRuntime.Execute(ctx, taskType, input); err == nil {
+			return result, nil
+		}
+	}
+
 	switch taskType {
 	case "ping":
 		result := map[string]interface{}{

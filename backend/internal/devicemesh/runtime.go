@@ -15,6 +15,10 @@ import (
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
+type dispatcherResolveAdapter interface {
+	Resolve(handlerName string) agent.RuntimeInvokeHandler
+}
+
 type Runtime struct {
 	DB            *sql.DB
 	BootstrapSvc  *bootstrap.Service
@@ -25,6 +29,8 @@ type Runtime struct {
 	DeviceReg     *host_registry.Registry
 	LocalHandler  *agent.LocalHandler
 	sessions      *deviceruntime.Service
+	dispatcher    dispatcherResolveAdapter
+	taskRuntime   agent.TaskRuntimeExecutor
 }
 
 func NewCloudRuntime(db *sql.DB, deviceReg *host_registry.Registry) (*Runtime, error) {
@@ -70,18 +76,43 @@ func NewCloudRuntimeWithHub(db *sql.DB, deviceReg *host_registry.Registry, hub *
 
 	probe := server.NewProbeService(hub)
 
-	return &Runtime{
+	sessionStore := deviceruntime.NewSQLiteSessionStore(db)
+	if err := sessionStore.EnsureSchema(context.Background()); err != nil {
+		return nil, err
+	}
+	sessions, err := deviceruntime.NewService(sessionStore, deviceruntime.ServiceOptions{})
+	if err != nil {
+		return nil, err
+	}
+
+	rt := &Runtime{
 		DB:            db,
 		BootstrapSvc:  bootstrapSvc,
 		CredentialSvc: credSvc,
 		Hub:           hub,
 		Probe:         probe,
 		DeviceReg:     deviceReg,
-	}, nil
+		sessions:      sessions,
+	}
+
+	rt.Handler = server.NewHandler(sessions, hub)
+
+	return rt, nil
 }
 
 func (rt *Runtime) SetSessions(sessions *deviceruntime.Service) {
 	rt.sessions = sessions
+}
+
+func (rt *Runtime) SetDispatcher(d dispatcherResolveAdapter) {
+	rt.dispatcher = d
+	if rt.Handler != nil && d != nil {
+		rt.Handler.SetDispatcher(d)
+	}
+}
+
+func (rt *Runtime) SetTaskRuntime(tr agent.TaskRuntimeExecutor) {
+	rt.taskRuntime = tr
 }
 
 func (rt *Runtime) Start() error {
@@ -114,14 +145,12 @@ func NewDeviceAgentRuntime(dataDir string, platform runtimeidentity.Platform) (*
 	return rt, nil
 }
 
-// R21: autoRecoverCredential attempts to restore credential and auto-connect
 func (rt *Runtime) autoRecoverCredential(handler *agent.LocalHandler) {
 	cred, err := handler.LoadCredential()
 	if err != nil || cred == nil {
 		return
 	}
 
-	// Skip expired credentials
 	if cred.ExpiresAt.Before(time.Now()) {
 		return
 	}
@@ -133,13 +162,24 @@ func (rt *Runtime) autoRecoverCredential(handler *agent.LocalHandler) {
 
 	cursor, _ := handler.LoadCursor()
 
+	dispatcher := rt.dispatcher
+	if dispatcher == nil {
+		dispatcher = agent.NewRuntimeDispatcher()
+	}
+
 	meshClient := agent.NewMeshClient(agent.MeshClientConfig{
-		CloudBaseURL: cred.CloudBaseUrl,
-		Credential:   cred.Credential,
-		UserID:       cred.UserID,
-		Identity:     identity,
-		Cursor:       cursor,
+		CloudBaseURL:      cred.CloudBaseUrl,
+		Credential:        cred.Credential,
+		UserID:            cred.UserID,
+		Identity:          identity,
+		Cursor:            cursor,
+		RuntimeDispatcher: dispatcher,
 	})
+	taskWorker := agent.NewTaskWorker(meshClient)
+	if rt.taskRuntime != nil {
+		taskWorker.SetTaskRuntime(rt.taskRuntime)
+	}
+	meshClient.SetTaskWorker(taskWorker)
 	meshClient.SetCredentialStore(handler.CredentialStore())
 	handler.SetMeshClient(meshClient)
 	meshClient.Start()
