@@ -184,18 +184,63 @@ func (h *Handler) Logout(c *gin.Context) {
 		return
 	}
 
+	clientType := detectClientType(c)
 	sessionID := actor.SessionID
 	if sessionID != "" && actor.UserID != "" {
 		var userID int64
 		fmt.Sscanf(string(actor.UserID), "%d", &userID)
-		if err := h.svc.RevokeCurrentSession(sessionID, userID); err != nil {
-			util.ErrorResponse(c, response.InternalError, err.Error(), nil)
-			return
+		if userID > 0 {
+			if err := h.svc.RevokeCurrentSession(sessionID, userID); err != nil {
+				util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+				return
+			}
 		}
 	}
 
-	h.clearRefreshCookie(c, detectClientType(c))
+	h.clearRefreshCookie(c, clientType)
 	util.SuccessMsgResponse(c, "已登出", nil)
+}
+
+func (h *Handler) RevokeRefresh(c *gin.Context) {
+	actor := getActor(c)
+	if actor == nil {
+		util.ErrorResponse(c, response.Unauthorized, "未认证", nil)
+		return
+	}
+
+	clientType := detectClientType(c)
+	if clientType == "web" {
+		rawToken, err := c.Cookie("AmitiaRefresh")
+		if err == nil && rawToken != "" {
+			if revokeErr := h.svc.RefreshService().RevokeByToken(rawToken); revokeErr != nil {
+				util.ErrorResponse(c, response.InternalError, revokeErr.Error(), nil)
+				return
+			}
+		}
+		h.clearRefreshCookie(c, "web")
+	} else {
+		var req struct {
+			RefreshToken string `json:"refreshToken"`
+		}
+		rawToken := ""
+		if err := c.ShouldBindJSON(&req); err == nil && req.RefreshToken != "" {
+			rawToken = req.RefreshToken
+		}
+		if rawToken == "" {
+			authHeader := c.GetHeader("Authorization")
+			if strings.HasPrefix(authHeader, "AmitiaRefresh ") {
+				rawToken = strings.TrimPrefix(authHeader, "AmitiaRefresh ")
+			}
+		}
+		if rawToken != "" {
+			if revokeErr := h.svc.RefreshService().RevokeByToken(rawToken); revokeErr != nil {
+				util.ErrorResponse(c, response.InternalError, revokeErr.Error(), nil)
+				return
+			}
+		}
+	}
+
+	util.SuccessMsgResponse(c, "刷新令牌已撤销", nil)
 }
 
 func (h *Handler) ListSessions(c *gin.Context) {

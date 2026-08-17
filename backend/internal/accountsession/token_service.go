@@ -34,7 +34,7 @@ func NewTokenService() *TokenService {
 	if absoluteTTL <= 0 {
 		absoluteTTL = 90 * 24 * time.Hour
 	}
-	return &TokenService{
+	s := &TokenService{
 		secret:      []byte(cfg.JWT.Secret),
 		issuer:      cfg.JWT.Issuer,
 		audience:    cfg.JWT.Audience,
@@ -42,14 +42,27 @@ func NewTokenService() *TokenService {
 		refreshTTL:  refreshTTL,
 		absoluteTTL: absoluteTTL,
 	}
+	s.validateSecret()
+	return s
 }
 
 func NewTokenServiceFromParams(secret, issuer, audience string) *TokenService {
-	return &TokenService{
+	s := &TokenService{
 		secret:    []byte(secret),
 		issuer:    issuer,
 		audience:  audience,
 		accessTTL: 15 * time.Minute,
+	}
+	s.validateSecret()
+	return s
+}
+
+func (s *TokenService) validateSecret() {
+	if len(s.secret) == 0 {
+		panic("accountsession: JWT secret 为空，拒绝初始化 TokenService")
+	}
+	if len(s.secret) < 32 {
+		panic("accountsession: JWT secret 长度不足 32 字节，拒绝初始化 TokenService")
 	}
 }
 
