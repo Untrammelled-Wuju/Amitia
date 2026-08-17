@@ -62,6 +62,7 @@ func (l *PersistentLock) Acquire(ctx context.Context, lockName string, ttl time.
 		HeartbeatAt:     nowStr,
 	}
 
+	var tookOverStaleLease bool
 	err := l.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var existing migrationLockRecord
 		if err := tx.Where("lock_name = ?", lockName).Take(&existing).Error; err != nil {
@@ -86,6 +87,7 @@ func (l *PersistentLock) Acquire(ctx context.Context, lockName string, ttl time.
 			if result.RowsAffected != 1 {
 				return fmt.Errorf("migration: stale lease CAS failed, rows affected=%d", result.RowsAffected)
 			}
+			tookOverStaleLease = true
 			return nil
 		}
 		if existing.OwnerInstanceID == l.instance {
@@ -112,19 +114,34 @@ func (l *PersistentLock) Acquire(ctx context.Context, lockName string, ttl time.
 
 	fh, err := os.OpenFile(lockFile, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
-		if errors.Is(err, os.ErrExist) {
-			return fmt.Errorf("migration: file lock already exists: %s", lockName)
+		if errors.Is(err, os.ErrExist) && tookOverStaleLease {
+			if rmErr := os.Remove(lockFile); rmErr != nil {
+				l.releaseDBLease(lockName)
+				return fmt.Errorf("migration: failed to remove stale lock file: %w", rmErr)
+			}
+			fh, err = os.OpenFile(lockFile, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 		}
-		return fmt.Errorf("migration: file lock open: %w", err)
+		if err != nil {
+			l.releaseDBLease(lockName)
+			if errors.Is(err, os.ErrExist) {
+				return fmt.Errorf("migration: file lock already exists: %s", lockName)
+			}
+			return fmt.Errorf("migration: file lock open: %w", err)
+		}
 	}
 	if _, err := fmt.Fprintf(fh, "instance=%s\ncreated=%s\n", l.instance, nowStr); err != nil {
 		fh.Close()
 		os.Remove(lockFile)
+		l.releaseDBLease(lockName)
 		return fmt.Errorf("migration: write lock file: %w", err)
 	}
 	fh.Close()
 
 	return nil
+}
+
+func (l *PersistentLock) releaseDBLease(lockName string) {
+	l.db.Where("lock_name = ? AND owner_instance_id = ?", lockName, l.instance).Delete(&migrationLockRecord{})
 }
 
 func (l *PersistentLock) Release(lockName string) error {
