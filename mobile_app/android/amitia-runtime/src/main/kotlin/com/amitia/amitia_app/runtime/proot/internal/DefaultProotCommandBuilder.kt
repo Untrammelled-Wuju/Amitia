@@ -13,7 +13,7 @@ internal class DefaultProotCommandBuilder : ProotCommandBuilder {
         args.add("-w"); args.add(spec.workingDirectory)
         for (mount in spec.bindMounts) {
             if (mount.readOnly) {
-                args.add("-R"); args.add("${mount.host}:${mount.guest}")
+                args.add("-b"); args.add("${mount.host}:${mount.guest}:ro")
             } else {
                 args.add("-b"); args.add("${mount.host}:${mount.guest}")
             }

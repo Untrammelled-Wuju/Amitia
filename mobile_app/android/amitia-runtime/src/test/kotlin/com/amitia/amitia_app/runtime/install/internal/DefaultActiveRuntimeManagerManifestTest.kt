@@ -364,7 +364,7 @@ internal class FakeManifestStore : RuntimeManifestStore {
                 target = com.amitia.amitia_app.runtime.manifest.RuntimeManifestTarget(
                     hostPlatform = "android",
                     hostAbi = "arm64-v8a",
-                    runtimeKind = "proot",
+                    runtimeKind = "embedded-proot",
                     guestPlatform = "linux",
                     guestArchitecture = "arm64",
                     distribution = "ubuntu",
