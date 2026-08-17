@@ -1,3 +1,4 @@
+# 此文件为工作区代码打包工具，不可更改文件内任何内容，除非用户允许
 param(
     [string]$OutputName = "U-Ai-source"
 )

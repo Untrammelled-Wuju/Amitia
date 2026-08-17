@@ -47,7 +47,7 @@ describe('G47-F15 Fault Matrix (Backend Driver)', () => {
     const archivePath = requireArchive();
 
     await driver.installPlugin(archivePath);
-    const plugin = await driver.waitForPluginByExtension('mock-amitiax-game-plugin', 30000);
+    const plugin = await driver.waitForPluginByExtension('mock-developer/mock-amitiax-game-plugin', 30000);
     extensionId = plugin.extensionId;
     await driver.enablePlugin(extensionId);
 
@@ -76,7 +76,7 @@ describe('G47-F15 Fault Matrix (Backend Driver)', () => {
     const archivePath = requireArchive();
 
     await driver.installPlugin(archivePath);
-    const plugin = await driver.waitForPluginByExtension('mock-amitiax-game-plugin', 30000);
+    const plugin = await driver.waitForPluginByExtension('mock-developer/mock-amitiax-game-plugin', 30000);
     extensionId = plugin.extensionId;
     await driver.enablePlugin(extensionId);
 
@@ -94,7 +94,7 @@ describe('G47-F15 Fault Matrix (Backend Driver)', () => {
     const archivePath = requireArchive();
 
     await driver.installPlugin(archivePath);
-    const plugin = await driver.waitForPluginByExtension('mock-amitiax-game-plugin', 30000);
+    const plugin = await driver.waitForPluginByExtension('mock-developer/mock-amitiax-game-plugin', 30000);
     extensionId = plugin.extensionId;
     await driver.enablePlugin(extensionId);
     await driver.disablePlugin(extensionId);
@@ -115,7 +115,7 @@ describe('G47-F15 Fault Matrix (Backend Driver)', () => {
     const archiveV2 = requireArchiveV2();
 
     await driver.installPlugin(archivePath);
-    const plugin = await driver.waitForPluginByExtension('mock-amitiax-game-plugin', 30000);
+    const plugin = await driver.waitForPluginByExtension('mock-developer/mock-amitiax-game-plugin', 30000);
     extensionId = plugin.extensionId;
     const v1Version = plugin.version;
     await driver.enablePlugin(extensionId);
@@ -132,7 +132,7 @@ describe('G47-F15 Fault Matrix (Backend Driver)', () => {
     const deadline = Date.now() + 60000;
     let updatedVersion = v1Version;
     while (Date.now() < deadline) {
-      const current = await driver.waitForPluginByExtension('mock-amitiax-game-plugin', 5000).catch(() => null);
+      const current = await driver.waitForPluginByExtension('mock-developer/mock-amitiax-game-plugin', 5000).catch(() => null);
       if (current && current.version !== v1Version) {
         updatedVersion = current.version;
         break;
@@ -152,7 +152,7 @@ describe('G47-F15 Fault Matrix (Backend Driver)', () => {
     const archivePath = requireArchive();
 
     await driver.installPlugin(archivePath);
-    const plugin = await driver.waitForPluginByExtension('mock-amitiax-game-plugin', 30000);
+    const plugin = await driver.waitForPluginByExtension('mock-developer/mock-amitiax-game-plugin', 30000);
     extensionId = plugin.extensionId;
     await driver.enablePlugin(extensionId);
 

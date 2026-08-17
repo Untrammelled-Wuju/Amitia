@@ -39,7 +39,7 @@ describe('G47-F15 Security (Backend Driver)', () => {
     const archivePath = requireArchive();
 
     await driver.installPlugin(archivePath);
-    const plugin = await driver.waitForPluginByExtension('mock-amitiax-game-plugin', 30000);
+    const plugin = await driver.waitForPluginByExtension('mock-developer/mock-amitiax-game-plugin', 30000);
     extensionId = plugin.extensionId;
     await driver.enablePlugin(extensionId);
 
@@ -62,7 +62,7 @@ describe('G47-F15 Security (Backend Driver)', () => {
     const archivePath = requireArchive();
 
     await driver.installPlugin(archivePath);
-    const plugin = await driver.waitForPluginByExtension('mock-amitiax-game-plugin', 30000);
+    const plugin = await driver.waitForPluginByExtension('mock-developer/mock-amitiax-game-plugin', 30000);
     extensionId = plugin.extensionId;
     await driver.enablePlugin(extensionId);
 
@@ -85,7 +85,7 @@ describe('G47-F15 Security (Backend Driver)', () => {
     const archivePath = requireArchive();
 
     await driver.installPlugin(archivePath);
-    const plugin = await driver.waitForPluginByExtension('mock-amitiax-game-plugin', 30000);
+    const plugin = await driver.waitForPluginByExtension('mock-developer/mock-amitiax-game-plugin', 30000);
     extensionId = plugin.extensionId;
     await driver.enablePlugin(extensionId);
 
