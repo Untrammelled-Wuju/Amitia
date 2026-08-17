@@ -1129,24 +1129,28 @@ func (w *Worker) markFrameFailed(task *desktoppet.GenerationTask, action *deskto
 
 func (w *Worker) failAction(action *desktoppet.GenerationTaskAction, code, message string) {
 	now := time.Now().Format(workerTimeFormat)
-	_ = w.repo.UpdateActionStatusNoTx(action.ID, map[string]interface{}{
+	if err := w.repo.UpdateActionStatusNoTx(action.ID, map[string]interface{}{
 		"status":        "failed",
 		"error_code":    code,
 		"error_message": message,
 		"completed_at":  now,
 		"updated_at":    now,
-	})
+	}); err != nil {
+		log.Logger.Warnf("failed to mark action %s as failed: %v", action.ID, err)
+	}
 }
 
 func (w *Worker) finalizeCallLog(logID, status, completedAt, usage, errCode, errMsg, providerRequestID string) {
-	_ = w.db.Model(&desktoppet.GenerationCallLog{}).Where("id = ?", logID).Updates(map[string]interface{}{
+	if err := w.db.Model(&desktoppet.GenerationCallLog{}).Where("id = ?", logID).Updates(map[string]interface{}{
 		"request_completed_at": completedAt,
 		"request_status":       status,
 		"usage":                usage,
 		"error_code":           errCode,
 		"error_message":        errMsg,
 		"provider_request_id":  providerRequestID,
-	}).Error
+	}).Error; err != nil {
+		log.Logger.Warnf("failed to finalize call log %s: %v", logID, err)
+	}
 }
 
 func serializeUsage(usage *imageprovider.GenerationUsage) string {

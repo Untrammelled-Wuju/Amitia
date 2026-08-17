@@ -13,7 +13,10 @@ import (
 
 func RegisterDesktopPetRouter(r *gin.RouterGroup, ctx *app.AppContext, registry *security.PathRootRegistry) {
 	repo := NewRepository(ctx.DB, ctx)
-	svc := NewService(repo, ctx.DB)
+	svc, err := NewService(repo, ctx.DB)
+	if err != nil {
+		panic(fmt.Errorf("failed to initialize desktoppet service: %w", err))
+	}
 	if registry == nil {
 		registry = security.NewPathRootRegistry()
 		if err := security.EnsureAllRequiredRoots(registry, config.AppCfg.Storage.DataDir); err != nil {
@@ -38,7 +41,10 @@ func RegisterDesktopPetRouter(r *gin.RouterGroup, ctx *app.AppContext, registry 
 
 func RegisterDesktopPetWriteRouter(r *gin.RouterGroup, ctx *app.AppContext, registry *security.PathRootRegistry) {
 	repo := NewRepository(ctx.DB, ctx)
-	svc := NewService(repo, ctx.DB)
+	svc, err := NewService(repo, ctx.DB)
+	if err != nil {
+		panic(fmt.Errorf("failed to initialize desktoppet service: %w", err))
+	}
 	responder := security.NewSafeArtifactResponder(registry)
 	guard := security.NewSQLiteOwnershipGuard(ctx.DB)
 	handler := NewHandler(svc, responder, guard)

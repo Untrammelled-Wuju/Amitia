@@ -49,7 +49,11 @@ func newServiceFromDB(t *testing.T, db *gorm.DB) Service {
 	t.Helper()
 	ctx := &app.AppContext{DB: db, Context: context.Background()}
 	repo := NewRepository(db, ctx)
-	return NewService(repo, db)
+	svc, err := NewService(repo, db)
+	if err != nil {
+		t.Fatalf("NewService: %v", err)
+	}
+	return svc
 }
 
 func setupTestService(t *testing.T) (Service, *gorm.DB, string) {

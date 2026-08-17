@@ -434,24 +434,28 @@ func (e *GenerationExecutor) updateActionProgress(task *desktoppet.GenerationTas
 
 func (e *GenerationExecutor) failAttempt(attemptID, code, message string) {
 	now := time.Now().Format(workerTimeFormat)
-	_ = e.db.Model(&generation.ActionGenerationAttempt{}).Where("id = ?", attemptID).Updates(map[string]interface{}{
+	if err := e.db.Model(&generation.ActionGenerationAttempt{}).Where("id = ?", attemptID).Updates(map[string]interface{}{
 		"status":        string(generation.AttemptStatusFailed),
 		"error_code":    code,
 		"error_message": message,
 		"completed_at":  now,
 		"updated_at":    now,
-	}).Error
+	}).Error; err != nil {
+		log.Logger.Warnf("failed to mark attempt %s as failed: %v", attemptID, err)
+	}
 }
 
 func (e *GenerationExecutor) failAction(action *desktoppet.GenerationTaskAction, code, message string) {
 	now := time.Now().Format(workerTimeFormat)
-	_ = e.repo.UpdateActionStatusNoTx(action.ID, map[string]interface{}{
+	if err := e.repo.UpdateActionStatusNoTx(action.ID, map[string]interface{}{
 		"status":        "failed",
 		"error_code":    code,
 		"error_message": message,
 		"completed_at":  now,
 		"updated_at":    now,
-	})
+	}); err != nil {
+		log.Logger.Warnf("failed to mark action %s as failed: %v", action.ID, err)
+	}
 }
 
 func convertToGenerationResult(legacy *imageprovider.ImageGenerationResult) *imageprovider.GenerationResult {

@@ -37,12 +37,24 @@ func (h *Handler) GetActionDefinitions(c *gin.Context) {
 
 func (h *Handler) CreateTask(c *gin.Context) {
 	characterID := c.PostForm("characterId")
-	modelConfigID, _ := strconv.Atoi(c.PostForm("modelConfigId"))
+	modelConfigID, err := strconv.Atoi(c.PostForm("modelConfigId"))
+	if err != nil || modelConfigID <= 0 {
+		util.ErrorResponse(c, response.InvalidParams, "modelConfigId 无效", gin.H{"errorCode": "INVALID_MODEL_CONFIG"})
+		return
+	}
 	name := c.PostForm("name")
 	prompt := c.PostForm("prompt")
 	negativePrompt := c.PostForm("negativePrompt")
-	outputWidth, _ := strconv.Atoi(c.PostForm("outputWidth"))
-	outputHeight, _ := strconv.Atoi(c.PostForm("outputHeight"))
+	outputWidth, err := strconv.Atoi(c.PostForm("outputWidth"))
+	if err != nil || outputWidth <= 0 {
+		util.ErrorResponse(c, response.InvalidParams, "outputWidth 无效", gin.H{"errorCode": "INVALID_OUTPUT_WIDTH"})
+		return
+	}
+	outputHeight, err := strconv.Atoi(c.PostForm("outputHeight"))
+	if err != nil || outputHeight <= 0 {
+		util.ErrorResponse(c, response.InvalidParams, "outputHeight 无效", gin.H{"errorCode": "INVALID_OUTPUT_HEIGHT"})
+		return
+	}
 
 	selectedActionKeysJSON := c.PostForm("selectedActionKeys")
 	var selectedActionKeys []string
