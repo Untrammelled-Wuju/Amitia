@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/deviceruntime"
 	protocol "github.com/u-ai/backend/internal/deviceruntime/protocol"
@@ -93,47 +92,6 @@ func (p *MeshDeviceRuntimeInvocationPort) Execute(ctx context.Context, request D
 		SentAt:               time.Now().UTC(),
 	}
 
-	payloadBytes, err := json.Marshal(invokePayload)
-	if err != nil {
-		return UnifiedToolResult{
-			InvocationID: request.Invocation.InvocationID,
-			Status:       ToolResultStatusFailed,
-			Error: &ToolError{
-				Code:    ErrorCodeExecutionFailed,
-				Message: fmt.Sprintf("marshal invoke payload: %v", err),
-			},
-		}
-	}
-
-	env := protocol.Envelope{
-		EnvelopeVersion:      1,
-		Protocol:             "amitia.device-mesh",
-		MessageType:          protocol.MessageTypeRuntimeInvoke,
-		MessageID:            uuid.New().String(),
-		UserID:               route.UserID,
-		DeviceID:             route.DeviceID,
-		RuntimeID:            route.RuntimeID,
-		RuntimeSessionID:     sessionID,
-		ConnectionGeneration: generation,
-		Sequence:             1,
-		PayloadSchemaVersion: 1,
-		PayloadHash:          protocol.ComputePayloadHash(payloadBytes),
-		SentAt:               time.Now().UTC(),
-		Payload:              payloadBytes,
-	}
-
-	envBytes, err := json.Marshal(env)
-	if err != nil {
-		return UnifiedToolResult{
-			InvocationID: request.Invocation.InvocationID,
-			Status:       ToolResultStatusFailed,
-			Error: &ToolError{
-				Code:    ErrorCodeExecutionFailed,
-				Message: fmt.Sprintf("marshal envelope: %v", err),
-			},
-		}
-	}
-
 	if p.ports.PendingInvocations == nil {
 		return UnifiedToolResult{
 			InvocationID: request.Invocation.InvocationID,
@@ -145,7 +103,7 @@ func (p *MeshDeviceRuntimeInvocationPort) Execute(ctx context.Context, request D
 		}
 	}
 
-	_, err = p.ports.PendingInvocations.Register(request, request.Invocation.InvocationID, sessionID.String(), generation, deadline)
+	_, err := p.ports.PendingInvocations.Register(request, request.Invocation.InvocationID, sessionID.String(), generation, deadline)
 	if err != nil {
 		return UnifiedToolResult{
 			InvocationID: request.Invocation.InvocationID,
@@ -157,7 +115,7 @@ func (p *MeshDeviceRuntimeInvocationPort) Execute(ctx context.Context, request D
 		}
 	}
 
-	if !p.ports.Hub.Send(sessionID, generation, envBytes) {
+	if !p.ports.Hub.SendEnvelope(sessionID, generation, protocol.MessageTypeRuntimeInvoke, invokePayload) {
 		p.ports.PendingInvocations.Cancel(request.Invocation.InvocationID, "failed to send")
 		return UnifiedToolResult{
 			InvocationID: request.Invocation.InvocationID,

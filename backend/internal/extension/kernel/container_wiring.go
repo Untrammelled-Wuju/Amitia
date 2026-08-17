@@ -7,11 +7,13 @@ import (
 	"log"
 	"time"
 
+	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
 	"github.com/u-ai/backend/internal/extension/kernel/dependency"
 	"github.com/u-ai/backend/internal/extension/kernel/developer_console"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/enablement"
 	"github.com/u-ai/backend/internal/extension/kernel/lifecycle_manager"
+	"github.com/u-ai/backend/internal/extension/kernel/package_security"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 )
 
@@ -168,12 +170,16 @@ func (c *containerPreflightChecker) Check(ctx context.Context, cmd lifecycle_man
 }
 
 type containerPlanExecutor struct {
-	instRepo    domain.InstallationRepository
-	defRepo     domain.DefinitionRepository
-	moduleRepo  sqlite.ModuleRepository
-	contribRepo sqlite.ContributionRepository
-	enablement  enablement.StateStore
-	installer   *TypedContributionInstaller
+	instRepo           domain.InstallationRepository
+	defRepo            domain.DefinitionRepository
+	moduleRepo         sqlite.ModuleRepository
+	contribRepo        sqlite.ContributionRepository
+	enablement         enablement.StateStore
+	installer          *TypedContributionInstaller
+	packageRepo        *PackageRepository
+	packageArtifact    *PackageArtifactStore
+	packageGeneration  *PackageGenerationStore
+	packageSecurity    *package_security.PackageSecurityService
 }
 
 func newContainerPlanExecutor(
@@ -183,14 +189,22 @@ func newContainerPlanExecutor(
 	contribRepo sqlite.ContributionRepository,
 	enablementStore enablement.StateStore,
 	installer *TypedContributionInstaller,
+	packageRepo *PackageRepository,
+	packageArtifact *PackageArtifactStore,
+	packageGeneration *PackageGenerationStore,
+	packageSecurity *package_security.PackageSecurityService,
 ) *containerPlanExecutor {
 	return &containerPlanExecutor{
-		instRepo:    instRepo,
-		defRepo:     defRepo,
-		moduleRepo:  moduleRepo,
-		contribRepo: contribRepo,
-		enablement:  enablementStore,
-		installer:   installer,
+		instRepo:          instRepo,
+		defRepo:           defRepo,
+		moduleRepo:        moduleRepo,
+		contribRepo:       contribRepo,
+		enablement:        enablementStore,
+		installer:         installer,
+		packageRepo:       packageRepo,
+		packageArtifact:   packageArtifact,
+		packageGeneration: packageGeneration,
+		packageSecurity:   packageSecurity,
 	}
 }
 
@@ -300,30 +314,8 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 		result.Applied = append(result.Applied, "uninstall")
 
 	case lifecycle_manager.CmdInstall:
-		now := time.Now().UTC()
-		inst := domain.ExtensionInstallation{
-			ExtensionID:       extID,
-			InstalledVersion:  plan.Command.TargetVersion,
-			PackageID:         plan.Command.PackageID,
-			InstallationState: domain.InstallationStateInstalled,
-			EnablementState:   domain.EnablementDisabled,
-			InstalledAt:       now,
-			UpdatedAt:         now,
-			Generation:        1,
-		}
-		if err := e.instRepo.PutInstallation(ctx, inst); err != nil {
-			result.Status = "failed"
-			result.Error = err.Error()
+		if err := e.executeDirectInstallSaga(ctx, plan, &result); err != nil {
 			return result, err
-		}
-		result.Applied = append(result.Applied, "create_installation")
-		if e.installer != nil {
-			if err := e.installer.InstallContributions(ctx, plan.CurrentState.Contributions, inst.Generation); err != nil {
-				result.Status = "failed"
-				result.Error = err.Error()
-				return result, err
-			}
-			result.Applied = append(result.Applied, "install_contributions")
 		}
 
 	case lifecycle_manager.CmdUpdate:
@@ -602,6 +594,135 @@ func (p *containerLifecycleSummaryProvider) Events(ctx context.Context, since ti
 		return 0, err
 	}
 	return len(recs), nil
+}
+
+func (e *containerPlanExecutor) executeDirectInstallSaga(ctx context.Context, plan lifecycle_manager.LifecyclePlan, result *lifecycle_manager.LifecycleResult) error {
+	extID := plan.Command.ExtensionID
+	packageID := plan.Command.PackageID
+	expectedHash, _ := plan.Command.Metadata["hash"].(string)
+
+	if e.packageRepo == nil || e.packageArtifact == nil || e.packageGeneration == nil || e.packageSecurity == nil {
+		return fmt.Errorf("package services unavailable for direct install")
+	}
+
+	artifact, err := e.packageRepo.GetArtifact(ctx, packageID)
+	if err != nil {
+		result.Status = "failed"
+		result.Error = fmt.Sprintf("get artifact: %v", err)
+		return err
+	}
+
+	if expectedHash != "" && artifact.ArchiveHash != expectedHash {
+		err := fmt.Errorf("artifact hash mismatch: expected %s, got %s", expectedHash, artifact.ArchiveHash)
+		result.Status = "failed"
+		result.Error = err.Error()
+		return err
+	}
+
+	if err := e.packageArtifact.VerifyArchive(artifact); err != nil {
+		result.Status = "failed"
+		result.Error = fmt.Sprintf("verify archive: %v", err)
+		return err
+	}
+
+	securityReport, err := e.packageSecurity.InspectFile(ctx, artifact.ArchivePath, package_security.PackageSource{
+		SourceType: package_security.SourceLocalFile,
+		LocalPath:  artifact.ArchivePath,
+	})
+	if err != nil || securityReport == nil || !securityReport.Passed {
+		if err == nil {
+			err = fmt.Errorf("archive security rejected package")
+		}
+		result.Status = "failed"
+		result.Error = err.Error()
+		return err
+	}
+
+	pkg, err := amitiax.OpenArchive(artifact.ArchivePath)
+	if err != nil {
+		result.Status = "failed"
+		result.Error = fmt.Sprintf("open archive: %v", err)
+		return err
+	}
+	if err := amitiax.VerifyIntegrity(pkg); err != nil {
+		result.Status = "failed"
+		result.Error = fmt.Sprintf("verify integrity: %v", err)
+		return err
+	}
+
+	definition, err := pkg.Manifest.ToExtensionDefinition()
+	if err != nil {
+		result.Status = "failed"
+		result.Error = fmt.Sprintf("build definition: %v", err)
+		return err
+	}
+	result.Applied = append(result.Applied, "build_candidate_definitions")
+
+	staging, err := e.packageSecurity.ExtractFileToStaging(ctx, artifact.ArchivePath, "direct-install")
+	if err != nil {
+		result.Status = "failed"
+		result.Error = fmt.Sprintf("extract to staging: %v", err)
+		return err
+	}
+	defer e.packageSecurity.GetStagingManager().Cleanup(context.Background(), staging.ID)
+	result.Applied = append(result.Applied, "extract_to_staging")
+
+	targetPath := staging.Path
+	generation := int64(1)
+	now := time.Now().UTC()
+	installID := fmt.Sprintf("inst_%s_%d", extID, now.UnixNano())
+
+	if plan.CurrentState.Installation != nil {
+		generation = plan.CurrentState.Installation.Generation + 1
+		installID = plan.CurrentState.Installation.InstallationID
+	}
+
+	installation := domain.ExtensionInstallation{
+		InstallationID:    installID,
+		ExtensionID:       definition.ID,
+		InstalledVersion:  definition.Version,
+		PackageID:         artifact.ArtifactID,
+		InstallationState: domain.InstallationStateInstalled,
+		EnablementState:   domain.EnablementDisabled,
+		InstalledAt:       now,
+		UpdatedAt:         now,
+		Generation:        generation,
+	}
+
+	for _, module := range definition.Modules {
+		if err := e.moduleRepo.PutModule(ctx, module); err != nil {
+			result.Status = "failed"
+			result.Error = fmt.Sprintf("put module %s: %v", module.ID, err)
+			return err
+		}
+		for _, contribution := range module.Contributions {
+			if err := e.contribRepo.PutContribution(ctx, contribution); err != nil {
+				result.Status = "failed"
+				result.Error = fmt.Sprintf("put contribution %s: %v", contribution.ID, err)
+				return err
+			}
+		}
+	}
+	result.Applied = append(result.Applied, "commit_kernel_repositories")
+
+	if err := e.defRepo.PutExtension(ctx, definition); err != nil {
+		result.Status = "failed"
+		result.Error = fmt.Sprintf("put definition: %v", err)
+		return err
+	}
+	result.Applied = append(result.Applied, "commit_installed_tree")
+
+	if err := e.instRepo.PutInstallation(ctx, installation); err != nil {
+		result.Status = "failed"
+		result.Error = fmt.Sprintf("put installation: %v", err)
+		return err
+	}
+	result.Applied = append(result.Applied, "create_installation")
+
+	artifact.InstalledPath = targetPath
+	result.Applied = append(result.Applied, "mark_installation_disabled")
+
+	return nil
 }
 
 type containerHostAPIAuditQuery struct {

@@ -74,6 +74,7 @@ import (
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval"
 	"github.com/u-ai/backend/internal/mcp"
 	"github.com/u-ai/backend/internal/media"
+	"github.com/u-ai/backend/internal/nativebridge"
 	"github.com/u-ai/backend/internal/platform/process"
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/internal/runtimeidentity"
@@ -119,8 +120,10 @@ type ContainerBuilder struct {
 
 	mcpRepository *mcp.Repository
 
-	meshHub                *server.ConnectionHub
+	meshHub                  *server.ConnectionHub
 	pendingInvocationManager *capability.PendingInvocationManager
+
+	nativeBridgeRelay *nativebridge.RelayHandler
 
 	backgroundBootstrapFunc func() (backgroundremoval.Registry, error)
 }
@@ -186,6 +189,11 @@ func (b *ContainerBuilder) WithHostArtifactResolver(
 	resolver script_host.ArtifactResolver,
 ) *ContainerBuilder {
 	b.hostArtifactResolver = resolver
+	return b
+}
+
+func (b *ContainerBuilder) WithNativeBridgeRelay(relay *nativebridge.RelayHandler) *ContainerBuilder {
+	b.nativeBridgeRelay = relay
 	return b
 }
 
@@ -416,7 +424,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	stateLoader := newContainerStateLoader(instRepo, defRepo, moduleRepo, contribRepo, runtimeRepo, stateStore)
 	preflightChecker := newContainerPreflightChecker(dependencyResolver)
 	typedInstaller := NewTypedContributionInstaller(nil)
-	planExecutor := newContainerPlanExecutor(instRepo, defRepo, moduleRepo, contribRepo, stateStore, typedInstaller)
+	planExecutor := newContainerPlanExecutor(instRepo, defRepo, moduleRepo, contribRepo, stateStore, typedInstaller, packageRepo, packageArtifactStore, packageGenerationStore, packageSec)
 	lcAuditWriter := newContainerAuditWriter(opRepo)
 	lifecycleMgr := lifecycle_manager.NewManager(stateLoader, preflightChecker, planExecutor, lcAuditWriter)
 
@@ -582,10 +590,10 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return nil, fmt.Errorf("kernel: create hook service: %w", err)
 	}
 
-var eventSvc *event.Service
-var eventBridge *event.RuntimeBridge
-var hostEmitter event.HostEventEmitter
-var lifecycleEmitter *event.LifecycleEventEmitter
+	var eventSvc *event.Service
+	var eventBridge *event.RuntimeBridge
+	var hostEmitter event.HostEventEmitter
+	var lifecycleEmitter *event.LifecycleEventEmitter
 	var eventBridgePublisher *eventbridge.Publisher
 
 	if b.runtimePolicy.DurableEvents {
@@ -737,7 +745,7 @@ var lifecycleEmitter *event.LifecycleEventEmitter
 	}
 	extensionProviderReconciler := capability.NewExtensionProviderReconciler(providerLifecycle, capabilityProviderRegistry)
 	providerInstanceReconciler := capability.NewProviderInstanceReconciler(providerLifecycle, capabilityProviderRegistry, runtimeidentity.Identity{})
-	builtinProviderReconciler := capability.NewBuiltinProviderReconciler(capabilityProviderRegistry, providerLifecycle)
+	builtinProviderReconciler := capability.NewBuiltinProviderReconciler(capabilityProviderRegistry, providerLifecycle, adapterRegistry)
 	capabilityResolver := capability.NewResolver(capability.NewProviderCatalogAdapter(capabilityProviderRegistry))
 	capabilityResolver.SetRuntimeCatalog(capability.NewRuntimeAdapterCatalogAdapter(adapterRegistry))
 
@@ -818,6 +826,13 @@ var lifecycleEmitter *event.LifecycleEventEmitter
 	mcpLifecycle := kernelmcp.NewMCPLifecycle(mcpProvisioner, mcpInstaller)
 	workshopPort := acquisition.NewDefaultWorkshop()
 
+	var mcpInstallPort acquisition.MCPInstallPort
+	if b.mcpRepository != nil {
+		mcpInstallPort = acquisition.NewMCPRepositoryBridge(b.mcpRepository)
+	} else {
+		mcpInstallPort = acquisition.NewMCPPortBridge(mcpLifecycle)
+	}
+
 	acquisitionInstallerRegistry, err := acquisition.NewInstallerRegistry(&acquisition.InstallerRegistryOpts{
 		EnableExistingPort: acquisition.NewEnableExistingPortBridgeWithDeps(acquisition.EnableExistingDeps{
 			EnablementSvc:      enablementService,
@@ -830,7 +845,7 @@ var lifecycleEmitter *event.LifecycleEventEmitter
 			ProviderRegistry:   capabilityProviderRegistry,
 		}),
 		PackageInstallPort: acquisition.NewPackagePortBridgeFromManager(lifecycleMgr),
-		MCPInstallPort:     acquisition.NewMCPPortBridge(mcpLifecycle),
+		MCPInstallPort:     mcpInstallPort,
 		SkillInstallPort:   acquisition.NewSkillPortBridge(acquisition.NewSkillCatalogBridge(agentSkillCatalog)),
 		WorkshopPort:       workshopPort,
 	})
@@ -1395,6 +1410,8 @@ var lifecycleEmitter *event.LifecycleEventEmitter
 		LifecycleEventEmitter:    lifecycleEmitter,
 		JSRuntimeFactory:         jsFactory,
 		EventDeliveryAdapter:     eventDeliveryAdapter,
+
+		NativeBridgeRelay: b.nativeBridgeRelay,
 
 		UIHost:                uiHost,
 		UIHostNotifier:        uiHostNotifier,

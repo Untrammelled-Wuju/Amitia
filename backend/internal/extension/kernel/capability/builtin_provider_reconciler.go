@@ -8,14 +8,16 @@ import (
 )
 
 type BuiltinProviderReconciler struct {
-	registry  *ProviderRegistry
-	lifecycle *ProviderLifecycleService
+	registry          *ProviderRegistry
+	lifecycle         *ProviderLifecycleService
+	adapterRegistry   *RuntimeAdapterRegistry
 }
 
-func NewBuiltinProviderReconciler(registry *ProviderRegistry, lifecycle *ProviderLifecycleService) *BuiltinProviderReconciler {
+func NewBuiltinProviderReconciler(registry *ProviderRegistry, lifecycle *ProviderLifecycleService, adapterRegistry *RuntimeAdapterRegistry) *BuiltinProviderReconciler {
 	return &BuiltinProviderReconciler{
-		registry:  registry,
-		lifecycle: lifecycle,
+		registry:        registry,
+		lifecycle:       lifecycle,
+		adapterRegistry: adapterRegistry,
 	}
 }
 
@@ -54,6 +56,24 @@ func (r *BuiltinProviderReconciler) reconcileSearchWeb() error {
 
 	instanceID := r.buildInstanceID(providerDef)
 	now := time.Now().UTC()
+
+	health := HealthReady
+	availability := ProviderAvailabilityAvailable
+	if r.adapterRegistry != nil {
+		adapter, ok := r.adapterRegistry.Resolve(providerDef.Runtime)
+		if !ok {
+			return fmt.Errorf("register search.web instance: runtime adapter not found for type %s", providerDef.Runtime.RuntimeType)
+		}
+		if !adapter.Supports(providerDef.Runtime) {
+			return fmt.Errorf("register search.web instance: runtime adapter does not support binding")
+		}
+		adapterHealth := adapter.Health(nil, providerDef.Runtime)
+		if adapterHealth == HealthUnhealthy || adapterHealth == HealthUnknown {
+			health = HealthUnknown
+			availability = ProviderAvailabilityUnknown
+		}
+	}
+
 	instance := CapabilityProviderInstance{
 		ID:           instanceID,
 		ProviderID:   providerDef.ID,
@@ -61,8 +81,8 @@ func (r *BuiltinProviderReconciler) reconcileSearchWeb() error {
 		Placement:    providerDef.Placement,
 		ExtensionID:  providerDef.ExtensionID,
 		ModuleID:     providerDef.ModuleID,
-		Health:       HealthReady,
-		Availability: ProviderAvailabilityAvailable,
+		Health:       health,
+		Availability: availability,
 		RegisteredAt: now,
 		UpdatedAt:    now,
 	}
