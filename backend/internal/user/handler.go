@@ -44,21 +44,6 @@ func (h *Handler) Setup(c *gin.Context) {
 	util.SuccessMsgResponse(c, "管理员注册成功", resp)
 }
 
-func (h *Handler) Login(c *gin.Context) {
-	var req LoginRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "用户名和密码不能为空", nil)
-		return
-	}
-
-	resp, _, err := h.service.Login(req.Username, req.Password, c.ClientIP(), c.Request.UserAgent())
-	if err != nil {
-		util.ErrorResponse(c, response.Unauthorized, err.Error(), nil)
-		return
-	}
-	util.SuccessMsgResponse(c, "登录成功", resp)
-}
-
 func (h *Handler) Me(c *gin.Context) {
 	token := extractToken(c)
 	if token == "" {
@@ -72,69 +57,6 @@ func (h *Handler) Me(c *gin.Context) {
 		return
 	}
 	util.SuccessResponse(c, resp)
-}
-
-func (h *Handler) Logout(c *gin.Context) {
-	token := extractToken(c)
-	if token == "" {
-		util.ErrorResponse(c, response.Unauthorized, "请先登录", nil)
-		return
-	}
-
-	if err := h.service.Logout(token); err != nil {
-		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
-		return
-	}
-	util.SuccessMsgResponse(c, "已登出", nil)
-}
-
-func (h *Handler) ListSessions(c *gin.Context) {
-	token := extractToken(c)
-	if token == "" {
-		util.ErrorResponse(c, response.Unauthorized, "请先登录", nil)
-		return
-	}
-
-	sessions, err := h.service.ListSessions(token)
-	if err != nil {
-		util.ErrorResponse(c, response.InvalidToken, err.Error(), nil)
-		return
-	}
-	util.SuccessResponse(c, sessions)
-}
-
-func (h *Handler) RevokeSession(c *gin.Context) {
-	token := extractToken(c)
-	if token == "" {
-		util.ErrorResponse(c, response.Unauthorized, "请先登录", nil)
-		return
-	}
-
-	id := parseID(c.Param("id"))
-	if id == 0 {
-		util.ErrorResponse(c, response.InvalidParams, "无效的会话 ID", nil)
-		return
-	}
-
-	if err := h.service.RevokeSession(token, id); err != nil {
-		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
-		return
-	}
-	util.SuccessResponse(c, nil)
-}
-
-func (h *Handler) RevokeAllSessions(c *gin.Context) {
-	token := extractToken(c)
-	if token == "" {
-		util.ErrorResponse(c, response.Unauthorized, "请先登录", nil)
-		return
-	}
-
-	if err := h.service.RevokeAllSessions(token); err != nil {
-		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
-		return
-	}
-	util.SuccessResponse(c, nil)
 }
 
 func (h *Handler) ChangePassword(c *gin.Context) {
