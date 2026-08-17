@@ -399,6 +399,71 @@ func (s *AccountSessionService) RevokeAllSessions(userID int64) error {
 	})
 }
 
+type SessionInitialSetupper interface {
+	CreateInitialSession(userID int, username, role, ip, ua string) (*LoginResponseInternal, error)
+}
+
+func (s *AccountSessionService) CreateInitialSession(userID int, username, role, ip, ua string) (*LoginResponseInternal, error) {
+	return s.createSessionAndTokens(userID, username, role, ip, ua)
+}
+
+func (s *AccountSessionService) ChangePasswordAndRotate(userID int64, oldPassword, newPassword string, svc AccountUserService) (*LoginResponseInternal, string, error) {
+	verifier := defaultPasswordVerifier{}
+	user, err := svc.FindByID(int(userID))
+	if err != nil {
+		return nil, "", ErrInvalidCredentials
+	}
+	if !verifier.VerifyPassword(oldPassword, user.PasswordHash) {
+		return nil, "", ErrInvalidCredentials
+	}
+	newHash := verifier.HashPassword(newPassword)
+	if newHash == "" {
+		return nil, "", fmt.Errorf("密码哈希失败")
+	}
+
+	var result *LoginResponseInternal
+	var oldSessionID string
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		sessions, err := s.sessions.ListUserSessions(userID)
+		if err != nil {
+			return err
+		}
+		for _, sess := range sessions {
+			if sess.Status == SessionStatusActive {
+				oldSessionID = sess.PublicID
+				break
+			}
+		}
+		if err := s.sessions.RevokeAllUser(userID, "password_change"); err != nil {
+			return err
+		}
+		for _, sess := range sessions {
+			if err := s.refresh.RevokeBySession(sess.PublicID); err != nil {
+				return err
+			}
+		}
+		if err := svc.UpdatePassword(int(userID), newHash); err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, "", err
+	}
+
+	newSession, createErr := s.createSessionAndTokens(int(userID), user.Username, user.Role, "", "")
+	if createErr != nil {
+		return nil, "", createErr
+	}
+
+	if auditErr := s.audit.LogPasswordChanged(userID, newSession.SessionPublicID); auditErr != nil {
+		return nil, "", auditErr
+	}
+
+	_ = result
+	return newSession, oldSessionID, nil
+}
+
 func (s *AccountSessionService) ListActiveSessions(userID int64) ([]Session, error) {
 	return s.sessions.ListUserSessions(userID)
 }

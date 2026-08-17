@@ -37,6 +37,82 @@ type loginRequestBody struct {
 	Password string `json:"password" binding:"required"`
 }
 
+func (h *Handler) Setup(c *gin.Context) {
+	var req struct {
+		Username string `json:"username" binding:"required"`
+		Password string `json:"password" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		util.ErrorResponse(c, response.InvalidParams, "用户名和密码不能为空", nil)
+		return
+	}
+	if len(req.Password) < 6 {
+		util.ErrorResponse(c, response.InvalidParams, "密码至少 6 位", nil)
+		return
+	}
+
+	hasAdmin, err := h.userProvider.HasAdmin()
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+		return
+	}
+	if hasAdmin {
+		util.ErrorResponse(c, response.BusinessError, "管理员已存在，请直接登录", gin.H{"errorCode": "auth.admin_exists"})
+		return
+	}
+
+	clientType := detectClientType(c)
+	ip := c.ClientIP()
+	ua := c.Request.UserAgent()
+
+	userDTO, err := h.userProvider.CreateUser(req.Username, req.Password, "admin")
+	if err != nil {
+		util.ErrorResponse(c, response.BusinessError, "创建用户失败: "+err.Error(), nil)
+		return
+	}
+
+	session, err := h.svc.CreateInitialSession(userDTO.ID, userDTO.Username, userDTO.Role, ip, ua)
+	if err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+		return
+	}
+
+	if err := h.userProvider.UpdateLoginTime(userDTO.ID); err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+		return
+	}
+
+	if err := h.audit.LogLoginSuccess(userDTO.ID, session.SessionPublicID, ip, ua, userDTO.Username); err != nil {
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+		return
+	}
+
+	result := gin.H{
+		"accessToken":           session.AccessToken,
+		"accessTokenExpiresAt":  session.AccessExpiresAt.Format(time.RFC3339),
+		"refreshToken":          session.RefreshToken,
+		"refreshTokenExpiresAt": session.RefreshExpiresAt.Format(time.RFC3339),
+		"token":                 session.AccessToken,
+		"session": gin.H{
+			"sessionId": session.SessionPublicID,
+			"createdAt": time.Now().UTC().Format(time.RFC3339),
+		},
+		"user": gin.H{
+			"id":       session.UserID,
+			"username": session.Username,
+			"role":     session.Role,
+		},
+	}
+
+	if clientType == "web" {
+		c.SetCookie("AmitiaRefresh", session.RefreshToken, int(30*24*time.Hour.Seconds()), "/api", "", true, true)
+		delete(result, "refreshToken")
+		delete(result, "refreshTokenExpiresAt")
+	}
+
+	util.SuccessResponse(c, result)
+}
+
 func (h *Handler) Login(c *gin.Context) {
 	var req loginRequestBody
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -319,6 +395,71 @@ func (h *Handler) RevokeOtherSessions(c *gin.Context) {
 		return
 	}
 	util.SuccessResponse(c, gin.H{"revokedCount": count})
+}
+
+func (h *Handler) ChangePassword(c *gin.Context) {
+	actor := getActor(c)
+	if actor == nil {
+		util.ErrorResponse(c, response.Unauthorized, "未认证", nil)
+		return
+	}
+
+	var req struct {
+		OldPassword string `json:"oldPassword" binding:"required"`
+		NewPassword string `json:"newPassword" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		util.ErrorResponse(c, response.InvalidParams, "请输入新旧密码", nil)
+		return
+	}
+	if len(req.NewPassword) < 6 {
+		util.ErrorResponse(c, response.InvalidParams, "新密码至少 6 位", nil)
+		return
+	}
+
+	var userID int64
+	fmt.Sscanf(string(actor.UserID), "%d", &userID)
+	if userID <= 0 {
+		util.ErrorResponse(c, response.Unauthorized, "未认证", nil)
+		return
+	}
+
+	newSession, _, err := h.svc.ChangePasswordAndRotate(userID, req.OldPassword, req.NewPassword, h.userProvider)
+	if err != nil {
+		switch err {
+		case ErrInvalidCredentials:
+			util.ErrorResponse(c, response.Unauthorized, "旧密码不正确", gin.H{"errorCode": "auth.invalid_old_password"})
+		default:
+			util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+		}
+		return
+	}
+
+	result := gin.H{
+		"accessToken":           newSession.AccessToken,
+		"accessTokenExpiresAt":  newSession.AccessExpiresAt.Format(time.RFC3339),
+		"refreshToken":          newSession.RefreshToken,
+		"refreshTokenExpiresAt": newSession.RefreshExpiresAt.Format(time.RFC3339),
+		"token":                 newSession.AccessToken,
+		"session": gin.H{
+			"sessionId": newSession.SessionPublicID,
+			"createdAt": time.Now().UTC().Format(time.RFC3339),
+		},
+		"user": gin.H{
+			"id":       newSession.UserID,
+			"username": newSession.Username,
+			"role":     newSession.Role,
+		},
+	}
+
+	clientType := detectClientType(c)
+	if clientType == "web" {
+		c.SetCookie("AmitiaRefresh", newSession.RefreshToken, int(30*24*time.Hour.Seconds()), "/api", "", true, true)
+		delete(result, "refreshToken")
+		delete(result, "refreshTokenExpiresAt")
+	}
+
+	util.SuccessResponse(c, result)
 }
 
 func (h *Handler) LogoutAll(c *gin.Context) {
