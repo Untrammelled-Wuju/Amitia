@@ -35,6 +35,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
 	installationrecovery "github.com/u-ai/backend/internal/desktoppet/installation/recovery"
+	
 	"github.com/u-ai/backend/internal/desktoppet/maintenance"
 	"github.com/u-ai/backend/internal/desktoppet/migration"
 	migrationplans "github.com/u-ai/backend/internal/desktoppet/migration/plans"
@@ -62,7 +63,6 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/runtime"
 	runtimev2 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v2"
 	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
-	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/desktoppet/worker"
 	"github.com/u-ai/backend/internal/devicemesh"
 	"github.com/u-ai/backend/internal/emote"
@@ -100,6 +100,7 @@ import (
 	"github.com/u-ai/backend/internal/scriptruntime/commandenv"
 	"github.com/u-ai/backend/internal/search"
 	"github.com/u-ai/backend/internal/system/dataportability"
+	syncpkg "github.com/u-ai/backend/internal/sync"
 	"github.com/u-ai/backend/internal/temporal"
 	"github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/workspace"
@@ -139,6 +140,7 @@ type AppServices struct {
 	QualityWorker                *qualityworker.Worker
 	InstallationCoordinator      coordinator.InstallationCoordinator
 	InstallationRepo             installation.Repository
+	InstallationRecoveryWorker   *installationrecovery.RecoveryWorker
 	NewReleaseService            release.ReleaseService
 	ReleaseRecoveryWorker        *release.ReleaseRecoveryWorker
 	ReleaseBuildWorker           *releaseworker.ReleaseBuildWorker
@@ -184,6 +186,7 @@ type AppServices struct {
 	ProductionCutover            *cutoverComposition
 	DataPortability              *dataportability.Coordinator
 	Artifact                     *ArtifactRuntime
+	Sync                         *syncpkg.Service
 }
 
 type RuntimeOrchestrator interface {
@@ -229,7 +232,7 @@ func (a reflectionMemoryServiceAdapter) SubmitReflectionCandidate(req interactio
 	return err
 }
 
-func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runtimeBootstrap, profile runtimeprofile.Profile, policy runtimeprofile.Policy) (*AppServices, error) {
+func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runtimeBootstrap, runtimeProfile runtimeprofile.Profile, policy runtimeprofile.Policy) (*AppServices, error) {
 	if config.AppCfg == nil {
 		config.AppCfg = &config.Config{}
 	}
@@ -323,7 +326,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	var workspaceRegistry *workspace.Registry
 	var workspaceService *workspace.Service
 	if config.AppCfg != nil && config.AppCfg.Storage.DataDir != "" {
-		workspaceRegistry, workspaceService, err = buildWorkspaceServices(config.AppCfg.Storage.DataDir)
+		workspaceRegistry, workspaceService, err = buildWorkspaceServices(config.AppCfg.Storage.DataDir, resourceResolver, ctx.DB, nil, nil)
 		if err != nil {
 			return nil, fmt.Errorf("initialize workspace services: %w", err)
 		}
@@ -331,12 +334,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	var mediaService *media.Service
 	if bootstrap != nil {
-		mediaService = buildMediaService(bootstrap.RuntimeHost(), config.AppCfg.Storage.DataDir)
+		mediaService = buildMediaService(bootstrap.RuntimeHost(), config.AppCfg.Storage.DataDir, resourceResolver, workspaceService)
 	}
 
 	var browserProvider browser.BrowserProvider
 	if config.AppCfg != nil && config.AppCfg.Providers.Browser.Enabled {
-		browserProvider, err = buildProductionBrowserProvider(config.AppCfg)
+		browserProvider, err = buildProductionBrowserProvider(config.AppCfg, bootstrap)
 		if err != nil {
 			return nil, fmt.Errorf("browser provider init failed: %w", err)
 		}
@@ -474,11 +477,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 	runtimeQueue := queue.NewSQLiteRuntimeQueueStore(ctx.DB)
 	deliveryStore := delivery.NewSQLiteDeliveryStore(ctx.DB)
-	deliveryWorker := delivery.NewWorker(deliveryStore, []delivery.ChannelAdapter{
+	deliveryWorker := delivery.NewWorker(deliveryStore, delivery.NewMapChannelResolverWith([]delivery.ChannelAdapter{
 		delivery.NewWebChannelAdapter(),
 		delivery.NewQQChannelAdapter("http://127.0.0.1:19877"),
 		delivery.NewWechatChannelAdapter("http://127.0.0.1:19876"),
-	}, delivery.DefaultWorkerConfig())
+	}), delivery.DefaultWorkerConfig())
 	deliveryAdapter := &chatDeliveryAdapter{store: deliveryStore}
 	chatSvc.SetDeliveryStore(deliveryAdapter)
 	emoteSvc := emote.NewService(ctx.DB, deliveryStore)
@@ -761,7 +764,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	coordRepo := &coordinatorRepoAdapter{installRepo: installationRepo}
 	coordValidator := &coordinatorReleaseValidator{releases: releaseRepo}
-	coordStager := &coordinatorReleaseStager{registry: pathRegistry, releases: releaseRepo}
+	coordStager := installation.NewReleaseStager(ctx.DB, pathRegistry, filepath.Join(config.AppCfg.Storage.DataDir, "staging"))
 	coordPublisher := &coordinatorRuntimePublisher{facade: runtimeV2Facade}
 	coordProjection := &coordinatorProjectionService{installRepo: installationRepo}
 	installationCoordinator = coordinator.NewCoordinator(coordRepo, coordValidator, coordStager, coordPublisher, coordProjection)
@@ -924,7 +927,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	migrationLock := migrationcore.NewPersistentLock(ctx.DB, lockDir)
 	migrationRunner.SetLock(migrationLock)
 	migrationRunner.SetBackupDir(backupDir)
-	backupPort := newDomainMigrationBackupPort(ctx.DB, backupDir)
+	backupPort := migration.NewDomainMigrationBackupPort(ctx.DB, backupDir)
 	migrationRunner.SetBackupPort(backupPort)
 	migrationRunner.RegisterPlan(migrationplans.NewDesktopPetV2CutoverPlan(migrationplans.Dependencies{DB: ctx.DB}))
 
@@ -937,11 +940,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	chatSvc.SetArtifactResolver(&chatArtifactAdapter{resolver: artifactRuntime.Resolver})
 	chat.SetGlobalArtifactResolver(&chatArtifactAdapter{resolver: artifactRuntime.Resolver})
 
-	installationRecoveryRepo := installationrecovery.NewInstallRepoAdapter(ctx.DB)
-	installationRecoveryWorker := installationrecovery.NewRecoveryWorker(installationRecoveryRepo)
+	syncApplier := syncpkg.NewBusinessApplier(ctx.DB)
+	syncService := syncpkg.NewService(ctx.DB, syncApplier)
 
 	services := &AppServices{
-		RuntimeProfile:               profile,
+		RuntimeProfile:               runtimeProfile,
 		RuntimePolicy:                policy,
 		Graph:                        graphSvc,
 		ChatDeliveryAdapter:          deliveryAdapter,
@@ -972,7 +975,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		EditingService:               editingSvc,
 		RegenerationWorker:           regenerationWorker,
 		BridgeRecoveryWorker:         bridgeRecoveryWorker,
-		InstallationRecoveryWorker:   installationRecoveryWorker,
+		
 		BehaviorService:              behaviorSvc,
 		AdapterManager:               adapterManager,
 		Reconciliation:               reconciliationEngine,
@@ -1004,6 +1007,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WorkspaceRegistry:            workspaceRegistry,
 		WorkspaceService:             workspaceService,
 		Artifact:                     artifactRuntime,
+		Sync:                         syncService,
 	}
 	if err := runCanonicalBuildAssertions(services); err != nil {
 		return nil, fmt.Errorf("canonical build assertion failed: %w", err)

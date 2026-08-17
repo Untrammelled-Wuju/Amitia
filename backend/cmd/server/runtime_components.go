@@ -396,13 +396,6 @@ func (c *desktopPetComponent) Start(ctx context.Context) error {
 		svc.ReleaseRecoveryWorker.Start(ctx)
 		c.state.releaseRecoveryWorkerOk = true
 	}
-	if svc.InstallationRecoveryWorker != nil {
-		go func() {
-			if err := svc.InstallationRecoveryWorker.Run(ctx); err != nil {
-				log.Logger.Errorf("installation recovery worker stopped: %v", err)
-			}
-		}()
-	}
 	if svc.BehaviorService != nil {
 		if err := svc.BehaviorService.Start(ctx); err != nil {
 			c.stopAllLocked(ctx, svc)
