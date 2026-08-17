@@ -17,7 +17,7 @@ from atomic_publish import atomic_publish_dir
 from tree_manifest import compute_tree_manifest, write_tree_manifest
 from hashing import sha256_file
 
-SCRIPTS_ROOT = os.path.join(SCRIPT_DIR, "..", "..", "..", "..", "scripts")
+SCRIPTS_ROOT = os.path.join(SCRIPT_DIR, "..", "..", "..", "scripts")
 NODE_SCRIPTS_DIR = os.path.join(SCRIPTS_ROOT, "node")
 
 OUTPUT_DIR_NAME = "scripts"
