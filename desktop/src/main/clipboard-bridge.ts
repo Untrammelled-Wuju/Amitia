@@ -1,4 +1,5 @@
 import { clipboard, type BrowserWindow } from "electron";
+import { getLocalAdminHeaders } from "./backend-session-client";
 
 const CORE_HOST = "127.0.0.1";
 const CORE_PORT = 18899;
@@ -41,27 +42,20 @@ export class ClipboardBridge {
     }
   }
 
-  private async getToken(): Promise<string | null> {
+  private async getAuthHeaders(): Promise<Record<string, string> | null> {
     if (this.mainWindow.isDestroyed()) return null;
     try {
-      const token = await this.mainWindow.webContents.executeJavaScript(
-        'localStorage.getItem("ai-companion-token")',
-        true,
-      );
-      if (typeof token === "string" && token.length > 0) {
-        return token;
-      }
+      return await getLocalAdminHeaders();
     } catch {
-      // ignore
+      return null;
     }
-    return null;
   }
 
   private async connect(): Promise<void> {
     if (this.stopped) return;
 
-    const token = await this.getToken();
-    if (!token) {
+    const headers = await this.getAuthHeaders();
+    if (!headers) {
       this.scheduleReconnect();
       return;
     }
@@ -74,7 +68,7 @@ export class ClipboardBridge {
         {
           headers: {
             Accept: "text/event-stream",
-            Authorization: `Bearer ${token}`,
+            ...headers,
             "Cache-Control": "no-cache",
           },
           signal: this.abortController.signal,
@@ -102,7 +96,7 @@ export class ClipboardBridge {
         buffer = events.pop() || "";
 
         for (const eventStr of events) {
-          this.parseAndHandleEvent(eventStr, token);
+          this.parseAndHandleEvent(eventStr, headers);
         }
       }
     } catch (err) {
@@ -116,7 +110,7 @@ export class ClipboardBridge {
     }
   }
 
-  private parseAndHandleEvent(eventStr: string, token: string): void {
+  private parseAndHandleEvent(eventStr: string, headers: Record<string, string>): void {
     const lines = eventStr.split("\n");
     let eventName = "";
     let dataStr = "";
@@ -130,13 +124,13 @@ export class ClipboardBridge {
     }
 
     if (eventName === "clipboard_request" && dataStr) {
-      void this.handleClipboardRequest(dataStr, token);
+      void this.handleClipboardRequest(dataStr, headers);
     }
   }
 
   private async handleClipboardRequest(
     dataStr: string,
-    token: string,
+    headers: Record<string, string>,
   ): Promise<void> {
     let payload: ClipboardRequestPayload;
     try {
@@ -156,27 +150,27 @@ export class ClipboardBridge {
       if (operation === "write") {
         const writeText = text || "";
         if (writeText.length > MAX_TEXT_SIZE) {
-          await this.respond(token, requestId, "", "clipboard text exceeds maximum size");
+          await this.respond(headers, requestId, "", "clipboard text exceeds maximum size");
           return;
         }
         clipboard.writeText(writeText);
-        await this.respond(token, requestId, "", null);
+        await this.respond(headers, requestId, "", null);
       } else if (operation === "read") {
         const clipText = clipboard.readText();
         const truncated = clipText.length > MAX_TEXT_SIZE
           ? clipText.slice(0, MAX_TEXT_SIZE)
           : clipText;
-        await this.respond(token, requestId, truncated, null);
+        await this.respond(headers, requestId, truncated, null);
       } else {
-        await this.respond(token, requestId, "", `unsupported operation: ${operation}`);
+        await this.respond(headers, requestId, "", `unsupported operation: ${operation}`);
       }
     } catch (err) {
-      await this.respond(token, requestId, "", String(err));
+      await this.respond(headers, requestId, "", String(err));
     }
   }
 
   private async respond(
-    token: string,
+    headers: Record<string, string>,
     requestId: string,
     text: string,
     error: string | null,
@@ -192,7 +186,7 @@ export class ClipboardBridge {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-            Authorization: `Bearer ${token}`,
+            ...headers,
           },
           body,
         },
