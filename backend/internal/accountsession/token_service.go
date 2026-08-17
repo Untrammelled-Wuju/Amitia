@@ -44,6 +44,15 @@ func NewTokenService() *TokenService {
 	}
 }
 
+func NewTokenServiceFromParams(secret, issuer, audience string) *TokenService {
+	return &TokenService{
+		secret:    []byte(secret),
+		issuer:    issuer,
+		audience:  audience,
+		accessTTL: 15 * time.Minute,
+	}
+}
+
 func (s *TokenService) SignAccessToken(userID int, username, role, sessionID string) (string, time.Time, error) {
 	jti := uuid.NewString()
 	now := time.Now().UTC()
