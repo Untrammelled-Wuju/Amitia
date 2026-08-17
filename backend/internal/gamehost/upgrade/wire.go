@@ -28,11 +28,16 @@ func (a *KernelLifecycleAdapter) ExecuteUpdate(ctx context.Context, extensionID 
 }
 
 type KernelArchiveUpdaterAdapter struct {
-	updateArchiveFn func(ctx context.Context, extensionID string, archivePath string) (*KernelUpdateResult, error)
+	updateArchiveFn       func(ctx context.Context, extensionID string, archivePath string) (*KernelUpdateResult, error)
+	getPreviousArchivePathFn func(ctx context.Context, extensionID string) (string, error)
 }
 
 func NewKernelArchiveUpdaterAdapter(fn func(ctx context.Context, extensionID string, archivePath string) (*KernelUpdateResult, error)) KernelArchiveUpdater {
 	return &KernelArchiveUpdaterAdapter{updateArchiveFn: fn}
+}
+
+func NewKernelArchiveUpdaterAdapterWithArchivePath(getFn func(ctx context.Context, extensionID string) (string, error), updateFn func(ctx context.Context, extensionID string, archivePath string) (*KernelUpdateResult, error)) KernelArchiveUpdater {
+	return &KernelArchiveUpdaterAdapter{updateArchiveFn: updateFn, getPreviousArchivePathFn: getFn}
 }
 
 func (a *KernelArchiveUpdaterAdapter) UpdateArchive(ctx context.Context, extensionID string, archivePath string) (*KernelUpdateResult, error) {
@@ -40,6 +45,13 @@ func (a *KernelArchiveUpdaterAdapter) UpdateArchive(ctx context.Context, extensi
 		return a.updateArchiveFn(ctx, extensionID, archivePath)
 	}
 	return nil, fmt.Errorf("kernel archive updater not wired")
+}
+
+func (a *KernelArchiveUpdaterAdapter) GetPreviousArchivePath(ctx context.Context, extensionID string) (string, error) {
+	if a.getPreviousArchivePathFn != nil {
+		return a.getPreviousArchivePathFn(ctx, extensionID)
+	}
+	return "", fmt.Errorf("get previous archive path not wired")
 }
 
 type RuntimeGraphReconcilerAdapter struct {

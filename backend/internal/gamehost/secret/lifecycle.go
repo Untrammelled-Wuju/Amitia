@@ -159,6 +159,40 @@ func (o *LifecycleOrchestrator) SessionsForService(runtimeID, serviceID string) 
 	return result
 }
 
+func (o *LifecycleOrchestrator) SessionsForRuntime(runtimeID string) []*RuntimeSecretLeaseSession {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	var result []*RuntimeSecretLeaseSession
+	seen := make(map[string]bool)
+	for key, sids := range o.serviceSessions {
+		if key.runtimeID != runtimeID {
+			continue
+		}
+		for _, sid := range sids {
+			if seen[sid] {
+				continue
+			}
+			seen[sid] = true
+			if sess, ok := o.sessions[sid]; ok {
+				result = append(result, sess)
+			}
+		}
+	}
+	return result
+}
+
+func (o *LifecycleOrchestrator) SessionsForExtension(extensionID string) []*RuntimeSecretLeaseSession {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	var result []*RuntimeSecretLeaseSession
+	for _, sess := range o.sessions {
+		if sess.ExtensionID == extensionID {
+			result = append(result, sess)
+		}
+	}
+	return result
+}
+
 func (o *LifecycleOrchestrator) RevokeSession(sessionID, reason string) RevokeOutcome {
 	sess, ok := o.SessionByID(sessionID)
 	if !ok {

@@ -316,3 +316,138 @@ func TestRace_AcquireVsRevoke(t *testing.T) {
 	<-done
 	wg.Wait()
 }
+
+func TestSubscriptionAdapter_RevokeGrant_RealIdentity(t *testing.T) {
+	b := newFakeBroker()
+	b.SeedSecret(refOpenAI, "v")
+	id := newFakeIdentity()
+	id.AddRuntime("rt-1", "p", "ext-1", "created")
+	id.AddService("rt-1", "svc-1", "p", "ext-1", "running")
+	g := &fakeGate{allow: true}
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
+	s := secret.NewSubscriptionAdapter(a)
+
+	res, err := a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
+		kernelsecret.SecretRef(refOpenAI), secret.PurposeStartup, true, 1)
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+	if !res.Granted {
+		t.Fatal("expected granted")
+	}
+
+	outcome := s.RevokeGrant(res.LeaseID)
+	if outcome.RevokedCount != 1 {
+		t.Errorf("expected 1 revoked, got %d", outcome.RevokedCount)
+	}
+	if len(a.ActiveRuntimeLeases("rt-1")) != 0 {
+		t.Error("expected no active leases after RevokeGrant")
+	}
+}
+
+func TestSubscriptionAdapter_RevokeGrant_NotFound(t *testing.T) {
+	b := newFakeBroker()
+	id := newFakeIdentity()
+	g := &fakeGate{allow: true}
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
+	s := secret.NewSubscriptionAdapter(a)
+
+	outcome := s.RevokeGrant(kernelsecret.LeaseID("nonexistent"))
+	if outcome.RevokedCount != 0 {
+		t.Errorf("expected 0 revoked for missing grant, got %d", outcome.RevokedCount)
+	}
+}
+
+func TestSubscriptionAdapter_RevokeBySubject(t *testing.T) {
+	b := newFakeBroker()
+	b.SeedSecret(refOpenAI, "v")
+	id := newFakeIdentity()
+	id.AddRuntime("rt-1", "p", "ext", "created")
+	id.AddService("rt-1", "svc-1", "p", "ext", "running")
+	g := &fakeGate{allow: true}
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
+	s := secret.NewSubscriptionAdapter(a)
+
+	_, err = a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
+		kernelsecret.SecretRef(refOpenAI), secret.PurposeStartup, true, 1)
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+
+	outcome := s.RevokeBySubject("rt-1")
+	if outcome.RevokedCount == 0 {
+		t.Error("expected at least one revoked by subject")
+	}
+	if len(a.ActiveRuntimeLeases("rt-1")) != 0 {
+		t.Error("expected no active leases after RevokeBySubject")
+	}
+}
+
+func TestSubscriptionAdapter_RevokeByExtension(t *testing.T) {
+	b := newFakeBroker()
+	b.SeedSecret(refOpenAI, "v")
+	id := newFakeIdentity()
+	id.AddRuntime("rt-1", "p", "ext-1", "created")
+	id.AddService("rt-1", "svc-1", "p", "ext-1", "running")
+	g := &fakeGate{allow: true}
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
+	s := secret.NewSubscriptionAdapter(a)
+
+	_, err = a.AcquireServiceLease(context.Background(), "rt-1", "p", "svc-1",
+		kernelsecret.SecretRef(refOpenAI), secret.PurposeStartup, true, 1)
+	if err != nil {
+		t.Fatalf("acquire: %v", err)
+	}
+
+	outcome := s.RevokeByExtension("ext-1")
+	if outcome.RevokedCount == 0 {
+		t.Error("expected at least one revoked by extension")
+	}
+	if len(a.ActiveExtensionLeases("ext-1")) != 0 {
+		t.Error("expected no active leases after RevokeByExtension")
+	}
+}
+
+func TestSubscriptionAdapter_RevokeBySubject_Empty(t *testing.T) {
+	b := newFakeBroker()
+	id := newFakeIdentity()
+	g := &fakeGate{allow: true}
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
+	s := secret.NewSubscriptionAdapter(a)
+
+	outcome := s.RevokeBySubject("")
+	if outcome.RevokedCount != 0 {
+		t.Error("expected 0 for empty subject")
+	}
+}
+
+func TestSubscriptionAdapter_RevokeByExtension_Empty(t *testing.T) {
+	b := newFakeBroker()
+	id := newFakeIdentity()
+	g := &fakeGate{allow: true}
+	a, err := secret.NewSecretLeaseAdapter(b, id, g)
+	if err != nil {
+		t.Fatalf("failed to create adapter: %v", err)
+	}
+	s := secret.NewSubscriptionAdapter(a)
+
+	outcome := s.RevokeByExtension("")
+	if outcome.RevokedCount != 0 {
+		t.Error("expected 0 for empty extension")
+	}
+}
