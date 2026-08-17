@@ -126,29 +126,28 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	systemHandler := system.NewHandler(systemSvc, ctx.DB, services.Chat, services.DataLifecycle, services.UnifiedEntry, services.Reconciliation, services.Memory)
 
 	public := r.Group("/api/public")
-	{
-		userRepo := user.NewRepository(ctx)
-		userSvc := user.NewService(userRepo, ctx)
-		userHandler := user.NewHandler(userSvc)
 
-		accountSessionRuntime, err := BuildAccountSessionRuntime(ctx.DB, userRepo)
-		if err != nil {
-			return nil, fmt.Errorf("failed to build accountsession runtime: %w", err)
-		}
-		services.AccountSession = accountSessionRuntime
+	userRepo := user.NewRepository(ctx)
+	userSvc := user.NewService(userRepo, ctx)
+	userHandler := user.NewHandler(userSvc)
 
-		public.GET("/auth/status", userHandler.Status)
-		public.POST("/auth/setup", userHandler.Setup)
-
-		accountsession.RegisterPublicRoutes(public, accountSessionRuntime.Handler)
-
-		public.GET("/onboarding/status", systemHandler.OnboardingStatus)
-		public.POST("/onboarding/complete", systemHandler.OnboardingComplete)
-		public.GET("/health", systemHandler.Health)
-
-		chatHandler := chat.NewHandlerWithUnifiedEntry(services.Chat, services.UnifiedEntry)
-		public.POST("/model/detect-models", chatHandler.DetectModels)
+	accountSessionRuntime, err := BuildAccountSessionRuntime(ctx.DB, userRepo)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build accountsession runtime: %w", err)
 	}
+	services.AccountSession = accountSessionRuntime
+
+	public.GET("/auth/status", userHandler.Status)
+	public.POST("/auth/setup", userHandler.Setup)
+
+	accountsession.RegisterPublicRoutes(public, accountSessionRuntime.Handler)
+
+	public.GET("/onboarding/status", systemHandler.OnboardingStatus)
+	public.POST("/onboarding/complete", systemHandler.OnboardingComplete)
+	public.GET("/health", systemHandler.Health)
+
+	chatHandler := chat.NewHandlerWithUnifiedEntry(services.Chat, services.UnifiedEntry)
+	public.POST("/model/detect-models", chatHandler.DetectModels)
 
 	sessionSvc, err := security.NewDesktopSessionService(ctx.DB, config.AppCfg.Storage.DataDir, localCredentialStore)
 	if err != nil {
@@ -380,6 +379,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		ListenAddress:    config.AppCfg.Server.Host,
 		AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
 		SessionService:   sessionSvc,
+		AccountSessions:  accountSessionRuntime.Validator,
 	}))
 	{
 		user.RegisterUserRouter(apiGroup, ctx)
@@ -535,6 +535,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 				ListenAddress:    config.AppCfg.Server.Host,
 				AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
 				SessionService:   sessionSvc,
+				AccountSessions:  accountSessionRuntime.Validator,
 			}))
 		}
 
@@ -563,6 +564,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		ListenAddress:    config.AppCfg.Server.Host,
 		AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
 		SessionService:   sessionSvc,
+		AccountSessions:  accountSessionRuntime.Validator,
 	}))
 	desktopPetWriteGroup.Use(readiness.RejectWritesWhenSafeMode(services.SafeMode))
 	{
@@ -597,6 +599,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		LocalUserID:      config.AppCfg.Security.LocalUserID,
 		ListenAddress:    config.AppCfg.Server.Host,
 		AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
+		AccountSessions:  accountSessionRuntime.Validator,
 	}))
 	maintenance.RegisterMaintenanceRouter(maintenanceAuthGroup, services.DesktopPetMaintenanceHandler)
 
