@@ -74,22 +74,33 @@ func (p *MeshDeviceRuntimeInvocationPort) Execute(ctx context.Context, request D
 		input = json.RawMessage(`{}`)
 	}
 
-	commandID := uuid.New().String()
-	cmdPayload := protocol.CommandPayload{
-		CommandID:       commandID,
-		CommandName:     route.Binding.HandlerName,
-		CommandSequence: time.Now().UnixNano(),
-		Payload:         input,
+	deadline := request.Invocation.DeadlineDuration
+	if deadline <= 0 {
+		deadline = 30 * time.Second
 	}
 
-	payloadBytes, err := json.Marshal(cmdPayload)
+	invokePayload := protocol.RuntimeInvokePayload{
+		InvocationID:         request.Invocation.InvocationID,
+		RuntimeType:          string(route.Binding.RuntimeType),
+		Handler:              route.Binding.HandlerName,
+		Input:                input,
+		ProviderID:           route.Binding.ProviderID,
+		DeviceID:             route.DeviceID,
+		RuntimeID:            route.RuntimeID,
+		RuntimeSessionID:     sessionID,
+		ConnectionGeneration: generation,
+		DeadlineMs:           deadline.Milliseconds(),
+		SentAt:               time.Now().UTC(),
+	}
+
+	payloadBytes, err := json.Marshal(invokePayload)
 	if err != nil {
 		return UnifiedToolResult{
 			InvocationID: request.Invocation.InvocationID,
 			Status:       ToolResultStatusFailed,
 			Error: &ToolError{
 				Code:    ErrorCodeExecutionFailed,
-				Message: fmt.Sprintf("marshal command: %v", err),
+				Message: fmt.Sprintf("marshal invoke payload: %v", err),
 			},
 		}
 	}
@@ -97,7 +108,7 @@ func (p *MeshDeviceRuntimeInvocationPort) Execute(ctx context.Context, request D
 	env := protocol.Envelope{
 		EnvelopeVersion:      1,
 		Protocol:             "amitia.device-mesh",
-		MessageType:          protocol.MessageTypeCommand,
+		MessageType:          protocol.MessageTypeRuntimeInvoke,
 		MessageID:            uuid.New().String(),
 		UserID:               route.UserID,
 		DeviceID:             route.DeviceID,
@@ -123,40 +134,6 @@ func (p *MeshDeviceRuntimeInvocationPort) Execute(ctx context.Context, request D
 		}
 	}
 
-	deadline := request.Invocation.DeadlineDuration
-	if deadline <= 0 {
-		deadline = 30 * time.Second
-	}
-
-	if p.ports.PendingInvocations != nil {
-		_, err := p.ports.PendingInvocations.Register(request, commandID, sessionID.String(), generation, deadline)
-		if err != nil {
-			return UnifiedToolResult{
-				InvocationID: request.Invocation.InvocationID,
-				Status:       ToolResultStatusFailed,
-				Error: &ToolError{
-					Code:    ErrorCodeInternalError,
-					Message: fmt.Sprintf("register pending invocation: %v", err),
-				},
-			}
-		}
-	}
-
-	if !p.ports.Hub.Send(sessionID, generation, envBytes) {
-		if p.ports.PendingInvocations != nil {
-			p.ports.PendingInvocations.Cancel(request.Invocation.InvocationID, "failed to send")
-		}
-		return UnifiedToolResult{
-			InvocationID: request.Invocation.InvocationID,
-			Status:       ToolResultStatusFailed,
-			Error: &ToolError{
-				Code:      ErrorCodeRuntimeUnavailable,
-				Message:   "failed to send command to device",
-				Retryable: true,
-			},
-		}
-	}
-
 	if p.ports.PendingInvocations == nil {
 		return UnifiedToolResult{
 			InvocationID: request.Invocation.InvocationID,
@@ -164,6 +141,31 @@ func (p *MeshDeviceRuntimeInvocationPort) Execute(ctx context.Context, request D
 			Error: &ToolError{
 				Code:    ErrorCodeInternalError,
 				Message: "pending invocation manager not configured",
+			},
+		}
+	}
+
+	_, err = p.ports.PendingInvocations.Register(request, request.Invocation.InvocationID, sessionID.String(), generation, deadline)
+	if err != nil {
+		return UnifiedToolResult{
+			InvocationID: request.Invocation.InvocationID,
+			Status:       ToolResultStatusFailed,
+			Error: &ToolError{
+				Code:    ErrorCodeInternalError,
+				Message: fmt.Sprintf("register pending invocation: %v", err),
+			},
+		}
+	}
+
+	if !p.ports.Hub.Send(sessionID, generation, envBytes) {
+		p.ports.PendingInvocations.Cancel(request.Invocation.InvocationID, "failed to send")
+		return UnifiedToolResult{
+			InvocationID: request.Invocation.InvocationID,
+			Status:       ToolResultStatusFailed,
+			Error: &ToolError{
+				Code:      ErrorCodeRuntimeUnavailable,
+				Message:   "failed to send invoke to device",
+				Retryable: true,
 			},
 		}
 	}
@@ -194,19 +196,7 @@ func (p *MeshDeviceRuntimeInvocationPort) Health(ctx context.Context, route Runt
 	if !p.ports.Hub.IsSessionActive(sessionID, generation) {
 		return HealthUnhealthy
 	}
-	pingPayload := protocol.PingPayload{Time: time.Now().UTC()}
-	pingBytes, err := json.Marshal(pingPayload)
-	if err != nil {
-		return HealthUnknown
-	}
-	if !p.ports.Hub.Send(sessionID, generation, pingBytes) {
-		return HealthUnhealthy
-	}
-	lastPong, ok := p.ports.Hub.GetLastPongAt(sessionID, generation)
-	if !ok {
-		return HealthUnknown
-	}
-	if time.Since(lastPong) > 90*time.Second {
+	if !p.ports.Hub.HasRecentPong(sessionID, generation, 90*time.Second) {
 		return HealthUnhealthy
 	}
 	return HealthReady

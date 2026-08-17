@@ -168,11 +168,29 @@ func (b *Bridge) handleReady(ctx context.Context, session *WebSession) (json.Raw
 }
 
 func (b *Bridge) handleContextGet(ctx context.Context, session *WebSession) (json.RawMessage, error) {
+	host := "web"
+	if session.Surface != "" {
+		host = session.Surface
+	}
+	os := "unknown"
+	platform := "web"
+	capabilities := []string{"browser"}
+	if session.CharacterID != "" {
+		capabilities = append(capabilities, "character")
+	}
+	if session.ConversationID != "" {
+		capabilities = append(capabilities, "conversation")
+	}
 	contextPayload := map[string]any{
 		"theme":    session.Theme,
 		"locale":   session.Locale,
-		"platform": "desktop",
-		"slotId":   session.SlotID,
+		"platform": platform,
+		"host":     host,
+		"os":       os,
+		"surface":  session.SlotID,
+		"characterId": session.CharacterID,
+		"conversationId": session.ConversationID,
+		"capabilities": capabilities,
 		"scope": map[string]any{
 			"extensionId": session.ExtensionID,
 			"moduleId":    session.ModuleID,
@@ -423,6 +441,46 @@ func (b *Bridge) handleStorage(ctx context.Context, session *WebSession, msg Bri
 
 func (b *Bridge) handleDialog(ctx context.Context, session *WebSession, msg BridgeMessage) (json.RawMessage, error) {
 	return json.Marshal(map[string]any{"ok": true})
+}
+
+func (b *Bridge) SendHostEvent(sessionID, eventType string, payload json.RawMessage) error {
+	session, err := b.host.GetSession(sessionID)
+	if err != nil {
+		return err
+	}
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	if session.bridgeClosed {
+		return ErrBridgeClosed
+	}
+	return nil
+}
+
+func (b *Bridge) UpdateSessionContext(sessionID, characterID, conversationID string) error {
+	session, err := b.host.GetSession(sessionID)
+	if err != nil {
+		return err
+	}
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	if characterID != "" {
+		session.CharacterID = characterID
+	}
+	if conversationID != "" {
+		session.ConversationID = conversationID
+	}
+	return nil
+}
+
+func (b *Bridge) UpdateSessionTheme(sessionID string, theme ThemeSnapshot) error {
+	session, err := b.host.GetSession(sessionID)
+	if err != nil {
+		return err
+	}
+	session.mu.Lock()
+	defer session.mu.Unlock()
+	session.Theme = theme
+	return nil
 }
 
 func isNavigationAllowed(target string, session *WebSession) bool {

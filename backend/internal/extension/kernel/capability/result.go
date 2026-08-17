@@ -124,6 +124,7 @@ const (
 	ErrorCodeSecretLeaseIssueFailed       = "secret_lease_issue_failed"
 	ErrorCodeProviderNotFound             = "provider_not_found"
 	ErrorCodeProviderUnavailable          = "provider_unavailable"
+	ErrorCodeSessionSuperseded            = "session_superseded"
 )
 
 func ErrorCategoryForCode(code string) ToolErrorCategory {
@@ -230,17 +231,20 @@ type RecordedSideEffect struct {
 }
 
 type UnifiedToolResult struct {
-	InvocationID  string               `json:"invocationId"`
-	ToolID        string               `json:"toolId,omitempty"`
-	Status        ToolResultStatus     `json:"status"`
-	Content       []ToolContent        `json:"content,omitempty"`
-	Structured    json.RawMessage      `json:"structured,omitempty"`
-	Error         *ToolError           `json:"error,omitempty"`
-	SideEffects   []RecordedSideEffect `json:"sideEffects,omitempty"`
-	DurationMS    int64                `json:"durationMs,omitempty"`
-	ResourceUsage *ResourceUsage       `json:"resourceUsage,omitempty"`
-	Generation    int64                `json:"generation,omitempty"`
-	Metadata      map[string]any       `json:"metadata,omitempty"`
+	InvocationID     string                           `json:"invocationId"`
+	ToolID           string                           `json:"toolId,omitempty"`
+	RuntimeSessionID string                           `json:"runtimeSessionId,omitempty"`
+	DeviceID         string                           `json:"deviceId,omitempty"`
+	RuntimeID        string                           `json:"runtimeId,omitempty"`
+	Status           ToolResultStatus                 `json:"status"`
+	Content          []ToolContent                    `json:"content,omitempty"`
+	Structured       json.RawMessage                  `json:"structured,omitempty"`
+	Error            *ToolError                       `json:"error,omitempty"`
+	SideEffects      []RecordedSideEffect             `json:"sideEffects,omitempty"`
+	DurationMS       int64                            `json:"durationMs,omitempty"`
+	ResourceUsage    *ResourceUsage                   `json:"resourceUsage,omitempty"`
+	Generation       int64                            `json:"generation,omitempty"`
+	Metadata         map[string]any                   `json:"metadata,omitempty"`
 }
 
 func NewToolSuccessResult(invocationID, toolID string) UnifiedToolResult {
@@ -306,10 +310,13 @@ func ResultFromContextError(invocationID string, err error) UnifiedToolResult {
 
 func (r UnifiedToolResult) Clone() UnifiedToolResult {
 	clone := UnifiedToolResult{
-		InvocationID: r.InvocationID,
-		ToolID:       r.ToolID,
-		Status:       r.Status,
-		DurationMS:   r.DurationMS,
+		InvocationID:     r.InvocationID,
+		ToolID:           r.ToolID,
+		RuntimeSessionID: r.RuntimeSessionID,
+		DeviceID:         r.DeviceID,
+		RuntimeID:        r.RuntimeID,
+		Status:           r.Status,
+		DurationMS:       r.DurationMS,
 	}
 
 	if r.Content != nil {
