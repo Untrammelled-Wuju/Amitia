@@ -313,7 +313,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 					c.JSON(400, gin.H{"code": 400, "msg": "deviceId is required"})
 					return
 				}
-				affected, err := bootstrapTicketRepo.RevokeDeviceTickets(c.Request.Context(), actor.UserID, deviceID)
+				affected, err := bootstrapTicketRepo.RevokeDeviceTickets(c.Request.Context(), string(actor.UserID), deviceID)
 				if err != nil {
 					log.Error("failed to revoke device bootstrap tickets", "error", err)
 					c.JSON(500, gin.H{"code": 500, "msg": "failed to revoke tickets"})

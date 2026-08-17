@@ -237,6 +237,12 @@ func (sm *StreamManager) RemoveByRuntime(ctx context.Context, runtimeID domain.R
 	return count
 }
 
+func (sm *StreamManager) Count() int {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+	return len(sm.streams)
+}
+
 func (sm *StreamManager) CountByRuntime(runtimeID domain.RuntimeInstanceID) int {
 	sm.mu.RLock()
 	defer sm.mu.RUnlock()
