@@ -252,7 +252,3 @@ func detectFramework(uiFiles []string, libs []string) string {
 }
 
 var ErrWorkspaceIDRequired = errors.New("source inspector: workspace ID is required")
-
-// refUITargetSource ensures the uiagent package import remains meaningful
-// as the source package grows to depend on shared uiagent types.
-var _ uiagent.UITargetType = uiagent.UITargetSource
