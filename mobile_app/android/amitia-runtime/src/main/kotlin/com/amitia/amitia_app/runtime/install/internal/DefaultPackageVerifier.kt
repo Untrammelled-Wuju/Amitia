@@ -24,6 +24,9 @@ internal class DefaultPackageVerifier : PackageVerifier {
         const val SHA256SUMS_PATH = "metadata/SHA256SUMS"
         const val ROOTFS_PAYLOAD_PATH = "payload/rootfs/rootfs.tar.xz"
         const val RUNTIME_PAYLOAD_PATH = "payload/runtime/runtime.tar.xz"
+        const val VALID_RUNTIME_KIND = "embedded-proot"
+        const val SOURCE_REVISION_PATTERN = "^[a-fA-F0-9]{7,40}$"
+        const val SHA256_PATTERN = "^[a-fA-F0-9]{64}$"
     }
 
     override fun verify(packageFile: File, expectedRuntimeVersion: String?): PackageVerificationResult {
@@ -114,10 +117,10 @@ internal class DefaultPackageVerifier : PackageVerifier {
                 "host ABI not arm64-v8a: ${packageIndex.target.hostAbi}"
             )
         }
-        if (packageIndex.target.runtimeKind != "proot") {
+        if (packageIndex.target.runtimeKind != VALID_RUNTIME_KIND) {
             return PackageVerificationResult.Failure(
                 RuntimeInstallErrorCode.PACKAGE_TARGET_MISMATCH,
-                "runtime kind not proot: ${packageIndex.target.runtimeKind}"
+                "runtime kind not $VALID_RUNTIME_KIND: ${packageIndex.target.runtimeKind}"
             )
         }
         if (packageIndex.target.guestPlatform != "linux") {
@@ -130,6 +133,25 @@ internal class DefaultPackageVerifier : PackageVerifier {
             return PackageVerificationResult.Failure(
                 RuntimeInstallErrorCode.PACKAGE_TARGET_MISMATCH,
                 "guest architecture not arm64: ${packageIndex.target.guestArchitecture}"
+            )
+        }
+
+        if (packageIndex.sourceRevision.isEmpty()) {
+            return PackageVerificationResult.Failure(
+                RuntimeInstallErrorCode.PACKAGE_INVALID,
+                "sourceRevision is required"
+            )
+        }
+        if (!packageIndex.sourceRevision.matches(Regex(SOURCE_REVISION_PATTERN))) {
+            return PackageVerificationResult.Failure(
+                RuntimeInstallErrorCode.PACKAGE_INVALID,
+                "sourceRevision must be 7-40 hex chars: ${packageIndex.sourceRevision}"
+            )
+        }
+        if (packageIndex.target.runtimeKind.isNotEmpty() && !packageIndex.target.runtimeKind.matches(Regex("^[a-zA-Z0-9._-]+$"))) {
+            return PackageVerificationResult.Failure(
+                RuntimeInstallErrorCode.PACKAGE_INVALID,
+                "runtimeKind invalid format: ${packageIndex.target.runtimeKind}"
             )
         }
 

@@ -137,6 +137,20 @@ class RuntimeService : Service() {
         val processPhase = if (ctx != null) ctx.processPhase else RuntimeProcessPhase.CREATED
         val terminalState = toRuntimeTerminalState(ctx?.terminalEvent)
         val startupPhase = ctx?.startupPhase ?: RuntimeStartupPhase.NOT_STARTED
+        val terminationCause = when (ctx?.terminalEvent) {
+            TerminalEventKind.UNEXPECTED_TERMINATION -> RuntimeServiceTerminationCause.SESSION_EXITED
+            TerminalEventKind.STARTUP_FAILURE_CLEANUP -> RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
+            else -> null
+        }
+        val teardownResult = when (ctx?.teardownState) {
+            TeardownState.COMPLETE -> ServiceTeardownResult.FullyStopped(ctx.launchStartId)
+            TeardownState.SUPERSEDED -> ServiceTeardownResult.SupersededByNewStart
+            TeardownState.FAILED -> ServiceTeardownResult.Failed
+            else -> null
+        }
+        val startupFailureMessage = if (ctx?.terminalEvent == TerminalEventKind.STARTUP_FAILURE_CLEANUP) {
+            startupFailureCleanupContextRef.get()?.phase
+        } else null
         val snapshot = RuntimeServiceLifecycleSnapshot(
             generation = generation,
             sessionId = sessionId,
@@ -146,6 +160,9 @@ class RuntimeService : Service() {
             terminalState = terminalState,
             latestStartId = latestStartIdRef.get(),
             stopRequested = stopRequestedRef.get(),
+            terminationCause = terminationCause,
+            teardownResult = teardownResult,
+            startupFailureMessage = startupFailureMessage,
         )
         lifecycleSnapshotRef.set(snapshot)
         endpoint.updateLifecycleSnapshot(snapshot)
@@ -595,7 +612,6 @@ class RuntimeService : Service() {
         }
         val stopId = ctx.stopStartId ?: ctx.launchStartId
         val teardownResult = performServiceTeardown(ctx, stopId, teardownReason)
-        updateLifecycleSnapshot()
 
         publishTerminalEventForExpectedOrUnexpected(
             ctx = ctx,
@@ -670,7 +686,6 @@ class RuntimeService : Service() {
             }
             val stopId = sessionContext.stopStartId ?: sessionContext.launchStartId
             val teardownResult = performServiceTeardown(sessionContext, stopId, teardownReason)
-            updateLifecycleSnapshot()
 
             publishTerminalEventForExpectedOrUnexpected(
                 ctx = sessionContext,
@@ -764,6 +779,15 @@ class RuntimeService : Service() {
         cleanupContext.cleanupPhase = StartupFailureCleanupPhase.SERVICE_TEARDOWN
         serviceState.set(ServiceHostState.CREATED)
         processOwnershipBarrier.set(ProcessOwnershipState.CONFIRMED_DEAD)
+
+        val ctx = currentSessionContextRef.get()
+        if (ctx != null && ctx.terminalEvent == null) {
+            ctx.terminalEvent = TerminalEventKind.STARTUP_FAILURE_CLEANUP
+            ctx.processPhase = RuntimeProcessPhase.EXITED
+            ctx.teardownState = TeardownState.COMPLETE
+        }
+        updateLifecycleSnapshot()
+
         clearSessionState()
         startupFailureCleanupContextRef.set(null)
         cleanupContext.cleanupPhase = StartupFailureCleanupPhase.COMPLETE
@@ -772,7 +796,6 @@ class RuntimeService : Service() {
         } catch (_: Exception) {
         }
         tryStopSelf(cleanupContext.launchStartId)
-        updateLifecycleSnapshot()
         endpoint.notify(
             RuntimeServiceHostEvent.StartupFailed(
                 generation = cleanupContext.generation,
@@ -886,19 +909,21 @@ class RuntimeService : Service() {
                     sessionContext.terminalEvent = TerminalEventKind.UNEXPECTED_TERMINATION
                     unexpectedTerminationCause = RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
                     unexpectedTerminationGeneration = sessionContext.generation
+                    updateLifecycleSnapshot()
                     clearSessionState()
                 } else {
                     processOwnershipBarrier.set(ProcessOwnershipState.UNOBSERVABLE)
+                    updateLifecycleSnapshot()
                 }
                 try {
                     stopForeground(STOP_FOREGROUND_REMOVE)
                 } catch (_: Exception) {
                 }
             } else {
+                updateLifecycleSnapshot()
                 clearSessionState()
             }
             startupFailureCleanupContextRef.set(null)
-            updateLifecycleSnapshot()
         }
         if (unexpectedTerminationGeneration != null && unexpectedTerminationCause != null) {
             endpoint.notify(
@@ -959,6 +984,16 @@ class RuntimeService : Service() {
                 ContextCompat.startForegroundService(context, intent)
                 RuntimeServiceResult.Success
             } catch (e: Exception) {
+                val existingSession = instanceRef.get()?.currentProotSession()
+                if (existingSession != null && existingSession.isAlive()) {
+                    return RuntimeServiceResult.Failure(
+                        RuntimeServiceError(
+                            code = RuntimeServiceErrorCode.PROCESS_OWNERSHIP_CONFLICT,
+                            message = "startHost failed but existing proot process still alive: ${e.message}",
+                            cause = e
+                        )
+                    )
+                }
                 instanceRef.get()?.let { svc ->
                     synchronized(svc) {
                         svc.destroyed.set(true)

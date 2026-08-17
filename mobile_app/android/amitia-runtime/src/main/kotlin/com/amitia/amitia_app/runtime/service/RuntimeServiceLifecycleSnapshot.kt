@@ -38,4 +38,10 @@ internal data class RuntimeServiceLifecycleSnapshot(
     val terminalState: RuntimeTerminalState?,
     val latestStartId: Int,
     val stopRequested: Boolean,
-)
+    val terminationCause: RuntimeServiceTerminationCause? = null,
+    val teardownResult: ServiceTeardownResult? = null,
+    val startupFailureMessage: String? = null,
+) {
+    val isTerminal: Boolean get() = terminalState != null
+    val isProcessObservedDead: Boolean get() = processPhase == RuntimeProcessPhase.EXITED
+}

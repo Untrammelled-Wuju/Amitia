@@ -109,19 +109,19 @@ internal class AndroidRuntimeServiceHost(
             val event = when (snapshot.terminalState) {
                 RuntimeTerminalState.EXPECTED_STOPPED -> RuntimeServiceHostEvent.ExpectedStopped(
                     generation = snapshot.generation,
-                    result = ServiceTeardownResult.SupersededByNewStart
+                    result = snapshot.teardownResult ?: ServiceTeardownResult.SupersededByNewStart
                 )
                 RuntimeTerminalState.UNEXPECTED_TERMINATION -> RuntimeServiceHostEvent.UnexpectedTermination(
                     generation = snapshot.generation,
-                    cause = RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
+                    cause = snapshot.terminationCause ?: RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR
                 )
                 RuntimeTerminalState.STARTUP_FAILURE_CLEANUP -> RuntimeServiceHostEvent.StartupFailed(
                     generation = snapshot.generation,
-                    cause = RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR,
-                    message = "startup failure cleanup",
+                    cause = snapshot.terminationCause ?: RuntimeServiceTerminationCause.SERVICE_INTERNAL_ERROR,
+                    message = snapshot.startupFailureMessage ?: "startup failure cleanup",
                     sessionId = snapshot.sessionId,
                     launchStartId = snapshot.latestStartId,
-                    phase = "startup_failure"
+                    phase = snapshot.startupFailureMessage ?: "startup_failure"
                 )
             }
             val listenerSnapshot = ArrayList(listeners)
