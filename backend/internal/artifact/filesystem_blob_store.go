@@ -43,7 +43,11 @@ func (s *FilesystemBlobStore) Put(ctx context.Context, reader io.Reader, limit i
 	h := sha256.New()
 	lr := io.LimitReader(reader, limit+1)
 	written, err := io.Copy(io.MultiWriter(tmp, h), lr)
-	tmp.Sync()
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		os.Remove(tmpName)
+		return BlobInfo{}, fmt.Errorf("artifact: sync temp failed: %w", err)
+	}
 	tmp.Close()
 	if err != nil {
 		os.Remove(tmpName)

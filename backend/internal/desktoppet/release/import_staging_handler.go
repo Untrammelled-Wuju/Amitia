@@ -155,14 +155,11 @@ func (h *ImportStagingHandler) Upload(c *gin.Context) {
 	}
 
 	if err := h.repo.Create(c.Request.Context(), staging); err != nil {
-		storageKey, cleanErr := h.registry.StorageKeyFromPath(security.RootImportQuarantine, filepath.Dir(quarantinePath))
-		if cleanErr == nil {
-			_ = security.NewSafeArtifactResponder(h.registry).SafeDelete(
-				security.RootImportQuarantine,
-				storageKey,
-				security.DeleteExpectation{EntityType: "import_staging", EntityID: staging.ID},
-			)
-		}
+		_ = security.NewSafeArtifactResponder(h.registry).SafeDelete(
+			security.RootImportQuarantine,
+			storageKey,
+			security.DeleteExpectation{EntityType: "import_staging", EntityID: staging.ID},
+		)
 		util.ErrorResponse(c, response.InternalError, "暂存记录失败", gin.H{"errorCode": "INTERNAL_ERROR"})
 		return
 	}
