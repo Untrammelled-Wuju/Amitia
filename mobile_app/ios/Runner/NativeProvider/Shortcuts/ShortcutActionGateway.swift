@@ -75,7 +75,16 @@ public class ShortcutActionGateway: NSObject {
     public static let shared = ShortcutActionGateway()
 
     public private(set) var registeredActions: [ShortcutAction] = []
-    public weak var backendDispatcher: BackendActionDispatcher?
+    public weak var backendDispatcher: BackendActionDispatcher? {
+        didSet {
+            _dispatcherReady = (backendDispatcher != nil)
+        }
+    }
+    private var _dispatcherReady: Bool = false
+
+    public var isDispatcherReady: Bool {
+        return _dispatcherReady && backendDispatcher != nil
+    }
 
     private override init() {
         super.init()
@@ -93,6 +102,7 @@ public class ShortcutActionGateway: NSObject {
 
     public func setupBackendDispatcher(_ dispatcher: BackendActionDispatcher) {
         backendDispatcher = dispatcher
+        _dispatcherReady = true
     }
 
     public func isCuratedAction(_ action: ShortcutAction) -> Bool {
@@ -112,8 +122,8 @@ public class ShortcutActionGateway: NSObject {
             return ["error": "ACTION_NOT_AVAILABLE", "actionId": action.actionId]
         }
 
-        guard let dispatcher = backendDispatcher else {
-            return ["error": "no backend dispatcher for action: \(action.actionId)"]
+        guard isDispatcherReady, let dispatcher = backendDispatcher else {
+            return ["error": "BACKEND_DISPATCHER_NOT_READY", "actionId": action.actionId]
         }
 
         return await dispatcher.executeAction(actionId: action.actionId, payload: payload)
