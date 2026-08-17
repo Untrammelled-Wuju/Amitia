@@ -32,6 +32,10 @@ func (fakeArchiveUpdater) UpdateArchive(ctx context.Context, extensionID string,
 	return &upgrade.KernelUpdateResult{Success: true}, nil
 }
 
+func (fakeArchiveUpdater) GetPreviousArchivePath(ctx context.Context, extensionID string) (string, error) {
+	return "", nil
+}
+
 func composeTestContainer(t *testing.T) *GameHostContainer {
 	t.Helper()
 	root := filepath.Join(t.TempDir(), "data")
