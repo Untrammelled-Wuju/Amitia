@@ -41,7 +41,7 @@ type ProcessCleanupProcessAdapter struct {
 	mu              sync.Mutex
 	cleaned         map[string]bool
 	supervisor      *trusted_service.ProcessSupervisor
-	hostIdentity    *HostIdentity
+	hostIdentity    HostIdentityProvider
 	runtimeResolver interface {
 		GetRuntime(runtimeID domain.RuntimeInstanceID) (*runtime.RuntimeInstanceRef, error)
 	}
@@ -54,7 +54,7 @@ func NewProcessCleanupAdapter(supervisor *trusted_service.ProcessSupervisor) *Pr
 	}
 }
 
-func NewProcessCleanupAdapterWithIdentity(supervisor *trusted_service.ProcessSupervisor, hostIdentity *HostIdentity, runtimeResolver interface {
+func NewProcessCleanupAdapterWithIdentity(supervisor *trusted_service.ProcessSupervisor, hostIdentity HostIdentityProvider, runtimeResolver interface {
 	GetRuntime(runtimeID domain.RuntimeInstanceID) (*runtime.RuntimeInstanceRef, error)
 }) *ProcessCleanupProcessAdapter {
 	return &ProcessCleanupProcessAdapter{
@@ -90,6 +90,7 @@ func (a *ProcessCleanupProcessAdapter) ListOrphanCandidates(ctx context.Context)
 	candidates := make([]ProcessCandidate, 0)
 	seen := make(map[string]bool)
 
+	ownerStore := a.supervisor.OwnerStore()
 	instances := a.supervisor.List()
 	for _, inst := range instances {
 		if inst == nil || inst.Definition == nil {
@@ -104,11 +105,7 @@ func (a *ProcessCleanupProcessAdapter) ListOrphanCandidates(ctx context.Context)
 			continue
 		}
 		pluginID := resolvePluginID(a.runtimeResolver, domain.RuntimeInstanceID(runtimeID))
-		hostInstanceID, hostSessionID := "", ""
-		if a.hostIdentity != nil {
-			hostInstanceID = a.hostIdentity.GetHostInstanceID()
-			hostSessionID = a.hostIdentity.GetHostSessionID()
-		}
+		hostInstanceID, hostSessionID := a.lookupDurableHostID(ownerStore, inst.ProcessInstanceID)
 		pidKey := fmt.Sprintf("pid-%d", inst.PID)
 		seen[pidKey] = true
 		candidates = append(candidates, ProcessCandidate{
@@ -117,7 +114,7 @@ func (a *ProcessCleanupProcessAdapter) ListOrphanCandidates(ctx context.Context)
 			RuntimeID:         domain.RuntimeInstanceID(runtimeID),
 			PluginID:          pluginID,
 			ExtensionID:       inst.Definition.ExtensionID,
-			ServiceID:         inst.ServiceID,
+			ServiceID:         inst.ProcessInstanceID,
 			ModuleID:          inst.Definition.ModuleID,
 			Generation:        uint64(inst.Generation),
 			HostInstanceID:    hostInstanceID,
@@ -141,7 +138,7 @@ func (a *ProcessCleanupProcessAdapter) ListOrphanCandidates(ctx context.Context)
 			RuntimeID:         domain.RuntimeInstanceID(meta.RuntimeID),
 			PluginID:          domain.PluginID(meta.PluginID),
 			ExtensionID:       meta.ExtensionID,
-			ServiceID:         meta.LogicalServiceID,
+			ServiceID:         meta.ProcessInstanceID,
 			ModuleID:          meta.ModuleID,
 			Generation:        uint64(meta.Generation),
 			HostInstanceID:    meta.HostInstanceID,
@@ -150,6 +147,17 @@ func (a *ProcessCleanupProcessAdapter) ListOrphanCandidates(ctx context.Context)
 	}
 
 	return candidates, nil
+}
+
+func (a *ProcessCleanupProcessAdapter) lookupDurableHostID(ownerStore *trusted_service.ProcessOwnerStore, processInstanceID string) (string, string) {
+	if ownerStore == nil || processInstanceID == "" {
+		return "", ""
+	}
+	meta, ok := ownerStore.LookupByProcessInstanceID(processInstanceID)
+	if !ok {
+		return "", ""
+	}
+	return meta.HostInstanceID, meta.HostSessionID
 }
 
 func resolvePluginID(resolver interface {
