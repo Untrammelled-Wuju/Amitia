@@ -159,12 +159,15 @@ func DefaultMigrations() []Migration {
 		TaskRunPauseColumnsMigration(),
 		ArtifactsMigration(),
 		AccountSessionSecurityMigration(),
-		SyncChangeLogMigration(),
-		SyncCursorMigration(),
-		SyncSequenceMigration(),
-		ExecutionResumeMigration(),
-		SyncMutationIdempotentMigration(),
-		SecurityAuditEventsColumnsMigration(),
+	SyncChangeLogMigration(),
+	SyncCursorMigration(),
+	SyncSequenceMigration(),
+	ExecutionResumeMigration(),
+	SyncMutationIdempotentMigration(),
+	SyncChangeLogUserIDMigration(),
+	SyncCursorCompositeKeyMigration(),
+	SyncMutationUserUniqueMigration(),
+	SecurityAuditEventsColumnsMigration(),
 		SecurityAuditEventsOccurredAtMigration(),
 		AuthSessionsMissingColumnsMigration(),
 	}
@@ -219,6 +222,56 @@ func SyncMutationIdempotentMigration() Migration {
 	}
 }
 
+func SyncChangeLogUserIDMigration() Migration {
+	return Migration{
+		Version: "20260817006",
+		Name:    "add_sync_changes_user_id_column",
+		Up: func(s *Step) error {
+			s.AddColumn("sync_changes", "user_id", "TEXT NOT NULL DEFAULT ''")
+			s.CreateIndex("idx_sync_changes_user", "sync_changes", []string{"user_id"}, false)
+			s.CreateIndex("idx_sync_changes_user_mutation", "sync_changes", []string{"user_id", "mutation_id"}, false)
+			return nil
+		},
+	}
+}
+
+func SyncCursorCompositeKeyMigration() Migration {
+	return Migration{
+		Version: "20260817007",
+		Name:    "sync_cursors_composite_primary_key",
+		Up: func(s *Step) error {
+			s.Execute(`CREATE TABLE IF NOT EXISTS sync_cursors_new (
+				device_id TEXT NOT NULL,
+				user_id TEXT NOT NULL,
+				scope TEXT NOT NULL DEFAULT 'device',
+				last_applied INTEGER NOT NULL DEFAULT 0,
+				last_pushed INTEGER NOT NULL DEFAULT 0,
+				updated_at DATETIME NOT NULL,
+				PRIMARY KEY (user_id, scope, device_id)
+			)`)
+			s.Execute(`INSERT OR IGNORE INTO sync_cursors_new (device_id, user_id, scope, last_applied, last_pushed, updated_at)
+				SELECT device_id, user_id, scope, last_applied, last_pushed, updated_at FROM sync_cursors`)
+			s.Execute("DROP TABLE IF EXISTS sync_cursors")
+			s.Execute("ALTER TABLE sync_cursors_new RENAME TO sync_cursors")
+			s.CreateIndex("idx_sync_cursors_user", "sync_cursors", []string{"user_id"}, false)
+			return nil
+		},
+	}
+}
+
+func SyncMutationUserUniqueMigration() Migration {
+	return Migration{
+		Version: "20260817008",
+		Name:    "sync_mutation_user_unique_index",
+		Up: func(s *Step) error {
+			s.Execute("DROP INDEX IF EXISTS idx_sync_changes_mutation")
+			s.Execute("DROP INDEX IF EXISTS idx_sync_changes_user_mutation")
+			s.CreateIndex("idx_sync_changes_user_mutation", "sync_changes", []string{"user_id", "mutation_id"}, true)
+			return nil
+		},
+	}
+}
+
 func ExecutionResumeMigration() Migration {
 	return Migration{
 		Version: "20260816003",
@@ -257,6 +310,7 @@ func SyncSequenceMigration() Migration {
 				id INTEGER PRIMARY KEY CHECK (id = 1),
 				seq INTEGER NOT NULL DEFAULT 0
 			)`)
+			s.Execute("INSERT OR IGNORE INTO sync_sequence (id, seq) VALUES (1, 0)")
 			return nil
 		},
 	}

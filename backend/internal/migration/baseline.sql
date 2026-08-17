@@ -5833,35 +5833,38 @@ CREATE INDEX IF NOT EXISTS idx_artifacts_created_at ON artifacts(created_at);
 
 
 CREATE TABLE IF NOT EXISTS sync_changes (
-    change_id TEXT PRIMARY KEY,
-    seq INTEGER NOT NULL,
-    entity_type TEXT NOT NULL,
-    entity_id TEXT NOT NULL,
-    operation TEXT NOT NULL,
-    revision INTEGER NOT NULL,
-    mutation_id TEXT,
-    origin_device TEXT,
-    payload BLOB,
-    checksum TEXT NOT NULL,
-    created_at DATETIME NOT NULL
+	change_id TEXT PRIMARY KEY,
+	seq INTEGER NOT NULL,
+	user_id TEXT NOT NULL,
+	entity_type TEXT NOT NULL,
+	entity_id TEXT NOT NULL,
+	operation TEXT NOT NULL,
+	revision INTEGER NOT NULL,
+	mutation_id TEXT,
+	origin_device TEXT,
+	payload BLOB,
+	checksum TEXT NOT NULL,
+	created_at DATETIME NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_changes_seq ON sync_changes(seq);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_changes_mutation ON sync_changes(mutation_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_changes_user_mutation ON sync_changes(user_id, mutation_id);
+CREATE INDEX IF NOT EXISTS idx_sync_changes_user ON sync_changes(user_id);
 CREATE INDEX IF NOT EXISTS idx_sync_changes_entity ON sync_changes(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_sync_changes_origin ON sync_changes(origin_device);
 CREATE TABLE IF NOT EXISTS sync_cursors (
-    device_id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    scope TEXT NOT NULL DEFAULT 'device',
-    last_applied INTEGER NOT NULL DEFAULT 0,
-    last_pushed INTEGER NOT NULL DEFAULT 0,
-    updated_at DATETIME NOT NULL
+	device_id TEXT NOT NULL,
+	user_id TEXT NOT NULL,
+	scope TEXT NOT NULL DEFAULT 'device',
+	last_applied INTEGER NOT NULL DEFAULT 0,
+	last_pushed INTEGER NOT NULL DEFAULT 0,
+	updated_at DATETIME NOT NULL,
+	PRIMARY KEY (user_id, scope, device_id)
 );
 CREATE INDEX IF NOT EXISTS idx_sync_cursors_user ON sync_cursors(user_id);
 
 CREATE TABLE IF NOT EXISTS sync_sequence (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
-    seq INTEGER NOT NULL DEFAULT 0
+	id INTEGER PRIMARY KEY CHECK (id = 1),
+	seq INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS execution_resumes (
