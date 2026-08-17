@@ -2,6 +2,7 @@ package artifact
 
 import (
 	"context"
+	"errors"
 	"io"
 	"time"
 
@@ -71,10 +72,8 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (Artifact, erro
 	}
 	blobInfo, err := s.blobStore.Put(ctx, req.Reader, maxBytes)
 	if err != nil {
-		if err.Error() != "" {
-			if maxBytes > 0 && err.Error()[0:1] == "e" {
-				return Artifact{}, ErrTooLarge(maxBytes)
-			}
+		if isBlobTooLarge(err) {
+			return Artifact{}, ErrTooLarge(maxBytes)
 		}
 		return Artifact{}, ErrBlobWriteFailed(err)
 	}
@@ -191,5 +190,9 @@ func normalizeMIME(mime string) string {
 		m += string(c)
 	}
 	return m
+}
+
+func isBlobTooLarge(err error) bool {
+	return errors.Is(err, ErrBlobTooLarge)
 }
 

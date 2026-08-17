@@ -4,12 +4,15 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"strings"
 )
+
+var ErrBlobTooLarge = errors.New("artifact: blob exceeds limit")
 
 type FilesystemBlobStore struct {
 	root string
@@ -48,7 +51,7 @@ func (s *FilesystemBlobStore) Put(ctx context.Context, reader io.Reader, limit i
 	}
 	if written > limit {
 		os.Remove(tmpName)
-		return BlobInfo{}, fmt.Errorf("artifact: blob exceeds limit %d", limit)
+		return BlobInfo{}, fmt.Errorf("%w: %d", ErrBlobTooLarge, limit)
 	}
 	digest := BlobDigest("sha256:" + hex.EncodeToString(h.Sum(nil)))
 	canonicalPath := s.blobPath(digest)
