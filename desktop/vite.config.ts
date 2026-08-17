@@ -74,7 +74,6 @@ export default defineConfig({
     rollupOptions: {
       input: {
         main: resolve(__dirname, "../front/index.html"),
-        pet: resolve(__dirname, "src/renderer/pet.html"),
       },
     },
   },

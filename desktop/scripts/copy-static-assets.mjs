@@ -11,6 +11,16 @@ const STATIC_SOURCES = [
     to: "dist/renderer/update-check",
     recursive: true,
   },
+  {
+    from: "src/renderer/pet.html",
+    to: "dist/renderer/pet.html",
+    recursive: false,
+  },
+  {
+    from: "dist-types/src/renderer/pet-main.js",
+    to: "dist/renderer/pet-main.js",
+    recursive: false,
+  },
 ];
 
 const NEVER_OVERWRITE = [
