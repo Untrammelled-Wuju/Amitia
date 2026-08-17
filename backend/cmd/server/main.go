@@ -414,6 +414,9 @@ func startCoreWorkers(appCtx context.Context, services *AppServices, r *http.Ser
 	}()
 
 	go services.Reconciliation.RunWorker(appCtx, 10*time.Minute, mindruntime.DefaultReconciliationWorkerTargets())
+	if services.InstallationRecoveryWorker != nil {
+		go services.InstallationRecoveryWorker.Run(appCtx)
+	}
 	return nil
 }
 
