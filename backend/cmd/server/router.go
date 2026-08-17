@@ -55,6 +55,7 @@ import (
 	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/qq"
 	"github.com/u-ai/backend/internal/realtime"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/safety"
 	"github.com/u-ai/backend/internal/system"
@@ -246,9 +247,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 				}
 				err := services.DeviceRepository.RegisterOrTouch(c.Request.Context(), device.Identity{
 					UserID:            actor.UserID,
-					DeviceID:          request.DeviceID,
+					DeviceID:          runtimeidentity.DeviceID(request.DeviceID),
 					DesktopInstanceID: request.DesktopInstanceID,
-					Platform:          request.Platform,
+					Platform:          runtimeidentity.Platform(request.Platform),
 					AppVersion:        request.AppVersion,
 				})
 				if err != nil {
@@ -277,11 +278,11 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 					return
 				}
 				runtimeID := strings.TrimSpace(request.RuntimeID)
-				if err := services.DeviceRepository.RequireOwned(c.Request.Context(), actor.UserID, deviceID); err != nil {
+				if err := services.DeviceRepository.RequireOwned(c.Request.Context(), string(actor.UserID), deviceID); err != nil {
 					c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": "device not found"})
 					return
 				}
-				rawTicket, ticket, err := bootstrapTicketRepo.Create(c.Request.Context(), actor.UserID, deviceID, runtimeID, 10*time.Minute)
+				rawTicket, ticket, err := bootstrapTicketRepo.Create(c.Request.Context(), string(actor.UserID), deviceID, runtimeID, 10*time.Minute)
 				if err != nil {
 					log.Error("failed to create bootstrap ticket", "error", err)
 					c.JSON(500, gin.H{"code": 500, "msg": "failed to create bootstrap ticket"})
