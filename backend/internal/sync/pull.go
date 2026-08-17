@@ -23,7 +23,18 @@ func (s *PullService) Pull(req PullRequest) (*PullResult, error) {
 		req.Limit = 500
 	}
 
-	cursor, err := s.cursors.GetOrCreate(req.DeviceID, req.UserID, ScopeDevice)
+	scope := ScopeDevice
+	if req.Scope != "" {
+		scope = req.Scope
+	}
+
+	identity := CursorIdentity{
+		UserID:   req.UserID,
+		Scope:    scope,
+		DeviceID: req.DeviceID,
+	}
+
+	cursor, err := s.cursors.GetOrCreate(identity)
 	if err != nil {
 		return nil, fmt.Errorf("pull: cursor: %w", err)
 	}
@@ -51,14 +62,24 @@ func (s *PullService) Pull(req PullRequest) (*PullResult, error) {
 	}, nil
 }
 
-func (s *PullService) MarkApplied(deviceID string, seq Sequence) error {
-	return s.cursors.MarkApplied(deviceID, seq)
+func (s *PullService) MarkApplied(userID string, deviceID string, scope CursorScope, seq Sequence) error {
+	identity := CursorIdentity{
+		UserID:   userID,
+		Scope:    scope,
+		DeviceID: deviceID,
+	}
+	return s.cursors.MarkApplied(identity, seq)
 }
 
-func (s *PullService) GetStatus(deviceID string) (*CursorStatus, error) {
+func (s *PullService) GetStatus(userID string, deviceID string, scope CursorScope) (*CursorStatus, error) {
 	serverSeq, err := s.changelog.GetServerSequence()
 	if err != nil {
 		return nil, fmt.Errorf("pull: server seq: %w", err)
 	}
-	return s.cursors.GetStatus(deviceID, serverSeq)
+	identity := CursorIdentity{
+		UserID:   userID,
+		Scope:    scope,
+		DeviceID: deviceID,
+	}
+	return s.cursors.GetStatus(identity, serverSeq)
 }

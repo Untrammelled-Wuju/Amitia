@@ -23,6 +23,7 @@ const (
 type ChangeRecord struct {
 	ChangeID     ChangeID      `gorm:"column:change_id;primaryKey"`
 	Sequence     Sequence      `gorm:"column:seq;not null;index"`
+	UserID       string        `gorm:"column:user_id;not null;index"`
 	EntityType   EntityType    `gorm:"column:entity_type;not null;index"`
 	EntityID     EntityID      `gorm:"column:entity_id;not null;index"`
 	Operation    OperationType `gorm:"column:operation;not null"`
@@ -48,8 +49,8 @@ const (
 
 type SyncCursor struct {
 	DeviceID    string      `gorm:"column:device_id;primaryKey"`
-	UserID      string      `gorm:"column:user_id;not null;index"`
-	Scope       CursorScope `gorm:"column:scope;not null"`
+	UserID      string      `gorm:"column:user_id;primaryKey;not null"`
+	Scope       CursorScope `gorm:"column:scope;primaryKey;not null"`
 	LastApplied Sequence    `gorm:"column:last_applied;not null;default:0"`
 	LastPushed  Sequence    `gorm:"column:last_pushed;not null;default:0"`
 	UpdatedAt   time.Time   `gorm:"column:updated_at;not null"`
@@ -75,6 +76,7 @@ type PullRequest struct {
 	LastCursor   Sequence `json:"lastCursor"`
 	Limit        int    `json:"limit,omitempty"`
 	EntityType   string `json:"entityType,omitempty"`
+	Scope        CursorScope `json:"scope,omitempty"`
 }
 
 type PullResult struct {

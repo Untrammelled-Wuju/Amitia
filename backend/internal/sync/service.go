@@ -7,6 +7,7 @@ import (
 )
 
 type Service struct {
+	DB         *gorm.DB
 	ChangeLog  *ChangeLogService
 	Cursor     *CursorService
 	Pull       *PullService
@@ -25,13 +26,14 @@ func NewService(db *gorm.DB, applier EntityMutationApplier) *Service {
 	changelog := NewChangeLogService(store, seq)
 	cursors := NewCursorService(cursorStore)
 	pull := NewPullService(changelog, cursors)
-	push := NewPushService(changelog, cursors, applier)
+	push := NewPushService(db, changelog, cursors, applier)
 	gap := NewGapDetector(changelog, store)
 	replay := NewReplayService(changelog)
 	conflicts := NewConflictResolver(StrategyServerWins)
 	apply := NewApplyService(conflicts)
 
 	return &Service{
+		DB:         db,
 		ChangeLog:  changelog,
 		Cursor:     cursors,
 		Pull:       pull,

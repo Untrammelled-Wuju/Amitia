@@ -13,9 +13,11 @@ import (
 
 type ChangeLogStore interface {
 	Append(record *ChangeRecord) error
+	AppendTx(tx *gorm.DB, record *ChangeRecord) error
 	ListAfter(cursor Sequence, limit int, entityType EntityType) ([]ChangeRecord, error)
 	GetLatestSequence() (Sequence, error)
 	GetByMutationID(mutationID MutationID) (*ChangeRecord, error)
+	GetByMutationIDAndUser(mutationID MutationID, userID string) (*ChangeRecord, error)
 	Count() (int64, error)
 }
 
@@ -35,6 +37,16 @@ func (s *sqliteChangeLogStore) Append(record *ChangeRecord) error {
 		record.Checksum = computeChecksum(record.Payload)
 	}
 	return s.db.Create(record).Error
+}
+
+func (s *sqliteChangeLogStore) AppendTx(tx *gorm.DB, record *ChangeRecord) error {
+	if record.CreatedAt.IsZero() {
+		record.CreatedAt = time.Now().UTC()
+	}
+	if record.Checksum == "" {
+		record.Checksum = computeChecksum(record.Payload)
+	}
+	return tx.Create(record).Error
 }
 
 func (s *sqliteChangeLogStore) ListAfter(cursor Sequence, limit int, entityType EntityType) ([]ChangeRecord, error) {
@@ -65,6 +77,15 @@ func (s *sqliteChangeLogStore) GetByMutationID(mutationID MutationID) (*ChangeRe
 	return &record, err
 }
 
+func (s *sqliteChangeLogStore) GetByMutationIDAndUser(mutationID MutationID, userID string) (*ChangeRecord, error) {
+	var record ChangeRecord
+	err := s.db.Where("mutation_id = ? AND user_id = ?", mutationID, userID).First(&record).Error
+	if err == gorm.ErrRecordNotFound {
+		return nil, nil
+	}
+	return &record, err
+}
+
 func (s *sqliteChangeLogStore) Count() (int64, error) {
 	var count int64
 	err := s.db.Model(&ChangeRecord{}).Count(&count).Error
@@ -73,7 +94,7 @@ func (s *sqliteChangeLogStore) Count() (int64, error) {
 
 type SequenceGenerator interface {
 	NextSequence() (Sequence, error)
-	EnsureSequenceTable() error
+	NextSequenceTx(tx *gorm.DB) (Sequence, error)
 }
 
 type sqliteSequenceGenerator struct {
@@ -81,11 +102,7 @@ type sqliteSequenceGenerator struct {
 }
 
 func NewSequenceGenerator(db *gorm.DB) SequenceGenerator {
-	gen := &sqliteSequenceGenerator{db: db}
-	if err := gen.EnsureSequenceTable(); err != nil {
-		panic(fmt.Sprintf("sync: failed to ensure sequence table: %v", err))
-	}
-	return gen
+	return &sqliteSequenceGenerator{db: db}
 }
 
 func (g *sqliteSequenceGenerator) NextSequence() (Sequence, error) {
@@ -97,13 +114,24 @@ func (g *sqliteSequenceGenerator) NextSequence() (Sequence, error) {
 	return Sequence(nextSeq), nil
 }
 
+func (g *sqliteSequenceGenerator) NextSequenceTx(tx *gorm.DB) (Sequence, error) {
+	var nextSeq int64
+	err := tx.Raw("UPDATE sync_sequence SET seq = seq + 1 RETURNING seq").Scan(&nextSeq).Error
+	if err != nil {
+		return g.fallbackNextSequenceTx(tx)
+	}
+	return Sequence(nextSeq), nil
+}
+
 func (g *sqliteSequenceGenerator) fallbackNextSequence() (Sequence, error) {
 	var nextSeq int64
 	err := g.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Exec("INSERT INTO sync_sequence (id, seq) VALUES (1, 1) ON CONFLICT(id) DO UPDATE SET seq = seq + 1").Error; err != nil {
+		seq, err := g.fallbackNextSequenceTx(tx)
+		if err != nil {
 			return err
 		}
-		return tx.Raw("SELECT seq FROM sync_sequence WHERE id = 1").Scan(&nextSeq).Error
+		nextSeq = int64(seq)
+		return nil
 	})
 	if err != nil {
 		return 0, err
@@ -111,26 +139,15 @@ func (g *sqliteSequenceGenerator) fallbackNextSequence() (Sequence, error) {
 	return Sequence(nextSeq), nil
 }
 
-func (g *sqliteSequenceGenerator) EnsureSequenceTable() error {
-	err := g.db.Exec(`CREATE TABLE IF NOT EXISTS sync_sequence (
-		id INTEGER PRIMARY KEY CHECK (id = 1),
-		seq INTEGER NOT NULL DEFAULT 0
-	)`).Error
-	if err != nil {
-		return err
+func (g *sqliteSequenceGenerator) fallbackNextSequenceTx(tx *gorm.DB) (Sequence, error) {
+	var nextSeq int64
+	if err := tx.Exec("INSERT INTO sync_sequence (id, seq) VALUES (1, 1) ON CONFLICT(id) DO UPDATE SET seq = seq + 1").Error; err != nil {
+		return 0, err
 	}
-	var count int64
-	err = g.db.Model(&struct {
-		ID  int64 `gorm:"column:id"`
-		Seq int64 `gorm:"column:seq"`
-	}{}).Table("sync_sequence").Count(&count).Error
-	if err != nil {
-		return err
+	if err := tx.Raw("SELECT seq FROM sync_sequence WHERE id = 1").Scan(&nextSeq).Error; err != nil {
+		return 0, err
 	}
-	if count == 0 {
-		err = g.db.Exec("INSERT INTO sync_sequence (id, seq) VALUES (1, 0)").Error
-	}
-	return err
+	return Sequence(nextSeq), nil
 }
 
 func computeChecksum(payload []byte) string {
@@ -147,9 +164,9 @@ func NewChangeLogService(store ChangeLogStore, sequences SequenceGenerator) *Cha
 	return &ChangeLogService{store: store, sequences: sequences}
 }
 
-func (s *ChangeLogService) Append(entityType EntityType, entityID EntityID, op OperationType, revision int64, mutationID MutationID, originDevice string, payload []byte) (*ChangeRecord, error) {
+func (s *ChangeLogService) Append(entityType EntityType, entityID EntityID, op OperationType, revision int64, mutationID MutationID, originDevice string, userID string, payload []byte) (*ChangeRecord, error) {
 	if mutationID != "" {
-		existing, err := s.store.GetByMutationID(mutationID)
+		existing, err := s.store.GetByMutationIDAndUser(mutationID, userID)
 		if err != nil {
 			return nil, fmt.Errorf("changelog: check mutation: %w", err)
 		}
@@ -166,6 +183,7 @@ func (s *ChangeLogService) Append(entityType EntityType, entityID EntityID, op O
 	record := &ChangeRecord{
 		ChangeID:     ChangeID(fmt.Sprintf("ch_%d", seq)),
 		Sequence:     seq,
+		UserID:       userID,
 		EntityType:   entityType,
 		EntityID:     entityID,
 		Operation:    op,
@@ -178,6 +196,43 @@ func (s *ChangeLogService) Append(entityType EntityType, entityID EntityID, op O
 	record.Checksum = computeChecksum(payload)
 
 	if err := s.store.Append(record); err != nil {
+		return nil, fmt.Errorf("changelog: append: %w", err)
+	}
+	return record, nil
+}
+
+func (s *ChangeLogService) AppendTx(tx *gorm.DB, entityType EntityType, entityID EntityID, op OperationType, revision int64, mutationID MutationID, originDevice string, userID string, payload []byte) (*ChangeRecord, error) {
+	if mutationID != "" {
+		existing, err := s.store.GetByMutationIDAndUser(mutationID, userID)
+		if err != nil {
+			return nil, fmt.Errorf("changelog: check mutation: %w", err)
+		}
+		if existing != nil {
+			return existing, nil
+		}
+	}
+
+	seq, err := s.sequences.NextSequenceTx(tx)
+	if err != nil {
+		return nil, fmt.Errorf("changelog: next sequence: %w", err)
+	}
+
+	record := &ChangeRecord{
+		ChangeID:     ChangeID(fmt.Sprintf("ch_%d", seq)),
+		Sequence:     seq,
+		UserID:       userID,
+		EntityType:   entityType,
+		EntityID:     entityID,
+		Operation:    op,
+		Revision:     revision,
+		MutationID:   mutationID,
+		OriginDevice: originDevice,
+		Payload:      payload,
+		CreatedAt:    time.Now().UTC(),
+	}
+	record.Checksum = computeChecksum(payload)
+
+	if err := s.store.AppendTx(tx, record); err != nil {
 		return nil, fmt.Errorf("changelog: append: %w", err)
 	}
 	return record, nil
