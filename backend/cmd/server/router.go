@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -589,6 +590,30 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 			Hub:           services.DeviceMesh.Hub,
 			Probe:         services.DeviceMesh.Probe,
 			DeviceReg:     deviceReg,
+			TaskClaimHandler: func(taskRunID string, attemptID string, workerID string, leaseDuration time.Duration) bool {
+				if services.MeshRemoteTaskExecutor == nil || services.MeshRemoteTaskExecutor.PendingTasks == nil {
+					return false
+				}
+				return services.MeshRemoteTaskExecutor.PendingTasks.Claim(taskRunID, workerID, leaseDuration)
+			},
+			TaskCompleteHandler: func(taskRunID string, attemptID string, success bool, result json.RawMessage, errMsg string) {
+				if services.MeshRemoteTaskExecutor == nil || services.MeshRemoteTaskExecutor.PendingTasks == nil {
+					return
+				}
+				services.MeshRemoteTaskExecutor.PendingTasks.Complete(taskRunID, success, errMsg)
+			},
+			TaskProgressHandler: func(taskRunID string, attemptID string, progress json.RawMessage) {
+				// Progress handling stub - full implementation in external_api.go
+			},
+			TaskCheckpointHandler: func(taskRunID string, attemptID string, checkpoint json.RawMessage) {
+				// Checkpoint handling stub - full implementation in external_api.go
+			},
+			DisconnectHandler: func(sessionID string, generation int64) {
+				if services.MeshRemoteTaskExecutor == nil || services.MeshRemoteTaskExecutor.PendingTasks == nil {
+					return
+				}
+				services.MeshRemoteTaskExecutor.PendingTasks.CancelAll(sessionID, "device_disconnected")
+			},
 			GetUserID: func(c *gin.Context) (runtimeidentity.UserID, bool) {
 				val, exists := c.Get("userId")
 				if !exists {

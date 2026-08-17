@@ -90,7 +90,15 @@ func (a *SupervisorAdapter) RefreshProgress(
 	taskRunID string,
 	progressJSON []byte,
 	startedAt time.Time,
+	generation int64,
 ) error {
+	run, err := a.service.GetTaskRun(ctx, taskRunID)
+	if err != nil {
+		return err
+	}
+	if run.Generation != generation {
+		return fmt.Errorf("stale progress: generation mismatch")
+	}
 	return a.service.store.PutProgress(ctx, taskRunID, time.Now().UnixNano(), progressJSON)
 }
 
@@ -100,7 +108,15 @@ func (a *SupervisorAdapter) UpdateProgress(
 	seq int64,
 	current, total *float64,
 	stage, message string,
+	generation int64,
 ) error {
+	run, err := a.service.GetTaskRun(ctx, taskRunID)
+	if err != nil {
+		return err
+	}
+	if run.Generation != generation {
+		return fmt.Errorf("stale progress: generation mismatch")
+	}
 	percentage := computePercentage(current, total)
 	a.service.handleProgress(ctx, taskRunID, seq, current, total, percentage, stage, message)
 	return nil

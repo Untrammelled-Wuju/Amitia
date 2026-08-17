@@ -9,13 +9,19 @@ import (
 	"github.com/google/uuid"
 )
 
-func (s *TaskRuntimeService) HandleExternalFinish(ctx context.Context, taskRunID string, status string, result json.RawMessage, artifactID, errCode, errMsg string) error {
+func (s *TaskRuntimeService) HandleExternalFinish(ctx context.Context, taskRunID string, status string, result json.RawMessage, artifactID, errCode, errMsg string, attemptID string, generation int64) error {
 	current, err := s.store.GetTaskRun(ctx, taskRunID)
 	if err != nil {
 		return err
 	}
 	if current.Status.IsTerminal() {
 		return nil
+	}
+	if attemptID != "" && current.ExecutionAttemptID != "" && attemptID != string(current.ExecutionAttemptID) {
+		return errors.New("stale worker: attempt_id mismatch")
+	}
+	if generation != 0 && current.Generation != 0 && generation != current.Generation {
+		return errors.New("stale worker: generation mismatch")
 	}
 	next := cloneTaskRun(current)
 	now := time.Now().UTC()
@@ -78,7 +84,7 @@ func (s *TaskRuntimeService) HandleExternalFinish(ctx context.Context, taskRunID
 	return s.publishTaskEvent(ctx, eventType, next, "", "")
 }
 
-func (s *TaskRuntimeService) HandleExternalProgress(ctx context.Context, taskRunID string, completedUnits, totalUnits int64, phase string) error {
+func (s *TaskRuntimeService) HandleExternalProgress(ctx context.Context, taskRunID string, completedUnits, totalUnits int64, phase string, attemptID string, generation int64) error {
 	s.progressMu.Lock()
 	last, ok := s.progressLast[taskRunID]
 	now := time.Now()
@@ -88,6 +94,16 @@ func (s *TaskRuntimeService) HandleExternalProgress(ctx context.Context, taskRun
 	}
 	s.progressLast[taskRunID] = now
 	s.progressMu.Unlock()
+
+	current, err := s.store.GetTaskRun(ctx, taskRunID)
+	if err == nil {
+		if attemptID != "" && current.ExecutionAttemptID != "" && attemptID != string(current.ExecutionAttemptID) {
+			return errors.New("stale worker: attempt_id mismatch")
+		}
+		if generation != 0 && current.Generation != 0 && generation != current.Generation {
+			return errors.New("stale worker: generation mismatch")
+		}
+	}
 
 	completedFloat := float64(completedUnits)
 	totalFloat := float64(totalUnits)
@@ -105,13 +121,19 @@ func (s *TaskRuntimeService) HandleExternalProgress(ctx context.Context, taskRun
 	return s.store.PutProgress(ctx, taskRunID, seq, progJSON)
 }
 
-func (s *TaskRuntimeService) HandleExternalCheckpoint(ctx context.Context, taskRunID string, lastUnit int64, phase string, payload json.RawMessage) error {
+func (s *TaskRuntimeService) HandleExternalCheckpoint(ctx context.Context, taskRunID string, lastUnit int64, phase string, payload json.RawMessage, attemptID string, generation int64) error {
 	current, err := s.store.GetTaskRun(ctx, taskRunID)
 	if err != nil {
 		return err
 	}
 	if current.Status.IsTerminal() {
 		return nil
+	}
+	if attemptID != "" && current.ExecutionAttemptID != "" && attemptID != string(current.ExecutionAttemptID) {
+		return errors.New("stale worker: attempt_id mismatch")
+	}
+	if generation != 0 && current.Generation != 0 && generation != current.Generation {
+		return errors.New("stale worker: generation mismatch")
 	}
 	if len(payload) > s.config.MaxCheckpointBytes {
 		return errors.New("checkpoint payload exceeds maximum size")

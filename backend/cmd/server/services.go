@@ -67,6 +67,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/worker"
 	"github.com/u-ai/backend/internal/devicemesh"
 	"github.com/u-ai/backend/internal/devicemesh/server"
+	task_runtime "github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
@@ -80,6 +81,8 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/management"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/imagegen"
+	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval"
+	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval/local"
 	"github.com/u-ai/backend/internal/interaction"
 	iosnative_background "github.com/u-ai/backend/internal/iosnative/background"
 	"github.com/u-ai/backend/internal/localmodel/llamacpp"
@@ -195,6 +198,7 @@ type AppServices struct {
 	BackgroundTaskRuntimeWired   bool
 	Artifact                     *ArtifactRuntime
 	DeviceMesh                   *devicemesh.Runtime
+	MeshRemoteTaskExecutor       *task_runtime.MeshRemoteTaskExecutor
 }
 
 type RuntimeOrchestrator interface {
@@ -377,6 +381,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 
 	meshHub := server.NewConnectionHub()
+	meshRemoteExecutor := task_runtime.NewMeshRemoteTaskExecutor(meshHub, nil)
 
 	kernelBuilder := kernel.NewContainerBuilder().
 		WithDBPath(kernelDBPath).
@@ -396,7 +401,14 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithWorkspaceService(workspaceService).
 		WithBrowserProvider(browserProvider).
 		WithRuntimeProfile(runtimeProfile).
-		WithMeshHub(meshHub)
+		WithMeshHub(meshHub).
+		WithBackgroundBootstrapFunc(func() (backgroundremoval.Registry, error) {
+			reg := backgroundremoval.NewRegistry()
+			if err := reg.Register(local.NewLocalProvider(), local.LocalCapabilities()); err != nil {
+				return nil, fmt.Errorf("register local background provider: %w", err)
+			}
+			return reg, nil
+		})
 
 	installationRepo := installation.NewRepository(ctx.DB, ctx)
 	runtimeConfig := runtime.DefaultRuntimeConfig()
@@ -1084,6 +1096,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		NativeBridgeRelay:            newNativeBridgeRelay(),
 		Artifact:                     nil,
 		DeviceMesh:                   nil,
+		MeshRemoteTaskExecutor:       meshRemoteExecutor,
 	}
 	if runtimeProfile == runtimeprofile.ProfileCloudCore && kernelContainer != nil {
 		deviceMeshRuntime, err := devicemesh.NewCloudRuntimeWithHub(kernelContainer.Store.DB(), kernelContainer.DeviceRegistry, meshHub)
@@ -1153,7 +1166,14 @@ func newDeviceAgentServices(ctx *app.AppContext, graphSvc graph.Service, bootstr
 		WithExtensionRoot(kernelRoot).
 		WithNodeEnvironmentResolver(nodeResolver).
 		WithHostArtifactResolver(artifactResolver).
-		WithRuntimeProfile(runtimeProfile)
+		WithRuntimeProfile(runtimeProfile).
+		WithBackgroundBootstrapFunc(func() (backgroundremoval.Registry, error) {
+			reg := backgroundremoval.NewRegistry()
+			if err := reg.Register(local.NewLocalProvider(), local.LocalCapabilities()); err != nil {
+				return nil, fmt.Errorf("register local background provider: %w", err)
+			}
+			return reg, nil
+		})
 	if bootstrap != nil {
 		kernelBuilder.WithRuntimeHost(bootstrap.RuntimeHost())
 	}
