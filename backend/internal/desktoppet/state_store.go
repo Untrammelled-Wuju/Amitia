@@ -191,8 +191,7 @@ func (s *StateStore) ApplyTransition(ctx context.Context, p taskstate.ApplyTrans
 	audit.PreviousVersion = current.RowVersion
 	audit.CurrentVersion = current.RowVersion + 1
 	if err := s.writeAuditRecord(audit); err != nil {
-		// nolint:errcheck
-		_ = err
+		return nil, fmt.Errorf("write audit record: %w", err)
 	}
 
 	return &taskstate.ApplyTransitionResult{

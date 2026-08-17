@@ -3,6 +3,7 @@ package gamehost
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 	gamehostsecret "github.com/u-ai/backend/internal/gamehost/secret"
@@ -105,7 +106,10 @@ func (c *GameHostContainer) Start(ctx context.Context) error {
 	}
 
 	if c.StartupRecovery != nil {
-		c.StartupRecovery.RunStartupRecovery(ctx)
+		report := c.StartupRecovery.RunStartupRecovery(ctx)
+		if !report.Success {
+			return fmt.Errorf("gamehost: startup recovery failed: %s", strings.Join(report.Errors, "; "))
+		}
 	} else if c.StartupGate != nil {
 		c.StartupGate.Open()
 	}
@@ -126,7 +130,9 @@ func (c *GameHostContainer) Shutdown(ctx context.Context) error {
 		c.RPCLifecycle.Shutdown(ctx)
 	}
 	if c.ControlPlane != nil {
-		_ = c.ControlPlane.Shutdown(ctx)
+		if err := c.ControlPlane.Shutdown(ctx); err != nil {
+			return fmt.Errorf("gamehost: control plane shutdown: %w", err)
+		}
 	}
 	if c.ResourceLifecycle != nil {
 		c.ResourceLifecycle.OnHostShutdown()

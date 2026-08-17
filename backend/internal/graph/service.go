@@ -196,8 +196,25 @@ func (s *service) GetStats(userID string) (map[string]interface{}, error) {
 
 	nodeResult, err := surrealdb.Query[any](context.Background(), s.client.DB(),
 		fmt.Sprintf("SELECT count() FROM entity_node%s GROUP ALL", nodeFilter), nil)
-	_ = nodeResult
-	_ = err
+	if err == nil && nodeResult != nil && len(*nodeResult) > 0 {
+		raw := (*nodeResult)[0].Result
+		if arr, ok := raw.([]interface{}); ok && len(arr) > 0 {
+			if m, ok := arr[0].(map[string]interface{}); ok {
+				if c, ok := m["count"]; ok {
+					switch v := c.(type) {
+					case float64:
+						nodeCount = int(v)
+					case int:
+						nodeCount = v
+					case int64:
+						nodeCount = int(v)
+					case uint64:
+						nodeCount = int(v)
+					}
+				}
+			}
+		}
+	}
 
 	edgeResult, err := surrealdb.Query[any](context.Background(), s.client.DB(),
 		"SELECT count() FROM entity_edge GROUP ALL", nil)
