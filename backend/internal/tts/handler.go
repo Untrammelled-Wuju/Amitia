@@ -43,7 +43,7 @@ func (h *Handler) Get(c *gin.Context) {
 func (h *Handler) Create(c *gin.Context) {
 	var req CreateTtsConfigRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	cfg, err := h.service.Create(&req)
@@ -58,7 +58,7 @@ func (h *Handler) Update(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	var updates map[string]interface{}
 	if err := c.ShouldBindJSON(&updates); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	cfg, err := h.service.Update(id, updates)
@@ -72,7 +72,7 @@ func (h *Handler) Update(c *gin.Context) {
 func (h *Handler) Delete(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	if err := h.service.Delete(id); err != nil {
-		util.ErrorResponse(c, response.OperationFailed, "删除失败", nil)
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
 	util.SuccessMsgResponse(c, "音色配置已删除", nil)
@@ -122,7 +122,7 @@ func (h *Handler) TestConnectionStandalone(c *gin.Context) {
 		VoiceType  string `json:"voiceType"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	cfg := &TtsConfig{
@@ -141,7 +141,7 @@ func (h *Handler) TestConnectionStandalone(c *gin.Context) {
 func (h *Handler) Synthesize(c *gin.Context) {
 	var req SynthesizeRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	var result *SynthesizeResponse
@@ -198,7 +198,7 @@ func (h *Handler) CloneVoice(c *gin.Context) {
 
 	audioData, err := io.ReadAll(file)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "读取音频失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 

@@ -41,7 +41,7 @@ func (h *Handler) ListEvents(c *gin.Context) {
 
 	events, err := h.repo.ListUserEvents(userID, limit, cursor)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "查询失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 

@@ -523,13 +523,13 @@ func handleUpload(c *gin.Context) {
 	savePath := filepath.Join(uploadDir, header.Filename)
 	out, err := os.Create(savePath)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "保存文件失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	defer out.Close()
 	_, err = io.Copy(out, file)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "写入文件失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, map[string]string{

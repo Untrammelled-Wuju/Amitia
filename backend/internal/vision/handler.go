@@ -18,7 +18,7 @@ func NewHandler(svc Service) *Handler { return &Handler{service: svc} }
 func (h *Handler) List(c *gin.Context) {
 	configs, err := h.service.List()
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "查询失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, configs)
@@ -37,7 +37,7 @@ func (h *Handler) Get(c *gin.Context) {
 func (h *Handler) Create(c *gin.Context) {
 	var req CreateVisionConfigRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	cfg, err := h.service.Create(&req)
@@ -52,7 +52,7 @@ func (h *Handler) Update(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	var updates map[string]interface{}
 	if err := c.ShouldBindJSON(&updates); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	cfg, err := h.service.Update(id, updates)
@@ -66,7 +66,7 @@ func (h *Handler) Update(c *gin.Context) {
 func (h *Handler) Delete(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	if err := h.service.Delete(id); err != nil {
-		util.ErrorResponse(c, response.OperationFailed, "删除失败", nil)
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
 	util.SuccessMsgResponse(c, "视觉模型配置已删除", nil)

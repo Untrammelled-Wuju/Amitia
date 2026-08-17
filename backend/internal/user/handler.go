@@ -19,7 +19,7 @@ func NewHandler(srv Service) *Handler {
 func (h *Handler) Status(c *gin.Context) {
 	hasAdmin, err := h.service.HasAdmin()
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "检查状态失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, gin.H{"hasAdmin": hasAdmin})
@@ -28,7 +28,7 @@ func (h *Handler) Status(c *gin.Context) {
 func (h *Handler) Setup(c *gin.Context) {
 	var req SetupRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "用户名和密码不能为空", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	if len(req.Password) < 6 {
@@ -82,7 +82,7 @@ func (h *Handler) Logout(c *gin.Context) {
 	}
 
 	if err := h.service.Logout(token); err != nil {
-		util.ErrorResponse(c, response.InternalError, "登出失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessMsgResponse(c, "已登出", nil)
