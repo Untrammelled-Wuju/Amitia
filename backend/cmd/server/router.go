@@ -38,6 +38,8 @@ import (
 	runtimev2 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v2"
 	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
 	devicemeshserver "github.com/u-ai/backend/internal/devicemesh/server"
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	deviceruntimeprotocol "github.com/u-ai/backend/internal/deviceruntime/protocol"
 	"github.com/u-ai/backend/internal/embedding_config"
 	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
@@ -596,25 +598,105 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 				}
 				return services.MeshRemoteTaskExecutor.PendingTasks.Claim(taskRunID, workerID, leaseDuration)
 			},
-			TaskCompleteHandler: func(taskRunID string, attemptID string, success bool, result json.RawMessage, errMsg string) {
-				if services.MeshRemoteTaskExecutor == nil || services.MeshRemoteTaskExecutor.PendingTasks == nil {
-					return
-				}
-				services.MeshRemoteTaskExecutor.PendingTasks.Complete(taskRunID, success, errMsg)
-			},
-			TaskProgressHandler: func(taskRunID string, attemptID string, progress json.RawMessage) {
-				// Progress handling stub - full implementation in external_api.go
-			},
-			TaskCheckpointHandler: func(taskRunID string, attemptID string, checkpoint json.RawMessage) {
-				// Checkpoint handling stub - full implementation in external_api.go
-			},
-			DisconnectHandler: func(sessionID string, generation int64) {
-				if services.MeshRemoteTaskExecutor == nil || services.MeshRemoteTaskExecutor.PendingTasks == nil {
-					return
-				}
-				services.MeshRemoteTaskExecutor.PendingTasks.CancelAll(sessionID, "device_disconnected")
-			},
-			GetUserID: func(c *gin.Context) (runtimeidentity.UserID, bool) {
+		TaskCompleteHandler: func(taskRunID string, attemptID string, success bool, result json.RawMessage, errMsg string) {
+			if services.MeshRemoteTaskExecutor == nil || services.MeshRemoteTaskExecutor.PendingTasks == nil {
+				return
+			}
+			services.MeshRemoteTaskExecutor.PendingTasks.Complete(taskRunID, success, errMsg)
+			if services.KernelContainer != nil && services.KernelContainer.TaskRuntimeService != nil {
+				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				defer cancel()
+				_ = services.KernelContainer.TaskRuntimeService.ApplyRemoteCompletion(ctx, taskRunID, attemptID, "", success, result, errMsg)
+			}
+		},
+		TaskProgressHandler: func(taskRunID string, attemptID string, progress json.RawMessage) {
+			if services.MeshRemoteTaskExecutor == nil || services.MeshRemoteTaskExecutor.PendingTasks == nil {
+				return
+			}
+			if _, ok := services.MeshRemoteTaskExecutor.PendingTasks.Get(taskRunID); !ok {
+				return
+			}
+			var prog struct {
+				Sequence   int64    `json:"sequence"`
+				Current    *float64 `json:"current,omitempty"`
+				Total      *float64 `json:"total,omitempty"`
+				Percentage *float64 `json:"percentage,omitempty"`
+				Stage      string   `json:"stage,omitempty"`
+				Message    string   `json:"message,omitempty"`
+			}
+			if err := json.Unmarshal(progress, &prog); err != nil {
+				return
+			}
+			if services.KernelContainer != nil && services.KernelContainer.TaskRuntimeService != nil {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				_ = services.KernelContainer.TaskRuntimeService.HandleRemoteProgress(ctx, taskRunID, attemptID, prog.Sequence, prog.Current, prog.Total, prog.Percentage, prog.Stage, prog.Message)
+			}
+		},
+		TaskCheckpointHandler: func(taskRunID string, attemptID string, checkpoint json.RawMessage) {
+			if services.MeshRemoteTaskExecutor == nil || services.MeshRemoteTaskExecutor.PendingTasks == nil {
+				return
+			}
+			if _, ok := services.MeshRemoteTaskExecutor.PendingTasks.Get(taskRunID); !ok {
+				return
+			}
+			var cp struct {
+				CheckpointID string          `json:"checkpointId"`
+				Version      int64           `json:"version"`
+				Payload      json.RawMessage `json:"payload"`
+				PayloadHash  string          `json:"payloadHash"`
+			}
+			if err := json.Unmarshal(checkpoint, &cp); err != nil {
+				return
+			}
+			if services.KernelContainer != nil && services.KernelContainer.TaskRuntimeService != nil {
+				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				_ = services.KernelContainer.TaskRuntimeService.HandleRemoteCheckpoint(ctx, taskRunID, attemptID, cp.CheckpointID, cp.Version, cp.Payload, cp.PayloadHash)
+			}
+		},
+		DisconnectHandler: func(sessionID string, generation int64) {
+			if services.MeshRemoteTaskExecutor == nil || services.MeshRemoteTaskExecutor.PendingTasks == nil {
+				return
+			}
+			services.MeshRemoteTaskExecutor.PendingTasks.CancelAll(sessionID, "device_disconnected")
+			if services.PendingInvocationManager != nil {
+				services.PendingInvocationManager.CancelAll(sessionID, "device_disconnected")
+			}
+		},
+		InvocationResultHandler: func(result deviceruntimeprotocol.RuntimeResultPayload) {
+			if services.PendingInvocationManager == nil {
+				return
+			}
+			services.PendingInvocationManager.Complete(result.InvocationID, capability.UnifiedToolResult{
+				InvocationID:     result.InvocationID,
+				RuntimeSessionID: string(result.RuntimeSessionID),
+				DeviceID:         string(result.DeviceID),
+				RuntimeID:        string(result.RuntimeID),
+				Status:           capability.ToolResultStatusSuccess,
+				Generation:       result.ConnectionGeneration,
+				Structured:       result.Result,
+			})
+		},
+		InvocationErrorHandler: func(errResult deviceruntimeprotocol.RuntimeErrorPayload) {
+			if services.PendingInvocationManager == nil {
+				return
+			}
+			services.PendingInvocationManager.Fail(errResult.InvocationID, capability.UnifiedToolResult{
+				InvocationID:     errResult.InvocationID,
+				RuntimeSessionID: string(errResult.RuntimeSessionID),
+				DeviceID:         string(errResult.DeviceID),
+				RuntimeID:        string(errResult.RuntimeID),
+				Status:           capability.ToolResultStatusFailed,
+				Generation:       errResult.ConnectionGeneration,
+				Error: &capability.ToolError{
+					Code:      errResult.ErrorCode,
+					Message:   errResult.Message,
+					Retryable: errResult.Retryable,
+				},
+			})
+		},
+		GetUserID: func(c *gin.Context) (runtimeidentity.UserID, bool) {
 				val, exists := c.Get("userId")
 				if !exists {
 					return runtimeidentity.UserID(""), false

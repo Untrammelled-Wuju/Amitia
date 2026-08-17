@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	goRuntime "runtime"
 	"strings"
 	"sync"
 	"time"
@@ -21,7 +20,6 @@ import (
 	"github.com/u-ai/backend/internal/browser"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
-	chatlocalmodel "github.com/u-ai/backend/internal/chat/localmodel"
 	"github.com/u-ai/backend/internal/companion"
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/delivery"
@@ -36,7 +34,6 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/editing/revisioncommit"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
-	"github.com/u-ai/backend/internal/desktoppet/integration"
 	"github.com/u-ai/backend/internal/desktoppet/maintenance"
 	"github.com/u-ai/backend/internal/desktoppet/migration"
 	migrationplans "github.com/u-ai/backend/internal/desktoppet/migration/plans"
@@ -65,15 +62,10 @@ import (
 	runtimev2 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v2"
 	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/desktoppet/worker"
-	"github.com/u-ai/backend/internal/devicemesh"
-	"github.com/u-ai/backend/internal/devicemesh/server"
-	task_runtime "github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/extension/kernel"
-	"github.com/u-ai/backend/internal/extension/kernel/builtin"
-	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	extensionmcp "github.com/u-ai/backend/internal/extension/kernel/mcp"
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
@@ -84,15 +76,12 @@ import (
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval"
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval/local"
 	"github.com/u-ai/backend/internal/interaction"
-	iosnative_background "github.com/u-ai/backend/internal/iosnative/background"
-	"github.com/u-ai/backend/internal/localmodel/llamacpp"
 	"github.com/u-ai/backend/internal/mcp"
 	"github.com/u-ai/backend/internal/media"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/middleware/security"
 	migrationcore "github.com/u-ai/backend/internal/migration"
 	"github.com/u-ai/backend/internal/mindruntime"
-	"github.com/u-ai/backend/internal/nativebridge"
 	newoutbox "github.com/u-ai/backend/internal/outbox"
 	"github.com/u-ai/backend/internal/personality"
 	"github.com/u-ai/backend/internal/pipelinecheckpoint"
@@ -102,31 +91,24 @@ import (
 	"github.com/u-ai/backend/internal/psyche/budget"
 	"github.com/u-ai/backend/internal/qdrant"
 	"github.com/u-ai/backend/internal/queue"
-	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/safety"
 	"github.com/u-ai/backend/internal/scriptruntime/commandenv"
 	"github.com/u-ai/backend/internal/search"
-	"github.com/u-ai/backend/internal/system/dataportability"
 	"github.com/u-ai/backend/internal/temporal"
-	"github.com/u-ai/backend/internal/uiagent"
-	"github.com/u-ai/backend/internal/uiagent/schema"
 	"github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/workspace"
 	"github.com/u-ai/backend/internal/worldbook"
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
 	"github.com/u-ai/backend/pkg/resourceuri"
-	"github.com/u-ai/backend/pkg/util"
 	"gorm.io/gorm"
 )
 
 type AppServices struct {
-	DB                           *gorm.DB
 	RuntimeProfile               runtimeprofile.Profile
 	RuntimePolicy                runtimeprofile.Policy
-	DataPortability              *dataportability.Coordinator
 	DeliveryStore                *delivery.SQLiteDeliveryStore
 	ChatDeliveryAdapter          chat.DeliveryStore
 	DeliveryWorker               *delivery.Worker
@@ -193,12 +175,6 @@ type AppServices struct {
 	WorkspaceRegistry            *workspace.Registry
 	WorkspaceService             *workspace.Service
 	ProductionCutover            *cutoverComposition
-	ClosureGate                  *Stage2ClosureGate
-	NativeBridgeRelay            *nativeBridgeRelay
-	BackgroundTaskRuntimeWired   bool
-	Artifact                     *ArtifactRuntime
-	DeviceMesh                   *devicemesh.Runtime
-	MeshRemoteTaskExecutor       *task_runtime.MeshRemoteTaskExecutor
 }
 
 type RuntimeOrchestrator interface {
@@ -244,12 +220,9 @@ func (a reflectionMemoryServiceAdapter) SubmitReflectionCandidate(req interactio
 	return err
 }
 
-func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runtimeBootstrap, runtimeProfile runtimeprofile.Profile, policy runtimeprofile.Policy) (*AppServices, error) {
+func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runtimeBootstrap, profile runtimeprofile.Profile, policy runtimeprofile.Policy) (*AppServices, error) {
 	if config.AppCfg == nil {
 		config.AppCfg = &config.Config{}
-	}
-	if runtimeProfile == runtimeprofile.ProfileDeviceAgent {
-		return newDeviceAgentServices(ctx, graphSvc, bootstrap, runtimeProfile, policy)
 	}
 	temporalSvc := temporal.NewService(temporal.NewRepository(ctx.DB), temporal.SystemClock{})
 	relTimeRepo := temporal.NewRelationshipTimeRepository(ctx.DB, temporal.SystemClock{})
@@ -307,8 +280,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		nodeResolver = bootstrap.NodeEnvironmentResolver()
 		host := bootstrap.RuntimeHost()
 		if host != nil {
-			chatlocalmodel.SetGlobalRuntimeHost(host)
-			llamacpp.SetGlobalEmbeddingHost(host)
 			var resolverErr error
 			artifactResolver, resolverErr = script_host.NewArtifactResolver(script_host.ResolveContext{
 				Host: host,
@@ -327,11 +298,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	imagegenRepo := imagegen.NewRepository(ctx.DB)
 	imagegenSvc := imagegen.NewService(imagegenRepo)
-	imageProviderRegistry := desktoppet.NewProviderRegistry()
+	providerRegistry := desktoppet.NewProviderRegistry()
 	var resourceResolver *resourceuri.PhysicalResolver
 	if config.AppCfg != nil && config.AppCfg.Storage.DataDir != "" {
-		paths := util.DetectRuntimePaths(config.AppCfg.Storage.DataDir)
-		resolver, resolverErr := resourceuri.NewPhysicalResolver(resourceuri.PhysicalRootsFromRuntimePaths(paths))
+		resolver, resolverErr := resourceuri.NewPhysicalResolver(resourceuri.PhysicalRoots{
+			Data: config.AppCfg.Storage.DataDir,
+		})
 		if resolverErr != nil {
 			log.Warn("failed to create resource resolver for image intelligence:", resolverErr)
 		} else {
@@ -342,21 +314,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	var workspaceRegistry *workspace.Registry
 	var workspaceService *workspace.Service
 	if config.AppCfg != nil && config.AppCfg.Storage.DataDir != "" {
-		var safBridge workspace.SAFBridge
-		if bootstrap != nil {
-			safBridge = newWorkspaceSAFBridge(bootstrap.AndroidNativeBridge())
-		} else {
-			safBridge = newWorkspaceSAFBridge(nil)
-		}
-		var remoteCredResolver workspace.RemoteCredentialResolver
-		resolver, credErr := newWorkspaceRemoteCredentialResolver(config.AppCfg.Storage.DataDir)
-		if credErr != nil {
-			log.Warn("workspace remote credential resolver unavailable:", credErr)
-			remoteCredResolver = &unavailableWorkspaceCredentialResolver{}
-		} else {
-			remoteCredResolver = resolver
-		}
-		workspaceRegistry, workspaceService, err = buildWorkspaceServices(config.AppCfg.Storage.DataDir, resourceResolver, ctx.DB, safBridge, remoteCredResolver)
+		workspaceRegistry, workspaceService, err = buildWorkspaceServices(config.AppCfg.Storage.DataDir)
 		if err != nil {
 			return nil, fmt.Errorf("initialize workspace services: %w", err)
 		}
@@ -364,24 +322,18 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	var mediaService *media.Service
 	if bootstrap != nil {
-		mediaService = buildMediaService(bootstrap.RuntimeHost(), config.AppCfg.Storage.DataDir, resourceResolver, workspaceService)
-		if mediaService != nil {
-			chatlocalmodel.SetGlobalMediaMaterializer(mediaService.Materializer())
-		}
+		mediaService = buildMediaService(bootstrap.RuntimeHost(), config.AppCfg.Storage.DataDir)
 	}
 
 	var browserProvider browser.BrowserProvider
 	if config.AppCfg != nil && config.AppCfg.Providers.Browser.Enabled {
-		browserProvider, err = buildProductionBrowserProvider(config.AppCfg, bootstrap)
+		browserProvider, err = buildProductionBrowserProvider(config.AppCfg)
 		if err != nil {
 			return nil, fmt.Errorf("browser provider init failed: %w", err)
 		}
 	} else {
 		browserProvider = browser.NewDisabledProvider()
 	}
-
-	meshHub := server.NewConnectionHub()
-	meshRemoteExecutor := task_runtime.NewMeshRemoteTaskExecutor(meshHub, nil)
 
 	kernelBuilder := kernel.NewContainerBuilder().
 		WithDBPath(kernelDBPath).
@@ -395,74 +347,17 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithDeepSearchTaskEntry("tasks/deep-search/index.js").
 		WithVisionService(visionSvc).
 		WithImageGenService(imagegenSvc).
-		WithImageProviderRegistry(imageProviderRegistry).
+		WithImageProviderRegistry(providerRegistry).
 		WithResourceResolver(resourceResolver).
 		WithMediaService(mediaService).
 		WithWorkspaceService(workspaceService).
-		WithBrowserProvider(browserProvider).
-		WithRuntimeProfile(runtimeProfile).
-		WithMeshHub(meshHub).
-		WithBackgroundBootstrapFunc(func() (backgroundremoval.Registry, error) {
-			reg := backgroundremoval.NewRegistry()
-			if err := reg.Register(local.NewLocalProvider(), local.LocalCapabilities()); err != nil {
-				return nil, fmt.Errorf("register local background provider: %w", err)
-			}
-			return reg, nil
-		})
-
-	installationRepo := installation.NewRepository(ctx.DB, ctx)
-	runtimeConfig := runtime.DefaultRuntimeConfig()
-	runtimeConfig.Enabled = config.AppCfg.DesktopPetRuntime.Enabled
-	runtimeConfig.LoopbackOnly = config.AppCfg.DesktopPetRuntime.LoopbackOnly
-	runtimeConfig.HeartbeatIntervalMs = config.AppCfg.DesktopPetRuntime.HeartbeatIntervalMs
-	runtimeConfig.HeartbeatTimeoutMs = config.AppCfg.DesktopPetRuntime.HeartbeatTimeoutMs
-	runtimeConfig.MaxMessageBytes = config.AppCfg.DesktopPetRuntime.MaxMessageBytes
-	runtimeConfig.RegisterTimeoutSec = config.AppCfg.DesktopPetRuntime.RegisterTimeoutSec
-	runtimeConfig.SendQueueSize = config.AppCfg.DesktopPetRuntime.SendQueueSize
-	runtimeConfig.CommandTimeoutSec = config.AppCfg.DesktopPetRuntime.CommandTimeoutSec
-	runtimeConfig.MaxRetryAttempts = config.AppCfg.DesktopPetRuntime.MaxRetryAttempts
-	runtimeConfig.RetryBaseDelayMs = config.AppCfg.DesktopPetRuntime.RetryBaseDelayMs
-	runtimeConfig.RetryMaxDelayMs = config.AppCfg.DesktopPetRuntime.RetryMaxDelayMs
-	runtimeConfig.CommandRetentionHours = config.AppCfg.DesktopPetRuntime.CommandRetentionHours
-
-	runtimeV2Facade := runtimev2.NewRuntimeFacade(ctx.DB, &runtimev2.FacadeConfig{
-		Enabled:            runtimeConfig.Enabled,
-		Path:               runtimeConfig.Path,
-		LoopbackOnly:       runtimeConfig.LoopbackOnly,
-		HeartbeatInterval:  time.Duration(runtimeConfig.HeartbeatIntervalMs) * time.Millisecond,
-		HeartbeatTimeout:   time.Duration(runtimeConfig.HeartbeatTimeoutMs) * time.Millisecond,
-		MaxMessageBytes:    int64(runtimeConfig.MaxMessageBytes),
-		CommandTimeoutSec:  int64(runtimeConfig.CommandTimeoutSec),
-		CommandRetentionHr: int64(runtimeConfig.CommandRetentionHours),
-	})
-
-	processingDataDir := mcpDataDirectory(ctx)
-
-	releaseRepo := releaserepo.NewSQLiteRepository(ctx.DB)
-	releaseStoragePort := releasestorage.NewFileSystemStorage(processingDataDir)
-	gateReader := qualitygate.NewQualityGateReader(ctx.DB)
-	releaseEventPublisher := release.NewReleaseEventPublisher(releaseRepo)
-	newReleaseService := release.NewReleaseService(releaseRepo, gateReader, releaseStoragePort, releaseEventPublisher)
-
-	kernelBuilder.WithDesktopPetPluginCapabilities(integration.NewProductionCapabilities(integration.ProductionCapabilitiesOptions{
-		InstallationRepo: installationRepo,
-		ReleaseService:   integration.NewInstallationResourcePort(installationRepo),
-		RuntimeFacade:    integration.NewInstallationActionPort(installationRepo),
-		RuntimePort:      integration.NewInstallationRuntimePort(installationRepo),
-		FloatingWindow:   integration.NewInstallationWindowPort(installationRepo),
-	}))
+		WithBrowserProvider(browserProvider)
 
 	if bootstrap != nil {
 		kernelBuilder.WithRuntimeHost(bootstrap.RuntimeHost())
 		kernelBuilder = applyAndroidLinuxProvider(kernelBuilder, bootstrap.RuntimeHost())
-
-		var err error
-		kernelBuilder, err = applyAndroidNativeProvider(kernelBuilder, bootstrap)
-		if err != nil {
-			return nil, fmt.Errorf("android native provider init failed: %w", err)
-		}
-
 		kernelBuilder = applyIOSNativeProvider(kernelBuilder, bootstrap.IOSNativeProvider())
+		kernelBuilder, _ = applyAndroidNativeProvider(kernelBuilder, bootstrap)
 	}
 
 	kernelContainer, err := kernelBuilder.Build(context.Background())
@@ -536,33 +431,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		baseURL := "http://" + config.AppCfg.Server.Addr()
 		toolFacade.SetSkillResourceHandler(extension.NewSkillResourceAdapter(extensionRuntime.AgentSkills, baseURL))
 	}
-
-	schemaCatalog := schema.DefaultCatalog
-	llmCall := func(ctx interface{}, promptJSON []byte) ([]byte, error) {
-		ctxVal := context.Background()
-		if c, ok := ctx.(context.Context); ok && c != nil {
-			ctxVal = c
-		}
-		var prompt schema.AIPrompt
-		if err := json.Unmarshal(promptJSON, &prompt); err != nil {
-			return nil, fmt.Errorf("schema generator: invalid prompt: %w", err)
-		}
-		systemPrompt := "You are a UI schema generator. Generate a valid SchemaUIDocument JSON based on the user description."
-		userPrompt := fmt.Sprintf("Task: %s\nDescription: %s\nAvailable Components: %s\nInstructions: %s",
-			prompt.Task, prompt.Description, strings.Join(prompt.AvailableComp, ", "), prompt.Instructions)
-		reply, _, _, err := chatSvc.GenerateWorkshopJSON(ctxVal, systemPrompt, userPrompt)
-		if err != nil {
-			return nil, fmt.Errorf("schema generator: %w", err)
-		}
-		return []byte(reply), nil
-	}
-	schemaGen := schema.NewAISchemaGenerator(schemaCatalog, llmCall)
-	builtin.SetUIAgentSchemaGenerator(schemaGen)
-	uiAgentExecutor := uiagent.NewUIExecutor(
-		uiagent.WithPolicy(uiagent.DefaultPolicy()),
-		uiagent.WithSchemaGenerator(schemaGen),
-	)
-	builtin.SetUIAgentExecutor(uiAgentExecutor)
 	chatSvc.SetToolRuntime(newChatToolRuntimeAdapter(toolFacade))
 	actionMaterializer := interaction.NewActionMaterializer(toolFacade)
 	actionDispatcher := interaction.NewActionDispatcher(toolFacade)
@@ -597,9 +465,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 	runtimeQueue := queue.NewSQLiteRuntimeQueueStore(ctx.DB)
 	deliveryStore := delivery.NewSQLiteDeliveryStore(ctx.DB)
-	channelResolver := delivery.BuildChannelResolverFromConfig()
-	channelAvailability := newChannelProviderAvailability(kernelContainer)
-	deliveryWorker := delivery.NewWorkerWithAvailability(deliveryStore, channelResolver, channelAvailability, delivery.DefaultWorkerConfig())
+	deliveryWorker := delivery.NewWorker(deliveryStore, []delivery.ChannelAdapter{
+		delivery.NewWebChannelAdapter(),
+		delivery.NewQQChannelAdapter("http://127.0.0.1:19877"),
+		delivery.NewWechatChannelAdapter("http://127.0.0.1:19876"),
+	}, delivery.DefaultWorkerConfig())
 	deliveryAdapter := &chatDeliveryAdapter{store: deliveryStore}
 	chatSvc.SetDeliveryStore(deliveryAdapter)
 	emoteSvc := emote.NewService(ctx.DB, deliveryStore)
@@ -739,13 +609,13 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	canonicalMCPCaller := NewCanonicalMCPCaller(canonicalStdioRegistry, canonicalRemoteRegistry)
 	kernelContainer.WireMCPAdapter(makeKernelMCPCaller(canonicalMCPCaller), makeKernelMCPHealth(canonicalMCPCaller), nil)
 	desktopPetRepo := desktoppet.NewRepository(ctx.DB, ctx)
-	desktopPetWorker := worker.NewWorker(ctx.DB, desktopPetRepo, imageProviderRegistry)
+	desktopPetWorker := worker.NewWorker(ctx.DB, desktopPetRepo, providerRegistry)
 	processingRepo := processing.NewRepository(ctx.DB, ctx)
+	processingDataDir := mcpDataDirectory(ctx)
 
-	bgRegistry := kernelContainer.BackgroundRemovalRegistry
-	if bgRegistry == nil {
-		log.Error("background removal registry not initialized from kernel bootstrap")
-		panic("background removal registry not initialized from kernel bootstrap")
+	bgRegistry := backgroundremoval.NewRegistry()
+	if err := bgRegistry.Register(local.NewLocalProvider(), local.LocalCapabilities()); err != nil {
+		log.Error("register local background provider failed: ", err)
 	}
 
 	processingPipeline := application.NewPipeline(bgRegistry, processingDataDir)
@@ -800,6 +670,34 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 	qualityWorker := qualityworker.NewWorker(ctx.DB, qualitySvc, processingDataDir)
 
+	installationRepo := installation.NewRepository(ctx.DB, ctx)
+	var installationCoordinator coordinator.InstallationCoordinator
+
+	runtimeConfig := runtime.DefaultRuntimeConfig()
+	runtimeConfig.Enabled = config.AppCfg.DesktopPetRuntime.Enabled
+	runtimeConfig.LoopbackOnly = config.AppCfg.DesktopPetRuntime.LoopbackOnly
+	runtimeConfig.HeartbeatIntervalMs = config.AppCfg.DesktopPetRuntime.HeartbeatIntervalMs
+	runtimeConfig.HeartbeatTimeoutMs = config.AppCfg.DesktopPetRuntime.HeartbeatTimeoutMs
+	runtimeConfig.MaxMessageBytes = config.AppCfg.DesktopPetRuntime.MaxMessageBytes
+	runtimeConfig.RegisterTimeoutSec = config.AppCfg.DesktopPetRuntime.RegisterTimeoutSec
+	runtimeConfig.SendQueueSize = config.AppCfg.DesktopPetRuntime.SendQueueSize
+	runtimeConfig.CommandTimeoutSec = config.AppCfg.DesktopPetRuntime.CommandTimeoutSec
+	runtimeConfig.MaxRetryAttempts = config.AppCfg.DesktopPetRuntime.MaxRetryAttempts
+	runtimeConfig.RetryBaseDelayMs = config.AppCfg.DesktopPetRuntime.RetryBaseDelayMs
+	runtimeConfig.RetryMaxDelayMs = config.AppCfg.DesktopPetRuntime.RetryMaxDelayMs
+	runtimeConfig.CommandRetentionHours = config.AppCfg.DesktopPetRuntime.CommandRetentionHours
+
+	runtimeV2Facade := runtimev2.NewRuntimeFacade(ctx.DB, &runtimev2.FacadeConfig{
+		Enabled:            runtimeConfig.Enabled,
+		Path:               runtimeConfig.Path,
+		LoopbackOnly:       runtimeConfig.LoopbackOnly,
+		HeartbeatInterval:  time.Duration(runtimeConfig.HeartbeatIntervalMs) * time.Millisecond,
+		HeartbeatTimeout:   time.Duration(runtimeConfig.HeartbeatTimeoutMs) * time.Millisecond,
+		MaxMessageBytes:    int64(runtimeConfig.MaxMessageBytes),
+		CommandTimeoutSec:  int64(runtimeConfig.CommandTimeoutSec),
+		CommandRetentionHr: int64(runtimeConfig.CommandRetentionHours),
+	})
+
 	runtimeSinkHolder := &runtimeEventSinkHolder{}
 	runtimeOutboxSink := runtime.NewOutboxRuntimeEventSink(
 		runtime.NewV2ActualStateEventOutbox(runtimeV2Facade.StateService().AppendDomainEvent),
@@ -835,9 +733,16 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	bridgeRecoveryWorker := revisioncommit.NewRecoveryWorker(bridgeProcessor, 30*time.Second)
 	_ = bridgeRecoveryWorker
 
+	releaseRepo := releaserepo.NewSQLiteRepository(ctx.DB)
+	releaseStoragePort := releasestorage.NewFileSystemStorage(processingDataDir)
+
 	if err := releaseStoragePort.Validate(); err != nil {
 		return nil, fmt.Errorf("initialize release storage: %w", err)
 	}
+
+	gateReader := qualitygate.NewQualityGateReader(ctx.DB)
+	releaseEventPublisher := release.NewReleaseEventPublisher(releaseRepo)
+	newReleaseService := release.NewReleaseService(releaseRepo, gateReader, releaseStoragePort, releaseEventPublisher)
 
 	pathRegistry := desktoppetsecurity.NewPathRootRegistry()
 	if err := desktoppetsecurity.EnsureAllRequiredRoots(pathRegistry, config.AppCfg.Storage.DataDir); err != nil {
@@ -845,12 +750,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 	importStagingRepo := desktoppetsecurity.NewImportStagingRepository(ctx.DB)
 
-	coordRepo := installation.NewCoordinatorRepoAdapter(installationRepo)
+	coordRepo := &coordinatorRepoAdapter{installRepo: installationRepo}
 	coordValidator := &coordinatorReleaseValidator{releases: releaseRepo}
 	coordStager := &coordinatorReleaseStager{registry: pathRegistry, releases: releaseRepo}
 	coordPublisher := &coordinatorRuntimePublisher{facade: runtimeV2Facade}
 	coordProjection := &coordinatorProjectionService{installRepo: installationRepo}
-	var installationCoordinator coordinator.InstallationCoordinator
 	installationCoordinator = coordinator.NewCoordinator(coordRepo, coordValidator, coordStager, coordPublisher, coordProjection)
 	deviceRepo := device.NewRepository(ctx.DB)
 
@@ -1015,27 +919,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	migrationRunner.SetBackupPort(backupPort)
 	migrationRunner.RegisterPlan(migrationplans.NewDesktopPetV2CutoverPlan(migrationplans.Dependencies{DB: ctx.DB}))
 
-	desktoppet.RefreshLegacyWriteFlagsFromDB(ctx.DB)
-
 	maintenanceHandler := maintenance.NewHandler(migrationRunner, nil, nil, nil)
 
-	dpCoord, err := buildDataPortabilityCoordinator(dataPortabilityDeps{
-		DataDir:   config.AppCfg.Storage.DataDir,
-		DB:        ctx.DB,
-		MemSvc:    memSvc,
-		EpicSvc:   epiSvc,
-		ExtSvc:    extensionRuntime,
-		Workspace: workspaceService,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("build data portability coordinator: %w", err)
-	}
-
 	services := &AppServices{
-		DB:                           ctx.DB,
-		RuntimeProfile:               runtimeProfile,
+		RuntimeProfile:               profile,
 		RuntimePolicy:                policy,
-		DataPortability:              dpCoord,
 		Graph:                        graphSvc,
 		ChatDeliveryAdapter:          deliveryAdapter,
 		Memory:                       memSvc,
@@ -1095,114 +983,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		MediaService:                 mediaService,
 		WorkspaceRegistry:            workspaceRegistry,
 		WorkspaceService:             workspaceService,
-		NativeBridgeRelay:            newNativeBridgeRelay(),
-		Artifact:                     nil,
-		DeviceMesh:                   nil,
-		MeshRemoteTaskExecutor:       meshRemoteExecutor,
-	}
-	if runtimeProfile == runtimeprofile.ProfileCloudCore && kernelContainer != nil {
-		deviceMeshRuntime, err := devicemesh.NewCloudRuntimeWithHub(kernelContainer.Store.DB(), kernelContainer.DeviceRegistry, meshHub)
-		if err != nil {
-			log.Warn("device-mesh cloud runtime unavailable: ", err)
-		} else {
-			services.DeviceMesh = deviceMeshRuntime
-		}
-	}
-	if services.Artifact == nil {
-		artifactRuntime, err := BuildArtifactRuntime(ctx.DB, "")
-		if err != nil {
-			log.Warn("artifact runtime build deferred: ", err)
-		} else {
-			services.Artifact = artifactRuntime
-			chatSvc.SetArtifactResolver(&chatArtifactAdapter{resolver: artifactRuntime.Resolver})
-		}
-	}
-	if services.NativeBridgeRelay != nil && bootstrap != nil {
-		if androidBridge, ok := bootstrap.AndroidNativeBridge().(*nativebridge.AndroidTransportBridge); ok {
-			services.NativeBridgeRelay.RegisterAndroidBridge(androidBridge)
-		}
-		tryRegisterIOSBridge(services.NativeBridgeRelay, bootstrap)
-	}
-	if services.NativeBridgeRelay != nil && services.KernelContainer != nil && services.KernelContainer.EventService != nil {
-		adapter := nativebridge.NewNativeEventSinkAdapter(services.KernelContainer.EventService)
-		services.NativeBridgeRelay.Handler().SetEventSink("android", adapter)
-		services.NativeBridgeRelay.Handler().SetEventSink("ios", adapter)
-	}
-	if bootstrap != nil && kernelContainer != nil && kernelContainer.TaskRuntimeService != nil {
-		iosProv := bootstrap.IOSNativeProvider()
-		if iosProv != nil {
-			if setter, ok := iosProv.(interface {
-				SetTaskRuntimePort(port iosnative_background.TaskRuntimePort)
-			}); ok {
-				setter.SetTaskRuntimePort(iosnative_background.NewTaskRuntimeServiceAdapter(kernelContainer.TaskRuntimeService))
-				services.BackgroundTaskRuntimeWired = true
-			}
-		}
 	}
 	if err := runCanonicalBuildAssertions(services); err != nil {
 		return nil, fmt.Errorf("canonical build assertion failed: %w", err)
-	}
-	return services, nil
-}
-
-func newDeviceAgentServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runtimeBootstrap, runtimeProfile runtimeprofile.Profile, policy runtimeprofile.Policy) (*AppServices, error) {
-	extensionRuntime, err := extension.NewRuntimeWithOptions(context.Background(), ctx.DB, "1.0.0", extension.RuntimeOptions{SkipPluginManagerStart: true})
-	if err != nil {
-		return nil, fmt.Errorf("initialize skill runtime: %w", err)
-	}
-	kernelRoot := filepath.Join(os.TempDir(), "amitia-extension-kernel")
-	if config.AppCfg != nil && config.AppCfg.Storage.DataDir != "" {
-		kernelRoot = filepath.Join(config.AppCfg.Storage.DataDir, "extensions-v2")
-	}
-	if err := extensionRuntime.AttachKernel(kernelRoot); err != nil {
-		return nil, fmt.Errorf("initialize extension kernel: %w", err)
-	}
-	kernelDBPath := filepath.Join(kernelRoot, "kernel.db")
-	var nodeResolver script_host.NodeEnvironmentResolver
-	var artifactResolver script_host.ArtifactResolver
-	if bootstrap != nil {
-		nodeResolver = bootstrap.NodeEnvironmentResolver()
-	}
-	kernelBuilder := kernel.NewContainerBuilder().
-		WithDBPath(kernelDBPath).
-		WithExtensionRoot(kernelRoot).
-		WithNodeEnvironmentResolver(nodeResolver).
-		WithHostArtifactResolver(artifactResolver).
-		WithRuntimeProfile(runtimeProfile).
-		WithBackgroundBootstrapFunc(func() (backgroundremoval.Registry, error) {
-			reg := backgroundremoval.NewRegistry()
-			if err := reg.Register(local.NewLocalProvider(), local.LocalCapabilities()); err != nil {
-				return nil, fmt.Errorf("register local background provider: %w", err)
-			}
-			return reg, nil
-		})
-	if bootstrap != nil {
-		kernelBuilder.WithRuntimeHost(bootstrap.RuntimeHost())
-	}
-	kernelContainer, err := kernelBuilder.Build(context.Background())
-	if err != nil {
-		return nil, fmt.Errorf("initialize kernel container: %w", err)
-	}
-	extensionRuntime.Kernel.SetContainer(kernelContainer)
-	if err := kernelContainer.Recover(context.Background()); err != nil {
-		log.Warn("kernel recovery warning: ", err)
-	}
-
-	// R19: Detect platform from runtime instead of hardcoding Windows
-	deviceAgentRuntime, err := devicemesh.NewDeviceAgentRuntime(config.AppCfg.Storage.DataDir, platformFromGOOS(goRuntime.GOOS))
-	if err != nil {
-		log.Warn("device-mesh agent runtime unavailable: ", err)
-	}
-
-	services := &AppServices{
-		DB:              ctx.DB,
-		RuntimeProfile:  runtimeProfile,
-		RuntimePolicy:   policy,
-		Graph:           nil,
-		Chat:            nil,
-		Extension:       extensionRuntime,
-		KernelContainer: kernelContainer,
-		DeviceMesh:      deviceAgentRuntime,
 	}
 	return services, nil
 }
@@ -1453,37 +1236,6 @@ func (a *chatDeliveryAdapter) PreemptActiveOutputLeases(characterID string) erro
 	return err
 }
 
-type channelProviderAvailability struct {
-	kernel *kernel.Container
-}
-
-func newChannelProviderAvailability(kernel *kernel.Container) *channelProviderAvailability {
-	return &channelProviderAvailability{kernel: kernel}
-}
-
-func (c *channelProviderAvailability) IsProviderAvailable(providerInstanceID string) bool {
-	if c.kernel == nil || c.kernel.CapabilityProviders == nil {
-		return true
-	}
-	instances := c.kernel.CapabilityProviders.SnapshotInstances()
-	for _, inst := range instances {
-		if inst == nil || string(inst.ID) != providerInstanceID {
-			continue
-		}
-		return inst.Availability == capability.ProviderAvailabilityAvailable
-	}
-	return false
-}
-
-func (c *channelProviderAvailability) MarkProviderUnavailable(providerInstanceID string, reason string) {
-	if c.kernel == nil || c.kernel.ProviderLifecycle == nil {
-		return
-	}
-	if err := c.kernel.ProviderLifecycle.UpdateInstanceAvailability(capability.ProviderInstanceID(providerInstanceID), capability.ProviderAvailabilityUnavailable); err != nil {
-		log.Error("channel provider mark unavailable failed", "provider", providerInstanceID, "error", err)
-	}
-}
-
 type reflectionOutboxServiceAdapter struct {
 	store *newoutbox.SQLiteOutboxStore
 }
@@ -1712,21 +1464,3 @@ func (s *BehaviorRuntimeEventSink) resolveCharacterAndPet(event runtime.RuntimeD
 
 var _ runtime.RuntimeEventSink = (*runtimeEventSinkHolder)(nil)
 var _ runtime.RuntimeEventSink = (*BehaviorRuntimeEventSink)(nil)
-
-// R19: platformFromGOOS converts runtime.GOOS to runtimeidentity.Platform
-func platformFromGOOS(goos string) runtimeidentity.Platform {
-	switch goos {
-	case "windows":
-		return runtimeidentity.PlatformWindows
-	case "darwin":
-		return runtimeidentity.PlatformDarwin
-	case "linux":
-		return runtimeidentity.PlatformLinux
-	case "android":
-		return runtimeidentity.PlatformAndroid
-	case "ios":
-		return runtimeidentity.PlatformIOS
-	default:
-		return runtimeidentity.PlatformUnknown
-	}
-}
