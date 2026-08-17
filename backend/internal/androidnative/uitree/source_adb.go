@@ -2,8 +2,11 @@ package uitree
 
 import (
 	"context"
+	"fmt"
+	"log"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/androidnative/adb"
 )
 
@@ -35,7 +38,8 @@ func (s *ADBSource) Snapshot(ctx context.Context, request SnapshotRequest) (RawS
 		return RawSnapshot{}, &Error{Code: UI_TREE_ADB_UNAVAILABLE, Message: "adb executor not configured"}
 	}
 
-	result, err := s.executor.ExecuteArgs(ctx, "", []string{"shell", "uiautomator", "dump", "/data/local/tmp/uitree_dump.xml"}, adb.InternalADBExecuteOptions{
+	dumpPath := fmt.Sprintf("/data/local/tmp/uitree_dump_%s.xml", uuid.NewString())
+	result, err := s.executor.ExecuteArgs(ctx, "", []string{"shell", "uiautomator", "dump", dumpPath}, adb.InternalADBExecuteOptions{
 		Timeout:   s.policy.SnapshotTimeout,
 		MaxOutput: int64(s.policy.MaxOutputBytes),
 	})
@@ -47,7 +51,7 @@ func (s *ADBSource) Snapshot(ctx context.Context, request SnapshotRequest) (RawS
 		return RawSnapshot{}, &Error{Code: UI_TREE_TIMEOUT, Message: "adb uiautomator dump timed out"}
 	}
 
-	readResult, err := s.executor.ExecuteArgs(ctx, "", []string{"shell", "cat", "/data/local/tmp/uitree_dump.xml"}, adb.InternalADBExecuteOptions{
+	readResult, err := s.executor.ExecuteArgs(ctx, "", []string{"shell", "cat", dumpPath}, adb.InternalADBExecuteOptions{
 		Timeout:   s.policy.SnapshotTimeout,
 		MaxOutput: int64(s.policy.MaxOutputBytes),
 	})
@@ -55,7 +59,9 @@ func (s *ADBSource) Snapshot(ctx context.Context, request SnapshotRequest) (RawS
 		return RawSnapshot{}, &Error{Code: UI_TREE_SNAPSHOT_FAILED, Message: err.Error()}
 	}
 
-	_, _ = s.executor.ExecuteArgs(ctx, "", []string{"shell", "rm", "-f", "/data/local/tmp/uitree_dump.xml"}, adb.InternalADBExecuteOptions{Timeout: 1 * time.Second})
+	if _, err := s.executor.ExecuteArgs(ctx, "", []string{"shell", "rm", "-f", dumpPath}, adb.InternalADBExecuteOptions{Timeout: 1 * time.Second}); err != nil {
+		log.Printf("uitree: adb source: cleanup failed: %v", err)
+	}
 
 	return RawSnapshot{
 		Source:     SourceTypeADB,

@@ -20,6 +20,7 @@ const (
 	ErrDisplayAmbiguous              = "DISPLAY_AMBIGUOUS"
 	ErrDisplayNativeBridgeUnavailable = "DISPLAY_NATIVE_BRIDGE_UNAVAILABLE"
 	ErrDisplayInvalidResponse        = "DISPLAY_INVALID_RESPONSE"
+	ErrDisplayInvalidRequest         = "DISPLAY_INVALID_REQUEST"
 	ErrDisplayTimeout                = "DISPLAY_TIMEOUT"
 	ErrDisplayCancelled              = "DISPLAY_CANCELLED"
 )
