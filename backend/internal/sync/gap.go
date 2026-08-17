@@ -66,7 +66,7 @@ func NewReplayService(changelog *ChangeLogService) *ReplayService {
 }
 
 func (s *ReplayService) Replay(cursor Sequence, limit int, entityType EntityType) (*PullResult, error) {
-	changes, nextCursor, hasMore, err := s.changelog.Pull(cursor, limit, entityType)
+	changes, nextCursor, hasMore, err := s.changelog.Pull("", cursor, limit, entityType)
 	if err != nil {
 		return nil, err
 	}
