@@ -340,23 +340,29 @@ window.amitiaUI = (function() {
     }
   }
 
-  function handleHostEvent(data) {
-    var eventType = data.event || data.method;
-    var payload = data.payload || {};
-    if (eventType === "ui.host.context") {
-      if (typeof onHostContextChange === "function") {
-        onHostContextChange(payload);
-      }
-    } else if (eventType === "ui.host.theme") {
-      if (typeof onThemeChange === "function") {
-        onThemeChange(payload);
-      }
-    } else if (eventType === "ui.host.resize") {
-      if (typeof onResize === "function") {
-        onResize(payload);
-      }
+function handleHostEvent(data) {
+var eventType = data.event || data.method;
+var payload = data.payload || {};
+if (eventType === "ui.host.context") {
+  for (var i = 0; i < hostContextChangeCallbacks.length; i++) {
+    if (typeof hostContextChangeCallbacks[i] === "function") {
+      hostContextChangeCallbacks[i](payload);
     }
   }
+} else if (eventType === "ui.host.theme") {
+  for (var i = 0; i < themeChangeCallbacks.length; i++) {
+    if (typeof themeChangeCallbacks[i] === "function") {
+      themeChangeCallbacks[i](payload);
+    }
+  }
+} else if (eventType === "ui.host.resize") {
+  for (var i = 0; i < resizeCallbacks.length; i++) {
+    if (typeof resizeCallbacks[i] === "function") {
+      resizeCallbacks[i](payload);
+    }
+  }
+}
+}
 
   function acceptPort(event) {
     if (event.source !== window.parent || port || !event.data || event.data.type !== "amitia.extension.init") return;
