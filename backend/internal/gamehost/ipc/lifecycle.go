@@ -349,6 +349,8 @@ func (cp *controlPlane) SendRequest(ctx context.Context, peer Peer, envelope pro
 		RequestID: envelope.ID,
 	}
 
+	FillRouting(&envelope, peer)
+
 	handle, registered := cp.responseCorrelator.RegisterPending(peer, envelope.ID, envelope.Generation, envelope.Method, envelope.Payload)
 	if !registered {
 		if handle == nil {
@@ -365,8 +367,6 @@ func (cp *controlPlane) SendRequest(ctx context.Context, peer Peer, envelope pro
 			return nil, NewIPCError(IPCErrorCancelled, domain.ErrCancelled, "request cancelled")
 		}
 	}
-
-	FillRouting(&envelope, peer)
 
 	if err := conn.Transport().Send(ctx, envelope); err != nil {
 		cp.responseCorrelator.Terminalize(requestKey, TerminalFailed, NewIPCErrorWithCause(IPCErrorTransport, domain.ErrRuntimeUnavailable, "send failed", err))
