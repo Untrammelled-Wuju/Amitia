@@ -28,7 +28,7 @@ func NewSubmitHandler(store *SQLiteDeliveryStore) *SubmitHandler {
 func (h *SubmitHandler) Submit(c *gin.Context) {
 	var req SubmitIntentRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	if req.Channel == "" || req.PeerID == "" || req.Text == "" {
