@@ -269,7 +269,7 @@ describe('G47-F15 E2E Full Flow', () => {
     // 15. Upgrade (real upgrade flow via updatePlugin)
     const archivePathV2 = process.env.MOCK_PLUGIN_ARCHIVE_PATH_V2;
     if (archivePathV2 && extensionId) {
-      const v1Version = (await driver.getRuntime(runtimeId)).pluginId ? plugin.version : undefined;
+      const v1Version = plugin.version;
       await driver.updatePlugin(extensionId, archivePathV2);
       const upgradeDeadline = Date.now() + 60000;
       let upgradedVersion = v1Version;
