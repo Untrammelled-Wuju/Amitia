@@ -84,7 +84,7 @@ type ProcessSupervisor struct {
 	protocolHandlers map[string]StdioProtocolHandler
 	exitObservers    []ProcessExitObserver
 	ownerStore       *ProcessOwnerStore
-	hostIdentity     *HostIdentityProvider
+	hostIdentity     HostIdentityProvider
 }
 
 type HostIdentityProvider interface {

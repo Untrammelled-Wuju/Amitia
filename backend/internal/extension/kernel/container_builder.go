@@ -1257,6 +1257,18 @@ var lifecycleEmitter *event.LifecycleEventEmitter
 		rollbackPointStore, updateMigrationExecutor, generationMgr,
 		journalMgr, rollbackRepo, rollbackPlanner,
 	)
+	rollbackExecutorV2.SetCompletionCallback(func(extensionID string, success bool, generation int64) {
+		if uiHostNotifier != nil {
+			extra := map[string]interface{}{"status": "completed"}
+			if !success {
+				extra["status"] = "failed"
+			}
+			if generation > 0 {
+				extra["generation"] = generation
+			}
+			uiHostNotifier.BroadcastExtensionChange("extension_rolled_back", extensionID, extra)
+		}
+	})
 	recoveryMgr := update.NewRecoveryManager(journalMgr, rollbackExecutorV2, rollbackPlanner, rollbackRepo)
 
 	migrationRepo := migration.NewMigrationRepository(db)

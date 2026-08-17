@@ -57,6 +57,9 @@ type ExtensionCard struct {
 	DisplayName           string            `json:"displayName"`
 	Description           string            `json:"description"`
 	Version               string            `json:"version"`
+	PackageURI            string            `json:"packageUri,omitempty"`
+	Hash                  string            `json:"hash,omitempty"`
+	ArtifactID            string            `json:"artifactId,omitempty"`
 	Icon                  string            `json:"icon,omitempty"`
 	Trust                 TrustLevel        `json:"trust"`
 	Status                ExtensionStatus   `json:"status"`
