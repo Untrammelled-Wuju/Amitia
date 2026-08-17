@@ -1,10 +1,9 @@
 {
   "domain": "bluetooth",
   "event": "connected",
+  "timestamp": "2026-08-16T16:00:00Z",
   "data": {
     "deviceId": "bt-001",
     "name": "Amitia Speaker"
-  },
-  "generation": 3,
-  "priority": "normal"
+  }
 }

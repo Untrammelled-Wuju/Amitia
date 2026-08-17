@@ -546,6 +546,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	}
 
 	if runtimeProvisioner != nil && runtimeManager != nil && pluginReg != nil {
+		lifecyclePlanner := runtime.NewLifecyclePlanner()
 		structureBuilderAdapter = recovery.NewHostStructureBuilderAdapter(
 			func(ctx context.Context, pluginID domain.PluginID, extensionID string) (recovery.TopologyResult, error) {
 				if err := runtimeProvisioner.Reconcile(ctx); err != nil {
@@ -572,13 +573,31 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 				return recovery.TopologyResult{Valid: false}, fmt.Errorf("runtime not found for plugin %s", pluginID)
 			},
 		func(ctx context.Context, topology recovery.TopologyResult) (recovery.LifecycleResult, error) {
-			planID := ""
-			if topology.Valid && topology.TopologyID != "" {
-				planID = fmt.Sprintf("plan-%s-%d", topology.TopologyID, time.Now().UnixNano())
+			if !topology.Valid || topology.TopologyID == "" {
+				return recovery.LifecycleResult{Valid: false}, fmt.Errorf("invalid topology for lifecycle plan")
 			}
+			runtimeID := domain.RuntimeInstanceID(topology.TopologyID)
+			snapshot, err := topologyStore.GetTopologySnapshot(runtimeID)
+			if err != nil {
+				return recovery.LifecycleResult{Valid: false}, fmt.Errorf("load topology snapshot: %w", err)
+			}
+			graph := runtime.DependencyGraphSnapshot{RuntimeID: runtimeID, Nodes: make([]runtime.DependencyNodeSnapshot, 0, len(snapshot.Services))}
+			for _, svc := range snapshot.Services {
+				deps := make([]domain.ServiceID, len(svc.Dependencies))
+				copy(deps, svc.Dependencies)
+				graph.Nodes = append(graph.Nodes, runtime.DependencyNodeSnapshot{ServiceID: svc.ServiceID, Dependencies: deps})
+			}
+			plan, planErr := lifecyclePlanner.BuildStartupPlan(snapshot, graph)
+			if planErr != nil {
+				return recovery.LifecycleResult{Valid: false}, fmt.Errorf("build lifecycle plan: %w", planErr)
+			}
+			if plan.ServiceCount() != len(snapshot.Services) {
+				return recovery.LifecycleResult{Valid: false}, fmt.Errorf("lifecycle plan incomplete: plan=%d total=%d", plan.ServiceCount(), len(snapshot.Services))
+			}
+			planID := fmt.Sprintf("plan-%s-%d", topology.TopologyID, time.Now().UnixNano())
 			return recovery.LifecycleResult{
 				PlanID: planID,
-				Valid:  topology.Valid,
+				Valid:  true,
 			}, nil
 		},
 		)
@@ -826,9 +845,14 @@ evtOpts := event.PublishOptions{
 		startupAuditSink = startup.NewAuditSinkLoggerAdapter()
 	}
 
+	hostIdentity := startup.NewHostIdentity("", "")
+	if opts.TrustedSupervisor != nil {
+		opts.TrustedSupervisor.SetHostIdentityProvider(hostIdentity)
+	}
+
 	startupRecovery, err := ComposeStartupRecovery(startup.StartupRecoveryDeps{
-		HostIdentity:      startup.NewHostIdentity("", ""),
-		ProcessCleanup:    startup.NewProcessCleanupAdapter(opts.TrustedSupervisor),
+		HostIdentity:      hostIdentity,
+		ProcessCleanup:    startup.NewProcessCleanupAdapterWithIdentity(opts.TrustedSupervisor, hostIdentity, runtimeManager),
 		TempCleanup:       startup.NewTempCleanupAdapter(dirMgr),
 		BinaryCleanup:     binaryCleanup,
 		EndpointCleanup:   startup.NewEndpointCleanupAdapter(),

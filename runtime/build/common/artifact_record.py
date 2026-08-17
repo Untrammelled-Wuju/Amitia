@@ -29,6 +29,7 @@ class FrozenArtifactRecord:
     buildMode: str
     schemaVersion: int = SCHEMA_VERSION
     createdAt: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
+    _record_path: str = field(default="", repr=False, compare=False)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -93,7 +94,7 @@ def validate(record: FrozenArtifactRecord) -> List[str]:
 def load(path: str) -> FrozenArtifactRecord:
     with open(path, "r", encoding="utf-8") as f:
         data = json.load(f)
-    return FrozenArtifactRecord(
+    record = FrozenArtifactRecord(
         schemaVersion=data.get("schemaVersion", SCHEMA_VERSION),
         componentId=data["componentId"],
         version=data["version"],
@@ -107,6 +108,8 @@ def load(path: str) -> FrozenArtifactRecord:
         buildMode=data["buildMode"],
         createdAt=data.get("createdAt", datetime.now(timezone.utc).isoformat()),
     )
+    object.__setattr__(record, '_record_path', path)
+    return record
 
 
 def write_canonical_json(record: FrozenArtifactRecord, path: str) -> None:

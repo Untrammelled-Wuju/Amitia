@@ -164,6 +164,7 @@ import ChatHeaderExtensionHost from "@/components/extension/chat/ChatHeaderExten
 import ChatStatusExtensionHost from "@/components/extension/chat/ChatStatusExtensionHost.vue";
 import ChatSidebarExtensionHost from "@/components/extension/chat/ChatSidebarExtensionHost.vue";
 import { useExtensionUIStore } from "@/stores/extensionUI";
+import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
 
 const router = useRouter();
 const callActive = ref(false);
@@ -236,34 +237,19 @@ const showImportDetail = ref(false);
 const convSummary = ref("");
 const showSummary = ref(false);
 const replyTarget = ref<any>(null);
-const chatExtensionContext = computed(() => ({
-  characterId: characterId.value,
-  conversationId: convId.value,
-  channel: isWechatActive.value ? "wechat" : isQQActive.value ? "qq" : "web",
-  platform: detectPlatform(),
-  host: window.amitiaDesktop ? "desktop" : "web",
-  os: detectOS(),
-  conversationState: sending.value ? "generating" : isOffline.value ? "offline" : "idle",
-  capabilities: window.amitiaDesktop ? ["browser", "desktop", "clipboard-host"] : ["browser"],
-}));
-
-function detectPlatform(): "windows" | "macos" | "linux" | "web" {
-  if (typeof navigator === "undefined") return "web";
-  const ua = navigator.userAgent.toLowerCase();
-  if (ua.includes("win")) return "windows";
-  if (ua.includes("mac")) return "macos";
-  if (ua.includes("linux")) return "linux";
-  return "web";
-}
-
-function detectOS(): "windows" | "macos" | "linux" | "unknown" {
-  if (typeof navigator === "undefined") return "unknown";
-  const ua = navigator.userAgent.toLowerCase();
-  if (ua.includes("win")) return "windows";
-  if (ua.includes("mac")) return "macos";
-  if (ua.includes("linux")) return "linux";
-  return "unknown";
-}
+const chatExtensionContext = computed(() => {
+  const env = resolveHostEnvironment();
+  return {
+    characterId: characterId.value,
+    conversationId: convId.value,
+    channel: isWechatActive.value ? "wechat" : isQQActive.value ? "qq" : "web",
+    platform: env.platform,
+    host: env.host,
+    os: env.os,
+    conversationState: sending.value ? "generating" : isOffline.value ? "offline" : "idle",
+    capabilities: env.host === "desktop" ? ["browser", "desktop", "clipboard-host"] : ["browser"],
+  };
+});
 const hasSidebarExtensions = computed(() => extensionUIStore.getVisibleContributions("chat.sidebar.panel").length > 0);
 const hasStatusExtensions = computed(() => extensionUIStore.getVisibleContributions("chat.status.item").length > 0);
 const sidebarDrawerOpen = ref(false);

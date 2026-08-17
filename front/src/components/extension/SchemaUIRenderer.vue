@@ -5,6 +5,7 @@ import type { UIContributionSummary } from "@/stores/extensionUI";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 import { apiClient } from "@/composables/useApi";
 import { fetchSchemaDocument } from "@/api/extension";
+import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
 import SchemaUINode from "./SchemaUINode.vue";
 import ExtensionRenderState from "./ExtensionRenderState.vue";
 import {
@@ -174,10 +175,14 @@ async function loadSchema() {
 }
 
 let restartToken = 0;
+let pendingCreateSessionId = "";
 
-async function createSession(): Promise<string> {
+async function createSession(expectedToken: number): Promise<string | null> {
+  if (expectedToken !== restartToken) return null;
   const key = `${props.contribution.extensionId}/${props.contribution.contributionId}`;
   const surfaceData = (props.context?.surface as Record<string, unknown> | undefined) ?? {};
+  const env = resolveHostEnvironment();
+  pendingCreateSessionId = key;
   const res = await apiClient.post<{
     sessionId?: string;
     session_id?: string;
@@ -188,7 +193,17 @@ async function createSession(): Promise<string> {
     surface: String(surfaceData.role ?? "main"),
     characterId: (props.context?.characterId as string) || "",
     conversationId: (props.context?.conversationId as string) || "",
+    host: env.host,
+    platform: env.platform,
+    os: env.os,
   });
+  if (expectedToken !== restartToken) {
+    const staleSid = res.data?.sessionId ?? res.data?.session_id ?? "";
+    if (staleSid) {
+      apiClient.delete(`/api/extensions/ui/sessions/${staleSid}`).catch(() => {});
+    }
+    return null;
+  }
   const data = res.data;
   const sid = data.sessionId ?? data.session_id ?? "";
   if (!sid) throw new Error("session 创建响应缺少 sessionId");
@@ -208,28 +223,22 @@ async function createSession(): Promise<string> {
 async function disposeSession() {
   if (!sessionId.value) return;
   const oldSessionId = sessionId.value;
+  const contributionKey = `${props.contribution.extensionId}/${props.contribution.contributionId}`;
   sessionId.value = "";
   sessionReady.value = false;
   try {
     await apiClient.delete(`/api/extensions/ui/sessions/${oldSessionId}`);
   } catch {
   }
+  uiStore.unregisterSession(contributionKey);
 }
 
 async function restartSession() {
   const token = ++restartToken;
-  if (sessionId.value) {
-    const oldSessionId = sessionId.value;
-    sessionId.value = "";
-    sessionReady.value = false;
-    try {
-      await apiClient.delete(`/api/extensions/ui/sessions/${oldSessionId}`);
-    } catch {
-    }
-  }
+  await disposeSession();
   if (token !== restartToken) return;
   try {
-    await createSession();
+    await createSession(token);
   } catch {
     if (token !== restartToken) return;
   }
@@ -255,8 +264,11 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
   actionLoading[action.action_id] = true;
   try {
     if (!sessionId.value || !sessionReady.value) {
-      await createSession();
+      const token = ++restartToken;
+      await createSession(token);
+      if (token !== restartToken) return;
     }
+    if (!sessionId.value || !sessionReady.value) return;
     const res = await fetch(`/api/extensions/ui/sessions/${sessionId.value}/bridge`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -282,7 +294,7 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
     const envelope = (await res.json().catch(() => ({}))) as {
       ok?: boolean;
       result?: Record<string, unknown>;
-      error?: { message?: string } | string;
+      error: { message?: string } | string;
     };
     if (envelope.ok === false) {
       const detail = typeof envelope.error === "string" ? envelope.error : envelope.error?.message;
@@ -380,6 +392,7 @@ watch(
 );
 
 onBeforeUnmount(() => {
+  ++restartToken;
   disposeSession();
 });
 </script>

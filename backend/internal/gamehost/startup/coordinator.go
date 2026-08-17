@@ -265,7 +265,7 @@ func (c *StartupRecoveryCoordinator) classifyOrphans(ctx context.Context, report
 		}
 		for _, pc := range procs {
 			proof := OwnershipProof{
-				HostInstanceID: hostID,
+				HostInstanceID: pc.HostInstanceID,
 				RuntimeID:      pc.RuntimeID,
 				PluginID:       pc.PluginID,
 				ExtensionID:    pc.ExtensionID,

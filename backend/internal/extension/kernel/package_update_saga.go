@@ -394,6 +394,8 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	}
 	if r.container.UIHostNotifier != nil {
 		r.container.UIHostNotifier.BroadcastExtensionChange("extension_updated", confirmed.session.ExtensionID, nil)
+		r.container.UIHostNotifier.BroadcastExtensionChange("extension_generation_changed", confirmed.session.ExtensionID, map[string]interface{}{"generation": current.Generation})
+		r.container.UIHostNotifier.BroadcastExtensionChange("extension_contributions_changed", confirmed.session.ExtensionID, nil)
 	}
 	return KernelInstallResult{OperationID: op.OperationID, TraceID: op.TraceID, Operation: "update", ExtensionID: confirmed.session.ExtensionID, Version: confirmed.session.Version, InstallationID: current.InstallationID, PackageHash: confirmed.artifact.ArchiveHash, ContentTreeHash: confirmed.artifact.ContentTreeHash, ArtifactPath: confirmed.artifact.ArchivePath, InstallPath: targetGeneration.GenerationPath, DefinitionHash: targetGeneration.Current.TreeHash, InstalledAt: current.UpdatedAt}, nil
 }

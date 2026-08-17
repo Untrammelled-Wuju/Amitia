@@ -1,9 +1,14 @@
 {
-  "description": "Event pipeline contract: dedup by fingerprint, priority-ordered dispatch, generation-aware filtering",
-  "pipeline": [
-    "fingerprint_dedup",
-    "priority_queue",
-    "generation_check",
-    "dispatch"
-  ]
+  "domain": "native_event",
+  "event": "pipeline_contract",
+  "timestamp": "2026-08-16T16:00:00Z",
+  "data": {
+    "description": "Event pipeline contract: dedup by fingerprint, priority-ordered dispatch, generation-aware filtering",
+    "pipeline": [
+      "fingerprint_dedup",
+      "priority_queue",
+      "generation_check",
+      "dispatch"
+    ]
+  }
 }

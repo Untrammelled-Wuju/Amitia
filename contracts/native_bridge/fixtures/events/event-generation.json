@@ -1,6 +1,10 @@
 {
-  "description": "Generation tracking for ordering and stale event suppression",
-  "currentGeneration": 5,
-  "staleThreshold": 3,
-  "policy": "drop events with generation < (current - threshold)"
+  "domain": "native_event",
+  "event": "generation_tracking",
+  "timestamp": "2026-08-16T16:00:00Z",
+  "data": {
+    "currentGeneration": 5,
+    "staleThreshold": 3,
+    "policy": "drop events with generation < (current - threshold)"
+  }
 }

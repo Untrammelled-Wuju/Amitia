@@ -107,6 +107,9 @@ func NewProcessSupervisor(rootDir string) *ProcessSupervisor {
 		protocolHandlers: make(map[string]StdioProtocolHandler),
 		ownerStore:       NewProcessOwnerStore(filepath.Join(rootDir, "process_owners")),
 	}
+	if s.ownerStore != nil && s.ownerStore.durable {
+		_ = s.ownerStore.load()
+	}
 	return s
 }
 
@@ -386,12 +389,12 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 
 	instance := &ServiceInstance{
 		InstanceID:        instanceID,
-		ProcessInstanceID: buildProcessInstanceID(req.RuntimeID, req.ServiceID),
+		ProcessInstanceID: req.ServiceID,
 		ServiceID:         req.ServiceID,
 		RuntimeID:         req.RuntimeID,
 		ExtensionID:       def.ExtensionID,
 		PluginID:          def.Publisher + "/" + def.ExtensionID,
-		LogicalServiceID:  req.ServiceID,
+		LogicalServiceID:  extractLogicalServiceID(req.ServiceID, req.RuntimeID),
 		ModuleID:          def.ModuleID,
 		Generation:        req.Generation,
 		Platform:          s.selector.current,
@@ -1299,6 +1302,17 @@ func buildProcessInstanceID(runtimeID, serviceID string) string {
 		return serviceID
 	}
 	return runtimeID + "/" + serviceID
+}
+
+func extractLogicalServiceID(supervisorKey, runtimeID string) string {
+	if supervisorKey == "" {
+		return ""
+	}
+	prefix := runtimeID + "/"
+	if runtimeID != "" && len(supervisorKey) > len(prefix) && supervisorKey[:len(prefix)] == prefix {
+		return supervisorKey[len(prefix):]
+	}
+	return supervisorKey
 }
 
 func generateNonce() string {
