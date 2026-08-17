@@ -307,23 +307,17 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
             )
         }
 
-        let fileURL = MediaStaging.urlForStagedResource(resourceUri)
-        guard fileURL != nil || resourceUri.hasPrefix("file://") else {
+        guard let fileURL = MediaStaging.urlForStagedResource(resourceUri) else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestId: request.requestId,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "resource not staged: \(resourceUri)")
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "resource not staged")
             )
         }
 
-        let sourceURL: URL
-        if let staged = fileURL {
-            sourceURL = staged
-        } else {
-            sourceURL = URL(string: resourceUri)!
-        }
+        let sourceURL: URL = fileURL
 
         guard let imageData = readDataChunked(from: sourceURL),
               let image = UIImage(data: imageData) else {

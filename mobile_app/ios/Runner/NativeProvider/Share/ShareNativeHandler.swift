@@ -273,17 +273,15 @@ public class ShareNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func materializeResource(_ uri: String) -> URL? {
-        if uri.hasPrefix("file://") {
-            return URL(string: uri)
-        }
-
         var filename = ""
         if uri.hasPrefix("media:staging:") {
             filename = String(uri.dropFirst("media:staging:".count))
         } else if uri.hasPrefix("resource:") {
             filename = String(uri.dropFirst("resource:".count))
+        } else if uri.hasPrefix("nativeStaging:") {
+            return MediaStaging.nativeStagingURL(uri)
         } else {
-            filename = uri
+            return nil
         }
 
         if filename.isEmpty { return nil }

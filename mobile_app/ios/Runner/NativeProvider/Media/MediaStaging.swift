@@ -246,9 +246,6 @@ public class MediaStaging {
     }
 
     public static func urlForStagedResource(_ resourceUri: String) -> URL? {
-        if resourceUri.hasPrefix("file://") {
-            return URL(string: resourceUri)
-        }
         if isNativeStagingId(resourceUri) {
             return nativeStagingURL(resourceUri)
         }

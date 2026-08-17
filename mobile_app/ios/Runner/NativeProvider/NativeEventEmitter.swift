@@ -116,6 +116,12 @@ final class NativeEventEmitter {
         lock.unlock()
 
         dispatchEvent(payload, sinks: sinksSnapshot)
+
+        lock.lock()
+        if let idx = eventQueue.lastIndex(where: { computeFingerprint($0) == fingerprint }) {
+            eventQueue.remove(at: idx)
+        }
+        lock.unlock()
     }
 
     func dequeue() -> NativeEventPayload? {
