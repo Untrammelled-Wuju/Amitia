@@ -1,4 +1,5 @@
 import { createDriver, BackendDriver } from '../backend_driver';
+import { GameCenterClient } from '../game_center_client';
 
 const ARCHIVE_PATH = process.env.MOCK_PLUGIN_ARCHIVE_PATH;
 const ARCHIVE_PATH_V2 = process.env.MOCK_PLUGIN_ARCHIVE_PATH_V2;
@@ -52,24 +53,23 @@ describe('G47-F15 Fault Matrix (Backend Driver)', () => {
     await driver.enablePlugin(extensionId);
 
     const runtimes = await driver.listRuntimes({ pluginId: plugin.pluginId });
-    if (runtimes.length > 0) {
-      runtimeId = runtimes[0].runtimeId;
-      await driver.startRuntime(runtimeId);
-      await driver.waitForRuntimeReady(runtimeId, 30000);
-      await driver.emergencyStop(runtimeId);
+    expect(runtimes.length).toBeGreaterThan(0);
+    runtimeId = runtimes[0].runtimeId;
+    await driver.startRuntime(runtimeId);
+    await driver.waitForRuntimeReady(runtimeId, 30000);
+    await driver.emergencyStop(runtimeId);
 
-      let startFailed = false;
-      try {
-        await driver.startRuntime(runtimeId);
-      } catch {
-        startFailed = true;
-      }
-      expect(startFailed).toBe(true);
-
-      await driver.rearm(runtimeId);
+    let startFailed = false;
+    try {
       await driver.startRuntime(runtimeId);
-      await driver.waitForRuntimeReady(runtimeId, 30000);
+    } catch {
+      startFailed = true;
     }
+    expect(startFailed).toBe(true);
+
+    await driver.rearm(runtimeId);
+    await driver.startRuntime(runtimeId);
+    await driver.waitForRuntimeReady(runtimeId, 30000);
   }, 90000);
 
   it('F10: crash recovery with running runtime', async () => {
@@ -121,11 +121,10 @@ describe('G47-F15 Fault Matrix (Backend Driver)', () => {
     await driver.enablePlugin(extensionId);
 
     const runtimes = await driver.listRuntimes({ pluginId: plugin.pluginId });
-    if (runtimes.length > 0) {
-      runtimeId = runtimes[0].runtimeId;
-      await driver.startRuntime(runtimeId);
-      await driver.waitForRuntimeReady(runtimeId, 30000);
-    }
+    expect(runtimes.length).toBeGreaterThan(0);
+    runtimeId = runtimes[0].runtimeId;
+    await driver.startRuntime(runtimeId);
+    await driver.waitForRuntimeReady(runtimeId, 30000);
 
     await driver.updatePlugin(extensionId, archiveV2);
 
@@ -148,6 +147,82 @@ describe('G47-F15 Fault Matrix (Backend Driver)', () => {
     }
   }, 180000);
 
+  it('F15-55: crash via mockgame.fault.crash triggers recovery with GenerationAfter > GenerationBefore', async () => {
+    const archivePath = requireArchive();
+    const client = new GameCenterClient();
+
+    await client.installPlugin(archivePath);
+    const driver = createDriver();
+    const plugin = await driver.waitForPluginByExtension('mock-developer/mock-amitiax-game-plugin', 30000);
+    const extId = plugin.extensionId;
+    await client.enablePlugin(extId);
+
+    const runtimes = await client.listRuntimes({ pluginId: plugin.pluginId });
+    expect(runtimes.items.length).toBeGreaterThan(0);
+    const rt = runtimes.items[0];
+    const rtId = rt.runtimeId;
+
+    await client.startRuntime(rtId);
+    await driver.waitForRuntimeReady(rtId, 30000);
+
+    const before = await client.getRuntime(rtId);
+    const genBefore = before.process?.processGeneration ?? 0;
+    expect(genBefore).toBeGreaterThan(0);
+
+    const crashResp = await fetch(
+      `${(client as any).baseUrl}/game-center/runtimes/${rtId}/services/mock-game-runtime/rpc`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ method: 'mockgame.fault.crash', payload: {} }),
+      },
+    );
+    expect(crashResp.status).toBe(200);
+
+    const deadline = Date.now() + 60000;
+    let genAfter = genBefore;
+    while (Date.now() < deadline) {
+      try {
+        const detail = await client.getRuntime(rtId);
+        if (detail.process?.processGeneration !== undefined) {
+          genAfter = detail.process.processGeneration;
+        }
+        const hs = await client.getHandshakeStatus(rtId);
+        if (hs.ready && detail.runtimeState === 'running' && genAfter > genBefore) {
+          break;
+        }
+      } catch {
+        // transient during recovery
+      }
+      await new Promise(r => setTimeout(r, 500));
+    }
+
+    expect(genAfter).toBeGreaterThan(genBefore);
+  }, 180000);
+
+  it('restart runtime increments generation', async () => {
+    const client = new GameCenterClient();
+    const driver = createDriver();
+
+    const runtimes = await client.listRuntimes();
+    const mockRt = runtimes.items.find(r => r.pluginId && r.pluginId.includes('mock-amitiax-game-plugin'));
+    if (!mockRt) {
+      throw new Error('no mock runtime available for restart test');
+    }
+    const rtId = mockRt.runtimeId;
+
+    const before = await client.getRuntime(rtId);
+    const genBefore = before.process?.processGeneration ?? 0;
+
+    await client.restartRuntime(rtId);
+    await driver.waitForRuntimeReady(rtId, 30000);
+
+    const after = await client.getRuntime(rtId);
+    const genAfter = after.process?.processGeneration ?? 0;
+
+    expect(genAfter).toBeGreaterThan(genBefore);
+  }, 90000);
+
   it('zero residue after uninstall', async () => {
     const archivePath = requireArchive();
 
@@ -157,12 +232,11 @@ describe('G47-F15 Fault Matrix (Backend Driver)', () => {
     await driver.enablePlugin(extensionId);
 
     const runtimes = await driver.listRuntimes({ pluginId: plugin.pluginId });
-    if (runtimes.length > 0) {
-      runtimeId = runtimes[0].runtimeId;
-      await driver.startRuntime(runtimeId);
-      await driver.waitForRuntimeReady(runtimeId, 30000);
-      await driver.stopRuntime(runtimeId);
-    }
+    expect(runtimes.length).toBeGreaterThan(0);
+    runtimeId = runtimes[0].runtimeId;
+    await driver.startRuntime(runtimeId);
+    await driver.waitForRuntimeReady(runtimeId, 30000);
+    await driver.stopRuntime(runtimeId);
 
     await driver.uninstallPlugin(extensionId);
     extensionId = null;
