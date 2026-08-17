@@ -27,6 +27,12 @@ type MeshClientConfig struct {
 	Cursor             *SessionCursor
 	OnState            func(AgentState)
 	RuntimeDispatcher  RuntimeDispatcher
+	TaskWorker         TaskWorker
+}
+
+type TaskWorker interface {
+	ExecuteTask(ctx context.Context, dispatch protocol.TaskDispatchPayload) error
+	CancelTask(ctx context.Context, taskRunID, attemptID string) error
 }
 
 type MeshClient struct {
@@ -309,6 +315,10 @@ func (c *MeshClient) readLoop() error {
 			c.handleRuntimeInvoke(&env)
 		case protocol.MessageTypeCommand:
 			c.sendUnsupportedCommand(&env)
+		case protocol.MessageTypeTaskDispatch:
+			c.handleTaskDispatch(&env)
+		case protocol.MessageTypeTaskCancel:
+			c.handleTaskCancel(&env)
 		}
 	}
 }
@@ -569,6 +579,163 @@ func (c *MeshClient) sendRuntimeError(errPayload *protocol.RuntimeErrorPayload) 
 	}
 
 	_ = c.writeEnvelope(env)
+}
+
+func (c *MeshClient) handleTaskDispatch(env *protocol.Envelope) {
+	var dispatch protocol.TaskDispatchPayload
+	if err := json.Unmarshal(env.Payload, &dispatch); err != nil {
+		c.sendTaskError(env.MessageID, "", "invalid_dispatch_payload", fmt.Sprintf("failed to parse dispatch: %v", err))
+		return
+	}
+
+	if c.conf.TaskWorker == nil {
+		c.sendTaskError(env.MessageID, dispatch.TaskRunID, "task_worker_unavailable", "no task worker configured")
+		return
+	}
+
+	if err := c.conf.TaskWorker.ExecuteTask(context.Background(), dispatch); err != nil {
+		c.sendTaskError(env.MessageID, dispatch.TaskRunID, "task_execution_failed", err.Error())
+		return
+	}
+}
+
+func (c *MeshClient) handleTaskCancel(env *protocol.Envelope) {
+	var cancel protocol.TaskCancelPayload
+	if err := json.Unmarshal(env.Payload, &cancel); err != nil {
+		return
+	}
+
+	if c.conf.TaskWorker != nil {
+		_ = c.conf.TaskWorker.CancelTask(context.Background(), cancel.TaskRunID, cancel.AttemptID)
+	}
+}
+
+func (c *MeshClient) sendTaskClaim(taskRunID, attemptID, leaseID, workerID string, leaseDurationMs int64) {
+	claim := protocol.TaskClaimPayload{
+		TaskRunID:          taskRunID,
+		AttemptID:          attemptID,
+		LeaseID:            leaseID,
+		WorkerID:           workerID,
+		LeaseDurationMs:    leaseDurationMs,
+		RuntimeSessionID:   c.sessionID,
+		ConnectionGeneration: c.connectionGen,
+		DeviceID:           c.conf.Identity.DeviceID,
+		RuntimeID:          c.conf.Identity.RuntimeID,
+		ClaimedAt:          time.Now().UTC(),
+	}
+	c.sendTaskEnvelope(protocol.MessageTypeTaskClaim, claim)
+}
+
+func (c *MeshClient) sendTaskComplete(taskRunID, attemptID, leaseID string, success bool, result json.RawMessage, errMsg string) {
+	complete := protocol.TaskCompletePayload{
+		TaskRunID:          taskRunID,
+		AttemptID:          attemptID,
+		LeaseID:            leaseID,
+		Success:            success,
+		Result:             result,
+		Error:              errMsg,
+		RuntimeSessionID:   c.sessionID,
+		ConnectionGeneration: c.connectionGen,
+		DeviceID:           c.conf.Identity.DeviceID,
+		RuntimeID:          c.conf.Identity.RuntimeID,
+		CompletedAt:        time.Now().UTC(),
+	}
+	c.sendTaskEnvelope(protocol.MessageTypeTaskComplete, complete)
+}
+
+func (c *MeshClient) sendTaskProgress(taskRunID, attemptID, leaseID string, seq int64, current, total, percentage *float64, stage, message string) {
+	progress := protocol.TaskProgressPayload{
+		TaskRunID:          taskRunID,
+		AttemptID:          attemptID,
+		LeaseID:            leaseID,
+		Sequence:           seq,
+		Current:            current,
+		Total:              total,
+		Percentage:         percentage,
+		Stage:              stage,
+		Message:            message,
+		RuntimeSessionID:   c.sessionID,
+		ConnectionGeneration: c.connectionGen,
+		DeviceID:           c.conf.Identity.DeviceID,
+		RuntimeID:          c.conf.Identity.RuntimeID,
+		ReportedAt:         time.Now().UTC(),
+	}
+	c.sendTaskEnvelope(protocol.MessageTypeTaskProgress, progress)
+}
+
+func (c *MeshClient) sendTaskCheckpoint(taskRunID, attemptID, leaseID, checkpointID string, version int64, payload json.RawMessage, payloadHash string) {
+	checkpoint := protocol.TaskCheckpointPayload{
+		TaskRunID:          taskRunID,
+		AttemptID:          attemptID,
+		LeaseID:            leaseID,
+		CheckpointID:       checkpointID,
+		Version:            version,
+		Payload:            payload,
+		PayloadHash:        payloadHash,
+		RuntimeSessionID:   c.sessionID,
+		ConnectionGeneration: c.connectionGen,
+		DeviceID:           c.conf.Identity.DeviceID,
+		RuntimeID:          c.conf.Identity.RuntimeID,
+		CheckpointAt:       time.Now().UTC(),
+	}
+	c.sendTaskEnvelope(protocol.MessageTypeTaskCheckpoint, checkpoint)
+}
+
+func (c *MeshClient) sendTaskEnvelope(msgType protocol.MessageType, payload interface{}) {
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return
+	}
+
+	c.localSequence = c.nextLocalSequence()
+
+	env := protocol.Envelope{
+		EnvelopeVersion:      meshprotocol.EnvelopeVersion,
+		Protocol:             meshprotocol.ProtocolName,
+		MessageType:          msgType,
+		MessageID:            uuid.New().String(),
+		UserID:               c.conf.UserID,
+		DeviceID:             c.conf.Identity.DeviceID,
+		RuntimeID:            c.conf.Identity.RuntimeID,
+		RuntimeSessionID:     c.sessionID,
+		ConnectionGeneration: c.connectionGen,
+		Sequence:             c.localSequence,
+		PayloadSchemaVersion: 1,
+		PayloadHash:          protocol.ComputePayloadHash(payloadBytes),
+		SentAt:               time.Now().UTC(),
+		Payload:              payloadBytes,
+	}
+
+	_ = c.writeEnvelope(env)
+}
+
+func (c *MeshClient) sendTaskError(messageID, taskRunID, code, message string) {
+	c.localSequence = c.nextLocalSequence()
+
+	errPayload := protocol.ErrorPayload{
+		Code:    code,
+		Message: message,
+	}
+	payloadBytes, _ := json.Marshal(errPayload)
+
+	resp := protocol.Envelope{
+		EnvelopeVersion:      meshprotocol.EnvelopeVersion,
+		Protocol:             meshprotocol.ProtocolName,
+		MessageType:          protocol.MessageTypeError,
+		MessageID:            messageID,
+		UserID:               c.conf.UserID,
+		DeviceID:             c.conf.Identity.DeviceID,
+		RuntimeID:            c.conf.Identity.RuntimeID,
+		RuntimeSessionID:     c.sessionID,
+		ConnectionGeneration: c.connectionGen,
+		Sequence:             c.localSequence,
+		PayloadSchemaVersion: 1,
+		PayloadHash:          protocol.ComputePayloadHash(payloadBytes),
+		SentAt:               time.Now().UTC(),
+		Payload:              payloadBytes,
+	}
+
+	_ = c.writeEnvelope(resp)
 }
 
 func (c *MeshClient) executeCommand(cmd protocol.CommandPayload) (*CommandResult, error) {
