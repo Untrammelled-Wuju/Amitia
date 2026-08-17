@@ -19,22 +19,24 @@ CREATE TABLE IF NOT EXISTS auth_users (
 );
 
 CREATE TABLE IF NOT EXISTS auth_sessions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    user_id INTEGER NOT NULL,
-    token_hash TEXT NOT NULL,
-    device_name TEXT DEFAULT '',
-    ip_address TEXT DEFAULT '',
-    user_agent TEXT DEFAULT '',
-    last_active_at TEXT DEFAULT (datetime('now')),
-    expires_at TEXT,
-    created_at TEXT DEFAULT (datetime('now')),
-    public_id TEXT UNIQUE,
-    status TEXT NOT NULL DEFAULT 'active',
-    revision INTEGER NOT NULL DEFAULT 1,
-    absolute_expires_at DATETIME,
-    revoked_at DATETIME,
-    revoke_reason TEXT,
-    last_refreshed_at DATETIME
+id INTEGER PRIMARY KEY AUTOINCREMENT,
+user_id INTEGER NOT NULL,
+username TEXT NOT NULL DEFAULT '',
+role TEXT NOT NULL DEFAULT 'user',
+token_hash TEXT NOT NULL,
+device_name TEXT DEFAULT '',
+ip_address TEXT DEFAULT '',
+user_agent TEXT DEFAULT '',
+last_active_at TEXT DEFAULT (datetime('now')),
+expires_at TEXT,
+created_at TEXT DEFAULT (datetime('now')),
+public_id TEXT UNIQUE,
+status TEXT NOT NULL DEFAULT 'active',
+revision INTEGER NOT NULL DEFAULT 1,
+absolute_expires_at DATETIME,
+revoked_at DATETIME,
+revoke_reason TEXT,
+last_refreshed_at DATETIME
 );
 
 CREATE TABLE IF NOT EXISTS auth_refresh_tokens (
