@@ -332,6 +332,21 @@ func (s *AccountSessionService) RevokeCurrentSession(sessionPublicID string, use
 	})
 }
 
+func (s *AccountSessionService) RevokeOwnedSession(userID int64, sessionPublicID string) error {
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		if err := s.sessions.RevokeOwned(userID, sessionPublicID, "user_revoke"); err != nil {
+			return err
+		}
+		if err := s.refresh.RevokeBySession(sessionPublicID); err != nil {
+			return err
+		}
+		if auditErr := s.audit.LogSessionRevoked(sessionPublicID, userID, "revoke_owned"); auditErr != nil {
+			return auditErr
+		}
+		return nil
+	})
+}
+
 func (s *AccountSessionService) RevokeOtherSessions(currentSessionID string, userID int64) (int, error) {
 	var count int
 	err := s.db.Transaction(func(tx *gorm.DB) error {
