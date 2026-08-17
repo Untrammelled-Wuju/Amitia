@@ -81,13 +81,13 @@ components:
     workUri: ""
   sidecars:
     wechat:
-      enabled: false
+      enabled: true
       entryUri: ""
       workUri: ""
       port: 19876
       healthUrl: "http://127.0.0.1:19876/api/health"
     qq:
-      enabled: false
+      enabled: true
       entryUri: ""
       workUri: ""
       port: 19877
@@ -110,13 +110,13 @@ runtime:
     workDir: ""
   sidecars:
     wechat:
-      enabled: false
+      enabled: true
       entryPath: ""
       workDir: ""
       port: 19876
       healthUrl: "http://127.0.0.1:19876/api/health"
     qq:
-      enabled: false
+      enabled: true
       entryPath: ""
       workDir: ""
       port: 19877
