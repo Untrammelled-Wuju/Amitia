@@ -56,7 +56,10 @@ class ShizukuCommandService : IPrivilegedCommandService.Stub() {
 
     override fun destroyService() {
         if (destroyed.compareAndSet(false, true)) {
-            ioExecutor.shutdownNow()
+            try {
+                ioExecutor.shutdownNow()
+            } catch (_: Exception) {
+            }
         }
     }
 
@@ -262,6 +265,7 @@ class ShizukuCommandService : IPrivilegedCommandService.Stub() {
                 .daemon(false)
                 .processNameSuffix("shizuku_command")
                 .debuggable(false)
+                .version(13)
         }
     }
 }
