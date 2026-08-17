@@ -202,6 +202,13 @@ func (p *MeshDeviceRuntimeInvocationPort) Health(ctx context.Context, route Runt
 	if !p.ports.Hub.Send(sessionID, generation, pingBytes) {
 		return HealthUnhealthy
 	}
+	lastPong, ok := p.ports.Hub.GetLastPongAt(sessionID, generation)
+	if !ok {
+		return HealthUnknown
+	}
+	if time.Since(lastPong) > 90*time.Second {
+		return HealthUnhealthy
+	}
 	return HealthReady
 }
 

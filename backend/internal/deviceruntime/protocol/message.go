@@ -12,6 +12,10 @@ const (
 	MessageTypeError         MessageType = "error"
 	MessageTypePing          MessageType = "ping"
 	MessageTypePong          MessageType = "pong"
+	MessageTypeTaskClaim     MessageType = "task_claim"
+	MessageTypeTaskComplete  MessageType = "task_complete"
+	MessageTypeTaskProgress  MessageType = "task_progress"
+	MessageTypeTaskCheckpoint MessageType = "task_checkpoint"
 )
 
 func (t MessageType) String() string {
@@ -22,7 +26,8 @@ func (t MessageType) IsValid() bool {
 	switch t {
 	case MessageTypeHello, MessageTypeHelloAck, MessageTypeCommand,
 		MessageTypeCommandAck, MessageTypeRuntimeEvent, MessageTypeStateSnapshot,
-		MessageTypeError, MessageTypePing, MessageTypePong:
+		MessageTypeError, MessageTypePing, MessageTypePong,
+		MessageTypeTaskClaim, MessageTypeTaskComplete, MessageTypeTaskProgress, MessageTypeTaskCheckpoint:
 		return true
 	}
 	return false

@@ -70,11 +70,23 @@ func (a *taskRuntimeServiceAdapter) CompleteRun(ctx context.Context, taskRunID s
 	if !success {
 		status = "failed"
 	}
-	return a.svc.HandleExternalFinish(ctx, taskRunID, status, nil, "", errCode, errMsg)
+	attemptID := ""
+	generation := int64(0)
+	if tr, err := a.svc.GetTaskRun(ctx, taskRunID); err == nil {
+		attemptID = string(tr.ExecutionAttemptID)
+		generation = tr.Generation
+	}
+	return a.svc.HandleExternalFinish(ctx, taskRunID, status, nil, "", errCode, errMsg, attemptID, generation)
 }
 
 func (a *taskRuntimeServiceAdapter) ReportProgress(ctx context.Context, taskRunID string, totalUnits, completedUnits int64, phase string) error {
-	return a.svc.HandleExternalProgress(ctx, taskRunID, completedUnits, totalUnits, phase)
+	attemptID := ""
+	generation := int64(0)
+	if tr, err := a.svc.GetTaskRun(ctx, taskRunID); err == nil {
+		attemptID = string(tr.ExecutionAttemptID)
+		generation = tr.Generation
+	}
+	return a.svc.HandleExternalProgress(ctx, taskRunID, completedUnits, totalUnits, phase, attemptID, generation)
 }
 
 func (a *taskRuntimeServiceAdapter) GetCheckpoint(ctx context.Context, taskRunID string) (*CheckpointData, error) {
@@ -99,7 +111,13 @@ func (a *taskRuntimeServiceAdapter) SetCheckpoint(ctx context.Context, taskRunID
 	if err != nil {
 		return err
 	}
-	return a.svc.HandleExternalCheckpoint(ctx, taskRunID, cp.LastUnit, cp.Phase, payload)
+	attemptID := ""
+	generation := int64(0)
+	if tr, err := a.svc.GetTaskRun(ctx, taskRunID); err == nil {
+		attemptID = string(tr.ExecutionAttemptID)
+		generation = tr.Generation
+	}
+	return a.svc.HandleExternalCheckpoint(ctx, taskRunID, cp.LastUnit, cp.Phase, payload, attemptID, generation)
 }
 
 func (a *taskRuntimeServiceAdapter) ClearCheckpoint(ctx context.Context, taskRunID string) error {
