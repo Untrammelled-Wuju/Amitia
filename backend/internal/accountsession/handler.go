@@ -58,9 +58,9 @@ func (h *Handler) Login(c *gin.Context) {
 	if err != nil {
 		switch err {
 		case ErrLoginRateLimited:
-			util.ErrorResponse(c, 429, "尝试过于频繁，请稍后再试", gin.H{"errorCode": "auth.login_rate_limited"})
+			util.ErrorResponse(c, 429, err.Error(), gin.H{"errorCode": "auth.login_rate_limited"})
 		case ErrInvalidCredentials:
-			util.ErrorResponse(c, response.Unauthorized, "用户名或密码错误", gin.H{"errorCode": "auth.invalid_credentials"})
+			util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "auth.invalid_credentials"})
 		default:
 			util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "auth.login_error"})
 		}
@@ -132,15 +132,15 @@ func (h *Handler) Refresh(c *gin.Context) {
 		case ErrRefreshReused:
 			h.audit.LogRefreshReuseDetected("", 0, c.ClientIP(), c.Request.UserAgent())
 			h.clearRefreshCookie(c, clientType)
-			util.ErrorResponse(c, response.Unauthorized, "令牌已失效，请重新登录", gin.H{"errorCode": "auth.refresh_reused"})
+			util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "auth.refresh_reused"})
 		case ErrRefreshExpired:
 			h.clearRefreshCookie(c, clientType)
-			util.ErrorResponse(c, response.Unauthorized, "刷新令牌已过期", gin.H{"errorCode": "auth.refresh_expired"})
+			util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "auth.refresh_expired"})
 		case ErrRefreshRevoked:
 			h.clearRefreshCookie(c, clientType)
-			util.ErrorResponse(c, response.Unauthorized, "刷新令牌已撤销", gin.H{"errorCode": "auth.refresh_revoked"})
+			util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "auth.refresh_revoked"})
 		default:
-			util.ErrorResponse(c, response.Unauthorized, "刷新令牌无效", gin.H{"errorCode": "auth.refresh_invalid"})
+			util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "auth.refresh_invalid"})
 		}
 		return
 	}
@@ -152,12 +152,12 @@ func (h *Handler) Refresh(c *gin.Context) {
 	tokenSvc := NewTokenService()
 	accessToken, accessExpiresAt, err := tokenSvc.SignAccessToken(int(userID), result.Username, result.Role, result.SessionID)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "签发令牌失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 
 	if err := h.audit.LogRefreshSuccess(result.SessionID, int(userID), c.ClientIP(), c.Request.UserAgent()); err != nil {
-		util.ErrorResponse(c, response.InternalError, "记录审计日志失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 
@@ -189,7 +189,7 @@ func (h *Handler) Logout(c *gin.Context) {
 		var userID int64
 		fmt.Sscanf(string(actor.UserID), "%d", &userID)
 		if err := h.svc.RevokeCurrentSession(sessionID, userID); err != nil {
-			util.ErrorResponse(c, response.InternalError, "登出失败", nil)
+			util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 			return
 		}
 	}
@@ -211,7 +211,7 @@ func (h *Handler) ListSessions(c *gin.Context) {
 
 	sessions, err := h.svc.ListActiveSessions(userID)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "获取会话失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 
@@ -253,7 +253,7 @@ func (h *Handler) RevokeSession(c *gin.Context) {
 	fmt.Sscanf(string(actor.UserID), "%d", &userID)
 
 	if err := h.svc.RevokeOwnedSession(userID, sessionID); err != nil {
-		util.ErrorResponse(c, response.InternalError, "撤销会话失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, nil)
@@ -270,7 +270,7 @@ func (h *Handler) RevokeOtherSessions(c *gin.Context) {
 	fmt.Sscanf(string(actor.UserID), "%d", &userID)
 	count, err := h.svc.RevokeOtherSessions(actor.SessionID, userID)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "操作失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, gin.H{"revokedCount": count})
@@ -286,7 +286,7 @@ func (h *Handler) LogoutAll(c *gin.Context) {
 	var userID int64
 	fmt.Sscanf(string(actor.UserID), "%d", &userID)
 	if err := h.svc.RevokeAllSessions(userID); err != nil {
-		util.ErrorResponse(c, response.InternalError, "退出全部设备失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	h.clearRefreshCookie(c, detectClientType(c))

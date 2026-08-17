@@ -21,7 +21,7 @@ func (h *Handler) List(c *gin.Context) {
 	c.ShouldBindQuery(&q)
 	resp, err := h.service.List(q)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "查询失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, resp)
@@ -30,7 +30,7 @@ func (h *Handler) List(c *gin.Context) {
 func (h *Handler) Create(c *gin.Context) {
 	var req CreateWorldBookRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "缺少必要参数", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	e, err := h.service.Create(&req)
@@ -45,7 +45,7 @@ func (h *Handler) Update(c *gin.Context) {
 	id := c.Param("id")
 	var req UpdateWorldBookRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	e, err := h.service.Update(id, &req)

@@ -23,7 +23,7 @@ func (h *Handler) Neighbors(c *gin.Context) {
 	userID := c.DefaultQuery("userId", "default")
 	result, err := h.svc.QueryNeighbors(id, depth, userID)
 	if err != nil {
-		util.ErrorResponse(c, 500, "查询邻居失败", nil)
+		util.ErrorResponse(c, 500, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, result)
@@ -39,7 +39,7 @@ func (h *Handler) FindPath(c *gin.Context) {
 	}
 	result, err := h.svc.FindPaths(from, to, maxDepth)
 	if err != nil {
-		util.ErrorResponse(c, 500, "路径查询失败", nil)
+		util.ErrorResponse(c, 500, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, result)
@@ -49,7 +49,7 @@ func (h *Handler) Stats(c *gin.Context) {
 	userID := c.DefaultQuery("userId", "default")
 	result, err := h.svc.GetStats(userID)
 	if err != nil {
-		util.ErrorResponse(c, 500, "统计查询失败", nil)
+		util.ErrorResponse(c, 500, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, result)
@@ -58,7 +58,7 @@ func (h *Handler) Stats(c *gin.Context) {
 func (h *Handler) DeleteNode(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.svc.DeleteNode(id); err != nil {
-		util.ErrorResponse(c, 500, "删除节点失败", nil)
+		util.ErrorResponse(c, 500, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, nil)
@@ -68,7 +68,7 @@ func (h *Handler) AllNodes(c *gin.Context) {
 	userID := c.DefaultQuery("userId", "default")
 	result, err := h.svc.GetAllNodes(userID)
 	if err != nil {
-		util.ErrorResponse(c, 500, "查询节点失败", nil)
+		util.ErrorResponse(c, 500, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, result)
@@ -78,7 +78,7 @@ func (h *Handler) AllEdges(c *gin.Context) {
 	userID := c.DefaultQuery("userId", "default")
 	result, err := h.svc.GetAllEdges(userID)
 	if err != nil {
-		util.ErrorResponse(c, 500, "查询边失败", nil)
+		util.ErrorResponse(c, 500, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, result)

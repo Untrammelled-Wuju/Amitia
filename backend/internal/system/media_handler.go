@@ -48,7 +48,7 @@ func (h *Handler) VoiceUpload(c *gin.Context) {
 
 	voiceDir := filepath.Join("data", "voice_msg")
 	if err := os.MkdirAll(voiceDir, 0755); err != nil {
-		util.ErrorResponse(c, response.InternalError, "创建目录失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 
@@ -61,13 +61,13 @@ func (h *Handler) VoiceUpload(c *gin.Context) {
 
 	dst, err := os.Create(savePath)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "保存文件失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	defer dst.Close()
 
 	if _, err := io.Copy(dst, file); err != nil {
-		util.ErrorResponse(c, response.InternalError, "写入文件失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 
@@ -105,7 +105,7 @@ func (h *Handler) ImageUpload(c *gin.Context) {
 
 	imageDir := filepath.Join("data", "images")
 	if err := os.MkdirAll(imageDir, 0755); err != nil {
-		util.ErrorResponse(c, response.InternalError, "创建目录失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 
@@ -118,13 +118,13 @@ func (h *Handler) ImageUpload(c *gin.Context) {
 
 	dst, err := os.Create(savePath)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "保存文件失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	defer dst.Close()
 
 	if _, err := io.Copy(dst, file); err != nil {
-		util.ErrorResponse(c, response.InternalError, "写入文件失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 
@@ -162,7 +162,7 @@ func (h *Handler) VideoUpload(c *gin.Context) {
 
 	videoDir := filepath.Join("data", "videos")
 	if err := os.MkdirAll(videoDir, 0755); err != nil {
-		util.ErrorResponse(c, response.InternalError, "创建目录失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 
@@ -175,13 +175,13 @@ func (h *Handler) VideoUpload(c *gin.Context) {
 
 	dst, err := os.Create(savePath)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "保存文件失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	defer dst.Close()
 
 	if _, err := io.Copy(dst, file); err != nil {
-		util.ErrorResponse(c, response.InternalError, "写入文件失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 

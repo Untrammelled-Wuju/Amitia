@@ -42,7 +42,7 @@ func (h *Handler) ListConversations(c *gin.Context) {
 	c.ShouldBindQuery(&q)
 	resp, err := h.service.ListConversations(q)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "查询失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, resp)
@@ -51,7 +51,7 @@ func (h *Handler) ListConversations(c *gin.Context) {
 func (h *Handler) CreateConversation(c *gin.Context) {
 	var req CreateConversationRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "缺少必要参数", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	conv, err := h.service.CreateConversation(&req)
@@ -68,7 +68,7 @@ func (h *Handler) GetMessages(c *gin.Context) {
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "50"))
 	msgs, total, err := h.service.GetMessages(id, page, pageSize)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "查询失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	totalPages := int((total + int64(pageSize) - 1) / int64(pageSize))
@@ -79,7 +79,7 @@ func (h *Handler) DeleteConversation(c *gin.Context) {
 	id := c.Param("id")
 	characterDeleted, err := h.service.DeleteConversation(id)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "删除失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, gin.H{"deleted": true, "characterDeleted": characterDeleted})
@@ -87,7 +87,7 @@ func (h *Handler) DeleteConversation(c *gin.Context) {
 
 func (h *Handler) DeleteAllConversations(c *gin.Context) {
 	if err := h.service.DeleteAllConversations(); err != nil {
-		util.ErrorResponse(c, response.InternalError, "删除失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessMsgResponse(c, "所有对话已删除", nil)
@@ -96,7 +96,7 @@ func (h *Handler) DeleteAllConversations(c *gin.Context) {
 func (h *Handler) DeleteMessages(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.service.DeleteMessages(id); err != nil {
-		util.ErrorResponse(c, response.InternalError, "清空失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessMsgResponse(c, "消息已清空", nil)
@@ -120,7 +120,7 @@ func (h *Handler) SearchMessages(c *gin.Context) {
 	}
 	resp, err := h.service.SearchMessages(q)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "搜索失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, resp)
@@ -132,7 +132,7 @@ func (h *Handler) ChangeCharacter(c *gin.Context) {
 		CharacterID string `json:"characterId"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil || body.CharacterID == "" {
-		util.ErrorResponse(c, response.InvalidParams, "characterId 不能为空", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	conv, err := h.service.ChangeCharacter(id, body.CharacterID)
@@ -146,7 +146,7 @@ func (h *Handler) ChangeCharacter(c *gin.Context) {
 func (h *Handler) Stats(c *gin.Context) {
 	stats, err := h.service.GetStats()
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "查询失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, stats)
@@ -155,7 +155,7 @@ func (h *Handler) Stats(c *gin.Context) {
 func (h *Handler) Chat(c *gin.Context) {
 	var req ChatRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "缺少必要参数", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	if h.unifiedEntry != nil {
@@ -195,7 +195,7 @@ func (h *Handler) Chat(c *gin.Context) {
 			h.writeUnifiedEntryError(c, err)
 			return
 		}
-		if orchResult == nil || orchResult.Response == nil {
+	if orchResult == nil || orchResult.Response == nil {
 			util.ErrorResponse(c, response.OperationFailed, "统一入口未返回回复", nil)
 			return
 		}
@@ -251,7 +251,7 @@ func (h *Handler) writeUnifiedEntryError(c *gin.Context, err error) {
 func (h *Handler) ListModels(c *gin.Context) {
 	models, err := h.service.ListModels()
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "查询失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	filtered := make([]ModelConfig, 0, len(models))
@@ -269,7 +269,7 @@ func (h *Handler) ListModels(c *gin.Context) {
 func (h *Handler) CreateModel(c *gin.Context) {
 	var raw map[string]interface{}
 	if err := c.ShouldBindJSON(&raw); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	cfg := ModelConfig{}
@@ -323,7 +323,7 @@ func (h *Handler) UpdateModel(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	var updates map[string]interface{}
 	if err := c.ShouldBindJSON(&updates); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	result, err := h.service.UpdateModel(id, updates)
@@ -337,7 +337,7 @@ func (h *Handler) UpdateModel(c *gin.Context) {
 func (h *Handler) DeleteModel(c *gin.Context) {
 	id, _ := strconv.Atoi(c.Param("id"))
 	if err := h.service.DeleteModel(id); err != nil {
-		util.ErrorResponse(c, response.OperationFailed, "删除失败", nil)
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
 	util.SuccessMsgResponse(c, "模型配置已删除", nil)
@@ -356,7 +356,7 @@ func (h *Handler) ActivateModel(c *gin.Context) {
 func (h *Handler) GetModelRoutes(c *gin.Context) {
 	routes, err := h.service.GetModelRoutes()
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "查询失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, routes)
@@ -367,7 +367,7 @@ func (h *Handler) UpdateModelRoutes(c *gin.Context) {
 		Routes []map[string]interface{} `json:"routes"`
 	}
 	if err := c.ShouldBindJSON(&body); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	if err := h.service.UpdateModelRoutes(body.Routes); err != nil {

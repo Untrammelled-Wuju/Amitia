@@ -24,7 +24,7 @@ func (h *Handler) List(c *gin.Context) {
 	c.ShouldBindQuery(&q)
 	resp, err := h.service.List(q)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "查询失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, resp)
@@ -33,7 +33,7 @@ func (h *Handler) List(c *gin.Context) {
 func (h *Handler) Create(c *gin.Context) {
 	var req CreateMemoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "key和value不能为空", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	m, err := h.service.Create(&req)
@@ -48,7 +48,7 @@ func (h *Handler) Update(c *gin.Context) {
 	id := c.Param("id")
 	var req UpdateMemoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	m, err := h.service.Update(id, &req)
@@ -62,7 +62,7 @@ func (h *Handler) Update(c *gin.Context) {
 func (h *Handler) Delete(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.service.Delete(id); err != nil {
-		util.ErrorResponse(c, response.OperationFailed, "删除失败", nil)
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
 	util.SuccessMsgResponse(c, "记忆已删除", nil)
@@ -71,7 +71,7 @@ func (h *Handler) Delete(c *gin.Context) {
 func (h *Handler) Search(c *gin.Context) {
 	var req SearchMemoryRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "参数错误", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	if req.Keyword == "" && req.Time == nil && len(req.Types) == 0 {
@@ -80,7 +80,7 @@ func (h *Handler) Search(c *gin.Context) {
 	}
 	items, err := h.service.Search(&req)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "搜索失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, gin.H{"items": items, "total": len(items)})
@@ -89,7 +89,7 @@ func (h *Handler) Search(c *gin.Context) {
 func (h *Handler) VectorSearch(c *gin.Context) {
 	var req VectorSearchRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "参数错误", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	results, err := h.service.VectorSearch(&req)
@@ -103,7 +103,7 @@ func (h *Handler) VectorSearch(c *gin.Context) {
 func (h *Handler) HybridSearch(c *gin.Context) {
 	var req VectorSearchRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "参数错误", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	results, err := h.service.HybridSearch(&req)
@@ -127,7 +127,7 @@ func (h *Handler) RecordUse(c *gin.Context) {
 	id := c.Param("id")
 	m, err := h.service.RecordUse(id)
 	if err != nil {
-		util.ErrorResponse(c, response.NotFound, "记忆不存在", nil)
+		util.ErrorResponse(c, response.NotFound, err.Error(), nil)
 		return
 	}
 	util.SuccessMsgResponse(c, "使用已记录", m)
@@ -136,7 +136,7 @@ func (h *Handler) RecordUse(c *gin.Context) {
 func (h *Handler) DeleteAll(c *gin.Context) {
 	characterID := c.Query("characterId")
 	if err := h.service.DeleteAll(characterID); err != nil {
-		util.ErrorResponse(c, response.OperationFailed, "删除失败", nil)
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}
 	util.SuccessMsgResponse(c, "所有记忆已删除", nil)
@@ -151,7 +151,7 @@ func (h *Handler) Timeline(c *gin.Context) {
 	timelineType := c.Query("type")
 	items, total, err := h.service.GetTimeline(page, pageSize, characterID, source, memoryType, timelineType)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "查询失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, gin.H{"items": items, "total": total, "page": page, "pageSize": pageSize})
@@ -159,7 +159,7 @@ func (h *Handler) Timeline(c *gin.Context) {
 func (h *Handler) CheckConflict(c *gin.Context) {
 	var req CheckConflictRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "参数错误", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	result, err := h.service.CheckConflict(&req)

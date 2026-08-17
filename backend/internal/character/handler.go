@@ -32,7 +32,7 @@ func (h *Handler) List(c *gin.Context) {
 	includeDisabled := c.Query("includeDisabled") == "true"
 	chars, err := h.service.List(includeDisabled)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "查询失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, chars)
@@ -51,7 +51,7 @@ func (h *Handler) Get(c *gin.Context) {
 func (h *Handler) Create(c *gin.Context) {
 	var req CreateCharacterRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	char, err := h.service.Create(&req)
@@ -80,7 +80,7 @@ func (h *Handler) Update(c *gin.Context) {
 func (h *Handler) Delete(c *gin.Context) {
 	id := c.Param("id")
 	if err := h.service.Delete(id); err != nil {
-		util.ErrorResponse(c, response.NotFound, "角色不存在", nil)
+		util.ErrorResponse(c, response.NotFound, err.Error(), nil)
 		return
 	}
 	util.SuccessMsgResponse(c, "角色已删除", nil)
@@ -99,7 +99,7 @@ func (h *Handler) SetActive(c *gin.Context) {
 func (h *Handler) ListTemplates(c *gin.Context) {
 	templates, err := h.service.ListTemplates()
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "查询失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, templates)
@@ -109,7 +109,7 @@ func (h *Handler) GetTemplate(c *gin.Context) {
 	id := c.Param("id")
 	t, err := h.service.GetTemplateByID(id)
 	if err != nil {
-		util.ErrorResponse(c, response.NotFound, "模板不存在", nil)
+		util.ErrorResponse(c, response.NotFound, err.Error(), nil)
 		return
 	}
 	util.SuccessResponse(c, t)
@@ -178,7 +178,7 @@ func (h *Handler) ImportPackPreview(c *gin.Context) {
 
 	data, err := io.ReadAll(file)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "读取文件失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 
@@ -201,7 +201,7 @@ func (h *Handler) ImportPackConfirm(c *gin.Context) {
 
 	data, err := io.ReadAll(file)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "读取文件失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 
@@ -249,7 +249,7 @@ func (h *Handler) UpdateRoleProfile(c *gin.Context) {
 	characterID := c.Query("characterId")
 	var updates map[string]interface{}
 	if err := c.ShouldBindJSON(&updates); err != nil {
-		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
+		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
 	profile, err := h.service.UpdateRoleProfile(characterID, updates)
@@ -271,7 +271,7 @@ func (h *Handler) UploadAvatar(c *gin.Context) {
 
 	avatarDir := filepath.Join("data", "avatars")
 	if err := os.MkdirAll(avatarDir, 0755); err != nil {
-		util.ErrorResponse(c, response.InternalError, "创建目录失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 
@@ -284,13 +284,13 @@ func (h *Handler) UploadAvatar(c *gin.Context) {
 
 	dst, err := os.Create(savePath)
 	if err != nil {
-		util.ErrorResponse(c, response.InternalError, "保存文件失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 	defer dst.Close()
 
 	if _, err := io.Copy(dst, file); err != nil {
-		util.ErrorResponse(c, response.InternalError, "写入文件失败", nil)
+		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
 
