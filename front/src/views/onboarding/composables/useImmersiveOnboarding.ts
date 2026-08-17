@@ -447,11 +447,11 @@ export function useImmersiveOnboarding() {
     try {
       await new Promise((resolve) => setTimeout(resolve, 600));
 
-      const res = await post<any>("/api/model/detect-models", {
-        baseUrl: modelBaseUrl.value,
-        apiKey: modelApiKey.value,
-        apiType: "openai-compatible",
-      });
+	const res = await post<any>("/api/public/model/detect-models", {
+		baseUrl: modelBaseUrl.value,
+		apiKey: modelApiKey.value,
+		apiType: "openai-compatible",
+	});
 
       if (res?.models && res.models.length > 0) {
         modelReady.value = true;
@@ -481,11 +481,11 @@ export function useImmersiveOnboarding() {
     try {
       await new Promise((resolve) => setTimeout(resolve, 600));
 
-      const res = await post<any>("/api/model/detect-models", {
-        baseUrl: visionModelURL.value,
-        apiKey: visionModelKey.value,
-        apiType: "openai-compatible",
-      });
+const res = await post<any>("/api/public/model/detect-models", {
+		baseUrl: visionModelURL.value,
+		apiKey: visionModelKey.value,
+		apiType: "openai-compatible",
+	});
 
       if (res?.models && res.models.length > 0) {
         visionReady.value = true;
@@ -538,11 +538,11 @@ export function useImmersiveOnboarding() {
     try {
       await new Promise((resolve) => setTimeout(resolve, 600));
 
-      const res = await post<any>("/api/model/detect-models", {
-        baseUrl: vectorModelURL.value,
-        apiKey: vectorModelKey.value,
-        apiType: "openai-compatible",
-      });
+const res = await post<any>("/api/public/model/detect-models", {
+		baseUrl: vectorModelURL.value,
+		apiKey: vectorModelKey.value,
+		apiType: "openai-compatible",
+	});
 
       if (res?.models && res.models.length > 0) {
         vectorReady.value = true;
