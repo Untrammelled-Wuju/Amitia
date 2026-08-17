@@ -45,10 +45,7 @@ func (r *providerInstanceReconciler) ActivateExtension(def domain.ExtensionDefin
 
 	for _, d := range defs {
 		modID := domain.ModuleID(d.ModuleID)
-		var result RuntimeReadyResult
-		if runtimeResults != nil {
-			result = runtimeResults[modID]
-		}
+		result, hasResult := runtimeResults[modID]
 
 		if d.Placement == ProviderPlacementDevice {
 			if r.runtimeIdent.DeviceID == "" || r.runtimeIdent.RuntimeID == "" {
@@ -59,11 +56,18 @@ func (r *providerInstanceReconciler) ActivateExtension(def domain.ExtensionDefin
 		instanceID := r.buildInstanceID(d, result)
 
 		health := HealthReady
-		if result.Health == "degraded" {
-			health = HealthDegraded
+		if hasResult {
+			if result.Health == "degraded" {
+				health = HealthDegraded
+			}
+		} else if d.Kind != ProviderKindBuiltin {
+			health = HealthUnknown
 		}
 
 		availability := ProviderAvailabilityAvailable
+		if !hasResult && d.Kind != ProviderKindBuiltin {
+			availability = ProviderAvailabilityUnknown
+		}
 
 		inst := CapabilityProviderInstance{
 			ID:                instanceID,

@@ -15,7 +15,7 @@ import (
 var (
 	uiAgentInspector  source.SourceInspector
 	uiAgentExecutor   *uiagent.UIExecutor
-	uiAgentSchemaGen  *schema.AISchemaGenerator
+	uiAgentSchemaGen  *schema.SchemaUIGenerator
 	uiAgentPreviewMgr uiagent.PreviewManager
 	uiAgentSourceEditor source.SourceEditor
 )
@@ -28,7 +28,7 @@ func SetUIAgentExecutor(executor *uiagent.UIExecutor) {
 	uiAgentExecutor = executor
 }
 
-func SetUIAgentSchemaGenerator(gen *schema.AISchemaGenerator) {
+func SetUIAgentSchemaGenerator(gen *schema.SchemaUIGenerator) {
 	uiAgentSchemaGen = gen
 }
 

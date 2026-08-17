@@ -410,6 +410,14 @@ func (b *DefaultPermissionBroker) Grant(ctx context.Context, request PermissionG
 }
 
 func (b *DefaultPermissionBroker) Revoke(ctx context.Context, grantID string) error {
+	stored, found, err := b.storage.GetByGrantID(ctx, grantID)
+	if err != nil {
+		return fmt.Errorf("revoke: lookup grant: %w", err)
+	}
+	if !found {
+		return fmt.Errorf("revoke: grant %s not found", grantID)
+	}
+
 	if err := b.storage.MarkRevoked(ctx, grantID); err != nil {
 		return err
 	}
@@ -418,7 +426,13 @@ func (b *DefaultPermissionBroker) Revoke(ctx context.Context, grantID string) er
 	b.auditRec.RecordRevoke(ctx, grantID)
 
 	if b.OnPermissionRevoked != nil {
-		b.OnPermissionRevoked("", "")
+		extID := stored.SubjectID
+		runtimeID := ""
+		if stored.SubjectType == string(SubjectRuntime) {
+			runtimeID = stored.SubjectID
+			extID = ""
+		}
+		b.OnPermissionRevoked(extID, runtimeID)
 	}
 
 	return nil
