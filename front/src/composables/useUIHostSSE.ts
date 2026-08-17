@@ -3,6 +3,7 @@ import { useRouter } from "vue-router";
 import { ElNotification, ElMessageBox } from "element-plus";
 import { resolveApiUrl, createAuthorizedRequestInit } from "../runtime/runtime-adapter";
 import { isNavigationAllowed } from "../navigation/nav-whitelist";
+import { useExtensionUIStore } from "../stores/extensionUI";
 
 interface SSEEventEnvelope {
   eventType: string;
@@ -35,6 +36,7 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
   let dedupCleanupTimer: ReturnType<typeof setInterval> | null = null;
   const processedRequestIds = new Set<string>();
   const isConnected = connected ?? ref(false);
+  let extensionRefreshTimer: ReturnType<typeof setTimeout> | null = null;
 
   function isExpired(expiresAt?: string): boolean {
     if (!expiresAt) return false;
@@ -137,6 +139,33 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
       });
   }
 
+  const EXTENSION_CHANGE_EVENTS = new Set([
+    "extension_installed",
+    "extension_uninstalled",
+    "extension_enabled",
+    "extension_disabled",
+    "extension_paused",
+    "extension_resumed",
+    "extension_updated",
+    "extension_rolled_back",
+    "extension_generation_changed",
+    "extension_contributions_changed",
+  ]);
+
+  function handleExtensionChange(event: MessageEvent) {
+    const envelope = parseEnvelope(event);
+    if (!envelope) return;
+    if (!EXTENSION_CHANGE_EVENTS.has(envelope.eventType)) return;
+    if (extensionRefreshTimer) {
+      clearTimeout(extensionRefreshTimer);
+    }
+    extensionRefreshTimer = setTimeout(() => {
+      extensionRefreshTimer = null;
+      const store = useExtensionUIStore();
+      store.refreshSnapshot(true).catch(() => {});
+    }, 300);
+  }
+
   function getReconnectDelay(): number {
     const delay = Math.min(
       BASE_RECONNECT_MS * Math.pow(2, reconnectAttempts),
@@ -168,6 +197,16 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
       eventSource.addEventListener("ui_notify", handleNotify);
       eventSource.addEventListener("ui_navigate", handleNavigate);
       eventSource.addEventListener("ui_dialog", handleDialog);
+      eventSource.addEventListener("extension_installed", handleExtensionChange);
+      eventSource.addEventListener("extension_uninstalled", handleExtensionChange);
+      eventSource.addEventListener("extension_enabled", handleExtensionChange);
+      eventSource.addEventListener("extension_disabled", handleExtensionChange);
+      eventSource.addEventListener("extension_paused", handleExtensionChange);
+      eventSource.addEventListener("extension_resumed", handleExtensionChange);
+      eventSource.addEventListener("extension_updated", handleExtensionChange);
+      eventSource.addEventListener("extension_rolled_back", handleExtensionChange);
+      eventSource.addEventListener("extension_generation_changed", handleExtensionChange);
+      eventSource.addEventListener("extension_contributions_changed", handleExtensionChange);
       eventSource.onopen = () => {
         isConnected.value = true;
         reconnectAttempts = 0;
@@ -191,6 +230,10 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
     if (reconnectTimer) {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
+    }
+    if (extensionRefreshTimer) {
+      clearTimeout(extensionRefreshTimer);
+      extensionRefreshTimer = null;
     }
     if (eventSource) {
       eventSource.close();

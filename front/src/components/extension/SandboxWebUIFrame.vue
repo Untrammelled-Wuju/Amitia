@@ -40,6 +40,14 @@ const iframeStyle = computed(() => {
   return { height: `${height}px` };
 });
 
+const sessionScopeKey = computed(() =>
+  `${props.contribution.contributionId}:${props.contribution.generation}:${uiContext.value.characterId || ""}:${uiContext.value.conversationId || ""}`
+);
+
+let serverCapabilities: string[] = [];
+let serverGrantedPerms: string[] = [];
+let serverGrantedScopes: string[] = [];
+
 function detectOS(): "windows" | "macos" | "linux" | "unknown" {
   if (typeof navigator === "undefined") return "unknown";
   const ua = navigator.userAgent.toLowerCase();
@@ -58,6 +66,9 @@ async function createSession() {
   error.value = null;
   ready.value = false;
   iframeLoaded.value = false;
+  serverCapabilities = [];
+  serverGrantedPerms = [];
+  serverGrantedScopes = [];
   try {
     const surfaceData = (uiContext.value.surface as Record<string, unknown> | undefined) ?? {};
     const surfaceRole = String(surfaceData.role ?? "main");
@@ -73,6 +84,9 @@ async function createSession() {
       csp: string;
       resourceUrl?: string;
       entryUrl?: string;
+      capabilities?: string[];
+      grantedPerms?: string[];
+      grantedScopes?: string[];
     }>("/api/extension/webui/session", {
       contributionId: props.contribution.contributionId,
       extensionId: props.contribution.extensionId,
@@ -104,6 +118,9 @@ async function createSession() {
     sessionOrigin.value = data.origin;
     sessionCSP.value = data.csp;
     resourceUrl.value = data.resourceUrl || data.entryUrl || "";
+    serverCapabilities = data.capabilities || [];
+    serverGrantedPerms = data.grantedPerms || [];
+    serverGrantedScopes = data.grantedScopes || [];
   } catch (e) {
     error.value = e instanceof Error ? e.message : String(e);
     emit("error", error.value);
@@ -113,8 +130,8 @@ async function createSession() {
 }
 
 async function destroySession() {
-	bridgePort?.close();
-	bridgePort = null;
+  bridgePort?.close();
+  bridgePort = null;
   if (!sessionId.value) return;
   try {
     await apiClient.delete(`/api/extension/webui/session/${sessionId.value}`);
@@ -123,6 +140,9 @@ async function destroySession() {
   sessionId.value = "";
   sessionNonce.value = "";
   sessionToken.value = "";
+  serverCapabilities = [];
+  serverGrantedPerms = [];
+  serverGrantedScopes = [];
   ready.value = false;
 }
 
@@ -151,7 +171,18 @@ function onMessage(event: MessageEvent) {
       nonce: sessionNonce.value,
       token: sessionToken.value,
       generation: props.contribution.generation,
-      uiContext: uiContext.value,
+      uiContext: {
+        theme: buildThemeTokens(),
+        locale: (uiContext.value.locale as string) || navigator.language || "en",
+        platform: (uiContext.value.platform as string) || "web",
+        host: (uiContext.value.host as string) || "web",
+        os: (uiContext.value.os as string) || "unknown",
+        surface: (uiContext.value.surface as Record<string, unknown> | undefined)?.role ?? "main",
+        slotId: props.slotId,
+      },
+      capabilities: serverCapabilities,
+      grantedPerms: serverGrantedPerms,
+      grantedScopes: serverGrantedScopes,
       theme: buildThemeTokens(),
     },
     sessionOrigin.value || "*",
@@ -225,7 +256,9 @@ function postUIContext() {
     slotId: props.slotId,
     characterId: (uiContext.value.characterId as string) || "",
     conversationId: (uiContext.value.conversationId as string) || "",
-    capabilities: (uiContext.value.capabilities as string[]) || [],
+    capabilities: serverCapabilities,
+    grantedPerms: serverGrantedPerms,
+    grantedScopes: serverGrantedScopes,
     scope: {
       extensionId: props.contribution.extensionId,
       moduleId: props.contribution.moduleId,
@@ -289,18 +322,34 @@ onBeforeUnmount(() => {
   void destroySession();
 });
 
-watch(() => props.contribution.contributionId, async () => {
+watch(sessionScopeKey, async () => {
   await destroySession();
   await createSession();
 });
 
-watch(() => props.contribution.generation, async () => {
-  await destroySession();
-  await createSession();
+watch(() => buildThemeSnapshot(), () => {
+  if (!bridgePort || !ready.value) return;
+  bridgePort.postMessage({ type: "host.event", method: "ui.host.theme", payload: buildThemeSnapshot() });
 });
 
-watch(uiContext, postUIContext, { deep: true });
+watch(() => {
+  const surface = (uiContext.value.surface as Record<string, unknown> | undefined) ?? {};
+  return { width: surface.width ?? 0, height: surface.height ?? 0, breakpoint: surface.breakpoint ?? "xs" };
+}, () => {
+  if (!bridgePort || !ready.value) return;
+  const surface = (uiContext.value.surface as Record<string, unknown> | undefined) ?? {};
+  const surfaceRole = String(surface.role ?? "main");
+  bridgePort.postMessage({ type: "host.event", method: "ui.host.resize", payload: { width: surface.width ?? 0, height: surface.height ?? 0, breakpoint: surface.breakpoint ?? "xs", surfaceRole } });
+}, { deep: true });
+
 watch(ready, (value) => { if (value) postUIContext(); });
+
+watch(() => uiContext.value.locale, () => {
+  if (!bridgePort || !ready.value) return;
+  bridgePort.postMessage({ type: "host.event", method: "ui.host.context", payload: {
+    locale: (uiContext.value.locale as string) || navigator.language || "en",
+  } });
+});
 </script>
 
 <template>

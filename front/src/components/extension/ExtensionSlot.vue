@@ -199,6 +199,14 @@ function retryContribution(contributionId: string) {
 }
 .extension-slot--header, .extension-slot--composer, .extension-slot--status { width: auto; }
 .extension-slot--sidebar, .extension-slot--main { height: 100%; min-height: 0; overflow: auto; flex: 1; }
+.extension-slot--sidebar .extension-slot__contribution,
+.extension-slot--main .extension-slot__contribution {
+  min-height: 0;
+  height: 100%;
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+}
 .extension-slot--message .extension-slot__contribution { max-width: 100%; }
 .extension-slot__skeleton {
   width: 100%;
