@@ -162,6 +162,12 @@ func handleNetworkAuth(c *gin.Context, cfg AuthConfig) {
 		return
 	}
 
+	if err := validateJWTSecret(cfg.JWTSecret); err != nil {
+		util.ErrorResponse(c, response.InternalError, "JWT 配置无效", nil)
+		c.Abort()
+		return
+	}
+
 	claims, err := parseAndValidateJWT(tokenStr, cfg.JWTSecret, cfg.JWTIssuer, cfg.JWTAudience)
 	if err != nil {
 		util.ErrorResponse(c, response.InvalidToken, "令牌无效", nil)
@@ -169,7 +175,13 @@ func handleNetworkAuth(c *gin.Context, cfg AuthConfig) {
 		return
 	}
 
-	if cfg.AccountSessions != nil && claims.SessionID != "" {
+	if cfg.AccountSessions == nil {
+		util.ErrorResponse(c, response.InternalError, "会话验证服务未配置", nil)
+		c.Abort()
+		return
+	}
+
+	if claims.SessionID != "" {
 		result := cfg.AccountSessions.ValidateAccessSession(claims.SessionID, claims.UserID)
 		if !result.Valid {
 			switch {
@@ -354,7 +366,20 @@ func extractBearerToken(c *gin.Context) string {
 	return ""
 }
 
+func validateJWTSecret(secret string) error {
+	if len(secret) == 0 {
+		return errors.New("JWT secret 为空")
+	}
+	if len(secret) < 32 {
+		return errors.New("JWT secret 长度不足 32 字节")
+	}
+	return nil
+}
+
 func parseAndValidateJWT(tokenStr, secret, issuer, audience string) (*AccessClaims, error) {
+	if err := validateJWTSecret(secret); err != nil {
+		return nil, err
+	}
 	tokenSvc := accountsession.NewTokenServiceFromParams(secret, issuer, audience)
 	claims, err := tokenSvc.ParseAccessToken(tokenStr)
 	if err != nil {
