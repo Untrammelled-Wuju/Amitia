@@ -135,13 +135,15 @@ const statusTitle = computed(() => {
 
 async function createNewConversation() {
   try {
+    const currentCharId = localStorage.getItem("webchat-char-id");
     const cachedChar = JSON.parse(localStorage.getItem("uai-default-char") || "{}");
-    if (!cachedChar?.id) {
+    const charId = currentCharId || cachedChar?.id;
+    if (!charId) {
       ElMessage.warning("请先选择角色");
       return null;
     }
     const created = await post<any>("/api/web-chat/conversations", {
-      characterId: cachedChar.id,
+      characterId: charId,
       title: "",
     });
     return created?.id || null;
@@ -220,11 +222,10 @@ function openUserProfile() {
 }
 
 :global(html[data-theme="dark"]) .side-nav {
-  background: var(--tp-glass-bg);
-  border-right-color: var(--tp-glass-border);
-  -webkit-backdrop-filter: blur(var(--tp-glass-blur-sm, 8px))
-    saturate(var(--tp-glass-saturate-sm, 1.1));
-  backdrop-filter: blur(var(--tp-glass-blur-sm, 8px)) saturate(var(--tp-glass-saturate-sm, 1.1));
+  background: var(--workbench-sidebar-bg);
+  border-right-color: var(--surface-border);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 
 .side-nav.is-collapsed {

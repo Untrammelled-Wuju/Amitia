@@ -109,6 +109,7 @@ onMounted(async () => {
           router.replace("/login");
         } else {
           extensionUIStore.refreshSnapshot(true).catch(() => {});
+          extensionUIStore.setupExtensionChangeListener();
         }
       } catch {
         localStorage.removeItem(TOKEN_KEY);

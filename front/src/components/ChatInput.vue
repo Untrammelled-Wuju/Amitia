@@ -20,22 +20,21 @@ SPDX-License-Identifier: AGPL-3.0-only
     />
 
         <div class="composer-stack">
-      <ComposerExtensionHost
-        v-if="characterId"
-        :character-id="characterId"
-        :conversation-id="conversationId"
-        :channel="channel"
-        :platform="detectPlatform()"
-        :host="window.amitiaDesktop ? 'desktop' : 'web'"
-        :os="detectOS()"
-        :conversation-state="generating ? 'generating' : 'idle'"
-        :capabilities="hostCapabilities"
-        :available-skills="agentSkillNames"
-        :draft="text"
-      />
-
       <div ref="inputWrapperRef" class="input-wrapper">
-          <div v-if="replyTarget" class="reply-preview-bar">
+        <ComposerExtensionHost
+          v-if="characterId"
+          :character-id="characterId"
+          :conversation-id="conversationId"
+          :channel="channel"
+          :platform="detectPlatform()"
+          :host="window.amitiaDesktop ? 'desktop' : 'web'"
+          :os="detectOS()"
+          :conversation-state="generating ? 'generating' : 'idle'"
+          :capabilities="hostCapabilities"
+          :available-skills="agentSkillNames"
+          :draft="text"
+        />
+        <div v-if="replyTarget" class="reply-preview-bar">
             <div class="reply-preview-content">
               <span class="reply-preview-label"
                 >正在引用{{
