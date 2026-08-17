@@ -68,14 +68,14 @@ func (j *Journal) Save() error {
 		return fmt.Errorf("artifact: journal path is empty")
 	}
 	dir := filepath.Dir(j.Path)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return fmt.Errorf("artifact: create journal dir %s: %w", dir, err)
 	}
 	data, err := json.MarshalIndent(j.Entries, "", "  ")
 	if err != nil {
 		return fmt.Errorf("artifact: marshal journal: %w", err)
 	}
-	if err := os.WriteFile(j.Path, data, 0644); err != nil {
+	if err := os.WriteFile(j.Path, data, 0o600); err != nil {
 		return fmt.Errorf("artifact: write journal %s: %w", j.Path, err)
 	}
 	return nil

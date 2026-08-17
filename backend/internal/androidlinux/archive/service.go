@@ -380,14 +380,14 @@ func (s *Service) openArchiveWriter(ctx context.Context, path string, format For
 		return OpenZipWriter(path, overwrite)
 	case FormatTAR:
 		tmpPath := path + ".amitia.tmp"
-		file, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+		file, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 		if err != nil {
 			return nil, ErrWriteFailed(err.Error())
 		}
 		return OpenTarWriter(&tempWriteCloser{File: file}), nil
 	case FormatTARGZ:
 		tmpPath := path + ".amitia.tmp"
-		file, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+		file, err := os.OpenFile(tmpPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 		if err != nil {
 			return nil, ErrWriteFailed(err.Error())
 		}

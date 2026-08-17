@@ -16,7 +16,7 @@ import (
 
 const (
 	maxSymlinkResolution = 32
-	golangDefaultMode    = 0644
+	golangDefaultMode    = 0o600
 )
 
 type Service struct {
@@ -215,7 +215,7 @@ func (s *Service) Write(path string, data []byte, opts WriteOptions) (StatResult
 
 	if opts.CreateParents {
 		dir := filepath.Dir(resolved)
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return StatResult{}, ErrIOFailed(err.Error())
 		}
 	}
@@ -272,7 +272,7 @@ func (s *Service) Append(path string, data []byte) (StatResult, error) {
 		return StatResult{}, ErrPathDenied(path, "cannot append to directory")
 	}
 
-	f, err := os.OpenFile(resolved, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+	f, err := os.OpenFile(resolved, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0o600)
 	if err != nil {
 		return StatResult{}, ErrIOFailed(err.Error())
 	}
@@ -294,7 +294,7 @@ func (s *Service) Mkdir(path string, opts MkdirOptions) (StatResult, error) {
 
 	mode := opts.Mode
 	if mode == 0 {
-		mode = 0755
+		mode = 0o700
 	}
 
 	if opts.Recursive {
@@ -335,12 +335,12 @@ func (s *Service) Touch(path string) (StatResult, error) {
 
 	dir := filepath.Dir(resolved)
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
-		if err := os.MkdirAll(dir, 0755); err != nil {
+		if err := os.MkdirAll(dir, 0o700); err != nil {
 			return StatResult{}, ErrIOFailed(err.Error())
 		}
 	}
 
-	f, err := os.OpenFile(resolved, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0644)
+	f, err := os.OpenFile(resolved, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 	if err != nil {
 		return StatResult{}, ErrIOFailed(err.Error())
 	}
@@ -709,7 +709,7 @@ func (s *Service) Symlink(target, linkPath string) (StatResult, error) {
 	}
 
 	dir := filepath.Dir(resolved)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return StatResult{}, ErrIOFailed(err.Error())
 	}
 

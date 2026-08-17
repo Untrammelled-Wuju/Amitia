@@ -42,11 +42,11 @@ func (s *ArtifactStore) WriteArtifact(workDir *WorkDirectory, kind string, frame
 		return nil, fmt.Errorf("artifact: write artifact: safe join: %w", err)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0o700); err != nil {
 		return nil, fmt.Errorf("artifact: write artifact: mkdir: %w", err)
 	}
 
-	if err := os.WriteFile(targetPath, data, 0644); err != nil {
+	if err := os.WriteFile(targetPath, data, 0o600); err != nil {
 		return nil, fmt.Errorf("artifact: write artifact: write file: %w", err)
 	}
 
@@ -101,11 +101,11 @@ func (s *ArtifactStore) WriteImage(workDir *WorkDirectory, subdir string, frameI
 		return "", fmt.Errorf("artifact: write image: safe join file: %w", err)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0o700); err != nil {
 		return "", fmt.Errorf("artifact: write image: mkdir: %w", err)
 	}
 
-	if err := os.WriteFile(targetPath, buf.Bytes(), 0644); err != nil {
+	if err := os.WriteFile(targetPath, buf.Bytes(), 0o600); err != nil {
 		return "", fmt.Errorf("artifact: write image: write file: %w", err)
 	}
 
@@ -138,11 +138,11 @@ func (s *ArtifactStore) WriteMask(workDir *WorkDirectory, frameIndex int, mask *
 		return "", fmt.Errorf("artifact: write mask: safe join: %w", err)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0o700); err != nil {
 		return "", fmt.Errorf("artifact: write mask: mkdir: %w", err)
 	}
 
-	if err := os.WriteFile(targetPath, buf.Bytes(), 0644); err != nil {
+	if err := os.WriteFile(targetPath, buf.Bytes(), 0o600); err != nil {
 		return "", fmt.Errorf("artifact: write mask: write file: %w", err)
 	}
 
@@ -176,11 +176,11 @@ func (s *ArtifactStore) WriteJSON(workDir *WorkDirectory, subdir string, filenam
 		return "", fmt.Errorf("artifact: write json: safe join file: %w", err)
 	}
 
-	if err := os.MkdirAll(filepath.Dir(targetPath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(targetPath), 0o700); err != nil {
 		return "", fmt.Errorf("artifact: write json: mkdir: %w", err)
 	}
 
-	if err := os.WriteFile(targetPath, data, 0644); err != nil {
+	if err := os.WriteFile(targetPath, data, 0o600); err != nil {
 		return "", fmt.Errorf("artifact: write json: write file: %w", err)
 	}
 

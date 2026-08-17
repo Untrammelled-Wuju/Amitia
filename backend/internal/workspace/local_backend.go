@@ -172,7 +172,7 @@ func (b *LocalBackend) Write(ctx context.Context, mount WorkspaceMount, path str
 			return WorkspaceEntry{}, fmt.Errorf("%w: %v", ErrWriteFailed, err)
 		}
 	} else {
-		if err := os.WriteFile(target, data, 0644); err != nil {
+		if err := os.WriteFile(target, data, 0o600); err != nil {
 			return WorkspaceEntry{}, fmt.Errorf("%w: %v", ErrWriteFailed, err)
 		}
 	}
@@ -189,9 +189,9 @@ func (b *LocalBackend) Mkdir(ctx context.Context, mount WorkspaceMount, path str
 	if err != nil {
 		return WorkspaceEntry{}, err
 	}
-	if err := os.MkdirAll(target, 0755); err != nil {
-		return WorkspaceEntry{}, fmt.Errorf("%w: %v", ErrCreateFailed, err)
-	}
+	if err := os.MkdirAll(target, 0o700); err != nil {
+			return WorkspaceEntry{}, fmt.Errorf("%w: %v", ErrCreateFailed, err)
+		}
 	info, err := os.Stat(target)
 	if err != nil {
 		return WorkspaceEntry{}, fmt.Errorf("%w: %v", ErrCreateFailed, err)
@@ -303,9 +303,9 @@ func (b *LocalBackend) Copy(ctx context.Context, mount WorkspaceMount, source st
 	if int64(len(data)) > MaxSingleWrite {
 		return WorkspaceEntry{}, fmt.Errorf("%w: copy size %d exceeds max %d", ErrResourceTooLarge, len(data), MaxSingleWrite)
 	}
-	if err := os.WriteFile(targetPath, data, 0644); err != nil {
-		return WorkspaceEntry{}, fmt.Errorf("%w: %v", ErrCopyFailed, err)
-	}
+	if err := os.WriteFile(targetPath, data, 0o600); err != nil {
+			return WorkspaceEntry{}, fmt.Errorf("%w: %v", ErrCopyFailed, err)
+		}
 	rel := filepath.Join(destinationDir, baseName)
 	info, err := os.Stat(targetPath)
 	if err != nil {

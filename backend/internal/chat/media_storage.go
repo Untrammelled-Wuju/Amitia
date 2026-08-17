@@ -21,7 +21,7 @@ func SaveImageFromDataURI(imageUrl string) string {
 		return imageUrl
 	}
 	imgDir := filepath.Join(config.AppCfg.Storage.DataDir, "images")
-	os.MkdirAll(imgDir, 0755)
+	os.MkdirAll(imgDir, 0o700)
 	idx := strings.Index(imageUrl, ";base64,")
 	if idx <= 0 {
 		return imageUrl
@@ -36,6 +36,6 @@ func SaveImageFromDataURI(imageUrl string) string {
 	if err != nil {
 		return imageUrl
 	}
-	os.WriteFile(filepath.Join(imgDir, fname), data, 0644)
+	os.WriteFile(filepath.Join(imgDir, fname), data, 0o600)
 	return "/images/" + fname
 }
