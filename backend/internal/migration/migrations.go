@@ -166,6 +166,7 @@ func DefaultMigrations() []Migration {
 		SyncMutationIdempotentMigration(),
 		SecurityAuditEventsColumnsMigration(),
 		SecurityAuditEventsOccurredAtMigration(),
+		AuthSessionsMissingColumnsMigration(),
 	}
 }
 
@@ -189,6 +190,18 @@ func SecurityAuditEventsOccurredAtMigration() Migration {
 		Name:    "add_security_audit_events_occurred_at",
 		Up: func(s *Step) error {
 			s.AddColumn("security_audit_events", "occurred_at", "TEXT")
+			return nil
+		},
+	}
+}
+
+func AuthSessionsMissingColumnsMigration() Migration {
+	return Migration{
+		Version: "20260817005",
+		Name:    "add_auth_sessions_missing_columns",
+		Up: func(s *Step) error {
+			s.AddColumn("auth_sessions", "username", "TEXT NOT NULL DEFAULT ''")
+			s.AddColumn("auth_sessions", "role", "TEXT NOT NULL DEFAULT 'user'")
 			return nil
 		},
 	}
