@@ -77,7 +77,7 @@ func (s *PushService) Push(req PushRequest) (*PushResult, error) {
 				Scope:    ScopeDevice,
 				DeviceID: req.DeviceID,
 			}
-			if err := s.cursors.MarkPushed(identity, maxSeq); err != nil {
+			if err := s.cursors.MarkPushedTx(tx, identity, maxSeq); err != nil {
 				return fmt.Errorf("push: mark pushed: %w", err)
 			}
 		}

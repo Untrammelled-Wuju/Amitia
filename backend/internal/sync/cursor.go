@@ -20,6 +20,7 @@ type CursorStore interface {
 	Save(cursor *SyncCursor) error
 	UpdateApplied(identity CursorIdentity, seq Sequence) error
 	UpdatePushed(identity CursorIdentity, seq Sequence) error
+	UpdatePushedTx(tx *gorm.DB, identity CursorIdentity, seq Sequence) error
 	ListByUser(userID string) ([]SyncCursor, error)
 }
 
@@ -70,6 +71,13 @@ func (s *sqliteCursorStore) UpdatePushed(identity CursorIdentity, seq Sequence) 
 	}).Error
 }
 
+func (s *sqliteCursorStore) UpdatePushedTx(tx *gorm.DB, identity CursorIdentity, seq Sequence) error {
+	return tx.Model(&SyncCursor{}).Where("user_id = ? AND scope = ? AND device_id = ?", identity.UserID, identity.Scope, identity.DeviceID).Updates(map[string]interface{}{
+		"last_pushed": seq,
+		"updated_at":  time.Now().UTC(),
+	}).Error
+}
+
 func (s *sqliteCursorStore) ListByUser(userID string) ([]SyncCursor, error) {
 	var cursors []SyncCursor
 	err := s.db.Where("user_id = ?", userID).Find(&cursors).Error
@@ -113,6 +121,10 @@ func (s *CursorService) MarkApplied(identity CursorIdentity, seq Sequence) error
 
 func (s *CursorService) MarkPushed(identity CursorIdentity, seq Sequence) error {
 	return s.store.UpdatePushed(identity, seq)
+}
+
+func (s *CursorService) MarkPushedTx(tx *gorm.DB, identity CursorIdentity, seq Sequence) error {
+	return s.store.UpdatePushedTx(tx, identity, seq)
 }
 
 func (s *CursorService) GetStatus(identity CursorIdentity, serverSeq Sequence) (*CursorStatus, error) {

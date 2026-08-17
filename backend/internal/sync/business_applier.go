@@ -4,7 +4,6 @@ package sync
 
 import (
 	"encoding/json"
-	"fmt"
 
 	"gorm.io/gorm"
 )
@@ -17,9 +16,16 @@ const (
 )
 
 type mutationPayload struct {
-	Title   string                 `json:"title"`
-	Content string                 `json:"content"`
-	Meta    map[string]interface{} `json:"meta,omitempty"`
+	Title          string                 `json:"title"`
+	Content        string                 `json:"content"`
+	Meta           map[string]interface{} `json:"meta,omitempty"`
+	ConversationID string                 `json:"conversationId,omitempty"`
+	Role           string                 `json:"role,omitempty"`
+	Sequence       int64                  `json:"sequence,omitempty"`
+	MsgType        string                 `json:"msgType,omitempty"`
+	Source         string                 `json:"source,omitempty"`
+	Key            string                 `json:"key,omitempty"`
+	Value          string                 `json:"value,omitempty"`
 }
 
 type businessApplier struct {
@@ -129,12 +135,23 @@ func (a *businessApplier) applyMessage(tx *gorm.DB, mutation ClientMutation) (in
 	}
 	switch mutation.Operation {
 	case OpCreate:
+		if payload.ConversationID == "" {
+			return 0, &ApplierError{Code: "missing_required_field", Message: "message conversationId is required"}
+		}
+		if payload.Role == "" {
+			return 0, &ApplierError{Code: "missing_required_field", Message: "message role is required"}
+		}
 		record := map[string]interface{}{
-			"id":         string(mutation.EntityID),
-			"content":    payload.Content,
-			"created_at": a.now(),
-			"updated_at": a.now(),
-			"revision":   1,
+			"id":              string(mutation.EntityID),
+			"conversation_id": payload.ConversationID,
+			"role":            payload.Role,
+			"content":         payload.Content,
+			"sequence":        payload.Sequence,
+			"msg_type":        payload.MsgType,
+			"source":          payload.Source,
+			"created_at":      a.now(),
+			"updated_at":      a.now(),
+			"revision":        1,
 		}
 		if err := tx.Table("messages").Create(record).Error; err != nil {
 			return 0, &ApplierError{Code: "apply_failed", Message: "create message: " + err.Error()}
@@ -257,55 +274,42 @@ func (a *businessApplier) applySettings(tx *gorm.DB, mutation ClientMutation) (i
 			return 0, &ApplierError{Code: "invalid_payload", Message: "unmarshal settings payload: " + err.Error()}
 		}
 	}
+	settingsKey := string(mutation.EntityID)
+	if payload.Key != "" {
+		settingsKey = payload.Key
+	}
 	switch mutation.Operation {
 	case OpCreate, OpUpdate:
 		var existing struct {
-			Revision int64
+			Key string
 		}
-		tx.Table("settings").Where("id = ?", mutation.EntityID).Select("COALESCE(revision, 0) as revision").Scan(&existing)
-
-		upsert := map[string]interface{}{
-			"id":         string(mutation.EntityID),
-			"meta":       payload.Meta,
-			"updated_at": a.now(),
-			"revision":   gorm.Expr("COALESCE(revision, 0) + 1"),
+		tx.Table("app_settings").Where("key = ?", settingsKey).Select("key").Scan(&existing)
+		if existing.Key == "" {
+			if err := tx.Table("app_settings").Create(map[string]interface{}{
+				"key":        settingsKey,
+				"value":      payload.Value,
+				"updated_at": a.now(),
+			}).Error; err != nil {
+				return 0, &ApplierError{Code: "apply_failed", Message: "create settings: " + err.Error()}
+			}
+		} else {
+			if err := tx.Table("app_settings").Where("key = ?", settingsKey).Updates(map[string]interface{}{
+				"value":      payload.Value,
+				"updated_at": a.now(),
+			}).Error; err != nil {
+				return 0, &ApplierError{Code: "apply_failed", Message: "update settings: " + err.Error()}
+			}
 		}
-		if err := tx.Table("settings").Save(upsert).Error; err != nil {
-			return 0, &ApplierError{Code: "apply_failed", Message: "upsert settings: " + err.Error()}
-		}
-		var rev int64
-		if err := tx.Table("settings").Where("id = ?", mutation.EntityID).Select("COALESCE(revision, 0)").Scan(&rev).Error; err != nil {
-			return 0, &ApplierError{Code: "apply_failed", Message: "read revision: " + err.Error()}
-		}
-		return rev, nil
+		return 0, nil
 	case OpDelete:
-		var existing struct {
-			Revision int64
+		if err := tx.Table("app_settings").Where("key = ?", settingsKey).Delete(nil).Error; err != nil {
+			return 0, &ApplierError{Code: "apply_failed", Message: "delete settings: " + err.Error()}
 		}
-		tx.Table("settings").Where("id = ? AND revision = ?", mutation.EntityID, mutation.BaseRevision).Select("COALESCE(revision, 0) as revision").Scan(&existing)
-
-		result := tx.Table("settings").Where("id = ? AND revision = ?", mutation.EntityID, mutation.BaseRevision).Updates(map[string]interface{}{
-			"deleted_at": a.now(),
-			"updated_at": a.now(),
-			"revision":   gorm.Expr("COALESCE(revision, 0) + 1"),
-		})
-		if result.Error != nil {
-			return 0, &ApplierError{Code: "apply_failed", Message: "delete settings: " + result.Error.Error()}
-		}
-		if result.RowsAffected == 0 {
-			var currentRev int64
-			tx.Table("settings").Where("id = ?", mutation.EntityID).Select("COALESCE(revision, 0)").Scan(&currentRev)
-			return 0, &ApplierError{Code: "conflict", Message: "settings revision mismatch", ServerRevision: currentRev}
-		}
-		var rev int64
-		if err := tx.Table("settings").Where("id = ?", mutation.EntityID).Select("COALESCE(revision, 0)").Scan(&rev).Error; err != nil {
-			return 0, &ApplierError{Code: "apply_failed", Message: "read revision: " + err.Error()}
-		}
-		return rev, nil
+		return 0, nil
 	}
 	return 0, &ApplierError{Code: "unsupported_operation", Message: "unsupported operation: " + string(mutation.Operation)}
 }
 
 func (a *businessApplier) now() string {
-	return fmt.Sprintf("%d", a.db.NowFunc().Unix())
+	return a.db.NowFunc().Format("2006-01-02 15:04:05")
 }
