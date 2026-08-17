@@ -28,7 +28,7 @@ type Service struct {
 	blobStore  BlobStore
 	repo       Repository
 	limits     UploadLimits
-	eventSink  EventSink
+	eventSink  *RealEventSink
 }
 
 func NewService(blobStore BlobStore, repo Repository, limits UploadLimits) *Service {
@@ -36,14 +36,12 @@ func NewService(blobStore BlobStore, repo Repository, limits UploadLimits) *Serv
 		blobStore: blobStore,
 		repo:      repo,
 		limits:    limits,
-		eventSink: noopEventSink{},
+		eventSink: nil,
 	}
 }
 
-func (s *Service) SetEventSink(sink EventSink) {
-	if sink != nil {
-		s.eventSink = sink
-	}
+func (s *Service) SetEventSink(sink *RealEventSink) {
+	s.eventSink = sink
 }
 
 func (s *Service) Create(ctx context.Context, req CreateRequest) (Artifact, error) {
@@ -97,21 +95,32 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (Artifact, erro
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
-	var txErr error
-	err = s.repo.DB().Transaction(func(tx *gorm.DB) error {
-		if err := s.repo.Create(tx, art); err != nil {
-			txErr = ErrMetadataWriteFailed(err)
-			return txErr
-		}
-		return nil
-	})
+
+	sqlDB, err := s.repo.SqlDB()
 	if err != nil {
-		return Artifact{}, err
+		return Artifact{}, ErrMetadataWriteFailed(err)
 	}
-	if txErr != nil {
-		return Artifact{}, txErr
+
+	tx, err := sqlDB.BeginTx(ctx, nil)
+	if err != nil {
+		return Artifact{}, ErrMetadataWriteFailed(err)
 	}
-	s.eventSink.ArtifactCreated(art)
+	defer tx.Rollback()
+
+	if err := s.repo.CreateSqlTx(tx, art); err != nil {
+		return Artifact{}, ErrMetadataWriteFailed(err)
+	}
+
+	if s.eventSink != nil {
+		if err := s.eventSink.PublishCreated(ctx, tx, art); err != nil {
+			return Artifact{}, ErrMetadataWriteFailed(err)
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return Artifact{}, ErrMetadataWriteFailed(err)
+	}
+
 	return *art, nil
 }
 
@@ -152,13 +161,33 @@ func (s *Service) Delete(ctx context.Context, ownerUserID string, id ID) error {
 	if count > 0 {
 		return ErrInUse(id)
 	}
-	if err := s.repo.DB().Transaction(func(tx *gorm.DB) error {
-		return s.repo.SoftDelete(tx, id)
-	}); err != nil {
+
+	sqlDB, err := s.repo.SqlDB()
+	if err != nil {
 		return err
 	}
+
+	tx, err := sqlDB.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	if err := s.repo.SoftDeleteSqlTx(tx, id); err != nil {
+		return err
+	}
+
+	if s.eventSink != nil {
+		if err := s.eventSink.PublishDeleted(ctx, tx, art); err != nil {
+			return err
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		return err
+	}
+
 	art.Status = StatusDeleted
-	s.eventSink.ArtifactDeleted(art)
 	return nil
 }
 
@@ -195,4 +224,3 @@ func normalizeMIME(mime string) string {
 func isBlobTooLarge(err error) bool {
 	return errors.Is(err, ErrBlobTooLarge)
 }
-
