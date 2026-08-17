@@ -47,6 +47,7 @@ type RepositoryV2 interface {
 	CreateOperationTx(tx *gorm.DB, op *operation.InstallationOperation) error
 	GetOperationTx(tx *gorm.DB, operationID string) (*operation.InstallationOperation, error)
 	GetOperationByIdempotencyKeyTx(tx *gorm.DB, userID, deviceID, idempotencyKey, opType string) (*operation.InstallationOperation, error)
+	UpdateOperationTx(tx *gorm.DB, op *operation.InstallationOperation) error
 	UpdateOperationStatusCAS(tx *gorm.DB, operationID, expectedStatus, newStatus, executionID string) (*operation.InstallationOperation, error)
 	ClaimOperationLeaseCAS(tx *gorm.DB, lease *operation.Lease, expectedStatuses []string) (*operation.InstallationOperation, error)
 	RenewOperationLeaseTx(tx *gorm.DB, operationID, executionID string) error

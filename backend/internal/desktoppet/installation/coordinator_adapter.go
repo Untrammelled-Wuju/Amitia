@@ -43,7 +43,7 @@ func (a *CoordinatorRepoAdapter) GetOperation(ctx context.Context, userID, devic
 
 func (a *CoordinatorRepoAdapter) UpdateOperation(ctx context.Context, op *operation.InstallationOperation) error {
 	return a.repo.Transaction(ctx, func(tx RepositoryV2) error {
-		return tx.CreateOperationTx(tx.DB(), op)
+		return tx.UpdateOperationTx(tx.DB(), op)
 	})
 }
 

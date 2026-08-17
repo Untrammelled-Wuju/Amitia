@@ -151,7 +151,14 @@ func (r *Runner) executePlan(operationID string, plan *DomainMigrationOperationP
 				close(r.leaseLost)
 			}
 		})
-		_ = r.lock.StartHeartbeat(r.lockName, 30*time.Second, r.leaseTTL)
+		if err := r.lock.StartHeartbeat(r.lockName, 30*time.Second, r.leaseTTL); err != nil {
+			_, _ = r.repo.UpdateOperationStageCAS(ctx, operationID, StagePreflight, StageFailedTerminal, func(o *MigrationOperation) {
+				o.Error = "启动心跳失败: " + err.Error()
+			})
+			r.lock.Release(r.lockName)
+			cancel()
+			return
+		}
 		defer r.lock.Release(r.lockName)
 	}
 
@@ -461,9 +468,6 @@ func (r *Runner) RequestCutover(ctx context.Context, operationID, direction stri
 				return &RunnerError{Code: "PARITY_FAILED", Message: fmt.Sprintf("Parity 检查 %s 失败: %s", pCheck.Name, detail)}
 			}
 		}
-		if _, err := r.repo.UpdateOperationStageCAS(ctx, operationID, MigrationStage(op.Stage), StageReadCutover, nil); err != nil {
-			return &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: "读切转阶段转换失败: " + err.Error()}
-		}
 		if err := r.repo.RecordReadCutover(ctx, operationID, op.PlanID); err != nil {
 			return &RunnerError{Code: "READ_CUTOVER_RECORD_FAILED", Message: "记录读切转失败: " + err.Error()}
 		}
@@ -478,9 +482,19 @@ func (r *Runner) RequestCutover(ctx context.Context, operationID, direction stri
 		if err := r.repo.MarkReadCutoverVerified(ctx, operationID, op.PlanID); err != nil {
 			return &RunnerError{Code: "READ_CUTOVER_VERIFY_FAILED", Message: "标记读切转已验证失败: " + err.Error()}
 		}
+		if _, err := r.repo.UpdateOperationStageCAS(ctx, operationID, MigrationStage(op.Stage), StageReadCutover, nil); err != nil {
+			return &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: "读切转阶段转换失败: " + err.Error()}
+		}
 	case "write":
 		if op.Stage != StageReadCutover && op.Stage != StageWriteCutover {
 			return &RunnerError{Code: "INVALID_STAGE", Message: fmt.Sprintf("当前阶段 %s 不允许写切转", op.Stage)}
+		}
+		hasVerifiedReadCutover, err := r.repo.HasVerifiedReadCutover(ctx, operationID)
+		if err != nil {
+			return &RunnerError{Code: "READ_CUTOVER_CHECK_FAILED", Message: "检查读切转验证状态失败: " + err.Error()}
+		}
+		if !hasVerifiedReadCutover {
+			return &RunnerError{Code: "READ_CUTOVER_NOT_VERIFIED", Message: "读切转未验证，不允许写切转"}
 		}
 		for _, pCheck := range plan.ParityChecks {
 			if !pCheck.Required {
@@ -493,9 +507,6 @@ func (r *Runner) RequestCutover(ctx context.Context, operationID, direction stri
 			if !passed {
 				return &RunnerError{Code: "PARITY_FAILED", Message: fmt.Sprintf("Parity 检查 %s 失败: %s", pCheck.Name, detail)}
 			}
-		}
-		if _, err := r.repo.UpdateOperationStageCAS(ctx, operationID, MigrationStage(op.Stage), StageWriteCutover, nil); err != nil {
-			return &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: "写切转阶段转换失败: " + err.Error()}
 		}
 		if err := r.repo.RecordWriteCutover(ctx, operationID, op.PlanID); err != nil {
 			return &RunnerError{Code: "WRITE_CUTOVER_RECORD_FAILED", Message: "记录写切转失败: " + err.Error()}
@@ -510,6 +521,9 @@ func (r *Runner) RequestCutover(ctx context.Context, operationID, direction stri
 		}
 		if err := r.repo.MarkWriteCutoverVerified(ctx, operationID, op.PlanID); err != nil {
 			return &RunnerError{Code: "WRITE_CUTOVER_VERIFY_FAILED", Message: "标记写切转已验证失败: " + err.Error()}
+		}
+		if _, err := r.repo.UpdateOperationStageCAS(ctx, operationID, MigrationStage(op.Stage), StageWriteCutover, nil); err != nil {
+			return &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: "写切转阶段转换失败: " + err.Error()}
 		}
 		if _, err := r.repo.UpdateOperationStageCAS(ctx, operationID, StageWriteCutover, StageCompleted, nil); err != nil {
 			return &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: "完成阶段转换失败: " + err.Error()}
