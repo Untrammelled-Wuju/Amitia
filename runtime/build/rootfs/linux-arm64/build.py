@@ -17,6 +17,7 @@ from errors import BuildError
 from atomic_publish import atomic_publish_dir
 from tree_manifest import compute_tree_manifest, write_tree_manifest
 from hashing import sha256_file
+from version_policy import same_version_gate
 
 ROOTFS_SCRIPTS_DIR = os.path.join(SCRIPT_DIR, "..", "..", "..", "scripts", "prepare")
 PREPARE_SH = os.path.join(ROOTFS_SCRIPTS_DIR, "prepare-ubuntu-rootfs-arm64.sh")
@@ -98,8 +99,7 @@ def build_rootfs(input_dir, output_root, cache_dir=None, staging_dir=None, dev_m
         record.write(frozen_path)
 
         final_output = os.path.join(output_root, OUTPUT_DIR_NAME)
-        if os.path.exists(final_output):
-            shutil.rmtree(final_output)
+        same_version_gate(output_root, record.componentId, record.version, record.treeSha256, artifact_sha)
         atomic_publish_dir(staging, final_output)
 
         return record

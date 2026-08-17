@@ -8,7 +8,7 @@ public enum AlarmKitAvailability {
     case unsupported(String)
 }
 
-public enum AlarmAuthorizationStatus {
+public enum AlarmAuthorizationStatus: String, Sendable {
     case authorized
     case denied
     case notDetermined
@@ -52,9 +52,9 @@ public class AlarmKitAdapter {
         }
         let majorVersion = Int((UIDevice.current.systemVersion).split(separator: ".").first ?? "25") ?? 25
         if majorVersion < 26 {
-            return .unsupported("system clock alarm API requires iOS 26.0+ AlarmKit. Current iOS \(majorVersion) does not expose alarm management.")
+            return .unsupported("PLATFORM_NOT_SUPPORTED")
         }
-        return .unsupported("AlarmKit framework not available on this device")
+        return .unsupported("PLATFORM_NOT_SUPPORTED")
     }
 
     public func authorizationStatus() -> AlarmAuthorizationStatus {
@@ -62,7 +62,7 @@ public class AlarmKitAdapter {
         #if canImport(AlarmKit)
         if #available(iOS 26.0, *) {
             let manager = AlarmManager.shared
-            switch manager.authorizationStatus {
+            switch manager.authorizationState {
             case .authorized: return .authorized
             case .denied: return .denied
             case .notDetermined: return .notDetermined
@@ -78,8 +78,8 @@ public class AlarmKitAdapter {
         #if canImport(AlarmKit)
         if #available(iOS 26.0, *) {
             do {
-                let result = try await AlarmManager.shared.requestAuthorization()
-                switch result {
+                let state = try await AlarmManager.shared.requestAuthorization()
+                switch state {
                 case .authorized: return (.authorized, nil)
                 case .denied: return (.denied, nil)
                 case .notDetermined: return (.notDetermined, nil)
@@ -109,8 +109,7 @@ public class AlarmKitAdapter {
                 title: title,
                 schedule: schedule,
                 presentation: presentation,
-                sound: sound,
-                metadata: metadata
+                sound: sound
             )
             return result
         }
@@ -133,6 +132,24 @@ public class AlarmKitAdapter {
         return (false, "PLATFORM_NOT_SUPPORTED")
     }
 
+    public func stopAlarm(id: String) async -> (success: Bool, error: String?) {
+        guard isAlarmKitAvailable() else { return (false, "PLATFORM_NOT_SUPPORTED") }
+        #if canImport(AlarmKit)
+        if #available(iOS 26.0, *) {
+            do {
+                guard let alarm = try await AlarmManager.shared.alarm(id: id) else {
+                    return (false, "ALARM_NOT_FOUND")
+                }
+                try await alarm.stop()
+                return (true, nil)
+            } catch {
+                return (false, error.localizedDescription)
+            }
+        }
+        #endif
+        return (false, "PLATFORM_NOT_SUPPORTED")
+    }
+
     public func listAlarms() async -> (alarms: [[String: Any]], error: String?) {
         guard isAlarmKitAvailable() else { return ([], "PLATFORM_NOT_SUPPORTED") }
         #if canImport(AlarmKit)
@@ -144,8 +161,9 @@ public class AlarmKitAdapter {
                         "id": alarm.id,
                         "title": alarm.title
                     ]
-                    if let state = alarm.state {
-                        item["state"] = String(describing: state)
+                    item["state"] = String(describing: alarm.state)
+                    if let countdown = alarm.countdown {
+                        item["countdownDuration"] = countdown.duration
                     }
                     return item
                 }
@@ -163,16 +181,16 @@ public class AlarmKitAdapter {
         #if canImport(AlarmKit)
         if #available(iOS 26.0, *) {
             do {
-                let alarms = try await AlarmManager.shared.alarms
-                guard let target = alarms.first(where: { $0.id == id }) else {
+                guard let target = try await AlarmManager.shared.alarm(id: id) else {
                     return (nil, "ALARM_NOT_FOUND")
                 }
                 var item: [String: Any] = [
                     "id": target.id,
                     "title": target.title
                 ]
-                if let state = target.state {
-                    item["state"] = String(describing: state)
+                item["state"] = String(describing: target.state)
+                if let countdown = target.countdown {
+                    item["countdownDuration"] = countdown.duration
                 }
                 return (item, nil)
             } catch {
@@ -199,12 +217,11 @@ public class AlarmKitAdapter {
         title: String,
         schedule: AmitiaAlarmScheduleDTO,
         presentation: AmitiaAlarmPresentationDTO,
-        sound: AmitiaAlarmSoundDTO?,
-        metadata: AmitiaAlarmMetadataDTO?
+        sound: AmitiaAlarmSoundDTO?
     ) async -> (success: Bool, error: String?) {
         do {
             let manager = AlarmManager.shared
-            let config = buildAlarmConfiguration(id: id, title: title, schedule: schedule, presentation: presentation, sound: sound)
+            let config = buildAlarmConfiguration(title: title, schedule: schedule, presentation: presentation, sound: sound)
             try await manager.schedule(id: id, configuration: config)
             return (true, nil)
         } catch {
@@ -214,14 +231,15 @@ public class AlarmKitAdapter {
 
     @available(iOS 26.0, *)
     private func buildAlarmConfiguration(
-        id: String,
         title: String,
         schedule: AmitiaAlarmScheduleDTO,
         presentation: AmitiaAlarmPresentationDTO,
         sound: AmitiaAlarmSoundDTO?
     ) -> AlarmKit.AlarmConfiguration {
         var config = AlarmKit.AlarmConfiguration(title: title)
-        config.schedule = buildAlarmSchedule(schedule)
+        if let alarmSchedule = buildAlarmSchedule(schedule) {
+            config.schedule = alarmSchedule
+        }
         config.presentation = buildAlarmPresentation(presentation)
         return config
     }
@@ -256,3 +274,4 @@ public class AlarmKitAdapter {
     }
     #endif
 }
+
