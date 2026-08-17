@@ -20,12 +20,13 @@ import (
 )
 
 type MeshClientConfig struct {
-	CloudBaseURL string
-	Credential   string
-	UserID       runtimeidentity.UserID
-	Identity     *LocalIdentity
-	Cursor       *SessionCursor
-	OnState      func(AgentState)
+	CloudBaseURL       string
+	Credential         string
+	UserID             runtimeidentity.UserID
+	Identity           *LocalIdentity
+	Cursor             *SessionCursor
+	OnState            func(AgentState)
+	RuntimeDispatcher  RuntimeDispatcher
 }
 
 type MeshClient struct {
@@ -304,6 +305,8 @@ func (c *MeshClient) readLoop() error {
 		case protocol.MessageTypeError:
 			c.handleError(&env)
 		case protocol.MessageTypePong:
+		case protocol.MessageTypeRuntimeInvoke:
+			c.handleRuntimeInvoke(&env)
 		case protocol.MessageTypeCommand:
 			c.sendUnsupportedCommand(&env)
 		}
@@ -462,6 +465,110 @@ func (c *MeshClient) sendUnsupportedCommand(env *protocol.Envelope) {
 	}
 
 	c.sendCommandAck(&cmd, result)
+}
+
+func (c *MeshClient) handleRuntimeInvoke(env *protocol.Envelope) {
+	var invoke protocol.RuntimeInvokePayload
+	if err := json.Unmarshal(env.Payload, &invoke); err != nil {
+		c.sendRuntimeError(&protocol.RuntimeErrorPayload{
+			InvocationID:       "",
+			RuntimeSessionID:   c.sessionID,
+			ConnectionGeneration: c.connectionGen,
+			DeviceID:           c.conf.Identity.DeviceID,
+			RuntimeID:          c.conf.Identity.RuntimeID,
+			ErrorCode:          "invalid_invoke_payload",
+			Message:            fmt.Sprintf("failed to parse invoke payload: %v", err),
+			Retryable:          false,
+			FailedAt:           time.Now().UTC(),
+		})
+		return
+	}
+
+	result, err := c.executeRuntimeInvoke(invoke)
+	if err != nil {
+		c.sendRuntimeError(&protocol.RuntimeErrorPayload{
+			InvocationID:       invoke.InvocationID,
+			RuntimeSessionID:   c.sessionID,
+			ConnectionGeneration: c.connectionGen,
+			DeviceID:           c.conf.Identity.DeviceID,
+			RuntimeID:          c.conf.Identity.RuntimeID,
+			ErrorCode:          "invoke_execution_failed",
+			Message:            err.Error(),
+			Retryable:          true,
+			FailedAt:           time.Now().UTC(),
+		})
+		return
+	}
+
+	c.sendRuntimeResult(result)
+}
+
+func (c *MeshClient) executeRuntimeInvoke(invoke protocol.RuntimeInvokePayload) (*protocol.RuntimeResultPayload, error) {
+	handler := c.resolveHandler(invoke.Handler)
+	if handler == nil {
+		return nil, fmt.Errorf("unsupported handler: %s", invoke.Handler)
+	}
+	return handler(invoke)
+}
+
+func (c *MeshClient) resolveHandler(handlerName string) RuntimeInvokeHandler {
+	return c.conf.RuntimeDispatcher.Resolve(handlerName)
+}
+
+func (c *MeshClient) sendRuntimeResult(result *protocol.RuntimeResultPayload) {
+	payloadBytes, err := json.Marshal(result)
+	if err != nil {
+		return
+	}
+
+	c.localSequence = c.nextLocalSequence()
+
+	env := protocol.Envelope{
+		EnvelopeVersion:      meshprotocol.EnvelopeVersion,
+		Protocol:             meshprotocol.ProtocolName,
+		MessageType:          protocol.MessageTypeRuntimeResult,
+		MessageID:            uuid.New().String(),
+		UserID:               c.conf.UserID,
+		DeviceID:             c.conf.Identity.DeviceID,
+		RuntimeID:            c.conf.Identity.RuntimeID,
+		RuntimeSessionID:     c.sessionID,
+		ConnectionGeneration: c.connectionGen,
+		Sequence:             c.localSequence,
+		PayloadSchemaVersion: 1,
+		PayloadHash:          protocol.ComputePayloadHash(payloadBytes),
+		SentAt:               time.Now().UTC(),
+		Payload:              payloadBytes,
+	}
+
+	_ = c.writeEnvelope(env)
+}
+
+func (c *MeshClient) sendRuntimeError(errPayload *protocol.RuntimeErrorPayload) {
+	payloadBytes, err := json.Marshal(errPayload)
+	if err != nil {
+		return
+	}
+
+	c.localSequence = c.nextLocalSequence()
+
+	env := protocol.Envelope{
+		EnvelopeVersion:      meshprotocol.EnvelopeVersion,
+		Protocol:             meshprotocol.ProtocolName,
+		MessageType:          protocol.MessageTypeRuntimeError,
+		MessageID:            uuid.New().String(),
+		UserID:               c.conf.UserID,
+		DeviceID:             c.conf.Identity.DeviceID,
+		RuntimeID:            c.conf.Identity.RuntimeID,
+		RuntimeSessionID:     c.sessionID,
+		ConnectionGeneration: c.connectionGen,
+		Sequence:             c.localSequence,
+		PayloadSchemaVersion: 1,
+		PayloadHash:          protocol.ComputePayloadHash(payloadBytes),
+		SentAt:               time.Now().UTC(),
+		Payload:              payloadBytes,
+	}
+
+	_ = c.writeEnvelope(env)
 }
 
 func (c *MeshClient) executeCommand(cmd protocol.CommandPayload) (*CommandResult, error) {
