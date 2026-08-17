@@ -295,12 +295,12 @@ async function handleNewChat(event?: CustomEvent) {
       newConvId = created?.id;
     }
     if (newConvId) {
-      localStorage.removeItem("webchat-conv-id");
       disconnectSSE();
       convId.value = newConvId;
       convTitle.value = "";
       messages.value = [];
       replyTarget.value = null;
+      localStorage.setItem("webchat-conv-id", newConvId);
       nextTick(() => scrollToBottom(true));
       connectSSE();
       ElMessage.success("已创建新对话");
@@ -639,7 +639,7 @@ onUnmounted(() => {
   display: flex;
   flex-direction: column;
 }
-.chat-sidebar-region { width: min(320px, 32%); min-width: 220px; padding: 12px; border-left: 1px solid var(--surface-border); height: 100%; min-height: 0; overflow: hidden; display: flex; flex-direction: column; }
+.chat-sidebar-region { width: min(320px, 32%); min-width: 220px; padding: 12px; border-left: 1px solid var(--surface-border); height: 100%; min-height: 0; overflow: hidden; display: flex; flex-direction: column; flex: 0 0 auto; }
 @media (min-width: 1024px) { .chat-body-wrapper { flex-direction: row; } }
 .sidebar-toggle-btn { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text-secondary); cursor: pointer; }
 .sidebar-toggle-btn:hover { border-color: var(--surface-border); background: var(--control-hover-bg); color: var(--text-primary); }
