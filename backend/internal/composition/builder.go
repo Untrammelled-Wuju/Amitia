@@ -11,15 +11,14 @@ import (
 	"gorm.io/gorm"
 )
 
-// Builder 提供 Composition Root 的显式构建入口。
 type Builder struct {
-	db      *gorm.DB
-	sqlDB   *sql.DB
-	profile runtimeprofile.Profile
-	policy  runtimeprofile.Policy
+	db         *gorm.DB
+	sqlDB      *sql.DB
+	profile    runtimeprofile.Profile
+	policy     runtimeprofile.Policy
+	deviceMesh DeviceMeshRuntime
 }
 
-// NewBuilder 创建 Composition Root 构建器。
 func NewBuilder(db *gorm.DB, sqlDB *sql.DB, profile runtimeprofile.Profile, policy runtimeprofile.Policy) *Builder {
 	return &Builder{
 		db:      db,
@@ -29,7 +28,11 @@ func NewBuilder(db *gorm.DB, sqlDB *sql.DB, profile runtimeprofile.Profile, poli
 	}
 }
 
-// Build 构建完整的 Composition Root 核心权威。
+func (b *Builder) WithDeviceMesh(dm DeviceMeshRuntime) *Builder {
+	b.deviceMesh = dm
+	return b
+}
+
 func (b *Builder) Build() (*Root, error) {
 	tools := capability.NewToolRegistry()
 	providers := capability.NewProviderRegistry()
@@ -38,12 +41,13 @@ func (b *Builder) Build() (*Root, error) {
 	outboxStore := outbox.NewSQLiteOutboxStore(b.db, outbox.DefaultOutboxStoreConfig())
 
 	root := &Root{
-		Profile:   b.profile,
-		Policy:    b.policy,
-		Tools:     tools,
-		Providers: providers,
-		Hosts:     hosts,
-		Outbox:    outboxStore,
+		Profile:    b.profile,
+		Policy:     b.policy,
+		Tools:      tools,
+		Providers:  providers,
+		Hosts:      hosts,
+		Outbox:     outboxStore,
+		DeviceMesh: b.deviceMesh,
 	}
 
 	return root, nil
