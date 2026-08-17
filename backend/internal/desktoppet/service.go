@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"mime/multipart"
 	"os"
@@ -64,8 +65,11 @@ type service struct {
 	refAssetService  referenceasset.ReferenceAssetService
 }
 
-func NewService(repo Repository, db *gorm.DB) Service {
-	registry := NewProviderRegistry()
+func NewService(repo Repository, db *gorm.DB) (Service, error) {
+	registry, err := NewProviderRegistry()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build provider registry: %w", err)
+	}
 	stateStore := NewStateStore(db)
 	refRepo := referenceasset.NewRepository(db)
 	refJournalRepo := referenceasset.NewJournalRepository(db)
@@ -78,10 +82,10 @@ func NewService(repo Repository, db *gorm.DB) Service {
 		stateStore:       stateStore,
 		stateEngine:      taskstate.NewEngine(stateStore),
 		refAssetService:  refAssetSvc,
-	}
+	}, nil
 }
 
-func NewProviderRegistry() *imageprovider.Registry {
+func NewProviderRegistry() (*imageprovider.Registry, error) {
 	registry := imageprovider.NewRegistry()
 	for alias, canonical := range map[string]string{
 		"volcengine_seedream": "seedream",
@@ -91,9 +95,9 @@ func NewProviderRegistry() *imageprovider.Registry {
 		registry.RegisterAlias(alias, canonical)
 	}
 	if err := seedream.Register(registry); err != nil {
-		log.Logger.Errorf("failed to register seedream provider: %v", err)
+		return nil, fmt.Errorf("failed to register seedream provider: %w", err)
 	}
-	return registry
+	return registry, nil
 }
 
 func (s *service) GetActionDefinitions() (*ActionDefinitionsResponse, error) {
@@ -874,7 +878,9 @@ func (s *service) StartTask(taskID string) (*TaskSummaryResponse, error) {
 			"progress":   0,
 			"started_at": "",
 		}
-		_ = s.repo.UpdateActionStatusNoTx(a.ID, supplementaryUpdates)
+		if err := s.repo.UpdateActionStatusNoTx(a.ID, supplementaryUpdates); err != nil {
+			log.Logger.Warnf("failed to reset action %s supplementary fields: %v", a.ID, err)
+		}
 	}
 
 	updatedTask, err := s.repo.GetTaskByID(taskID)
@@ -940,7 +946,9 @@ func (s *service) CancelTask(taskID string) error {
 			return err
 		}
 		now := time.Now().Format(desktopPetTimeFormat)
-		_ = s.repo.SetCancelRequested(taskID, now)
+		if err := s.repo.SetCancelRequested(taskID, now); err != nil {
+			log.Logger.Warnf("failed to set cancel requested for task %s: %v", taskID, err)
+		}
 		return nil
 	}
 
@@ -1015,7 +1023,9 @@ func (s *service) RetryAction(taskID, actionKey string) (*TaskActionResponse, er
 		"progress":   0,
 		"started_at": "",
 	}
-	_ = s.repo.UpdateActionStatusNoTx(target.ID, supplementaryUpdates)
+	if err := s.repo.UpdateActionStatusNoTx(target.ID, supplementaryUpdates); err != nil {
+		log.Logger.Warnf("failed to reset action %s supplementary fields: %v", target.ID, err)
+	}
 
 	taskStatus := contracts.LifecycleStatus(task.Status)
 	if taskStatus.IsTerminal() {
