@@ -38,6 +38,10 @@ const capturedError = ref<string | null>(null);
 const formState = reactive<Record<string, unknown>>({});
 const localContextOverride = reactive<Record<string, unknown>>({});
 
+const sessionScopeKey = computed(() =>
+  `${props.contribution.contributionId}:${props.contribution.generation}:${props.context?.characterId || ""}:${props.context?.conversationId || ""}`
+);
+
 const mergedContext = computed<Record<string, unknown>>(() => ({
   ...(props.context ?? {}),
   ...localContextOverride,
@@ -329,6 +333,15 @@ watch(
     ensureSession().catch(() => {});
   }
 );
+
+watch(sessionScopeKey, async () => {
+  if (sessionId.value) {
+    await apiClient.delete(`/api/extensions/ui/sessions/${sessionId.value}`).catch(() => {});
+  }
+  sessionId.value = "";
+  sessionReady.value = false;
+  ensureSession().catch(() => {});
+});
 
 watch(
   () => props.contribution.schemaPath,

@@ -24,7 +24,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { computed, onErrorCaptured, onMounted, ref } from "vue";
+import { computed, onErrorCaptured, onMounted, onUnmounted, ref } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { AppLayout } from "./ui-index";
 import { apiClient } from "./ui-index";
@@ -42,6 +42,7 @@ const route = useRoute();
 const renderError = ref(false);
 const capturedError = ref<string | null>(null);
 const extensionUIStore = useExtensionUIStore();
+let disposeExtensionListener: (() => void) | null = null;
 
 const TOKEN_KEY = "ai-companion-token";
 
@@ -109,7 +110,7 @@ onMounted(async () => {
           router.replace("/login");
         } else {
           extensionUIStore.refreshSnapshot(true).catch(() => {});
-          extensionUIStore.setupExtensionChangeListener();
+          disposeExtensionListener = extensionUIStore.setupExtensionChangeListener();
         }
       } catch {
         localStorage.removeItem(TOKEN_KEY);
@@ -131,6 +132,13 @@ onMounted(async () => {
       }
     }
   } catch {}
+});
+
+onUnmounted(() => {
+  if (disposeExtensionListener) {
+    disposeExtensionListener();
+    disposeExtensionListener = null;
+  }
 });
 </script>
 
