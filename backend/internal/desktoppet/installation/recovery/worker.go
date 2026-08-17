@@ -132,6 +132,9 @@ func (w *RecoveryWorker) tick(ctx context.Context) error {
 }
 
 func (w *RecoveryWorker) recoverOperation(ctx context.Context, op *operation.InstallationOperation) error {
+	if op.Status == operation.OpStatusCancelRequested {
+		return w.recoverCancelOperation(ctx, op)
+	}
 	if !op.IsActive() {
 		return nil
 	}
@@ -150,6 +153,24 @@ func (w *RecoveryWorker) recoverOperation(ctx context.Context, op *operation.Ins
 	default:
 		return nil
 	}
+}
+
+func (w *RecoveryWorker) recoverCancelOperation(ctx context.Context, op *operation.InstallationOperation) error {
+	if op.Status == operation.OpStatusCompleted || op.Status == operation.OpStatusFailedTerminal || op.Status == operation.OpStatusCancelled {
+		return nil
+	}
+	if w.runtimeRecovery != nil {
+		if err := w.runtimeRecovery.CancelOperation(ctx, op); err != nil {
+			return err
+		}
+	}
+	if _, err := w.repo.UpdateOperationStatus(op.ID, op.Status, operation.OpStatusCancelled, w.executionID); err != nil {
+		if op.Status == operation.OpStatusCancelRequested {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 func (w *RecoveryWorker) tryClaimLease(op *operation.InstallationOperation) (*operation.Lease, error) {

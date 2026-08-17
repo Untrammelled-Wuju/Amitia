@@ -19,6 +19,7 @@ type RuntimeRecovery struct {
 
 type RuntimeRepo interface {
 	SendDesiredCommand(ctx context.Context, opID, userID, deviceID, runtimeID, installationID string, desiredRevision int64) error
+	CancelDesiredCommand(ctx context.Context, opID, userID, deviceID, runtimeID string) error
 	QueryRuntimeAppliedState(ctx context.Context, userID, deviceID, runtimeID string) (appliedRevision int64, actualReleaseID string, err error)
 	MarkRuntimeApplied(opID string, appliedRevision int64) error
 }
@@ -45,6 +46,13 @@ func (r *RuntimeRecovery) Recover(ctx context.Context, op *operation.Installatio
 	default:
 		return fmt.Errorf("%w: %s", ErrInvalidStage, j.Stage)
 	}
+}
+
+func (r *RuntimeRecovery) CancelOperation(ctx context.Context, op *operation.InstallationOperation) error {
+	if r.runtimeRepo == nil {
+		return nil
+	}
+	return r.runtimeRepo.CancelDesiredCommand(ctx, op.ID, op.UserID, op.DeviceID, op.RuntimeID)
 }
 
 func (r *RuntimeRecovery) recoverFromDesiredStateCommitted(ctx context.Context, op *operation.InstallationOperation, j *RecoveryCommitJournal) error {
