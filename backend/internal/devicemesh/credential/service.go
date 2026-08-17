@@ -94,16 +94,26 @@ func (s *Service) Validate(ctx context.Context, rawCredential string) (*DeviceRu
 	return cred, nil
 }
 
-func (s *Service) Revoke(ctx context.Context, credentialID string) error {
+func (s *Service) Revoke(ctx context.Context, callerID runtimeidentity.UserID, credentialID string) error {
+	cred, err := s.repo.GetByID(ctx, credentialID)
+	if err != nil {
+		return fmt.Errorf("credential: get: %w", err)
+	}
+	if cred == nil {
+		return errors.New("credential: not found")
+	}
+	if cred.UserID != callerID {
+		return errors.New("credential: forbidden")
+	}
 	return s.repo.RevokeByID(ctx, credentialID, s.clock.Now())
 }
 
-func (s *Service) RevokeAllForDevice(ctx context.Context, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID) error {
-	return s.repo.RevokeAllForDevice(ctx, userID, deviceID, s.clock.Now())
+func (s *Service) RevokeAllForDevice(ctx context.Context, callerID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID) error {
+	return s.repo.RevokeAllForDevice(ctx, callerID, deviceID, s.clock.Now())
 }
 
-func (s *Service) ListByUser(ctx context.Context, userID runtimeidentity.UserID) ([]*DeviceRuntimeCredential, error) {
-	return s.repo.ListByUser(ctx, userID)
+func (s *Service) ListByUser(ctx context.Context, callerID runtimeidentity.UserID) ([]*DeviceRuntimeCredential, error) {
+	return s.repo.ListByUser(ctx, callerID)
 }
 
 type ExchangeTicketView struct {

@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"log"
 	"net/http"
 	"time"
 
@@ -117,13 +118,18 @@ func (h *LocalHandler) handleBootstrap(c *gin.Context) {
 		return
 	}
 
-	_ = h.credStore.DeleteCursor()
+	if err := h.credStore.DeleteCursor(); err != nil {
+		log.Printf("devicemesh: agent: delete cursor failed: %v", err)
+	}
 
 	if h.mesh != nil {
 		h.mesh.Stop()
 	}
 
-	cursor, _ := h.credStore.LoadCursor()
+	cursor, err := h.credStore.LoadCursor()
+	if err != nil {
+		log.Printf("devicemesh: agent: load cursor failed: %v", err)
+	}
 	h.mesh = NewMeshClient(MeshClientConfig{
 		CloudBaseURL: req.CloudBaseURL,
 		Credential:   resp.Credential,
@@ -149,8 +155,14 @@ func (h *LocalHandler) handleStatus(c *gin.Context) {
 		state = h.mesh.State()
 	}
 
-	cred, _ := h.credStore.LoadCredential()
-	cursor, _ := h.credStore.LoadCursor()
+	cred, err := h.credStore.LoadCredential()
+	if err != nil {
+		log.Printf("devicemesh: agent: load credential failed: %v", err)
+	}
+	cursor, err := h.credStore.LoadCursor()
+	if err != nil {
+		log.Printf("devicemesh: agent: load cursor failed: %v", err)
+	}
 
 	resp := gin.H{
 		"state":                string(state),
@@ -184,8 +196,14 @@ func (h *LocalHandler) handleDeleteCredential(c *gin.Context) {
 		h.mesh = nil
 	}
 
-	_ = h.credStore.DeleteCredential()
-	_ = h.credStore.DeleteCursor()
+	if err := h.credStore.DeleteCredential(); err != nil {
+		c.JSON(500, gin.H{"code": "delete_failed", "message": err.Error()})
+		return
+	}
+	if err := h.credStore.DeleteCursor(); err != nil {
+		c.JSON(500, gin.H{"code": "delete_failed", "message": err.Error()})
+		return
+	}
 
 	c.JSON(200, gin.H{"ok": true})
 }

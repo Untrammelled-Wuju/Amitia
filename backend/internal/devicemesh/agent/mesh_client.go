@@ -387,7 +387,11 @@ func (c *MeshClient) handlePing(env *protocol.Envelope) {
 	}
 
 	pong := protocol.PongPayload{Time: ping.Time}
-	payloadBytes, _ := json.Marshal(pong)
+	payloadBytes, err := json.Marshal(pong)
+	if err != nil {
+		log.Printf("devicemesh: agent: marshal pong failed: %v", err)
+		return
+	}
 
 	c.localSequence = c.nextLocalSequence()
 
@@ -408,7 +412,9 @@ func (c *MeshClient) handlePing(env *protocol.Envelope) {
 		Payload:              payloadBytes,
 	}
 
-	_ = c.writeEnvelope(pongEnv)
+	if err := c.writeEnvelope(pongEnv); err != nil {
+		log.Printf("devicemesh: agent: send pong failed: %v", err)
+	}
 }
 
 func (c *MeshClient) handleError(env *protocol.Envelope) {
@@ -437,7 +443,11 @@ func (c *MeshClient) handleError(env *protocol.Envelope) {
 
 func (c *MeshClient) sendPing() error {
 	ping := protocol.PingPayload{Time: time.Now().UTC()}
-	payloadBytes, _ := json.Marshal(ping)
+	payloadBytes, err := json.Marshal(ping)
+	if err != nil {
+		log.Printf("devicemesh: agent: marshal ping failed: %v", err)
+		return err
+	}
 
 	c.localSequence = c.nextLocalSequence()
 
@@ -550,7 +560,9 @@ func (c *MeshClient) sendRuntimeResult(result *protocol.RuntimeResultPayload) {
 		Payload:              payloadBytes,
 	}
 
-	_ = c.writeEnvelope(env)
+	if err := c.writeEnvelope(env); err != nil {
+		log.Printf("devicemesh: agent: send runtime result failed: %v", err)
+	}
 }
 
 func (c *MeshClient) sendRuntimeError(errPayload *protocol.RuntimeErrorPayload) {
@@ -578,7 +590,9 @@ func (c *MeshClient) sendRuntimeError(errPayload *protocol.RuntimeErrorPayload) 
 		Payload:              payloadBytes,
 	}
 
-	_ = c.writeEnvelope(env)
+	if err := c.writeEnvelope(env); err != nil {
+		log.Printf("devicemesh: agent: send runtime error failed: %v", err)
+	}
 }
 
 func (c *MeshClient) handleTaskDispatch(env *protocol.Envelope) {
@@ -606,7 +620,9 @@ func (c *MeshClient) handleTaskCancel(env *protocol.Envelope) {
 	}
 
 	if c.conf.TaskWorker != nil {
-		_ = c.conf.TaskWorker.CancelTask(context.Background(), cancel.TaskRunID, cancel.AttemptID)
+		if err := c.conf.TaskWorker.CancelTask(context.Background(), cancel.TaskRunID, cancel.AttemptID); err != nil {
+			log.Printf("devicemesh: agent: cancel task failed: %v", err)
+		}
 	}
 }
 
@@ -706,7 +722,9 @@ func (c *MeshClient) sendTaskEnvelope(msgType protocol.MessageType, payload inte
 		Payload:              payloadBytes,
 	}
 
-	_ = c.writeEnvelope(env)
+	if err := c.writeEnvelope(env); err != nil {
+		log.Printf("devicemesh: agent: send task envelope failed: %v", err)
+	}
 }
 
 func (c *MeshClient) sendTaskError(messageID, taskRunID, code, message string) {
@@ -735,7 +753,9 @@ func (c *MeshClient) sendTaskError(messageID, taskRunID, code, message string) {
 		Payload:              payloadBytes,
 	}
 
-	_ = c.writeEnvelope(resp)
+	if err := c.writeEnvelope(resp); err != nil {
+		log.Printf("devicemesh: agent: send task error failed: %v", err)
+	}
 }
 
 func (c *MeshClient) executeCommand(cmd protocol.CommandPayload) (*CommandResult, error) {
@@ -816,7 +836,9 @@ func (c *MeshClient) sendCommandAck(cmd *protocol.CommandPayload, result *Comman
 		Payload:              mustMarshal(ack),
 	}
 
-	_ = c.writeEnvelope(env)
+	if err := c.writeEnvelope(env); err != nil {
+		log.Printf("devicemesh: agent: send command ack failed: %v", err)
+	}
 }
 
 func (c *MeshClient) sendCommandReject(env *protocol.Envelope, code, reason string) {
@@ -845,7 +867,9 @@ func (c *MeshClient) sendCommandReject(env *protocol.Envelope, code, reason stri
 		Payload:              payloadBytes,
 	}
 
-	_ = c.writeEnvelope(resp)
+	if err := c.writeEnvelope(resp); err != nil {
+		log.Printf("devicemesh: agent: send command reject failed: %v", err)
+	}
 }
 
 func mustMarshal(v interface{}) json.RawMessage {
