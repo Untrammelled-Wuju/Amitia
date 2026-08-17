@@ -18,6 +18,13 @@ class ShizukuCommandService : IPrivilegedCommandService.Stub() {
     private val destroyed = AtomicBoolean(false)
 
     override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {
+        if (code == IBinder.INTERFACE_TRANSACTION) {
+            return try {
+                super.onTransact(code, data, reply, flags)
+            } catch (e: Exception) {
+                false
+            }
+        }
         if (destroyed.get()) {
             return false
         }
