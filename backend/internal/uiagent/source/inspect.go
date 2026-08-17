@@ -9,7 +9,6 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/u-ai/backend/internal/uiagent"
 	"github.com/u-ai/backend/internal/workspace"
 )
 

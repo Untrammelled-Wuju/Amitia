@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -188,6 +189,19 @@ func (h *Handler) VideoUpload(c *gin.Context) {
 	util.SuccessResponse(c, gin.H{"videoUrl": videoUrl})
 }
 
+func resolveAudioURL(c *gin.Context, h *Handler, audioUrl string) string {
+	if strings.HasPrefix(audioUrl, "amitia://artifacts/") {
+		id, parseErr := artifact.ParseURI(audioUrl)
+		if parseErr == nil {
+			return "http://" + c.Request.Host + "/api/artifacts/v1/" + string(id) + "/content"
+		}
+	}
+	if strings.HasPrefix(audioUrl, "/voice/") {
+		return "http://" + c.Request.Host + audioUrl
+	}
+	return audioUrl
+}
+
 func currentUserID(c *gin.Context) string {
 	if v, ok := c.Get("userID"); ok {
 		if s, ok := v.(string); ok {
@@ -213,7 +227,7 @@ func (h *Handler) VoiceTranscribe(c *gin.Context) {
 		return
 	}
 
-	fullAudioUrl := "http://127.0.0.1:18080" + body.AudioUrl
+	fullAudioUrl := resolveAudioURL(c, h, body.AudioUrl)
 
 	taskID, submitErr := asr.SubmitTask(activeCfg, fullAudioUrl, "zh-CN")
 	if submitErr != nil {
