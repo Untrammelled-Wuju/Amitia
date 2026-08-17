@@ -170,6 +170,23 @@ func DefaultMigrations() []Migration {
 		SecurityAuditEventsColumnsMigration(),
 		SecurityAuditEventsOccurredAtMigration(),
 		AuthSessionsMissingColumnsMigration(),
+		SyncRevisionDeletedAtMigration(),
+	}
+}
+
+func SyncRevisionDeletedAtMigration() Migration {
+	return Migration{
+		Version: "20260818001",
+		Name:    "add_revision_deleted_at_to_sync_entities",
+		Up: func(s *Step) error {
+			s.AddColumn("conversations", "revision", "INTEGER NOT NULL DEFAULT 0")
+			s.AddColumn("conversations", "deleted_at", "TEXT")
+			s.AddColumn("messages", "revision", "INTEGER NOT NULL DEFAULT 0")
+			s.AddColumn("messages", "deleted_at", "TEXT")
+			s.AddColumn("characters", "revision", "INTEGER NOT NULL DEFAULT 0")
+			s.AddColumn("characters", "deleted_at", "TEXT")
+			return nil
+		},
 	}
 }
 

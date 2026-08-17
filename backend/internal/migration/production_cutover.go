@@ -188,19 +188,21 @@ type AuthoritySnapshot struct {
 }
 
 type CutoverDependencies struct {
-	DB             *gorm.DB
-	Container      CanonicalAuthorityProvider
-	Maintenance    CutoverMaintenanceGate
-	Snapshot       CutoverSnapshotPort
-	Migration      CutoverMigrationPort
-	Bootstrap      CutoverBootstrapPort
-	ReadSwitch     CutoverReadSwitchPort
-	WriteLockout   CutoverWriteLockoutPort
-	WorkerCutoff   CutoverWorkerCutoffPort
-	Smoke          CutoverSmokePort
-	LegacyVerifier CutoverLegacyVerifier
-	StateStore     CutoverStateStore
-	Now            func() time.Time
+	DB                    *gorm.DB
+	Container            CanonicalAuthorityProvider
+	Maintenance          CutoverMaintenanceGate
+	Snapshot             CutoverSnapshotPort
+	Migration            CutoverMigrationPort
+	Bootstrap            CutoverBootstrapPort
+	ReadSwitch           CutoverReadSwitchPort
+	WriteLockout         CutoverWriteLockoutPort
+	WorkerCutoff         CutoverWorkerCutoffPort
+	Smoke                CutoverSmokePort
+	LegacyVerifier       CutoverLegacyVerifier
+	StateStore           CutoverStateStore
+	RuntimeArchitectureGate *RuntimeArchitectureGate
+	Stage2ClosureGate      *Stage2ClosureGate
+	Now                    func() time.Time
 }
 
 type CutoverPlan struct {
@@ -269,6 +271,14 @@ func (p *CutoverPlan) getSmoke() CutoverSmokePort {
 
 func (p *CutoverPlan) getLegacyVerifier() CutoverLegacyVerifier {
 	return p.deps.LegacyVerifier
+}
+
+func (p *CutoverPlan) getRuntimeArchitectureGate() *RuntimeArchitectureGate {
+	return p.deps.RuntimeArchitectureGate
+}
+
+func (p *CutoverPlan) getStage2ClosureGate() *Stage2ClosureGate {
+	return p.deps.Stage2ClosureGate
 }
 
 type dbStateStore struct {
@@ -404,6 +414,24 @@ func (p *CutoverPlan) runPreflight(ctx context.Context, state *CutoverState) err
 	if err := p.Preflight(ctx); err != nil {
 		return err
 	}
+
+	if p.getRuntimeArchitectureGate() != nil {
+		ready, failures := p.getRuntimeArchitectureGate().Check(ctx)
+		if !ready {
+			return fmt.Errorf("%w: runtime architecture gate failures: %v", ErrCutoverPreflightFailure, failures)
+		}
+	}
+
+	if p.getStage2ClosureGate() != nil {
+		g0OK, g0Failures, err := p.getStage2ClosureGate().ValidateG0(ctx)
+		if err != nil {
+			return fmt.Errorf("%w: stage2 closure gate validation error: %w", ErrCutoverPreflightFailure, err)
+		}
+		if !g0OK {
+			return fmt.Errorf("%w: G0 evidence gate blocked: %v", ErrCutoverPreflightFailure, g0Failures)
+		}
+	}
+
 	if p.getLegacyVerifier() != nil {
 		v := p.getLegacyVerifier()
 		if v.LegacyMCPManagerPresent() {
@@ -417,6 +445,25 @@ func (p *CutoverPlan) runPreflight(ctx context.Context, state *CutoverState) err
 		}
 	}
 	return nil
+}
+
+func (p *CutoverPlan) CanRunCutover(ctx context.Context) (bool, error) {
+	if p.getRuntimeArchitectureGate() != nil {
+		ready, _ := p.getRuntimeArchitectureGate().Check(ctx)
+		if !ready {
+			return false, nil
+		}
+	}
+	if p.getStage2ClosureGate() != nil {
+		g0OK, _, err := p.getStage2ClosureGate().ValidateG0(ctx)
+		if err != nil {
+			return false, err
+		}
+		if !g0OK {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func (p *CutoverPlan) runQuiesce(ctx context.Context, state *CutoverState) error {

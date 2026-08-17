@@ -145,7 +145,9 @@ CREATE TABLE IF NOT EXISTS characters (
     emotion_scale INTEGER DEFAULT 0,
     silence_duration INTEGER DEFAULT 0,
     character_base TEXT DEFAULT '',
-    card_data_json TEXT DEFAULT '{}'
+    card_data_json TEXT DEFAULT '{}',
+    revision INTEGER NOT NULL DEFAULT 0,
+    deleted_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS character_templates (
@@ -168,7 +170,9 @@ CREATE TABLE IF NOT EXISTS conversations (
     message_count INTEGER DEFAULT 0,
     state_version TEXT DEFAULT '',
     created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    updated_at TEXT DEFAULT (datetime('now')),
+    revision INTEGER NOT NULL DEFAULT 0,
+    deleted_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -203,7 +207,9 @@ CREATE TABLE IF NOT EXISTS messages (
     fallback_asset_reference TEXT NOT NULL DEFAULT '',
     response_group_id TEXT NOT NULL DEFAULT '',
     delivery_sequence INTEGER NOT NULL DEFAULT 0,
-    emote_decision_status TEXT NOT NULL DEFAULT 'none'
+    emote_decision_status TEXT NOT NULL DEFAULT 'none',
+    revision INTEGER NOT NULL DEFAULT 0,
+    deleted_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS pipeline_checkpoints (
