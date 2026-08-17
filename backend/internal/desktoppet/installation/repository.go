@@ -27,6 +27,8 @@ const installationTimeFormat = "2006-01-02 15:04:05"
 type Repository interface {
 	DB() *gorm.DB
 
+	RepositoryV2
+
 	CreateInstallation(installation *Installation) error
 	GetInstallation(id string) (*Installation, error)
 	GetInstallationByPackageVersion(packageID, packageVersion string) (*Installation, error)
@@ -45,8 +47,6 @@ type Repository interface {
 
 	GetInstallationByUserDevicePet(userID, deviceID, petID string) (*Installation, error)
 	ListInstallationsByUserDevice(userID, deviceID string) ([]*Installation, error)
-
-	Transaction(ctx context.Context, fn func(repo RepositoryV2) error) error
 }
 
 type repository struct {
@@ -175,6 +175,10 @@ func (a *txRepositoryAdapter) RequeueOutboxEventsBefore(tx *gorm.DB, availableBe
 
 func (a *txRepositoryAdapter) CreateOperationTx(tx *gorm.DB, op *operation.InstallationOperation) error {
 	return a.repo.CreateOperationTx(tx, op)
+}
+
+func (a *txRepositoryAdapter) UpdateOperationTx(tx *gorm.DB, op *operation.InstallationOperation) error {
+	return a.repo.UpdateOperationTx(tx, op)
 }
 
 func (a *txRepositoryAdapter) GetOperationTx(tx *gorm.DB, operationID string) (*operation.InstallationOperation, error) {
@@ -729,6 +733,12 @@ func (r *repository) RequeueOutboxEventsBefore(tx *gorm.DB, availableBefore stri
 
 func (r *repository) CreateOperationTx(tx *gorm.DB, op *operation.InstallationOperation) error {
 	return tx.Create(op).Error
+}
+
+func (r *repository) UpdateOperationTx(tx *gorm.DB, op *operation.InstallationOperation) error {
+	now := time.Now().Format(installationTimeFormat)
+	op.UpdatedAt = now
+	return tx.Model(op).Where("id = ?", op.ID).Updates(op).Error
 }
 
 func (r *repository) GetOperationTx(tx *gorm.DB, operationID string) (*operation.InstallationOperation, error) {
