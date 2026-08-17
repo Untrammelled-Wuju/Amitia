@@ -110,6 +110,7 @@ const WechatStylePrompt = "你和用户是比较熟悉的长期对话关系，�
 type ArtifactResolver interface {
 	Resolve(ctx context.Context, actor string, resourceURI string) (ArtifactResolution, error)
 	Open(ctx context.Context, actor string, resourceURI string) (io.ReadCloser, ArtifactResolution, error)
+	RegisterReference(artifactID string, refType string, refID string) error
 }
 
 type ArtifactResolution struct {

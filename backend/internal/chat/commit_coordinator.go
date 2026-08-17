@@ -224,6 +224,9 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 		if err := tx.Exec("UPDATE conversations SET updated_at = ?, message_count = (SELECT COUNT(*) FROM messages WHERE conversation_id = ?) WHERE id = ?", now, plan.Conversation, plan.Conversation).Error; err != nil {
 			return err
 		}
+		if err := s.commitAttachmentsTx(tx, plan, plan.UserMessageID); err != nil {
+			return err
+		}
 		if shouldCommitRuntime(plan.Request) {
 			if plan.Runtime != nil && plan.Runtime.Appraisal != nil {
 				if err := s.applyAppraisalResultTx(tx, plan); err != nil {

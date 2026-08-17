@@ -21,19 +21,20 @@ func uploadFileToArk(baseURL, apiKey, filePath string) (string, error) {
 		return "", fmt.Errorf("无法打开文件: %w", err)
 	}
 	defer file.Close()
+	return uploadStreamToArk(baseURL, apiKey, file, filepath.Base(filePath))
+}
 
+func uploadStreamToArk(baseURL, apiKey string, reader io.Reader, fileName string) (string, error) {
 	var requestBody bytes.Buffer
 	writer := multipart.NewWriter(&requestBody)
 
 	_ = writer.WriteField("purpose", "user_data")
 
-	fileName := filepath.Base(filePath)
-
 	part, err := writer.CreateFormFile("file", fileName)
 	if err != nil {
 		return "", err
 	}
-	if _, err := io.Copy(part, file); err != nil {
+	if _, err := io.Copy(part, reader); err != nil {
 		return "", err
 	}
 	writer.Close()

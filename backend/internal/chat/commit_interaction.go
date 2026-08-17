@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/interaction"
 	"gorm.io/gorm"
 )
@@ -90,6 +92,52 @@ func (s *service) transitionInteractionCommittedTx(tx *gorm.DB, plan messageComm
 
 func shouldCommitRuntime(req *ProcessMessageRequest) bool {
 	return req != nil && strings.TrimSpace(req.InteractionID) != "" && req.Runtime != nil
+}
+
+func (s *service) commitAttachmentsTx(tx *gorm.DB, plan messageCommitPlan, userMsgID string) error {
+	if len(plan.Request.Attachments) == 0 {
+		return nil
+	}
+	actor := userIDForRequest(plan.Request)
+	for i, input := range plan.Request.Attachments {
+		resolved, err := s.ResolveAttachment(context.Background(), actor, input)
+		if err != nil {
+			return err
+		}
+		artifactID := ""
+		if s.artifactResolver != nil {
+			if _, parseErr := artifact.ParseURI(input.ResourceURI); parseErr == nil {
+				art, resolveErr := s.artifactResolver.Resolve(context.Background(), actor, input.ResourceURI)
+				if resolveErr == nil {
+					artifactID = art.ID
+				}
+			}
+		}
+		attachment := &MessageAttachment{
+			ID:          uuid.New().String(),
+			MessageID:   userMsgID,
+			Sequence:    i,
+			Type:        resolved.Type,
+			ResourceURI: resolved.ResourceURI,
+			MIMEType:    resolved.MIMEType,
+			Filename:    resolved.Filename,
+			SizeBytes:   resolved.SizeBytes,
+			ContentHash: resolved.ContentHash,
+			Width:       resolved.Width,
+			Height:      resolved.Height,
+			DurationMS:  resolved.DurationMS,
+			CreatedAt:   time.Now().Format("2006-01-02 15:04:05"),
+		}
+		if err := tx.Create(attachment).Error; err != nil {
+			return fmt.Errorf("create message attachment: %w", err)
+		}
+		if artifactID != "" && s.artifactResolver != nil {
+			if err := s.artifactResolver.RegisterReference(artifactID, "message_attachment", attachment.ID); err != nil {
+				return fmt.Errorf("register artifact reference: %w", err)
+			}
+		}
+	}
+	return nil
 }
 
 func relationshipTypeForRequest(req *ProcessMessageRequest) string {
