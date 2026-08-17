@@ -20,6 +20,7 @@ from safe_extract import safe_extract
 from atomic_publish import atomic_publish_dir
 from tree_manifest import compute_tree_manifest, write_tree_manifest
 from hashing import sha256_file
+from version_policy import same_version_gate
 
 DEFAULT_LOCK_FILE = os.path.join(SCRIPT_DIR, "..", "..", "..", "artifacts", "node", "linux-arm64", "node-runtime-lock.json")
 
@@ -186,10 +187,13 @@ def build_node(input_dir, output_dir, lock_path=None):
             sourceRevision=lock.get("sourceUrl", ""),
             buildMode="release",
         )
-        validate(tree_record)
+        validation_errors = validate(tree_record)
+        if validation_errors:
+            raise BuildError(f"Node record validation failed: {'; '.join(validation_errors)}")
         frozen_path = os.path.join(staging, "node-frozen-record.json")
         tree_record.write(frozen_path)
 
+        same_version_gate(output_dir, tree_record.componentId, tree_record.version, tree_record.treeSha256, node_files_sha)
         if os.path.exists(output_dir):
             shutil.rmtree(output_dir)
         atomic_publish_dir(staging, output_dir)
@@ -203,15 +207,10 @@ def build_node(input_dir, output_dir, lock_path=None):
 
 def main():
     parser = argparse.ArgumentParser(description="Node Linux ARM64 Builder")
-    parser.add_argument("--offline", action="store_true", help="Run in offline mode")
     parser.add_argument("--input", default=None, help="Input directory with Node archive")
-    parser.add_argument("--output", default=None, help="Output directory")
+    parser.add_argument("--output", required=True, help="Output directory")
     parser.add_argument("--lock", default=None, help="Path to node-runtime-lock.json")
     args = parser.parse_args()
-
-    if args.offline:
-        print("Node builder: offline mode - checks skipped")
-        return 0
 
     if not args.output:
         print("Node builder: ERROR - --output directory required", file=sys.stderr)
