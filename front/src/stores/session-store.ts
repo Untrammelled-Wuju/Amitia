@@ -1,6 +1,7 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
 import { ref, computed } from "vue";
+import { revokeRefreshToken } from "./session-client";
 
 export interface SessionState {
   accessToken: string | null;
@@ -21,6 +22,7 @@ const state = ref<SessionState>({
 });
 
 const TOKEN_KEY = "ai-companion-token";
+let revoking = false;
 
 export function getStoredToken(): string | null {
   return localStorage.getItem(TOKEN_KEY);
@@ -32,6 +34,16 @@ export function setStoredToken(token: string): void {
 
 export function clearStoredToken(): void {
   localStorage.removeItem(TOKEN_KEY);
+}
+
+export function revokeOnServer(): void {
+  if (revoking) {
+    return;
+  }
+  revoking = true
+  revokeRefreshToken().finally(() => {
+    revoking = false
+  });
 }
 
 export function useSessionStore() {
@@ -75,6 +87,7 @@ export function useSessionStore() {
       role: null,
     };
     clearStoredToken();
+    revokeOnServer();
   }
 
   return {

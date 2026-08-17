@@ -8,7 +8,7 @@ import { getRuntimeConnection, getDeploymentConfig, getBackendAuthHeaders } from
 import { getDeviceTimezone } from "@/utils/requestEnvelope";
 import { classifyError, displayError } from "./request";
 import { getStoredToken, setStoredToken, clearStoredToken } from "@/stores/session-store";
-import { ensureValidToken, initRefreshCoordinator, stopRefreshCoordinator } from "@/stores/refresh-coordinator";
+import { ensureValidToken, initRefreshCoordinator, stopRefreshCoordinator, forceCleanupSession } from "@/stores/refresh-coordinator";
 
 const BASE_URL = (import.meta as any).env?.VITE_API_URL || "";
 
@@ -82,6 +82,9 @@ apiClient.interceptors.response.use(
   (error) => {
     if (error && typeof error === "object" && "severity" in error) {
       return Promise.reject(error);
+    }
+    if (error?.response?.status === 401) {
+      forceCleanupSession();
     }
     const body = (error.response?.data as ApiResponse) || null;
     const err = classifyError(body, error as AxiosError);

@@ -62,6 +62,13 @@ export async function logoutUser(): Promise<void> {
   await apiClient.post("/api/public/auth/logout");
 }
 
+export async function revokeRefreshToken(): Promise<void> {
+  try {
+    await apiClient.post("/api/public/auth/logout/revoke");
+  } catch {
+  }
+}
+
 export async function listSessions(): Promise<SessionInfo[]> {
   const res = await apiClient.get<SessionInfo[]>("/api/public/auth/sessions");
   return res as unknown as SessionInfo[];
