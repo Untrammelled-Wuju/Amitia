@@ -385,12 +385,8 @@ type GeneratedSkillInstaller struct {
 }
 
 // NewGeneratedSkillInstaller creates a GeneratedSkillInstaller with real dependencies.
-func NewGeneratedSkillInstaller(skillPort SkillInstallPort) *GeneratedSkillInstaller {
-	return &GeneratedSkillInstaller{skillPort: skillPort}
-}
-
-// NewGeneratedSkillInstallerWithWorkshop creates a GeneratedSkillInstaller with Workshop support.
-func NewGeneratedSkillInstallerWithWorkshop(skillPort SkillInstallPort, workshopPort WorkshopGeneratePort) *GeneratedSkillInstaller {
+// Both skillPort and workshopPort must be provided.
+func NewGeneratedSkillInstaller(skillPort SkillInstallPort, workshopPort WorkshopGeneratePort) *GeneratedSkillInstaller {
 	return &GeneratedSkillInstaller{skillPort: skillPort, workshopPort: workshopPort}
 }
 

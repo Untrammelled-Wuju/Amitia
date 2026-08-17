@@ -80,6 +80,8 @@ import (
 	"github.com/u-ai/backend/internal/runtimeprofile"
 	"github.com/u-ai/backend/internal/search"
 	"github.com/u-ai/backend/internal/uiagent"
+	"github.com/u-ai/backend/internal/uiagent/preview"
+	"github.com/u-ai/backend/internal/uiagent/schema"
 	"github.com/u-ai/backend/internal/uiagent/source"
 	"github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/internal/workspace"
@@ -116,7 +118,8 @@ type ContainerBuilder struct {
 
 	mcpRepository *mcp.Repository
 
-	meshHub *server.ConnectionHub
+	meshHub                *server.ConnectionHub
+	pendingInvocationManager *capability.PendingInvocationManager
 
 	backgroundBootstrapFunc func() (backgroundremoval.Registry, error)
 }
@@ -163,6 +166,11 @@ func (b *ContainerBuilder) WithMemoryQueryService(s MemoryQueryService) *Contain
 
 func (b *ContainerBuilder) WithMeshHub(hub *server.ConnectionHub) *ContainerBuilder {
 	b.meshHub = hub
+	return b
+}
+
+func (b *ContainerBuilder) WithPendingInvocationManager(mgr *capability.PendingInvocationManager) *ContainerBuilder {
+	b.pendingInvocationManager = mgr
 	return b
 }
 
@@ -229,6 +237,7 @@ func (b *ContainerBuilder) WithIOSNativeProvider(provider capability.IOSProvider
 
 type GameHostArchiveUpdater interface {
 	UpdateArchive(ctx context.Context, extensionID string, archivePath string) (*gamehostKernelUpdateResult, error)
+	GetPreviousArchivePath(ctx context.Context, extensionID string) (string, error)
 }
 
 type gamehostKernelUpdateResult = upgrade.KernelUpdateResult
@@ -924,8 +933,9 @@ var lifecycleEmitter *event.LifecycleEventEmitter
 	var deviceRuntimePort capability.DeviceRuntimeInvocationPort
 	if b.meshHub != nil && sessionService != nil {
 		meshPorts := &capability.MeshRuntimePorts{
-			Hub:           b.meshHub,
-			SessionLookup: sessionService,
+			Hub:                b.meshHub,
+			SessionLookup:      sessionService,
+			PendingInvocations: b.pendingInvocationManager,
 		}
 		deviceRuntimePort = capability.NewMeshDeviceRuntimeInvocationPort(meshPorts)
 	}
@@ -987,8 +997,18 @@ var lifecycleEmitter *event.LifecycleEventEmitter
 	toolFacade.SetRecoveryService(recoveryService)
 
 	builtin.SetUIAgentInspector(source.NewSourceInspectorWithWorkspace(b.workspaceService))
+	preciseEditingSvc := workspace.NewDefaultPreciseEditingService(b.workspaceService)
+	builtin.SetUIAgentPreciseService(preciseEditingSvc)
+	previewSessionMgr := preview.NewSessionManager()
+	previewValidator := schema.NewSchemaValidator(schema.DefaultCatalog)
+	previewObserver := preview.NewObserver(previewSessionMgr, previewValidator)
+	previewRefiner := preview.NewAutoRefiner(previewSessionMgr, previewObserver)
 	uiAgentExecutor := uiagent.NewUIExecutor(
 		uiagent.WithPolicy(uiagent.DefaultPolicy()),
+		uiagent.WithSourceEditor(source.NewSourceEditor(preciseEditingSvc)),
+		uiagent.WithPreviewManager(previewSessionMgr),
+		uiagent.WithObserver(previewObserver),
+		uiagent.WithAutoRefiner(previewRefiner),
 	)
 	builtin.SetUIAgentExecutor(uiAgentExecutor)
 
@@ -1471,26 +1491,31 @@ var lifecycleEmitter *event.LifecycleEventEmitter
 
 	var archiveUpdater upgrade.KernelArchiveUpdater
 	if b.gameHostArchiveUpdater != nil {
-		archiveUpdater = upgrade.NewKernelArchiveUpdaterAdapter(b.gameHostArchiveUpdater.UpdateArchive)
+		archiveUpdater = upgrade.NewKernelArchiveUpdaterAdapterWithArchivePath(b.gameHostArchiveUpdater.GetPreviousArchivePath, b.gameHostArchiveUpdater.UpdateArchive)
 	} else {
-		archiveUpdater = upgrade.NewKernelArchiveUpdaterAdapter(func(ctx context.Context, extensionID string, archivePath string) (*upgrade.KernelUpdateResult, error) {
-			if lifecycleMgr == nil {
-				return nil, fmt.Errorf("kernel lifecycle manager not available")
-			}
-			result, err := lifecycleMgr.Execute(ctx, lifecycle_manager.LifecycleCommand{
-				Kind:        lifecycle_manager.CmdUpdate,
-				ExtensionID: domain.ExtensionID(extensionID),
-				PackageID:   archivePath,
-			})
-			if err != nil {
-				return &upgrade.KernelUpdateResult{Success: false, Reason: err.Error()}, err
-			}
-			return &upgrade.KernelUpdateResult{
-				Success:    result.Status == "completed",
-				NewVersion: "",
-				Reason:     result.Error,
-			}, nil
-		})
+		archiveUpdater = upgrade.NewKernelArchiveUpdaterAdapterWithArchivePath(
+			func(ctx context.Context, extensionID string) (string, error) {
+				return "", fmt.Errorf("kernel archive path lookup not available")
+			},
+			func(ctx context.Context, extensionID string, archivePath string) (*upgrade.KernelUpdateResult, error) {
+				if lifecycleMgr == nil {
+					return nil, fmt.Errorf("kernel lifecycle manager not available")
+				}
+				result, err := lifecycleMgr.Execute(ctx, lifecycle_manager.LifecycleCommand{
+					Kind:        lifecycle_manager.CmdUpdate,
+					ExtensionID: domain.ExtensionID(extensionID),
+					PackageID:   archivePath,
+				})
+				if err != nil {
+					return &upgrade.KernelUpdateResult{Success: false, Reason: err.Error()}, err
+				}
+				return &upgrade.KernelUpdateResult{
+					Success:    result.Status == "completed",
+					NewVersion: "",
+					Reason:     result.Error,
+				}, nil
+			},
+		)
 	}
 
 	gameHost, err := gamehost.ComposeGameHost(gamehost.GameHostComposeOptions{

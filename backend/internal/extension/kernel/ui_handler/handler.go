@@ -470,6 +470,10 @@ func (h *HTTPHandler) handleWebUISessionCollection(w http.ResponseWriter, r *htt
 	var req struct {
 		ContributionID string                      `json:"contributionId"`
 		Surface        string                      `json:"surface"`
+		SurfaceRole    string                      `json:"surfaceRole"`
+		Host           string                      `json:"host"`
+		OS             string                      `json:"os"`
+		Platform       string                      `json:"platform"`
 		CharacterID    string                      `json:"characterId"`
 		ConversationID string                      `json:"conversationId"`
 		Theme          sandbox_webui.ThemeSnapshot `json:"theme"`
@@ -534,6 +538,10 @@ func (h *HTTPHandler) handleWebUISessionCollection(w http.ResponseWriter, r *htt
 		BasePath:           basePath,
 		EntryPath:          def.Entry.Path,
 		Surface:            req.Surface,
+		SurfaceRole:        req.SurfaceRole,
+		Host:               req.Host,
+		OS:                 req.OS,
+		Platform:           req.Platform,
 		CharacterID:        req.CharacterID,
 		ConversationID:     req.ConversationID,
 		GrantedPerms:       auth.GrantedPerms,

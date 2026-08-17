@@ -16,6 +16,7 @@ type RecoveryService struct {
 	acquisitionService *AcquisitionService
 	detector           MissingCapabilityDetector
 	budget             *CapabilityRecoveryBudget
+	resumeRepo         execution.ResumeRepository
 }
 
 // NewRecoveryService creates a RecoveryService backed by the given
@@ -26,6 +27,16 @@ func NewRecoveryService(acquisitionService *AcquisitionService) *RecoveryService
 		acquisitionService: acquisitionService,
 		detector:           NewMissingCapabilityDetector(),
 		budget:             newCapabilityRecoveryBudgetPtr(),
+	}
+}
+
+// NewRecoveryServiceWithRepository creates a RecoveryService with a resume repository for persistence.
+func NewRecoveryServiceWithRepository(acquisitionService *AcquisitionService, resumeRepo execution.ResumeRepository) *RecoveryService {
+	return &RecoveryService{
+		acquisitionService: acquisitionService,
+		detector:           NewMissingCapabilityDetector(),
+		budget:             newCapabilityRecoveryBudgetPtr(),
+		resumeRepo:         resumeRepo,
 	}
 }
 

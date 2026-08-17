@@ -341,7 +341,7 @@ window.amitiaUI = (function() {
   }
 
   function handleHostEvent(data) {
-    var eventType = data.event;
+    var eventType = data.event || data.method;
     var payload = data.payload || {};
     if (eventType === "ui.host.context") {
       if (typeof onHostContextChange === "function") {
@@ -413,18 +413,33 @@ window.amitiaUI = (function() {
         hostContextChangeCallbacks.push(cb);
         onHostContextChange = cb;
       }
+      return function() {
+        var idx = hostContextChangeCallbacks.indexOf(cb);
+        if (idx >= 0) hostContextChangeCallbacks.splice(idx, 1);
+        if (onHostContextChange === cb) onHostContextChange = null;
+      };
     },
     onThemeChange: function(cb) {
       if (typeof cb === "function") {
         themeChangeCallbacks.push(cb);
         onThemeChange = cb;
       }
+      return function() {
+        var idx = themeChangeCallbacks.indexOf(cb);
+        if (idx >= 0) themeChangeCallbacks.splice(idx, 1);
+        if (onThemeChange === cb) onThemeChange = null;
+      };
     },
     onResize: function(cb) {
       if (typeof cb === "function") {
         resizeCallbacks.push(cb);
         onResize = cb;
       }
+      return function() {
+        var idx = resizeCallbacks.indexOf(cb);
+        if (idx >= 0) resizeCallbacks.splice(idx, 1);
+        if (onResize === cb) onResize = null;
+      };
     },
     sessionId: sessionId,
     origin: origin,

@@ -75,7 +75,7 @@ func BuildUIAgentExtension(version string) Definition {
 				Version: version,
 				Runtime: &domain.RuntimeDefinition{
 					Type:        domain.RuntimeTypeBuiltin,
-					EntryPoint:  "uiagent.modify",
+					EntryPoint:  "uiagent.runtime",
 					WorkerCount: 2,
 				},
 				Contributions: buildUIAgentContributions(UIAgentExtensionID, UIAgentModuleID),

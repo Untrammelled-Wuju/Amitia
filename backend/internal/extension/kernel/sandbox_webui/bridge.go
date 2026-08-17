@@ -168,29 +168,53 @@ func (b *Bridge) handleReady(ctx context.Context, session *WebSession) (json.Raw
 }
 
 func (b *Bridge) handleContextGet(ctx context.Context, session *WebSession) (json.RawMessage, error) {
-	host := "web"
-	if session.Surface != "" {
-		host = session.Surface
+	host := session.Host
+	if host == "" {
+		host = "web"
 	}
-	os := "unknown"
-	platform := "web"
+	os := session.OS
+	if os == "" {
+		os = "unknown"
+	}
+	platform := session.Platform
+	if platform == "" {
+		platform = "web"
+	}
+	surfaceRole := session.SurfaceRole
+	if surfaceRole == "" {
+		surfaceRole = session.Surface
+	}
 	capabilities := []string{"browser"}
+	if session.Host == "desktop" {
+		capabilities = append(capabilities, "desktop")
+	}
 	if session.CharacterID != "" {
 		capabilities = append(capabilities, "character")
 	}
 	if session.ConversationID != "" {
 		capabilities = append(capabilities, "conversation")
 	}
+	for _, perm := range session.GrantedPerms {
+		if perm != "" {
+			capabilities = append(capabilities, "perm:"+perm)
+		}
+	}
+	for _, scope := range session.GrantedScopes {
+		if scope != "" {
+			capabilities = append(capabilities, "scope:"+scope)
+		}
+	}
 	contextPayload := map[string]any{
-		"theme":    session.Theme,
-		"locale":   session.Locale,
-		"platform": platform,
-		"host":     host,
-		"os":       os,
-		"surface":  session.SlotID,
-		"characterId": session.CharacterID,
+		"theme":          session.Theme,
+		"locale":         session.Locale,
+		"platform":       platform,
+		"host":           host,
+		"os":             os,
+		"surface":        surfaceRole,
+		"slotId":         session.SlotID,
+		"characterId":    session.CharacterID,
 		"conversationId": session.ConversationID,
-		"capabilities": capabilities,
+		"capabilities":   capabilities,
 		"scope": map[string]any{
 			"extensionId": session.ExtensionID,
 			"moduleId":    session.ModuleID,
