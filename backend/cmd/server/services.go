@@ -183,7 +183,7 @@ type AppServices struct {
 	WorkspaceService             *workspace.Service
 	ProductionCutover            *cutoverComposition
 	DataPortability              *dataportability.Coordinator
-	Artifact                     *artifact.Service
+	Artifact                     *ArtifactRuntime
 }
 
 type RuntimeOrchestrator interface {
