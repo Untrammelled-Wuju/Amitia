@@ -64,8 +64,18 @@ func (d *defaultMissingDetector) DetectFromResolution(ctx context.Context, failu
 		return nil, nil
 	}
 
+	capID := capability.CapabilityID("")
+	if invocation.Metadata != nil {
+		if v, ok := invocation.Metadata["capabilityId"]; ok {
+			if s, ok := v.(string); ok {
+				capID = capability.CapabilityID(s)
+			}
+		}
+	}
+
 	return &CapabilityResumeContext{
 		ConversationID: conversationIDFromContext(ctx),
+		CapabilityID:   capID,
 		State:          ResumePending,
 	}, nil
 }

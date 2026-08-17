@@ -237,6 +237,8 @@ type Container struct {
 
 	EventBridgePublisher *eventbridge.Publisher
 
+	NativeBridgeRelay interface{}
+
 	AcquisitionService *acquisition.AcquisitionService
 
 	BackgroundRemovalRegistry backgroundremoval.Registry

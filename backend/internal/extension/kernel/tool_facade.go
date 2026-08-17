@@ -553,14 +553,52 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 	resolved := f.resolveExecutionTarget(ctx, def)
 
 	if resolved.missingCapability != "" {
-		return LegacyToolResult{
-			Status:      "FAILED",
-			VisibleText: fmt.Sprintf("capability not available: %s", resolved.missingCapability),
-			Error: &LegacyToolError{
-				Code:    "CAPABILITY_NOT_REGISTERED",
-				Message: string(resolved.missingCapability),
-				Detail:  fmt.Sprintf("capability %s has no executable provider", resolved.missingCapability),
-			},
+		if f.recoveryService != nil {
+			metadata := map[string]any{
+				"capabilityId": string(resolved.missingCapability),
+			}
+			invocation := capability.NewToolInvocationContext(capability.ToolInvocationOptions{
+				ExternalCallID: externalCallID,
+				UserID:         scope.UserID,
+				CharacterID:    scope.CharacterID,
+				ConversationID: scope.ConversationID,
+				Channel:        scope.Channel,
+				SessionID:      scope.SessionID,
+				ExtensionID:    def.ExtensionID,
+				ModuleID:       def.ModuleID,
+				Source:         capability.InvocationSourceModel,
+				IdempotencyKey: idempotencyKey,
+				TraceID:        scope.TraceID,
+				OperationID:    scope.RequestID,
+				IsBackground:   isBackground,
+				Metadata:       metadata,
+			})
+			resolutionFailure := capability.ResolutionFailureCapabilityNotRegistered
+			_, recoverErr := f.recoveryService.RecoverFromResolution(ctx, resolutionFailure, invocation)
+			if recoverErr != nil {
+				return LegacyToolResult{
+					Status:      "FAILED",
+					VisibleText: fmt.Sprintf("capability recovery failed: %s", recoverErr),
+					Error: &LegacyToolError{
+						Code:    "CAPABILITY_RECOVERY_FAILED",
+						Message: string(resolved.missingCapability),
+						Detail:  recoverErr.Error(),
+					},
+				}
+			}
+			resolved = f.resolveExecutionTarget(ctx, def)
+		}
+
+		if resolved.missingCapability != "" {
+			return LegacyToolResult{
+				Status:      "FAILED",
+				VisibleText: fmt.Sprintf("capability not available: %s", resolved.missingCapability),
+				Error: &LegacyToolError{
+					Code:    "CAPABILITY_NOT_REGISTERED",
+					Message: string(resolved.missingCapability),
+					Detail:  fmt.Sprintf("capability %s has no executable provider", resolved.missingCapability),
+				},
+			}
 		}
 	}
 

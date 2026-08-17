@@ -253,9 +253,11 @@ func (i *EnableExistingInstaller) Install(
 	candidate.Metadata["enableOnly"] = true
 
 	var err error
+	var extID string
+	var serverName string
 	switch candidate.Kind {
 	case CandidateExtensionPackage:
-		extID, _ := candidate.Metadata["extensionId"].(string)
+		extID, _ = candidate.Metadata["extensionId"].(string)
 		if extID == "" {
 			return InstalledCapability{}, fmt.Errorf("enable existing installer: missing extensionId")
 		}
@@ -264,10 +266,11 @@ func (i *EnableExistingInstaller) Install(
 		err = i.enablePort.EnableSkill(ctx, candidate.ID)
 	case CandidateMCP:
 		if candidate.Install.MCP != nil {
-			err = i.enablePort.EnableMCP(ctx, candidate.Install.MCP.ServerName)
+			serverName = candidate.Install.MCP.ServerName
 		} else {
-			err = i.enablePort.EnableMCP(ctx, candidate.ID)
+			serverName = candidate.ID
 		}
+		err = i.enablePort.EnableMCP(ctx, serverName)
 	default:
 		return InstalledCapability{}, fmt.Errorf("enable existing installer: unsupported candidate kind %s", candidate.Kind)
 	}
@@ -281,6 +284,16 @@ func (i *EnableExistingInstaller) Install(
 		Target:        target,
 		CapabilityIDs: candidate.Capabilities,
 		InstalledAt:   time.Now().UTC(),
+	}
+
+	if extID != "" {
+		installed.ExtensionIDs = []string{extID}
+	}
+	if serverName != "" {
+		if installed.Candidate.Metadata == nil {
+			installed.Candidate.Metadata = make(map[string]any)
+		}
+		installed.Candidate.Metadata["mcpServerName"] = serverName
 	}
 
 	return installed, nil
