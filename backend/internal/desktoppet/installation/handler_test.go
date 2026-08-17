@@ -547,6 +547,10 @@ func (s *stubRepository) CreateOperationTx(tx *gorm.DB, op *operation.Installati
 	return nil
 }
 
+func (s *stubRepository) UpdateOperationTx(tx *gorm.DB, op *operation.InstallationOperation) error {
+	return nil
+}
+
 func (s *stubRepository) GetOperationTx(tx *gorm.DB, operationID string) (*operation.InstallationOperation, error) {
 	return nil, nil
 }
