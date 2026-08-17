@@ -47,17 +47,21 @@ func (f NotifyFunc) Notify(ctx context.Context, extensionID, instanceID, service
 }
 
 type ProcessExitEvent struct {
-	ProcessInstanceID string
-	ServiceID         string
-	RuntimeID         string
-	InstanceID        string
-	ExtensionID       string
-	PluginID          string
-	Generation        int64
-	ExitCode          int
-	Expected          bool
-	OccurredAt        time.Time
-	RestartCount      int
+	ProcessInstanceID  string
+	ServiceID          string
+	RuntimeID          string
+	InstanceID         string
+	ExtensionID        string
+	PluginID           string
+	LogicalServiceID   string
+	Generation         int64
+	ExitCode           int
+	Expected           bool
+	OccurredAt         time.Time
+	RestartCount       int
+	HostInstanceID     string
+	HostSessionID      string
+	ModuleID           string
 }
 
 type ProcessExitObserver interface {
@@ -79,10 +83,17 @@ type ProcessSupervisor struct {
 	gameHostNotifier GameHostNotifier
 	protocolHandlers map[string]StdioProtocolHandler
 	exitObservers    []ProcessExitObserver
+	ownerStore       *ProcessOwnerStore
+	hostIdentity     *HostIdentityProvider
+}
+
+type HostIdentityProvider interface {
+	GetHostInstanceID() string
+	GetHostSessionID() string
 }
 
 func NewProcessSupervisor(rootDir string) *ProcessSupervisor {
-	return &ProcessSupervisor{
+	s := &ProcessSupervisor{
 		instances:        make(map[string]*ServiceInstance),
 		defs:             make(map[string]*ServiceRuntimeDefinition),
 		verifier:         NewBinaryVerifier(),
@@ -94,7 +105,9 @@ func NewProcessSupervisor(rootDir string) *ProcessSupervisor {
 		rootDir:          rootDir,
 		logger:           func(level, msg string, fields map[string]any) {},
 		protocolHandlers: make(map[string]StdioProtocolHandler),
+		ownerStore:       NewProcessOwnerStore(filepath.Join(rootDir, "process_owners")),
 	}
+	return s
 }
 
 func NewProcessSupervisorWithVerifier(rootDir string, verifier *BinaryVerifier) *ProcessSupervisor {
@@ -126,6 +139,34 @@ func (s *ProcessSupervisor) SetGameHostNotifier(n GameHostNotifier) {
 	s.gameHostNotifier = n
 }
 
+func (s *ProcessSupervisor) SetHostIdentityProvider(h HostIdentityProvider) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.hostIdentity = h
+}
+
+func (s *ProcessSupervisor) OwnerStore() *ProcessOwnerStore {
+	return s.ownerStore
+}
+
+func (s *ProcessSupervisor) GetHostInstanceID() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.hostIdentity != nil {
+		return s.hostIdentity.GetHostInstanceID()
+	}
+	return ""
+}
+
+func (s *ProcessSupervisor) GetHostSessionID() string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.hostIdentity != nil {
+		return s.hostIdentity.GetHostSessionID()
+	}
+	return ""
+}
+
 func (s *ProcessSupervisor) RegisterProcessExitObserver(observer ProcessExitObserver) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -151,6 +192,19 @@ func (s *ProcessSupervisor) notifyProcessExit(event ProcessExitEvent) {
 	for _, o := range observers {
 		o.OnProcessExit(event)
 	}
+}
+
+func (s *ProcessSupervisor) getCanonicalPluginID(inst *ServiceInstance) string {
+	if inst.PluginID != "" {
+		return inst.PluginID
+	}
+	if inst.Definition != nil && inst.Definition.Publisher != "" {
+		return inst.Definition.Publisher + "/" + inst.Definition.ExtensionID
+	}
+	if inst.Definition != nil {
+		return inst.Definition.ExtensionID
+	}
+	return inst.ExtensionID
 }
 
 func (s *ProcessSupervisor) RegisterStdioProtocolHandler(protocol string, handler StdioProtocolHandler) error {
@@ -331,18 +385,22 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 	env := s.buildSafeEnvironment(exe, def, req.SessionToken, instanceID, req.Generation, tempDir, defaultLogLevel(req.LogLevel), req.SecretLease)
 
 	instance := &ServiceInstance{
-		InstanceID:   instanceID,
-		ServiceID:    req.ServiceID,
-		RuntimeID:    req.RuntimeID,
-		Definition:   def,
-		Generation:   req.Generation,
-		Platform:     s.selector.current,
-		Executable:   exe,
-		State:        ServiceStateStarting,
-		WorkingDir:   workingDir,
-		SessionToken: req.SessionToken,
-		circuit:      NewCircuitBreaker(DefaultCircuitConfig()),
-		stopCh:       make(chan struct{}),
+		InstanceID:        instanceID,
+		ProcessInstanceID: buildProcessInstanceID(req.RuntimeID, req.ServiceID),
+		ServiceID:         req.ServiceID,
+		RuntimeID:         req.RuntimeID,
+		ExtensionID:       def.ExtensionID,
+		PluginID:          def.Publisher + "/" + def.ExtensionID,
+		LogicalServiceID:  req.ServiceID,
+		ModuleID:          def.ModuleID,
+		Generation:        req.Generation,
+		Platform:          s.selector.current,
+		Executable:        exe,
+		State:             ServiceStateStarting,
+		WorkingDir:        workingDir,
+		SessionToken:      req.SessionToken,
+		circuit:           NewCircuitBreaker(DefaultCircuitConfig()),
+		stopCh:            make(chan struct{}),
 	}
 	instance.SetState(ServiceStateStarting)
 
@@ -395,9 +453,16 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 	instance.MarkStarted()
 	instance.circuit.RecordSuccess()
 
+	instance.HostInstanceID = s.GetHostInstanceID()
+	instance.HostSessionID = s.GetHostSessionID()
+
 	s.mu.Lock()
 	s.instances[req.ServiceID] = instance
 	s.mu.Unlock()
+
+	if s.ownerStore != nil {
+		s.ownerStore.RecordOwnership(instance, instance.HostInstanceID, instance.HostSessionID)
+	}
 
 	go s.healthMon.Monitor(instance, def)
 
@@ -718,23 +783,24 @@ func (s *ProcessSupervisor) watchProcess(inst *ServiceInstance, cmd *exec.Cmd) {
 	stopped := inst.State_()
 	expected := stopped == ServiceStateStopping || stopped == ServiceStateStopped
 
-	pluginID := inst.Definition.ExtensionID
-	if inst.Definition.Publisher != "" {
-		pluginID = inst.Definition.Publisher + "/" + inst.Definition.ExtensionID
-	}
+	pluginID := s.getCanonicalPluginID(inst)
 
 	s.notifyProcessExit(ProcessExitEvent{
-		ProcessInstanceID: buildProcessInstanceID(inst.RuntimeID, inst.ServiceID),
-		ServiceID:         inst.ServiceID,
-		RuntimeID:         inst.RuntimeID,
-		InstanceID:        inst.InstanceID,
-		ExtensionID:       inst.Definition.ExtensionID,
-		PluginID:          pluginID,
-		Generation:        inst.Generation,
-		ExitCode:          exitCode,
-		Expected:          expected,
-		OccurredAt:        time.Now(),
-		RestartCount:      inst.RestartCount,
+		ProcessInstanceID:  inst.ProcessInstanceID,
+		ServiceID:          inst.ServiceID,
+		RuntimeID:          inst.RuntimeID,
+		InstanceID:         inst.InstanceID,
+		ExtensionID:        inst.ExtensionID,
+		PluginID:           pluginID,
+		LogicalServiceID:   inst.LogicalServiceID,
+		Generation:         inst.Generation,
+		ExitCode:           exitCode,
+		Expected:           expected,
+		OccurredAt:         time.Now(),
+		RestartCount:       inst.RestartCount,
+		HostInstanceID:     inst.HostInstanceID,
+		HostSessionID:      inst.HostSessionID,
+		ModuleID:           inst.ModuleID,
 	})
 
 	if expected {
@@ -910,6 +976,9 @@ func (s *ProcessSupervisor) Stop(ctx context.Context, req StopRequest) (*StopRes
 	}
 
 	inst.MarkStopped()
+	if s.ownerStore != nil && inst.ProcessInstanceID != "" {
+		s.ownerStore.RemoveOwnership(inst.ProcessInstanceID)
+	}
 	s.log("info", "service stopped", map[string]any{
 		"service": req.ServiceID,
 		"reason":  req.Reason,
@@ -984,6 +1053,27 @@ func (s *ProcessSupervisor) List() []*ServiceInstance {
 		out = append(out, inst)
 	}
 	return out
+}
+
+func (s *ProcessSupervisor) ListDurableOwnedProcesses() []ProcessOwnerMetadata {
+	if s.ownerStore == nil {
+		return nil
+	}
+	return s.ownerStore.GetOwnedProcesses()
+}
+
+func (s *ProcessSupervisor) LookupDurableByRuntimeID(runtimeID string) []ProcessOwnerMetadata {
+	if s.ownerStore == nil {
+		return nil
+	}
+	return s.ownerStore.LookupByRuntimeID(runtimeID)
+}
+
+func (s *ProcessSupervisor) LookupDurableByPluginID(pluginID string) []ProcessOwnerMetadata {
+	if s.ownerStore == nil {
+		return nil
+	}
+	return s.ownerStore.LookupByPluginID(pluginID)
 }
 
 func (s *ProcessSupervisor) StopAll(ctx context.Context, reason string) {
