@@ -3,6 +3,7 @@ import Foundation
 public struct NativeEventPayload: Sendable {
     public let domain: String
     public let event: String
+    public let timestamp: String
     public let data: [String: Any]
     public let generation: Int?
     public let priority: NativeEventPriority
@@ -11,6 +12,7 @@ public struct NativeEventPayload: Sendable {
     public init(domain: String, event: String, data: [String: Any] = [:], generation: Int? = nil, priority: NativeEventPriority = .normal, entityRef: String? = nil) {
         self.domain = domain
         self.event = event
+        self.timestamp = ISO8601DateFormatter().string(from: Date())
         self.data = data
         self.generation = generation
         self.priority = priority
@@ -21,8 +23,7 @@ public struct NativeEventPayload: Sendable {
         var dict: [String: Any] = [
             "domain": domain,
             "event": event,
-            "timestamp": ISO8601DateFormatter().string(from: Date()),
-            "priority": priority.rawValue
+            "timestamp": timestamp
         ]
         if !data.isEmpty {
             dict["data"] = data
@@ -52,22 +53,47 @@ public protocol NativeEventSink: AnyObject {
     func receiveEvent(_ payload: NativeEventPayload)
 }
 
+private struct DedupEntry {
+    var count: Int = 1
+    var lastSeenAt: Date = Date()
+}
+
 final class NativeEventEmitter {
     static let shared = NativeEventEmitter()
     private let notificationName = NSNotification.Name("com.amitia.iosnative.emitEvent")
     private let lock = NSLock()
     private var eventQueue: [NativeEventPayload] = []
-    private var seenFingerprints: Set<String> = []
+    private var dedupCache: [String: DedupEntry] = [:]
     private var maxQueueSize = 100
     private var absoluteMaxQueueSize = 200
-    private var maxDedupCacheSize = 1000
+    private var dedupWindowSize: TimeInterval = 5.0
     private var sinks: [WeakSink] = []
 
     private struct WeakSink {
         weak var value: NativeEventSink?
     }
 
-    private init() {}
+    private init() {
+        startDedupCleanupTimer()
+    }
+
+    private func startDedupCleanupTimer() {
+        let timer = DispatchSource.makeTimerSource(queue: DispatchQueue(label: "com.amitia.nativeevent.cleanup"))
+        timer.schedule(deadline: .now() + dedupWindowSize, repeats: dedupWindowSize)
+        timer.setEventHandler { [weak self] in
+            self?.cleanupExpiredDedupEntries()
+        }
+        timer.resume()
+    }
+
+    private func cleanupExpiredDedupEntries() {
+        lock.lock()
+        let now = Date()
+        dedupCache = dedupCache.filter { _, entry in
+            now.timeIntervalSince(entry.lastSeenAt) < dedupWindowSize
+        }
+        lock.unlock()
+    }
 
     func registerSink(_ sink: NativeEventSink) {
         lock.lock()
@@ -100,14 +126,18 @@ final class NativeEventEmitter {
         }
 
         let fingerprint = computeFingerprint(payload)
-        if seenFingerprints.contains(fingerprint) {
-            lock.unlock()
-            return
+        let now = Date()
+        if let existing = dedupCache[fingerprint] {
+            if now.timeIntervalSince(existing.lastSeenAt) < dedupWindowSize {
+                var updated = existing
+                updated.count += 1
+                updated.lastSeenAt = now
+                dedupCache[fingerprint] = updated
+                lock.unlock()
+                return
+            }
         }
-        seenFingerprints.insert(fingerprint)
-        if seenFingerprints.count > maxDedupCacheSize {
-            seenFingerprints.removeAll()
-        }
+        dedupCache[fingerprint] = DedupEntry(count: 1, lastSeenAt: now)
 
         eventQueue.append(payload)
         eventQueue.sort { $0.priority > $1.priority }
@@ -165,20 +195,24 @@ final class NativeEventEmitter {
         if let ref = payload.entityRef {
             components.append("ref:\(ref)")
         }
-        if let gen = payload.generation {
-            components.append("gen:\(gen)")
-        } else {
-            components.append("gen:none")
-        }
         if let dataKey = payload.data["idempotencyKey"] as? String {
             components.append("id:\(dataKey)")
+        }
+        if let peripheralId = payload.data["peripheralId"] as? String {
+            components.append("p:\(peripheralId)")
+        }
+        if let serviceUUID = payload.data["serviceUUID"] as? String {
+            components.append("s:\(serviceUUID)")
+        }
+        if let characteristicUUID = payload.data["characteristicUUID"] as? String {
+            components.append("c:\(characteristicUUID)")
         }
         return components.joined(separator: "|")
     }
 
     func clearDedupCache() {
         lock.lock()
-        seenFingerprints.removeAll()
+        dedupCache.removeAll()
         eventQueue.removeAll()
         lock.unlock()
     }
