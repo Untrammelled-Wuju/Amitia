@@ -842,8 +842,8 @@ func (r *repository) RenewOperationLeaseTx(tx *gorm.DB, operationID, executionID
 
 func (r *repository) ListPendingOperations(limit int) ([]*operation.InstallationOperation, error) {
 	var ops []*operation.InstallationOperation
-	err := r.db.Where("status IN (?, ?, ?)",
-		operation.OpStatusCreated, operation.OpStatusQueued, operation.OpStatusWaitingRuntimeACK).
+	err := r.db.Where("status IN (?, ?, ?, ?)",
+		operation.OpStatusCreated, operation.OpStatusQueued, operation.OpStatusWaitingRuntimeACK, operation.OpStatusCancelRequested).
 		Order("created_at asc").Limit(limit).Find(&ops).Error
 	if err != nil {
 		return nil, err
@@ -853,8 +853,8 @@ func (r *repository) ListPendingOperations(limit int) ([]*operation.Installation
 
 func (r *repository) ListExpiredLeaseOperations(leaseTimeout string, limit int) ([]*operation.InstallationOperation, error) {
 	var ops []*operation.InstallationOperation
-	err := r.db.Where("lease_expires_at < ? AND status IN (?, ?)", leaseTimeout,
-		operation.OpStatusRunning, operation.OpStatusWaitingRuntimeACK).
+	err := r.db.Where("lease_expires_at < ? AND status IN (?, ?, ?)", leaseTimeout,
+		operation.OpStatusRunning, operation.OpStatusWaitingRuntimeACK, operation.OpStatusCancelRequested).
 		Order("lease_expires_at asc").Limit(limit).Find(&ops).Error
 	if err != nil {
 		return nil, err
