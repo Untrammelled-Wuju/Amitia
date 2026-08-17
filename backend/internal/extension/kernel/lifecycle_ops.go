@@ -348,6 +348,10 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 	r.persistLifecycleStep(ctx, operationID, "register_ui", LifecycleStepSucceeded, nil)
 	r.updateLifecycleOperationStatus(ctx, operationID, LifecycleOperationCompleted, "register_ui", nil)
 
+	if r.container != nil && r.container.UIHostNotifier != nil {
+		r.container.UIHostNotifier.BroadcastExtensionChange("extension_enabled", extensionID, nil)
+	}
+
 	return nil
 }
 
@@ -712,6 +716,10 @@ func (r *Runtime) Disable(ctx context.Context, extensionID string) error {
 		return fmt.Errorf("kernel: update installation: %w", err)
 	}
 
+	if r.container.UIHostNotifier != nil {
+		r.container.UIHostNotifier.BroadcastExtensionChange("extension_disabled", extensionID, nil)
+	}
+
 	return nil
 }
 
@@ -884,6 +892,10 @@ func (r *Runtime) Uninstall(ctx context.Context, extensionID string) error {
 	r.mu.Lock()
 	delete(r.installed, extensionID)
 	r.mu.Unlock()
+
+	if r.container.UIHostNotifier != nil {
+		r.container.UIHostNotifier.BroadcastExtensionChange("extension_uninstalled", extensionID, nil)
+	}
 
 	return nil
 }
