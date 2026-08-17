@@ -14,6 +14,7 @@ const props = withDefaults(
     maxItems?: number;
     startIndex?: number;
     surfaceRole?: ExtensionSurfaceRole;
+    contributionId?: string;
   }>(),
   {
     fallback: undefined,
@@ -21,6 +22,7 @@ const props = withDefaults(
     maxItems: undefined,
     startIndex: 0,
     surfaceRole: "main",
+    contributionId: undefined,
   }
 );
 
@@ -80,6 +82,9 @@ onBeforeUnmount(() => {
 });
 
 const visibleContributions = computed<UIContributionSummary[]>(() => {
+  if (props.contributionId) {
+    return contributions.value.filter((c) => c.contributionId === props.contributionId);
+  }
   const contributionList = contributions.value.slice(props.startIndex);
   if (props.maxItems && props.maxItems > 0) {
     return contributionList.slice(0, props.maxItems);
@@ -193,7 +198,7 @@ function retryContribution(contributionId: string) {
   flex: 1 1 auto;
 }
 .extension-slot--header, .extension-slot--composer, .extension-slot--status { width: auto; }
-.extension-slot--sidebar { height: 100%; min-height: 0; overflow: auto; }
+.extension-slot--sidebar, .extension-slot--main { height: 100%; min-height: 0; overflow: auto; flex: 1; }
 .extension-slot--message .extension-slot__contribution { max-width: 100%; }
 .extension-slot__skeleton {
   width: 100%;

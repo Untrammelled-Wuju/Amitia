@@ -1,9 +1,15 @@
 export interface AmitiaUIContext {
   theme: { mode: string; density: string; tokens: Record<string, string> };
   locale: string;
-  platform: string;
+  platform: "windows" | "macos" | "linux" | "web";
+  host: "web" | "desktop";
+  os: "windows" | "macos" | "linux" | "unknown";
+  surface: string;
   slotId: string;
   scope: { extensionId: string; moduleId: string };
+  characterId: string;
+  conversationId: string;
+  capabilities: string[];
   generation: number;
 }
 
@@ -32,6 +38,9 @@ export interface AmitiaUI {
   createArtifact(contentType: string, data: unknown, filename?: string): Promise<{ artifactId: string; contentType: string; size: number; filename: string }>;
   log(level: string, message: string): Promise<void>;
   ping(): Promise<{ ok: boolean; timestamp: string; expiresAt: string }>;
+  onHostContextChange(cb: (context: AmitiaUIContext) => void): () => void;
+  onThemeChange(cb: (theme: AmitiaUIContext["theme"]) => void): () => void;
+  onResize(cb: (payload: { width: number; height: number; breakpoint: string; surfaceRole: string }) => void): () => void;
   readonly sessionId: string;
   readonly origin: string;
   readonly generation: number;

@@ -447,8 +447,10 @@ import type {
   ExtensionUpdateMeta,
   UpdateOperationInfo,
 } from "@/api/desktop";
+import { useExtensionUIStore } from "@/stores/extensionUI";
 
 const router = useRouter();
+const extensionUIStore = useExtensionUIStore();
 
 const tab = ref("install");
 const loadError = ref("");
@@ -607,6 +609,7 @@ async function doInstall() {
   try {
     const result = await installExtension(selectedFile.value);
     ElMessage.success(`安装成功: ${result.extensionId} v${result.version}`);
+    extensionUIStore.dispatchExtensionChanged("install");
     previewVisible.value = false;
     selectedFile.value = null;
     previewResult.value = null;
@@ -624,9 +627,11 @@ async function toggleEnable(row: KernelExtension, enable: boolean) {
     if (enable) {
       await enableExtension(row.extensionId);
       ElMessage.success("已启用: " + row.extensionId);
+      extensionUIStore.dispatchExtensionChanged("enable");
     } else {
       await disableExtension(row.extensionId);
       ElMessage.success("已禁用: " + row.extensionId);
+      extensionUIStore.dispatchExtensionChanged("disable");
     }
     await refreshList();
   } catch (e: any) {
@@ -643,6 +648,7 @@ async function doUninstall(row: KernelExtension) {
     );
     await uninstallExtension(row.extensionId);
     ElMessage.success("已卸载: " + row.extensionId);
+    extensionUIStore.dispatchExtensionChanged("uninstall");
     await refreshList();
   } catch (e: any) {
     if (e !== "cancel" && e?.message !== "cancel") {
@@ -660,6 +666,7 @@ async function doPause(row: KernelExtension) {
     );
     await pauseExtension(row.extensionId);
     ElMessage.success("已暂停: " + row.extensionId);
+    extensionUIStore.dispatchExtensionChanged("disable");
     await refreshList();
   } catch (e: any) {
     if (e !== "cancel" && e?.message !== "cancel") {
@@ -677,6 +684,7 @@ async function doRollback(row: KernelExtension) {
     );
     await rollbackExtension(row.extensionId);
     ElMessage.success("已回滚: " + row.extensionId);
+    extensionUIStore.dispatchExtensionChanged("update");
     await refreshList();
   } catch (e: any) {
     if (e !== "cancel" && e?.message !== "cancel") {
@@ -768,6 +776,7 @@ async function doInstallUpdate() {
     const op = await installUpdate(updateTarget.value.extensionId, updateOperationId.value);
     updateOperation.value = op;
     ElMessage.success("安装已触发");
+    extensionUIStore.dispatchExtensionChanged("update");
     await refreshList();
   } catch (e: any) {
     ElMessage.error("安装失败: " + (e?.message || e));
@@ -816,6 +825,7 @@ async function doRollbackUpdate() {
     const op = await rollbackUpdate(updateTarget.value.extensionId, updateOperationId.value);
     updateOperation.value = op;
     ElMessage.success("已回滚");
+    extensionUIStore.dispatchExtensionChanged("update");
     await refreshList();
   } catch (e: any) {
     ElMessage.error("回滚失败: " + (e?.message || e));

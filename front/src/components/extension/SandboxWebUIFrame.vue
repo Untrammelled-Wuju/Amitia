@@ -40,6 +40,19 @@ const iframeStyle = computed(() => {
   return { height: `${height}px` };
 });
 
+function detectOS(): "windows" | "macos" | "linux" | "unknown" {
+  if (typeof navigator === "undefined") return "unknown";
+  const ua = navigator.userAgent.toLowerCase();
+  if (ua.includes("win")) return "windows";
+  if (ua.includes("mac")) return "macos";
+  if (ua.includes("linux")) return "linux";
+  return "unknown";
+}
+
+function isDesktopShell(): boolean {
+  return typeof window !== "undefined" && !!(window as unknown as Record<string, unknown>).amitiaDesktop;
+}
+
 async function createSession() {
   loading.value = true;
   error.value = null;
@@ -49,6 +62,9 @@ async function createSession() {
     const surfaceData = (uiContext.value.surface as Record<string, unknown> | undefined) ?? {};
     const surfaceRole = String(surfaceData.role ?? "main");
     const themeData = (uiContext.value.theme as Record<string, unknown> | undefined) ?? {};
+    const	os = detectOS();
+    const platform = os === "unknown" ? "web" : os;
+    const host = isDesktopShell() ? "desktop" : "web";
     const res = await apiClient.post<{
       sessionId: string;
       nonce: string;
@@ -64,6 +80,10 @@ async function createSession() {
       slotId: props.slotId,
       generation: props.contribution.generation,
       surface: surfaceRole,
+      surfaceRole,
+      host,
+      os,
+      platform,
       characterId: (uiContext.value.characterId as string) || "",
       conversationId: (uiContext.value.conversationId as string) || "",
       theme: {
@@ -193,15 +213,39 @@ function onIframeLoad() {
 function postUIContext() {
   if (!bridgePort || !ready.value) return;
   const surface = (uiContext.value.surface as Record<string, unknown> | undefined) ?? {};
-  const themeData = buildThemeTokens();
-  bridgePort.postMessage({ type: "host.event", method: "ui.host.context", payload: uiContext.value });
-  bridgePort.postMessage({ type: "host.event", method: "ui.host.theme", payload: themeData });
-  bridgePort.postMessage({ type: "host.event", method: "ui.host.resize", payload: { width: surface.width ?? 0, height: surface.height ?? 0, breakpoint: surface.breakpoint ?? "xs", surfaceRole: surface.role ?? "main" } });
+  const surfaceRole = String(surface.role ?? "main");
+  const themeSnapshot = buildThemeSnapshot();
+  const contextPayload = {
+    theme: themeSnapshot,
+    locale: (uiContext.value.locale as string) || navigator.language || "en",
+    platform: (uiContext.value.platform as string) || "web",
+    host: (uiContext.value.host as string) || "web",
+    os: (uiContext.value.os as string) || "unknown",
+    surface: surfaceRole,
+    slotId: props.slotId,
+    characterId: (uiContext.value.characterId as string) || "",
+    conversationId: (uiContext.value.conversationId as string) || "",
+    capabilities: (uiContext.value.capabilities as string[]) || [],
+    scope: {
+      extensionId: props.contribution.extensionId,
+      moduleId: props.contribution.moduleId,
+    },
+    generation: props.contribution.generation,
+  };
+  bridgePort.postMessage({ type: "host.event", method: "ui.host.context", payload: contextPayload });
+  bridgePort.postMessage({ type: "host.event", method: "ui.host.theme", payload: themeSnapshot });
+  bridgePort.postMessage({ type: "host.event", method: "ui.host.resize", payload: { width: surface.width ?? 0, height: surface.height ?? 0, breakpoint: surface.breakpoint ?? "xs", surfaceRole } });
+}
+
+function buildThemeSnapshot() {
+  const tokens = buildThemeTokens();
+  const themeData = (uiContext.value.theme as Record<string, unknown> | undefined) ?? {};
+  const mode = themeData.mode || (uiContext.value.hostTheme as string) || "light";
+  const density = themeData.density || "default";
+  return { mode, density, tokens };
 }
 
 function buildThemeTokens() {
-  const themeData = (uiContext.value.theme as Record<string, unknown> | undefined) ?? {};
-  const mode = themeData.mode || (uiContext.value.hostTheme as string) || "light";
   const cs = getComputedStyle(document.documentElement);
   const surface = cs.getPropertyValue("--amitia-bg-surface").trim() || "transparent";
   const textPrimary = cs.getPropertyValue("--amitia-text-primary").trim() || "inherit";
@@ -218,21 +262,20 @@ function buildThemeTokens() {
   const warning = cs.getPropertyValue("--amitia-color-warning").trim() || "#c99a56";
   const danger = cs.getPropertyValue("--amitia-color-danger").trim() || "#c96e6a";
   return {
-    mode,
-    surface,
-    textPrimary,
-    textSecondary,
-    border,
-    control,
-    controlActive,
-    radius,
-    radiusLg,
-    font,
-    fontSize,
-    accent,
-    success,
-    warning,
-    danger,
+    "--amitia-bg-surface": surface,
+    "--amitia-text-primary": textPrimary,
+    "--amitia-text-secondary": textSecondary,
+    "--amitia-border": border,
+    "--amitia-control-hover": control,
+    "--amitia-control-active": controlActive,
+    "--amitia-radius-sm": radius,
+    "--amitia-radius-lg": radiusLg,
+    "--amitia-font-ui": font,
+    "--amitia-font-size-sm": fontSize,
+    "--amitia-color-accent": accent,
+    "--amitia-color-success": success,
+    "--amitia-color-warning": warning,
+    "--amitia-color-danger": danger,
   };
 }
 
@@ -292,13 +335,18 @@ watch(ready, (value) => { if (value) postUIContext(); });
 <style scoped>
 .sandbox-webui-frame {
   width: 100%;
+  height: 100%;
   min-width: 0;
   display: flex;
   flex-direction: column;
+  flex: 1;
+  min-height: 0;
 }
 .sandbox-webui-frame__container {
   position: relative;
   width: 100%;
+  height: 100%;
+  flex: 1;
   min-height: 0;
 }
 .sandbox-webui-frame__iframe {
