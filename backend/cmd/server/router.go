@@ -58,6 +58,7 @@ import (
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/safety"
+	"github.com/u-ai/backend/internal/sync"
 	"github.com/u-ai/backend/internal/system"
 	"github.com/u-ai/backend/internal/temporal"
 	"github.com/u-ai/backend/internal/tts"
@@ -508,6 +509,20 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		emote.RegisterRouter(apiGroup, services.Emote)
 		temporal.RegisterRouter(apiGroup, services.Temporal, services.RelTimeCoordinator)
 		mood.RegisterMoodRouter(apiGroup, ctx)
+		if services.Sync != nil {
+			syncHandler := sync.NewHandler(services.Sync, services.DeviceRepository)
+			syncHandler.RegisterRoutes(apiGroup, security.AuthenticationMiddleware(security.AuthConfig{
+				Mode:             config.AppCfg.Security.Mode,
+				JWTSecret:        config.AppCfg.JWT.Secret,
+				JWTIssuer:        config.AppCfg.JWT.Issuer,
+				JWTAudience:      config.AppCfg.JWT.Audience,
+				LocalCredentials: localCredentialStore,
+				LocalUserID:      config.AppCfg.Security.LocalUserID,
+				ListenAddress:    config.AppCfg.Server.Host,
+				AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
+				SessionService:   sessionSvc,
+			}))
+		}
 	}
 
 	desktopPetWriteGroup := r.Group("/api")
@@ -542,7 +557,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 			if err != nil {
 				return "", err
 			}
-			return ticket.UserID, nil
+			return runtimeidentity.UserID(ticket.UserID), nil
 		},
 	)
 	runtimev2.RegisterUserRoutes(apiGroup, services.DesktopPetRuntimeV2)
