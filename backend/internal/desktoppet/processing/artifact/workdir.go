@@ -86,7 +86,7 @@ func (w *WorkDirectory) Create() error {
 		w.MeasurementsDir,
 	}
 	for _, d := range dirs {
-		if err := os.MkdirAll(d, 0755); err != nil {
+		if err := os.MkdirAll(d, 0o700); err != nil {
 			return fmt.Errorf("artifact: create workdir %s: %w", d, err)
 		}
 	}

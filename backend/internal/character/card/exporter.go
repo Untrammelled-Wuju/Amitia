@@ -246,11 +246,11 @@ func (e *Exporter) exportV2PNG(card *CharacterCard, input ExportInput) (*Charact
 
 func (e *Exporter) saveToResource(data []byte, filename string, subdir string) (string, error) {
 	dir := filepath.Join(e.ResourceBaseDir, subdir)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return "", err
 	}
 	path := filepath.Join(dir, filename)
-	if err := os.WriteFile(path, data, 0644); err != nil {
+	if err := os.WriteFile(path, data, 0o600); err != nil {
 		return "", err
 	}
 	return "/resources/" + subdir + "/" + filename, nil

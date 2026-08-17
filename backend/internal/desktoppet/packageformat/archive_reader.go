@@ -287,7 +287,7 @@ func (r *ArchiveReader) ExtractArchive(path, destDir string) error {
 			return NewPackageError(ErrCodePackagePathInvalid, fmt.Sprintf("unsafe file path: %s", normalized), secErr)
 		}
 
-		if err := os.MkdirAll(filepath.Dir(targetPath), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Dir(targetPath), 0o700); err != nil {
 			return NewPackageError(ErrCodePackagePathInvalid, fmt.Sprintf("failed to create parent directory for: %s", normalized), err)
 		}
 
@@ -296,7 +296,7 @@ func (r *ArchiveReader) ExtractArchive(path, destDir string) error {
 			return NewPackageError(ErrCodePackageManifestInvalid, fmt.Sprintf("failed to open entry: %s", normalized), openErr)
 		}
 
-		outFile, createErr := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
+		outFile, createErr := os.OpenFile(targetPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
 		if createErr != nil {
 			rc.Close()
 			return NewPackageError(ErrCodePackagePathInvalid, fmt.Sprintf("failed to create file: %s", normalized), createErr)

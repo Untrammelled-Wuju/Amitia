@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"sync"
@@ -1356,8 +1357,9 @@ func (s *TaskRuntimeService) leaseReclaimLoop() {
 }
 
 func (s *TaskRuntimeService) cleanupWorkspace(taskRunID, workspace string) {
-	_ = os.RemoveAll(workspace)
-	_ = filepath.Clean(workspace)
+	if err := os.RemoveAll(workspace); err != nil {
+		log.Printf("task_runtime: cleanup workspace failed for %s: %v", taskRunID, err)
+	}
 }
 
 func (s *TaskRuntimeService) createTaskWorkspace(taskRunID string) (string, error) {
@@ -1366,7 +1368,7 @@ func (s *TaskRuntimeService) createTaskWorkspace(taskRunID string) (string, erro
 		base = os.TempDir()
 	}
 	workspace := filepath.Join(base, "task-workspace-"+taskRunID)
-	if err := os.MkdirAll(workspace, 0o755); err != nil {
+	if err := os.MkdirAll(workspace, 0o700); err != nil {
 		return "", err
 	}
 	return workspace, nil

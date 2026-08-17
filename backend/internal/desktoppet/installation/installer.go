@@ -112,7 +112,7 @@ func (s *installer) InstallPackage(packageId, userId, characterId string) (*Inst
 		}
 	}()
 
-	if err := os.MkdirAll(tmpDir, 0o755); err != nil {
+	if err := os.MkdirAll(tmpDir, 0o700); err != nil {
 		return nil, s.failWithRollback(installId, state, "创建临时安装目录失败", err)
 	}
 	state.tmpCreated = true
@@ -520,7 +520,7 @@ func (s *installer) writeMetadataFiles(finalDir, installId string, pkg *processi
 		return NewInstallationError(ErrCodeInstallationFailed, "序列化 metadata.json 失败", err)
 	}
 	metadataPath := filepath.Join(finalDir, installationMetadataFile)
-	if err := os.WriteFile(metadataPath, metadataData, 0o644); err != nil {
+	if err := os.WriteFile(metadataPath, metadataData, 0o600); err != nil {
 		return NewInstallationError(ErrCodeInstallationFailed, "写入 metadata.json 失败", err)
 	}
 
@@ -538,7 +538,7 @@ func (s *installer) writeMetadataFiles(finalDir, installId string, pkg *processi
 		return NewInstallationError(ErrCodeInstallationFailed, "序列化 integrity.json 失败", err)
 	}
 	integrityPath := filepath.Join(finalDir, installationIntegrityFile)
-	if err := os.WriteFile(integrityPath, integrityData, 0o644); err != nil {
+	if err := os.WriteFile(integrityPath, integrityData, 0o600); err != nil {
 		return NewInstallationError(ErrCodeInstallationFailed, "写入 integrity.json 失败", err)
 	}
 
@@ -575,7 +575,7 @@ func (s *installer) atomicMoveDir(src, dst string) error {
 		return nil
 	}
 
-	if err := os.MkdirAll(dst, 0o755); err != nil {
+	if err := os.MkdirAll(dst, 0o700); err != nil {
 		return err
 	}
 

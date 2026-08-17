@@ -186,7 +186,7 @@ func (s *service) ExportConversation(convID string, format string) (string, erro
 	}
 
 	dataDir := "data" + "/" + "exports"
-	_ = os.MkdirAll(dataDir, 0755)
+	_ = os.MkdirAll(dataDir, 0o700)
 
 	ts := time.Now().Format("20060102_150405")
 	safeTitle := strings.Map(func(r rune) rune {
@@ -215,7 +215,7 @@ func (s *service) ExportConversation(convID string, format string) (string, erro
 	}
 
 	filePath := filepath.Join(dataDir, fileName)
-	if err := os.WriteFile(filePath, content, 0644); err != nil {
+	if err := os.WriteFile(filePath, content, 0o600); err != nil {
 		return "", err
 	}
 

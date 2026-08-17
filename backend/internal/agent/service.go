@@ -214,11 +214,11 @@ func (s *service) Webhook(ctx context.Context, req WebhookRequest) (map[string]i
 	audioUrl := ""
 	if req.AudioBase64 != "" {
 		voiceDir := "data/voice_msg"
-		os.MkdirAll(voiceDir, 0755)
+		os.MkdirAll(voiceDir, 0o700)
 		fname := uuid.New().String() + ".mp3"
 		data, err := base64.StdEncoding.DecodeString(req.AudioBase64)
 		if err == nil {
-			os.WriteFile(filepath.Join(voiceDir, fname), data, 0644)
+			os.WriteFile(filepath.Join(voiceDir, fname), data, 0o600)
 			audioUrl = "/voice/" + fname
 			fmt.Printf("[Webhook] 用户语音已保存: %s\n", fname)
 		}
