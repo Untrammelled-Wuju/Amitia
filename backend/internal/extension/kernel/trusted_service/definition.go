@@ -157,33 +157,40 @@ type ServiceNetworkPolicy struct {
 }
 
 type ServiceInstance struct {
-	InstanceID      string                    `json:"instance_id"`
-	ServiceID       string                    `json:"service_id"`
-	RuntimeID       string                    `json:"runtime_id,omitempty"`
-	Definition      *ServiceRuntimeDefinition `json:"-"`
-	Generation      int64                     `json:"generation"`
-	Platform        Platform                  `json:"platform"`
-	Executable      *PlatformExecutable       `json:"executable"`
-	State           ServiceState              `json:"state"`
-	PID             int                       `json:"pid,omitempty"`
-	StartedAt       *time.Time                `json:"started_at,omitempty"`
-	StoppedAt       *time.Time                `json:"stopped_at,omitempty"`
-	LastHealthAt    *time.Time                `json:"last_health_at,omitempty"`
-	RestartCount    int                       `json:"restart_count"`
-	HealthFails     int                       `json:"health_fails"`
-	WorkingDir      string                    `json:"working_dir"`
-	StdioConn       string                    `json:"stdio_conn,omitempty"`
-	SessionToken    string                    `json:"session_token,omitempty"`
-	rpcSession      *RPCSession               `json:"-"`
-	protocolSession io.Closer                 `json:"-"`
-	managedProc     interface{}               `json:"-"`
-	procHandle      uint64                    `json:"-"`
-	circuit         *CircuitBreaker           `json:"-"`
-	lastExitCode    int                       `json:"-"`
-	lastExitError   string                    `json:"-"`
-	mu              sync.RWMutex
-	stopCh          chan struct{}
-	healthCancel    context.CancelFunc
+	InstanceID        string                    `json:"instance_id"`
+	ProcessInstanceID string                    `json:"process_instance_id"`
+	ServiceID         string                    `json:"service_id"`
+	RuntimeID         string                    `json:"runtime_id,omitempty"`
+	ExtensionID       string                    `json:"extension_id"`
+	PluginID          string                    `json:"plugin_id"`
+	LogicalServiceID  string                    `json:"logical_service_id"`
+	HostInstanceID    string                    `json:"host_instance_id"`
+	HostSessionID     string                    `json:"host_session_id"`
+	ModuleID          string                    `json:"module_id"`
+	Definition        *ServiceRuntimeDefinition `json:"-"`
+	Generation        int64                     `json:"generation"`
+	Platform          Platform                  `json:"platform"`
+	Executable        *PlatformExecutable       `json:"executable"`
+	State             ServiceState              `json:"state"`
+	PID               int                       `json:"pid,omitempty"`
+	StartedAt         *time.Time                `json:"started_at,omitempty"`
+	StoppedAt         *time.Time                `json:"stopped_at,omitempty"`
+	LastHealthAt      *time.Time                `json:"last_health_at,omitempty"`
+	RestartCount      int                       `json:"restart_count"`
+	HealthFails       int                       `json:"health_fails"`
+	WorkingDir        string                    `json:"working_dir"`
+	StdioConn         string                    `json:"stdio_conn,omitempty"`
+	SessionToken      string                    `json:"session_token,omitempty"`
+	rpcSession        *RPCSession               `json:"-"`
+	protocolSession   io.Closer                 `json:"-"`
+	managedProc       interface{}               `json:"-"`
+	procHandle        uint64                    `json:"-"`
+	circuit           *CircuitBreaker           `json:"-"`
+	lastExitCode      int                       `json:"-"`
+	lastExitError     string                    `json:"-"`
+	mu                sync.RWMutex
+	stopCh            chan struct{}
+	healthCancel      context.CancelFunc
 }
 
 func (i *ServiceInstance) SetState(state ServiceState) {
