@@ -382,6 +382,8 @@ type ReleaseData struct {
 	UpdatedAt             string
 }
 
+func (ReleaseData) TableName() string { return "desktop_pet_package_releases" }
+
 type ReleaseFileData struct {
 	ID        string
 	ReleaseID string
@@ -394,5 +396,7 @@ type ReleaseFileData struct {
 	FrameID   string
 	CreatedAt string
 }
+
+func (ReleaseFileData) TableName() string { return "desktop_pet_release_files" }
 
 var _ = time.Now

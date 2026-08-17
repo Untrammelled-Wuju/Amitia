@@ -11,20 +11,22 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet/packageformat"
+	"github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/log"
 )
 
 type ReleaseRecoveryWorker struct {
-	repo           ReleaseRepository
-	leaseManager   LeaseManagerPort
-	journalManager JournalManagerPort
-	storage        ReleaseStoragePort
-	eventPublisher EventPublisher
-	checkInterval  time.Duration
-	stopCh         chan struct{}
-	wg             sync.WaitGroup
-	mu             sync.Mutex
-	running        bool
+	repo             ReleaseRepository
+	stagingRepo      security.ImportStagingRepository
+	leaseManager     LeaseManagerPort
+	journalManager   JournalManagerPort
+	storage          ReleaseStoragePort
+	eventPublisher   EventPublisher
+	checkInterval    time.Duration
+	stopCh           chan struct{}
+	wg               sync.WaitGroup
+	mu               sync.Mutex
+	running          bool
 }
 
 type LeaseManagerPort interface {
@@ -40,6 +42,7 @@ type JournalManagerPort interface {
 
 func NewReleaseRecoveryWorker(
 	repo ReleaseRepository,
+	stagingRepo security.ImportStagingRepository,
 	leaseManager LeaseManagerPort,
 	journalManager JournalManagerPort,
 	storage ReleaseStoragePort,
@@ -47,6 +50,7 @@ func NewReleaseRecoveryWorker(
 ) *ReleaseRecoveryWorker {
 	return &ReleaseRecoveryWorker{
 		repo:           repo,
+		stagingRepo:    stagingRepo,
 		leaseManager:   leaseManager,
 		journalManager: journalManager,
 		storage:        storage,
@@ -477,7 +481,7 @@ func (w *ReleaseRecoveryWorker) isPublishedConsistent(op *ReleaseBuildOperation)
 	return true
 }
 
-func (w *ReleaseRecoveryWorker) verifyImportConsistency(op *ReleaseBuildOperation, releaseData *ReleaseData, publishedDir string) error {
+func (w *ReleaseRecoveryWorker) verifyImportConsistency(ctx context.Context, op *ReleaseBuildOperation, releaseData *ReleaseData, publishedDir string) error {
 	if releaseData == nil {
 		return errors.New("release data is nil")
 	}
@@ -553,6 +557,20 @@ func (w *ReleaseRecoveryWorker) verifyImportConsistency(op *ReleaseBuildOperatio
 	report := packageformat.NewValidator().ValidateDirectory(publishedDir, &manifest)
 	if report == nil || report.Verdict == "invalid" {
 		return errors.New("published release validation failed")
+	}
+
+	if w.stagingRepo != nil && snapshot.ImportStagingID != "" {
+		staging, stagingErr := w.stagingRepo.GetForUser(ctx, snapshot.ImportStagingID, releaseData.OwnerUserID)
+		if stagingErr != nil {
+			return fmt.Errorf("get import staging: %w", stagingErr)
+		}
+		if staging.Status != security.StagingStatusConsumed {
+			if staging.Status == security.StagingStatusConsuming {
+				_, _ = w.stagingRepo.CompleteConsumptionCAS(ctx, staging.ID, releaseData.OwnerUserID, staging.StateRevision)
+			} else {
+				return fmt.Errorf("import staging status expected=consumed/consuming actual=%s", staging.Status)
+			}
+		}
 	}
 
 	return nil
