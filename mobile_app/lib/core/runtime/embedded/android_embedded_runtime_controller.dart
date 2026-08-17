@@ -139,14 +139,30 @@ class DefaultRemoteCoreProbe {
   static const Duration defaultTimeout = Duration(seconds: 5);
 
   Future<bool> probe(Uri baseUri, {Duration timeout = defaultTimeout}) async {
+    final normalized = _ensureHttpScheme(baseUri);
+
+    final readyResult = await _probePath(normalized, '/readyz', timeout);
+    if (readyResult == null) {
+      final livezResult = await _probePath(normalized, '/livez', timeout);
+      return livezResult;
+    }
+    return readyResult;
+  }
+
+  Future<bool?> _probePath(Uri baseUri, String path, Duration timeout) async {
     final client = HttpClient()
       ..connectionTimeout = timeout;
     try {
-      final normalized = _ensureHttpScheme(baseUri);
-      final uri = normalized.replace(path: '/livez');
+      final uri = baseUri.replace(path: path);
       final request = await client.getUrl(uri);
       final response = await request.close().timeout(timeout);
       await response.drain<void>();
+      if (path == '/livez') {
+        return response.statusCode == 200;
+      }
+      if (response.statusCode == 404 || response.statusCode == 405) {
+        return null;
+      }
       return response.statusCode == 200;
     } catch (_) {
       return false;

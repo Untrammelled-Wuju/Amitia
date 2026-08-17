@@ -213,13 +213,14 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
     private func handleTaskGetPending(_ request: IOSNativeRequest) async -> IOSNativeResponse {
         if #available(iOS 13.0, *) {
             let requests = await BGTaskScheduler.shared.pendingTaskRequests()
-            let pending = requests.map { req -> [String: Any] in
+            var pending: [[String: Any]] = []
+            for req in requests {
                 var info: [String: Any] = ["identifier": req.identifier]
                 if let mapping = await BGTaskIdentifierRegistry.shared.mappingForIdentifier(req.identifier) {
                     info["taskRunId"] = mapping.taskRunId
                     info["systemClass"] = mapping.systemClass
                 }
-                return info
+                pending.append(info)
             }
             return successResponse(request, result: ["pending": pending])
         }

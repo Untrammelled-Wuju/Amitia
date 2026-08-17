@@ -5,14 +5,14 @@ import '../backend_connection_endpoint.dart';
 import '../backend_connection_repository.dart';
 import '../backend_connection_source.dart';
 import 'runtime_backend_connection_source.dart';
-import '../../auth/auth_token_store.dart';
+import '../../auth/account_session_store.dart';
 import '../../runtime/runtime_bridge_provider.dart';
 import '../../runtime/runtime_bridge_state.dart';
 import '../../runtime/backend/mobile_backend_providers.dart';
 import '../../runtime/backend/mobile_deployment_mode.dart';
 
-final authTokenStoreProvider = Provider<AuthTokenStore>((ref) {
-  return const SharedPreferencesAuthTokenStore();
+final accountSessionProvider = Provider<AccountSessionStore>((ref) {
+  return FlutterSecureAccountSessionStore();
 });
 
 final backendConnectionRepositoryProvider = Provider<BackendConnectionRepository>((ref) {
@@ -25,8 +25,8 @@ final backendConnectionSourceProvider = Provider<BackendConnectionSource>((ref) 
   if (config.mode == MobileDeploymentMode.local) {
     return const RuntimeBackendConnectionSource();
   }
-  final tokenStore = ref.watch(authTokenStoreProvider);
-  return _CloudBackendConnectionSource(config, tokenStore);
+  final sessionStore = ref.watch(accountSessionProvider);
+  return _CloudBackendConnectionSource(config, sessionStore);
 });
 
 final backendConnectionProvider = FutureProvider<BackendConnectionAvailability>((ref) async {
@@ -120,9 +120,9 @@ class _DefaultBackendConnectionRepository implements BackendConnectionRepository
 
 class _CloudBackendConnectionSource implements BackendConnectionSource {
   final MobileDeploymentConfig _config;
-  final AuthTokenStore _tokenStore;
+  final AccountSessionStore _sessionStore;
 
-  _CloudBackendConnectionSource(this._config, this._tokenStore);
+  _CloudBackendConnectionSource(this._config, this._sessionStore);
 
   @override
   Future<BackendConnectionAvailability> resolve({int? expectedRuntimeGeneration}) async {
@@ -146,10 +146,10 @@ class _CloudBackendConnectionSource implements BackendConnectionSource {
         port: port,
         httpScheme: scheme,
         webSocketScheme: wsScheme,
-        livenessPath: '/livez',
+        livenessPath: '/readyz',
         readinessPath: '/readyz',
       );
-      final token = await _tokenStore.getToken();
+      final token = await _sessionStore.getAccessToken();
       if (token == null || token.trim().isEmpty) {
         return BackendConnectionUnavailable();
       }
