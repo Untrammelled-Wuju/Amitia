@@ -5,12 +5,13 @@ import (
 )
 
 type Repository interface {
-	Create(artifact *Artifact) error
+	Create(tx *gorm.DB, artifact *Artifact) error
 	GetByID(id ID) (*Artifact, error)
 	GetByOwnerAndID(ownerUserID string, id ID) (*Artifact, error)
-	SoftDelete(id ID) error
-	InsertReference(ref *ArtifactReference) error
+	SoftDelete(tx *gorm.DB, id ID) error
+	InsertReference(tx *gorm.DB, ref *ArtifactReference) error
 	CountReferences(artifactID ID) (int64, error)
+	DB() *gorm.DB
 }
 
 type sqliteRepository struct {
@@ -21,8 +22,12 @@ func NewRepository(db *gorm.DB) Repository {
 	return &sqliteRepository{db: db}
 }
 
-func (r *sqliteRepository) Create(artifact *Artifact) error {
-	return r.db.Create(artifact).Error
+func (r *sqliteRepository) DB() *gorm.DB {
+	return r.db
+}
+
+func (r *sqliteRepository) Create(tx *gorm.DB, artifact *Artifact) error {
+	return tx.Create(artifact).Error
 }
 
 func (r *sqliteRepository) GetByID(id ID) (*Artifact, error) {
@@ -37,17 +42,17 @@ func (r *sqliteRepository) GetByOwnerAndID(ownerUserID string, id ID) (*Artifact
 	return &a, err
 }
 
-func (r *sqliteRepository) SoftDelete(id ID) error {
+func (r *sqliteRepository) SoftDelete(tx *gorm.DB, id ID) error {
 	now := r.db.NowFunc()
-	return r.db.Model(&Artifact{}).Where("artifact_id = ?", id).Updates(map[string]interface{}{
+	return tx.Model(&Artifact{}).Where("artifact_id = ?", id).Updates(map[string]interface{}{
 		"status":     StatusDeleted,
 		"deleted_at": now,
 		"revision":   gorm.Expr("revision + 1"),
 	}).Error
 }
 
-func (r *sqliteRepository) InsertReference(ref *ArtifactReference) error {
-	return r.db.Create(ref).Error
+func (r *sqliteRepository) InsertReference(tx *gorm.DB, ref *ArtifactReference) error {
+	return tx.Create(ref).Error
 }
 
 func (r *sqliteRepository) CountReferences(artifactID ID) (int64, error) {
