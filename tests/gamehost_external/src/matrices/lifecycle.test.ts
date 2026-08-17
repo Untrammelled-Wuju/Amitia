@@ -173,35 +173,35 @@ describe('G47-F15 E2E Full Flow', () => {
     const customRpcBody = await customRpcResp.json();
     expect(customRpcBody.code).toBe(200);
 
-    // 7. HostAPI (call host.get_runtime_info)
+    // 7. HostAPI (call mockgame.hostapi.invoke)
     const hostApiResp = await fetch(
       `${(client as any).baseUrl}/game-center/runtimes/${runtimeId}/services/mock-game-runtime/rpc`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method: 'host.get_runtime_info', payload: {} }),
+        body: JSON.stringify({ method: 'mockgame.hostapi.invoke', payload: {} }),
       },
     );
     expect(hostApiResp.status).toBe(200);
 
-    // 8. Secret (via mockgame.secret.check RPC)
+    // 8. Secret (via mockgame.secret.acquire RPC)
     const secretResp = await fetch(
       `${(client as any).baseUrl}/game-center/runtimes/${runtimeId}/services/mock-game-runtime/rpc`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method: 'mockgame.secret.check', payload: {} }),
+        body: JSON.stringify({ method: 'mockgame.secret.acquire', payload: {} }),
       },
     );
     expect(secretResp.status).toBe(200);
 
-    // 9. Effect (apply mockgame.effect.apply)
+    // 9. Effect (apply mockgame.control.output)
     const effectResp = await fetch(
       `${(client as any).baseUrl}/game-center/runtimes/${runtimeId}/services/mock-game-runtime/rpc`,
       {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method: 'mockgame.effect.apply', payload: { effect: 'test', duration: 1000 } }),
+        body: JSON.stringify({ method: 'mockgame.control.output', payload: { effect: 'test', duration: 1000 } }),
       },
     );
     expect(effectResp.status).toBe(200);
