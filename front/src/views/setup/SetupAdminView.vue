@@ -78,7 +78,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { ref, reactive, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
-import { apiClient, setToken } from "../../ui-index";
+import { apiClient } from "../../ui-index";
+import { useSessionStore } from "../../stores/session-store";
 
 const router = useRouter();
 const formRef = ref();
@@ -136,8 +137,16 @@ async function handleSetup() {
       password: form.password,
     });
     const data = res.data?.data || res.data;
-    if (data?.token) {
-      setToken(data.token);
+    if (data?.accessToken || data?.token) {
+      const { setSession } = useSessionStore();
+      setSession({
+        accessToken: data.accessToken || data.token,
+        accessTokenExpiresAt: data.accessTokenExpiresAt || null,
+        sessionId: data.sessionId || (data.session?.sessionId) || null,
+        userId: data.userId?.toString() || null,
+        username: data.username || null,
+        role: data.role || null,
+      });
       ElMessage.success("管理员设置成功，已自动登录");
       router.push("/chat");
     }

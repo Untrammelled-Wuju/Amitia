@@ -163,7 +163,6 @@ export function useCharacterVoice() {
       if (cloneForm.refText.trim())
         formData.append("refText", cloneForm.refText.trim());
 
-      const token = localStorage.getItem("ai-companion-token");
       if (!globalApiKey.value) {
         ElMessage.warning("请先在音色配置中设置API Key");
         cloneLoading.value = false;
@@ -173,7 +172,7 @@ export function useCharacterVoice() {
         "/api/tts/voice-clone?apiKey=" + encodeURIComponent(globalApiKey.value);
       const resp = await fetch(url, {
         method: "POST",
-        headers: token ? { Authorization: "Bearer " + token } : {},
+        headers: {},
         body: formData,
       });
       const json = await resp.json();

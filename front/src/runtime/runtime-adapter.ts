@@ -3,8 +3,6 @@ import type { RuntimeConnection, DeploymentModeConfig } from "./runtime-types";
 let cachedConnection: RuntimeConnection | null = null;
 let cachedConfig: DeploymentModeConfig | null = null;
 
-const TOKEN_KEY = "ai-companion-token";
-
 function normalizeHTTPBaseURL(raw: string): string {
   const url = new URL(raw);
   return url.toString().replace(/\/+$/, "");
@@ -93,9 +91,6 @@ export async function createAuthorizedRequestInit(
 
   if (deployment.mode === "local" && window.amitiaDesktop) {
     Object.assign(headers, await getBackendAuthHeaders());
-  } else {
-    const token = localStorage.getItem(TOKEN_KEY);
-    if (token) headers.Authorization = `Bearer ${token}`;
   }
 
   return {

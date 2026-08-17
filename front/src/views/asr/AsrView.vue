@@ -166,11 +166,10 @@ async function uploadFile() {
   if (!audioFile.value) return;
   const formData = new FormData();
   formData.append("audio", audioFile.value);
-  const token = localStorage.getItem("ai-companion-token");
   try {
     const resp = await fetch("/api/asr/upload", {
       method: "POST",
-      headers: token ? { Authorization: "Bearer " + token } : {},
+      headers: {},
       body: formData,
     });
     const json = await resp.json();
@@ -196,10 +195,9 @@ async function submitTask() {
     const formData = new FormData();
     formData.append("audioUrl", audioUrl.value.trim());
     if (language.value) formData.append("language", language.value);
-    const token = localStorage.getItem("ai-companion-token");
     const resp = await fetch("/api/asr/submit", {
       method: "POST",
-      headers: token ? { Authorization: "Bearer " + token } : {},
+      headers: {},
       body: formData,
     });
     const json = await resp.json();

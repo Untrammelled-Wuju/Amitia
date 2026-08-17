@@ -442,12 +442,10 @@ async function testVoice() {
   testingVoice.value = true;
   testAudioUrl.value = "";
   try {
-    const token = localStorage.getItem("ai-companion-token");
     const res = await fetch("/api/tts/synthesize", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: token ? "Bearer " + token : "",
       },
       body: JSON.stringify({
         voiceType: form.voiceType,
@@ -505,10 +503,9 @@ async function submitClone() {
 
     const url =
       "/api/tts/voice-clone?apiKey=" + encodeURIComponent(globalApiKey.value);
-    const token = localStorage.getItem("ai-companion-token");
     const resp = await fetch(url, {
       method: "POST",
-      headers: token ? { Authorization: "Bearer " + token } : {},
+      headers: {},
       body: fd,
     });
     const json = await resp.json();

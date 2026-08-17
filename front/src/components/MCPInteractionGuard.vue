@@ -233,7 +233,7 @@ watch(current, () => {
           : "";
 });
 async function load() {
-  if (!localStorage.getItem("ai-companion-token") || current.value) return;
+  if (current.value) return;
   try {
     current.value = (await listMCPInteractions())[0];
   } catch {}
