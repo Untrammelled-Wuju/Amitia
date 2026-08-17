@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -72,6 +73,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	extensionmcp "github.com/u-ai/backend/internal/extension/kernel/mcp"
+	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 	"github.com/u-ai/backend/internal/extension/kernel/skill"
 	"github.com/u-ai/backend/internal/gamehost/management"
@@ -401,10 +403,30 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		kernelBuilder, _ = applyAndroidNativeProvider(kernelBuilder, bootstrap)
 	}
 
+	var meshRuntime *devicemesh.Runtime
+	var sqlDB *sql.DB
+	if sqlDB, err = ctx.DB.DB(); err != nil {
+		return nil, fmt.Errorf("get sql db: %w", err)
+	}
+	deviceReg := host_registry.NewRegistry(sqlDB)
+	if err := deviceReg.LoadFromStore(context.Background()); err != nil {
+		return nil, fmt.Errorf("load device registry: %w", err)
+	}
+	meshRuntime, err = devicemesh.NewCloudRuntime(sqlDB, deviceReg)
+	if err != nil {
+		return nil, fmt.Errorf("create device mesh runtime: %w", err)
+	}
+	kernelBuilder.WithMeshHub(meshRuntime.Hub)
 	kernelContainer, err := kernelBuilder.Build(context.Background())
 	if err != nil {
 		log.Error("failed to initialize kernel container:", err)
 		panic("failed to initialize kernel container")
+	}
+	if kernelContainer.AdapterRegistry != nil {
+		meshRuntime.SetDispatcher(devicemesh.NewCloudRuntimeDispatcher(kernelContainer.AdapterRegistry))
+	}
+	if kernelContainer.TaskRuntimeService != nil {
+		meshRuntime.SetTaskRuntime(NewTaskRuntimeExecutor(kernelContainer.TaskRuntimeService))
 	}
 	archiveUpdater.SetContainer(kernelContainer)
 	extensionRuntime.Kernel.SetContainer(kernelContainer)
@@ -1040,6 +1062,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		Artifact:                     artifactRuntime,
 		Sync:                         syncService,
 		DB:                           ctx.DB,
+		DeviceMesh:                   meshRuntime,
 		NativeBridgeRelay:            newNativeBridgeRelay(),
 	}
 	if err := runCanonicalBuildAssertions(services); err != nil {

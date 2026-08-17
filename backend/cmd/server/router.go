@@ -138,7 +138,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	services.AccountSession = accountSessionRuntime
 
 	public.GET("/auth/status", userHandler.Status)
-	public.POST("/auth/setup", userHandler.Setup)
 
 	accountsession.RegisterPublicRoutes(public, accountSessionRuntime.Handler)
 
@@ -382,6 +381,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		AccountSessions:  accountSessionRuntime.Validator,
 	}))
 	{
+		accountsession.RegisterAuthenticatedRoutes(apiGroup, accountSessionRuntime.Handler)
 		user.RegisterUserRouter(apiGroup, ctx)
 		character.RegisterCharacterRouter(apiGroup, ctx, services.Chat)
 		chat.RegisterChatRouterWithDelivery(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.ChatDeliveryAdapter)
