@@ -4,9 +4,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/middleware"
@@ -21,7 +19,7 @@ func NewHandler(svc *Service) *Handler {
 }
 
 func (h *Handler) Register(r *gin.RouterGroup) {
-	artifacts := r.Group("/api/artifacts/v1")
+	artifacts := r.Group("/artifacts/v1")
 	{
 		artifacts.POST("", h.Upload)
 		artifacts.GET("/:artifactId", h.GetMetadata)
@@ -118,7 +116,12 @@ func (h *Handler) GetContent(c *gin.Context) {
 	c.Header("Content-Disposition", fmt.Sprintf(`%s; filename="%s"`, disposition, sanitizeDispositionFilename(filename)))
 	c.Header("Cache-Control", "private, max-age=86400")
 	c.Header("X-Content-Type-Options", "nosniff")
-	http.ServeContent(c.Writer, c.Request, filename, art.UpdatedAt, newReadSeeker(rc, info.SizeBytes))
+	rs, ok := rc.(io.ReadSeeker)
+	if !ok {
+		c.JSON(500, gin.H{"error": "artifact.server_error", "message": "blob store does not support seek"})
+		return
+	}
+	http.ServeContent(c.Writer, c.Request, filename, art.UpdatedAt, rs)
 	c.Status(200)
 }
 
@@ -171,39 +174,3 @@ func sanitizeDispositionFilename(name string) string {
 	return name
 }
 
-func newReadSeeker(rc io.Reader, size int64) io.ReadSeeker {
-	if rs, ok := rc.(io.ReadSeeker); ok {
-		return rs
-	}
-	return &readSeekerAdapter{rc: rc, size: size}
-}
-
-type readSeekerAdapter struct {
-	rc   io.Reader
-	pos  int64
-	size int64
-}
-
-func (a *readSeekerAdapter) Read(p []byte) (int, error) {
-	n, err := a.rc.Read(p)
-	a.pos += int64(n)
-	return n, err
-}
-
-func (a *readSeekerAdapter) Seek(offset int64, whence int) (int64, error) {
-	if rs, ok := a.rc.(io.ReadSeeker); ok {
-		return rs.Seek(offset, whence)
-	}
-	if whence == io.SeekStart && offset == 0 && a.pos == 0 {
-		return 0, nil
-	}
-	if whence == io.SeekEnd {
-		return a.size, nil
-	}
-	return a.pos, fmt.Errorf("artifact: seek not fully supported")
-}
-
-func init() {
-	_ = filepath.Base
-	_ = time.Now
-}

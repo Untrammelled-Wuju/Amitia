@@ -24,7 +24,11 @@ func (s *FilesystemBlobStore) blobPath(digest BlobDigest) string {
 	if len(d) < 8 {
 		return filepath.Join(s.root, d)
 	}
-	return filepath.Join(s.root, d[5:7], d[7:9], d)
+	hex := d[7:]
+	if len(hex) < 4 {
+		return filepath.Join(s.root, hex)
+	}
+	return filepath.Join(s.root, hex[0:2], hex[2:4], hex)
 }
 
 func (s *FilesystemBlobStore) Put(ctx context.Context, reader io.Reader, limit int64) (BlobInfo, error) {

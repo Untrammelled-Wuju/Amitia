@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type CreateRequest struct {
@@ -97,8 +98,19 @@ func (s *Service) Create(ctx context.Context, req CreateRequest) (Artifact, erro
 		CreatedAt:   now,
 		UpdatedAt:   now,
 	}
-	if err := s.repo.Create(art); err != nil {
-		return Artifact{}, ErrMetadataWriteFailed(err)
+	var txErr error
+	err = s.repo.DB().Transaction(func(tx *gorm.DB) error {
+		if err := s.repo.Create(tx, art); err != nil {
+			txErr = ErrMetadataWriteFailed(err)
+			return txErr
+		}
+		return nil
+	})
+	if err != nil {
+		return Artifact{}, err
+	}
+	if txErr != nil {
+		return Artifact{}, txErr
 	}
 	s.eventSink.ArtifactCreated(art)
 	return *art, nil
@@ -141,7 +153,9 @@ func (s *Service) Delete(ctx context.Context, ownerUserID string, id ID) error {
 	if count > 0 {
 		return ErrInUse(id)
 	}
-	if err := s.repo.SoftDelete(id); err != nil {
+	if err := s.repo.DB().Transaction(func(tx *gorm.DB) error {
+		return s.repo.SoftDelete(tx, id)
+	}); err != nil {
 		return err
 	}
 	art.Status = StatusDeleted
@@ -158,11 +172,13 @@ func (s *Service) OpenBlob(ctx context.Context, digest BlobDigest) (io.ReadClose
 }
 
 func (s *Service) RegisterReference(artifactID ID, refType string, refID string) error {
-	return s.repo.InsertReference(&ArtifactReference{
-		ArtifactID:    artifactID,
-		ReferenceType: refType,
-		ReferenceID:   refID,
-		CreatedAt:     time.Now(),
+	return s.repo.DB().Transaction(func(tx *gorm.DB) error {
+		return s.repo.InsertReference(tx, &ArtifactReference{
+			ArtifactID:    artifactID,
+			ReferenceType: refType,
+			ReferenceID:   refID,
+			CreatedAt:     time.Now(),
+		})
 	})
 }
 

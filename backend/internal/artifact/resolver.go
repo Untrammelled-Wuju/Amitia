@@ -8,6 +8,7 @@ import (
 type Resolver interface {
 	Resolve(ctx context.Context, actor string, resourceURI string) (Artifact, error)
 	Open(ctx context.Context, actor string, resourceURI string) (io.ReadCloser, Artifact, error)
+	RegisterReference(artifactID ID, refType string, refID string) error
 }
 
 type resolver struct {
@@ -36,4 +37,8 @@ func (r *resolver) Open(ctx context.Context, actor string, resourceURI string) (
 		return nil, Artifact{}, err
 	}
 	return rc, art, nil
+}
+
+func (r *resolver) RegisterReference(artifactID ID, refType string, refID string) error {
+	return r.svc.RegisterReference(artifactID, refType, refID)
 }
