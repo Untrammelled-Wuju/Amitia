@@ -203,26 +203,30 @@ function buildThemeTokens() {
   const themeData = (uiContext.value.theme as Record<string, unknown> | undefined) ?? {};
   const mode = themeData.mode || (uiContext.value.hostTheme as string) || "light";
   const cs = getComputedStyle(document.documentElement);
-  const surface = cs.getPropertyValue("--amitia-bg-surface").trim() || cs.getPropertyValue("--surface-bg").trim() || "transparent";
-  const text = cs.getPropertyValue("--amitia-text-primary").trim() || cs.getPropertyValue("--text-primary").trim() || "inherit";
-  const textSecondary = cs.getPropertyValue("--amitia-text-secondary").trim() || cs.getPropertyValue("--text-secondary").trim() || "inherit";
-  const border = cs.getPropertyValue("--amitia-border").trim() || cs.getPropertyValue("--surface-border").trim() || "transparent";
-  const control = cs.getPropertyValue("--amitia-control-hover").trim() || cs.getPropertyValue("--control-hover-bg").trim() || "transparent";
-  const radius = cs.getPropertyValue("--amitia-radius-sm").trim() || cs.getPropertyValue("--radius-sm").trim() || "8px";
-  const font = cs.getPropertyValue("--amitia-font-ui").trim() || cs.getPropertyValue("--ac-font-family").trim() || "system-ui";
-  const fontSize = cs.getPropertyValue("--amitia-font-size-sm").trim() || cs.getPropertyValue("--ac-font-size-sm").trim() || "13px";
-  const accent = cs.getPropertyValue("--ac-color-primary").trim() || cs.getPropertyValue("--tp-primary").trim() || "#c99557";
-  const success = cs.getPropertyValue("--ac-color-success").trim() || cs.getPropertyValue("--tp-success").trim() || "#75a184";
-  const warning = cs.getPropertyValue("--ac-color-warning").trim() || cs.getPropertyValue("--tp-warning").trim() || "#c99a56";
-  const danger = cs.getPropertyValue("--ac-color-danger").trim() || cs.getPropertyValue("--tp-danger").trim() || "#c96e6a";
+  const surface = cs.getPropertyValue("--amitia-bg-surface").trim() || "transparent";
+  const textPrimary = cs.getPropertyValue("--amitia-text-primary").trim() || "inherit";
+  const textSecondary = cs.getPropertyValue("--amitia-text-secondary").trim() || "inherit";
+  const border = cs.getPropertyValue("--amitia-border").trim() || "transparent";
+  const control = cs.getPropertyValue("--amitia-control-hover").trim() || "transparent";
+  const controlActive = cs.getPropertyValue("--amitia-control-active").trim() || "transparent";
+  const radius = cs.getPropertyValue("--amitia-radius-sm").trim() || "8px";
+  const radiusLg = cs.getPropertyValue("--amitia-radius-lg").trim() || "12px";
+  const font = cs.getPropertyValue("--amitia-font-ui").trim() || "system-ui";
+  const fontSize = cs.getPropertyValue("--amitia-font-size-sm").trim() || "13px";
+  const accent = cs.getPropertyValue("--amitia-color-accent").trim() || "#c99557";
+  const success = cs.getPropertyValue("--amitia-color-success").trim() || "#75a184";
+  const warning = cs.getPropertyValue("--amitia-color-warning").trim() || "#c99a56";
+  const danger = cs.getPropertyValue("--amitia-color-danger").trim() || "#c96e6a";
   return {
     mode,
     surface,
-    text,
+    textPrimary,
     textSecondary,
     border,
     control,
+    controlActive,
     radius,
+    radiusLg,
     font,
     fontSize,
     accent,

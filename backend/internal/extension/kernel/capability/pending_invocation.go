@@ -70,10 +70,38 @@ func (m *PendingInvocationManager) Complete(invocationID string, result UnifiedT
 	if result.Generation != 0 && pi.Generation != 0 && result.Generation != pi.Generation {
 		return false
 	}
+	if result.RuntimeSessionID != "" && pi.SessionID != "" && result.RuntimeSessionID != pi.SessionID {
+		return false
+	}
+	if result.DeviceID != "" && pi.DeviceID != "" && result.DeviceID != pi.DeviceID {
+		return false
+	}
+	if result.RuntimeID != "" && pi.RuntimeID != "" && result.RuntimeID != pi.RuntimeID {
+		return false
+	}
 	delete(m.pending, invocationID)
 	pi.CancelFunc()
 	select {
 	case pi.ResultCh <- result:
+	default:
+	}
+	return true
+}
+
+func (m *PendingInvocationManager) Fail(invocationID string, errResult UnifiedToolResult) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	pi, ok := m.pending[invocationID]
+	if !ok {
+		return false
+	}
+	if errResult.Generation != 0 && pi.Generation != 0 && errResult.Generation != pi.Generation {
+		return false
+	}
+	delete(m.pending, invocationID)
+	pi.CancelFunc()
+	select {
+	case pi.ResultCh <- errResult:
 	default:
 	}
 	return true
@@ -112,6 +140,46 @@ func (m *PendingInvocationManager) CancelAll(sessionID string, reason string) {
 	defer m.mu.Unlock()
 	for id, pi := range m.pending {
 		if pi.SessionID == sessionID {
+			delete(m.pending, id)
+			pi.CancelFunc()
+			result := NewToolFailureResult(id, "", &ToolError{
+				Code:      ErrorCodeConnectionLost,
+				Message:   reason,
+				Retryable: true,
+			})
+			select {
+			case pi.ResultCh <- result:
+			default:
+			}
+		}
+	}
+}
+
+func (m *PendingInvocationManager) SupersedeSession(oldSessionID string, newGeneration int64) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for id, pi := range m.pending {
+		if pi.SessionID == oldSessionID && pi.Generation != newGeneration {
+			delete(m.pending, id)
+			pi.CancelFunc()
+			result := NewToolFailureResult(id, "", &ToolError{
+				Code:      ErrorCodeSessionSuperseded,
+				Message:   "session superseded by newer connection",
+				Retryable: true,
+			})
+			select {
+			case pi.ResultCh <- result:
+			default:
+			}
+		}
+	}
+}
+
+func (m *PendingInvocationManager) CancelByDevice(deviceID string, reason string) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for id, pi := range m.pending {
+		if pi.DeviceID == deviceID {
 			delete(m.pending, id)
 			pi.CancelFunc()
 			result := NewToolFailureResult(id, "", &ToolError{

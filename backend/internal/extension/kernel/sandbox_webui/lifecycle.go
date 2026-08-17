@@ -334,6 +334,28 @@ window.amitiaUI = (function() {
       }
       return;
     }
+    if (data.type === "host.event") {
+      handleHostEvent(data);
+      return;
+    }
+  }
+
+  function handleHostEvent(data) {
+    var eventType = data.event;
+    var payload = data.payload || {};
+    if (eventType === "ui.host.context") {
+      if (typeof onHostContextChange === "function") {
+        onHostContextChange(payload);
+      }
+    } else if (eventType === "ui.host.theme") {
+      if (typeof onThemeChange === "function") {
+        onThemeChange(payload);
+      }
+    } else if (eventType === "ui.host.resize") {
+      if (typeof onResize === "function") {
+        onResize(payload);
+      }
+    }
   }
 
   function acceptPort(event) {
@@ -349,6 +371,13 @@ window.amitiaUI = (function() {
 
   window.addEventListener("message", acceptPort);
   window.parent.postMessage({type:"amitia.extension.ready",protocolVersion:protocolVersion,session:sessionId,nonce:nonce,generation:generation,contributionId:contributionId}, "*");
+
+  var hostContextChangeCallbacks = [];
+  var themeChangeCallbacks = [];
+  var resizeCallbacks = [];
+  var onHostContextChange = null;
+  var onThemeChange = null;
+  var onResize = null;
 
   var api = {
     ready: function() {
@@ -378,6 +407,24 @@ window.amitiaUI = (function() {
     onReady: function(cb) {
       if (isReady) { cb(); return; }
       readyCallbacks.push(cb);
+    },
+    onHostContextChange: function(cb) {
+      if (typeof cb === "function") {
+        hostContextChangeCallbacks.push(cb);
+        onHostContextChange = cb;
+      }
+    },
+    onThemeChange: function(cb) {
+      if (typeof cb === "function") {
+        themeChangeCallbacks.push(cb);
+        onThemeChange = cb;
+      }
+    },
+    onResize: function(cb) {
+      if (typeof cb === "function") {
+        resizeCallbacks.push(cb);
+        onResize = cb;
+      }
     },
     sessionId: sessionId,
     origin: origin,

@@ -336,7 +336,10 @@ watch(
 
 watch(
   () => props.contribution.generation,
-  () => {
+  async () => {
+    if (sessionId.value) {
+      await apiClient.delete(`/api/extensions/ui/sessions/${sessionId.value}`).catch(() => {});
+    }
     sessionId.value = "";
     sessionReady.value = false;
     ensureSession().catch(() => {});
