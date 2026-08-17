@@ -7,6 +7,9 @@ const (
 	MessageTypeHelloAck      MessageType = "hello_ack"
 	MessageTypeCommand       MessageType = "command"
 	MessageTypeCommandAck    MessageType = "command_ack"
+	MessageTypeRuntimeInvoke MessageType = "runtime.invoke"
+	MessageTypeRuntimeResult MessageType = "runtime.result"
+	MessageTypeRuntimeError  MessageType = "runtime.error"
 	MessageTypeRuntimeEvent  MessageType = "runtime_event"
 	MessageTypeStateSnapshot MessageType = "state_snapshot"
 	MessageTypeError         MessageType = "error"
@@ -25,7 +28,8 @@ func (t MessageType) String() string {
 func (t MessageType) IsValid() bool {
 	switch t {
 	case MessageTypeHello, MessageTypeHelloAck, MessageTypeCommand,
-		MessageTypeCommandAck, MessageTypeRuntimeEvent, MessageTypeStateSnapshot,
+		MessageTypeCommandAck, MessageTypeRuntimeInvoke, MessageTypeRuntimeResult, MessageTypeRuntimeError,
+		MessageTypeRuntimeEvent, MessageTypeStateSnapshot,
 		MessageTypeError, MessageTypePing, MessageTypePong,
 		MessageTypeTaskClaim, MessageTypeTaskComplete, MessageTypeTaskProgress, MessageTypeTaskCheckpoint:
 		return true
