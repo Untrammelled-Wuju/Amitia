@@ -244,4 +244,58 @@ describe('G47-F15 Fault Matrix (Backend Driver)', () => {
 
     await driver.assertZeroResidue();
   }, 90000);
+
+  it('F15-57: zero residue target-scoped check after full lifecycle', async () => {
+    const archivePath = requireArchive();
+    const client = new GameCenterClient();
+
+    // Full lifecycle: install → enable → start → use → stop → uninstall
+    await client.installPlugin(archivePath);
+    const driver2 = createDriver();
+    const plugin = await driver2.waitForPluginByExtension('mock-developer/mock-amitiax-game-plugin', 30000);
+    const extId = plugin.extensionId;
+    await client.enablePlugin(extId);
+
+    const runtimes = await client.listRuntimes({ pluginId: plugin.pluginId });
+    expect(runtimes.items.length).toBeGreaterThan(0);
+    const rtId = runtimes.items[0].runtimeId;
+
+    await client.startRuntime(rtId);
+    await driver2.waitForRuntimeReady(rtId, 30000);
+
+    // Exercise RPC, HostAPI, Takeover/Release
+    await fetch(
+      `${(client as any).baseUrl}/game-center/runtimes/${rtId}/services/mock-game-runtime/rpc`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ method: 'mockgame.echo', payload: {} }),
+      },
+    );
+
+    await client.takeover(rtId, 'plugin');
+    await client.release(rtId, 'observe');
+
+    await client.stopRuntime(rtId);
+    await client.uninstallPlugin(extId);
+
+    // Now check zero residue via debug endpoint
+    const residueResp = await fetch(
+      `${(client as any).baseUrl}/game-center-debug/residue`,
+    );
+    expect(residueResp.status).toBe(200);
+    const residueBody = await residueResp.json();
+    expect(residueBody.code).toBe(200);
+
+    const report = residueBody.data;
+    expect(report.pluginCount).toBe(0);
+    expect(report.runtimeCount).toBe(0);
+    expect(report.connectionCount).toBe(0);
+    expect(report.handshakeCount).toBe(0);
+    expect(report.pendingRpcCount).toBe(0);
+    expect(report.channelCount).toBe(0);
+    expect(report.streamCount).toBe(0);
+    expect(report.binaryCount).toBe(0);
+    expect(report.secretLeaseCount).toBe(0);
+  }, 120000);
 });
