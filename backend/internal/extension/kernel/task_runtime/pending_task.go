@@ -20,6 +20,7 @@ type PendingTask struct {
 	DeadlineAt   time.Time
 	ClaimCh      chan TaskClaimResult
 	CancelFunc   context.CancelFunc
+	CancelAckCh  chan struct{}
 }
 
 type TaskClaimResult struct {
@@ -51,19 +52,20 @@ func (m *PendingTaskManager) Register(request TaskExecutionRequest, sessionID st
 	_, cancel := context.WithTimeout(context.Background(), deadline)
 	target := request.Target.Normalize()
 	pt := &PendingTask{
-		TaskRunID:  taskRunID,
-		AttemptID:  request.AttemptID.String(),
-		TaskDefID:  request.Run.TaskDefinitionID,
-		UserID:     string(target.UserID),
-		DeviceID:   string(target.DeviceID),
-		RuntimeID:  string(target.RuntimeID),
-		SessionID:  sessionID,
-		Generation: generation,
-		LeaseID:    generateLeaseID(),
-		CreatedAt:  time.Now().UTC(),
-		DeadlineAt: time.Now().UTC().Add(deadline),
-		ClaimCh:    make(chan TaskClaimResult, 1),
-		CancelFunc: cancel,
+		TaskRunID:   taskRunID,
+		AttemptID:   request.AttemptID.String(),
+		TaskDefID:   request.Run.TaskDefinitionID,
+		UserID:      string(target.UserID),
+		DeviceID:    string(target.DeviceID),
+		RuntimeID:   string(target.RuntimeID),
+		SessionID:   sessionID,
+		Generation:  generation,
+		LeaseID:     generateLeaseID(),
+		CreatedAt:   time.Now().UTC(),
+		DeadlineAt:  time.Now().UTC().Add(deadline),
+		ClaimCh:     make(chan TaskClaimResult, 1),
+		CancelFunc:  cancel,
+		CancelAckCh: make(chan struct{}, 1),
 	}
 	m.mu.Lock()
 	m.pending[taskRunID] = pt
@@ -109,6 +111,12 @@ func (m *PendingTaskManager) Complete(taskRunID string, success bool, errMsg str
 	select {
 	case pt.ClaimCh <- result:
 	default:
+	}
+	if !success {
+		select {
+		case pt.CancelAckCh <- struct{}{}:
+		default:
+		}
 	}
 }
 
@@ -170,6 +178,21 @@ func (m *PendingTaskManager) WaitForClaim(ctx context.Context, taskRunID string)
 		return result, nil
 	case <-ctx.Done():
 		return TaskClaimResult{Success: false, Error: ctx.Err().Error()}, ctx.Err()
+	}
+}
+
+func (m *PendingTaskManager) WaitForCancelAck(ctx context.Context, taskRunID string) bool {
+	m.mu.RLock()
+	pt, ok := m.pending[taskRunID]
+	m.mu.RUnlock()
+	if !ok {
+		return true
+	}
+	select {
+	case <-pt.CancelAckCh:
+		return true
+	case <-ctx.Done():
+		return false
 	}
 }
 

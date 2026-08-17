@@ -132,6 +132,10 @@ type WebSession struct {
 	Theme                ThemeSnapshot
 	Locale               string
 	Surface              string
+	SurfaceRole          string
+	Host                 string
+	OS                   string
+	Platform             string
 	CharacterID          string
 	ConversationID       string
 	GrantedPerms         []string
@@ -328,6 +332,10 @@ type CreateSessionRequest struct {
 	EntryPath            string
 	ExpectedHash         string
 	Surface              string
+	SurfaceRole          string
+	Host                 string
+	OS                   string
+	Platform             string
 	CharacterID          string
 	ConversationID       string
 	GrantedPerms         []string
@@ -441,6 +449,10 @@ func (h *Host) CreateSession(req CreateSessionRequest) (*CreateSessionResult, er
 		Theme:                req.Theme,
 		Locale:               req.Locale,
 		Surface:              req.Surface,
+		SurfaceRole:          req.SurfaceRole,
+		Host:                 req.Host,
+		OS:                   req.OS,
+		Platform:             req.Platform,
 		CharacterID:          req.CharacterID,
 		ConversationID:       req.ConversationID,
 		GrantedPerms:         req.GrantedPerms,

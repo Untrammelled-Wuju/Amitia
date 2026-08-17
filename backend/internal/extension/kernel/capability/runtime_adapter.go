@@ -39,6 +39,7 @@ type RuntimeBinding struct {
 	RuntimeType RuntimeType    `json:"runtimeType"`
 	RuntimeID   string         `json:"runtimeId"`
 	HandlerName string         `json:"handlerName"`
+	ProviderID  string         `json:"providerId,omitempty"`
 	Endpoint    string         `json:"endpoint,omitempty"`
 	Metadata    map[string]any `json:"metadata,omitempty"`
 }

@@ -14,6 +14,18 @@ import (
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
+type TaskProgressHandler interface {
+	HandleProgress(ctx context.Context, taskRunID, attemptID, leaseID string, seq int64, current, total, percentage *float64, stage, message string) error
+}
+
+type TaskCheckpointHandler interface {
+	HandleCheckpoint(ctx context.Context, taskRunID, attemptID, leaseID, checkpointID string, version int64, payload json.RawMessage, payloadHash string) error
+}
+
+type TaskCompletionHandler interface {
+	HandleCompletion(ctx context.Context, taskRunID, attemptID, leaseID string, success bool, result json.RawMessage, errMsg string) error
+}
+
 type meshSessionLookup interface {
 	GetActiveSession(ctx context.Context, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID) (deviceruntime.RuntimeSession, error)
 }
@@ -24,6 +36,9 @@ type MeshRemoteTaskExecutor struct {
 	PendingTasks       *PendingTaskManager
 	HeartbeatInterval  time.Duration
 	LeaseDuration      time.Duration
+	progressHandler    TaskProgressHandler
+	checkpointHandler  TaskCheckpointHandler
+	completionHandler  TaskCompletionHandler
 }
 
 func NewMeshRemoteTaskExecutor(hub *server.ConnectionHub, lookup meshSessionLookup) *MeshRemoteTaskExecutor {
@@ -34,6 +49,18 @@ func NewMeshRemoteTaskExecutor(hub *server.ConnectionHub, lookup meshSessionLook
 		HeartbeatInterval: 30 * time.Second,
 		LeaseDuration:     5 * time.Minute,
 	}
+}
+
+func (e *MeshRemoteTaskExecutor) SetProgressHandler(h TaskProgressHandler) {
+	e.progressHandler = h
+}
+
+func (e *MeshRemoteTaskExecutor) SetCheckpointHandler(h TaskCheckpointHandler) {
+	e.checkpointHandler = h
+}
+
+func (e *MeshRemoteTaskExecutor) SetCompletionHandler(h TaskCompletionHandler) {
+	e.completionHandler = h
 }
 
 func (e *MeshRemoteTaskExecutor) Kind() TaskExecutorKind {
@@ -94,8 +121,10 @@ func (e *MeshRemoteTaskExecutor) executeOnDevice(ctx context.Context, request Ta
 		}
 	}
 
+	var pt *PendingTask
 	if e.PendingTasks != nil {
-		_, err := e.PendingTasks.Register(request, sessionID.String(), generation, deadline)
+		var err error
+		pt, err = e.PendingTasks.Register(request, sessionID.String(), generation, deadline)
 		if err != nil {
 			return TaskExecutionOutcome{
 				Status:       RunStatusFailed,
@@ -105,16 +134,34 @@ func (e *MeshRemoteTaskExecutor) executeOnDevice(ctx context.Context, request Ta
 		}
 	}
 
-	taskCmd := MeshTaskCommand{
-		TaskRunID:        request.Run.TaskRunID,
-		TaskDefinitionID: request.Run.TaskDefinitionID,
-		AttemptID:        request.AttemptID.String(),
-		Input:            request.Run.Input,
-		DeadlineAt:       request.Run.DeadlineAt,
-		MaxAttempts:      request.Run.MaxAttempts,
+	var deadlineAt *time.Time
+	if request.Run.DeadlineAt != nil {
+		d := *request.Run.DeadlineAt
+		deadlineAt = &d
 	}
 
-	inputBytes, err := json.Marshal(taskCmd)
+	var inputCopy json.RawMessage
+	if request.Run.Input != nil {
+		inputCopy = append(json.RawMessage(nil), request.Run.Input...)
+	}
+
+	dispatch := protocol.TaskDispatchPayload{
+		TaskRunID:          request.Run.TaskRunID,
+		TaskDefinitionID:   request.Run.TaskDefinitionID,
+		AttemptID:          request.AttemptID.String(),
+		LeaseID:            pt.LeaseID,
+		Input:              inputCopy,
+		DeadlineAt:         deadlineAt,
+		MaxAttempts:        request.Run.MaxAttempts,
+		Placement:          string(request.Placement),
+		DeviceID:           target.DeviceID,
+		RuntimeID:          target.RuntimeID,
+		RuntimeSessionID:   sessionID,
+		ConnectionGeneration: generation,
+		SentAt:             time.Now().UTC(),
+	}
+
+	payloadBytes, err := json.Marshal(dispatch)
 	if err != nil {
 		if e.PendingTasks != nil {
 			e.PendingTasks.Cancel(request.Run.TaskRunID, "marshal failed")
@@ -122,33 +169,14 @@ func (e *MeshRemoteTaskExecutor) executeOnDevice(ctx context.Context, request Ta
 		return TaskExecutionOutcome{
 			Status:       RunStatusFailed,
 			ErrorCode:    string(ErrTaskExecutionAttemptInvalid),
-			ErrorMessage: "marshal task command: " + err.Error(),
-		}, err
-	}
-
-	cmdPayload := protocol.CommandPayload{
-		CommandID:       uuid.New().String(),
-		CommandName:     "task.execute",
-		CommandSequence: time.Now().UnixNano(),
-		Payload:         inputBytes,
-	}
-
-	payloadBytes, err := json.Marshal(cmdPayload)
-	if err != nil {
-		if e.PendingTasks != nil {
-			e.PendingTasks.Cancel(request.Run.TaskRunID, "marshal failed")
-		}
-		return TaskExecutionOutcome{
-			Status:       RunStatusFailed,
-			ErrorCode:    string(ErrTaskExecutionAttemptInvalid),
-			ErrorMessage: "marshal command payload: " + err.Error(),
+			ErrorMessage: "marshal task dispatch: " + err.Error(),
 		}, err
 	}
 
 	env := protocol.Envelope{
 		EnvelopeVersion:      1,
 		Protocol:             "amitia.device-mesh",
-		MessageType:          protocol.MessageTypeCommand,
+		MessageType:          protocol.MessageTypeTaskDispatch,
 		MessageID:            uuid.New().String(),
 		UserID:               target.UserID,
 		DeviceID:             target.DeviceID,
@@ -248,6 +276,24 @@ func (e *MeshRemoteTaskExecutor) resolveDeviceSession(ctx context.Context, targe
 	return conn.SessionID, conn.Generation, nil
 }
 
+func (e *MeshRemoteTaskExecutor) CancelAndWait(ctx context.Context, run *TaskRun, timeout time.Duration) error {
+	if err := e.Cancel(ctx, run); err != nil {
+		return err
+	}
+
+	if e.PendingTasks == nil {
+		return nil
+	}
+
+	cancelCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	if !e.PendingTasks.WaitForCancelAck(cancelCtx, run.TaskRunID) {
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "cancel ack timed out")
+	}
+	return nil
+}
+
 func (e *MeshRemoteTaskExecutor) ValidateTarget(ctx context.Context, target TaskExecutionTarget) error {
 	normalized := target.Normalize()
 	if normalized.IsZero() {
@@ -290,32 +336,24 @@ func (e *MeshRemoteTaskExecutor) Cancel(ctx context.Context, run *TaskRun) error
 		return NewTaskError(ErrTaskRuntimeSessionBindingInvalid, "cancel requires active session")
 	}
 
-	cancelCmd := MeshTaskCancelCommand{
-		TaskRunID: run.TaskRunID,
-		AttemptID: run.ExecutionAttemptID.String(),
+	cancelPayload := protocol.TaskCancelPayload{
+		TaskRunID:          run.TaskRunID,
+		AttemptID:          run.ExecutionAttemptID.String(),
+		Reason:             "user_requested",
+		RuntimeSessionID:   sessionID,
+		ConnectionGeneration: generation,
+		SentAt:             time.Now().UTC(),
 	}
 
-	payloadBytes, err := json.Marshal(cancelCmd)
+	payloadBytes, err := json.Marshal(cancelPayload)
 	if err != nil {
-		return fmt.Errorf("marshal cancel command: %w", err)
-	}
-
-	cmdPayload := protocol.CommandPayload{
-		CommandID:       uuid.New().String(),
-		CommandName:     "task.cancel",
-		CommandSequence: time.Now().UnixNano(),
-		Payload:         payloadBytes,
-	}
-
-	cmdBytes, err := json.Marshal(cmdPayload)
-	if err != nil {
-		return fmt.Errorf("marshal command payload: %w", err)
+		return fmt.Errorf("marshal cancel payload: %w", err)
 	}
 
 	env := protocol.Envelope{
 		EnvelopeVersion:      1,
 		Protocol:             "amitia.device-mesh",
-		MessageType:          protocol.MessageTypeCommand,
+		MessageType:          protocol.MessageTypeTaskCancel,
 		MessageID:            uuid.New().String(),
 		UserID:               target.UserID,
 		DeviceID:             target.DeviceID,
@@ -324,9 +362,9 @@ func (e *MeshRemoteTaskExecutor) Cancel(ctx context.Context, run *TaskRun) error
 		ConnectionGeneration: generation,
 		Sequence:             1,
 		PayloadSchemaVersion: 1,
-		PayloadHash:          protocol.ComputePayloadHash(cmdBytes),
+		PayloadHash:          protocol.ComputePayloadHash(payloadBytes),
 		SentAt:               time.Now().UTC(),
-		Payload:              cmdBytes,
+		Payload:              payloadBytes,
 	}
 
 	envBytes, err := json.Marshal(env)
@@ -338,18 +376,4 @@ func (e *MeshRemoteTaskExecutor) Cancel(ctx context.Context, run *TaskRun) error
 		return NewTaskError(ErrRemoteTaskExecutorUnavailable, "failed to send cancel to device")
 	}
 	return nil
-}
-
-type MeshTaskCommand struct {
-	TaskRunID        string          `json:"taskRunId"`
-	TaskDefinitionID string          `json:"taskDefinitionId"`
-	AttemptID        string          `json:"attemptId"`
-	Input            json.RawMessage `json:"input,omitempty"`
-	DeadlineAt       *time.Time      `json:"deadlineAt,omitempty"`
-	MaxAttempts      int             `json:"maxAttempts"`
-}
-
-type MeshTaskCancelCommand struct {
-	TaskRunID string `json:"taskRunId"`
-	AttemptID string `json:"attemptId"`
 }

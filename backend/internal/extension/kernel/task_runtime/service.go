@@ -148,6 +148,7 @@ func (s *TaskRuntimeService) Start(ctx context.Context) {
 	s.dispatchCtx, s.dispatchCancel = context.WithCancel(ctx)
 	go s.dispatchLoop()
 	go s.leaseReclaimLoop()
+	go s.remoteLeaseExpiryLoop()
 }
 
 func (s *TaskRuntimeService) Shutdown(ctx context.Context) {
@@ -666,6 +667,13 @@ func (s *TaskRuntimeService) applyExecutionOutcome(ctx context.Context, run *Tas
 		em := outcome.ErrorMessage
 		next.ErrorMessage = &em
 	}
+	if outcome.LeaseID != "" {
+		next.LeaseID = outcome.LeaseID
+	}
+	if outcome.LeaseExpiresAt != nil {
+		le := *outcome.LeaseExpiresAt
+		next.LeaseExpiresAt = &le
+	}
 
 	if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
 		if outcome.Result != nil && outcome.Status.IsTerminal() {
@@ -984,9 +992,40 @@ func (s *TaskRuntimeService) Cancel(ctx context.Context, taskRunID, reason strin
 	placement := current.EffectiveExecutionPlacement()
 	if placement != TaskExecutionPlacementLocal {
 		if s.remoteExecutor != nil {
-			if err := s.remoteExecutor.Cancel(ctx, current); err != nil {
+			var cancelTimeout time.Duration
+			if s.config.CancelGracePeriod > 0 {
+				cancelTimeout = s.config.CancelGracePeriod
+			} else {
+				cancelTimeout = 10 * time.Second
+			}
+			if waiter, ok := s.remoteExecutor.(interface {
+				CancelAndWait(ctx context.Context, run *TaskRun, timeout time.Duration) error
+			}); ok {
+				if err := waiter.CancelAndWait(ctx, current, cancelTimeout); err != nil {
+					return err
+				}
+			} else {
+				if err := s.remoteExecutor.Cancel(ctx, current); err != nil {
+					return err
+				}
+			}
+			next := cloneTaskRun(current)
+			now := time.Now().UTC()
+			next.Status = RunStatusCancelled
+			next.FinishedAt = &now
+			next.Revision = NextRevision(current.Revision)
+			if err := s.mutateTaskRun(ctx, taskMutationParams{
+				next:       next,
+				expected:   current.Status,
+				generation: current.Generation,
+				revision:   current.Revision,
+				removeQ:    true,
+				eventType:  TaskEventCancelled,
+				eventMsg:   "",
+			}); err != nil {
 				return err
 			}
+			return nil
 		}
 		return NewTaskError(ErrRemoteTaskExecutorUnavailable, "remote cancellation not available")
 	}

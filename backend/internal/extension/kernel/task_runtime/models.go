@@ -207,6 +207,9 @@ type TaskRun struct {
 	ErrorMessage         *string                `json:"errorMessage,omitempty"`
 	Generation           int64                  `json:"generation"`
 	Revision             int64                  `json:"revision"`
+	LeaseID              string                 `json:"leaseId,omitempty"`
+	LeaseExpiresAt       *time.Time             `json:"leaseExpiresAt,omitempty"`
+	LastHeartbeatAt      *time.Time             `json:"lastHeartbeatAt,omitempty"`
 }
 
 func (r *TaskRun) EffectiveExecutionPlacement() TaskExecutionPlacement {
@@ -343,6 +346,15 @@ func cloneTaskRun(run *TaskRun) *TaskRun {
 	if run.PauseReason != nil {
 		s := *run.PauseReason
 		clone.PauseReason = &s
+	}
+	clone.LeaseID = run.LeaseID
+	if run.LeaseExpiresAt != nil {
+		t := *run.LeaseExpiresAt
+		clone.LeaseExpiresAt = &t
+	}
+	if run.LastHeartbeatAt != nil {
+		t := *run.LastHeartbeatAt
+		clone.LastHeartbeatAt = &t
 	}
 	clone.ExecutionTarget = run.ExecutionTarget
 	return &clone

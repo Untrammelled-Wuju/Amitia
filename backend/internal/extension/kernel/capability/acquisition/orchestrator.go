@@ -17,17 +17,39 @@ type InstallOrchestrator struct {
 	installers map[InstallMethod]Installer
 }
 
-// NewInstallOrchestrator creates a fully initialized InstallOrchestrator
-// with all built-in installers registered.
-func NewInstallOrchestrator() *InstallOrchestrator {
-	return &InstallOrchestrator{
-		installers: map[InstallMethod]Installer{
-			InstallExtension:      &ExtensionPackageInstaller{},
-			InstallMCP:            &MCPInstaller{},
-			InstallSkill:          &SkillInstaller{},
-			InstallEnableExisting: &EnableExistingInstaller{},
-		},
+// NewInstallOrchestrator creates an InstallOrchestrator with the provided dependencies.
+// All installers are fully initialized with real ports.
+func NewInstallOrchestrator(opts *InstallerRegistryOpts) (*InstallOrchestrator, error) {
+	if opts == nil {
+		return nil, fmt.Errorf("install orchestrator: opts is nil")
 	}
+
+	installers := make(map[InstallMethod]Installer)
+
+	if opts.PackageInstallPort != nil {
+		installers[InstallExtension] = NewExtensionPackageInstaller(opts.PackageInstallPort)
+	}
+	if opts.MCPInstallPort != nil {
+		installers[InstallMCP] = NewMCPInstaller(opts.MCPInstallPort)
+	}
+	if opts.SkillInstallPort != nil {
+		installers[InstallSkill] = NewSkillInstaller(opts.SkillInstallPort)
+		if opts.WorkshopPort != nil {
+			installers[InstallGeneratedSkill] = NewGeneratedSkillInstallerWithWorkshop(opts.SkillInstallPort, opts.WorkshopPort)
+		}
+	}
+	if opts.EnableExistingPort != nil {
+		installers[InstallEnableExisting] = NewEnableExistingInstaller(opts.EnableExistingPort)
+	}
+
+	requiredMethods := []InstallMethod{InstallExtension, InstallMCP, InstallSkill, InstallEnableExisting}
+	for _, method := range requiredMethods {
+		if _, ok := installers[method]; !ok {
+			return nil, fmt.Errorf("install orchestrator: missing required installer for method %s", method)
+		}
+	}
+
+	return &InstallOrchestrator{installers: installers}, nil
 }
 
 // Install selects the correct Installer based on the candidate's install
