@@ -3,6 +3,7 @@ package artifact
 import (
 	"bytes"
 	"context"
+	"database/sql"
 	"errors"
 	"io"
 	"net/http"
