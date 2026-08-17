@@ -13,6 +13,7 @@ import com.amitia.amitia_app.runtime.proot.ProotObserver
 import com.amitia.amitia_app.runtime.proot.ProotProcessLauncher
 import com.amitia.amitia_app.runtime.proot.ProotSession
 import com.amitia.amitia_app.runtime.proot.ProotStopResult
+import com.amitia.amitia_app.runtime.proot.ProotTerminationResult
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicReference
@@ -134,5 +135,9 @@ internal class AndroidProotComponent(
         override fun requestStop() {}
         override val exit: com.amitia.amitia_app.runtime.proot.ProotExit? = null
         override fun activate() {}
+        override fun terminateAndConfirmExit(
+            gracefulTimeoutMs: Long,
+            forceTimeoutMs: Long,
+        ): ProotTerminationResult = ProotTerminationResult.ConfirmedExited(null)
     }
 }

@@ -9,7 +9,8 @@ enum class RuntimeServiceErrorCode {
     SERVICE_ALREADY_ACTIVE,
     SERVICE_STOP_FAILED,
     SERVICE_TERMINATED,
-    SERVICE_INTERNAL_ERROR
+    SERVICE_INTERNAL_ERROR,
+    PROCESS_OWNERSHIP_CONFLICT
 }
 
 data class RuntimeServiceError(
