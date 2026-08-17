@@ -40,6 +40,11 @@ import UIKit
         messenger: self.registrar(forPlugin: "IOSNativeBridgePlugin")!.messenger(),
         host: host
       )
+
+      let dispatcher = BackendActionDispatcherImpl.shared
+      dispatcher.configure(host: host)
+      ShortcutActionGateway.shared.setupBackendDispatcher(dispatcher)
+      BackgroundNativeHandler.registerBGTaskHandlers()
     }
 
     let resolver = RootfsResolver()
