@@ -164,6 +164,33 @@ func DefaultMigrations() []Migration {
 		SyncSequenceMigration(),
 		ExecutionResumeMigration(),
 		SyncMutationIdempotentMigration(),
+		SecurityAuditEventsColumnsMigration(),
+		SecurityAuditEventsOccurredAtMigration(),
+	}
+}
+
+func SecurityAuditEventsColumnsMigration() Migration {
+	return Migration{
+		Version: "20260817003",
+		Name:    "add_security_audit_events_missing_columns",
+		Up: func(s *Step) error {
+			s.AddColumn("security_audit_events", "actor_type", "TEXT")
+			s.AddColumn("security_audit_events", "auth_method", "TEXT")
+			s.AddColumn("security_audit_events", "reason_code", "TEXT")
+			s.AddColumn("security_audit_events", "details_json", "TEXT")
+			return nil
+		},
+	}
+}
+
+func SecurityAuditEventsOccurredAtMigration() Migration {
+	return Migration{
+		Version: "20260817004",
+		Name:    "add_security_audit_events_occurred_at",
+		Up: func(s *Step) error {
+			s.AddColumn("security_audit_events", "occurred_at", "TEXT")
+			return nil
+		},
 	}
 }
 
