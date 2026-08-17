@@ -87,8 +87,10 @@ func (a *ProcessCleanupProcessAdapter) ListOrphanCandidates(ctx context.Context)
 	if a.supervisor == nil {
 		return nil, nil
 	}
+	candidates := make([]ProcessCandidate, 0)
+	seen := make(map[string]bool)
+
 	instances := a.supervisor.List()
-	candidates := make([]ProcessCandidate, 0, len(instances))
 	for _, inst := range instances {
 		if inst == nil || inst.Definition == nil {
 			continue
@@ -107,19 +109,46 @@ func (a *ProcessCleanupProcessAdapter) ListOrphanCandidates(ctx context.Context)
 			hostInstanceID = a.hostIdentity.GetHostInstanceID()
 			hostSessionID = a.hostIdentity.GetHostSessionID()
 		}
+		pidKey := fmt.Sprintf("pid-%d", inst.PID)
+		seen[pidKey] = true
 		candidates = append(candidates, ProcessCandidate{
-			PID:              inst.PID,
-			ProcessInstanceID: inst.InstanceID,
-			RuntimeID:        domain.RuntimeInstanceID(runtimeID),
-			PluginID:         pluginID,
-			ExtensionID:      inst.Definition.ExtensionID,
-			ServiceID:        inst.ServiceID,
-			ModuleID:         inst.Definition.ModuleID,
-			Generation:       uint64(inst.Generation),
-			HostInstanceID:   hostInstanceID,
-			HostSessionID:    hostSessionID,
+			PID:               inst.PID,
+			ProcessInstanceID: inst.ProcessInstanceID,
+			RuntimeID:         domain.RuntimeInstanceID(runtimeID),
+			PluginID:          pluginID,
+			ExtensionID:       inst.Definition.ExtensionID,
+			ServiceID:         inst.ServiceID,
+			ModuleID:          inst.Definition.ModuleID,
+			Generation:        uint64(inst.Generation),
+			HostInstanceID:    hostInstanceID,
+			HostSessionID:     hostSessionID,
 		})
 	}
+
+	durableProcesses := a.supervisor.ListDurableOwnedProcesses()
+	for _, meta := range durableProcesses {
+		pidKey := fmt.Sprintf("pid-%d", meta.PID)
+		if seen[pidKey] {
+			continue
+		}
+		if meta.PID <= 0 {
+			continue
+		}
+		seen[pidKey] = true
+		candidates = append(candidates, ProcessCandidate{
+			PID:               meta.PID,
+			ProcessInstanceID: meta.ProcessInstanceID,
+			RuntimeID:         domain.RuntimeInstanceID(meta.RuntimeID),
+			PluginID:          domain.PluginID(meta.PluginID),
+			ExtensionID:       meta.ExtensionID,
+			ServiceID:         meta.LogicalServiceID,
+			ModuleID:          meta.ModuleID,
+			Generation:        uint64(meta.Generation),
+			HostInstanceID:    meta.HostInstanceID,
+			HostSessionID:     meta.HostSessionID,
+		})
+	}
+
 	return candidates, nil
 }
 
