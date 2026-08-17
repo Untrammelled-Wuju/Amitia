@@ -1,6 +1,10 @@
 package editing
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/u-ai/backend/internal/desktoppet"
+)
 
 const (
 	ErrCodeEditTaskNotFound              = "EDIT_TASK_NOT_FOUND"
@@ -270,6 +274,7 @@ var (
 	ErrActionRevisionAnchorInvalid   = NewEditError(ErrCodeActionRevisionAnchorInvalid, "Anchor解析失败或非法")
 	ErrActionRevisionActiveNotFound  = NewEditError(ErrCodeActionRevisionActiveNotFound, "Active Revision不存在")
 	ErrActionRevisionBindingConflict = NewEditError(ErrCodeActionRevisionBindingConflict, "Binding绑定冲突")
+	ErrLegacyWriteDisabled           = NewEditError(desktoppet.ErrCodeLegacyPackageWriteDisabled, "Legacy editing write disabled")
 )
 
 const (
