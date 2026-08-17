@@ -7,6 +7,7 @@ import (
 
 	"github.com/u-ai/backend/internal/uiagent/preview"
 	"github.com/u-ai/backend/internal/uiagent/schema"
+	"github.com/u-ai/backend/internal/uiagent/source"
 )
 
 // SourceEditOperation describes a single file edit.
@@ -19,21 +20,6 @@ type SourceEditOperation struct {
 	SearchMode    string `json:"searchMode"`
 	ReplaceAll    bool   `json:"replaceAll"`
 	ExpectedCount int    `json:"expectedCount"`
-}
-
-// SourceEditRequest is a batched source edit request.
-type SourceEditRequest struct {
-	WorkspaceID string                `json:"workspaceId"`
-	Operations  []SourceEditOperation `json:"operations"`
-	Transaction bool                  `json:"transaction"`
-}
-
-// SourceEditResult wraps the outcome of source edit operations.
-type SourceEditResult struct {
-	ChangedFiles      []string `json:"changedFiles"`
-	Success           bool     `json:"success"`
-	AppliedOperations int      `json:"appliedOperations"`
-	TransactionToken  string   `json:"transactionToken,omitempty"`
 }
 
 // SchemaEditResult is the result of a schema-mode operation.
@@ -74,7 +60,7 @@ type sourceEditorAdapter struct {
 	editor SourceEditor
 }
 
-func (a sourceEditorAdapter) call(ctx context.Context, req SourceEditRequest) (*SourceEditResult, error) {
+func (a sourceEditorAdapter) call(ctx context.Context, req source.SourceEditRequest) (*source.SourceEditResult, error) {
 	if a.editor == nil {
 		return nil, fmt.Errorf("source editor not configured")
 	}
@@ -151,14 +137,14 @@ func (e *UIExecutor) Validate(plan UIChangePlan) error {
 }
 
 // ApplySourceEdits executes source-editing operations.
-func (e *UIExecutor) ApplySourceEdits(ctx context.Context, plan UIChangePlan) (*SourceEditResult, error) {
-	srcReq := SourceEditRequest{
+func (e *UIExecutor) ApplySourceEdits(ctx context.Context, plan UIChangePlan) (*source.SourceEditResult, error) {
+	srcReq := source.SourceEditRequest{
 		WorkspaceID: plan.Intent.Target.WorkspaceID,
 		Transaction: plan.RollbackStrategy == RollbackEditTransaction,
 	}
 
 	for _, op := range plan.Operations {
-		srcOp := SourceEditOperation{
+		srcOp := source.SourceEditOperation{
 			Path: op.Target,
 		}
 		if len(op.Payload) > 0 {

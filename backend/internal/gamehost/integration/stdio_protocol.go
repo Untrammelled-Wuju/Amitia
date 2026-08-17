@@ -106,7 +106,7 @@ func (h *GameHostStdioProtocolHandler) validateServiceBelongsToRuntime(
 	}
 
 	for _, svc := range snapshot.Services {
-		if svc.ID == runtime.ServiceInstanceID(serviceID) {
+		if string(svc.ServiceID) == string(serviceID) && string(svc.RuntimeID) == string(runtimeID) {
 			if svc.PluginID != pluginID {
 				return fmt.Errorf("service %q does not belong to plugin %q", serviceID, pluginID)
 			}
