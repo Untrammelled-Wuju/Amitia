@@ -316,9 +316,12 @@ onMounted(() => {
 
 watch(
   () => props.contribution.contributionId,
-  () => {
+  async () => {
     for (const k of Object.keys(formState)) delete formState[k];
     for (const k of Object.keys(localContextOverride)) delete localContextOverride[k];
+    if (sessionId.value) {
+      await apiClient.delete(`/api/extensions/ui/sessions/${sessionId.value}`).catch(() => {});
+    }
     sessionId.value = "";
     sessionReady.value = false;
     capturedError.value = null;

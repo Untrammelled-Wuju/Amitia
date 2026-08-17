@@ -20,4 +20,5 @@ withDefaults(defineProps<{
 .extension-surface.is-scrollable { overflow: auto; }
 .extension-surface--header, .extension-surface--composer, .extension-surface--status { border: 0; background: transparent; }
 .extension-surface--message { overflow: hidden; }
+.extension-surface--sidebar, .extension-surface--main { height: 100%; flex: 1; min-height: 0; }
 </style>

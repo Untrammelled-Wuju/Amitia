@@ -50,10 +50,10 @@ const overflowContributions = computed(() => {
 </script>
 <template>
   <div class="chat-header-extension-host">
-    <ExtensionSlot v-for="contribution in visibleContributions" :key="contribution.contributionId" slot-id="chat.header.action" :context="context" :max-items="1" fallback="none" layout="inline" surface-role="header" />
+    <ExtensionSlot v-for="contribution in visibleContributions" :key="contribution.contributionId" slot-id="chat.header.action" :context="context" :contribution-id="contribution.contributionId" fallback="none" layout="inline" surface-role="header" />
     <el-dropdown v-if="hasOverflow" trigger="click" placement="bottom-end">
       <button type="button" class="chat-header-extension-host__overflow" aria-label="更多扩展操作"><el-icon><MoreFilled /></el-icon></button>
-      <template #dropdown><div class="chat-header-extension-host__menu"><ExtensionSlot v-for="contribution in overflowContributions" :key="contribution.contributionId" slot-id="chat.header.action" :context="context" :max-items="1" fallback="none" layout="stack" surface-role="overlay" /></div></template>
+      <template #dropdown><div class="chat-header-extension-host__menu"><ExtensionSlot v-for="contribution in overflowContributions" :key="contribution.contributionId" slot-id="chat.header.action" :context="context" :contribution-id="contribution.contributionId" fallback="none" layout="stack" surface-role="overlay" /></div></template>
     </el-dropdown>
   </div>
 </template>

@@ -215,6 +215,12 @@ export const useExtensionUIStore = defineStore("extensionUI", () => {
     await refreshSnapshot(true);
   }
 
+  function dispatchExtensionChanged(changeType: "install" | "uninstall" | "enable" | "disable" | "update"): void {
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("amitia:extension-state-changed", { detail: { changeType } }));
+    }
+  }
+
   function setupExtensionChangeListener(): () => void {
     const handler = () => {
       void notifyExtensionChanged("update");
@@ -246,6 +252,7 @@ export const useExtensionUIStore = defineStore("extensionUI", () => {
     startSession,
     endSession,
     notifyExtensionChanged,
+    dispatchExtensionChanged,
     setupExtensionChangeListener,
   };
 });
