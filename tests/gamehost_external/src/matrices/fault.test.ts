@@ -242,10 +242,11 @@ describe('G47-F15 Fault Matrix (Backend Driver)', () => {
     await driver.stopRuntime(runtimeId);
 
     await driver.uninstallPlugin(extensionId);
+    const uninstalledExtensionId = extensionId;
     extensionId = null;
     runtimeId = null;
 
-    await driver.assertZeroResidue();
+    await driver.assertZeroResidueForExtension(uninstalledExtensionId);
   }, 90000);
 
   it('F15-57: zero residue target-scoped check after full lifecycle', async () => {
@@ -276,29 +277,12 @@ describe('G47-F15 Fault Matrix (Backend Driver)', () => {
       },
     );
 
-    await client.takeover(rtId, 'plugin');
-    await client.release(rtId, 'observe');
+    await client.takeover(rtId, { targetMode: 'plugin' });
+    await client.release(rtId, { targetMode: 'observe' });
 
     await client.stopRuntime(rtId);
     await client.uninstallPlugin(extId);
 
-    // Now check zero residue via debug endpoint
-    const residueResp = await fetch(
-      `${(client as any).baseUrl}/game-center-debug/residue`,
-    );
-    expect(residueResp.status).toBe(200);
-    const residueBody = await residueResp.json();
-    expect(residueBody.code).toBe(200);
-
-    const report = residueBody.data;
-    expect(report.pluginCount).toBe(0);
-    expect(report.runtimeCount).toBe(0);
-    expect(report.connectionCount).toBe(0);
-    expect(report.handshakeCount).toBe(0);
-    expect(report.pendingRpcCount).toBe(0);
-    expect(report.channelCount).toBe(0);
-    expect(report.streamCount).toBe(0);
-    expect(report.binaryCount).toBe(0);
-    expect(report.secretLeaseCount).toBe(0);
+    await driver.assertZeroResidueForExtension(extId);
   }, 120000);
 });

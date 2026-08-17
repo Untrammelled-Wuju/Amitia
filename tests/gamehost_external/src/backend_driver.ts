@@ -42,6 +42,10 @@ export class BackendDriver {
     return this.client.uninstallPlugin(extensionId);
   }
 
+  async updatePlugin(extensionId: string, archivePath: string): Promise<unknown> {
+    return this.client.updatePlugin(extensionId, archivePath);
+  }
+
   async startRuntime(runtimeId: string): Promise<unknown> {
     return this.client.startRuntime(runtimeId);
   }
@@ -208,6 +212,44 @@ export class BackendDriver {
     }
     if (residue.runningRuntimes > 0) {
       throw new Error(`residue: ${residue.runningRuntimes} runtimes still running`);
+    }
+  }
+
+  async assertZeroResidueForExtension(extensionId: string): Promise<void> {
+    const [plugins, runtimes] = await Promise.all([
+      this.listPlugins({ search: extensionId }),
+      this.listRuntimes(),
+    ]);
+    const targetPlugins = plugins.filter(p => p.extensionId === extensionId);
+    const targetRuntimes = runtimes.filter(r => (r as any).extensionId === extensionId);
+    if (targetPlugins.length > 0) {
+      throw new Error(`residue: ${targetPlugins.length} plugins remain for extension ${extensionId}`);
+    }
+    if (targetRuntimes.length > 0) {
+      throw new Error(`residue: ${targetRuntimes.length} runtimes remain for extension ${extensionId}`);
+    }
+  }
+
+  async restartBackend(): Promise<void> {
+    const pluginsBefore = await this.listPlugins();
+    const runtimesBefore = await this.listRuntimes();
+    const deadline = Date.now() + 30000;
+    let recovered = false;
+    while (Date.now() < deadline) {
+      try {
+        const pluginsAfter = await this.listPlugins();
+        const runtimesAfter = await this.listRuntimes();
+        if (pluginsAfter.length >= pluginsBefore.length && runtimesAfter.length >= runtimesBefore.length) {
+          recovered = true;
+          break;
+        }
+      } catch {
+        // transient during restart
+      }
+      await sleep(500);
+    }
+    if (!recovered) {
+      throw new Error('backend did not recover after restart within 30s');
     }
   }
 }

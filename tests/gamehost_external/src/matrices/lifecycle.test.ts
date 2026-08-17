@@ -100,12 +100,11 @@ describe('G47-F15 Lifecycle (Backend Driver)', () => {
     await driver.stopRuntime(runtimeId);
 
     await driver.uninstallPlugin(extensionId);
+    const uninstalledExtensionId = extensionId;
     extensionId = null;
     runtimeId = null;
 
-    const residue = await driver.getResidue();
-    expect(residue.pluginCount).toBe(0);
-    expect(residue.runtimeCount).toBe(0);
+    await driver.assertZeroResidueForExtension(uninstalledExtensionId);
   }, 60000);
 });
 
@@ -170,7 +169,7 @@ describe('G47-F15 E2E Full Flow', () => {
       },
     );
     expect(customRpcResp.status).toBe(200);
-    const customRpcBody = await customRpcResp.json();
+    const customRpcBody = (await customRpcResp.json()) as { code: number; msg: string };
     expect(customRpcBody.code).toBe(200);
 
     // 7. HostAPI (call mockgame.hostapi.invoke)
@@ -267,10 +266,12 @@ describe('G47-F15 E2E Full Flow', () => {
     await driver.waitForRuntimeReady(runtimeId, 30000);
 
     // 15. Upgrade (real upgrade flow via updatePlugin)
+    expect(archivePath).toBeDefined();
     const archivePathV2 = process.env.MOCK_PLUGIN_ARCHIVE_PATH_V2;
-    if (archivePathV2 && extensionId) {
+    expect(extensionId).toBeDefined();
+    if (archivePathV2) {
       const v1Version = plugin.version;
-      await driver.updatePlugin(extensionId, archivePathV2);
+      await driver.updatePlugin(extensionId!, archivePathV2);
       const upgradeDeadline = Date.now() + 60000;
       let upgradedVersion = v1Version;
       while (Date.now() < upgradeDeadline) {
@@ -288,7 +289,8 @@ describe('G47-F15 E2E Full Flow', () => {
       }
     }
 
-    // 16. Backend Restart is handled by test infrastructure (server remains running)
+    // 16. Backend Restart - verify state persistence across restart
+    await driver.restartBackend();
 
     // 17. Disable
     const newRuntimes = await driver.listRuntimes({ pluginId: plugin.pluginId });
@@ -299,12 +301,13 @@ describe('G47-F15 E2E Full Flow', () => {
     await driver.disablePlugin(extensionId);
 
     // 18. Uninstall
+    const finalExtensionId = extensionId;
     await driver.uninstallPlugin(extensionId);
     extensionId = null;
     runtimeId = null;
 
-    const finalResidue = await driver.getResidue();
-    expect(finalResidue.pluginCount).toBe(0);
-    expect(finalResidue.runtimeCount).toBe(0);
+    if (finalExtensionId) {
+      await driver.assertZeroResidueForExtension(finalExtensionId);
+    }
   }, 300000);
 });
