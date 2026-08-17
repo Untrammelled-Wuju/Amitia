@@ -4,13 +4,14 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/gamehost"
 )
 
 type DebugHandler struct {
-	container *GameHostContainer
+	container *gamehost.GameHostContainer
 }
 
-func NewDebugHandler(container *GameHostContainer) *DebugHandler {
+func NewDebugHandler(container *gamehost.GameHostContainer) *DebugHandler {
 	return &DebugHandler{container: container}
 }
 
