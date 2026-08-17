@@ -10,25 +10,6 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 )
 
-type noopAdapter struct {
-	KindField ContributionKind
-}
-
-func (a *noopAdapter) Kind() ContributionKind { return a.KindField }
-func (a *noopAdapter) Register(ctx context.Context, ref ContributionRef, def map[string]any, rev int, enabled bool) (ContributionRegistration, error) {
-	return ContributionRegistration{
-		Ref:        ref,
-		Kind:       a.KindField,
-		Revision:   rev,
-		Status:     ContributionStatusRegistered,
-		Definition: cloneMap(def),
-	}, nil
-}
-func (a *noopAdapter) Detach(ctx context.Context, reg ContributionRegistration) error { return nil }
-func (a *noopAdapter) Validate(ctx context.Context, ref ContributionRef, def map[string]any) error {
-	return nil
-}
-
 type resourceContributionAdapter struct {
 }
 
@@ -301,7 +282,6 @@ func validateResourceRef(ref string) error {
 
 func defaultAdapters() []ContributionAdapter {
 	return []ContributionAdapter{
-		&noopAdapter{KindField: KindUnknown},
 		&resourceContributionAdapter{},
 		&actionContributionAdapter{},
 		&runtimeCapabilityContributionAdapter{},
