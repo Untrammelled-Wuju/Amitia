@@ -7,6 +7,7 @@ import (
 	"log"
 	"time"
 
+	"github.com/u-ai/backend/internal/desktoppet/plugin"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 	kernelpermission "github.com/u-ai/backend/internal/extension/kernel/permission"
@@ -38,7 +39,6 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/stream"
 	"github.com/u-ai/backend/internal/gamehost/stream/binary"
 	"github.com/u-ai/backend/internal/gamehost/upgrade"
-	"github.com/u-ai/backend/internal/desktoppet/plugin"
 	"github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
@@ -490,7 +490,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 			func(serviceID string) int {
 				def, err := opts.TrustedSupervisor.GetDefinition(serviceID)
 				if err != nil {
-					return 3
+					return recovery.DefaultMaxRestarts
 				}
 				return def.Recovery.MaxRestarts
 			},
@@ -572,34 +572,34 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 				}
 				return recovery.TopologyResult{Valid: false}, fmt.Errorf("runtime not found for plugin %s", pluginID)
 			},
-		func(ctx context.Context, topology recovery.TopologyResult) (recovery.LifecycleResult, error) {
-			if !topology.Valid || topology.TopologyID == "" {
-				return recovery.LifecycleResult{Valid: false}, fmt.Errorf("invalid topology for lifecycle plan")
-			}
-			runtimeID := domain.RuntimeInstanceID(topology.TopologyID)
-			snapshot, err := topologyStore.GetTopologySnapshot(runtimeID)
-			if err != nil {
-				return recovery.LifecycleResult{Valid: false}, fmt.Errorf("load topology snapshot: %w", err)
-			}
-			graph := runtime.DependencyGraphSnapshot{RuntimeID: runtimeID, Nodes: make([]runtime.DependencyNodeSnapshot, 0, len(snapshot.Services))}
-			for _, svc := range snapshot.Services {
-				deps := make([]domain.ServiceID, len(svc.Dependencies))
-				copy(deps, svc.Dependencies)
-				graph.Nodes = append(graph.Nodes, runtime.DependencyNodeSnapshot{ServiceID: svc.ServiceID, Dependencies: deps})
-			}
-			plan, planErr := lifecyclePlanner.BuildStartupPlan(snapshot, graph)
-			if planErr != nil {
-				return recovery.LifecycleResult{Valid: false}, fmt.Errorf("build lifecycle plan: %w", planErr)
-			}
-			if plan.ServiceCount() != len(snapshot.Services) {
-				return recovery.LifecycleResult{Valid: false}, fmt.Errorf("lifecycle plan incomplete: plan=%d total=%d", plan.ServiceCount(), len(snapshot.Services))
-			}
-			planID := fmt.Sprintf("plan-%s-%d", topology.TopologyID, time.Now().UnixNano())
-			return recovery.LifecycleResult{
-				PlanID: planID,
-				Valid:  true,
-			}, nil
-		},
+			func(ctx context.Context, topology recovery.TopologyResult) (recovery.LifecycleResult, error) {
+				if !topology.Valid || topology.TopologyID == "" {
+					return recovery.LifecycleResult{Valid: false}, fmt.Errorf("invalid topology for lifecycle plan")
+				}
+				runtimeID := domain.RuntimeInstanceID(topology.TopologyID)
+				snapshot, err := topologyStore.GetTopologySnapshot(runtimeID)
+				if err != nil {
+					return recovery.LifecycleResult{Valid: false}, fmt.Errorf("load topology snapshot: %w", err)
+				}
+				graph := runtime.DependencyGraphSnapshot{RuntimeID: runtimeID, Nodes: make([]runtime.DependencyNodeSnapshot, 0, len(snapshot.Services))}
+				for _, svc := range snapshot.Services {
+					deps := make([]domain.ServiceID, len(svc.Dependencies))
+					copy(deps, svc.Dependencies)
+					graph.Nodes = append(graph.Nodes, runtime.DependencyNodeSnapshot{ServiceID: svc.ServiceID, Dependencies: deps})
+				}
+				plan, planErr := lifecyclePlanner.BuildStartupPlan(snapshot, graph)
+				if planErr != nil {
+					return recovery.LifecycleResult{Valid: false}, fmt.Errorf("build lifecycle plan: %w", planErr)
+				}
+				if plan.ServiceCount() != len(snapshot.Services) {
+					return recovery.LifecycleResult{Valid: false}, fmt.Errorf("lifecycle plan incomplete: plan=%d total=%d", plan.ServiceCount(), len(snapshot.Services))
+				}
+				planID := fmt.Sprintf("plan-%s-%d", topology.TopologyID, time.Now().UnixNano())
+				return recovery.LifecycleResult{
+					PlanID: planID,
+					Valid:  true,
+				}, nil
+			},
 		)
 	}
 
@@ -641,22 +641,22 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	if opts.EventService != nil {
 		productionAuditSink = recovery.NewAuditSinkAdapter(func(auditEvent recovery.RecoveryAuditEvent) {
 			payload := map[string]interface{}{
-				"operationId": string(auditEvent.OperationID),
-				"runtimeId":   string(auditEvent.RuntimeID),
-				"extensionId": auditEvent.ExtensionID,
-				"pluginId":    string(auditEvent.PluginID),
+				"operationId":  string(auditEvent.OperationID),
+				"runtimeId":    string(auditEvent.RuntimeID),
+				"extensionId":  auditEvent.ExtensionID,
+				"pluginId":     string(auditEvent.PluginID),
 				"failureClass": string(auditEvent.FailureClass),
-				"stage":       string(auditEvent.Stage),
-				"attempt":     auditEvent.Attempt,
-				"result":      auditEvent.Result,
-				"error":       auditEvent.Error,
-				"timestamp":   auditEvent.Timestamp.Format(time.RFC3339Nano),
+				"stage":        string(auditEvent.Stage),
+				"attempt":      auditEvent.Attempt,
+				"result":       auditEvent.Result,
+				"error":        auditEvent.Error,
+				"timestamp":    auditEvent.Timestamp.Format(time.RFC3339Nano),
 			}
 			payloadJSON, _ := json.Marshal(payload)
-evtOpts := event.PublishOptions{
-			Metadata: json.RawMessage(`"` + string(auditEvent.OperationID) + `"`),
-		}
-		_, _ = opts.EventService.Publish(nil, "gamehost.recovery.audit", 1, payloadJSON, evtOpts)
+			evtOpts := event.PublishOptions{
+				Metadata: json.RawMessage(`"` + string(auditEvent.OperationID) + `"`),
+			}
+			_, _ = opts.EventService.Publish(nil, "gamehost.recovery.audit", 1, payloadJSON, evtOpts)
 		})
 	} else {
 		productionAuditSink = recovery.NewAuditSinkAdapter(func(event recovery.RecoveryAuditEvent) {
@@ -828,12 +828,12 @@ evtOpts := event.PublishOptions{
 		evtSvc := opts.EventService
 		startupAuditSink = startup.NewEventServiceAuditSinkAdapter(func(startupEvent startup.StartupRecoveryAuditEvent) {
 			payload := map[string]interface{}{
-				"operationId":   startupEvent.OperationID,
-				"stage":         startupEvent.Stage,
-				"resourceType":  startupEvent.ResourceType,
-				"resourceId":    startupEvent.ResourceID,
-				"error":         startupEvent.Error,
-				"timestamp":     time.Now().Format(time.RFC3339Nano),
+				"operationId":  startupEvent.OperationID,
+				"stage":        startupEvent.Stage,
+				"resourceType": startupEvent.ResourceType,
+				"resourceId":   startupEvent.ResourceID,
+				"error":        startupEvent.Error,
+				"timestamp":    time.Now().Format(time.RFC3339Nano),
 			}
 			payloadJSON, _ := json.Marshal(payload)
 			evtOpts := event.PublishOptions{
@@ -845,8 +845,15 @@ evtOpts := event.PublishOptions{
 		startupAuditSink = startup.NewAuditSinkLoggerAdapter()
 	}
 
-	hostIdentity := startup.NewHostIdentity("", "")
-	if opts.TrustedSupervisor != nil {
+	var hostIdentity *startup.DurableHostIdentity
+	if dirMgr != nil {
+		var err error
+		hostIdentity, err = startup.NewDurableHostIdentity(dirMgr.Root())
+		if err != nil {
+			return nil, fmt.Errorf("compose durable host identity: %w", err)
+		}
+	}
+	if opts.TrustedSupervisor != nil && hostIdentity != nil {
 		opts.TrustedSupervisor.SetHostIdentityProvider(hostIdentity)
 	}
 

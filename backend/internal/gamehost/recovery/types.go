@@ -6,6 +6,10 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/domain"
 )
 
+const (
+	DefaultMaxRestarts int = 3
+)
+
 type FailureClass string
 
 const (
@@ -115,11 +119,11 @@ type RecoveryRequest struct {
 }
 
 type RecoveryResponse struct {
-	OperationID    RecoveryOperationID
-	Success        bool
-	Stage          RecoveryStage
-	Result         RecoveryResult
-	Error          error
+	OperationID RecoveryOperationID
+	Success     bool
+	Stage       RecoveryStage
+	Result      RecoveryResult
+	Error       error
 }
 
 type RecoverableMetadata struct {
