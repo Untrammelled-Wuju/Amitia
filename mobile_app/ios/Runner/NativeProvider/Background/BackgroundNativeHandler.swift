@@ -21,6 +21,17 @@ public class BackgroundNativeHandler: NSObject, IOSNativeOperationHandler {
     private var activeTaskRunIds: Set<String> = []
     private let queue = DispatchQueue(label: "com.amitia.backgroundnative", attributes: .concurrent)
 
+    public static func registerBGTaskHandlers() {
+        if #available(iOS 13.0, *) {
+            BGTaskScheduler.shared.register(forTaskWithIdentifier: "com.amitia.background.refresh", using: nil) { task in
+                BackgroundTaskBridge.shared.handleBackgroundTask(task)
+            }
+            BGTaskScheduler.shared.register(forTaskWithIdentifier: "com.amitia.background.processing", using: nil) { task in
+                BackgroundTaskBridge.shared.handleBackgroundTask(task)
+            }
+        }
+    }
+
     public override init() {
         super.init()
         BackgroundTaskBridge.shared.delegate = self
