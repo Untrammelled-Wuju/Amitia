@@ -30,7 +30,7 @@ func NewSQLite(dataDir string) *gorm.DB {
 
 	sqlDB, _ := db.DB()
 	sqlDB.SetMaxIdleConns(10)
-	sqlDB.SetMaxOpenConns(1)
+	sqlDB.SetMaxOpenConns(10)
 	sqlDB.SetConnMaxLifetime(time.Hour)
 
 	if err := sqlDB.Ping(); err != nil {

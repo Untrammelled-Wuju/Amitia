@@ -55,7 +55,61 @@ func (l *PersistentLock) Acquire(ctx context.Context, lockName string, ttl time.
 	nowStr := now.Format(time.RFC3339Nano)
 	expires := now.Add(ttl).Format(time.RFC3339Nano)
 
-	_ = os.Remove(lockFile)
+	lease := migrationLockRecord{
+		LockName:        lockName,
+		OwnerInstanceID: l.instance,
+		LeaseExpiresAt:  expires,
+		HeartbeatAt:     nowStr,
+	}
+
+	err := l.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		var existing migrationLockRecord
+		if err := tx.Where("lock_name = ?", lockName).Take(&existing).Error; err != nil {
+			if !errors.Is(err, gorm.ErrRecordNotFound) {
+				return err
+			}
+			return tx.Create(&lease).Error
+		}
+		expiresAt, parseErr := time.Parse(time.RFC3339Nano, existing.LeaseExpiresAt)
+		if parseErr != nil || !expiresAt.After(now) {
+			result := tx.Model(&migrationLockRecord{}).
+				Where("lock_name = ? AND owner_instance_id = ? AND lease_expires_at = ?",
+					lockName, existing.OwnerInstanceID, existing.LeaseExpiresAt).
+				Updates(map[string]interface{}{
+					"owner_instance_id": l.instance,
+					"lease_expires_at":  expires,
+					"heartbeat_at":      nowStr,
+				})
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected != 1 {
+				return fmt.Errorf("migration: stale lease CAS failed, rows affected=%d", result.RowsAffected)
+			}
+			return nil
+		}
+		if existing.OwnerInstanceID == l.instance {
+			result := tx.Model(&migrationLockRecord{}).
+				Where("lock_name = ? AND owner_instance_id = ?", lockName, l.instance).
+				Updates(map[string]interface{}{
+					"lease_expires_at": expires,
+					"heartbeat_at":     nowStr,
+				})
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected != 1 {
+				return fmt.Errorf("migration: renew lease CAS failed, rows affected=%d", result.RowsAffected)
+			}
+			return nil
+		}
+		return fmt.Errorf("migration: db lease held by %s until %s", existing.OwnerInstanceID, existing.LeaseExpiresAt)
+	})
+
+	if err != nil {
+		return err
+	}
+
 	fh, err := os.OpenFile(lockFile, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
 		if errors.Is(err, os.ErrExist) {
@@ -70,47 +124,6 @@ func (l *PersistentLock) Acquire(ctx context.Context, lockName string, ttl time.
 	}
 	fh.Close()
 
-	lease := migrationLockRecord{
-		LockName:        lockName,
-		OwnerInstanceID: l.instance,
-		LeaseExpiresAt:  expires,
-		HeartbeatAt:     nowStr,
-	}
-
-	err = l.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		var existing migrationLockRecord
-		if err := tx.Where("lock_name = ?", lockName).Take(&existing).Error; err != nil {
-			if !errors.Is(err, gorm.ErrRecordNotFound) {
-				return err
-			}
-			return tx.Create(&lease).Error
-		}
-		expiresAt, parseErr := time.Parse(time.RFC3339Nano, existing.LeaseExpiresAt)
-		if parseErr != nil || !expiresAt.After(now) {
-			return tx.Model(&migrationLockRecord{}).
-				Where("lock_name = ? AND owner_instance_id = ? AND lease_expires_at = ?",
-					lockName, existing.OwnerInstanceID, existing.LeaseExpiresAt).
-				Updates(map[string]interface{}{
-					"owner_instance_id": l.instance,
-					"lease_expires_at":  expires,
-					"heartbeat_at":      nowStr,
-				}).Error
-		}
-		if existing.OwnerInstanceID == l.instance {
-			return tx.Model(&migrationLockRecord{}).
-				Where("lock_name = ? AND owner_instance_id = ?", lockName, l.instance).
-				Updates(map[string]interface{}{
-					"lease_expires_at": expires,
-					"heartbeat_at":     nowStr,
-				}).Error
-		}
-		return fmt.Errorf("migration: db lease held by %s until %s", existing.OwnerInstanceID, existing.LeaseExpiresAt)
-	})
-
-	if err != nil {
-		os.Remove(lockFile)
-		return err
-	}
 	return nil
 }
 

@@ -68,10 +68,15 @@ CREATE TABLE IF NOT EXISTS security_audit_events (
     event_type TEXT NOT NULL,
     outcome TEXT NOT NULL DEFAULT 'success',
     severity TEXT NOT NULL DEFAULT 'info',
+    actor_type TEXT,
+    auth_method TEXT,
     ip_address TEXT,
     user_agent TEXT,
     device_name TEXT,
+    reason_code TEXT,
     detail TEXT,
+    details_json TEXT,
+    occurred_at TEXT,
     created_at DATETIME NOT NULL DEFAULT (datetime('now'))
 );
 
