@@ -2317,6 +2317,7 @@ func isIdempotentDDL(ddl string) bool {
 	return strings.HasPrefix(upper, "CREATE TABLE IF NOT EXISTS") ||
 		strings.HasPrefix(upper, "CREATE INDEX IF NOT EXISTS") ||
 		strings.HasPrefix(upper, "CREATE UNIQUE INDEX IF NOT EXISTS") ||
+		strings.HasPrefix(upper, "DROP INDEX IF EXISTS") ||
 		strings.HasPrefix(upper, "UPDATE ")
 }
 
