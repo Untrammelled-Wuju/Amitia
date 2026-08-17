@@ -53,6 +53,7 @@ import { useExtensionUIStore } from "@/stores/extensionUI";
 const router = useRouter();
 const { connect: connectUIHost, disconnect: disconnectUIHost } = useUIHostSSE();
 let electronNavCleanup: (() => void) | null = null;
+let disposeExtensionListener: (() => void) | null = null;
 const {
   state: theme,
   resolvedMode: resolvedTheme,
@@ -185,6 +186,10 @@ onMounted(() => {
     extensionUIStore.refreshSnapshot(true).then(() => {
       extensionRuntimeAvailable.value = true;
     });
+    if (disposeExtensionListener) {
+      disposeExtensionListener();
+    }
+    disposeExtensionListener = extensionUIStore.setupExtensionChangeListener();
   }
 
   if (window.amitiaDesktop?.onUINavigate) {
@@ -206,6 +211,10 @@ onMounted(() => {
     if (electronNavCleanup) {
       electronNavCleanup();
       electronNavCleanup = null;
+    }
+    if (disposeExtensionListener) {
+      disposeExtensionListener();
+      disposeExtensionListener = null;
     }
   });
 });

@@ -42,7 +42,6 @@ const route = useRoute();
 const renderError = ref(false);
 const capturedError = ref<string | null>(null);
 const extensionUIStore = useExtensionUIStore();
-let disposeExtensionListener: (() => void) | null = null;
 
 const TOKEN_KEY = "ai-companion-token";
 
@@ -110,7 +109,6 @@ onMounted(async () => {
           router.replace("/login");
         } else {
           extensionUIStore.refreshSnapshot(true).catch(() => {});
-          disposeExtensionListener = extensionUIStore.setupExtensionChangeListener();
         }
       } catch {
         localStorage.removeItem(TOKEN_KEY);
@@ -134,12 +132,7 @@ onMounted(async () => {
   } catch {}
 });
 
-onUnmounted(() => {
-  if (disposeExtensionListener) {
-    disposeExtensionListener();
-    disposeExtensionListener = null;
-  }
-});
+onUnmounted(() => {});
 </script>
 
 <style>
