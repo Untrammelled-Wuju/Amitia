@@ -8,4 +8,6 @@ interface ProotSession {
     fun close()
     fun requestStop()
     val exit: ProotExit?
+    fun activate()
+    fun terminateAndConfirmExit(gracefulTimeoutMs: Long, forceTimeoutMs: Long): ProotTerminationResult
 }

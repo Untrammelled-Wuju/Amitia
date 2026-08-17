@@ -150,10 +150,10 @@ public class HealthKitNativeHandler: NSObject, IOSNativeOperationHandler {
 
             var profile: [String: Any] = [:]
             if let dob = dob {
-                profile["dateOfBirth": "\(dob.year ?? 0)-\(dob.month ?? 0)-\(dob.day ?? 0)"]
+                profile["dateOfBirth"] = "\(dob.year ?? 0)-\(dob.month ?? 0)-\(dob.day ?? 0)"
             }
-            profile["biologicalSex": biologicalSex.biologicalSex.rawValue]
-            profile["bloodType": bloodType.bloodType.rawValue]
+            profile["biologicalSex"] = biologicalSex.biologicalSex.rawValue
+            profile["bloodType"] = bloodType.bloodType.rawValue
 
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,

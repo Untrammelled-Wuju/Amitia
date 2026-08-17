@@ -102,14 +102,25 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleStatus(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        let available = #available(iOS 16.0, *)
+        if #available(iOS 16.0, *) {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestId: request.requestId,
+                status: "ok",
+                result: [
+                    "available": true,
+                    "actions": ShortcutActionGateway.shared.registeredActions.map { $0.actionId }
+                ],
+                error: nil
+            )
+        }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
             requestId: request.requestId,
             status: "ok",
             result: [
-                "available": available,
-                "actions": ShortcutActionGateway.shared.registeredActions.map { $0.actionId }
+                "available": false,
+                "actions": []
             ],
             error: nil
         )
@@ -287,23 +298,39 @@ public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleRuntimeReadiness(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        let available = #available(iOS 16.0, *)
+        if #available(iOS 16.0, *) {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestId: request.requestId,
+                status: "ok",
+                result: ["ready": true],
+                error: nil
+            )
+        }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
             requestId: request.requestId,
             status: "ok",
-            result: ["ready": available],
+            result: ["ready": false],
             error: nil
         )
     }
 
     private func handleRuntimeEnsure(_ request: IOSNativeRequest) -> IOSNativeResponse {
-        let available = #available(iOS 16.0, *)
+        if #available(iOS 16.0, *) {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestId: request.requestId,
+                status: "ok",
+                result: ["ensured": true],
+                error: nil
+            )
+        }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
             requestId: request.requestId,
             status: "ok",
-            result: ["ensured": available],
+            result: ["ensured": false],
             error: nil
         )
     }

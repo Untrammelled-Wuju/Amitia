@@ -16,8 +16,8 @@ data class RuntimeManifest(
     init {
         require(schemaVersion == 1) { "unsupported schemaVersion: $schemaVersion" }
         require(runtimeVersion.isNotBlank()) { "runtimeVersion must not be blank" }
-        require(sourceCommit.trim().length == 40 || sourceCommit.trim().length == 64) {
-            "sourceCommit must be 40 or 64 hex chars"
+        require(sourceCommit.trim().length in 7..40) {
+            "sourceCommit must be 7-40 hex chars, got: ${sourceCommit.trim().length}"
         }
         require(packageId.isNotBlank()) { "packageId must not be blank" }
         require(packageSha256.trim().length == 64) { "packageSha256 must be 64 hex chars" }

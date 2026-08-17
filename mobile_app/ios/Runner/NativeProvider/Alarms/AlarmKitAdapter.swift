@@ -75,18 +75,19 @@ public class AlarmKitAdapter {
         return .notDetermined
     }
 
-    public func requestAuthorization() async -> Bool {
-        guard isAlarmKitAvailable() else { return false }
+    public func requestAuthorization() async -> (granted: Bool, error: String?) {
+        guard isAlarmKitAvailable() else { return (false, "PLATFORM_NOT_SUPPORTED") }
         #if canImport(AlarmKit)
         if #available(iOS 26.0, *) {
             do {
-                return try await AlarmManager.shared.requestAuthorization()
+                let granted = try await AlarmManager.shared.requestAuthorization()
+                return (granted, nil)
             } catch {
-                return false
+                return (false, error.localizedDescription)
             }
         }
         #endif
-        return false
+        return (false, "PLATFORM_NOT_SUPPORTED")
     }
 
     public func createAlarm(
