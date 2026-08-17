@@ -62,7 +62,7 @@ func (h *Handler) Login(c *gin.Context) {
 		case ErrInvalidCredentials:
 			util.ErrorResponse(c, response.Unauthorized, "用户名或密码错误", gin.H{"errorCode": "auth.invalid_credentials"})
 		default:
-			util.ErrorResponse(c, response.Unauthorized, "登录失败", nil)
+			util.ErrorResponse(c, response.Unauthorized, err.Error(), gin.H{"errorCode": "auth.login_error"})
 		}
 		return
 	}

@@ -845,7 +845,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 	importStagingRepo := desktoppetsecurity.NewImportStagingRepository(ctx.DB)
 
-	coordRepo := &coordinatorRepoAdapter{installRepo: installationRepo}
+	coordRepo := installation.NewCoordinatorRepoAdapter(installationRepo)
 	coordValidator := &coordinatorReleaseValidator{releases: releaseRepo}
 	coordStager := &coordinatorReleaseStager{registry: pathRegistry, releases: releaseRepo}
 	coordPublisher := &coordinatorRuntimePublisher{facade: runtimeV2Facade}
@@ -1011,9 +1011,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	migrationLock := migrationcore.NewPersistentLock(ctx.DB, lockDir)
 	migrationRunner.SetLock(migrationLock)
 	migrationRunner.SetBackupDir(backupDir)
-	backupPort := newDomainMigrationBackupPort(ctx.DB, backupDir)
+	backupPort := migration.NewDomainMigrationBackupPort(ctx.DB, backupDir)
 	migrationRunner.SetBackupPort(backupPort)
 	migrationRunner.RegisterPlan(migrationplans.NewDesktopPetV2CutoverPlan(migrationplans.Dependencies{DB: ctx.DB}))
+
+	desktoppet.RefreshLegacyWriteFlagsFromDB(ctx.DB)
 
 	maintenanceHandler := maintenance.NewHandler(migrationRunner, nil, nil, nil)
 
