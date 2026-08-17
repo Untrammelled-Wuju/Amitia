@@ -764,6 +764,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 	importStagingRepo := desktoppetsecurity.NewImportStagingRepository(ctx.DB)
 
+	desktoppet.RefreshLegacyWriteFlagsFromDB(ctx.DB)
+
 	coordRepo := &coordinatorRepoAdapter{installRepo: installationRepo}
 	coordValidator := &coordinatorReleaseValidator{releases: releaseRepo}
 	coordStager := installation.NewReleaseStager(ctx.DB, pathRegistry, filepath.Join(config.AppCfg.Storage.DataDir, "staging"))
@@ -898,7 +900,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	leaseManager := releasebuild.NewLeaseManager()
 	journalManager := releasebuild.NewPublishJournalManager(releaseRepo)
-	releaseRecoveryWorker := release.NewReleaseRecoveryWorker(releaseRepo, leaseManager, journalManager, releaseStoragePort, releaseEventPublisher)
+	releaseRecoveryWorker := release.NewReleaseRecoveryWorker(releaseRepo, importStagingRepo, leaseManager, journalManager, releaseStoragePort, releaseEventPublisher)
 	_ = releaseRecoveryWorker
 	_ = newReleaseService
 	_ = journalManager
@@ -935,7 +937,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	maintenanceHandler := maintenance.NewHandler(migrationRunner, nil, nil, nil)
 
-	artifactRuntime, artifactErr := BuildArtifactRuntime(ctx.DB, "")
+	artifactRuntime, artifactErr := BuildArtifactRuntime(ctx.DB, "", kernelContainer.EventService)
 	if artifactErr != nil {
 		return nil, fmt.Errorf("failed to build artifact runtime: %w", artifactErr)
 	}
