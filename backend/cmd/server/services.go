@@ -1010,6 +1010,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WorkspaceService:             workspaceService,
 		Artifact:                     artifactRuntime,
 		Sync:                         syncService,
+		DB:                           ctx.DB,
 	}
 	if err := runCanonicalBuildAssertions(services); err != nil {
 		return nil, fmt.Errorf("canonical build assertion failed: %w", err)

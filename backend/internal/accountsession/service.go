@@ -63,6 +63,11 @@ func (defaultPasswordVerifier) HashPassword(password string) string {
 	return saltHex + ":" + hex.EncodeToString(dk)
 }
 
+func HashPassword(password string) string {
+	v := defaultPasswordVerifier{}
+	return v.HashPassword(password)
+}
+
 type AccountUserService interface {
 	FindByUsername(username string) (*AuthUserDTO, error)
 	FindByID(id int) (*AuthUserDTO, error)
