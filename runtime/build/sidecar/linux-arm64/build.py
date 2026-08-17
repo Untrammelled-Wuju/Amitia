@@ -16,6 +16,7 @@ from errors import BuildError
 from atomic_publish import atomic_publish_dir
 from tree_manifest import compute_tree_manifest, write_tree_manifest
 from hashing import sha256_file
+from version_policy import same_version_gate
 
 SIDECAR_ROOT = os.path.join(SCRIPT_DIR, "..", "..", "..", "..", "backend", "sidecar")
 SRC_DIR = os.path.join(SIDECAR_ROOT, "src")
@@ -119,8 +120,7 @@ def build_sidecar(input_dir, output_root, node_bin=None):
         write_tree_manifest(staging, manifest_path)
 
         final_output = os.path.join(output_root, OUTPUT_DIR_NAME)
-        if os.path.exists(final_output):
-            shutil.rmtree(final_output)
+        same_version_gate(output_root, record.componentId, record.version, record.treeSha256, tree_sha)
         atomic_publish_dir(staging, final_output)
 
         return record

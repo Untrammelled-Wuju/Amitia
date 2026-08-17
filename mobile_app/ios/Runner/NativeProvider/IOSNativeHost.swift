@@ -100,6 +100,26 @@ private let supportedProtocolVersions: Set<Int> = [1]
     public override init() {
         super.init()
         setupNotifications()
+        setupBackgroundTaskBridgeEventEmitter()
+    }
+
+    private func setupBackgroundTaskBridgeEventEmitter() {
+        BackgroundTaskBridge.shared.eventEmitter = { [weak self] eventDict in
+            guard let self = self else { return }
+            let domain = eventDict["domain"] as? String ?? "background"
+            let eventName = eventDict["event"] as? String ?? ""
+            let timestamp = eventDict["timestamp"] as? String ?? ISO8601DateFormatter().string(from: Date())
+            let data = eventDict["data"] as? [String: Any] ?? [:]
+
+            let payload = NativeEventPayload(
+                domain: domain,
+                event: eventName,
+                timestamp: timestamp,
+                data: data,
+                entityRef: data["identifier"] as? String ?? data["taskRunId"] as? String
+            )
+            NativeEventEmitter.shared.emit(payload)
+        }
     }
 
     private func setupNotifications() {
