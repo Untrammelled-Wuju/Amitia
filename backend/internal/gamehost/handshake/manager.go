@@ -344,6 +344,12 @@ func (m *HandshakeManager) getStateCell(connID string) *stateCell {
 	return s
 }
 
+func (m *HandshakeManager) Count() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return len(m.states)
+}
+
 func (m *HandshakeManager) Shutdown(ctx context.Context) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
