@@ -987,6 +987,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	if err := runCanonicalBuildAssertions(services); err != nil {
 		return nil, fmt.Errorf("canonical build assertion failed: %w", err)
 	}
+	desktoppet.RefreshLegacyWriteFlagsFromDB(ctx.DB)
 	return services, nil
 }
 

@@ -46,9 +46,13 @@
   --amitia-radius-md: var(--radius-md);
   --amitia-radius-lg: var(--radius-lg);
   --amitia-font-ui: var(--ac-font-family);
-  --amitia-font-size-sm: var(--ac-font-size-sm);
-  --amitia-font-size-md: var(--ac-font-size-base);
-  --ac-color-primary: var(--tp-primary);
+--amitia-font-size-sm: var(--ac-font-size-sm);
+--amitia-font-size-md: var(--ac-font-size-base);
+--amitia-color-accent: var(--ac-color-primary);
+--amitia-color-success: var(--ac-color-success);
+--amitia-color-warning: var(--ac-color-warning);
+--amitia-color-danger: var(--ac-color-danger);
+--ac-color-primary: var(--tp-primary);
   --ac-color-primary-light: var(--tp-primary-light-3);
   --ac-color-primary-dark: var(--tp-primary-active);
   --ac-color-primary-bg: var(--tp-primary-bg);
