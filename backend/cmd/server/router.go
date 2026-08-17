@@ -491,15 +491,18 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 					management.RegisterGameCenterControlRouter(apiGroup, controlHandler)
 				}
 
-				if services.KernelContainer.GameHost != nil && services.KernelContainer.GameHost.ControlPlane != nil {
-					rpcInvoker := management.NewControlPlaneRPCInvoker(
-						services.KernelContainer.GameHost.ControlPlane,
-						management.NewGameHostTopologyStore(services.KernelContainer.GameHost.RuntimeTopologyStore),
-						management.NewGameHostPluginRegistry(services.KernelContainer.GameHost.PluginRegistry),
-					)
-					rpcHandler := management.NewRPCHandler(rpcInvoker)
-					management.RegisterRPCRouter(apiGroup, rpcHandler)
-				}
+		if services.KernelContainer.GameHost != nil && services.KernelContainer.GameHost.ControlPlane != nil {
+			rpcInvoker := management.NewControlPlaneRPCInvoker(
+				services.KernelContainer.GameHost.ControlPlane,
+				management.NewGameHostTopologyStore(services.KernelContainer.GameHost.RuntimeTopologyStore),
+				management.NewGameHostPluginRegistry(services.KernelContainer.GameHost.PluginRegistry),
+			)
+			rpcHandler := management.NewRPCHandler(rpcInvoker)
+			management.RegisterRPCRouter(apiGroup, rpcHandler)
+
+			debugHandler := management.NewDebugHandler(services.KernelContainer.GameHost)
+			management.RegisterDebugRouter(apiGroup, debugHandler)
+		}
 			}
 		}
 		emote.RegisterRouter(apiGroup, services.Emote)
@@ -534,8 +537,8 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		r,
 		services.DesktopPetRuntimeV2,
 		services.SafeMode,
-		func(ctx context.Context, rawTicket, runtimeID, deviceID string) (string, error) {
-			ticket, err := bootstrapTicketRepo.ConsumeWithValidation(ctx, rawTicket, runtimeID, deviceID)
+		func(ctx context.Context, rawTicket string, runtimeID runtimeidentity.RuntimeID, deviceID runtimeidentity.DeviceID) (runtimeidentity.UserID, error) {
+			ticket, err := bootstrapTicketRepo.ConsumeWithValidation(ctx, rawTicket, string(runtimeID), string(deviceID))
 			if err != nil {
 				return "", err
 			}
