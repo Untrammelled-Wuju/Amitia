@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/u-ai/backend/internal/desktoppet"
 	"github.com/u-ai/backend/internal/desktoppet/editing"
 	"github.com/u-ai/backend/internal/desktoppet/processing"
 	"github.com/u-ai/backend/internal/desktoppet/processing/contracts"
@@ -33,6 +34,9 @@ func NewService(repo Repository, procReader ProcessingRevisionReader) BaselineRe
 }
 
 func (s *service) CreateFromProcessingRevision(ctx context.Context, req CreateBaselineRevisionRequest) (*editing.ActionRevision, error) {
+	if desktoppet.IsLegacyEditingWriteDisabled() {
+		return nil, editing.ErrLegacyWriteDisabled
+	}
 	existing, err := s.repo.GetActionRevisionBySource(req.ProcessingRevisionID, SourceTypeProcessingBaseline)
 	if err != nil {
 		return nil, fmt.Errorf("查询已存在的Baseline Revision失败: %w", err)

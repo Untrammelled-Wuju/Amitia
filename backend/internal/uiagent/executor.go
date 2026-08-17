@@ -44,12 +44,12 @@ type SchemaEditResult struct {
 
 // SourceEditor applies source code edits to a workspace.
 type SourceEditor interface {
-	ApplyEdits(ctx context.Context, req SourceEditRequest) (*SourceEditResult, error)
+	ApplyEdits(ctx context.Context, req source.SourceEditRequest) (*source.SourceEditResult, error)
 }
 
 // PreviewManager creates and manages preview sessions.
 type PreviewManager interface {
-	Create(workspaceID string, doc *schema.SchemaUIDocument) (PreviewSessionRef, error)
+	Create(workspaceID string, doc *schema.SchemaUIDocument) (*preview.PreviewSession, error)
 }
 
 // PreviewSessionRef references a preview session.
