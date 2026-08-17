@@ -1,6 +1,10 @@
 package accountsession
 
-import "fmt"
+import (
+	"fmt"
+
+	"gorm.io/gorm"
+)
 
 type AuditLogger interface {
 	LogLoginSuccess(userID int, sessionID, ip, ua, username string) error
@@ -21,6 +25,31 @@ type AuditLogger interface {
 type AuditRepository interface {
 	Insert(event *AuditEvent) error
 	ListUserEvents(userID int64, limit int, cursor string) ([]AuditEvent, error)
+}
+
+type auditRepository struct {
+	db *gorm.DB
+}
+
+func NewAuditRepository(db *gorm.DB) AuditRepository {
+	return &auditRepository{db: db}
+}
+
+func (r *auditRepository) Insert(event *AuditEvent) error {
+	return r.db.Create(event).Error
+}
+
+func (r *auditRepository) ListUserEvents(userID int64, limit int, cursor string) ([]AuditEvent, error) {
+	var events []AuditEvent
+	query := r.db.Where("user_id = ?", fmt.Sprintf("%d", userID)).Order("occurred_at DESC")
+	if limit > 0 {
+		query = query.Limit(limit)
+	}
+	if cursor != "" {
+		query = query.Where("occurred_at < ?", cursor)
+	}
+	err := query.Find(&events).Error
+	return events, err
 }
 
 type AuditEvent struct {

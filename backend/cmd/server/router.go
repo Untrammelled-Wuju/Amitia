@@ -16,6 +16,7 @@ import (
 	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/agent"
 	"github.com/u-ai/backend/internal/asr"
+	"github.com/u-ai/backend/internal/accountsession"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/companion"
@@ -128,9 +129,16 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		userSvc := user.NewService(userRepo, ctx)
 		userHandler := user.NewHandler(userSvc)
 
+		accountSessionRuntime, err := BuildAccountSessionRuntime(ctx.DB, userRepo)
+		if err != nil {
+			return nil, fmt.Errorf("failed to build accountsession runtime: %w", err)
+		}
+		services.AccountSession = accountSessionRuntime
+
 		public.GET("/auth/status", userHandler.Status)
 		public.POST("/auth/setup", userHandler.Setup)
-		public.POST("/auth/login", userHandler.Login)
+
+		accountsession.RegisterPublicRoutes(public, accountSessionRuntime.Handler)
 
 		public.GET("/onboarding/status", systemHandler.OnboardingStatus)
 		public.POST("/onboarding/complete", systemHandler.OnboardingComplete)
