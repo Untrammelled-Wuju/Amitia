@@ -4,6 +4,7 @@ import 'backend_topology.dart';
 import 'backend_topology_resolver.dart';
 import 'backend_connection.dart';
 import '../embedded/embedded_runtime_controller.dart';
+import '../backend_transport/connectivity/backend_connectivity_probe.dart';
 
 export '../embedded/embedded_runtime_controller.dart' show EmbeddedRuntimeStatus;
 
@@ -94,7 +95,7 @@ class MobileBackendStatus {
 }
 
 abstract interface class RemoteCoreProbe {
-  Future<bool> probe(Uri baseUri, {Duration timeout});
+  Future<BackendConnectivityResult> probe(Uri baseUri, {Duration timeout});
 }
 
 abstract interface class MobileBackendLifecycle {
@@ -124,6 +125,18 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
   })  : _resolver = resolver,
         _embeddedRuntime = embeddedRuntime,
         _remoteProbe = remoteProbe;
+
+  factory DefaultMobileBackendLifecycle.withProbe({
+    required BackendTopologyResolver resolver,
+    required EmbeddedRuntimeController embeddedRuntime,
+    required BackendConnectivityProbe connectivityProbe,
+  }) {
+    return DefaultMobileBackendLifecycle(
+      resolver: resolver,
+      embeddedRuntime: embeddedRuntime,
+      remoteProbe: _ConnectivityProbeAdapter(connectivityProbe),
+    );
+  }
 
   @override
   Stream<MobileBackendStatus> get statusStream => _statusController.stream;
@@ -185,9 +198,10 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
       topology.businessCore.httpBaseUri,
     );
 
-    final reachable = await _remoteProbe.probe(topology.businessCore.httpBaseUri);
+    final probeResult = await _remoteProbe.probe(topology.businessCore.httpBaseUri);
     if (expectedGeneration != _generation) return;
 
+    final reachable = probeResult == BackendConnectivityResult.ready || probeResult == BackendConnectivityResult.live;
     if (reachable) {
       _emitStatus(MobileBackendStatus(
         mode: MobileDeploymentMode.cloud,
@@ -296,7 +310,8 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
     if (expectedGeneration != _generation) return;
 
     final localStatus = results[0] as EmbeddedRuntimeStatus;
-    final remoteReachable = results[1] as bool;
+    final remoteResult = results[1] as BackendConnectivityResult;
+    final remoteReachable = remoteResult == BackendConnectivityResult.ready || remoteResult == BackendConnectivityResult.live;
 
     final localNodeStatus = BackendNodeStatus(
       state: localStatus == EmbeddedRuntimeStatus.ready
@@ -386,4 +401,15 @@ BackendConnection? buildLocalConnection(MobileBackendTopology topology) {
     isRemote: localRuntime.isRemote,
     authStrategy: BackendAuthStrategy.localTrusted,
   );
+}
+
+class _ConnectivityProbeAdapter implements RemoteCoreProbe {
+  final BackendConnectivityProbe _probe;
+
+  _ConnectivityProbeAdapter(this._probe);
+
+  @override
+  Future<BackendConnectivityResult> probe(Uri baseUri, {Duration timeout}) async {
+    return _probe.probe();
+  }
 }
