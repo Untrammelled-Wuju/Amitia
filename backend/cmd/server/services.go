@@ -187,6 +187,7 @@ type AppServices struct {
 	DataPortability              *dataportability.Coordinator
 	Artifact                     *ArtifactRuntime
 	Sync                         *syncpkg.Service
+	AccountSession               *AccountSessionRuntime
 }
 
 type RuntimeOrchestrator interface {
@@ -310,7 +311,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	imagegenRepo := imagegen.NewRepository(ctx.DB)
 	imagegenSvc := imagegen.NewService(imagegenRepo)
-	providerRegistry := desktoppet.NewProviderRegistry()
+	providerRegistry, _ := desktoppet.NewProviderRegistry()
 	var resourceResolver *resourceuri.PhysicalResolver
 	if config.AppCfg != nil && config.AppCfg.Storage.DataDir != "" {
 		resolver, resolverErr := resourceuri.NewPhysicalResolver(resourceuri.PhysicalRoots{
@@ -363,7 +364,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithResourceResolver(resourceResolver).
 		WithMediaService(mediaService).
 		WithWorkspaceService(workspaceService).
-		WithBrowserProvider(browserProvider)
+		WithBrowserProvider(browserProvider).
+		WithRuntimeProfile(runtimeProfile)
 
 	if bootstrap != nil {
 		kernelBuilder.WithRuntimeHost(bootstrap.RuntimeHost())
