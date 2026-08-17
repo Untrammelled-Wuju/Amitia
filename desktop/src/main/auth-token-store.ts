@@ -41,7 +41,7 @@ export function setAccessToken(token: string | null): void {
 
 export function getRefreshToken(): string | null {
   try {
-    if (safeStorage.isEncryptionEnabled()) {
+    if ((safeStorage as any).isEncryptionEnabled?.()) {
       const encrypted = localStorage.getItem(REFRESH_TOKEN_KEY);
       if (encrypted) {
         return safeStorage.decryptString(Buffer.from(encrypted, "base64"));
@@ -61,7 +61,7 @@ export function setRefreshToken(token: string | null): void {
       localStorage.removeItem(REFRESH_TOKEN_KEY);
       return;
     }
-    if (safeStorage.isEncryptionEnabled()) {
+    if ((safeStorage as any).isEncryptionEnabled?.()) {
       const encrypted = safeStorage.encryptString(token);
       localStorage.setItem(REFRESH_TOKEN_KEY, encrypted.toString("base64"));
     } else {
