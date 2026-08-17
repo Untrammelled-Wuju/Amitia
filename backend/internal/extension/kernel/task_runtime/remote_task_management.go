@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"log"
 	"time"
 )
 
@@ -58,12 +59,12 @@ func (s *TaskRuntimeService) HandleRemoteCheckpoint(ctx context.Context, taskRun
 	}
 
 	if len(payload) > s.config.MaxCheckpointBytes {
-		return nil
+		return NewTaskError(ErrTaskCheckpointTooLarge, "checkpoint payload exceeds maximum size")
 	}
 
 	actualHash := hashBytes(payload)
 	if payloadHash != "" && payloadHash != actualHash {
-		return nil
+		return NewTaskError(ErrTaskCheckpointHashMismatch, "checkpoint payload hash mismatch")
 	}
 
 	def, err := s.store.GetTaskDefinition(ctx, run.TaskDefinitionID)
@@ -275,6 +276,18 @@ func (s *TaskRuntimeService) HeartbeatRemoteTask(ctx context.Context, taskRunID,
 	})
 }
 
+func (s *TaskRuntimeService) HandleProgress(ctx context.Context, taskRunID, attemptID, leaseID string, seq int64, current, total, percentage *float64, stage, message string) error {
+	return s.HandleRemoteProgress(ctx, taskRunID, attemptID, seq, current, total, percentage, stage, message)
+}
+
+func (s *TaskRuntimeService) HandleCheckpoint(ctx context.Context, taskRunID, attemptID, leaseID, checkpointID string, version int64, payload json.RawMessage, payloadHash string) error {
+	return s.HandleRemoteCheckpoint(ctx, taskRunID, attemptID, checkpointID, version, payload, payloadHash)
+}
+
+func (s *TaskRuntimeService) HandleCompletion(ctx context.Context, taskRunID, attemptID, leaseID string, success bool, result json.RawMessage, errMsg string) error {
+	return s.ApplyRemoteCompletion(ctx, taskRunID, attemptID, leaseID, success, result, errMsg)
+}
+
 func (s *TaskRuntimeService) remoteLeaseExpiryLoop() {
 	ticker := time.NewTicker(30 * time.Second)
 	defer ticker.Stop()
@@ -283,7 +296,9 @@ func (s *TaskRuntimeService) remoteLeaseExpiryLoop() {
 		case <-s.dispatchCtx.Done():
 			return
 		case <-ticker.C:
-			_, _ = s.ReclaimExpiredLeases(s.dispatchCtx)
+			if _, err := s.ReclaimExpiredLeases(s.dispatchCtx); err != nil {
+				log.Printf("task_runtime: reclaim expired leases failed: %v", err)
+			}
 		}
 	}
 }

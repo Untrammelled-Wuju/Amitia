@@ -2,6 +2,8 @@ package task_runtime
 
 import (
 	"context"
+	cryptoRand "crypto/rand"
+	"math/big"
 	"sync"
 	"time"
 )
@@ -210,7 +212,8 @@ func randomSuffix(n int) string {
 	const letters = "abcdefghijklmnopqrstuvwxyz0123456789"
 	b := make([]byte, n)
 	for i := range b {
-		b[i] = letters[time.Now().UnixNano()%int64(len(letters))]
+		idx, _ := cryptoRand.Int(cryptoRand.Reader, big.NewInt(int64(len(letters))))
+		b[i] = letters[idx.Int64()]
 	}
 	return string(b)
 }
