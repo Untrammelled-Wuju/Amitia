@@ -111,15 +111,20 @@ func (a *WebChannelAdapter) ProviderInstanceID() string {
 }
 
 func (a *WebChannelAdapter) Deliver(intent DeliveryIntent) error {
-	if intent.ContentType != "text" && intent.ContentType != "emote" && intent.ContentType != "audio" {
-		return fmt.Errorf("unsupported web content type %s", intent.ContentType)
-	}
 	var payload map[string]interface{}
 	if err := json.Unmarshal(intent.Payload, &payload); err != nil {
-		return err
+		return fmt.Errorf("web delivery: invalid payload: %w", err)
 	}
-	if _, ok := payload["messageId"].(string); !ok {
-		return fmt.Errorf("web delivery missing messageId")
+	messageID, ok := payload["messageId"].(string)
+	if !ok || messageID == "" {
+		return fmt.Errorf("web delivery: missing messageId")
+	}
+	if intent.ContentType == "emote" {
+		if _, hasAsset := payload["originalPath"]; !hasAsset {
+			if _, hasFallback := payload["fallbackPath"]; !hasFallback {
+				return fmt.Errorf("web delivery: emote missing asset")
+			}
+		}
 	}
 	return nil
 }
