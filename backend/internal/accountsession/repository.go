@@ -16,6 +16,7 @@ type SessionRepository interface {
 	ListUserSessions(userID int64) ([]Session, error)
 	UpdateRevision(publicID string, revision int64) error
 	Revoke(publicID, reason string) error
+	RevokeOwned(userID int64, publicID, reason string) error
 	RevokeAllUser(userID int64, reason string) error
 	RevokeAllUserExcept(userID int64, exceptPublicID, reason string) error
 	TouchLastActive(publicID string) error
@@ -101,6 +102,16 @@ func (r *sessionRepository) UpdateRevision(publicID string, revision int64) erro
 func (r *sessionRepository) Revoke(publicID, reason string) error {
 	now := time.Now().UTC()
 	return r.db.Model(&Session{}).Where("public_id = ? AND status = ?", publicID, SessionStatusActive).
+		Updates(map[string]interface{}{
+			"status":       SessionStatusRevoked,
+			"revoked_at":   now,
+			"revoke_reason": reason,
+		}).Error
+}
+
+func (r *sessionRepository) RevokeOwned(userID int64, publicID, reason string) error {
+	now := time.Now().UTC()
+	return r.db.Model(&Session{}).Where("public_id = ? AND user_id = ? AND status = ?", publicID, userID, SessionStatusActive).
 		Updates(map[string]interface{}{
 			"status":       SessionStatusRevoked,
 			"revoked_at":   now,

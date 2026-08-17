@@ -252,7 +252,7 @@ func (h *Handler) RevokeSession(c *gin.Context) {
 	var userID int64
 	fmt.Sscanf(string(actor.UserID), "%d", &userID)
 
-	if err := h.svc.RevokeCurrentSession(sessionID, userID); err != nil {
+	if err := h.svc.RevokeOwnedSession(userID, sessionID); err != nil {
 		util.ErrorResponse(c, response.InternalError, "撤销会话失败", nil)
 		return
 	}
