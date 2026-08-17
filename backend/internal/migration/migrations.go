@@ -303,8 +303,9 @@ func ExecutionResumeMigration() Migration {
 
 func SyncSequenceMigration() Migration {
 	return Migration{
-		Version: "20260817001",
-		Name:    "create_sync_sequence_table",
+		Version:            "20260817001",
+		Name:               "create_sync_sequence_table",
+		AcceptedChecksums:  []string{"4bef88e97e20a93914eb87805f639f4a7c2ad684ce552590fc0f79644dc5197"},
 		Up: func(s *Step) error {
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS sync_sequence (
 				id INTEGER PRIMARY KEY CHECK (id = 1),
