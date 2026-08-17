@@ -102,19 +102,37 @@ func NewDesktopPetV2CutoverPlan(deps Dependencies) migration.DomainMigrationOper
 				},
 			},
 			{
-				Name:     "installation_count",
+				Name:     "installation_integrity",
 				Required: true,
 				Check: func(ctx context.Context) (bool, string, error) {
-					var installCount int64
-					if err := deps.DB.WithContext(ctx).Raw("SELECT COUNT(*) FROM desktop_pet_installations WHERE status IN (?, ?)", "active", "installed").Count(&installCount).Error; err != nil {
+					type installationRow struct {
+						ID               string
+						UserID           string
+						DeviceID         string
+						PetID            string
+						CurrentReleaseID string
+						DesiredState     string
+						Status           string
+					}
+					var installations []installationRow
+					if err := deps.DB.WithContext(ctx).Raw("SELECT id, user_id, device_id, pet_id, current_release_id, desired_state, status FROM desktop_pet_installations WHERE status IN (?, ?)", "active", "installed").Scan(&installations).Error; err != nil {
 						return false, "", err
 					}
-					var desiredCount int64
-					if err := deps.DB.WithContext(ctx).Raw("SELECT COUNT(*) FROM desktop_pet_runtime_desired_states").Count(&desiredCount).Error; err != nil {
-						return false, "", err
-					}
-					if installCount != desiredCount {
-						return false, fmt.Sprintf("installation parity mismatch: installations=%d desired_states=%d", installCount, desiredCount), nil
+					for _, inst := range installations {
+						var desiredCount int64
+						if err := deps.DB.WithContext(ctx).Raw("SELECT COUNT(*) FROM desktop_pet_runtime_desired_states WHERE user_id = ? AND device_id = ? AND installation_id = ?", inst.UserID, inst.DeviceID, inst.ID).Count(&desiredCount).Error; err != nil {
+							return false, "", err
+						}
+						if desiredCount == 0 {
+							return false, fmt.Sprintf("installation %s: no matching desired state for user=%s device=%s", inst.ID, inst.UserID, inst.DeviceID), nil
+						}
+						var bindingCount int64
+						if err := deps.DB.WithContext(ctx).Raw("SELECT COUNT(*) FROM desktop_pet_device_active_installation_bindings WHERE user_id = ? AND device_id = ? AND installation_id = ?", inst.UserID, inst.DeviceID, inst.ID).Count(&bindingCount).Error; err != nil {
+							return false, "", err
+						}
+						if bindingCount == 0 {
+							return false, fmt.Sprintf("installation %s: no active binding for user=%s device=%s", inst.ID, inst.UserID, inst.DeviceID), nil
+						}
 					}
 					return true, "", nil
 				},
@@ -133,9 +151,9 @@ func NewDesktopPetV2CutoverPlan(deps Dependencies) migration.DomainMigrationOper
 						ContentRootHash     string
 					}
 					var rows []releaseRow
-if err := deps.DB.WithContext(ctx).Raw("SELECT id, lifecycle, integrity_status, compatibility_status, storage_key, manifest_hash, content_root_hash FROM desktop_pet_package_releases WHERE lifecycle = ?", "ready").Scan(&rows).Error; err != nil {
-					return false, "", err
-				}
+					if err := deps.DB.WithContext(ctx).Raw("SELECT id, lifecycle, integrity_status, compatibility_status, storage_key, manifest_hash, content_root_hash FROM desktop_pet_package_releases WHERE lifecycle = ?", "ready").Scan(&rows).Error; err != nil {
+						return false, "", err
+					}
 					for _, r := range rows {
 						if r.IntegrityStatus != "verified" {
 							return false, fmt.Sprintf("release %s: integrity not verified", r.ID), nil

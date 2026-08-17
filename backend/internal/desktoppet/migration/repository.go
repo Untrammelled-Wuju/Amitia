@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type operationRecord struct {
@@ -61,8 +62,8 @@ func (conflictRecord) TableName() string {
 
 type readCutoverRecord struct {
 	ID          string `gorm:"column:id;primaryKey"`
-	OperationID string `gorm:"column:operation_id"`
-	StepName    string `gorm:"column:step_name"`
+	OperationID string `gorm:"column:operation_id;uniqueIndex:idx_read_cutover_op_step"`
+	StepName    string `gorm:"column:step_name;uniqueIndex:idx_read_cutover_op_step"`
 	CutoverAt   string `gorm:"column:cutover_at"`
 	Verified    int    `gorm:"column:verified"`
 }
@@ -73,8 +74,8 @@ func (readCutoverRecord) TableName() string {
 
 type writeCutoverRecord struct {
 	ID          string `gorm:"column:id;primaryKey"`
-	OperationID string `gorm:"column:operation_id"`
-	StepName    string `gorm:"column:step_name"`
+	OperationID string `gorm:"column:operation_id;uniqueIndex:idx_write_cutover_op_step"`
+	StepName    string `gorm:"column:step_name;uniqueIndex:idx_write_cutover_op_step"`
 	CutoverAt   string `gorm:"column:cutover_at"`
 	Verified    int    `gorm:"column:verified"`
 }
@@ -294,7 +295,12 @@ func (r *DBRepository) RecordReadCutover(ctx context.Context, operationID, stepN
 		CutoverAt:   now,
 		Verified:    0,
 	}
-	return r.db.WithContext(ctx).Create(&record).Error
+	return r.db.WithContext(ctx).
+		Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "operation_id"}, {Name: "step_name"}},
+			DoUpdates: clause.AssignmentColumns([]string{"cutover_at"}),
+		}).
+		Create(&record).Error
 }
 
 func (r *DBRepository) RecordWriteCutover(ctx context.Context, operationID, stepName string) error {
@@ -307,7 +313,12 @@ func (r *DBRepository) RecordWriteCutover(ctx context.Context, operationID, step
 		CutoverAt:   now,
 		Verified:    0,
 	}
-	return r.db.WithContext(ctx).Create(&record).Error
+	return r.db.WithContext(ctx).
+		Clauses(clause.OnConflict{
+			Columns:   []clause.Column{{Name: "operation_id"}, {Name: "step_name"}},
+			DoUpdates: clause.AssignmentColumns([]string{"cutover_at"}),
+		}).
+		Create(&record).Error
 }
 
 func (r *DBRepository) MarkReadCutoverVerified(ctx context.Context, operationID, stepName string) error {
