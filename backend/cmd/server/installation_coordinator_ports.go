@@ -2,13 +2,8 @@ package main
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
-	"os"
-	"path/filepath"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,7 +17,6 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/installation/projection"
 	"github.com/u-ai/backend/internal/desktoppet/release"
 	releasecore "github.com/u-ai/backend/internal/desktoppet/release"
-	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
 
@@ -54,135 +48,6 @@ func (p *coordinatorReleaseValidator) ValidateRelease(ctx context.Context, userI
 	}, nil
 }
 
-type coordinatorReleaseStager struct {
-	registry *desktoppetsecurity.PathRootRegistry
-	releases release.ReleaseRepository
-}
-
-func (p *coordinatorReleaseStager) PrepareStagingCopy(ctx context.Context, releaseID, installationID string) (string, error) {
-	item, err := p.releases.GetRelease(releaseID)
-	if err != nil {
-		return "", fmt.Errorf("get release: %w", err)
-	}
-	if item.StorageKey == "" {
-		return "", fmt.Errorf("release has no published copy")
-	}
-	publishedRoot, err := p.registry.Root(desktoppetsecurity.RootReleasePublished)
-	if err != nil {
-		return "", fmt.Errorf("resolve published root: %w", err)
-	}
-	srcPath := filepath.Join(publishedRoot, item.StorageKey)
-	info, err := os.Lstat(srcPath)
-	if err != nil {
-		return "", fmt.Errorf("resolve source: %w", err)
-	}
-	if info.Mode()&os.ModeSymlink != 0 {
-		return "", fmt.Errorf("source path is a symlink")
-	}
-	stagingRoot, err := p.registry.Root(desktoppetsecurity.RootInstallations)
-	if err != nil {
-		return "", fmt.Errorf("resolve installations root: %w", err)
-	}
-	stagingKey := installationID + "_" + uuid.New().String()[:8]
-	dstPath := filepath.Join(stagingRoot, stagingKey)
-	if err := safeCopy(srcPath, dstPath, info); err != nil {
-		return "", fmt.Errorf("copy staging: %w", err)
-	}
-	return stagingKey, nil
-}
-
-func (p *coordinatorReleaseStager) VerifyStagingCopy(ctx context.Context, releaseID, installationID, stagingPathKey string) error {
-	files, err := p.releases.GetReleaseFiles(releaseID)
-	if err != nil {
-		return fmt.Errorf("get release files: %w", err)
-	}
-	stagingRoot, err := p.registry.Root(desktoppetsecurity.RootInstallations)
-	if err != nil {
-		return fmt.Errorf("resolve installations root: %w", err)
-	}
-	for _, f := range files {
-		fullPath := filepath.Join(stagingRoot, stagingPathKey, f.Path)
-		info, err := os.Lstat(fullPath)
-		if err != nil {
-			return fmt.Errorf("verify file %s: %w", f.Path, err)
-		}
-		if info.Size() != f.Bytes {
-			return fmt.Errorf("verify file %s: size mismatch (got %d, want %d)", f.Path, info.Size(), f.Bytes)
-		}
-		if f.SHA256 != "" {
-			actualHash, err := hashFile(fullPath)
-			if err != nil {
-				return fmt.Errorf("hash file %s: %w", f.Path, err)
-			}
-			if actualHash != f.SHA256 {
-				return fmt.Errorf("verify file %s: hash mismatch", f.Path)
-			}
-		}
-	}
-	return nil
-}
-
-func safeCopy(src, dst string, info os.FileInfo) error {
-	if info.IsDir() {
-		return copyDir(src, dst)
-	}
-	return copyFile(src, dst, info.Mode().Perm())
-}
-
-func copyDir(src, dst string) error {
-	if err := os.MkdirAll(dst, 0o755); err != nil {
-		return err
-	}
-	entries, err := os.ReadDir(src)
-	if err != nil {
-		return err
-	}
-	for _, e := range entries {
-		srcPath := filepath.Join(src, e.Name())
-		dstPath := filepath.Join(dst, e.Name())
-		info, err := os.Lstat(srcPath)
-		if err != nil {
-			return err
-		}
-		if info.Mode()&os.ModeSymlink != 0 {
-			return fmt.Errorf("symlink detected during copy: %s", srcPath)
-		}
-		if err := safeCopy(srcPath, dstPath, info); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func copyFile(src, dst string, perm os.FileMode) error {
-	in, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer in.Close()
-	out, err := os.OpenFile(dst, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, perm)
-	if err != nil {
-		return err
-	}
-	defer out.Close()
-	if _, err := io.Copy(out, in); err != nil {
-		return err
-	}
-	return nil
-}
-
-func hashFile(path string) (string, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", err
-	}
-	return hex.EncodeToString(h.Sum(nil)), nil
-}
 
 type coordinatorRuntimePublisher struct {
 	facade *runtimev2.RuntimeFacade
