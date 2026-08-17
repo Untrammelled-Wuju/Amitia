@@ -424,6 +424,20 @@ func (a *AuditSinkLoggerAdapter) RecordStartupRecovery(event StartupRecoveryAudi
 		event.OperationID, event.Stage, event.ResourceType, event.ResourceID, event.Error)
 }
 
+type EventServiceAuditSinkAdapter struct {
+	recordFn func(event StartupRecoveryAuditEvent)
+}
+
+func NewEventServiceAuditSinkAdapter(recordFn func(event StartupRecoveryAuditEvent)) *EventServiceAuditSinkAdapter {
+	return &EventServiceAuditSinkAdapter{recordFn: recordFn}
+}
+
+func (a *EventServiceAuditSinkAdapter) RecordStartupRecovery(event StartupRecoveryAuditEvent) {
+	if a.recordFn != nil {
+		a.recordFn(event)
+	}
+}
+
 type noopKernelReconciliationProvider struct{}
 
 func NewNoopKernelReconciliationProvider() KernelReconciliationProvider {

@@ -2,8 +2,10 @@ package gamehost
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
@@ -40,6 +42,8 @@ import (
 	"github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
+type RollbackPostAction func(ctx context.Context, extensionID string) error
+
 type GameHostComposeOptions struct {
 	DataRoot            string
 	KernelSource        integration.KernelContributionSource
@@ -50,6 +54,7 @@ type GameHostComposeOptions struct {
 	DefinitionReconcile upgrade.DefinitionReconciler
 	KernelLifecycle     upgrade.KernelExtensionLifecycle
 	SecretBroker        *secret.Broker
+	RollbackPostAction  RollbackPostAction
 
 	EffectivePermission *permission.EffectivePermissionAdapter
 	PermissionBroker    permission.Broker
@@ -113,10 +118,15 @@ func ComposeRecoveryCoordinator(deps recovery.RecoveryCoordinatorDeps) (*recover
 }
 
 func getRollbackArchivePath(ctx context.Context, extensionID string, opts GameHostComposeOptions) string {
-	if extensionID == "" {
+	if extensionID == "" || opts.ArchiveUpdater == nil {
 		return ""
 	}
-	return ""
+	archivePath, err := opts.ArchiveUpdater.GetPreviousArchivePath(ctx, extensionID)
+	if err != nil {
+		log.Printf("[gamehost] get rollback archive path failed for %s: %v", extensionID, err)
+		return ""
+	}
+	return archivePath
 }
 
 func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
@@ -500,6 +510,11 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 			if err != nil {
 				return recovery.KernelRollbackResult{Success: false, Error: err.Error()}, err
 			}
+			if opts.RollbackPostAction != nil {
+				if postErr := opts.RollbackPostAction(ctx, extensionID); postErr != nil {
+					log.Printf("[gamehost] rollback post-action failed for %s: %v", extensionID, postErr)
+				}
+			}
 			return recovery.KernelRollbackResult{
 				Success:           result.Success,
 				NewVersion:        result.NewVersion,
@@ -556,12 +571,16 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 				}
 				return recovery.TopologyResult{Valid: false}, fmt.Errorf("runtime not found for plugin %s", pluginID)
 			},
-			func(ctx context.Context, topology recovery.TopologyResult) (recovery.LifecycleResult, error) {
-				return recovery.LifecycleResult{
-					PlanID: topology.TopologyID,
-					Valid:  topology.Valid,
-				}, nil
-			},
+		func(ctx context.Context, topology recovery.TopologyResult) (recovery.LifecycleResult, error) {
+			planID := ""
+			if topology.Valid && topology.TopologyID != "" {
+				planID = fmt.Sprintf("plan-%s-%d", topology.TopologyID, time.Now().UnixNano())
+			}
+			return recovery.LifecycleResult{
+				PlanID: planID,
+				Valid:  topology.Valid,
+			}, nil
+		},
 		)
 	}
 
@@ -600,10 +619,32 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	}
 
 	var productionAuditSink recovery.AuditSink
-	productionAuditSink = recovery.NewAuditSinkAdapter(func(event recovery.RecoveryAuditEvent) {
-		log.Printf("[recovery-audit] op=%s runtime=%s ext=%s plugin=%s stage=%s result=%s err=%s",
-			event.OperationID, event.RuntimeID, event.ExtensionID, event.PluginID, event.Stage, event.Result, event.Error)
-	})
+	if opts.EventService != nil {
+		productionAuditSink = recovery.NewAuditSinkAdapter(func(auditEvent recovery.RecoveryAuditEvent) {
+			payload := map[string]interface{}{
+				"operationId": string(auditEvent.OperationID),
+				"runtimeId":   string(auditEvent.RuntimeID),
+				"extensionId": auditEvent.ExtensionID,
+				"pluginId":    string(auditEvent.PluginID),
+				"failureClass": string(auditEvent.FailureClass),
+				"stage":       string(auditEvent.Stage),
+				"attempt":     auditEvent.Attempt,
+				"result":      auditEvent.Result,
+				"error":       auditEvent.Error,
+				"timestamp":   auditEvent.Timestamp.Format(time.RFC3339Nano),
+			}
+			payloadJSON, _ := json.Marshal(payload)
+evtOpts := event.PublishOptions{
+			Metadata: json.RawMessage(`"` + string(auditEvent.OperationID) + `"`),
+		}
+		_, _ = opts.EventService.Publish(nil, "gamehost.recovery.audit", 1, payloadJSON, evtOpts)
+		})
+	} else {
+		productionAuditSink = recovery.NewAuditSinkAdapter(func(event recovery.RecoveryAuditEvent) {
+			log.Printf("[recovery-audit] op=%s runtime=%s ext=%s plugin=%s stage=%s result=%s err=%s",
+				event.OperationID, event.RuntimeID, event.ExtensionID, event.PluginID, event.Stage, event.Result, event.Error)
+		})
+	}
 
 	recoveryRuntimeManager := &recoveryRuntimeManagerAdapter{mgr: runtimeManager}
 
@@ -763,6 +804,28 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		binaryCleanup = startup.NewNoopBinaryCleanupProvider()
 	}
 
+	var startupAuditSink startup.AuditSink
+	if opts.EventService != nil {
+		evtSvc := opts.EventService
+		startupAuditSink = startup.NewEventServiceAuditSinkAdapter(func(startupEvent startup.StartupRecoveryAuditEvent) {
+			payload := map[string]interface{}{
+				"operationId":   startupEvent.OperationID,
+				"stage":         startupEvent.Stage,
+				"resourceType":  startupEvent.ResourceType,
+				"resourceId":    startupEvent.ResourceID,
+				"error":         startupEvent.Error,
+				"timestamp":     time.Now().Format(time.RFC3339Nano),
+			}
+			payloadJSON, _ := json.Marshal(payload)
+			evtOpts := event.PublishOptions{
+				Metadata: json.RawMessage(`"` + startupEvent.OperationID + `"`),
+			}
+			_, _ = evtSvc.Publish(nil, "gamehost.startup.audit", 1, payloadJSON, evtOpts)
+		})
+	} else {
+		startupAuditSink = startup.NewAuditSinkLoggerAdapter()
+	}
+
 	startupRecovery, err := ComposeStartupRecovery(startup.StartupRecoveryDeps{
 		HostIdentity:      startup.NewHostIdentity("", ""),
 		ProcessCleanup:    startup.NewProcessCleanupAdapter(opts.TrustedSupervisor),
@@ -772,7 +835,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		ShmCleanup:        startup.NewSharedMemoryCleanupAdapter(),
 		KernelRecon:       kernelRecon,
 		RuntimeGraphRecon: runtimeProvisioner,
-		AuditSink:         startup.NewAuditSinkLoggerAdapter(),
+		AuditSink:         startupAuditSink,
 		Gate:              startupGate,
 	})
 	if err != nil {

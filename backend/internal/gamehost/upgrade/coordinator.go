@@ -24,6 +24,7 @@ type KernelExtensionLifecycle interface {
 
 type KernelArchiveUpdater interface {
 	UpdateArchive(ctx context.Context, extensionID string, archivePath string) (*KernelUpdateResult, error)
+	GetPreviousArchivePath(ctx context.Context, extensionID string) (string, error)
 }
 
 type KernelUpdateResult struct {

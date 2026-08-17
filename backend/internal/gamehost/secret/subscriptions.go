@@ -1,5 +1,9 @@
 package secret
 
+import (
+	kernelsecret "github.com/u-ai/backend/internal/extension/kernel/secret"
+)
+
 type SubscriptionAdapter struct {
 	inner *SecretLeaseAdapter
 	orc   *LifecycleOrchestrator
@@ -11,6 +15,52 @@ func NewSubscriptionAdapter(inner *SecretLeaseAdapter) *SubscriptionAdapter {
 
 func NewSubscriptionAdapterWithOrchestrator(inner *SecretLeaseAdapter, orc *LifecycleOrchestrator) *SubscriptionAdapter {
 	return &SubscriptionAdapter{inner: inner, orc: orc}
+}
+
+func (s *SubscriptionAdapter) RevokeGrant(leaseID kernelsecret.LeaseID) RevokeOutcome {
+	entry, ok := s.inner.index.LookupByLease(leaseID)
+	if !ok {
+		return RevokeOutcome{RevokedCount: 0, RequestedBy: string(leaseID), Reason: "grant not found"}
+	}
+	extensionID := entry.ExtensionID
+	runtimeID := entry.RuntimeID
+	if err := s.inner.RevokeLease(leaseID, "permission revoked"); err != nil {
+		return RevokeOutcome{RevokedCount: 0, RequestedBy: string(leaseID), Reason: err.Error()}
+	}
+	s.OnPermissionRevoked(extensionID, runtimeID)
+	return RevokeOutcome{RevokedCount: 1, RequestedBy: string(leaseID), Reason: "permission revoked"}
+}
+
+func (s *SubscriptionAdapter) RevokeBySubject(subject string) RevokeOutcome {
+	if subject == "" {
+		return RevokeOutcome{RevokedCount: 0, RequestedBy: subject, Reason: "empty subject"}
+	}
+	if s.orc != nil {
+		sessions := s.orc.SessionsForRuntime(subject)
+		revoked := 0
+		for _, sess := range sessions {
+			outcome := s.orc.RevokeSession(sess.SessionID, "subject revoked")
+			revoked += outcome.RevokedCount
+		}
+		return RevokeOutcome{RevokedCount: revoked, RequestedBy: subject, Reason: "subject revoked"}
+	}
+	return s.inner.RevokeRuntimeLeases(subject, "subject revoked")
+}
+
+func (s *SubscriptionAdapter) RevokeByExtension(extensionID string) RevokeOutcome {
+	if extensionID == "" {
+		return RevokeOutcome{RevokedCount: 0, RequestedBy: extensionID, Reason: "empty extension"}
+	}
+	if s.orc != nil {
+		sessions := s.orc.SessionsForExtension(extensionID)
+		revoked := 0
+		for _, sess := range sessions {
+			outcome := s.orc.RevokeSession(sess.SessionID, "extension revoked")
+			revoked += outcome.RevokedCount
+		}
+		return RevokeOutcome{RevokedCount: revoked, RequestedBy: extensionID, Reason: "extension revoked"}
+	}
+	return s.inner.RevokeExtensionLeases(extensionID, "extension revoked")
 }
 
 func (s *SubscriptionAdapter) OnPermissionRevoked(extensionID, runtimeID string) {
