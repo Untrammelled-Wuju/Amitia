@@ -6,7 +6,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"path/filepath"
@@ -15,7 +14,6 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/config"
-	"github.com/u-ai/backend/internal/accountsession"
 	"github.com/u-ai/backend/internal/agent"
 	"github.com/u-ai/backend/internal/asr"
 	"github.com/u-ai/backend/internal/character"
@@ -37,15 +35,10 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/runtime"
 	runtimev2 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v2"
 	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
-	devicemeshserver "github.com/u-ai/backend/internal/devicemesh/server"
-	"github.com/u-ai/backend/internal/extension/kernel/capability"
-	deviceruntimeprotocol "github.com/u-ai/backend/internal/deviceruntime/protocol"
 	"github.com/u-ai/backend/internal/embedding_config"
 	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
-	kernelruntime "github.com/u-ai/backend/internal/extension/kernel"
-	kerneldomain "github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_center"
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
 	"github.com/u-ai/backend/internal/feedback"
@@ -62,11 +55,8 @@ import (
 	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/qq"
 	"github.com/u-ai/backend/internal/realtime"
-	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
 	"github.com/u-ai/backend/internal/safety"
-	"github.com/u-ai/backend/internal/securityaudit"
-	"github.com/u-ai/backend/internal/sync"
 	"github.com/u-ai/backend/internal/system"
 	"github.com/u-ai/backend/internal/temporal"
 	"github.com/u-ai/backend/internal/tts"
@@ -75,7 +65,6 @@ import (
 	"github.com/u-ai/backend/internal/worldbook"
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
-	"gorm.io/gorm"
 )
 
 func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error) {
@@ -131,29 +120,19 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 	systemSvc := system.NewService(ctx, services.RuntimeProfile)
 	systemHandler := system.NewHandler(systemSvc, ctx.DB, services.Chat, services.DataLifecycle, services.UnifiedEntry, services.Reconciliation, services.Memory)
 
-	userRepo := user.NewRepository(ctx)
-	userSvc := user.NewService(userRepo, ctx)
-	userHandler := user.NewHandler(userSvc)
-
 	public := r.Group("/api/public")
 	{
+		userRepo := user.NewRepository(ctx)
+		userSvc := user.NewService(userRepo, ctx)
+		userHandler := user.NewHandler(userSvc)
+
 		public.GET("/auth/status", userHandler.Status)
 		public.POST("/auth/setup", userHandler.Setup)
+		public.POST("/auth/login", userHandler.Login)
 
 		public.GET("/onboarding/status", systemHandler.OnboardingStatus)
 		public.POST("/onboarding/complete", systemHandler.OnboardingComplete)
 	}
-
-	accountSessionSvc := accountsession.NewAccountSessionService(ctx.DB, accountsession.AccountSessionServiceConfig{
-		Sessions:    accountsession.NewSessionRepository(ctx.DB),
-		Refresh:     accountsession.NewRefreshRepository(ctx.DB),
-		Audit:       accountsession.NewAuditLogger(securityaudit.NewRepository(ctx.DB)),
-		Guard:       accountsession.NewLoginGuardService(accountsession.NewGuardRepository(ctx.DB)),
-		MaxSessions: 10,
-	})
-	accountSessionValidator := accountsession.NewValidator(accountSessionSvc.SessionRepository(), &userServiceProvider{repo: userRepo})
-	accountSessionHandler := accountsession.NewHandler(accountSessionSvc, accountSessionValidator, accountSessionSvc.AuditLogger(), &userServiceProvider{repo: userRepo})
-	accountsession.RegisterPublicRoutes(public, accountSessionHandler)
 
 	sessionSvc, err := security.NewDesktopSessionService(ctx.DB, config.AppCfg.Storage.DataDir, localCredentialStore)
 	if err != nil {
@@ -183,7 +162,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 					LocalUserID:      config.AppCfg.Security.LocalUserID,
 					ListenAddress:    config.AppCfg.Server.Host,
 					AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
-					AccountSessions:  accountSessionValidator,
 				},
 			),
 		)
@@ -199,7 +177,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 				sessionSvc.CreateSession,
 			)
 		}
-		accountsession.RegisterAuthenticatedRoutes(localRoot, accountSessionHandler)
 	}
 
 	if services.DesktopInstanceStore != nil {
@@ -218,7 +195,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 					ListenAddress:    config.AppCfg.Server.Host,
 					AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
 					SessionService:   sessionSvc,
-					AccountSessions:  accountSessionValidator,
 				},
 			),
 		)
@@ -268,16 +244,11 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 					)
 					return
 				}
-				platform, parseErr := runtimeidentity.ParsePlatform(request.Platform)
-				if parseErr != nil {
-					c.JSON(400, gin.H{"code": 400, "msg": "invalid platform"})
-					return
-				}
 				err := services.DeviceRepository.RegisterOrTouch(c.Request.Context(), device.Identity{
 					UserID:            actor.UserID,
-					DeviceID:          runtimeidentity.ParseDeviceID(request.DeviceID),
+					DeviceID:          request.DeviceID,
 					DesktopInstanceID: request.DesktopInstanceID,
-					Platform:          platform,
+					Platform:          request.Platform,
 					AppVersion:        request.AppVersion,
 				})
 				if err != nil {
@@ -306,11 +277,11 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 					return
 				}
 				runtimeID := strings.TrimSpace(request.RuntimeID)
-				if err := services.DeviceRepository.RequireOwned(c.Request.Context(), actor.UserID.String(), deviceID); err != nil {
+				if err := services.DeviceRepository.RequireOwned(c.Request.Context(), actor.UserID, deviceID); err != nil {
 					c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": "device not found"})
 					return
 				}
-				rawTicket, ticket, err := bootstrapTicketRepo.Create(c.Request.Context(), actor.UserID.String(), deviceID, runtimeID, 10*time.Minute)
+				rawTicket, ticket, err := bootstrapTicketRepo.Create(c.Request.Context(), actor.UserID, deviceID, runtimeID, 10*time.Minute)
 				if err != nil {
 					log.Error("failed to create bootstrap ticket", "error", err)
 					c.JSON(500, gin.H{"code": 500, "msg": "failed to create bootstrap ticket"})
@@ -341,7 +312,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 					c.JSON(400, gin.H{"code": 400, "msg": "deviceId is required"})
 					return
 				}
-				affected, err := bootstrapTicketRepo.RevokeDeviceTickets(c.Request.Context(), actor.UserID.String(), deviceID)
+				affected, err := bootstrapTicketRepo.RevokeDeviceTickets(c.Request.Context(), actor.UserID, deviceID)
 				if err != nil {
 					log.Error("failed to revoke device bootstrap tickets", "error", err)
 					c.JSON(500, gin.H{"code": 500, "msg": "failed to revoke tickets"})
@@ -421,9 +392,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		embedding_config.RegisterEmbeddingConfigRouter(apiGroup, ctx)
 		imagegen.RegisterImageGenRouter(apiGroup, ctx)
 		desktoppet.RegisterDesktopPetRouter(apiGroup, ctx, services.PathRegistry)
-		if services.Artifact != nil && services.Artifact.Handler != nil {
-			services.Artifact.Handler.Register(apiGroup)
-		}
 		doctor.RegisterRouter(apiGroup, ctx.DB, services.Extension)
 		readiness.RegisterRouter(apiGroup, ctx.DB, services.Extension)
 		system.RegisterPsycheAPIRouter(apiGroup)
@@ -435,7 +403,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		safety.RegisterSafetyRouter(apiGroup, ctx.DB)
 		delivery.RegisterSubmitRouter(apiGroup, services.DeliveryStore)
 		extension.RegisterRouter(apiGroup, ctx, services.Extension)
-		registerSyncRouter(apiGroup, ctx.DB)
 		if services.KernelContainer != nil {
 			cardProvider := extension_center.NewKernelCardProvider(services.KernelContainer.DefinitionRepository, services.KernelContainer.InstallationRepository)
 			centerSvc := extension_center.NewCenterService(cardProvider)
@@ -486,8 +453,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 				if services.KernelContainer.GameHost != nil && services.KernelContainer.GameHost.UpgradeCoordinator != nil {
 					upgradeCoordinator = &management.GameHostUpgradeCoordinatorAdapter{UC: services.KernelContainer.GameHost.UpgradeCoordinator}
 				}
-				preflight := &gameCenterTargetPreflightAdapter{preflight: kernelruntime.NewTargetMutationGuard(services.Extension.Kernel.PreviewArchiveTarget)}
-				packageSvc := management.NewProductionPackageMutationServiceWithPreflight(kernelReader, management.NewGameHostPluginRegistryFromContainer(services.KernelContainer.GameHost), kernelMutation, upgradeCoordinator, preflight)
+				packageSvc := management.NewProductionPackageMutationServiceFromKernelReader(kernelReader, management.NewGameHostPluginRegistryFromContainer(services.KernelContainer.GameHost), kernelMutation, upgradeCoordinator)
 				runtimeSvc := management.NewProductionRuntimeMutationService(services.KernelContainer.GameHost)
 				gameCenterMutationHandler := management.NewMutationHandler(packageSvc, runtimeSvc)
 				management.RegisterGameCenterMutationRouter(apiGroup, gameCenterMutationHandler)
@@ -520,11 +486,18 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 						EmergencyStopFn: func(ctx context.Context, runtimeID string) (control.EmergencyStopResult, error) {
 							return services.KernelContainer.GameHost.EmergencyStopService.Execute(ctx, domain.RuntimeInstanceID(runtimeID))
 						},
-						RearmFn: func(ctx context.Context, runtimeID string) error {
-							return services.KernelContainer.GameHost.EmergencyStopService.ClearEmergencyLatch(ctx, domain.RuntimeInstanceID(runtimeID), "game_center_user")
-						},
 					})
 					management.RegisterGameCenterControlRouter(apiGroup, controlHandler)
+				}
+
+				if services.KernelContainer.GameHost != nil && services.KernelContainer.GameHost.ControlPlane != nil {
+					rpcInvoker := management.NewControlPlaneRPCInvoker(
+						services.KernelContainer.GameHost.ControlPlane,
+						management.NewGameHostTopologyStore(services.KernelContainer.GameHost.RuntimeTopologyStore),
+						management.NewGameHostPluginRegistry(services.KernelContainer.GameHost.PluginRegistry),
+					)
+					rpcHandler := management.NewRPCHandler(rpcInvoker)
+					management.RegisterRPCRouter(apiGroup, rpcHandler)
 				}
 			}
 		}
@@ -560,158 +533,15 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 		r,
 		services.DesktopPetRuntimeV2,
 		services.SafeMode,
-		func(ctx context.Context, rawTicket string, runtimeID runtimeidentity.RuntimeID, deviceID runtimeidentity.DeviceID) (runtimeidentity.UserID, error) {
-			ticket, err := bootstrapTicketRepo.ConsumeWithValidation(ctx, rawTicket, string(runtimeID), string(deviceID))
+		func(ctx context.Context, rawTicket, runtimeID, deviceID string) (string, error) {
+			ticket, err := bootstrapTicketRepo.ConsumeWithValidation(ctx, rawTicket, runtimeID, deviceID)
 			if err != nil {
-				return runtimeidentity.UserID(""), err
+				return "", err
 			}
-			return runtimeidentity.UserID(ticket.UserID), nil
+			return ticket.UserID, nil
 		},
 	)
 	runtimev2.RegisterUserRoutes(apiGroup, services.DesktopPetRuntimeV2)
-
-	if services.DeviceMesh != nil && services.KernelContainer != nil {
-		kernelStore := services.KernelContainer.Store.DB()
-		deviceReg := services.KernelContainer.DeviceRegistry
-		meshSessionSvc := services.KernelContainer.DeviceRuntimeSessions
-		devicemeshserver.RegisterCloudRoutes(apiGroup, security.AuthenticationMiddleware(security.AuthConfig{
-			Mode:             config.AppCfg.Security.Mode,
-			JWTSecret:        config.AppCfg.JWT.Secret,
-			JWTIssuer:        config.AppCfg.JWT.Issuer,
-			JWTAudience:      config.AppCfg.JWT.Audience,
-			LocalCredentials: localCredentialStore,
-			LocalUserID:      config.AppCfg.Security.LocalUserID,
-			ListenAddress:    config.AppCfg.Server.Host,
-			AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
-			SessionService:   sessionSvc,
-		}), &devicemeshserver.RouterDeps{
-			DB:            kernelStore,
-			Sessions:      meshSessionSvc,
-			BootstrapSvc:  services.DeviceMesh.BootstrapSvc,
-			CredentialSvc: services.DeviceMesh.CredentialSvc,
-			Hub:           services.DeviceMesh.Hub,
-			Probe:         services.DeviceMesh.Probe,
-			DeviceReg:     deviceReg,
-			TaskClaimHandler: func(taskRunID string, attemptID string, workerID string, leaseDuration time.Duration) bool {
-				if services.MeshRemoteTaskExecutor == nil || services.MeshRemoteTaskExecutor.PendingTasks == nil {
-					return false
-				}
-				return services.MeshRemoteTaskExecutor.PendingTasks.Claim(taskRunID, workerID, leaseDuration)
-			},
-		TaskCompleteHandler: func(taskRunID string, attemptID string, success bool, result json.RawMessage, errMsg string) {
-			if services.MeshRemoteTaskExecutor == nil || services.MeshRemoteTaskExecutor.PendingTasks == nil {
-				return
-			}
-			services.MeshRemoteTaskExecutor.PendingTasks.Complete(taskRunID, success, errMsg)
-			if services.KernelContainer != nil && services.KernelContainer.TaskRuntimeService != nil {
-				ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-				defer cancel()
-				_ = services.KernelContainer.TaskRuntimeService.ApplyRemoteCompletion(ctx, taskRunID, attemptID, "", success, result, errMsg)
-			}
-		},
-		TaskProgressHandler: func(taskRunID string, attemptID string, progress json.RawMessage) {
-			if services.MeshRemoteTaskExecutor == nil || services.MeshRemoteTaskExecutor.PendingTasks == nil {
-				return
-			}
-			if _, ok := services.MeshRemoteTaskExecutor.PendingTasks.Get(taskRunID); !ok {
-				return
-			}
-			var prog struct {
-				Sequence   int64    `json:"sequence"`
-				Current    *float64 `json:"current,omitempty"`
-				Total      *float64 `json:"total,omitempty"`
-				Percentage *float64 `json:"percentage,omitempty"`
-				Stage      string   `json:"stage,omitempty"`
-				Message    string   `json:"message,omitempty"`
-			}
-			if err := json.Unmarshal(progress, &prog); err != nil {
-				return
-			}
-			if services.KernelContainer != nil && services.KernelContainer.TaskRuntimeService != nil {
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				_ = services.KernelContainer.TaskRuntimeService.HandleRemoteProgress(ctx, taskRunID, attemptID, prog.Sequence, prog.Current, prog.Total, prog.Percentage, prog.Stage, prog.Message)
-			}
-		},
-		TaskCheckpointHandler: func(taskRunID string, attemptID string, checkpoint json.RawMessage) {
-			if services.MeshRemoteTaskExecutor == nil || services.MeshRemoteTaskExecutor.PendingTasks == nil {
-				return
-			}
-			if _, ok := services.MeshRemoteTaskExecutor.PendingTasks.Get(taskRunID); !ok {
-				return
-			}
-			var cp struct {
-				CheckpointID string          `json:"checkpointId"`
-				Version      int64           `json:"version"`
-				Payload      json.RawMessage `json:"payload"`
-				PayloadHash  string          `json:"payloadHash"`
-			}
-			if err := json.Unmarshal(checkpoint, &cp); err != nil {
-				return
-			}
-			if services.KernelContainer != nil && services.KernelContainer.TaskRuntimeService != nil {
-				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				_ = services.KernelContainer.TaskRuntimeService.HandleRemoteCheckpoint(ctx, taskRunID, attemptID, cp.CheckpointID, cp.Version, cp.Payload, cp.PayloadHash)
-			}
-		},
-		DisconnectHandler: func(sessionID string, generation int64) {
-			if services.MeshRemoteTaskExecutor == nil || services.MeshRemoteTaskExecutor.PendingTasks == nil {
-				return
-			}
-			services.MeshRemoteTaskExecutor.PendingTasks.CancelAll(sessionID, "device_disconnected")
-			if services.PendingInvocationManager != nil {
-				services.PendingInvocationManager.CancelAll(sessionID, "device_disconnected")
-			}
-		},
-		InvocationResultHandler: func(result deviceruntimeprotocol.RuntimeResultPayload) {
-			if services.PendingInvocationManager == nil {
-				return
-			}
-			services.PendingInvocationManager.Complete(result.InvocationID, capability.UnifiedToolResult{
-				InvocationID:     result.InvocationID,
-				RuntimeSessionID: string(result.RuntimeSessionID),
-				DeviceID:         string(result.DeviceID),
-				RuntimeID:        string(result.RuntimeID),
-				Status:           capability.ToolResultStatusSuccess,
-				Generation:       result.ConnectionGeneration,
-				Structured:       result.Result,
-			})
-		},
-		InvocationErrorHandler: func(errResult deviceruntimeprotocol.RuntimeErrorPayload) {
-			if services.PendingInvocationManager == nil {
-				return
-			}
-			services.PendingInvocationManager.Fail(errResult.InvocationID, capability.UnifiedToolResult{
-				InvocationID:     errResult.InvocationID,
-				RuntimeSessionID: string(errResult.RuntimeSessionID),
-				DeviceID:         string(errResult.DeviceID),
-				RuntimeID:        string(errResult.RuntimeID),
-				Status:           capability.ToolResultStatusFailed,
-				Generation:       errResult.ConnectionGeneration,
-				Error: &capability.ToolError{
-					Code:      errResult.ErrorCode,
-					Message:   errResult.Message,
-					Retryable: errResult.Retryable,
-				},
-			})
-		},
-		GetUserID: func(c *gin.Context) (runtimeidentity.UserID, bool) {
-				val, exists := c.Get("userId")
-				if !exists {
-					return runtimeidentity.UserID(""), false
-				}
-				switch v := val.(type) {
-				case runtimeidentity.UserID:
-					return v, true
-				case string:
-					return runtimeidentity.UserID(v), true
-				default:
-					return runtimeidentity.UserID(""), false
-				}
-			},
-		})
-	}
 
 	maintenanceAuthGroup := r.Group("/api")
 	maintenanceAuthGroup.Use(security.AuthenticationMiddleware(security.AuthConfig{
@@ -724,30 +554,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices) (*gin.Engine, error
 	}))
 	maintenance.RegisterMaintenanceRouter(maintenanceAuthGroup, services.DesktopPetMaintenanceHandler)
 
-	if services.NativeBridgeRelay != nil {
-		apiGroup.GET("/native-bridge/relay", services.NativeBridgeRelay.Handler().HandleWebSocket)
-	}
-
 	return r, nil
-}
-
-type gameCenterTargetPreflightAdapter struct {
-	preflight kernelruntime.PackageTargetPreflight
-}
-
-func (a *gameCenterTargetPreflightAdapter) ValidateArchiveTarget(ctx context.Context, archivePath string, expected kerneldomain.ManagementTarget) (*management.PackageTargetPreview, error) {
-	if a == nil || a.preflight == nil {
-		return nil, fmt.Errorf("game center target preflight unavailable")
-	}
-	preview, err := a.preflight.ValidateArchiveTarget(ctx, archivePath, expected)
-	if err != nil {
-		return nil, err
-	}
-	return &management.PackageTargetPreview{
-		ExtensionID:      preview.ExtensionID,
-		ManagementTarget: preview.ManagementTarget,
-		Installable:      preview.Installable,
-	}, nil
 }
 
 type packageImportAdapter struct {
@@ -783,17 +590,6 @@ func registerImportStagingRoutes(r *gin.RouterGroup, reg *desktoppetsecurity.Pat
 		g.POST("/consume", handler.Consume)
 		g.POST("/:stagingId/reject", handler.Reject)
 	}
-}
-
-func registerSyncRouter(apiGroup *gin.RouterGroup, db *gorm.DB) {
-	syncApplier := sync.NewBusinessApplier(db)
-	syncSvc := sync.NewService(db, syncApplier)
-	syncHandler := sync.NewHandler(syncSvc)
-	syncGroup := apiGroup.Group("/v1/sync")
-	syncGroup.POST("/pull", syncHandler.HandlePull)
-	syncGroup.POST("/push", syncHandler.HandlePush)
-	syncGroup.GET("/status", syncHandler.HandleStatus)
-	syncGroup.GET("/gap", syncHandler.HandleGap)
 }
 
 func generateShutdownOpID() string {
