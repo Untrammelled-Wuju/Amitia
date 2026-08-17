@@ -17,6 +17,9 @@ type RemoteCatalogEntry struct {
 	Name                string   `json:"name"`
 	Description         string   `json:"description"`
 	Version             string   `json:"version"`
+	PackageURI          string   `json:"packageUri,omitempty"`
+	Hash                string   `json:"hash,omitempty"`
+	SizeBytes           int64    `json:"sizeBytes,omitempty"`
 	ProvidedCapabilities []string `json:"providedCapabilities,omitempty"`
 	Trust               string   `json:"trust,omitempty"`
 	Source              string   `json:"source,omitempty"`
@@ -133,6 +136,15 @@ func (s *RemoteCatalogSource) toCandidate(entry RemoteCatalogEntry) CapabilityCa
 	if trustLevel == "" {
 		trustLevel = TrustUnverified
 	}
+	install := CandidateInstallDescriptor{
+		Method: InstallExtension,
+	}
+	if entry.PackageURI != "" {
+		install.ExtensionPackage = &ExtensionInstallDescriptor{
+			PackageURI: entry.PackageURI,
+			Hash:       entry.Hash,
+		}
+	}
 	return CapabilityCandidate{
 		ID:           entry.ExtensionID,
 		Kind:         CandidateExtensionPackage,
@@ -140,10 +152,8 @@ func (s *RemoteCatalogSource) toCandidate(entry RemoteCatalogEntry) CapabilityCa
 		Description:  entry.Description,
 		Version:      entry.Version,
 		Capabilities: caps,
-		Install: CandidateInstallDescriptor{
-			Method: InstallExtension,
-		},
-		Trust: CandidateTrust{Level: trustLevel},
+		Install:      install,
+		Trust:        CandidateTrust{Level: trustLevel},
 		Metadata: map[string]any{
 			"extensionId": entry.ExtensionID,
 			"source":      entry.Source,

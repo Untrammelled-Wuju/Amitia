@@ -444,6 +444,16 @@ func (s *ExtensionCatalogSource) buildCandidate(card extension_center.ExtensionC
 
 	providedCaps := s.extractProvidedCapabilities(card)
 
+	install := CandidateInstallDescriptor{
+		Method: method,
+	}
+	if card.PackageURI != "" {
+		install.ExtensionPackage = &ExtensionInstallDescriptor{
+			PackageURI: card.PackageURI,
+			Hash:       card.Hash,
+		}
+	}
+
 	return CapabilityCandidate{
 		ID:           card.ExtensionID,
 		Kind:         CandidateExtensionPackage,
@@ -451,9 +461,7 @@ func (s *ExtensionCatalogSource) buildCandidate(card extension_center.ExtensionC
 		Description:  card.Description,
 		Version:      card.Version,
 		Capabilities: providedCaps,
-		Install: CandidateInstallDescriptor{
-			Method: method,
-		},
+		Install:      install,
 		Trust: CandidateTrust{
 			Level: TrustLevel(card.Trust),
 		},

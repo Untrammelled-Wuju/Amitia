@@ -246,12 +246,8 @@ func (f *ToolFacade) ResolveModelTool(modelName string) (ResolvedToolReference, 
 	if !ok {
 		return ResolvedToolReference{}, fmt.Errorf("tool not found: %s", modelName)
 	}
-	resolvedID := capability.CapabilityID(def.ID)
-	if def.CapabilityID != "" {
-		resolvedID = def.CapabilityID
-	}
 	return ResolvedToolReference{
-		ID:              resolvedID,
+		ID:              capability.CapabilityID(def.ID),
 		ModelName:       def.ModelName,
 		ExtensionID:     def.ExtensionID,
 		ModuleID:        def.ModuleID,
@@ -590,9 +586,6 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 		Metadata:        metadata,
 	})
 	execToolID := capability.CapabilityID(def.ID)
-	if def.CapabilityID != "" {
-		execToolID = def.CapabilityID
-	}
 	req := execution.ToolExecutionRequest{
 		ToolID:     execToolID,
 		Input:      input,
@@ -649,9 +642,6 @@ func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName strin
 		Metadata:        streamMetadata,
 	})
 	execToolID := capability.CapabilityID(def.ID)
-	if def.CapabilityID != "" {
-		execToolID = def.CapabilityID
-	}
 	req := execution.ToolExecutionRequest{
 		ToolID:     execToolID,
 		Input:      input,

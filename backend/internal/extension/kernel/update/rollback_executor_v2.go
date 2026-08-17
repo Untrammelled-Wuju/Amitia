@@ -7,15 +7,18 @@ import (
 	"time"
 )
 
+type RollbackCompletionCallback func(extensionID string, success bool, generation int64)
+
 type RollbackExecutorV2 struct {
-	mu          sync.Mutex
-	points      *RollbackPointStore
-	migrations  *MigrationExecutor
-	generations *GenerationManager
-	journal     *JournalManager
-	repo        *RollbackRepository
-	planner     *RollbackPlanner
-	inProgress  map[string]*RollbackPlan
+	mu                sync.Mutex
+	points            *RollbackPointStore
+	migrations        *MigrationExecutor
+	generations       *GenerationManager
+	journal           *JournalManager
+	repo              *RollbackRepository
+	planner           *RollbackPlanner
+	inProgress        map[string]*RollbackPlan
+	completionCallback RollbackCompletionCallback
 }
 
 func NewRollbackExecutorV2(
@@ -35,6 +38,12 @@ func NewRollbackExecutorV2(
 		planner:     planner,
 		inProgress:  make(map[string]*RollbackPlan),
 	}
+}
+
+func (e *RollbackExecutorV2) SetCompletionCallback(cb RollbackCompletionCallback) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.completionCallback = cb
 }
 
 func (e *RollbackExecutorV2) Execute(ctx context.Context, plan *RollbackPlan) error {
@@ -171,6 +180,13 @@ func (e *RollbackExecutorV2) Execute(ctx context.Context, plan *RollbackPlan) er
 			finalStatus = JournalStatusFailed
 		}
 		e.journal.WriteStep(ctx, operationID, "final", JournalStepRollbackExecute, finalStatus, "", "", nil)
+	}
+
+	e.mu.Lock()
+	cb := e.completionCallback
+	e.mu.Unlock()
+	if cb != nil {
+		cb(plan.ExtensionID, plan.Status == RollbackStatusCompleted, plan.ToGeneration)
 	}
 
 	return nil
