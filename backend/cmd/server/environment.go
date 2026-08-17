@@ -33,6 +33,7 @@ type Environment struct {
 	host       runtimehost.RuntimeHost
 	supervisor runtimehost.ProcessSupervisor
 	entries    []ProcessEntry
+	onShutdown func()
 }
 
 func NewEnvironment(host runtimehost.RuntimeHost) *Environment {
@@ -47,7 +48,7 @@ func (e *Environment) AddProcess(id runtimehost.ProcessID, spec runtimehost.Proc
 }
 
 func (e *Environment) SetOnShutdown(fn func()) {
-	_ = fn
+	e.onShutdown = fn
 }
 
 func (e *Environment) StartAll() error {
@@ -69,9 +70,13 @@ func (e *Environment) StartAll() error {
 
 func (e *Environment) stopStarted(ctx context.Context) error {
 	var lastErr error
-	_ = ctx
 	for _, entry := range e.entries {
-		_ = e.supervisor.Stop(ctx, entry.ID)
+		if err := e.supervisor.Stop(ctx, entry.ID); err != nil {
+			log.Printf("[Env] %s 停止失败: %v", entry.ID, err)
+			if lastErr == nil {
+				lastErr = err
+			}
+		}
 	}
 	return lastErr
 }
@@ -102,6 +107,9 @@ func (e *Environment) StopAll(ctx context.Context) error {
 		if err := e.supervisor.Stop(ctx, e.entries[i].ID); err != nil {
 			log.Printf("[Env] %s 停止失败: %v", e.entries[i].ID, err)
 		}
+	}
+	if e.onShutdown != nil {
+		e.onShutdown()
 	}
 	log.Println("[Env] 所有附属服务已停止")
 	return nil
