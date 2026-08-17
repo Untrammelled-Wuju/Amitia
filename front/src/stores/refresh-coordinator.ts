@@ -1,16 +1,20 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
-import { useSessionStore } from "./session-store";
+import { useSessionStore, clearStoredToken, revokeOnServer } from "./session-store";
 import { refreshToken } from "./session-client";
 
 let refreshPromise: Promise<string> | null = null;
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 
-function scheduleRefresh(expiresAt: string) {
+function clearRefreshTimer(): void {
   if (refreshTimer) {
     clearTimeout(refreshTimer);
     refreshTimer = null;
   }
+}
+
+function scheduleRefresh(expiresAt: string) {
+  clearRefreshTimer();
   const expiry = new Date(expiresAt).getTime();
   const now = Date.now();
   const refreshIn = Math.max(expiry - now - 60000, 5000);
@@ -49,16 +53,20 @@ export function initRefreshCoordinator(expiresAt?: string) {
 }
 
 export function stopRefreshCoordinator() {
-  if (refreshTimer) {
-    clearTimeout(refreshTimer);
-    refreshTimer = null;
-  }
+  clearRefreshTimer();
   refreshPromise = null;
 }
 
 export function getAccessToken(): string | null {
   const { state } = useSessionStore();
   return state.value.accessToken;
+}
+
+export function forceCleanupSession(): void {
+  clearRefreshTimer();
+  refreshPromise = null;
+  clearStoredToken();
+  revokeOnServer();
 }
 
 export async function ensureValidToken(): Promise<string | null> {

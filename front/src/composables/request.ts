@@ -8,6 +8,7 @@ import axios, {
 import { ElMessage, ElMessageBox } from "element-plus";
 import { ERR, type ApiResponse } from "@/types";
 import { getRuntimeConnection } from "@/runtime/runtime-adapter";
+import { forceCleanupSession } from "@/stores/refresh-coordinator";
 
 const BASE_URL = (import.meta as any).env?.VITE_API_URL || "";
 const TOKEN_KEY = "ai-companion-token";
@@ -95,7 +96,7 @@ export function classifyError(
       code === ERR.TOKEN_EXPIRED ||
       code === ERR.TOKEN_INVALID
     ) {
-      localStorage.removeItem(TOKEN_KEY);
+      forceCleanupSession();
       const PUBLIC_PATHS = ["/login", "/setup", "/onboarding", "/privacy", "/usage-boundary"];
       if (!PUBLIC_PATHS.includes(window.location.pathname)) {
         window.location.href = "/login";
@@ -205,6 +206,9 @@ request.interceptors.response.use(
     return response.data;
   },
   (error: AxiosError) => {
+    if (error?.response?.status === 401) {
+      forceCleanupSession();
+    }
     const body = (error.response?.data as ApiResponse) || null;
     const err = classifyError(body, error);
     err.raw = body;
