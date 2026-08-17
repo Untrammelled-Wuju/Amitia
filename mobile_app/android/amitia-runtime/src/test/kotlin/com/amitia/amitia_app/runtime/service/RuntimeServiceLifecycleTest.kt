@@ -534,6 +534,7 @@ internal class LifecycleDeadProotSession(private val gen: Long) : ProotSession {
         exitCode = 1,
         stopRequested = false,
     )
+    override fun activate() {}
 
     override fun terminateAndConfirmExit(gracefulTimeoutMs: Long, forceTimeoutMs: Long): ProotTerminationResult {
         return ProotTerminationResult.ConfirmedExited(exit?.exitCode)
