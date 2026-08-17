@@ -384,7 +384,7 @@ func (w *ReleaseRecoveryWorker) recoverImportPrepared(ctx context.Context, op *R
 }
 
 func (w *ReleaseRecoveryWorker) recoverImportPublished(ctx context.Context, op *ReleaseBuildOperation, journal *ReleasePublishJournal) error {
-	if w.isPublishedConsistent(op) {
+	if w.isPublishedConsistent(ctx, op) {
 		op.State = BuildOpStateCompleted
 		op.Stage = ImportJournalStageFilesPublished
 		op.CompletedAt = formatRecoveryTimestamp(time.Now())
@@ -408,7 +408,7 @@ func (w *ReleaseRecoveryWorker) recoverImportPublished(ctx context.Context, op *
 }
 
 func (w *ReleaseRecoveryWorker) recoverImportFinalized(ctx context.Context, op *ReleaseBuildOperation, journal *ReleasePublishJournal) error {
-	if w.isPublishedConsistent(op) {
+	if w.isPublishedConsistent(ctx, op) {
 		op.State = BuildOpStateCompleted
 		op.Stage = ImportJournalStageSnapshotCommitted
 		op.CompletedAt = formatRecoveryTimestamp(time.Now())
@@ -428,7 +428,7 @@ func (w *ReleaseRecoveryWorker) recoverImportFinalized(ctx context.Context, op *
 }
 
 func (w *ReleaseRecoveryWorker) verifyCompletedImport(ctx context.Context, op *ReleaseBuildOperation, journal *ReleasePublishJournal) error {
-	if !w.isPublishedConsistent(op) {
+	if !w.isPublishedConsistent(ctx, op) {
 		log.Logger.Warnf("Import operation %s marked completed but published data inconsistent", op.ID)
 		return w.markImportManualReview(op, journal, "COMPLETED_BUT_INCONSISTENT")
 	}
@@ -452,7 +452,7 @@ func (w *ReleaseRecoveryWorker) markImportManualReview(op *ReleaseBuildOperation
 	return nil
 }
 
-func (w *ReleaseRecoveryWorker) isPublishedConsistent(op *ReleaseBuildOperation) bool {
+func (w *ReleaseRecoveryWorker) isPublishedConsistent(ctx context.Context, op *ReleaseBuildOperation) bool {
 	if op.PetID == "" || op.ReleaseID == "" {
 		return false
 	}
@@ -474,7 +474,7 @@ func (w *ReleaseRecoveryWorker) isPublishedConsistent(op *ReleaseBuildOperation)
 	if releaseRecord.ContentRootHash == "" {
 		return false
 	}
-	if err := w.verifyImportConsistency(op, releaseRecord, publishedDir); err != nil {
+	if err := w.verifyImportConsistency(ctx, op, releaseRecord, publishedDir); err != nil {
 		log.Logger.Warnf("import consistency check failed for operation %s: %v", op.ID, err)
 		return false
 	}

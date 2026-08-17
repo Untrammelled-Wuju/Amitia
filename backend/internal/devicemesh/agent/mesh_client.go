@@ -27,10 +27,10 @@ type MeshClientConfig struct {
 	Cursor             *SessionCursor
 	OnState            func(AgentState)
 	RuntimeDispatcher  RuntimeDispatcher
-	TaskWorker         TaskWorker
+	TaskWorker         TaskWorkerIface
 }
 
-type TaskWorker interface {
+type TaskWorkerIface interface {
 	ExecuteTask(ctx context.Context, dispatch protocol.TaskDispatchPayload) error
 	CancelTask(ctx context.Context, taskRunID, attemptID string) error
 }
