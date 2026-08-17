@@ -392,6 +392,16 @@ func (a *SecretLeaseAdapter) LeasesForSession(sessionID string) []kernelsecret.L
 	return out
 }
 
+func (a *SecretLeaseAdapter) Count() int {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	count := 0
+	for _, leases := range a.sessionLeases {
+		count += len(leases)
+	}
+	return count
+}
+
 func (a *SecretLeaseAdapter) ActiveRuntimeLeases(runtimeID string) []kernelsecret.LeaseID {
 	return a.index.ActiveLeasesByRuntime(runtimeID)
 }
