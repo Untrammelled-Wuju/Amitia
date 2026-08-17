@@ -124,19 +124,34 @@ func (w *defaultTaskWorker) executeTaskByType(ctx context.Context, dispatch prot
 	taskType, _ := input["taskType"].(string)
 	log.Printf("devicemesh: agent: executing task: taskRunId=%s taskType=%s", dispatch.TaskRunID, taskType)
 
+	if taskType == "" {
+		return nil, fmt.Errorf("missing taskType in task input")
+	}
+
 	w.reportProgress(ctx, dispatch, 1, float64Ptr(0), float64Ptr(100), float64Ptr(0), "executing", fmt.Sprintf("executing task type: %s", taskType))
 
-	w.reportProgress(ctx, dispatch, 2, float64Ptr(50), float64Ptr(100), float64Ptr(50), "executing", "task in progress")
+	result, err := w.dispatchTaskExecution(ctx, taskType, input)
+	if err != nil {
+		return nil, err
+	}
 
 	w.reportProgress(ctx, dispatch, 3, float64Ptr(100), float64Ptr(100), float64Ptr(100), "completing", "task completing")
 
-	result := map[string]interface{}{
-		"taskType":  taskType,
-		"completed": true,
-		"timestamp": time.Now().UTC().Format(time.RFC3339),
+	return result, nil
+}
+
+func (w *defaultTaskWorker) dispatchTaskExecution(ctx context.Context, taskType string, input map[string]interface{}) (json.RawMessage, error) {
+	switch taskType {
+	case "ping":
+		result := map[string]interface{}{
+			"taskType":  taskType,
+			"completed": true,
+			"timestamp": time.Now().UTC().Format(time.RFC3339),
+		}
+		return json.Marshal(result)
+	default:
+		return nil, fmt.Errorf("unsupported task type: %s", taskType)
 	}
-	resultBytes, _ := json.Marshal(result)
-	return resultBytes, nil
 }
 
 func (w *defaultTaskWorker) reportProgress(ctx context.Context, dispatch protocol.TaskDispatchPayload, seq int64, current, total, percentage *float64, stage, message string) {
