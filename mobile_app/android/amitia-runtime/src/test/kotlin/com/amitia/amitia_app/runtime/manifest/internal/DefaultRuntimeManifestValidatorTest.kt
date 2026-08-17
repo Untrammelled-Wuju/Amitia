@@ -19,7 +19,7 @@ class DefaultRuntimeManifestValidatorTest {
     private fun sampleTarget(): RuntimeManifestTarget = RuntimeManifestTarget(
         hostPlatform = "android",
         hostAbi = "arm64-v8a",
-        runtimeKind = "proot",
+            runtimeKind = "embedded-proot",
         guestPlatform = "linux",
         guestArchitecture = "arm64",
         distribution = "ubuntu",

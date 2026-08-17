@@ -5,7 +5,6 @@ import android.os.IBinder
 import android.os.Parcel
 import android.os.RemoteException
 import rikka.shizuku.Shizuku
-import rikka.shizuku.ShizukuUserServiceArgs
 import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.util.concurrent.Executors
@@ -253,8 +252,8 @@ class ShizukuCommandService : IPrivilegedCommandService.Stub() {
         const val TRANSACTION_executeCommand: Int = IBinder.FIRST_CALL_TRANSACTION
         const val TRANSACTION_destroyService: Int = IBinder.FIRST_CALL_TRANSACTION + 1
 
-        fun createArgs(): ShizukuUserServiceArgs<ShizukuCommandService> {
-            return ShizukuUserServiceArgs(
+        fun createArgs(): Shizuku.UserServiceArgs {
+            return Shizuku.UserServiceArgs(
                 ComponentName(
                     "com.amitia.amitia_app",
                     ShizukuCommandService::class.java.name,
