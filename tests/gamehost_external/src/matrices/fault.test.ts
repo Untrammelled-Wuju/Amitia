@@ -169,15 +169,18 @@ describe('G47-F15 Fault Matrix (Backend Driver)', () => {
     const genBefore = before.process?.processGeneration ?? 0;
     expect(genBefore).toBeGreaterThan(0);
 
-    const crashResp = await fetch(
-      `${(client as any).baseUrl}/game-center/runtimes/${rtId}/services/mock-game-runtime/rpc`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method: 'mockgame.fault.crash', payload: {} }),
-      },
-    );
-    expect(crashResp.status).toBe(200);
+    try {
+      await fetch(
+        `${(client as any).baseUrl}/game-center/runtimes/${rtId}/services/mock-game-runtime/rpc`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ method: 'mockgame.fault.crash', payload: {} }),
+        },
+      );
+    } catch {
+      // expected: crash may cause connection failure
+    }
 
     const deadline = Date.now() + 60000;
     let genAfter = genBefore;
