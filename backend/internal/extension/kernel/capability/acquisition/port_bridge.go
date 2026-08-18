@@ -46,12 +46,13 @@ func (b *mcpInstallPortBridge) InstallMCP(ctx context.Context, serverName string
 	if b.lifecycle == nil {
 		return "", fmt.Errorf("MCP lifecycle not configured")
 	}
+	launcherKind := resolveLauncherKind(transport)
 	binding := mcp.MCPBinding{
 		ID:        serverName,
 		Owner:     mcp.ExtensionOwnerRef{Type: "user"},
 		Transport: mcp.MCPTransportSpec{Kind: transport},
 		Launcher: &mcp.MCPLauncherSpec{
-			Kind:    string(mcp.MCPLauncherNPX),
+			Kind:    string(launcherKind),
 			Command: command,
 			Args:    args,
 		},
@@ -63,7 +64,7 @@ func (b *mcpInstallPortBridge) InstallMCP(ctx context.Context, serverName string
 		PlanID:    "manual-" + serverName,
 		BindingID: serverName,
 		Transport: transport,
-		Launcher:  string(mcp.MCPLauncherNPX),
+		Launcher:  string(launcherKind),
 	}
 	plan.PlanDigest = plan.ComputeDigest()
 	if err := b.lifecycle.Install(ctx, binding, plan); err != nil {
@@ -76,15 +77,36 @@ func (b *mcpInstallPortBridge) InstallMCP(ctx context.Context, serverName string
 		return "", fmt.Errorf("MCP start: %w", err)
 	}
 
-	// Discover and sync tools from the MCP server
+	if !b.lifecycle.IsConnected(serverName) {
+		return "", fmt.Errorf("MCP server %s not connected after start", serverName)
+	}
+
 	if b.toolSync != nil {
 		descriptors, err := b.toolSync.ListMCPTools(ctx, serverName)
-		if err == nil && len(descriptors) > 0 {
-			_, _ = b.toolSync.SyncMCPTools(ctx, serverName, descriptors)
+		if err != nil {
+			return "", fmt.Errorf("MCP list tools: %w", err)
+		}
+		if len(descriptors) > 0 {
+			if _, syncErr := b.toolSync.SyncMCPTools(ctx, serverName, descriptors); syncErr != nil {
+				return "", fmt.Errorf("MCP sync tools: %w", syncErr)
+			}
 		}
 	}
 
 	return serverName, nil
+}
+
+func resolveLauncherKind(transport string) mcp.MCPLauncherKind {
+	switch transport {
+	case "stdio":
+		return mcp.MCPLauncherNPX
+	case "streamable_http", "sse":
+		return mcp.MCPLauncherUVX
+	case "executable":
+		return mcp.MCPLauncherExecutable
+	default:
+		return mcp.MCPLauncherNPX
+	}
 }
 
 func (b *mcpInstallPortBridge) RemoveMCP(ctx context.Context, serverName string) error {

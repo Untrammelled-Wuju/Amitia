@@ -419,6 +419,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	packageSec := package_security.NewPackageSecurityServiceAtRoot(package_security.DefaultArchivePolicy(), package_security.NewSQLiteAuditWriter(db), b.extRoot)
 	packageRepo := NewPackageRepository(db)
 	packageArtifactStore := NewPackageArtifactStore(b.extRoot)
+	packageArtifactStoreAdapter := &kernelArtifactStoreAdapter{store: packageArtifactStore}
+	packageRepoAdapter := &kernelArtifactRegistryAdapter{repo: packageRepo}
 	packageGenerationStore := NewPackageGenerationStore(b.extRoot)
 	packageTrustRepo := NewPackageTrustRepository(db)
 	userDataSnapshotStore := NewUserDataSnapshotStore(db)
@@ -873,7 +875,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 			AgentSkillCatalog:  agentSkillCatalog,
 			ProviderRegistry:   capabilityProviderRegistry,
 		}),
-		PackageInstallPort: acquisition.NewPackagePortBridgeFromManager(lifecycleMgr),
+		PackageInstallPort: acquisition.NewPackagePortBridgeWithResolver(lifecycleMgr, packageArtifactStoreAdapter, packageRepoAdapter),
 		MCPInstallPort:     mcpInstallPort,
 		SkillInstallPort:   acquisition.NewSkillPortBridge(acquisition.NewSkillCatalogBridge(agentSkillCatalog)),
 		WorkshopPort:       workshopPort,
@@ -1780,4 +1782,67 @@ func makeSearchHealthFunc(cfg search.Config, broker *secret.Broker) capability.S
 
 func registerDeepSearchSystemTask(ctx context.Context, svc *task_runtime.TaskRuntimeService, entry string) error {
 	return RegisterDeepSearchSystemTask(ctx, svc, entry)
+}
+
+// kernelArtifactStoreAdapter adapts PackageArtifactStore to the acquisition RemoteArtifactStorer interface.
+type kernelArtifactStoreAdapter struct {
+	store *PackageArtifactStore
+}
+
+func (a *kernelArtifactStoreAdapter) PutArchiveFromURI(ctx context.Context, uri string, metadata acquisition.ArtifactStoreMetadata) (acquisition.StoredArtifact, error) {
+	kernelMeta := ArtifactMetadata{
+		ExtensionID:  metadata.ExtensionID,
+		Version:      metadata.Version,
+		SourceURI:    metadata.SourceURI,
+		ExpectedHash: metadata.ExpectedHash,
+	}
+	result, err := a.store.PutArchiveFromURI(ctx, uri, kernelMeta)
+	if err != nil {
+		return acquisition.StoredArtifact{}, err
+	}
+	return acquisition.StoredArtifact{
+		ArtifactID:   result.ArtifactID,
+		ArchiveHash:  result.ArchiveHash,
+		ArchivePath:  result.ArchivePath,
+		ManifestHash: result.ManifestHash,
+	}, nil
+}
+
+func (a *kernelArtifactStoreAdapter) HasArtifactAtHash(expectedHash string) (string, error) {
+	return a.store.HasArtifactAtHash(expectedHash)
+}
+
+func (a *kernelArtifactStoreAdapter) ArtifactIDFromHash(hash string) string {
+	return a.store.ArtifactIDFromHash(hash)
+}
+
+// kernelArtifactRegistryAdapter adapts PackageRepository to the acquisition RemoteArtifactRegistry interface.
+type kernelArtifactRegistryAdapter struct {
+	repo *PackageRepository
+}
+
+func (a *kernelArtifactRegistryAdapter) PutArtifact(ctx context.Context, artifact acquisition.ArtifactRecord) error {
+	return a.repo.PutArtifact(ctx, PackageArtifact{
+		ArtifactID:   artifact.ArtifactID,
+		ExtensionID:  artifact.ExtensionID,
+		Version:      artifact.Version,
+		ArchiveHash:  artifact.ArchiveHash,
+		ArchivePath:  artifact.ArchivePath,
+		ManifestHash: artifact.ManifestHash,
+	})
+}
+
+func (a *kernelArtifactRegistryAdapter) GetArtifactByArchivePath(ctx context.Context, archivePath string) (*acquisition.ArtifactRecord, error) {
+	result, err := a.repo.GetArtifactByArchivePath(ctx, archivePath)
+	if err != nil {
+		return nil, err
+	}
+	return &acquisition.ArtifactRecord{
+		ArtifactID:   result.ArtifactID,
+		ExtensionID:  result.ExtensionID,
+		Version:      result.Version,
+		ArchiveHash:  result.ArchiveHash,
+		ArchivePath:  result.ArchivePath,
+		ManifestHash: result.ManifestHash,
+	}, nil
 }
