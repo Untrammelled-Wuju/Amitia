@@ -10,11 +10,11 @@ import (
 type EditMode string
 
 const (
-	EditModePrecise       EditMode = "precise"
+	EditModePrecise         EditMode = "precise"
 	EditModePreciseWithDiff EditMode = "precise_with_diff"
-	EditModeKeyword       EditMode = "keyword_replace"
-	EditModePatch         EditMode = "patch"
-	EditModeAST           EditMode = "ast_edit"
+	EditModeKeyword         EditMode = "keyword_replace"
+	EditModePatch           EditMode = "patch"
+	EditModeAST             EditMode = "ast_edit"
 )
 
 type SourceEditOperation struct {
@@ -29,11 +29,11 @@ type SourceEditOperation struct {
 }
 
 type SourceEditRequest struct {
-	WorkspaceID    string                `json:"workspaceId"`
-	Operations     []SourceEditOperation `json:"operations"`
-	Transaction    bool                  `json:"transaction"`
-	AutoCommit     bool                  `json:"autoCommit"`
-	ExistingTxID   string                `json:"existingTxId,omitempty"`
+	WorkspaceID  string                `json:"workspaceId"`
+	Operations   []SourceEditOperation `json:"operations"`
+	Transaction  bool                  `json:"transaction"`
+	AutoCommit   bool                  `json:"autoCommit"`
+	ExistingTxID string                `json:"existingTxId,omitempty"`
 }
 
 type SourceEditResult struct {
@@ -53,9 +53,22 @@ type SourceEditor interface {
 	RollbackTx(ctx context.Context, tx *workspace.EditTransaction) error
 }
 
+// PreviewTransactionEditor is implemented by editors whose transaction can be
+// materialized for build/runtime validation before the final commit.
+type PreviewTransactionEditor interface {
+	SourceEditor
+	MaterializePreviewTx(ctx context.Context, tx *workspace.EditTransaction) error
+	FinalizePreviewTx(ctx context.Context, tx *workspace.EditTransaction) error
+}
+
+type previewTransactionService interface {
+	MaterializePreview(ctx context.Context, tx *workspace.EditTransaction) error
+	FinalizePreviewCommit(ctx context.Context, tx *workspace.EditTransaction) error
+}
+
 type defaultSourceEditor struct {
-	precise    workspace.PreciseEditingService
-	activeTxs  map[string]*workspace.EditTransaction
+	precise   workspace.PreciseEditingService
+	activeTxs map[string]*workspace.EditTransaction
 }
 
 func NewSourceEditor(precise workspace.PreciseEditingService) SourceEditor {
@@ -175,6 +188,31 @@ func (e *defaultSourceEditor) CommitTx(ctx context.Context, tx *workspace.EditTr
 		return ErrPreciseUnavailable
 	}
 	if err := e.precise.Commit(ctx, tx); err != nil {
+		_ = e.precise.Rollback(ctx, tx)
+		delete(e.activeTxs, tx.ID)
+		return fmt.Errorf("%w: %v", ErrTransactionFailed, err)
+	}
+	delete(e.activeTxs, tx.ID)
+	return nil
+}
+
+func (e *defaultSourceEditor) MaterializePreviewTx(ctx context.Context, tx *workspace.EditTransaction) error {
+	previewSvc, ok := e.precise.(previewTransactionService)
+	if !ok {
+		return fmt.Errorf("%w: precise service does not support preview transactions", ErrPreciseUnavailable)
+	}
+	if err := previewSvc.MaterializePreview(ctx, tx); err != nil {
+		return fmt.Errorf("%w: %v", ErrTransactionFailed, err)
+	}
+	return nil
+}
+
+func (e *defaultSourceEditor) FinalizePreviewTx(ctx context.Context, tx *workspace.EditTransaction) error {
+	previewSvc, ok := e.precise.(previewTransactionService)
+	if !ok {
+		return fmt.Errorf("%w: precise service does not support preview transactions", ErrPreciseUnavailable)
+	}
+	if err := previewSvc.FinalizePreviewCommit(ctx, tx); err != nil {
 		_ = e.precise.Rollback(ctx, tx)
 		delete(e.activeTxs, tx.ID)
 		return fmt.Errorf("%w: %v", ErrTransactionFailed, err)
