@@ -12,18 +12,19 @@ type EntityType string
 type EntityID string
 type OperationType string
 type MutationID string
+type MutationClaimStatus string
+
+const (
+	MutationClaimStatusPending    MutationClaimStatus = "pending"
+	MutationClaimStatusCommitted  MutationClaimStatus = "committed"
+	MutationClaimStatusRolledBack MutationClaimStatus = "rolled_back"
+)
 
 const (
 	OpCreate   OperationType = "create"
 	OpUpdate   OperationType = "update"
 	OpDelete   OperationType = "delete"
 	OpSnapshot OperationType = "snapshot"
-)
-
-const (
-	MutationClaimStatusPending     = "pending"
-	MutationClaimStatusCommitted   = "committed"
-	MutationClaimStatusRolledBack  = "rolled_back"
 )
 
 type ChangeRecord struct {
