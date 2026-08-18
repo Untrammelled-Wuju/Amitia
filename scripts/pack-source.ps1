@@ -5,140 +5,88 @@ param(
 
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $PSCommandPath }
 $workspace = Split-Path -Parent $scriptDir
-$parentDir = Split-Path $workspace -Leaf
+$parentDir = Split-Path $workspace -Parent
+$folderName = Split-Path $workspace -Leaf
 $outputFile = Join-Path $workspace "$OutputName.tar.gz"
 
 if (Test-Path $outputFile) { Remove-Item $outputFile -Force }
 
-Set-Location $workspace
+$excludes = @(
+    "--exclude=node_modules"
+    "--exclude=.git"
+    "--exclude=*.exe"
+    "--exclude=*.log"
+    "--exclude=desktop/dist"
+    "--exclude=desktop/build"
+    "--exclude=desktop/release"
+    "--exclude=front/dist"
+    "--exclude=mobile_app/build"
+    "--exclude=mobile_app/android/app/build"
+    "--exclude=mobile_app/android/amitia-runtime/build"
+    "--exclude=mobile_app/android/.gradle"
+    "--exclude=backend/pkg/gameplugin/sdk/game-plugin/dist"
+    "--exclude=*.db"
+    "--exclude=*.db-shm"
+    "--exclude=*.db-wal"
+    "--exclude=*.db-journal"
+    "--exclude=qdrant/storage"
+    "--exclude=surrealdb/surreal.exe"
+    "--exclude=desktop/release"
+    "--exclude=desktop/build"
+    "--exclude=desktop/dist-types"
+    "--exclude=desktop/resources/core"
+    "--exclude=sdk/plugin-sdk/dist"
+    "--exclude=sdk/plugin-sdk/node_modules"
+    "--exclude=*.pyc"
+    "--exclude=__pycache__"
+    "--exclude=.DS_Store"
+    "--exclude=Thumbs.db"
+    "--exclude=*.bak"
+    "--exclude=*.tmp"
+    "--exclude=*.orig"
+    "--exclude=.vscode"
+    "--exclude=.idea"
+    "--exclude=.env"
+    "--exclude=.env.local"
+    "--exclude=.publish-config.json"
+    "--exclude=backend/data"
+    "--exclude=backend/cmd/data"
+    "--exclude=data"
+    "--exclude=logs"
+    "--exclude=runtime/out"
+    "--exclude=backend/server_linux_amd64"
+    "--exclude=backend/server_linux_arm64"
+    "--exclude=backend/server"
+    "--exclude=backend/surrealdb/surreal.zip"
+    "--exclude=backend/qdrant/qdrant.zip"
+    "--exclude=backend/node/node.exe.zip"
+    "--exclude=desktop/resources/qdrant/qdrant.zip"
+    "--exclude=desktop/resources/surrealdb/surrealdb/surreal.zip"
+    "--exclude=desktop/resources/surrealdb/surreal.zip"
+    "--exclude=desktop/resources/core/node/node.zip"
+    "--exclude=mobile_app/android/app/src/main/assets/runtime-package"
+    "--exclude=backend/server.exe"
+    "--exclude=backend/server.exe~"
+    "--exclude=backend/cmd/server/server.exe"
+    "--exclude=backend/cmd/server/backend.exe"
+    "--exclude=backend/cmd/server/backend"
+    "--exclude=backend/amitia-ext.exe"
+    "--exclude=backend/amitiax.exe"
+    "--exclude=backend/extension.test.exe"
+    "--exclude=backend/kernel.test.exe"
+    "--exclude=backend/legacy-package-migrate.exe"
+    "--exclude=backend/worker.test.exe"
+    "--exclude=backend/server_*.exe"
+    "--exclude=*.tar"
+    "--exclude=AmitiaData"
+)
 
-Write-Host "Packing source: $parentDir -> $outputFile"
+Set-Location $parentDir
+
+Write-Host "Packing source: $folderName -> $outputFile"
 $startTime = Get-Date
 
-$allowedFilesFile = Join-Path $workspace ".pack-source-files.txt"
-if (Test-Path $allowedFilesFile) { Remove-Item $allowedFilesFile -Force }
-
-$gitArchiveResult = & git archive --format=tar HEAD 2>&1
-if ($LASTEXITCODE -eq 0) {
-    & git archive --format=tar -o "$OutputName.tar" HEAD
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "git archive failed"
-        exit 1
-    }
-    & gzip "$OutputName.tar"
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "gzip failed"
-        exit 1
-    }
-    Rename-Item -Path "$OutputName.tar.gz" -NewName $outputFile -Force
-} else {
-    Write-Host "git archive unavailable, using git ls-files whitelist approach"
-
-    & git ls-files -co --exclude-standard | Out-File -FilePath $allowedFilesFile -Encoding utf8
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "git ls-files failed"
-        exit 1
-    }
-
-    $forbiddenPatterns = @(
-        'build_errors\.txt$',
-        'errors\.txt$',
-        'vet_errors\.txt$',
-        'node_modules/',
-        '\.exe$',
-        '\.zip$',
-        'desktop/release/',
-        'desktop/build/',
-        'desktop/dist-types/',
-        'desktop/resources/core/',
-        'front/dist/',
-        'mobile_app/build/',
-        'qdrant/storage/',
-        'surrealdb/',
-        'backend/data/',
-        'backend/cmd/data/',
-        'data/',
-        'logs/',
-        'runtime/out/',
-        'AmitiaData/',
-        '\.db$',
-        '\.db-shm$',
-        '\.db-wal$',
-        '\.tar$',
-        '\.tar\.gz$',
-        '\.pyc$',
-        '__pycache__/',
-        '\.DS_Store$',
-        'Thumbs\.db$'
-    )
-
-    $allFiles = Get-Content $allowedFilesFile
-    $cleanFiles = @()
-    $hasForbidden = $false
-
-    foreach ($file in $allFiles) {
-        $file = $file.Trim()
-        if ([string]::IsNullOrWhiteSpace($file)) { continue }
-
-        $isForbidden = $false
-        foreach ($pattern in $forbiddenPatterns) {
-            if ($file -match $pattern) {
-                Write-Warning "Forbidden file detected: $file (matched: $pattern)"
-                $isForbidden = $true
-                $hasForbidden = $true
-                break
-            }
-        }
-        if (-not $isForbidden) {
-            $cleanFiles += $file
-        }
-    }
-
-    if ($hasForbidden) {
-        Write-Error "Forbidden files detected. Aborting pack."
-        if (Test-Path $allowedFilesFile) { Remove-Item $allowedFilesFile -Force }
-        if (Test-Path $outputFile) { Remove-Item $outputFile -Force }
-        exit 1
-    }
-
-    if ($cleanFiles.Count -eq 0) {
-        Write-Error "No files to pack after whitelist filtering"
-        if (Test-Path $allowedFilesFile) { Remove-Item $allowedFilesFile -Force }
-        exit 1
-    }
-
-    $cleanFiles | Out-File -FilePath $allowedFilesFile -Encoding utf8
-
-    & tar -czf $outputFile --files-from=$allowedFilesFile
-    if ($LASTEXITCODE -ne 0) {
-        Write-Error "tar failed"
-        if (Test-Path $allowedFilesFile) { Remove-Item $allowedFilesFile -Force }
-        if (Test-Path $outputFile) { Remove-Item $outputFile -Force }
-        exit 1
-    }
-
-    Remove-Item $allowedFilesFile -Force
-}
-
-if (-not (Test-Path $outputFile)) {
-    Write-Error "Output file not created"
-    exit 1
-}
-
-$verifyResult = & tar -tzf $outputFile 2>&1
-if ($LASTEXITCODE -ne 0) {
-    Write-Error "Archive verification failed"
-    Remove-Item $outputFile -Force
-    exit 1
-}
-
-foreach ($item in $verifyResult) {
-    if ($item -match 'node_modules|\.exe$|build_errors\.txt|errors\.txt|desktop/release|desktop/build') {
-        Write-Error "Archive contains forbidden content: $item"
-        Remove-Item $outputFile -Force
-        exit 1
-    }
-}
+& tar -czf $outputFile @excludes $folderName
 
 $elapsed = (Get-Date) - $startTime
 $size = (Get-Item $outputFile).Length
