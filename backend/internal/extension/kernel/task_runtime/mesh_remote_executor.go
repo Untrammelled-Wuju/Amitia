@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/deviceruntime"
 	protocol "github.com/u-ai/backend/internal/deviceruntime/protocol"
@@ -31,21 +29,25 @@ type meshSessionLookup interface {
 }
 
 type MeshRemoteTaskExecutor struct {
-	hub                *server.ConnectionHub
-	sessionLookup      meshSessionLookup
-	PendingTasks       *PendingTaskManager
-	HeartbeatInterval  time.Duration
-	LeaseDuration      time.Duration
-	progressHandler    TaskProgressHandler
-	checkpointHandler  TaskCheckpointHandler
-	completionHandler  TaskCompletionHandler
+	hub               *server.ConnectionHub
+	sessionLookup     meshSessionLookup
+	PendingTasks      *PendingTaskManager
+	HeartbeatInterval time.Duration
+	LeaseDuration     time.Duration
+	progressHandler   TaskProgressHandler
+	checkpointHandler TaskCheckpointHandler
+	completionHandler TaskCompletionHandler
 }
 
-func NewMeshRemoteTaskExecutor(hub *server.ConnectionHub, lookup meshSessionLookup) *MeshRemoteTaskExecutor {
+func NewMeshRemoteTaskExecutor(hub *server.ConnectionHub, lookup meshSessionLookup, shared ...*PendingTaskManager) *MeshRemoteTaskExecutor {
+	pending := NewPendingTaskManager()
+	if len(shared) > 0 && shared[0] != nil {
+		pending = shared[0]
+	}
 	return &MeshRemoteTaskExecutor{
 		hub:               hub,
 		sessionLookup:     lookup,
-		PendingTasks:      NewPendingTaskManager(),
+		PendingTasks:      pending,
 		HeartbeatInterval: 30 * time.Second,
 		LeaseDuration:     5 * time.Minute,
 	}
@@ -95,6 +97,14 @@ func (e *MeshRemoteTaskExecutor) Execute(ctx context.Context, request TaskExecut
 }
 
 func (e *MeshRemoteTaskExecutor) executeOnDevice(ctx context.Context, request TaskExecutionRequest) (TaskExecutionOutcome, error) {
+	if e.PendingTasks == nil {
+		return TaskExecutionOutcome{
+			Status:       RunStatusFailed,
+			ErrorCode:    string(ErrRemoteTaskExecutorUnavailable),
+			ErrorMessage: "pending task manager not configured",
+		}, NewTaskError(ErrRemoteTaskExecutorUnavailable, "pending task manager not configured")
+	}
+
 	target := request.Target.Normalize()
 	if !target.HasDevice() {
 		return TaskExecutionOutcome{
@@ -121,17 +131,13 @@ func (e *MeshRemoteTaskExecutor) executeOnDevice(ctx context.Context, request Ta
 		}
 	}
 
-	var pt *PendingTask
-	if e.PendingTasks != nil {
-		var err error
-		pt, err = e.PendingTasks.Register(request, sessionID.String(), generation, deadline)
-		if err != nil {
-			return TaskExecutionOutcome{
-				Status:       RunStatusFailed,
-				ErrorCode:    string(ErrTaskExecutionAttemptInvalid),
-				ErrorMessage: fmt.Sprintf("register pending task: %v", err),
-			}, err
-		}
+	pt, err := e.PendingTasks.Register(request, sessionID.String(), generation, deadline)
+	if err != nil {
+		return TaskExecutionOutcome{
+			Status:       RunStatusFailed,
+			ErrorCode:    string(ErrTaskExecutionAttemptInvalid),
+			ErrorMessage: fmt.Sprintf("register pending task: %v", err),
+		}, err
 	}
 
 	var deadlineAt *time.Time
@@ -146,79 +152,28 @@ func (e *MeshRemoteTaskExecutor) executeOnDevice(ctx context.Context, request Ta
 	}
 
 	dispatch := protocol.TaskDispatchPayload{
-		TaskRunID:          request.Run.TaskRunID,
-		TaskDefinitionID:   request.Run.TaskDefinitionID,
-		AttemptID:          request.AttemptID.String(),
-		LeaseID:            pt.LeaseID,
-		Input:              inputCopy,
-		DeadlineAt:         deadlineAt,
-		MaxAttempts:        request.Run.MaxAttempts,
-		Placement:          string(request.Placement),
-		DeviceID:           target.DeviceID,
-		RuntimeID:          target.RuntimeID,
-		RuntimeSessionID:   sessionID,
-		ConnectionGeneration: generation,
-		SentAt:             time.Now().UTC(),
-	}
-
-	payloadBytes, err := json.Marshal(dispatch)
-	if err != nil {
-		if e.PendingTasks != nil {
-			e.PendingTasks.Cancel(request.Run.TaskRunID, "marshal failed")
-		}
-		return TaskExecutionOutcome{
-			Status:       RunStatusFailed,
-			ErrorCode:    string(ErrTaskExecutionAttemptInvalid),
-			ErrorMessage: "marshal task dispatch: " + err.Error(),
-		}, err
-	}
-
-	env := protocol.Envelope{
-		EnvelopeVersion:      1,
-		Protocol:             "amitia.device-mesh",
-		MessageType:          protocol.MessageTypeTaskDispatch,
-		MessageID:            uuid.New().String(),
-		UserID:               target.UserID,
+		TaskRunID:            request.Run.TaskRunID,
+		TaskDefinitionID:     request.Run.TaskDefinitionID,
+		AttemptID:            request.AttemptID.String(),
+		LeaseID:              pt.LeaseID,
+		Input:                inputCopy,
+		DeadlineAt:           deadlineAt,
+		MaxAttempts:          request.Run.MaxAttempts,
+		Placement:            string(request.Placement),
 		DeviceID:             target.DeviceID,
 		RuntimeID:            target.RuntimeID,
 		RuntimeSessionID:     sessionID,
 		ConnectionGeneration: generation,
-		Sequence:             nextSequence(),
-		PayloadSchemaVersion: 1,
-		PayloadHash:          protocol.ComputePayloadHash(payloadBytes),
 		SentAt:               time.Now().UTC(),
-		Payload:              payloadBytes,
 	}
 
-	envBytes, err := json.Marshal(env)
-	if err != nil {
-		if e.PendingTasks != nil {
-			e.PendingTasks.Cancel(request.Run.TaskRunID, "marshal failed")
-		}
-		return TaskExecutionOutcome{
-			Status:       RunStatusFailed,
-			ErrorCode:    string(ErrTaskExecutionAttemptInvalid),
-			ErrorMessage: "marshal envelope: " + err.Error(),
-		}, err
-	}
-
-	if !e.hub.Send(sessionID, generation, envBytes) {
-		if e.PendingTasks != nil {
-			e.PendingTasks.Cancel(request.Run.TaskRunID, "send failed")
-		}
+	if !e.hub.SendEnvelope(sessionID, generation, protocol.MessageTypeTaskDispatch, dispatch) {
+		e.PendingTasks.Cancel(request.Run.TaskRunID, "send failed")
 		return TaskExecutionOutcome{
 			Status:       RunStatusRecoveryRequired,
 			ErrorCode:    string(ErrRemoteTaskExecutorUnavailable),
 			ErrorMessage: "failed to send task to device",
 		}, NewTaskError(ErrRemoteTaskExecutorUnavailable, "failed to send task to device")
-	}
-
-	if e.PendingTasks == nil {
-		return TaskExecutionOutcome{
-			Status:       RunStatusFailed,
-			ErrorCode:    string(ErrRemoteTaskExecutorUnavailable),
-			ErrorMessage: "pending task manager not configured",
-		}, NewTaskError(ErrRemoteTaskExecutorUnavailable, "pending task manager not configured")
 	}
 
 	claimResult, err := e.PendingTasks.WaitForClaim(ctx, request.Run.TaskRunID)
@@ -336,44 +291,25 @@ func (e *MeshRemoteTaskExecutor) Cancel(ctx context.Context, run *TaskRun) error
 		return NewTaskError(ErrTaskRuntimeSessionBindingInvalid, "cancel requires active session")
 	}
 
+	leaseID := run.LeaseID
+	if e.PendingTasks != nil {
+		if pending, ok := e.PendingTasks.Get(run.TaskRunID); ok && pending != nil && pending.LeaseID != "" {
+			leaseID = pending.LeaseID
+		}
+	}
 	cancelPayload := protocol.TaskCancelPayload{
-		TaskRunID:          run.TaskRunID,
-		AttemptID:          run.ExecutionAttemptID.String(),
-		Reason:             "user_requested",
-		RuntimeSessionID:   sessionID,
-		ConnectionGeneration: generation,
-		SentAt:             time.Now().UTC(),
-	}
-
-	payloadBytes, err := json.Marshal(cancelPayload)
-	if err != nil {
-		return fmt.Errorf("marshal cancel payload: %w", err)
-	}
-
-	env := protocol.Envelope{
-		EnvelopeVersion:      1,
-		Protocol:             "amitia.device-mesh",
-		MessageType:          protocol.MessageTypeTaskCancel,
-		MessageID:            uuid.New().String(),
-		UserID:               target.UserID,
-		DeviceID:             target.DeviceID,
-		RuntimeID:            target.RuntimeID,
+		TaskRunID:            run.TaskRunID,
+		AttemptID:            run.ExecutionAttemptID.String(),
+		LeaseID:              leaseID,
+		Reason:               "user_requested",
 		RuntimeSessionID:     sessionID,
 		ConnectionGeneration: generation,
-		Sequence:             nextSequence(),
-		PayloadSchemaVersion: 1,
-		PayloadHash:          protocol.ComputePayloadHash(payloadBytes),
 		SentAt:               time.Now().UTC(),
-		Payload:              payloadBytes,
 	}
 
-	envBytes, err := json.Marshal(env)
-	if err != nil {
-		return fmt.Errorf("marshal envelope: %w", err)
-	}
-
-	if !e.hub.Send(sessionID, generation, envBytes) {
+	if !e.hub.SendEnvelope(sessionID, generation, protocol.MessageTypeTaskCancel, cancelPayload) {
 		return NewTaskError(ErrRemoteTaskExecutorUnavailable, "failed to send cancel to device")
 	}
+
 	return nil
 }

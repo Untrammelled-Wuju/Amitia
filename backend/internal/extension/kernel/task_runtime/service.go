@@ -460,6 +460,34 @@ func (s *TaskRuntimeService) executeTaskRun(ctx context.Context, run *TaskRun) {
 			return
 		}
 
+		// Remote execution has the same lifecycle gate as local execution: queued
+		// -> starting -> running. The device claim callback owns the transition to
+		// running after it has persisted the authoritative lease.
+		current, err := s.store.GetTaskRun(ctx, run.TaskRunID)
+		if err != nil {
+			s.failRun(ctx, run, ErrTaskRuntimeStartFailed, fmt.Sprintf("reload remote run: %v", err))
+			return
+		}
+		startingRun := cloneTaskRun(current)
+		now := time.Now().UTC()
+		startingRun.Status = RunStatusStarting
+		startingRun.StartedAt = &now
+		startingRun.Revision = NextRevision(current.Revision)
+		if err := s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
+			ok, casErr := s.store.UpdateTaskRunCAS(txCtx, startingRun, current.Status, current.Generation, current.Revision)
+			if casErr != nil {
+				return casErr
+			}
+			if !ok {
+				return NewTaskError(ErrTaskExecutionAttemptInvalid, "concurrent remote start state change")
+			}
+			return s.publishTaskEvent(txCtx, TaskEventStarting, startingRun, "", "remote_dispatch")
+		}); err != nil {
+			s.failRun(ctx, run, ErrTaskRuntimeStartFailed, fmt.Sprintf("persist remote starting: %v", err))
+			return
+		}
+		CopyCommittedTaskRun(run, startingRun)
+
 		executor, err := s.executorFor(run.EffectiveExecutionPlacement())
 		if err != nil {
 			s.failRun(ctx, run, ErrRemoteTaskExecutorUnavailable, err.Error())
@@ -660,9 +688,22 @@ func (s *TaskRuntimeService) applyExecutionOutcome(ctx context.Context, run *Tas
 		return
 	}
 
+	// A device result may race the executor returning its non-terminal claim
+	// outcome. Never let a late Running outcome overwrite a terminal result.
+	if current.Status.IsTerminal() && !outcome.Status.IsTerminal() {
+		CopyCommittedTaskRun(run, current)
+		return
+	}
+	if outcome.Status == RunStatusRunning && current.Status == RunStatusRunning {
+		CopyCommittedTaskRun(run, current)
+		return
+	}
+
 	next := cloneTaskRun(current)
 	next.Status = outcome.Status
-	next.FinishedAt = &now
+	if outcome.Status.IsTerminal() {
+		next.FinishedAt = &now
+	}
 	next.Revision = NextRevision(current.Revision)
 	if outcome.ErrorCode != "" {
 		ec := outcome.ErrorCode
@@ -994,48 +1035,77 @@ func (s *TaskRuntimeService) Cancel(ctx context.Context, taskRunID, reason strin
 		return NewTaskError(ErrTaskNotCancelable, "task already terminal: "+string(current.Status))
 	}
 
+	now := time.Now().UTC()
 	placement := current.EffectiveExecutionPlacement()
 	if placement != TaskExecutionPlacementLocal {
-		if s.remoteExecutor != nil {
-			var cancelTimeout time.Duration
-			if s.config.CancelGracePeriod > 0 {
-				cancelTimeout = s.config.CancelGracePeriod
-			} else {
-				cancelTimeout = 10 * time.Second
-			}
-			if waiter, ok := s.remoteExecutor.(interface {
-				CancelAndWait(ctx context.Context, run *TaskRun, timeout time.Duration) error
-			}); ok {
-				if err := waiter.CancelAndWait(ctx, current, cancelTimeout); err != nil {
-					return err
-				}
-			} else {
-				if err := s.remoteExecutor.Cancel(ctx, current); err != nil {
-					return err
-				}
-			}
-			next := cloneTaskRun(current)
-			now := time.Now().UTC()
-			next.Status = RunStatusCancelled
-			next.FinishedAt = &now
-			next.Revision = NextRevision(current.Revision)
-			if err := s.mutateTaskRun(ctx, taskMutationParams{
-				next:       next,
+		// A queued remote task has not been handed to a worker yet; cancel it
+		// locally without manufacturing a remote acknowledgement.
+		if current.Status == RunStatusQueued {
+			cancelledRun := cloneTaskRun(current)
+			cancelledRun.Status = RunStatusCancelled
+			cancelledRun.CancelRequestedAt = &now
+			cancelledRun.FinishedAt = &now
+			cancelledRun.Revision = NextRevision(current.Revision)
+			return s.mutateTaskRun(ctx, taskMutationParams{
+				next:       cancelledRun,
 				expected:   current.Status,
 				generation: current.Generation,
 				revision:   current.Revision,
 				removeQ:    true,
 				eventType:  TaskEventCancelled,
-				eventMsg:   "",
+				eventMsg:   reason,
+			})
+		}
+		if s.remoteExecutor == nil {
+			return NewTaskError(ErrRemoteTaskExecutorUnavailable, "remote cancellation not available")
+		}
+		if current.Status != RunStatusRunning && current.Status != RunStatusCancelling {
+			return NewTaskError(ErrTaskNotCancelable, "remote task is not running: "+string(current.Status))
+		}
+
+		if current.Status == RunStatusRunning {
+			cancelling := cloneTaskRun(current)
+			cancelling.Status = RunStatusCancelling
+			cancelling.CancelRequestedAt = &now
+			cancelling.Revision = NextRevision(current.Revision)
+			if err := s.mutateTaskRun(ctx, taskMutationParams{
+				next:       cancelling,
+				expected:   current.Status,
+				generation: current.Generation,
+				revision:   current.Revision,
 			}); err != nil {
 				return err
 			}
+			current = cancelling
+		}
+
+		cancelTimeout := s.config.CancelGracePeriod
+		if cancelTimeout <= 0 {
+			cancelTimeout = 10 * time.Second
+		}
+		if waiter, ok := s.remoteExecutor.(interface {
+			CancelAndWait(ctx context.Context, run *TaskRun, timeout time.Duration) error
+		}); ok {
+			if err := waiter.CancelAndWait(ctx, current, cancelTimeout); err != nil {
+				return err
+			}
+		} else if err := s.remoteExecutor.Cancel(ctx, current); err != nil {
+			return err
+		}
+
+		latest, err := s.store.GetTaskRun(ctx, taskRunID)
+		if err != nil {
+			return err
+		}
+		if latest.Status == RunStatusCancelled {
 			return nil
 		}
-		return NewTaskError(ErrRemoteTaskExecutorUnavailable, "remote cancellation not available")
+		if latest.Status.IsTerminal() {
+			return NewTaskError(ErrTaskNotCancelable, "remote cancel completed with status: "+string(latest.Status))
+		}
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "remote cancel acknowledged without terminal cancellation state")
 	}
 
-	now := time.Now().UTC()
 	current.CancelRequestedAt = &now
 
 	if current.Status == RunStatusQueued || current.Status == RunStatusPaused || current.Status == RunStatusPausing {

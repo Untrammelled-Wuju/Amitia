@@ -3,6 +3,7 @@ package kernel
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -361,7 +362,7 @@ func (f *ToolFacade) handleAcquireCapability(ctx context.Context, input json.Raw
 			Error:       &LegacyToolError{Code: "INVALID_INPUT", Message: err.Error()},
 		}, err
 	}
-	output, err := f.acquisitionBridge.AcquireCapability(ctx, req, scope.UserID, nil)
+	output, err := f.acquisitionBridge.AcquireCapability(ctx, req, scope.UserID, scope.ExecContext)
 	if err != nil {
 		return LegacyToolResult{
 			Status:      "FAILED",
@@ -571,11 +572,26 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 				TraceID:        scope.TraceID,
 				OperationID:    scope.RequestID,
 				IsBackground:   isBackground,
+				ExecContext:    scope.ExecContext,
 				Metadata:       metadata,
 			})
 			resolutionFailure := capability.ResolutionFailureCapabilityNotRegistered
-			_, recoverErr := f.recoveryService.RecoverFromResolution(ctx, resolutionFailure, invocation)
+			recoveryResult, recoverErr := f.recoveryService.RecoverFromResolution(ctx, resolutionFailure, invocation)
 			if recoverErr != nil {
+				if errors.Is(recoverErr, acquisition.ErrApprovalRequired) && recoveryResult != nil {
+					payload, _ := json.Marshal(recoveryResult)
+					return LegacyToolResult{
+						Status:      "WAITING_APPROVAL",
+						Output:      payload,
+						VisibleText: fmt.Sprintf("approval required to acquire capability %s", resolved.missingCapability),
+						Error: &LegacyToolError{
+							Code:      "CAPABILITY_APPROVAL_REQUIRED",
+							Message:   string(resolved.missingCapability),
+							Detail:    recoveryResult.ResumeToken,
+							Retryable: true,
+						},
+					}
+				}
 				return LegacyToolResult{
 					Status:      "FAILED",
 					VisibleText: fmt.Sprintf("capability recovery failed: %s", recoverErr),
@@ -620,6 +636,7 @@ func (f *ToolFacade) executeResolvedTool(ctx context.Context, def capability.Too
 		TraceID:         scope.TraceID,
 		OperationID:     scope.RequestID,
 		IsBackground:    isBackground,
+		ExecContext:     scope.ExecContext,
 		ExecutionTarget: resolved.target,
 		Metadata:        metadata,
 	})
@@ -676,6 +693,7 @@ func (f *ToolFacade) ExecuteModelToolStream(ctx context.Context, modelName strin
 		TraceID:         scope.TraceID,
 		OperationID:     scope.RequestID,
 		IsBackground:    isBackground,
+		ExecContext:     scope.ExecContext,
 		ExecutionTarget: resolved.target,
 		Metadata:        streamMetadata,
 	})

@@ -37,7 +37,9 @@ func (d *defaultMissingDetector) DetectFromError(ctx context.Context, err error,
 	var missingErr MissingCapabilityError
 	if errors.As(err, &missingErr) {
 		return &CapabilityResumeContext{
-			ConversationID: conversationIDFromContext(ctx),
+			ConversationID: invocation.ConversationID,
+			UserID:         invocation.UserID,
+			ExecContext:    invocation.ExecContext,
 			CapabilityID:   missingErr.CapabilityID,
 			State:          ResumePending,
 		}, nil
@@ -74,7 +76,9 @@ func (d *defaultMissingDetector) DetectFromResolution(ctx context.Context, failu
 	}
 
 	return &CapabilityResumeContext{
-		ConversationID: conversationIDFromContext(ctx),
+		ConversationID: invocation.ConversationID,
+		UserID:         invocation.UserID,
+		ExecContext:    invocation.ExecContext,
 		CapabilityID:   capID,
 		State:          ResumePending,
 	}, nil

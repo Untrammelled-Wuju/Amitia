@@ -256,29 +256,31 @@ func (s *AcquisitionService) Acquire(ctx context.Context, request AcquisitionReq
 		resumeToken := generateResumeToken()
 		result.ResumeToken = resumeToken
 
-		s.mu.Lock()
-		s.resumeContexts[resumeToken] = CapabilityResumeContext{
+		resumeContext := CapabilityResumeContext{
 			State:                    ResumePending,
 			CapabilityID:             plan.Request.CapabilityID,
-			AcquisitionTransactionID: result.TransactionID,
+			AcquisitionTransactionID: resumeToken,
+			ConversationID:           request.ConversationID(),
+			UserID:                   string(request.UserID),
+			ExecContext:              request.ExecContext,
 		}
+		s.mu.Lock()
+		s.resumeContexts[resumeToken] = resumeContext
 		s.mu.Unlock()
 
-		if s.execution != nil {
+		if s.execution != nil && request.ExecContext != nil {
 			resume, err := s.execution.CreateResume(acqExecCtx, execution.ResumeTypeCapabilityAcquisition, string(request.CapabilityID))
 			if err == nil && resume != nil {
 				result.ResumeID = resume.ResumeID
 				if s.resumeRepo != nil {
 					resume.RequiredCapabilityID = string(request.CapabilityID)
 					resume.AcquisitionTransactionID = resumeToken
-					if pctx, ok := s.resumeContexts[resumeToken]; ok {
-						if pctx.ConversationID != "" {
-							if resume.Metadata == nil {
-								resume.Metadata = map[string]any{}
-							}
-							resume.Metadata["conversationId"] = pctx.ConversationID
-						}
+					if resume.Metadata == nil {
+						resume.Metadata = map[string]any{}
 					}
+					resume.Metadata["conversationId"] = resumeContext.ConversationID
+					resume.Metadata["userId"] = resumeContext.UserID
+					resume.Metadata["executionId"] = acqExecCtx.ExecutionID
 					_ = s.resumeRepo.Save(ctx, *resume)
 				}
 			}
@@ -351,14 +353,27 @@ func (s *AcquisitionService) ResumeAcquire(ctx context.Context, resumeToken stri
 		if s.resumeRepo != nil {
 			persisted, err := s.resumeRepo.GetByAcquisitionTransactionID(ctx, resumeToken)
 			if err == nil && persisted != nil {
+				restoredExec := &execution.ExecutionContext{
+					ExecutionID:       persisted.ParentExecutionID,
+					RootExecutionID:   persisted.RootExecutionID,
+					ParentExecutionID: persisted.ParentExecutionID,
+					Source:            "capability_resume",
+					CreatedAt:         time.Now().UTC(),
+				}
 				resumeCtx = CapabilityResumeContext{
 					CapabilityID:             capability.CapabilityID(persisted.RequiredCapabilityID),
 					AcquisitionTransactionID: persisted.AcquisitionTransactionID,
 					State:                    ResumePending,
+					ExecContext:              restoredExec,
 				}
 				if persisted.Metadata != nil {
 					if convID, ok := persisted.Metadata["conversationId"].(string); ok {
 						resumeCtx.ConversationID = convID
+						restoredExec.ConversationID = convID
+					}
+					if userID, ok := persisted.Metadata["userId"].(string); ok {
+						resumeCtx.UserID = userID
+						restoredExec.UserID = runtimeidentity.UserID(userID)
 					}
 				}
 				ok = true
@@ -379,7 +394,8 @@ func (s *AcquisitionService) ResumeAcquire(ctx context.Context, resumeToken stri
 
 	request := AcquisitionRequest{
 		CapabilityID: resumeCtx.CapabilityID,
-		UserID:       runtimeidentity.UserID(""),
+		UserID:       runtimeidentity.UserID(resumeCtx.UserID),
+		ExecContext:  resumeCtx.ExecContext,
 	}
 
 	// Proceed with acquisition now that approval is granted.

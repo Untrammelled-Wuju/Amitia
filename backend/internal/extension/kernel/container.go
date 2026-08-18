@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/desktoppet/plugin_boundary"
 	"github.com/u-ai/backend/internal/deviceruntime"
 	coreexec "github.com/u-ai/backend/internal/execution"
@@ -242,6 +243,7 @@ type Container struct {
 	AcquisitionService *acquisition.AcquisitionService
 
 	BackgroundRemovalRegistry backgroundremoval.Registry
+	ChannelResolver           delivery.ChannelResolver
 }
 
 func (c *Container) Close() error {

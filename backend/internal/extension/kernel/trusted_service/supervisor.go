@@ -47,21 +47,21 @@ func (f NotifyFunc) Notify(ctx context.Context, extensionID, instanceID, service
 }
 
 type ProcessExitEvent struct {
-	ProcessInstanceID  string
-	ServiceID          string
-	RuntimeID          string
-	InstanceID         string
-	ExtensionID        string
-	PluginID           string
-	LogicalServiceID   string
-	Generation         int64
-	ExitCode           int
-	Expected           bool
-	OccurredAt         time.Time
-	RestartCount       int
-	HostInstanceID     string
-	HostSessionID      string
-	ModuleID           string
+	ProcessInstanceID string
+	ServiceID         string
+	RuntimeID         string
+	InstanceID        string
+	ExtensionID       string
+	PluginID          string
+	LogicalServiceID  string
+	Generation        int64
+	ExitCode          int
+	Expected          bool
+	OccurredAt        time.Time
+	RestartCount      int
+	HostInstanceID    string
+	HostSessionID     string
+	ModuleID          string
 }
 
 type ProcessExitObserver interface {
@@ -85,6 +85,7 @@ type ProcessSupervisor struct {
 	exitObservers    []ProcessExitObserver
 	ownerStore       *ProcessOwnerStore
 	hostIdentity     HostIdentityProvider
+	ownerStoreErr    error
 }
 
 type HostIdentityProvider interface {
@@ -108,7 +109,7 @@ func NewProcessSupervisor(rootDir string) *ProcessSupervisor {
 		ownerStore:       NewProcessOwnerStore(filepath.Join(rootDir, "process_owners")),
 	}
 	if s.ownerStore != nil && s.ownerStore.durable {
-		_ = s.ownerStore.load()
+		s.ownerStoreErr = s.ownerStore.load()
 	}
 	return s
 }
@@ -148,8 +149,11 @@ func (s *ProcessSupervisor) SetHostIdentityProvider(h HostIdentityProvider) {
 	s.hostIdentity = h
 }
 
-func (s *ProcessSupervisor) OwnerStore() *ProcessOwnerStore {
-	return s.ownerStore
+func (s *ProcessSupervisor) LookupDurableOwnedProcess(processInstanceID string) (ProcessOwnerMetadata, bool) {
+	if s.ownerStore == nil || processInstanceID == "" {
+		return ProcessOwnerMetadata{}, false
+	}
+	return s.ownerStore.LookupByProcessInstanceID(processInstanceID)
 }
 
 func (s *ProcessSupervisor) GetHostInstanceID() string {
@@ -328,6 +332,9 @@ type StartResult struct {
 }
 
 func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*StartResult, error) {
+	if s.ownerStoreErr != nil {
+		return nil, fmt.Errorf("trusted_service: durable process owner store unavailable: %w", s.ownerStoreErr)
+	}
 	s.mu.Lock()
 	def, exists := s.defs[req.ServiceID]
 	if !exists {
@@ -469,7 +476,11 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 	s.mu.Unlock()
 
 	if s.ownerStore != nil {
-		s.ownerStore.RecordOwnership(instance, instance.HostInstanceID, instance.HostSessionID)
+		if _, err := s.ownerStore.RecordOwnership(instance, instance.HostInstanceID, instance.HostSessionID); err != nil {
+			s.ownerStoreErr = err
+			s.killProcessTree(instance)
+			return nil, fmt.Errorf("trusted_service: persist process ownership: %w", err)
+		}
 	}
 
 	go s.healthMon.Monitor(instance, def)
@@ -794,21 +805,21 @@ func (s *ProcessSupervisor) watchProcess(inst *ServiceInstance, cmd *exec.Cmd) {
 	pluginID := s.getCanonicalPluginID(inst)
 
 	s.notifyProcessExit(ProcessExitEvent{
-		ProcessInstanceID:  inst.ProcessInstanceID,
-		ServiceID:          inst.ServiceID,
-		RuntimeID:          inst.RuntimeID,
-		InstanceID:         inst.InstanceID,
-		ExtensionID:        inst.ExtensionID,
-		PluginID:           pluginID,
-		LogicalServiceID:   inst.LogicalServiceID,
-		Generation:         inst.Generation,
-		ExitCode:           exitCode,
-		Expected:           expected,
-		OccurredAt:         time.Now(),
-		RestartCount:       inst.RestartCount,
-		HostInstanceID:     inst.HostInstanceID,
-		HostSessionID:      inst.HostSessionID,
-		ModuleID:           inst.ModuleID,
+		ProcessInstanceID: inst.ProcessInstanceID,
+		ServiceID:         inst.ServiceID,
+		RuntimeID:         inst.RuntimeID,
+		InstanceID:        inst.InstanceID,
+		ExtensionID:       inst.ExtensionID,
+		PluginID:          pluginID,
+		LogicalServiceID:  inst.LogicalServiceID,
+		Generation:        inst.Generation,
+		ExitCode:          exitCode,
+		Expected:          expected,
+		OccurredAt:        time.Now(),
+		RestartCount:      inst.RestartCount,
+		HostInstanceID:    inst.HostInstanceID,
+		HostSessionID:     inst.HostSessionID,
+		ModuleID:          inst.ModuleID,
 	})
 
 	if expected {
@@ -1001,7 +1012,10 @@ func (s *ProcessSupervisor) Stop(ctx context.Context, req StopRequest) (*StopRes
 
 	inst.MarkStopped()
 	if s.ownerStore != nil && inst.ProcessInstanceID != "" {
-		s.ownerStore.RemoveOwnership(inst.ProcessInstanceID)
+		if err := s.ownerStore.RemoveOwnership(inst.ProcessInstanceID); err != nil {
+			s.ownerStoreErr = err
+			return nil, fmt.Errorf("trusted_service: persist ownership removal: %w", err)
+		}
 	}
 	s.log("info", "service stopped", map[string]any{
 		"service": req.ServiceID,
@@ -1057,6 +1071,60 @@ func (s *ProcessSupervisor) killProcessTree(inst *ServiceInstance) {
 			}
 		}
 	}
+}
+
+func (s *ProcessSupervisor) CleanupDurableOwnedProcess(ctx context.Context, processInstanceID string, requestedPID int, hostInstanceID string) error {
+	if s.ownerStoreErr != nil {
+		return fmt.Errorf("trusted_service: durable process owner store unavailable: %w", s.ownerStoreErr)
+	}
+	if s.ownerStore == nil {
+		return fmt.Errorf("trusted_service: durable process owner store unavailable")
+	}
+	meta, ok := s.ownerStore.LookupByProcessInstanceID(processInstanceID)
+	if !ok {
+		return nil
+	}
+	if hostInstanceID != "" && meta.HostInstanceID != "" && meta.HostInstanceID != hostInstanceID {
+		return fmt.Errorf("trusted_service: durable owner belongs to foreign host")
+	}
+	if requestedPID > 0 && meta.PID > 0 && requestedPID != meta.PID {
+		return fmt.Errorf("trusted_service: durable owner PID mismatch requested=%d durable=%d", requestedPID, meta.PID)
+	}
+	if meta.PID <= 0 {
+		return fmt.Errorf("trusted_service: durable owner has invalid PID")
+	}
+	identity, err := process.ReadProcessIdentity(meta.PID)
+	if err != nil {
+		return fmt.Errorf("trusted_service: unable to prove process identity for pid %d: %w", meta.PID, err)
+	}
+	if !process.SameProcessIdentity(meta.Executable, meta.ProcessStartID, identity) {
+		return fmt.Errorf("trusted_service: process identity mismatch for pid %d; refusing cleanup", meta.PID)
+	}
+	if err := process.TerminateProcessTree(meta.PID, 0); err != nil {
+		proc, findErr := os.FindProcess(meta.PID)
+		if findErr != nil {
+			return fmt.Errorf("trusted_service: find durable process: %w", findErr)
+		}
+		if killErr := proc.Kill(); killErr != nil {
+			return fmt.Errorf("trusted_service: terminate durable process: %w", killErr)
+		}
+	}
+	deadline := time.Now().Add(10 * time.Second)
+	for s.procMgr.IsAlive(meta.PID) {
+		if time.Now().After(deadline) {
+			return fmt.Errorf("trusted_service: durable process %d still alive", meta.PID)
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(50 * time.Millisecond):
+		}
+	}
+	if err := s.ownerStore.RemoveOwnership(processInstanceID); err != nil {
+		s.ownerStoreErr = err
+		return fmt.Errorf("trusted_service: persist durable ownership cleanup: %w", err)
+	}
+	return nil
 }
 
 func (s *ProcessSupervisor) Get(serviceID string) (*ServiceInstance, error) {

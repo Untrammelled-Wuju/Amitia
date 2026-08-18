@@ -1,6 +1,7 @@
 package acquisition
 
 import (
+	"github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 )
 
@@ -16,8 +17,10 @@ type CapabilityResumeContext struct {
 
 	AcquisitionTransactionID string `json:"acquisitionTransactionId,omitempty"`
 
-	State    ResumeState `json:"state"`
-	Approved bool        `json:"approved"`
+	State       ResumeState                 `json:"state"`
+	Approved    bool                        `json:"approved"`
+	UserID      string                      `json:"userId,omitempty"`
+	ExecContext *execution.ExecutionContext `json:"-"`
 }
 
 type ToolCallSnapshot struct {

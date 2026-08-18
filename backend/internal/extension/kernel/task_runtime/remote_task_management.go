@@ -102,9 +102,17 @@ func (s *TaskRuntimeService) UpdateLease(ctx context.Context, taskRunID, leaseID
 	now := time.Now().UTC()
 	next.LeaseExpiresAt = ptrTime(now.Add(extension))
 	next.LastHeartbeatAt = ptrTime(now)
+	next.Revision = NextRevision(current.Revision)
 
 	return s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
-		return s.store.PutTaskRun(txCtx, next)
+		ok, casErr := s.store.UpdateTaskRunCAS(txCtx, next, current.Status, current.Generation, current.Revision)
+		if casErr != nil {
+			return casErr
+		}
+		if !ok {
+			return NewTaskError(ErrTaskExecutionAttemptInvalid, "concurrent lease update")
+		}
+		return nil
 	})
 }
 
@@ -225,14 +233,25 @@ func (s *TaskRuntimeService) ApplyRemoteCompletion(ctx context.Context, taskRunI
 			ResultHash: hashBytes(result),
 			CreatedAt:  now,
 		}
+		next.ErrorCode = nil
+		next.ErrorMessage = nil
+	} else if current.Status == RunStatusCancelling {
+		// A completion emitted after a remote cancel is the worker's cancel ACK,
+		// not a task failure. Preserve cancellation semantics end-to-end.
+		next.Status = RunStatusCancelled
+		eventType = TaskEventCancelled
+		next.ErrorCode = nil
+		if errMsg != "" {
+			next.ErrorMessage = &errMsg
+		}
 	} else {
 		next.Status = RunStatusFailed
 		eventType = TaskEventFailed
+		next.ErrorCode = strPtr("remote_completed")
 		if errMsg != "" {
 			next.ErrorMessage = &errMsg
 		}
 	}
-	next.ErrorCode = strPtr("remote_completed")
 	next.Revision = NextRevision(current.Revision)
 
 	return s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
@@ -241,8 +260,12 @@ func (s *TaskRuntimeService) ApplyRemoteCompletion(ctx context.Context, taskRunI
 				return err
 			}
 		}
-		if err := s.store.PutTaskRun(txCtx, next); err != nil {
-			return err
+		ok, casErr := s.store.UpdateTaskRunCAS(txCtx, next, current.Status, current.Generation, current.Revision)
+		if casErr != nil {
+			return casErr
+		}
+		if !ok {
+			return NewTaskError(ErrTaskExecutionAttemptInvalid, "concurrent remote completion")
 		}
 		if err := s.store.RemoveFromQueue(txCtx, next.TaskRunID); err != nil {
 			return err
@@ -251,13 +274,60 @@ func (s *TaskRuntimeService) ApplyRemoteCompletion(ctx context.Context, taskRunI
 	})
 }
 
-func (s *TaskRuntimeService) HeartbeatRemoteTask(ctx context.Context, taskRunID, leaseID string, extendDuration time.Duration) error {
+func (s *TaskRuntimeService) HandleRemoteClaim(ctx context.Context, taskRunID, attemptID, leaseID string, leaseExpiresAt time.Time) error {
 	current, err := s.store.GetTaskRun(ctx, taskRunID)
 	if err != nil {
 		return err
 	}
 	if current == nil {
 		return NewTaskError(ErrTaskNotFound, "task not found")
+	}
+	if current.ExecutionAttemptID.String() != attemptID {
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "attempt ID mismatch")
+	}
+	if current.Status.IsTerminal() {
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "task already terminal")
+	}
+	if current.Status == RunStatusRunning {
+		if current.LeaseID != "" && current.LeaseID != leaseID {
+			return NewTaskError(ErrTaskExecutionAttemptInvalid, "lease ID mismatch")
+		}
+		return nil
+	}
+
+	next := cloneTaskRun(current)
+	now := time.Now().UTC()
+	next.Status = RunStatusRunning
+	if next.StartedAt == nil {
+		next.StartedAt = &now
+	}
+	next.LeaseID = leaseID
+	next.LeaseExpiresAt = &leaseExpiresAt
+	next.LastHeartbeatAt = &now
+	next.Revision = NextRevision(current.Revision)
+
+	return s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
+		ok, casErr := s.store.UpdateTaskRunCAS(txCtx, next, current.Status, current.Generation, current.Revision)
+		if casErr != nil {
+			return casErr
+		}
+		if !ok {
+			return NewTaskError(ErrTaskExecutionAttemptInvalid, "concurrent remote claim state change")
+		}
+		return s.publishTaskEvent(txCtx, TaskEventRunning, next, "", "remote_claimed")
+	})
+}
+
+func (s *TaskRuntimeService) HeartbeatRemoteTask(ctx context.Context, taskRunID, attemptID, leaseID string, extendDuration time.Duration) error {
+	current, err := s.store.GetTaskRun(ctx, taskRunID)
+	if err != nil {
+		return err
+	}
+	if current == nil {
+		return NewTaskError(ErrTaskNotFound, "task not found")
+	}
+	if current.ExecutionAttemptID.String() != attemptID {
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "attempt ID mismatch")
 	}
 	if current.LeaseID != leaseID {
 		return NewTaskError(ErrTaskExecutionAttemptInvalid, "lease ID mismatch")
@@ -270,22 +340,56 @@ func (s *TaskRuntimeService) HeartbeatRemoteTask(ctx context.Context, taskRunID,
 	now := time.Now().UTC()
 	next.LeaseExpiresAt = ptrTime(now.Add(extendDuration))
 	next.LastHeartbeatAt = ptrTime(now)
+	next.Revision = NextRevision(current.Revision)
 
 	return s.store.WithinTaskTx(ctx, func(txCtx context.Context) error {
-		return s.store.PutTaskRun(txCtx, next)
+		ok, casErr := s.store.UpdateTaskRunCAS(txCtx, next, current.Status, current.Generation, current.Revision)
+		if casErr != nil {
+			return casErr
+		}
+		if !ok {
+			return NewTaskError(ErrTaskExecutionAttemptInvalid, "concurrent remote heartbeat")
+		}
+		return nil
 	})
 }
 
 func (s *TaskRuntimeService) HandleProgress(ctx context.Context, taskRunID, attemptID, leaseID string, seq int64, current, total, percentage *float64, stage, message string) error {
+	if err := s.validateRemoteAttemptLease(ctx, taskRunID, attemptID, leaseID); err != nil {
+		return err
+	}
 	return s.HandleRemoteProgress(ctx, taskRunID, attemptID, seq, current, total, percentage, stage, message)
 }
 
 func (s *TaskRuntimeService) HandleCheckpoint(ctx context.Context, taskRunID, attemptID, leaseID, checkpointID string, version int64, payload json.RawMessage, payloadHash string) error {
+	if err := s.validateRemoteAttemptLease(ctx, taskRunID, attemptID, leaseID); err != nil {
+		return err
+	}
 	return s.HandleRemoteCheckpoint(ctx, taskRunID, attemptID, checkpointID, version, payload, payloadHash)
 }
 
 func (s *TaskRuntimeService) HandleCompletion(ctx context.Context, taskRunID, attemptID, leaseID string, success bool, result json.RawMessage, errMsg string) error {
 	return s.ApplyRemoteCompletion(ctx, taskRunID, attemptID, leaseID, success, result, errMsg)
+}
+
+func (s *TaskRuntimeService) validateRemoteAttemptLease(ctx context.Context, taskRunID, attemptID, leaseID string) error {
+	run, err := s.store.GetTaskRun(ctx, taskRunID)
+	if err != nil {
+		return err
+	}
+	if run == nil {
+		return NewTaskError(ErrTaskNotFound, "task not found")
+	}
+	if run.ExecutionAttemptID.String() != attemptID {
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "attempt ID mismatch")
+	}
+	if run.LeaseID == "" || run.LeaseID != leaseID {
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "lease ID mismatch")
+	}
+	if run.Status.IsTerminal() {
+		return NewTaskError(ErrTaskExecutionAttemptInvalid, "task already terminal")
+	}
+	return nil
 }
 
 func (s *TaskRuntimeService) remoteLeaseExpiryLoop() {
@@ -302,4 +406,3 @@ func (s *TaskRuntimeService) remoteLeaseExpiryLoop() {
 		}
 	}
 }
-

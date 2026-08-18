@@ -2,23 +2,24 @@ package capability
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 )
 
 type PendingInvocation struct {
-	InvocationID  string
-	CommandID     string
-	UserID        string
-	DeviceID      string
-	RuntimeID     string
-	SessionID     string
-	Generation    int64
-	HandlerName   string
-	CreatedAt     time.Time
-	DeadlineAt    time.Time
-	ResultCh      chan UnifiedToolResult
-	CancelFunc    context.CancelFunc
+	InvocationID string
+	CommandID    string
+	UserID       string
+	DeviceID     string
+	RuntimeID    string
+	SessionID    string
+	Generation   int64
+	HandlerName  string
+	CreatedAt    time.Time
+	DeadlineAt   time.Time
+	ResultCh     chan UnifiedToolResult
+	CancelFunc   context.CancelFunc
 }
 
 type PendingInvocationManager struct {
@@ -39,7 +40,7 @@ func (m *PendingInvocationManager) Register(req DeviceRuntimeInvocationRequest, 
 		deadline = m.defaultTTL
 	}
 	invocationID := req.Invocation.InvocationID
-	_, cancel := context.WithTimeout(context.Background(), deadline)
+	deadlineCtx, cancel := context.WithTimeout(context.Background(), deadline)
 	pi := &PendingInvocation{
 		InvocationID: invocationID,
 		CommandID:    commandID,
@@ -55,8 +56,19 @@ func (m *PendingInvocationManager) Register(req DeviceRuntimeInvocationRequest, 
 		CancelFunc:   cancel,
 	}
 	m.mu.Lock()
+	if existing, exists := m.pending[invocationID]; exists && existing != nil {
+		m.mu.Unlock()
+		cancel()
+		return nil, fmt.Errorf("invocation already pending: %s", invocationID)
+	}
 	m.pending[invocationID] = pi
 	m.mu.Unlock()
+	go func() {
+		<-deadlineCtx.Done()
+		if deadlineCtx.Err() == context.DeadlineExceeded {
+			m.Cancel(invocationID, "invocation deadline exceeded")
+		}
+	}()
 	return pi, nil
 }
 
@@ -96,6 +108,15 @@ func (m *PendingInvocationManager) Fail(invocationID string, errResult UnifiedTo
 		return false
 	}
 	if errResult.Generation != 0 && pi.Generation != 0 && errResult.Generation != pi.Generation {
+		return false
+	}
+	if errResult.RuntimeSessionID != "" && pi.SessionID != "" && errResult.RuntimeSessionID != pi.SessionID {
+		return false
+	}
+	if errResult.DeviceID != "" && pi.DeviceID != "" && errResult.DeviceID != pi.DeviceID {
+		return false
+	}
+	if errResult.RuntimeID != "" && pi.RuntimeID != "" && errResult.RuntimeID != pi.RuntimeID {
 		return false
 	}
 	delete(m.pending, invocationID)

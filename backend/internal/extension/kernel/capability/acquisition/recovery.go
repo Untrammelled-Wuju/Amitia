@@ -4,10 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 // RecoveryService orchestrates automatic recovery from missing-capability
@@ -16,7 +18,8 @@ import (
 type RecoveryService struct {
 	acquisitionService *AcquisitionService
 	detector           MissingCapabilityDetector
-	budget             *CapabilityRecoveryBudget
+	budgetMu           sync.Mutex
+	budgets            map[string]*CapabilityRecoveryBudget
 	resumeRepo         execution.ResumeRepository
 }
 
@@ -27,7 +30,7 @@ func NewRecoveryService(acquisitionService *AcquisitionService) *RecoveryService
 	return &RecoveryService{
 		acquisitionService: acquisitionService,
 		detector:           NewMissingCapabilityDetector(),
-		budget:             newCapabilityRecoveryBudgetPtr(),
+		budgets:            make(map[string]*CapabilityRecoveryBudget),
 	}
 }
 
@@ -36,7 +39,7 @@ func NewRecoveryServiceWithRepository(acquisitionService *AcquisitionService, re
 	return &RecoveryService{
 		acquisitionService: acquisitionService,
 		detector:           NewMissingCapabilityDetector(),
-		budget:             newCapabilityRecoveryBudgetPtr(),
+		budgets:            make(map[string]*CapabilityRecoveryBudget),
 		resumeRepo:         resumeRepo,
 	}
 }
@@ -71,8 +74,10 @@ func (s *RecoveryService) Recover(
 
 	acqID := string(resumeCtx.CapabilityID)
 
-	// Step 1: Check budget.
-	if !s.budget.CanAttempt(acqID) {
+	// Step 1: Check the budget scoped to the current RootExecution. A recovery
+	// attempt in one user task must never consume another task's budget.
+	budget := s.budgetFor(resumeCtx)
+	if !s.canAttempt(budget, acqID) {
 		return nil, fmt.Errorf("recovery: budget exhausted for capability %s", acqID)
 	}
 
@@ -87,14 +92,14 @@ func (s *RecoveryService) Recover(
 	var err error
 
 	if needsFresh {
-		s.budget.RecordAttempt(acqID)
+		s.recordAttempt(budget, acqID)
 		result, err = s.acquisitionService.Acquire(ctx, request, resumeCtx.Approved)
 	} else {
 		// An existing acquisition transaction is available and not in a rolled-back
 		// state. Attempt to resume it via the stored transaction ID. If the
 		// resume token is not tracked in the AcquisitionService, fall back to
 		// a fresh acquire.
-		s.budget.RecordAttempt(acqID)
+		s.recordAttempt(budget, acqID)
 		result, err = s.attemptResume(ctx, resumeCtx, request)
 	}
 
@@ -149,6 +154,8 @@ func (s *RecoveryService) RecoverFromResolution(
 func (s *RecoveryService) reconstructRequest(resumeCtx CapabilityResumeContext) AcquisitionRequest {
 	return AcquisitionRequest{
 		CapabilityID:       resumeCtx.CapabilityID,
+		UserID:             runtimeidentity.UserID(resumeCtx.UserID),
+		ExecContext:        resumeCtx.ExecContext,
 		AutoInstallAllowed: true,
 	}
 }
@@ -178,12 +185,60 @@ func (s *RecoveryService) attemptResume(
 
 // Budget returns a read-only copy of the current recovery budget for observability.
 func (s *RecoveryService) Budget() CapabilityRecoveryBudget {
-	return *s.budget
+	s.budgetMu.Lock()
+	defer s.budgetMu.Unlock()
+	aggregate := NewCapabilityRecoveryBudget()
+	aggregate.CurrentAcquisitions = 0
+	for _, budget := range s.budgets {
+		aggregate.CurrentAcquisitions += budget.CurrentAcquisitions
+		for capabilityID, attempts := range budget.AttemptedCapabilities {
+			aggregate.AttemptedCapabilities[capabilityID] += attempts
+		}
+	}
+	return aggregate
 }
 
 // ResetBudget resets the recovery budget. Useful when a new task begins.
 func (s *RecoveryService) ResetBudget() {
-	s.budget = newCapabilityRecoveryBudgetPtr()
+	s.budgetMu.Lock()
+	s.budgets = make(map[string]*CapabilityRecoveryBudget)
+	s.budgetMu.Unlock()
+}
+
+func (s *RecoveryService) budgetFor(resumeCtx CapabilityResumeContext) *CapabilityRecoveryBudget {
+	key := ""
+	if resumeCtx.ExecContext != nil {
+		key = resumeCtx.ExecContext.RootExecutionID
+		if key == "" {
+			key = resumeCtx.ExecContext.ExecutionID
+		}
+	}
+	if key == "" {
+		key = resumeCtx.ConversationID
+	}
+	if key == "" {
+		key = "unscoped:" + resumeCtx.UserID
+	}
+	s.budgetMu.Lock()
+	defer s.budgetMu.Unlock()
+	budget := s.budgets[key]
+	if budget == nil {
+		budget = newCapabilityRecoveryBudgetPtr()
+		s.budgets[key] = budget
+	}
+	return budget
+}
+
+func (s *RecoveryService) canAttempt(budget *CapabilityRecoveryBudget, capabilityID string) bool {
+	s.budgetMu.Lock()
+	defer s.budgetMu.Unlock()
+	return budget.CanAttempt(capabilityID)
+}
+
+func (s *RecoveryService) recordAttempt(budget *CapabilityRecoveryBudget, capabilityID string) {
+	s.budgetMu.Lock()
+	budget.RecordAttempt(capabilityID)
+	s.budgetMu.Unlock()
 }
 
 // _ is a compile-time guard ensuring RecoveryService methods return the expected types.
