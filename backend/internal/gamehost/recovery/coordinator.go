@@ -312,7 +312,7 @@ func (c *RecoveryCoordinator) executeRecoveryFlow(ctx context.Context, op *Recov
 		}
 	}
 
-	restartCount := 0
+	restartCount := -1
 	maxRestarts := -1
 	if c.supervisor != nil {
 		budgetKey := req.ServiceID
@@ -321,9 +321,9 @@ func (c *RecoveryCoordinator) executeRecoveryFlow(ctx context.Context, op *Recov
 		}
 		restartCount = c.supervisor.GetRestartCount(budgetKey)
 		maxRestarts = c.supervisor.GetMaxRestarts(budgetKey)
-		if maxRestarts < 0 {
-			return nil, NewRecoverySuppressedError(req.RuntimeID, "restart policy unavailable")
-		}
+	}
+	if maxRestarts < 0 || restartCount < 0 {
+		return nil, NewRecoverySuppressedError(req.RuntimeID, "restart policy unavailable: unknown budget state")
 	}
 	level := c.classifier.DetermineLevel(op.FailureClass, restartCount, maxRestarts)
 	op.Level = level

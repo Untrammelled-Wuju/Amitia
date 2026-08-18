@@ -45,6 +45,7 @@ type ServiceExecutionContext struct {
 	RuntimeID    domain.RuntimeInstanceID
 	ExtensionID  string
 	PluginID     domain.PluginID
+	ContributionID string
 	ServiceID    domain.ServiceID
 	DefinitionID string
 

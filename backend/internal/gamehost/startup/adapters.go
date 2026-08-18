@@ -112,7 +112,7 @@ func (a *ProcessCleanupProcessAdapter) cleanupDurableOwnedProcess(ctx context.Co
 			log.Printf("[startup-recovery] cleanupDurableOwnedProcess: kill failed pid=%d: %v", pid, err)
 		}
 	}
-	ownerStore.DeleteByProcessInstanceID(instanceID)
+	ownerStore.RemoveOwnership(instanceID)
 	log.Printf("[startup-recovery] cleanupDurableOwnedProcess: cleaned instance=%s pid=%d runtime=%s plugin=%s extension=%s",
 		instanceID, pid, meta.RuntimeID, meta.PluginID, meta.ExtensionID)
 	return nil
