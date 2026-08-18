@@ -557,22 +557,25 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 				SessionService:   sessionSvc,
 				AccountSessions:  accountSessionRuntime.Validator,
 			})
-			meshSQLDB, _ := ctx.DB.DB()
-			devicemeshserver.RegisterCloudRoutes(apiGroup, deviceMeshAuthMW, &devicemeshserver.RouterDeps{
-				DB:        meshSQLDB,
-				Sessions:  services.DeviceMesh.GetSessions(),
-				Hub:       services.DeviceMesh.Hub,
-				Probe:     services.DeviceMesh.Probe,
-				DeviceReg: services.DeviceMesh.DeviceReg,
-				GetUserID: func(c *gin.Context) (runtimeidentity.UserID, bool) {
-					actor := security.GetActor(c)
-					if actor == nil || actor.UserID == "" {
-						return "", false
-					}
-					return runtimeidentity.UserID(actor.UserID), true
-				},
-			})
-		}
+		meshSQLDB, _ := ctx.DB.DB()
+		devicemeshserver.RegisterCloudRoutes(apiGroup, deviceMeshAuthMW, &devicemeshserver.RouterDeps{
+			DB:        meshSQLDB,
+			Sessions:  services.DeviceMesh.GetSessions(),
+			Hub:       services.DeviceMesh.Hub,
+			Handler:   services.DeviceMesh.Handler,
+			Probe:     services.DeviceMesh.Probe,
+			DeviceReg: services.DeviceMesh.DeviceReg,
+			GetUserID: func(c *gin.Context) (runtimeidentity.UserID, bool) {
+				actor := security.GetActor(c)
+				if actor == nil || actor.UserID == "" {
+					return "", false
+				}
+				return runtimeidentity.UserID(actor.UserID), true
+			},
+			PendingInvocations: services.DeviceMesh,
+			PendingTasks:       services.DeviceMesh,
+		})
+	}
 
 		if services.NativeBridgeRelay != nil && bootstrap != nil {
 			tryRegisterAndroidBridge(services.NativeBridgeRelay, bootstrap)
