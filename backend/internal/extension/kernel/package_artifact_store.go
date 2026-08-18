@@ -6,11 +6,20 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 )
+
+type ArtifactMetadata struct {
+	ExtensionID  string
+	Version      string
+	SourceURI    string
+	ExpectedHash string
+}
 
 type PackageArtifactStore struct {
 	root string
@@ -85,6 +94,123 @@ func (s *PackageArtifactStore) PlaceArchive(a PackageArtifact) (PackageArtifact,
 	}
 	a.ArchivePath = path
 	return a, nil
+}
+
+func (s *PackageArtifactStore) PutArchiveFromURI(ctx context.Context, uri string, metadata ArtifactMetadata) (PackageArtifact, error) {
+	if err := ctx.Err(); err != nil {
+		return PackageArtifact{}, err
+	}
+	archivePath, err := s.downloadToCanonical(ctx, uri, metadata.ExpectedHash)
+	if err != nil {
+		return PackageArtifact{}, err
+	}
+	hash, err := s.hashFile(archivePath)
+	if err != nil {
+		return PackageArtifact{}, err
+	}
+	if metadata.ExpectedHash != "" && hash != metadata.ExpectedHash {
+		return PackageArtifact{}, fmt.Errorf("downloaded archive hash mismatch: expected %s, got %s", metadata.ExpectedHash, hash)
+	}
+	return PackageArtifact{
+		ArtifactID:  s.ArtifactIDFromHash(hash),
+		ArchiveHash: hash,
+		ArchivePath: archivePath,
+	}, nil
+}
+
+func (s *PackageArtifactStore) downloadToCanonical(ctx context.Context, uri string, expectedHash string) (string, error) {
+	tempRoot := filepath.Join(s.root, "artifacts", "temp")
+	if err := os.MkdirAll(tempRoot, 0o700); err != nil {
+		return "", fmt.Errorf("create temp dir: %w", err)
+	}
+	temp, err := os.CreateTemp(tempRoot, ".remote-*.amitiax")
+	if err != nil {
+		return "", fmt.Errorf("create temp file: %w", err)
+	}
+	tempPath := temp.Name()
+	defer os.Remove(tempPath)
+
+	if err := s.downloadFile(ctx, uri, temp); err != nil {
+		temp.Close()
+		return "", err
+	}
+	if err := temp.Sync(); err != nil {
+		temp.Close()
+		return "", fmt.Errorf("sync temp file: %w", err)
+	}
+	temp.Close()
+
+	hash, err := s.hashFile(tempPath)
+	if err != nil {
+		return "", err
+	}
+	finalPath := s.canonicalArchivePath(hash)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := os.MkdirAll(filepath.Dir(finalPath), 0o700); err != nil {
+		return "", fmt.Errorf("create canonical dir: %w", err)
+	}
+	if _, err := os.Stat(finalPath); err == nil {
+		return finalPath, nil
+	}
+	if err := os.Rename(tempPath, finalPath); err != nil {
+		return "", fmt.Errorf("move to canonical: %w", err)
+	}
+	return finalPath, nil
+}
+
+func (s *PackageArtifactStore) downloadFile(ctx context.Context, uri string, dest *os.File) error {
+	return downloadFileTo(ctx, uri, dest)
+}
+
+func downloadFileTo(ctx context.Context, uri string, dest io.Writer) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, uri, nil)
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	client := &http.Client{Timeout: 5 * time.Minute}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("execute request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("download failed: HTTP %d", resp.StatusCode)
+	}
+	if _, err := io.Copy(dest, resp.Body); err != nil {
+		return fmt.Errorf("write file: %w", err)
+	}
+	return nil
+}
+
+func (s *PackageArtifactStore) hashFile(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", fmt.Errorf("open file for hashing: %w", err)
+	}
+	defer file.Close()
+	hash := sha256.New()
+	if _, err := io.Copy(hash, file); err != nil {
+		return "", fmt.Errorf("hash file: %w", err)
+	}
+	return "sha256:" + hex.EncodeToString(hash.Sum(nil)), nil
+}
+
+func (s *PackageArtifactStore) ArtifactIDFromHash(hash string) string {
+	hexDigest := strings.TrimPrefix(hash, "sha256:")
+	return artifactIDFromDigest(hexDigest)
+}
+
+func (s *PackageArtifactStore) HasArtifactAtHash(expectedHash string) (string, error) {
+	if expectedHash != "" {
+		if hexDigest, err := archiveHexDigest(expectedHash); err == nil {
+			candidate := s.canonicalArchivePath(hexDigest)
+			if info, statErr := os.Stat(candidate); statErr == nil && !info.IsDir() {
+				return candidate, nil
+			}
+		}
+	}
+	return "", os.ErrNotExist
 }
 
 func (s *PackageArtifactStore) VerifyArchive(a PackageArtifact) error {

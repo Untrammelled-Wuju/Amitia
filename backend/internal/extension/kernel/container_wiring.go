@@ -334,8 +334,14 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 		}
 
 	case lifecycle_manager.CmdInstall:
-		if err := e.executeDirectInstallSaga(ctx, plan, &result); err != nil {
+		generation, err := e.executeDirectInstallSaga(ctx, plan, &result)
+		if err != nil {
 			return result, err
+		}
+		if e.uiHostNotifier != nil {
+			e.uiHostNotifier.BroadcastExtensionChange("extension_installed", string(extID), nil)
+			e.uiHostNotifier.BroadcastExtensionChange("extension_generation_changed", string(extID), map[string]interface{}{"generation": generation})
+			e.uiHostNotifier.BroadcastExtensionChange("extension_contributions_changed", string(extID), nil)
 		}
 
 	case lifecycle_manager.CmdUpdate:
@@ -638,14 +644,14 @@ func (p *containerLifecycleSummaryProvider) Events(ctx context.Context, since ti
 	return len(recs), nil
 }
 
-func (e *containerPlanExecutor) executeDirectInstallSaga(ctx context.Context, plan lifecycle_manager.LifecyclePlan, result *lifecycle_manager.LifecycleResult) error {
+func (e *containerPlanExecutor) executeDirectInstallSaga(ctx context.Context, plan lifecycle_manager.LifecyclePlan, result *lifecycle_manager.LifecycleResult) (int64, error) {
 	extID := plan.Command.ExtensionID
 	packageID := plan.Command.PackageID
 	packageURI := plan.Command.PackageURI
 	expectedHash, _ := plan.Command.Metadata["hash"].(string)
 
 	if e.packageRepo == nil || e.packageArtifact == nil || e.packageGeneration == nil || e.packageSecurity == nil {
-		return fmt.Errorf("package services unavailable for direct install")
+		return 0, fmt.Errorf("package services unavailable for direct install")
 	}
 
 	// Resolve PackageURI to ArtifactID if needed
@@ -655,7 +661,7 @@ func (e *containerPlanExecutor) executeDirectInstallSaga(ctx context.Context, pl
 		if err != nil {
 			result.Status = "failed"
 			result.Error = fmt.Sprintf("resolve remote artifact: %v", err)
-			return err
+			return 0, err
 		}
 		resolvedPackageID = artifactID
 	}
@@ -664,20 +670,20 @@ func (e *containerPlanExecutor) executeDirectInstallSaga(ctx context.Context, pl
 	if err != nil {
 		result.Status = "failed"
 		result.Error = fmt.Sprintf("get artifact: %v", err)
-		return err
+		return 0, err
 	}
 
 	if expectedHash != "" && artifact.ArchiveHash != expectedHash {
 		err := fmt.Errorf("artifact hash mismatch: expected %s, got %s", expectedHash, artifact.ArchiveHash)
 		result.Status = "failed"
 		result.Error = err.Error()
-		return err
+		return 0, err
 	}
 
 	if err := e.packageArtifact.VerifyArchive(artifact); err != nil {
 		result.Status = "failed"
 		result.Error = fmt.Sprintf("verify archive: %v", err)
-		return err
+		return 0, err
 	}
 
 	securityReport, err := e.packageSecurity.InspectFile(ctx, artifact.ArchivePath, package_security.PackageSource{
@@ -690,26 +696,26 @@ func (e *containerPlanExecutor) executeDirectInstallSaga(ctx context.Context, pl
 		}
 		result.Status = "failed"
 		result.Error = err.Error()
-		return err
+		return 0, err
 	}
 
 	pkg, err := amitiax.OpenArchive(artifact.ArchivePath)
 	if err != nil {
 		result.Status = "failed"
 		result.Error = fmt.Sprintf("open archive: %v", err)
-		return err
+		return 0, err
 	}
 	if err := amitiax.VerifyIntegrity(pkg); err != nil {
 		result.Status = "failed"
 		result.Error = fmt.Sprintf("verify integrity: %v", err)
-		return err
+		return 0, err
 	}
 
 	definition, err := pkg.Manifest.ToExtensionDefinition()
 	if err != nil {
 		result.Status = "failed"
 		result.Error = fmt.Sprintf("build definition: %v", err)
-		return err
+		return 0, err
 	}
 	result.Applied = append(result.Applied, "build_candidate_definitions")
 
@@ -717,7 +723,7 @@ func (e *containerPlanExecutor) executeDirectInstallSaga(ctx context.Context, pl
 	if err != nil {
 		result.Status = "failed"
 		result.Error = fmt.Sprintf("extract to staging: %v", err)
-		return err
+		return 0, err
 	}
 	result.Applied = append(result.Applied, "extract_to_staging")
 
@@ -726,7 +732,7 @@ func (e *containerPlanExecutor) executeDirectInstallSaga(ctx context.Context, pl
 		_ = e.packageSecurity.GetStagingManager().Cleanup(context.Background(), staging.ID)
 		result.Status = "failed"
 		result.Error = "install root not configured"
-		return fmt.Errorf("install root not configured")
+		return 0, fmt.Errorf("install root not configured")
 	}
 
 	installDir := filepath.Join(installRoot, string(definition.ID))
@@ -734,14 +740,14 @@ func (e *containerPlanExecutor) executeDirectInstallSaga(ctx context.Context, pl
 		_ = e.packageSecurity.GetStagingManager().Cleanup(context.Background(), staging.ID)
 		result.Status = "failed"
 		result.Error = fmt.Sprintf("create install dir: %v", err)
-		return err
+		return 0, err
 	}
 
 	if err := copyDir(staging.Path, installDir); err != nil {
 		_ = e.packageSecurity.GetStagingManager().Cleanup(context.Background(), staging.ID)
 		result.Status = "failed"
 		result.Error = fmt.Sprintf("copy to install dir: %v", err)
-		return err
+		return 0, err
 	}
 
 	_ = e.packageSecurity.GetStagingManager().Cleanup(context.Background(), staging.ID)
@@ -772,13 +778,13 @@ func (e *containerPlanExecutor) executeDirectInstallSaga(ctx context.Context, pl
 		if err := e.moduleRepo.PutModule(ctx, module); err != nil {
 			result.Status = "failed"
 			result.Error = fmt.Sprintf("put module %s: %v", module.ID, err)
-			return err
+			return 0, err
 		}
 		for _, contribution := range module.Contributions {
 			if err := e.contribRepo.PutContribution(ctx, contribution); err != nil {
 				result.Status = "failed"
 				result.Error = fmt.Sprintf("put contribution %s: %v", contribution.ID, err)
-				return err
+				return 0, err
 			}
 		}
 	}
@@ -787,21 +793,21 @@ func (e *containerPlanExecutor) executeDirectInstallSaga(ctx context.Context, pl
 	if err := e.defRepo.PutExtension(ctx, definition); err != nil {
 		result.Status = "failed"
 		result.Error = fmt.Sprintf("put definition: %v", err)
-		return err
+		return 0, err
 	}
 	result.Applied = append(result.Applied, "commit_installed_tree")
 
 	if err := e.instRepo.PutInstallation(ctx, installation); err != nil {
 		result.Status = "failed"
 		result.Error = fmt.Sprintf("put installation: %v", err)
-		return err
+		return 0, err
 	}
 	result.Applied = append(result.Applied, "create_installation")
 
 	artifact.InstalledPath = targetPath
 	result.Applied = append(result.Applied, "mark_installation_disabled")
 
-	return nil
+	return generation, nil
 }
 
 // resolveRemoteArtifact downloads a package from a remote URI and registers it as an artifact.

@@ -397,8 +397,8 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 		ServiceID:         req.ServiceID,
 		RuntimeID:         req.RuntimeID,
 		ExtensionID:       def.ExtensionID,
-		PluginID:          def.Publisher + "/" + def.ExtensionID,
-		LogicalServiceID:  extractLogicalServiceID(req.ServiceID, req.RuntimeID),
+		PluginID:          resolveCanonicalPluginID(req.PluginID, def.Publisher, def.ExtensionID),
+		LogicalServiceID:  resolveCanonicalLogicalServiceID(req.LogicalServiceID, req.ServiceID, req.RuntimeID),
 		ModuleID:          def.ModuleID,
 		Definition:        def,
 		Generation:        req.Generation,
@@ -825,37 +825,53 @@ func (s *ProcessSupervisor) watchProcess(inst *ServiceInstance, cmd *exec.Cmd) {
 		"error":     inst.lastExitError,
 	})
 
-	if inst.Definition != nil {
-		policy := inst.Definition.Recovery
-		if policy.RecoveryDecisionMode == RecoveryDecisionExternal {
-			s.log("warn", "service crash recorded; recovery decision delegated to external authority", map[string]any{
-				"service":   inst.ServiceID,
-				"instance":  inst.InstanceID,
-				"exit_code": exitCode,
-			})
-		} else if inst.RestartCount < policy.MaxRestarts && inst.circuit.AllowStart() {
-			delay := s.calculateBackoff(policy, inst.RestartCount)
-			go func() {
-				timer := time.NewTimer(delay)
-				defer timer.Stop()
-				select {
-				case <-timer.C:
-					s.restart(inst)
-				case <-inst.stopCh:
-					return
-				}
-			}()
-		} else if policy.QuarantineOnFail {
-			s.log("error", "service quarantined due to frequent crashes", map[string]any{
-				"service":   inst.ServiceID,
-				"restarts":  inst.RestartCount,
-				"exit_code": exitCode,
-			})
-			inst.SetState(ServiceStateQuarantined)
-			_ = s.quarantine.Quarantine(inst.ServiceID, inst.InstanceID, QuarantineFrequentCrash,
-				fmt.Sprintf("exited with code %d, restarts %d/%d", exitCode, inst.RestartCount, policy.MaxRestarts),
-				map[string]any{"exit_code": exitCode, "restarts": inst.RestartCount})
-		}
+	if inst.Definition == nil {
+		s.log("warn", "service crash with no definition; fail-closed, no restart", map[string]any{
+			"service":   inst.ServiceID,
+			"instance":  inst.InstanceID,
+			"exit_code": exitCode,
+		})
+		inst.MarkCrashed()
+		return
+	}
+	policy := inst.Definition.Recovery
+	if policy.MaxRestarts <= 0 && policy.RecoveryDecisionMode != RecoveryDecisionExternal {
+		s.log("warn", "service crash with zero max_restarts; fail-closed, no restart", map[string]any{
+			"service":   inst.ServiceID,
+			"instance":  inst.InstanceID,
+			"exit_code": exitCode,
+		})
+		inst.SetState(ServiceStateDegraded)
+		return
+	}
+	if policy.RecoveryDecisionMode == RecoveryDecisionExternal {
+		s.log("warn", "service crash recorded; recovery decision delegated to external authority", map[string]any{
+			"service":   inst.ServiceID,
+			"instance":  inst.InstanceID,
+			"exit_code": exitCode,
+		})
+	} else if inst.RestartCount < policy.MaxRestarts && inst.circuit.AllowStart() {
+		delay := s.calculateBackoff(policy, inst.RestartCount)
+		go func() {
+			timer := time.NewTimer(delay)
+			defer timer.Stop()
+			select {
+			case <-timer.C:
+				s.restart(inst)
+			case <-inst.stopCh:
+				return
+			}
+		}()
+	} else if policy.QuarantineOnFail {
+		s.log("error", "service quarantined due to frequent crashes", map[string]any{
+			"service":   inst.ServiceID,
+			"restarts":  inst.RestartCount,
+			"exit_code": exitCode,
+		})
+		inst.SetState(ServiceStateQuarantined)
+		_ = s.quarantine.Quarantine(inst.ServiceID, inst.InstanceID, QuarantineFrequentCrash,
+			fmt.Sprintf("exited with code %d, restarts %d/%d", exitCode, inst.RestartCount, policy.MaxRestarts),
+			map[string]any{"exit_code": exitCode, "restarts": inst.RestartCount})
 	}
 }
 
@@ -1318,6 +1334,26 @@ func extractLogicalServiceID(supervisorKey, runtimeID string) string {
 		return supervisorKey[len(prefix):]
 	}
 	return supervisorKey
+}
+
+func resolveCanonicalPluginID(reqPluginID, publisher, extensionID string) string {
+	if reqPluginID != "" {
+		return reqPluginID
+	}
+	if publisher != "" && extensionID != "" {
+		return publisher + "/" + extensionID
+	}
+	if extensionID != "" {
+		return extensionID
+	}
+	return ""
+}
+
+func resolveCanonicalLogicalServiceID(reqLogicalServiceID, serviceID, runtimeID string) string {
+	if reqLogicalServiceID != "" {
+		return reqLogicalServiceID
+	}
+	return extractLogicalServiceID(serviceID, runtimeID)
 }
 
 func generateNonce() string {

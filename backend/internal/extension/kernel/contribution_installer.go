@@ -193,9 +193,25 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 		Permissions  json.RawMessage `json:"permissions,omitempty"`
 		Scope        json.RawMessage `json:"scope,omitempty"`
 		Internal     bool            `json:"internal,omitempty"`
+		Runtime      map[string]any  `json:"runtime,omitempty"`
 	}
 	if err := json.Unmarshal(defData, &def); err != nil {
 		return installOp{}, fmt.Errorf("unmarshal tool definition: %w", err)
+	}
+
+	runtimeType := ""
+	runtimeID := ""
+	handlerName := def.HandlerName
+	if len(def.Runtime) > 0 {
+		if v, ok := def.Runtime["runtimeType"].(string); ok {
+			runtimeType = v
+		}
+		if v, ok := def.Runtime["runtimeId"].(string); ok {
+			runtimeID = v
+		}
+		if v, ok := def.Runtime["handlerName"].(string); ok && v != "" {
+			handlerName = v
+		}
 	}
 
 	toolID := def.ToolID
@@ -243,7 +259,7 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 		SideEffect:   capability.SideEffectLevel(def.SideEffect),
 		Permissions:  perms,
 		Scope:        scope,
-		Runtime:      i.buildRuntimeBindingWithHandler(contrib, def.HandlerName, toolID),
+		Runtime:      i.buildRuntimeBindingFromValues(contrib, handlerName, runtimeType, runtimeID, toolID),
 	}
 
 	permIDs := make([]string, 0)
@@ -765,6 +781,10 @@ func (i *TypedContributionInstaller) buildRuntimeBinding(contrib domain.Contribu
 }
 
 func (i *TypedContributionInstaller) buildRuntimeBindingWithHandler(contrib domain.ContributionDefinition, handlerName string, toolID string) capability.RuntimeBinding {
+	return i.buildRuntimeBindingFromValues(contrib, handlerName, "", "", toolID)
+}
+
+func (i *TypedContributionInstaller) buildRuntimeBindingFromValues(contrib domain.ContributionDefinition, handlerName string, runtimeType string, runtimeID string, toolID string) capability.RuntimeBinding {
 	rb := capability.RuntimeBinding{
 		HandlerName: string(contrib.ModuleID),
 		Metadata: map[string]any{
@@ -778,6 +798,12 @@ func (i *TypedContributionInstaller) buildRuntimeBindingWithHandler(contrib doma
 		if contrib.RuntimeBinding.InstanceID != "" {
 			rb.HandlerName = contrib.RuntimeBinding.InstanceID
 		}
+	}
+	if runtimeType != "" {
+		rb.RuntimeType = capability.RuntimeType(runtimeType)
+	}
+	if runtimeID != "" {
+		rb.RuntimeID = runtimeID
 	}
 	if handlerName != "" {
 		rb.HandlerName = handlerName
