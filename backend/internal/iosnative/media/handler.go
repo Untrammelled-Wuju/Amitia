@@ -4,15 +4,17 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/u-ai/backend/internal/iosnative/staging"
 	"github.com/u-ai/backend/internal/nativebridge"
 )
 
 type MediaHandler struct {
-	bridge nativebridge.Bridge
+	bridge   nativebridge.Bridge
+	importer *staging.StagingImporter
 }
 
-func NewMediaHandler(bridge nativebridge.Bridge) *MediaHandler {
-	return &MediaHandler{bridge: bridge}
+func NewMediaHandler(bridge nativebridge.Bridge, importer *staging.StagingImporter) *MediaHandler {
+	return &MediaHandler{bridge: bridge, importer: importer}
 }
 
 func (h *MediaHandler) Execute(ctx context.Context, request nativebridge.Request) nativebridge.Response {
@@ -47,6 +49,8 @@ func (h *MediaHandler) Execute(ctx context.Context, request nativebridge.Request
 		return h.handleAudioStatus(ctx, request)
 	case OperationAudioRecord:
 		return h.handleAudioRecord(ctx, request)
+	case OperationStagingImport:
+		return h.handleStagingImport(ctx, request)
 	default:
 		return NewMediaError(request, nativebridge.ErrOperationNotSupported, fmt.Sprintf("unsupported operation: %s", request.Operation))
 	}
@@ -372,4 +376,112 @@ func (h *MediaHandler) handleAudioRecord(ctx context.Context, request nativebrid
 	}
 
 	return h.bridgeCall(ctx, request, OperationAudioRecord, payload)
+}
+
+func (h *MediaHandler) handleStagingImport(ctx context.Context, request nativebridge.Request) nativebridge.Response {
+	if h.importer == nil {
+		return NewMediaError(request, ErrStagingImporterUnavailable, "staging importer is not configured")
+	}
+
+	nativeStagingID, ok := request.Payload["nativeStagingId"].(string)
+	if !ok || nativeStagingID == "" {
+		return NewMediaError(request, ErrInvalidRequest, "missing required field: nativeStagingId")
+	}
+
+	getPayloadString := func(m map[string]any, key string) string {
+		if v, ok := m[key].(string); ok {
+			return v
+		}
+		return ""
+	}
+
+	req := staging.StagingImportRequest{
+		NativeStagingID: nativeStagingID,
+		TaskRunID:       getPayloadString(request.Payload, "taskRunId"),
+		MimeType:        getPayloadString(request.Payload, "mimeType"),
+		Filename:        getPayloadString(request.Payload, "filename"),
+		Source:          getPayloadString(request.Payload, "source"),
+	}
+
+	if maxReadBytes, ok := request.Payload["maxReadBytes"].(float64); ok && maxReadBytes > 0 {
+		req.MaxReadBytes = int64(maxReadBytes)
+	}
+
+	bridge := &stagingMediaBridge{handler: h, ctx: ctx}
+	result, err := h.importer.ImportWithBridge(req, bridge)
+	if err != nil {
+		return NewMediaError(request, ErrStagingImportFailed, err.Error())
+	}
+
+	return nativebridge.Response{
+		ProtocolVersion: request.ProtocolVersion,
+		RequestId:       request.RequestId,
+		Status:          "ok",
+		Result: map[string]any{
+			"resourceUri": result.ResourceURI,
+			"size":        result.Size,
+			"mimeType":    result.MimeType,
+			"filename":    result.Filename,
+			"importedAt":  result.ImportedAt,
+			"checksum":    result.Checksum,
+		},
+	}
+}
+
+type stagingMediaBridge struct {
+	handler *MediaHandler
+	ctx     context.Context
+}
+
+func (b *stagingMediaBridge) call(operation string, payload map[string]any) nativebridge.Response {
+	if b.handler.bridge == nil {
+		return nativebridge.Response{Status: "error", Error: &nativebridge.Error{Code: "BRIDGE_UNAVAILABLE", Message: "ios native bridge is not available"}}
+	}
+	resp, err := b.handler.bridge.Execute(b.ctx, nativebridge.Request{
+		ProtocolVersion: 1,
+		RequestId:       "staging-" + operation,
+		Platform:        "ios",
+		Operation:       operation,
+		Payload:         payload,
+	})
+	if err != nil {
+		return nativebridge.Response{Status: "error", Error: &nativebridge.Error{Code: "BRIDGE_ERROR", Message: err.Error()}}
+	}
+	return resp
+}
+
+func (b *stagingMediaBridge) Stat(id string) (int64, string, string, error) {
+	resp := b.call("native.resource.stat", map[string]any{
+		"nativeStagingId": id,
+	})
+	if resp.Status != "ok" {
+		return 0, "", "", fmt.Errorf("stat failed: %s", resp.Error)
+	}
+	size, _ := resp.Result["size"].(float64)
+	mimeType, _ := resp.Result["mimeType"].(string)
+	filename, _ := resp.Result["filename"].(string)
+	return int64(size), mimeType, filename, nil
+}
+
+func (b *stagingMediaBridge) ReadChunk(id string, offset, length int64) ([]byte, error) {
+	resp := b.call("native.resource.read_chunk", map[string]any{
+		"nativeStagingId": id,
+		"offset":          offset,
+		"length":          length,
+	})
+	if resp.Status != "ok" {
+		return nil, fmt.Errorf("read_chunk failed: %s", resp.Error)
+	}
+	content, _ := resp.Result["contentBase64"].(string)
+	return []byte(content), nil
+}
+
+func (b *stagingMediaBridge) Release(id string) error {
+	resp := b.call("native.resource.release", map[string]any{
+		"nativeStagingId": id,
+	})
+	if resp.Status != "ok" {
+		return fmt.Errorf("release failed: %s", resp.Error)
+	}
+	return nil
 }

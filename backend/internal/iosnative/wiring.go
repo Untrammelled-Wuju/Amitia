@@ -13,11 +13,18 @@ import (
 	"github.com/u-ai/backend/internal/iosnative/reminders"
 	"github.com/u-ai/backend/internal/iosnative/share"
 	"github.com/u-ai/backend/internal/iosnative/shortcuts"
+	"github.com/u-ai/backend/internal/iosnative/staging"
 	"github.com/u-ai/backend/internal/nativebridge"
+	"os"
+	"path/filepath"
 )
 
 func NewCanonicalProvider(bridge nativebridge.Bridge, taskRuntimePort ...background.TaskRuntimePort) (*Provider, error) {
 	provider := NewProvider(bridge)
+
+	baseDir := filepath.Join(os.TempDir(), "amitia", "media-staging")
+	_ = os.MkdirAll(baseDir, 0755)
+	stagingImporter := staging.NewStagingImporter(baseDir)
 
 	healthHandler := health.NewHealthHandler(bridge)
 	for _, op := range health.Operations() {
@@ -68,7 +75,7 @@ func NewCanonicalProvider(bridge nativebridge.Bridge, taskRuntimePort ...backgro
 		}
 	}
 
-	mediaHandler := media.NewMediaHandler(bridge)
+	mediaHandler := media.NewMediaHandler(bridge, stagingImporter)
 	for _, op := range media.Operations() {
 		if err := provider.RegisterHandler(op, mediaHandler); err != nil {
 			return nil, err
