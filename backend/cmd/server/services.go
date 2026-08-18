@@ -74,9 +74,9 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	extensionmcp "github.com/u-ai/backend/internal/extension/kernel/mcp"
-	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 	"github.com/u-ai/backend/internal/extension/kernel/skill"
+	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 	"github.com/u-ai/backend/internal/gamehost/management"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/imagegen"
@@ -361,6 +361,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	meshHub := devicemeshserver.NewConnectionHub()
 
 	kernelBuilder := kernel.NewContainerBuilder().
+		WithWorkshopModelGenerator(chatSvc).
 		WithDBPath(kernelDBPath).
 		WithExtensionRoot(kernelRoot).
 		WithCharacterReader(kernelCharReader).
@@ -381,10 +382,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithPendingInvocationManager(pendingInvocationManager).
 		WithMeshHub(meshHub).
 		WithBackgroundBootstrapFunc(func() (backgroundremoval.Registry, error) {
-		reg := backgroundremoval.NewRegistry()
-		reg.Register(local.NewLocalProvider(), local.LocalCapabilities())
-		return reg, nil
-	})
+			reg := backgroundremoval.NewRegistry()
+			reg.Register(local.NewLocalProvider(), local.LocalCapabilities())
+			return reg, nil
+		})
 
 	if bootstrap != nil {
 		kernelBuilder.WithRuntimeHost(bootstrap.RuntimeHost())
