@@ -983,22 +983,18 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	migrationRunner.RegisterPlan(migrationplans.NewDesktopPetV2CutoverPlan(migrationplans.Dependencies{
 		DB: ctx.DB,
 		ReadPathReady: func() error {
-			if installationRepoV2 == nil {
-				return errors.New("RepositoryV2 is nil")
-			}
-			return nil
+			return verifyDesktopPetProductionReader(context.Background(), installationRepoV2)
 		},
 		WritePathReady: func() error {
-			if installationCoordinator == nil {
-				return errors.New("InstallationCoordinator V2 is nil")
-			}
 			if projectionBridge == nil || installationRecoveryWorker == nil || desiredOutboxWorker == nil {
 				return errors.New("V2 projection/recovery/outbox production wiring is incomplete")
 			}
-			if runtimeV2Facade == nil {
-				return errors.New("Runtime V2 facade is nil")
+			canaryCtx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+			defer cancel()
+			if _, err := executeDesktopPetWriteCanary(canaryCtx, installationCoordinator, installationRepoV2, runtimeV2Facade); err != nil {
+				return err
 			}
-			return nil
+			return executeDesktopPetEditingWriteCanary(canaryCtx, editingSvc, ctx.DB)
 		},
 		ReleasePublishedReady: func(storageKey string) error {
 			publishedPath, err := pathRegistry.Resolve(desktoppetsecurity.RootReleasePublished, storageKey)
