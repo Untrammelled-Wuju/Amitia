@@ -206,6 +206,8 @@ func NewChangeLogService(store ChangeLogStore, sequences SequenceGenerator) *Cha
 func (s *ChangeLogService) RecordChange(tx *gorm.DB, entityType EntityType, entityID EntityID, op OperationType, revision int64, mutationID MutationID, userID string, scope CursorScope, payload []byte) (*ChangeRecord, error) {
 	return s.AppendTx(tx, entityType, entityID, op, revision, mutationID, "", userID, scope, payload)
 }
+
+func (s *ChangeLogService) Append(entityType EntityType, entityID EntityID, op OperationType, revision int64, mutationID MutationID, originDevice string, userID string, scope CursorScope, payload []byte) (*ChangeRecord, error) {
 	if mutationID != "" {
 		existing, err := s.store.GetByMutationIDAndUser(mutationID, userID)
 		if err != nil {
