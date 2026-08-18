@@ -11,6 +11,7 @@ const (
 	MessageTypeRuntimeResult  MessageType = "runtime.result"
 	MessageTypeRuntimeError   MessageType = "runtime.error"
 	MessageTypeRuntimeEvent   MessageType = "runtime_event"
+	MessageTypeRuntimeCancel  MessageType = "runtime.cancel"
 	MessageTypeStateSnapshot  MessageType = "state_snapshot"
 	MessageTypeError          MessageType = "error"
 	MessageTypePing           MessageType = "ping"
@@ -21,6 +22,9 @@ const (
 	MessageTypeTaskComplete   MessageType = "task_complete"
 	MessageTypeTaskProgress   MessageType = "task_progress"
 	MessageTypeTaskCheckpoint MessageType = "task_checkpoint"
+	MessageTypeTaskHeartbeat  MessageType = "task_heartbeat"
+	MessageTypeTaskPause      MessageType = "task_pause"
+	MessageTypeTaskResume     MessageType = "task_resume"
 )
 
 func (t MessageType) String() string {
@@ -31,10 +35,12 @@ func (t MessageType) IsValid() bool {
 	switch t {
 	case MessageTypeHello, MessageTypeHelloAck, MessageTypeCommand,
 		MessageTypeCommandAck, MessageTypeRuntimeInvoke, MessageTypeRuntimeResult, MessageTypeRuntimeError,
+		MessageTypeRuntimeCancel,
 		MessageTypeRuntimeEvent, MessageTypeStateSnapshot,
 		MessageTypeError, MessageTypePing, MessageTypePong,
 		MessageTypeTaskDispatch, MessageTypeTaskCancel,
-		MessageTypeTaskClaim, MessageTypeTaskComplete, MessageTypeTaskProgress, MessageTypeTaskCheckpoint:
+		MessageTypeTaskClaim, MessageTypeTaskComplete, MessageTypeTaskProgress, MessageTypeTaskCheckpoint,
+		MessageTypeTaskHeartbeat, MessageTypeTaskPause, MessageTypeTaskResume:
 		return true
 	}
 	return false

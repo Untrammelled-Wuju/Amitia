@@ -91,3 +91,35 @@ type TaskCheckpointPayload struct {
 	RuntimeID          runtimeidentity.RuntimeID        `json:"runtimeId"`
 	CheckpointAt       time.Time                        `json:"checkpointAt"`
 }
+
+type TaskHeartbeatPayload struct {
+	TaskRunID          string                           `json:"taskRunId"`
+	AttemptID          string                           `json:"attemptId"`
+	LeaseID            string                           `json:"leaseId"`
+	Sequence           int64                            `json:"sequence"`
+	RuntimeSessionID   runtimeidentity.RuntimeSessionID `json:"runtimeSessionId"`
+	ConnectionGeneration int64                          `json:"connectionGeneration"`
+	DeviceID           runtimeidentity.DeviceID         `json:"deviceId"`
+	RuntimeID          runtimeidentity.RuntimeID        `json:"runtimeId"`
+	ReportedAt         time.Time                        `json:"reportedAt"`
+}
+
+type TaskPausePayload struct {
+	TaskRunID          string                           `json:"taskRunId"`
+	AttemptID          string                           `json:"attemptId"`
+	LeaseID            string                           `json:"leaseId"`
+	Reason             string                           `json:"reason"`
+	RuntimeSessionID   runtimeidentity.RuntimeSessionID `json:"runtimeSessionId"`
+	ConnectionGeneration int64                          `json:"connectionGeneration"`
+	SentAt             time.Time                        `json:"sentAt"`
+}
+
+type TaskResumePayload struct {
+	TaskRunID          string                           `json:"taskRunId"`
+	AttemptID          string                           `json:"attemptId"`
+	LeaseID            string                           `json:"leaseId"`
+	CheckpointID       string                           `json:"checkpointId,omitempty"`
+	RuntimeSessionID   runtimeidentity.RuntimeSessionID `json:"runtimeSessionId"`
+	ConnectionGeneration int64                          `json:"connectionGeneration"`
+	SentAt             time.Time                        `json:"sentAt"`
+}
