@@ -5,7 +5,11 @@ package recovery
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
+
+	"github.com/google/uuid"
+	"github.com/u-ai/backend/log"
 
 	"github.com/u-ai/backend/internal/desktoppet/installation/operation"
 )
@@ -27,6 +31,7 @@ const (
 type RecoveryRepo interface {
 	ListExpiredLeaseOperations(leaseTimeout string, limit int) ([]*operation.InstallationOperation, error)
 	RenewOperationLease(operationID, executionID string) error
+	ReleaseOperationLease(operationID, executionID string) error
 	ClaimOperationLease(operationID, owner string, ttl time.Duration, expectedStatuses []string) (*operation.InstallationOperation, error)
 	UpdateOperationStatus(operationID, oldStatus, newStatus, executionID string) (*operation.InstallationOperation, error)
 	GetCommitJournal(operationID string) (*RecoveryCommitJournal, error)
@@ -102,6 +107,16 @@ func NewRecoveryWorker(repo RecoveryRepo, opts ...RecoveryWorkerOption) *Recover
 	return w
 }
 
+func (w *RecoveryWorker) ConfigureRecoveries(staging *StagingRecovery, db *DBRecovery, runtime *RuntimeRecovery, sw *SwitchRecovery) {
+	if w == nil {
+		return
+	}
+	w.stagingRecovery = staging
+	w.dbRecovery = db
+	w.runtimeRecovery = runtime
+	w.switchRecovery = sw
+}
+
 func (w *RecoveryWorker) Run(ctx context.Context) error {
 	ticker := time.NewTicker(w.scanInterval)
 	defer ticker.Stop()
@@ -111,7 +126,7 @@ func (w *RecoveryWorker) Run(ctx context.Context) error {
 			return ctx.Err()
 		case <-ticker.C:
 			if err := w.tick(ctx); err != nil {
-				continue
+				log.Warn("installation recovery: scan failed: ", err)
 			}
 		}
 	}
@@ -125,16 +140,13 @@ func (w *RecoveryWorker) tick(ctx context.Context) error {
 	}
 	for _, op := range pendingOps {
 		if err := w.recoverOperation(ctx, op); err != nil {
-			continue
+			log.Warn("installation recovery: operation ", op.ID, " failed: ", err)
 		}
 	}
 	return nil
 }
 
 func (w *RecoveryWorker) recoverOperation(ctx context.Context, op *operation.InstallationOperation) error {
-	if op.Status == operation.OpStatusCancelRequested {
-		return w.recoverCancelOperation(ctx, op)
-	}
 	if !op.IsActive() {
 		return nil
 	}
@@ -143,15 +155,18 @@ func (w *RecoveryWorker) recoverOperation(ctx context.Context, op *operation.Ins
 		return err
 	}
 	defer w.safeReleaseLease(op.ID)
+	if op.Status == operation.OpStatusCancelRequested {
+		return w.recoverCancelOperation(ctx, op)
+	}
 	switch op.OperationType {
-	case operation.TypeInstall, operation.TypeUpgrade, operation.TypeDowngrade, operation.TypeRepair:
+	case operation.TypeInstall, operation.TypeRepair:
 		return w.recoverCommitOperation(ctx, op, lease)
-	case operation.TypeSwitch:
+	case operation.TypeSwitch, operation.TypeUpgrade, operation.TypeDowngrade:
 		return w.recoverSwitchOperation(ctx, op, lease)
 	case operation.TypeUninstall, operation.TypeEnable, operation.TypeDisable, operation.TypeRecenter, operation.TypeSettings, operation.TypeDefaultAction:
 		return w.recoverDesiredStateOperation(ctx, op, lease)
 	default:
-		return nil
+		return fmt.Errorf("installation recovery: unsupported operation type %s", op.OperationType)
 	}
 }
 
@@ -159,7 +174,10 @@ func (w *RecoveryWorker) recoverCancelOperation(ctx context.Context, op *operati
 	if op.Status == operation.OpStatusCompleted || op.Status == operation.OpStatusFailedTerminal || op.Status == operation.OpStatusCancelled {
 		return nil
 	}
-	if w.runtimeRecovery != nil {
+	if op.Stage == operation.OpStageRuntimeCommandEnqueued || op.Stage == operation.OpStageWaitingRuntimeACK || op.Stage == operation.OpStageRuntimeApplied {
+		if w.runtimeRecovery == nil {
+			return errors.New("installation recovery: runtime recovery is required to cancel an in-flight runtime operation")
+		}
 		if err := w.runtimeRecovery.CancelOperation(ctx, op); err != nil {
 			return err
 		}
@@ -190,33 +208,44 @@ func (w *RecoveryWorker) safeReleaseLease(operationID string) {
 	if w.repo == nil {
 		return
 	}
-	_ = w.repo.RenewOperationLease(operationID, "")
+	if err := w.repo.ReleaseOperationLease(operationID, w.executionID); err != nil {
+		log.Warn("installation recovery: release operation lease failed: ", err)
+	}
 }
 
 func (w *RecoveryWorker) recoverCommitOperation(ctx context.Context, op *operation.InstallationOperation, lease *operation.Lease) error {
 	journal, err := w.repo.GetCommitJournal(op.ID)
 	if err != nil {
-		return nil
+		return fmt.Errorf("installation recovery: load commit journal: %w", err)
 	}
-	if w.stagingRecovery != nil && isStagingStage(journal.Stage) {
+	if isStagingStage(journal.Stage) {
+		if w.stagingRecovery == nil {
+			return errors.New("installation recovery: staging recovery is not configured")
+		}
 		if err := w.stagingRecovery.Recover(ctx, op, journal); err != nil {
 			return err
 		}
 	}
 	journal, err = w.repo.GetCommitJournal(op.ID)
 	if err != nil {
-		return nil
+		return fmt.Errorf("installation recovery: reload commit journal: %w", err)
 	}
-	if w.dbRecovery != nil && isDBStage(journal.Stage) {
+	if isDBStage(journal.Stage) {
+		if w.dbRecovery == nil {
+			return errors.New("installation recovery: database recovery is not configured")
+		}
 		if err := w.dbRecovery.Recover(ctx, op, journal); err != nil {
 			return err
 		}
 	}
 	journal, err = w.repo.GetCommitJournal(op.ID)
 	if err != nil {
-		return nil
+		return fmt.Errorf("installation recovery: reload commit journal: %w", err)
 	}
-	if w.runtimeRecovery != nil && isRuntimeStage(journal.Stage) {
+	if isRuntimeStage(journal.Stage) {
+		if w.runtimeRecovery == nil {
+			return errors.New("installation recovery: runtime recovery is not configured")
+		}
 		if err := w.runtimeRecovery.Recover(ctx, op, journal); err != nil {
 			return err
 		}
@@ -227,22 +256,23 @@ func (w *RecoveryWorker) recoverCommitOperation(ctx context.Context, op *operati
 func (w *RecoveryWorker) recoverSwitchOperation(ctx context.Context, op *operation.InstallationOperation, lease *operation.Lease) error {
 	journal, err := w.repo.GetSwitchJournal(op.ID)
 	if err != nil {
-		return nil
+		return fmt.Errorf("installation recovery: load switch journal: %w", err)
 	}
-	if w.switchRecovery != nil {
-		return w.switchRecovery.Recover(ctx, op, journal)
+	if w.switchRecovery == nil {
+		return errors.New("installation recovery: switch recovery is not configured")
 	}
-	return nil
+	return w.switchRecovery.Recover(ctx, op, journal)
 }
 
 func (w *RecoveryWorker) recoverDesiredStateOperation(ctx context.Context, op *operation.InstallationOperation, lease *operation.Lease) error {
 	if op.Stage == operation.OpStageWaitingRuntimeACK || op.Stage == operation.OpStageRuntimeCommandEnqueued {
-		if w.runtimeRecovery != nil {
-			return w.runtimeRecovery.Recover(ctx, op, &RecoveryCommitJournal{
-				OperationID: op.ID,
-				Stage:       op.Stage,
-			})
+		if w.runtimeRecovery == nil {
+			return errors.New("installation recovery: runtime recovery is not configured")
 		}
+		return w.runtimeRecovery.Recover(ctx, op, &RecoveryCommitJournal{
+			OperationID: op.ID,
+			Stage:       op.Stage,
+		})
 	}
 	return nil
 }
@@ -279,5 +309,5 @@ func isRuntimeStage(stage string) bool {
 }
 
 func generateRecoveryID() string {
-	return "recv-" + time.Now().Format("20060102") + "-" + time.Now().Format("150405")
+	return "recv-" + uuid.NewString()
 }

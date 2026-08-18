@@ -15,6 +15,11 @@ type RuntimeRecovery struct {
 	worker      *RecoveryWorker
 	repo        RecoveryRepo
 	runtimeRepo RuntimeRepo
+	finalizer   RuntimeAppliedFinalizer
+}
+
+type RuntimeAppliedFinalizer interface {
+	FinalizeRuntimeApplied(ctx context.Context, op *operation.InstallationOperation) error
 }
 
 type RuntimeRepo interface {
@@ -24,12 +29,16 @@ type RuntimeRepo interface {
 	MarkRuntimeApplied(opID string, appliedRevision int64) error
 }
 
-func NewRuntimeRecovery(worker *RecoveryWorker, repo RecoveryRepo, runtimeRepo RuntimeRepo) *RuntimeRecovery {
-	return &RuntimeRecovery{
+func NewRuntimeRecovery(worker *RecoveryWorker, repo RecoveryRepo, runtimeRepo RuntimeRepo, finalizers ...RuntimeAppliedFinalizer) *RuntimeRecovery {
+	r := &RuntimeRecovery{
 		worker:      worker,
 		repo:        repo,
 		runtimeRepo: runtimeRepo,
 	}
+	if len(finalizers) > 0 {
+		r.finalizer = finalizers[0]
+	}
+	return r
 }
 
 func (r *RuntimeRecovery) Recover(ctx context.Context, op *operation.InstallationOperation, j *RecoveryCommitJournal) error {
@@ -49,8 +58,8 @@ func (r *RuntimeRecovery) Recover(ctx context.Context, op *operation.Installatio
 }
 
 func (r *RuntimeRecovery) CancelOperation(ctx context.Context, op *operation.InstallationOperation) error {
-	if r.runtimeRepo == nil {
-		return nil
+	if r == nil || r.runtimeRepo == nil {
+		return errors.New("runtimeRecovery: runtimeRepo not configured")
 	}
 	return r.runtimeRepo.CancelDesiredCommand(ctx, op.ID, op.UserID, op.DeviceID, op.RuntimeID)
 }
@@ -98,6 +107,11 @@ func (r *RuntimeRecovery) recoverFromWaitingRuntimeAck(ctx context.Context, op *
 }
 
 func (r *RuntimeRecovery) recoverFromRuntimeApplied(ctx context.Context, op *operation.InstallationOperation, j *RecoveryCommitJournal) error {
+	if r.finalizer != nil {
+		if err := r.finalizer.FinalizeRuntimeApplied(ctx, op); err != nil {
+			return fmt.Errorf("runtimeRecovery: finalize runtime-applied operation op=%s: %w", op.ID, err)
+		}
+	}
 	if _, err := r.repo.CASUpdateCommitJournalStage(op.ID, operation.OpStageRuntimeApplied, operation.OpStageCleanupCompleted, r.worker.executionID); err != nil {
 		if !errors.Is(err, ErrJournalNotFound) {
 			return fmt.Errorf("runtimeRecovery: CAS update to cleanup_completed failed: %w", err)

@@ -39,6 +39,10 @@ func (r *testRecoveryRepo) RenewOperationLease(operationID, executionID string) 
 	return nil
 }
 
+func (r *testRecoveryRepo) ReleaseOperationLease(operationID, executionID string) error {
+	return nil
+}
+
 func (r *testRecoveryRepo) ClaimOperationLease(operationID, owner string, ttl time.Duration, expectedStatuses []string) (*operation.InstallationOperation, error) {
 	op, ok := r.ops[operationID]
 	if !ok {
@@ -99,10 +103,41 @@ func (r *testRecoveryRepo) CASUpdateSwitchJournalStage(operationID, expectedStag
 	return journal, nil
 }
 
+type testRuntimeRepo struct{}
+
+func (testRuntimeRepo) SendDesiredCommand(context.Context, string, string, string, string, string, int64) error {
+	return nil
+}
+func (testRuntimeRepo) CancelDesiredCommand(context.Context, string, string, string, string) error {
+	return nil
+}
+func (testRuntimeRepo) QueryRuntimeAppliedState(context.Context, string, string, string) (int64, string, error) {
+	return 1, "", nil
+}
+func (testRuntimeRepo) MarkRuntimeApplied(string, int64) error { return nil }
+
+type testSwitchRepo struct{}
+
+func (testSwitchRepo) PublishSwitchDesired(context.Context, string, string, string, string, string, int64) error {
+	return nil
+}
+func (testSwitchRepo) SendSwitchCommand(context.Context, string, string, string, string, string, int64) error {
+	return nil
+}
+func (testSwitchRepo) QuerySwitchApplied(context.Context, string, string, string, int64) (bool, error) {
+	return true, nil
+}
+
+func newTestWorkerWithRuntime(repo RecoveryRepo) *RecoveryWorker {
+	worker := NewRecoveryWorker(repo)
+	worker.runtimeRecovery = NewRuntimeRecovery(worker, repo, testRuntimeRepo{})
+	return worker
+}
+
 func TestRecoveryWorker_UninstallOperation_IsRecovered(t *testing.T) {
 	repo := newTestRepo()
 
-	worker := NewRecoveryWorker(repo)
+	worker := newTestWorkerWithRuntime(repo)
 
 	op := &operation.InstallationOperation{
 		ID:            "uninstall-op-1",
@@ -121,7 +156,7 @@ func TestRecoveryWorker_UninstallOperation_IsRecovered(t *testing.T) {
 func TestRecoveryWorker_EnableOperation_IsRecovered(t *testing.T) {
 	repo := newTestRepo()
 
-	worker := NewRecoveryWorker(repo)
+	worker := newTestWorkerWithRuntime(repo)
 
 	op := &operation.InstallationOperation{
 		ID:            "enable-op-1",
@@ -140,7 +175,7 @@ func TestRecoveryWorker_EnableOperation_IsRecovered(t *testing.T) {
 func TestRecoveryWorker_RecenterOperation_IsRecovered(t *testing.T) {
 	repo := newTestRepo()
 
-	worker := NewRecoveryWorker(repo)
+	worker := newTestWorkerWithRuntime(repo)
 
 	op := &operation.InstallationOperation{
 		ID:            "recenter-op-1",
@@ -159,7 +194,7 @@ func TestRecoveryWorker_RecenterOperation_IsRecovered(t *testing.T) {
 func TestRecoveryWorker_InstallOperation_UsesCommitRecovery(t *testing.T) {
 	repo := newTestRepo()
 
-	worker := NewRecoveryWorker(repo)
+	worker := newTestWorkerWithRuntime(repo)
 
 	op := &operation.InstallationOperation{
 		ID:            "install-op-1",
@@ -183,6 +218,7 @@ func TestRecoveryWorker_SwitchOperation_UsesSwitchRecovery(t *testing.T) {
 	repo := newTestRepo()
 
 	worker := NewRecoveryWorker(repo)
+	worker.switchRecovery = NewSwitchRecovery(worker, repo, testSwitchRepo{})
 
 	op := &operation.InstallationOperation{
 		ID:            "switch-op-1",
@@ -192,8 +228,10 @@ func TestRecoveryWorker_SwitchOperation_UsesSwitchRecovery(t *testing.T) {
 	}
 	repo.ops[op.ID] = op
 	repo.switchJournals[op.ID] = &RecoverySwitchJournal{
-		OperationID: op.ID,
-		Stage:       operation.OpStageWaitingRuntimeACK,
+		OperationID:        op.ID,
+		Stage:              SwitchStageRuntimeApplied,
+		NewInstallationID:  "installation-new",
+		NewDesiredRevision: 1,
 	}
 
 	err := worker.recoverOperation(context.Background(), op)
@@ -218,5 +256,44 @@ func TestRecoveryWorker_InactiveOperation_IsSkipped(t *testing.T) {
 	err := worker.recoverOperation(context.Background(), op)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRecoveryWorker_MissingRuntimeRecoveryFailsClosed(t *testing.T) {
+	repo := newTestRepo()
+	worker := NewRecoveryWorker(repo)
+	op := &operation.InstallationOperation{
+		ID: "missing-runtime", OperationType: operation.TypeEnable,
+		Status: operation.OpStatusWaitingRuntimeACK, Stage: operation.OpStageWaitingRuntimeACK,
+	}
+	repo.ops[op.ID] = op
+	if err := worker.recoverOperation(context.Background(), op); err == nil {
+		t.Fatal("expected missing runtime recovery to fail closed")
+	}
+}
+
+func TestRecoveryWorker_MissingCommitJournalFailsClosed(t *testing.T) {
+	repo := newTestRepo()
+	worker := newTestWorkerWithRuntime(repo)
+	op := &operation.InstallationOperation{
+		ID: "missing-journal", OperationType: operation.TypeInstall,
+		Status: operation.OpStatusWaitingRuntimeACK, Stage: operation.OpStageWaitingRuntimeACK,
+	}
+	repo.ops[op.ID] = op
+	if err := worker.recoverOperation(context.Background(), op); err == nil {
+		t.Fatal("expected missing commit journal to fail closed")
+	}
+}
+
+func TestRecoveryWorker_CancelInFlightWithoutRuntimeRecoveryFailsClosed(t *testing.T) {
+	repo := newTestRepo()
+	worker := NewRecoveryWorker(repo)
+	op := &operation.InstallationOperation{
+		ID: "cancel-inflight", OperationType: operation.TypeEnable,
+		Status: operation.OpStatusCancelRequested, Stage: operation.OpStageWaitingRuntimeACK,
+	}
+	repo.ops[op.ID] = op
+	if err := worker.recoverOperation(context.Background(), op); err == nil {
+		t.Fatal("expected in-flight cancel without runtime recovery to fail closed")
 	}
 }
