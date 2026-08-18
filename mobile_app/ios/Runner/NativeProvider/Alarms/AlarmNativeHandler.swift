@@ -68,9 +68,9 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         case "media.alarms.countdown":
             return await handleCountdown(request)
         case "media.alarms.pause":
-            return handlePause(request)
+            return await handlePause(request)
         case "media.alarms.resume":
-            return handleResume(request)
+            return await handleResume(request)
         default:
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
@@ -118,7 +118,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
             case .authorized: authString = "authorized"
             case .denied: authString = "denied"
             case .notDetermined: authString = "notDetermined"
-            case .restricted: authString = "restricted"
+            @unknown default: authString = "notDetermined"
             }
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
@@ -354,7 +354,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         let availability = AlarmKitAdapter.shared.checkAvailability()
         switch availability {
         case .available:
-            let (success, error) = await AlarmKitAdapter.shared.cancelAlarm(id: alarmId)
+            let (success, error) = await AlarmKitAdapter.shared.stopAlarm(id: alarmId)
             if success {
                 return IOSNativeResponse(
                     protocolVersion: request.protocolVersion,
@@ -369,7 +369,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
                     requestId: request.requestId,
                     status: "error",
                     result: nil,
-                    error: IOSNativeError(code: "CANCEL_FAILED", message: error ?? "alarm not found: \(alarmId)")
+                    error: IOSNativeError(code: "STOP_FAILED", message: error ?? "alarm not found: \(alarmId)")
                 )
             }
         case .unsupported(let reason):
@@ -463,7 +463,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         return await handleSchedule(countdownRequest)
     }
 
-    private func handlePause(_ request: IOSNativeRequest) -> IOSNativeResponse {
+    private func handlePause(_ request: IOSNativeRequest) async -> IOSNativeResponse {
         guard let alarmId = request.payload?["alarmId"] as? String, !alarmId.isEmpty else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
@@ -492,7 +492,7 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         )
     }
 
-    private func handleResume(_ request: IOSNativeRequest) -> IOSNativeResponse {
+    private func handleResume(_ request: IOSNativeRequest) async -> IOSNativeResponse {
         guard let alarmId = request.payload?["alarmId"] as? String, !alarmId.isEmpty else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,

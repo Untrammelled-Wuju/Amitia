@@ -110,29 +110,38 @@ object ShizukuCommandServiceHolder {
     private var deathRecipient: IBinder.DeathRecipient? = null
 
     fun unbindService() {
+        runDestroyTransaction()
+    }
+
+    private fun runDestroyTransaction() {
+        val svc = proxyRef.getAndSet(null) ?: return
         try {
-            val svc = proxyRef.get()
-            if (svc != null) {
-                deathRecipient?.let { recipient ->
+            deathRecipient?.let { recipient ->
+                try {
                     svc.asBinder().unlinkToDeath(recipient, 0)
-                }
-                deathRecipient = null
-                svc.destroyService()
+                } catch (_: Exception) {}
             }
-        } catch (_: Exception) {}
-        connection?.let {
+            deathRecipient = null
             try {
-                Shizuku.unbindUserService(ShizukuCommandService.createArgs(), it, true)
+                svc.destroyService()
             } catch (_: Exception) {}
+        } finally {
+            connection?.let { conn ->
+                try {
+                    Shizuku.unbindUserService(ShizukuCommandService.createArgs(), conn, true)
+                } catch (_: Exception) {}
+            }
+            connection = null
+            stateRef.set(ShizukuServiceState.DEAD)
+            bindingInProgress = false
         }
-        connection = null
-        proxyRef.set(null)
-        stateRef.set(ShizukuServiceState.DEAD)
-        bindingInProgress = false
     }
 
     fun onServiceDestroyed(instance: ShizukuCommandService) {
         proxyRef.set(null)
+        deathRecipient = null
+        connection = null
         stateRef.set(ShizukuServiceState.DEAD)
+        bindingInProgress = false
     }
 }
