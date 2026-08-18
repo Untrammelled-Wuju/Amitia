@@ -176,6 +176,7 @@ func DefaultMigrations() []Migration {
 		AuthSessionsMissingColumnsMigration(),
 		SyncSchemaRevisionDeletedAtMigration(),
 		SyncMutationClaimsMigration(),
+		AppSettingsTombstoneMigration(),
 	}
 }
 
@@ -194,6 +195,19 @@ func SyncMutationClaimsMigration() Migration {
 				PRIMARY KEY (user_id, scope, mutation_id)
 			)`)
 			s.CreateIndex("idx_sync_mutation_claims_status", "sync_mutation_claims", []string{"status"}, false)
+			return nil
+		},
+	}
+}
+
+func AppSettingsTombstoneMigration() Migration {
+	return Migration{
+		Version: "20260818005",
+		Name:    "add_app_settings_deleted_at_column",
+		Up: func(s *Step) error {
+			s.AddColumn("app_settings", "deleted_at", "DATETIME")
+			s.CreateIndex("idx_app_settings_deleted_at", "app_settings", []string{"deleted_at"}, false)
+			s.Execute("UPDATE app_settings SET revision = 1 WHERE revision IS NULL OR revision < 1")
 			return nil
 		},
 	}
