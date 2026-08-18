@@ -95,6 +95,7 @@ var RequiredCheckerNames = []string{
 	"migration_state",
 	"legacy_chain",
 	"canonical_cutover",
+	"mesh",
 }
 
 func (s *ReadinessService) Snapshot() ReadinessSnapshot {
@@ -325,6 +326,7 @@ type StartupReadinessDeps struct {
 	MigrationReady          func() error
 	LegacyChainReady        func() error
 	CanonicalCutoverReady   func() error
+	MeshReady               func() error
 }
 
 func NewFullStartupReadinessService(deps StartupReadinessDeps) (*ReadinessService, error) {
@@ -380,6 +382,9 @@ func NewFullStartupReadinessService(deps StartupReadinessDeps) (*ReadinessServic
 		return nil, err
 	}
 	if err := register("canonical_cutover", true, wrapReadyFunc(deps.CanonicalCutoverReady, "canonical_cutover")); err != nil {
+		return nil, err
+	}
+	if err := register("mesh", true, wrapReadyFunc(deps.MeshReady, "mesh")); err != nil {
 		return nil, err
 	}
 	return svc, nil
