@@ -25,6 +25,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/behavior"
 	"github.com/u-ai/backend/internal/desktoppet/device"
 	"github.com/u-ai/backend/internal/desktoppet/doctor"
+	"github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/desktoppet/editing"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/maintenance"
@@ -590,6 +591,45 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		},
 	)
 	runtimev2.RegisterUserRoutes(apiGroup, services.DesktopPetRuntimeV2)
+
+	if services.DeviceMesh != nil {
+		meshAuthMW := security.AuthenticationMiddleware(security.AuthConfig{
+			Mode:             config.AppCfg.Security.Mode,
+			JWTSecret:        config.AppCfg.JWT.Secret,
+			JWTIssuer:        config.AppCfg.JWT.Issuer,
+			JWTAudience:      config.AppCfg.JWT.Audience,
+			LocalCredentials: localCredentialStore,
+			LocalUserID:      config.AppCfg.Security.LocalUserID,
+			ListenAddress:    config.AppCfg.Server.Host,
+			AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
+			SessionService:   sessionSvc,
+			AccountSessions:  accountSessionRuntime.Validator,
+		})
+		meshDeps := &server.RouterDeps{
+			DB:           nil,
+			Sessions:     services.DeviceMesh.GetSessions(),
+			BootstrapSvc: services.DeviceMesh.BootstrapSvc,
+			CredentialSvc: services.DeviceMesh.CredentialSvc,
+			Hub:          services.DeviceMesh.Hub,
+			Probe:        services.DeviceMesh.Probe,
+			DeviceReg:    services.DeviceMesh.DeviceReg,
+			GetUserID: func(c *gin.Context) (runtimeidentity.UserID, bool) {
+				actor := security.GetActor(c)
+				if actor == nil {
+					return "", false
+				}
+				return actor.UserID, true
+			},
+			TaskClaimHandler:        services.KernelContainer.TaskRuntimeService,
+			TaskCompleteHandler:     services.KernelContainer.TaskRuntimeService,
+			TaskProgressHandler:     services.KernelContainer.TaskRuntimeService,
+			TaskCheckpointHandler:   services.KernelContainer.TaskRuntimeService,
+			DisconnectHandler:       nil,
+			InvocationResultHandler: services.KernelContainer.ToolFacade,
+			InvocationErrorHandler:  services.KernelContainer.ToolFacade,
+		}
+		server.RegisterCloudRoutes(r, meshAuthMW, meshDeps)
+	}
 
 	maintenanceAuthGroup := r.Group("/api")
 	maintenanceAuthGroup.Use(security.AuthenticationMiddleware(security.AuthConfig{
