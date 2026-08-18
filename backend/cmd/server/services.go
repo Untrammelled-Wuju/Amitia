@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"strings"
 	"sync"
 	"time"
@@ -21,6 +22,7 @@ import (
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/companion"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/desktoppet"
@@ -274,7 +276,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		log.Error("failed to init relationship/need store schema:", err)
 		panic("failed to init relationship/need store schema")
 	}
-	chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, memSvc, profSvc, epiSvc, wbSvc, compressor, visionSvc, graphSvc, psycheStore)
+	syncApplier := syncpkg.NewBusinessApplier(ctx.DB)
+	syncService := syncpkg.NewService(ctx.DB, syncApplier)
+	chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, memSvc, profSvc, epiSvc, wbSvc, compressor, visionSvc, graphSvc, psycheStore, syncService.ChangeLog)
 	extensionRuntime, err := extension.NewRuntimeWithOptions(context.Background(), ctx.DB, "1.0.0", extension.RuntimeOptions{SkipPluginManagerStart: true})
 	if err != nil {
 		log.Error("failed to initialize skill runtime:", err)
@@ -360,6 +364,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	meshHub := devicemeshserver.NewConnectionHub()
 
+	canonicalStdioFactory := extensionmcp.NewCanonicalStdioFactory(commandResolver)
+	canonicalStdioRegistry := extensionmcp.NewCanonicalStdioRegistry(canonicalStdioFactory)
+	canonicalRemoteFactory := extensionmcp.NewCanonicalRemoteFactory()
+	canonicalRemoteRegistry := extensionmcp.NewCanonicalRemoteRegistry(canonicalRemoteFactory)
+	mcpAcquisitionRuntime := newMCPAcquisitionRuntime(canonicalStdioRegistry, canonicalRemoteRegistry)
+
 	kernelBuilder := kernel.NewContainerBuilder().
 		WithWorkshopModelGenerator(chatSvc).
 		WithDBPath(kernelDBPath).
@@ -380,11 +390,14 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithBrowserProvider(browserProvider).
 		WithRuntimeProfile(runtimeProfile).
 		WithPendingInvocationManager(pendingInvocationManager).
+		WithPendingTaskManager(pendingTaskManager).
 		WithMeshHub(meshHub).
+		WithMCPRuntimeConnectPort(mcpAcquisitionRuntime).
 		WithBackgroundBootstrapFunc(func() (backgroundremoval.Registry, error) {
-			reg := backgroundremoval.NewRegistry()
-			reg.Register(local.NewLocalProvider(), local.LocalCapabilities())
-			return reg, nil
+			// The kernel builder owns canonical provider registration. Returning an
+			// empty registry here avoids a second local-provider registration while
+			// still allowing the server to inject the shared registry instance.
+			return backgroundremoval.NewRegistry(), nil
 		})
 
 	if bootstrap != nil {
@@ -499,11 +512,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 	runtimeQueue := queue.NewSQLiteRuntimeQueueStore(ctx.DB)
 	deliveryStore := delivery.NewSQLiteDeliveryStore(ctx.DB)
-	deliveryWorker := delivery.NewWorker(deliveryStore, delivery.NewMapChannelResolverWith([]delivery.ChannelAdapter{
-		delivery.NewWebChannelAdapter(),
-		delivery.NewQQChannelAdapter("http://127.0.0.1:19877"),
-		delivery.NewWechatChannelAdapter("http://127.0.0.1:19876"),
-	}), delivery.DefaultWorkerConfig())
+	if kernelContainer.ChannelResolver == nil {
+		log.Error("kernel capability channel resolver is not configured")
+		panic("kernel capability channel resolver is not configured")
+	}
+	deliveryWorker := delivery.NewWorker(deliveryStore, kernelContainer.ChannelResolver, delivery.DefaultWorkerConfig())
 	deliveryAdapter := &chatDeliveryAdapter{store: deliveryStore}
 	chatSvc.SetDeliveryStore(deliveryAdapter)
 	emoteSvc := emote.NewService(ctx.DB, deliveryStore)
@@ -1099,25 +1112,60 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sql.DB from gorm: %w", err)
 	}
-	deviceMeshRuntime, err := devicemesh.NewCloudRuntimeWithHub(sqlDB, kernelContainer.DeviceRegistry, meshHub)
-	if err != nil {
-		return nil, fmt.Errorf("failed to construct device mesh runtime: %w", err)
+	dispatcher := devicemesh.NewCloudRuntimeDispatcher(kernelContainer.AdapterRegistry)
+	if runtimeProfile.IsDeviceAgent() {
+		if kernelContainer.TaskRuntimeService == nil {
+			return nil, fmt.Errorf("device-agent task runtime service is required")
+		}
+		deviceMeshRuntime, meshErr := devicemesh.NewDeviceAgentRuntime(
+			mcpDataDirectory(ctx),
+			platformFromGOOS(goruntime.GOOS),
+			NewTaskRuntimeExecutor(kernelContainer.TaskRuntimeService),
+			dispatcher,
+		)
+		if meshErr != nil {
+			return nil, fmt.Errorf("failed to construct device-agent mesh runtime: %w", meshErr)
+		}
+		services.DeviceMesh = deviceMeshRuntime
+	} else {
+		sqlDB, dbErr := ctx.DB.DB()
+		if dbErr != nil {
+			return nil, fmt.Errorf("failed to get sql.DB from gorm: %w", dbErr)
+		}
+		deviceMeshRuntime, meshErr := devicemesh.NewCloudRuntimeWithHub(sqlDB, kernelContainer.DeviceRegistry, meshHub)
+		if meshErr != nil {
+			return nil, fmt.Errorf("failed to construct device mesh runtime: %w", meshErr)
+		}
+		deviceMeshRuntime.SetPendingInvocations(pendingInvocationManager)
+		deviceMeshRuntime.SetPendingTasks(pendingTaskManager)
+		deviceMeshRuntime.SetDispatcher(dispatcher)
+		if kernelContainer.TaskRuntimeService != nil {
+			deviceMeshRuntime.SetTaskRuntime(NewTaskRuntimeExecutor(kernelContainer.TaskRuntimeService))
+		}
+		services.DeviceMesh = deviceMeshRuntime
 	}
-	deviceMeshRuntime.SetPendingInvocations(pendingInvocationManager)
-	deviceMeshRuntime.SetPendingTasks(pendingTaskManager)
-	if kernelContainer.AdapterRegistry != nil {
-		cloudDispatcher := devicemesh.NewCloudRuntimeDispatcher(kernelContainer.AdapterRegistry)
-		deviceMeshRuntime.SetDispatcher(cloudDispatcher)
-	}
-	if kernelContainer.TaskRuntimeService != nil {
-		deviceMeshRuntime.SetTaskRuntime(NewTaskRuntimeExecutor(kernelContainer.TaskRuntimeService))
-	}
-	services.DeviceMesh = deviceMeshRuntime
 
 	if err := runCanonicalBuildAssertions(services); err != nil {
 		return nil, fmt.Errorf("canonical build assertion failed: %w", err)
 	}
 	return services, nil
+}
+
+func platformFromGOOS(goos string) runtimeidentity.Platform {
+	switch strings.ToLower(strings.TrimSpace(goos)) {
+	case "android":
+		return runtimeidentity.PlatformAndroid
+	case "ios":
+		return runtimeidentity.PlatformIOS
+	case "windows":
+		return runtimeidentity.PlatformWindows
+	case "darwin":
+		return runtimeidentity.PlatformDarwin
+	case "linux":
+		return runtimeidentity.PlatformLinux
+	default:
+		return runtimeidentity.PlatformUnknown
+	}
 }
 
 func mcpDataDirectory(ctx *app.AppContext) string {

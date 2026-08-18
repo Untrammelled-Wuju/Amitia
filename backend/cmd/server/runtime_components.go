@@ -293,7 +293,7 @@ func (c *taskRuntimeComponent) Descriptor() runtimeorchestrator.ComponentDescrip
 		Required:     false,
 		Dependencies: []runtimeorchestrator.ComponentID{runtimeorchestrator.ComponentExtensionKernel},
 		Capabilities: []string{"task.runtime"},
-		Profiles:     profilesCore,
+		Profiles:     profilesAll,
 	}
 }
 

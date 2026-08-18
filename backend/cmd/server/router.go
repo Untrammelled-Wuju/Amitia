@@ -390,7 +390,11 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	{
 		accountsession.RegisterAuthenticatedRoutes(apiGroup, accountSessionRuntime.Handler)
 		user.RegisterUserRouter(apiGroup, ctx)
-		character.RegisterCharacterRouter(apiGroup, ctx, services.Chat)
+		if services.Sync != nil && services.Sync.ChangeLog != nil {
+			character.RegisterCharacterRouterWithRecorder(apiGroup, ctx, services.Chat, services.Sync.ChangeLog)
+		} else {
+			character.RegisterCharacterRouter(apiGroup, ctx, services.Chat)
+		}
 		chat.RegisterChatRouterWithDelivery(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.ChatDeliveryAdapter)
 		memHandler := memory.RegisterMemoryRouter(apiGroup, ctx, services.Graph)
 		apiGroup.GET("/memory/retrieval/stats", memHandler.RetrieveStats)
@@ -546,7 +550,10 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			}))
 		}
 
-		if services.DeviceMesh != nil {
+		if services.DeviceMesh == nil || services.DeviceMesh.BootstrapSvc == nil || services.DeviceMesh.CredentialSvc == nil || services.DeviceMesh.Hub == nil || services.DeviceMesh.Handler == nil {
+			return nil, fmt.Errorf("device mesh: required cloud runtime dependencies are not initialized")
+		}
+		{
 			deviceMeshAuthMW := security.AuthenticationMiddleware(security.AuthConfig{
 				Mode:             config.AppCfg.Security.Mode,
 				JWTSecret:        config.AppCfg.JWT.Secret,
@@ -559,14 +566,19 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 				SessionService:   sessionSvc,
 				AccountSessions:  accountSessionRuntime.Validator,
 			})
-			meshSQLDB, _ := ctx.DB.DB()
-			devicemeshserver.RegisterCloudRoutes(apiGroup, deviceMeshAuthMW, &devicemeshserver.RouterDeps{
-				DB:        meshSQLDB,
-				Sessions:  services.DeviceMesh.GetSessions(),
-				Hub:       services.DeviceMesh.Hub,
-				Handler:   services.DeviceMesh.Handler,
-				Probe:     services.DeviceMesh.Probe,
-				DeviceReg: services.DeviceMesh.DeviceReg,
+			meshSQLDB, meshDBErr := ctx.DB.DB()
+			if meshDBErr != nil {
+				return nil, fmt.Errorf("device mesh: resolve sql db: %w", meshDBErr)
+			}
+			if err := devicemeshserver.RegisterCloudRoutes(apiGroup, deviceMeshAuthMW, &devicemeshserver.RouterDeps{
+				DB:            meshSQLDB,
+				Sessions:      services.DeviceMesh.GetSessions(),
+				BootstrapSvc:  services.DeviceMesh.BootstrapSvc,
+				CredentialSvc: services.DeviceMesh.CredentialSvc,
+				Hub:           services.DeviceMesh.Hub,
+				Handler:       services.DeviceMesh.Handler,
+				Probe:         services.DeviceMesh.Probe,
+				DeviceReg:     services.DeviceMesh.DeviceReg,
 				GetUserID: func(c *gin.Context) (runtimeidentity.UserID, bool) {
 					actor := security.GetActor(c)
 					if actor == nil || actor.UserID == "" {
@@ -601,19 +613,84 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 					unifiedResult.Generation = errResult.ConnectionGeneration
 					services.DeviceMesh.PendingInvocations.Fail(errResult.InvocationID, unifiedResult)
 				}),
-				TaskClaimHandler: devicemeshserver.TaskClaimAdapter(func(taskRunID string, workerID string, leaseDuration time.Duration) bool {
-					if services.DeviceMesh.PendingTasks == nil {
+				TaskClaimPayloadHandler: devicemeshserver.TaskClaimPayloadAdapter(func(claim protocol.TaskClaimPayload) bool {
+					if services.DeviceMesh.PendingTasks == nil || services.KernelContainer == nil || services.KernelContainer.TaskRuntimeService == nil {
 						return false
 					}
-					return services.DeviceMesh.PendingTasks.Claim(taskRunID, workerID, leaseDuration)
+					if !services.DeviceMesh.PendingTasks.ValidateBound(claim.TaskRunID, claim.AttemptID, claim.LeaseID, claim.RuntimeSessionID.String(), claim.ConnectionGeneration) {
+						return false
+					}
+					leaseDuration := time.Duration(claim.LeaseDurationMs) * time.Millisecond
+					if leaseDuration <= 0 {
+						leaseDuration = 5 * time.Minute
+					}
+					if err := services.KernelContainer.TaskRuntimeService.HandleRemoteClaim(context.Background(), claim.TaskRunID, claim.AttemptID, claim.LeaseID, time.Now().UTC().Add(leaseDuration)); err != nil {
+						return false
+					}
+					return services.DeviceMesh.PendingTasks.ClaimBound(
+						claim.TaskRunID, claim.AttemptID, claim.LeaseID, claim.RuntimeSessionID.String(),
+						claim.ConnectionGeneration, claim.WorkerID, leaseDuration,
+					)
 				}),
-				TaskCompleteHandler: devicemeshserver.TaskCompleteAdapter(func(taskRunID string, success bool, errMsg string) {
-					if services.DeviceMesh.PendingTasks == nil {
+				TaskHeartbeatPayloadHandler: devicemeshserver.TaskHeartbeatPayloadAdapter(func(heartbeat protocol.TaskHeartbeatPayload) {
+					if services.DeviceMesh.PendingTasks == nil || services.KernelContainer == nil || services.KernelContainer.TaskRuntimeService == nil {
 						return
 					}
-					services.DeviceMesh.PendingTasks.Complete(taskRunID, success, errMsg)
+					const leaseExtension = 5 * time.Minute
+					if !services.DeviceMesh.PendingTasks.HeartbeatBound(heartbeat.TaskRunID, heartbeat.AttemptID, heartbeat.LeaseID, heartbeat.RuntimeSessionID.String(), heartbeat.ConnectionGeneration, heartbeat.Sequence, leaseExtension) {
+						return
+					}
+					if err := services.KernelContainer.TaskRuntimeService.HeartbeatRemoteTask(context.Background(), heartbeat.TaskRunID, heartbeat.AttemptID, heartbeat.LeaseID, leaseExtension); err != nil {
+						services.DeviceMesh.PendingTasks.Cancel(heartbeat.TaskRunID, "task runtime heartbeat persist failed")
+						log.Error("device mesh task heartbeat persist failed", "taskRunId", heartbeat.TaskRunID, "error", err)
+					}
 				}),
-			})
+				TaskProgressPayloadHandler: devicemeshserver.TaskProgressPayloadAdapter(func(progress protocol.TaskProgressPayload) {
+					if services.DeviceMesh.PendingTasks == nil || services.KernelContainer == nil || services.KernelContainer.TaskRuntimeService == nil {
+						return
+					}
+					if !services.DeviceMesh.PendingTasks.ValidateBound(progress.TaskRunID, progress.AttemptID, progress.LeaseID, progress.RuntimeSessionID.String(), progress.ConnectionGeneration) {
+						return
+					}
+					if err := services.KernelContainer.TaskRuntimeService.HandleProgress(context.Background(), progress.TaskRunID, progress.AttemptID, progress.LeaseID, progress.Sequence, progress.Current, progress.Total, progress.Percentage, progress.Stage, progress.Message); err != nil {
+						log.Error("device mesh task progress persist failed", "taskRunId", progress.TaskRunID, "error", err)
+					}
+				}),
+				TaskCheckpointPayloadHandler: devicemeshserver.TaskCheckpointPayloadAdapter(func(checkpoint protocol.TaskCheckpointPayload) {
+					if services.DeviceMesh.PendingTasks == nil || services.KernelContainer == nil || services.KernelContainer.TaskRuntimeService == nil {
+						return
+					}
+					if !services.DeviceMesh.PendingTasks.ValidateBound(checkpoint.TaskRunID, checkpoint.AttemptID, checkpoint.LeaseID, checkpoint.RuntimeSessionID.String(), checkpoint.ConnectionGeneration) {
+						return
+					}
+					if err := services.KernelContainer.TaskRuntimeService.HandleCheckpoint(context.Background(), checkpoint.TaskRunID, checkpoint.AttemptID, checkpoint.LeaseID, checkpoint.CheckpointID, checkpoint.Version, checkpoint.Payload, checkpoint.PayloadHash); err != nil {
+						log.Error("device mesh task checkpoint persist failed", "taskRunId", checkpoint.TaskRunID, "error", err)
+					}
+				}),
+				TaskCompletePayloadHandler: devicemeshserver.TaskCompletePayloadAdapter(func(complete protocol.TaskCompletePayload) {
+					if services.DeviceMesh.PendingTasks == nil || services.KernelContainer == nil || services.KernelContainer.TaskRuntimeService == nil {
+						return
+					}
+					if !services.DeviceMesh.PendingTasks.ValidateBound(complete.TaskRunID, complete.AttemptID, complete.LeaseID, complete.RuntimeSessionID.String(), complete.ConnectionGeneration) {
+						return
+					}
+					if err := services.KernelContainer.TaskRuntimeService.HandleCompletion(context.Background(), complete.TaskRunID, complete.AttemptID, complete.LeaseID, complete.Success, complete.Result, complete.Error); err != nil {
+						log.Error("device mesh task completion persist failed", "taskRunId", complete.TaskRunID, "error", err)
+						return
+					}
+					services.DeviceMesh.PendingTasks.CompleteBound(complete.TaskRunID, complete.AttemptID, complete.LeaseID, complete.RuntimeSessionID.String(), complete.ConnectionGeneration, complete.Success, complete.Error)
+				}),
+				DisconnectHandler: devicemeshserver.DisconnectHandler(func(sessionID string, generation int64) {
+					if services.DeviceMesh.PendingInvocations != nil {
+						services.DeviceMesh.PendingInvocations.CancelAll(sessionID, "device connection closed")
+					}
+					if services.DeviceMesh.PendingTasks != nil {
+						services.DeviceMesh.PendingTasks.CancelAll(sessionID, "device connection closed")
+					}
+				}),
+			}); err != nil {
+				return nil, fmt.Errorf("register device mesh routes: %w", err)
+			}
 		}
 
 		if services.NativeBridgeRelay != nil && bootstrap != nil {
