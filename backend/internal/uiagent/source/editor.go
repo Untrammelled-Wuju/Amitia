@@ -29,9 +29,11 @@ type SourceEditOperation struct {
 }
 
 type SourceEditRequest struct {
-	WorkspaceID string                `json:"workspaceId"`
-	Operations  []SourceEditOperation `json:"operations"`
-	Transaction bool                  `json:"transaction"`
+	WorkspaceID    string                `json:"workspaceId"`
+	Operations     []SourceEditOperation `json:"operations"`
+	Transaction    bool                  `json:"transaction"`
+	AutoCommit     bool                  `json:"autoCommit"`
+	ExistingTxID   string                `json:"existingTxId,omitempty"`
 }
 
 type SourceEditResult struct {
@@ -39,18 +41,28 @@ type SourceEditResult struct {
 	AppliedOperations int      `json:"appliedOperations"`
 	TransactionToken  string   `json:"transactionToken,omitempty"`
 	ChangedFiles      []string `json:"changedFiles,omitempty"`
+	DiffPreview       string   `json:"diffPreview,omitempty"`
 }
 
 type SourceEditor interface {
 	ApplyEdits(ctx context.Context, req SourceEditRequest) (*SourceEditResult, error)
+	BeginTransaction(ctx context.Context, workspaceID string) (*workspace.EditTransaction, error)
+	ApplyPatchesTx(ctx context.Context, tx *workspace.EditTransaction, req SourceEditRequest) (*SourceEditResult, error)
+	PreviewDiff(ctx context.Context, tx *workspace.EditTransaction) (*workspace.DiffResult, error)
+	CommitTx(ctx context.Context, tx *workspace.EditTransaction) error
+	RollbackTx(ctx context.Context, tx *workspace.EditTransaction) error
 }
 
 type defaultSourceEditor struct {
-	precise workspace.PreciseEditingService
+	precise    workspace.PreciseEditingService
+	activeTxs  map[string]*workspace.EditTransaction
 }
 
 func NewSourceEditor(precise workspace.PreciseEditingService) SourceEditor {
-	return &defaultSourceEditor{precise: precise}
+	return &defaultSourceEditor{
+		precise:   precise,
+		activeTxs: make(map[string]*workspace.EditTransaction),
+	}
 }
 
 func (e *defaultSourceEditor) ApplyEdits(ctx context.Context, req SourceEditRequest) (*SourceEditResult, error) {
@@ -74,9 +86,13 @@ func (e *defaultSourceEditor) ApplyEdits(ctx context.Context, req SourceEditRequ
 				return nil, err
 			}
 		}
-		if err := e.precise.Commit(ctx, tx); err != nil {
-			_ = e.precise.Rollback(ctx, tx)
-			return nil, fmt.Errorf("%w: %v", ErrTransactionFailed, err)
+		if req.AutoCommit {
+			if err := e.precise.Commit(ctx, tx); err != nil {
+				_ = e.precise.Rollback(ctx, tx)
+				return nil, fmt.Errorf("%w: %v", ErrTransactionFailed, err)
+			}
+		} else {
+			e.activeTxs[tx.ID] = tx
 		}
 		result.TransactionToken = tx.ID
 		for path := range tx.ChangedFiles {
@@ -94,6 +110,80 @@ func (e *defaultSourceEditor) ApplyEdits(ctx context.Context, req SourceEditRequ
 		result.ChangedFiles = append(result.ChangedFiles, op.Path)
 	}
 	return result, nil
+}
+
+func (e *defaultSourceEditor) BeginTransaction(ctx context.Context, workspaceID string) (*workspace.EditTransaction, error) {
+	if e.precise == nil {
+		return nil, ErrPreciseUnavailable
+	}
+	tx, err := e.precise.BeginTransaction(ctx, workspaceID)
+	if err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrTransactionFailed, err)
+	}
+	e.activeTxs[tx.ID] = tx
+	return tx, nil
+}
+
+func (e *defaultSourceEditor) ApplyPatchesTx(ctx context.Context, tx *workspace.EditTransaction, req SourceEditRequest) (*SourceEditResult, error) {
+	if tx == nil {
+		return nil, fmt.Errorf("%w: transaction is nil", ErrTransactionFailed)
+	}
+	if e.precise == nil {
+		return nil, ErrPreciseUnavailable
+	}
+
+	result := &SourceEditResult{Success: true}
+	for _, op := range req.Operations {
+		if err := e.applyOperationTx(ctx, tx, op); err != nil {
+			_ = e.precise.Rollback(ctx, tx)
+			delete(e.activeTxs, tx.ID)
+			return nil, err
+		}
+	}
+	result.TransactionToken = tx.ID
+	for path := range tx.ChangedFiles {
+		result.ChangedFiles = append(result.ChangedFiles, path)
+	}
+	result.AppliedOperations = len(req.Operations)
+	return result, nil
+}
+
+func (e *defaultSourceEditor) PreviewDiff(ctx context.Context, tx *workspace.EditTransaction) (*workspace.DiffResult, error) {
+	if tx == nil {
+		return nil, fmt.Errorf("%w: transaction is nil", ErrTransactionFailed)
+	}
+	if e.precise == nil {
+		return nil, ErrPreciseUnavailable
+	}
+	return e.precise.PreviewDiff(ctx, tx)
+}
+
+func (e *defaultSourceEditor) CommitTx(ctx context.Context, tx *workspace.EditTransaction) error {
+	if tx == nil {
+		return fmt.Errorf("%w: transaction is nil", ErrTransactionFailed)
+	}
+	if e.precise == nil {
+		return ErrPreciseUnavailable
+	}
+	if err := e.precise.Commit(ctx, tx); err != nil {
+		_ = e.precise.Rollback(ctx, tx)
+		delete(e.activeTxs, tx.ID)
+		return fmt.Errorf("%w: %v", ErrTransactionFailed, err)
+	}
+	delete(e.activeTxs, tx.ID)
+	return nil
+}
+
+func (e *defaultSourceEditor) RollbackTx(ctx context.Context, tx *workspace.EditTransaction) error {
+	if tx == nil {
+		return fmt.Errorf("%w: transaction is nil", ErrTransactionFailed)
+	}
+	if e.precise == nil {
+		return ErrPreciseUnavailable
+	}
+	err := e.precise.Rollback(ctx, tx)
+	delete(e.activeTxs, tx.ID)
+	return err
 }
 
 func (e *defaultSourceEditor) applyOperation(ctx context.Context, workspaceID string, op SourceEditOperation) error {

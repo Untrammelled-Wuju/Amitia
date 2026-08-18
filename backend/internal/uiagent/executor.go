@@ -8,6 +8,7 @@ import (
 	"github.com/u-ai/backend/internal/uiagent/preview"
 	"github.com/u-ai/backend/internal/uiagent/schema"
 	"github.com/u-ai/backend/internal/uiagent/source"
+	"github.com/u-ai/backend/internal/workspace"
 )
 
 // SourceEditOperation describes a single file edit.
@@ -31,6 +32,11 @@ type SchemaEditResult struct {
 // SourceEditor applies source code edits to a workspace.
 type SourceEditor interface {
 	ApplyEdits(ctx context.Context, req source.SourceEditRequest) (*source.SourceEditResult, error)
+	BeginTransaction(ctx context.Context, workspaceID string) (*workspace.EditTransaction, error)
+	ApplyPatchesTx(ctx context.Context, tx *workspace.EditTransaction, req source.SourceEditRequest) (*source.SourceEditResult, error)
+	PreviewDiff(ctx context.Context, tx *workspace.EditTransaction) (*workspace.DiffResult, error)
+	CommitTx(ctx context.Context, tx *workspace.EditTransaction) error
+	RollbackTx(ctx context.Context, tx *workspace.EditTransaction) error
 }
 
 // PreviewManager creates and manages preview sessions.
@@ -65,6 +71,41 @@ func (a sourceEditorAdapter) call(ctx context.Context, req source.SourceEditRequ
 		return nil, fmt.Errorf("source editor not configured")
 	}
 	return a.editor.ApplyEdits(ctx, req)
+}
+
+func (a sourceEditorAdapter) beginTx(ctx context.Context, workspaceID string) (*workspace.EditTransaction, error) {
+	if a.editor == nil {
+		return nil, fmt.Errorf("source editor not configured")
+	}
+	return a.editor.BeginTransaction(ctx, workspaceID)
+}
+
+func (a sourceEditorAdapter) applyPatchesTx(ctx context.Context, tx *workspace.EditTransaction, req source.SourceEditRequest) (*source.SourceEditResult, error) {
+	if a.editor == nil {
+		return nil, fmt.Errorf("source editor not configured")
+	}
+	return a.editor.ApplyPatchesTx(ctx, tx, req)
+}
+
+func (a sourceEditorAdapter) previewDiff(ctx context.Context, tx *workspace.EditTransaction) (*workspace.DiffResult, error) {
+	if a.editor == nil {
+		return nil, fmt.Errorf("source editor not configured")
+	}
+	return a.editor.PreviewDiff(ctx, tx)
+}
+
+func (a sourceEditorAdapter) commitTx(ctx context.Context, tx *workspace.EditTransaction) error {
+	if a.editor == nil {
+		return fmt.Errorf("source editor not configured")
+	}
+	return a.editor.CommitTx(ctx, tx)
+}
+
+func (a sourceEditorAdapter) rollbackTx(ctx context.Context, tx *workspace.EditTransaction) error {
+	if a.editor == nil {
+		return fmt.Errorf("source editor not configured")
+	}
+	return a.editor.RollbackTx(ctx, tx)
 }
 
 // UIExecutorOption configures a UIExecutor.
@@ -180,6 +221,112 @@ func (e *UIExecutor) ApplySourceEdits(ctx context.Context, plan UIChangePlan) (*
 	}
 
 	return result, nil
+}
+
+// ApplySourceEditsWithPreview 执行完整的事务流程：
+// BeginTx → ApplyPatchTx → Preview → Observer → AutoRefine → Commit/Rollback
+func (e *UIExecutor) ApplySourceEditsWithPreview(ctx context.Context, plan UIChangePlan) (*source.SourceEditResult, string, error) {
+	workspaceID := plan.Intent.Target.WorkspaceID
+	if workspaceID == "" {
+		return nil, "", source.ErrWorkspaceIDRequired
+	}
+
+	srcReq := source.SourceEditRequest{
+		WorkspaceID: workspaceID,
+		Transaction: true,
+		AutoCommit:  false,
+	}
+	for _, op := range plan.Operations {
+		srcOp := source.SourceEditOperation{
+			Path: op.Target,
+		}
+		if len(op.Payload) > 0 {
+			var payload struct {
+				Patch      string `json:"patch"`
+				OldText    string `json:"oldText"`
+				NewText    string `json:"newText"`
+				BaseSHA256 string `json:"baseSha256"`
+				SearchMode string `json:"searchMode"`
+				ReplaceAll bool   `json:"replaceAll"`
+				ExpectCount int   `json:"expectCount"`
+			}
+			if err := json.Unmarshal(op.Payload, &payload); err == nil {
+				srcOp.Patch = payload.Patch
+				srcOp.OldText = payload.OldText
+				srcOp.NewText = payload.NewText
+				srcOp.BaseSHA256 = payload.BaseSHA256
+				srcOp.SearchMode = payload.SearchMode
+				srcOp.ReplaceAll = payload.ReplaceAll
+				srcOp.ExpectedCount = payload.ExpectCount
+			}
+		}
+		srcReq.Operations = append(srcReq.Operations, srcOp)
+	}
+
+	if len(srcReq.Operations) == 0 {
+		return nil, "", fmt.Errorf("no source operations to apply")
+	}
+
+	tx, err := e.sourceEditor.beginTx(ctx, workspaceID)
+	if err != nil {
+		return nil, "", fmt.Errorf("begin transaction: %w", err)
+	}
+
+	applyResult, err := e.sourceEditor.applyPatchesTx(ctx, tx, srcReq)
+	if err != nil {
+		_ = e.sourceEditor.rollbackTx(ctx, tx)
+		return nil, "", fmt.Errorf("apply patches: %w", err)
+	}
+
+	diffResult, err := e.sourceEditor.previewDiff(ctx, tx)
+	if err != nil {
+		_ = e.sourceEditor.rollbackTx(ctx, tx)
+		return nil, "", fmt.Errorf("preview diff: %w", err)
+	}
+	applyResult.DiffPreview = diffResult.UnifiedDiff
+
+	if e.observer != nil {
+		obsResult, obsErr := e.observer.Capture(ctx, workspaceID)
+		if obsErr == nil && len(obsResult.Errors) > 0 && e.autoRefiner != nil {
+			refineReq := preview.RefineRequest{
+				SessionID:     workspaceID,
+				Observation:   obsResult,
+				ChangedPaths:  obsResult.ChangedPaths,
+				MaxIterations: e.maxRefineIter,
+				Revision:      plan.ExecutionID,
+			}
+			if plan.Intent.Target.WorkspaceID != "" {
+				refineReq.Target = &preview.PreviewTarget{
+					WorkspaceID: plan.Intent.Target.WorkspaceID,
+					Platform:    plan.Intent.Target.Platform,
+					SourceType:  string(plan.Intent.Target.Type),
+				}
+			}
+			refineResult, refineErr := e.autoRefiner.Refine(ctx, refineReq)
+			if refineErr != nil {
+				_ = e.sourceEditor.rollbackTx(ctx, tx)
+				return applyResult, "", fmt.Errorf("auto refine failed: %w", refineErr)
+			}
+			if refineResult.State == "needs_manual" || refineResult.State == "no_progress" {
+				_ = e.sourceEditor.rollbackTx(ctx, tx)
+				return applyResult, refineResult.State, nil
+			}
+			if refineResult.TransactionID != "" {
+				refineApplyResult, err := e.sourceEditor.applyPatchesTx(ctx, tx, srcReq)
+				if err != nil {
+					_ = e.sourceEditor.rollbackTx(ctx, tx)
+					return nil, "", fmt.Errorf("apply refine patches: %w", err)
+				}
+				applyResult = refineApplyResult
+			}
+		}
+	}
+
+	if err := e.sourceEditor.commitTx(ctx, tx); err != nil {
+		return nil, "", fmt.Errorf("commit transaction: %w", err)
+	}
+
+	return applyResult, "committed", nil
 }
 
 // ApplySchema executes schema generation and rendering.
