@@ -119,6 +119,14 @@ func (rt *Runtime) GetSessions() *deviceruntime.Service {
 	return rt.sessions
 }
 
+func (rt *Runtime) GetDispatcher() dispatcherResolveAdapter {
+	return rt.dispatcher
+}
+
+func (rt *Runtime) GetTaskRuntime() agent.TaskRuntimeExecutor {
+	return rt.taskRuntime
+}
+
 func (rt *Runtime) Start() error {
 	if rt.Hub == nil {
 		rt.Hub = server.NewConnectionHub()
@@ -136,14 +144,15 @@ func (rt *Runtime) Stop() error {
 	return nil
 }
 
-func NewDeviceAgentRuntime(dataDir string, platform runtimeidentity.Platform) (*Runtime, error) {
+func NewDeviceAgentRuntime(dataDir string, platform runtimeidentity.Platform, taskRuntime agent.TaskRuntimeExecutor, dispatcher dispatcherResolveAdapter) (*Runtime, error) {
 	localHandler := agent.NewLocalHandler(dataDir, platform)
 
 	rt := &Runtime{
 		LocalHandler: localHandler,
+		taskRuntime:  taskRuntime,
+		dispatcher:   dispatcher,
 	}
 
-	// R21: Auto-recover credential on restart
 	rt.autoRecoverCredential(localHandler)
 
 	return rt, nil

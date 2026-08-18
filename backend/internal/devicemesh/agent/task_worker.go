@@ -151,9 +151,11 @@ func (w *defaultTaskWorker) executeTaskByType(ctx context.Context, dispatch prot
 
 func (w *defaultTaskWorker) dispatchTaskExecution(ctx context.Context, taskType string, input map[string]interface{}) (json.RawMessage, error) {
 	if w.taskRuntime != nil {
-		if result, err := w.taskRuntime.Execute(ctx, taskType, input); err == nil {
+		result, err := w.taskRuntime.Execute(ctx, taskType, input)
+		if err == nil {
 			return result, nil
 		}
+		return nil, fmt.Errorf("taskRuntime.Execute failed for type %s: %w", taskType, err)
 	}
 
 	switch taskType {
