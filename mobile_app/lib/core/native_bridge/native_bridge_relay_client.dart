@@ -58,6 +58,7 @@ class NativeBridgeRelayClient {
       StreamController<RelayEnvelope>.broadcast();
   final StreamController<bool> _connectionController =
       StreamController<bool>.broadcast();
+  final Map<String, Completer<Map<String, dynamic>>> _backendActionPending = {};
 
   Timer? _reconnectTimer;
   bool _disposed = false;
@@ -71,7 +72,9 @@ class NativeBridgeRelayClient {
     required this.dispatcher,
     BackendUriBuilder? uriBuilder,
     this.reconnectDelay = const Duration(seconds: 3),
-  }) : _uriBuilder = uriBuilder ?? BackendUriBuilder();
+  }) : _uriBuilder = uriBuilder ?? BackendUriBuilder() {
+    dispatcher.setBackendActionHandler(_sendBackendActionRequest);
+  }
 
   Stream<RelayEnvelope> get events => _eventController.stream;
   Stream<bool> get connectionState => _connectionController.stream;
@@ -136,6 +139,18 @@ class NativeBridgeRelayClient {
           envelope.requestId.isNotEmpty &&
           envelope.payload != null) {
         _handlePlatformRequest(envelope);
+      } else if (envelope.type == 'backend_action.response' &&
+          envelope.requestId.isNotEmpty) {
+        final completer = _backendActionPending.remove(envelope.requestId);
+        if (completer != null && !completer.isCompleted) {
+          completer.complete(envelope.payload ?? {
+            'status': 'error',
+            'error': {
+              'code': 'INVALID_RESPONSE',
+              'message': 'backend action response payload missing',
+            },
+          });
+        }
       } else {
         _eventController.add(envelope);
       }
@@ -187,6 +202,49 @@ class NativeBridgeRelayClient {
     socket.add(envelope.json());
   }
 
+  Future<Map<String, dynamic>> _sendBackendActionRequest(
+    String actionId,
+    Map<String, dynamic>? payload,
+  ) async {
+    final socket = _socket;
+    if (socket == null || _currentGeneration <= 0) {
+      return {
+        'status': 'error',
+        'error': {
+          'code': 'BACKEND_DISPATCHER_NOT_READY',
+          'message': 'native relay is not connected',
+        },
+      };
+    }
+    final requestId = 'shortcut-${DateTime.now().microsecondsSinceEpoch}';
+    final completer = Completer<Map<String, dynamic>>();
+    _backendActionPending[requestId] = completer;
+    final envelope = RelayEnvelope(
+      type: 'backend_action.request',
+      requestId: requestId,
+      platform: platform,
+      generation: _currentGeneration,
+      payload: {
+        'requestId': requestId,
+        'actionId': actionId,
+        'payload': payload ?? <String, dynamic>{},
+      },
+    );
+    socket.add(envelope.json());
+    try {
+      return await completer.future.timeout(const Duration(seconds: 30));
+    } on TimeoutException {
+      _backendActionPending.remove(requestId);
+      return {
+        'status': 'error',
+        'error': {
+          'code': 'TIMEOUT',
+          'message': 'backend shortcut action timed out',
+        },
+      };
+    }
+  }
+
   void updateGeneration(int generation) {
     _currentGeneration = generation;
   }
@@ -206,10 +264,24 @@ class NativeBridgeRelayClient {
   void _handleDisconnect() {
     if (_disposed) return;
     _cancelNativeEventSub();
+    _failBackendActionPending('BRIDGE_DISCONNECTED', 'native relay disconnected');
     _currentGeneration = 0;
     _socket = null;
     _connectionController.add(false);
     _scheduleReconnect();
+  }
+
+  void _failBackendActionPending(String code, String message) {
+    final pending = Map<String, Completer<Map<String, dynamic>>>.from(_backendActionPending);
+    _backendActionPending.clear();
+    for (final completer in pending.values) {
+      if (!completer.isCompleted) {
+        completer.complete({
+          'status': 'error',
+          'error': {'code': code, 'message': message},
+        });
+      }
+    }
   }
 
   void _cancelNativeEventSub() {
@@ -236,6 +308,8 @@ class NativeBridgeRelayClient {
 
   Future<void> dispose() async {
     _disposed = true;
+    dispatcher.setBackendActionHandler(null);
+    _failBackendActionPending('DISPOSED', 'native relay disposed');
     _reconnectTimer?.cancel();
     _cancelNativeEventSub();
     await _socket?.close();

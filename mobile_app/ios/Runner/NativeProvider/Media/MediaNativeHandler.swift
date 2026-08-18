@@ -326,7 +326,7 @@ public class MediaNativeHandler: NSObject, IOSNativeOperationHandler {
                 requestId: request.requestId,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "failed to load image data from \(sourceURL.path)")
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "failed to load staged image data")
             )
         }
 

@@ -1,71 +1,66 @@
+import Flutter
 import Foundation
 
 public class BackendActionDispatcherImpl: BackendActionDispatcher {
     public static let shared = BackendActionDispatcherImpl()
 
-    private var isReady: Bool = true
-    private var nativeHost: IOSNativeHost?
+    private var channel: FlutterMethodChannel?
 
     private init() {}
 
-    public func configure(host: IOSNativeHost) {
-        self.nativeHost = host
+    public func configure(messenger: FlutterBinaryMessenger) {
+        channel = FlutterMethodChannel(
+            name: "com.amitia.ios_native/backend_action",
+            binaryMessenger: messenger
+        )
     }
 
     public func executeAction(actionId: String, payload: [String: Any]?) async -> [String: Any] {
-        guard isReady else {
-            return ["error": "BACKEND_DISPATCHER_NOT_READY", "actionId": actionId]
-        }
-
-        guard let host = nativeHost else {
-            return ["error": "BACKEND_DISPATCHER_NOT_READY", "actionId": actionId]
-        }
-
-        let requestId = UUID().uuidString
-        let operation = mapActionIdToOperation(actionId)
-
-        let requestPayload: [String: Any] = [
-            "actionId": actionId,
-            "payload": payload ?? [:],
-            "requestedAt": ISO8601DateFormatter().string(from: Date())
-        ]
-
-        let request = IOSNativeRequest(
-            protocolVersion: 1,
-            requestId: requestId,
-            platform: "ios",
-            operation: operation,
-            payload: requestPayload
-        )
-
-        let response = await host.execute(request)
-
-        if response.status == "ok" {
-            return response.result ?? [:]
-        } else {
-            let errorCode = response.error?.code ?? "UNKNOWN_ERROR"
-            let errorMessage = response.error?.message ?? "Action execution failed"
+        guard let channel else {
             return [
-                "error": errorCode,
-                "message": errorMessage,
+                "status": "error",
+                "error": [
+                    "code": "BACKEND_DISPATCHER_NOT_READY",
+                    "message": "Backend action channel is not configured"
+                ],
                 "actionId": actionId
             ]
         }
-    }
 
-    private func mapActionIdToOperation(_ actionId: String) -> String {
-        if actionId.hasPrefix("com.amitia.action.chat") {
-            return "shortcuts.execute.chat"
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.main.async {
+                channel.invokeMethod(
+                    "backendAction.execute",
+                    arguments: [
+                        "actionId": actionId,
+                        "payload": payload ?? [:]
+                    ]
+                ) { result in
+                    if let flutterError = result as? FlutterError {
+                        continuation.resume(returning: [
+                            "status": "error",
+                            "error": [
+                                "code": flutterError.code,
+                                "message": flutterError.message ?? "Backend action failed"
+                            ],
+                            "actionId": actionId
+                        ])
+                        return
+                    }
+                    guard let response = result as? [String: Any] else {
+                        continuation.resume(returning: [
+                            "status": "error",
+                            "error": [
+                                "code": "INVALID_RESPONSE",
+                                "message": "Backend action returned an invalid response"
+                            ],
+                            "actionId": actionId
+                        ])
+                        return
+                    }
+                    continuation.resume(returning: response)
+                }
+            }
         }
-        if actionId.hasPrefix("com.amitia.action.reminder") {
-            return "shortcuts.execute.reminder"
-        }
-        if actionId.hasPrefix("com.amitia.action.alarm") {
-            return "shortcuts.execute.alarm"
-        }
-        if actionId.hasPrefix("com.amitia.action.media") {
-            return "shortcuts.execute.media"
-        }
-        return "shortcuts.execute.generic"
     }
 }

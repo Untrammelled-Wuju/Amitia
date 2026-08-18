@@ -60,6 +60,8 @@
 	<string>Amitia App 需要完全访问日历来管理您的日程安排</string>
 	<key>NSRemindersUsageDescription</key>
 	<string>Amitia App 需要访问提醒事项来读取和管理您的提醒</string>
+	<key>NSAlarmKitUsageDescription</key>
+	<string>Amitia App 需要使用系统闹钟来创建和管理您明确设置的提醒。</string>
 	<key>NSRemindersFullAccessUsageDescription</key>
 	<string>Amitia App 需要完全访问提醒事项来创建和管理提醒</string>
 	<key>NSContactsUsageDescription</key>

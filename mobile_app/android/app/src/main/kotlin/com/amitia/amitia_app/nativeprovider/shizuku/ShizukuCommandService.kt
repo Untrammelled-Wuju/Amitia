@@ -54,11 +54,18 @@ class ShizukuCommandService : IPrivilegedCommandService.Stub() {
         }
     }
 
-    override fun destroyService() {
+    override fun destroy() {
         if (destroyed.compareAndSet(false, true)) {
             try {
                 ioExecutor.shutdownNow()
+                ioExecutor.awaitTermination(250, TimeUnit.MILLISECONDS)
             } catch (_: Exception) {
+            } finally {
+                // Shizuku UserService processes are not normal Android service
+                // processes and are not killed by unbindUserService alone. The
+                // official destroy transaction is responsible for terminating
+                // the privileged process after cleanup.
+                System.exit(0)
             }
         }
     }
@@ -253,7 +260,6 @@ class ShizukuCommandService : IPrivilegedCommandService.Stub() {
 
     companion object {
         const val TRANSACTION_executeCommand: Int = IBinder.FIRST_CALL_TRANSACTION
-        const val TRANSACTION_destroyService: Int = IBinder.FIRST_CALL_TRANSACTION + 1
 
         fun createArgs(): Shizuku.UserServiceArgs {
             return Shizuku.UserServiceArgs(

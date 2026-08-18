@@ -10,9 +10,6 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         "media.alarms.schedule",
         "media.alarms.stop",
         "media.alarms.cancel",
-        "media.alarms.countdown",
-        "media.alarms.pause",
-        "media.alarms.resume"
     ]
 
     public override init() {
@@ -65,12 +62,6 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
             return await handleStop(request)
         case "media.alarms.cancel":
             return await handleCancel(request)
-        case "media.alarms.countdown":
-            return await handleCountdown(request)
-        case "media.alarms.pause":
-            return await handlePause(request)
-        case "media.alarms.resume":
-            return await handleResume(request)
         default:
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
@@ -254,14 +245,26 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handleSchedule(_ request: IOSNativeRequest) async -> IOSNativeResponse {
-        guard let alarmId = request.payload?["alarmId"] as? String ?? request.payload?["id"] as? String,
-              let title = request.payload?["title"] as? String else {
+        guard let title = request.payload?["title"] as? String, !title.isEmpty else {
             return IOSNativeResponse(
                 protocolVersion: request.protocolVersion,
                 requestId: request.requestId,
                 status: "error",
                 result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing alarmId or title")
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing title")
+            )
+        }
+        let alarmId = (request.payload?["alarmId"] as? String)
+            ?? (request.payload?["id"] as? String)
+            ?? UUID().uuidString
+        let kind = (request.payload?["kind"] as? String) ?? "alarm"
+        guard kind == "alarm" else {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestId: request.requestId,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "CAPABILITY_UNAVAILABLE", message: "countdown alarms and timers require an AlarmKit Live Activity widget extension")
             )
         }
 
@@ -426,98 +429,4 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
         }
     }
 
-    private func handleCountdown(_ request: IOSNativeRequest) async -> IOSNativeResponse {
-        guard let seconds = request.payload?["seconds"] as? Double else {
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestId: request.requestId,
-                status: "error",
-                result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing seconds")
-            )
-        }
-
-        let alarmId = "countdown-\(UUID().uuidString)"
-        var countdownPayload = request.payload ?? [:]
-        if countdownPayload["alarmId"] == nil && countdownPayload["id"] == nil {
-            countdownPayload["id"] = alarmId
-        }
-        let title = (countdownPayload["title"] as? String) ?? "Countdown"
-        countdownPayload["title"] = title
-
-        var schedule = AmitiaAlarmScheduleDTO()
-        let futureDate = Date().addingTimeInterval(seconds)
-        let formatter = ISO8601DateFormatter()
-        schedule.fireAt = formatter.string(from: futureDate)
-        countdownPayload["schedule"] = ["fireAt": formatter.string(from: futureDate)]
-
-        countdownPayload["presentation"] = ["alertTitle": title]
-
-        let countdownRequest = IOSNativeRequest(
-            protocolVersion: request.protocolVersion,
-            requestId: request.requestId,
-            platform: request.platform,
-            operation: "media.alarms.schedule",
-            payload: countdownPayload
-        )
-        return await handleSchedule(countdownRequest)
-    }
-
-    private func handlePause(_ request: IOSNativeRequest) async -> IOSNativeResponse {
-        guard let alarmId = request.payload?["alarmId"] as? String, !alarmId.isEmpty else {
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestId: request.requestId,
-                status: "error",
-                result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing required field: alarmId")
-            )
-        }
-        let (success, error) = await AlarmKitAdapter.shared.pauseAlarm(id: alarmId)
-        if success {
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestId: request.requestId,
-                status: "ok",
-                result: ["alarmId": alarmId, "paused": true],
-                error: nil
-            )
-        }
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestId: request.requestId,
-            status: "error",
-            result: nil,
-            error: IOSNativeError(code: "PAUSE_FAILED", message: error ?? "unknown error")
-        )
-    }
-
-    private func handleResume(_ request: IOSNativeRequest) async -> IOSNativeResponse {
-        guard let alarmId = request.payload?["alarmId"] as? String, !alarmId.isEmpty else {
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestId: request.requestId,
-                status: "error",
-                result: nil,
-                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing required field: alarmId")
-            )
-        }
-        let (success, error) = await AlarmKitAdapter.shared.resumeAlarm(id: alarmId)
-        if success {
-            return IOSNativeResponse(
-                protocolVersion: request.protocolVersion,
-                requestId: request.requestId,
-                status: "ok",
-                result: ["alarmId": alarmId, "resumed": true],
-                error: nil
-            )
-        }
-        return IOSNativeResponse(
-            protocolVersion: request.protocolVersion,
-            requestId: request.requestId,
-            status: "error",
-            result: nil,
-            error: IOSNativeError(code: "RESUME_FAILED", message: error ?? "unknown error")
-        )
-    }
 }

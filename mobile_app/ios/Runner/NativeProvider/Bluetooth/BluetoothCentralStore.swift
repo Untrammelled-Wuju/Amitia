@@ -732,7 +732,8 @@ public final class BluetoothCentralStore: NSObject, CBCentralManagerDelegate, CB
         NativeEventEmitter.shared.emit(NativeEventPayload(
             domain: "bluetooth",
             event: "adapter.state_changed",
-            data: ["state": stateString]
+            data: ["state": stateString],
+            generation: Int(currentGeneration)
         ))
     }
 
@@ -743,17 +744,24 @@ public final class BluetoothCentralStore: NSObject, CBCentralManagerDelegate, CB
             peripheralNames[peripheral.identifier] = name
         }
         peripheralRSSI[peripheral.identifier] = RSSI
-        advertisementData[peripheral.identifier] = advertisementData
+        self.advertisementData[peripheral.identifier] = advertisementData
         lock.unlock()
+        var safeAdvertisement: [String: Any] = [:]
+        if let connectable = advertisementData[CBAdvertisementDataIsConnectable] as? NSNumber {
+            safeAdvertisement["isConnectable"] = connectable.boolValue
+        }
+        if let serviceUUIDs = advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] {
+            safeAdvertisement["serviceUUIDs"] = serviceUUIDs.map(\.uuidString)
+        }
         NativeEventEmitter.shared.emit(NativeEventPayload(
             domain: "bluetooth",
             event: "peripheral.discovered",
             data: [
                 "id": peripheral.identifier.uuidString,
-                "name": peripheral.name ?? NSNull(),
                 "rssi": RSSI.intValue,
-                "advertisementData": advertisementData
+                "advertisement": safeAdvertisement
             ],
+            generation: Int(currentGeneration),
             entityRef: peripheral.identifier.uuidString
         ))
     }
@@ -771,6 +779,7 @@ public final class BluetoothCentralStore: NSObject, CBCentralManagerDelegate, CB
             domain: "bluetooth",
             event: "peripheral.connected",
             data: ["id": peripheral.identifier.uuidString, "name": peripheral.name ?? NSNull()],
+            generation: Int(currentGeneration),
             entityRef: peripheral.identifier.uuidString
         ))
     }
@@ -791,6 +800,7 @@ public final class BluetoothCentralStore: NSObject, CBCentralManagerDelegate, CB
                 "name": peripheral.name ?? NSNull(),
                 "error": error?.localizedDescription ?? "connection failed"
             ],
+            generation: Int(currentGeneration),
             entityRef: peripheral.identifier.uuidString
         ))
     }
@@ -812,6 +822,7 @@ public final class BluetoothCentralStore: NSObject, CBCentralManagerDelegate, CB
             domain: "bluetooth",
             event: "peripheral.disconnected",
             data: ["id": peripheral.identifier.uuidString, "name": peripheral.name ?? NSNull(), "error": error?.localizedDescription ?? NSNull()],
+            generation: Int(currentGeneration),
             entityRef: peripheral.identifier.uuidString
         ))
     }
@@ -860,6 +871,7 @@ public final class BluetoothCentralStore: NSObject, CBCentralManagerDelegate, CB
                     "characteristicUUID": characteristic.uuid.uuidString,
                     "value": (characteristic.value ?? Data()).base64EncodedString()
                 ],
+                generation: Int(currentGeneration),
                 entityRef: peripheral.identifier.uuidString
             ))
         }
@@ -929,4 +941,4 @@ public final class BluetoothCentralStore: NSObject, CBCentralManagerDelegate, CB
         }
         completeOperation(key: key, result: RSSI, error: nil)
     }
-}</longcat_think>
+}

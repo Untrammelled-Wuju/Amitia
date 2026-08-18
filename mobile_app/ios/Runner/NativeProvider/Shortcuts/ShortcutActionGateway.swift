@@ -92,11 +92,10 @@ public class ShortcutActionGateway: NSObject {
             .openConversation,
             .createReminder,
             .addAlarm,
+            .removeAlarm,
             .addCalendarEvent,
             .pickMedia,
-            .search,
-            .settings,
-            .status
+            .exportMedia
         ]
     }
 
@@ -119,11 +118,11 @@ public class ShortcutActionGateway: NSObject {
 
     public func executeAction(_ action: ShortcutAction, payload: [String: Any]?) async -> [String: Any] {
         guard isCuratedAction(action) else {
-            return ["error": "ACTION_NOT_AVAILABLE", "actionId": action.actionId]
+            return ["status": "error", "error": ["code": "ACTION_NOT_AVAILABLE", "message": "Shortcut action is not available"], "actionId": action.actionId]
         }
 
         guard isDispatcherReady, let dispatcher = backendDispatcher else {
-            return ["error": "BACKEND_DISPATCHER_NOT_READY", "actionId": action.actionId]
+            return ["status": "error", "error": ["code": "BACKEND_DISPATCHER_NOT_READY", "message": "Backend dispatcher is not ready"], "actionId": action.actionId]
         }
 
         return await dispatcher.executeAction(actionId: action.actionId, payload: payload)
@@ -131,7 +130,7 @@ public class ShortcutActionGateway: NSObject {
 
     public func executeUnchecked(actionId: String, payload: [String: Any]?) async -> [String: Any] {
         guard let action = ShortcutAction.from(actionId: actionId) else {
-            return ["error": "ACTION_NOT_AVAILABLE", "actionId": actionId]
+            return ["status": "error", "error": ["code": "ACTION_NOT_AVAILABLE", "message": "Shortcut action is not available"], "actionId": actionId]
         }
         return await executeAction(action, payload: payload)
     }

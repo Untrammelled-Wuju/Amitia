@@ -4,25 +4,7 @@ import Foundation
 public class ShortcutNativeHandler: NSObject, IOSNativeOperationHandler {
     public let operations: Set<String> = [
         "shortcuts.status",
-        "shortcuts.entities.characters",
-        "shortcuts.entities.conversations",
-        "shortcuts.entities.alarms",
-        "shortcuts.entities.reminders",
-        "shortcuts.entities.actions",
-        "shortcuts.entity.resolve",
-        "shortcuts.entity.suggestions",
-        "shortcuts.actions.catalog",
-        "shortcuts.action.describe",
-        "shortcuts.action.execute",
-        "shortcuts.action.confirm",
-        "shortcuts.runtime.readiness",
-        "shortcuts.runtime.ensure",
-        "shortcuts.snapshot.get",
-        "shortcuts.snapshot.refresh",
-        "shortcuts.shortcuts.provider",
-        "shortcuts.shortcuts.phrase",
-        "shortcuts.settings.get",
-        "shortcuts.settings.update"
+        "shortcuts.shortcuts.provider"
     ]
 
     public override init() {

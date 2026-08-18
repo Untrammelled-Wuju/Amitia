@@ -123,7 +123,7 @@ object ShizukuCommandServiceHolder {
             }
             deathRecipient = null
             try {
-                svc.destroyService()
+                svc.destroy()
             } catch (_: Exception) {}
         } finally {
             connection?.let { conn ->
