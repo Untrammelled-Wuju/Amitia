@@ -384,7 +384,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	{
 		accountsession.RegisterAuthenticatedRoutes(apiGroup, accountSessionRuntime.Handler)
 		user.RegisterUserRouter(apiGroup, ctx)
-		character.RegisterCharacterRouter(apiGroup, ctx, services.Chat)
+		character.RegisterCharacterRouterWithRecorder(apiGroup, ctx, services.Chat, services.Sync.ChangeLog)
 		chat.RegisterChatRouterWithDelivery(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.ChatDeliveryAdapter)
 		memHandler := memory.RegisterMemoryRouter(apiGroup, ctx, services.Graph)
 		apiGroup.GET("/memory/retrieval/stats", memHandler.RetrieveStats)
@@ -606,13 +606,12 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			AccountSessions:  accountSessionRuntime.Validator,
 		})
 		meshDeps := &server.RouterDeps{
-			DB:           nil,
-			Sessions:     services.DeviceMesh.GetSessions(),
-			BootstrapSvc: services.DeviceMesh.BootstrapSvc,
+			Sessions:      services.DeviceMesh.GetSessions(),
+			BootstrapSvc:  services.DeviceMesh.BootstrapSvc,
 			CredentialSvc: services.DeviceMesh.CredentialSvc,
-			Hub:          services.DeviceMesh.Hub,
-			Probe:        services.DeviceMesh.Probe,
-			DeviceReg:    services.DeviceMesh.DeviceReg,
+			Hub:           services.DeviceMesh.Hub,
+			Probe:         services.DeviceMesh.Probe,
+			DeviceReg:     services.DeviceMesh.DeviceReg,
 			GetUserID: func(c *gin.Context) (runtimeidentity.UserID, bool) {
 				actor := security.GetActor(c)
 				if actor == nil {
@@ -620,13 +619,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 				}
 				return actor.UserID, true
 			},
-			TaskClaimHandler:        services.KernelContainer.TaskRuntimeService,
-			TaskCompleteHandler:     services.KernelContainer.TaskRuntimeService,
-			TaskProgressHandler:     services.KernelContainer.TaskRuntimeService,
-			TaskCheckpointHandler:   services.KernelContainer.TaskRuntimeService,
-			DisconnectHandler:       nil,
-			InvocationResultHandler: services.KernelContainer.ToolFacade,
-			InvocationErrorHandler:  services.KernelContainer.ToolFacade,
 		}
 		server.RegisterCloudRoutes(r, meshAuthMW, meshDeps)
 	}

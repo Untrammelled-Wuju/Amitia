@@ -66,12 +66,14 @@ import (
 	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/desktoppet/worker"
 	"github.com/u-ai/backend/internal/devicemesh"
+	"github.com/u-ai/backend/internal/deviceruntime/protocol"
 	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	extensionmcp "github.com/u-ai/backend/internal/extension/kernel/mcp"
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
@@ -271,7 +273,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		log.Error("failed to init relationship/need store schema:", err)
 		panic("failed to init relationship/need store schema")
 	}
-	chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, memSvc, profSvc, epiSvc, wbSvc, compressor, visionSvc, graphSvc, psycheStore)
+	syncApplier := syncpkg.NewBusinessApplier(ctx.DB)
+	syncService := syncpkg.NewService(ctx.DB, syncApplier)
+	chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, memSvc, profSvc, epiSvc, wbSvc, compressor, visionSvc, graphSvc, psycheStore, syncService.ChangeLog)
 	extensionRuntime, err := extension.NewRuntimeWithOptions(context.Background(), ctx.DB, "1.0.0", extension.RuntimeOptions{SkipPluginManagerStart: true})
 	if err != nil {
 		log.Error("failed to initialize skill runtime:", err)
@@ -429,7 +433,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	if err != nil {
 		return nil, fmt.Errorf("create device mesh runtime: %w", err)
 	}
+	pendingInvocations := capability.NewPendingInvocationManager()
 	kernelBuilder.WithMeshHub(meshRuntime.Hub)
+	kernelBuilder.WithPendingInvocationManager(pendingInvocations)
 	kernelContainer, err := kernelBuilder.Build(context.Background())
 	if err != nil {
 		log.Error("failed to initialize kernel container:", err)
@@ -441,6 +447,40 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	if kernelContainer.TaskRuntimeService != nil {
 		meshRuntime.SetTaskRuntime(NewTaskRuntimeExecutor(kernelContainer.TaskRuntimeService))
 	}
+	meshRuntime.Handler.SetOnInvocationResult(func(result protocol.RuntimeResultPayload) {
+		pendingInvocations.Complete(result.InvocationID, capability.UnifiedToolResult{
+			InvocationID:     result.InvocationID,
+			RuntimeSessionID: string(result.RuntimeSessionID),
+			DeviceID:         string(result.DeviceID),
+			RuntimeID:        string(result.RuntimeID),
+			Status:           capability.ToolResultStatusSuccess,
+			Content: []capability.ToolContent{
+				{Type: capability.ToolContentText, Text: string(result.Result)},
+			},
+			Generation: result.ConnectionGeneration,
+		})
+	})
+	meshRuntime.Handler.SetOnInvocationError(func(errResult protocol.RuntimeErrorPayload) {
+		pendingInvocations.Fail(errResult.InvocationID, capability.UnifiedToolResult{
+			InvocationID:     errResult.InvocationID,
+			RuntimeSessionID: string(errResult.RuntimeSessionID),
+			DeviceID:         string(errResult.DeviceID),
+			RuntimeID:        string(errResult.RuntimeID),
+			Status:           capability.ToolResultStatusFailed,
+			Error: &capability.ToolError{
+				Code:      errResult.ErrorCode,
+				Message:   errResult.Message,
+				Retryable: errResult.Retryable,
+			},
+			Generation: errResult.ConnectionGeneration,
+		})
+	})
+	meshRuntime.Handler.SetOnInvocationCancelAck(func(invocationID string, reason string) {
+		pendingInvocations.Cancel(invocationID, reason)
+	})
+	meshRuntime.Handler.SetOnDisconnect(func(sessionID string, generation int64) {
+		pendingInvocations.CancelAll(sessionID, "device disconnected")
+	})
 	archiveUpdater.SetContainer(kernelContainer)
 	extensionRuntime.Kernel.SetContainer(kernelContainer)
 	if err := extensionRuntime.Kernel.RecoverPackageOperations(context.Background()); err != nil {
@@ -949,6 +989,18 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 				}
 				return nil
 			},
+			MeshReady: func() error {
+				if meshRuntime == nil {
+					return fmt.Errorf("device mesh runtime is nil")
+				}
+				if meshRuntime.Hub == nil {
+					return fmt.Errorf("device mesh connection hub is nil")
+				}
+				if meshRuntime.BootstrapSvc == nil {
+					return fmt.Errorf("device mesh bootstrap service is nil")
+				}
+				return nil
+			},
 		})
 		if err != nil {
 			return nil, fmt.Errorf("initialize readiness service: %w", err)
@@ -1000,9 +1052,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 	chatSvc.SetArtifactResolver(&chatArtifactAdapter{resolver: artifactRuntime.Resolver})
 	chat.SetGlobalArtifactResolver(&chatArtifactAdapter{resolver: artifactRuntime.Resolver})
-
-	syncApplier := syncpkg.NewBusinessApplier(ctx.DB)
-	syncService := syncpkg.NewService(ctx.DB, syncApplier)
 
 	services := &AppServices{
 		RuntimeProfile:          runtimeProfile,
