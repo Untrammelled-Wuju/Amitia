@@ -232,11 +232,13 @@ describe('G47-F15 Fault Matrix (Backend Driver)', () => {
     await driver.installPlugin(archivePath);
     const plugin = await driver.waitForPluginByExtension('mock-developer/mock-amitiax-game-plugin', 30000);
     extensionId = plugin.extensionId;
+    const pluginId = plugin.pluginId;
     await driver.enablePlugin(extensionId);
 
     const runtimes = await driver.listRuntimes({ pluginId: plugin.pluginId });
     expect(runtimes.length).toBeGreaterThan(0);
     runtimeId = runtimes[0].runtimeId;
+    const targetRuntimeId = runtimeId;
     await driver.startRuntime(runtimeId);
     await driver.waitForRuntimeReady(runtimeId, 30000);
     await driver.stopRuntime(runtimeId);
@@ -247,6 +249,54 @@ describe('G47-F15 Fault Matrix (Backend Driver)', () => {
     runtimeId = null;
 
     await driver.assertZeroResidueForExtension(uninstalledExtensionId);
+    await driver.assertZeroResidueForPlugin(pluginId);
+    await driver.assertZeroResidueForRuntime(targetRuntimeId);
+  }, 90000);
+
+  it('zero residue plugin-scoped check after uninstall', async () => {
+    const archivePath = requireArchive();
+
+    await driver.installPlugin(archivePath);
+    const plugin = await driver.waitForPluginByExtension('mock-developer/mock-amitiax-game-plugin', 30000);
+    extensionId = plugin.extensionId;
+    const pluginId = plugin.pluginId;
+    await driver.enablePlugin(extensionId);
+
+    const runtimes = await driver.listRuntimes({ pluginId: plugin.pluginId });
+    expect(runtimes.length).toBeGreaterThan(0);
+    runtimeId = runtimes[0].runtimeId;
+    await driver.startRuntime(runtimeId);
+    await driver.waitForRuntimeReady(runtimeId, 30000);
+    await driver.stopRuntime(runtimeId);
+
+    await driver.uninstallPlugin(extensionId);
+    extensionId = null;
+    runtimeId = null;
+
+    await driver.assertZeroResidueForPlugin(pluginId);
+  }, 90000);
+
+  it('zero residue runtime-scoped check after stop and uninstall', async () => {
+    const archivePath = requireArchive();
+
+    await driver.installPlugin(archivePath);
+    const plugin = await driver.waitForPluginByExtension('mock-developer/mock-amitiax-game-plugin', 30000);
+    extensionId = plugin.extensionId;
+    await driver.enablePlugin(extensionId);
+
+    const runtimes = await driver.listRuntimes({ pluginId: plugin.pluginId });
+    expect(runtimes.length).toBeGreaterThan(0);
+    runtimeId = runtimes[0].runtimeId;
+    const targetRuntimeId = runtimeId;
+    await driver.startRuntime(runtimeId);
+    await driver.waitForRuntimeReady(runtimeId, 30000);
+    await driver.stopRuntime(runtimeId);
+
+    await driver.uninstallPlugin(extensionId);
+    extensionId = null;
+    runtimeId = null;
+
+    await driver.assertZeroResidueForRuntime(targetRuntimeId);
   }, 90000);
 
   it('F15-57: zero residue target-scoped check after full lifecycle', async () => {

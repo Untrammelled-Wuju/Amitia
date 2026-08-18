@@ -1,7 +1,13 @@
 import { GameCenterClient, createClient, GameRuntimeDetail, GamePluginSummary } from './game_center_client';
 import { waitUntil, sleep, TimeoutError } from './waiters';
+import { exec, spawn } from 'child_process';
+import { promisify } from 'util';
+
+const execAsync = promisify(exec);
 
 export { TimeoutError } from './waiters';
+export type { ResidueTarget };
+export { ResidueCheckError };
 
 export interface BackendDriverOptions {
   baseUrl?: string;
@@ -13,6 +19,18 @@ export interface ResidueSnapshot {
   runtimeCount: number;
   runningRuntimes: number;
   readyRuntimes: number;
+}
+
+export type ResidueTarget =
+  | { type: 'extension'; extensionId: string }
+  | { type: 'plugin'; pluginId: string }
+  | { type: 'runtime'; runtimeId: string };
+
+export class ResidueCheckError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'ResidueCheckError';
+  }
 }
 
 export class BackendDriver {
@@ -216,26 +234,87 @@ export class BackendDriver {
   }
 
   async assertZeroResidueForExtension(extensionId: string): Promise<void> {
+    return this.assertZeroResidueFor({ type: 'extension', extensionId });
+  }
+
+  async assertZeroResidueForPlugin(pluginId: string): Promise<void> {
+    return this.assertZeroResidueFor({ type: 'plugin', pluginId });
+  }
+
+  async assertZeroResidueForRuntime(runtimeId: string): Promise<void> {
+    return this.assertZeroResidueFor({ type: 'runtime', runtimeId });
+  }
+
+  async assertZeroResidueFor(target: ResidueTarget): Promise<void> {
     const [plugins, runtimes] = await Promise.all([
-      this.listPlugins({ search: extensionId }),
+      this.listPlugins(),
       this.listRuntimes(),
     ]);
-    const targetPlugins = plugins.filter(p => p.extensionId === extensionId);
-    const targetRuntimes = runtimes.filter(r => (r as any).extensionId === extensionId);
+
+    let targetPlugins: typeof plugins = [];
+    let targetRuntimes: typeof runtimes = [];
+
+    switch (target.type) {
+      case 'extension':
+        targetPlugins = plugins.filter(p => p.extensionId === target.extensionId);
+        targetRuntimes = runtimes.filter(r => (r as any).extensionId === target.extensionId);
+        break;
+      case 'plugin':
+        targetPlugins = plugins.filter(p => p.pluginId === target.pluginId);
+        targetRuntimes = runtimes.filter(r => (r as any).pluginId === target.pluginId);
+        break;
+      case 'runtime':
+        targetRuntimes = runtimes.filter(r => (r as any).runtimeId === target.runtimeId);
+        break;
+    }
+
+    const parts: string[] = [];
     if (targetPlugins.length > 0) {
-      throw new Error(`residue: ${targetPlugins.length} plugins remain for extension ${extensionId}`);
+      parts.push(`${targetPlugins.length} plugins remain`);
     }
     if (targetRuntimes.length > 0) {
-      throw new Error(`residue: ${targetRuntimes.length} runtimes remain for extension ${extensionId}`);
+      parts.push(`${targetRuntimes.length} runtimes remain`);
+    }
+    if (parts.length > 0) {
+      const targetDesc = target.type === 'extension'
+        ? `extension ${target.extensionId}`
+        : target.type === 'plugin'
+          ? `plugin ${target.pluginId}`
+          : `runtime ${target.runtimeId}`;
+      throw new ResidueCheckError(`residue [${targetDesc}]: ${parts.join(', ')}`);
     }
   }
 
   async restartBackend(): Promise<void> {
     const pluginsBefore = await this.listPlugins();
     const runtimesBefore = await this.listRuntimes();
-    const deadline = Date.now() + 30000;
+
+    const backendPid = await this.findBackendProcess();
+    if (!backendPid) {
+      throw new Error('backend process (server.exe) not found - cannot restart');
+    }
+
+    await this.killProcess(backendPid);
+
+    const stopDeadline = Date.now() + 15000;
+    while (Date.now() < stopDeadline) {
+      const stillRunning = await this.isProcessAlive(backendPid);
+      if (!stillRunning) {
+        break;
+      }
+      await sleep(500);
+    }
+
+    const stillRunningAfterWait = await this.isProcessAlive(backendPid);
+    if (stillRunningAfterWait) {
+      throw new Error(`backend process (PID=${backendPid}) did not terminate within 15s`);
+    }
+
+    await this.startBackend();
+
+    const recoveryDeadline = Date.now() + 60000;
     let recovered = false;
-    while (Date.now() < deadline) {
+    while (Date.now() < recoveryDeadline) {
       try {
         const pluginsAfter = await this.listPlugins();
         const runtimesAfter = await this.listRuntimes();
@@ -246,11 +325,89 @@ export class BackendDriver {
       } catch {
         // transient during restart
       }
-      await sleep(500);
+      await sleep(1000);
     }
     if (!recovered) {
-      throw new Error('backend did not recover after restart within 30s');
+      throw new Error('backend did not recover after restart within 60s');
     }
+  }
+
+  private async findBackendProcess(): Promise<number | null> {
+    try {
+      const { stdout } = await execAsync('tasklist /FI "IMAGENAME eq server.exe" /FO CSV /NH');
+      const lines = stdout.split('\n').filter(line => line.trim() && line.includes('server.exe'));
+      if (lines.length > 0) {
+        const parts = lines[0].split(',');
+        if (parts.length >= 2) {
+          const pid = parseInt(parts[1].replace(/"/g, '').trim(), 10);
+          if (!isNaN(pid) && pid > 0) {
+            return pid;
+          }
+        }
+      }
+    } catch {
+      // fallback to port-based detection
+    }
+
+    try {
+      const { stdout } = await execAsync('netstat -ano | findstr ":18899"');
+      const lines = stdout.split('\n').filter(line => line.includes('LISTENING'));
+      if (lines.length > 0) {
+        const parts = lines[0].trim().split(/\s+/);
+        const pid = parseInt(parts[parts.length - 1], 10);
+        if (!isNaN(pid) && pid > 0) {
+          return pid;
+        }
+      }
+    } catch {
+      // ignore
+    }
+
+    return null;
+  }
+
+  private async killProcess(pid: number): Promise<void> {
+    try {
+      await execAsync(`taskkill /F /PID ${pid}`);
+    } catch (err: any) {
+      if (err.message && err.message.includes('not found')) {
+        return;
+      }
+      throw err;
+    }
+  }
+
+  private async isProcessAlive(pid: number): Promise<boolean> {
+    try {
+      const { stdout } = await execAsync(`tasklist /FI "PID eq ${pid}" /FO CSV /NH`);
+      return stdout.includes(String(pid));
+    } catch {
+      return false;
+    }
+  }
+
+  private async startBackend(): Promise<void> {
+    const backendDir = process.env.BACKEND_DIR || 'D:\\桌面\\跟进项目\\U-Ai\\backend';
+    const serverPath = `${backendDir}\\server.exe`;
+
+    spawn(serverPath, [], {
+      cwd: backendDir,
+      detached: true,
+      stdio: 'ignore',
+      windowsHide: true,
+    }).unref();
+
+    const startDeadline = Date.now() + 30000;
+    while (Date.now() < startDeadline) {
+      try {
+        await this.listPlugins();
+        return;
+      } catch {
+        // not ready yet
+      }
+      await sleep(1000);
+    }
+    throw new Error('backend did not start within 30s');
   }
 }
 

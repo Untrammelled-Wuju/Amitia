@@ -182,6 +182,11 @@ describe('G47-F15 E2E Full Flow', () => {
       },
     );
     expect(hostApiResp.status).toBe(200);
+    const hostApiBody = (await hostApiResp.json()) as { code: number; msg: string; data?: { status?: string; output?: unknown } };
+    expect(hostApiBody.code).toBe(200);
+    expect(hostApiBody.data).toBeDefined();
+    expect(hostApiBody.data?.status).toBeDefined();
+    expect(hostApiBody.data?.output).toBeDefined();
 
     // 8. Secret (via mockgame.secret.acquire RPC)
     const secretResp = await fetch(
@@ -193,6 +198,13 @@ describe('G47-F15 E2E Full Flow', () => {
       },
     );
     expect(secretResp.status).toBe(200);
+    const secretBody = (await secretResp.json()) as { code: number; msg: string; data?: { granted?: boolean; leaseId?: string } };
+    expect(secretBody.code).toBe(200);
+    expect(secretBody.data).toBeDefined();
+    expect(secretBody.data?.granted).toBe(true);
+    expect(secretBody.data?.leaseId).toBeDefined();
+    expect(typeof secretBody.data?.leaseId).toBe('string');
+    expect((secretBody.data?.leaseId ?? '').length).toBeGreaterThan(0);
 
     // 9. Effect (apply mockgame.control.output)
     const effectResp = await fetch(
@@ -204,6 +216,12 @@ describe('G47-F15 E2E Full Flow', () => {
       },
     );
     expect(effectResp.status).toBe(200);
+    const effectBody = (await effectResp.json()) as { code: number; msg: string; data?: { allowed?: boolean; hostState?: string } };
+    expect(effectBody.code).toBe(200);
+    expect(effectBody.data).toBeDefined();
+    expect(effectBody.data?.allowed).toBe(true);
+    const hostState = effectBody.data?.hostState ?? '';
+    expect(hostState === 'accepted' || hostState === 'committed').toBe(true);
 
     // 10. Takeover → Release
     await driver.takeover(runtimeId, 'plugin');
@@ -265,28 +283,29 @@ describe('G47-F15 E2E Full Flow', () => {
     await driver.startRuntime(runtimeId);
     await driver.waitForRuntimeReady(runtimeId, 30000);
 
-    // 15. Upgrade (real upgrade flow via updatePlugin)
+    // 15. Upgrade (real upgrade flow via updatePlugin) - V2 archive is REQUIRED, cannot silently skip
     expect(archivePath).toBeDefined();
-    const archivePathV2 = process.env.MOCK_PLUGIN_ARCHIVE_PATH_V2;
     expect(extensionId).toBeDefined();
-    if (archivePathV2) {
-      const v1Version = plugin.version;
-      await driver.updatePlugin(extensionId!, archivePathV2);
-      const upgradeDeadline = Date.now() + 60000;
-      let upgradedVersion = v1Version;
-      while (Date.now() < upgradeDeadline) {
-        const current = await driver.waitForPluginByExtension('mock-developer/mock-amitiax-game-plugin', 5000).catch(() => null);
-        if (current && current.version !== v1Version) {
-          upgradedVersion = current.version;
-          break;
-        }
-        await new Promise(r => setTimeout(r, 500));
+    const archivePathV2 = process.env.MOCK_PLUGIN_ARCHIVE_PATH_V2;
+    if (!archivePathV2) {
+      throw new Error('MOCK_PLUGIN_ARCHIVE_PATH_V2 environment variable is required for F15-56 upgrade step - silent skip is forbidden');
+    }
+    const v1Version = plugin.version;
+    await driver.updatePlugin(extensionId!, archivePathV2);
+    const upgradeDeadline = Date.now() + 60000;
+    let upgradedVersion = v1Version;
+    while (Date.now() < upgradeDeadline) {
+      const current = await driver.waitForPluginByExtension('mock-developer/mock-amitiax-game-plugin', 5000).catch(() => null);
+      if (current && current.version !== v1Version) {
+        upgradedVersion = current.version;
+        break;
       }
-      expect(upgradedVersion).not.toBe(v1Version);
+      await new Promise(r => setTimeout(r, 500));
+    }
+    expect(upgradedVersion).not.toBe(v1Version);
 
-      if (runtimeId) {
-        await driver.waitForRuntimeReady(runtimeId, 60000);
-      }
+    if (runtimeId) {
+      await driver.waitForRuntimeReady(runtimeId, 60000);
     }
 
     // 16. Backend Restart - verify state persistence across restart
