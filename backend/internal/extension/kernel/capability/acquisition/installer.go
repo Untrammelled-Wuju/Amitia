@@ -397,14 +397,14 @@ type WorkshopGeneratePort interface {
 	GenerateInstruction(ctx context.Context, requirement string) (WorkshopInstructionDraft, error)
 }
 
-// WorkshopInstructionDraft represents a generated skill instruction draft.
 type WorkshopInstructionDraft struct {
-	Name        string            `json:"name"`
-	Description string            `json:"description"`
-	Body        string            `json:"body"`
-	References  map[string]string `json:"references"`
-	Assets      map[string]string `json:"assets"`
-	DisplayName string            `json:"displayName"`
+	Name             string            `json:"name"`
+	Description      string            `json:"description"`
+	Body             string            `json:"body"`
+	References       map[string]string `json:"references"`
+	Assets           map[string]string `json:"assets"`
+	DisplayName      string            `json:"displayName"`
+	ShortDescription string            `json:"shortDescription"`
 }
 
 // GeneratedSkillInstaller handles the InstallGeneratedSkill method. It generates
