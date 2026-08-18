@@ -122,7 +122,7 @@ func TestStage2ClosureGate_ValidateG0_WithFailures(t *testing.T) {
 		platformBridge:     struct{}{},
 	}, "android")
 
-	gate := NewStage2ClosureGate(loader, runtimeGate)
+	gate := NewStage2ClosureGateWithManifest(loader, runtimeGate, "20260816002", []string{"G0-A01", "G0-A02"})
 	ok, failures, err := gate.ValidateG0(context.Background())
 	if err != nil {
 		t.Fatalf("validate g0: %v", err)
@@ -190,7 +190,7 @@ func TestCutoverPlan_CanRunCutover(t *testing.T) {
 		Stage2ClosureGate: func() *Stage2ClosureGate {
 			loader := NewEvidenceLoader(evidencePath)
 			rg := NewRuntimeArchitectureGate(validContainer, "android")
-			return NewStage2ClosureGate(loader, rg)
+			return NewStage2ClosureGateWithManifest(loader, rg, "20260816002", []string{"G0-A01"})
 		}(),
 	})
 
@@ -212,4 +212,60 @@ func setupTestDB(t *testing.T) *sqlite.Store {
 	}
 	t.Cleanup(func() { store.Close() })
 	return store
+}
+
+func TestStage2ClosureGate_NotVerifiedBlocks(t *testing.T) {
+	dir := t.TempDir()
+	manifest := EvidenceManifest{
+		Version:         "2",
+		ManifestVersion: "20260816002",
+		Evidence: map[string]EvidenceItem{
+			"G0-A01": {Status: EvidenceNOTVERIFIED, Evidence: "not run"},
+		},
+		Summary: EvidenceSummary{Total: 1, NotVerified: 1},
+	}
+	data, _ := json.Marshal(manifest)
+	path := filepath.Join(dir, "not-verified.json")
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+	provider := &testAuthorityProvider{
+		toolFacade: struct{}{}, permissionBroker: struct{}{}, eventService: struct{}{},
+		scheduleService: struct{}{}, taskRuntimeService: struct{}{}, hookService: struct{}{},
+		nativeBridgeRelay: struct{}{}, platformBridge: struct{}{},
+	}
+	gate := NewStage2ClosureGateWithManifest(NewEvidenceLoader(path), NewRuntimeArchitectureGate(provider, "android"), "20260816002", []string{"G0-A01"})
+	ok, failures, err := gate.ValidateG0(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok || len(failures) == 0 {
+		t.Fatalf("NOT_VERIFIED must block G0: ok=%v failures=%v", ok, failures)
+	}
+}
+
+func TestStage2ClosureGate_MissingEvidenceBlocks(t *testing.T) {
+	dir := t.TempDir()
+	manifest := EvidenceManifest{
+		Version: "2", ManifestVersion: "20260816002",
+		Evidence: map[string]EvidenceItem{}, Summary: EvidenceSummary{Total: 0},
+	}
+	data, _ := json.Marshal(manifest)
+	path := filepath.Join(dir, "missing.json")
+	if err := os.WriteFile(path, data, 0644); err != nil {
+		t.Fatal(err)
+	}
+	provider := &testAuthorityProvider{
+		toolFacade: struct{}{}, permissionBroker: struct{}{}, eventService: struct{}{},
+		scheduleService: struct{}{}, taskRuntimeService: struct{}{}, hookService: struct{}{},
+		nativeBridgeRelay: struct{}{}, platformBridge: struct{}{},
+	}
+	gate := NewStage2ClosureGateWithManifest(NewEvidenceLoader(path), NewRuntimeArchitectureGate(provider, "android"), "20260816002", []string{"G0-A01"})
+	ok, failures, err := gate.ValidateG0(context.Background())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if ok || len(failures) == 0 {
+		t.Fatalf("missing evidence must block G0: ok=%v failures=%v", ok, failures)
+	}
 }
