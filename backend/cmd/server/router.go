@@ -37,7 +37,9 @@ import (
 	runtimev2 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v2"
 	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
 	devicemeshserver "github.com/u-ai/backend/internal/devicemesh/server"
+	"github.com/u-ai/backend/internal/deviceruntime/protocol"
 	"github.com/u-ai/backend/internal/embedding_config"
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
@@ -572,8 +574,45 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 				}
 				return runtimeidentity.UserID(actor.UserID), true
 			},
-			PendingInvocations: services.DeviceMesh,
-			PendingTasks:       services.DeviceMesh,
+			InvocationResultHandler: devicemeshserver.InvocationResultHandler(func(result protocol.RuntimeResultPayload) {
+				if services.DeviceMesh.PendingInvocations == nil {
+					return
+				}
+				unifiedResult := capability.NewToolSuccessResult(result.InvocationID, "")
+				unifiedResult.RuntimeSessionID = string(result.RuntimeSessionID)
+				unifiedResult.DeviceID = string(result.DeviceID)
+				unifiedResult.RuntimeID = string(result.RuntimeID)
+				unifiedResult.Generation = result.ConnectionGeneration
+				unifiedResult.Structured = result.Result
+				services.DeviceMesh.PendingInvocations.Complete(result.InvocationID, unifiedResult)
+			}),
+			InvocationErrorHandler: devicemeshserver.InvocationErrorHandler(func(errResult protocol.RuntimeErrorPayload) {
+				if services.DeviceMesh.PendingInvocations == nil {
+					return
+				}
+				unifiedResult := capability.NewToolFailureResult(errResult.InvocationID, "", &capability.ToolError{
+					Code:      errResult.ErrorCode,
+					Message:   errResult.Message,
+					Retryable: errResult.Retryable,
+				})
+				unifiedResult.RuntimeSessionID = string(errResult.RuntimeSessionID)
+				unifiedResult.DeviceID = string(errResult.DeviceID)
+				unifiedResult.RuntimeID = string(errResult.RuntimeID)
+				unifiedResult.Generation = errResult.ConnectionGeneration
+				services.DeviceMesh.PendingInvocations.Fail(errResult.InvocationID, unifiedResult)
+			}),
+			TaskClaimHandler: devicemeshserver.TaskClaimAdapter(func(taskRunID string, workerID string, leaseDuration time.Duration) bool {
+				if services.DeviceMesh.PendingTasks == nil {
+					return false
+				}
+				return services.DeviceMesh.PendingTasks.Claim(taskRunID, workerID, leaseDuration)
+			}),
+			TaskCompleteHandler: devicemeshserver.TaskCompleteAdapter(func(taskRunID string, success bool, errMsg string) {
+				if services.DeviceMesh.PendingTasks == nil {
+					return
+				}
+				services.DeviceMesh.PendingTasks.Complete(taskRunID, success, errMsg)
+			}),
 		})
 	}
 

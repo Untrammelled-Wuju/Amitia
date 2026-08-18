@@ -16,6 +16,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel"
 	legacymigration "github.com/u-ai/backend/internal/extension/package_legacy_migration"
 	"github.com/u-ai/backend/internal/migration"
+	"github.com/u-ai/backend/internal/mcp"
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/database/mysql"
 	"github.com/u-ai/backend/pkg/util"
@@ -139,9 +140,11 @@ func main() {
 	}
 
 	kernelDBPath := filepath.Join(kernelRoot, "kernel.db")
+	mcpRepository := mcp.NewRepository(db)
 	kernelContainer, err := kernel.NewContainerBuilder().
 		WithDBPath(kernelDBPath).
 		WithExtensionRoot(kernelRoot).
+		WithMCPRepository(mcpRepository).
 		Build(rootCtx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "kernel container build failed: %v\n", err)

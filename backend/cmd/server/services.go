@@ -70,8 +70,10 @@ import (
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/extension/kernel"
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	extensionmcp "github.com/u-ai/backend/internal/extension/kernel/mcp"
+	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 	"github.com/u-ai/backend/internal/extension/kernel/skill"
 	"github.com/u-ai/backend/internal/gamehost/management"
@@ -352,6 +354,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		browserProvider = browser.NewDisabledProvider()
 	}
 
+	pendingInvocationManager := capability.NewPendingInvocationManager()
+	pendingTaskManager := task_runtime.NewPendingTaskManager()
+
 	kernelBuilder := kernel.NewContainerBuilder().
 		WithDBPath(kernelDBPath).
 		WithExtensionRoot(kernelRoot).
@@ -370,6 +375,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithWorkspaceService(workspaceService).
 		WithBrowserProvider(browserProvider).
 		WithRuntimeProfile(runtimeProfile).
+		WithPendingInvocationManager(pendingInvocationManager).
 		WithBackgroundBootstrapFunc(func() (backgroundremoval.Registry, error) {
 			reg := backgroundremoval.NewRegistry()
 			reg.Register(local.NewLocalProvider(), local.LocalCapabilities())
@@ -584,6 +590,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	chatSvc.EnsureChannelConversation("qq")
 
 	entry := interaction.NewUnifiedEntry(orch, resolver, temporal.SystemClock{})
+	if kernelContainer != nil && kernelContainer.ExecutionService != nil {
+		entry.SetExecutionService(kernelContainer.ExecutionService)
+	}
 	compSvc.AttachUnifiedEntry(entry)
 	compSvc.AttachDeliveryStore(deliveryStore)
 	if coordinatorSetter, ok := interface{}(compSvc).(interface {
@@ -1093,6 +1102,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	if err != nil {
 		return nil, fmt.Errorf("failed to construct device mesh runtime: %w", err)
 	}
+	deviceMeshRuntime.SetPendingInvocations(pendingInvocationManager)
+	deviceMeshRuntime.SetPendingTasks(pendingTaskManager)
 	if kernelContainer.AdapterRegistry != nil {
 		cloudDispatcher := devicemesh.NewCloudRuntimeDispatcher(kernelContainer.AdapterRegistry)
 		deviceMeshRuntime.SetDispatcher(cloudDispatcher)
