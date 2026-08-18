@@ -112,23 +112,40 @@ func (s *PushService) applyMutation(tx *gorm.DB, deviceID, userID string, scope 
 	}
 
 	if mutation.MutationID != "" {
-		claimed, record, err := s.changelog.ClaimMutationTx(tx, mutation.MutationID, userID, scope)
+		claimed, claim, err := s.changelog.ClaimMutationTx(tx, mutation.MutationID, userID, scope)
 		if err != nil {
 			return nil, fmt.Errorf("changelog: claim mutation: %w", err)
 		}
 		if !claimed {
+			if claim.Status == MutationClaimStatusCommitted {
+				existingRecord, err := s.changelog.GetByMutationIDAndUserTx(tx, mutation.MutationID, userID)
+				if err != nil {
+					return nil, fmt.Errorf("changelog: get committed mutation record: %w", err)
+				}
+				if existingRecord != nil {
+					return &MutationResult{
+						MutationID: mutation.MutationID,
+						Success:    true,
+						ChangeID:   existingRecord.ChangeID,
+						Sequence:   existingRecord.Sequence,
+						Revision:   existingRecord.Revision,
+					}, nil
+				}
+			}
 			return &MutationResult{
 				MutationID: mutation.MutationID,
-				Success:    true,
-				ChangeID:   record.ChangeID,
-				Sequence:   record.Sequence,
-				Revision:   record.Revision,
+				Success:    false,
+				ErrorCode:  "mutation_pending",
+				Message:    "mutation is being processed",
 			}, nil
 		}
 	}
 
 	revision, err := s.applier.Apply(tx, mutation)
 	if err != nil {
+		if mutation.MutationID != "" {
+			_ = s.changelog.RollbackClaimTx(tx, mutation.MutationID, userID, scope)
+		}
 		result := &MutationResult{
 			MutationID: mutation.MutationID,
 			Success:    false,
@@ -157,7 +174,16 @@ func (s *PushService) applyMutation(tx *gorm.DB, deviceID, userID string, scope 
 		mutation.Payload,
 	)
 	if err != nil {
+		if mutation.MutationID != "" {
+			_ = s.changelog.RollbackClaimTx(tx, mutation.MutationID, userID, scope)
+		}
 		return nil, fmt.Errorf("changelog append: %w", err)
+	}
+
+	if mutation.MutationID != "" {
+		if err := s.changelog.CommitClaimTx(tx, mutation.MutationID, userID, scope); err != nil {
+			return nil, fmt.Errorf("changelog commit claim: %w", err)
+		}
 	}
 
 	return &MutationResult{
