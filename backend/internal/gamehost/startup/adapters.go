@@ -76,10 +76,59 @@ func (a *ProcessCleanupProcessAdapter) CleanupOwnedProcess(ctx context.Context, 
 			Force:     pid > 0,
 		})
 		if err != nil {
+			if err == trusted_service.ErrServiceNotFound {
+				log.Printf("[startup-recovery] process not in supervisor instances, attempting durable cleanup: instance=%s pid=%d", instanceID, pid)
+				return a.cleanupDurableOwnedProcess(ctx, instanceID, pid)
+			}
 			return fmt.Errorf("process supervisor stop for instance %s: %w", instanceID, err)
 		}
 	}
 	log.Printf("[startup-recovery] process cleanup: instance=%s pid=%d", instanceID, pid)
+	return nil
+}
+
+func (a *ProcessCleanupProcessAdapter) cleanupDurableOwnedProcess(ctx context.Context, instanceID string, pid int) error {
+	if a.supervisor == nil {
+		return fmt.Errorf("cleanupDurableOwnedProcess: supervisor unavailable")
+	}
+	ownerStore := a.supervisor.OwnerStore()
+	if ownerStore == nil {
+		return fmt.Errorf("cleanupDurableOwnedProcess: owner store unavailable")
+	}
+	meta, ok := ownerStore.LookupByProcessInstanceID(instanceID)
+	if !ok {
+		log.Printf("[startup-recovery] cleanupDurableOwnedProcess: no durable record for instance=%s", instanceID)
+		return nil
+	}
+	if a.hostIdentity != nil {
+		actualHostID := a.hostIdentity.GetHostInstanceID()
+		if actualHostID != "" && meta.HostInstanceID != "" && meta.HostInstanceID != actualHostID {
+			log.Printf("[startup-recovery] cleanupDurableOwnedProcess: foreign host instance=%s host=%s", instanceID, meta.HostInstanceID)
+			return nil
+		}
+	}
+	if pid > 0 {
+		if err := a.killProcessTree(pid); err != nil {
+			log.Printf("[startup-recovery] cleanupDurableOwnedProcess: kill failed pid=%d: %v", pid, err)
+		}
+	}
+	ownerStore.DeleteByProcessInstanceID(instanceID)
+	log.Printf("[startup-recovery] cleanupDurableOwnedProcess: cleaned instance=%s pid=%d runtime=%s plugin=%s extension=%s",
+		instanceID, pid, meta.RuntimeID, meta.PluginID, meta.ExtensionID)
+	return nil
+}
+
+func (a *ProcessCleanupProcessAdapter) killProcessTree(pid int) error {
+	if pid <= 0 {
+		return nil
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return fmt.Errorf("find process %d: %w", pid, err)
+	}
+	if err := proc.Kill(); err != nil {
+		return fmt.Errorf("kill process %d: %w", pid, err)
+	}
 	return nil
 }
 
