@@ -16,18 +16,20 @@ type TaskRuntimeExecutor interface {
 }
 
 type defaultTaskWorker struct {
-	client      *MeshClient
-	taskRuntime TaskRuntimeExecutor
-	mu          sync.Mutex
-	cancelFns   map[string]context.CancelFunc
-	progressSeq map[string]int64
+	client       *MeshClient
+	taskRuntime  TaskRuntimeExecutor
+	mu           sync.Mutex
+	cancelFns    map[string]context.CancelFunc
+	progressSeq  map[string]int64
+	heartbeatSeq map[string]int64
 }
 
 func NewTaskWorker(client *MeshClient) *defaultTaskWorker {
 	return &defaultTaskWorker{
-		client:      client,
-		cancelFns:   make(map[string]context.CancelFunc),
-		progressSeq: make(map[string]int64),
+		client:       client,
+		cancelFns:    make(map[string]context.CancelFunc),
+		progressSeq:  make(map[string]int64),
+		heartbeatSeq: make(map[string]int64),
 	}
 }
 
@@ -39,12 +41,16 @@ func (w *defaultTaskWorker) ExecuteTask(ctx context.Context, dispatch protocol.T
 	log.Printf("devicemesh: agent: task dispatch received: taskRunId=%s attemptId=%s",
 		dispatch.TaskRunID, dispatch.AttemptID)
 
+	if w.client == nil {
+		return fmt.Errorf("task worker mesh client is not configured")
+	}
+	const leaseDurationMs = int64(5 * time.Minute / time.Millisecond)
 	w.client.sendTaskClaim(
 		dispatch.TaskRunID,
 		dispatch.AttemptID,
 		dispatch.LeaseID,
 		w.client.conf.Identity.RuntimeID.String(),
-		60000,
+		leaseDurationMs,
 	)
 
 	taskCtx, cancel := context.WithCancel(ctx)
@@ -52,12 +58,16 @@ func (w *defaultTaskWorker) ExecuteTask(ctx context.Context, dispatch protocol.T
 	w.cancelFns[dispatch.TaskRunID] = cancel
 	w.mu.Unlock()
 
-	go w.runTask(taskCtx, dispatch)
+	go w.runHeartbeat(taskCtx, dispatch)
+	go func() {
+		defer cancel()
+		w.runTask(taskCtx, dispatch)
+	}()
 
 	return nil
 }
 
-func (w *defaultTaskWorker) CancelTask(ctx context.Context, taskRunID, attemptID string) error {
+func (w *defaultTaskWorker) CancelTask(ctx context.Context, taskRunID, attemptID, leaseID string) error {
 	log.Printf("devicemesh: agent: task cancel received: taskRunId=%s attemptId=%s", taskRunID, attemptID)
 
 	w.mu.Lock()
@@ -67,9 +77,11 @@ func (w *defaultTaskWorker) CancelTask(ctx context.Context, taskRunID, attemptID
 
 	if ok && cancel != nil {
 		cancel()
+		return nil
 	}
-
-	w.client.sendTaskComplete(taskRunID, attemptID, "", false, nil, "task cancelled by server")
+	if w.client != nil {
+		w.client.sendTaskComplete(taskRunID, attemptID, leaseID, false, nil, "task was not running on device")
+	}
 	return nil
 }
 
@@ -78,6 +90,7 @@ func (w *defaultTaskWorker) runTask(ctx context.Context, dispatch protocol.TaskD
 		w.mu.Lock()
 		delete(w.cancelFns, dispatch.TaskRunID)
 		delete(w.progressSeq, dispatch.TaskRunID)
+		delete(w.heartbeatSeq, dispatch.TaskRunID)
 		w.mu.Unlock()
 	}()
 
@@ -131,10 +144,13 @@ func (w *defaultTaskWorker) executeTaskByType(ctx context.Context, dispatch prot
 	}
 
 	taskType, _ := input["taskType"].(string)
+	if taskType == "" {
+		taskType = dispatch.TaskDefinitionID
+	}
 	log.Printf("devicemesh: agent: executing task: taskRunId=%s taskType=%s", dispatch.TaskRunID, taskType)
 
 	if taskType == "" {
-		return nil, fmt.Errorf("missing taskType in task input")
+		return nil, fmt.Errorf("missing task definition id")
 	}
 
 	w.reportProgress(ctx, dispatch, 1, float64Ptr(0), float64Ptr(100), float64Ptr(0), "executing", fmt.Sprintf("executing task type: %s", taskType))
@@ -168,6 +184,25 @@ func (w *defaultTaskWorker) dispatchTaskExecution(ctx context.Context, taskType 
 		return json.Marshal(result)
 	default:
 		return nil, fmt.Errorf("unsupported task type: %s", taskType)
+	}
+}
+
+func (w *defaultTaskWorker) runHeartbeat(ctx context.Context, dispatch protocol.TaskDispatchPayload) {
+	ticker := time.NewTicker(30 * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			w.mu.Lock()
+			w.heartbeatSeq[dispatch.TaskRunID]++
+			seq := w.heartbeatSeq[dispatch.TaskRunID]
+			w.mu.Unlock()
+			if w.client != nil {
+				w.client.sendTaskHeartbeat(dispatch.TaskRunID, dispatch.AttemptID, dispatch.LeaseID, seq)
+			}
+		}
 	}
 }
 
