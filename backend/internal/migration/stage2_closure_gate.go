@@ -24,12 +24,12 @@ type EvidenceItem struct {
 }
 
 type EvidenceManifest struct {
-	Version         string                    `json:"version"`
-	ManifestVersion string                    `json:"manifestVersion"`
-	GeneratedAt     string                    `json:"generatedAt"`
-	Evidence        map[string]EvidenceItem   `json:"evidence"`
-	Summary         EvidenceSummary           `json:"summary"`
-	Fixtures        map[string]int            `json:"fixtures"`
+	Version         string                  `json:"version"`
+	ManifestVersion string                  `json:"manifestVersion"`
+	GeneratedAt     string                  `json:"generatedAt"`
+	Evidence        map[string]EvidenceItem `json:"evidence"`
+	Summary         EvidenceSummary         `json:"summary"`
+	Fixtures        map[string]int          `json:"fixtures"`
 }
 
 type EvidenceSummary struct {
