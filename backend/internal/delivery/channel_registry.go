@@ -8,6 +8,8 @@ import (
 	"fmt"
 
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
 const (
@@ -136,4 +138,37 @@ func (a *capabilityChannelAdapter) Deliver(intent DeliveryIntent) error {
 	}
 	_, err = a.invoker.InvokeCapability(nil, a.capID, inputBytes)
 	return err
+}
+
+// ProviderInvocationCapabilityInvoker adapts a capability.ProviderInvocationService
+// to the CapabilityProviderInvoker interface. This is the formal Channel discovery
+// mechanism: channel.deliver.* → CapabilityService → ProviderInvocation.
+type ProviderInvocationCapabilityInvoker struct {
+	invocationService *capability.ProviderInvocationService
+	userID            string
+}
+
+func NewProviderInvocationCapabilityInvoker(svc *capability.ProviderInvocationService, userID string) *ProviderInvocationCapabilityInvoker {
+	return &ProviderInvocationCapabilityInvoker{
+		invocationService: svc,
+		userID:            userID,
+	}
+}
+
+func (p *ProviderInvocationCapabilityInvoker) InvokeCapability(ctx context.Context, capabilityID string, input []byte) ([]byte, error) {
+	if p.invocationService == nil {
+		return nil, fmt.Errorf("provider invocation service not configured")
+	}
+	capID := capability.CapabilityID(capabilityID)
+	req := capability.ProviderInvocationRequest{
+		CapabilityID: capID,
+		Input:        input,
+		UserID:       runtimeidentity.UserID(p.userID),
+		AllowCore:    true,
+	}
+	result, err := p.invocationService.Invoke(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	return result.Output, nil
 }
