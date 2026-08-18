@@ -8,6 +8,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -65,9 +66,12 @@ func newWorkerRepo(t *testing.T, db *gorm.DB) processing.Repository {
 
 func newTestWorkerWithPipeline(t *testing.T, db *gorm.DB, repo processing.Repository, dataDir string) *Worker {
 	t.Helper()
-	bgRegistry := backgroundremoval.NewRegistry()
+	bgRegistry := backgroundremoval.DefaultRegistry()
 	if err := bgRegistry.Register(local.NewLocalProvider(), local.LocalCapabilities()); err != nil {
-		t.Fatalf("register local bg provider: %v", err)
+		var providerErr *backgroundremoval.ProviderError
+		if !errors.As(err, &providerErr) || providerErr.Code != backgroundremoval.ErrCodeProviderAlreadyRegistered {
+			t.Fatalf("register local bg provider: %v", err)
+		}
 	}
 	pipeline := application.NewPipeline(bgRegistry, dataDir)
 	sourceResolver := application.NewRepoSourceResolver(repo, dataDir, nil)
