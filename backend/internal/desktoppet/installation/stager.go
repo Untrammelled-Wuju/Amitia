@@ -4,17 +4,14 @@ package installation
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
 
 	"github.com/u-ai/backend/internal/desktoppet/packageformat"
+	"github.com/u-ai/backend/internal/desktoppet/release"
 	"github.com/u-ai/backend/internal/desktoppet/security"
 	"gorm.io/gorm"
 )
@@ -25,18 +22,16 @@ type ReleaseStager interface {
 }
 
 type releaseStager struct {
-	db          *gorm.DB
-	registry    *security.PathRootRegistry
-	responder   *security.SafeArtifactResponder
-	stagingRoot string
+	db        *gorm.DB
+	registry  *security.PathRootRegistry
+	responder *security.SafeArtifactResponder
 }
 
-func NewReleaseStager(db *gorm.DB, registry *security.PathRootRegistry, stagingRoot string) ReleaseStager {
+func NewReleaseStager(db *gorm.DB, registry *security.PathRootRegistry) ReleaseStager {
 	return &releaseStager{
-		db:          db,
-		registry:    registry,
-		responder:   security.NewSafeArtifactResponder(registry),
-		stagingRoot: stagingRoot,
+		db:        db,
+		registry:  registry,
+		responder: security.NewSafeArtifactResponder(registry),
 	}
 }
 
@@ -47,12 +42,14 @@ func (s *releaseStager) PrepareStagingCopy(ctx context.Context, releaseID, insta
 	if installationID == "" {
 		return "", fmt.Errorf("stager: installationID is empty")
 	}
+	if s.db == nil || s.registry == nil || s.responder == nil {
+		return "", fmt.Errorf("stager: dependencies are not initialized")
+	}
 
 	var releaseData struct {
 		ID              string `gorm:"column:id"`
-		PetID           string `gorm:"column:pet_id"`
+		StorageKey      string `gorm:"column:storage_key"`
 		ContentRootHash string `gorm:"column:content_root_hash"`
-		ManifestJSON    string `gorm:"column:manifest_json"`
 	}
 	if err := s.db.WithContext(ctx).Table("desktop_pet_package_releases").
 		Where("id = ?", releaseID).
@@ -62,27 +59,51 @@ func (s *releaseStager) PrepareStagingCopy(ctx context.Context, releaseID, insta
 		}
 		return "", fmt.Errorf("stager: query release: %w", err)
 	}
-
-	if releaseData.ContentRootHash == "" {
-		return "", fmt.Errorf("stager: release %s has no content root hash", releaseID)
+	if releaseData.ContentRootHash == "" || strings.TrimSpace(releaseData.StorageKey) == "" {
+		return "", fmt.Errorf("stager: release %s has incomplete published metadata", releaseID)
 	}
 
-	publishedDir := filepath.Join(s.stagingRoot, "..", "releases", "published", releaseData.PetID, releaseID)
-	if _, err := os.Stat(publishedDir); err != nil {
+	publishedDir, err := s.registry.Resolve(security.RootReleasePublished, releaseData.StorageKey)
+	if err != nil {
+		return "", fmt.Errorf("stager: resolve published directory: %w", err)
+	}
+	info, err := os.Lstat(publishedDir)
+	if err != nil {
 		return "", fmt.Errorf("stager: published directory not found: %w", err)
 	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return "", fmt.Errorf("stager: published path is not a safe directory")
+	}
 
-	stagingKey := installationID
-	stagingDir := filepath.Join(s.stagingRoot, stagingKey)
+	installRoot, err := s.registry.Root(security.RootInstallations)
+	if err != nil {
+		return "", fmt.Errorf("stager: installation root unavailable: %w", err)
+	}
+	stagingParent := filepath.Join(installRoot, ".staging")
+	if err := os.MkdirAll(stagingParent, 0o700); err != nil {
+		return "", fmt.Errorf("stager: create staging parent: %w", err)
+	}
 
-	if err := os.RemoveAll(stagingDir); err != nil {
-		return "", fmt.Errorf("stager: clean staging dir: %w", err)
+	stagingKey := filepath.ToSlash(filepath.Join(".staging", installationID))
+	stagingDir, err := s.registry.Resolve(security.RootInstallations, stagingKey)
+	if err != nil {
+		return "", fmt.Errorf("stager: resolve installation staging path: %w", err)
+	}
+	if _, err := os.Lstat(stagingDir); err == nil {
+		if err := s.responder.SafeDelete(
+			security.RootInstallations,
+			stagingKey,
+			security.DeleteExpectation{EntityType: "installation_staging", EntityID: installationID},
+		); err != nil {
+			return "", fmt.Errorf("stager: safely clean existing staging dir: %w", err)
+		}
+	} else if !os.IsNotExist(err) {
+		return "", fmt.Errorf("stager: inspect existing staging dir: %w", err)
 	}
 
 	if err := s.responder.SafeCopyTree(publishedDir, stagingDir); err != nil {
 		return "", fmt.Errorf("stager: copy tree: %w", err)
 	}
-
 	return stagingKey, nil
 }
 
@@ -90,10 +111,12 @@ func (s *releaseStager) VerifyStagingCopy(ctx context.Context, releaseID, instal
 	if releaseID == "" || installationID == "" || stagingPathKey == "" {
 		return fmt.Errorf("stager: invalid verify parameters")
 	}
+	if s.db == nil || s.registry == nil {
+		return fmt.Errorf("stager: dependencies are not initialized")
+	}
 
 	var releaseData struct {
 		ID              string `gorm:"column:id"`
-		PetID           string `gorm:"column:pet_id"`
 		FileCount       int    `gorm:"column:file_count"`
 		ContentRootHash string `gorm:"column:content_root_hash"`
 		ManifestHash    string `gorm:"column:manifest_hash"`
@@ -105,98 +128,65 @@ func (s *releaseStager) VerifyStagingCopy(ctx context.Context, releaseID, instal
 		return fmt.Errorf("stager: query release for verify: %w", err)
 	}
 
-	stagingDir := filepath.Join(s.stagingRoot, stagingPathKey)
-
-	var actualFiles []string
-	if err := filepath.Walk(stagingDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if info.IsDir() {
-			return nil
-		}
-		rel, relErr := filepath.Rel(stagingDir, path)
-		if relErr != nil {
-			return relErr
-		}
-		actualFiles = append(actualFiles, filepath.ToSlash(rel))
-		return nil
-	}); err != nil {
-		return fmt.Errorf("stager: walk staging dir: %w", err)
+	stagingDir, err := s.registry.Resolve(security.RootInstallations, stagingPathKey)
+	if err != nil {
+		return fmt.Errorf("stager: resolve staging directory: %w", err)
+	}
+	info, err := os.Lstat(stagingDir)
+	if err != nil || !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return fmt.Errorf("stager: staging directory is missing or unsafe")
 	}
 
-	if len(actualFiles) != releaseData.FileCount {
-		return fmt.Errorf("stager: file count mismatch: expected=%d actual=%d", releaseData.FileCount, len(actualFiles))
+	var releaseFiles []release.ReleaseFileData
+	if err := s.db.WithContext(ctx).Table("desktop_pet_release_files").
+		Where("release_id = ?", releaseID).
+		Order("path ASC").
+		Find(&releaseFiles).Error; err != nil {
+		return fmt.Errorf("stager: query release files: %w", err)
+	}
+	if len(releaseFiles) != releaseData.FileCount {
+		return fmt.Errorf("stager: file count mismatch: expected=%d actual=%d", releaseData.FileCount, len(releaseFiles))
+	}
+	for _, item := range releaseFiles {
+		fullPath, err := packageformat.SecureJoinUnderRoot(stagingDir, item.Path)
+		if err != nil {
+			return fmt.Errorf("stager: unsafe release file path %s: %w", item.Path, err)
+		}
+		fileInfo, err := os.Lstat(fullPath)
+		if err != nil {
+			return fmt.Errorf("stager: missing release file %s: %w", item.Path, err)
+		}
+		if !fileInfo.Mode().IsRegular() || fileInfo.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("stager: release file is not regular: %s", item.Path)
+		}
+		hash, size, err := release.HashFile(fullPath)
+		if err != nil {
+			return fmt.Errorf("stager: hash release file %s: %w", item.Path, err)
+		}
+		if !strings.EqualFold(hash, item.SHA256) || size != item.Bytes {
+			return fmt.Errorf("stager: release file mismatch %s", item.Path)
+		}
 	}
 
 	var manifest packageformat.Manifest
 	if err := json.Unmarshal([]byte(releaseData.ManifestJSON), &manifest); err != nil {
 		return fmt.Errorf("stager: unmarshal manifest: %w", err)
 	}
-
-	actualContentRootHash, err := s.computeContentRootHash(stagingDir)
+	canonicalManifestHash, err := packageformat.CanonicalManifestHash(&manifest)
 	if err != nil {
-		return fmt.Errorf("stager: compute content root hash: %w", err)
+		return fmt.Errorf("stager: canonical manifest hash: %w", err)
 	}
-	if actualContentRootHash != releaseData.ContentRootHash {
-		return fmt.Errorf("stager: content root hash mismatch: expected=%s actual=%s", releaseData.ContentRootHash, actualContentRootHash)
+	if !strings.EqualFold(canonicalManifestHash, releaseData.ManifestHash) ||
+		!strings.EqualFold(manifest.Integrity.ManifestHash, releaseData.ManifestHash) {
+		return fmt.Errorf("stager: manifest hash mismatch")
+	}
+	if !strings.EqualFold(manifest.Integrity.ContentRootHash, releaseData.ContentRootHash) {
+		return fmt.Errorf("stager: content root hash mismatch")
 	}
 
 	report := packageformat.NewValidator().ValidateDirectory(stagingDir, &manifest)
 	if report == nil || report.Verdict == "invalid" {
 		return fmt.Errorf("stager: packageformat validation failed")
 	}
-
 	return nil
 }
-
-func (s *releaseStager) computeContentRootHash(dir string) (string, error) {
-	files, err := listDirFiles(dir)
-	if err != nil {
-		return "", err
-	}
-	sort.Strings(files)
-
-	hasher := sha256.New()
-	for _, relPath := range files {
-		hasher.Write([]byte(relPath))
-		hasher.Write([]byte{0})
-
-		absPath := filepath.Join(dir, filepath.FromSlash(relPath))
-		f, err := os.Open(absPath)
-		if err != nil {
-			return "", err
-		}
-		if _, err := io.Copy(hasher, f); err != nil {
-			f.Close()
-			return "", err
-		}
-		f.Close()
-		hasher.Write([]byte{0})
-	}
-	return hex.EncodeToString(hasher.Sum(nil)), nil
-}
-
-func listDirFiles(dir string) ([]string, error) {
-	var files []string
-	err := filepath.WalkDir(dir, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if d.IsDir() {
-			return nil
-		}
-		rel, relErr := filepath.Rel(dir, path)
-		if relErr != nil {
-			return relErr
-		}
-		files = append(files, filepath.ToSlash(rel))
-		return nil
-	})
-	if err != nil {
-		return nil, err
-	}
-	return files, nil
-}
-
-var _ = strings.TrimSpace

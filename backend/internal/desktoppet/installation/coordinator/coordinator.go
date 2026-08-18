@@ -2,6 +2,7 @@ package coordinator
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/desktoppet/installation/device"
 	"github.com/u-ai/backend/internal/desktoppet/installation/operation"
+	"github.com/u-ai/backend/log"
 )
 
 type ReleaseValidator interface {
@@ -23,19 +25,22 @@ type ReleaseStager interface {
 type RuntimeDesiredStatePublisher interface {
 	PublishDesiredState(ctx context.Context, deviceCtx device.DeviceContext, snapshot *DesiredStateSnapshot) error
 	PublishRecenter(ctx context.Context, deviceCtx device.DeviceContext, installationID string) error
+	PublishPlayAction(ctx context.Context, deviceCtx device.DeviceContext, installationID, actionKey string) error
 }
 
 type DesiredStateSnapshot struct {
-	DesiredRevision  int64
-	DesiredHash      string
-	InstallationID   string
-	PetID            string
-	ReleaseID        string
-	UserID           string
-	DeviceID         string
-	RuntimeID        string
-	EnsureAbsent     bool
-	DefaultActionKey string
+	DesiredRevision      int64  `json:"desiredRevision"`
+	DesiredHash          string `json:"desiredHash"`
+	InstallationID       string `json:"installationId"`
+	PetID                string `json:"petId"`
+	ReleaseID            string `json:"releaseId"`
+	UserID               string `json:"userId"`
+	DeviceID             string `json:"deviceId"`
+	RuntimeID            string `json:"runtimeId"`
+	EnsureAbsent         bool   `json:"ensureAbsent"`
+	DefaultActionKey     string `json:"defaultActionKey"`
+	SettingsRevision     int64  `json:"settingsRevision"`
+	SettingsSnapshotJSON string `json:"settingsSnapshotJSON"`
 }
 
 type InstallationRecord struct {
@@ -57,9 +62,10 @@ type Repository interface {
 	FindOperationByIdempotencyKey(ctx context.Context, userID, deviceID, key, operationType string) (*operation.InstallationOperation, error)
 
 	GetInstallation(ctx context.Context, userID, deviceID, installationID string) (*InstallationRecord, error)
+	GetDesiredStateSnapshot(ctx context.Context, userID, deviceID string) (*DesiredStateSnapshot, error)
 	CreateInstallationAndDesiredState(ctx context.Context, op *operation.InstallationOperation, install *InstallationRecord, desired *DesiredStateSnapshot, stagingPathKey string) (desiredRevision int64, err error)
 	UpdateDesiredEnabled(ctx context.Context, op *operation.InstallationOperation, installationID string, enabled bool) (desiredRevision int64, err error)
-	SwitchRelease(ctx context.Context, op *operation.InstallationOperation, installationID, targetReleaseID, stagingPathKey string) (desiredRevision int64, err error)
+	SwitchRelease(ctx context.Context, op *operation.InstallationOperation, installationID, targetReleaseID, stagingPathKey, defaultActionKey string) (desiredRevision int64, err error)
 	UpdateSettings(ctx context.Context, op *operation.InstallationOperation, installationID string, expectedRevision int, updates map[string]interface{}) (settingsRevision int, desiredRevision int64, err error)
 	ChangeDefaultAction(ctx context.Context, op *operation.InstallationOperation, installationID, actionKey string) (desiredRevision int64, err error)
 	MarkUninstallDesired(ctx context.Context, op *operation.InstallationOperation, installationID string) (desiredRevision int64, err error)
@@ -73,6 +79,8 @@ type ProjectionService interface {
 }
 
 type RuntimeHeartbeat struct {
+	InstallationID          string
+	PetID                   string
 	AppliedDesiredRevision  int64
 	AppliedSettingsRevision int64
 	ActualReleaseID         string
@@ -113,7 +121,7 @@ type InstallationCoordinator interface {
 	UpdateSettings(ctx context.Context, req SettingsRequest) (*SettingsResult, error)
 	ChangeDefaultAction(ctx context.Context, req DefaultActionRequest) (*EnableDisableResult, error)
 	Recenter(ctx context.Context, req RecenterRequest) (*EnableDisableResult, error)
-	PlayAction(ctx context.Context, userID, installationID, actionKey string) error
+	PlayAction(ctx context.Context, deviceCtx device.DeviceContext, installationID, actionKey string) error
 	GetOperationStatus(ctx context.Context, userID, deviceID, operationID string) (*operation.InstallationOperation, error)
 	CancelOperation(ctx context.Context, userID, deviceID, operationID string) error
 }
@@ -135,7 +143,22 @@ func NewCoordinator(
 	stager ReleaseStager,
 	publisher RuntimeDesiredStatePublisher,
 	projection ProjectionService,
-) *Coordinator {
+) (*Coordinator, error) {
+	if repo == nil {
+		return nil, errors.New("installation coordinator: repository is required")
+	}
+	if validator == nil {
+		return nil, errors.New("installation coordinator: release validator is required")
+	}
+	if stager == nil {
+		return nil, errors.New("installation coordinator: release stager is required")
+	}
+	if publisher == nil {
+		return nil, errors.New("installation coordinator: runtime publisher is required")
+	}
+	if projection == nil {
+		return nil, errors.New("installation coordinator: projection service is required")
+	}
 	return &Coordinator{
 		repo:             repo,
 		releaseValidator: validator,
@@ -145,7 +168,7 @@ func NewCoordinator(
 		executionID:      generateExecutionID(),
 		defaultLeaseTTL:  5 * time.Minute,
 		maxRetryAttempts: 3,
-	}
+	}, nil
 }
 
 func (c *Coordinator) Install(ctx context.Context, req InstallRequest) (*InstallResult, error) {
@@ -154,7 +177,7 @@ func (c *Coordinator) Install(ctx context.Context, req InstallRequest) (*Install
 	}
 	idempotencyKey := req.IdempotencyKey
 	if idempotencyKey == "" {
-		idempotencyKey = c.buildIdempotencyKey(operation.TypeInstall, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.TargetReleaseID)
+		idempotencyKey = c.buildIdempotencyKey(operation.TypeInstall, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.TargetReleaseID, req.PetID, req.CharacterID)
 	}
 	return c.executeInstall(ctx, req, idempotencyKey)
 }
@@ -163,7 +186,10 @@ func (c *Coordinator) Enable(ctx context.Context, req EnableDisableRequest) (*En
 	if err := req.Validate(); err != nil {
 		return &EnableDisableResult{Status: operation.OpStatusFailedTerminal, ErrorCode: "VALIDATION_FAILED"}, err
 	}
-	idempotencyKey := c.buildIdempotencyKey(operation.TypeEnable, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID)
+	idempotencyKey := req.IdempotencyKey
+	if idempotencyKey == "" {
+		idempotencyKey = c.buildIdempotencyKey(operation.TypeEnable, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID)
+	}
 	return c.executeEnableDisable(ctx, req, idempotencyKey, true)
 }
 
@@ -171,7 +197,10 @@ func (c *Coordinator) Disable(ctx context.Context, req EnableDisableRequest) (*E
 	if err := req.Validate(); err != nil {
 		return &EnableDisableResult{Status: operation.OpStatusFailedTerminal, ErrorCode: "VALIDATION_FAILED"}, err
 	}
-	idempotencyKey := c.buildIdempotencyKey(operation.TypeDisable, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID)
+	idempotencyKey := req.IdempotencyKey
+	if idempotencyKey == "" {
+		idempotencyKey = c.buildIdempotencyKey(operation.TypeDisable, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID)
+	}
 	return c.executeEnableDisable(ctx, req, idempotencyKey, false)
 }
 
@@ -179,20 +208,37 @@ func (c *Coordinator) Switch(ctx context.Context, req SwitchRequest) (*SwitchRes
 	if err := req.Validate(); err != nil {
 		return &SwitchResult{Status: operation.OpStatusFailedTerminal, ErrorCode: "VALIDATION_FAILED"}, err
 	}
-	idempotencyKey := c.buildIdempotencyKey(operation.TypeSwitch, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.SourceInstallationID, req.TargetReleaseID)
-	return c.executeSwitch(ctx, req, idempotencyKey)
+	idempotencyKey := req.IdempotencyKey
+	if idempotencyKey == "" {
+		idempotencyKey = c.buildIdempotencyKey(operation.TypeSwitch, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.SourceInstallationID, req.TargetReleaseID)
+	}
+	return c.executeSwitch(ctx, req, idempotencyKey, operation.TypeSwitch)
 }
 
 func (c *Coordinator) Upgrade(ctx context.Context, req UpgradeRequest) (*InstallResult, error) {
 	if err := req.Validate(); err != nil {
 		return &InstallResult{Status: operation.OpStatusFailedTerminal, ErrorCode: "VALIDATION_FAILED"}, err
 	}
-	idempotencyKey := c.buildIdempotencyKey(operation.TypeUpgrade, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID, req.TargetReleaseID)
-	return c.executeInstall(ctx, InstallRequest{
-		DeviceCtx:       req.DeviceCtx,
-		TargetReleaseID: req.TargetReleaseID,
-		IdempotencyKey:  idempotencyKey,
-	}, idempotencyKey)
+	idempotencyKey := req.IdempotencyKey
+	if idempotencyKey == "" {
+		idempotencyKey = c.buildIdempotencyKey(operation.TypeUpgrade, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID, req.TargetReleaseID)
+	}
+	result, err := c.executeSwitch(ctx, SwitchRequest{
+		DeviceCtx:            req.DeviceCtx,
+		SourceInstallationID: req.InstallationID,
+		TargetReleaseID:      req.TargetReleaseID,
+		IdempotencyKey:       idempotencyKey,
+	}, idempotencyKey, operation.TypeUpgrade)
+	if result == nil {
+		return nil, err
+	}
+	return &InstallResult{
+		OperationID:    result.OperationID,
+		InstallationID: result.InstallationID,
+		Status:         result.Status,
+		Stage:          operation.OpStageWaitingRuntimeACK,
+		ErrorCode:      result.ErrorCode,
+	}, err
 }
 
 func (c *Coordinator) Downgrade(ctx context.Context, req DowngradeRequest) (*InstallResult, error) {
@@ -203,33 +249,62 @@ func (c *Coordinator) Downgrade(ctx context.Context, req DowngradeRequest) (*Ins
 	if err := req.Validate(); err != nil {
 		return &InstallResult{Status: operation.OpStatusFailedTerminal, ErrorCode: "VALIDATION_FAILED"}, err
 	}
-	idempotencyKey := c.buildIdempotencyKey(operation.TypeDowngrade, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID, req.TargetReleaseID)
-	return c.executeInstall(ctx, InstallRequest{
-		DeviceCtx:       req.DeviceCtx,
-		TargetReleaseID: req.TargetReleaseID,
-		SourceReleaseID: req.InstallationID,
-		IdempotencyKey:  idempotencyKey,
-	}, idempotencyKey)
+	idempotencyKey := req.IdempotencyKey
+	if idempotencyKey == "" {
+		idempotencyKey = c.buildIdempotencyKey(operation.TypeDowngrade, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID, req.TargetReleaseID)
+	}
+	result, err := c.executeSwitch(ctx, SwitchRequest{
+		DeviceCtx:            req.DeviceCtx,
+		SourceInstallationID: req.InstallationID,
+		TargetReleaseID:      req.TargetReleaseID,
+		IdempotencyKey:       idempotencyKey,
+	}, idempotencyKey, operation.TypeDowngrade)
+	if result == nil {
+		return nil, err
+	}
+	return &InstallResult{
+		OperationID:    result.OperationID,
+		InstallationID: result.InstallationID,
+		Status:         result.Status,
+		Stage:          operation.OpStageWaitingRuntimeACK,
+		ErrorCode:      result.ErrorCode,
+	}, err
 }
 
 func (c *Coordinator) Rollback(ctx context.Context, req UpgradeRequest) (*InstallResult, error) {
 	if err := req.Validate(); err != nil {
 		return &InstallResult{Status: operation.OpStatusFailedTerminal, ErrorCode: "VALIDATION_FAILED"}, err
 	}
-	idempotencyKey := c.buildIdempotencyKey(operation.TypeRepair, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID, req.TargetReleaseID)
-	return c.executeInstall(ctx, InstallRequest{
-		DeviceCtx:       req.DeviceCtx,
-		TargetReleaseID: req.TargetReleaseID,
-		SourceReleaseID: req.InstallationID,
-		IdempotencyKey:  idempotencyKey,
-	}, idempotencyKey)
+	idempotencyKey := req.IdempotencyKey
+	if idempotencyKey == "" {
+		idempotencyKey = c.buildIdempotencyKey(operation.TypeRepair, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID, req.TargetReleaseID)
+	}
+	result, err := c.executeSwitch(ctx, SwitchRequest{
+		DeviceCtx:            req.DeviceCtx,
+		SourceInstallationID: req.InstallationID,
+		TargetReleaseID:      req.TargetReleaseID,
+		IdempotencyKey:       idempotencyKey,
+	}, idempotencyKey, operation.TypeRepair)
+	if result == nil {
+		return nil, err
+	}
+	return &InstallResult{
+		OperationID:    result.OperationID,
+		InstallationID: result.InstallationID,
+		Status:         result.Status,
+		Stage:          operation.OpStageWaitingRuntimeACK,
+		ErrorCode:      result.ErrorCode,
+	}, err
 }
 
 func (c *Coordinator) Repair(ctx context.Context, req RepairRequest) (*InstallResult, error) {
 	if err := req.Validate(); err != nil {
 		return &InstallResult{Status: operation.OpStatusFailedTerminal, ErrorCode: "VALIDATION_FAILED"}, err
 	}
-	idempotencyKey := c.buildIdempotencyKey(operation.TypeRepair, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID)
+	idempotencyKey := req.IdempotencyKey
+	if idempotencyKey == "" {
+		idempotencyKey = c.buildIdempotencyKey(operation.TypeRepair, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID)
+	}
 	return c.executeRepair(ctx, req, idempotencyKey)
 }
 
@@ -237,7 +312,10 @@ func (c *Coordinator) Uninstall(ctx context.Context, req UninstallRequest) (*Uni
 	if err := req.Validate(); err != nil {
 		return &UninstallResult{Status: operation.OpStatusFailedTerminal, ErrorMessage: err.Error()}, err
 	}
-	idempotencyKey := c.buildIdempotencyKey(operation.TypeUninstall, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID)
+	idempotencyKey := req.IdempotencyKey
+	if idempotencyKey == "" {
+		idempotencyKey = c.buildIdempotencyKey(operation.TypeUninstall, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID)
+	}
 	return c.executeUninstall(ctx, req, idempotencyKey)
 }
 
@@ -245,7 +323,10 @@ func (c *Coordinator) UpdateSettings(ctx context.Context, req SettingsRequest) (
 	if err := req.Validate(); err != nil {
 		return &SettingsResult{Status: operation.OpStatusFailedTerminal, ErrorCode: "VALIDATION_FAILED"}, err
 	}
-	idempotencyKey := c.buildIdempotencyKey(operation.TypeSettings, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID)
+	idempotencyKey := req.IdempotencyKey
+	if idempotencyKey == "" {
+		idempotencyKey = c.buildIdempotencyKey(operation.TypeSettings, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID, fmt.Sprintf("%d", req.ExpectedRevision), stableJSON(req.Updates))
+	}
 	return c.executeSettings(ctx, req, idempotencyKey)
 }
 
@@ -253,7 +334,10 @@ func (c *Coordinator) ChangeDefaultAction(ctx context.Context, req DefaultAction
 	if err := req.Validate(); err != nil {
 		return &EnableDisableResult{Status: operation.OpStatusFailedTerminal, ErrorCode: "VALIDATION_FAILED"}, err
 	}
-	idempotencyKey := c.buildIdempotencyKey(operation.TypeDefaultAction, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID, req.DesiredActionKey)
+	idempotencyKey := req.IdempotencyKey
+	if idempotencyKey == "" {
+		idempotencyKey = c.buildIdempotencyKey(operation.TypeDefaultAction, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID, req.DesiredActionKey)
+	}
 	return c.executeDefaultAction(ctx, req, idempotencyKey)
 }
 
@@ -261,15 +345,25 @@ func (c *Coordinator) Recenter(ctx context.Context, req RecenterRequest) (*Enabl
 	if err := req.Validate(); err != nil {
 		return &EnableDisableResult{Status: operation.OpStatusFailedTerminal, ErrorCode: "VALIDATION_FAILED"}, err
 	}
-	idempotencyKey := c.buildIdempotencyKey(operation.TypeRecenter, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID)
+	idempotencyKey := req.IdempotencyKey
+	if idempotencyKey == "" {
+		idempotencyKey = c.buildIdempotencyKey(operation.TypeRecenter, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.InstallationID, uuid.NewString())
+	}
 	return c.executeRecenter(ctx, req, idempotencyKey)
 }
 
-func (c *Coordinator) PlayAction(ctx context.Context, userID, installationID, actionKey string) error {
-	if userID == "" || installationID == "" || actionKey == "" {
-		return errors.New("coordinator: userID, installationID and actionKey are required")
+func (c *Coordinator) PlayAction(ctx context.Context, deviceCtx device.DeviceContext, installationID, actionKey string) error {
+	if !deviceCtx.IsValid() || installationID == "" || actionKey == "" {
+		return errors.New("coordinator: valid device context, installationID and actionKey are required")
 	}
-	return nil
+	inst, err := c.repo.GetInstallation(ctx, deviceCtx.UserID, deviceCtx.DeviceID, installationID)
+	if err != nil {
+		return err
+	}
+	if inst == nil || inst.UserID != deviceCtx.UserID || inst.DeviceID != deviceCtx.DeviceID {
+		return ErrOwnershipMismatch
+	}
+	return c.runtimePublisher.PublishPlayAction(ctx, deviceCtx, installationID, actionKey)
 }
 
 func (c *Coordinator) GetOperationStatus(ctx context.Context, userID, deviceID, operationID string) (*operation.InstallationOperation, error) {
@@ -286,6 +380,47 @@ func (c *Coordinator) CancelOperation(ctx context.Context, userID, deviceID, ope
 	return c.repo.MarkOperationCancelRequested(ctx, userID, deviceID, operationID)
 }
 
+func stableJSON(value interface{}) string {
+	data, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Sprintf("%v", value)
+	}
+	return string(data)
+}
+
+func operationRequestHash(op *operation.InstallationOperation, extra map[string]string) string {
+	fields := map[string]string{
+		"operationType":   op.OperationType,
+		"userID":          op.UserID,
+		"deviceID":        op.DeviceID,
+		"installationID":  op.InstallationID,
+		"petID":           op.PetID,
+		"sourceReleaseID": op.SourceReleaseID,
+		"targetReleaseID": op.TargetReleaseID,
+	}
+	for key, value := range extra {
+		fields[key] = value
+	}
+	return operation.ComputeRequestHash(fields)
+}
+
+func (c *Coordinator) resolveIdempotentOperation(ctx context.Context, op *operation.InstallationOperation) (*operation.InstallationOperation, error) {
+	if op == nil || op.IdempotencyKey == "" {
+		return nil, nil
+	}
+	existing, err := c.repo.FindOperationByIdempotencyKey(ctx, op.UserID, op.DeviceID, op.IdempotencyKey, op.OperationType)
+	if err != nil {
+		return nil, err
+	}
+	if existing == nil {
+		return nil, nil
+	}
+	if existing.RequestHash != "" && op.RequestHash != "" && existing.RequestHash != op.RequestHash {
+		return nil, operation.ErrIdempotencyConflict
+	}
+	return existing, nil
+}
+
 func (c *Coordinator) buildIdempotencyKey(opType string, parts ...string) string {
 	allParts := append([]string{opType}, parts...)
 	return operation.ComputeIdempotencyKey(allParts...)
@@ -295,6 +430,7 @@ func (c *Coordinator) executeInstall(ctx context.Context, req InstallRequest, id
 	op := &operation.InstallationOperation{
 		ID:              uuidPrefix("opin_"),
 		OperationType:   operation.TypeInstall,
+		InstallationID:  uuidPrefix("ins_"),
 		UserID:          req.DeviceCtx.UserID,
 		DeviceID:        req.DeviceCtx.DeviceID,
 		RuntimeID:       req.DeviceCtx.RuntimeID,
@@ -307,95 +443,90 @@ func (c *Coordinator) executeInstall(ctx context.Context, req InstallRequest, id
 		CreatedAt:       time.Now().Format(operationTimeFormat),
 		UpdatedAt:       time.Now().Format(operationTimeFormat),
 	}
-	if c.releaseValidator == nil {
-		return &InstallResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "NOT_CONFIGURED", ErrorMessage: "releaseValidator not configured"}, errors.New("releaseValidator not configured")
+	op.RequestHash = operationRequestHash(op, map[string]string{"characterID": req.CharacterID})
+	if existing, err := c.resolveIdempotentOperation(ctx, op); err != nil {
+		return &InstallResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: operation.ErrCodeIDEMPOTENCYConflict, ErrorMessage: err.Error()}, err
+	} else if existing != nil {
+		return &InstallResult{OperationID: existing.ID, InstallationID: existing.InstallationID, Status: existing.Status, Stage: existing.Stage, ErrorCode: existing.ErrorCode, ErrorMessage: existing.ErrorMessage}, nil
 	}
 	validationResult, err := c.releaseValidator.ValidateRelease(ctx, req.DeviceCtx.UserID, req.TargetReleaseID)
 	if err != nil {
-		return c.failInstall(op, operation.OpStageReleaseVerified, err)
+		return c.failInstall(ctx, op, operation.OpStageReleaseVerified, err)
 	}
 	if !validationResult.IsInstallable {
 		err := fmt.Errorf("%w: release %s is not installable", ErrReleaseNotInstallable, req.TargetReleaseID)
-		return c.failInstall(op, operation.OpStageReleaseVerified, err)
+		return c.failInstall(ctx, op, operation.OpStageReleaseVerified, err)
+	}
+	if op.PetID == "" {
+		op.PetID = validationResult.PetID
 	}
 	op.Stage = operation.OpStageReleaseVerified
 	op.UpdatedAt = time.Now().Format(operationTimeFormat)
 
 	if err := c.repo.CreateOperation(ctx, op); err != nil {
-		return c.failInstall(op, operation.OpStageReleaseVerified, err)
+		return c.failInstall(ctx, op, operation.OpStageReleaseVerified, err)
 	}
 
-	stagingKey, err := c.releaseStager.PrepareStagingCopy(ctx, req.TargetReleaseID, op.ID)
+	stagingKey, err := c.releaseStager.PrepareStagingCopy(ctx, req.TargetReleaseID, op.InstallationID)
 	if err != nil {
-		return c.failInstall(op, operation.OpStageStagingPrepared, err)
+		return c.failInstall(ctx, op, operation.OpStageStagingPrepared, err)
 	}
 
 	op.Stage = operation.OpStageStagingPrepared
 	op.UpdatedAt = time.Now().Format(operationTimeFormat)
 
-	if err := c.releaseStager.VerifyStagingCopy(ctx, req.TargetReleaseID, op.ID, stagingKey); err != nil {
-		return c.failInstall(op, operation.OpStageStagingVerified, err)
+	if err := c.releaseStager.VerifyStagingCopy(ctx, req.TargetReleaseID, op.InstallationID, stagingKey); err != nil {
+		return c.failInstall(ctx, op, operation.OpStageStagingVerified, err)
 	}
 
 	install := &InstallationRecord{
-		ID:                uuidPrefix("ins_"),
+		ID:                op.InstallationID,
 		UserID:            req.DeviceCtx.UserID,
 		DeviceID:          req.DeviceCtx.DeviceID,
-		PetID:             req.PetID,
+		PetID:             op.PetID,
 		ReleaseID:         req.TargetReleaseID,
 		Status:            "installed",
 		Enabled:           true,
 		InstallStorageKey: stagingKey,
-		DefaultActionKey:  validationResult.PublishedPathKey,
+		DefaultActionKey:  validationResult.DefaultActionKey,
 	}
 
 	desiredRev, err := c.repo.CreateInstallationAndDesiredState(ctx, op, install, &DesiredStateSnapshot{
 		InstallationID:   install.ID,
-		PetID:            req.PetID,
+		PetID:            op.PetID,
 		ReleaseID:        req.TargetReleaseID,
 		UserID:           req.DeviceCtx.UserID,
 		DeviceID:         req.DeviceCtx.DeviceID,
 		RuntimeID:        req.DeviceCtx.RuntimeID,
 		EnsureAbsent:     false,
-		DefaultActionKey: validationResult.PublishedPathKey,
+		DefaultActionKey: validationResult.DefaultActionKey,
 	}, stagingKey)
 	if err != nil {
-		return c.failInstall(op, operation.OpStageDatabaseCommitted, err)
+		return c.failInstall(ctx, op, operation.OpStageDatabaseCommitted, err)
 	}
 
 	op.DesiredRevision = desiredRev
 	op.Stage = operation.OpStageDatabaseCommitted
 	op.UpdatedAt = time.Now().Format(operationTimeFormat)
 	if err := c.repo.UpdateOperation(ctx, op); err != nil {
-		return c.failInstall(op, operation.OpStageDatabaseCommitted, err)
+		return c.failInstall(ctx, op, operation.OpStageDatabaseCommitted, err)
 	}
 
 	op.Stage = operation.OpStageDesiredStateCommitted
 	op.UpdatedAt = time.Now().Format(operationTimeFormat)
 	if err := c.repo.UpdateOperation(ctx, op); err != nil {
-		return c.failInstall(op, operation.OpStageDesiredStateCommitted, err)
+		return c.failInstall(ctx, op, operation.OpStageDesiredStateCommitted, err)
 	}
 
-	if err := c.runtimePublisher.PublishDesiredState(ctx, req.DeviceCtx, &DesiredStateSnapshot{
-		DesiredRevision:  desiredRev,
-		DesiredHash:      "",
-		InstallationID:   install.ID,
-		PetID:            req.PetID,
-		ReleaseID:        req.TargetReleaseID,
-		UserID:           req.DeviceCtx.UserID,
-		DeviceID:         req.DeviceCtx.DeviceID,
-		RuntimeID:        req.DeviceCtx.RuntimeID,
-		EnsureAbsent:     false,
-		DefaultActionKey: validationResult.PublishedPathKey,
-	}); err != nil {
-		return c.failInstall(op, operation.OpStageRuntimeCommandEnqueued, err)
+	if err := c.publishPersistedDesiredState(ctx, req.DeviceCtx, false); err != nil {
+		return c.failInstall(ctx, op, operation.OpStageRuntimeCommandEnqueued, err)
 	}
 
 	op.Status = operation.OpStatusWaitingRuntimeACK
 	op.Stage = operation.OpStageWaitingRuntimeACK
 	op.UpdatedAt = time.Now().Format(operationTimeFormat)
 	if err := c.repo.UpdateOperation(ctx, op); err != nil {
-		return c.failInstall(op, operation.OpStageWaitingRuntimeACK, err)
+		return c.failInstall(ctx, op, operation.OpStageWaitingRuntimeACK, err)
 	}
 
 	return &InstallResult{
@@ -424,6 +555,12 @@ func (c *Coordinator) executeEnableDisable(ctx context.Context, req EnableDisabl
 		CreatedAt:      time.Now().Format(operationTimeFormat),
 		UpdatedAt:      time.Now().Format(operationTimeFormat),
 	}
+	op.RequestHash = operationRequestHash(op, map[string]string{"enabled": fmt.Sprintf("%t", enabled)})
+	if existing, err := c.resolveIdempotentOperation(ctx, op); err != nil {
+		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: operation.ErrCodeIDEMPOTENCYConflict}, err
+	} else if existing != nil {
+		return &EnableDisableResult{OperationID: existing.ID, DesiredRevision: existing.DesiredRevision, Status: existing.Status, ErrorCode: existing.ErrorCode}, nil
+	}
 	if err := c.repo.CreateOperation(ctx, op); err != nil {
 		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_CREATE_FAILED"}, err
 	}
@@ -433,8 +570,8 @@ func (c *Coordinator) executeEnableDisable(ctx context.Context, req EnableDisabl
 		op.Status = operation.OpStatusFailedTerminal
 		op.ErrorCode = "DESIRED_UPDATE_FAILED"
 		op.ErrorMessage = err.Error()
-		_ = c.repo.UpdateOperation(ctx, op)
-		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "DESIRED_UPDATE_FAILED"}, err
+		persistErr := c.persistOperation(ctx, op, err)
+		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "DESIRED_UPDATE_FAILED"}, persistErr
 	}
 	op.DesiredRevision = desiredRev
 	op.Stage = operation.OpStageDesiredStateCommitted
@@ -443,19 +580,12 @@ func (c *Coordinator) executeEnableDisable(ctx context.Context, req EnableDisabl
 		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_UPDATE_FAILED"}, err
 	}
 
-	if err := c.runtimePublisher.PublishDesiredState(ctx, req.DeviceCtx, &DesiredStateSnapshot{
-		DesiredRevision: desiredRev,
-		InstallationID:  req.InstallationID,
-		UserID:          req.DeviceCtx.UserID,
-		DeviceID:        req.DeviceCtx.DeviceID,
-		RuntimeID:       req.DeviceCtx.RuntimeID,
-		EnsureAbsent:    false,
-	}); err != nil {
+	if err := c.publishPersistedDesiredState(ctx, req.DeviceCtx, false); err != nil {
 		op.Status = operation.OpStatusFailedTerminal
 		op.ErrorCode = "PUBLISH_FAILED"
 		op.ErrorMessage = err.Error()
-		_ = c.repo.UpdateOperation(ctx, op)
-		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "PUBLISH_FAILED"}, err
+		persistErr := c.persistOperation(ctx, op, err)
+		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "PUBLISH_FAILED"}, persistErr
 	}
 
 	op.Status = operation.OpStatusWaitingRuntimeACK
@@ -468,7 +598,7 @@ func (c *Coordinator) executeEnableDisable(ctx context.Context, req EnableDisabl
 	return &EnableDisableResult{OperationID: op.ID, DesiredRevision: desiredRev, Status: operation.OpStatusWaitingRuntimeACK}, nil
 }
 
-func (c *Coordinator) executeSwitch(ctx context.Context, req SwitchRequest, idempotencyKey string) (*SwitchResult, error) {
+func (c *Coordinator) executeSwitch(ctx context.Context, req SwitchRequest, idempotencyKey, operationType string) (*SwitchResult, error) {
 	currentInst, err := c.repo.GetInstallation(ctx, req.DeviceCtx.UserID, req.DeviceCtx.DeviceID, req.SourceInstallationID)
 	if err != nil {
 		return &SwitchResult{Status: operation.OpStatusFailedTerminal, ErrorCode: "INSTALLATION_NOT_FOUND"}, err
@@ -481,9 +611,6 @@ func (c *Coordinator) executeSwitch(ctx context.Context, req SwitchRequest, idem
 		return &SwitchResult{Status: operation.OpStatusFailedTerminal, ErrorCode: "OWNERSHIP_MISMATCH"}, err
 	}
 
-	if c.releaseValidator == nil {
-		return &SwitchResult{Status: operation.OpStatusFailedTerminal, ErrorCode: "NOT_CONFIGURED"}, errors.New("releaseValidator not configured")
-	}
 	validationResult, err := c.releaseValidator.ValidateRelease(ctx, req.DeviceCtx.UserID, req.TargetReleaseID)
 	if err != nil {
 		return &SwitchResult{Status: operation.OpStatusFailedTerminal, ErrorCode: "RELEASE_VALIDATION_FAILED"}, err
@@ -492,10 +619,14 @@ func (c *Coordinator) executeSwitch(ctx context.Context, req SwitchRequest, idem
 		err := fmt.Errorf("%w: release %s is not installable", ErrReleaseNotInstallable, req.TargetReleaseID)
 		return &SwitchResult{Status: operation.OpStatusFailedTerminal, ErrorCode: "RELEASE_NOT_INSTALLABLE"}, err
 	}
+	if validationResult.PetID != "" && currentInst.PetID != "" && validationResult.PetID != currentInst.PetID {
+		err := fmt.Errorf("%w: target release pet %s does not match installation pet %s", ErrReleaseNotInstallable, validationResult.PetID, currentInst.PetID)
+		return &SwitchResult{Status: operation.OpStatusFailedTerminal, ErrorCode: "RELEASE_PET_MISMATCH"}, err
+	}
 
 	op := &operation.InstallationOperation{
 		ID:              uuidPrefix("opin_"),
-		OperationType:   operation.TypeSwitch,
+		OperationType:   operationType,
 		UserID:          req.DeviceCtx.UserID,
 		DeviceID:        req.DeviceCtx.DeviceID,
 		RuntimeID:       req.DeviceCtx.RuntimeID,
@@ -507,6 +638,12 @@ func (c *Coordinator) executeSwitch(ctx context.Context, req SwitchRequest, idem
 		Stage:           operation.OpStageRequestValidated,
 		CreatedAt:       time.Now().Format(operationTimeFormat),
 		UpdatedAt:       time.Now().Format(operationTimeFormat),
+	}
+	op.RequestHash = operationRequestHash(op, nil)
+	if existing, err := c.resolveIdempotentOperation(ctx, op); err != nil {
+		return &SwitchResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: operation.ErrCodeIDEMPOTENCYConflict}, err
+	} else if existing != nil {
+		return &SwitchResult{OperationID: existing.ID, InstallationID: existing.InstallationID, DesiredRevision: existing.DesiredRevision, Status: existing.Status, ErrorCode: existing.ErrorCode}, nil
 	}
 	if err := c.repo.CreateOperation(ctx, op); err != nil {
 		return &SwitchResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_CREATE_FAILED"}, err
@@ -521,13 +658,13 @@ func (c *Coordinator) executeSwitch(ctx context.Context, req SwitchRequest, idem
 		return &SwitchResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "STAGING_VERIFY_FAILED"}, err
 	}
 
-	desiredRev, err := c.repo.SwitchRelease(ctx, op, req.SourceInstallationID, req.TargetReleaseID, stagingKey)
+	desiredRev, err := c.repo.SwitchRelease(ctx, op, req.SourceInstallationID, req.TargetReleaseID, stagingKey, validationResult.DefaultActionKey)
 	if err != nil {
 		op.Status = operation.OpStatusFailedTerminal
 		op.ErrorCode = "SWITCH_FAILED"
 		op.ErrorMessage = err.Error()
-		_ = c.repo.UpdateOperation(ctx, op)
-		return &SwitchResult{OperationID: op.ID, InstallationID: req.SourceInstallationID, Status: operation.OpStatusFailedTerminal, ErrorCode: "SWITCH_FAILED"}, err
+		persistErr := c.persistOperation(ctx, op, err)
+		return &SwitchResult{OperationID: op.ID, InstallationID: req.SourceInstallationID, Status: operation.OpStatusFailedTerminal, ErrorCode: "SWITCH_FAILED"}, persistErr
 	}
 	op.DesiredRevision = desiredRev
 	op.Stage = operation.OpStageDatabaseCommitted
@@ -536,27 +673,20 @@ func (c *Coordinator) executeSwitch(ctx context.Context, req SwitchRequest, idem
 		return &SwitchResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_UPDATE_FAILED"}, err
 	}
 
-	if err := c.runtimePublisher.PublishDesiredState(ctx, req.DeviceCtx, &DesiredStateSnapshot{
-		DesiredRevision:  desiredRev,
-		InstallationID:   req.SourceInstallationID,
-		ReleaseID:        req.TargetReleaseID,
-		UserID:           req.DeviceCtx.UserID,
-		DeviceID:         req.DeviceCtx.DeviceID,
-		RuntimeID:        req.DeviceCtx.RuntimeID,
-		EnsureAbsent:     false,
-		DefaultActionKey: validationResult.PublishedPathKey,
-	}); err != nil {
+	if err := c.publishPersistedDesiredState(ctx, req.DeviceCtx, false); err != nil {
 		op.Status = operation.OpStatusFailedTerminal
 		op.ErrorCode = "PUBLISH_FAILED"
 		op.ErrorMessage = err.Error()
-		_ = c.repo.UpdateOperation(ctx, op)
-		return &SwitchResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "PUBLISH_FAILED"}, err
+		persistErr := c.persistOperation(ctx, op, err)
+		return &SwitchResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "PUBLISH_FAILED"}, persistErr
 	}
 
 	op.Status = operation.OpStatusWaitingRuntimeACK
 	op.Stage = operation.OpStageWaitingRuntimeACK
 	op.UpdatedAt = time.Now().Format(operationTimeFormat)
-	_ = c.repo.UpdateOperation(ctx, op)
+	if err := c.persistOperation(ctx, op, nil); err != nil {
+		return &SwitchResult{OperationID: op.ID, InstallationID: req.SourceInstallationID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_UPDATE_FAILED"}, err
+	}
 
 	return &SwitchResult{OperationID: op.ID, InstallationID: req.SourceInstallationID, DesiredRevision: desiredRev, Status: operation.OpStatusWaitingRuntimeACK}, nil
 }
@@ -570,9 +700,6 @@ func (c *Coordinator) executeRepair(ctx context.Context, req RepairRequest, idem
 		return &InstallResult{Status: operation.OpStatusFailedTerminal, ErrorCode: "INSTALLATION_NOT_FOUND"}, fmt.Errorf("installation not found")
 	}
 
-	if c.releaseValidator == nil {
-		return &InstallResult{Status: operation.OpStatusFailedTerminal, ErrorCode: "NOT_CONFIGURED"}, errors.New("releaseValidator not configured")
-	}
 	validationResult, err := c.releaseValidator.ValidateRelease(ctx, req.DeviceCtx.UserID, currentInst.ReleaseID)
 	if err != nil {
 		return &InstallResult{Status: operation.OpStatusFailedTerminal, ErrorCode: "RELEASE_VALIDATION_FAILED"}, err
@@ -596,6 +723,12 @@ func (c *Coordinator) executeRepair(ctx context.Context, req RepairRequest, idem
 		CreatedAt:       time.Now().Format(operationTimeFormat),
 		UpdatedAt:       time.Now().Format(operationTimeFormat),
 	}
+	op.RequestHash = operationRequestHash(op, nil)
+	if existing, err := c.resolveIdempotentOperation(ctx, op); err != nil {
+		return &InstallResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: operation.ErrCodeIDEMPOTENCYConflict, ErrorMessage: err.Error()}, err
+	} else if existing != nil {
+		return &InstallResult{OperationID: existing.ID, InstallationID: existing.InstallationID, Status: existing.Status, Stage: existing.Stage, ErrorCode: existing.ErrorCode, ErrorMessage: existing.ErrorMessage}, nil
+	}
 	if err := c.repo.CreateOperation(ctx, op); err != nil {
 		return &InstallResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_CREATE_FAILED"}, err
 	}
@@ -604,7 +737,9 @@ func (c *Coordinator) executeRepair(ctx context.Context, req RepairRequest, idem
 	if err != nil {
 		return &InstallResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "STAGING_FAILED"}, err
 	}
-	_ = c.releaseStager.VerifyStagingCopy(ctx, currentInst.ReleaseID, req.InstallationID, stagingKey)
+	if err := c.releaseStager.VerifyStagingCopy(ctx, currentInst.ReleaseID, req.InstallationID, stagingKey); err != nil {
+		return c.failInstall(ctx, op, operation.OpStageStagingVerified, err)
+	}
 
 	desiredRev, err := c.repo.CreateInstallationAndDesiredState(ctx, op, currentInst, &DesiredStateSnapshot{
 		InstallationID:   req.InstallationID,
@@ -617,30 +752,25 @@ func (c *Coordinator) executeRepair(ctx context.Context, req RepairRequest, idem
 		DefaultActionKey: currentInst.DefaultActionKey,
 	}, stagingKey)
 	if err != nil {
-		return c.failInstall(op, operation.OpStageDatabaseCommitted, err)
+		return c.failInstall(ctx, op, operation.OpStageDatabaseCommitted, err)
 	}
 	op.DesiredRevision = desiredRev
 	op.Stage = operation.OpStageDatabaseCommitted
 	op.UpdatedAt = time.Now().Format(operationTimeFormat)
-	_ = c.repo.UpdateOperation(ctx, op)
+	if err := c.persistOperation(ctx, op, nil); err != nil {
+		return &InstallResult{OperationID: op.ID, InstallationID: req.InstallationID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_UPDATE_FAILED"}, err
+	}
 
-	if err := c.runtimePublisher.PublishDesiredState(ctx, req.DeviceCtx, &DesiredStateSnapshot{
-		DesiredRevision:  desiredRev,
-		InstallationID:   req.InstallationID,
-		ReleaseID:        currentInst.ReleaseID,
-		UserID:           req.DeviceCtx.UserID,
-		DeviceID:         req.DeviceCtx.DeviceID,
-		RuntimeID:        req.DeviceCtx.RuntimeID,
-		EnsureAbsent:     false,
-		DefaultActionKey: currentInst.DefaultActionKey,
-	}); err != nil {
-		return c.failInstall(op, operation.OpStageRuntimeCommandEnqueued, err)
+	if err := c.publishPersistedDesiredState(ctx, req.DeviceCtx, false); err != nil {
+		return c.failInstall(ctx, op, operation.OpStageRuntimeCommandEnqueued, err)
 	}
 
 	op.Status = operation.OpStatusWaitingRuntimeACK
 	op.Stage = operation.OpStageWaitingRuntimeACK
 	op.UpdatedAt = time.Now().Format(operationTimeFormat)
-	_ = c.repo.UpdateOperation(ctx, op)
+	if err := c.persistOperation(ctx, op, nil); err != nil {
+		return &InstallResult{OperationID: op.ID, InstallationID: req.InstallationID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_UPDATE_FAILED"}, err
+	}
 
 	return &InstallResult{OperationID: op.ID, InstallationID: req.InstallationID, Status: operation.OpStatusWaitingRuntimeACK, Stage: operation.OpStageWaitingRuntimeACK}, nil
 }
@@ -659,6 +789,12 @@ func (c *Coordinator) executeUninstall(ctx context.Context, req UninstallRequest
 		CreatedAt:      time.Now().Format(operationTimeFormat),
 		UpdatedAt:      time.Now().Format(operationTimeFormat),
 	}
+	op.RequestHash = operationRequestHash(op, nil)
+	if existing, err := c.resolveIdempotentOperation(ctx, op); err != nil {
+		return &UninstallResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorMessage: err.Error()}, err
+	} else if existing != nil {
+		return &UninstallResult{OperationID: existing.ID, Status: existing.Status, ErrorMessage: existing.ErrorMessage}, nil
+	}
 	if err := c.repo.CreateOperation(ctx, op); err != nil {
 		return &UninstallResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorMessage: err.Error()}, err
 	}
@@ -668,33 +804,30 @@ func (c *Coordinator) executeUninstall(ctx context.Context, req UninstallRequest
 		op.Status = operation.OpStatusFailedTerminal
 		op.ErrorCode = "UNINSTALL_DESIRED_FAILED"
 		op.ErrorMessage = err.Error()
-		_ = c.repo.UpdateOperation(ctx, op)
-		return &UninstallResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorMessage: err.Error()}, err
+		persistErr := c.persistOperation(ctx, op, err)
+		return &UninstallResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorMessage: persistErr.Error()}, persistErr
 	}
 	op.DesiredRevision = desiredRev
 	op.Stage = operation.OpStageDesiredStateCommitted
 	op.UpdatedAt = time.Now().Format(operationTimeFormat)
-	_ = c.repo.UpdateOperation(ctx, op)
+	if err := c.persistOperation(ctx, op, nil); err != nil {
+		return &UninstallResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorMessage: err.Error()}, err
+	}
 
-	if err := c.runtimePublisher.PublishDesiredState(ctx, req.DeviceCtx, &DesiredStateSnapshot{
-		DesiredRevision: desiredRev,
-		InstallationID:  req.InstallationID,
-		UserID:          req.DeviceCtx.UserID,
-		DeviceID:        req.DeviceCtx.DeviceID,
-		RuntimeID:       req.DeviceCtx.RuntimeID,
-		EnsureAbsent:    true,
-	}); err != nil {
+	if err := c.publishPersistedDesiredState(ctx, req.DeviceCtx, true); err != nil {
 		op.Status = operation.OpStatusFailedTerminal
 		op.ErrorCode = "PUBLISH_FAILED"
 		op.ErrorMessage = err.Error()
-		_ = c.repo.UpdateOperation(ctx, op)
-		return &UninstallResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorMessage: err.Error()}, err
+		persistErr := c.persistOperation(ctx, op, err)
+		return &UninstallResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorMessage: persistErr.Error()}, persistErr
 	}
 
 	op.Status = operation.OpStatusWaitingRuntimeACK
 	op.Stage = operation.OpStageWaitingRuntimeACK
 	op.UpdatedAt = time.Now().Format(operationTimeFormat)
-	_ = c.repo.UpdateOperation(ctx, op)
+	if err := c.persistOperation(ctx, op, nil); err != nil {
+		return &UninstallResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorMessage: err.Error()}, err
+	}
 
 	return &UninstallResult{OperationID: op.ID, Status: operation.OpStatusWaitingRuntimeACK}, nil
 }
@@ -713,6 +846,12 @@ func (c *Coordinator) executeSettings(ctx context.Context, req SettingsRequest, 
 		CreatedAt:      time.Now().Format(operationTimeFormat),
 		UpdatedAt:      time.Now().Format(operationTimeFormat),
 	}
+	op.RequestHash = operationRequestHash(op, map[string]string{"expectedRevision": fmt.Sprintf("%d", req.ExpectedRevision), "updates": stableJSON(req.Updates)})
+	if existing, err := c.resolveIdempotentOperation(ctx, op); err != nil {
+		return &SettingsResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: operation.ErrCodeIDEMPOTENCYConflict, ErrorMessage: err.Error()}, err
+	} else if existing != nil {
+		return &SettingsResult{OperationID: existing.ID, DesiredRevision: existing.DesiredRevision, Status: existing.Status, ErrorCode: existing.ErrorCode, ErrorMessage: existing.ErrorMessage}, nil
+	}
 	if err := c.repo.CreateOperation(ctx, op); err != nil {
 		return &SettingsResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_CREATE_FAILED"}, err
 	}
@@ -722,33 +861,30 @@ func (c *Coordinator) executeSettings(ctx context.Context, req SettingsRequest, 
 		op.Status = operation.OpStatusFailedTerminal
 		op.ErrorCode = "SETTINGS_UPDATE_FAILED"
 		op.ErrorMessage = err.Error()
-		_ = c.repo.UpdateOperation(ctx, op)
-		return &SettingsResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "SETTINGS_UPDATE_FAILED"}, err
+		persistErr := c.persistOperation(ctx, op, err)
+		return &SettingsResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "SETTINGS_UPDATE_FAILED"}, persistErr
 	}
 	op.DesiredRevision = desiredRev
 	op.Stage = operation.OpStageDatabaseCommitted
 	op.UpdatedAt = time.Now().Format(operationTimeFormat)
-	_ = c.repo.UpdateOperation(ctx, op)
+	if err := c.persistOperation(ctx, op, nil); err != nil {
+		return &SettingsResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_UPDATE_FAILED", ErrorMessage: err.Error()}, err
+	}
 
-	if err := c.runtimePublisher.PublishDesiredState(ctx, req.DeviceCtx, &DesiredStateSnapshot{
-		DesiredRevision: desiredRev,
-		InstallationID:  req.InstallationID,
-		UserID:          req.DeviceCtx.UserID,
-		DeviceID:        req.DeviceCtx.DeviceID,
-		RuntimeID:       req.DeviceCtx.RuntimeID,
-		EnsureAbsent:    false,
-	}); err != nil {
+	if err := c.publishPersistedDesiredState(ctx, req.DeviceCtx, false); err != nil {
 		op.Status = operation.OpStatusFailedTerminal
 		op.ErrorCode = "PUBLISH_FAILED"
 		op.ErrorMessage = err.Error()
-		_ = c.repo.UpdateOperation(ctx, op)
-		return &SettingsResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "PUBLISH_FAILED"}, err
+		persistErr := c.persistOperation(ctx, op, err)
+		return &SettingsResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "PUBLISH_FAILED"}, persistErr
 	}
 
 	op.Status = operation.OpStatusWaitingRuntimeACK
 	op.Stage = operation.OpStageWaitingRuntimeACK
 	op.UpdatedAt = time.Now().Format(operationTimeFormat)
-	_ = c.repo.UpdateOperation(ctx, op)
+	if err := c.persistOperation(ctx, op, nil); err != nil {
+		return &SettingsResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_UPDATE_FAILED"}, err
+	}
 
 	return &SettingsResult{OperationID: op.ID, SettingsRevision: settingsRev, DesiredRevision: desiredRev, Status: operation.OpStatusWaitingRuntimeACK}, nil
 }
@@ -767,6 +903,12 @@ func (c *Coordinator) executeDefaultAction(ctx context.Context, req DefaultActio
 		CreatedAt:      time.Now().Format(operationTimeFormat),
 		UpdatedAt:      time.Now().Format(operationTimeFormat),
 	}
+	op.RequestHash = operationRequestHash(op, map[string]string{"actionKey": req.DesiredActionKey})
+	if existing, err := c.resolveIdempotentOperation(ctx, op); err != nil {
+		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: operation.ErrCodeIDEMPOTENCYConflict}, err
+	} else if existing != nil {
+		return &EnableDisableResult{OperationID: existing.ID, DesiredRevision: existing.DesiredRevision, Status: existing.Status, ErrorCode: existing.ErrorCode}, nil
+	}
 	if err := c.repo.CreateOperation(ctx, op); err != nil {
 		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_CREATE_FAILED"}, err
 	}
@@ -776,34 +918,30 @@ func (c *Coordinator) executeDefaultAction(ctx context.Context, req DefaultActio
 		op.Status = operation.OpStatusFailedTerminal
 		op.ErrorCode = "DEFAULT_ACTION_FAILED"
 		op.ErrorMessage = err.Error()
-		_ = c.repo.UpdateOperation(ctx, op)
-		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "DEFAULT_ACTION_FAILED"}, err
+		persistErr := c.persistOperation(ctx, op, err)
+		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "DEFAULT_ACTION_FAILED"}, persistErr
 	}
 	op.DesiredRevision = desiredRev
 	op.Stage = operation.OpStageDesiredStateCommitted
 	op.UpdatedAt = time.Now().Format(operationTimeFormat)
-	_ = c.repo.UpdateOperation(ctx, op)
+	if err := c.persistOperation(ctx, op, nil); err != nil {
+		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_UPDATE_FAILED"}, err
+	}
 
-	if err := c.runtimePublisher.PublishDesiredState(ctx, req.DeviceCtx, &DesiredStateSnapshot{
-		DesiredRevision:  desiredRev,
-		InstallationID:   req.InstallationID,
-		UserID:           req.DeviceCtx.UserID,
-		DeviceID:         req.DeviceCtx.DeviceID,
-		RuntimeID:        req.DeviceCtx.RuntimeID,
-		DefaultActionKey: req.DesiredActionKey,
-		EnsureAbsent:     false,
-	}); err != nil {
+	if err := c.publishPersistedDesiredState(ctx, req.DeviceCtx, false); err != nil {
 		op.Status = operation.OpStatusFailedTerminal
 		op.ErrorCode = "PUBLISH_FAILED"
 		op.ErrorMessage = err.Error()
-		_ = c.repo.UpdateOperation(ctx, op)
-		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "PUBLISH_FAILED"}, err
+		persistErr := c.persistOperation(ctx, op, err)
+		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "PUBLISH_FAILED"}, persistErr
 	}
 
 	op.Status = operation.OpStatusWaitingRuntimeACK
 	op.Stage = operation.OpStageWaitingRuntimeACK
 	op.UpdatedAt = time.Now().Format(operationTimeFormat)
-	_ = c.repo.UpdateOperation(ctx, op)
+	if err := c.persistOperation(ctx, op, nil); err != nil {
+		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_UPDATE_FAILED"}, err
+	}
 
 	return &EnableDisableResult{OperationID: op.ID, DesiredRevision: desiredRev, Status: operation.OpStatusWaitingRuntimeACK}, nil
 }
@@ -822,6 +960,12 @@ func (c *Coordinator) executeRecenter(ctx context.Context, req RecenterRequest, 
 		CreatedAt:      time.Now().Format(operationTimeFormat),
 		UpdatedAt:      time.Now().Format(operationTimeFormat),
 	}
+	op.RequestHash = operationRequestHash(op, nil)
+	if existing, err := c.resolveIdempotentOperation(ctx, op); err != nil {
+		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: operation.ErrCodeIDEMPOTENCYConflict}, err
+	} else if existing != nil {
+		return &EnableDisableResult{OperationID: existing.ID, DesiredRevision: existing.DesiredRevision, Status: existing.Status, ErrorCode: existing.ErrorCode}, nil
+	}
 	if err := c.repo.CreateOperation(ctx, op); err != nil {
 		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_CREATE_FAILED"}, err
 	}
@@ -830,19 +974,21 @@ func (c *Coordinator) executeRecenter(ctx context.Context, req RecenterRequest, 
 		op.Status = operation.OpStatusFailedTerminal
 		op.ErrorCode = "PUBLISH_FAILED"
 		op.ErrorMessage = err.Error()
-		_ = c.repo.UpdateOperation(ctx, op)
-		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "PUBLISH_FAILED"}, err
+		persistErr := c.persistOperation(ctx, op, err)
+		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "PUBLISH_FAILED"}, persistErr
 	}
 
 	op.Status = operation.OpStatusWaitingRuntimeACK
 	op.Stage = operation.OpStageWaitingRuntimeACK
 	op.UpdatedAt = time.Now().Format(operationTimeFormat)
-	_ = c.repo.UpdateOperation(ctx, op)
+	if err := c.persistOperation(ctx, op, nil); err != nil {
+		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_UPDATE_FAILED"}, err
+	}
 
 	return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusWaitingRuntimeACK}, nil
 }
 
-func (c *Coordinator) failInstall(op *operation.InstallationOperation, stage string, cause error) (*InstallResult, error) {
+func (c *Coordinator) failInstall(ctx context.Context, op *operation.InstallationOperation, stage string, cause error) (*InstallResult, error) {
 	if op == nil {
 		return &InstallResult{Status: operation.OpStatusFailedTerminal, ErrorMessage: cause.Error()}, cause
 	}
@@ -851,6 +997,11 @@ func (c *Coordinator) failInstall(op *operation.InstallationOperation, stage str
 	op.Status = operation.OpStatusFailedTerminal
 	op.Stage = stage
 	op.UpdatedAt = time.Now().Format(operationTimeFormat)
+	if existing, err := c.repo.GetOperation(ctx, op.UserID, op.DeviceID, op.ID); err == nil && existing != nil {
+		if updateErr := c.repo.UpdateOperation(ctx, op); updateErr != nil {
+			cause = errors.Join(cause, updateErr)
+		}
+	}
 	return &InstallResult{
 		OperationID:  op.ID,
 		Status:       operation.OpStatusFailedTerminal,
@@ -858,6 +1009,39 @@ func (c *Coordinator) failInstall(op *operation.InstallationOperation, stage str
 		ErrorCode:    op.ErrorCode,
 		ErrorMessage: cause.Error(),
 	}, cause
+}
+
+func (c *Coordinator) publishPersistedDesiredState(ctx context.Context, deviceCtx device.DeviceContext, ensureAbsent bool) error {
+	snapshot, err := c.repo.GetDesiredStateSnapshot(ctx, deviceCtx.UserID, deviceCtx.DeviceID)
+	if err != nil {
+		return fmt.Errorf("load persisted desired state: %w", err)
+	}
+	snapshot.EnsureAbsent = ensureAbsent
+	if snapshot.RuntimeID == "" {
+		snapshot.RuntimeID = deviceCtx.RuntimeID
+	}
+	// The desired-state row and its outbox event are committed in the same
+	// transaction. Immediate dispatch is only a latency optimization: if it
+	// fails, the durable outbox worker will retry without turning a committed
+	// desired state into a terminal operation failure.
+	if err := c.runtimePublisher.PublishDesiredState(ctx, deviceCtx, snapshot); err != nil {
+		// The same desired snapshot is committed to the durable outbox in the
+		// repository transaction. Immediate dispatch is a latency optimization,
+		// so failure is observable but does not invalidate the committed intent.
+		log.Warn("installation coordinator: immediate desired-state publish failed; durable outbox will retry: ", err)
+	}
+	return nil
+}
+
+func (c *Coordinator) persistOperation(ctx context.Context, op *operation.InstallationOperation, cause error) error {
+	updateErr := c.repo.UpdateOperation(ctx, op)
+	if updateErr == nil {
+		return cause
+	}
+	if cause != nil {
+		return errors.Join(cause, updateErr)
+	}
+	return updateErr
 }
 
 func generateExecutionID() string {

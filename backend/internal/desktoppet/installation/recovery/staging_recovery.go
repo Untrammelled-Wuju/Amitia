@@ -83,12 +83,13 @@ func (r *StagingRecovery) recoverFromStagingPrepared(ctx context.Context, op *op
 }
 
 func (r *StagingRecovery) recoverFromStagingVerified(ctx context.Context, op *operation.InstallationOperation, j *RecoveryCommitJournal) error {
-	if err := r.stagingRepo.CleanupStaging(op.ID); err != nil {
-		return fmt.Errorf("stagingRecovery: cleanup before skip-staging failed op=%s: %w", op.ID, err)
-	}
-	if _, err := r.repo.CASUpdateCommitJournalStage(op.ID, operation.OpStageStagingVerified, operation.OpStageOldInstallParked, r.worker.executionID); err != nil {
+	// The V2 coordinator keeps the verified copy under the installation staging
+	// root until the database transaction commits. Do not delete that copy here:
+	// it is the recovery source of truth. Advance to files_published so DBRecovery
+	// can replay the transactional installation/desired-state commit.
+	if _, err := r.repo.CASUpdateCommitJournalStage(op.ID, operation.OpStageStagingVerified, operation.OpStageFilesPublished, r.worker.executionID); err != nil {
 		if !errors.Is(err, ErrJournalNotFound) {
-			return fmt.Errorf("stagingRecovery: CAS update to old_install_parked failed: %w", err)
+			return fmt.Errorf("stagingRecovery: CAS update to files_published failed: %w", err)
 		}
 	}
 	return nil

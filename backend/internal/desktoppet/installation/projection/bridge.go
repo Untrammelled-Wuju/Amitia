@@ -5,9 +5,11 @@ package projection
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
+	"github.com/u-ai/backend/log"
 	"gorm.io/gorm"
 )
 
@@ -21,34 +23,36 @@ type RuntimeEventRecord struct {
 	EventType        string `gorm:"column:event_type"`
 	Payload          []byte `gorm:"column:payload"`
 	RuntimeSessionID string `gorm:"column:runtime_session_id"`
+	CommandID        string `gorm:"column:command_id"`
 	Sequence         int64  `gorm:"column:sequence"`
 	Delivered        int    `gorm:"column:delivered"`
 }
 
-func (RuntimeEventRecord) TableName() string {
-	return "desktop_pet_runtime_event_records"
+func (RuntimeEventRecord) TableName() string { return "desktop_pet_runtime_event_records" }
+
+type runtimeSessionIdentity struct {
+	ID        string `gorm:"column:id"`
+	UserID    string `gorm:"column:user_id"`
+	DeviceID  string `gorm:"column:device_id"`
+	RuntimeID string `gorm:"column:runtime_id"`
 }
+
+func (runtimeSessionIdentity) TableName() string { return "desktop_pet_runtime_sessions" }
+
+type runtimeCommandProjection struct {
+	ID              string `gorm:"column:id"`
+	DesiredRevision int64  `gorm:"column:desired_revision"`
+}
+
+func (runtimeCommandProjection) TableName() string { return "desktop_pet_runtime_commands_v2" }
 
 type ProjectionBridge struct {
-	db        *gorm.DB
-	service   *Service
-	runtimeID string
-	userID    string
-	deviceID  string
-	stopCh    chan struct{}
-	doneCh    chan struct{}
+	db      *gorm.DB
+	service *Service
 }
 
-func NewProjectionBridge(db *gorm.DB, service *Service, userID, deviceID, runtimeID string) *ProjectionBridge {
-	return &ProjectionBridge{
-		db:        db,
-		service:   service,
-		userID:    userID,
-		deviceID:  deviceID,
-		runtimeID: runtimeID,
-		stopCh:    make(chan struct{}),
-		doneCh:    make(chan struct{}),
-	}
+func NewProjectionBridge(db *gorm.DB, service *Service) *ProjectionBridge {
+	return &ProjectionBridge{db: db, service: service}
 }
 
 func (b *ProjectionBridge) Start(ctx context.Context) {
@@ -58,108 +62,132 @@ func (b *ProjectionBridge) Start(ctx context.Context) {
 	go b.run(ctx)
 }
 
-func (b *ProjectionBridge) Stop() {
-	if b == nil {
-		return
-	}
-	close(b.stopCh)
-	<-b.doneCh
-}
-
 func (b *ProjectionBridge) run(ctx context.Context) {
-	defer close(b.doneCh)
 	ticker := time.NewTicker(bridgePollInterval)
 	defer ticker.Stop()
-
 	for {
 		select {
-		case <-b.stopCh:
-			return
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
-			b.processBatch(ctx)
+			if err := b.processBatch(ctx); err != nil && ctx.Err() == nil {
+				log.Warn("installation projection bridge batch failed: ", err)
+			}
 		}
 	}
 }
 
-func (b *ProjectionBridge) processBatch(ctx context.Context) {
+func (b *ProjectionBridge) processBatch(ctx context.Context) error {
 	var events []RuntimeEventRecord
-	err := b.db.Where("delivered = 0").
-		Order("sequence ASC").
-		Limit(eventBatchSize).
-		Find(&events).Error
-	if err != nil {
-		return
+	if err := b.db.WithContext(ctx).Where("delivered = 0").Order("sequence ASC").Limit(eventBatchSize).Find(&events).Error; err != nil {
+		return err
 	}
-
 	for _, event := range events {
-		b.processEvent(ctx, event)
+		if err := b.processEvent(ctx, event); err != nil {
+			log.Warn("installation projection bridge event ", event.ID, " failed: ", err)
+			continue
+		}
+		if err := b.markDelivered(ctx, event.ID); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
-func (b *ProjectionBridge) processEvent(ctx context.Context, event RuntimeEventRecord) {
+func (b *ProjectionBridge) processEvent(ctx context.Context, event RuntimeEventRecord) error {
 	switch event.EventType {
 	case "runtime.state.snapshot":
-		b.handleStateSnapshot(ctx, event)
-	case "runtime.command.acknowledged":
-		b.handleCommandAcknowledged(ctx, event)
+		return b.handleStateSnapshot(ctx, event)
+	case "runtime.command.acknowledged", "command.ack":
+		return b.handleCommandAcknowledged(ctx, event)
+	default:
+		return nil
 	}
-
-	b.markDelivered(event.ID)
 }
 
-func (b *ProjectionBridge) handleStateSnapshot(ctx context.Context, event RuntimeEventRecord) {
+func (b *ProjectionBridge) sessionIdentity(ctx context.Context, sessionID string) (*runtimeSessionIdentity, error) {
+	if sessionID == "" {
+		return nil, errors.New("projection bridge: runtime session id required")
+	}
+	var identity runtimeSessionIdentity
+	if err := b.db.WithContext(ctx).Where("id = ?", sessionID).First(&identity).Error; err != nil {
+		return nil, err
+	}
+	if identity.UserID == "" || identity.DeviceID == "" || identity.RuntimeID == "" {
+		return nil, errors.New("projection bridge: incomplete runtime session identity")
+	}
+	return &identity, nil
+}
+
+func (b *ProjectionBridge) handleStateSnapshot(ctx context.Context, event RuntimeEventRecord) error {
 	var snapshot StateSnapshotPayload
 	if err := json.Unmarshal(event.Payload, &snapshot); err != nil {
-		return
+		return err
 	}
-
+	identity, err := b.sessionIdentity(ctx, event.RuntimeSessionID)
+	if err != nil {
+		return err
+	}
 	heartbeat := &coordinator.RuntimeHeartbeat{
+		InstallationID:          snapshot.InstallationID,
+		PetID:                   snapshot.PetID,
 		AppliedDesiredRevision:  snapshot.AppliedDesiredRevision,
 		AppliedSettingsRevision: int64(snapshot.AppliedSettingsRevision),
 		ActualReleaseID:         snapshot.ReleaseID,
 		ActualVisible:           boolToInt(snapshot.WindowStatus == "visible"),
 		ActualActionKey:         snapshot.CurrentActionKey,
-		ActualHealth:            b.mapHealthStatus(snapshot.PlaybackStatus),
+		ActualHealth:            mapHealthStatus(snapshot.PlaybackStatus),
 		Timestamp:               snapshot.CapturedAt,
 	}
-
-	_ = b.service.HandleRuntimeHeartbeat(ctx, b.userID, b.deviceID, b.runtimeID, heartbeat)
+	return b.service.HandleRuntimeHeartbeat(ctx, identity.UserID, identity.DeviceID, identity.RuntimeID, heartbeat)
 }
 
-func (b *ProjectionBridge) handleCommandAcknowledged(ctx context.Context, event RuntimeEventRecord) {
+func (b *ProjectionBridge) handleCommandAcknowledged(ctx context.Context, event RuntimeEventRecord) error {
 	var ack CommandAckPayload
 	if err := json.Unmarshal(event.Payload, &ack); err != nil {
-		return
+		return err
 	}
-
 	if ack.Status != "completed" && ack.Status != "failed_terminal" {
-		return
+		return nil
 	}
-
+	identity, err := b.sessionIdentity(ctx, event.RuntimeSessionID)
+	if err != nil {
+		return err
+	}
+	appliedRevision := ack.AppliedRevision
+	commandID := ack.CommandID
+	if commandID == "" {
+		commandID = event.CommandID
+	}
+	if appliedRevision == 0 && commandID != "" {
+		var command runtimeCommandProjection
+		if err := b.db.WithContext(ctx).Where("id = ?", commandID).First(&command).Error; err == nil {
+			appliedRevision = command.DesiredRevision
+		}
+	}
 	result := &coordinator.CommandResult{
-		AppliedRevision: 0,
-		Timestamp:       time.Now().Format("2006-01-02 15:04:05"),
+		Success:         ack.Status == "completed",
+		AppliedRevision: appliedRevision,
+		Timestamp:       time.Now().UTC().Format(time.RFC3339),
 	}
-
-	if ack.Status == "completed" {
-		result.Success = true
-		result.AppliedRevision = ack.AppliedRevision
-	} else {
-		result.Success = false
-	}
-
-	_ = b.service.HandleCommandResult(ctx, b.userID, b.deviceID, result)
+	return b.service.HandleCommandResult(ctx, identity.UserID, identity.DeviceID, result)
 }
 
-func (b *ProjectionBridge) markDelivered(eventID string) {
-	_ = b.db.Model(&RuntimeEventRecord{}).
-		Where("id = ?", eventID).
-		Update("delivered", 1).Error
+func (b *ProjectionBridge) markDelivered(ctx context.Context, eventID string) error {
+	result := b.db.WithContext(ctx).Model(&RuntimeEventRecord{}).Where("id = ? AND delivered = 0").Updates(map[string]interface{}{
+		"delivered":    1,
+		"delivered_at": time.Now().UTC().Format(time.RFC3339),
+	})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return errors.New("projection bridge: event delivery CAS failed")
+	}
+	return nil
 }
 
-func (b *ProjectionBridge) mapHealthStatus(playbackStatus string) string {
+func mapHealthStatus(playbackStatus string) string {
 	switch playbackStatus {
 	case "playing", "holding":
 		return "healthy"
@@ -172,8 +200,8 @@ func (b *ProjectionBridge) mapHealthStatus(playbackStatus string) string {
 	}
 }
 
-func boolToInt(b bool) int {
-	if b {
+func boolToInt(v bool) int {
+	if v {
 		return 1
 	}
 	return 0

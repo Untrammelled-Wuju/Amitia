@@ -6,8 +6,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/u-ai/backend/internal/desktoppet/installation/operation"
 	"github.com/u-ai/backend/internal/desktoppet/installation/journal"
+	"github.com/u-ai/backend/internal/desktoppet/installation/operation"
 	"gorm.io/gorm"
 )
 
@@ -21,9 +21,9 @@ func NewInstallRepoAdapter(db *gorm.DB) RecoveryRepo {
 
 func (a *installRepoAdapter) ListExpiredLeaseOperations(leaseTimeout string, limit int) ([]*operation.InstallationOperation, error) {
 	var ops []*operation.InstallationOperation
-	err := a.db.Where("lease_expires_at < ? AND status IN (?, ?, ?)", leaseTimeout,
-		operation.OpStatusRunning, operation.OpStatusWaitingRuntimeACK, operation.OpStatusCancelRequested).
-		Order("lease_expires_at asc").Limit(limit).Find(&ops).Error
+	err := a.db.Where("status IN (?, ?, ?, ?, ?) AND (lease_expires_at IS NULL OR lease_expires_at = '' OR lease_expires_at < ?)",
+		operation.OpStatusCreated, operation.OpStatusQueued, operation.OpStatusRunning, operation.OpStatusWaitingRuntimeACK, operation.OpStatusCancelRequested, leaseTimeout).
+		Order("created_at asc").Limit(limit).Find(&ops).Error
 	if err != nil {
 		return nil, err
 	}
@@ -31,16 +31,42 @@ func (a *installRepoAdapter) ListExpiredLeaseOperations(leaseTimeout string, lim
 }
 
 func (a *installRepoAdapter) RenewOperationLease(operationID, executionID string) error {
-	return a.db.Model(&operation.InstallationOperation{}).
+	result := a.db.Model(&operation.InstallationOperation{}).
 		Where("id = ? AND lease_owner = ?", operationID, executionID).
 		Updates(map[string]interface{}{
-			"lease_expires_at": time.Now().Add(5 * time.Minute),
-			"heartbeat_at":     time.Now(),
-		}).Error
+			"lease_expires_at": time.Now().Add(5 * time.Minute).Format("2006-01-02 15:04:05"),
+			"heartbeat_at":     time.Now().Format("2006-01-02 15:04:05"),
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return ErrRecoveryLeaseLost
+	}
+	return nil
+}
+
+func (a *installRepoAdapter) ReleaseOperationLease(operationID, executionID string) error {
+	result := a.db.Model(&operation.InstallationOperation{}).
+		Where("id = ? AND lease_owner = ?", operationID, executionID).
+		Updates(map[string]interface{}{
+			"lease_owner":      "",
+			"lease_expires_at": "",
+			"heartbeat_at":     "",
+			"updated_at":       time.Now().Format("2006-01-02 15:04:05"),
+		})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return ErrRecoveryLeaseLost
+	}
+	return nil
 }
 
 func (a *installRepoAdapter) ClaimOperationLease(operationID, owner string, ttl time.Duration, expectedStatuses []string) (*operation.InstallationOperation, error) {
 	var op operation.InstallationOperation
+	now := time.Now()
 	err := a.db.Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("id = ?", operationID).Take(&op).Error; err != nil {
 			return err
@@ -49,18 +75,21 @@ func (a *installRepoAdapter) ClaimOperationLease(operationID, owner string, ttl 
 			return errors.New("operation status mismatch")
 		}
 		result := tx.Model(&operation.InstallationOperation{}).
-			Where("id = ? AND status = ?", operationID, op.Status).
+			Where("id = ? AND status = ? AND (lease_expires_at IS NULL OR lease_expires_at = '' OR lease_expires_at < ? OR lease_owner = ?)", operationID, op.Status, now.Format("2006-01-02 15:04:05"), owner).
 			Updates(map[string]interface{}{
-				"lease_owner":       owner,
-				"lease_expires_at":  time.Now().Add(ttl),
-				"heartbeat_at":      time.Now(),
+				"lease_owner":      owner,
+				"lease_expires_at": now.Add(ttl).Format("2006-01-02 15:04:05"),
+				"heartbeat_at":     now.Format("2006-01-02 15:04:05"),
 			})
 		if result.Error != nil {
 			return result.Error
 		}
 		if result.RowsAffected != 1 {
-			return errors.New("lease claim failed")
+			return ErrRecoveryLeaseLost
 		}
+		op.LeaseOwner = owner
+		op.LeaseExpiresAt = now.Add(ttl).Format("2006-01-02 15:04:05")
+		op.HeartbeatAt = now.Format("2006-01-02 15:04:05")
 		return nil
 	})
 	if err != nil {
@@ -81,8 +110,8 @@ func (a *installRepoAdapter) UpdateOperationStatus(operationID, oldStatus, newSt
 		result := tx.Model(&operation.InstallationOperation{}).
 			Where("id = ? AND status = ?", operationID, oldStatus).
 			Updates(map[string]interface{}{
-				"status":      newStatus,
-				"updated_at":  time.Now(),
+				"status":     newStatus,
+				"updated_at": time.Now(),
 			})
 		if result.Error != nil {
 			return result.Error

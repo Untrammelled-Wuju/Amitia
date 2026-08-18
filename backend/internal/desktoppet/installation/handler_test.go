@@ -376,8 +376,8 @@ func (s *stubCoordinator) Recenter(ctx context.Context, req coordinator.Recenter
 	return &coordinator.EnableDisableResult{OperationID: req.InstallationID, Status: "recenter"}, nil
 }
 
-func (s *stubCoordinator) PlayAction(ctx context.Context, userID, installationID, actionKey string) error {
-	return mapInstallErr(s.svc.PlayAction(userID, installationID, actionKey))
+func (s *stubCoordinator) PlayAction(ctx context.Context, deviceCtx device.DeviceContext, installationID, actionKey string) error {
+	return mapInstallErr(s.svc.PlayAction(deviceCtx.UserID, installationID, actionKey))
 }
 
 func (s *stubCoordinator) GetOperationStatus(ctx context.Context, userID, deviceID, operationID string) (*operation.InstallationOperation, error) {

@@ -210,12 +210,14 @@ func (ctx OperationContext) IsValid() bool {
 
 type ReleaseValidationResult struct {
 	ReleaseID        string
+	PetID            string
 	IsInstallable    bool
 	HasStagingCopy   bool
 	HasPublishedCopy bool
 	ManifestValid    bool
 	StagingPathKey   string
 	PublishedPathKey string
+	DefaultActionKey string
 	SettingsRevision int
 	DesiredSettings  settings.SettingsSnapshot
 	ErrorMessage     string

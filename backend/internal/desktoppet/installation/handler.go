@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
 	"github.com/u-ai/backend/internal/desktoppet/installation/device"
+	"github.com/u-ai/backend/internal/desktoppet/installation/operation"
 	"github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/pkg/comment/response"
@@ -39,6 +40,19 @@ type installPackagePayload struct {
 
 type updateDefaultActionPayload struct {
 	ActionKey string `json:"action_key"`
+}
+
+type switchReleasePayload struct {
+	TargetReleaseID string `json:"targetReleaseId"`
+}
+
+type downgradePayload struct {
+	TargetReleaseID string `json:"targetReleaseId"`
+	SafetyConfirm   bool   `json:"safetyConfirm"`
+}
+
+type operationStatusResponse struct {
+	Operation *operation.InstallationOperation `json:"operation"`
 }
 
 func (h *Handler) InstallPackage(c *gin.Context) {
@@ -369,11 +383,11 @@ func mapInstallationErrorCode(code string) int {
 
 type CoordinatorHandler struct {
 	coordinator coordinator.InstallationCoordinator
-	repo        Repository
+	repo        RepositoryV2
 	guard       security.OwnershipGuard
 }
 
-func NewCoordinatorHandler(coord coordinator.InstallationCoordinator, repo Repository, guard security.OwnershipGuard) *CoordinatorHandler {
+func NewCoordinatorHandler(coord coordinator.InstallationCoordinator, repo RepositoryV2, guard security.OwnershipGuard) *CoordinatorHandler {
 	return &CoordinatorHandler{coordinator: coord, repo: repo, guard: guard}
 }
 
@@ -413,17 +427,13 @@ func (h *CoordinatorHandler) InstallPackage(c *gin.Context) {
 		DeviceCtx:       deviceCtx,
 		TargetReleaseID: packageID,
 		CharacterID:     payload.CharacterID,
+		IdempotencyKey:  strings.TrimSpace(c.GetHeader("Idempotency-Key")),
 	})
 	if err != nil {
 		writeCoordinatorError(c, err)
 		return
 	}
-	install, getErr := h.repo.GetInstallation(result.OperationID)
-	if getErr != nil {
-		util.SuccessMsgResponse(c, "安装成功", gin.H{"operationId": result.OperationID, "status": result.Status})
-		return
-	}
-	util.SuccessMsgResponse(c, "安装成功", install)
+	util.SuccessMsgResponse(c, "安装任务已创建", gin.H{"operationId": result.OperationID, "status": result.Status})
 }
 
 func (h *CoordinatorHandler) ListInstallations(c *gin.Context) {
@@ -432,8 +442,11 @@ func (h *CoordinatorHandler) ListInstallations(c *gin.Context) {
 		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
 		return
 	}
-	userID := actorID
-	items, err := h.repo.ListInstallations(userID)
+	deviceID, ok := requireDeviceID(c)
+	if !ok {
+		return
+	}
+	items, err := h.repo.ListInstallationsForUserDevice(actorID, deviceID)
 	if err != nil {
 		writeInstallationError(c, err)
 		return
@@ -463,7 +476,7 @@ func (h *CoordinatorHandler) GetInstallation(c *gin.Context) {
 		writeInstallationOwnershipError(c, err)
 		return
 	}
-	inst, err := h.repo.GetInstallation(installationID)
+	inst, err := h.repo.GetInstallationForUserDevice(string(actor.UserID), deviceID, installationID)
 	if err != nil {
 		writeInstallationError(c, err)
 		return
@@ -496,6 +509,7 @@ func (h *CoordinatorHandler) EnableInstallation(c *gin.Context) {
 			DeviceID: deviceID,
 		},
 		InstallationID: installationID,
+		IdempotencyKey: strings.TrimSpace(c.GetHeader("Idempotency-Key")),
 	})
 	if err != nil {
 		writeCoordinatorError(c, err)
@@ -529,6 +543,7 @@ func (h *CoordinatorHandler) DisableInstallation(c *gin.Context) {
 			DeviceID: deviceID,
 		},
 		InstallationID: installationID,
+		IdempotencyKey: strings.TrimSpace(c.GetHeader("Idempotency-Key")),
 	})
 	if err != nil {
 		writeCoordinatorError(c, err)
@@ -572,6 +587,7 @@ func (h *CoordinatorHandler) UpdateDefaultAction(c *gin.Context) {
 		},
 		InstallationID:   installationID,
 		DesiredActionKey: payload.ActionKey,
+		IdempotencyKey:   strings.TrimSpace(c.GetHeader("Idempotency-Key")),
 	})
 	if err != nil {
 		writeCoordinatorError(c, err)
@@ -604,12 +620,30 @@ func (h *CoordinatorHandler) UpdateRuntimeSettings(c *gin.Context) {
 		writeInstallationOwnershipError(c, err)
 		return
 	}
+	if err := payload.Validate(); err != nil {
+		writeInstallationError(c, err)
+		return
+	}
+	expectedRevision := 0
+	if payload.ExpectedRevision != nil {
+		expectedRevision = *payload.ExpectedRevision
+	} else {
+		currentSettings, err := h.repo.GetRuntimeSettingsForUserDevice(string(actor.UserID), deviceID, installationID)
+		if err != nil {
+			writeInstallationError(c, err)
+			return
+		}
+		expectedRevision = currentSettings.SettingsRevision
+	}
 	result, err := h.coordinator.UpdateSettings(c.Request.Context(), coordinator.SettingsRequest{
 		DeviceCtx: device.DeviceContext{
 			UserID:   string(actor.UserID),
 			DeviceID: deviceID,
 		},
-		InstallationID: installationID,
+		InstallationID:   installationID,
+		ExpectedRevision: expectedRevision,
+		Updates:          payload.ToUpdates(),
+		IdempotencyKey:   strings.TrimSpace(c.GetHeader("Idempotency-Key")),
 	})
 	if err != nil {
 		writeCoordinatorError(c, err)
@@ -643,6 +677,7 @@ func (h *CoordinatorHandler) Recenter(c *gin.Context) {
 			DeviceID: deviceID,
 		},
 		InstallationID: installationID,
+		IdempotencyKey: strings.TrimSpace(c.GetHeader("Idempotency-Key")),
 	})
 	if err != nil {
 		writeCoordinatorError(c, err)
@@ -675,11 +710,202 @@ func (h *CoordinatorHandler) PlayAction(c *gin.Context) {
 		writeInstallationOwnershipError(c, err)
 		return
 	}
-	if err := h.coordinator.PlayAction(c.Request.Context(), string(actor.UserID), installationID, actionKey); err != nil {
+	if err := h.coordinator.PlayAction(c.Request.Context(), device.DeviceContext{UserID: string(actor.UserID), DeviceID: deviceID}, installationID, actionKey); err != nil {
 		writeCoordinatorError(c, err)
 		return
 	}
 	util.SuccessMsgResponse(c, "动作已触发", gin.H{"installationId": installationID, "actionKey": actionKey})
+}
+
+func (h *CoordinatorHandler) Uninstall(c *gin.Context) {
+	installationID := c.Param("installationId")
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	deviceID, ok := requireDeviceID(c)
+	if !ok {
+		return
+	}
+	if _, err := h.guard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
+		writeInstallationOwnershipError(c, err)
+		return
+	}
+	result, err := h.coordinator.Uninstall(c.Request.Context(), coordinator.UninstallRequest{
+		DeviceCtx:      device.DeviceContext{UserID: string(actor.UserID), DeviceID: deviceID},
+		InstallationID: installationID,
+		IdempotencyKey: strings.TrimSpace(c.GetHeader("Idempotency-Key")),
+	})
+	if err != nil {
+		writeCoordinatorError(c, err)
+		return
+	}
+	util.SuccessMsgResponse(c, "卸载任务已创建", gin.H{"operationId": result.OperationID, "status": result.Status})
+}
+
+func (h *CoordinatorHandler) SwitchRelease(c *gin.Context) {
+	installationID := c.Param("installationId")
+	var payload switchReleasePayload
+	if err := c.ShouldBindJSON(&payload); err != nil || strings.TrimSpace(payload.TargetReleaseID) == "" {
+		util.ErrorResponse(c, response.InvalidParams, "targetReleaseId 不能为空", gin.H{"errorCode": ErrCodeInstallationInvalid})
+		return
+	}
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	deviceID, ok := requireDeviceID(c)
+	if !ok {
+		return
+	}
+	if _, err := h.guard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
+		writeInstallationOwnershipError(c, err)
+		return
+	}
+	result, err := h.coordinator.Switch(c.Request.Context(), coordinator.SwitchRequest{
+		DeviceCtx:            device.DeviceContext{UserID: string(actor.UserID), DeviceID: deviceID},
+		SourceInstallationID: installationID,
+		TargetReleaseID:      strings.TrimSpace(payload.TargetReleaseID),
+		IdempotencyKey:       strings.TrimSpace(c.GetHeader("Idempotency-Key")),
+	})
+	if err != nil {
+		writeCoordinatorError(c, err)
+		return
+	}
+	util.SuccessMsgResponse(c, "切换任务已创建", result)
+}
+
+func (h *CoordinatorHandler) Upgrade(c *gin.Context) {
+	installationID := c.Param("installationId")
+	var payload switchReleasePayload
+	if err := c.ShouldBindJSON(&payload); err != nil || strings.TrimSpace(payload.TargetReleaseID) == "" {
+		util.ErrorResponse(c, response.InvalidParams, "targetReleaseId 不能为空", gin.H{"errorCode": ErrCodeInstallationInvalid})
+		return
+	}
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	deviceID, ok := requireDeviceID(c)
+	if !ok {
+		return
+	}
+	if _, err := h.guard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
+		writeInstallationOwnershipError(c, err)
+		return
+	}
+	result, err := h.coordinator.Upgrade(c.Request.Context(), coordinator.UpgradeRequest{
+		DeviceCtx:       device.DeviceContext{UserID: string(actor.UserID), DeviceID: deviceID},
+		InstallationID:  installationID,
+		TargetReleaseID: strings.TrimSpace(payload.TargetReleaseID),
+		IdempotencyKey:  strings.TrimSpace(c.GetHeader("Idempotency-Key")),
+	})
+	if err != nil {
+		writeCoordinatorError(c, err)
+		return
+	}
+	util.SuccessMsgResponse(c, "升级任务已创建", result)
+}
+
+func (h *CoordinatorHandler) Downgrade(c *gin.Context) {
+	installationID := c.Param("installationId")
+	var payload downgradePayload
+	if err := c.ShouldBindJSON(&payload); err != nil || strings.TrimSpace(payload.TargetReleaseID) == "" {
+		util.ErrorResponse(c, response.InvalidParams, "targetReleaseId 不能为空", gin.H{"errorCode": ErrCodeInstallationInvalid})
+		return
+	}
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	deviceID, ok := requireDeviceID(c)
+	if !ok {
+		return
+	}
+	if _, err := h.guard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
+		writeInstallationOwnershipError(c, err)
+		return
+	}
+	result, err := h.coordinator.Downgrade(c.Request.Context(), coordinator.DowngradeRequest{
+		DeviceCtx:       device.DeviceContext{UserID: string(actor.UserID), DeviceID: deviceID},
+		InstallationID:  installationID,
+		TargetReleaseID: strings.TrimSpace(payload.TargetReleaseID),
+		IdempotencyKey:  strings.TrimSpace(c.GetHeader("Idempotency-Key")),
+		SafetyConfirm:   payload.SafetyConfirm,
+	})
+	if err != nil {
+		writeCoordinatorError(c, err)
+		return
+	}
+	util.SuccessMsgResponse(c, "降级任务已创建", result)
+}
+
+func (h *CoordinatorHandler) Repair(c *gin.Context) {
+	installationID := c.Param("installationId")
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	deviceID, ok := requireDeviceID(c)
+	if !ok {
+		return
+	}
+	if _, err := h.guard.RequireInstallationStrict(c.Request.Context(), actor, deviceID, installationID); err != nil {
+		writeInstallationOwnershipError(c, err)
+		return
+	}
+	result, err := h.coordinator.Repair(c.Request.Context(), coordinator.RepairRequest{
+		DeviceCtx:      device.DeviceContext{UserID: string(actor.UserID), DeviceID: deviceID},
+		InstallationID: installationID,
+		IdempotencyKey: strings.TrimSpace(c.GetHeader("Idempotency-Key")),
+	})
+	if err != nil {
+		writeCoordinatorError(c, err)
+		return
+	}
+	util.SuccessMsgResponse(c, "修复任务已创建", result)
+}
+
+func (h *CoordinatorHandler) GetOperationStatus(c *gin.Context) {
+	operationID := c.Param("operationId")
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	deviceID, ok := requireDeviceID(c)
+	if !ok {
+		return
+	}
+	op, err := h.coordinator.GetOperationStatus(c.Request.Context(), actorID, deviceID, operationID)
+	if err != nil {
+		writeCoordinatorError(c, err)
+		return
+	}
+	util.SuccessResponse(c, operationStatusResponse{Operation: op})
+}
+
+func (h *CoordinatorHandler) CancelOperation(c *gin.Context) {
+	operationID := c.Param("operationId")
+	actorID, err := middleware.ResolveActorID(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	deviceID, ok := requireDeviceID(c)
+	if !ok {
+		return
+	}
+	if err := h.coordinator.CancelOperation(c.Request.Context(), actorID, deviceID, operationID); err != nil {
+		writeCoordinatorError(c, err)
+		return
+	}
+	util.SuccessMsgResponse(c, "取消请求已提交", gin.H{"operationId": operationID, "status": operation.OpStatusCancelRequested})
 }
 
 func writeCoordinatorError(c *gin.Context, err error) {

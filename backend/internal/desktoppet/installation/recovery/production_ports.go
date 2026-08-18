@@ -1,0 +1,571 @@
+// SPDX-FileCopyrightText: 2026 彭旭
+// SPDX-License-Identifier: AGPL-3.0-only
+package recovery
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/desktoppet/installation"
+	"github.com/u-ai/backend/internal/desktoppet/installation/binding"
+	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
+	"github.com/u-ai/backend/internal/desktoppet/installation/desired"
+	"github.com/u-ai/backend/internal/desktoppet/installation/journal"
+	"github.com/u-ai/backend/internal/desktoppet/installation/operation"
+	"github.com/u-ai/backend/internal/desktoppet/installation/projection"
+	runtimev2 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v2"
+	security "github.com/u-ai/backend/internal/desktoppet/security"
+	"gorm.io/gorm"
+)
+
+type ProductionStagingRepo struct {
+	db        *gorm.DB
+	stager    coordinator.ReleaseStager
+	registry  *security.PathRootRegistry
+	responder *security.SafeArtifactResponder
+}
+
+func NewProductionStagingRepo(db *gorm.DB, stager coordinator.ReleaseStager, registry *security.PathRootRegistry) *ProductionStagingRepo {
+	return &ProductionStagingRepo{db: db, stager: stager, registry: registry, responder: security.NewSafeArtifactResponder(registry)}
+}
+
+func (p *ProductionStagingRepo) CleanupStaging(opID string) error {
+	if p == nil || p.db == nil || p.registry == nil {
+		return errors.New("production staging recovery: not configured")
+	}
+	var op operation.InstallationOperation
+	if err := p.db.Where("id = ?", opID).First(&op).Error; err != nil {
+		return err
+	}
+	key := p.stagingKey(op)
+	resolved, err := p.registry.Resolve(security.RootInstallations, key)
+	if err != nil {
+		return err
+	}
+	if _, err := os.Lstat(resolved); errors.Is(err, os.ErrNotExist) {
+		return nil
+	} else if err != nil {
+		return err
+	}
+	entityID := op.InstallationID
+	if entityID == "" {
+		entityID = op.ID
+	}
+	return p.responder.SafeDelete(security.RootInstallations, key, security.DeleteExpectation{EntityType: "installation_staging", EntityID: entityID})
+}
+
+func (p *ProductionStagingRepo) ReprepareStaging(opID, stagingPathKey, targetReleaseID string) (string, error) {
+	if p == nil || p.db == nil || p.stager == nil {
+		return "", errors.New("production staging recovery: not configured")
+	}
+	var op operation.InstallationOperation
+	if err := p.db.Where("id = ?", opID).First(&op).Error; err != nil {
+		return "", err
+	}
+	entityID := op.InstallationID
+	if entityID == "" {
+		entityID = op.ID
+	}
+	return p.stager.PrepareStagingCopy(context.Background(), targetReleaseID, entityID)
+}
+
+func (p *ProductionStagingRepo) VerifyStagingIntegrity(stagingPathKey, targetReleaseID string) (bool, error) {
+	if p == nil || p.stager == nil {
+		return false, errors.New("production staging recovery: not configured")
+	}
+	entityID := filepath.Base(filepath.FromSlash(stagingPathKey))
+	if entityID == "." || entityID == string(filepath.Separator) || entityID == "" {
+		return false, errors.New("production staging recovery: invalid staging path key")
+	}
+	if err := p.stager.VerifyStagingCopy(context.Background(), targetReleaseID, entityID, stagingPathKey); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (p *ProductionStagingRepo) PublishStaging(stagingPathKey, targetReleaseID string) (string, error) {
+	valid, err := p.VerifyStagingIntegrity(stagingPathKey, targetReleaseID)
+	if err != nil || !valid {
+		return "", err
+	}
+	return stagingPathKey, nil
+}
+
+func (p *ProductionStagingRepo) stagingKey(op operation.InstallationOperation) string {
+	var j journal.InstallationCommitJournal
+	if p.db.Where("operation_id = ?", op.ID).First(&j).Error == nil && strings.TrimSpace(j.StagingPathKey) != "" {
+		return j.StagingPathKey
+	}
+	entityID := op.InstallationID
+	if entityID == "" {
+		entityID = op.ID
+	}
+	return filepath.ToSlash(filepath.Join(".staging", entityID))
+}
+
+type ProductionDBRepo struct {
+	db   *gorm.DB
+	repo installation.RepositoryV2
+}
+
+func NewProductionDBRepo(db *gorm.DB, repo installation.RepositoryV2) *ProductionDBRepo {
+	return &ProductionDBRepo{db: db, repo: repo}
+}
+
+func (p *ProductionDBRepo) DBCommitBatch(opID, installationID, targetReleaseID, previousReleaseID string) error {
+	if p == nil || p.db == nil || p.repo == nil {
+		return errors.New("production db recovery: not configured")
+	}
+	return p.repo.Transaction(context.Background(), func(tx installation.RepositoryV2) error {
+		op, err := tx.GetOperationTx(tx.DB(), opID)
+		if err != nil {
+			return err
+		}
+		j, err := tx.GetCommitJournalTx(tx.DB(), opID)
+		if err != nil {
+			return err
+		}
+		if installationID == "" {
+			installationID = op.InstallationID
+		}
+		if installationID == "" {
+			return errors.New("production db recovery: installation id missing")
+		}
+		targetReleaseID = firstNonEmpty(targetReleaseID, j.TargetReleaseID, op.TargetReleaseID)
+		petID := firstNonEmpty(op.PetID, j.PetID)
+		now := time.Now().UTC().Format("2006-01-02 15:04:05")
+
+		var inst installation.Installation
+		err = tx.DB().Where("id = ? AND user_id = ? AND device_id = ?", installationID, op.UserID, op.DeviceID).First(&inst).Error
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
+		}
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			inst = installation.Installation{
+				ID: installationID, UserID: op.UserID, DeviceID: op.DeviceID, PetID: petID,
+				CurrentReleaseID: targetReleaseID, Status: installation.StatusInstalled, IsActive: 1,
+				InstallPath: j.StagingPathKey, InstallStorageKey: j.StagingPathKey,
+				LifecycleState: installation.LifecycleInstalled, IntegrityStatus: installation.IntegrityVerified,
+				DesiredState: installation.DesiredEnabled, RuntimeSyncState: installation.SyncPending,
+				InstalledAt: now, CreatedAt: now, UpdatedAt: now,
+			}
+			if err := tx.CreateInstallationTx(tx.DB(), &inst); err != nil {
+				return err
+			}
+		} else {
+			inst.CurrentReleaseID = targetReleaseID
+			inst.InstallPath = j.StagingPathKey
+			inst.InstallStorageKey = j.StagingPathKey
+			inst.LifecycleState = installation.LifecycleInstalled
+			inst.IntegrityStatus = installation.IntegrityVerified
+			inst.DesiredState = installation.DesiredEnabled
+			inst.RuntimeSyncState = installation.SyncPending
+			inst.UpdatedAt = now
+			if err := tx.UpdateInstallationTx(tx.DB(), &inst); err != nil {
+				return err
+			}
+		}
+
+		existing, err := tx.GetRuntimeDesiredStateTx(tx.DB(), op.UserID, op.DeviceID)
+		if err != nil {
+			return err
+		}
+		expected := int64(-1)
+		if existing != nil {
+			expected = existing.DesiredRevision
+		}
+		revision, err := tx.AllocateDeviceDesiredRevisionCAS(tx.DB(), op.UserID, op.DeviceID)
+		if err != nil {
+			return err
+		}
+		state := &desired.RuntimeDesiredState{
+			UserID: op.UserID, DeviceID: op.DeviceID, RuntimeID: op.RuntimeID,
+			InstallationID: installationID, PetID: petID, ReleaseID: targetReleaseID,
+			DesiredEnabled: true, DesiredVisible: true, DesiredRevision: revision,
+			OperationID: op.ID, CreatedAt: now, UpdatedAt: now,
+		}
+		if existing != nil {
+			state.DesiredActionKey = existing.DesiredActionKey
+			state.SettingsRevision = existing.SettingsRevision
+			state.SettingsSnapshotJSON = existing.SettingsSnapshotJSON
+		}
+		if _, err := tx.UpsertRuntimeDesiredStateCAS(tx.DB(), op.UserID, op.DeviceID, state, expected); err != nil {
+			return err
+		}
+		if err := tx.UpsertActiveBindingTx(tx.DB(), &binding.DeviceActiveInstallationBinding{
+			UserID: op.UserID, DeviceID: op.DeviceID, InstallationID: installationID,
+			PetID: petID, ReleaseID: targetReleaseID, BindingRevision: revision,
+			BoundReason: binding.BoundReasonRestore, BoundAt: now, BoundBy: "recovery",
+			CreatedAt: now, UpdatedAt: now,
+		}); err != nil {
+			return err
+		}
+		op.InstallationID = installationID
+		op.DesiredRevision = revision
+		op.Stage = operation.OpStageDatabaseCommitted
+		return tx.UpdateOperationTx(tx.DB(), op)
+	})
+}
+
+func (p *ProductionDBRepo) DBMarkDatabaseCommitted(opID string) error {
+	return p.db.Model(&operation.InstallationOperation{}).Where("id = ?", opID).Updates(map[string]interface{}{
+		"stage":      operation.OpStageDatabaseCommitted,
+		"updated_at": time.Now().UTC().Format("2006-01-02 15:04:05"),
+	}).Error
+}
+
+func (p *ProductionDBRepo) GetInstallation(installationID string) (interface{}, error) {
+	var inst installation.Installation
+	if err := p.db.Where("id = ?", installationID).First(&inst).Error; err != nil {
+		return nil, err
+	}
+	return &inst, nil
+}
+
+type ProductionRuntimeRepo struct {
+	db     *gorm.DB
+	facade *runtimev2.RuntimeFacade
+}
+
+func NewProductionRuntimeRepo(db *gorm.DB, facade *runtimev2.RuntimeFacade) *ProductionRuntimeRepo {
+	return &ProductionRuntimeRepo{db: db, facade: facade}
+}
+
+func (p *ProductionRuntimeRepo) SendDesiredCommand(ctx context.Context, opID, userID, deviceID, runtimeID, installationID string, desiredRevision int64) error {
+	if p == nil || p.db == nil || p.facade == nil {
+		return errors.New("production runtime recovery: runtime v2 unavailable")
+	}
+	var op operation.InstallationOperation
+	if err := p.db.WithContext(ctx).Where("id = ? AND user_id = ? AND device_id = ?", opID, userID, deviceID).First(&op).Error; err != nil {
+		return err
+	}
+	if op.OperationType == operation.TypeRecenter {
+		payload := []byte(fmt.Sprintf(`{"installationId":%q}`, firstNonEmpty(installationID, op.InstallationID)))
+		_, err := p.facade.Commands().CreateEphemeralCommand(userID, deviceID, string(runtimev2.CommandTypeRecenterOnce), fmt.Sprintf("recovery-recenter:%s", opID), payload)
+		if errors.Is(err, runtimev2.ErrCommandDuplication) {
+			return nil
+		}
+		return err
+	}
+
+	var state desired.RuntimeDesiredState
+	if err := p.db.WithContext(ctx).Where("user_id = ? AND device_id = ?", userID, deviceID).First(&state).Error; err != nil {
+		return err
+	}
+	if desiredRevision == 0 {
+		desiredRevision = state.DesiredRevision
+	}
+	seq, err := p.facade.Commands().AllocateDeviceSequence(nil, userID, deviceID, time.Now())
+	if err != nil {
+		return err
+	}
+	ensureAbsent := op.OperationType == operation.TypeUninstall || (!state.DesiredEnabled && !state.DesiredVisible && op.OperationType == operation.TypeUninstall)
+	payload := runtimev2.SyncDesiredStatePayload{
+		DesiredRevision:        desiredRevision,
+		DesiredHash:            state.DesiredHash,
+		EnsureAbsent:           ensureAbsent,
+		InstallationID:         firstNonEmpty(installationID, state.InstallationID),
+		PetID:                  state.PetID,
+		ReleaseID:              state.ReleaseID,
+		RuntimeContractVersion: runtimev2.CurrentSchemaVersion,
+		DefaultActionKey:       state.DesiredActionKey,
+		SettingsRevision:       state.SettingsRevision,
+	}
+	commandType := runtimev2.CommandTypeSyncDesiredState
+	if ensureAbsent {
+		commandType = runtimev2.CommandTypeEnsureAbsent
+	}
+	_, err = p.facade.Commands().CreateDurableCommand(userID, deviceID, string(commandType), fmt.Sprintf("recovery:%s:%d", opID, desiredRevision), fmt.Sprintf("desired:%s", deviceID), seq, payload)
+	if errors.Is(err, runtimev2.ErrCommandDuplication) {
+		return nil
+	}
+	return err
+}
+
+func (p *ProductionRuntimeRepo) CancelDesiredCommand(ctx context.Context, opID, userID, deviceID, runtimeID string) error {
+	if p == nil || p.db == nil || p.facade == nil {
+		return nil
+	}
+	var op operation.InstallationOperation
+	if err := p.db.WithContext(ctx).Where("id = ? AND user_id = ? AND device_id = ?", opID, userID, deviceID).First(&op).Error; err != nil {
+		return err
+	}
+	var command runtimev2.RuntimeCommand
+	err := p.db.WithContext(ctx).Where("user_id = ? AND device_id = ? AND desired_revision = ?", userID, deviceID, op.DesiredRevision).Order("created_at DESC").First(&command).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if command.IsTerminal() {
+		return nil
+	}
+	return p.facade.Commands().MarkCancelled(command.ID, time.Now())
+}
+
+func (p *ProductionRuntimeRepo) QueryRuntimeAppliedState(ctx context.Context, userID, deviceID, runtimeID string) (int64, string, error) {
+	var proj projection.InstallationRuntimeProjection
+	query := p.db.WithContext(ctx).Where("user_id = ? AND device_id = ?", userID, deviceID)
+	if runtimeID != "" {
+		query = query.Where("runtime_id = ?", runtimeID)
+	}
+	if err := query.First(&proj).Error; err != nil {
+		return 0, "", err
+	}
+	if proj.RuntimeSyncState != projection.SyncStateApplied {
+		return proj.AppliedDesiredRevision, proj.ActualReleaseID, errors.New("runtime projection not applied")
+	}
+	return proj.AppliedDesiredRevision, proj.ActualReleaseID, nil
+}
+
+func (p *ProductionRuntimeRepo) MarkRuntimeApplied(opID string, appliedRevision int64) error {
+	result := p.db.Model(&operation.InstallationOperation{}).Where("id = ? AND desired_revision <= ?", opID, appliedRevision).Updates(map[string]interface{}{
+		"stage":      operation.OpStageRuntimeApplied,
+		"updated_at": time.Now().UTC().Format("2006-01-02 15:04:05"),
+	})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return errors.New("production runtime recovery: runtime applied operation CAS failed")
+	}
+	return nil
+}
+
+type ProductionSwitchRepo struct {
+	runtime *ProductionRuntimeRepo
+}
+
+func NewProductionSwitchRepo(runtime *ProductionRuntimeRepo) *ProductionSwitchRepo {
+	return &ProductionSwitchRepo{runtime: runtime}
+}
+
+func (p *ProductionSwitchRepo) PublishSwitchDesired(ctx context.Context, opID, userID, deviceID, runtimeID, newInstallationID string, newDesiredRevision int64) error {
+	if p == nil || p.runtime == nil || p.runtime.db == nil {
+		return errors.New("production switch recovery: runtime repository is not configured")
+	}
+	var state desired.RuntimeDesiredState
+	if err := p.runtime.db.WithContext(ctx).Where("user_id = ? AND device_id = ?", userID, deviceID).First(&state).Error; err != nil {
+		return fmt.Errorf("production switch recovery: load desired state: %w", err)
+	}
+	if state.InstallationID != newInstallationID {
+		return fmt.Errorf("production switch recovery: desired installation mismatch: expected=%s actual=%s", newInstallationID, state.InstallationID)
+	}
+	if state.DesiredRevision < newDesiredRevision {
+		return fmt.Errorf("production switch recovery: desired revision not persisted: expected>=%d actual=%d", newDesiredRevision, state.DesiredRevision)
+	}
+	var outboxCount int64
+	if err := p.runtime.db.WithContext(ctx).Table("desktop_pet_runtime_desired_state_outbox").
+		Where("user_id = ? AND device_id = ? AND installation_id = ? AND desired_revision = ?", userID, deviceID, newInstallationID, newDesiredRevision).
+		Count(&outboxCount).Error; err != nil {
+		return fmt.Errorf("production switch recovery: verify desired outbox: %w", err)
+	}
+	if outboxCount == 0 {
+		return errors.New("production switch recovery: desired outbox event missing")
+	}
+	return nil
+}
+
+func (p *ProductionSwitchRepo) SendSwitchCommand(ctx context.Context, opID, userID, deviceID, runtimeID, newInstallationID string, newDesiredRevision int64) error {
+	return p.runtime.SendDesiredCommand(ctx, opID, userID, deviceID, runtimeID, newInstallationID, newDesiredRevision)
+}
+
+func (p *ProductionSwitchRepo) QuerySwitchApplied(ctx context.Context, userID, deviceID, runtimeID string, newDesiredRevision int64) (bool, error) {
+	rev, _, err := p.runtime.QueryRuntimeAppliedState(ctx, userID, deviceID, runtimeID)
+	if err != nil {
+		return false, err
+	}
+	return rev >= newDesiredRevision, nil
+}
+
+type ProductionRuntimeFinalizer struct {
+	db       *gorm.DB
+	repo     installation.RepositoryV2
+	registry *security.PathRootRegistry
+}
+
+func NewProductionRuntimeFinalizer(db *gorm.DB, repo installation.RepositoryV2, registry *security.PathRootRegistry) *ProductionRuntimeFinalizer {
+	return &ProductionRuntimeFinalizer{db: db, repo: repo, registry: registry}
+}
+
+func (f *ProductionRuntimeFinalizer) FinalizeRuntimeApplied(ctx context.Context, op *operation.InstallationOperation) error {
+	if f == nil || f.db == nil || f.repo == nil {
+		return errors.New("production runtime finalizer: not configured")
+	}
+	if op.OperationType != operation.TypeUninstall {
+		return f.finalizeNonUninstall(ctx, op)
+	}
+	return f.finalizeUninstall(ctx, op)
+}
+
+func (f *ProductionRuntimeFinalizer) finalizeNonUninstall(ctx context.Context, op *operation.InstallationOperation) error {
+	if op.InstallationID == "" {
+		return nil
+	}
+	return f.repo.Transaction(ctx, func(tx installation.RepositoryV2) error {
+		inst, err := loadInstallationForRecovery(tx.DB(), op.UserID, op.DeviceID, op.InstallationID)
+		if err != nil {
+			return err
+		}
+		inst.RuntimeSyncState = installation.SyncConfirmed
+		switch op.OperationType {
+		case operation.TypeEnable:
+			inst.Status = installation.StatusEnabled
+			inst.DesiredState = installation.DesiredEnabled
+		case operation.TypeDisable:
+			inst.Status = installation.StatusDisabled
+			inst.DesiredState = installation.DesiredDisabled
+		case operation.TypeInstall, operation.TypeUpgrade, operation.TypeDowngrade, operation.TypeRepair, operation.TypeSwitch:
+			if inst.Status != installation.StatusEnabled && inst.Status != installation.StatusDisabled {
+				inst.Status = installation.StatusInstalled
+			}
+			inst.LifecycleState = installation.LifecycleInstalled
+		}
+		return tx.UpdateInstallationTx(tx.DB(), inst)
+	})
+}
+
+func (f *ProductionRuntimeFinalizer) finalizeUninstall(ctx context.Context, op *operation.InstallationOperation) error {
+	var proj projection.InstallationRuntimeProjection
+	if err := f.db.WithContext(ctx).Where("user_id = ? AND device_id = ?", op.UserID, op.DeviceID).First(&proj).Error; err != nil {
+		return err
+	}
+	if proj.AppliedDesiredRevision < op.DesiredRevision {
+		return errors.New("uninstall finalizer: runtime has not applied ensure_absent revision")
+	}
+	if proj.InstallationID == op.InstallationID && proj.ActualReleaseID != "" {
+		return errors.New("uninstall finalizer: runtime still reports installation present")
+	}
+
+	return f.repo.Transaction(ctx, func(tx installation.RepositoryV2) error {
+		inst, err := loadInstallationForRecovery(tx.DB(), op.UserID, op.DeviceID, op.InstallationID)
+		if err != nil {
+			return err
+		}
+		var existing installation.TrashEntry
+		trashErr := tx.DB().Where("operation_id = ? AND installation_id = ? AND status <> ?", op.ID, op.InstallationID, "purged").First(&existing).Error
+		hasTrash := trashErr == nil
+		if trashErr != nil && !errors.Is(trashErr, gorm.ErrRecordNotFound) {
+			return trashErr
+		}
+		if !hasTrash {
+			if strings.TrimSpace(inst.InstallStorageKey) == "" {
+				return errors.New("uninstall finalizer: installation storage key missing")
+			}
+			resolved, err := f.registry.Resolve(security.RootInstallations, inst.InstallStorageKey)
+			if err != nil {
+				return err
+			}
+			trashEntityID := op.ID + "_" + inst.ID
+			dest, err := f.registry.MoveToTrashWithDestination(resolved, trashEntityID)
+			if err != nil {
+				if !errors.Is(err, os.ErrNotExist) {
+					return err
+				}
+				dest, err = findRecoveredTrashPath(f.registry, op.ID, inst.ID, filepath.Base(resolved))
+				if err != nil {
+					return errors.Join(errors.New("uninstall finalizer: installation storage missing and no trash entry exists"), err)
+				}
+			}
+			trashKey, err := f.registry.StorageKeyFromPath(security.RootStorageTrash, dest)
+			if err != nil {
+				return err
+			}
+			if err := tx.CreateTrashEntryTx(tx.DB(), &installation.TrashEntry{
+				ID:             uuid.NewString(),
+				OperationID:    op.ID,
+				InstallationID: inst.ID,
+				StorageKey:     trashKey,
+				Reason:         "uninstall",
+				ContentHash:    inst.InstalledContentHash,
+				RetainUntil:    time.Now().UTC().Add(30 * 24 * time.Hour).Format(time.RFC3339),
+				Status:         "retained",
+				CreatedAt:      time.Now().UTC().Format(time.RFC3339),
+			}); err != nil {
+				return err
+			}
+		}
+		bindingEntry, bindErr := tx.GetActiveBindingForUserDeviceTx(tx.DB(), op.UserID, op.DeviceID)
+		if bindErr != nil && !errors.Is(bindErr, installation.ErrBindingNotFound) {
+			return bindErr
+		}
+		if bindErr == nil && bindingEntry != nil && bindingEntry.InstallationID == inst.ID {
+			if err := tx.DeleteActiveBindingTx(tx.DB(), op.UserID, op.DeviceID); err != nil {
+				return err
+			}
+		}
+		inst.Status = installation.StatusUninstalled
+		inst.LifecycleState = installation.LifecycleUninstalled
+		inst.IsActive = 0
+		inst.DesiredState = installation.DesiredDisabled
+		inst.RuntimeSyncState = installation.SyncConfirmed
+		inst.UpdatedAt = time.Now().UTC().Format("2006-01-02 15:04:05")
+		return tx.UpdateInstallationTx(tx.DB(), inst)
+	})
+}
+
+func findRecoveredTrashPath(registry *security.PathRootRegistry, operationID, installationID, baseName string) (string, error) {
+	if registry == nil {
+		return "", errors.New("uninstall finalizer: path registry not configured")
+	}
+	trashRoot, err := registry.Root(security.RootStorageTrash)
+	if err != nil {
+		return "", err
+	}
+	entries, err := os.ReadDir(trashRoot)
+	if err != nil {
+		return "", err
+	}
+	suffix := "_" + operationID + "_" + installationID + "_" + baseName
+	var match string
+	for _, entry := range entries {
+		if !strings.HasSuffix(entry.Name(), suffix) {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return "", err
+		}
+		if info.Mode()&os.ModeSymlink != 0 {
+			return "", errors.New("uninstall finalizer: recovered trash path is a symlink")
+		}
+		if match != "" {
+			return "", errors.New("uninstall finalizer: multiple recovered trash paths found")
+		}
+		match = filepath.Join(trashRoot, entry.Name())
+	}
+	if match == "" {
+		return "", os.ErrNotExist
+	}
+	return match, nil
+}
+
+func loadInstallationForRecovery(db *gorm.DB, userID, deviceID, installationID string) (*installation.Installation, error) {
+	var inst installation.Installation
+	if err := db.Where("id = ? AND user_id = ? AND device_id = ?", installationID, userID, deviceID).First(&inst).Error; err != nil {
+		return nil, err
+	}
+	return &inst, nil
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, value := range values {
+		if strings.TrimSpace(value) != "" {
+			return value
+		}
+	}
+	return ""
+}
+
+var _ StagingRepo = (*ProductionStagingRepo)(nil)
+var _ DBRepo = (*ProductionDBRepo)(nil)
+var _ RuntimeRepo = (*ProductionRuntimeRepo)(nil)
+var _ SwitchRepo = (*ProductionSwitchRepo)(nil)
+var _ RuntimeAppliedFinalizer = (*ProductionRuntimeFinalizer)(nil)

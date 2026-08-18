@@ -7,6 +7,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
 	"gorm.io/gorm"
 )
@@ -24,9 +25,12 @@ func (s *Service) UpdateProjection(ctx context.Context, userID, deviceID string,
 	err := s.db.WithContext(ctx).Where("user_id = ? AND device_id = ?", userID, deviceID).Take(&proj).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
+			now := time.Now().UTC().Format(time.RFC3339)
 			proj = InstallationRuntimeProjection{
-				UserID:   userID,
-				DeviceID: deviceID,
+				ID:        uuid.NewString(),
+				UserID:    userID,
+				DeviceID:  deviceID,
+				CreatedAt: now,
 			}
 		} else {
 			return err
@@ -42,8 +46,14 @@ func (s *Service) UpdateProjection(ctx context.Context, userID, deviceID string,
 func (s *Service) HandleRuntimeHeartbeat(ctx context.Context, userID, deviceID, runtimeID string, heartbeat *coordinator.RuntimeHeartbeat) error {
 	return s.UpdateProjection(ctx, userID, deviceID, func(p *InstallationRuntimeProjection) error {
 		p.RuntimeID = runtimeID
-		p.AppliedDesiredRevision = heartbeat.AppliedDesiredRevision
-		p.AppliedSettingsRevision = heartbeat.AppliedSettingsRevision
+		p.InstallationID = heartbeat.InstallationID
+		p.PetID = heartbeat.PetID
+		if heartbeat.AppliedDesiredRevision >= p.AppliedDesiredRevision {
+			p.AppliedDesiredRevision = heartbeat.AppliedDesiredRevision
+		}
+		if heartbeat.AppliedSettingsRevision >= p.AppliedSettingsRevision {
+			p.AppliedSettingsRevision = heartbeat.AppliedSettingsRevision
+		}
 		p.ActualReleaseID = heartbeat.ActualReleaseID
 		p.ActualVisible = heartbeat.ActualVisible
 		p.ActualActionKey = heartbeat.ActualActionKey
@@ -62,7 +72,9 @@ func (s *Service) HandleRuntimeHeartbeat(ctx context.Context, userID, deviceID, 
 func (s *Service) HandleCommandResult(ctx context.Context, userID, deviceID string, result *coordinator.CommandResult) error {
 	return s.UpdateProjection(ctx, userID, deviceID, func(p *InstallationRuntimeProjection) error {
 		if result.Success {
-			p.AppliedDesiredRevision = result.AppliedRevision
+			if result.AppliedRevision >= p.AppliedDesiredRevision {
+				p.AppliedDesiredRevision = result.AppliedRevision
+			}
 			p.RuntimeSyncState = SyncStateApplied
 			p.LastAppliedAt = result.Timestamp
 		} else {
