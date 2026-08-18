@@ -43,3 +43,13 @@ type RuntimeErrorPayload struct {
 	Retryable          bool                             `json:"retryable"`
 	FailedAt           time.Time                        `json:"failedAt"`
 }
+
+type RuntimeCancelPayload struct {
+	InvocationID       string                           `json:"invocationId"`
+	Reason             string                           `json:"reason"`
+	RuntimeSessionID   runtimeidentity.RuntimeSessionID `json:"runtimeSessionId"`
+	ConnectionGeneration int64                          `json:"connectionGeneration"`
+	DeviceID           runtimeidentity.DeviceID         `json:"deviceId"`
+	RuntimeID          runtimeidentity.RuntimeID        `json:"runtimeId"`
+	SentAt             time.Time                        `json:"sentAt"`
+}
