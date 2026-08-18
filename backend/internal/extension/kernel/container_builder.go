@@ -12,6 +12,7 @@ import (
 	sqlitedriver "github.com/glebarez/sqlite"
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/browser"
+	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/integration"
 	"github.com/u-ai/backend/internal/desktoppet/plugin_boundary"
@@ -74,6 +75,7 @@ import (
 	"github.com/u-ai/backend/internal/imageintelligence"
 	"github.com/u-ai/backend/internal/imageprovider"
 	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval"
+	"github.com/u-ai/backend/internal/imageprovider/backgroundremoval/local"
 	"github.com/u-ai/backend/internal/mcp"
 	"github.com/u-ai/backend/internal/media"
 	"github.com/u-ai/backend/internal/nativebridge"
@@ -831,10 +833,27 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 			return nil, fmt.Errorf("background removal bootstrap failed: %w", err)
 		}
 	}
+	if bgRegistry == nil {
+		bgRegistry = backgroundremoval.NewRegistry()
+	}
+	if err := bgRegistry.Register(local.NewLocalProvider(), local.LocalCapabilities()); err != nil {
+		cancel()
+		return nil, fmt.Errorf("background removal register local provider failed: %w", err)
+	}
 	cancel()
 
 	providerInvocationService := capability.NewProviderInvocationService(capabilityService, adapterRegistry)
 	kernelProviderInvoker := NewKernelProviderInvoker(providerInvocationService)
+
+	// CapabilityChannelResolver 是正式的 Channel 发现机制：
+	// channel.deliver.* → CapabilityService → ProviderInvocation
+	// 原 BuildChannelResolverFromConfig 只作为 Builtin Channel Provider 内部实现（fallback）
+	capabilityChannelInvoker := delivery.NewProviderInvocationCapabilityInvoker(providerInvocationService, "")
+	builtinChannelResolver := delivery.BuildChannelResolverFromConfig()
+	capabilityChannelResolver := delivery.NewCapabilityChannelResolver(capabilityChannelInvoker, builtinChannelResolver)
+	if b.channelStore == nil {
+		b.channelStore = delivery.NewResolverChannelStore(capabilityChannelResolver)
+	}
 
 	acquisitionSourceRegistry := acquisition.NewSourceRegistry()
 	acquisitionSourceRegistry.Register(acquisition.NewInstalledSource(capabilityService, capabilityProviderRegistry))
@@ -995,28 +1014,29 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 
 	if err := RegisterProductionAdapters(adapterRegistry, AdapterRegistrationDeps{
-		JSGlobalFactory:       jsFactory,
-		WASMFactory:           wasmFactory,
-		WASMModuleMgr:         wasmModuleMgr,
-		Supervisor:            supervisor,
-		TaskService:           taskRuntimeService,
-		WorkflowCaller:        makeWorkflowCallFunc(workflowExecutor),
-		WorkflowCancel:        makeWorkflowCancelFunc(workflowExecutor),
-		BuiltinDispatcher:     builtinDispatcher,
-		AndroidLinuxProvider:  b.androidLinuxProvider,
-		AndroidNativeProvider: b.androidNativeProvider,
-		SearchCaller:          makeSearchCallFunc(b.searchConfig, kernelSecretBroker),
-		SearchHealth:          makeSearchHealthFunc(b.searchConfig, kernelSecretBroker),
-		InternalDispatcher:    internalDispatcher,
-		MediaCaller:           mediaCaller,
-		MediaHealth:           mediaHealth,
-		WorkspaceCaller:       workspaceCaller,
-		WorkspaceHealth:       workspaceHealth,
-		BrowserCaller:         makeBrowserCallFunc(b.browserProvider),
-		BrowserHealth:         makeBrowserHealthFunc(b.browserProvider),
-		DeviceRuntimePort:     deviceRuntimePort,
-		BackgroundRemoval:     bgRegistry,
-		ChannelStore:          b.channelStore,
+		JSGlobalFactory:        jsFactory,
+		WASMFactory:            wasmFactory,
+		WASMModuleMgr:          wasmModuleMgr,
+		Supervisor:             supervisor,
+		TaskService:            taskRuntimeService,
+		WorkflowCaller:         makeWorkflowCallFunc(workflowExecutor),
+		WorkflowCancel:         makeWorkflowCancelFunc(workflowExecutor),
+		BuiltinDispatcher:      builtinDispatcher,
+		BuiltinHandlerVerifier: tool.HasHandler,
+		AndroidLinuxProvider:   b.androidLinuxProvider,
+		AndroidNativeProvider:  b.androidNativeProvider,
+		SearchCaller:           makeSearchCallFunc(b.searchConfig, kernelSecretBroker),
+		SearchHealth:           makeSearchHealthFunc(b.searchConfig, kernelSecretBroker),
+		InternalDispatcher:     internalDispatcher,
+		MediaCaller:            mediaCaller,
+		MediaHealth:            mediaHealth,
+		WorkspaceCaller:        workspaceCaller,
+		WorkspaceHealth:        workspaceHealth,
+		BrowserCaller:          makeBrowserCallFunc(b.browserProvider),
+		BrowserHealth:          makeBrowserHealthFunc(b.browserProvider),
+		DeviceRuntimePort:      deviceRuntimePort,
+		BackgroundRemoval:      bgRegistry,
+		ChannelStore:           b.channelStore,
 	}); err != nil {
 		return nil, fmt.Errorf("kernel: register production adapters: %w", err)
 	}
@@ -1062,17 +1082,18 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	builtin.SetUIAgentAISchemaGenerator(schemaGenerator)
 	previewSessionMgr := preview.NewSessionManager()
 	previewValidator := schema.NewSchemaValidator(schema.DefaultCatalog)
-	previewObserver := preview.NewObserver(previewSessionMgr, previewValidator)
+
+	flutterAnalyzer := adapters.NewFlutterAnalyzer(b.workspaceService)
+	webAnalyzer := adapters.NewWebAnalyzer(b.workspaceService)
+	realDiagnosticRunner := adapters.NewRealDiagnosticRunner(flutterAnalyzer, webAnalyzer)
+
+	previewObserver := preview.NewObserver(previewSessionMgr, previewValidator, preview.WithDiagnosticRunner(realDiagnosticRunner))
 	patchGenerator := preview.NewDefaultPatchGeneratorWithCatalog(previewValidator, schema.DefaultCatalog)
 	patchApplier := preview.NewDefaultApplierWithCatalog(previewSessionMgr, schema.DefaultCatalog)
 	previewRefiner := preview.NewAutoRefinerWithPatch(previewSessionMgr, previewObserver, patchGenerator, patchApplier)
 	builtin.SetUIAgentPreviewManager(previewSessionMgr)
 	builtin.SetUIAgentObserver(previewObserver)
 	builtin.SetUIAgentRefiner(previewRefiner)
-
-	flutterAnalyzer := adapters.NewFlutterAnalyzer(b.workspaceService)
-	webAnalyzer := adapters.NewWebAnalyzer(b.workspaceService)
-	realDiagnosticRunner := adapters.NewRealDiagnosticRunner(flutterAnalyzer, webAnalyzer)
 	builtin.SetUIAgentDiagnosticRunner(realDiagnosticRunner)
 	uiAgentExecutor := uiagent.NewUIExecutor(
 		uiagent.WithPolicy(uiagent.DefaultPolicy()),

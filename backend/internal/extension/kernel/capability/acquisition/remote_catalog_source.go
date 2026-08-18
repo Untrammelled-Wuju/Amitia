@@ -13,16 +13,16 @@ import (
 
 // RemoteCatalogEntry represents a single entry fetched from the remote catalog API.
 type RemoteCatalogEntry struct {
-	ExtensionID         string   `json:"extensionId"`
-	Name                string   `json:"name"`
-	Description         string   `json:"description"`
-	Version             string   `json:"version"`
-	PackageURI          string   `json:"packageUri,omitempty"`
-	Hash                string   `json:"hash,omitempty"`
-	SizeBytes           int64    `json:"sizeBytes,omitempty"`
+	ExtensionID          string   `json:"extensionId"`
+	Name                 string   `json:"name"`
+	Description          string   `json:"description"`
+	Version              string   `json:"version"`
+	PackageURI           string   `json:"packageUri,omitempty"`
+	Hash                 string   `json:"hash,omitempty"`
+	SizeBytes            int64    `json:"sizeBytes,omitempty"`
 	ProvidedCapabilities []string `json:"providedCapabilities,omitempty"`
-	Trust               string   `json:"trust,omitempty"`
-	Source              string   `json:"source,omitempty"`
+	Trust                string   `json:"trust,omitempty"`
+	Source               string   `json:"source,omitempty"`
 }
 
 // RemoteCatalogResponse represents the expected response from the remote catalog API.
@@ -32,7 +32,7 @@ type RemoteCatalogResponse struct {
 
 // RemoteCatalogSource fetches capability candidates from a remote catalog HTTP API.
 type RemoteCatalogSource struct {
-	client     *http.Client
+	client *http.Client
 	apiURL string
 }
 
@@ -136,6 +136,8 @@ func (s *RemoteCatalogSource) toCandidate(entry RemoteCatalogEntry) CapabilityCa
 	if trustLevel == "" {
 		trustLevel = TrustUnverified
 	}
+	signatureVerified := trustLevel == TrustVerified || trustLevel == TrustTrusted || trustLevel == TrustBuiltin
+	publisherVerified := signatureVerified
 	install := CandidateInstallDescriptor{
 		Method: InstallExtension,
 	}
@@ -152,8 +154,18 @@ func (s *RemoteCatalogSource) toCandidate(entry RemoteCatalogEntry) CapabilityCa
 		Description:  entry.Description,
 		Version:      entry.Version,
 		Capabilities: caps,
-		Install:      install,
-		Trust:        CandidateTrust{Level: trustLevel},
+		Source: CandidateSource{
+			Registry:  entry.Source,
+			URI:       entry.PackageURI,
+			Publisher: entry.Source,
+		},
+		Install: install,
+		Trust: CandidateTrust{
+			Level:             trustLevel,
+			SignatureVerified: signatureVerified,
+			PublisherVerified: publisherVerified,
+			SourceVerified:    signatureVerified,
+		},
 		Metadata: map[string]any{
 			"extensionId": entry.ExtensionID,
 			"source":      entry.Source,
