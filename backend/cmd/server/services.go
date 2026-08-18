@@ -66,6 +66,7 @@ import (
 	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/desktoppet/worker"
 	"github.com/u-ai/backend/internal/devicemesh"
+	devicemeshserver "github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
@@ -357,6 +358,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	pendingInvocationManager := capability.NewPendingInvocationManager()
 	pendingTaskManager := task_runtime.NewPendingTaskManager()
 
+	meshHub := devicemeshserver.NewConnectionHub()
+
 	kernelBuilder := kernel.NewContainerBuilder().
 		WithDBPath(kernelDBPath).
 		WithExtensionRoot(kernelRoot).
@@ -376,11 +379,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithBrowserProvider(browserProvider).
 		WithRuntimeProfile(runtimeProfile).
 		WithPendingInvocationManager(pendingInvocationManager).
+		WithMeshHub(meshHub).
 		WithBackgroundBootstrapFunc(func() (backgroundremoval.Registry, error) {
-			reg := backgroundremoval.NewRegistry()
-			reg.Register(local.NewLocalProvider(), local.LocalCapabilities())
-			return reg, nil
-		})
+		reg := backgroundremoval.NewRegistry()
+		reg.Register(local.NewLocalProvider(), local.LocalCapabilities())
+		return reg, nil
+	})
 
 	if bootstrap != nil {
 		kernelBuilder.WithRuntimeHost(bootstrap.RuntimeHost())
@@ -1098,7 +1102,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sql.DB from gorm: %w", err)
 	}
-	deviceMeshRuntime, err := devicemesh.NewCloudRuntime(sqlDB, kernelContainer.DeviceRegistry)
+	deviceMeshRuntime, err := devicemesh.NewCloudRuntimeWithHub(sqlDB, kernelContainer.DeviceRegistry, meshHub)
 	if err != nil {
 		return nil, fmt.Errorf("failed to construct device mesh runtime: %w", err)
 	}
