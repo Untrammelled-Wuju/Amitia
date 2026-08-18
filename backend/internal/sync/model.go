@@ -48,11 +48,11 @@ func (ChangeRecord) TableName() string {
 }
 
 type MutationClaim struct {
-	UserID      string       `gorm:"column:user_id;primaryKey"`
-	Scope       CursorScope  `gorm:"column:scope;primaryKey;not null;default:device"`
-	MutationID  MutationID   `gorm:"column:mutation_id;primaryKey"`
-	Status      string       `gorm:"column:status;not null;default:pending;index"`
-	CreatedAt   time.Time    `gorm:"column:created_at;not null"`
+	UserID      string               `gorm:"column:user_id;primaryKey"`
+	Scope       CursorScope          `gorm:"column:scope;primaryKey;not null;default:device"`
+	MutationID  MutationID           `gorm:"column:mutation_id;primaryKey"`
+	Status      MutationClaimStatus  `gorm:"column:status;not null;default:pending;index"`
+	CreatedAt   time.Time            `gorm:"column:created_at;not null"`
 }
 
 func (MutationClaim) TableName() string {
