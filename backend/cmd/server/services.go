@@ -4,7 +4,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -74,6 +73,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	extensionmcp "github.com/u-ai/backend/internal/extension/kernel/mcp"
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
+	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 	"github.com/u-ai/backend/internal/extension/kernel/skill"
 	"github.com/u-ai/backend/internal/gamehost/management"
@@ -404,15 +404,18 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 
 	var meshRuntime *devicemesh.Runtime
-	var sqlDB *sql.DB
-	if sqlDB, err = ctx.DB.DB(); err != nil {
-		return nil, fmt.Errorf("get sql db: %w", err)
+	kernelStore, err := sqlite.NewStore(kernelDBPath)
+	if err != nil {
+		return nil, fmt.Errorf("open kernel store: %w", err)
 	}
-	deviceReg := host_registry.NewRegistry(sqlDB)
+	if err := kernelStore.Migrate(context.Background()); err != nil {
+		return nil, fmt.Errorf("migrate kernel store: %w", err)
+	}
+	deviceReg := host_registry.NewRegistry(kernelStore.DB())
 	if err := deviceReg.LoadFromStore(context.Background()); err != nil {
 		return nil, fmt.Errorf("load device registry: %w", err)
 	}
-	meshRuntime, err = devicemesh.NewCloudRuntime(sqlDB, deviceReg)
+	meshRuntime, err = devicemesh.NewCloudRuntime(kernelStore.DB(), deviceReg)
 	if err != nil {
 		return nil, fmt.Errorf("create device mesh runtime: %w", err)
 	}
