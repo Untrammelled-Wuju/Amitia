@@ -31,6 +31,16 @@ func RegisterMemory(t Tool, fn ToolCallFunc) {
 	memFuncMap[t.Function.Name] = fn
 }
 
+func HasHandler(name string) bool {
+	if _, ok := funcMap[name]; ok {
+		return true
+	}
+	if _, ok := memFuncMap[name]; ok {
+		return true
+	}
+	return false
+}
+
 func GetAll() []Tool {
 	return tools
 }
