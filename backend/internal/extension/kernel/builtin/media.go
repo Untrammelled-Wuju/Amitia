@@ -443,6 +443,7 @@ func BuildBackgroundRemovalExtension(version string) Definition {
 					Runtime: &domain.RuntimeDefinition{
 						Type: domain.RuntimeTypeBackgroundRemoval,
 					},
+					Contributions: buildBackgroundRemovalContributions(extID, moduleID),
 					ProvidedCapabilities: []domain.ProvidedCapability{
 						{ID: "image.background.remove", Version: "1.0.0"},
 					},
@@ -461,6 +462,39 @@ func BuildBackgroundRemovalExtension(version string) Definition {
 		Required:          false,
 		DisableAllowed:    true,
 		BootstrapRevision: 1,
+	}
+}
+
+func buildBackgroundRemovalContributions(extID domain.ExtensionID, modID domain.ModuleID) []domain.ContributionDefinition {
+	return []domain.ContributionDefinition{
+		{
+			ID:          domain.ContributionID("background_removal.remove"),
+			ModuleID:    modID,
+			ExtensionID: extID,
+			Kind:        domain.ContributionKindTool,
+			Name:        domain.LocalizedText{Default: "Background Removal"},
+			Description: domain.LocalizedText{Default: "Remove the background from an image"},
+			Definition: map[string]any{
+				"capabilityId": "image.background.remove",
+				"modelName":    "image.background.remove",
+				"inputSchema":  `{"type":"object","properties":{"image":{"type":"string","description":"Base64-encoded image or image URL"},"mode":{"type":"string","enum":["remove","keep_alpha","use_existing_alpha"],"description":"Background removal mode"},"provider":{"type":"string","description":"Optional provider name override"}},"required":["image"],"additionalProperties":false}`,
+				"outputSchema": `{"type":"object","properties":{"image":{"type":"string","description":"Base64-encoded foreground image"},"mask":{"type":"string","description":"Base64-encoded mask image"},"width":{"type":"integer"},"height":{"type":"integer"},"provider":{"type":"string"},"degraded":{"type":"boolean"},"removedRatio":{"type":"number"}}}`,
+				"riskLevel":    "low",
+				"sideEffect":   "read_only",
+				"permissions":  []map[string]any{{"capability": "image.background.remove", "risk": "low"}},
+				"timeoutMs":    int64(120000),
+				"idempotent":   true,
+				"retryable":    true,
+				"runtime": map[string]any{
+					"runtimeType": "background_removal",
+					"runtimeId":   "default",
+					"handlerName": "image.background.remove",
+				},
+			},
+			Metadata: map[string]any{
+				"system.builtin": true,
+			},
+		},
 	}
 }
 

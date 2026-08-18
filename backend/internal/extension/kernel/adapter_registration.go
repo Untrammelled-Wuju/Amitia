@@ -40,6 +40,7 @@ type AdapterRegistrationDeps struct {
 	WorkspaceHealth       capability.WorkspaceHealthFunc
 	DeviceRuntimePort     capability.DeviceRuntimeInvocationPort
 	BackgroundRemoval     backgroundremoval.Registry
+	ChannelStore          capability.ChannelStore
 }
 
 func RegisterProductionAdapters(registry *capability.RuntimeAdapterRegistry, deps AdapterRegistrationDeps) error {
@@ -156,6 +157,14 @@ func RegisterProductionAdapters(registry *capability.RuntimeAdapterRegistry, dep
 			makeBackgroundRemovalHealthFunc(deps.BackgroundRemoval),
 		)
 		registry.Register(capability.RuntimeTypeBackgroundRemoval, bgAdapter)
+	}
+
+	if deps.ChannelStore != nil {
+		channelAdapter := capability.NewChannelRuntimeAdapter(
+			makeChannelCallFunc(deps.ChannelStore),
+			makeChannelHealthFunc(deps.ChannelStore),
+		)
+		registry.Register(capability.RuntimeTypeChannel, channelAdapter)
 	}
 
 	return nil
@@ -418,5 +427,37 @@ func makeTaskStatusFunc(svc *task_runtime.TaskRuntimeService) capability.TaskSta
 			return capability.TaskRunStatus{}, fmt.Errorf("task runtime service not configured")
 		}
 		return capability.TaskRunStatus{}, fmt.Errorf("task adapter status not implemented")
+	}
+}
+
+func makeChannelCallFunc(store capability.ChannelStore) capability.ChannelCallFunc {
+	return func(ctx context.Context, handlerName string, input json.RawMessage) (json.RawMessage, error) {
+		if store == nil {
+			return nil, fmt.Errorf("channel store not configured")
+		}
+		channel, peerID, contentType, payload, err := capability.DecodeChannelInput(input)
+		if err != nil {
+			return nil, err
+		}
+		if channel == "" {
+			return nil, fmt.Errorf("channel is required")
+		}
+		if contentType == "" {
+			contentType = "text"
+		}
+		intentID, err := store.CreateIntent(ctx, channel, peerID, contentType, payload)
+		if err != nil {
+			return nil, fmt.Errorf("channel delivery intent creation failed: %w", err)
+		}
+		return capability.EncodeChannelResult(intentID, "pending"), nil
+	}
+}
+
+func makeChannelHealthFunc(store capability.ChannelStore) capability.ChannelHealthFunc {
+	return func(ctx context.Context) capability.HealthStatus {
+		if store == nil {
+			return capability.HealthUnknown
+		}
+		return capability.HealthReady
 	}
 }

@@ -33,6 +33,7 @@ const (
 	RuntimeTypeMedia             RuntimeType = "media"
 	RuntimeTypeBackgroundRemoval RuntimeType = "background_removal"
 	RuntimeTypeWorkspace         RuntimeType = "workspace"
+	RuntimeTypeChannel           RuntimeType = "channel"
 )
 
 type RuntimeBinding struct {
