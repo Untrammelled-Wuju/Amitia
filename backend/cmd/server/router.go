@@ -36,7 +36,6 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/runtime"
 	runtimev2 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v2"
 	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
-	"github.com/u-ai/backend/internal/devicemesh"
 	devicemeshserver "github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/embedding_config"
 	"github.com/u-ai/backend/internal/emote"

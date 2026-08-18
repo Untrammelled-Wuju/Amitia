@@ -1098,7 +1098,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		deviceMeshRuntime.SetDispatcher(cloudDispatcher)
 	}
 	if kernelContainer.TaskRuntimeService != nil {
-		deviceMeshRuntime.SetTaskRuntime(&taskRuntimeAdapter{service: kernelContainer.TaskRuntimeService})
+		deviceMeshRuntime.SetTaskRuntime(NewTaskRuntimeExecutor(kernelContainer.TaskRuntimeService))
 	}
 	services.DeviceMesh = deviceMeshRuntime
 
@@ -1124,14 +1124,6 @@ func mcpDataDirectory(ctx *app.AppContext) string {
 		}
 	}
 	return filepath.Join(".", "data")
-}
-
-type taskRuntimeAdapter struct {
-	service *task_runtime.TaskRuntimeService
-}
-
-func (a *taskRuntimeAdapter) Execute(ctx context.Context, taskType string, input map[string]interface{}) (json.RawMessage, error) {
-	return nil, fmt.Errorf("cloud-side taskRuntime.Execute not supported for type %s", taskType)
 }
 
 func checkMigrationState(db *gorm.DB) error {
