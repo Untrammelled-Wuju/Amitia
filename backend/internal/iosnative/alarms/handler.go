@@ -33,12 +33,6 @@ func (h *AlarmHandler) Execute(ctx context.Context, request nativebridge.Request
 		return h.handleStop(ctx, request)
 	case OperationCancel:
 		return h.handleCancel(ctx, request)
-	case OperationCountdown:
-		return h.handleCountdown(ctx, request)
-	case OperationPause:
-		return h.handlePause(ctx, request)
-	case OperationResume:
-		return h.handleResume(ctx, request)
 	default:
 		return NewAlarmError(request, nativebridge.ErrOperationNotSupported, fmt.Sprintf("unsupported operation: %s", request.Operation))
 	}
@@ -184,36 +178,6 @@ func (h *AlarmHandler) handleCancel(ctx context.Context, request nativebridge.Re
 		return NewAlarmError(request, ErrAlarmsNotFound, "missing required field: alarmId")
 	}
 	return h.bridgeCall(ctx, request, OperationCancel, map[string]any{
-		"alarmId": alarmID,
-	})
-}
-
-func (h *AlarmHandler) handleCountdown(ctx context.Context, request nativebridge.Request) nativebridge.Response {
-	alarmID, ok := request.Payload["alarmId"].(string)
-	if !ok || alarmID == "" {
-		return NewAlarmError(request, ErrAlarmsNotFound, "missing required field: alarmId")
-	}
-	return h.bridgeCall(ctx, request, OperationCountdown, map[string]any{
-		"alarmId": alarmID,
-	})
-}
-
-func (h *AlarmHandler) handlePause(ctx context.Context, request nativebridge.Request) nativebridge.Response {
-	alarmID, ok := request.Payload["alarmId"].(string)
-	if !ok || alarmID == "" {
-		return NewAlarmError(request, ErrAlarmsNotFound, "missing required field: alarmId")
-	}
-	return h.bridgeCall(ctx, request, OperationPause, map[string]any{
-		"alarmId": alarmID,
-	})
-}
-
-func (h *AlarmHandler) handleResume(ctx context.Context, request nativebridge.Request) nativebridge.Response {
-	alarmID, ok := request.Payload["alarmId"].(string)
-	if !ok || alarmID == "" {
-		return NewAlarmError(request, ErrAlarmsNotFound, "missing required field: alarmId")
-	}
-	return h.bridgeCall(ctx, request, OperationResume, map[string]any{
 		"alarmId": alarmID,
 	})
 }

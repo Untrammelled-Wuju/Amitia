@@ -208,9 +208,13 @@ func TestHandler_Schedule_MissingTitle(t *testing.T) {
 func TestHandler_Schedule_MissingPresentation(t *testing.T) {
 	h := NewAlarmHandler(newMockAlarmBridge(nativebridge.Response{}, nil))
 	req := baseAlarmRequest(OperationSchedule)
-	req.Payload["kind"] = "timer"
-	req.Payload["title"] = "My Timer"
-	req.Payload["countdown"] = map[string]any{"preAlertSeconds": float64(60)}
+	req.Payload["kind"] = "alarm"
+	req.Payload["title"] = "Wake Up"
+	req.Payload["schedule"] = map[string]any{
+		"hour":       float64(7),
+		"minute":     float64(0),
+		"recurrence": "never",
+	}
 	resp := h.Execute(context.Background(), req)
 
 	if resp.Status != "error" {
@@ -277,15 +281,8 @@ func TestHandler_Schedule_Success(t *testing.T) {
 	}
 }
 
-func TestHandler_Schedule_Timer(t *testing.T) {
-	expected := nativebridge.Response{
-		ProtocolVersion: 1,
-		RequestId:       "test-alarm-001",
-		Status:          "ok",
-		Result:          map[string]any{"alarmId": "timer-001"},
-	}
-	bridge := newMockAlarmBridge(expected, nil)
-	h := NewAlarmHandler(bridge)
+func TestHandler_Schedule_TimerUnsupported(t *testing.T) {
+	h := NewAlarmHandler(newMockAlarmBridge(nativebridge.Response{}, nil))
 
 	req := baseAlarmRequest(OperationSchedule)
 	req.Payload["kind"] = "timer"
@@ -294,8 +291,11 @@ func TestHandler_Schedule_Timer(t *testing.T) {
 	req.Payload["presentation"] = map[string]any{"alertTitle": "Timer Done"}
 	resp := h.Execute(context.Background(), req)
 
-	if resp.Status != "ok" {
-		t.Errorf("expected ok status, got %s", resp.Status)
+	if resp.Status != "error" {
+		t.Errorf("expected error status, got %s", resp.Status)
+	}
+	if resp.Error == nil || resp.Error.Code != ErrAlarmsScheduleInvalid {
+		t.Fatalf("expected ErrAlarmsScheduleInvalid, got %#v", resp.Error)
 	}
 }
 
@@ -517,13 +517,13 @@ func TestIsValidAlarmIntentAction(t *testing.T) {
 }
 
 func TestIsValidKind(t *testing.T) {
-	for _, k := range []string{"alarm", "timer", "countdown_alarm"} {
-		if !IsValidKind(k) {
-			t.Errorf("expected %s to be valid", k)
-		}
+	if !IsValidKind("alarm") {
+		t.Error("expected alarm to be valid")
 	}
-	if IsValidKind("invalid") {
-		t.Error("expected invalid kind")
+	for _, k := range []string{"timer", "countdown_alarm", "invalid"} {
+		if IsValidKind(k) {
+			t.Errorf("expected %s to be invalid", k)
+		}
 	}
 }
 
@@ -650,8 +650,8 @@ func TestValidateScheduleRequest(t *testing.T) {
 		},
 		Presentation: IOSAlarmPresentation{AlertTitle: "Test"},
 	})
-	if err != nil {
-		t.Errorf("unexpected error: %v", err)
+	if err == nil {
+		t.Error("expected timer kind to be rejected until AlarmKit Live Activity support is available")
 	}
 }
 

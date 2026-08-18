@@ -20,11 +20,17 @@ import (
 )
 
 func NewCanonicalProvider(bridge nativebridge.Bridge, taskRuntimePort ...background.TaskRuntimePort) (*Provider, error) {
+	return NewCanonicalProviderWithStaging(bridge, nil, taskRuntimePort...)
+}
+
+func NewCanonicalProviderWithStaging(bridge nativebridge.Bridge, stagingImporter *staging.StagingImporter, taskRuntimePort ...background.TaskRuntimePort) (*Provider, error) {
 	provider := NewProvider(bridge)
 
-	baseDir := filepath.Join(os.TempDir(), "amitia", "media-staging")
-	_ = os.MkdirAll(baseDir, 0755)
-	stagingImporter := staging.NewStagingImporter(baseDir)
+	if stagingImporter == nil {
+		baseDir := filepath.Join(os.TempDir(), "amitia", "media-staging")
+		_ = os.MkdirAll(baseDir, 0755)
+		stagingImporter = staging.NewStagingImporter(baseDir)
+	}
 
 	healthHandler := health.NewHealthHandler(bridge)
 	for _, op := range health.Operations() {

@@ -26,24 +26,6 @@ const (
 func Operations() []string {
 	return []string{
 		OperationStatus,
-		OperationEntitiesCharacters,
-		OperationEntitiesConversations,
-		OperationEntitiesAlarms,
-		OperationEntitiesReminders,
-		OperationEntitiesActions,
-		OperationEntityResolve,
-		OperationEntitySuggestions,
-		OperationActionsCatalog,
-		OperationActionDescribe,
-		OperationActionExecute,
-		OperationActionConfirm,
-		OperationRuntimeReadiness,
-		OperationRuntimeEnsure,
-		OperationSnapshotGet,
-		OperationSnapshotRefresh,
 		OperationShortcutsProvider,
-		OperationShortcutsPhrase,
-		OperationSettingsGet,
-		OperationSettingsUpdate,
 	}
 }

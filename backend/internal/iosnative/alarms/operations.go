@@ -9,9 +9,10 @@ const (
 	OperationSchedule             = "media.alarms.schedule"
 	OperationStop                 = "media.alarms.stop"
 	OperationCancel               = "media.alarms.cancel"
-	OperationCountdown            = "media.alarms.countdown"
-	OperationPause                = "media.alarms.pause"
-	OperationResume               = "media.alarms.resume"
+	// Internal legacy operation constants are retained for compatibility but are not advertised until a Live Activity widget extension exists.
+	OperationCountdown = "media.alarms.countdown"
+	OperationPause     = "media.alarms.pause"
+	OperationResume    = "media.alarms.resume"
 )
 
 func Operations() []string {
@@ -24,8 +25,5 @@ func Operations() []string {
 		OperationSchedule,
 		OperationStop,
 		OperationCancel,
-		OperationCountdown,
-		OperationPause,
-		OperationResume,
 	}
 }
