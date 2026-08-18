@@ -175,8 +175,8 @@ func TestStartup_EmptyCleanup(t *testing.T) {
 func TestStartup_ProcessCandidates_Cleaned(t *testing.T) {
 	c, proc, _, _, _, _, _, _, _ := setupTestCoordinator()
 	proc.candidates = []ProcessCandidate{
-		{PID: 1234, RuntimeID: "rt-1", PluginID: "p1", ExtensionID: "ext-1", Generation: 5},
-		{PID: 5678, RuntimeID: "rt-2", PluginID: "p2", ExtensionID: "ext-2", Generation: 3},
+		{PID: 1234, RuntimeID: "rt-1", PluginID: "p1", ExtensionID: "ext-1", Generation: 5, HostInstanceID: "host-abc"},
+		{PID: 5678, RuntimeID: "rt-2", PluginID: "p2", ExtensionID: "ext-2", Generation: 3, HostInstanceID: "host-abc"},
 	}
 
 	report := c.RunStartupRecovery(context.Background())
@@ -501,7 +501,7 @@ func TestStartup_OperationIDUnique(t *testing.T) {
 // Cleanup result classifications
 func TestStartup_AllCleanupSuccess(t *testing.T) {
 	c, proc, temp, bin, ep, shm, _, _, _ := setupTestCoordinator()
-	proc.candidates = []ProcessCandidate{{PID: 1, RuntimeID: "rt-1"}}
+	proc.candidates = []ProcessCandidate{{PID: 1, RuntimeID: "rt-1", HostInstanceID: "host-abc"}}
 	temp.candidates = []TempCandidate{{RuntimeID: "rt-2", Path: "/data/temp/rt-2"}}
 	bin.candidates = []BinaryCandidate{{BinaryID: "b-1", RuntimeID: "rt-3"}}
 	ep.candidates = []EndpointCandidate{{EndpointID: "e-1", RuntimeID: "rt-4"}}

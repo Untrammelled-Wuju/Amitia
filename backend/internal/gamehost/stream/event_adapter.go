@@ -157,7 +157,7 @@ func pickProducerType(cfgType, pluginID string) event.EventProducerType {
 		return event.EventProducerType(cfgType)
 	}
 	if pluginID == "" {
-		return event.EventProducerTypeSystem
+		return event.EventProducerType("host")
 	}
 	return event.EventProducerType("gamehost_plugin")
 }
