@@ -126,6 +126,8 @@ type ContainerBuilder struct {
 	nativeBridgeRelay *nativebridge.RelayHandler
 
 	backgroundBootstrapFunc func() (backgroundremoval.Registry, error)
+
+	channelStore capability.ChannelStore
 }
 
 func NewContainerBuilder() *ContainerBuilder {
@@ -279,6 +281,11 @@ func (b *ContainerBuilder) WithRuntimeProfile(profile runtimeprofile.Profile) *C
 
 func (b *ContainerBuilder) WithBackgroundBootstrapFunc(fn func() (backgroundremoval.Registry, error)) *ContainerBuilder {
 	b.backgroundBootstrapFunc = fn
+	return b
+}
+
+func (b *ContainerBuilder) WithChannelStore(store capability.ChannelStore) *ContainerBuilder {
+	b.channelStore = store
 	return b
 }
 
@@ -984,6 +991,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		BrowserHealth:         makeBrowserHealthFunc(b.browserProvider),
 		DeviceRuntimePort:     deviceRuntimePort,
 		BackgroundRemoval:     bgRegistry,
+		ChannelStore:          b.channelStore,
 	}); err != nil {
 		return nil, fmt.Errorf("kernel: register production adapters: %w", err)
 	}

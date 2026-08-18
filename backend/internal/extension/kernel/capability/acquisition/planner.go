@@ -17,22 +17,14 @@ type CandidateSearcher interface {
 	Search(ctx context.Context, request AcquisitionRequest) ([]CapabilityCandidate, error)
 }
 
-// SearchService is a stub implementation of CandidateSearcher.
-// Replace with a concrete implementation that wires to registries, catalogs,
-// and local providers.
 type SearchService struct{}
 
-// NewSearchService returns a SearchService stub. Replace with a concrete
-// implementation that wires to registries, catalogs, and local providers.
 func NewSearchService() *SearchService {
 	return &SearchService{}
 }
 
-// Search returns candidate sources that may satisfy the acquisition request.
-// The default implementation returns an empty slice; concrete implementations
-// should query registries, local extensions, MCP servers, and skill catalogs.
 func (s *SearchService) Search(ctx context.Context, request AcquisitionRequest) ([]CapabilityCandidate, error) {
-	return nil, nil
+	return nil, errors.New("SearchService is not implemented")
 }
 
 // Planner orchestrates the full acquisition planning pipeline:

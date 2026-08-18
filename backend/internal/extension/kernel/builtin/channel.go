@@ -162,6 +162,7 @@ func buildChannelModule(
 		Runtime: &domain.RuntimeDefinition{
 			Type: domain.RuntimeTypeBuiltin,
 		},
+		Contributions: buildChannelContributions(extID, modID, capID),
 		ProvidedCapabilities: []domain.ProvidedCapability{
 			{ID: string(capID), Version: ver.String()},
 		},
@@ -170,6 +171,41 @@ func buildChannelModule(
 			Priority: 100,
 			Metadata: map[string]any{
 				"channel": providerID,
+			},
+		},
+	}
+}
+
+func buildChannelContributions(extID domain.ExtensionID, modID domain.ModuleID, capID capability.CapabilityID) []domain.ContributionDefinition {
+	contributionID := "channel_deliver_" + string(capID)
+	modelName := "channel.deliver." + string(capID)
+	return []domain.ContributionDefinition{
+		{
+			ID:          domain.ContributionID(contributionID),
+			ModuleID:    modID,
+			ExtensionID: extID,
+			Kind:        domain.ContributionKindTool,
+			Name:        domain.LocalizedText{Default: "Channel Deliver - " + string(capID)},
+			Description: domain.LocalizedText{Default: "Send a message through the " + string(capID) + " channel"},
+			Definition: map[string]any{
+				"capabilityId": string(capID),
+				"modelName":    modelName,
+				"inputSchema":  `{"type":"object","properties":{"channel":{"type":"string","description":"Target channel name"},"peerId":{"type":"string","description":"Recipient peer ID"},"contentType":{"type":"string","enum":["text","emote","image","file"],"description":"Content type of the message"},"payload":{"type":"object","description":"Message payload"}},"required":["channel","peerId","payload"],"additionalProperties":false}`,
+				"outputSchema": `{"type":"object","properties":{"intentId":{"type":"string","description":"Delivery intent ID"},"status":{"type":"string","description":"Initial delivery status"}}}`,
+				"riskLevel":    "medium",
+				"sideEffect":   "write",
+				"permissions":  []map[string]any{{"capability": string(capID), "risk": "medium"}},
+				"timeoutMs":    int64(30000),
+				"idempotent":   false,
+				"retryable":    true,
+				"runtime": map[string]any{
+					"runtimeType": "channel",
+					"runtimeId":   "default",
+					"handlerName": string(capID),
+				},
+			},
+			Metadata: map[string]any{
+				"system.builtin": true,
 			},
 		},
 	}

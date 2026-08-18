@@ -38,6 +38,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/ui_ordering"
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow_migration"
+	"github.com/u-ai/backend/internal/runtimeprofile"
 )
 
 type Stage string
@@ -517,6 +518,7 @@ func verifyDomainInvariants(ctx context.Context) ([]string, error) {
 	defer os.RemoveAll(tempDir)
 
 	container, err := kernel.NewContainerBuilder().
+		WithRuntimeProfile(runtimeprofile.ProfileLocal).
 		WithDBPath(filepath.Join(tempDir, "k.db")).
 		WithExtensionRoot(filepath.Join(tempDir, "ext")).
 		Build(ctx)

@@ -75,6 +75,10 @@ func (s *TaskRuntimeService) SetRemoteExecutor(executor RemoteTaskExecutor) {
 	s.remoteExecutor = executor
 }
 
+func (s *TaskRuntimeService) RemoteExecutor() RemoteTaskExecutor {
+	return s.remoteExecutor
+}
+
 func (s *TaskRuntimeService) publishTaskEvent(ctx context.Context, eventType TaskDomainEventType, run *TaskRun, reason, errorCode string) error {
 	if s.events == nil {
 		return nil
