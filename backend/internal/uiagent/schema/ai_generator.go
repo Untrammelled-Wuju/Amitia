@@ -32,6 +32,16 @@ func NewAISchemaGeneratorWithHeuristic(catalog *ComponentCatalog, llmCall LLMSch
 	return &AISchemaGenerator{catalog: catalog, llmCall: llmCall, allowHeuristic: true}
 }
 
+// SetLLMCallFunc sets the LLM call function after construction.
+func (g *AISchemaGenerator) SetLLMCallFunc(llmCall LLMSchemaCallFunc) {
+	g.llmCall = llmCall
+}
+
+// HasLLMCallFunc returns true if a LLM call function is configured.
+func (g *AISchemaGenerator) HasLLMCallFunc() bool {
+	return g.llmCall != nil
+}
+
 // Generate produces a SchemaUIDocument from a description.
 func (g *AISchemaGenerator) Generate(
 	description string,

@@ -13,10 +13,28 @@ type DiagnosticRunner interface {
 	Supports(platform string) bool
 }
 
-type defaultDiagnosticRunner struct{}
+type defaultDiagnosticRunner struct {
+	flutterAnalyzer FlutterAnalyzer
+	webAnalyzer     WebAnalyzer
+}
+
+type FlutterAnalyzer interface {
+	Analyze(ctx context.Context, workspaceID string, paths []string) ([]string, []string, error)
+}
+
+type WebAnalyzer interface {
+	TypeCheck(ctx context.Context, workspaceID string, paths []string) ([]string, []string, error)
+}
 
 func NewDiagnosticRunner() DiagnosticRunner {
 	return &defaultDiagnosticRunner{}
+}
+
+func NewDiagnosticRunnerWithAnalyzers(flutter FlutterAnalyzer, web WebAnalyzer) DiagnosticRunner {
+	return &defaultDiagnosticRunner{
+		flutterAnalyzer: flutter,
+		webAnalyzer:     web,
+	}
 }
 
 func (r *defaultDiagnosticRunner) RunDiagnostics(ctx context.Context, workspaceID string, paths []string) ([]string, []string, error) {
@@ -25,6 +43,39 @@ func (r *defaultDiagnosticRunner) RunDiagnostics(ctx context.Context, workspaceI
 
 func (r *defaultDiagnosticRunner) Supports(platform string) bool {
 	return false
+}
+
+type realDiagnosticRunner struct {
+	flutterAnalyzer FlutterAnalyzer
+	webAnalyzer     WebAnalyzer
+}
+
+func NewRealDiagnosticRunner(flutter FlutterAnalyzer, web WebAnalyzer) DiagnosticRunner {
+	return &realDiagnosticRunner{
+		flutterAnalyzer: flutter,
+		webAnalyzer:     web,
+	}
+}
+
+func (r *realDiagnosticRunner) RunDiagnostics(ctx context.Context, workspaceID string, paths []string) ([]string, []string, error) {
+	if r.flutterAnalyzer != nil {
+		return r.flutterAnalyzer.Analyze(ctx, workspaceID, paths)
+	}
+	if r.webAnalyzer != nil {
+		return r.webAnalyzer.TypeCheck(ctx, workspaceID, paths)
+	}
+	return []string{"no analyzer configured"}, nil, nil
+}
+
+func (r *realDiagnosticRunner) Supports(platform string) bool {
+	switch platform {
+	case "flutter":
+		return r.flutterAnalyzer != nil
+	case "web":
+		return r.webAnalyzer != nil
+	default:
+		return false
+	}
 }
 
 type PreviewMode string
