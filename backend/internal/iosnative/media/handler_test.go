@@ -921,3 +921,44 @@ func TestMapCodeToMessage(t *testing.T) {
 		})
 	}
 }
+
+type base64ChunkBridge struct {
+	payload string
+}
+
+func (b *base64ChunkBridge) Execute(_ context.Context, req nativebridge.Request) (nativebridge.Response, error) {
+	if req.Operation == "native.resource.read_chunk" {
+		return nativebridge.Response{
+			ProtocolVersion: 1,
+			RequestId:       req.RequestId,
+			Status:          "ok",
+			Result: map[string]any{
+				"contentBase64": b.payload,
+				"length":        float64(3),
+			},
+		}, nil
+	}
+	return nativebridge.Response{ProtocolVersion: 1, RequestId: req.RequestId, Status: "ok"}, nil
+}
+
+func (b *base64ChunkBridge) Health(context.Context) nativebridge.Health {
+	return nativebridge.HealthReady
+}
+
+func TestStagingMediaBridgeReadChunkDecodesBase64(t *testing.T) {
+	h := NewMediaHandler(&base64ChunkBridge{payload: "/wAx"}, nil)
+	bridge := &stagingMediaBridge{handler: h, ctx: context.Background()}
+	got, err := bridge.ReadChunk("nativeStaging:test", 0, 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []byte{0xff, 0x00, 0x31}
+	if len(got) != len(want) {
+		t.Fatalf("length mismatch: got %d want %d", len(got), len(want))
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("byte %d mismatch: got %x want %x", i, got[i], want[i])
+		}
+	}
+}

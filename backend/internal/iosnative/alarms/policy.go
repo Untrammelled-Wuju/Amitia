@@ -30,7 +30,7 @@ var AlarmKitTintColors = []string{
 
 var SupportedSecondaryBehaviors = []string{"countdown", "custom"}
 
-var SupportedKinds = []string{"alarm", "timer", "countdown_alarm"}
+var SupportedKinds = []string{"alarm"}
 
 func IsValidWeekday(w string) bool {
 	for _, v := range AllowedWeekdays {

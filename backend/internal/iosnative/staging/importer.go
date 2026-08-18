@@ -9,11 +9,13 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/u-ai/backend/pkg/resourceuri"
 )
 
 const (
-	MaxChunkSize      = 1048576
-	DefaultMaxReadSize = 50 * 1048576 * 1024
+	MaxChunkSize       = 1048576
+	DefaultMaxReadSize = 512 * 1048576
 )
 
 type NativeResourceBridge interface {
@@ -41,16 +43,25 @@ type StagingImportResult struct {
 }
 
 type StagingImporter struct {
-	baseDir    string
-	maxChunk   int64
-	maxRead    int64
+	baseDir  string
+	maxChunk int64
+	maxRead  int64
+	resolver *resourceuri.PhysicalResolver
 }
 
-func NewStagingImporter(baseDir string) *StagingImporter {
+func NewStagingImporter(baseDir string, resolver ...*resourceuri.PhysicalResolver) *StagingImporter {
+	var configured *resourceuri.PhysicalResolver
+	if len(resolver) > 0 {
+		configured = resolver[0]
+	}
+	if configured == nil {
+		configured, _ = resourceuri.NewPhysicalResolver(resourceuri.PhysicalRoots{Temp: baseDir})
+	}
 	return &StagingImporter{
 		baseDir:  baseDir,
 		maxChunk: MaxChunkSize,
 		maxRead:  DefaultMaxReadSize,
+		resolver: configured,
 	}
 }
 
@@ -75,6 +86,18 @@ func (i *StagingImporter) ImportWithBridge(req StagingImportRequest, bridge Nati
 	size, bridgeMimeType, bridgeFilename, err := bridge.Stat(req.NativeStagingID)
 	if err != nil {
 		return nil, fmt.Errorf("native stat failed: %w", err)
+	}
+	released := false
+	defer func() {
+		if !released {
+			_ = bridge.Release(req.NativeStagingID)
+		}
+	}()
+	if size < 0 {
+		return nil, fmt.Errorf("native stat returned negative size")
+	}
+	if size > maxRead {
+		return nil, fmt.Errorf("native resource too large: %d > maxReadBytes %d", size, maxRead)
 	}
 
 	mimeType := req.MimeType
@@ -104,6 +127,14 @@ func (i *StagingImporter) ImportWithBridge(req StagingImportRequest, bridge Nati
 	}
 
 	targetPath := filepath.Join(targetDir, safeFilename)
+	if _, statErr := os.Stat(targetPath); statErr == nil {
+		ext := filepath.Ext(safeFilename)
+		base := strings.TrimSuffix(safeFilename, ext)
+		suffix := sha256.Sum256([]byte(req.NativeStagingID + now.Format(time.RFC3339Nano)))
+		targetPath = filepath.Join(targetDir, fmt.Sprintf("%s_%s%s", base, hex.EncodeToString(suffix[:4]), ext))
+	} else if !os.IsNotExist(statErr) {
+		return nil, fmt.Errorf("stat target file: %w", statErr)
+	}
 	tmpPath := targetPath + ".tmp"
 
 	f, err := os.OpenFile(tmpPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
@@ -113,12 +144,8 @@ func (i *StagingImporter) ImportWithBridge(req StagingImportRequest, bridge Nati
 
 	hash := sha256.New()
 	var totalWritten int64
-	remaining := maxRead
+	remaining := size
 	var chunkErr error
-
-	if size > maxRead {
-		size = maxRead
-	}
 
 	for offset := int64(0); offset < size && remaining > 0; {
 		chunkLen := i.maxChunk
@@ -150,10 +177,12 @@ func (i *StagingImporter) ImportWithBridge(req StagingImportRequest, bridge Nati
 		}
 	}
 
-	f.Close()
+	if closeErr := f.Close(); chunkErr == nil && closeErr != nil {
+		chunkErr = closeErr
+	}
 
 	if chunkErr != nil {
-		os.Remove(tmpPath)
+		_ = os.Remove(tmpPath)
 		return nil, fmt.Errorf("stream chunk: %w", chunkErr)
 	}
 
@@ -162,12 +191,29 @@ func (i *StagingImporter) ImportWithBridge(req StagingImportRequest, bridge Nati
 		return nil, fmt.Errorf("rename temp file: %w", err)
 	}
 
+	if totalWritten != size {
+		_ = os.Remove(targetPath)
+		return nil, fmt.Errorf("native resource truncated: expected %d bytes, wrote %d", size, totalWritten)
+	}
+
 	if rerr := bridge.Release(req.NativeStagingID); rerr != nil {
-		fmt.Printf("failed to release native staging %s: %v\n", req.NativeStagingID, rerr)
+		_ = os.Remove(targetPath)
+		return nil, fmt.Errorf("release native staging: %w", rerr)
+	}
+	released = true
+
+	if i.resolver == nil {
+		_ = os.Remove(targetPath)
+		return nil, fmt.Errorf("canonical resource resolver unavailable")
+	}
+	canonicalURI, err := i.resolver.Reverse(targetPath)
+	if err != nil {
+		_ = os.Remove(targetPath)
+		return nil, fmt.Errorf("resolve canonical resource uri: %w", err)
 	}
 
 	checksum := hex.EncodeToString(hash.Sum(nil))
-	resourceURI := fmt.Sprintf("amitia://native/blobs/%s/%s", dateDir, safeFilename)
+	resourceURI := canonicalURI.String()
 
 	return &StagingImportResult{
 		ResourceURI: resourceURI,

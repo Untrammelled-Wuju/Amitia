@@ -2,7 +2,9 @@ package media
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
+	"sync/atomic"
 
 	"github.com/u-ai/backend/internal/iosnative/staging"
 	"github.com/u-ai/backend/internal/nativebridge"
@@ -428,6 +430,8 @@ func (h *MediaHandler) handleStagingImport(ctx context.Context, request nativebr
 	}
 }
 
+var stagingRequestCounter atomic.Uint64
+
 type stagingMediaBridge struct {
 	handler *MediaHandler
 	ctx     context.Context
@@ -439,7 +443,7 @@ func (b *stagingMediaBridge) call(operation string, payload map[string]any) nati
 	}
 	resp, err := b.handler.bridge.Execute(b.ctx, nativebridge.Request{
 		ProtocolVersion: 1,
-		RequestId:       "staging-" + operation,
+		RequestId:       fmt.Sprintf("staging-%s-%d", operation, stagingRequestCounter.Add(1)),
 		Platform:        "ios",
 		Operation:       operation,
 		Payload:         payload,
@@ -472,8 +476,18 @@ func (b *stagingMediaBridge) ReadChunk(id string, offset, length int64) ([]byte,
 	if resp.Status != "ok" {
 		return nil, fmt.Errorf("read_chunk failed: %s", resp.Error)
 	}
-	content, _ := resp.Result["contentBase64"].(string)
-	return []byte(content), nil
+	content, ok := resp.Result["contentBase64"].(string)
+	if !ok || content == "" {
+		return nil, fmt.Errorf("read_chunk response missing contentBase64")
+	}
+	decoded, err := base64.StdEncoding.DecodeString(content)
+	if err != nil {
+		return nil, fmt.Errorf("read_chunk contentBase64 decode failed: %w", err)
+	}
+	if reported, ok := resp.Result["length"].(float64); ok && int64(len(decoded)) != int64(reported) {
+		return nil, fmt.Errorf("read_chunk length mismatch: decoded=%d reported=%d", len(decoded), int64(reported))
+	}
+	return decoded, nil
 }
 
 func (b *stagingMediaBridge) Release(id string) error {
