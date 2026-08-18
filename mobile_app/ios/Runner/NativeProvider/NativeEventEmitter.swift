@@ -9,10 +9,10 @@ public struct NativeEventPayload: Sendable {
     public let priority: NativeEventPriority
     public let entityRef: String?
 
-    public init(domain: String, event: String, data: [String: Any] = [:], generation: Int? = nil, priority: NativeEventPriority = .normal, entityRef: String? = nil) {
+    public init(domain: String, event: String, timestamp: String? = nil, data: [String: Any] = [:], generation: Int? = nil, priority: NativeEventPriority = .normal, entityRef: String? = nil) {
         self.domain = domain
         self.event = event
-        self.timestamp = ISO8601DateFormatter().string(from: Date())
+        self.timestamp = timestamp ?? ISO8601DateFormatter().string(from: Date())
         self.data = data
         self.generation = generation
         self.priority = priority

@@ -150,6 +150,42 @@ public class AlarmKitAdapter {
         return (false, "PLATFORM_NOT_SUPPORTED")
     }
 
+    public func pauseAlarm(id: String) async -> (success: Bool, error: String?) {
+        guard isAlarmKitAvailable() else { return (false, "PLATFORM_NOT_SUPPORTED") }
+        #if canImport(AlarmKit)
+        if #available(iOS 26.0, *) {
+            do {
+                guard let alarm = try await AlarmManager.shared.alarm(id: id) else {
+                    return (false, "ALARM_NOT_FOUND")
+                }
+                try await alarm.pause()
+                return (true, nil)
+            } catch {
+                return (false, error.localizedDescription)
+            }
+        }
+        #endif
+        return (false, "PLATFORM_NOT_SUPPORTED")
+    }
+
+    public func resumeAlarm(id: String) async -> (success: Bool, error: String?) {
+        guard isAlarmKitAvailable() else { return (false, "PLATFORM_NOT_SUPPORTED") }
+        #if canImport(AlarmKit)
+        if #available(iOS 26.0, *) {
+            do {
+                guard let alarm = try await AlarmManager.shared.alarm(id: id) else {
+                    return (false, "ALARM_NOT_FOUND")
+                }
+                try await alarm.resume()
+                return (true, nil)
+            } catch {
+                return (false, error.localizedDescription)
+            }
+        }
+        #endif
+        return (false, "PLATFORM_NOT_SUPPORTED")
+    }
+
     public func listAlarms() async -> (alarms: [[String: Any]], error: String?) {
         guard isAlarmKitAvailable() else { return ([], "PLATFORM_NOT_SUPPORTED") }
         #if canImport(AlarmKit)

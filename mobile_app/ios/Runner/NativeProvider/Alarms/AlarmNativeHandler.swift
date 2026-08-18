@@ -464,22 +464,60 @@ public class AlarmNativeHandler: NSObject, IOSNativeOperationHandler {
     }
 
     private func handlePause(_ request: IOSNativeRequest) -> IOSNativeResponse {
+        guard let alarmId = request.payload?["alarmId"] as? String, !alarmId.isEmpty else {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestId: request.requestId,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing required field: alarmId")
+            )
+        }
+        let (success, error) = await AlarmKitAdapter.shared.pauseAlarm(id: alarmId)
+        if success {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestId: request.requestId,
+                status: "ok",
+                result: ["alarmId": alarmId, "paused": true],
+                error: nil
+            )
+        }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
             requestId: request.requestId,
             status: "error",
             result: nil,
-            error: IOSNativeError(code: "CAPABILITY_UNAVAILABLE", message: "Alarm pause is not supported in current iOS version")
+            error: IOSNativeError(code: "PAUSE_FAILED", message: error ?? "unknown error")
         )
     }
 
     private func handleResume(_ request: IOSNativeRequest) -> IOSNativeResponse {
+        guard let alarmId = request.payload?["alarmId"] as? String, !alarmId.isEmpty else {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestId: request.requestId,
+                status: "error",
+                result: nil,
+                error: IOSNativeError(code: "INVALID_ARGUMENT", message: "missing required field: alarmId")
+            )
+        }
+        let (success, error) = await AlarmKitAdapter.shared.resumeAlarm(id: alarmId)
+        if success {
+            return IOSNativeResponse(
+                protocolVersion: request.protocolVersion,
+                requestId: request.requestId,
+                status: "ok",
+                result: ["alarmId": alarmId, "resumed": true],
+                error: nil
+            )
+        }
         return IOSNativeResponse(
             protocolVersion: request.protocolVersion,
             requestId: request.requestId,
             status: "error",
             result: nil,
-            error: IOSNativeError(code: "CAPABILITY_UNAVAILABLE", message: "Alarm resume is not supported in current iOS version")
+            error: IOSNativeError(code: "RESUME_FAILED", message: error ?? "unknown error")
         )
     }
 }
