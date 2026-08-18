@@ -46,6 +46,14 @@ func (lc *MCPLifecycle) GetInstallation(bindingID string) (*MCPInstallation, err
 	return inst, nil
 }
 
+func (lc *MCPLifecycle) IsConnected(bindingID string) bool {
+	inst, ok := lc.installations[bindingID]
+	if !ok {
+		return false
+	}
+	return inst.RuntimeState == MCPRuntimeReady
+}
+
 func (lc *MCPLifecycle) RegisterBinding(binding MCPBinding) (*MCPInstallation, error) {
 	if binding.ID == "" {
 		return nil, &InvalidBindingError{BindingID: binding.ID, Reason: "binding ID is required"}

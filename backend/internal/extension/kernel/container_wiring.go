@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
@@ -810,53 +809,46 @@ func (e *containerPlanExecutor) executeDirectInstallSaga(ctx context.Context, pl
 	return generation, nil
 }
 
-// resolveRemoteArtifact downloads a package from a remote URI and registers it as an artifact.
+// resolveRemoteArtifact downloads a package from a remote URI into the managed
+// Artifact Store and registers it in the PackageRepository with a canonical ArtifactID.
 func (e *containerPlanExecutor) resolveRemoteArtifact(ctx context.Context, extID, version, packageURI, expectedHash string) (string, error) {
 	if packageURI == "" {
 		return "", fmt.Errorf("packageURI is empty")
 	}
+	if e.packageArtifact == nil || e.packageRepo == nil {
+		return "", fmt.Errorf("package artifact services unavailable")
+	}
 
-	// Check if artifact already exists by URI
-	// For now, we'll download and register a new artifact
-	// In production, this should check for existing artifacts first
+	archivePath, err := e.packageArtifact.HasArtifactAtHash(expectedHash)
+	if err == nil && archivePath != "" {
+		if existing, getErr := e.packageRepo.GetArtifactByArchivePath(ctx, archivePath); getErr == nil && existing.ArtifactID != "" {
+			return existing.ArtifactID, nil
+		}
+	}
 
-	// Download the package to a temp location
-	tmpDir, err := os.MkdirTemp("", "remote_artifact_*")
+	metadata := ArtifactMetadata{
+		ExtensionID:  extID,
+		Version:      version,
+		SourceURI:    packageURI,
+		ExpectedHash: expectedHash,
+	}
+	result, err := e.packageArtifact.PutArchiveFromURI(ctx, packageURI, metadata)
 	if err != nil {
-		return "", fmt.Errorf("create temp dir: %w", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	// Extract filename from URI
-	filename := packageURI
-	if idx := strings.LastIndex(packageURI, "/"); idx >= 0 && idx < len(packageURI)-1 {
-		filename = packageURI[idx+1:]
-	}
-	if filename == "" {
-		filename = "package.amitiax"
-	}
-	archivePath := filepath.Join(tmpDir, filename)
-
-	// Download the file
-	if err := downloadFile(ctx, packageURI, archivePath); err != nil {
-		return "", fmt.Errorf("download package: %w", err)
+		return "", fmt.Errorf("store remote artifact: %w", err)
 	}
 
-	// Register the artifact in the repository
-	artifactID := fmt.Sprintf("artifact_%s_%d", extID, time.Now().UnixNano())
-	artifact := PackageArtifact{
+	artifactID := result.ArtifactID
+	if artifactID == "" {
+		artifactID = e.packageArtifact.ArtifactIDFromHash(result.ArchiveHash)
+	}
+
+	if err := e.packageRepo.PutArtifact(ctx, PackageArtifact{
 		ArtifactID:  artifactID,
 		ExtensionID: extID,
 		Version:     version,
-		ArchivePath: archivePath,
-	}
-
-	if expectedHash != "" {
-		artifact.ArchiveHash = expectedHash
-	}
-
-	// Put the artifact in the repository
-	if err := e.packageRepo.PutArtifact(ctx, artifact); err != nil {
+		ArchiveHash: result.ArchiveHash,
+		ArchivePath: result.ArchivePath,
+	}); err != nil {
 		return "", fmt.Errorf("register artifact: %w", err)
 	}
 
