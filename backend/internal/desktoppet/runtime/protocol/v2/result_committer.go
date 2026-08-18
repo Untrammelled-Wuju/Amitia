@@ -28,7 +28,10 @@ func (c *ResultCommitter) CommitResult(result *CommandResult, eventType string, 
 	}
 
 	seq := int64(0)
-	evtSeq, _ := c.events.GetLatestEventSeq(result.RuntimeSessionID)
+	evtSeq, err := c.events.GetLatestEventSeq(result.RuntimeSessionID)
+	if err != nil {
+		return err
+	}
 	if evtSeq > 0 {
 		seq = evtSeq + 1
 	} else {

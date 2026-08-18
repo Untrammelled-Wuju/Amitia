@@ -70,9 +70,9 @@ func RegisterUserRoutes(apiGroup *gin.RouterGroup, facade *RuntimeFacade) {
 				"runtimeId": conn.RuntimeID,
 				"deviceId":  conn.DeviceID,
 				"state":     conn.State,
-				"sessionId": conn.SessionID,
-				"lastSeq":   conn.LastSeq,
-				"lastBeat":  conn.LastBeat.Format(time.RFC3339),
+				"sessionId": conn.SessionIDValue(),
+				"lastSeq":   conn.LastInboundSequence(),
+				"lastBeat":  conn.LastHeartbeat().Format(time.RFC3339),
 			})
 		}
 		c.JSON(http.StatusOK, gin.H{"success": true, "data": views})
@@ -97,9 +97,9 @@ func RegisterUserRoutes(apiGroup *gin.RouterGroup, facade *RuntimeFacade) {
 			"runtimeId": conn.RuntimeID,
 			"deviceId":  conn.DeviceID,
 			"state":     conn.State,
-			"sessionId": conn.SessionID,
-			"lastSeq":   conn.LastSeq,
-			"lastBeat":  conn.LastBeat.Format(time.RFC3339),
+			"sessionId": conn.SessionIDValue(),
+			"lastSeq":   conn.LastInboundSequence(),
+			"lastBeat":  conn.LastHeartbeat().Format(time.RFC3339),
 		}})
 	})
 
@@ -250,6 +250,15 @@ func (ctx *wsConnContext) SendEnvelope(env *Envelope, sentAt string) error {
 	if env == nil {
 		return nil
 	}
+	if ctx.conn != nil {
+		_, generation := ctx.conn.SessionSnapshot()
+		if generation > 0 {
+			env.ConnectionGeneration = generation
+		}
+		if env.Sequence <= 0 {
+			env.Sequence = ctx.conn.NextOutboundSequence()
+		}
+	}
 	data, err := json.Marshal(env)
 	if err != nil {
 		return err
@@ -257,11 +266,6 @@ func (ctx *wsConnContext) SendEnvelope(env *Envelope, sentAt string) error {
 
 	select {
 	case ctx.sendCh <- data:
-		if ctx.conn != nil && sentAt != "" {
-			ctx.mu.Lock()
-			ctx.conn.LastSeq = env.Sequence
-			ctx.mu.Unlock()
-		}
 		return nil
 	case <-ctx.doneCh:
 		return ErrConnectionClosed
@@ -304,7 +308,8 @@ func (ctx *wsConnContext) readLoop() {
 			return
 		}
 
-		if env.MessageType != MessageTypeHello && env.RuntimeSessionID != runtimeidentity.RuntimeSessionID(ctx.conn.SessionID) {
+		sessionID, _ := ctx.conn.SessionSnapshot()
+		if env.MessageType != MessageTypeHello && env.RuntimeSessionID != runtimeidentity.RuntimeSessionID(sessionID) {
 			return
 		}
 
@@ -315,37 +320,40 @@ func (ctx *wsConnContext) readLoop() {
 		switch MessageType(env.MessageType) {
 		case MessageTypeHello:
 			var payload HelloPayload
-			if err := json.Unmarshal(env.Payload, &payload); err == nil {
-				ack, err := ctx.handler.HandleHello(ctx.conn, &payload)
-				if err == nil && ack != nil {
-					ackEnv, _ := ctx.handler.CreateEnvelope(MessageTypeHelloAck, "hello_ack", ctx.conn.RuntimeID, runtimeidentity.ParseRuntimeSessionID(ctx.conn.SessionID), ack, ctx.conn.UserID, ctx.conn.DeviceID)
-					if ackEnv != nil {
-						if ackData, err := json.Marshal(ackEnv); err == nil {
-							select {
-							case ctx.sendCh <- ackData:
-							default:
-							}
-						}
-					}
-				}
+			if err := json.Unmarshal(env.Payload, &payload); err != nil {
+				return
+			}
+			ack, err := ctx.handler.HandleHello(ctx.conn, &payload)
+			if err != nil || ack == nil {
+				return
+			}
+			ackEnv, err := ctx.handler.CreateEnvelope(MessageTypeHelloAck, "hello_ack", ctx.conn.RuntimeID, runtimeidentity.ParseRuntimeSessionID(ctx.conn.SessionIDValue()), ack, ctx.conn.UserID, ctx.conn.DeviceID)
+			if err != nil || ackEnv == nil {
+				return
+			}
+			if err := ctx.SendEnvelope(ackEnv, time.Now().Format("2006-01-02 15:04:05")); err != nil {
+				return
 			}
 		case MessageTypeCommandAck:
 			var ackPayload CommandAckPayload
-			if err := json.Unmarshal(env.Payload, &ackPayload); err == nil {
-				_ = ctx.handler.HandleCommandAck(ctx.conn, &env, &ackPayload)
+			if err := json.Unmarshal(env.Payload, &ackPayload); err != nil {
+				return
+			}
+			if err := ctx.handler.HandleCommandAck(ctx.conn, &env, &ackPayload); err != nil {
+				return
 			}
 		case MessageTypePing:
-			pongEnv, _ := ctx.handler.CreateEnvelope(MessageTypePong, "pong", ctx.conn.RuntimeID, runtimeidentity.ParseRuntimeSessionID(ctx.conn.SessionID), protocol.PongPayload{Time: time.Now()}, ctx.conn.UserID, ctx.conn.DeviceID)
-			if pongEnv != nil {
-				if pongData, err := json.Marshal(pongEnv); err == nil {
-					select {
-					case ctx.sendCh <- pongData:
-					default:
-					}
-				}
+			pongEnv, err := ctx.handler.CreateEnvelope(MessageTypePong, "pong", ctx.conn.RuntimeID, runtimeidentity.ParseRuntimeSessionID(ctx.conn.SessionIDValue()), protocol.PongPayload{Time: time.Now()}, ctx.conn.UserID, ctx.conn.DeviceID)
+			if err != nil || pongEnv == nil {
+				return
+			}
+			if err := ctx.SendEnvelope(pongEnv, time.Now().Format("2006-01-02 15:04:05")); err != nil {
+				return
 			}
 		default:
-			_, _ = ctx.handler.HandleEvent(ctx.conn, env.MessageName, env.Payload)
+			if _, err := ctx.handler.HandleEvent(ctx.conn, &env); err != nil {
+				return
+			}
 		}
 	}
 }

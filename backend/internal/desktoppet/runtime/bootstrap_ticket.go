@@ -112,8 +112,9 @@ func (r *BootstrapTicketRepository) ConsumeWithValidation(ctx context.Context, r
 		return nil, tx.Error
 	}
 	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
+		if recovered := recover(); recovered != nil {
+			_ = tx.Rollback().Error
+			panic(recovered)
 		}
 	}()
 
@@ -144,21 +145,23 @@ func (r *BootstrapTicketRepository) ConsumeWithValidation(ctx context.Context, r
 	}
 	expires, err := time.Parse(time.RFC3339, ticket.ExpiresAt)
 	if err != nil {
-		_ = tx.Model(&BootstrapTicket{}).Where("id = ?", ticket.ID).Updates(map[string]interface{}{
-			"status":     BootstrapTicketStatusExpired,
-			"reason":     "expires_at_corrupted",
-			"updated_at": time.Now().UTC().Format(time.RFC3339),
-		}).Error
-		tx.Commit()
+		if markErr := markTicketExpiredTx(tx, ticket.ID, "expires_at_corrupted"); markErr != nil {
+			_ = tx.Rollback().Error
+			return nil, markErr
+		}
+		if commitErr := tx.Commit().Error; commitErr != nil {
+			return nil, commitErr
+		}
 		return nil, ErrTicketExpired
 	}
 	if time.Now().After(expires) {
-		_ = tx.Model(&BootstrapTicket{}).Where("id = ?", ticket.ID).Updates(map[string]interface{}{
-			"status":     BootstrapTicketStatusExpired,
-			"reason":     "expired",
-			"updated_at": time.Now().UTC().Format(time.RFC3339),
-		}).Error
-		tx.Commit()
+		if markErr := markTicketExpiredTx(tx, ticket.ID, "expired"); markErr != nil {
+			_ = tx.Rollback().Error
+			return nil, markErr
+		}
+		if commitErr := tx.Commit().Error; commitErr != nil {
+			return nil, commitErr
+		}
 		return nil, ErrTicketExpired
 	}
 
@@ -201,6 +204,21 @@ func (r *BootstrapTicketRepository) ConsumeWithValidation(ctx context.Context, r
 	return &ticket, nil
 }
 
+func markTicketExpiredTx(tx *gorm.DB, ticketID, reason string) error {
+	result := tx.Model(&BootstrapTicket{}).Where("id = ? AND status = ?", ticketID, BootstrapTicketStatusActive).Updates(map[string]interface{}{
+		"status":     BootstrapTicketStatusExpired,
+		"reason":     reason,
+		"updated_at": time.Now().UTC().Format(time.RFC3339),
+	})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return fmt.Errorf("runtime bootstrap ticket expiration CAS affected %d rows", result.RowsAffected)
+	}
+	return nil
+}
+
 func generateRawTicket() (string, error) {
 	b := make([]byte, 32)
 	if _, err := rand.Read(b); err != nil {
@@ -220,8 +238,9 @@ func (r *BootstrapTicketRepository) Consume(ctx context.Context, rawTicket, runt
 		return nil, tx.Error
 	}
 	defer func() {
-		if r := recover(); r != nil {
-			tx.Rollback()
+		if recovered := recover(); recovered != nil {
+			_ = tx.Rollback().Error
+			panic(recovered)
 		}
 	}()
 
@@ -252,21 +271,23 @@ func (r *BootstrapTicketRepository) Consume(ctx context.Context, rawTicket, runt
 	}
 	expires, err := time.Parse(time.RFC3339, ticket.ExpiresAt)
 	if err != nil {
-		_ = tx.Model(&BootstrapTicket{}).Where("id = ?", ticket.ID).Updates(map[string]interface{}{
-			"status":     BootstrapTicketStatusExpired,
-			"reason":     "expires_at_corrupted",
-			"updated_at": time.Now().UTC().Format(time.RFC3339),
-		}).Error
-		tx.Commit()
+		if markErr := markTicketExpiredTx(tx, ticket.ID, "expires_at_corrupted"); markErr != nil {
+			_ = tx.Rollback().Error
+			return nil, markErr
+		}
+		if commitErr := tx.Commit().Error; commitErr != nil {
+			return nil, commitErr
+		}
 		return nil, ErrTicketExpired
 	}
 	if time.Now().After(expires) {
-		_ = tx.Model(&BootstrapTicket{}).Where("id = ?", ticket.ID).Updates(map[string]interface{}{
-			"status":     BootstrapTicketStatusExpired,
-			"reason":     "expired",
-			"updated_at": time.Now().UTC().Format(time.RFC3339),
-		}).Error
-		tx.Commit()
+		if markErr := markTicketExpiredTx(tx, ticket.ID, "expired"); markErr != nil {
+			_ = tx.Rollback().Error
+			return nil, markErr
+		}
+		if commitErr := tx.Commit().Error; commitErr != nil {
+			return nil, commitErr
+		}
 		return nil, ErrTicketExpired
 	}
 

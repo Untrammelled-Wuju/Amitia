@@ -5,6 +5,7 @@ package v2
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"time"
 
 	"github.com/u-ai/backend/internal/runtimeidentity"
@@ -42,7 +43,11 @@ func (d *ConnectionCommandDispatcher) Run(
 }
 
 func (d *ConnectionCommandDispatcher) dispatchOnce(conn *Connection, send func(*Envelope, string) error) {
-	if conn == nil || conn.SessionID == "" {
+	if conn == nil {
+		return
+	}
+	sessionID, generation := conn.SessionSnapshot()
+	if sessionID == "" {
 		return
 	}
 	if conn.GetState() != ConnStateConnected {
@@ -51,6 +56,7 @@ func (d *ConnectionCommandDispatcher) dispatchOnce(conn *Connection, send func(*
 
 	cmds, err := d.commands.ListCommandsToDispatch(100)
 	if err != nil {
+		log.Warn("[v2-dispatcher] list commands failed: ", err)
 		return
 	}
 
@@ -67,7 +73,17 @@ func (d *ConnectionCommandDispatcher) dispatchOnce(conn *Connection, send func(*
 
 		var payload interface{}
 		if err := json.Unmarshal([]byte(cmd.PayloadJSON), &payload); err != nil {
-			_ = d.commands.MarkFailed(cmd.ID, "PAYLOAD_INVALID", err.Error(), time.Now())
+			if markErr := d.commands.MarkFailed(cmd.ID, "PAYLOAD_INVALID", err.Error(), time.Now()); markErr != nil {
+				log.Warn("[v2-dispatcher] mark invalid payload failed: ", markErr)
+			}
+			continue
+		}
+
+		rawPayload, err := valueToRawMessage(payload)
+		if err != nil {
+			if markErr := d.commands.MarkFailed(cmd.ID, "PAYLOAD_ENCODE_FAILED", err.Error(), time.Now()); markErr != nil {
+				log.Warn("[v2-dispatcher] mark payload encode failure failed: ", markErr)
+			}
 			continue
 		}
 
@@ -75,7 +91,7 @@ func (d *ConnectionCommandDispatcher) dispatchOnce(conn *Connection, send func(*
 			MessageTypeCommand,
 			cmd.CommandType,
 			conn.RuntimeID,
-			runtimeidentity.ParseRuntimeSessionID(conn.SessionID),
+			runtimeidentity.ParseRuntimeSessionID(sessionID),
 			CommandDispatchPayload{
 				CommandID:        cmd.ID,
 				CommandType:      cmd.CommandType,
@@ -85,7 +101,7 @@ func (d *ConnectionCommandDispatcher) dispatchOnce(conn *Connection, send func(*
 				InstallationID:   cmd.InstallationID,
 				PetID:            cmd.PetID,
 				ReleaseID:        cmd.ReleaseID,
-				Payload:          valueToRawMessage(payload),
+				Payload:          rawPayload,
 			},
 			conn.UserID,
 			conn.DeviceID,
@@ -96,21 +112,27 @@ func (d *ConnectionCommandDispatcher) dispatchOnce(conn *Connection, send func(*
 		}
 
 		envelope.MessageID = cmd.ID
-		envelope.Sequence = conn.LastSeq + 1
+		envelope.ConnectionGeneration = generation
+		envelope.Sequence = conn.NextOutboundSequence()
 
 		if err := send(envelope, now); err != nil {
 			log.Warn("[v2-dispatcher] send failed: ", err)
 			continue
 		}
 
-		_ = d.commands.MarkTransportDispatched(cmd.ID, string(conn.RuntimeID), time.Now())
+		if err := d.commands.MarkTransportDispatched(cmd.ID, string(conn.RuntimeID), time.Now()); err != nil {
+			log.Warn("[v2-dispatcher] mark transport dispatched failed: ", err)
+		}
 	}
 }
 
-func valueToRawMessage(v interface{}) json.RawMessage {
+func valueToRawMessage(v interface{}) (json.RawMessage, error) {
 	if raw, ok := v.(json.RawMessage); ok {
-		return raw
+		return raw, nil
 	}
-	b, _ := json.Marshal(v)
-	return b
+	b, err := json.Marshal(v)
+	if err != nil {
+		return nil, fmt.Errorf("encode command payload: %w", err)
+	}
+	return b, nil
 }
