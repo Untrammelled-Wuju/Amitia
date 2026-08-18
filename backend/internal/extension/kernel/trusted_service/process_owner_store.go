@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"sync"
 	"time"
+
+	platformprocess "github.com/u-ai/backend/internal/platform/process"
 )
 
 type ProcessOwnerMetadata struct {
@@ -21,6 +23,8 @@ type ProcessOwnerMetadata struct {
 	HostSessionID     string    `json:"host_session_id"`
 	PID               int       `json:"pid"`
 	StartedAt         time.Time `json:"started_at"`
+	Executable        string    `json:"executable"`
+	ProcessStartID    string    `json:"process_start_id"`
 }
 
 type ProcessOwnerStore struct {
@@ -38,7 +42,11 @@ func NewProcessOwnerStore(dataDir string) *ProcessOwnerStore {
 	}
 }
 
-func (s *ProcessOwnerStore) RecordOwnership(inst *ServiceInstance, hostInstanceID, hostSessionID string) ProcessOwnerMetadata {
+func (s *ProcessOwnerStore) RecordOwnership(inst *ServiceInstance, hostInstanceID, hostSessionID string) (ProcessOwnerMetadata, error) {
+	identity, err := platformprocess.ReadProcessIdentity(inst.PID)
+	if err != nil {
+		return ProcessOwnerMetadata{}, fmt.Errorf("capture process identity pid=%d: %w", inst.PID, err)
+	}
 	meta := ProcessOwnerMetadata{
 		ProcessInstanceID: inst.ProcessInstanceID,
 		PluginID:          inst.PluginID,
@@ -51,19 +59,23 @@ func (s *ProcessOwnerStore) RecordOwnership(inst *ServiceInstance, hostInstanceI
 		HostSessionID:     hostSessionID,
 		PID:               inst.PID,
 		StartedAt:         time.Now().UTC(),
+		Executable:        identity.Executable,
+		ProcessStartID:    identity.StartIdentity,
 	}
 	s.mu.Lock()
 	s.metadata[inst.ProcessInstanceID] = meta
 	s.mu.Unlock()
-	s.persist()
-	return meta
+	if err := s.persist(); err != nil {
+		return ProcessOwnerMetadata{}, err
+	}
+	return meta, nil
 }
 
-func (s *ProcessOwnerStore) RemoveOwnership(processInstanceID string) {
+func (s *ProcessOwnerStore) RemoveOwnership(processInstanceID string) error {
 	s.mu.Lock()
 	delete(s.metadata, processInstanceID)
 	s.mu.Unlock()
-	s.persist()
+	return s.persist()
 }
 
 func (s *ProcessOwnerStore) GetOwnedProcesses() []ProcessOwnerMetadata {

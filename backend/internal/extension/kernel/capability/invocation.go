@@ -122,7 +122,8 @@ type ToolInvocationContext struct {
 }
 
 type ToolInvocationOptions struct {
-	Parent *ToolInvocationContext
+	Parent      *ToolInvocationContext
+	ExecContext *execution.ExecutionContext
 
 	ExternalCallID string
 
@@ -177,6 +178,7 @@ func NewOperationID() string {
 
 func NewToolInvocationContext(opts ToolInvocationOptions) ToolInvocationContext {
 	invocation := ToolInvocationContext{
+		ExecContext:          opts.ExecContext,
 		InvocationID:         NewInvocationID(),
 		ExternalCallID:       opts.ExternalCallID,
 		UserID:               opts.UserID,
@@ -203,6 +205,10 @@ func NewToolInvocationContext(opts ToolInvocationOptions) ToolInvocationContext 
 
 	if opts.Metadata != nil {
 		invocation.Metadata = cloneStringAnyMap(opts.Metadata)
+	}
+
+	if opts.ExecContext != nil {
+		invocation.RootID = opts.ExecContext.RootExecutionID
 	}
 
 	if opts.Parent != nil {

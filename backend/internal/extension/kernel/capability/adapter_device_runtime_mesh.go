@@ -84,6 +84,7 @@ func (p *MeshDeviceRuntimeInvocationPort) Execute(ctx context.Context, request D
 		Handler:              route.Binding.HandlerName,
 		Input:                input,
 		ProviderID:           route.Binding.ProviderID,
+		UserID:               route.UserID,
 		DeviceID:             route.DeviceID,
 		RuntimeID:            route.RuntimeID,
 		RuntimeSessionID:     sessionID,

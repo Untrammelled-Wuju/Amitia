@@ -125,9 +125,11 @@ type ContainerBuilder struct {
 	runtimePolicy                runtimeprofile.Policy
 
 	mcpRepository *mcp.Repository
+	mcpRuntimeConnectPort acquisition.MCPRuntimeConnectPort
 
 	meshHub                  *server.ConnectionHub
 	pendingInvocationManager *capability.PendingInvocationManager
+	pendingTaskManager       *task_runtime.PendingTaskManager
 
 	nativeBridgeRelay *nativebridge.RelayHandler
 
@@ -308,6 +310,16 @@ func (b *ContainerBuilder) WithChannelStore(store capability.ChannelStore) *Cont
 
 func (b *ContainerBuilder) WithMCPRepository(repo *mcp.Repository) *ContainerBuilder {
 	b.mcpRepository = repo
+	return b
+}
+
+func (b *ContainerBuilder) WithMCPRuntimeConnectPort(port acquisition.MCPRuntimeConnectPort) *ContainerBuilder {
+	b.mcpRuntimeConnectPort = port
+	return b
+}
+
+func (b *ContainerBuilder) WithPendingTaskManager(mgr *task_runtime.PendingTaskManager) *ContainerBuilder {
+	b.pendingTaskManager = mgr
 	return b
 }
 
@@ -789,7 +801,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		taskRuntimeService.SetRemoteExecutor(executor)
 	}
 	extensionProviderReconciler := capability.NewExtensionProviderReconciler(providerLifecycle, capabilityProviderRegistry)
-	providerInstanceReconciler := capability.NewProviderInstanceReconciler(providerLifecycle, capabilityProviderRegistry, runtimeidentity.Identity{})
+	providerInstanceReconciler := capability.NewProviderInstanceReconcilerWithAdapters(providerLifecycle, capabilityProviderRegistry, runtimeidentity.Identity{}, adapterRegistry)
 	builtinProviderReconciler := capability.NewBuiltinProviderReconciler(capabilityProviderRegistry, providerLifecycle, adapterRegistry)
 	capabilityResolver := capability.NewResolver(capability.NewProviderCatalogAdapter(capabilityProviderRegistry))
 	capabilityResolver.SetRuntimeCatalog(capability.NewRuntimeAdapterCatalogAdapter(adapterRegistry))
@@ -881,6 +893,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		acquisitionSourceRegistry.Register(acquisition.NewMCPPackageSource(mcpAdapter))
 	}
 	acquisitionSourceRegistry.Register(acquisition.NewRemoteCatalogSource("https://amitia.untrammelled.top/api/catalog"))
+	acquisitionSourceRegistry.Register(acquisition.NewRemoteMCPCatalogSource("https://amitia.untrammelled.top/api/mcp"))
 
 	mcpProvisioner := kernelmcpinstaller.NewDefaultProvisioner()
 	mcpInstaller := kernelmcpinstaller.NewDefaultInstaller()
@@ -898,6 +911,10 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	} else {
 		mcpInstallPort = acquisition.NewMCPPortBridge(mcpLifecycle)
 	}
+	mcpToolSync := NewAcquisitionMCPToolSync(toolRegistry)
+	if b.mcpRuntimeConnectPort != nil {
+		mcpInstallPort = acquisition.NewMCPPortBridgeWithRuntime(mcpLifecycle, b.mcpRuntimeConnectPort, mcpToolSync)
+	}
 
 	acquisitionInstallerRegistry, err := acquisition.NewInstallerRegistry(&acquisition.InstallerRegistryOpts{
 		EnableExistingPort: acquisition.NewEnableExistingPortBridgeWithDeps(acquisition.EnableExistingDeps{
@@ -910,7 +927,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 			AgentSkillCatalog:  agentSkillCatalog,
 			ProviderRegistry:   capabilityProviderRegistry,
 		}),
-		PackageInstallPort: acquisition.NewPackagePortBridgeWithResolver(lifecycleMgr, packageArtifactStoreAdapter, packageRepoAdapter),
+		PackageInstallPort: acquisition.NewPackagePortBridgeWithCanonicalResolver(lifecycleMgr, packageArtifactStoreAdapter, packageRepoAdapter, canonicalPackageInstaller),
 		MCPInstallPort:     mcpInstallPort,
 		SkillInstallPort:   acquisition.NewSkillPortBridge(acquisition.NewSkillCatalogBridge(agentSkillCatalog)),
 		WorkshopPort:       workshopPort,
@@ -1414,6 +1431,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	canaryShadowMgr := canary.NewShadowManager()
 	canaryOwnershipResolver := canary.NewBackgroundOwnershipResolver()
 
+	var builtContainer *Container
+	canonicalPackageInstaller := newAcquisitionPackageInstaller(func() *Container { return builtContainer })
+
 	container := &Container{
 		Store:                  store,
 		TransactionManager:     tm,
@@ -1593,8 +1613,13 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 		BackgroundRemovalRegistry: bgRegistry,
 
+		ChannelResolver: capabilityChannelResolver,
+
 		EventBridgePublisher: eventBridgePublisher,
 	}
+
+	builtin.SetUIAgentPublisher(newUIAgentPublisher(b.extRoot, schemaRegistry, uiContribRepo, uiHost))
+	builtContainer = container
 
 	if b.iosNativeProvider != nil {
 		container.WireIOSPlatformAdapter(b.iosNativeProvider)

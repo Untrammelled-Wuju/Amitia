@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
+	"strings"
 
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/uiagent"
@@ -15,16 +17,26 @@ import (
 )
 
 var (
-	uiAgentInspector       source.SourceInspector
-	uiAgentExecutor        *uiagent.UIExecutor
-	uiAgentSchemaGen       *schema.SchemaUIGenerator
-	uiAgentAISchemaGen     *schema.AISchemaGenerator
-	uiAgentPreviewMgr      uiagent.PreviewManager
-	uiAgentObserver        preview.Observer
-	uiAgentRefiner         preview.AutoRefiner
-	uiAgentSourceEditor    source.SourceEditor
+	uiAgentInspector        source.SourceInspector
+	uiAgentExecutor         *uiagent.UIExecutor
+	uiAgentSchemaGen        *schema.SchemaUIGenerator
+	uiAgentAISchemaGen      *schema.AISchemaGenerator
+	uiAgentPreviewMgr       uiagent.PreviewManager
+	uiAgentObserver         preview.Observer
+	uiAgentRefiner          preview.AutoRefiner
+	uiAgentSourceEditor     source.SourceEditor
 	uiAgentDiagnosticRunner adapters.DiagnosticRunner
+	uiAgentPublisher        UIAgentPublisher
 )
+
+type UIAgentPublishResult struct {
+	SchemaID       string `json:"schemaId"`
+	ContributionID string `json:"contributionId"`
+}
+
+type UIAgentPublisher interface {
+	Publish(ctx context.Context, workspaceID string, doc *schema.SchemaUIDocument) (UIAgentPublishResult, error)
+}
 
 func SetUIAgentInspector(inspector source.SourceInspector) {
 	uiAgentInspector = inspector
@@ -66,6 +78,10 @@ func SetUIAgentDiagnosticRunner(runner adapters.DiagnosticRunner) {
 	uiAgentDiagnosticRunner = runner
 }
 
+func SetUIAgentPublisher(publisher UIAgentPublisher) {
+	uiAgentPublisher = publisher
+}
+
 func init() {
 	tool.Register(tool.Tool{
 		Type: "function",
@@ -101,6 +117,10 @@ func init() {
 						Type:        "array",
 						Description: "The modification operations to apply.",
 					},
+					"preview": {
+						Type:        "boolean",
+						Description: "Keep the validated preview session available after commit.",
+					},
 				},
 				Required: []string{"workspaceId", "operations"},
 			},
@@ -119,8 +139,17 @@ func init() {
 						Type:        "string",
 						Description: "The workspace ID to create in.",
 					},
+					"mode": {
+						Type:        "string",
+						Description: "Creation mode. Use schema for generated Schema UI.",
+						Enum:        []string{"schema"},
+					},
+					"description": {
+						Type:        "string",
+						Description: "Natural-language description of the UI to create.",
+					},
 				},
-				Required: []string{"workspaceId"},
+				Required: []string{"workspaceId", "mode", "description"},
 			},
 		},
 	}, uiagentCreateHandler)
@@ -222,8 +251,48 @@ func uiagentModifyHandler(ctx context.Context, execCtx tool.ToolExecutionContext
 		}
 		result.DiffPreview = diffResult.UnifiedDiff
 
-		if err := uiAgentSourceEditor.CommitTx(ctx, tx); err != nil {
-			return tool.ErrorResult("commit_failed", fmt.Sprintf("commit failed: %v", err))
+		previewEditor, ok := uiAgentSourceEditor.(source.PreviewTransactionEditor)
+		if !ok {
+			_ = uiAgentSourceEditor.RollbackTx(ctx, tx)
+			return tool.ErrorResult("preview_unavailable", "source editor does not support pre-commit preview transactions")
+		}
+		if err := previewEditor.MaterializePreviewTx(ctx, tx); err != nil {
+			_ = uiAgentSourceEditor.RollbackTx(ctx, tx)
+			return tool.ErrorResult("preview_failed", fmt.Sprintf("failed to materialize transaction for preview: %v", err))
+		}
+
+		if uiAgentPreviewMgr == nil || uiAgentObserver == nil {
+			_ = uiAgentSourceEditor.RollbackTx(ctx, tx)
+			return tool.ErrorResult("preview_unavailable", "source validation requires preview manager and observer")
+		}
+		platform := detectSourcePreviewPlatform(result.ChangedFiles)
+		if platform == "" {
+			_ = uiAgentSourceEditor.RollbackTx(ctx, tx)
+			return tool.ErrorResult("preview_unavailable", "unable to determine source preview platform")
+		}
+		previewSession, previewErr := uiAgentPreviewMgr.Create(workspaceID, nil)
+		if previewErr != nil {
+			_ = uiAgentSourceEditor.RollbackTx(ctx, tx)
+			return tool.ErrorResult("preview_failed", fmt.Sprintf("preview session creation failed: %v", previewErr))
+		}
+		previewSession.Target = &preview.PreviewTarget{WorkspaceID: workspaceID, Platform: platform, SourceType: "source"}
+		previewSession.TransactionID = tx.ID
+		obs, obsErr := uiAgentObserver.Capture(ctx, previewSession.ID)
+		if obsErr != nil {
+			_ = uiAgentSourceEditor.RollbackTx(ctx, tx)
+			_ = uiAgentPreviewMgr.Terminate(previewSession.ID)
+			return tool.ErrorResult("preview_failed", fmt.Sprintf("preview observation failed: %v", obsErr))
+		}
+		if preview.ShouldBlockCommit(obs) {
+			_ = uiAgentSourceEditor.RollbackTx(ctx, tx)
+			if !wantPreview {
+				_ = uiAgentPreviewMgr.Terminate(previewSession.ID)
+			}
+			return tool.ErrorResult("preview_validation_failed", fmt.Sprintf("preview blocked commit: %s", strings.Join(obs.AllErrors(), "; ")))
+		}
+		if err := previewEditor.FinalizePreviewTx(ctx, tx); err != nil {
+			_ = uiAgentSourceEditor.RollbackTx(ctx, tx)
+			return tool.ErrorResult("commit_failed", fmt.Sprintf("commit failed after preview: %v", err))
 		}
 
 		response := map[string]interface{}{
@@ -234,12 +303,10 @@ func uiagentModifyHandler(ctx context.Context, execCtx tool.ToolExecutionContext
 			"diffPreview":       result.DiffPreview,
 		}
 
-		if wantPreview && uiAgentPreviewMgr != nil {
-			previewSession, previewErr := uiAgentPreviewMgr.Create(workspaceID, nil)
-			if previewErr != nil {
-				return tool.ErrorResult("preview_failed", fmt.Sprintf("preview session creation failed: %v", previewErr))
-			}
+		if wantPreview {
 			response["previewRef"] = previewSession.ID
+		} else {
+			_ = uiAgentPreviewMgr.Terminate(previewSession.ID)
 		}
 
 		resultJSON, _ := json.Marshal(response)
@@ -289,6 +356,22 @@ func uiagentModifyHandler(ctx context.Context, execCtx tool.ToolExecutionContext
 	}
 }
 
+func detectSourcePreviewPlatform(paths []string) string {
+	hasWeb := false
+	for _, p := range paths {
+		switch strings.ToLower(filepath.Ext(p)) {
+		case ".dart":
+			return "flutter"
+		case ".vue", ".tsx", ".jsx", ".ts", ".js", ".svelte", ".html", ".css", ".scss":
+			hasWeb = true
+		}
+	}
+	if hasWeb {
+		return "web"
+	}
+	return ""
+}
+
 func uiagentCreateHandler(ctx context.Context, execCtx tool.ToolExecutionContext, args map[string]interface{}) tool.ToolCallResult {
 	workspaceID, _ := args["workspaceId"].(string)
 	if workspaceID == "" {
@@ -329,29 +412,49 @@ func uiagentCreateHandler(ctx context.Context, execCtx tool.ToolExecutionContext
 		if obsErr != nil {
 			return tool.ErrorResult("preview_observe_failed", fmt.Sprintf("preview observation failed: %v", obsErr))
 		}
-		if len(obsResult.Errors) > 0 {
+		if preview.ShouldBlockCommit(obsResult) && obsResult.CanRefine && uiAgentRefiner != nil {
+			refined, refineErr := uiAgentRefiner.Refine(ctx, preview.RefineRequest{
+				SessionID:     session.ID,
+				Observation:   obsResult,
+				Target:        session.Target,
+				MaxIterations: preview.MaxRefineIterations,
+			})
+			if refineErr == nil && refined != nil && refined.Observation != nil {
+				obsResult = refined.Observation
+			}
+		}
+		if preview.ShouldBlockCommit(obsResult) {
+			allErrors := obsResult.AllErrors()
 			response := map[string]interface{}{
 				"success":    false,
 				"schemaId":   doc.Title,
-				"previewRef":  session.ID,
-				"errors":     obsResult.Errors,
+				"previewRef": session.ID,
+				"errors":     allErrors,
 				"state":      "needs_manual",
 			}
 			resultJSON, _ := json.Marshal(response)
 			return tool.ToolCallResult{
 				Status:      tool.ToolStatusSuccess,
 				Content:     string(resultJSON),
-				VisibleText: fmt.Sprintf("Schema %s generated but has %d issues requiring manual review", doc.Title, len(obsResult.Errors)),
+				VisibleText: fmt.Sprintf("Schema %s generated but has %d issues requiring manual review", doc.Title, len(allErrors)),
 			}
 		}
 	}
+	if uiAgentPublisher == nil {
+		return tool.ErrorResult("ui_agent_unavailable", "UI agent publisher not configured")
+	}
+	published, publishErr := uiAgentPublisher.Publish(ctx, workspaceID, doc)
+	if publishErr != nil {
+		return tool.ErrorResult("publish_failed", fmt.Sprintf("schema publish failed: %v", publishErr))
+	}
 
 	response := map[string]interface{}{
-		"success":    true,
-		"schemaId":   doc.Title,
-		"previewRef":  session.ID,
-		"createdBy":  "uiagent.create",
-		"state":      "published",
+		"success":        true,
+		"schemaId":       published.SchemaID,
+		"contributionId": published.ContributionID,
+		"previewRef":     session.ID,
+		"createdBy":      "uiagent.create",
+		"state":          "published",
 	}
 
 	resultJSON, _ := json.Marshal(response)
@@ -386,16 +489,16 @@ func uiagentPreviewHandler(ctx context.Context, execCtx tool.ToolExecutionContex
 		}
 		blockCommit := preview.ShouldBlockCommit(obsResult)
 		response := map[string]interface{}{
-			"sessionId":     obsResult.SessionID,
-			"errors":        obsResult.AllErrors(),
-			"warnings":      obsResult.Warnings,
-			"compileErrors": obsResult.CompileErrors,
-			"runtimeErrors": obsResult.RuntimeErrors,
-			"bindingErrors": obsResult.BindingErrors,
-			"actionErrors":  obsResult.ActionErrors,
+			"sessionId":      obsResult.SessionID,
+			"errors":         obsResult.AllErrors(),
+			"warnings":       obsResult.Warnings,
+			"compileErrors":  obsResult.CompileErrors,
+			"runtimeErrors":  obsResult.RuntimeErrors,
+			"bindingErrors":  obsResult.BindingErrors,
+			"actionErrors":   obsResult.ActionErrors,
 			"overflowErrors": obsResult.OverflowErrors,
-			"canRefine":     obsResult.CanRefine,
-			"blockCommit":   blockCommit,
+			"canRefine":      obsResult.CanRefine,
+			"blockCommit":    blockCommit,
 		}
 		resultJSON, _ := json.Marshal(response)
 		if blockCommit {
@@ -416,8 +519,8 @@ func uiagentPreviewHandler(ctx context.Context, execCtx tool.ToolExecutionContex
 			return tool.ErrorResult("ui_agent_unavailable", "UI agent preview refiner not configured")
 		}
 		refineReq := preview.RefineRequest{
-			SessionID:      sessionID,
-			MaxIterations:  preview.MaxRefineIterations,
+			SessionID:     sessionID,
+			MaxIterations: preview.MaxRefineIterations,
 		}
 		if workspaceID != "" {
 			refineReq.Target = &preview.PreviewTarget{

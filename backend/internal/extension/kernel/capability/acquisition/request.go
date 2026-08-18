@@ -47,3 +47,10 @@ func (r AcquisitionRequest) WantsDevice() bool {
 	return r.RequiredPlacement == capability.ProviderPlacementDevice ||
 		r.RequiredDeviceID != ""
 }
+
+func (r AcquisitionRequest) ConversationID() string {
+	if r.ExecContext != nil {
+		return r.ExecContext.ConversationID
+	}
+	return ""
+}

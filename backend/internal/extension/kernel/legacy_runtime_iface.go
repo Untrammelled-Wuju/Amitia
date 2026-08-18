@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/agent/tool"
+	coreexec "github.com/u-ai/backend/internal/execution"
 )
 
 type LegacyScope struct {
@@ -20,6 +21,7 @@ type LegacyScope struct {
 	ToolCallID     string
 	CorrelationID  string
 	CausationID    string
+	ExecContext    *coreexec.ExecutionContext
 }
 
 type LegacyContextContribution struct {

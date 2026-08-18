@@ -63,8 +63,29 @@ func (b *AgentCapabilityBridge) FindCapabilities(ctx context.Context, input Find
 // AcquireCapability translates an AcquireInput into an AcquisitionRequest,
 // invokes the AcquisitionService.Acquire, and returns an AcquireOutput.
 func (b *AgentCapabilityBridge) AcquireCapability(ctx context.Context, input AcquireInput, userID string, execCtx *execution.ExecutionContext) (*AcquireOutput, error) {
+	if input.ResumeToken != "" {
+		if !input.UserConfirmed && !input.Approval {
+			return nil, NewAcquisitionError("approval_required", "userConfirmed=true is required to resume an approval-gated acquisition", nil)
+		}
+		result, err := b.acquisitionService.ResumeAcquire(ctx, input.ResumeToken)
+		if err != nil {
+			return &AcquireOutput{Success: false, State: StateFailed, ResumeToken: input.ResumeToken, ErrorMessage: err.Error()}, err
+		}
+		output := &AcquireOutput{Success: result.IsReady(), State: result.State, ResumeToken: input.ResumeToken}
+		if len(result.CapabilityIDs) > 0 {
+			output.CapabilityID = string(result.CapabilityIDs[0])
+		}
+		if result.IsReady() {
+			output.InstalledAt = result.UpdatedAt.Format(time.RFC3339)
+		}
+		if result.Error != "" {
+			output.ErrorMessage = result.Error
+		}
+		return output, nil
+	}
+
 	if input.CapabilityID == "" {
-		return nil, NewAcquisitionError("invalid_input", "capabilityId is required", nil)
+		return nil, NewAcquisitionError("invalid_input", "capabilityId is required for a new acquisition", nil)
 	}
 
 	request := AcquisitionRequest{

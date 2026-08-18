@@ -1,6 +1,7 @@
 package capability
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
@@ -25,6 +26,7 @@ type providerInstanceReconciler struct {
 	lifecycle    *ProviderLifecycleService
 	registry     *ProviderRegistry
 	runtimeIdent runtimeidentity.Identity
+	adapters     *RuntimeAdapterRegistry
 }
 
 func NewProviderInstanceReconciler(lifecycle *ProviderLifecycleService, registry *ProviderRegistry, ident runtimeidentity.Identity) ProviderInstanceReconciler {
@@ -32,6 +34,19 @@ func NewProviderInstanceReconciler(lifecycle *ProviderLifecycleService, registry
 		lifecycle:    lifecycle,
 		registry:     registry,
 		runtimeIdent: ident,
+	}
+}
+
+// NewProviderInstanceReconcilerWithAdapters makes Builtin readiness depend on
+// the actual runtime adapter/handler being resolvable. This prevents a builtin
+// declaration from becoming executable merely because its provider definition
+// exists.
+func NewProviderInstanceReconcilerWithAdapters(lifecycle *ProviderLifecycleService, registry *ProviderRegistry, ident runtimeidentity.Identity, adapters *RuntimeAdapterRegistry) ProviderInstanceReconciler {
+	return &providerInstanceReconciler{
+		lifecycle:    lifecycle,
+		registry:     registry,
+		runtimeIdent: ident,
+		adapters:     adapters,
 	}
 }
 
@@ -56,16 +71,24 @@ func (r *providerInstanceReconciler) ActivateExtension(def domain.ExtensionDefin
 		instanceID := r.buildInstanceID(d, result)
 
 		health := HealthReady
+		availability := ProviderAvailabilityAvailable
 		if hasResult {
 			if result.Health == "degraded" {
 				health = HealthDegraded
 			}
-		} else if d.Kind != ProviderKindBuiltin {
+		} else if d.Kind == ProviderKindBuiltin && r.adapters != nil {
+			adapter, ok := r.adapters.Resolve(d.Runtime)
+			if !ok || adapter == nil || !adapter.Supports(d.Runtime) {
+				health = HealthUnknown
+				availability = ProviderAvailabilityUnknown
+			} else {
+				health = adapter.Health(context.Background(), d.Runtime)
+				if health != HealthReady && health != HealthDegraded {
+					availability = ProviderAvailabilityUnknown
+				}
+			}
+		} else {
 			health = HealthUnknown
-		}
-
-		availability := ProviderAvailabilityAvailable
-		if !hasResult && d.Kind != ProviderKindBuiltin {
 			availability = ProviderAvailabilityUnknown
 		}
 

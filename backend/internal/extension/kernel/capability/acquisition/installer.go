@@ -15,8 +15,8 @@ import (
 type (
 	// PackageInstallPort invokes the real package install saga.
 	PackageInstallPort interface {
-		InstallPackage(ctx context.Context, extID string, version string, packageID string, hash string) (string, error)
-		UninstallPackage(ctx context.Context, extID string) error
+		InstallPackage(ctx context.Context, extID string, version string, packageID string, hash string, userID string) (string, error)
+		UninstallPackage(ctx context.Context, extID string, userID string) error
 		ResolveArtifact(ctx context.Context, extID string, version string, packageURI string, hash string) (string, error)
 	}
 
@@ -120,7 +120,7 @@ func (i *ExtensionPackageInstaller) Install(
 		packageID = artifactID
 	}
 
-	installID, err := i.packagePort.InstallPackage(ctx, extID, version, packageID, hash)
+	installID, err := i.packagePort.InstallPackage(ctx, extID, version, packageID, hash, string(target.UserID))
 	if err != nil {
 		return InstalledCapability{}, fmt.Errorf("extension installer: install package %s: %w", extID, err)
 	}
@@ -160,7 +160,7 @@ func (i *ExtensionPackageInstaller) Rollback(
 		return nil
 	}
 
-	if err := i.packagePort.UninstallPackage(ctx, installed.ExtensionIDs[0]); err != nil {
+	if err := i.packagePort.UninstallPackage(ctx, installed.ExtensionIDs[0], string(installed.Target.UserID)); err != nil {
 		return fmt.Errorf("extension installer rollback: uninstall %s: %w", installed.ExtensionIDs[0], err)
 	}
 	return nil
@@ -410,8 +410,8 @@ type WorkshopInstructionDraft struct {
 // GeneratedSkillInstaller handles the InstallGeneratedSkill method. It generates
 // a skill via Workshop, validates it, then delegates to SkillInstallPort for registration.
 type GeneratedSkillInstaller struct {
-	skillPort     SkillInstallPort
-	workshopPort  WorkshopGeneratePort
+	skillPort    SkillInstallPort
+	workshopPort WorkshopGeneratePort
 }
 
 // NewGeneratedSkillInstaller creates a GeneratedSkillInstaller with real dependencies.

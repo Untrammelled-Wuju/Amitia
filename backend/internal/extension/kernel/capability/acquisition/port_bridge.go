@@ -3,14 +3,32 @@ package acquisition
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/enablement"
+	"github.com/u-ai/backend/internal/extension/kernel/lifecycle_manager"
 	"github.com/u-ai/backend/internal/extension/kernel/mcp"
 	legacymcp "github.com/u-ai/backend/internal/mcp"
 )
+
+// MCPRuntimeConnectRequest describes the canonical runtime connection required
+// after installation. The runtime port owns protocol initialization and discovery.
+type MCPRuntimeConnectRequest struct {
+	ServerID  string
+	Transport string
+	Command   string
+	Args      []string
+	Env       map[string]string
+}
+
+// MCPRuntimeConnectPort connects a real MCP runtime and returns its discovered tools.
+type MCPRuntimeConnectPort interface {
+	ConnectAndDiscover(ctx context.Context, req MCPRuntimeConnectRequest) ([]capability.MCPToolDescriptor, error)
+	Disconnect(ctx context.Context, serverID string) error
+}
 
 // NewMCPPortBridge 创建 MCP 安装端口桥接
 func NewMCPPortBridge(lifecycle *mcp.MCPLifecycle) MCPInstallPort {
@@ -20,6 +38,12 @@ func NewMCPPortBridge(lifecycle *mcp.MCPLifecycle) MCPInstallPort {
 // NewMCPPortBridgeWithDiscovery 创建带工具发现功能的 MCP 安装端口桥接
 func NewMCPPortBridgeWithDiscovery(lifecycle *mcp.MCPLifecycle, toolSync MCPToolSyncPort) MCPInstallPort {
 	return &mcpInstallPortBridge{lifecycle: lifecycle, toolSync: toolSync}
+}
+
+// NewMCPPortBridgeWithRuntime creates the production bridge that owns the
+// complete Install -> Start -> Connect -> Discover -> Sync lifecycle.
+func NewMCPPortBridgeWithRuntime(lifecycle *mcp.MCPLifecycle, runtime MCPRuntimeConnectPort, toolSync MCPToolSyncPort) MCPInstallPort {
+	return &mcpInstallPortBridge{lifecycle: lifecycle, runtime: runtime, toolSync: toolSync}
 }
 
 // MCPToolSyncPort defines the interface for syncing MCP tools to the registry
@@ -39,6 +63,7 @@ type MCPToolSyncResult struct {
 
 type mcpInstallPortBridge struct {
 	lifecycle *mcp.MCPLifecycle
+	runtime   MCPRuntimeConnectPort
 	toolSync  MCPToolSyncPort
 }
 
@@ -46,16 +71,21 @@ func (b *mcpInstallPortBridge) InstallMCP(ctx context.Context, serverName string
 	if b.lifecycle == nil {
 		return "", fmt.Errorf("MCP lifecycle not configured")
 	}
-	launcherKind := resolveLauncherKind(transport)
+	launcherKind := resolveLauncherKind(transport, command)
 	binding := mcp.MCPBinding{
 		ID:        serverName,
 		Owner:     mcp.ExtensionOwnerRef{Type: "user"},
 		Transport: mcp.MCPTransportSpec{Kind: transport},
-		Launcher: &mcp.MCPLauncherSpec{
-			Kind:    string(launcherKind),
-			Command: command,
-			Args:    args,
-		},
+	}
+	if transport == "streamable_http" || transport == "sse" || transport == "remote" {
+		binding.Transport.Endpoint = command
+	} else {
+		binding.Launcher = &mcp.MCPLauncherSpec{
+			Kind:        string(launcherKind),
+			Command:     command,
+			Args:        args,
+			Environment: env,
+		}
 	}
 	if _, err := b.lifecycle.RegisterBinding(binding); err != nil {
 		return "", fmt.Errorf("MCP register binding: %w", err)
@@ -64,7 +94,9 @@ func (b *mcpInstallPortBridge) InstallMCP(ctx context.Context, serverName string
 		PlanID:    "manual-" + serverName,
 		BindingID: serverName,
 		Transport: transport,
-		Launcher:  string(launcherKind),
+	}
+	if binding.Launcher != nil {
+		plan.Launcher = string(launcherKind)
 	}
 	plan.PlanDigest = plan.ComputeDigest()
 	if err := b.lifecycle.Install(ctx, binding, plan); err != nil {
@@ -77,41 +109,53 @@ func (b *mcpInstallPortBridge) InstallMCP(ctx context.Context, serverName string
 		return "", fmt.Errorf("MCP start: %w", err)
 	}
 
-	if !b.lifecycle.IsConnected(serverName) {
-		return "", fmt.Errorf("MCP server %s not connected after start", serverName)
+	if b.runtime == nil {
+		return "", fmt.Errorf("MCP runtime connector not configured")
 	}
-
-	if b.toolSync != nil {
-		descriptors, err := b.toolSync.ListMCPTools(ctx, serverName)
-		if err != nil {
-			return "", fmt.Errorf("MCP list tools: %w", err)
-		}
-		if len(descriptors) > 0 {
-			if _, syncErr := b.toolSync.SyncMCPTools(ctx, serverName, descriptors); syncErr != nil {
-				return "", fmt.Errorf("MCP sync tools: %w", syncErr)
-			}
-		}
+	descriptors, err := b.runtime.ConnectAndDiscover(ctx, MCPRuntimeConnectRequest{
+		ServerID: serverName, Transport: transport, Command: command, Args: args, Env: env,
+	})
+	if err != nil {
+		return "", fmt.Errorf("MCP connect/discover: %w", err)
+	}
+	if b.toolSync == nil {
+		return "", fmt.Errorf("MCP tool sync not configured")
+	}
+	if _, err := b.toolSync.SyncMCPTools(ctx, serverName, descriptors); err != nil {
+		return "", fmt.Errorf("MCP sync tools: %w", err)
+	}
+	if err := b.lifecycle.MarkReady(serverName); err != nil {
+		return "", fmt.Errorf("MCP mark ready: %w", err)
 	}
 
 	return serverName, nil
 }
 
-func resolveLauncherKind(transport string) mcp.MCPLauncherKind {
+func resolveLauncherKind(transport string, command string) mcp.MCPLauncherKind {
+	lower := strings.ToLower(strings.TrimSpace(command))
 	switch transport {
-	case "stdio":
-		return mcp.MCPLauncherNPX
-	case "streamable_http", "sse":
-		return mcp.MCPLauncherUVX
 	case "executable":
 		return mcp.MCPLauncherExecutable
+	case "stdio":
+		switch {
+		case strings.Contains(lower, "uvx") || strings.Contains(lower, "uv "):
+			return mcp.MCPLauncherUVX
+		case strings.Contains(lower, "npx"):
+			return mcp.MCPLauncherNPX
+		default:
+			return mcp.MCPLauncherExecutable
+		}
 	default:
-		return mcp.MCPLauncherNPX
+		return mcp.MCPLauncherExecutable
 	}
 }
 
 func (b *mcpInstallPortBridge) RemoveMCP(ctx context.Context, serverName string) error {
 	if b.lifecycle == nil {
 		return fmt.Errorf("MCP lifecycle not configured")
+	}
+	if b.runtime != nil {
+		_ = b.runtime.Disconnect(ctx, serverName)
 	}
 	return b.lifecycle.Uninstall(serverName)
 }
@@ -167,6 +211,9 @@ type EnableExistingDeps struct {
 	MCPLifecycle       *mcp.MCPLifecycle
 	AgentSkillCatalog  *agent_skill.AgentSkillCatalog
 	ProviderRegistry   *capability.ProviderRegistry
+	LifecycleManager   *lifecycle_manager.Manager
+	MCPRuntime         MCPRuntimeConnectPort
+	MCPToolSync        MCPToolSyncPort
 }
 
 // NewEnableExistingPortBridge 创建启用现有能力端口桥接
@@ -185,6 +232,9 @@ func NewEnableExistingPortBridgeWithDeps(deps EnableExistingDeps) EnableExisting
 		mcpLifecycle:       deps.MCPLifecycle,
 		agentSkillCatalog:  deps.AgentSkillCatalog,
 		providerRegistry:   deps.ProviderRegistry,
+		lifecycleManager:   deps.LifecycleManager,
+		mcpRuntime:         deps.MCPRuntime,
+		mcpToolSync:        deps.MCPToolSync,
 	}
 }
 
@@ -197,6 +247,9 @@ type enableExistingPortBridge struct {
 	mcpLifecycle       *mcp.MCPLifecycle
 	agentSkillCatalog  *agent_skill.AgentSkillCatalog
 	providerRegistry   *capability.ProviderRegistry
+	lifecycleManager   *lifecycle_manager.Manager
+	mcpRuntime         MCPRuntimeConnectPort
+	mcpToolSync        MCPToolSyncPort
 }
 
 func (b *enableExistingPortBridge) EnableExtension(ctx context.Context, extID string) error {
@@ -216,13 +269,24 @@ func (b *enableExistingPortBridge) EnableExtension(ctx context.Context, extID st
 		}
 	}
 
+	// 通过正式 lifecycle manager 启用运行时；只有 runtime/lifecycle 成功后才写 enablement。
+	if b.lifecycleManager != nil {
+		if _, err := b.lifecycleManager.Execute(ctx, lifecycle_manager.LifecycleCommand{
+			Kind:        lifecycle_manager.CmdEnable,
+			ExtensionID: domain.ExtensionID(extID),
+			RequestID:   fmt.Sprintf("acq_enable_%s", extID),
+		}); err != nil {
+			return fmt.Errorf("enable extension %s: lifecycle enable: %w", extID, err)
+		}
+	}
+
 	// 持久化启用状态
 	if err := b.enablementSvc.Enable(ctx, enablement.StateSubject{Kind: enablement.SubjectExtension, ID: extID}); err != nil {
 		return fmt.Errorf("enable extension %s: %w", extID, err)
 	}
 
 	// 触发 ProviderInstance 协调：若 placement 未生成则生成真实 ProviderInstance
-	if b.instanceReconciler != nil && b.definitionRepo != nil && b.providerRegistry != nil {
+	if b.lifecycleManager == nil && b.instanceReconciler != nil && b.definitionRepo != nil && b.providerRegistry != nil {
 		def, err := b.definitionRepo.GetExtension(ctx, domain.ExtensionID(extID), domain.SemanticVersion{})
 		if err == nil && def.ID != "" {
 			providerDefs := b.providerRegistry.ListByExtension(extID)
@@ -259,6 +323,12 @@ func (b *enableExistingPortBridge) EnableSkill(ctx context.Context, skillID stri
 		_, exists := b.agentSkillCatalog.Get(skillID)
 		if !exists {
 			return fmt.Errorf("enable skill %s: not found", skillID)
+		}
+	}
+
+	if b.agentSkillCatalog != nil {
+		if err := b.agentSkillCatalog.SetEnabled(skillID, true); err != nil {
+			return fmt.Errorf("enable skill %s: catalog enable: %w", skillID, err)
 		}
 	}
 
@@ -306,10 +376,18 @@ func (b *enableExistingPortBridge) EnableMCP(ctx context.Context, serverName str
 			return fmt.Errorf("enable MCP %s: lifecycle start: %w", serverName, err)
 		}
 
-		if !b.isMCPConnected(ctx, serverName) {
-			return fmt.Errorf("enable MCP %s: server not connected", serverName)
+		if b.mcpRuntime == nil {
+			return fmt.Errorf("enable MCP %s: runtime connector not configured", serverName)
 		}
-
+		descriptors, err := b.mcpRuntime.ConnectAndDiscover(ctx, MCPRuntimeConnectRequest{ServerID: serverName})
+		if err != nil {
+			return fmt.Errorf("enable MCP %s: connect/discover: %w", serverName, err)
+		}
+		if b.mcpToolSync != nil {
+			if _, err := b.mcpToolSync.SyncMCPTools(ctx, serverName, descriptors); err != nil {
+				return fmt.Errorf("enable MCP %s: tool sync: %w", serverName, err)
+			}
+		}
 		if err := b.mcpLifecycle.MarkReady(serverName); err != nil {
 			return fmt.Errorf("enable MCP %s: lifecycle mark ready: %w", serverName, err)
 		}

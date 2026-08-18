@@ -214,8 +214,8 @@ func buildSteps(candidate CapabilityCandidate, decision PolicyDecision) []Acquis
 		order++
 		steps = append(steps, AcquisitionPlanStep{
 			Order:       order,
-			Action:      "enable",
-			Description: "Enable the already-installed provider",
+			Action:      "install",
+			Description: "Enable the already-installed provider through its canonical lifecycle",
 			Kind:        candidate.Kind,
 			Completed:   false,
 		})
