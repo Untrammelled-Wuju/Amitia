@@ -169,6 +169,8 @@ func DefaultMigrations() []Migration {
 		SyncChangeLogUserIDMigration(),
 		SyncCursorCompositeKeyMigration(),
 		SyncMutationUserUniqueMigration(),
+		SyncChangeLogScopeMigration(),
+		AppSettingsRevisionMigration(),
 		SecurityAuditEventsColumnsMigration(),
 		SecurityAuditEventsOccurredAtMigration(),
 		AuthSessionsMissingColumnsMigration(),
@@ -269,6 +271,31 @@ func SyncMutationUserUniqueMigration() Migration {
 			s.Execute("DROP INDEX IF EXISTS idx_sync_changes_mutation")
 			s.Execute("DROP INDEX IF EXISTS idx_sync_changes_user_mutation")
 			s.CreateIndex("idx_sync_changes_user_mutation", "sync_changes", []string{"user_id", "mutation_id"}, true)
+			return nil
+		},
+	}
+}
+
+func SyncChangeLogScopeMigration() Migration {
+	return Migration{
+		Version: "20260818001",
+		Name:    "add_sync_changes_scope_column_and_unique_index",
+		Up: func(s *Step) error {
+			s.AddColumn("sync_changes", "scope", "TEXT NOT NULL DEFAULT 'device'")
+			s.Execute("DROP INDEX IF EXISTS idx_sync_changes_user_mutation")
+			s.CreateIndex("idx_sync_changes_scope", "sync_changes", []string{"scope"}, false)
+			s.CreateIndex("idx_sync_changes_user_scope_mutation", "sync_changes", []string{"user_id", "scope", "mutation_id"}, true)
+			return nil
+		},
+	}
+}
+
+func AppSettingsRevisionMigration() Migration {
+	return Migration{
+		Version: "20260818002",
+		Name:    "add_app_settings_revision_column",
+		Up: func(s *Step) error {
+			s.AddColumn("app_settings", "revision", "INTEGER NOT NULL DEFAULT 0")
 			return nil
 		},
 	}

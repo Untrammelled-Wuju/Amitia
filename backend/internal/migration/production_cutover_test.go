@@ -14,6 +14,8 @@ type testAuthorityProvider struct {
 	scheduleService    interface{}
 	taskRuntimeService interface{}
 	hookService        interface{}
+	nativeBridgeRelay  interface{}
+	platformBridge     interface{}
 }
 
 func (p *testAuthorityProvider) ToolFacade() interface{}         { return p.toolFacade }
@@ -22,6 +24,8 @@ func (p *testAuthorityProvider) EventService() interface{}       { return p.even
 func (p *testAuthorityProvider) ScheduleService() interface{}    { return p.scheduleService }
 func (p *testAuthorityProvider) TaskRuntimeService() interface{} { return p.taskRuntimeService }
 func (p *testAuthorityProvider) HookService() interface{}        { return p.hookService }
+func (p *testAuthorityProvider) NativeBridgeRelay() interface{}  { return p.nativeBridgeRelay }
+func (p *testAuthorityProvider) PlatformBridge() interface{}     { return p.platformBridge }
 
 func TestCutoverPlan_Preflight(t *testing.T) {
 	plan := NewCutoverPlan(CutoverDependencies{
@@ -32,6 +36,8 @@ func TestCutoverPlan_Preflight(t *testing.T) {
 			scheduleService:    struct{}{},
 			taskRuntimeService: struct{}{},
 			hookService:        struct{}{},
+			nativeBridgeRelay:  struct{}{},
+			platformBridge:     struct{}{},
 		},
 		Now: time.Now,
 	})
@@ -60,6 +66,8 @@ func TestCutoverPlan_VerifyCanonicalAuthorities(t *testing.T) {
 			scheduleService:    struct{}{},
 			taskRuntimeService: struct{}{},
 			hookService:        struct{}{},
+			nativeBridgeRelay:  struct{}{},
+			platformBridge:     struct{}{},
 		},
 		Now: time.Now,
 	})
@@ -276,6 +284,118 @@ func TestCutoverPlan_WriteLockout_ACKProjectionBroken(t *testing.T) {
 	}
 	if state.PhaseStatus != "verifying" {
 		t.Fatalf("expected phase status to be 'verifying', got: %s", state.PhaseStatus)
+	}
+}
+
+func TestCutoverReadSwitchPort_VerifyProductionReaderNotLegacy_MissingCheckerFails(t *testing.T) {
+	port := NewCutoverReadSwitchPort(ReadSwitchDependencies{
+		Container: &testAuthorityProvider{
+			toolFacade:         struct{}{},
+			permissionBroker:   struct{}{},
+			eventService:       struct{}{},
+			scheduleService:    struct{}{},
+			taskRuntimeService: struct{}{},
+			hookService:        struct{}{},
+			nativeBridgeRelay:  struct{}{},
+			platformBridge:     struct{}{},
+		},
+	})
+	err := port.VerifyProductionReaderNotLegacy(context.Background())
+	if err == nil {
+		t.Fatal("expected VerifyProductionReaderNotLegacy to fail when legacy checker is not configured")
+	}
+}
+
+func TestCutoverReadSwitchPort_VerifyReadCanonical_ProductionVerifierCalled(t *testing.T) {
+	verifierCalled := false
+	port := NewCutoverReadSwitchPort(ReadSwitchDependencies{
+		Container: &testAuthorityProvider{
+			toolFacade:         struct{}{},
+			permissionBroker:   struct{}{},
+			eventService:       struct{}{},
+			scheduleService:    struct{}{},
+			taskRuntimeService: struct{}{},
+			hookService:        struct{}{},
+			nativeBridgeRelay:  struct{}{},
+			platformBridge:     struct{}{},
+		},
+		ProductionReadVerifier: func(ctx context.Context) error {
+			verifierCalled = true
+			return nil
+		},
+	})
+	err := port.VerifyReadCanonical(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !verifierCalled {
+		t.Fatal("expected production read verifier to be called")
+	}
+}
+
+func TestCutoverReadSwitchPort_VerifyReadCanonical_ProductionVerifierFailure(t *testing.T) {
+	port := NewCutoverReadSwitchPort(ReadSwitchDependencies{
+		Container: &testAuthorityProvider{
+			toolFacade:         struct{}{},
+			permissionBroker:   struct{}{},
+			eventService:       struct{}{},
+			scheduleService:    struct{}{},
+			taskRuntimeService: struct{}{},
+			hookService:        struct{}{},
+			nativeBridgeRelay:  struct{}{},
+			platformBridge:     struct{}{},
+		},
+		ProductionReadVerifier: func(ctx context.Context) error {
+			return errors.New("production read verification failed: userId mismatch")
+		},
+	})
+	err := port.VerifyReadCanonical(context.Background())
+	if err == nil {
+		t.Fatal("expected VerifyReadCanonical to fail when production verifier fails")
+	}
+}
+
+func TestCutoverWriteLockoutPort_ExecuteCanaryOperation_MissingExecutorFails(t *testing.T) {
+	port := NewCutoverWriteLockoutPort(WriteLockoutDependencies{})
+	_, err := port.ExecuteCanaryOperation(context.Background())
+	if err == nil {
+		t.Fatal("expected ExecuteCanaryOperation to fail when canary executor is not configured")
+	}
+}
+
+func TestCutoverWriteLockoutPort_VerifyCanaryOperation_NilResultFails(t *testing.T) {
+	port := NewCutoverWriteLockoutPort(WriteLockoutDependencies{})
+	err := port.VerifyCanaryOperation(context.Background(), nil)
+	if err == nil {
+		t.Fatal("expected VerifyCanaryOperation to fail when result is nil")
+	}
+}
+
+func TestCutoverWriteLockoutPort_ExecuteCanaryOperation_ExecutorCalled(t *testing.T) {
+	executorCalled := false
+	port := NewCutoverWriteLockoutPort(WriteLockoutDependencies{
+		CanaryExecutor: func(ctx context.Context) (*CanaryResult, error) {
+			executorCalled = true
+			return &CanaryResult{
+				OperationID:        "real-canary-op",
+				CommandID:          "real-canary-cmd",
+				OperationTerminal:  "completed",
+				CommandTerminal:    "completed",
+				ProjectionRevision: 5,
+				DesiredRevision:    5,
+				Success:            true,
+			}, nil
+		},
+	})
+	result, err := port.ExecuteCanaryOperation(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !executorCalled {
+		t.Fatal("expected canary executor to be called")
+	}
+	if result.OperationID != "real-canary-op" {
+		t.Fatalf("expected real canary result, got: %s", result.OperationID)
 	}
 }
 

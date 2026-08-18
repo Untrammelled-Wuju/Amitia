@@ -66,6 +66,8 @@ func TestRuntimeArchitectureGate_AllPresent(t *testing.T) {
 		scheduleService:    struct{}{},
 		taskRuntimeService: struct{}{},
 		hookService:        struct{}{},
+		nativeBridgeRelay:  struct{}{},
+		platformBridge:     struct{}{},
 	}, "android")
 
 	ready, failures := gate.Check(context.Background())
@@ -116,6 +118,8 @@ func TestStage2ClosureGate_ValidateG0_WithFailures(t *testing.T) {
 		scheduleService:    struct{}{},
 		taskRuntimeService: struct{}{},
 		hookService:        struct{}{},
+		nativeBridgeRelay:  struct{}{},
+		platformBridge:     struct{}{},
 	}, "android")
 
 	gate := NewStage2ClosureGate(loader, runtimeGate)
@@ -143,6 +147,8 @@ func TestStage2ClosureGate_ManifestVersion(t *testing.T) {
 		scheduleService:    struct{}{},
 		taskRuntimeService: struct{}{},
 		hookService:        struct{}{},
+		nativeBridgeRelay:  struct{}{},
+		platformBridge:     struct{}{},
 	}, "android")
 
 	gate := NewStage2ClosureGate(loader, runtimeGate)
@@ -162,6 +168,8 @@ func TestAppServices_ArchitectureReady(t *testing.T) {
 		scheduleService:    struct{}{},
 		taskRuntimeService: struct{}{},
 		hookService:        struct{}{},
+		nativeBridgeRelay:  struct{}{},
+		platformBridge:     struct{}{},
 	}}
 	if !services.ArchitectureReady() {
 		t.Fatal("expected AppServices.ArchitectureReady to be true")
@@ -199,6 +207,8 @@ func TestCutoverPlan_CanRunCutover(t *testing.T) {
 		scheduleService:    struct{}{},
 		taskRuntimeService: struct{}{},
 		hookService:        struct{}{},
+		nativeBridgeRelay:  struct{}{},
+		platformBridge:     struct{}{},
 	}
 	plan := NewCutoverPlan(CutoverDependencies{
 		Container:               validContainer,

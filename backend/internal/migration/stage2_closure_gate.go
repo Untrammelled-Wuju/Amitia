@@ -148,6 +148,12 @@ func (g *RuntimeArchitectureGate) Check(ctx context.Context) (bool, []string) {
 	if g.container.HookService() == nil {
 		failures = append(failures, "HookService: nil")
 	}
+	if g.container.NativeBridgeRelay() == nil {
+		failures = append(failures, "NativeBridgeRelay: nil")
+	}
+	if g.container.PlatformBridge() == nil {
+		failures = append(failures, "PlatformBridge: nil")
+	}
 
 	return len(failures) == 0, failures
 }
@@ -215,7 +221,7 @@ func (g *Stage2ClosureGate) ValidateG0(ctx context.Context) (bool, []string, err
 		} else {
 			for key, item := range manifest.Evidence {
 				switch item.Status {
-				case EvidenceFAIL, EvidenceBLOCKED:
+				case EvidenceFAIL, EvidenceBLOCKED, EvidenceNOTVERIFIED:
 					failures = append(failures, fmt.Sprintf("Evidence[%s]: %s", key, item.Status))
 				}
 			}
@@ -270,6 +276,12 @@ func (s *AppServices) ArchitectureReady() bool {
 		return false
 	}
 	if s.Container.HookService() == nil {
+		return false
+	}
+	if s.Container.NativeBridgeRelay() == nil {
+		return false
+	}
+	if s.Container.PlatformBridge() == nil {
 		return false
 	}
 	return true
