@@ -421,7 +421,6 @@ func (s *AccountSessionService) ChangePasswordAndRotate(userID int64, oldPasswor
 		return nil, "", fmt.Errorf("密码哈希失败")
 	}
 
-	var result *LoginResponseInternal
 	var oldSessionID string
 	err = s.db.Transaction(func(tx *gorm.DB) error {
 		sessions, err := s.sessions.ListUserSessions(userID)
@@ -460,7 +459,6 @@ func (s *AccountSessionService) ChangePasswordAndRotate(userID int64, oldPasswor
 		return nil, "", auditErr
 	}
 
-	_ = result
 	return newSession, oldSessionID, nil
 }
 

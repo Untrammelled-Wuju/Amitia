@@ -1085,6 +1085,23 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		DB:                           ctx.DB,
 		NativeBridgeRelay:            newNativeBridgeRelay(),
 	}
+	sqlDB, err := ctx.DB.DB()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sql.DB from gorm: %w", err)
+	}
+	deviceMeshRuntime, err := devicemesh.NewCloudRuntime(sqlDB, kernelContainer.DeviceRegistry)
+	if err != nil {
+		return nil, fmt.Errorf("failed to construct device mesh runtime: %w", err)
+	}
+	if kernelContainer.AdapterRegistry != nil {
+		cloudDispatcher := devicemesh.NewCloudRuntimeDispatcher(kernelContainer.AdapterRegistry)
+		deviceMeshRuntime.SetDispatcher(cloudDispatcher)
+	}
+	if kernelContainer.TaskRuntimeService != nil {
+		deviceMeshRuntime.SetTaskRuntime(&taskRuntimeAdapter{service: kernelContainer.TaskRuntimeService})
+	}
+	services.DeviceMesh = deviceMeshRuntime
+
 	if err := runCanonicalBuildAssertions(services); err != nil {
 		return nil, fmt.Errorf("canonical build assertion failed: %w", err)
 	}
@@ -1107,6 +1124,14 @@ func mcpDataDirectory(ctx *app.AppContext) string {
 		}
 	}
 	return filepath.Join(".", "data")
+}
+
+type taskRuntimeAdapter struct {
+	service *task_runtime.TaskRuntimeService
+}
+
+func (a *taskRuntimeAdapter) Execute(ctx context.Context, taskType string, input map[string]interface{}) (json.RawMessage, error) {
+	return nil, fmt.Errorf("cloud-side taskRuntime.Execute not supported for type %s", taskType)
 }
 
 func checkMigrationState(db *gorm.DB) error {

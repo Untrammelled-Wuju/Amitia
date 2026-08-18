@@ -11,6 +11,7 @@ import (
 type ResumeRepository interface {
 	Save(ctx context.Context, resume ResumeContext) error
 	Get(ctx context.Context, resumeID string) (*ResumeContext, error)
+	GetByAcquisitionTransactionID(ctx context.Context, acquisitionTxnID string) (*ResumeContext, error)
 	UpdateState(ctx context.Context, resumeID string, state ResumeState, reason string) error
 	ListPending(ctx context.Context) ([]ResumeContext, error)
 	ListByRootExecution(ctx context.Context, rootExecutionID string) ([]ResumeContext, error)
@@ -92,6 +93,18 @@ func (r *SQLiteResumeRepository) Get(ctx context.Context, resumeID string) (*Res
 		       created_at, updated_at
 		FROM execution_resumes WHERE resume_id = ?
 	`, resumeID)
+	return scanResumeContext(row)
+}
+
+func (r *SQLiteResumeRepository) GetByAcquisitionTransactionID(ctx context.Context, acquisitionTxnID string) (*ResumeContext, error) {
+	row := r.db.QueryRowContext(ctx, `
+		SELECT resume_id, root_execution_id, parent_execution_id,
+		       resume_type, resume_state, checkpoint_ref,
+		       required_capability_id, acquisition_transaction_id,
+		       task_id, payload_ref, reason, metadata,
+		       created_at, updated_at
+		FROM execution_resumes WHERE acquisition_transaction_id = ?
+	`, acquisitionTxnID)
 	return scanResumeContext(row)
 }
 

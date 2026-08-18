@@ -36,6 +36,8 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/runtime"
 	runtimev2 "github.com/u-ai/backend/internal/desktoppet/runtime/protocol/v2"
 	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
+	"github.com/u-ai/backend/internal/devicemesh"
+	devicemeshserver "github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/embedding_config"
 	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
@@ -99,6 +101,10 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			c.JSON(503, gin.H{"code": 503, "msg": "blocked", "data": gin.H{"status": "blocked", "reason": "orchestrator not initialized"}})
 			return
 		}
+		if services.AccountSession == nil || services.AccountSession.Validator == nil {
+			c.JSON(503, gin.H{"code": 503, "msg": "blocked", "data": gin.H{"status": "blocked", "reason": "accountsession validator not initialized"}})
+			return
+		}
 		snap := services.RuntimeOrchestrator.Snapshot()
 		overallStatus := "ready"
 		if snap.IsBlocked() {
@@ -138,7 +144,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	services.AccountSession = accountSessionRuntime
 
 	public.GET("/auth/status", userHandler.Status)
-	public.POST("/auth/setup", userHandler.Setup)
 
 	accountsession.RegisterPublicRoutes(public, accountSessionRuntime.Handler)
 
@@ -382,6 +387,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		AccountSessions:  accountSessionRuntime.Validator,
 	}))
 	{
+		accountsession.RegisterAuthenticatedRoutes(apiGroup, accountSessionRuntime.Handler)
 		user.RegisterUserRouter(apiGroup, ctx)
 		character.RegisterCharacterRouter(apiGroup, ctx, services.Chat)
 		chat.RegisterChatRouterWithDelivery(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.ChatDeliveryAdapter)
@@ -537,6 +543,36 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 				SessionService:   sessionSvc,
 				AccountSessions:  accountSessionRuntime.Validator,
 			}))
+		}
+
+		if services.DeviceMesh != nil {
+			deviceMeshAuthMW := security.AuthenticationMiddleware(security.AuthConfig{
+				Mode:             config.AppCfg.Security.Mode,
+				JWTSecret:        config.AppCfg.JWT.Secret,
+				JWTIssuer:        config.AppCfg.JWT.Issuer,
+				JWTAudience:      config.AppCfg.JWT.Audience,
+				LocalCredentials: localCredentialStore,
+				LocalUserID:      config.AppCfg.Security.LocalUserID,
+				ListenAddress:    config.AppCfg.Server.Host,
+				AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
+				SessionService:   sessionSvc,
+				AccountSessions:  accountSessionRuntime.Validator,
+			})
+			meshSQLDB, _ := ctx.DB.DB()
+			devicemeshserver.RegisterCloudRoutes(apiGroup, deviceMeshAuthMW, &devicemeshserver.RouterDeps{
+				DB:        meshSQLDB,
+				Sessions:  services.DeviceMesh.GetSessions(),
+				Hub:       services.DeviceMesh.Hub,
+				Probe:     services.DeviceMesh.Probe,
+				DeviceReg: services.DeviceMesh.DeviceReg,
+				GetUserID: func(c *gin.Context) (runtimeidentity.UserID, bool) {
+					actor := security.GetActor(c)
+					if actor == nil || actor.UserID == "" {
+						return "", false
+					}
+					return runtimeidentity.UserID(actor.UserID), true
+				},
+			})
 		}
 
 		if services.NativeBridgeRelay != nil && bootstrap != nil {
