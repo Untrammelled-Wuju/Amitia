@@ -2,7 +2,7 @@ package migration
 
 func DesktopPetInstallationOperationIdempotencyMigration() Migration {
 	return Migration{
-		Version: "20260818002",
+		Version: "20260818006",
 		Name:    "desktop_pet_installation_operation_idempotency_unique",
 		Up: func(s *Step) error {
 			s.Execute(`UPDATE desktop_pet_installation_operations AS o

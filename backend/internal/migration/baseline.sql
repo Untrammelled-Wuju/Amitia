@@ -774,11 +774,15 @@ CREATE TABLE IF NOT EXISTS need_states (
 );
 
 CREATE TABLE IF NOT EXISTS app_settings (
-	key TEXT PRIMARY KEY,
-	value TEXT DEFAULT '',
-	revision INTEGER NOT NULL DEFAULT 0,
-	updated_at TEXT DEFAULT (datetime('now'))
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    key TEXT NOT NULL UNIQUE,
+    value TEXT DEFAULT '',
+    revision INTEGER NOT NULL DEFAULT 1,
+    deleted_at DATETIME,
+    updated_at TEXT DEFAULT (datetime('now'))
 );
+CREATE INDEX IF NOT EXISTS idx_app_settings_key ON app_settings(key);
+CREATE INDEX IF NOT EXISTS idx_app_settings_deleted_at ON app_settings(deleted_at);
 
 CREATE INDEX IF NOT EXISTS idx_active_task_due ON active_message_task(due_time);
 CREATE INDEX IF NOT EXISTS idx_active_task_status_due ON active_message_task(status, due_time);

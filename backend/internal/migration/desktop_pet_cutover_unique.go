@@ -5,7 +5,7 @@ package migration
 // before creating the unique indexes.
 func DesktopPetCutoverUniqueMigration() Migration {
 	return Migration{
-		Version: "20260818001",
+		Version: "20260818005",
 		Name:    "desktop_pet_cutover_operation_step_unique",
 		Up: func(s *Step) error {
 			s.Execute(`DELETE FROM desktop_pet_read_cutovers
