@@ -172,12 +172,16 @@ func (p *MeshDeviceRuntimeInvocationPort) Cancel(ctx context.Context, request De
 		}
 		return fmt.Errorf("device session not found")
 	}
-	cancelPayload := map[string]string{
-		"cancelInvocationId": request.Invocation.InvocationID,
-		"reason":             string(reason.Code),
+	cancelPayload := protocol.RuntimeCancelPayload{
+		InvocationID:         request.Invocation.InvocationID,
+		RuntimeSessionID:     sessionID,
+		ConnectionGeneration: generation,
+		DeviceID:             route.DeviceID,
+		RuntimeID:            route.RuntimeID,
+		Reason:               string(reason.Code),
+		SentAt:               time.Now().UTC(),
 	}
-	payloadBytes, _ := json.Marshal(cancelPayload)
-	if !p.ports.Hub.Send(sessionID, generation, payloadBytes) {
+	if !p.ports.Hub.SendEnvelope(sessionID, generation, protocol.MessageTypeRuntimeCancel, cancelPayload) {
 		if p.ports.PendingInvocations != nil {
 			p.ports.PendingInvocations.Cancel(request.Invocation.InvocationID, string(reason.Code))
 		}
