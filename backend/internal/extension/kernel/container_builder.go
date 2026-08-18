@@ -790,10 +790,6 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		cancel()
 		return nil, fmt.Errorf("builtin reconcile failed: %w", err)
 	}
-	if err := builtinProviderReconciler.Reconcile(); err != nil {
-		cancel()
-		return nil, fmt.Errorf("builtin provider reconcile failed: %w", err)
-	}
 
 	var bgRegistry backgroundremoval.Registry
 	if b.backgroundBootstrapFunc != nil {
@@ -811,6 +807,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	acquisitionSourceRegistry := acquisition.NewSourceRegistry()
 	acquisitionSourceRegistry.Register(acquisition.NewInstalledSource(capabilityService, capabilityProviderRegistry))
 	acquisitionSourceRegistry.Register(acquisition.NewAgentSkillSource(agentSkillCatalog))
+	acquisitionSourceRegistry.Register(acquisition.NewGeneratedSkillSource(true))
+	acquisitionSourceRegistry.Register(acquisition.NewNewSkillSource(nil))
 
 	extensionCenterService := extension_center.NewCenterService(extension_center.NewKernelCardProvider(defRepo, instRepo))
 	acquisitionSourceRegistry.Register(acquisition.NewExtensionCatalogSource(extensionCenterService))
@@ -990,6 +988,10 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return nil, fmt.Errorf("kernel: register production adapters: %w", err)
 	}
 
+	if err := builtinProviderReconciler.Reconcile(); err != nil {
+		return nil, fmt.Errorf("builtin provider reconcile failed: %w", err)
+	}
+
 	if err := registerIOSToolsIfPresent(toolRegistry, b.iosNativeProvider); err != nil {
 		return nil, fmt.Errorf("kernel: register ios native tools: %w", err)
 	}
@@ -1031,6 +1033,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	patchGenerator := preview.NewDefaultPatchGenerator(previewValidator)
 	patchApplier := preview.NewDefaultApplier(previewSessionMgr)
 	previewRefiner := preview.NewAutoRefinerWithPatch(previewSessionMgr, previewObserver, patchGenerator, patchApplier)
+	builtin.SetUIAgentPreviewManager(previewSessionMgr)
+	builtin.SetUIAgentObserver(previewObserver)
+	builtin.SetUIAgentRefiner(previewRefiner)
 	uiAgentExecutor := uiagent.NewUIExecutor(
 		uiagent.WithPolicy(uiagent.DefaultPolicy()),
 		uiagent.WithSourceEditor(source.NewSourceEditor(preciseEditingSvc)),
@@ -1054,6 +1059,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 
 	acquisitionService.SetExecution(acquisition.NewExecutionPort(execService))
+	acquisitionService.SetResumeRepo(resumeRepo)
 
 	runtimeState := NewRuntimeState()
 

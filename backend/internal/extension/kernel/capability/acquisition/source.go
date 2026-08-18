@@ -539,6 +539,99 @@ func (s *GeneratedSkillSource) Search(ctx context.Context, request AcquisitionRe
 }
 
 
+// NewSkillSource 从远程 Skill 仓库搜索可安装的 Skill 候选
+type NewSkillSource struct {
+	remoteCatalog interface {
+		ListSkills(ctx context.Context) ([]RemoteSkillEntry, error)
+	}
+}
+
+// RemoteSkillEntry 表示远程仓库中的 Skill 条目
+type RemoteSkillEntry struct {
+	ID          string   `json:"id"`
+	Name        string   `json:"name"`
+	Description string   `json:"description"`
+	SourceURI   string   `json:"sourceUri"`
+	Hash        string   `json:"hash"`
+	Provides    []string `json:"provides"`
+}
+
+// NewSkillSource 创建 NewSkillSource 实例
+func NewNewSkillSource(remoteCatalog interface {
+	ListSkills(ctx context.Context) ([]RemoteSkillEntry, error)
+}) *NewSkillSource {
+	return &NewSkillSource{remoteCatalog: remoteCatalog}
+}
+
+func (s *NewSkillSource) ID() string {
+	return "new_skill"
+}
+
+func (s *NewSkillSource) Kind() CandidateKind {
+	return CandidateAgentSkill
+}
+
+func (s *NewSkillSource) Search(ctx context.Context, request AcquisitionRequest) ([]CapabilityCandidate, error) {
+	if s.remoteCatalog == nil {
+		return nil, nil
+	}
+
+	entries, err := s.remoteCatalog.ListSkills(ctx)
+	if err != nil {
+		return nil, nil
+	}
+
+	capID := string(request.CapabilityID)
+	var candidates []CapabilityCandidate
+	for _, entry := range entries {
+		matches := capID == ""
+		if !matches {
+			for _, provides := range entry.Provides {
+				if provides == capID {
+					matches = true
+					break
+				}
+			}
+		}
+		if !matches {
+			continue
+		}
+
+		var caps []capability.CapabilityID
+		for _, p := range entry.Provides {
+			caps = append(caps, capability.CapabilityID(p))
+		}
+		if len(caps) == 0 {
+			caps = []capability.CapabilityID{request.CapabilityID}
+		}
+
+		candidates = append(candidates, CapabilityCandidate{
+			ID:           "skill_" + entry.ID,
+			Kind:         CandidateAgentSkill,
+			Name:         entry.Name,
+			Description:  entry.Description,
+			Capabilities: caps,
+			Install: CandidateInstallDescriptor{
+				Method: InstallSkill,
+				Skill: &SkillInstallDescriptor{
+					SourceURI: entry.SourceURI,
+					SkillName: entry.Name,
+					Hash:      entry.Hash,
+				},
+			},
+			Trust: CandidateTrust{
+				Level: TrustUnverified,
+			},
+			Metadata: map[string]any{
+				"sourceUri": entry.SourceURI,
+				"remote":    true,
+			},
+		})
+	}
+
+	return candidates, nil
+}
+
 // containsString 检查 substr 是否包含在 s 中（大小写不敏感）
 func containsString(s, substr string) bool {
 	if substr == "" {
