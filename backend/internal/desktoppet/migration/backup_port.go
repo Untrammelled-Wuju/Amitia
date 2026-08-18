@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -35,6 +36,8 @@ type backupPortComponent struct {
 type backupRecord struct {
 	ID         string `gorm:"column:id;primaryKey"`
 	BackupPath string `gorm:"column:backup_path"`
+	BackupSize int64  `gorm:"column:backup_size"`
+	Checksum   string `gorm:"column:checksum"`
 	Status     string `gorm:"column:status"`
 }
 
@@ -133,23 +136,41 @@ func (p *domainMigrationBackupPort) BackupExists(ctx context.Context, backupID s
 	if record.BackupPath == "" {
 		return false, nil
 	}
-	if _, err := os.Stat(record.BackupPath); err != nil {
+	mainSize, mainChecksum, err := p.fileSizeAndChecksum(record.BackupPath)
+	if err != nil || mainSize != record.BackupSize || !strings.EqualFold(mainChecksum, record.Checksum) {
 		return false, nil
 	}
 	backupDir := filepath.Dir(record.BackupPath)
 	manifestPath := filepath.Join(backupDir, backupID+".json")
-	if _, err := os.Stat(manifestPath); err != nil {
+	manifestData, err := os.ReadFile(manifestPath)
+	if err != nil {
 		return false, nil
+	}
+	var manifest backupPortManifest
+	if err := json.Unmarshal(manifestData, &manifest); err != nil {
+		return false, nil
+	}
+	if manifest.ID != backupID || filepath.Clean(manifest.BackupPath) != filepath.Clean(record.BackupPath) || len(manifest.Components) == 0 {
+		return false, nil
+	}
+	for _, component := range manifest.Components {
+		size, checksum, err := p.fileSizeAndChecksum(component.BackupPath)
+		if err != nil || size != component.Size || !strings.EqualFold(checksum, component.Checksum) {
+			return false, nil
+		}
 	}
 	return true, nil
 }
 
 func (p *domainMigrationBackupPort) failBackup(backupID, backupPath, startedAt string, backupErr error) error {
 	finishedAt := time.Now().UTC().Format(time.RFC3339)
-	_ = p.db.WithContext(context.Background()).Exec(
+	persistErr := p.db.WithContext(context.Background()).Exec(
 		"INSERT OR REPLACE INTO backup_records (id, backup_path, backup_size, checksum, status, started_at, finished_at, error_message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
 		backupID, backupPath, 0, "", "failed", startedAt, finishedAt, backupErr.Error(),
 	).Error
+	if persistErr != nil {
+		return errors.Join(backupErr, fmt.Errorf("persist failed backup record: %w", persistErr))
+	}
 	return backupErr
 }
 

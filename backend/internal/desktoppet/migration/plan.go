@@ -57,7 +57,10 @@ type DomainMigrationPlan struct {
 	SchemaSteps           []StepFunc        `json:"-"`
 	BackfillSteps         []BatchedStepFunc `json:"-"`
 	VerificationChecks    []CheckFunc       `json:"-"`
-	CutoverSteps          []StepFunc        `json:"-"`
+	ReadCutoverSteps      []StepFunc        `json:"-"`
+	ReadCutoverChecks     []CheckFunc       `json:"-"`
+	WriteCutoverSteps     []StepFunc        `json:"-"`
+	WriteCutoverChecks    []CheckFunc       `json:"-"`
 	LegacyWriteBlockSteps []StepFunc        `json:"-"`
 	CleanupSteps          []StepFunc        `json:"-"`
 	ForwardFixPolicy      string            `json:"forwardFixPolicy"`

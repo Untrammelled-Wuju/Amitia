@@ -170,8 +170,16 @@ func (r *DBRepository) GetOperation(ctx context.Context, id string) (*MigrationO
 		UpdatedAt:      record.UpdatedAt,
 		CompletedAt:    record.CompletedAt,
 	}
-	op.VerifiedReadCutover, _ = r.HasVerifiedReadCutover(ctx, record.ID)
-	op.VerifiedWriteCutover, _ = r.HasVerifiedWriteCutover(ctx, record.ID)
+	verifiedRead, err := r.HasVerifiedReadCutover(ctx, record.ID)
+	if err != nil {
+		return nil, fmt.Errorf("migration: load read cutover verification: %w", err)
+	}
+	verifiedWrite, err := r.HasVerifiedWriteCutover(ctx, record.ID)
+	if err != nil {
+		return nil, fmt.Errorf("migration: load write cutover verification: %w", err)
+	}
+	op.VerifiedReadCutover = verifiedRead
+	op.VerifiedWriteCutover = verifiedWrite
 	if op.PlanID == "" {
 		op.PlanID = record.Kind
 	}
@@ -211,7 +219,9 @@ func (r *DBRepository) UpdateOperationStageCAS(ctx context.Context, operationID 
 			UpdatedAt:      record.UpdatedAt,
 			CompletedAt:    record.CompletedAt,
 		}
-		mutate(op)
+		if mutate != nil {
+			mutate(op)
+		}
 		updates := map[string]interface{}{
 			"status":     string(next),
 			"updated_at": now,
@@ -223,7 +233,14 @@ func (r *DBRepository) UpdateOperationStageCAS(ctx context.Context, operationID 
 		if next == StageCompleted || next == StageFailedRetryable || next == StageFailedTerminal || next == StageManualReview {
 			updates["completed_at"] = now
 		}
-		return tx.Model(&operationRecord{}).Where("id = ? AND status = ?", operationID, string(expected)).Updates(updates).Error
+		result := tx.Model(&operationRecord{}).Where("id = ? AND status = ?", operationID, string(expected)).Updates(updates)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return fmt.Errorf("%w: stage CAS affected %d rows", ErrMigrationStage, result.RowsAffected)
+		}
+		return nil
 	})
 	if err != nil {
 		if errors.Is(err, ErrMigrationStage) {
@@ -355,8 +372,10 @@ func (r *DBRepository) HasVerifiedReadCutover(ctx context.Context, operationID s
 
 func (r *DBRepository) HasVerifiedWriteCutover(ctx context.Context, operationID string) (bool, error) {
 	var count int64
-	err := r.db.WithContext(ctx).Model(&writeCutoverRecord{}).Where("operation_id = ? AND verified = 1", operationID).Count(&count).Error
-	return count > 0, err
+	err := r.db.WithContext(ctx).Model(&writeCutoverRecord{}).
+		Where("operation_id = ? AND verified = 1 AND step_name IN ?", operationID, []string{"installation", "editing"}).
+		Distinct("step_name").Count(&count).Error
+	return count == 2, err
 }
 
 func (r *DBRepository) LegacyInstallationWriteDisabled() bool {
