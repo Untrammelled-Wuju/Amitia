@@ -8,10 +8,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/pipelinecheckpoint"
-	"time"
+	"github.com/u-ai/backend/internal/sync"
+	"gorm.io/gorm"
 )
 
 func (s *service) ListConversations(q ConversationQuery) (*ConversationListResponse, error) {
@@ -50,8 +53,23 @@ func (s *service) CreateConversation(req *CreateConversationRequest) (*Conversat
 	if req.Source == "" {
 		req.Source = "manual"
 	}
-	c := &Conversation{CharacterID: req.CharacterID, Title: req.Title, Channel: req.Channel, Source: req.Source, PeerID: req.PeerID}
-	if err := s.repo.CreateConversation(c); err != nil {
+	c := &Conversation{ID: uuid.New().String(), CharacterID: req.CharacterID, Title: req.Title, Channel: req.Channel, Source: req.Source, PeerID: req.PeerID}
+
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		now := time.Now().Format("2006-01-02 15:04:05")
+		if err := tx.Exec("INSERT INTO conversations (id, character_id, title, channel, source, peer_id, created_at, updated_at, revision) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1)",
+			c.ID, c.CharacterID, c.Title, c.Channel, c.Source, c.PeerID, now, now).Error; err != nil {
+			return err
+		}
+		if s.changeRecorder != nil {
+			payload, _ := json.Marshal(map[string]string{"id": c.ID, "title": c.Title})
+			if _, recErr := s.changeRecorder.RecordChange(tx, sync.EntityTypeConversation, sync.EntityID(c.ID), sync.OpCreate, 1, sync.MutationID("local_"+c.ID+"_create"), "local_user", sync.ScopeUser, payload); recErr != nil {
+				return recErr
+			}
+		}
+		return nil
+	})
+	if err != nil {
 		return nil, err
 	}
 	return c, nil
@@ -126,10 +144,44 @@ func (s *service) DeleteConversation(id string) (bool, error) {
 	if characterDeleted {
 		s.db.Exec("UPDATE characters SET conversation_id = '' WHERE conversation_id = ?", id)
 	}
-	if err := s.repo.DeleteConversation(id); err != nil {
+
+	var newRevision int64
+	var convErr error
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		var conv struct {
+			Revision int64
+		}
+		if err := tx.Table("conversations").Where("id = ?", id).Select("COALESCE(revision, 0) as revision").Scan(&conv).Error; err != nil {
+			return err
+		}
+		newRevision = conv.Revision + 1
+		now := time.Now().Format("2006-01-02 15:04:05")
+		if err := tx.Table("conversations").Where("id = ?", id).Updates(map[string]interface{}{
+			"deleted_at": now,
+			"updated_at": now,
+			"revision":   newRevision,
+		}).Error; err != nil {
+			return err
+		}
+		if s.changeRecorder != nil {
+			payload, _ := json.Marshal(map[string]string{"id": id})
+			if _, recErr := s.changeRecorder.RecordChange(tx, sync.EntityTypeConversation, sync.EntityID(id), sync.OpDelete, newRevision, sync.MutationID("local_"+id+"_delete"), "local_user", sync.ScopeUser, payload); recErr != nil {
+				convErr = recErr
+				return recErr
+			}
+		}
+		return nil
+	})
+	if convErr != nil {
+		return false, convErr
+	}
+	if err != nil {
 		return false, err
 	}
-	return characterDeleted, pipelinecheckpoint.New(s.db).ResetConversation(id)
+	if err := pipelinecheckpoint.New(s.db).ResetConversation(id); err != nil {
+		return false, err
+	}
+	return characterDeleted, nil
 }
 
 func (s *service) DeleteAllConversations() error {
