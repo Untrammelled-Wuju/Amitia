@@ -20,6 +20,22 @@ class GameCenterState {
   final bool runtimeLoading;
   final String? runtimeError;
 
+  final GameRuntimeServicesResponse? runtimeServices;
+  final bool runtimeServicesLoading;
+  final String? runtimeServicesError;
+
+  final GameRuntimeHealthResponse? runtimeHealth;
+  final bool runtimeHealthLoading;
+  final String? runtimeHealthError;
+
+  final GamePluginHandshakeResponse? handshake;
+  final bool handshakeLoading;
+  final String? handshakeError;
+
+  final GameCenterHealthResponse? centerHealth;
+  final bool centerHealthLoading;
+  final String? centerHealthError;
+
   final Set<String> packageOperationByExtensionId;
   final Set<String> runtimeOperationByRuntimeId;
 
@@ -38,6 +54,18 @@ class GameCenterState {
     this.runtimeDetail,
     this.runtimeLoading = false,
     this.runtimeError,
+    this.runtimeServices,
+    this.runtimeServicesLoading = false,
+    this.runtimeServicesError,
+    this.runtimeHealth,
+    this.runtimeHealthLoading = false,
+    this.runtimeHealthError,
+    this.handshake,
+    this.handshakeLoading = false,
+    this.handshakeError,
+    this.centerHealth,
+    this.centerHealthLoading = false,
+    this.centerHealthError,
     this.packageOperationByExtensionId = const {},
     this.runtimeOperationByRuntimeId = const {},
   });
@@ -63,6 +91,22 @@ class GameCenterState {
     bool? runtimeLoading,
     String? runtimeError,
     bool clearRuntimeError = false,
+    GameRuntimeServicesResponse? runtimeServices,
+    bool? runtimeServicesLoading,
+    String? runtimeServicesError,
+    bool clearRuntimeServicesError = false,
+    GameRuntimeHealthResponse? runtimeHealth,
+    bool? runtimeHealthLoading,
+    String? runtimeHealthError,
+    bool clearRuntimeHealthError = false,
+    GamePluginHandshakeResponse? handshake,
+    bool? handshakeLoading,
+    String? handshakeError,
+    bool clearHandshakeError = false,
+    GameCenterHealthResponse? centerHealth,
+    bool? centerHealthLoading,
+    String? centerHealthError,
+    bool clearCenterHealthError = false,
     Set<String>? packageOperationByExtensionId,
     Set<String>? runtimeOperationByRuntimeId,
   }) {
@@ -81,6 +125,18 @@ class GameCenterState {
       runtimeDetail: runtimeDetail ?? this.runtimeDetail,
       runtimeLoading: runtimeLoading ?? this.runtimeLoading,
       runtimeError: clearRuntimeError ? null : (runtimeError ?? this.runtimeError),
+      runtimeServices: runtimeServices ?? this.runtimeServices,
+      runtimeServicesLoading: runtimeServicesLoading ?? this.runtimeServicesLoading,
+      runtimeServicesError: clearRuntimeServicesError ? null : (runtimeServicesError ?? this.runtimeServicesError),
+      runtimeHealth: runtimeHealth ?? this.runtimeHealth,
+      runtimeHealthLoading: runtimeHealthLoading ?? this.runtimeHealthLoading,
+      runtimeHealthError: clearRuntimeHealthError ? null : (runtimeHealthError ?? this.runtimeHealthError),
+      handshake: handshake ?? this.handshake,
+      handshakeLoading: handshakeLoading ?? this.handshakeLoading,
+      handshakeError: clearHandshakeError ? null : (handshakeError ?? this.handshakeError),
+      centerHealth: centerHealth ?? this.centerHealth,
+      centerHealthLoading: centerHealthLoading ?? this.centerHealthLoading,
+      centerHealthError: clearCenterHealthError ? null : (centerHealthError ?? this.centerHealthError),
       packageOperationByExtensionId: packageOperationByExtensionId ?? this.packageOperationByExtensionId,
       runtimeOperationByRuntimeId: runtimeOperationByRuntimeId ?? this.runtimeOperationByRuntimeId,
     );
@@ -340,4 +396,64 @@ class GameCenterController extends StateNotifier<GameCenterState> {
   }
 
   bool hasRuntimeOp(String runtimeId) => state.runtimeOperationByRuntimeId.contains(runtimeId);
+
+  Future<void> loadCenterHealth() async {
+    final gen = state.generation + 1;
+    state = state.copyWith(centerHealthLoading: true, generation: gen, clearCenterHealthError: true);
+    try {
+      final result = await api.health();
+      if (!mounted) return;
+      if (gen != state.generation) return;
+      state = state.copyWith(centerHealth: result, centerHealthLoading: false);
+    } catch (e) {
+      if (!mounted) return;
+      if (gen != state.generation) return;
+      state = state.copyWith(centerHealthLoading: false, centerHealthError: e.toString());
+    }
+  }
+
+  Future<void> loadRuntimeServices(String runtimeId) async {
+    final gen = state.generation + 1;
+    state = state.copyWith(runtimeServicesLoading: true, generation: gen, clearRuntimeServicesError: true);
+    try {
+      final result = await api.getRuntimeServices(runtimeId);
+      if (!mounted) return;
+      if (gen != state.generation) return;
+      state = state.copyWith(runtimeServices: result, runtimeServicesLoading: false);
+    } catch (e) {
+      if (!mounted) return;
+      if (gen != state.generation) return;
+      state = state.copyWith(runtimeServicesLoading: false, runtimeServicesError: e.toString());
+    }
+  }
+
+  Future<void> loadRuntimeHealth(String runtimeId) async {
+    final gen = state.generation + 1;
+    state = state.copyWith(runtimeHealthLoading: true, generation: gen, clearRuntimeHealthError: true);
+    try {
+      final result = await api.getRuntimeHealth(runtimeId);
+      if (!mounted) return;
+      if (gen != state.generation) return;
+      state = state.copyWith(runtimeHealth: result, runtimeHealthLoading: false);
+    } catch (e) {
+      if (!mounted) return;
+      if (gen != state.generation) return;
+      state = state.copyWith(runtimeHealthLoading: false, runtimeHealthError: e.toString());
+    }
+  }
+
+  Future<void> performHandshake(String runtimeId) async {
+    final gen = state.generation + 1;
+    state = state.copyWith(handshakeLoading: true, generation: gen, clearHandshakeError: true);
+    try {
+      final result = await api.handshake(runtimeId);
+      if (!mounted) return;
+      if (gen != state.generation) return;
+      state = state.copyWith(handshake: result, handshakeLoading: false);
+    } catch (e) {
+      if (!mounted) return;
+      if (gen != state.generation) return;
+      state = state.copyWith(handshakeLoading: false, handshakeError: e.toString());
+    }
+  }
 }
