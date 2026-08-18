@@ -82,6 +82,11 @@ type DiagnosticRunner interface {
 	Supports(platform string) bool
 }
 
+type PlatformDiagnosticRunner interface {
+	DiagnosticRunner
+	RunPlatformDiagnostics(ctx context.Context, platform string, workspaceID string, paths []string) ([]string, []string, error)
+}
+
 type defaultObserver struct {
 	sessions         SessionManager
 	validator        schema.SchemaValidator
@@ -115,12 +120,12 @@ func (o *defaultObserver) Capture(ctx context.Context, sessionID string) (*Obser
 		return result, fmt.Errorf("get session: %w", err)
 	}
 
-	if session.Schema == nil {
+	if session.Schema == nil && (session.Target == nil || session.Target.SourceType != "source") {
 		result.Errors = append(result.Errors, "schema is nil")
 		return result, nil
 	}
 
-	if o.validator != nil {
+	if session.Schema != nil && o.validator != nil {
 		validationResult := o.validator.Validate(session.Schema)
 		if !validationResult.Valid {
 			for _, e := range validationResult.Errors {
@@ -130,12 +135,20 @@ func (o *defaultObserver) Capture(ctx context.Context, sessionID string) (*Obser
 		result.Warnings = append(result.Warnings, validationResult.Warnings...)
 	}
 
-	result.ChangedPaths = detectSchemaIssues(session.Schema)
+	if session.Schema != nil {
+		result.ChangedPaths = detectSchemaIssues(session.Schema)
+	}
 
 	if session.Target != nil && session.Target.Platform != "" && o.diagnosticRunner != nil {
 		result.Platform = session.Target.Platform
 		if o.diagnosticRunner.Supports(session.Target.Platform) {
-			compileErrors, warnings, diagErr := o.diagnosticRunner.RunDiagnostics(ctx, session.WorkspaceID, nil)
+			var compileErrors, warnings []string
+			var diagErr error
+			if platformRunner, ok := o.diagnosticRunner.(PlatformDiagnosticRunner); ok {
+				compileErrors, warnings, diagErr = platformRunner.RunPlatformDiagnostics(ctx, session.Target.Platform, session.WorkspaceID, nil)
+			} else {
+				compileErrors, warnings, diagErr = o.diagnosticRunner.RunDiagnostics(ctx, session.WorkspaceID, nil)
+			}
 			if diagErr != nil {
 				result.RuntimeErrors = append(result.RuntimeErrors, fmt.Sprintf("diagnostic error: %v", diagErr))
 			}

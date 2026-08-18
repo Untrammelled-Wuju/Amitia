@@ -58,13 +58,32 @@ func NewRealDiagnosticRunner(flutter FlutterAnalyzer, web WebAnalyzer) Diagnosti
 }
 
 func (r *realDiagnosticRunner) RunDiagnostics(ctx context.Context, workspaceID string, paths []string) ([]string, []string, error) {
-	if r.flutterAnalyzer != nil {
+	// Compatibility path for callers that do not provide a platform. Prefer the
+	// only configured analyzer; source preview uses RunPlatformDiagnostics.
+	if r.flutterAnalyzer != nil && r.webAnalyzer == nil {
 		return r.flutterAnalyzer.Analyze(ctx, workspaceID, paths)
 	}
-	if r.webAnalyzer != nil {
+	if r.webAnalyzer != nil && r.flutterAnalyzer == nil {
 		return r.webAnalyzer.TypeCheck(ctx, workspaceID, paths)
 	}
-	return []string{"no analyzer configured"}, nil, nil
+	return nil, nil, fmt.Errorf("diagnostic platform required when multiple analyzers are configured")
+}
+
+func (r *realDiagnosticRunner) RunPlatformDiagnostics(ctx context.Context, platform string, workspaceID string, paths []string) ([]string, []string, error) {
+	switch platform {
+	case "flutter":
+		if r.flutterAnalyzer == nil {
+			return nil, nil, fmt.Errorf("flutter analyzer not configured")
+		}
+		return r.flutterAnalyzer.Analyze(ctx, workspaceID, paths)
+	case "web":
+		if r.webAnalyzer == nil {
+			return nil, nil, fmt.Errorf("web analyzer not configured")
+		}
+		return r.webAnalyzer.TypeCheck(ctx, workspaceID, paths)
+	default:
+		return nil, nil, fmt.Errorf("unsupported diagnostic platform %q", platform)
+	}
 }
 
 func (r *realDiagnosticRunner) Supports(platform string) bool {
@@ -95,12 +114,12 @@ type PreviewDiagnostics struct {
 }
 
 type PreviewRequest struct {
-	Mode           PreviewMode             `json:"mode"`
-	Document       *schema.SchemaUIDocument `json:"document,omitempty"`
-	Target         *PreviewTarget          `json:"target,omitempty"`
-	TransactionID  string                  `json:"transactionId,omitempty"`
-	RootExecution  string                  `json:"rootExecution,omitempty"`
-	Revision       string                  `json:"revision,omitempty"`
+	Mode          PreviewMode              `json:"mode"`
+	Document      *schema.SchemaUIDocument `json:"document,omitempty"`
+	Target        *PreviewTarget           `json:"target,omitempty"`
+	TransactionID string                   `json:"transactionId,omitempty"`
+	RootExecution string                   `json:"rootExecution,omitempty"`
+	Revision      string                   `json:"revision,omitempty"`
 }
 
 type PreviewTarget struct {
