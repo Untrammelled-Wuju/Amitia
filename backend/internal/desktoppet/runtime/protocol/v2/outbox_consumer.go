@@ -116,7 +116,9 @@ func (c *OutboxConsumer) claimPendingEvents(now time.Time) ([]DomainEventOutbox,
 
 func (c *OutboxConsumer) processEvent(ctx context.Context, event DomainEventOutbox, now time.Time) {
 	if event.Attempt >= outboxMaxAttempts {
-		_ = c.markFailed(event, "max attempts reached", now)
+		if err := c.markFailed(event, "max attempts reached", now); err != nil {
+			log.Error("outbox mark terminal failure failed: ", event.ID, " error: ", err)
+		}
 		return
 	}
 
@@ -125,7 +127,9 @@ func (c *OutboxConsumer) processEvent(ctx context.Context, event DomainEventOutb
 
 	if err := c.handler(handlerCtx, event); err != nil {
 		log.Error("outbox event handler failed: ", event.ID, " error: ", err)
-		_ = c.markAttemptFailed(event, err, now)
+		if markErr := c.markAttemptFailed(event, err, now); markErr != nil {
+			log.Error("outbox persist retry failure failed: ", event.ID, " error: ", markErr)
+		}
 		return
 	}
 

@@ -2,6 +2,7 @@ package v2
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -56,19 +57,27 @@ func (s *commandService) CreateDurableCommand(userID, deviceID, commandType, ide
 	hash := ComputePayloadHash(payloadBytes)
 
 	cmd := &RuntimeCommand{
-		ID:              "rtcmdv2_" + uuid.NewString(),
-		UserID:          userID,
-		DeviceID:        deviceID,
-		CommandType:     commandType,
-		Status:          string(CommandStatusQueued),
-		DesiredRevision: payload.GetRevision(),
-		IdempotencyKey:  idempotencyKey,
-		CoalesceKey:     coalesceKey,
-		DeviceSequence:  deviceSeq,
-		PayloadJSON:     string(payloadBytes),
-		PayloadHash:     hash,
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		ID:                   "rtcmdv2_" + uuid.NewString(),
+		UserID:               userID,
+		DeviceID:             deviceID,
+		CommandType:          commandType,
+		Durability:           "durable",
+		Status:               string(CommandStatusQueued),
+		DesiredRevision:      payload.GetRevision(),
+		IdempotencyKey:       idempotencyKey,
+		CoalesceKey:          coalesceKey,
+		DeviceSequence:       deviceSeq,
+		PayloadJSON:          string(payloadBytes),
+		PayloadHash:          hash,
+		PayloadSchemaVersion: 1,
+		CreatedAt:            now,
+		UpdatedAt:            now,
+	}
+	if syncPayload, ok := payload.(SyncDesiredStatePayload); ok {
+		cmd.SettingsRevision = syncPayload.SettingsRevision
+		cmd.InstallationID = syncPayload.InstallationID
+		cmd.PetID = syncPayload.PetID
+		cmd.ReleaseID = syncPayload.ReleaseID
 	}
 
 	var existing RuntimeCommand
@@ -81,6 +90,8 @@ func (s *commandService) CreateDurableCommand(userID, deviceID, commandType, ide
 		if existing.Status == string(CommandStatusCompleted) || existing.PayloadHash == hash {
 			return &existing, ErrCommandDuplication
 		}
+	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, err
 	}
 
 	if err := s.db.Create(cmd).Error; err != nil {
@@ -93,16 +104,18 @@ func (s *commandService) CreateEphemeralCommand(userID, deviceID, commandType, i
 	now := time.Now().Format("2006-01-02 15:04:05")
 	hash := ComputePayloadHash(payload)
 	cmd := &RuntimeCommand{
-		ID:             "rtcmdv2_" + uuid.NewString(),
-		UserID:         userID,
-		DeviceID:       deviceID,
-		CommandType:    commandType,
-		Status:         string(CommandStatusQueued),
-		IdempotencyKey: idempotencyKey,
-		PayloadJSON:    string(payload),
-		PayloadHash:    hash,
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		ID:                   "rtcmdv2_" + uuid.NewString(),
+		UserID:               userID,
+		DeviceID:             deviceID,
+		CommandType:          commandType,
+		Durability:           "ephemeral",
+		Status:               string(CommandStatusQueued),
+		IdempotencyKey:       idempotencyKey,
+		PayloadJSON:          string(payload),
+		PayloadHash:          hash,
+		PayloadSchemaVersion: 1,
+		CreatedAt:            now,
+		UpdatedAt:            now,
 	}
 
 	var existing RuntimeCommand
@@ -111,8 +124,12 @@ func (s *commandService) CreateEphemeralCommand(userID, deviceID, commandType, i
 			"user_id = ? AND device_id = ? AND idempotency_key = ?",
 			userID, deviceID, idempotencyKey,
 		).Order("created_at DESC").First(&existing).Error
-		if err == nil && existing.PayloadHash == hash {
-			return &existing, ErrCommandDuplication
+		if err == nil {
+			if existing.PayloadHash == hash {
+				return &existing, ErrCommandDuplication
+			}
+		} else if !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, err
 		}
 	}
 
@@ -158,91 +175,193 @@ func (s *commandService) UpdateStatus(commandID string, from, to CommandStatus, 
 	return nil
 }
 
+func commandProgressRank(status CommandStatus) int {
+	switch status {
+	case CommandStatusCreated:
+		return 0
+	case CommandStatusQueued:
+		return 1
+	case CommandStatusDispatching:
+		return 2
+	case CommandStatusTransportDispatched:
+		return 3
+	case CommandStatusRuntimeReceived:
+		return 4
+	case CommandStatusRuntimeAccepted:
+		return 5
+	case CommandStatusRendererAccepted:
+		return 6
+	case CommandStatusPlaybackStarted:
+		return 7
+	case CommandStatusCompleted:
+		return 8
+	default:
+		return -1
+	}
+}
+
+func (s *commandService) advanceProgress(
+	commandID string,
+	target CommandStatus,
+	runtimeID, sessionID string,
+	t time.Time,
+	extra map[string]interface{},
+) error {
+	if commandID == "" {
+		return errors.New("command id is empty")
+	}
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		var cmd RuntimeCommand
+		if err := tx.Where("id = ?", commandID).Take(&cmd).Error; err != nil {
+			return err
+		}
+		current := CommandStatus(cmd.Status)
+		if IsCommandTerminal(current) {
+			if current == target || current == CommandStatusCompleted {
+				return nil
+			}
+			return fmt.Errorf("command %s already terminal: %s", commandID, current)
+		}
+		currentRank := commandProgressRank(current)
+		targetRank := commandProgressRank(target)
+		if currentRank >= 0 && targetRank >= 0 && currentRank >= targetRank {
+			return nil
+		}
+		updates := map[string]interface{}{
+			"status":     string(target),
+			"updated_at": t,
+		}
+		if runtimeID != "" {
+			updates["runtime_id"] = runtimeID
+		}
+		if sessionID != "" {
+			updates["runtime_session_id"] = sessionID
+		}
+		for key, value := range extra {
+			updates[key] = value
+		}
+		result := tx.Model(&RuntimeCommand{}).Where("id = ? AND status = ?", commandID, cmd.Status).Updates(updates)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return errors.New("command progress transition lost concurrent CAS")
+		}
+		return nil
+	})
+}
+
 func (s *commandService) MarkDispatching(commandID, runtimeID string, t time.Time) error {
-	return s.db.Model(&RuntimeCommand{}).Where("id = ?", commandID).Updates(map[string]interface{}{
-		"status":     string(CommandStatusDispatching),
-		"runtime_id": runtimeID,
-		"updated_at": t,
-	}).Error
+	return s.advanceProgress(commandID, CommandStatusDispatching, runtimeID, "", t, nil)
 }
 
 func (s *commandService) MarkTransportDispatched(commandID, runtimeID string, t time.Time) error {
-	return s.db.Model(&RuntimeCommand{}).Where("id = ? AND runtime_id = ?", commandID, runtimeID).Updates(map[string]interface{}{
-		"status":     string(CommandStatusTransportDispatched),
-		"updated_at": t,
-	}).Error
+	return s.advanceProgress(commandID, CommandStatusTransportDispatched, runtimeID, "", t, nil)
 }
 
 func (s *commandService) MarkRuntimeReceived(commandID, runtimeID, sessionID string, t time.Time) error {
-	return s.db.Model(&RuntimeCommand{}).Where("id = ? AND runtime_id = ?", commandID, runtimeID).Updates(map[string]interface{}{
-		"status":             string(CommandStatusRuntimeReceived),
-		"runtime_session_id": sessionID,
-		"updated_at":         t,
-	}).Error
+	return s.advanceProgress(commandID, CommandStatusRuntimeReceived, runtimeID, sessionID, t, nil)
 }
 
 func (s *commandService) MarkRuntimeAccepted(commandID, runtimeID, sessionID string, t time.Time) error {
-	return s.db.Model(&RuntimeCommand{}).Where("id = ? AND runtime_id = ?", commandID, runtimeID).Updates(map[string]interface{}{
-		"status":             string(CommandStatusRuntimeAccepted),
-		"runtime_session_id": sessionID,
-		"updated_at":         t,
-	}).Error
+	return s.advanceProgress(commandID, CommandStatusRuntimeAccepted, runtimeID, sessionID, t, nil)
 }
 
 func (s *commandService) MarkRendererAccepted(commandID, runtimeID, sessionID string, t time.Time) error {
-	return s.db.Model(&RuntimeCommand{}).Where("id = ? AND runtime_id = ?", commandID, runtimeID).Updates(map[string]interface{}{
-		"status":             string(CommandStatusRendererAccepted),
-		"runtime_session_id": sessionID,
-		"updated_at":         t,
-	}).Error
+	return s.advanceProgress(commandID, CommandStatusRendererAccepted, runtimeID, sessionID, t, nil)
 }
 
 func (s *commandService) MarkPlaybackStarted(commandID, playbackID string, t time.Time) error {
-	return s.db.Model(&RuntimeCommand{}).Where("id = ?", commandID).Updates(map[string]interface{}{
-		"status":     string(CommandStatusPlaybackStarted),
-		"updated_at": t,
-	}).Error
+	return s.advanceProgress(commandID, CommandStatusPlaybackStarted, "", "", t, map[string]interface{}{
+		"playback_request_id": playbackID,
+	})
 }
 
 func (s *commandService) MarkCompleted(commandID, playbackID string, t time.Time) error {
-	return s.db.Model(&RuntimeCommand{}).Where("id = ?", commandID).Updates(map[string]interface{}{
-		"status":       string(CommandStatusCompleted),
-		"completed_at": t,
-		"updated_at":   t,
-	}).Error
+	return s.advanceProgress(commandID, CommandStatusCompleted, "", "", t, map[string]interface{}{
+		"playback_request_id": playbackID,
+		"completed_at":        t,
+	})
 }
 
 func (s *commandService) MarkFailed(commandID, errCode, errMsg string, t time.Time) error {
-	return s.db.Model(&RuntimeCommand{}).Where("id = ?", commandID).Updates(map[string]interface{}{
-		"status":        string(CommandStatusFailedTerminal),
-		"error_code":    errCode,
-		"error_message": errMsg,
-		"completed_at":  t,
-		"updated_at":    t,
-	}).Error
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		var cmd RuntimeCommand
+		if err := tx.Where("id = ?", commandID).Take(&cmd).Error; err != nil {
+			return err
+		}
+		if IsCommandTerminal(CommandStatus(cmd.Status)) {
+			if cmd.Status == string(CommandStatusFailedTerminal) {
+				return nil
+			}
+			return fmt.Errorf("command %s already terminal: %s", commandID, cmd.Status)
+		}
+		result := tx.Model(&RuntimeCommand{}).Where("id = ? AND status = ?", commandID, cmd.Status).Updates(map[string]interface{}{
+			"status":        string(CommandStatusFailedTerminal),
+			"error_code":    errCode,
+			"error_message": errMsg,
+			"completed_at":  t,
+			"updated_at":    t,
+		})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return errors.New("command failure transition lost concurrent CAS")
+		}
+		return nil
+	})
 }
 
 func (s *commandService) MarkExpired(commandID string, t time.Time) error {
-	return s.db.Model(&RuntimeCommand{}).Where("id = ? AND status NOT IN (?, ?, ?, ?, ?, ?, ?)",
+	result := s.db.Model(&RuntimeCommand{}).Where("id = ? AND status NOT IN (?, ?, ?, ?, ?, ?)",
 		commandID,
-		string(CommandStatusCompleted), string(CommandStatusFailedTerminal), string(CommandStatusFailedRetryable),
-		string(CommandStatusExpired), string(CommandStatusCancelled), string(CommandStatusSuperseded),
+		string(CommandStatusCompleted), string(CommandStatusFailedTerminal), string(CommandStatusExpired),
+		string(CommandStatusCancelled), string(CommandStatusSuperseded), string(CommandStatusPlaybackStarted),
 	).Updates(map[string]interface{}{
 		"status":       string(CommandStatusExpired),
 		"completed_at": t,
 		"updated_at":   t,
-	}).Error
+	})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		var cmd RuntimeCommand
+		if err := s.db.Where("id = ?", commandID).Take(&cmd).Error; err != nil {
+			return err
+		}
+		if IsCommandTerminal(CommandStatus(cmd.Status)) || cmd.Status == string(CommandStatusPlaybackStarted) {
+			return nil
+		}
+		return errors.New("command expiration transition updated no rows")
+	}
+	return nil
 }
 
 func (s *commandService) MarkCancelled(commandID string, t time.Time) error {
-	return s.db.Model(&RuntimeCommand{}).Where("id = ? AND status NOT IN (?, ?, ?, ?, ?)",
+	result := s.db.Model(&RuntimeCommand{}).Where("id = ? AND status NOT IN (?, ?, ?, ?, ?)",
 		commandID,
-		string(CommandStatusCompleted), string(CommandStatusFailedTerminal), string(CommandStatusExpired), string(CommandStatusCancelled),
+		string(CommandStatusCompleted), string(CommandStatusFailedTerminal), string(CommandStatusExpired), string(CommandStatusCancelled), string(CommandStatusSuperseded),
 	).Updates(map[string]interface{}{
 		"status":       string(CommandStatusCancelled),
 		"completed_at": t,
 		"updated_at":   t,
-	}).Error
+	})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected == 0 {
+		var cmd RuntimeCommand
+		if err := s.db.Where("id = ?", commandID).Take(&cmd).Error; err != nil {
+			return err
+		}
+		if IsCommandTerminal(CommandStatus(cmd.Status)) {
+			return nil
+		}
+		return errors.New("command cancellation transition updated no rows")
+	}
+	return nil
 }
 
 func (s *commandService) GetLatestCommand(userID, deviceID, commandType string) (*RuntimeCommand, error) {

@@ -37,11 +37,42 @@ type Connection struct {
 	SessionID  string
 	Generation int64
 	State      ConnectionState
-	LastSeq    int64
-	LastBeat   time.Time
+	// LastSeq tracks the last successfully persisted inbound runtime envelope sequence.
+	// OutboundSeq is independent: server->runtime envelopes must never advance the
+	// replay cursor used for runtime->server envelopes.
+	LastSeq     int64
+	OutboundSeq int64
+	LastBeat    time.Time
 
 	mu     sync.RWMutex
 	sendCh []byte
+}
+
+func (c *Connection) ActivateSession(sessionID string, generation, lastInboundSeq int64) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.SessionID = sessionID
+	c.Generation = generation
+	c.LastSeq = lastInboundSeq
+	c.State = ConnStateConnected
+}
+
+func (c *Connection) SessionSnapshot() (string, int64) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.SessionID, c.Generation
+}
+
+func (c *Connection) SessionIDValue() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.SessionID
+}
+
+func (c *Connection) LastHeartbeat() time.Time {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.LastBeat
 }
 
 func (c *Connection) GetState() ConnectionState {
@@ -54,6 +85,35 @@ func (c *Connection) SetState(s ConnectionState) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.State = s
+}
+
+func (c *Connection) LastInboundSequence() int64 {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.LastSeq
+}
+
+func (c *Connection) AcceptInboundSequence(seq int64) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if seq <= c.LastSeq {
+		return false
+	}
+	c.LastSeq = seq
+	return true
+}
+
+func (c *Connection) IsInboundSequenceNew(seq int64) bool {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return seq > c.LastSeq
+}
+
+func (c *Connection) NextOutboundSequence() int64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.OutboundSeq++
+	return c.OutboundSeq
 }
 
 func (c *Connection) SessionIdentity() protocol.SessionIdentity {
@@ -118,7 +178,12 @@ func (h *Handler) HandleConnect(userID runtimeidentity.UserID, deviceID runtimei
 
 	key := RuntimeConnectionKey(userID, deviceID, runtimeID)
 	if existing, ok := h.connections[key]; ok && existing.GetState() == ConnStateConnected {
-		_ = h.sessions.SupersedeSession(existing.SessionID, "new_connection")
+		existingSessionID := existing.SessionIDValue()
+		if existingSessionID != "" {
+			if err := h.sessions.SupersedeSession(existingSessionID, "new_connection"); err != nil {
+				return nil, fmt.Errorf("supersede existing runtime session: %w", err)
+			}
+		}
 	}
 
 	conn := &Connection{
@@ -160,27 +225,25 @@ func (h *Handler) HandleHello(conn *Connection, payload *HelloPayload) (*HelloAc
 
 		projection, projectionErr := h.sessions.SyncFromDeviceRuntimeSession(nil, result.Session, *payload)
 		if projectionErr != nil {
-			_ = h.deviceRuntimeSessions.Close(nil, result.Session.ID, result.Session.ConnectionGeneration, "desktop_pet_projection_failed", now)
+			closeErr := h.deviceRuntimeSessions.Close(nil, result.Session.ID, result.Session.ConnectionGeneration, "desktop_pet_projection_failed", now)
+			if closeErr != nil {
+				projectionErr = errors.Join(projectionErr, fmt.Errorf("close failed session after projection error: %w", closeErr))
+			}
 			return nil, NewProtocolError(ErrCodeEnvelopeInvalid, fmt.Sprintf("sync projection failed: %v", projectionErr))
 		}
 
-		var markErr error
 		if result.Session.Status != protocol.SessionStatusReady {
-			_, markErr = h.deviceRuntimeSessions.MarkReady(nil, result.Session.ID, result.Session.ConnectionGeneration, now)
+			if _, markErr := h.deviceRuntimeSessions.MarkReady(nil, result.Session.ID, result.Session.ConnectionGeneration, now); markErr != nil {
+				closeErr := h.deviceRuntimeSessions.Close(nil, result.Session.ID, result.Session.ConnectionGeneration, "presence_projection_failed", now)
+				if closeErr != nil {
+					markErr = errors.Join(markErr, fmt.Errorf("close failed session after mark-ready error: %w", closeErr))
+				}
+				return nil, NewProtocolError(ErrCodeEnvelopeInvalid, fmt.Sprintf("session mark ready failed: %v", markErr))
+			}
 		}
 
-		conn.SessionID = result.Session.ID.String()
-		conn.Generation = result.Session.ConnectionGeneration
-		conn.State = ConnStateConnected
-		conn.LastSeq = result.Session.LastEventSequence
-
+		conn.ActivateSession(result.Session.ID.String(), result.Session.ConnectionGeneration, result.Session.LastEventSequence)
 		helloAck := SessionResultToHelloAck(result, projection.LastAppliedDesiredRevision)
-
-		if markErr != nil {
-			_ = h.deviceRuntimeSessions.Close(nil, result.Session.ID, result.Session.ConnectionGeneration, "presence_projection_failed", now)
-			return nil, NewProtocolError(ErrCodeEnvelopeInvalid, fmt.Sprintf("session mark ready failed: %v", markErr))
-		}
-
 		return helloAck, nil
 	}
 
@@ -198,10 +261,7 @@ func (h *Handler) HandleHello(conn *Connection, payload *HelloPayload) (*HelloAc
 	}
 	_ = oldSession
 
-	conn.SessionID = newSession.ID
-	conn.Generation = newSession.ConnectionGeneration
-	conn.State = ConnStateConnected
-	conn.LastSeq = newSession.LastEventSequence
+	conn.ActivateSession(newSession.ID, newSession.ConnectionGeneration, newSession.LastEventSequence)
 
 	return &HelloAckPayload{
 		Accepted:        true,
@@ -213,78 +273,190 @@ func (h *Handler) HandleHello(conn *Connection, payload *HelloPayload) (*HelloAc
 }
 
 func (h *Handler) HandleCommandAck(conn *Connection, env *Envelope, ack *CommandAckPayload) error {
-	if conn == nil || conn.SessionID == "" {
+	if conn == nil {
 		return ErrConnectionClosed
 	}
-
-	newSeq := conn.LastSeq + 1
-	if env.Sequence <= conn.LastSeq {
+	sessionID := conn.SessionIDValue()
+	if sessionID == "" {
+		return ErrConnectionClosed
+	}
+	if env == nil || ack == nil {
+		return NewProtocolError(ErrCodeEnvelopeInvalid, "command ack envelope is required")
+	}
+	if !conn.IsInboundSequenceNew(env.Sequence) {
+		// Exact/older retries are idempotently ignored. The unique event sequence
+		// constraint provides a second persistence-level guard.
 		return nil
 	}
 
-	event := &EventRecord{
-		ID:               "rtevtv2_" + uuid.NewString(),
-		EventType:        "command.ack",
-		Payload:          env.Payload,
-		PayloadHash:      env.PayloadHash,
-		RuntimeSessionID: conn.SessionID,
-		Sequence:         newSeq,
-		OccurredAt:       time.Now().Format("2006-01-02 15:04:05"),
-		Delivered:        0,
-		InsertedAt:       time.Now().Format("2006-01-02 15:04:05"),
-	}
-
-	if _, err := h.events.Append(event.EventType, event.Payload, conn.SessionID, newSeq, "runtime_command", nil); err != nil {
-		return fmt.Errorf("append event failed: %v", err)
-	}
-
-	ackCmdID := ack.CommandID
+	ackCmdID := strings.TrimSpace(ack.CommandID)
 	if ackCmdID == "" {
-		return nil
+		return NewProtocolError(ErrCodeEnvelopeInvalid, "commandId is required")
+	}
+	status := CommandStatus(ack.Status)
+	switch status {
+	case CommandStatusRuntimeReceived, CommandStatusRuntimeAccepted, CommandStatusRendererAccepted,
+		CommandStatusCompleted, CommandStatusFailedTerminal:
+	default:
+		return NewProtocolError(ErrCodeEnvelopeInvalid, fmt.Sprintf("unsupported command ack status: %s", ack.Status))
 	}
 
-	now := time.Now()
-	switch CommandStatus(ack.Status) {
+	now := time.Now().UTC()
+	switch status {
 	case CommandStatusRuntimeReceived:
-		if err := h.commands.MarkRuntimeReceived(ackCmdID, string(conn.RuntimeID), conn.SessionID, now); err != nil {
-			log.Warn("[v2] MarkRuntimeReceived failed: ", err)
+		if err := h.commands.MarkRuntimeReceived(ackCmdID, string(conn.RuntimeID), sessionID, now); err != nil {
+			return fmt.Errorf("mark runtime received: %w", err)
 		}
 	case CommandStatusRuntimeAccepted:
-		if err := h.commands.MarkRuntimeAccepted(ackCmdID, string(conn.RuntimeID), conn.SessionID, now); err != nil {
-			log.Warn("[v2] MarkRuntimeAccepted failed: ", err)
+		if err := h.commands.MarkRuntimeAccepted(ackCmdID, string(conn.RuntimeID), sessionID, now); err != nil {
+			return fmt.Errorf("mark runtime accepted: %w", err)
 		}
 	case CommandStatusRendererAccepted:
-		if err := h.commands.MarkRendererAccepted(ackCmdID, string(conn.RuntimeID), conn.SessionID, now); err != nil {
-			log.Warn("[v2] MarkRendererAccepted failed: ", err)
+		if err := h.commands.MarkRendererAccepted(ackCmdID, string(conn.RuntimeID), sessionID, now); err != nil {
+			return fmt.Errorf("mark renderer accepted: %w", err)
 		}
 	case CommandStatusCompleted:
 		if err := h.commands.MarkCompleted(ackCmdID, "", now); err != nil {
-			log.Warn("[v2] MarkCompleted failed: ", err)
+			return fmt.Errorf("mark command completed: %w", err)
 		}
 	case CommandStatusFailedTerminal:
 		if err := h.commands.MarkFailed(ackCmdID, ack.RejectErrorCode, ack.RejectReason, now); err != nil {
-			log.Warn("[v2] MarkFailed failed: ", err)
+			return fmt.Errorf("mark command failed: %w", err)
 		}
 	}
 
-	conn.LastSeq = newSeq
+	if _, err := h.events.Append(
+		EventTypeCommandAck,
+		env.Payload,
+		sessionID,
+		env.Sequence,
+		TriggerSourceRuntimeCommand,
+		&ackCmdID,
+	); err != nil {
+		return fmt.Errorf("append command ack event: %w", err)
+	}
+	processedSeq := int64(0)
+	if status.IsTerminal() {
+		processedSeq = ack.CommandSequence
+	}
+	if err := h.persistAuthoritativeCursor(conn, env.Sequence, processedSeq, 0, ""); err != nil {
+		return err
+	}
+	if !conn.AcceptInboundSequence(env.Sequence) {
+		return nil
+	}
+	if err := h.sessions.UpdateLastEventSequence(sessionID, env.Sequence); err != nil {
+		return fmt.Errorf("persist command ack sequence: %w", err)
+	}
 	return nil
 }
 
-func (h *Handler) HandleEvent(conn *Connection, eventType string, payload []byte) (*EventRecord, error) {
-	if conn == nil || conn.SessionID == "" {
+func (h *Handler) HandleEvent(conn *Connection, env *Envelope) (*EventRecord, error) {
+	if conn == nil {
 		return nil, ErrConnectionClosed
 	}
-
-	newSeq := conn.LastSeq + 1
-
-	event, err := h.events.Append(eventType, payload, conn.SessionID, newSeq, TriggerSourceRuntimeCommand, nil)
-	if err != nil {
-		return nil, fmt.Errorf("append event failed: %v", err)
+	sessionID := conn.SessionIDValue()
+	if sessionID == "" {
+		return nil, ErrConnectionClosed
+	}
+	if env == nil {
+		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, "runtime event envelope is required")
+	}
+	if !IsEventType(env.MessageName) {
+		return nil, NewProtocolError(ErrCodeEnvelopeInvalid, fmt.Sprintf("unsupported runtime event type: %s", env.MessageName))
+	}
+	if !conn.IsInboundSequenceNew(env.Sequence) {
+		return nil, nil
 	}
 
-	conn.LastSeq = newSeq
+	var commandID *string
+	if id := extractEventCommandID(env.Payload); id != "" {
+		commandID = &id
+	}
+	event, err := h.events.Append(
+		env.MessageName,
+		env.Payload,
+		sessionID,
+		env.Sequence,
+		TriggerSourceRuntimeCommand,
+		commandID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("append runtime event: %w", err)
+	}
+	processedSeq, appliedRevision, actualStateHash := runtimeEventCursor(env)
+	if err := h.persistAuthoritativeCursor(conn, env.Sequence, processedSeq, appliedRevision, actualStateHash); err != nil {
+		return nil, err
+	}
+	if !conn.AcceptInboundSequence(env.Sequence) {
+		return event, nil
+	}
+	if err := h.sessions.UpdateLastEventSequence(sessionID, env.Sequence); err != nil {
+		return nil, fmt.Errorf("persist runtime event sequence: %w", err)
+	}
 	return event, nil
+}
+
+func extractEventCommandID(payload []byte) string {
+	if len(payload) == 0 {
+		return ""
+	}
+	var body struct {
+		CommandID string `json:"commandId"`
+	}
+	if err := json.Unmarshal(payload, &body); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(body.CommandID)
+}
+
+func runtimeEventCursor(env *Envelope) (processedSeq, appliedRevision int64, actualStateHash string) {
+	if env == nil || env.MessageName != EventStateSnapshot {
+		return 0, 0, ""
+	}
+	var snapshot StateSnapshotPayload
+	if err := json.Unmarshal(env.Payload, &snapshot); err != nil {
+		return 0, 0, ""
+	}
+	return snapshot.LastProcessedCommandSequence, snapshot.AppliedDesiredRevision, snapshot.ActualStateHash
+}
+
+func (h *Handler) persistAuthoritativeCursor(conn *Connection, eventSeq, processedSeq, appliedRevision int64, actualStateHash string) error {
+	if h.deviceRuntimeSessions == nil || conn == nil {
+		return nil
+	}
+	sessionID, generation := conn.SessionSnapshot()
+	if sessionID == "" || generation <= 0 {
+		return nil
+	}
+	id := runtimeidentity.ParseRuntimeSessionID(sessionID)
+	session, err := h.deviceRuntimeSessions.GetSession(nil, id)
+	if err != nil {
+		return fmt.Errorf("load authoritative runtime cursor: %w", err)
+	}
+	cursor := protocol.SessionCursor{
+		ConnectionGeneration:         generation,
+		LastAppliedStateRevision:     session.LastAppliedStateRevision,
+		LastProcessedCommandSequence: session.LastProcessedCommandSequence,
+		LastEventSequence:            session.LastEventSequence,
+		ActualStateHash:              session.ActualStateHash,
+	}
+	if eventSeq > cursor.LastEventSequence {
+		cursor.LastEventSequence = eventSeq
+	}
+	if processedSeq > cursor.LastProcessedCommandSequence {
+		cursor.LastProcessedCommandSequence = processedSeq
+	}
+	if appliedRevision > cursor.LastAppliedStateRevision {
+		cursor.LastAppliedStateRevision = appliedRevision
+	}
+	if actualStateHash != "" {
+		cursor.ActualStateHash = actualStateHash
+	}
+	if err := h.deviceRuntimeSessions.UpdateCursor(nil, id, generation, cursor, time.Now().UTC()); err != nil {
+		return fmt.Errorf("persist authoritative runtime cursor: %w", err)
+	}
+	return nil
 }
 
 func (h *Handler) HandleDisconnect(conn *Connection) error {
@@ -293,18 +465,25 @@ func (h *Handler) HandleDisconnect(conn *Connection) error {
 	}
 
 	conn.SetState(ConnStateClosed)
+	sessionID, generation := conn.SessionSnapshot()
 
 	if h.deviceRuntimeSessions != nil {
-		if conn.SessionID != "" && conn.Generation > 0 {
-			err := h.deviceRuntimeSessions.Close(nil, runtimeidentity.ParseRuntimeSessionID(conn.SessionID), conn.Generation, "client_disconnect", time.Now().UTC())
+		if sessionID != "" && generation > 0 {
+			err := h.deviceRuntimeSessions.Close(nil, runtimeidentity.ParseRuntimeSessionID(sessionID), generation, "client_disconnect", time.Now().UTC())
 			if err != nil && !errors.Is(err, deviceruntime.ErrConnectionSuperseded) {
 				log.Warn("[v2] device runtime close failed: ", err)
 			}
 		}
-		return h.sessions.SupersedeSession(conn.SessionID, "client_disconnect")
+		if sessionID == "" {
+			return nil
+		}
+		return h.sessions.SupersedeSession(sessionID, "client_disconnect")
 	}
 
-	return h.sessions.SupersedeSession(conn.SessionID, "client_disconnect")
+	if sessionID == "" {
+		return nil
+	}
+	return h.sessions.SupersedeSession(sessionID, "client_disconnect")
 }
 
 func (h *Handler) HandleHeartbeat(conn *Connection) error {
@@ -314,16 +493,17 @@ func (h *Handler) HandleHeartbeat(conn *Connection) error {
 
 	now := time.Now().UTC()
 	conn.TouchHeartbeat(now)
+	sessionID, generation := conn.SessionSnapshot()
 
-	if h.deviceRuntimeSessions != nil && conn.SessionID != "" && conn.Generation > 0 {
-		_, err := h.deviceRuntimeSessions.Heartbeat(nil, runtimeidentity.ParseRuntimeSessionID(conn.SessionID), conn.Generation, now)
+	if h.deviceRuntimeSessions != nil && sessionID != "" && generation > 0 {
+		_, err := h.deviceRuntimeSessions.Heartbeat(nil, runtimeidentity.ParseRuntimeSessionID(sessionID), generation, now)
 		if err != nil {
 			return err
 		}
-		return h.sessions.UpdateLastHeartbeat(conn.SessionID)
+		return h.sessions.UpdateLastHeartbeat(sessionID)
 	}
 
-	return h.sessions.UpdateLastHeartbeat(conn.SessionID)
+	return h.sessions.UpdateLastHeartbeat(sessionID)
 }
 
 func (h *Handler) CreateEnvelope(msgType MessageType, msgName string, runtimeID runtimeidentity.RuntimeID, sessionID runtimeidentity.RuntimeSessionID, payload interface{}, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID) (*Envelope, error) {

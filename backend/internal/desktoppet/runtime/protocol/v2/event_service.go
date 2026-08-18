@@ -2,6 +2,7 @@ package v2
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -61,6 +62,26 @@ func (s *eventService) Append(eventType string, payload []byte, sessionID string
 	}
 
 	if err := s.db.Create(event).Error; err != nil {
+		// Runtime envelopes may be retried after a connection/database boundary.
+		// The session+sequence unique key makes Append idempotent only when the
+		// retry is byte-for-byte the same logical event; a conflicting reuse of
+		// the sequence is a protocol/data-integrity error.
+		var existing EventRecord
+		lookupErr := s.db.Where(
+			"runtime_session_id = ? AND sequence = ?",
+			sessionID, seq,
+		).First(&existing).Error
+		if lookupErr == nil {
+			if existing.EventType == event.EventType &&
+				existing.PayloadHash == event.PayloadHash &&
+				existing.CommandID == event.CommandID {
+				return &existing, nil
+			}
+			return nil, fmt.Errorf(
+				"runtime event sequence conflict session=%s sequence=%d: %w",
+				sessionID, seq, err,
+			)
+		}
 		return nil, err
 	}
 	return event, nil

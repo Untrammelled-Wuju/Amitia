@@ -28,7 +28,10 @@ func (s *BehaviorEventSink) RecordHealthChange(runtimeSessionID, previousStatus,
 	now := time.Now().Format("2006-01-02 15:04:05")
 
 	seq := int64(0)
-	evtSeq, _ := s.events.GetLatestEventSeq(runtimeSessionID)
+	evtSeq, err := s.events.GetLatestEventSeq(runtimeSessionID)
+	if err != nil {
+		return err
+	}
 	if evtSeq > 0 {
 		seq = evtSeq + 1
 	} else {
@@ -43,7 +46,10 @@ func (s *BehaviorEventSink) RecordHealthChange(runtimeSessionID, previousStatus,
 
 func (s *BehaviorEventSink) RecordPlaybackEvent(runtimeSessionID, cmdID, eventType string, payload []byte) error {
 	seq := int64(0)
-	evtSeq, _ := s.events.GetLatestEventSeq(runtimeSessionID)
+	evtSeq, err := s.events.GetLatestEventSeq(runtimeSessionID)
+	if err != nil {
+		return err
+	}
 	if evtSeq > 0 {
 		seq = evtSeq + 1
 	} else {
@@ -63,7 +69,10 @@ func (s *BehaviorEventSink) RecordDesiredApplied(runtimeSessionID, cmdID string,
 	now := time.Now().Format(time.RFC3339)
 
 	seq := int64(0)
-	evtSeq, _ := s.events.GetLatestEventSeq(runtimeSessionID)
+	evtSeq, err := s.events.GetLatestEventSeq(runtimeSessionID)
+	if err != nil {
+		return err
+	}
 	if evtSeq > 0 {
 		seq = evtSeq + 1
 	} else {

@@ -16,6 +16,9 @@ package v2
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -112,95 +115,118 @@ func (s *sessionService) GetActiveSession(userID runtimeidentity.UserID, deviceI
 //
 // Deprecated: Use SyncFromDeviceRuntimeSession with deviceruntime.Service instead.
 func (s *sessionService) AcquireSession(ctx *gorm.DB, userID runtimeidentity.UserID, deviceID runtimeidentity.DeviceID, runtimeID runtimeidentity.RuntimeID, caps []string, capsHash string, lastAppliedRev, lastCmdSeq, lastEvtSeq int64, contractVersion string) (*RuntimeSession, *RuntimeSession, error) {
-	db := s.db
+	base := s.db
 	if ctx != nil {
-		db = ctx
+		base = ctx
 	}
 
-	var existing RuntimeSession
-	err := db.Where(
-		"user_id = ? AND device_id = ? AND runtime_id = ? AND status IN (?, ?, ?, ?)",
-		userID.String(), deviceID.String(), runtimeID.String(),
-		SessionStatusRegistering, SessionStatusSyncing, SessionStatusReady, SessionStatusDegraded,
-	).Order("connection_generation DESC").First(&existing).Error
-
-	var prevGen int64
+	var newSession *RuntimeSession
 	var oldSession *RuntimeSession
-	if err == nil {
-		prevGen = existing.ConnectionGeneration
-		oldSession = &existing
+	err := base.Transaction(func(tx *gorm.DB) error {
+		var existing RuntimeSession
+		err := tx.Where(
+			"user_id = ? AND device_id = ? AND runtime_id = ? AND status IN (?, ?, ?, ?)",
+			userID.String(), deviceID.String(), runtimeID.String(),
+			SessionStatusRegistering, SessionStatusSyncing, SessionStatusReady, SessionStatusDegraded,
+		).Order("connection_generation DESC").First(&existing).Error
 
-		now := time.Now().Format("2006-01-02 15:04:05")
-		db.Model(&RuntimeSession{}).Where("id = ?", existing.ID).Updates(map[string]interface{}{
-			"status":        SessionStatusSuperseded,
-			"superseded_at": now,
-			"updated_at":    now,
-		})
-	}
-
-	now := time.Now().Format("2006-01-02 15:04:05")
-	newSession := &RuntimeSession{
-		ID:                           string(runtimeidentity.RuntimeSessionID("rtsessv2_" + uuid.NewString())),
-		UserID:                       userID,
-		DeviceID:                     deviceID,
-		RuntimeID:                    runtimeID,
-		ConnectionGeneration:         prevGen + 1,
-		RuntimeContractVersion:       contractVersion,
-		CapabilitiesHash:             capsHash,
-		LastAppliedDesiredRevision:   lastAppliedRev,
-		LastProcessedCommandSequence: lastCmdSeq,
-		LastEventSequence:            lastEvtSeq,
-		Status:                       string(SessionStatusSyncing),
-		ConnectedAt:                  now,
-		LastHeartbeatAt:              now,
-		CreatedAt:                    now,
-		UpdatedAt:                    now,
-	}
-
-	if len(caps) > 0 {
-		capsJSON := []byte{}
-		for i, c := range caps {
-			if i > 0 {
-				capsJSON = append(capsJSON, ',')
+		var prevGen int64
+		if err == nil {
+			prevGen = existing.ConnectionGeneration
+			copy := existing
+			oldSession = &copy
+			now := time.Now().UTC().Format("2006-01-02 15:04:05")
+			result := tx.Model(&RuntimeSession{}).Where("id = ?", existing.ID).Updates(map[string]interface{}{
+				"status":        SessionStatusSuperseded,
+				"superseded_at": now,
+				"updated_at":    now,
+			})
+			if result.Error != nil {
+				return result.Error
 			}
-			capsJSON = append(capsJSON, '"')
-			capsJSON = append(capsJSON, c...)
-			capsJSON = append(capsJSON, '"')
+			if result.RowsAffected != 1 {
+				return fmt.Errorf("supersede previous runtime session: expected 1 row, got %d", result.RowsAffected)
+			}
+		} else if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return err
 		}
-		newSession.CapabilitiesJSON = "[" + string(capsJSON) + "]"
-	}
 
-	if err := db.Create(newSession).Error; err != nil {
+		now := time.Now().UTC().Format("2006-01-02 15:04:05")
+		capsJSON, err := json.Marshal(caps)
+		if err != nil {
+			return fmt.Errorf("marshal runtime capabilities: %w", err)
+		}
+		created := &RuntimeSession{
+			ID:                           string(runtimeidentity.RuntimeSessionID("rtsessv2_" + uuid.NewString())),
+			UserID:                       userID,
+			DeviceID:                     deviceID,
+			RuntimeID:                    runtimeID,
+			ConnectionGeneration:         prevGen + 1,
+			RuntimeContractVersion:       contractVersion,
+			CapabilitiesHash:             capsHash,
+			CapabilitiesJSON:             string(capsJSON),
+			LastAppliedDesiredRevision:   maxInt64(0, lastAppliedRev),
+			LastProcessedCommandSequence: maxInt64(0, lastCmdSeq),
+			LastEventSequence:            maxInt64(0, lastEvtSeq),
+			Status:                       string(SessionStatusSyncing),
+			ConnectedAt:                  now,
+			LastHeartbeatAt:              now,
+			CreatedAt:                    now,
+			UpdatedAt:                    now,
+		}
+		if err := tx.Create(created).Error; err != nil {
+			return err
+		}
+		if oldSession != nil {
+			result := tx.Model(&RuntimeSession{}).Where("id = ?", oldSession.ID).Updates(map[string]interface{}{
+				"superseded_by": created.ID,
+				"updated_at":    now,
+			})
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected != 1 {
+				return fmt.Errorf("link superseded runtime session: expected 1 row, got %d", result.RowsAffected)
+			}
+		}
+		newSession = created
+		return nil
+	})
+	if err != nil {
 		return nil, oldSession, err
 	}
-
-	if oldSession != nil {
-		db.Model(&RuntimeSession{}).Where("id = ?", oldSession.ID).Update("superseded_by", newSession.ID)
-	}
-
 	return newSession, oldSession, nil
 }
 
 func (s *sessionService) UpdateLastAppliedRevision(id string, revision int64) error {
-	now := time.Now().Format("2006-01-02 15:04:05")
+	if strings.TrimSpace(id) == "" {
+		return errors.New("runtime session id required")
+	}
+	now := time.Now().UTC().Format("2006-01-02 15:04:05")
 	return s.db.Model(&RuntimeSession{}).Where("id = ?", id).Updates(map[string]interface{}{
-		"last_applied_desired_revision": revision,
+		"last_applied_desired_revision": gorm.Expr("CASE WHEN last_applied_desired_revision < ? THEN ? ELSE last_applied_desired_revision END", revision, revision),
 		"updated_at":                    now,
 	}).Error
 }
 
 func (s *sessionService) UpdateLastProcessedCommandSequence(id string, seq int64) error {
-	now := time.Now().Format("2006-01-02 15:04:05")
+	if strings.TrimSpace(id) == "" {
+		return errors.New("runtime session id required")
+	}
+	now := time.Now().UTC().Format("2006-01-02 15:04:05")
 	return s.db.Model(&RuntimeSession{}).Where("id = ?", id).Updates(map[string]interface{}{
-		"last_processed_command_sequence": seq,
+		"last_processed_command_sequence": gorm.Expr("CASE WHEN last_processed_command_sequence < ? THEN ? ELSE last_processed_command_sequence END", seq, seq),
 		"updated_at":                      now,
 	}).Error
 }
 
 func (s *sessionService) UpdateLastEventSequence(id string, seq int64) error {
-	now := time.Now().Format("2006-01-02 15:04:05")
+	if strings.TrimSpace(id) == "" {
+		return errors.New("runtime session id required")
+	}
+	now := time.Now().UTC().Format("2006-01-02 15:04:05")
 	return s.db.Model(&RuntimeSession{}).Where("id = ?", id).Updates(map[string]interface{}{
-		"last_event_sequence": seq,
+		"last_event_sequence": gorm.Expr("CASE WHEN last_event_sequence < ? THEN ? ELSE last_event_sequence END", seq, seq),
 		"updated_at":          now,
 	}).Error
 }
@@ -214,13 +240,23 @@ func (s *sessionService) UpdateLastHeartbeat(id string) error {
 }
 
 func (s *sessionService) SupersedeSession(id, supersededBy string) error {
-	now := time.Now().Format("2006-01-02 15:04:05")
-	return s.db.Model(&RuntimeSession{}).Where("id = ?", id).Updates(map[string]interface{}{
+	if strings.TrimSpace(id) == "" {
+		return nil
+	}
+	now := time.Now().UTC().Format("2006-01-02 15:04:05")
+	result := s.db.Model(&RuntimeSession{}).Where("id = ?", id).Updates(map[string]interface{}{
 		"status":        SessionStatusSuperseded,
 		"superseded_by": supersededBy,
 		"superseded_at": now,
 		"updated_at":    now,
-	}).Error
+	})
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected != 1 {
+		return fmt.Errorf("supersede runtime session %s: expected 1 row, got %d", id, result.RowsAffected)
+	}
+	return nil
 }
 
 func (s *sessionService) SyncFromDeviceRuntimeSession(ctx context.Context, runtimeSession deviceruntime.RuntimeSession, hello HelloPayload) (*RuntimeSession, error) {
@@ -249,7 +285,10 @@ func (s *sessionService) SyncFromDeviceRuntimeSession(ctx context.Context, runti
 			UpdatedAt:                    now,
 		}
 
-		capsJSON, _ := json.Marshal(hello.Capabilities)
+		capsJSON, marshalErr := json.Marshal(hello.Capabilities)
+		if marshalErr != nil {
+			return nil, fmt.Errorf("marshal runtime capabilities: %w", marshalErr)
+		}
 		if len(capsJSON) > 0 {
 			session.CapabilitiesJSON = string(capsJSON)
 		}
@@ -271,7 +310,10 @@ func (s *sessionService) SyncFromDeviceRuntimeSession(ctx context.Context, runti
 	existing.Status = string(runtimeSession.Status)
 	existing.UpdatedAt = now
 
-	capsJSON, _ := json.Marshal(hello.Capabilities)
+	capsJSON, marshalErr := json.Marshal(hello.Capabilities)
+	if marshalErr != nil {
+		return nil, fmt.Errorf("marshal runtime capabilities: %w", marshalErr)
+	}
 	if len(capsJSON) > 0 {
 		existing.CapabilitiesJSON = string(capsJSON)
 	}
@@ -301,4 +343,11 @@ func (s *sessionService) DeleteTerminalBefore(cutoff time.Time) (int64, error) {
 		SessionStatusClosed, SessionStatusSuperseded, cutoffStr,
 	).Delete(&RuntimeSession{})
 	return result.RowsAffected, result.Error
+}
+
+func maxInt64(a, b int64) int64 {
+	if a > b {
+		return a
+	}
+	return b
 }

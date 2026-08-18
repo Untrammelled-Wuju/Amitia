@@ -58,21 +58,28 @@ func (r *Reconciler) ExpireCommands(now time.Time) (int64, error) {
 		if cmd.Status == string(CommandStatusExpired) {
 			continue
 		}
-		if err := r.commands.MarkExpired(cmd.ID, now); err == nil {
-			expired++
+		if err := r.commands.MarkExpired(cmd.ID, now); err != nil {
+			return expired, fmt.Errorf("mark command %s expired: %w", cmd.ID, err)
+		}
+		expired++
 
-			payload, _ := marshalJSON(map[string]interface{}{
-				"commandId": cmd.ID,
-				"expiredAt": now.Format(time.RFC3339),
-			})
-			seq := int64(0)
-			evtSeq, _ := r.events.GetLatestEventSeq(cmd.RuntimeSessionID)
-			if evtSeq > 0 {
-				seq = evtSeq + 1
-			} else {
-				seq = 1
-			}
-			_, _ = r.events.Append("command.timeout", payload, cmd.RuntimeSessionID, seq, TriggerSourceSystemRecovery, &cmd.ID)
+		payload, err := marshalJSON(map[string]interface{}{
+			"commandId": cmd.ID,
+			"expiredAt": now.Format(time.RFC3339),
+		})
+		if err != nil {
+			return expired, fmt.Errorf("marshal command timeout event: %w", err)
+		}
+		evtSeq, err := r.events.GetLatestEventSeq(cmd.RuntimeSessionID)
+		if err != nil {
+			return expired, fmt.Errorf("load latest event sequence: %w", err)
+		}
+		seq := evtSeq + 1
+		if seq < 1 {
+			seq = 1
+		}
+		if _, err := r.events.Append(EventCommandTimeout, payload, cmd.RuntimeSessionID, seq, TriggerSourceSystemRecovery, &cmd.ID); err != nil {
+			return expired, fmt.Errorf("append command timeout event: %w", err)
 		}
 	}
 
