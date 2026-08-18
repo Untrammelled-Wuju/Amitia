@@ -1,6 +1,8 @@
 import Foundation
+import UIKit
 #if canImport(AlarmKit)
 import AlarmKit
+import SwiftUI
 #endif
 
 public enum AlarmKitAvailability {
@@ -41,28 +43,29 @@ public struct AmitiaAlarmMetadataDTO: Codable {
     var ownerRef: String?
 }
 
-public class AlarmKitAdapter {
+#if canImport(AlarmKit)
+@available(iOS 26.0, *)
+private struct AmitiaAlarmKitMetadata: AlarmMetadata {
+    let title: String
+    let kind: String?
+    let ownerRef: String?
+}
+#endif
+
+public final class AlarmKitAdapter {
     public static let shared = AlarmKitAdapter()
 
     private init() {}
 
     public func checkAvailability() -> AlarmKitAvailability {
-        if isAlarmKitAvailable() {
-            return .available
-        }
-        let majorVersion = Int((UIDevice.current.systemVersion).split(separator: ".").first ?? "25") ?? 25
-        if majorVersion < 26 {
-            return .unsupported("PLATFORM_NOT_SUPPORTED")
-        }
-        return .unsupported("PLATFORM_NOT_SUPPORTED")
+        isAlarmKitAvailable() ? .available : .unsupported("PLATFORM_NOT_SUPPORTED")
     }
 
     public func authorizationStatus() -> AlarmAuthorizationStatus {
         guard isAlarmKitAvailable() else { return .notDetermined }
         #if canImport(AlarmKit)
         if #available(iOS 26.0, *) {
-            let manager = AlarmManager.shared
-            switch manager.authorizationState {
+            switch AlarmManager.shared.authorizationState {
             case .authorized: return .authorized
             case .denied: return .denied
             case .notDetermined: return .notDetermined
@@ -78,15 +81,14 @@ public class AlarmKitAdapter {
         #if canImport(AlarmKit)
         if #available(iOS 26.0, *) {
             do {
-                let state = try await AlarmManager.shared.requestAuthorization()
-                switch state {
+                switch try await AlarmManager.shared.requestAuthorization() {
                 case .authorized: return (.authorized, nil)
                 case .denied: return (.denied, nil)
                 case .notDetermined: return (.notDetermined, nil)
                 @unknown default: return (.notDetermined, nil)
                 }
             } catch {
-                return (.denied, error.localizedDescription)
+                return (.notDetermined, error.localizedDescription)
             }
         }
         #endif
@@ -104,14 +106,45 @@ public class AlarmKitAdapter {
         guard isAlarmKitAvailable() else { return (false, "PLATFORM_NOT_SUPPORTED") }
         #if canImport(AlarmKit)
         if #available(iOS 26.0, *) {
-            let result = await createAlarmInternal(
-                id: id,
-                title: title,
-                schedule: schedule,
-                presentation: presentation,
-                sound: sound
-            )
-            return result
+            guard let alarmID = UUID(uuidString: id) else {
+                return (false, "INVALID_ALARM_ID")
+            }
+            if let sound, sound.kind == "named" {
+                return (false, "CUSTOM_SOUND_NOT_SUPPORTED")
+            }
+            do {
+                let alarmSchedule = try buildAlarmSchedule(schedule)
+                let stopButton = AlarmButton(
+                    text: "Dismiss",
+                    textColor: .white,
+                    systemImageName: "stop.circle"
+                )
+                let alert = AlarmPresentation.Alert(
+                    title: presentation.alertTitle ?? title,
+                    stopButton: stopButton
+                )
+                let attributes = AlarmAttributes<AmitiaAlarmKitMetadata>(
+                    presentation: AlarmPresentation(alert: alert),
+                    metadata: AmitiaAlarmKitMetadata(
+                        title: title,
+                        kind: metadata?.kind,
+                        ownerRef: metadata?.ownerRef
+                    ),
+                    tintColor: tintColor(presentation.tintColor)
+                )
+                typealias Configuration = AlarmManager.AlarmConfiguration<AmitiaAlarmKitMetadata>
+                let configuration = Configuration.alarm(
+                    schedule: alarmSchedule,
+                    attributes: attributes,
+                    stopIntent: nil,
+                    secondaryIntent: nil,
+                    sound: .default
+                )
+                _ = try await AlarmManager.shared.schedule(id: alarmID, configuration: configuration)
+                return (true, nil)
+            } catch {
+                return (false, error.localizedDescription)
+            }
         }
         #endif
         return (false, "PLATFORM_NOT_SUPPORTED")
@@ -121,8 +154,9 @@ public class AlarmKitAdapter {
         guard isAlarmKitAvailable() else { return (false, "PLATFORM_NOT_SUPPORTED") }
         #if canImport(AlarmKit)
         if #available(iOS 26.0, *) {
+            guard let alarmID = UUID(uuidString: id) else { return (false, "INVALID_ALARM_ID") }
             do {
-                try await AlarmManager.shared.cancel(id: id)
+                try AlarmManager.shared.cancel(id: alarmID)
                 return (true, nil)
             } catch {
                 return (false, error.localizedDescription)
@@ -136,47 +170,9 @@ public class AlarmKitAdapter {
         guard isAlarmKitAvailable() else { return (false, "PLATFORM_NOT_SUPPORTED") }
         #if canImport(AlarmKit)
         if #available(iOS 26.0, *) {
+            guard let alarmID = UUID(uuidString: id) else { return (false, "INVALID_ALARM_ID") }
             do {
-                guard let alarm = try await AlarmManager.shared.alarm(id: id) else {
-                    return (false, "ALARM_NOT_FOUND")
-                }
-                try await alarm.stop()
-                return (true, nil)
-            } catch {
-                return (false, error.localizedDescription)
-            }
-        }
-        #endif
-        return (false, "PLATFORM_NOT_SUPPORTED")
-    }
-
-    public func pauseAlarm(id: String) async -> (success: Bool, error: String?) {
-        guard isAlarmKitAvailable() else { return (false, "PLATFORM_NOT_SUPPORTED") }
-        #if canImport(AlarmKit)
-        if #available(iOS 26.0, *) {
-            do {
-                guard let alarm = try await AlarmManager.shared.alarm(id: id) else {
-                    return (false, "ALARM_NOT_FOUND")
-                }
-                try await alarm.pause()
-                return (true, nil)
-            } catch {
-                return (false, error.localizedDescription)
-            }
-        }
-        #endif
-        return (false, "PLATFORM_NOT_SUPPORTED")
-    }
-
-    public func resumeAlarm(id: String) async -> (success: Bool, error: String?) {
-        guard isAlarmKitAvailable() else { return (false, "PLATFORM_NOT_SUPPORTED") }
-        #if canImport(AlarmKit)
-        if #available(iOS 26.0, *) {
-            do {
-                guard let alarm = try await AlarmManager.shared.alarm(id: id) else {
-                    return (false, "ALARM_NOT_FOUND")
-                }
-                try await alarm.resume()
+                try AlarmManager.shared.stop(id: alarmID)
                 return (true, nil)
             } catch {
                 return (false, error.localizedDescription)
@@ -191,19 +187,8 @@ public class AlarmKitAdapter {
         #if canImport(AlarmKit)
         if #available(iOS 26.0, *) {
             do {
-                let alarms = try await AlarmManager.shared.alarms
-                let result = alarms.map { alarm -> [String: Any] in
-                    var item: [String: Any] = [
-                        "id": alarm.id,
-                        "title": alarm.title
-                    ]
-                    item["state"] = String(describing: alarm.state)
-                    if let countdown = alarm.countdown {
-                        item["countdownDuration"] = countdown.duration
-                    }
-                    return item
-                }
-                return (result, nil)
+                let alarms = try AlarmManager.shared.alarms
+                return (alarms.map(alarmDictionary), nil)
             } catch {
                 return ([], error.localizedDescription)
             }
@@ -216,19 +201,13 @@ public class AlarmKitAdapter {
         guard isAlarmKitAvailable() else { return (nil, "PLATFORM_NOT_SUPPORTED") }
         #if canImport(AlarmKit)
         if #available(iOS 26.0, *) {
+            guard let alarmID = UUID(uuidString: id) else { return (nil, "INVALID_ALARM_ID") }
             do {
-                guard let target = try await AlarmManager.shared.alarm(id: id) else {
+                let alarms = try AlarmManager.shared.alarms
+                guard let target = alarms.first(where: { $0.id == alarmID }) else {
                     return (nil, "ALARM_NOT_FOUND")
                 }
-                var item: [String: Any] = [
-                    "id": target.id,
-                    "title": target.title
-                ]
-                item["state"] = String(describing: target.state)
-                if let countdown = target.countdown {
-                    item["countdownDuration"] = countdown.duration
-                }
-                return (item, nil)
+                return (alarmDictionary(target), nil)
             } catch {
                 return (nil, error.localizedDescription)
             }
@@ -248,66 +227,67 @@ public class AlarmKitAdapter {
 
     #if canImport(AlarmKit)
     @available(iOS 26.0, *)
-    private func createAlarmInternal(
-        id: String,
-        title: String,
-        schedule: AmitiaAlarmScheduleDTO,
-        presentation: AmitiaAlarmPresentationDTO,
-        sound: AmitiaAlarmSoundDTO?
-    ) async -> (success: Bool, error: String?) {
-        do {
-            let manager = AlarmManager.shared
-            let config = buildAlarmConfiguration(title: title, schedule: schedule, presentation: presentation, sound: sound)
-            try await manager.schedule(id: id, configuration: config)
-            return (true, nil)
-        } catch {
-            return (false, error.localizedDescription)
+    private func buildAlarmSchedule(_ schedule: AmitiaAlarmScheduleDTO) throws -> Alarm.Schedule {
+        if let fireAt = schedule.fireAt {
+            guard let date = ISO8601DateFormatter().date(from: fireAt) else {
+                throw NSError(domain: "AmitiaAlarmKit", code: 1, userInfo: [NSLocalizedDescriptionKey: "invalid fireAt"])
+            }
+            return .fixed(date)
+        }
+        guard let hour = schedule.hour, let minute = schedule.minute else {
+            throw NSError(domain: "AmitiaAlarmKit", code: 2, userInfo: [NSLocalizedDescriptionKey: "missing alarm schedule"])
+        }
+        let time = Alarm.Schedule.Relative.Time(hour: hour, minute: minute)
+        let recurrence: Alarm.Schedule.Relative.Recurrence
+        if schedule.recurrence == "weekly" {
+            let weekdays = try (schedule.weekdays ?? []).map(localeWeekday)
+            guard !weekdays.isEmpty else {
+                throw NSError(domain: "AmitiaAlarmKit", code: 3, userInfo: [NSLocalizedDescriptionKey: "weekly recurrence requires weekdays"])
+            }
+            recurrence = .weekly(weekdays)
+        } else {
+            recurrence = .never
+        }
+        return .relative(Alarm.Schedule.Relative(time: time, repeats: recurrence))
+    }
+
+    @available(iOS 26.0, *)
+    private func localeWeekday(_ weekday: String) throws -> Locale.Weekday {
+        switch weekday.lowercased() {
+        case "monday": return .monday
+        case "tuesday": return .tuesday
+        case "wednesday": return .wednesday
+        case "thursday": return .thursday
+        case "friday": return .friday
+        case "saturday": return .saturday
+        case "sunday": return .sunday
+        default:
+            throw NSError(domain: "AmitiaAlarmKit", code: 4, userInfo: [NSLocalizedDescriptionKey: "invalid weekday: \(weekday)"])
         }
     }
 
     @available(iOS 26.0, *)
-    private func buildAlarmConfiguration(
-        title: String,
-        schedule: AmitiaAlarmScheduleDTO,
-        presentation: AmitiaAlarmPresentationDTO,
-        sound: AmitiaAlarmSoundDTO?
-    ) -> AlarmKit.AlarmConfiguration {
-        var config = AlarmKit.AlarmConfiguration(title: title)
-        if let alarmSchedule = buildAlarmSchedule(schedule) {
-            config.schedule = alarmSchedule
+    private func tintColor(_ value: String?) -> Color {
+        switch value {
+        case "amitia-green": return .green
+        case "amitia-orange": return .orange
+        case "amitia-blue": return .blue
+        default: return .blue
         }
-        config.presentation = buildAlarmPresentation(presentation)
-        return config
     }
 
     @available(iOS 26.0, *)
-    private func buildAlarmSchedule(_ schedule: AmitiaAlarmScheduleDTO) -> AlarmKit.AlarmSchedule? {
-        if let fireAt = schedule.fireAt, let date = ISO8601DateFormatter().date(from: fireAt) {
-            return AlarmKit.AlarmSchedule(date: date)
+    private func alarmDictionary(_ alarm: Alarm) -> [String: Any] {
+        var item: [String: Any] = [
+            "id": alarm.id.uuidString,
+            "state": String(describing: alarm.state)
+        ]
+        item["schedule"] = String(describing: alarm.schedule)
+        if let countdown = alarm.countdownDuration {
+            item["countdownPreAlert"] = countdown.preAlert
+            item["countdownPostAlert"] = countdown.postAlert
         }
-        if let hour = schedule.hour, let minute = schedule.minute {
-            var dc = DateComponents()
-            dc.hour = hour
-            dc.minute = minute
-            return AlarmKit.AlarmSchedule(dateComponents: dc)
-        }
-        return nil
-    }
-
-    @available(iOS 26.0, *)
-    private func buildAlarmPresentation(_ presentation: AmitiaAlarmPresentationDTO) -> AlarmKit.AlarmPresentation? {
-        var p = AlarmKit.AlarmPresentation()
-        if let alertTitle = presentation.alertTitle {
-            p.alertTitle = alertTitle
-        }
-        if let countdownTitle = presentation.countdownTitle {
-            p.countdownTitle = countdownTitle
-        }
-        if let pausedTitle = presentation.pausedTitle {
-            p.pausedTitle = pausedTitle
-        }
-        return p
+        return item
     }
     #endif
 }
-

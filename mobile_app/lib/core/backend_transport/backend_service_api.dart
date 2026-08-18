@@ -126,6 +126,21 @@ class BackendServiceApi {
     return _parseResponse<T>(response, fromJson, path);
   }
 
+  /// Invoke endpoints that intentionally use the RPC envelope
+  /// `{code,msg,payload}` instead of the normal management `{code,msg,data}` envelope.
+  Future<T?> postPayload<T>(
+    String path, {
+    Object? data,
+    T Function(dynamic)? fromJson,
+  }) async {
+    final response = await _http.send(BackendHttpRequest(
+      method: BackendHttpMethod.post,
+      path: path,
+      body: data,
+    ));
+    return _parsePayloadResponse<T>(response, fromJson, path);
+  }
+
   Future<T?> put<T>(
     String path, {
     Object? data,
@@ -185,6 +200,28 @@ class BackendServiceApi {
     if (fromJson != null && data != null) {
       return fromJson(data);
     }
+    return data as T?;
+  }
+
+  T? _parsePayloadResponse<T>(
+    BackendHttpResponse response,
+    T Function(dynamic)? fromJson,
+    String path,
+  ) {
+    final data = response.data;
+    if (data is Map<String, dynamic> && data.containsKey('code')) {
+      final code = data['code'] as int? ?? 0;
+      final message = data['message'] as String? ?? data['msg'] as String? ?? '';
+      final detail = data['detail'] as String?;
+      if (code != 200) {
+        throw ServiceApiException(code: code, message: message, detail: detail);
+      }
+      final payload = data['payload'];
+      if (payload == null) return null;
+      if (fromJson != null) return fromJson(payload);
+      return payload as T?;
+    }
+    if (fromJson != null && data != null) return fromJson(data);
     return data as T?;
   }
 

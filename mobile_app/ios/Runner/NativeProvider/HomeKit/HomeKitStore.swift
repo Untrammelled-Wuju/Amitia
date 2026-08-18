@@ -15,7 +15,7 @@ public struct HomeKitRef: Sendable {
     }
 }
 
-public final class HomeKitStore: NSObject, HMHomeManagerDelegate, HMHomeDelegate, @unchecked Sendable {
+public final class HomeKitStore: NSObject, HMHomeManagerDelegate, HMHomeDelegate, HMAccessoryDelegate, @unchecked Sendable {
     public static let shared = HomeKitStore()
 
     private var homeManager: HMHomeManager?
@@ -57,9 +57,17 @@ public final class HomeKitStore: NSObject, HMHomeManagerDelegate, HMHomeDelegate
     }
 
     public func invalidate() {
-        queue.sync {
+        let homes = queue.sync { () -> [HMHome] in
             generation += 1
+            let homes = cachedHomes
             cachedHomes = []
+            return homes
+        }
+        for home in homes {
+            home.delegate = nil
+            for accessory in home.accessories {
+                accessory.delegate = nil
+            }
         }
     }
 
@@ -128,6 +136,12 @@ public final class HomeKitStore: NSObject, HMHomeManagerDelegate, HMHomeDelegate
     }
 
     public func homeManagerDidUpdateHomes(_ manager: HMHomeManager) {
+        for home in manager.homes {
+            home.delegate = self
+            for accessory in home.accessories {
+                accessory.delegate = self
+            }
+        }
         let continuations = queue.sync {
             self.cachedHomes = manager.homes
             let pending = self.readinessContinuations
@@ -140,11 +154,16 @@ public final class HomeKitStore: NSObject, HMHomeManagerDelegate, HMHomeDelegate
         NativeEventEmitter.shared.emit(NativeEventPayload(
             domain: "homekit",
             event: "homes.updated",
-            data: ["count": manager.homes.count]
+            data: ["count": manager.homes.count],
+            generation: Int(currentGeneration)
         ))
     }
 
     public func homeManager(_ manager: HMHomeManager, didAdd home: HMHome) {
+        home.delegate = self
+        for accessory in home.accessories {
+            accessory.delegate = self
+        }
         queue.sync {
             if !cachedHomes.contains(where: { $0.uniqueIdentifier == home.uniqueIdentifier }) {
                 cachedHomes.append(home)
@@ -153,113 +172,131 @@ public final class HomeKitStore: NSObject, HMHomeManagerDelegate, HMHomeDelegate
         NativeEventEmitter.shared.emit(NativeEventPayload(
             domain: "homekit",
             event: "home.added",
-            data: ["id": home.uniqueIdentifier.uuidString, "name": home.name]
+            data: ["id": home.uniqueIdentifier.uuidString],
+            generation: Int(currentGeneration),
+            entityRef: home.uniqueIdentifier.uuidString
         ))
     }
 
     public func homeManager(_ manager: HMHomeManager, didRemove home: HMHome) {
+        home.delegate = nil
+        for accessory in home.accessories {
+            accessory.delegate = nil
+        }
         queue.sync {
             cachedHomes.removeAll { $0.uniqueIdentifier == home.uniqueIdentifier }
         }
         NativeEventEmitter.shared.emit(NativeEventPayload(
             domain: "homekit",
             event: "home.removed",
-            data: ["id": home.uniqueIdentifier.uuidString, "name": home.name]
+            data: ["id": home.uniqueIdentifier.uuidString],
+            generation: Int(currentGeneration),
+            entityRef: home.uniqueIdentifier.uuidString
         ))
     }
 
     // MARK: - HMHomeDelegate
 
     public func home(_ home: HMHome, didAdd accessory: HMAccessory) {
-        queue.sync { generation += 1 }
+        accessory.delegate = self
         NativeEventEmitter.shared.emit(NativeEventPayload(
             domain: "homekit",
             event: "accessory.added",
             data: [
                 "id": accessory.uniqueIdentifier.uuidString,
-                "name": accessory.name,
-                "homeId": home.uniqueIdentifier.uuidString,
-                "category": accessory.category.localizedDescription
+                "homeId": home.uniqueIdentifier.uuidString
             ],
-            generation: Int(generation)
+            generation: Int(currentGeneration),
+            entityRef: accessory.uniqueIdentifier.uuidString
         ))
     }
 
     public func home(_ home: HMHome, didRemove accessory: HMAccessory) {
-        queue.sync { generation += 1 }
+        accessory.delegate = nil
         NativeEventEmitter.shared.emit(NativeEventPayload(
             domain: "homekit",
             event: "accessory.removed",
             data: [
                 "id": accessory.uniqueIdentifier.uuidString,
-                "name": accessory.name,
                 "homeId": home.uniqueIdentifier.uuidString
             ],
-            generation: Int(generation)
+            generation: Int(currentGeneration),
+            entityRef: accessory.uniqueIdentifier.uuidString
         ))
     }
 
     public func home(_ home: HMHome, didUpdateNameFor accessory: HMAccessory) {
-        queue.sync { generation += 1 }
         NativeEventEmitter.shared.emit(NativeEventPayload(
             domain: "homekit",
             event: "accessory.updated",
             data: [
                 "id": accessory.uniqueIdentifier.uuidString,
-                "name": accessory.name,
                 "homeId": home.uniqueIdentifier.uuidString,
                 "changeType": "name"
             ],
-            generation: Int(generation)
+            generation: Int(currentGeneration),
+            entityRef: accessory.uniqueIdentifier.uuidString
         ))
     }
 
-    public func home(_ home: HMHome, didAdd service: HMService, to accessory: HMAccessory) {
-        queue.sync { generation += 1 }
+    // MARK: - HMAccessoryDelegate
+
+    public func accessoryDidUpdateServices(_ accessory: HMAccessory) {
+        let homeID = homeContaining(accessory)?.uniqueIdentifier.uuidString ?? ""
         NativeEventEmitter.shared.emit(NativeEventPayload(
             domain: "homekit",
-            event: "service.added",
+            event: "service.updated",
             data: [
-                "id": service.uniqueIdentifier.uuidString,
-                "name": service.name,
-                "serviceType": service.serviceType,
                 "accessoryId": accessory.uniqueIdentifier.uuidString,
-                "homeId": home.uniqueIdentifier.uuidString
+                "homeId": homeID,
+                "serviceCount": accessory.services.count,
+                "changeType": "services"
             ],
-            generation: Int(generation)
+            generation: Int(currentGeneration),
+            entityRef: accessory.uniqueIdentifier.uuidString
         ))
     }
 
-    public func home(_ home: HMHome, didUpdateNameFor service: HMService) {
-        queue.sync { generation += 1 }
+    public func accessory(_ accessory: HMAccessory, didUpdateNameFor service: HMService) {
+        let homeID = homeContaining(accessory)?.uniqueIdentifier.uuidString ?? ""
         NativeEventEmitter.shared.emit(NativeEventPayload(
             domain: "homekit",
             event: "service.updated",
             data: [
                 "id": service.uniqueIdentifier.uuidString,
-                "name": service.name,
                 "serviceType": service.serviceType,
+                "accessoryId": accessory.uniqueIdentifier.uuidString,
+                "homeId": homeID,
                 "changeType": "name"
             ],
-            generation: Int(generation)
+            generation: Int(currentGeneration),
+            entityRef: accessory.uniqueIdentifier.uuidString
         ))
     }
 
-    public func home(_ home: HMHome, didUpdateValueFor characteristic: HMCharacteristic) {
-        queue.sync { generation += 1 }
+    public func accessory(_ accessory: HMAccessory, service: HMService, didUpdateValueFor characteristic: HMCharacteristic) {
+        let homeID = homeContaining(accessory)?.uniqueIdentifier.uuidString ?? ""
         NativeEventEmitter.shared.emit(NativeEventPayload(
             domain: "homekit",
             event: "characteristic.value_changed",
             data: [
                 "id": characteristic.uniqueIdentifier.uuidString,
                 "characteristicType": characteristic.characteristicType,
-                "value": characteristic.value ?? NSNull(),
-                "serviceId": characteristic.service?.uniqueIdentifier.uuidString ?? "",
-                "accessoryId": characteristic.service?.accessory?.uniqueIdentifier.uuidString ?? "",
-                "homeId": home.uniqueIdentifier.uuidString
+                "serviceId": service.uniqueIdentifier.uuidString,
+                "accessoryId": accessory.uniqueIdentifier.uuidString,
+                "homeId": homeID
             ],
-            generation: Int(generation),
-            entityRef: characteristic.service?.accessory?.uniqueIdentifier.uuidString
+            generation: Int(currentGeneration),
+            entityRef: "\(accessory.uniqueIdentifier.uuidString)/\(service.uniqueIdentifier.uuidString)/\(characteristic.uniqueIdentifier.uuidString)"
         ))
     }
+
+    private func homeContaining(_ accessory: HMAccessory) -> HMHome? {
+        return queue.sync {
+            cachedHomes.first { home in
+                home.accessories.contains { $0.uniqueIdentifier == accessory.uniqueIdentifier }
+            }
+        }
+    }
+
 }

@@ -708,7 +708,9 @@ class GameRuntimeHealthResponse {
     return GameRuntimeHealthResponse(
       status: (json['status'] ?? '').toString(),
       runtimeState: json['runtimeState'] as String?,
-      lastHeartbeat: json['lastHeartbeat'] != null ? DateTime.tryParse(json['lastHeartbeat']) : null,
+      lastHeartbeat: json['lastHeartbeat'] != null
+          ? DateTime.tryParse(json['lastHeartbeat'])
+          : (json['updatedAt'] != null ? DateTime.tryParse(json['updatedAt']) : null),
     );
   }
 }

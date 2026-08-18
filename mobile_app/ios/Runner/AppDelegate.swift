@@ -36,13 +36,15 @@ import UIKit
     if let host = self.iosNativeHost {
       self.nativeTransport = IOSNativeTransport(host: host, delegate: self)
       self.nativeTransport?.attach()
+      let nativeRegistrar = self.registrar(forPlugin: "IOSNativeBridgePlugin")!
+      let nativeMessenger = nativeRegistrar.messenger()
       IOSNativeBridgePlugin.register(
-        messenger: self.registrar(forPlugin: "IOSNativeBridgePlugin")!.messenger(),
+        messenger: nativeMessenger,
         host: host
       )
 
       let dispatcher = BackendActionDispatcherImpl.shared
-      dispatcher.configure(host: host)
+      dispatcher.configure(messenger: nativeMessenger)
       ShortcutActionGateway.shared.setupBackendDispatcher(dispatcher)
       BackgroundNativeHandler.registerBGTaskHandlers()
     }

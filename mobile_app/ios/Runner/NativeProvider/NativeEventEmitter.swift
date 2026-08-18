@@ -1,6 +1,6 @@
 import Foundation
 
-public struct NativeEventPayload: Sendable {
+public struct NativeEventPayload: @unchecked Sendable {
     public let domain: String
     public let event: String
     public let timestamp: String
@@ -66,7 +66,9 @@ final class NativeEventEmitter {
     private var dedupCache: [String: DedupEntry] = [:]
     private var maxQueueSize = 100
     private var absoluteMaxQueueSize = 200
+    private var maxDedupEntries = 4096
     private var dedupWindowSize: TimeInterval = 5.0
+    private var dedupCleanupTimer: DispatchSourceTimer?
     private var sinks: [WeakSink] = []
 
     private struct WeakSink {
@@ -83,6 +85,7 @@ final class NativeEventEmitter {
         timer.setEventHandler { [weak self] in
             self?.cleanupExpiredDedupEntries()
         }
+        dedupCleanupTimer = timer
         timer.resume()
     }
 
@@ -111,6 +114,11 @@ final class NativeEventEmitter {
     func emit(_ payload: NativeEventPayload) {
         lock.lock()
 
+        if eventQueue.count >= maxQueueSize && payload.priority <= .normal {
+            lock.unlock()
+            return
+        }
+
         if eventQueue.count >= absoluteMaxQueueSize {
             if payload.priority <= .normal {
                 lock.unlock()
@@ -127,8 +135,9 @@ final class NativeEventEmitter {
 
         let fingerprint = computeFingerprint(payload)
         let now = Date()
+        let eventDedupWindow = dedupWindow(for: payload)
         if let existing = dedupCache[fingerprint] {
-            if now.timeIntervalSince(existing.lastSeenAt) < dedupWindowSize {
+            if now.timeIntervalSince(existing.lastSeenAt) < eventDedupWindow {
                 var updated = existing
                 updated.count += 1
                 updated.lastSeenAt = now
@@ -136,6 +145,10 @@ final class NativeEventEmitter {
                 lock.unlock()
                 return
             }
+        }
+        if dedupCache.count >= maxDedupEntries,
+           let oldest = dedupCache.min(by: { $0.value.lastSeenAt < $1.value.lastSeenAt })?.key {
+            dedupCache.removeValue(forKey: oldest)
         }
         dedupCache[fingerprint] = DedupEntry(count: 1, lastSeenAt: now)
 
@@ -190,8 +203,18 @@ final class NativeEventEmitter {
         )
     }
 
+    private func dedupWindow(for payload: NativeEventPayload) -> TimeInterval {
+        if payload.event == "characteristic.value_updated" || payload.event == "characteristic.value_changed" {
+            return 0.20
+        }
+        return dedupWindowSize
+    }
+
     private func computeFingerprint(_ payload: NativeEventPayload) -> String {
         var components = [payload.domain, payload.event]
+        if let generation = payload.generation {
+            components.append("g:\(generation)")
+        }
         if let ref = payload.entityRef {
             components.append("ref:\(ref)")
         }
@@ -206,6 +229,11 @@ final class NativeEventEmitter {
         }
         if let characteristicUUID = payload.data["characteristicUUID"] as? String {
             components.append("c:\(characteristicUUID)")
+        }
+        if payload.event == "characteristic.value_updated" || payload.event == "characteristic.value_changed" {
+            if let value = payload.data["value"] {
+                components.append("v:\(String(describing: value))")
+            }
         }
         return components.joined(separator: "|")
     }
