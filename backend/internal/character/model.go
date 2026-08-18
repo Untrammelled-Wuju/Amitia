@@ -46,6 +46,7 @@ type Character struct {
 	EmotionScale        int     `gorm:"column:emotion_scale;default:0" json:"emotionScale"`
 	SilenceDuration     int     `gorm:"column:silence_duration;default:0" json:"silenceDuration"`
 	CardDataJSON        string  `gorm:"column:card_data_json;default:{}" json:"cardData,omitempty"`
+	Revision            int64   `gorm:"column:revision;not null;default:0" json:"revision"`
 }
 
 func (Character) TableName() string { return "characters" }

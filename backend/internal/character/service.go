@@ -295,13 +295,12 @@ func (s *service) Update(id string, req *UpdateCharacterRequest) (*Character, er
 		return nil, fmt.Errorf("没有可更新的字段")
 	}
 	var updateErr error
-	err := s.db.Transaction(func(tx *gorm.DB) error {
+	err = s.db.Transaction(func(tx *gorm.DB) error {
 		var current Character
 		if err := tx.Where("id = ?", id).First(&current).Error; err != nil {
 			return err
 		}
-		oldRevision := current.Revision
-		newRevision := oldRevision + 1
+		newRevision := current.Revision + 1
 		updates["revision"] = newRevision
 		if err := tx.Model(&Character{}).Where("id = ?", id).Updates(updates).Error; err != nil {
 			return err

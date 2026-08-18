@@ -4,12 +4,17 @@ package character
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/internal/sync"
 	"github.com/u-ai/backend/pkg/app"
 )
 
 func RegisterCharacterRouter(r *gin.RouterGroup, ctx *app.AppContext, chatTester ChatTester) {
+	RegisterCharacterRouterWithRecorder(r, ctx, chatTester, nil)
+}
+
+func RegisterCharacterRouterWithRecorder(r *gin.RouterGroup, ctx *app.AppContext, chatTester ChatTester, recorder sync.ChangeRecorder) {
 	repo := NewRepository(ctx)
-	svc := NewService(repo, ctx)
+	svc := NewService(repo, ctx, recorder)
 	handler := NewHandler(svc)
 	handler.chatTester = chatTester
 
