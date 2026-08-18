@@ -140,8 +140,13 @@ func (p *cutoverBootstrapPort) VerifyCanonicalWiring(ctx context.Context) error 
 	return nil
 }
 
+type ProductionReadVerifier func(ctx context.Context) error
+type ProductionLegacyChecker func(ctx context.Context) error
+
 type ReadSwitchDependencies struct {
-	Container CanonicalAuthorityProvider
+	Container               CanonicalAuthorityProvider
+	ProductionReadVerifier  ProductionReadVerifier
+	ProductionLegacyChecker ProductionLegacyChecker
 }
 
 type cutoverReadSwitchPort struct {
@@ -175,16 +180,30 @@ func (p *cutoverReadSwitchPort) VerifyReadCanonical(ctx context.Context) error {
 	if c.HookService() == nil {
 		return errors.New("read switch: HookService not available for canonical reads")
 	}
+	if p.deps.ProductionReadVerifier != nil {
+		if err := p.deps.ProductionReadVerifier(ctx); err != nil {
+			return fmt.Errorf("read switch: production read verification failed: %w", err)
+		}
+	}
 	return nil
 }
 
 func (p *cutoverReadSwitchPort) VerifyProductionReaderNotLegacy(ctx context.Context) error {
+	if p.deps.ProductionLegacyChecker == nil {
+		return errors.New("read switch: production legacy checker not configured; cannot confirm production reader has migrated away from legacy")
+	}
+	if err := p.deps.ProductionLegacyChecker(ctx); err != nil {
+		return fmt.Errorf("read switch: production reader legacy check failed: %w", err)
+	}
 	return nil
 }
 
+type CanaryExecutor func(ctx context.Context) (*CanaryResult, error)
+
 type WriteLockoutDependencies struct {
-	LockoutFn func(ctx context.Context) error
-	VerifyFn  func(ctx context.Context) error
+	LockoutFn      func(ctx context.Context) error
+	VerifyFn       func(ctx context.Context) error
+	CanaryExecutor CanaryExecutor
 }
 
 type cutoverWriteLockoutPort struct {
@@ -210,18 +229,20 @@ func (p *cutoverWriteLockoutPort) VerifyLegacyWriteLockout(ctx context.Context) 
 }
 
 func (p *cutoverWriteLockoutPort) ExecuteCanaryOperation(ctx context.Context) (*CanaryResult, error) {
-	return &CanaryResult{
-		OperationID:        "canary-op",
-		CommandID:          "canary-cmd",
-		OperationTerminal:  "completed",
-		CommandTerminal:    "completed",
-		ProjectionRevision: 1,
-		DesiredRevision:    1,
-		Success:            true,
-	}, nil
+	if p.deps.CanaryExecutor == nil {
+		return nil, errors.New("write lockout: canary executor not configured; must execute a real canary through Coordinator->DesiredState->Outbox->Runtime Command->terminal ACK->Projection")
+	}
+	result, err := p.deps.CanaryExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("write lockout: canary execution failed: %w", err)
+	}
+	return result, nil
 }
 
 func (p *cutoverWriteLockoutPort) VerifyCanaryOperation(ctx context.Context, result *CanaryResult) error {
+	if result == nil {
+		return errors.New("write lockout: canary result is nil")
+	}
 	if !result.Success {
 		return errors.New("canary operation failed")
 	}

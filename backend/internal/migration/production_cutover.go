@@ -114,6 +114,8 @@ type CanonicalAuthorityProvider interface {
 	ScheduleService() interface{}
 	TaskRuntimeService() interface{}
 	HookService() interface{}
+	NativeBridgeRelay() interface{}
+	PlatformBridge() interface{}
 }
 
 type CutoverMaintenanceGate interface {
@@ -715,6 +717,12 @@ func (p *CutoverPlan) Preflight(ctx context.Context) error {
 	if p.deps.Container.HookService() == nil {
 		return fmt.Errorf("%w: HookService not initialized", ErrCutoverPreflightFailure)
 	}
+	if p.deps.Container.NativeBridgeRelay() == nil {
+		return fmt.Errorf("%w: NativeBridgeRelay not initialized", ErrCutoverPreflightFailure)
+	}
+	if p.deps.Container.PlatformBridge() == nil {
+		return fmt.Errorf("%w: PlatformBridge not initialized", ErrCutoverPreflightFailure)
+	}
 	return nil
 }
 
@@ -741,6 +749,12 @@ func (p *CutoverPlan) VerifyCanonicalAuthorities() []string {
 	}
 	if p.deps.Container.HookService() == nil {
 		failures = append(failures, "HookService: missing")
+	}
+	if p.deps.Container.NativeBridgeRelay() == nil {
+		failures = append(failures, "NativeBridgeRelay: missing")
+	}
+	if p.deps.Container.PlatformBridge() == nil {
+		failures = append(failures, "PlatformBridge: missing")
 	}
 	return failures
 }

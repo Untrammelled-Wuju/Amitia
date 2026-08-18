@@ -768,9 +768,10 @@ CREATE TABLE IF NOT EXISTS need_states (
 );
 
 CREATE TABLE IF NOT EXISTS app_settings (
-    key TEXT PRIMARY KEY,
-    value TEXT DEFAULT '',
-    updated_at TEXT DEFAULT (datetime('now'))
+	key TEXT PRIMARY KEY,
+	value TEXT DEFAULT '',
+	revision INTEGER NOT NULL DEFAULT 0,
+	updated_at TEXT DEFAULT (datetime('now'))
 );
 
 CREATE INDEX IF NOT EXISTS idx_active_task_due ON active_message_task(due_time);
@@ -5839,6 +5840,7 @@ CREATE TABLE IF NOT EXISTS sync_changes (
 	change_id TEXT PRIMARY KEY,
 	seq INTEGER NOT NULL,
 	user_id TEXT NOT NULL,
+	scope TEXT NOT NULL DEFAULT 'device',
 	entity_type TEXT NOT NULL,
 	entity_id TEXT NOT NULL,
 	operation TEXT NOT NULL,
@@ -5850,8 +5852,9 @@ CREATE TABLE IF NOT EXISTS sync_changes (
 	created_at DATETIME NOT NULL
 );
 CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_changes_seq ON sync_changes(seq);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_changes_user_mutation ON sync_changes(user_id, mutation_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_sync_changes_user_scope_mutation ON sync_changes(user_id, scope, mutation_id);
 CREATE INDEX IF NOT EXISTS idx_sync_changes_user ON sync_changes(user_id);
+CREATE INDEX IF NOT EXISTS idx_sync_changes_scope ON sync_changes(scope);
 CREATE INDEX IF NOT EXISTS idx_sync_changes_entity ON sync_changes(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_sync_changes_origin ON sync_changes(origin_device);
 CREATE TABLE IF NOT EXISTS sync_cursors (
