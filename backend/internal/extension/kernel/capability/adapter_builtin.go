@@ -7,12 +7,23 @@ import (
 
 type DispatchFunc func(ctx context.Context, handlerName string, input json.RawMessage, invocation ToolInvocationContext) (json.RawMessage, error)
 
+type HandlerVerifier func(handlerName string) bool
+
 type BuiltinRuntimeAdapter struct {
-	dispatcher DispatchFunc
+	dispatcher      DispatchFunc
+	handlerVerifier HandlerVerifier
 }
 
 func NewBuiltinRuntimeAdapter(dispatcher DispatchFunc) *BuiltinRuntimeAdapter {
 	return &BuiltinRuntimeAdapter{dispatcher: dispatcher}
+}
+
+func NewBuiltinRuntimeAdapterWithVerifier(dispatcher DispatchFunc, verifier HandlerVerifier) *BuiltinRuntimeAdapter {
+	return &BuiltinRuntimeAdapter{dispatcher: dispatcher, handlerVerifier: verifier}
+}
+
+func (a *BuiltinRuntimeAdapter) SetHandlerVerifier(v HandlerVerifier) {
+	a.handlerVerifier = v
 }
 
 func (a *BuiltinRuntimeAdapter) Supports(binding RuntimeBinding) bool {
@@ -60,5 +71,16 @@ func (a *BuiltinRuntimeAdapter) Execute(
 }
 
 func (a *BuiltinRuntimeAdapter) Health(ctx context.Context, binding RuntimeBinding) HealthStatus {
+	if binding.HandlerName == "" {
+		return HealthUnhealthy
+	}
+	if a.dispatcher == nil {
+		return HealthUnhealthy
+	}
+	if a.handlerVerifier != nil {
+		if !a.handlerVerifier(binding.HandlerName) {
+			return HealthUnhealthy
+		}
+	}
 	return HealthReady
 }

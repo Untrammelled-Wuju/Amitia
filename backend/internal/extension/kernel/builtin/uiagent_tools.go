@@ -384,11 +384,31 @@ func uiagentPreviewHandler(ctx context.Context, execCtx tool.ToolExecutionContex
 		if err != nil {
 			return tool.ErrorResult("preview_observe_failed", fmt.Sprintf("observe failed: %v", err))
 		}
-		resultJSON, _ := json.Marshal(obsResult)
+		blockCommit := preview.ShouldBlockCommit(obsResult)
+		response := map[string]interface{}{
+			"sessionId":     obsResult.SessionID,
+			"errors":        obsResult.AllErrors(),
+			"warnings":      obsResult.Warnings,
+			"compileErrors": obsResult.CompileErrors,
+			"runtimeErrors": obsResult.RuntimeErrors,
+			"bindingErrors": obsResult.BindingErrors,
+			"actionErrors":  obsResult.ActionErrors,
+			"overflowErrors": obsResult.OverflowErrors,
+			"canRefine":     obsResult.CanRefine,
+			"blockCommit":   blockCommit,
+		}
+		resultJSON, _ := json.Marshal(response)
+		if blockCommit {
+			return tool.ToolCallResult{
+				Status:      tool.ToolStatusSuccess,
+				Content:     string(resultJSON),
+				VisibleText: fmt.Sprintf("Preview observe session %s: %d issues found, commit/publish blocked", sessionID, len(obsResult.AllErrors())),
+			}
+		}
 		return tool.ToolCallResult{
 			Status:      tool.ToolStatusSuccess,
 			Content:     string(resultJSON),
-			VisibleText: fmt.Sprintf("Preview observe session %s: %d errors, %d warnings", sessionID, len(obsResult.Errors), len(obsResult.Warnings)),
+			VisibleText: fmt.Sprintf("Preview observe session %s: clean, ready to commit/publish", sessionID),
 		}
 
 	case "refine":
