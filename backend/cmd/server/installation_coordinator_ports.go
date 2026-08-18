@@ -51,10 +51,13 @@ type coordinatorRuntimePublisher struct {
 
 func (p *coordinatorRuntimePublisher) PublishDesiredState(ctx context.Context, deviceCtx device.DeviceContext, snapshot *coordinator.DesiredStateSnapshot) error {
 	if p.facade == nil {
-		return fmt.Errorf("runtime v2 unavailable")
+		return "", fmt.Errorf("runtime v2 unavailable")
 	}
 	if !deviceCtx.IsValid() {
-		return fmt.Errorf("invalid device context")
+		return "", fmt.Errorf("invalid device context")
+	}
+	if operationID == "" {
+		return "", fmt.Errorf("operation id is required")
 	}
 	seq, err := p.facade.Commands().AllocateDeviceSequence(nil, deviceCtx.UserID, deviceCtx.DeviceID, time.Now())
 	if err != nil {
@@ -102,34 +105,40 @@ func (p *coordinatorRuntimePublisher) PublishDesiredState(ctx context.Context, d
 	return nil
 }
 
-func (p *coordinatorRuntimePublisher) PublishRecenter(ctx context.Context, deviceCtx device.DeviceContext, installationID string) error {
+func (p *coordinatorRuntimePublisher) PublishRecenter(ctx context.Context, deviceCtx device.DeviceContext, installationID, operationID string) (string, error) {
 	if p.facade == nil {
-		return fmt.Errorf("runtime v2 unavailable")
+		return "", fmt.Errorf("runtime v2 unavailable")
 	}
 	if !deviceCtx.IsValid() {
-		return fmt.Errorf("invalid device context")
+		return "", fmt.Errorf("invalid device context")
+	}
+	if operationID == "" {
+		return "", fmt.Errorf("operation id is required")
 	}
 	payload := map[string]interface{}{
 		"installationId": installationID,
 	}
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("marshal recenter payload: %w", err)
+		return "", fmt.Errorf("marshal recenter payload: %w", err)
 	}
-	_, err = p.facade.Commands().CreateEphemeralCommand(
+	cmd, err := p.facade.Commands().CreateEphemeralCommand(
 		deviceCtx.UserID,
 		deviceCtx.DeviceID,
 		string(runtimev2.CommandTypeRecenterOnce),
-		fmt.Sprintf("recenter:%s:%s", deviceCtx.DeviceID, installationID),
+		fmt.Sprintf("recenter:%s", operationID),
 		payloadBytes,
 	)
 	if err != nil {
-		if err == runtimev2.ErrCommandDuplication {
-			return nil
+		if err == runtimev2.ErrCommandDuplication && cmd != nil {
+			return cmd.ID, nil
 		}
-		return fmt.Errorf("create recenter command: %w", err)
+		return "", fmt.Errorf("create recenter command: %w", err)
 	}
-	return nil
+	if cmd == nil || cmd.ID == "" {
+		return "", fmt.Errorf("create recenter command: empty command id")
+	}
+	return cmd.ID, nil
 }
 
 func (p *coordinatorRuntimePublisher) PublishPlayAction(ctx context.Context, deviceCtx device.DeviceContext, installationID, actionKey string) error {

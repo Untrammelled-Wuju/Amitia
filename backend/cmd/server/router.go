@@ -39,10 +39,10 @@ import (
 	devicemeshserver "github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/deviceruntime/protocol"
 	"github.com/u-ai/backend/internal/embedding_config"
-	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_center"
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
 	"github.com/u-ai/backend/internal/feedback"
@@ -559,62 +559,62 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 				SessionService:   sessionSvc,
 				AccountSessions:  accountSessionRuntime.Validator,
 			})
-		meshSQLDB, _ := ctx.DB.DB()
-		devicemeshserver.RegisterCloudRoutes(apiGroup, deviceMeshAuthMW, &devicemeshserver.RouterDeps{
-			DB:        meshSQLDB,
-			Sessions:  services.DeviceMesh.GetSessions(),
-			Hub:       services.DeviceMesh.Hub,
-			Handler:   services.DeviceMesh.Handler,
-			Probe:     services.DeviceMesh.Probe,
-			DeviceReg: services.DeviceMesh.DeviceReg,
-			GetUserID: func(c *gin.Context) (runtimeidentity.UserID, bool) {
-				actor := security.GetActor(c)
-				if actor == nil || actor.UserID == "" {
-					return "", false
-				}
-				return runtimeidentity.UserID(actor.UserID), true
-			},
-			InvocationResultHandler: devicemeshserver.InvocationResultHandler(func(result protocol.RuntimeResultPayload) {
-				if services.DeviceMesh.PendingInvocations == nil {
-					return
-				}
-				unifiedResult := capability.NewToolSuccessResult(result.InvocationID, "")
-				unifiedResult.RuntimeSessionID = string(result.RuntimeSessionID)
-				unifiedResult.DeviceID = string(result.DeviceID)
-				unifiedResult.RuntimeID = string(result.RuntimeID)
-				unifiedResult.Generation = result.ConnectionGeneration
-				unifiedResult.Structured = result.Result
-				services.DeviceMesh.PendingInvocations.Complete(result.InvocationID, unifiedResult)
-			}),
-			InvocationErrorHandler: devicemeshserver.InvocationErrorHandler(func(errResult protocol.RuntimeErrorPayload) {
-				if services.DeviceMesh.PendingInvocations == nil {
-					return
-				}
-				unifiedResult := capability.NewToolFailureResult(errResult.InvocationID, "", &capability.ToolError{
-					Code:      errResult.ErrorCode,
-					Message:   errResult.Message,
-					Retryable: errResult.Retryable,
-				})
-				unifiedResult.RuntimeSessionID = string(errResult.RuntimeSessionID)
-				unifiedResult.DeviceID = string(errResult.DeviceID)
-				unifiedResult.RuntimeID = string(errResult.RuntimeID)
-				unifiedResult.Generation = errResult.ConnectionGeneration
-				services.DeviceMesh.PendingInvocations.Fail(errResult.InvocationID, unifiedResult)
-			}),
-			TaskClaimHandler: devicemeshserver.TaskClaimAdapter(func(taskRunID string, workerID string, leaseDuration time.Duration) bool {
-				if services.DeviceMesh.PendingTasks == nil {
-					return false
-				}
-				return services.DeviceMesh.PendingTasks.Claim(taskRunID, workerID, leaseDuration)
-			}),
-			TaskCompleteHandler: devicemeshserver.TaskCompleteAdapter(func(taskRunID string, success bool, errMsg string) {
-				if services.DeviceMesh.PendingTasks == nil {
-					return
-				}
-				services.DeviceMesh.PendingTasks.Complete(taskRunID, success, errMsg)
-			}),
-		})
-	}
+			meshSQLDB, _ := ctx.DB.DB()
+			devicemeshserver.RegisterCloudRoutes(apiGroup, deviceMeshAuthMW, &devicemeshserver.RouterDeps{
+				DB:        meshSQLDB,
+				Sessions:  services.DeviceMesh.GetSessions(),
+				Hub:       services.DeviceMesh.Hub,
+				Handler:   services.DeviceMesh.Handler,
+				Probe:     services.DeviceMesh.Probe,
+				DeviceReg: services.DeviceMesh.DeviceReg,
+				GetUserID: func(c *gin.Context) (runtimeidentity.UserID, bool) {
+					actor := security.GetActor(c)
+					if actor == nil || actor.UserID == "" {
+						return "", false
+					}
+					return runtimeidentity.UserID(actor.UserID), true
+				},
+				InvocationResultHandler: devicemeshserver.InvocationResultHandler(func(result protocol.RuntimeResultPayload) {
+					if services.DeviceMesh.PendingInvocations == nil {
+						return
+					}
+					unifiedResult := capability.NewToolSuccessResult(result.InvocationID, "")
+					unifiedResult.RuntimeSessionID = string(result.RuntimeSessionID)
+					unifiedResult.DeviceID = string(result.DeviceID)
+					unifiedResult.RuntimeID = string(result.RuntimeID)
+					unifiedResult.Generation = result.ConnectionGeneration
+					unifiedResult.Structured = result.Result
+					services.DeviceMesh.PendingInvocations.Complete(result.InvocationID, unifiedResult)
+				}),
+				InvocationErrorHandler: devicemeshserver.InvocationErrorHandler(func(errResult protocol.RuntimeErrorPayload) {
+					if services.DeviceMesh.PendingInvocations == nil {
+						return
+					}
+					unifiedResult := capability.NewToolFailureResult(errResult.InvocationID, "", &capability.ToolError{
+						Code:      errResult.ErrorCode,
+						Message:   errResult.Message,
+						Retryable: errResult.Retryable,
+					})
+					unifiedResult.RuntimeSessionID = string(errResult.RuntimeSessionID)
+					unifiedResult.DeviceID = string(errResult.DeviceID)
+					unifiedResult.RuntimeID = string(errResult.RuntimeID)
+					unifiedResult.Generation = errResult.ConnectionGeneration
+					services.DeviceMesh.PendingInvocations.Fail(errResult.InvocationID, unifiedResult)
+				}),
+				TaskClaimHandler: devicemeshserver.TaskClaimAdapter(func(taskRunID string, workerID string, leaseDuration time.Duration) bool {
+					if services.DeviceMesh.PendingTasks == nil {
+						return false
+					}
+					return services.DeviceMesh.PendingTasks.Claim(taskRunID, workerID, leaseDuration)
+				}),
+				TaskCompleteHandler: devicemeshserver.TaskCompleteAdapter(func(taskRunID string, success bool, errMsg string) {
+					if services.DeviceMesh.PendingTasks == nil {
+						return
+					}
+					services.DeviceMesh.PendingTasks.Complete(taskRunID, success, errMsg)
+				}),
+			})
+		}
 
 		if services.NativeBridgeRelay != nil && bootstrap != nil {
 			tryRegisterAndroidBridge(services.NativeBridgeRelay, bootstrap)
