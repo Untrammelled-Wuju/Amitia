@@ -93,6 +93,8 @@ export class DesktopRuntimeHandlerV2 {
   private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private idleHeartbeatTimer: ReturnType<typeof setInterval> | null = null;
   private lastServerTime = "";
+  private pendingConnectResolve: (() => void) | null = null;
+  private pendingConnectReject: ((err: Error) => void) | null = null;
 
   private readonly pendingCommands = new Map<string, RuntimeCommandAttempt>();
   private reconnectReason: ReconnectReason = "initial";
@@ -146,18 +148,26 @@ export class DesktopRuntimeHandlerV2 {
     return new Promise<void>((resolve, reject) => {
       try {
         this.cleanupSocket();
+        this.rejectPendingConnect(new Error("runtime connection superseded"));
+        this.pendingConnectResolve = resolve;
+        this.pendingConnectReject = reject;
 
         const ws = new WebSocket(this.config.url);
         this.ws = ws;
 
         const timeoutId = setTimeout(() => {
+          if (this.state !== "handshaking") return;
+          const err = new Error("runtime connect timeout");
+          this.rejectPendingConnect(err);
           ws.close(4000, "connect_timeout");
-          reject(new Error("runtime connect timeout"));
         }, this.config.connectTimeoutMs);
 
         ws.onopen = () => {
           clearTimeout(timeoutId);
-          void this.sendHello();
+          this.sendHello().catch((err) => {
+            this.rejectPendingConnect(err instanceof Error ? err : new Error(String(err)));
+            ws.close(4001, "hello_send_failed");
+          });
         };
 
         ws.onmessage = (event: MessageEvent) => {
@@ -168,25 +178,43 @@ export class DesktopRuntimeHandlerV2 {
         ws.onerror = () => {
           clearTimeout(timeoutId);
           if (this.state === "handshaking") {
-            reject(new Error("runtime socket error"));
+            this.rejectPendingConnect(new Error("runtime socket error"));
           }
         };
 
         ws.onclose = (event) => {
           clearTimeout(timeoutId);
+          if (this.state === "handshaking") {
+            this.rejectPendingConnect(new Error(`runtime socket closed during handshake: ${event.code} ${event.reason}`));
+          }
           this.handleClose(event.code, event.reason);
-          resolve();
         };
 
         this.startHeartbeat();
       } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err));
         this.setState("degraded");
-        reject(err);
+        this.rejectPendingConnect(error);
       }
     });
   }
 
+  private resolvePendingConnect(): void {
+    const resolve = this.pendingConnectResolve;
+    this.pendingConnectResolve = null;
+    this.pendingConnectReject = null;
+    resolve?.();
+  }
+
+  private rejectPendingConnect(err: Error): void {
+    const reject = this.pendingConnectReject;
+    this.pendingConnectResolve = null;
+    this.pendingConnectReject = null;
+    reject?.(err);
+  }
+
   disconnect(): void {
+    this.rejectPendingConnect(new Error("runtime disconnected"));
     this.stopHeartbeat();
     this.cleanupSocket();
     this.setState("disconnected");
@@ -324,8 +352,10 @@ export class DesktopRuntimeHandlerV2 {
 
   private async handleHelloAck(ack: HelloAckPayload): Promise<void> {
     if (!ack.accepted) {
+      const err = new Error(`hello rejected: ${ack.errorCode} ${ack.errorMessage}`);
       this.setState("degraded");
-      this.hooks.onError(new Error(`hello rejected: ${ack.errorCode} ${ack.errorMessage}`));
+      this.rejectPendingConnect(err);
+      this.hooks.onError(err);
       return;
     }
 
@@ -334,6 +364,7 @@ export class DesktopRuntimeHandlerV2 {
     this.lastServerTime = ack.serverTime ?? "";
     this.reconnectAttempts = 0;
     this.setState("connected");
+    this.resolvePendingConnect();
 
     this.hooks.onHelloAck(ack);
   }
@@ -356,9 +387,12 @@ export class DesktopRuntimeHandlerV2 {
     }
 
     await this.sendCommandAck(command.commandId, command.commandSequence ?? 0, "runtime_received");
+    await this.sendCommandAck(command.commandId, command.commandSequence ?? 0, "runtime_accepted");
 
     try {
-      const result = await this.hooks.onCommand(envelope.payload, envelope);
+      const execution = this.hooks.onCommand(envelope.payload, envelope);
+      await this.sendCommandAck(command.commandId, command.commandSequence ?? 0, "renderer_accepted");
+      const result = await execution;
       const ackStatus = this.mapCommandExecutionStatus(result.status);
       if (result.status === "failed" || result.status === "rejected") {
         await this.sendCommandAck(
