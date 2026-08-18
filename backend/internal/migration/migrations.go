@@ -174,6 +174,27 @@ func DefaultMigrations() []Migration {
 		SecurityAuditEventsColumnsMigration(),
 		SecurityAuditEventsOccurredAtMigration(),
 		AuthSessionsMissingColumnsMigration(),
+		SyncSchemaRevisionDeletedAtMigration(),
+		SyncMutationClaimsMigration(),
+	}
+}
+
+func SyncMutationClaimsMigration() Migration {
+	return Migration{
+		Version: "20260818004",
+		Name:    "create_sync_mutation_claims_table",
+		Up: func(s *Step) error {
+			s.CreateTable(`CREATE TABLE IF NOT EXISTS sync_mutation_claims (
+				user_id TEXT NOT NULL,
+				scope TEXT NOT NULL DEFAULT 'device',
+				mutation_id TEXT NOT NULL,
+				status TEXT NOT NULL DEFAULT 'pending',
+				created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+				PRIMARY KEY (user_id, scope, mutation_id)
+			)`)
+			s.CreateIndex("idx_sync_mutation_claims_status", "sync_mutation_claims", []string{"status"}, false)
+			return nil
+		},
 	}
 }
 
@@ -209,6 +230,22 @@ func AuthSessionsMissingColumnsMigration() Migration {
 		Up: func(s *Step) error {
 			s.AddColumn("auth_sessions", "username", "TEXT NOT NULL DEFAULT ''")
 			s.AddColumn("auth_sessions", "role", "TEXT NOT NULL DEFAULT 'user'")
+			return nil
+		},
+	}
+}
+
+func SyncSchemaRevisionDeletedAtMigration() Migration {
+	return Migration{
+		Version: "20260818003",
+		Name:    "add_sync_revision_deleted_at_to_core_tables",
+		Up: func(s *Step) error {
+			s.AddColumn("characters", "revision", "INTEGER NOT NULL DEFAULT 1")
+			s.AddColumn("characters", "deleted_at", "DATETIME")
+			s.AddColumn("conversations", "revision", "INTEGER NOT NULL DEFAULT 1")
+			s.AddColumn("conversations", "deleted_at", "DATETIME")
+			s.AddColumn("messages", "revision", "INTEGER NOT NULL DEFAULT 1")
+			s.AddColumn("messages", "deleted_at", "DATETIME")
 			return nil
 		},
 	}

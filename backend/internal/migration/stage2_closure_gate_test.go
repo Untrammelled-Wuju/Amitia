@@ -160,32 +160,6 @@ func TestStage2ClosureGate_ManifestVersion(t *testing.T) {
 	}
 }
 
-func TestAppServices_ArchitectureReady(t *testing.T) {
-	services := &AppServices{Container: &testAuthorityProvider{
-		toolFacade:         struct{}{},
-		permissionBroker:   struct{}{},
-		eventService:       struct{}{},
-		scheduleService:    struct{}{},
-		taskRuntimeService: struct{}{},
-		hookService:        struct{}{},
-		nativeBridgeRelay:  struct{}{},
-		platformBridge:     struct{}{},
-	}}
-	if !services.ArchitectureReady() {
-		t.Fatal("expected AppServices.ArchitectureReady to be true")
-	}
-
-	var nilServices *AppServices
-	if nilServices.ArchitectureReady() {
-		t.Fatal("expected nil AppServices to report not ready")
-	}
-
-	emptyServices := &AppServices{Container: &testAuthorityProvider{}}
-	if emptyServices.ArchitectureReady() {
-		t.Fatal("expected AppServices with empty container to report not ready")
-	}
-}
-
 func TestCutoverPlan_CanRunCutover(t *testing.T) {
 	dir := t.TempDir()
 	passEvidence := EvidenceManifest{

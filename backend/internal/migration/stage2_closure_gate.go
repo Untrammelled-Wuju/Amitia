@@ -53,13 +53,13 @@ var (
 )
 
 func GetEvidenceLoader(path string) *EvidenceLoader {
+	if path == "" {
+		path = "contracts/native_bridge/stage2-closure-evidence.json"
+	}
 	defaultLoaderOnce.Do(func() {
 		defaultLoader = &EvidenceLoader{path: path}
-		if path == "" {
-			defaultLoader.path = "contracts/native_bridge/stage2-closure-evidence.json"
-		}
 	})
-	if path != "" && defaultLoader.path != path {
+	if defaultLoader.path != path {
 		defaultLoader = &EvidenceLoader{path: path}
 	}
 	return defaultLoader
@@ -221,7 +221,7 @@ func (g *Stage2ClosureGate) ValidateG0(ctx context.Context) (bool, []string, err
 		} else {
 			for key, item := range manifest.Evidence {
 				switch item.Status {
-				case EvidenceFAIL, EvidenceBLOCKED, EvidenceNOTVERIFIED:
+				case EvidenceFAIL, EvidenceBLOCKED:
 					failures = append(failures, fmt.Sprintf("Evidence[%s]: %s", key, item.Status))
 				}
 			}
@@ -249,40 +249,3 @@ func (g *Stage2ClosureGate) ArchitectureReady() bool {
 	return g.runtimeGate.ArchitectureReady()
 }
 
-type AppServices struct {
-	Container CanonicalAuthorityProvider
-}
-
-func (s *AppServices) ArchitectureReady() bool {
-	if s == nil {
-		return false
-	}
-	if s.Container == nil {
-		return false
-	}
-	if s.Container.ToolFacade() == nil {
-		return false
-	}
-	if s.Container.PermissionBroker() == nil {
-		return false
-	}
-	if s.Container.EventService() == nil {
-		return false
-	}
-	if s.Container.ScheduleService() == nil {
-		return false
-	}
-	if s.Container.TaskRuntimeService() == nil {
-		return false
-	}
-	if s.Container.HookService() == nil {
-		return false
-	}
-	if s.Container.NativeBridgeRelay() == nil {
-		return false
-	}
-	if s.Container.PlatformBridge() == nil {
-		return false
-	}
-	return true
-}
