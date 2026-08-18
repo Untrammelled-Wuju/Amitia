@@ -255,106 +255,64 @@ func (c DesktopPetPluginCapabilities) RebuildFromExisting(ctx context.Context, e
 		return fmt.Errorf("RebuildFromExisting: list contributions: %w", err)
 	}
 
-	resBindings := make(map[string]ExistingPetResourceBinding)
-	actionBindings := make(map[string]ExistingPetActionBinding)
-	rtBindings := make(map[string]ExistingPetRuntimeBinding)
-	winBindings := make(map[string]ExistingPetWindowBinding)
-
-	if resPort, ok := c.Resource.(*productionResourceCapability); ok {
-		if resPort.release != nil {
-			bindings, err := resPort.release.ListAttachedResources(ctx, extensionID)
-			if err == nil {
-				for _, b := range bindings {
-					resBindings[b.Handle] = b
-				}
-			}
+	// Correlation is explicitly rebuildable. Clear any stale in-memory handles first;
+	// the canonical Extension Kernel contribution source is then replayed through the
+	// same production capabilities used for normal lifecycle attach.
+	if p, ok := c.Resource.(*productionResourceCapability); ok && p.release != nil {
+		if err := p.release.RebuildFromExisting(); err != nil {
+			return fmt.Errorf("RebuildFromExisting: resource reset: %w", err)
 		}
+		p.mu.Lock()
+		p.cache = make(map[PetResourceHandle]PluginResourceAttachRequest)
+		p.mu.Unlock()
 	}
-	if actionPort, ok := c.Action.(*productionActionCapability); ok {
-		if actionPort.facade != nil {
-			bindings, err := actionPort.facade.ListAttachedActions(ctx, extensionID)
-			if err == nil {
-				for _, b := range bindings {
-					actionBindings[b.Handle] = b
-				}
-			}
+	if p, ok := c.Action.(*productionActionCapability); ok && p.facade != nil {
+		if err := p.facade.RebuildFromExisting(); err != nil {
+			return fmt.Errorf("RebuildFromExisting: action reset: %w", err)
 		}
+		p.mu.Lock()
+		p.cache = make(map[PetActionHandle]PluginActionAttachRequest)
+		p.mu.Unlock()
 	}
-	if rtPort, ok := c.Runtime.(*productionRuntimeCapability); ok {
-		if rtPort.facade != nil {
-			bindings, err := rtPort.facade.ListAttachedRuntimes(ctx, extensionID)
-			if err == nil {
-				for _, b := range bindings {
-					rtBindings[b.Handle] = b
-				}
-			}
+	if p, ok := c.Runtime.(*productionRuntimeCapability); ok && p.facade != nil {
+		if err := p.facade.RebuildFromExisting(); err != nil {
+			return fmt.Errorf("RebuildFromExisting: runtime reset: %w", err)
 		}
+		p.mu.Lock()
+		p.cache = make(map[PetRuntimeHandle]PluginRuntimeAttachRequest)
+		p.mu.Unlock()
 	}
-	if winPort, ok := c.FloatingWindow.(*productionFloatingWindowCapability); ok {
-		if winPort.publisher != nil {
-			bindings, err := winPort.publisher.ListAttachedWindows(ctx, extensionID)
-			if err == nil {
-				for _, b := range bindings {
-					winBindings[b.ExtensionID+"/"+b.ContributionID] = b
-				}
-			}
+	if p, ok := c.FloatingWindow.(*productionFloatingWindowCapability); ok && p.publisher != nil {
+		if err := p.publisher.RebuildFromExisting(); err != nil {
+			return fmt.Errorf("RebuildFromExisting: window reset: %w", err)
 		}
+		p.mu.Lock()
+		p.cache = make(map[PetFloatingWindowHandle]PluginFloatingWindowAttachRequest)
+		p.mu.Unlock()
 	}
 
-	if resPort, ok := c.Resource.(*productionResourceCapability); ok {
-		resPort.mu.Lock()
-		resPort.cache = make(map[PetResourceHandle]PluginResourceAttachRequest)
-		for _, b := range resBindings {
-			handle := PetResourceHandle(b.Handle)
-			resPort.cache[handle] = PluginResourceAttachRequest{
-				ExtensionID:    b.ExtensionID,
-				ContributionID: b.ContributionID,
-				Revision:       b.Revision,
-				Definition:     b.Definition,
-			}
+	for _, contrib := range contribs {
+		if contrib.ExtensionID == "" {
+			contrib.ExtensionID = extensionID
 		}
-		resPort.mu.Unlock()
-	}
-	if actionPort, ok := c.Action.(*productionActionCapability); ok {
-		actionPort.mu.Lock()
-		actionPort.cache = make(map[PetActionHandle]PluginActionAttachRequest)
-		for _, b := range actionBindings {
-			handle := PetActionHandle(b.Handle)
-			actionPort.cache[handle] = PluginActionAttachRequest{
-				ExtensionID:    b.ExtensionID,
-				ContributionID: b.ContributionID,
-				Revision:       b.Revision,
-				Target:         b.Target,
+		target := ExistingPetActionTarget{}
+		if c.ActionTarget != nil {
+			resolved, resolveErr := c.ActionTarget.ResolveActionTarget(ctx, contrib.ExtensionID, contrib.ContributionID, contrib.Revision)
+			if resolveErr != nil {
+				return fmt.Errorf("RebuildFromExisting: resolve action target %s: %w", contrib.ContributionID, resolveErr)
 			}
+			target = resolved
 		}
-		actionPort.mu.Unlock()
-	}
-	if rtPort, ok := c.Runtime.(*productionRuntimeCapability); ok {
-		rtPort.mu.Lock()
-		rtPort.cache = make(map[PetRuntimeHandle]PluginRuntimeAttachRequest)
-		for _, b := range rtBindings {
-			handle := PetRuntimeHandle(b.Handle)
-			rtPort.cache[handle] = PluginRuntimeAttachRequest{
-				ExtensionID:    b.ExtensionID,
-				ContributionID: b.ContributionID,
-				Revision:       b.Revision,
-			}
+		if _, err := c.TransactionalAttach(ctx, AttachTransactionRequest{
+			ExtensionID:    contrib.ExtensionID,
+			PluginID:       contrib.PluginID,
+			ContributionID: contrib.ContributionID,
+			Revision:       contrib.Revision,
+			Target:         target,
+			Definition:     contrib.Definition,
+		}); err != nil {
+			return fmt.Errorf("RebuildFromExisting: replay contribution %s: %w", contrib.ContributionID, err)
 		}
-		rtPort.mu.Unlock()
 	}
-	if winPort, ok := c.FloatingWindow.(*productionFloatingWindowCapability); ok {
-		winPort.mu.Lock()
-		winPort.cache = make(map[PetFloatingWindowHandle]PluginFloatingWindowAttachRequest)
-		for _, b := range winBindings {
-			handle := PetFloatingWindowHandle(b.ExtensionID + "/" + b.ContributionID)
-			winPort.cache[handle] = PluginFloatingWindowAttachRequest{
-				ExtensionID:    b.ExtensionID,
-				ContributionID: b.ContributionID,
-			}
-		}
-		winPort.mu.Unlock()
-	}
-
-	_ = contribs
 	return nil
 }

@@ -4,293 +4,249 @@ package integration
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"sort"
 	"sync"
-	"time"
-
-	"github.com/google/uuid"
-	"gorm.io/gorm"
 )
 
-type PluginResourceAttachment struct {
-	Handle         string `gorm:"primaryKey"`
-	ExtensionID    string `gorm:"index"`
-	ContributionID string `gorm:"index"`
-	Revision       int
-	Definition     string
-	CreatedAt      int64
+// These adapters intentionally keep only rebuildable correlation state in memory.
+// DesktopPet plugin contributions are projections of the canonical Extension Kernel
+// contribution source; they must never create plugin_*_attachments durable truth.
+// RebuildFromExisting clears correlation and DesktopPetPluginCapabilities.RebuildFromExisting
+// repopulates it from the canonical contribution source.
+
+type correlationResourcePort struct {
+	mu       sync.RWMutex
+	bindings map[string]ExistingPetResourceBinding
 }
 
-func (PluginResourceAttachment) TableName() string { return "plugin_resource_attachments" }
-
-type PluginActionAttachment struct {
-	Handle         string `gorm:"primaryKey"`
-	ExtensionID    string `gorm:"index"`
-	ContributionID string `gorm:"index"`
-	Revision       int
-	TargetJSON     string
-	Definition     string
-	CreatedAt      int64
+func NewExistingResourceCorrelationPort() ExistingPetResourcePort {
+	return &correlationResourcePort{bindings: make(map[string]ExistingPetResourceBinding)}
 }
 
-func (PluginActionAttachment) TableName() string { return "plugin_action_attachments" }
-
-type PluginRuntimeAttachment struct {
-	Handle         string `gorm:"primaryKey"`
-	ExtensionID    string `gorm:"index"`
-	ContributionID string `gorm:"index"`
-	Revision       int
-	Definition     string
-	CreatedAt      int64
-}
-
-func (PluginRuntimeAttachment) TableName() string { return "plugin_runtime_attachments" }
-
-type PluginWindowAttachment struct {
-	ExtensionID    string `gorm:"primaryKey"`
-	ContributionID string `gorm:"primaryKey"`
-	Definition     string
-	CreatedAt      int64
-}
-
-func (PluginWindowAttachment) TableName() string { return "plugin_window_attachments" }
-
-type sqliteResourcePort struct {
-	mu sync.RWMutex
-	db *gorm.DB
-}
-
-func NewSQLiteResourcePort(db *gorm.DB) ExistingPetResourcePort {
-	return &sqliteResourcePort{db: db}
-}
-
-func (p *sqliteResourcePort) AttachPluginResource(ctx context.Context, extensionID, contributionID string, revision int, definition map[string]any) (string, error) {
+func (p *correlationResourcePort) AttachPluginResource(ctx context.Context, extensionID, contributionID string, revision int, definition map[string]any) (string, error) {
 	if extensionID == "" || contributionID == "" {
 		return "", fmt.Errorf("extensionID and contributionID required")
 	}
-	handle := uuid.New().String()
-	defJSON := encodeDefinition(definition)
-	now := timestampMs()
-	rec := PluginResourceAttachment{Handle: handle, ExtensionID: extensionID, ContributionID: contributionID, Revision: revision, Definition: defJSON, CreatedAt: now}
-	if err := p.db.WithContext(ctx).Create(&rec).Error; err != nil {
-		return "", fmt.Errorf("create resource attachment: %w", err)
+	handle := correlationHandle("resource", extensionID, contributionID, revision)
+	p.mu.Lock()
+	p.bindings[handle] = ExistingPetResourceBinding{
+		Handle: handle, ExtensionID: extensionID, ContributionID: contributionID,
+		Revision: revision, Definition: cloneDefinition(definition),
 	}
+	p.mu.Unlock()
 	return handle, nil
 }
 
-func (p *sqliteResourcePort) DetachPluginResource(ctx context.Context, handle string) error {
+func (p *correlationResourcePort) DetachPluginResource(ctx context.Context, handle string) error {
 	if handle == "" {
 		return fmt.Errorf("handle required")
 	}
-	return p.db.WithContext(ctx).Delete(&PluginResourceAttachment{}, "handle = ?", handle).Error
-}
-
-func (p *sqliteResourcePort) ListAttachedResources(ctx context.Context, extensionID string) ([]ExistingPetResourceBinding, error) {
-	var rows []PluginResourceAttachment
-	if err := p.db.WithContext(ctx).Where("extension_id = ?", extensionID).Find(&rows).Error; err != nil {
-		return nil, fmt.Errorf("list resource attachments: %w", err)
-	}
-	result := make([]ExistingPetResourceBinding, 0, len(rows))
-	for _, r := range rows {
-		result = append(result, ExistingPetResourceBinding{Handle: r.Handle, ExtensionID: r.ExtensionID, ContributionID: r.ContributionID, Revision: r.Revision, Definition: decodeDefinition(r.Definition)})
-	}
-	return result, nil
-}
-
-func (p *sqliteResourcePort) RebuildFromExisting() error {
-	if p.db == nil {
-		return fmt.Errorf("rebuildFromExisting: db unavailable")
-	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if err := p.db.Exec("DELETE FROM plugin_resource_attachments").Error; err != nil {
-		return fmt.Errorf("rebuildFromExisting: clear correlation failed: %w", err)
+	if _, ok := p.bindings[handle]; !ok {
+		return fmt.Errorf("resource correlation %s not found", handle)
 	}
+	delete(p.bindings, handle)
 	return nil
 }
 
-type sqliteActionPort struct {
-	mu sync.RWMutex
-	db *gorm.DB
+func (p *correlationResourcePort) ListAttachedResources(ctx context.Context, extensionID string) ([]ExistingPetResourceBinding, error) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	out := make([]ExistingPetResourceBinding, 0)
+	for _, b := range p.bindings {
+		if extensionID == "" || b.ExtensionID == extensionID {
+			out = append(out, b)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Handle < out[j].Handle })
+	return out, nil
 }
 
-func NewSQLiteActionPort(db *gorm.DB) ExistingPetActionPort {
-	return &sqliteActionPort{db: db}
+func (p *correlationResourcePort) RebuildFromExisting() error {
+	p.mu.Lock()
+	p.bindings = make(map[string]ExistingPetResourceBinding)
+	p.mu.Unlock()
+	return nil
 }
 
-func (p *sqliteActionPort) AttachPluginAction(ctx context.Context, extensionID, contributionID string, revision int, target ExistingPetActionTarget, definition map[string]any) (string, error) {
+type correlationActionPort struct {
+	mu       sync.RWMutex
+	bindings map[string]ExistingPetActionBinding
+}
+
+func NewExistingActionCorrelationPort() ExistingPetActionPort {
+	return &correlationActionPort{bindings: make(map[string]ExistingPetActionBinding)}
+}
+
+func (p *correlationActionPort) AttachPluginAction(ctx context.Context, extensionID, contributionID string, revision int, target ExistingPetActionTarget, definition map[string]any) (string, error) {
 	if extensionID == "" || contributionID == "" {
 		return "", fmt.Errorf("extensionID and contributionID required")
 	}
 	if target.InstallationID == "" {
 		return "", fmt.Errorf("AttachPluginAction: target installationID required")
 	}
-	handle := uuid.New().String()
-	defJSON := encodeDefinition(definition)
-	targetJSON := encodeDefinition(map[string]any{"installationID": target.InstallationID, "deviceID": target.DeviceID, "userID": target.UserID})
-	now := timestampMs()
-	rec := PluginActionAttachment{Handle: handle, ExtensionID: extensionID, ContributionID: contributionID, Revision: revision, TargetJSON: targetJSON, Definition: defJSON, CreatedAt: now}
-	if err := p.db.WithContext(ctx).Create(&rec).Error; err != nil {
-		return "", fmt.Errorf("create action attachment: %w", err)
-	}
+	handle := correlationHandle("action", extensionID, contributionID, revision)
+	p.mu.Lock()
+	p.bindings[handle] = ExistingPetActionBinding{Handle: handle, ExtensionID: extensionID, ContributionID: contributionID, Revision: revision, Target: target}
+	p.mu.Unlock()
 	return handle, nil
 }
 
-func (p *sqliteActionPort) DetachPluginAction(ctx context.Context, handle string) error {
+func (p *correlationActionPort) DetachPluginAction(ctx context.Context, handle string) error {
 	if handle == "" {
 		return fmt.Errorf("handle required")
 	}
-	return p.db.WithContext(ctx).Delete(&PluginActionAttachment{}, "handle = ?", handle).Error
-}
-
-func (p *sqliteActionPort) ListAttachedActions(ctx context.Context, extensionID string) ([]ExistingPetActionBinding, error) {
-	var rows []PluginActionAttachment
-	if err := p.db.WithContext(ctx).Where("extension_id = ?", extensionID).Find(&rows).Error; err != nil {
-		return nil, fmt.Errorf("list action attachments: %w", err)
-	}
-	result := make([]ExistingPetActionBinding, 0, len(rows))
-	for _, r := range rows {
-		result = append(result, ExistingPetActionBinding{Handle: r.Handle, ExtensionID: r.ExtensionID, ContributionID: r.ContributionID, Revision: r.Revision})
-	}
-	return result, nil
-}
-
-func (p *sqliteActionPort) RebuildFromExisting() error {
-	if p.db == nil {
-		return fmt.Errorf("rebuildFromExisting: db unavailable")
-	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if err := p.db.Exec("DELETE FROM plugin_action_attachments").Error; err != nil {
-		return fmt.Errorf("rebuildFromExisting: clear correlation failed: %w", err)
+	if _, ok := p.bindings[handle]; !ok {
+		return fmt.Errorf("action correlation %s not found", handle)
 	}
+	delete(p.bindings, handle)
 	return nil
 }
 
-type sqliteRuntimePort struct {
-	mu sync.RWMutex
-	db *gorm.DB
+func (p *correlationActionPort) ListAttachedActions(ctx context.Context, extensionID string) ([]ExistingPetActionBinding, error) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	out := make([]ExistingPetActionBinding, 0)
+	for _, b := range p.bindings {
+		if extensionID == "" || b.ExtensionID == extensionID {
+			out = append(out, b)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Handle < out[j].Handle })
+	return out, nil
 }
 
-func NewSQLiteRuntimePort(db *gorm.DB) ExistingPetRuntimePort {
-	return &sqliteRuntimePort{db: db}
+func (p *correlationActionPort) RebuildFromExisting() error {
+	p.mu.Lock()
+	p.bindings = make(map[string]ExistingPetActionBinding)
+	p.mu.Unlock()
+	return nil
 }
 
-func (p *sqliteRuntimePort) AttachPluginRuntime(ctx context.Context, extensionID, contributionID string, revision int, definition map[string]any) (string, error) {
+type correlationRuntimePort struct {
+	mu       sync.RWMutex
+	bindings map[string]ExistingPetRuntimeBinding
+}
+
+func NewExistingRuntimeCorrelationPort() ExistingPetRuntimePort {
+	return &correlationRuntimePort{bindings: make(map[string]ExistingPetRuntimeBinding)}
+}
+
+func (p *correlationRuntimePort) AttachPluginRuntime(ctx context.Context, extensionID, contributionID string, revision int, definition map[string]any) (string, error) {
 	if extensionID == "" || contributionID == "" {
 		return "", fmt.Errorf("extensionID and contributionID required")
 	}
-	handle := uuid.New().String()
-	defJSON := encodeDefinition(definition)
-	now := timestampMs()
-	rec := PluginRuntimeAttachment{Handle: handle, ExtensionID: extensionID, ContributionID: contributionID, Revision: revision, Definition: defJSON, CreatedAt: now}
-	if err := p.db.WithContext(ctx).Create(&rec).Error; err != nil {
-		return "", fmt.Errorf("create runtime attachment: %w", err)
-	}
+	handle := correlationHandle("runtime", extensionID, contributionID, revision)
+	p.mu.Lock()
+	p.bindings[handle] = ExistingPetRuntimeBinding{Handle: handle, ExtensionID: extensionID, ContributionID: contributionID, Revision: revision}
+	p.mu.Unlock()
 	return handle, nil
 }
 
-func (p *sqliteRuntimePort) DetachPluginRuntime(ctx context.Context, handle string) error {
+func (p *correlationRuntimePort) DetachPluginRuntime(ctx context.Context, handle string) error {
 	if handle == "" {
 		return fmt.Errorf("handle required")
 	}
-	return p.db.WithContext(ctx).Delete(&PluginRuntimeAttachment{}, "handle = ?", handle).Error
-}
-
-func (p *sqliteRuntimePort) ListAttachedRuntimes(ctx context.Context, extensionID string) ([]ExistingPetRuntimeBinding, error) {
-	var rows []PluginRuntimeAttachment
-	if err := p.db.WithContext(ctx).Where("extension_id = ?", extensionID).Find(&rows).Error; err != nil {
-		return nil, fmt.Errorf("list runtime attachments: %w", err)
-	}
-	result := make([]ExistingPetRuntimeBinding, 0, len(rows))
-	for _, r := range rows {
-		result = append(result, ExistingPetRuntimeBinding{Handle: r.Handle, ExtensionID: r.ExtensionID, ContributionID: r.ContributionID, Revision: r.Revision})
-	}
-	return result, nil
-}
-
-func (p *sqliteRuntimePort) RebuildFromExisting() error {
-	if p.db == nil {
-		return fmt.Errorf("rebuildFromExisting: db unavailable")
-	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if err := p.db.Exec("DELETE FROM plugin_runtime_attachments").Error; err != nil {
-		return fmt.Errorf("rebuildFromExisting: clear correlation failed: %w", err)
+	if _, ok := p.bindings[handle]; !ok {
+		return fmt.Errorf("runtime correlation %s not found", handle)
 	}
+	delete(p.bindings, handle)
 	return nil
 }
 
-type sqliteWindowPort struct {
-	mu sync.RWMutex
-	db *gorm.DB
+func (p *correlationRuntimePort) ListAttachedRuntimes(ctx context.Context, extensionID string) ([]ExistingPetRuntimeBinding, error) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	out := make([]ExistingPetRuntimeBinding, 0)
+	for _, b := range p.bindings {
+		if extensionID == "" || b.ExtensionID == extensionID {
+			out = append(out, b)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Handle < out[j].Handle })
+	return out, nil
 }
 
-func NewSQLiteWindowPort(db *gorm.DB) ExistingPetWindowPort {
-	return &sqliteWindowPort{db: db}
-}
-
-func (p *sqliteWindowPort) PublishFloatingWindowContribution(ctx context.Context, extensionID, contributionID string, definition map[string]any) error {
-	if extensionID == "" || contributionID == "" {
-		return fmt.Errorf("extensionID and contributionID required")
-	}
-	defJSON := encodeDefinition(definition)
-	now := timestampMs()
-	rec := PluginWindowAttachment{ExtensionID: extensionID, ContributionID: contributionID, Definition: defJSON, CreatedAt: now}
-	return p.db.WithContext(ctx).Save(&rec).Error
-}
-
-func (p *sqliteWindowPort) RetractFloatingWindowContribution(ctx context.Context, extensionID, contributionID string) error {
-	if extensionID == "" || contributionID == "" {
-		return fmt.Errorf("extensionID and contributionID required")
-	}
-	return p.db.WithContext(ctx).Delete(&PluginWindowAttachment{}, "extension_id = ? AND contribution_id = ?", extensionID, contributionID).Error
-}
-
-func (p *sqliteWindowPort) ListAttachedWindows(ctx context.Context, extensionID string) ([]ExistingPetWindowBinding, error) {
-	var rows []PluginWindowAttachment
-	if err := p.db.WithContext(ctx).Where("extension_id = ?", extensionID).Find(&rows).Error; err != nil {
-		return nil, fmt.Errorf("list window attachments: %w", err)
-	}
-	result := make([]ExistingPetWindowBinding, 0, len(rows))
-	for _, r := range rows {
-		result = append(result, ExistingPetWindowBinding{ExtensionID: r.ExtensionID, ContributionID: r.ContributionID})
-	}
-	return result, nil
-}
-
-func (p *sqliteWindowPort) RebuildFromExisting() error {
-	if p.db == nil {
-		return fmt.Errorf("rebuildFromExisting: db unavailable")
-	}
+func (p *correlationRuntimePort) RebuildFromExisting() error {
 	p.mu.Lock()
-	defer p.mu.Unlock()
-	if err := p.db.Exec("DELETE FROM plugin_window_attachments").Error; err != nil {
-		return fmt.Errorf("rebuildFromExisting: clear correlation failed: %w", err)
-	}
+	p.bindings = make(map[string]ExistingPetRuntimeBinding)
+	p.mu.Unlock()
 	return nil
 }
 
-func encodeDefinition(def map[string]any) string {
+type correlationWindowPort struct {
+	mu       sync.RWMutex
+	bindings map[string]ExistingPetWindowBinding
+}
+
+func NewExistingWindowCorrelationPort() ExistingPetWindowPort {
+	return &correlationWindowPort{bindings: make(map[string]ExistingPetWindowBinding)}
+}
+
+func (p *correlationWindowPort) PublishFloatingWindowContribution(ctx context.Context, extensionID, contributionID string, definition map[string]any) error {
+	if extensionID == "" || contributionID == "" {
+		return fmt.Errorf("extensionID and contributionID required")
+	}
+	key := extensionID + "/" + contributionID
+	p.mu.Lock()
+	p.bindings[key] = ExistingPetWindowBinding{ExtensionID: extensionID, ContributionID: contributionID}
+	p.mu.Unlock()
+	return nil
+}
+
+func (p *correlationWindowPort) RetractFloatingWindowContribution(ctx context.Context, extensionID, contributionID string) error {
+	if extensionID == "" || contributionID == "" {
+		return fmt.Errorf("extensionID and contributionID required")
+	}
+	key := extensionID + "/" + contributionID
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if _, ok := p.bindings[key]; !ok {
+		return fmt.Errorf("window correlation %s not found", key)
+	}
+	delete(p.bindings, key)
+	return nil
+}
+
+func (p *correlationWindowPort) ListAttachedWindows(ctx context.Context, extensionID string) ([]ExistingPetWindowBinding, error) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	out := make([]ExistingPetWindowBinding, 0)
+	for _, b := range p.bindings {
+		if extensionID == "" || b.ExtensionID == extensionID {
+			out = append(out, b)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		return out[i].ExtensionID+"/"+out[i].ContributionID < out[j].ExtensionID+"/"+out[j].ContributionID
+	})
+	return out, nil
+}
+
+func (p *correlationWindowPort) RebuildFromExisting() error {
+	p.mu.Lock()
+	p.bindings = make(map[string]ExistingPetWindowBinding)
+	p.mu.Unlock()
+	return nil
+}
+
+func correlationHandle(kind, extensionID, contributionID string, revision int) string {
+	return fmt.Sprintf("%s:%s/%s@%d", kind, extensionID, contributionID, revision)
+}
+
+func cloneDefinition(def map[string]any) map[string]any {
 	if def == nil {
-		return "{}"
+		return nil
 	}
-	buf, err := json.Marshal(def)
-	if err != nil {
-		return "{}"
+	out := make(map[string]any, len(def))
+	for k, v := range def {
+		out[k] = v
 	}
-	return string(buf)
-}
-
-func decodeDefinition(s string) map[string]any {
-	var result map[string]any
-	if err := json.Unmarshal([]byte(s), &result); err != nil {
-		return map[string]any{}
-	}
-	return result
-}
-
-func timestampMs() int64 {
-	return time.Now().UnixMilli()
+	return out
 }
