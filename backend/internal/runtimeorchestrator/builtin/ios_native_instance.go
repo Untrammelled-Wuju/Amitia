@@ -6,14 +6,17 @@ package builtin
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 	"sync"
 
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/iosnative"
 	"github.com/u-ai/backend/internal/iosnative/background"
+	"github.com/u-ai/backend/internal/iosnative/staging"
 	"github.com/u-ai/backend/internal/nativebridge"
 	"github.com/u-ai/backend/internal/runtimehost"
 	"github.com/u-ai/backend/internal/runtimeorchestrator"
+	"github.com/u-ai/backend/pkg/resourceuri"
 )
 
 const ComponentIDIOSNative runtimeorchestrator.ComponentID = "provider.ios-native"
@@ -61,7 +64,16 @@ func (p *iosNativeProviderInstance) rebuildDomainProvider() {
 	if p.taskRuntime != nil {
 		ports = append(ports, p.taskRuntime)
 	}
-	domain, err := iosnative.NewCanonicalProvider(p.bridge, ports...)
+	var stagingImporter *staging.StagingImporter
+	if p.host != nil {
+		paths := p.host.Paths()
+		resolver, resolverErr := resourceuri.NewPhysicalResolver(resourceuri.PhysicalRootsFromRuntimePaths(paths))
+		if resolverErr == nil && paths.DataDir != "" {
+			baseDir := filepath.Join(paths.DataDir, "attachments", "ios-native-imports")
+			stagingImporter = staging.NewStagingImporter(baseDir, resolver)
+		}
+	}
+	domain, err := iosnative.NewCanonicalProviderWithStaging(p.bridge, stagingImporter, ports...)
 	if err != nil {
 		return
 	}
