@@ -34,8 +34,8 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/editing/revisioncommit"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
+	installationprojection "github.com/u-ai/backend/internal/desktoppet/installation/projection"
 	installationrecovery "github.com/u-ai/backend/internal/desktoppet/installation/recovery"
-	"github.com/u-ai/backend/internal/desktoppet/integration"
 
 	"github.com/u-ai/backend/internal/desktoppet/maintenance"
 	"github.com/u-ai/backend/internal/desktoppet/migration"
@@ -66,16 +66,12 @@ import (
 	desktoppetsecurity "github.com/u-ai/backend/internal/desktoppet/security"
 	"github.com/u-ai/backend/internal/desktoppet/worker"
 	"github.com/u-ai/backend/internal/devicemesh"
-	"github.com/u-ai/backend/internal/deviceruntime/protocol"
 	"github.com/u-ai/backend/internal/emote"
 	"github.com/u-ai/backend/internal/episodic"
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/extension/kernel"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	extensionmcp "github.com/u-ai/backend/internal/extension/kernel/mcp"
-	"github.com/u-ai/backend/internal/extension/kernel/capability"
-	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
-	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 	"github.com/u-ai/backend/internal/extension/kernel/skill"
 	"github.com/u-ai/backend/internal/gamehost/management"
@@ -144,8 +140,10 @@ type AppServices struct {
 	QualityService               quality.QualityService
 	QualityWorker                *qualityworker.Worker
 	InstallationCoordinator      coordinator.InstallationCoordinator
-	InstallationRepo             installation.Repository
+	InstallationRepo             installation.RepositoryV2
 	InstallationRecoveryWorker   *installationrecovery.RecoveryWorker
+	InstallationProjectionBridge *installationprojection.ProjectionBridge
+	InstallationDesiredOutbox    *installation.DesiredStateOutboxWorker
 	NewReleaseService            release.ReleaseService
 	ReleaseRecoveryWorker        *release.ReleaseRecoveryWorker
 	ReleaseBuildWorker           *releaseworker.ReleaseBuildWorker
@@ -273,9 +271,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		log.Error("failed to init relationship/need store schema:", err)
 		panic("failed to init relationship/need store schema")
 	}
-	syncApplier := syncpkg.NewBusinessApplier(ctx.DB)
-	syncService := syncpkg.NewService(ctx.DB, syncApplier)
-	chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, memSvc, profSvc, epiSvc, wbSvc, compressor, visionSvc, graphSvc, psycheStore, syncService.ChangeLog)
+	chatSvc := chat.NewService(chat.NewRepository(ctx), ctx, memSvc, profSvc, epiSvc, wbSvc, compressor, visionSvc, graphSvc, psycheStore)
 	extensionRuntime, err := extension.NewRuntimeWithOptions(context.Background(), ctx.DB, "1.0.0", extension.RuntimeOptions{SkipPluginManagerStart: true})
 	if err != nil {
 		log.Error("failed to initialize skill runtime:", err)
@@ -356,33 +352,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		browserProvider = browser.NewDisabledProvider()
 	}
 
-	archiveUpdater := kernel.NewProductionArchiveUpdater()
-
-	installationRepo := installation.NewRepository(ctx.DB, ctx)
-	resourcePort := integration.NewSQLiteResourcePort(ctx.DB)
-	actionPort := integration.NewSQLiteActionPort(ctx.DB)
-	runtimePort := integration.NewSQLiteRuntimePort(ctx.DB)
-	windowPort := integration.NewSQLiteWindowPort(ctx.DB)
-	petPluginCaps := integration.NewProductionCapabilities(integration.ProductionCapabilitiesOptions{
-		InstallationRepo: installationRepo,
-		ReleaseService:   resourcePort,
-		RuntimeFacade:    actionPort,
-		RuntimePort:      runtimePort,
-		FloatingWindow:   windowPort,
-	})
-	if err := petPluginCaps.Validate(); err != nil {
-		log.Error("desktoppet plugin capabilities validation failed:", err)
-	}
-
-	deliveryStore := delivery.NewSQLiteDeliveryStore(ctx.DB)
-	deliveryResolver := delivery.NewMapChannelResolverWith([]delivery.ChannelAdapter{
-		delivery.NewWebChannelAdapter(),
-		delivery.NewQQChannelAdapter("http://127.0.0.1:19877"),
-		delivery.NewWechatChannelAdapter("http://127.0.0.1:19876"),
-	})
-	deliveryWorker := delivery.NewWorker(deliveryStore, deliveryResolver, delivery.DefaultWorkerConfig())
-	channelStore := kernel.NewDeliveryChannelStore(deliveryStore, deliveryResolver)
-
 	kernelBuilder := kernel.NewContainerBuilder().
 		WithDBPath(kernelDBPath).
 		WithExtensionRoot(kernelRoot).
@@ -401,14 +370,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithWorkspaceService(workspaceService).
 		WithBrowserProvider(browserProvider).
 		WithRuntimeProfile(runtimeProfile).
-		WithGameHostArchiveUpdater(archiveUpdater).
-		WithDesktopPetPluginCapabilities(petPluginCaps).
 		WithBackgroundBootstrapFunc(func() (backgroundremoval.Registry, error) {
 			reg := backgroundremoval.NewRegistry()
 			reg.Register(local.NewLocalProvider(), local.LocalCapabilities())
 			return reg, nil
-		}).
-		WithChannelStore(channelStore)
+		})
 
 	if bootstrap != nil {
 		kernelBuilder.WithRuntimeHost(bootstrap.RuntimeHost())
@@ -417,71 +383,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		kernelBuilder, _ = applyAndroidNativeProvider(kernelBuilder, bootstrap)
 	}
 
-	var meshRuntime *devicemesh.Runtime
-	kernelStore, err := sqlite.NewStore(kernelDBPath)
-	if err != nil {
-		return nil, fmt.Errorf("open kernel store: %w", err)
-	}
-	if err := kernelStore.Migrate(context.Background()); err != nil {
-		return nil, fmt.Errorf("migrate kernel store: %w", err)
-	}
-	deviceReg := host_registry.NewRegistry(kernelStore.DB())
-	if err := deviceReg.LoadFromStore(context.Background()); err != nil {
-		return nil, fmt.Errorf("load device registry: %w", err)
-	}
-	meshRuntime, err = devicemesh.NewCloudRuntime(kernelStore.DB(), deviceReg)
-	if err != nil {
-		return nil, fmt.Errorf("create device mesh runtime: %w", err)
-	}
-	pendingInvocations := capability.NewPendingInvocationManager()
-	kernelBuilder.WithMeshHub(meshRuntime.Hub)
-	kernelBuilder.WithPendingInvocationManager(pendingInvocations)
 	kernelContainer, err := kernelBuilder.Build(context.Background())
 	if err != nil {
 		log.Error("failed to initialize kernel container:", err)
 		panic("failed to initialize kernel container")
 	}
-	if kernelContainer.AdapterRegistry != nil {
-		meshRuntime.SetDispatcher(devicemesh.NewCloudRuntimeDispatcher(kernelContainer.AdapterRegistry))
-	}
-	if kernelContainer.TaskRuntimeService != nil {
-		meshRuntime.SetTaskRuntime(NewTaskRuntimeExecutor(kernelContainer.TaskRuntimeService))
-	}
-	meshRuntime.Handler.SetOnInvocationResult(func(result protocol.RuntimeResultPayload) {
-		pendingInvocations.Complete(result.InvocationID, capability.UnifiedToolResult{
-			InvocationID:     result.InvocationID,
-			RuntimeSessionID: string(result.RuntimeSessionID),
-			DeviceID:         string(result.DeviceID),
-			RuntimeID:        string(result.RuntimeID),
-			Status:           capability.ToolResultStatusSuccess,
-			Content: []capability.ToolContent{
-				{Type: capability.ToolContentText, Text: string(result.Result)},
-			},
-			Generation: result.ConnectionGeneration,
-		})
-	})
-	meshRuntime.Handler.SetOnInvocationError(func(errResult protocol.RuntimeErrorPayload) {
-		pendingInvocations.Fail(errResult.InvocationID, capability.UnifiedToolResult{
-			InvocationID:     errResult.InvocationID,
-			RuntimeSessionID: string(errResult.RuntimeSessionID),
-			DeviceID:         string(errResult.DeviceID),
-			RuntimeID:        string(errResult.RuntimeID),
-			Status:           capability.ToolResultStatusFailed,
-			Error: &capability.ToolError{
-				Code:      errResult.ErrorCode,
-				Message:   errResult.Message,
-				Retryable: errResult.Retryable,
-			},
-			Generation: errResult.ConnectionGeneration,
-		})
-	})
-	meshRuntime.Handler.SetOnInvocationCancelAck(func(invocationID string, reason string) {
-		pendingInvocations.Cancel(invocationID, reason)
-	})
-	meshRuntime.Handler.SetOnDisconnect(func(sessionID string, generation int64) {
-		pendingInvocations.CancelAll(sessionID, "device disconnected")
-	})
-	archiveUpdater.SetContainer(kernelContainer)
 	extensionRuntime.Kernel.SetContainer(kernelContainer)
 	if err := extensionRuntime.Kernel.RecoverPackageOperations(context.Background()); err != nil {
 		log.Error("package operation recovery failed: ", err)
@@ -581,7 +487,12 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		panic("failed to init outbox store schema")
 	}
 	runtimeQueue := queue.NewSQLiteRuntimeQueueStore(ctx.DB)
-
+	deliveryStore := delivery.NewSQLiteDeliveryStore(ctx.DB)
+	deliveryWorker := delivery.NewWorker(deliveryStore, delivery.NewMapChannelResolverWith([]delivery.ChannelAdapter{
+		delivery.NewWebChannelAdapter(),
+		delivery.NewQQChannelAdapter("http://127.0.0.1:19877"),
+		delivery.NewWechatChannelAdapter("http://127.0.0.1:19876"),
+	}), delivery.DefaultWorkerConfig())
 	deliveryAdapter := &chatDeliveryAdapter{store: deliveryStore}
 	chatSvc.SetDeliveryStore(deliveryAdapter)
 	emoteSvc := emote.NewService(ctx.DB, deliveryStore)
@@ -782,6 +693,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	}
 	qualityWorker := qualityworker.NewWorker(ctx.DB, qualitySvc, processingDataDir)
 
+	installationRepo := installation.NewRepository(ctx.DB, ctx)
+	installationRepoV2, ok := installationRepo.(installation.RepositoryV2)
+	if !ok {
+		return nil, errors.New("desktop pet installation repository does not implement RepositoryV2")
+	}
 	var installationCoordinator coordinator.InstallationCoordinator
 
 	runtimeConfig := runtime.DefaultRuntimeConfig()
@@ -863,12 +779,31 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 
 	desktoppet.RefreshLegacyWriteFlagsFromDB(ctx.DB)
 
-	coordRepo := &coordinatorRepoAdapter{installRepo: installationRepo}
+	coordRepo := installation.NewCoordinatorRepoAdapter(installationRepoV2)
 	coordValidator := &coordinatorReleaseValidator{releases: releaseRepo}
-	coordStager := installation.NewReleaseStager(ctx.DB, pathRegistry, filepath.Join(config.AppCfg.Storage.DataDir, "staging"))
+	coordStager := installation.NewReleaseStager(ctx.DB, pathRegistry)
 	coordPublisher := &coordinatorRuntimePublisher{facade: runtimeV2Facade}
-	coordProjection := &coordinatorProjectionService{installRepo: installationRepo}
-	installationCoordinator = coordinator.NewCoordinator(coordRepo, coordValidator, coordStager, coordPublisher, coordProjection)
+	desiredOutboxWorker := installation.NewDesiredStateOutboxWorker(installationRepoV2, coordPublisher)
+	projectionService := installationprojection.NewService(ctx.DB)
+	coordProjection := installationprojection.NewCoordinatorAdapter(projectionService)
+	projectionBridge := installationprojection.NewProjectionBridge(ctx.DB, projectionService)
+	installationCoordinator, err = coordinator.NewCoordinator(coordRepo, coordValidator, coordStager, coordPublisher, coordProjection)
+	if err != nil {
+		return nil, fmt.Errorf("initialize installation coordinator: %w", err)
+	}
+
+	recoveryRepo := installationrecovery.NewInstallRepoAdapter(ctx.DB)
+	installationRecoveryWorker := installationrecovery.NewRecoveryWorker(recoveryRepo)
+	stagingRecoveryPort := installationrecovery.NewProductionStagingRepo(ctx.DB, coordStager, pathRegistry)
+	dbRecoveryPort := installationrecovery.NewProductionDBRepo(ctx.DB, installationRepoV2)
+	runtimeRecoveryPort := installationrecovery.NewProductionRuntimeRepo(ctx.DB, runtimeV2Facade)
+	runtimeFinalizer := installationrecovery.NewProductionRuntimeFinalizer(ctx.DB, installationRepoV2, pathRegistry)
+	stagingRecovery := installationrecovery.NewStagingRecovery(installationRecoveryWorker, recoveryRepo, stagingRecoveryPort)
+	dbRecovery := installationrecovery.NewDBRecovery(installationRecoveryWorker, recoveryRepo, dbRecoveryPort)
+	runtimeRecovery := installationrecovery.NewRuntimeRecovery(installationRecoveryWorker, recoveryRepo, runtimeRecoveryPort, runtimeFinalizer)
+	switchRecovery := installationrecovery.NewSwitchRecovery(installationRecoveryWorker, recoveryRepo, installationrecovery.NewProductionSwitchRepo(runtimeRecoveryPort))
+	installationRecoveryWorker.ConfigureRecoveries(stagingRecovery, dbRecovery, runtimeRecovery, switchRecovery)
+
 	deviceRepo := device.NewRepository(ctx.DB)
 
 	var desktopInstanceStore *security.DesktopInstanceStore
@@ -989,18 +924,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 				}
 				return nil
 			},
-			MeshReady: func() error {
-				if meshRuntime == nil {
-					return fmt.Errorf("device mesh runtime is nil")
-				}
-				if meshRuntime.Hub == nil {
-					return fmt.Errorf("device mesh connection hub is nil")
-				}
-				if meshRuntime.BootstrapSvc == nil {
-					return fmt.Errorf("device mesh bootstrap service is nil")
-				}
-				return nil
-			},
 		})
 		if err != nil {
 			return nil, fmt.Errorf("initialize readiness service: %w", err)
@@ -1042,7 +965,42 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	migrationRunner.SetBackupDir(backupDir)
 	backupPort := migration.NewDomainMigrationBackupPort(ctx.DB, backupDir)
 	migrationRunner.SetBackupPort(backupPort)
-	migrationRunner.RegisterPlan(migrationplans.NewDesktopPetV2CutoverPlan(migrationplans.Dependencies{DB: ctx.DB}))
+	migrationRunner.SetLegacyWriteRefresh(func() { desktoppet.RefreshLegacyWriteFlagsFromDB(ctx.DB) })
+	migrationRunner.RegisterPlan(migrationplans.NewDesktopPetV2CutoverPlan(migrationplans.Dependencies{
+		DB: ctx.DB,
+		ReadPathReady: func() error {
+			if installationRepoV2 == nil {
+				return errors.New("RepositoryV2 is nil")
+			}
+			return nil
+		},
+		WritePathReady: func() error {
+			if installationCoordinator == nil {
+				return errors.New("InstallationCoordinator V2 is nil")
+			}
+			if projectionBridge == nil || installationRecoveryWorker == nil || desiredOutboxWorker == nil {
+				return errors.New("V2 projection/recovery/outbox production wiring is incomplete")
+			}
+			if runtimeV2Facade == nil {
+				return errors.New("Runtime V2 facade is nil")
+			}
+			return nil
+		},
+		ReleasePublishedReady: func(storageKey string) error {
+			publishedPath, err := pathRegistry.Resolve(desktoppetsecurity.RootReleasePublished, storageKey)
+			if err != nil {
+				return err
+			}
+			info, err := os.Lstat(publishedPath)
+			if err != nil {
+				return err
+			}
+			if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+				return fmt.Errorf("published path is not a regular directory: %s", publishedPath)
+			}
+			return nil
+		},
+	}))
 
 	maintenanceHandler := maintenance.NewHandler(migrationRunner, nil, nil, nil)
 
@@ -1053,38 +1011,44 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	chatSvc.SetArtifactResolver(&chatArtifactAdapter{resolver: artifactRuntime.Resolver})
 	chat.SetGlobalArtifactResolver(&chatArtifactAdapter{resolver: artifactRuntime.Resolver})
 
+	syncApplier := syncpkg.NewBusinessApplier(ctx.DB)
+	syncService := syncpkg.NewService(ctx.DB, syncApplier)
+
 	services := &AppServices{
-		RuntimeProfile:          runtimeProfile,
-		RuntimePolicy:           policy,
-		Graph:                   graphSvc,
-		ChatDeliveryAdapter:     nil,
-		Memory:                  memSvc,
-		Profile:                 profSvc,
-		Episodic:                epiSvc,
-		WorldBook:               wbSvc,
-		Vision:                  visionSvc,
-		Companion:               compSvc,
-		Chat:                    chatSvc,
-		UnifiedEntry:            entry,
-		DataLifecycle:           dataLifecycle,
-		RuntimeQueue:            runtimeQueue,
-		NewOutbox:               newOutboxStore,
-		DeliveryStore:           deliveryStore,
-		DeliveryWorker:          deliveryWorker,
-		OutboxWorker:            newOutboxWorker,
-		DesktopPetWorker:        desktopPetWorker,
-		ProcessingWorker:        processingWorker,
-		QualityService:          qualitySvc,
-		QualityWorker:           qualityWorker,
-		InstallationCoordinator: installationCoordinator,
-		InstallationRepo:        installationRepo,
-		NewReleaseService:       newReleaseService,
-		ReleaseRecoveryWorker:   releaseRecoveryWorker,
-		ReleaseEventPublisher:   releaseEventPublisher,
-		DesktopPetRuntimeV2:     runtimeV2Facade,
-		EditingService:          editingSvc,
-		RegenerationWorker:      regenerationWorker,
-		BridgeRecoveryWorker:    bridgeRecoveryWorker,
+		RuntimeProfile:               runtimeProfile,
+		RuntimePolicy:                policy,
+		Graph:                        graphSvc,
+		ChatDeliveryAdapter:          deliveryAdapter,
+		Memory:                       memSvc,
+		Profile:                      profSvc,
+		Episodic:                     epiSvc,
+		WorldBook:                    wbSvc,
+		Vision:                       visionSvc,
+		Companion:                    compSvc,
+		Chat:                         chatSvc,
+		UnifiedEntry:                 entry,
+		DataLifecycle:                dataLifecycle,
+		RuntimeQueue:                 runtimeQueue,
+		NewOutbox:                    newOutboxStore,
+		DeliveryStore:                deliveryStore,
+		DeliveryWorker:               deliveryWorker,
+		OutboxWorker:                 newOutboxWorker,
+		DesktopPetWorker:             desktopPetWorker,
+		ProcessingWorker:             processingWorker,
+		QualityService:               qualitySvc,
+		QualityWorker:                qualityWorker,
+		InstallationCoordinator:      installationCoordinator,
+		InstallationRepo:             installationRepoV2,
+		InstallationRecoveryWorker:   installationRecoveryWorker,
+		InstallationProjectionBridge: projectionBridge,
+		InstallationDesiredOutbox:    desiredOutboxWorker,
+		NewReleaseService:            newReleaseService,
+		ReleaseRecoveryWorker:        releaseRecoveryWorker,
+		ReleaseEventPublisher:        releaseEventPublisher,
+		DesktopPetRuntimeV2:          runtimeV2Facade,
+		EditingService:               editingSvc,
+		RegenerationWorker:           regenerationWorker,
+		BridgeRecoveryWorker:         bridgeRecoveryWorker,
 
 		BehaviorService:              behaviorSvc,
 		AdapterManager:               adapterManager,
@@ -1093,7 +1057,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		VoiceEntry:                   voiceEntry,
 		Extension:                    extensionRuntime,
 		KernelContainer:              kernelContainer,
-		Emote:                        nil,
+		Emote:                        emoteSvc,
 		Temporal:                     temporalSvc,
 		RelTimeCoordinator:           relTimeCoordinator,
 		OwnershipGuard:               ownershipGuard,
@@ -1119,7 +1083,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		Artifact:                     artifactRuntime,
 		Sync:                         syncService,
 		DB:                           ctx.DB,
-		DeviceMesh:                   meshRuntime,
 		NativeBridgeRelay:            newNativeBridgeRelay(),
 	}
 	if err := runCanonicalBuildAssertions(services); err != nil {

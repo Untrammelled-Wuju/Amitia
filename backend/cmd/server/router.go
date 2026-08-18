@@ -14,9 +14,9 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/config"
+	"github.com/u-ai/backend/internal/accountsession"
 	"github.com/u-ai/backend/internal/agent"
 	"github.com/u-ai/backend/internal/asr"
-	"github.com/u-ai/backend/internal/accountsession"
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/companion"
@@ -25,7 +25,6 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/behavior"
 	"github.com/u-ai/backend/internal/desktoppet/device"
 	"github.com/u-ai/backend/internal/desktoppet/doctor"
-	"github.com/u-ai/backend/internal/devicemesh/server"
 	"github.com/u-ai/backend/internal/desktoppet/editing"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/maintenance"
@@ -43,18 +42,18 @@ import (
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_center"
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
-	iosnativebackground "github.com/u-ai/backend/internal/iosnative/background"
-	"github.com/u-ai/backend/internal/nativebridge"
 	"github.com/u-ai/backend/internal/feedback"
 	"github.com/u-ai/backend/internal/gamehost/control"
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/management"
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/imagegen"
+	iosnativebackground "github.com/u-ai/backend/internal/iosnative/background"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/internal/middleware/security"
 	"github.com/u-ai/backend/internal/mood"
+	"github.com/u-ai/backend/internal/nativebridge"
 	"github.com/u-ai/backend/internal/proactive"
 	"github.com/u-ai/backend/internal/profile"
 	"github.com/u-ai/backend/internal/qq"
@@ -139,6 +138,7 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	services.AccountSession = accountSessionRuntime
 
 	public.GET("/auth/status", userHandler.Status)
+	public.POST("/auth/setup", userHandler.Setup)
 
 	accountsession.RegisterPublicRoutes(public, accountSessionRuntime.Handler)
 
@@ -382,9 +382,8 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		AccountSessions:  accountSessionRuntime.Validator,
 	}))
 	{
-		accountsession.RegisterAuthenticatedRoutes(apiGroup, accountSessionRuntime.Handler)
 		user.RegisterUserRouter(apiGroup, ctx)
-		character.RegisterCharacterRouterWithRecorder(apiGroup, ctx, services.Chat, services.Sync.ChangeLog)
+		character.RegisterCharacterRouter(apiGroup, ctx, services.Chat)
 		chat.RegisterChatRouterWithDelivery(apiGroup, ctx, services.Chat, services.UnifiedEntry, services.ChatDeliveryAdapter)
 		memHandler := memory.RegisterMemoryRouter(apiGroup, ctx, services.Graph)
 		apiGroup.GET("/memory/retrieval/stats", memHandler.RetrieveStats)
@@ -591,37 +590,6 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		},
 	)
 	runtimev2.RegisterUserRoutes(apiGroup, services.DesktopPetRuntimeV2)
-
-	if services.DeviceMesh != nil {
-		meshAuthMW := security.AuthenticationMiddleware(security.AuthConfig{
-			Mode:             config.AppCfg.Security.Mode,
-			JWTSecret:        config.AppCfg.JWT.Secret,
-			JWTIssuer:        config.AppCfg.JWT.Issuer,
-			JWTAudience:      config.AppCfg.JWT.Audience,
-			LocalCredentials: localCredentialStore,
-			LocalUserID:      config.AppCfg.Security.LocalUserID,
-			ListenAddress:    config.AppCfg.Server.Host,
-			AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
-			SessionService:   sessionSvc,
-			AccountSessions:  accountSessionRuntime.Validator,
-		})
-		meshDeps := &server.RouterDeps{
-			Sessions:      services.DeviceMesh.GetSessions(),
-			BootstrapSvc:  services.DeviceMesh.BootstrapSvc,
-			CredentialSvc: services.DeviceMesh.CredentialSvc,
-			Hub:           services.DeviceMesh.Hub,
-			Probe:         services.DeviceMesh.Probe,
-			DeviceReg:     services.DeviceMesh.DeviceReg,
-			GetUserID: func(c *gin.Context) (runtimeidentity.UserID, bool) {
-				actor := security.GetActor(c)
-				if actor == nil {
-					return "", false
-				}
-				return actor.UserID, true
-			},
-		}
-		server.RegisterCloudRoutes(r, meshAuthMW, meshDeps)
-	}
 
 	maintenanceAuthGroup := r.Group("/api")
 	maintenanceAuthGroup.Use(security.AuthenticationMiddleware(security.AuthConfig{
