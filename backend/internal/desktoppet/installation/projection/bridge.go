@@ -6,9 +6,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
+	"github.com/u-ai/backend/internal/desktoppet/installation/operation"
 	"github.com/u-ai/backend/log"
 	"gorm.io/gorm"
 )
@@ -42,6 +45,7 @@ func (runtimeSessionIdentity) TableName() string { return "desktop_pet_runtime_s
 type runtimeCommandProjection struct {
 	ID              string `gorm:"column:id"`
 	DesiredRevision int64  `gorm:"column:desired_revision"`
+	IdempotencyKey  string `gorm:"column:idempotency_key"`
 }
 
 func (runtimeCommandProjection) TableName() string { return "desktop_pet_runtime_commands_v2" }
@@ -159,9 +163,12 @@ func (b *ProjectionBridge) handleCommandAcknowledged(ctx context.Context, event 
 	if commandID == "" {
 		commandID = event.CommandID
 	}
-	if appliedRevision == 0 && commandID != "" {
-		var command runtimeCommandProjection
-		if err := b.db.WithContext(ctx).Where("id = ?", commandID).First(&command).Error; err == nil {
+	var command runtimeCommandProjection
+	if commandID != "" {
+		if err := b.db.WithContext(ctx).Where("id = ?", commandID).First(&command).Error; err != nil {
+			return fmt.Errorf("projection bridge: load acknowledged command %s: %w", commandID, err)
+		}
+		if appliedRevision == 0 {
 			appliedRevision = command.DesiredRevision
 		}
 	}
@@ -170,7 +177,134 @@ func (b *ProjectionBridge) handleCommandAcknowledged(ctx context.Context, event 
 		AppliedRevision: appliedRevision,
 		Timestamp:       time.Now().UTC().Format(time.RFC3339),
 	}
-	return b.service.HandleCommandResult(ctx, identity.UserID, identity.DeviceID, result)
+	if err := b.service.HandleCommandResult(ctx, identity.UserID, identity.DeviceID, result); err != nil {
+		return err
+	}
+	if err := b.completeRecenterOperationFromACK(ctx, command.IdempotencyKey, ack.Status); err != nil {
+		return err
+	}
+	return b.completeDesiredStateOperationFromACK(ctx, identity.UserID, identity.DeviceID, command.DesiredRevision, ack.Status)
+}
+
+func (b *ProjectionBridge) completeDesiredStateOperationFromACK(ctx context.Context, userID, deviceID string, desiredRevision int64, ackStatus string) error {
+	if desiredRevision <= 0 {
+		return nil
+	}
+	var state struct {
+		OperationID string `gorm:"column:operation_id"`
+	}
+	err := b.db.WithContext(ctx).Table("desktop_pet_runtime_desired_states").
+		Select("operation_id").
+		Where("user_id = ? AND device_id = ? AND desired_revision = ?", userID, deviceID, desiredRevision).
+		Take(&state).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if state.OperationID == "" {
+		return nil
+	}
+	var op operation.InstallationOperation
+	if err := b.db.WithContext(ctx).Where("id = ?", state.OperationID).First(&op).Error; err != nil {
+		return err
+	}
+	switch op.OperationType {
+	case operation.TypeEnable, operation.TypeDisable, operation.TypeSettings, operation.TypeDefaultAction:
+	default:
+		return nil
+	}
+	if op.IsTerminal() {
+		return nil
+	}
+	if op.Status != operation.OpStatusWaitingRuntimeACK || op.Stage != operation.OpStageWaitingRuntimeACK {
+		return fmt.Errorf("projection bridge: desired-state operation %s is not ready for terminal ACK: status=%s stage=%s", op.ID, op.Status, op.Stage)
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	operationUpdates := map[string]interface{}{"updated_at": now}
+	installationSyncState := ""
+	switch ackStatus {
+	case "completed":
+		operationUpdates["status"] = operation.OpStatusCompleted
+		operationUpdates["stage"] = operation.OpStageCompleted
+		operationUpdates["completed_at"] = now
+		installationSyncState = "confirmed"
+	case "failed_terminal":
+		operationUpdates["status"] = operation.OpStatusFailedTerminal
+		operationUpdates["error_code"] = "RUNTIME_COMMAND_FAILED"
+		installationSyncState = "failed"
+	default:
+		return nil
+	}
+	return b.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		res := tx.Model(&operation.InstallationOperation{}).
+			Where("id = ? AND status = ? AND stage = ?", op.ID, operation.OpStatusWaitingRuntimeACK, operation.OpStageWaitingRuntimeACK).
+			Updates(operationUpdates)
+		if res.Error != nil {
+			return res.Error
+		}
+		if res.RowsAffected != 1 {
+			return errors.New("projection bridge: desired-state terminal operation CAS failed")
+		}
+		if op.InstallationID == "" {
+			return nil
+		}
+		installRes := tx.Table("desktop_pet_installations").
+			Where("id = ? AND user_id = ? AND device_id = ?", op.InstallationID, op.UserID, op.DeviceID).
+			Updates(map[string]interface{}{"runtime_sync_state": installationSyncState, "updated_at": now})
+		if installRes.Error != nil {
+			return installRes.Error
+		}
+		if installRes.RowsAffected != 1 {
+			return errors.New("projection bridge: desired-state installation sync-state update failed")
+		}
+		return nil
+	})
+}
+
+func (b *ProjectionBridge) completeRecenterOperationFromACK(ctx context.Context, idempotencyKey, ackStatus string) error {
+	const prefix = "recenter:"
+	if !strings.HasPrefix(idempotencyKey, prefix) {
+		return nil
+	}
+	opID := strings.TrimPrefix(idempotencyKey, prefix)
+	if opID == "" {
+		return errors.New("projection bridge: recenter command missing operation id")
+	}
+	var op operation.InstallationOperation
+	if err := b.db.WithContext(ctx).Where("id = ? AND operation_type = ?", opID, operation.TypeRecenter).First(&op).Error; err != nil {
+		return fmt.Errorf("projection bridge: load recenter operation %s: %w", opID, err)
+	}
+	if op.IsTerminal() {
+		return nil
+	}
+	if op.Status != operation.OpStatusWaitingRuntimeACK || op.Stage != operation.OpStageWaitingRuntimeACK {
+		return fmt.Errorf("projection bridge: recenter operation %s is not ready for terminal ACK: status=%s stage=%s", opID, op.Status, op.Stage)
+	}
+	now := time.Now().UTC().Format(time.RFC3339)
+	updates := map[string]interface{}{"updated_at": now}
+	switch ackStatus {
+	case "completed":
+		updates["status"] = operation.OpStatusCompleted
+		updates["stage"] = operation.OpStageCompleted
+		updates["completed_at"] = now
+	case "failed_terminal":
+		updates["status"] = operation.OpStatusFailedTerminal
+		updates["error_code"] = "RUNTIME_COMMAND_FAILED"
+	default:
+		return nil
+	}
+	res := b.db.WithContext(ctx).Model(&operation.InstallationOperation{}).
+		Where("id = ? AND status = ? AND stage = ?", opID, operation.OpStatusWaitingRuntimeACK, operation.OpStageWaitingRuntimeACK).
+		Updates(updates)
+	if res.Error != nil {
+		return res.Error
+	}
+	if res.RowsAffected != 1 {
+		return errors.New("projection bridge: recenter terminal operation CAS failed")
+	}
+	return nil
 }
 
 func (b *ProjectionBridge) markDelivered(ctx context.Context, eventID string) error {

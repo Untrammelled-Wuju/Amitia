@@ -62,6 +62,33 @@ func (r *testRecoveryRepo) UpdateOperationStatus(operationID, oldStatus, newStat
 	return op, nil
 }
 
+func (r *testRecoveryRepo) CASUpdateOperationStage(operationID, expectedStage, newStage, executionID string) (*operation.InstallationOperation, error) {
+	op, ok := r.ops[operationID]
+	if !ok {
+		return nil, errors.New("not found")
+	}
+	if op.Stage != expectedStage {
+		return nil, ErrCASConflict
+	}
+	op.Stage = newStage
+	r.ops[operationID] = op
+	return op, nil
+}
+
+func (r *testRecoveryRepo) CompleteOperation(operationID, expectedStage, expectedStatus, executionID string) (*operation.InstallationOperation, error) {
+	op, ok := r.ops[operationID]
+	if !ok {
+		return nil, errors.New("not found")
+	}
+	if op.Stage != expectedStage || op.Status != expectedStatus {
+		return nil, ErrCASConflict
+	}
+	op.Stage = operation.OpStageCompleted
+	op.Status = operation.OpStatusCompleted
+	r.ops[operationID] = op
+	return op, nil
+}
+
 func (r *testRecoveryRepo) GetCommitJournal(operationID string) (*RecoveryCommitJournal, error) {
 	journal, ok := r.commitJournals[operationID]
 	if !ok {
@@ -104,7 +131,10 @@ func (r *testRecoveryRepo) CASUpdateSwitchJournalStage(operationID, expectedStag
 	return journal, nil
 }
 
-type testRuntimeRepo struct{}
+type testRuntimeRepo struct {
+	forceNoTerminal bool
+	queriedKeys     *[]string
+}
 
 func (testRuntimeRepo) SendDesiredCommand(context.Context, string, string, string, string, string, int64) error {
 	return nil
@@ -115,8 +145,13 @@ func (testRuntimeRepo) CancelDesiredCommand(context.Context, string, string, str
 func (testRuntimeRepo) QueryRuntimeAppliedState(context.Context, string, string, string) (int64, string, error) {
 	return 1, "", nil
 }
-func (testRuntimeRepo) MarkRuntimeApplied(string, int64) error { return nil }
-func (testRuntimeRepo) QueryCommandTerminalStatus(ctx context.Context, commandID string) (status string, found bool, err error) {
+func (r testRuntimeRepo) QueryCommandTerminalStatusByIdempotencyKey(ctx context.Context, idempotencyKey string) (status string, found bool, err error) {
+	if r.queriedKeys != nil {
+		*r.queriedKeys = append(*r.queriedKeys, idempotencyKey)
+	}
+	if r.forceNoTerminal {
+		return "", false, nil
+	}
 	return "completed", true, nil
 }
 
@@ -305,6 +340,10 @@ func TestRecoveryWorker_DesiredStateCommitted_RecoversAndEnqueuesCommand(t *test
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	got := repo.ops[op.ID]
+	if got.Stage != operation.OpStageWaitingRuntimeACK || got.Status != operation.OpStatusWaitingRuntimeACK {
+		t.Fatalf("expected operation to advance to waiting_runtime_ack, got stage=%s status=%s", got.Stage, got.Status)
+	}
 }
 
 func TestRecoveryWorker_RuntimeApplied_CallsFinalizer(t *testing.T) {
@@ -336,6 +375,10 @@ func TestRecoveryWorker_RuntimeApplied_CallsFinalizer(t *testing.T) {
 	}
 	if !finalizerCalled {
 		t.Fatal("expected finalizer to be called for runtime_applied stage")
+	}
+	got := repo.ops[op.ID]
+	if got.Stage != operation.OpStageCompleted || got.Status != operation.OpStatusCompleted {
+		t.Fatalf("expected runtime_applied recovery to complete operation, got stage=%s status=%s", got.Stage, got.Status)
 	}
 }
 
@@ -395,30 +438,33 @@ func TestRecoveryWorker_RecenterOperation_TerminalACKCompletes(t *testing.T) {
 	worker := newTestWorkerWithRuntime(repo)
 
 	op := &operation.InstallationOperation{
-		ID:                      "recenter-terminal-ack",
-		OperationType:           operation.TypeRecenter,
-		Status:                  operation.OpStatusWaitingRuntimeACK,
-		Stage:                   operation.OpStageWaitingRuntimeACK,
-		ExpectedAppliedRevision: 1,
+		ID:            "recenter-terminal-ack",
+		OperationType: operation.TypeRecenter,
+		Status:        operation.OpStatusWaitingRuntimeACK,
+		Stage:         operation.OpStageWaitingRuntimeACK,
 	}
 	repo.ops[op.ID] = op
 
 	err := worker.recoverOperation(context.Background(), op)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	got := repo.ops[op.ID]
+	if got.Stage != operation.OpStageCompleted || got.Status != operation.OpStatusCompleted {
+		t.Fatalf("expected terminal ACK to complete recenter operation, got stage=%s status=%s", got.Stage, got.Status)
 	}
 }
 
 func TestRecoveryWorker_RecenterOperation_NoTerminalACKDoesNotComplete(t *testing.T) {
 	repo := newTestRepo()
-	worker := newTestWorkerWithRuntime(repo)
+	worker := NewRecoveryWorker(repo)
+	worker.runtimeRecovery = NewRuntimeRecovery(worker, repo, testRuntimeRepo{forceNoTerminal: true})
 
 	op := &operation.InstallationOperation{
-		ID:                      "recenter-no-ack",
-		OperationType:           operation.TypeRecenter,
-		Status:                  operation.OpStatusWaitingRuntimeACK,
-		Stage:                   operation.OpStageWaitingRuntimeACK,
-		ExpectedAppliedRevision: 0,
+		ID:            "recenter-no-ack",
+		OperationType: operation.TypeRecenter,
+		Status:        operation.OpStatusWaitingRuntimeACK,
+		Stage:         operation.OpStageWaitingRuntimeACK,
 	}
 	repo.ops[op.ID] = op
 
@@ -426,25 +472,28 @@ func TestRecoveryWorker_RecenterOperation_NoTerminalACKDoesNotComplete(t *testin
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
+	if repo.ops[op.ID].Status == operation.OpStatusCompleted {
+		t.Fatal("recenter without terminal ACK must not complete")
+	}
 }
 
 func TestRecoveryWorker_TwoConsecutiveRecenters_GenerateIndependentCommands(t *testing.T) {
 	repo := newTestRepo()
-	worker := newTestWorkerWithRuntime(repo)
+	queried := []string{}
+	worker := NewRecoveryWorker(repo)
+	worker.runtimeRecovery = NewRuntimeRecovery(worker, repo, testRuntimeRepo{queriedKeys: &queried})
 
 	op1 := &operation.InstallationOperation{
-		ID:                      "recenter-1",
-		OperationType:           operation.TypeRecenter,
-		Status:                  operation.OpStatusWaitingRuntimeACK,
-		Stage:                   operation.OpStageWaitingRuntimeACK,
-		ExpectedAppliedRevision: 1,
+		ID:            "recenter-1",
+		OperationType: operation.TypeRecenter,
+		Status:        operation.OpStatusWaitingRuntimeACK,
+		Stage:         operation.OpStageWaitingRuntimeACK,
 	}
 	op2 := &operation.InstallationOperation{
-		ID:                      "recenter-2",
-		OperationType:           operation.TypeRecenter,
-		Status:                  operation.OpStatusWaitingRuntimeACK,
-		Stage:                   operation.OpStageWaitingRuntimeACK,
-		ExpectedAppliedRevision: 2,
+		ID:            "recenter-2",
+		OperationType: operation.TypeRecenter,
+		Status:        operation.OpStatusWaitingRuntimeACK,
+		Stage:         operation.OpStageWaitingRuntimeACK,
 	}
 	repo.ops[op1.ID] = op1
 	repo.ops[op2.ID] = op2
@@ -456,6 +505,9 @@ func TestRecoveryWorker_TwoConsecutiveRecenters_GenerateIndependentCommands(t *t
 	err = worker.recoverOperation(context.Background(), op2)
 	if err != nil {
 		t.Fatalf("unexpected error for op2: %v", err)
+	}
+	if len(queried) != 2 || queried[0] != "recenter:"+op1.ID || queried[1] != "recenter:"+op2.ID {
+		t.Fatalf("recenter operations must query independent original command keys, got %v", queried)
 	}
 }
 
@@ -518,6 +570,9 @@ func TestRecoveryWorker_UninstallOperation_IdempotentCompletion(t *testing.T) {
 	err = worker.recoverOperation(context.Background(), op)
 	if err != nil {
 		t.Fatalf("unexpected error on second call: %v", err)
+	}
+	if callCount != 1 {
+		t.Fatalf("expected idempotent finalizer to run once, got %d", callCount)
 	}
 }
 
