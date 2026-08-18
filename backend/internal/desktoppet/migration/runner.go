@@ -4,9 +4,9 @@ package migration
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -22,14 +22,15 @@ type BackupPort interface {
 }
 
 type Runner struct {
-	repo      *DBRepository
-	lock      *migrationcore.PersistentLock
-	lockName  string
-	backup    BackupPort
-	plans     map[string]DomainMigrationOperationPlan
-	leaseTTL  time.Duration
-	backupDir string
-	leaseLost chan struct{}
+	repo               *DBRepository
+	lock               *migrationcore.PersistentLock
+	lockName           string
+	backup             BackupPort
+	plans              map[string]DomainMigrationOperationPlan
+	leaseTTL           time.Duration
+	backupDir          string
+	leaseLost          chan struct{}
+	legacyWriteRefresh func()
 }
 
 func NewRunner(repo *DBRepository) *Runner {
@@ -54,6 +55,21 @@ func (r *Runner) SetBackupDir(dir string) {
 	r.backupDir = dir
 }
 
+func (r *Runner) SetLegacyWriteRefresh(refresh func()) {
+	r.legacyWriteRefresh = refresh
+}
+
+func (r *Runner) heartbeatInterval() time.Duration {
+	interval := r.leaseTTL / 3
+	if interval <= 0 {
+		interval = time.Second
+	}
+	if r.leaseTTL >= 15*time.Second && interval < 5*time.Second {
+		interval = 5 * time.Second
+	}
+	return interval
+}
+
 func (r *Runner) RegisterPlan(plan DomainMigrationOperationPlan) {
 	if r.plans == nil {
 		r.plans = make(map[string]DomainMigrationOperationPlan)
@@ -75,7 +91,10 @@ type DomainMigrationOperationPlan struct {
 	SchemaSteps           []StepFunc
 	BackfillSteps         []BatchedStepFunc
 	VerificationChecks    []CheckFunc
-	CutoverSteps          []StepFunc
+	ReadCutoverSteps      []StepFunc
+	ReadCutoverChecks     []CheckFunc
+	WriteCutoverSteps     []StepFunc
+	WriteCutoverChecks    []CheckFunc
 	LegacyWriteBlockSteps []StepFunc
 	ParityChecks          []ParityCheck
 }
@@ -91,9 +110,12 @@ const batchSize = 500
 func (r *Runner) checkLeaseLost(ctx context.Context, operationID string, op *MigrationOperation) bool {
 	select {
 	case <-r.leaseLost:
-		r.repo.UpdateOperationStageCAS(ctx, operationID, MigrationStage(op.Stage), StageFailedTerminal, func(o *MigrationOperation) {
+		ok, err := r.repo.UpdateOperationStageCAS(ctx, operationID, MigrationStage(op.Stage), StageFailedTerminal, func(o *MigrationOperation) {
 			o.Error = "lease ownership lost, migration terminated"
 		})
+		if err != nil || !ok {
+			log.Printf("desktop pet migration: persist lease-lost terminal state for %s failed: ok=%v err=%v", operationID, ok, err)
+		}
 		return true
 	default:
 		return false
@@ -105,8 +127,6 @@ func (r *Runner) RunPlan(ctx context.Context, planID string) (string, error) {
 	if !ok {
 		return "", &RunnerError{Code: "PLAN_NOT_FOUND", Message: "迁移计划未注册: " + planID}
 	}
-
-	r.leaseLost = make(chan struct{})
 
 	op := &MigrationOperation{
 		ID:            uuid.New().String(),
@@ -136,37 +156,55 @@ func (r *Runner) executePlan(operationID string, plan *DomainMigrationOperationP
 
 	if r.lock != nil {
 		lockCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
-		if err := r.lock.Acquire(lockCtx, r.lockName, r.leaseTTL); err != nil {
-			_, _ = r.repo.UpdateOperationStageCAS(ctx, operationID, StagePreflight, StageFailedTerminal, func(o *MigrationOperation) {
+		err := r.lock.Acquire(lockCtx, r.lockName, r.leaseTTL)
+		cancel()
+		if err != nil {
+			ok, persistErr := r.repo.UpdateOperationStageCAS(ctx, operationID, StagePreflight, StageFailedTerminal, func(o *MigrationOperation) {
 				o.Error = "获取迁移锁失败: " + err.Error()
 			})
-			cancel()
+			if persistErr != nil || !ok {
+				log.Printf("desktop pet migration: persist lock acquisition failure for %s failed: ok=%v err=%v", operationID, ok, persistErr)
+			}
 			return
 		}
-		cancel()
+		leaseLost := make(chan struct{})
+		r.leaseLost = leaseLost
 		r.lock.SetLeaseLostHandler(func(string) {
 			select {
-			case <-r.leaseLost:
+			case <-leaseLost:
 			default:
-				close(r.leaseLost)
+				close(leaseLost)
 			}
 		})
-		if err := r.lock.StartHeartbeat(r.lockName, 30*time.Second, r.leaseTTL); err != nil {
-			_, _ = r.repo.UpdateOperationStageCAS(ctx, operationID, StagePreflight, StageFailedTerminal, func(o *MigrationOperation) {
+		if err := r.lock.StartHeartbeat(r.lockName, r.heartbeatInterval(), r.leaseTTL); err != nil {
+			ok, persistErr := r.repo.UpdateOperationStageCAS(ctx, operationID, StagePreflight, StageFailedTerminal, func(o *MigrationOperation) {
 				o.Error = "启动心跳失败: " + err.Error()
 			})
-			r.lock.Release(r.lockName)
-			cancel()
+			if persistErr != nil || !ok {
+				log.Printf("desktop pet migration: persist heartbeat startup failure for %s failed: ok=%v err=%v", operationID, ok, persistErr)
+			}
+			if releaseErr := r.lock.Release(r.lockName); releaseErr != nil {
+				log.Printf("desktop pet migration: release lock after heartbeat startup failure: %v", releaseErr)
+			}
 			return
 		}
-		defer r.lock.Release(r.lockName)
+		defer func() {
+			if releaseErr := r.lock.Release(r.lockName); releaseErr != nil {
+				log.Printf("desktop pet migration: release plan lock %s failed: %v", operationID, releaseErr)
+			}
+		}()
+	} else {
+		r.leaseLost = make(chan struct{})
 	}
 
 	defer func() {
 		if rec := recover(); rec != nil {
-			r.repo.UpdateOperationStageCAS(ctx, operationID, MigrationStage(op.Stage), StageFailedTerminal, func(o *MigrationOperation) {
+			ok, persistErr := r.repo.UpdateOperationStageCAS(ctx, operationID, MigrationStage(op.Stage), StageFailedTerminal, func(o *MigrationOperation) {
 				o.Error = fmt.Sprintf("panic: %v", rec)
 			})
+			if persistErr != nil || !ok {
+				log.Printf("desktop pet migration: persist panic terminal state for %s failed: ok=%v err=%v", operationID, ok, persistErr)
+			}
 		}
 	}()
 
@@ -203,11 +241,21 @@ func (r *Runner) executePlan(operationID string, plan *DomainMigrationOperationP
 				}
 			}
 			op.Updated()
-			r.repo.UpdateOperationCheckpoint(ctx, op)
+			if checkpointErr := r.repo.UpdateOperationCheckpoint(ctx, op); checkpointErr != nil {
+				log.Printf("desktop pet migration: update checkpoint for %s failed: %v", operationID, checkpointErr)
+				return
+			}
 			continue
 		}
 		op.Updated()
-		r.repo.UpdateOperationCheckpoint(ctx, op)
+		if checkpointErr := r.repo.UpdateOperationCheckpoint(ctx, op); checkpointErr != nil {
+			stepErr := &RunnerError{Code: "CHECKPOINT_UPDATE_FAILED", Message: "更新迁移操作检查点失败: " + checkpointErr.Error()}
+			ok, persistErr := r.repo.UpdateOperationStageCAS(ctx, operationID, expected, StageFailedRetryable, func(o *MigrationOperation) { o.Error = stepErr.Error() })
+			if persistErr != nil || !ok {
+				log.Printf("desktop pet migration: persist checkpoint failure for %s failed: ok=%v err=%v", operationID, ok, persistErr)
+			}
+			return
+		}
 		stepErr := stages[i].fn(op)
 		if stepErr == nil {
 			casOk, casErr := r.repo.UpdateOperationStageCAS(ctx, operationID, expected, stages[i].to, nil)
@@ -219,15 +267,16 @@ func (r *Runner) executePlan(operationID string, plan *DomainMigrationOperationP
 			}
 		}
 		if stepErr != nil {
+			next := StageFailedRetryable
 			var me *RunnerError
 			if errors.As(stepErr, &me) && me.Code == "MANUAL_REVIEW_REQUIRED" {
-				r.repo.UpdateOperationStageCAS(ctx, operationID, expected, StageManualReview, func(o *MigrationOperation) {
-					o.Error = stepErr.Error()
-				})
-			} else {
-				r.repo.UpdateOperationStageCAS(ctx, operationID, expected, StageFailedRetryable, func(o *MigrationOperation) {
-					o.Error = stepErr.Error()
-				})
+				next = StageManualReview
+			}
+			ok, persistErr := r.repo.UpdateOperationStageCAS(ctx, operationID, expected, next, func(o *MigrationOperation) {
+				o.Error = stepErr.Error()
+			})
+			if persistErr != nil || !ok {
+				log.Printf("desktop pet migration: persist stage failure for %s failed: ok=%v err=%v original=%v", operationID, ok, persistErr, stepErr)
 			}
 			return
 		}
@@ -247,8 +296,11 @@ func (r *Runner) runPreflight(op *MigrationOperation) error {
 
 func (r *Runner) runBackup(op *MigrationOperation) error {
 	plan := r.plans[op.PlanID]
-	if !plan.BackupRequired || r.backup == nil {
+	if !plan.BackupRequired {
 		return nil
+	}
+	if r.backup == nil {
+		return &RunnerError{Code: "BACKUP_NOT_CONFIGURED", Message: "迁移计划要求备份，但 BackupPort 未配置"}
 	}
 	backupID, err := r.backup.CreateBackup(context.Background())
 	if err != nil {
@@ -301,7 +353,9 @@ func (r *Runner) runBackfill(op *MigrationOperation) error {
 
 			stepName := fmt.Sprintf("backfill_batch_%d", batchIdx)
 			inputHash := ComputeCheckpoint(input{PK: int64(offset), BatchIdx: batchIdx})
-			r.repo.SaveCheckpoint(ctx, op.ID, stepName, fmt.Sprintf("%d", offset), int(processedTotal), inputHash, "", int(conflictsTotal))
+			if err := r.repo.SaveCheckpoint(ctx, op.ID, stepName, fmt.Sprintf("%d", offset), int(processedTotal), inputHash, "", int(conflictsTotal)); err != nil {
+				return &RunnerError{Code: "CHECKPOINT_SAVE_FAILED", Message: "保存回填检查点失败: " + err.Error()}
+			}
 
 			if processed < batchSize {
 				break
@@ -318,8 +372,7 @@ type input struct {
 }
 
 func ComputeCheckpoint(in input) string {
-	data, _ := json.Marshal(in)
-	return ComputeChecksum(string(data))
+	return ComputeChecksum(fmt.Sprintf("pk=%d;batch=%d", in.PK, in.BatchIdx))
 }
 
 func (r *Runner) runVerifying(op *MigrationOperation) error {
@@ -355,53 +408,6 @@ func (r *Runner) runVerifying(op *MigrationOperation) error {
 	return nil
 }
 
-func (r *Runner) runReadCutover(op *MigrationOperation) error {
-	ctx := context.Background()
-	if err := r.repo.RecordReadCutover(ctx, op.ID, op.PlanID); err != nil {
-		return &RunnerError{Code: "READ_CUTOVER_RECORD_FAILED", Message: "记录读切换失败: " + err.Error()}
-	}
-	if err := r.repo.MarkReadCutoverVerified(ctx, op.ID, op.PlanID); err != nil {
-		return &RunnerError{Code: "READ_CUTOVER_VERIFY_FAILED", Message: "标记读切换已验证失败: " + err.Error()}
-	}
-	return nil
-}
-
-func (r *Runner) runWriteCutover(op *MigrationOperation) error {
-	ctx := context.Background()
-
-	plan := r.plans[op.PlanID]
-	for _, pCheck := range plan.ParityChecks {
-		if !pCheck.Required {
-			continue
-		}
-		passed, detail, err := pCheck.Check(ctx)
-		if err != nil {
-			return &RunnerError{Code: "PARITY_CHECK_ERROR", Message: fmt.Sprintf("Parity 检查 %s 出错: %v", pCheck.Name, err)}
-		}
-		if !passed {
-			return &RunnerError{Code: "MANUAL_REVIEW_REQUIRED", Message: fmt.Sprintf("Parity 检查 %s 失败: %s", pCheck.Name, detail)}
-		}
-	}
-
-	if err := r.repo.RecordWriteCutover(ctx, op.ID, op.PlanID); err != nil {
-		return &RunnerError{Code: "WRITE_CUTOVER_RECORD_FAILED", Message: "记录写切换失败: " + err.Error()}
-	}
-	if err := r.repo.MarkWriteCutoverVerified(ctx, op.ID, op.PlanID); err != nil {
-		return &RunnerError{Code: "WRITE_CUTOVER_VERIFY_FAILED", Message: "标记写切换已验证失败: " + err.Error()}
-	}
-	return nil
-}
-
-func (r *Runner) runLegacyWriteBlock(op *MigrationOperation) error {
-	plan := r.plans[op.PlanID]
-	for _, step := range plan.LegacyWriteBlockSteps {
-		if err := step(); err != nil {
-			return &RunnerError{Code: "LEGACY_BLOCK_FAILED", Message: "旧写阻断失败: " + err.Error()}
-		}
-	}
-	return nil
-}
-
 func (r *Runner) GetOperation(ctx context.Context, operationID string) (*MigrationOperation, error) {
 	if r.repo == nil {
 		return nil, &RunnerError{Code: "NOT_INITIALIZED", Message: "迁移仓库未初始化"}
@@ -409,7 +415,7 @@ func (r *Runner) GetOperation(ctx context.Context, operationID string) (*Migrati
 	return r.repo.GetOperation(ctx, operationID)
 }
 
-func (r *Runner) RequestCutover(ctx context.Context, operationID, direction string) error {
+func (r *Runner) RequestCutover(ctx context.Context, operationID, direction string) (retErr error) {
 	if operationID == "" {
 		return &RunnerError{Code: "OPERATION_REQUIRED", Message: "operationId 不能为空"}
 	}
@@ -417,12 +423,63 @@ func (r *Runner) RequestCutover(ctx context.Context, operationID, direction stri
 		return &RunnerError{Code: "INVALID_DIRECTION", Message: "切转方向无效: " + direction}
 	}
 
+	releaseLock, err := r.acquireCutoverLock(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if releaseErr := releaseLock(); releaseErr != nil {
+			if retErr == nil {
+				retErr = &RunnerError{Code: "MIGRATION_LOCK_RELEASE_FAILED", Message: "释放切转迁移锁失败: " + releaseErr.Error()}
+			} else {
+				retErr = errors.Join(retErr, fmt.Errorf("release cutover lock: %w", releaseErr))
+			}
+		}
+	}()
+
+	retErr = r.requestCutoverLocked(ctx, operationID, direction)
+	return retErr
+}
+
+func (r *Runner) acquireCutoverLock(ctx context.Context) (func() error, error) {
+	if r.lock == nil {
+		return func() error { return nil }, nil
+	}
+	lockCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	defer cancel()
+	if err := r.lock.Acquire(lockCtx, r.lockName, r.leaseTTL); err != nil {
+		return nil, &RunnerError{Code: "MIGRATION_LOCK_FAILED", Message: "获取切转迁移锁失败: " + err.Error()}
+	}
+
+	leaseLost := make(chan struct{})
+	r.leaseLost = leaseLost
+	r.lock.SetLeaseLostHandler(func(string) {
+		select {
+		case <-leaseLost:
+		default:
+			close(leaseLost)
+		}
+	})
+	if err := r.lock.StartHeartbeat(r.lockName, r.heartbeatInterval(), r.leaseTTL); err != nil {
+		releaseErr := r.lock.Release(r.lockName)
+		if releaseErr != nil {
+			return nil, &RunnerError{Code: "LOCK_HEARTBEAT_FAILED", Message: "启动切转锁心跳失败: " + errors.Join(err, releaseErr).Error()}
+		}
+		return nil, &RunnerError{Code: "LOCK_HEARTBEAT_FAILED", Message: "启动切转锁心跳失败: " + err.Error()}
+	}
+	return func() error { return r.lock.Release(r.lockName) }, nil
+}
+
+func (r *Runner) requestCutoverLocked(ctx context.Context, operationID, direction string) error {
 	op, err := r.repo.GetOperation(ctx, operationID)
 	if err != nil {
 		return &RunnerError{Code: "OPERATION_GET_FAILED", Message: "获取迁移操作失败: " + err.Error()}
 	}
 	if op == nil {
 		return &RunnerError{Code: "OPERATION_NOT_FOUND", Message: "迁移操作不存在"}
+	}
+	if r.checkLeaseLost(ctx, operationID, op) {
+		return &RunnerError{Code: "LEASE_LOST", Message: "迁移锁所有权已丢失"}
 	}
 
 	openConflicts, err := r.repo.CountOpenConflicts(ctx, operationID)
@@ -437,95 +494,175 @@ func (r *Runner) RequestCutover(ctx context.Context, operationID, direction stri
 	if !ok {
 		return &RunnerError{Code: "PLAN_NOT_FOUND", Message: "迁移计划未注册: " + op.PlanID}
 	}
-
-	if plan.BackupRequired && op.BackupID == "" {
-		return &RunnerError{Code: "BACKUP_MISSING", Message: "备份缺失，不允许切转"}
-	}
-	if plan.BackupRequired && r.backup != nil {
-		exists, err := r.backup.BackupExists(ctx, op.BackupID)
-		if err != nil {
-			return &RunnerError{Code: "BACKUP_VERIFY_FAILED", Message: "备份校验失败: " + err.Error()}
+	if plan.BackupRequired {
+		if op.BackupID == "" || r.backup == nil {
+			return &RunnerError{Code: "BACKUP_MISSING", Message: "备份缺失，不允许切转"}
+		}
+		exists, verifyErr := r.backup.BackupExists(ctx, op.BackupID)
+		if verifyErr != nil {
+			return &RunnerError{Code: "BACKUP_VERIFY_FAILED", Message: "备份校验失败: " + verifyErr.Error()}
 		}
 		if !exists {
 			return &RunnerError{Code: "BACKUP_NOT_FOUND", Message: "备份记录不存在: " + op.BackupID}
 		}
 	}
 
-	switch direction {
-	case "read":
-		if op.Stage != StageVerifying && op.Stage != StageReadCutover {
-			return &RunnerError{Code: "INVALID_STAGE", Message: fmt.Sprintf("当前阶段 %s 不允许读切转", op.Stage)}
+	if direction == "read" {
+		return r.requestReadCutover(ctx, op, plan)
+	}
+	return r.requestWriteCutover(ctx, op, plan)
+}
+
+func (r *Runner) runRequiredParity(ctx context.Context, plan DomainMigrationOperationPlan) error {
+	for _, pCheck := range plan.ParityChecks {
+		if !pCheck.Required {
+			continue
 		}
-		for _, pCheck := range plan.ParityChecks {
-			if !pCheck.Required {
-				continue
-			}
-			passed, detail, err := pCheck.Check(ctx)
-			if err != nil {
-				return &RunnerError{Code: "PARITY_CHECK_ERROR", Message: fmt.Sprintf("Parity 检查 %s 出错: %v", pCheck.Name, err)}
-			}
-			if !passed {
-				return &RunnerError{Code: "PARITY_FAILED", Message: fmt.Sprintf("Parity 检查 %s 失败: %s", pCheck.Name, detail)}
-			}
+		passed, detail, err := pCheck.Check(ctx)
+		if err != nil {
+			return &RunnerError{Code: "PARITY_CHECK_ERROR", Message: fmt.Sprintf("Parity 检查 %s 出错: %v", pCheck.Name, err)}
 		}
-		if err := r.repo.RecordReadCutover(ctx, operationID, op.PlanID); err != nil {
-			return &RunnerError{Code: "READ_CUTOVER_RECORD_FAILED", Message: "记录读切转失败: " + err.Error()}
+		if !passed {
+			return &RunnerError{Code: "PARITY_FAILED", Message: fmt.Sprintf("Parity 检查 %s 失败: %s", pCheck.Name, detail)}
 		}
-		for _, step := range plan.CutoverSteps {
-			if r.checkLeaseLost(ctx, operationID, op) {
-				return &RunnerError{Code: "LEASE_LOST", Message: "lease lost during read cutover"}
+	}
+	return nil
+}
+
+func (r *Runner) requestReadCutover(ctx context.Context, op *MigrationOperation, plan DomainMigrationOperationPlan) error {
+	if op.Stage == StageReadCutover {
+		verified, err := r.repo.HasVerifiedReadCutover(ctx, op.ID)
+		if err != nil {
+			return &RunnerError{Code: "READ_CUTOVER_CHECK_FAILED", Message: err.Error()}
+		}
+		if verified {
+			return nil
+		}
+	}
+	if op.Stage != StageVerifying {
+		return &RunnerError{Code: "INVALID_STAGE", Message: fmt.Sprintf("当前阶段 %s 不允许读切转", op.Stage)}
+	}
+	if err := r.runRequiredParity(ctx, plan); err != nil {
+		return err
+	}
+	for _, step := range plan.ReadCutoverSteps {
+		if r.checkLeaseLost(ctx, op.ID, op) {
+			return &RunnerError{Code: "LEASE_LOST", Message: "lease lost during read cutover"}
+		}
+		if err := step(); err != nil {
+			return &RunnerError{Code: "READ_CUTOVER_STEP_FAILED", Message: "读切转步骤执行失败: " + err.Error()}
+		}
+	}
+	for _, check := range plan.ReadCutoverChecks {
+		passed, detail := check()
+		if !passed {
+			return &RunnerError{Code: "READ_CUTOVER_VERIFY_FAILED", Message: "读切转验证失败: " + detail}
+		}
+	}
+	const readStep = "v2_read_path"
+	if err := r.repo.RecordReadCutover(ctx, op.ID, readStep); err != nil {
+		return &RunnerError{Code: "READ_CUTOVER_RECORD_FAILED", Message: "记录读切转失败: " + err.Error()}
+	}
+	if err := r.repo.MarkReadCutoverVerified(ctx, op.ID, readStep); err != nil {
+		return &RunnerError{Code: "READ_CUTOVER_VERIFY_FAILED", Message: "标记读切转已验证失败: " + err.Error()}
+	}
+	ok, err := r.repo.UpdateOperationStageCAS(ctx, op.ID, StageVerifying, StageReadCutover, nil)
+	if err != nil || !ok {
+		if err == nil {
+			err = errors.New("stage CAS returned false")
+		}
+		return &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: "读切转阶段转换失败: " + err.Error()}
+	}
+	return nil
+}
+
+func (r *Runner) requestWriteCutover(ctx context.Context, op *MigrationOperation, plan DomainMigrationOperationPlan) error {
+	if op.Stage == StageCompleted {
+		verified, err := r.repo.HasVerifiedWriteCutover(ctx, op.ID)
+		if err == nil && verified {
+			return nil
+		}
+	}
+	if op.Stage != StageReadCutover && op.Stage != StageWriteCutover && op.Stage != StageLegacyWriteBlocked {
+		return &RunnerError{Code: "INVALID_STAGE", Message: fmt.Sprintf("当前阶段 %s 不允许写切转", op.Stage)}
+	}
+	readVerified, err := r.repo.HasVerifiedReadCutover(ctx, op.ID)
+	if err != nil {
+		return &RunnerError{Code: "READ_CUTOVER_CHECK_FAILED", Message: "检查读切转验证状态失败: " + err.Error()}
+	}
+	if !readVerified {
+		return &RunnerError{Code: "READ_CUTOVER_NOT_VERIFIED", Message: "读切转未验证，不允许写切转"}
+	}
+	if err := r.runRequiredParity(ctx, plan); err != nil {
+		return err
+	}
+	if op.Stage == StageReadCutover {
+		for _, step := range plan.WriteCutoverSteps {
+			if r.checkLeaseLost(ctx, op.ID, op) {
+				return &RunnerError{Code: "LEASE_LOST", Message: "lease lost during write cutover"}
 			}
 			if err := step(); err != nil {
-				return &RunnerError{Code: "READ_CUTOVER_STEP_FAILED", Message: "读切转步骤执行失败: " + err.Error()}
+				return &RunnerError{Code: "WRITE_CUTOVER_STEP_FAILED", Message: "写切转步骤执行失败: " + err.Error()}
 			}
 		}
-		if err := r.repo.MarkReadCutoverVerified(ctx, operationID, op.PlanID); err != nil {
-			return &RunnerError{Code: "READ_CUTOVER_VERIFY_FAILED", Message: "标记读切转已验证失败: " + err.Error()}
-		}
-		if _, err := r.repo.UpdateOperationStageCAS(ctx, operationID, MigrationStage(op.Stage), StageReadCutover, nil); err != nil {
-			return &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: "读切转阶段转换失败: " + err.Error()}
-		}
-	case "write":
-		if op.Stage != StageReadCutover && op.Stage != StageWriteCutover {
-			return &RunnerError{Code: "INVALID_STAGE", Message: fmt.Sprintf("当前阶段 %s 不允许写切转", op.Stage)}
-		}
-		hasVerifiedReadCutover, err := r.repo.HasVerifiedReadCutover(ctx, operationID)
-		if err != nil {
-			return &RunnerError{Code: "READ_CUTOVER_CHECK_FAILED", Message: "检查读切转验证状态失败: " + err.Error()}
-		}
-		if !hasVerifiedReadCutover {
-			return &RunnerError{Code: "READ_CUTOVER_NOT_VERIFIED", Message: "读切转未验证，不允许写切转"}
-		}
-		for _, pCheck := range plan.ParityChecks {
-			if !pCheck.Required {
-				continue
-			}
-			passed, detail, err := pCheck.Check(ctx)
-			if err != nil {
-				return &RunnerError{Code: "PARITY_CHECK_ERROR", Message: fmt.Sprintf("Parity 检查 %s 出错: %v", pCheck.Name, err)}
-			}
+		for _, check := range plan.WriteCutoverChecks {
+			passed, detail := check()
 			if !passed {
-				return &RunnerError{Code: "PARITY_FAILED", Message: fmt.Sprintf("Parity 检查 %s 失败: %s", pCheck.Name, detail)}
+				return &RunnerError{Code: "WRITE_CUTOVER_VERIFY_FAILED", Message: "写切转验证失败: " + detail}
 			}
 		}
-		if err := r.repo.RecordWriteCutover(ctx, operationID, op.PlanID); err != nil {
-			return &RunnerError{Code: "WRITE_CUTOVER_RECORD_FAILED", Message: "记录写切转失败: " + err.Error()}
+		for _, stepName := range []string{"installation", "editing"} {
+			if err := r.repo.RecordWriteCutover(ctx, op.ID, stepName); err != nil {
+				return &RunnerError{Code: "WRITE_CUTOVER_RECORD_FAILED", Message: "记录写切转失败: " + err.Error()}
+			}
+			if err := r.repo.MarkWriteCutoverVerified(ctx, op.ID, stepName); err != nil {
+				return &RunnerError{Code: "WRITE_CUTOVER_VERIFY_FAILED", Message: "标记写切转已验证失败: " + err.Error()}
+			}
+		}
+		ok, err := r.repo.UpdateOperationStageCAS(ctx, op.ID, StageReadCutover, StageWriteCutover, nil)
+		if err != nil || !ok {
+			if err == nil {
+				err = errors.New("stage CAS returned false")
+			}
+			return &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: "写切转阶段转换失败: " + err.Error()}
+		}
+		op.Stage = StageWriteCutover
+	}
+
+	if op.Stage == StageWriteCutover {
+		writeVerified, err := r.repo.HasVerifiedWriteCutover(ctx, op.ID)
+		if err != nil {
+			return &RunnerError{Code: "WRITE_CUTOVER_CHECK_FAILED", Message: "检查写切转验证状态失败: " + err.Error()}
+		}
+		if !writeVerified {
+			return &RunnerError{Code: "WRITE_CUTOVER_NOT_VERIFIED", Message: "installation/editing 写切转未全部验证，禁止阻断旧写"}
 		}
 		for _, step := range plan.LegacyWriteBlockSteps {
-			if r.checkLeaseLost(ctx, operationID, op) {
-				return &RunnerError{Code: "LEASE_LOST", Message: "lease lost during write cutover"}
+			if r.checkLeaseLost(ctx, op.ID, op) {
+				return &RunnerError{Code: "LEASE_LOST", Message: "lease lost during legacy write block"}
 			}
 			if err := step(); err != nil {
 				return &RunnerError{Code: "LEGACY_BLOCK_FAILED", Message: "旧写阻断失败: " + err.Error()}
 			}
 		}
-		if err := r.repo.MarkWriteCutoverVerified(ctx, operationID, op.PlanID); err != nil {
-			return &RunnerError{Code: "WRITE_CUTOVER_VERIFY_FAILED", Message: "标记写切转已验证失败: " + err.Error()}
+		if r.legacyWriteRefresh != nil {
+			r.legacyWriteRefresh()
 		}
-		if _, err := r.repo.UpdateOperationStageCAS(ctx, operationID, MigrationStage(op.Stage), StageWriteCutover, nil); err != nil {
-			return &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: "写切转阶段转换失败: " + err.Error()}
+		ok, err := r.repo.UpdateOperationStageCAS(ctx, op.ID, StageWriteCutover, StageLegacyWriteBlocked, nil)
+		if err != nil || !ok {
+			if err == nil {
+				err = errors.New("stage CAS returned false")
+			}
+			return &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: "旧写阻断阶段转换失败: " + err.Error()}
 		}
-		if _, err := r.repo.UpdateOperationStageCAS(ctx, operationID, StageWriteCutover, StageCompleted, nil); err != nil {
+		op.Stage = StageLegacyWriteBlocked
+	}
+	if op.Stage == StageLegacyWriteBlocked {
+		ok, err := r.repo.UpdateOperationStageCAS(ctx, op.ID, StageLegacyWriteBlocked, StageCompleted, nil)
+		if err != nil || !ok {
+			if err == nil {
+				err = errors.New("stage CAS returned false")
+			}
 			return &RunnerError{Code: "STAGE_TRANSITION_FAILED", Message: "完成阶段转换失败: " + err.Error()}
 		}
 	}
