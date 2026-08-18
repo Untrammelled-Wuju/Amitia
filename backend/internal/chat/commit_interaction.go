@@ -132,7 +132,7 @@ func (s *service) commitAttachmentsTx(tx *gorm.DB, plan messageCommitPlan, userM
 			return fmt.Errorf("create message attachment: %w", err)
 		}
 		if artifactID != "" && s.artifactResolver != nil {
-			if err := s.artifactResolver.RegisterReference(artifactID, "message_attachment", attachment.ID); err != nil {
+			if err := s.artifactResolver.RegisterReferenceGormTx(tx, artifactID, "message_attachment", attachment.ID); err != nil {
 				return fmt.Errorf("register artifact reference: %w", err)
 			}
 		}

@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/character/card"
+	"github.com/u-ai/backend/internal/sync"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -53,12 +54,17 @@ type Service interface {
 }
 
 type service struct {
-	repo Repository
-	db   *gorm.DB
+	repo          Repository
+	db            *gorm.DB
+	changeRecorder sync.ChangeRecorder
 }
 
-func NewService(repo Repository, ctx *app.AppContext) Service {
-	return &service{repo: repo, db: ctx.DB}
+func NewService(repo Repository, ctx *app.AppContext, recorder ...sync.ChangeRecorder) Service {
+	var r sync.ChangeRecorder
+	if len(recorder) > 0 {
+		r = recorder[0]
+	}
+	return &service{repo: repo, db: ctx.DB, changeRecorder: r}
 }
 
 func (s *service) List(includeDisabled bool) ([]Character, error) {
@@ -133,13 +139,36 @@ func (s *service) Create(req *CreateCharacterRequest) (*Character, error) {
 	if err := s.db.Table("characters").Count(&count).Error; err == nil && count == 0 {
 		c.IsDefault = 1
 	}
-	if err := s.repo.Create(c); err != nil {
+
+	var createErr error
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(c).Error; err != nil {
+			return err
+		}
+		convID := uuid.New().String()
+		now := time.Now().Format("2006-01-02 15:04:05")
+		if err := tx.Exec("INSERT INTO conversations (id, character_id, title, channel, source, created_at, updated_at, revision) VALUES (?, ?, ?, 'web', 'system', ?, ?, 1)", convID, c.ID, c.Name, now, now).Error; err != nil {
+			return err
+		}
+		if err := tx.Table("characters").Where("id = ?", c.ID).Update("conversation_id", convID).Error; err != nil {
+			return err
+		}
+		if s.changeRecorder != nil {
+			payload, _ := json.Marshal(map[string]string{"id": c.ID, "name": c.Name})
+			if _, recErr := s.changeRecorder.RecordChange(tx, sync.EntityTypeCharacter, sync.EntityID(c.ID), sync.OpCreate, 1, sync.MutationID("local_"+c.ID+"_create"), "local_user", sync.ScopeUser, payload); recErr != nil {
+				createErr = recErr
+				return recErr
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		if createErr != nil {
+			return nil, fmt.Errorf("创建角色失败: %w", createErr)
+		}
 		return nil, fmt.Errorf("创建角色失败: %w", err)
 	}
-	convID := uuid.New().String()
-	now := time.Now().Format("2006-01-02 15:04:05")
-	s.db.Exec("INSERT INTO conversations (id, character_id, title, channel, source, created_at, updated_at) VALUES (?, ?, ?, 'web', 'system', ?, ?)", convID, c.ID, c.Name, now, now)
-	s.db.Table("characters").Where("id = ?", c.ID).Update("conversation_id", convID)
+
 	presetRules := []struct {
 		Name, Channel, RuleType, ScheduleCron, PromptTemplate string
 		MaxPerDay, RandomMinutes                              int
@@ -265,13 +294,62 @@ func (s *service) Update(id string, req *UpdateCharacterRequest) (*Character, er
 	if len(updates) == 0 {
 		return nil, fmt.Errorf("没有可更新的字段")
 	}
-	if err := s.repo.Update(id, updates); err != nil {
+	var updateErr error
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		var current Character
+		if err := tx.Where("id = ?", id).First(&current).Error; err != nil {
+			return err
+		}
+		oldRevision := current.Revision
+		newRevision := oldRevision + 1
+		updates["revision"] = newRevision
+		if err := tx.Model(&Character{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+			return err
+		}
+		if s.changeRecorder != nil {
+			payload, _ := json.Marshal(map[string]interface{}{"id": id, "revision": newRevision})
+			if _, recErr := s.changeRecorder.RecordChange(tx, sync.EntityTypeCharacter, sync.EntityID(id), sync.OpUpdate, newRevision, sync.MutationID("local_"+id+"_update"), "local_user", sync.ScopeUser, payload); recErr != nil {
+				updateErr = recErr
+				return recErr
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		if updateErr != nil {
+			return nil, fmt.Errorf("更新失败: %w", updateErr)
+		}
 		return nil, fmt.Errorf("更新失败: %w", err)
 	}
-	return s.repo.FindByID(id)
+	var result Character
+	if err := s.db.Where("id = ?", id).First(&result).Error; err != nil {
+		return nil, err
+	}
+	return &result, nil
 }
 
-func (s *service) Delete(id string) error { return s.repo.Delete(id) }
+func (s *service) Delete(id string) error {
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		var current Character
+		if err := tx.Where("id = ?", id).First(&current).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&Character{}).Where("id = ?", id).Updates(map[string]interface{}{
+			"deleted_at": time.Now().Format("2006-01-02 15:04:05"),
+			"updated_at": time.Now().Format("2006-01-02 15:04:05"),
+			"revision":   current.Revision + 1,
+		}).Error; err != nil {
+			return err
+		}
+		if s.changeRecorder != nil {
+			payload, _ := json.Marshal(map[string]string{"id": id})
+			if _, recErr := s.changeRecorder.RecordChange(tx, sync.EntityTypeCharacter, sync.EntityID(id), sync.OpDelete, current.Revision+1, sync.MutationID("local_"+id+"_delete"), "local_user", sync.ScopeUser, payload); recErr != nil {
+				return recErr
+			}
+		}
+		return nil
+	})
+}
 
 func (s *service) SetActive(id string) (*Character, error) {
 	_, err := s.repo.FindByID(id)

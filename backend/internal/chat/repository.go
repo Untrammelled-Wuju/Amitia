@@ -36,6 +36,8 @@ type Repository interface {
 	CreateMessageAttachment(attachment *MessageAttachment) error
 	GetMessageAttachments(messageID string) ([]MessageAttachment, error)
 	GetAttachmentByID(id string) (*MessageAttachment, error)
+	DeleteAttachmentsByMessage(messageID string) error
+	GetAttachmentsByConv(convID string) ([]MessageAttachment, error)
 }
 
 type repository struct {
@@ -284,4 +286,19 @@ func (r *repository) GetAttachmentByID(id string) (*MessageAttachment, error) {
 	var attachment MessageAttachment
 	err := r.db.Where("id = ?", id).First(&attachment).Error
 	return &attachment, err
+}
+
+func (r *repository) DeleteAttachmentsByMessage(messageID string) error {
+	return r.db.Where("message_id = ?", messageID).Delete(&MessageAttachment{}).Error
+}
+
+func (r *repository) GetAttachmentsByConv(convID string) ([]MessageAttachment, error) {
+	var attachments []MessageAttachment
+	err := r.db.Joins("JOIN messages ON messages.id = message_attachments.message_id").
+		Where("messages.conversation_id = ?", convID).
+		Find(&attachments).Error
+	if attachments == nil {
+		return []MessageAttachment{}, err
+	}
+	return attachments, err
 }
