@@ -322,7 +322,7 @@ func (a *defaultApplier) fixDangerousBinding(doc *schema.SchemaUIDocument, nodeT
 	for _, node := range nodes {
 		for i := range node.Bindings {
 			if containsDangerous(string(node.Bindings[i].Source)) {
-				node.Bindings[i].Source = schema_ui.BindingSourceStatic
+				node.Bindings[i].Source = schema_ui.SourceStatic
 			}
 		}
 	}
