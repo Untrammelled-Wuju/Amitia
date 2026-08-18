@@ -10,11 +10,14 @@ import (
 )
 
 type LocalHandler struct {
-	identity  *IdentityStore
-	credStore *CredentialStore
-	mesh      *MeshClient
-	platform  runtimeidentity.Platform
-	dataDir   string
+	identity      *IdentityStore
+	credStore     *CredentialStore
+	mesh          *MeshClient
+	platform      runtimeidentity.Platform
+	dataDir       string
+	dispatcher    RuntimeDispatcher
+	taskWorker    TaskWorkerIface
+	taskWorkerSet bool
 }
 
 func NewLocalHandler(dataDir string, platform runtimeidentity.Platform) *LocalHandler {
@@ -23,11 +26,25 @@ func NewLocalHandler(dataDir string, platform runtimeidentity.Platform) *LocalHa
 		credStore: NewCredentialStore(dataDir),
 		platform:  platform,
 		dataDir:   dataDir,
+		dispatcher: NewRuntimeDispatcher(),
 	}
 }
 
 func (h *LocalHandler) SetMeshClient(c *MeshClient) {
 	h.mesh = c
+}
+
+func (h *LocalHandler) SetDispatcher(d RuntimeDispatcher) {
+	h.dispatcher = d
+}
+
+func (h *LocalHandler) SetTaskWorker(w TaskWorkerIface) {
+	h.taskWorker = w
+	h.taskWorkerSet = true
+}
+
+func (h *LocalHandler) TaskWorkerSet() bool {
+	return h.taskWorkerSet
 }
 
 // R21: LoadCredential exposes credential loading for auto-recovery
@@ -130,12 +147,21 @@ func (h *LocalHandler) handleBootstrap(c *gin.Context) {
 	if err != nil {
 		log.Printf("devicemesh: agent: load cursor failed: %v", err)
 	}
+
+	var worker TaskWorkerIface
+	worker = NewTaskWorker(h.mesh)
+	if h.taskWorker != nil {
+		worker = h.taskWorker
+		h.taskWorkerSet = true
+	}
 	h.mesh = NewMeshClient(MeshClientConfig{
-		CloudBaseURL: req.CloudBaseURL,
-		Credential:   resp.Credential,
-		UserID:       cred.UserID,
-		Identity:     id,
-		Cursor:       cursor,
+		CloudBaseURL:      req.CloudBaseURL,
+		Credential:        resp.Credential,
+		UserID:            cred.UserID,
+		Identity:          id,
+		Cursor:            cursor,
+		RuntimeDispatcher: h.dispatcher,
+		TaskWorker:        worker,
 	})
 	h.mesh.SetCredentialStore(h.credStore)
 	h.mesh.Start()
