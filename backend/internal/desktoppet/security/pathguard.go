@@ -61,10 +61,10 @@ var defaultRelativePaths = map[StorageRootKind]string{
 	RootProcessingRevisions: "desktop-pets/processing-revisions",
 	RootEditingAssets:       "desktop-pets/editing-assets",
 	RootQualityReports:      "desktop-pets/quality-reports",
-	RootReleaseWorkspaces:   "desktop-pets/release-workspaces",
-	RootReleaseStaging:      "desktop-pets/release-staging",
-	RootReleasePublished:    "desktop-pets/release-published",
-	RootReleaseArchives:     "desktop-pets/release-archives",
+	RootReleaseWorkspaces:   "desktop-pets/releases/workspaces",
+	RootReleaseStaging:      "desktop-pets/releases/staging",
+	RootReleasePublished:    "desktop-pets/releases/published",
+	RootReleaseArchives:     "desktop-pets/releases/archives",
 	RootInstallations:       "desktop-pets/installations",
 	RootImportQuarantine:    "desktop-pets/import-quarantine",
 	RootStorageTrash:        "desktop-pets/storage-trash",
@@ -230,28 +230,33 @@ func (r *PathRootRegistry) StorageKeyFromPath(kind StorageRootKind, absolutePath
 }
 
 func (r *PathRootRegistry) MoveToTrash(resolvedPath string, entityID string) error {
+	_, err := r.MoveToTrashWithDestination(resolvedPath, entityID)
+	return err
+}
+
+func (r *PathRootRegistry) MoveToTrashWithDestination(resolvedPath string, entityID string) (string, error) {
 	info, err := os.Lstat(resolvedPath)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if info.Mode()&os.ModeSymlink != 0 {
-		return os.Remove(resolvedPath)
+		return "", ErrUnsafePath
 	}
 	trashRoot, err := r.Root(RootStorageTrash)
 	if err != nil {
-		return err
+		return "", err
 	}
 	if err := os.MkdirAll(trashRoot, 0o700); err != nil {
-		return err
+		return "", err
 	}
-	timestamp := time.Now().UTC().Format("20060102_150405")
+	timestamp := time.Now().UTC().Format("20060102_150405.000000000")
 	baseName := filepath.Base(resolvedPath)
 	trashName := fmt.Sprintf("%s_%s_%s", timestamp, entityID, baseName)
 	destPath := filepath.Join(trashRoot, trashName)
 	if err := os.Rename(resolvedPath, destPath); err != nil {
-		return err
+		return "", err
 	}
-	return nil
+	return destPath, nil
 }
 
 func (r *PathRootRegistry) resolve(filePath string) (string, error) {
