@@ -155,17 +155,29 @@ func (h *ImportStagingHandler) Upload(c *gin.Context) {
 	}
 
 	if err := h.repo.Create(c.Request.Context(), staging); err != nil {
-		_ = security.NewSafeArtifactResponder(h.registry).SafeDelete(
+		cleanupErr := security.NewSafeArtifactResponder(h.registry).SafeDelete(
 			security.RootImportQuarantine,
 			storageKey,
 			security.DeleteExpectation{EntityType: "import_staging", EntityID: staging.ID},
 		)
+		if cleanupErr != nil {
+			util.ErrorResponse(c, response.InternalError, "暂存记录失败且隔离文件清理失败", gin.H{
+				"errorCode": "IMPORT_STAGING_PERSIST_AND_CLEANUP_FAILED",
+			})
+			return
+		}
 		util.ErrorResponse(c, response.InternalError, "暂存记录失败", gin.H{"errorCode": "INTERNAL_ERROR"})
 		return
 	}
 
 	if err := h.inspector.InspectAndMarkReady(c.Request.Context(), staging); err != nil {
-		_, _ = h.repo.SetRejected(c.Request.Context(), staging.ID, actorID, err.Error())
+		updated, rejectErr := h.repo.SetRejected(c.Request.Context(), staging.ID, actorID, err.Error())
+		if rejectErr != nil || !updated {
+			util.ErrorResponse(c, response.InternalError, "导入包检查失败且拒绝状态持久化失败", gin.H{
+				"errorCode": "IMPORT_REJECTION_PERSIST_FAILED",
+			})
+			return
+		}
 		util.ErrorResponse(c, response.BusinessError, "导入包检查失败", gin.H{"errorCode": "IMPORT_INSPECTION_FAILED"})
 		return
 	}

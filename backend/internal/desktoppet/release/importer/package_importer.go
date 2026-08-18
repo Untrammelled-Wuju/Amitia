@@ -141,6 +141,10 @@ func (pi *PackageImporter) ImportPackage(ctx context.Context, req *ImportPackage
 
 	validation, err := pi.validator.ValidatePackage(ctx, req.UserID, req.ImportStagingID)
 	if err != nil {
+		var releaseErr *release.ReleaseError
+		if errors.As(err, &releaseErr) {
+			return nil, releaseErr
+		}
 		return nil, release.NewReleaseError("VALIDATION_FAILED", "包验证失败", err)
 	}
 	if !validation.IsValid {
@@ -163,6 +167,9 @@ func (pi *PackageImporter) executeImport(ctx context.Context, req *ImportPackage
 	manifest := validation.Manifest
 	if manifest == nil {
 		return nil, release.NewReleaseError("MANIFEST_MISSING", "验证结果缺少 manifest", nil)
+	}
+	if validation.Compatibility != release.ReleaseCompatCompatible {
+		return nil, release.NewReleaseError("RUNTIME_INCOMPATIBLE", "桌宠包与当前Runtime不兼容", nil)
 	}
 
 	if pi.registry == nil || pi.stagingRepo == nil {
@@ -432,14 +439,18 @@ func (pi *PackageImporter) runImportSaga(
 	buildOp.State = release.BuildOpStateBuilding
 	buildOp.Stage = release.ImportJournalStageDatabasePrepared
 	buildOp.UpdatedAt = formatImportTimestamp(time.Now())
-	_ = pi.repo.UpdateBuildOperation(buildOp)
+	if err := pi.repo.UpdateBuildOperation(buildOp); err != nil {
+		if journalErr := pi.failJournal(journal, err); journalErr != nil {
+			return release.NewReleaseError("JOURNAL_FAILURE_RECORD_FAILED", "数据库阶段写入失败且无法写入恢复日志", errors.Join(err, journalErr))
+		}
+		return release.NewReleaseError("OPERATION_UPDATE_FAILED", "更新导入操作阶段失败", err)
+	}
 
 	if err := pi.storage.EnsureWorkspaceDir(operationID); err != nil {
 		if journalErr := pi.failJournal(journal, err); journalErr != nil {
 			return release.NewReleaseError("JOURNAL_FAILURE_RECORD_FAILED", "导入失败且无法写入恢复日志", errors.Join(err, journalErr))
 		}
-		pi.compensateAfterDatabasePrepared(petID, releaseID, buildOp, snapshot, true)
-		return release.NewReleaseError("WORKSPACE_CREATE_FAILED", "创建工作区失败", err)
+		return pi.withCompensation(petID, releaseID, buildOp, snapshot, true, release.NewReleaseError("WORKSPACE_CREATE_FAILED", "创建工作区失败", err))
 	}
 
 	workspaceDir, err := pi.storage.WorkspaceDir(operationID)
@@ -447,8 +458,7 @@ func (pi *PackageImporter) runImportSaga(
 		if journalErr := pi.failJournal(journal, err); journalErr != nil {
 			return release.NewReleaseError("JOURNAL_FAILURE_RECORD_FAILED", "导入失败且无法写入恢复日志", errors.Join(err, journalErr))
 		}
-		pi.compensateAfterDatabasePrepared(petID, releaseID, buildOp, snapshot, true)
-		return release.NewReleaseError("WORKSPACE_DIR_FAILED", "获取工作区路径失败", err)
+		return pi.withCompensation(petID, releaseID, buildOp, snapshot, true, release.NewReleaseError("WORKSPACE_DIR_FAILED", "获取工作区路径失败", err))
 	}
 
 	reader := packageformat.NewArchiveReader(packageformat.DefaultArchiveLimits())
@@ -456,19 +466,18 @@ func (pi *PackageImporter) runImportSaga(
 		if journalErr := pi.failJournal(journal, err); journalErr != nil {
 			return release.NewReleaseError("JOURNAL_FAILURE_RECORD_FAILED", "导入失败且无法写入恢复日志", errors.Join(err, journalErr))
 		}
-		pi.storage.RemoveWorkspaceDir(operationID)
-		pi.compensateAfterDatabasePrepared(petID, releaseID, buildOp, snapshot, true)
-		return release.NewReleaseError("WORKSPACE_EXTRACT_FAILED", "解压到工作区失败", err)
+		return pi.withCompensation(petID, releaseID, buildOp, snapshot, true, release.NewReleaseError("WORKSPACE_EXTRACT_FAILED", "解压到工作区失败", err))
 	}
 
 	workspaceReport := packageformat.NewValidator().ValidateDirectory(workspaceDir, validation.Manifest)
+	if workspaceReport != nil {
+		validation.Warnings = append(validation.Warnings, collectValidationWarnings(workspaceReport.Findings)...)
+	}
 	if workspaceReport == nil || workspaceReport.Verdict == "invalid" {
 		if journalErr := pi.failJournal(journal, errors.New("workspace validation failed")); journalErr != nil {
 			return release.NewReleaseError("JOURNAL_FAILURE_RECORD_FAILED", "导入失败且无法写入恢复日志", journalErr)
 		}
-		pi.storage.RemoveWorkspaceDir(operationID)
-		pi.compensateAfterDatabasePrepared(petID, releaseID, buildOp, snapshot, true)
-		return release.NewReleaseError("WORKSPACE_VALIDATION_FAILED", "解压后的桌宠包验证失败", nil)
+		return pi.withCompensation(petID, releaseID, buildOp, snapshot, true, release.NewReleaseError("WORKSPACE_VALIDATION_FAILED", "解压后的桌宠包验证失败", nil))
 	}
 
 	if pi.journalManager != nil && journal != nil {
@@ -479,9 +488,14 @@ func (pi *PackageImporter) runImportSaga(
 
 	buildOp.Stage = release.ImportJournalStageWorkspaceBuilt
 	buildOp.UpdatedAt = formatImportTimestamp(time.Now())
-	_ = pi.repo.UpdateBuildOperation(buildOp)
+	if err := pi.repo.UpdateBuildOperation(buildOp); err != nil {
+		if journalErr := pi.failJournal(journal, err); journalErr != nil {
+			return release.NewReleaseError("JOURNAL_FAILURE_RECORD_FAILED", "工作区阶段写入失败且无法写入恢复日志", errors.Join(err, journalErr))
+		}
+		return release.NewReleaseError("OPERATION_UPDATE_FAILED", "更新工作区阶段失败", err)
+	}
 
-	if sourceInfo, statErr := os.Stat(sourcePath); statErr == nil && sourceInfo.Mode().IsRegular() {
+	if sourceInfo, statErr := os.Lstat(sourcePath); statErr == nil && sourceInfo.Mode().IsRegular() && sourceInfo.Mode()&os.ModeSymlink == 0 {
 		expectedHash := ""
 		if sourceContentHash != "" {
 			expectedHash = sourceContentHash
@@ -491,59 +505,58 @@ func (pi *PackageImporter) runImportSaga(
 			if journalErr := pi.failJournal(journal, archiveErr); journalErr != nil {
 				return release.NewReleaseError("JOURNAL_FAILURE_RECORD_FAILED", "导入失败且无法写入恢复日志", errors.Join(archiveErr, journalErr))
 			}
-			pi.storage.RemoveWorkspaceDir(operationID)
-			pi.compensateAfterDatabasePrepared(petID, releaseID, buildOp, snapshot, true)
-			return release.NewReleaseError("ARCHIVE_STORE_FAILED", "归档存储失败", archiveErr)
+			return pi.withCompensation(petID, releaseID, buildOp, snapshot, true, release.NewReleaseError("ARCHIVE_STORE_FAILED", "归档存储失败", archiveErr))
 		}
 		releaseRecord.ArchiveStorageKey = archiveStorageKey
 		releaseRecord.ArchiveHash = archiveHash
 		releaseRecord.ArchiveBytes = archiveBytes
+		validation.IntegrityVerified =
+			(validation.IsValid && workspaceReport != nil &&
+				(workspaceReport.Verdict == "valid" || workspaceReport.Verdict == "valid_with_warnings") &&
+				strings.EqualFold(archiveHash, actualHash) &&
+				strings.EqualFold(actualHash, validation.SourcePackageHash))
+		if !validation.IntegrityVerified {
+			integrityErr := release.NewReleaseError("INTEGRITY_NOT_VERIFIED", "桌宠包完整性未验证", nil)
+			if journalErr := pi.failJournal(journal, integrityErr); journalErr != nil {
+				return release.NewReleaseError("JOURNAL_FAILURE_RECORD_FAILED", "完整性验证失败且无法写入恢复日志", errors.Join(integrityErr, journalErr))
+			}
+			return pi.withCompensation(petID, releaseID, buildOp, snapshot, true, integrityErr)
+		}
+		releaseRecord.IntegrityStatus = string(release.ReleaseIntegrityVerified)
 	} else {
-		releaseRecord.ArchiveStorageKey = ""
-		releaseRecord.ArchiveHash = ""
-		releaseRecord.ArchiveBytes = 0
+		sourceErr := release.NewReleaseError("ARCHIVE_SOURCE_INVALID", "导入源不是普通文件或是符号链接", nil)
+		if journalErr := pi.failJournal(journal, sourceErr); journalErr != nil {
+			return release.NewReleaseError("JOURNAL_FAILURE_RECORD_FAILED", "归档源校验失败且无法写入恢复日志", errors.Join(sourceErr, journalErr))
+		}
+		return pi.withCompensation(petID, releaseID, buildOp, snapshot, true, sourceErr)
 	}
 	if uErr := pi.repo.UpdateRelease(releaseRecord); uErr != nil {
 		if journalErr := pi.failJournal(journal, uErr); journalErr != nil {
 			return release.NewReleaseError("JOURNAL_FAILURE_RECORD_FAILED", "导入失败且无法写入恢复日志", errors.Join(uErr, journalErr))
 		}
-		pi.storage.RemoveWorkspaceDir(operationID)
-		pi.compensateAfterDatabasePrepared(petID, releaseID, buildOp, snapshot, true)
-		return release.NewReleaseError("ARCHIVE_HASH_UPDATE_FAILED", "更新归档记录失败", uErr)
+		return pi.withCompensation(petID, releaseID, buildOp, snapshot, true, release.NewReleaseError("ARCHIVE_HASH_UPDATE_FAILED", "更新归档记录失败", uErr))
 	}
 
 	if err := pi.storage.EnsureStagingDir(releaseID); err != nil {
 		if journalErr := pi.failJournal(journal, err); journalErr != nil {
 			return release.NewReleaseError("JOURNAL_FAILURE_RECORD_FAILED", "导入失败且无法写入恢复日志", errors.Join(err, journalErr))
 		}
-		pi.storage.RemoveWorkspaceDir(operationID)
-		pi.compensateAfterDatabasePrepared(petID, releaseID, buildOp, snapshot, true)
-		return release.NewReleaseError("STAGING_ENSURE_FAILED", "创建暂存目录失败", err)
+		return pi.withCompensation(petID, releaseID, buildOp, snapshot, true, release.NewReleaseError("STAGING_ENSURE_FAILED", "创建暂存目录失败", err))
 	}
 
 	if err := pi.storage.MoveWorkspaceToStaging(operationID, releaseID); err != nil {
 		if journalErr := pi.failJournal(journal, err); journalErr != nil {
 			return release.NewReleaseError("JOURNAL_FAILURE_RECORD_FAILED", "导入失败且无法写入恢复日志", errors.Join(err, journalErr))
 		}
-		pi.storage.RemoveWorkspaceDir(operationID)
-		pi.compensateAfterDatabasePrepared(petID, releaseID, buildOp, snapshot, true)
-		return release.NewReleaseError("WORKSPACE_TO_STAGING_FAILED", "工作区到暂存移动失败", err)
+		return pi.withCompensation(petID, releaseID, buildOp, snapshot, true, release.NewReleaseError("WORKSPACE_TO_STAGING_FAILED", "工作区到暂存移动失败", err))
 	}
-
-	buildOp.Stage = release.ImportJournalStageFilesPublished
-	buildOp.UpdatedAt = formatImportTimestamp(time.Now())
-	_ = pi.repo.UpdateBuildOperation(buildOp)
 
 	if err := pi.storage.AtomicRenameStagingToPublished(petID, releaseID); err != nil {
 		if journalErr := pi.failJournal(journal, err); journalErr != nil {
 			return release.NewReleaseError("JOURNAL_FAILURE_RECORD_FAILED", "导入失败且无法写入恢复日志", errors.Join(err, journalErr))
 		}
-		pi.storage.RemoveStagingDir(releaseID)
-		pi.compensateAfterDatabasePrepared(petID, releaseID, buildOp, snapshot, true)
-		return release.NewReleaseError("ATOMIC_PUBLISH_FAILED", "原子发布失败", err)
+		return pi.withCompensation(petID, releaseID, buildOp, snapshot, true, release.NewReleaseError("ATOMIC_PUBLISH_FAILED", "原子发布失败", err))
 	}
-
-	pi.storage.RemoveWorkspaceDir(operationID)
 
 	if pi.journalManager != nil && journal != nil {
 		if err := pi.journalManager.UpdateStage(journal, release.ImportJournalStageFilesPublished, releaseRecord.ContentRootHash, workspaceDir, ""); err != nil {
@@ -551,11 +564,17 @@ func (pi *PackageImporter) runImportSaga(
 		}
 	}
 
-	if !validation.IntegrityVerified {
-		return release.NewReleaseError("INTEGRITY_NOT_VERIFIED", "桌宠包完整性未验证", nil)
+	buildOp.Stage = release.ImportJournalStageFilesPublished
+	buildOp.UpdatedAt = formatImportTimestamp(time.Now())
+	if err := pi.repo.UpdateBuildOperation(buildOp); err != nil {
+		if journalErr := pi.failJournal(journal, err); journalErr != nil {
+			return release.NewReleaseError("JOURNAL_FAILURE_RECORD_FAILED", "发布阶段写入失败且无法写入恢复日志", errors.Join(err, journalErr))
+		}
+		return release.NewReleaseError("OPERATION_UPDATE_FAILED", "更新发布阶段失败", err)
 	}
-	if validation.Compatibility != release.ReleaseCompatCompatible {
-		return release.NewReleaseError("RUNTIME_INCOMPATIBLE", "桌宠包与当前Runtime不兼容", nil)
+
+	if err := pi.storage.RemoveWorkspaceDir(operationID); err != nil {
+		return release.NewReleaseError("WORKSPACE_CLEANUP_FAILED", "发布后清理工作区失败", err)
 	}
 
 	if err := pi.finalizeImport(ctx, req, releaseRecord, buildOp, snapshot, journal); err != nil {
@@ -677,16 +696,46 @@ func (pi *PackageImporter) failJournal(journal *release.ReleasePublishJournal, c
 	return pi.journalManager.MarkFailed(journal, cause.Error())
 }
 
-func (pi *PackageImporter) compensateAfterDatabasePrepared(petID, releaseID string, buildOp *release.ReleaseBuildOperation, snapshot *release.ImportPackageSnapshot, cleanupFiles bool) {
+func (pi *PackageImporter) withCompensation(
+	petID, releaseID string,
+	buildOp *release.ReleaseBuildOperation,
+	snapshot *release.ImportPackageSnapshot,
+	cleanupFiles bool,
+	cause error,
+) error {
+	compensationErr := pi.compensateAfterDatabasePrepared(petID, releaseID, buildOp, snapshot, cleanupFiles)
+	if compensationErr == nil {
+		return cause
+	}
+	return release.NewReleaseError(
+		"COMPENSATION_FAILED",
+		"导入失败且补偿状态持久化失败，需要人工恢复",
+		errors.Join(cause, compensationErr),
+	)
+}
+
+func (pi *PackageImporter) compensateAfterDatabasePrepared(
+	petID, releaseID string,
+	buildOp *release.ReleaseBuildOperation,
+	snapshot *release.ImportPackageSnapshot,
+	cleanupFiles bool,
+) error {
+	var compensationErrors []error
 	if cleanupFiles {
 		if petID != "" && releaseID != "" {
-			pi.storage.RemovePublishedDir(petID, releaseID)
+			if err := pi.storage.RemovePublishedDir(petID, releaseID); err != nil {
+				compensationErrors = append(compensationErrors, fmt.Errorf("remove published release: %w", err))
+			}
 		}
 		if releaseID != "" {
-			pi.storage.RemoveStagingDir(releaseID)
+			if err := pi.storage.RemoveStagingDir(releaseID); err != nil {
+				compensationErrors = append(compensationErrors, fmt.Errorf("remove release staging: %w", err))
+			}
 		}
 		if buildOp != nil && buildOp.ID != "" {
-			pi.storage.RemoveWorkspaceDir(buildOp.ID)
+			if err := pi.storage.RemoveWorkspaceDir(buildOp.ID); err != nil {
+				compensationErrors = append(compensationErrors, fmt.Errorf("remove import workspace: %w", err))
+			}
 		}
 	}
 
@@ -695,23 +744,34 @@ func (pi *PackageImporter) compensateAfterDatabasePrepared(petID, releaseID stri
 		buildOp.ErrorCode = "COMPENSATED"
 		buildOp.ErrorMessage = "导入失败已补偿"
 		buildOp.UpdatedAt = formatImportTimestamp(time.Now())
-		_ = pi.repo.UpdateBuildOperation(buildOp)
+		if err := pi.repo.UpdateBuildOperation(buildOp); err != nil {
+			compensationErrors = append(compensationErrors, fmt.Errorf("persist compensated operation: %w", err))
+		}
 	}
 
 	if snapshot != nil {
 		snapshot.Status = release.ImportSnapshotFailedRetryable
 		snapshot.UpdatedAt = formatImportTimestamp(time.Now())
-		_ = pi.repo.UpdateImportSnapshot(snapshot)
+		if err := pi.repo.UpdateImportSnapshot(snapshot); err != nil {
+			compensationErrors = append(compensationErrors, fmt.Errorf("persist compensated snapshot: %w", err))
+		}
 	}
 
 	if releaseID != "" {
-		if releaseRecord, err := pi.repo.GetRelease(releaseID); err == nil && releaseRecord != nil {
+		releaseRecord, err := pi.repo.GetRelease(releaseID)
+		if err != nil {
+			compensationErrors = append(compensationErrors, fmt.Errorf("load release for compensation: %w", err))
+		} else if releaseRecord != nil {
 			releaseRecord.Lifecycle = string(release.ReleaseLifecycleBuilding)
 			releaseRecord.IntegrityStatus = string(release.ReleaseIntegrityUnknown)
 			releaseRecord.UpdatedAt = formatImportTimestamp(time.Now())
-			_ = pi.repo.UpdateRelease(releaseRecord)
+			if err := pi.repo.UpdateRelease(releaseRecord); err != nil {
+				compensationErrors = append(compensationErrors, fmt.Errorf("persist compensated release: %w", err))
+			}
 		}
 	}
+
+	return errors.Join(compensationErrors...)
 }
 
 func (pi *PackageImporter) hashWorkspaceFiles(workspaceDir, releaseID string, manifest *packageformat.Manifest) ([]release.ReleaseFileData, int64, int, error) {
@@ -799,16 +859,6 @@ func (pi *PackageImporter) computeArchiveStats(sourcePath string, manifest *pack
 
 	_ = manifest
 	return total, count, nil
-}
-
-func (pi *PackageImporter) markOperationFailed(op *release.ReleaseBuildOperation, code string, err error) {
-	op.State = release.BuildOpStateFailedTerminal
-	op.ErrorCode = code
-	if err != nil {
-		op.ErrorMessage = err.Error()
-	}
-	op.UpdatedAt = formatImportTimestamp(time.Now())
-	_ = pi.repo.UpdateBuildOperation(op)
 }
 
 func (pi *PackageImporter) GetStagingRepo() security.ImportStagingRepository {
