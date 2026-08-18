@@ -72,8 +72,11 @@ func (e *defaultSourceEditor) ApplyEdits(ctx context.Context, req SourceEditRequ
 	if e.precise == nil {
 		return nil, ErrPreciseUnavailable
 	}
+	if len(req.Operations) == 0 {
+		return nil, fmt.Errorf("%w: no operations to apply", ErrUnsupportedEdit)
+	}
 
-	result := &SourceEditResult{Success: true}
+	result := &SourceEditResult{}
 
 	if req.Transaction {
 		tx, err := e.precise.BeginTransaction(ctx, req.WorkspaceID)
@@ -99,6 +102,7 @@ func (e *defaultSourceEditor) ApplyEdits(ctx context.Context, req SourceEditRequ
 			result.ChangedFiles = append(result.ChangedFiles, path)
 		}
 		result.AppliedOperations = len(req.Operations)
+		result.Success = len(result.ChangedFiles) > 0
 		return result, nil
 	}
 
@@ -109,6 +113,7 @@ func (e *defaultSourceEditor) ApplyEdits(ctx context.Context, req SourceEditRequ
 		result.AppliedOperations++
 		result.ChangedFiles = append(result.ChangedFiles, op.Path)
 	}
+	result.Success = result.AppliedOperations > 0
 	return result, nil
 }
 
@@ -131,8 +136,11 @@ func (e *defaultSourceEditor) ApplyPatchesTx(ctx context.Context, tx *workspace.
 	if e.precise == nil {
 		return nil, ErrPreciseUnavailable
 	}
+	if len(req.Operations) == 0 {
+		return nil, fmt.Errorf("%w: no operations to apply", ErrUnsupportedEdit)
+	}
 
-	result := &SourceEditResult{Success: true}
+	result := &SourceEditResult{}
 	for _, op := range req.Operations {
 		if err := e.applyOperationTx(ctx, tx, op); err != nil {
 			_ = e.precise.Rollback(ctx, tx)
@@ -145,6 +153,7 @@ func (e *defaultSourceEditor) ApplyPatchesTx(ctx context.Context, tx *workspace.
 		result.ChangedFiles = append(result.ChangedFiles, path)
 	}
 	result.AppliedOperations = len(req.Operations)
+	result.Success = len(result.ChangedFiles) > 0
 	return result, nil
 }
 

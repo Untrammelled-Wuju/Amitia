@@ -358,7 +358,7 @@ func (e *UIExecutor) ApplySchema(ctx context.Context, plan UIChangePlan) (*Schem
 	}
 
 	return &SchemaEditResult{
-		ChangedFiles: []string{"schema://" + doc.Title},
+		ChangedFiles: []string{},
 		SchemaID:     doc.Title,
 	}, nil
 }
