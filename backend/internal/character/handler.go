@@ -11,9 +11,20 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
 )
+
+type syncScopedCharacterService interface {
+	CreateForUser(req *CreateCharacterRequest, userID string) (*Character, error)
+	UpdateForUser(id string, req *UpdateCharacterRequest, userID string) (*Character, error)
+	DeleteForUser(id string, userID string) error
+	SetActiveForUser(id string, userID string) (*Character, error)
+	UpdateRoleProfileForUser(characterID string, updates map[string]interface{}, userID string) (*RoleProfileResponse, error)
+	UpdateAvatarForUser(id string, avatarURL string, userID string) error
+	ImportCardForUser(data []byte, filename string, confirm bool, userID string) (*CardImportResult, error)
+}
 
 type ChatTester interface {
 	TestChat(ctx context.Context, characterID string, userMessage string) (string, error)
@@ -54,7 +65,13 @@ func (h *Handler) Create(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
-	char, err := h.service.Create(&req)
+	var char *Character
+	var err error
+	if scoped, ok := h.service.(syncScopedCharacterService); ok {
+		char, err = scoped.CreateForUser(&req, requestidentity.ResolveGin(c, ""))
+	} else {
+		char, err = h.service.Create(&req)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
@@ -69,7 +86,13 @@ func (h *Handler) Update(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, "无效请求体", nil)
 		return
 	}
-	char, err := h.service.Update(id, &req)
+	var char *Character
+	var err error
+	if scoped, ok := h.service.(syncScopedCharacterService); ok {
+		char, err = scoped.UpdateForUser(id, &req, requestidentity.ResolveGin(c, ""))
+	} else {
+		char, err = h.service.Update(id, &req)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
@@ -79,7 +102,13 @@ func (h *Handler) Update(c *gin.Context) {
 
 func (h *Handler) Delete(c *gin.Context) {
 	id := c.Param("id")
-	if err := h.service.Delete(id); err != nil {
+	var err error
+	if scoped, ok := h.service.(syncScopedCharacterService); ok {
+		err = scoped.DeleteForUser(id, requestidentity.ResolveGin(c, ""))
+	} else {
+		err = h.service.Delete(id)
+	}
+	if err != nil {
 		util.ErrorResponse(c, response.NotFound, err.Error(), nil)
 		return
 	}
@@ -88,7 +117,13 @@ func (h *Handler) Delete(c *gin.Context) {
 
 func (h *Handler) SetActive(c *gin.Context) {
 	id := c.Param("id")
-	char, err := h.service.SetActive(id)
+	var char *Character
+	var err error
+	if scoped, ok := h.service.(syncScopedCharacterService); ok {
+		char, err = scoped.SetActiveForUser(id, requestidentity.ResolveGin(c, ""))
+	} else {
+		char, err = h.service.SetActive(id)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
@@ -205,7 +240,12 @@ func (h *Handler) ImportPackConfirm(c *gin.Context) {
 		return
 	}
 
-	result, err := h.service.ImportCard(data, header.Filename, true)
+	var result *CardImportResult
+	if scoped, ok := h.service.(syncScopedCharacterService); ok {
+		result, err = scoped.ImportCardForUser(data, header.Filename, true, requestidentity.ResolveGin(c, ""))
+	} else {
+		result, err = h.service.ImportCard(data, header.Filename, true)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
@@ -252,7 +292,13 @@ func (h *Handler) UpdateRoleProfile(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
-	profile, err := h.service.UpdateRoleProfile(characterID, updates)
+	var profile *RoleProfileResponse
+	var err error
+	if scoped, ok := h.service.(syncScopedCharacterService); ok {
+		profile, err = scoped.UpdateRoleProfileForUser(characterID, updates, requestidentity.ResolveGin(c, ""))
+	} else {
+		profile, err = h.service.UpdateRoleProfile(characterID, updates)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
@@ -295,7 +341,12 @@ func (h *Handler) UploadAvatar(c *gin.Context) {
 	}
 
 	avatarUrl := "/avatars/" + filename
-	if err := h.service.UpdateAvatar(id, avatarUrl); err != nil {
+	if scoped, ok := h.service.(syncScopedCharacterService); ok {
+		err = scoped.UpdateAvatarForUser(id, avatarUrl, requestidentity.ResolveGin(c, ""))
+	} else {
+		err = h.service.UpdateAvatar(id, avatarUrl)
+	}
+	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
 	}

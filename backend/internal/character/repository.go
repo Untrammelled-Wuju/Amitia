@@ -35,7 +35,7 @@ func NewRepository(ctx *app.AppContext) Repository {
 
 func (r *repository) List(includeDisabled bool) ([]Character, error) {
 	var chars []Character
-	q := r.db.Order("sort_order, created_at")
+	q := r.db.Where("deleted_at IS NULL").Order("sort_order, created_at")
 	if !includeDisabled {
 		q = q.Where("status = ?", "enabled")
 	}
@@ -48,7 +48,7 @@ func (r *repository) List(includeDisabled bool) ([]Character, error) {
 
 func (r *repository) FindByID(id string) (*Character, error) {
 	var c Character
-	err := r.db.Where("id = ?", id).First(&c).Error
+	err := r.db.Where("id = ? AND deleted_at IS NULL", id).First(&c).Error
 	return &c, err
 }
 
@@ -68,8 +68,8 @@ func (r *repository) Delete(id string) error {
 }
 
 func (r *repository) SetActive(id string) error {
-	r.db.Model(&Character{}).Where("is_active = 1").Update("is_active", 0)
-	return r.db.Model(&Character{}).Where("id = ?", id).Update("is_active", 1).Error
+	r.db.Model(&Character{}).Where("is_active = 1 AND deleted_at IS NULL").Update("is_active", 0)
+	return r.db.Model(&Character{}).Where("id = ? AND deleted_at IS NULL", id).Update("is_active", 1).Error
 }
 
 func (r *repository) FindTemplateByID(id string) (*CharacterTemplate, error) {
@@ -89,7 +89,7 @@ func (r *repository) ListTemplates() ([]CharacterTemplate, error) {
 
 func (r *repository) GetActive() (*Character, error) {
 	var c Character
-	err := r.db.Where("is_active = 1").First(&c).Error
+	err := r.db.Where("is_active = 1 AND deleted_at IS NULL").First(&c).Error
 	return &c, err
 }
 
@@ -97,19 +97,19 @@ func (r *repository) GetRuntimeProfile(id string) (*RoleRuntimeProfile, error) {
 	var c Character
 	var err error
 	if strings.TrimSpace(id) != "" {
-		err = r.db.Where("id = ? AND status = ?", id, "enabled").First(&c).Error
+		err = r.db.Where("id = ? AND status = ? AND deleted_at IS NULL", id, "enabled").First(&c).Error
 	} else {
-		err = r.db.Where("is_default = 1 AND status = ?", "enabled").Limit(1).First(&c).Error
+		err = r.db.Where("is_default = 1 AND status = ? AND deleted_at IS NULL", "enabled").Limit(1).First(&c).Error
 		if err != nil {
-			err = r.db.Where("status = ?", "enabled").Order("sort_order, created_at").Limit(1).First(&c).Error
+			err = r.db.Where("status = ? AND deleted_at IS NULL", "enabled").Order("sort_order, created_at").Limit(1).First(&c).Error
 		}
 	}
 	if err != nil {
 		if strings.TrimSpace(id) != "" {
 			log.Printf("[RoleRuntimeProfile] requested character %s not found or disabled, trying fallback", id)
-			err = r.db.Where("is_default = 1 AND status = ?", "enabled").Limit(1).First(&c).Error
+			err = r.db.Where("is_default = 1 AND status = ? AND deleted_at IS NULL", "enabled").Limit(1).First(&c).Error
 			if err != nil {
-				err = r.db.Where("status = ?", "enabled").Order("sort_order, created_at").Limit(1).First(&c).Error
+				err = r.db.Where("status = ? AND deleted_at IS NULL", "enabled").Order("sort_order, created_at").Limit(1).First(&c).Error
 			}
 		}
 		if err != nil {
