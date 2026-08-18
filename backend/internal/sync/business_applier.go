@@ -4,6 +4,8 @@ package sync
 
 import (
 	"encoding/json"
+	"errors"
+	"time"
 
 	"gorm.io/gorm"
 )
@@ -17,13 +19,17 @@ const (
 
 type mutationPayload struct {
 	Title          string                 `json:"title"`
+	Name           string                 `json:"name,omitempty"`
 	Content        string                 `json:"content"`
 	Meta           map[string]interface{} `json:"meta,omitempty"`
 	ConversationID string                 `json:"conversationId,omitempty"`
+	CharacterID    string                 `json:"characterId,omitempty"`
+	Channel        string                 `json:"channel,omitempty"`
+	Source         string                 `json:"source,omitempty"`
+	PeerID         string                 `json:"peerId,omitempty"`
 	Role           string                 `json:"role,omitempty"`
 	Sequence       int64                  `json:"sequence,omitempty"`
 	MsgType        string                 `json:"msgType,omitempty"`
-	Source         string                 `json:"source,omitempty"`
 	Key            string                 `json:"key,omitempty"`
 	Value          string                 `json:"value,omitempty"`
 }
@@ -71,11 +77,15 @@ func (a *businessApplier) applyConversation(tx *gorm.DB, mutation ClientMutation
 	switch mutation.Operation {
 	case OpCreate:
 		record := map[string]interface{}{
-			"id":         string(mutation.EntityID),
-			"title":      payload.Title,
-			"created_at": a.now(),
-			"updated_at": a.now(),
-			"revision":   1,
+			"id":           string(mutation.EntityID),
+			"character_id": payload.CharacterID,
+			"title":        payload.Title,
+			"channel":      payload.Channel,
+			"source":       payload.Source,
+			"peer_id":      payload.PeerID,
+			"created_at":   a.now(),
+			"updated_at":   a.now(),
+			"revision":     1,
 		}
 		if err := tx.Table("conversations").Create(record).Error; err != nil {
 			return 0, &ApplierError{Code: "apply_failed", Message: "create conversation: " + err.Error()}
@@ -88,6 +98,18 @@ func (a *businessApplier) applyConversation(tx *gorm.DB, mutation ClientMutation
 		}
 		if payload.Title != "" {
 			updates["title"] = payload.Title
+		}
+		if payload.CharacterID != "" {
+			updates["character_id"] = payload.CharacterID
+		}
+		if payload.Channel != "" {
+			updates["channel"] = payload.Channel
+		}
+		if payload.Source != "" {
+			updates["source"] = payload.Source
+		}
+		if payload.PeerID != "" {
+			updates["peer_id"] = payload.PeerID
 		}
 		result := tx.Table("conversations").Where("id = ? AND revision = ?", mutation.EntityID, mutation.BaseRevision).Updates(updates)
 		if result.Error != nil {
@@ -140,9 +162,6 @@ func (a *businessApplier) applyMessage(tx *gorm.DB, mutation ClientMutation) (in
 		}
 		if payload.Role == "" {
 			return 0, &ApplierError{Code: "missing_required_field", Message: "message role is required"}
-		}
-		if payload.Content == "" {
-			return 0, &ApplierError{Code: "missing_required_field", Message: "message content is required"}
 		}
 		record := map[string]interface{}{
 			"id":              string(mutation.EntityID),
@@ -214,12 +233,19 @@ func (a *businessApplier) applyCharacter(tx *gorm.DB, mutation ClientMutation) (
 	}
 	switch mutation.Operation {
 	case OpCreate:
+		name := payload.Name
+		if name == "" {
+			name = payload.Title
+		}
 		record := map[string]interface{}{
 			"id":         string(mutation.EntityID),
-			"name":       payload.Title,
+			"name":       name,
 			"created_at": a.now(),
 			"updated_at": a.now(),
 			"revision":   1,
+		}
+		for key, value := range sanitizeCharacterMeta(payload.Meta) {
+			record[key] = value
 		}
 		if err := tx.Table("characters").Create(record).Error; err != nil {
 			return 0, &ApplierError{Code: "apply_failed", Message: "create character: " + err.Error()}
@@ -230,8 +256,13 @@ func (a *businessApplier) applyCharacter(tx *gorm.DB, mutation ClientMutation) (
 			"updated_at": a.now(),
 			"revision":   gorm.Expr("COALESCE(revision, 0) + 1"),
 		}
-		if payload.Title != "" {
+		if payload.Name != "" {
+			updates["name"] = payload.Name
+		} else if payload.Title != "" {
 			updates["name"] = payload.Title
+		}
+		for key, value := range sanitizeCharacterMeta(payload.Meta) {
+			updates[key] = value
 		}
 		result := tx.Table("characters").Where("id = ? AND revision = ?", mutation.EntityID, mutation.BaseRevision).Updates(updates)
 		if result.Error != nil {
@@ -270,6 +301,31 @@ func (a *businessApplier) applyCharacter(tx *gorm.DB, mutation ClientMutation) (
 	return 0, &ApplierError{Code: "unsupported_operation", Message: "unsupported operation: " + string(mutation.Operation)}
 }
 
+func sanitizeCharacterMeta(meta map[string]interface{}) map[string]interface{} {
+	if len(meta) == 0 {
+		return nil
+	}
+	allowed := map[string]struct{}{
+		"name": {}, "identity": {}, "personality": {}, "speaking_style": {},
+		"relationship_style": {}, "character_base": {}, "boundary_rules": {},
+		"description": {}, "status": {}, "is_active": {}, "sort_order": {},
+		"gender": {}, "pronoun": {}, "self_reference": {}, "gender_expression": {},
+		"life_identity": {}, "voice_config_id": {}, "voice_type": {}, "voice_speed": {},
+		"voice_pitch": {}, "voice_volume": {}, "custom_voice_id": {}, "voice_mode": {},
+		"emotion": {}, "emotion_scale": {}, "silence_duration": {}, "personality_config": {},
+		"is_default": {}, "chat_style_config": {}, "scene_rules": {}, "avatar": {},
+		"conversation_id": {}, "gender_label": {}, "user_addressing_style": {},
+		"base_prompt": {}, "generated_prompt": {}, "personality_sliders": {}, "card_data_json": {},
+	}
+	out := make(map[string]interface{}, len(meta))
+	for key, value := range meta {
+		if _, ok := allowed[key]; ok {
+			out[key] = value
+		}
+	}
+	return out
+}
+
 func (a *businessApplier) applySettings(tx *gorm.DB, mutation ClientMutation) (int64, error) {
 	var payload mutationPayload
 	if len(mutation.Payload) > 0 {
@@ -281,38 +337,119 @@ func (a *businessApplier) applySettings(tx *gorm.DB, mutation ClientMutation) (i
 	if payload.Key != "" {
 		settingsKey = payload.Key
 	}
-	switch mutation.Operation {
-	case OpCreate, OpUpdate:
-		var existing struct {
-			Key string
+	type settingRevision struct {
+		Revision  int64
+		DeletedAt *time.Time
+	}
+	readCurrent := func() (settingRevision, bool, error) {
+		var current settingRevision
+		err := tx.Table("app_settings").Where("key = ?", settingsKey).Select("revision", "deleted_at").Take(&current).Error
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return settingRevision{}, false, nil
 		}
-		tx.Table("app_settings").Where("key = ?", settingsKey).Select("key").Scan(&existing)
-		if existing.Key == "" {
+		if err != nil {
+			return settingRevision{}, false, err
+		}
+		return current, true, nil
+	}
+	conflict := func(current int64, message string) (int64, error) {
+		return 0, &ApplierError{Code: "conflict", Message: message, ServerRevision: current}
+	}
+	switch mutation.Operation {
+	case OpCreate:
+		current, exists, err := readCurrent()
+		if err != nil {
+			return 0, &ApplierError{Code: "apply_failed", Message: "read settings: " + err.Error()}
+		}
+		if !exists {
+			if mutation.BaseRevision != 0 {
+				return conflict(0, "settings base revision mismatch")
+			}
 			if err := tx.Table("app_settings").Create(map[string]interface{}{
 				"key":        settingsKey,
 				"value":      payload.Value,
 				"revision":   1,
+				"deleted_at": nil,
 				"updated_at": a.now(),
 			}).Error; err != nil {
 				return 0, &ApplierError{Code: "apply_failed", Message: "create settings: " + err.Error()}
 			}
 			return 1, nil
-		} else {
-			var currentRev struct{ Revision int64 }
-			tx.Table("app_settings").Where("key = ?", settingsKey).Select("revision").Scan(&currentRev)
-			newRev := currentRev.Revision + 1
-			if err := tx.Table("app_settings").Where("key = ?", settingsKey).Updates(map[string]interface{}{
-				"value":      payload.Value,
-				"revision":   newRev,
-				"updated_at": a.now(),
-			}).Error; err != nil {
-				return 0, &ApplierError{Code: "apply_failed", Message: "update settings: " + err.Error()}
-			}
-			return newRev, nil
 		}
+		if current.DeletedAt == nil || current.Revision != mutation.BaseRevision {
+			return conflict(current.Revision, "settings already exists or base revision mismatch")
+		}
+		result := tx.Table("app_settings").Where("key = ? AND revision = ? AND deleted_at IS NOT NULL", settingsKey, mutation.BaseRevision).Updates(map[string]interface{}{
+			"value":      payload.Value,
+			"revision":   gorm.Expr("revision + 1"),
+			"deleted_at": nil,
+			"updated_at": a.now(),
+		})
+		if result.Error != nil {
+			return 0, &ApplierError{Code: "apply_failed", Message: "restore settings: " + result.Error.Error()}
+		}
+		if result.RowsAffected != 1 {
+			latest, _, latestErr := readCurrent()
+			if latestErr != nil {
+				return 0, &ApplierError{Code: "apply_failed", Message: "read settings after restore conflict: " + latestErr.Error()}
+			}
+			return conflict(latest.Revision, "settings restore revision mismatch")
+		}
+		return mutation.BaseRevision + 1, nil
+	case OpUpdate:
+		current, exists, err := readCurrent()
+		if err != nil {
+			return 0, &ApplierError{Code: "apply_failed", Message: "read settings: " + err.Error()}
+		}
+		if !exists {
+			return conflict(0, "settings does not exist")
+		}
+		if current.DeletedAt != nil || current.Revision != mutation.BaseRevision {
+			return conflict(current.Revision, "settings revision mismatch")
+		}
+		result := tx.Table("app_settings").Where("key = ? AND revision = ? AND deleted_at IS NULL", settingsKey, mutation.BaseRevision).Updates(map[string]interface{}{
+			"value":      payload.Value,
+			"revision":   gorm.Expr("revision + 1"),
+			"updated_at": a.now(),
+		})
+		if result.Error != nil {
+			return 0, &ApplierError{Code: "apply_failed", Message: "update settings: " + result.Error.Error()}
+		}
+		if result.RowsAffected != 1 {
+			latest, _, latestErr := readCurrent()
+			if latestErr != nil {
+				return 0, &ApplierError{Code: "apply_failed", Message: "read settings after conflict: " + latestErr.Error()}
+			}
+			return conflict(latest.Revision, "settings revision mismatch")
+		}
+		return mutation.BaseRevision + 1, nil
 	case OpDelete:
-		if err := tx.Table("app_settings").Where("key = ?", settingsKey).Delete(nil).Error; err != nil {
-			return 0, &ApplierError{Code: "apply_failed", Message: "delete settings: " + err.Error()}
+		current, exists, err := readCurrent()
+		if err != nil {
+			return 0, &ApplierError{Code: "apply_failed", Message: "read settings: " + err.Error()}
+		}
+		if !exists {
+			return conflict(0, "settings does not exist")
+		}
+		if current.DeletedAt != nil || current.Revision != mutation.BaseRevision {
+			return conflict(current.Revision, "settings revision mismatch")
+		}
+		now := a.now()
+		result := tx.Table("app_settings").Where("key = ? AND revision = ? AND deleted_at IS NULL", settingsKey, mutation.BaseRevision).Updates(map[string]interface{}{
+			"value":      "",
+			"revision":   gorm.Expr("revision + 1"),
+			"deleted_at": now,
+			"updated_at": now,
+		})
+		if result.Error != nil {
+			return 0, &ApplierError{Code: "apply_failed", Message: "delete settings: " + result.Error.Error()}
+		}
+		if result.RowsAffected != 1 {
+			latest, _, latestErr := readCurrent()
+			if latestErr != nil {
+				return 0, &ApplierError{Code: "apply_failed", Message: "read settings after delete conflict: " + latestErr.Error()}
+			}
+			return conflict(latest.Revision, "settings revision mismatch")
 		}
 		return mutation.BaseRevision + 1, nil
 	}

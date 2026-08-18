@@ -58,24 +58,27 @@ func (s *sqliteCursorStore) Save(cursor *SyncCursor) error {
 }
 
 func (s *sqliteCursorStore) UpdateApplied(identity CursorIdentity, seq Sequence) error {
-	return s.db.Model(&SyncCursor{}).Where("user_id = ? AND scope = ? AND device_id = ?", identity.UserID, identity.Scope, identity.DeviceID).Updates(map[string]interface{}{
-		"last_applied": seq,
-		"updated_at":   time.Now().UTC(),
-	}).Error
+	return s.db.Exec(`INSERT INTO sync_cursors (device_id, user_id, scope, last_applied, last_pushed, updated_at)
+		VALUES (?, ?, ?, ?, 0, ?)
+		ON CONFLICT(user_id, scope, device_id) DO UPDATE SET
+		last_applied = CASE WHEN sync_cursors.last_applied < excluded.last_applied THEN excluded.last_applied ELSE sync_cursors.last_applied END,
+		updated_at = excluded.updated_at`, identity.DeviceID, identity.UserID, identity.Scope, seq, time.Now().UTC()).Error
 }
 
 func (s *sqliteCursorStore) UpdatePushed(identity CursorIdentity, seq Sequence) error {
-	return s.db.Model(&SyncCursor{}).Where("user_id = ? AND scope = ? AND device_id = ?", identity.UserID, identity.Scope, identity.DeviceID).Updates(map[string]interface{}{
-		"last_pushed": seq,
-		"updated_at":  time.Now().UTC(),
-	}).Error
+	return s.db.Exec(`INSERT INTO sync_cursors (device_id, user_id, scope, last_applied, last_pushed, updated_at)
+		VALUES (?, ?, ?, 0, ?, ?)
+		ON CONFLICT(user_id, scope, device_id) DO UPDATE SET
+		last_pushed = CASE WHEN sync_cursors.last_pushed < excluded.last_pushed THEN excluded.last_pushed ELSE sync_cursors.last_pushed END,
+		updated_at = excluded.updated_at`, identity.DeviceID, identity.UserID, identity.Scope, seq, time.Now().UTC()).Error
 }
 
 func (s *sqliteCursorStore) UpdatePushedTx(tx *gorm.DB, identity CursorIdentity, seq Sequence) error {
-	return tx.Model(&SyncCursor{}).Where("user_id = ? AND scope = ? AND device_id = ?", identity.UserID, identity.Scope, identity.DeviceID).Updates(map[string]interface{}{
-		"last_pushed": seq,
-		"updated_at":  time.Now().UTC(),
-	}).Error
+	return tx.Exec(`INSERT INTO sync_cursors (device_id, user_id, scope, last_applied, last_pushed, updated_at)
+		VALUES (?, ?, ?, 0, ?, ?)
+		ON CONFLICT(user_id, scope, device_id) DO UPDATE SET
+		last_pushed = CASE WHEN sync_cursors.last_pushed < excluded.last_pushed THEN excluded.last_pushed ELSE sync_cursors.last_pushed END,
+		updated_at = excluded.updated_at`, identity.DeviceID, identity.UserID, identity.Scope, seq, time.Now().UTC()).Error
 }
 
 func (s *sqliteCursorStore) ListByUser(userID string) ([]SyncCursor, error) {
