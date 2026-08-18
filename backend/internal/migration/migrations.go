@@ -171,6 +171,8 @@ func DefaultMigrations() []Migration {
 		SecurityAuditEventsOccurredAtMigration(),
 		AuthSessionsMissingColumnsMigration(),
 		SyncRevisionDeletedAtMigration(),
+		SyncChangeLogScopeMigration(),
+		SyncMutationUserScopeUniqueMigration(),
 	}
 }
 
@@ -510,6 +512,30 @@ func TaskRunPauseColumnsMigration() Migration {
 			s.AddColumn("extension_task_runs", "pause_requested_at", "DATETIME")
 			s.AddColumn("extension_task_runs", "paused_at", "DATETIME")
 			s.AddColumn("extension_task_runs", "resumed_at", "DATETIME")
+			return nil
+		},
+	}
+}
+
+func SyncChangeLogScopeMigration() Migration {
+	return Migration{
+		Version: "20260818002",
+		Name:    "add_scope_column_to_sync_changes",
+		Up: func(s *Step) error {
+			s.AddColumn("sync_changes", "scope", "TEXT NOT NULL DEFAULT 'device'")
+			s.CreateIndex("idx_sync_changes_user_scope_seq", "sync_changes", []string{"user_id", "scope", "seq"}, false)
+			return nil
+		},
+	}
+}
+
+func SyncMutationUserScopeUniqueMigration() Migration {
+	return Migration{
+		Version: "20260818003",
+		Name:    "sync_mutation_user_scope_unique_index",
+		Up: func(s *Step) error {
+			s.Execute("DROP INDEX IF EXISTS idx_sync_changes_user_mutation")
+			s.CreateIndex("idx_sync_changes_user_scope_mutation", "sync_changes", []string{"user_id", "scope", "mutation_id"}, true)
 			return nil
 		},
 	}
