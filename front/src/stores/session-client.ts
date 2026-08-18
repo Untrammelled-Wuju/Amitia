@@ -59,30 +59,30 @@ export async function refreshToken(req: RefreshRequest): Promise<RefreshResponse
 }
 
 export async function logoutUser(): Promise<void> {
-  await apiClient.post("/api/public/auth/logout");
+  await apiClient.post("/api/auth/logout");
 }
 
 export async function revokeRefreshToken(): Promise<void> {
   try {
-    await apiClient.post("/api/public/auth/logout/revoke");
+    await apiClient.post("/api/auth/logout/revoke");
   } catch {
   }
 }
 
 export async function listSessions(): Promise<SessionInfo[]> {
-  const res = await apiClient.get<SessionInfo[]>("/api/public/auth/sessions");
+  const res = await apiClient.get<SessionInfo[]>("/api/auth/sessions");
   return res as unknown as SessionInfo[];
 }
 
 export async function revokeSession(sessionId: string): Promise<void> {
-  await apiClient.delete(`/api/public/auth/sessions/${sessionId}`);
+  await apiClient.delete(`/api/auth/sessions/${sessionId}`);
 }
 
 export async function revokeOtherSessions(): Promise<{ revokedCount: number }> {
-  const res = await apiClient.delete<{ revokedCount: number }>("/api/public/auth/sessions");
+  const res = await apiClient.delete<{ revokedCount: number }>("/api/auth/sessions");
   return res as unknown as { revokedCount: number };
 }
 
 export async function logoutAll(): Promise<void> {
-  await apiClient.post("/api/public/auth/logout-all");
+  await apiClient.post("/api/auth/logout-all");
 }
