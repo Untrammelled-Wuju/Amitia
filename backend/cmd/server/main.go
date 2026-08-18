@@ -131,7 +131,6 @@ func main() {
 
 	sqlDB, _ := db.DB()
 	agenttool.SetDB(sqlDB)
-	freshInstall := isNewDatabase(db)
 	if err := applyDatabaseStartupMigrations(db, paths.DataDir); err != nil {
 		log.Error("数据库启动迁移失败:", err)
 		os.Exit(1)
@@ -173,6 +172,7 @@ func main() {
 		os.Exit(1)
 	}
 	services.RuntimeOrchestrator = bootstrap
+	registerNativeBridgeTransports(services.NativeBridgeRelay, bootstrap)
 
 	if err := runCanonicalRuntimeAssertions(services); err != nil {
 		log.Error("Canonical runtime startup assertions failed:", err)
@@ -182,7 +182,7 @@ func main() {
 
 	if policy.CoreBusinessServices {
 		productionCutover := initCutoverGate(db, services)
-		closureGate := NewStage2ClosureGate(services)
+		closureGate := NewStage2ClosureGateAdapterFromCanonical(services, productionCutover.runtimeGate, productionCutover.closureGate)
 		services.ProductionCutover = productionCutover
 		services.ClosureGate = closureGate
 
@@ -204,40 +204,26 @@ func main() {
 			os.Exit(1)
 		}
 
-		if checkResult.Incomplete {
+		if !checkResult.Committed {
 			canRun, reasons := closureGate.CanRunCutover()
 			if !canRun {
 				log.Error(closureGate.FailureMessage(reasons))
 				_ = bootstrap.StopAll(context.Background())
 				os.Exit(1)
 			}
-			log.Info("检测到未完成的生产切换，正在恢复执行...")
+			if checkResult.Incomplete {
+				log.Info("检测到未完成的生产切换，正在恢复执行...")
+			} else if checkResult.NeverRun {
+				log.Info("数据库无cutover记录，G0已通过，开始首次生产切换...")
+			} else {
+				log.Info("执行生产切换...")
+			}
 			if err := productionCutover.RunCutover(appCtx); err != nil {
 				log.Error("生产切换执行失败:", err)
 				_ = bootstrap.StopAll(context.Background())
 				os.Exit(1)
 			}
 			log.Info("生产切换完成")
-		} else if checkResult.NeverRun {
-			log.Info("数据库无cutover记录，跳过生产切换")
-		} else if !checkResult.Committed {
-			if freshInstall {
-				log.Info("新安装数据库，等待Closure Gate通过后再执行cutover")
-			} else {
-				canRun, reasons := closureGate.CanRunCutover()
-				if !canRun {
-					log.Error(closureGate.FailureMessage(reasons))
-					_ = bootstrap.StopAll(context.Background())
-					os.Exit(1)
-				}
-				log.Info("执行生产切换...")
-				if err := productionCutover.RunCutover(appCtx); err != nil {
-					log.Error("生产切换执行失败:", err)
-					_ = bootstrap.StopAll(context.Background())
-					os.Exit(1)
-				}
-				log.Info("生产切换完成")
-			}
 		}
 
 		if err := runCanonicalRuntimeAssertions(services); err != nil {

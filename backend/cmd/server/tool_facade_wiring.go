@@ -33,6 +33,7 @@ func (a *chatToolRuntimeAdapter) toLegacyScope(scope chat.SkillScope) kernel.Leg
 		ToolCallID:     scope.ToolCallID,
 		CorrelationID:  scope.CorrelationID,
 		CausationID:    scope.CausationID,
+		ExecContext:    scope.ExecContext,
 	}
 }
 
