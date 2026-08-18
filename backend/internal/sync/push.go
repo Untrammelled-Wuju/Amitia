@@ -58,23 +58,27 @@ func (s *PushService) Push(req PushRequest) (*PushResult, error) {
 
 	var maxSeq Sequence
 
+	scope := ScopeDevice
 	err := s.db.Transaction(func(tx *gorm.DB) error {
 		for _, mutation := range req.Mutations {
-			mutResult := s.applyMutation(tx, req.DeviceID, req.UserID, mutation)
+			mutResult, txErr := s.applyMutation(tx, req.DeviceID, req.UserID, scope, mutation)
+			if txErr != nil {
+				return txErr
+			}
 			if mutResult.Success {
-				result.Accepted = append(result.Accepted, mutResult)
+				result.Accepted = append(result.Accepted, *mutResult)
 				if mutResult.Sequence > maxSeq {
 					maxSeq = mutResult.Sequence
 				}
 			} else {
-				result.Rejected = append(result.Rejected, mutResult)
+				result.Rejected = append(result.Rejected, *mutResult)
 			}
 		}
 
 		if maxSeq > 0 {
 			identity := CursorIdentity{
 				UserID:   req.UserID,
-				Scope:    ScopeDevice,
+				Scope:    scope,
 				DeviceID: req.DeviceID,
 			}
 			if err := s.cursors.MarkPushedTx(tx, identity, maxSeq); err != nil {
@@ -97,19 +101,19 @@ func (s *PushService) Push(req PushRequest) (*PushResult, error) {
 	return result, nil
 }
 
-func (s *PushService) applyMutation(tx *gorm.DB, deviceID, userID string, mutation ClientMutation) MutationResult {
+func (s *PushService) applyMutation(tx *gorm.DB, deviceID, userID string, scope CursorScope, mutation ClientMutation) (*MutationResult, error) {
 	if s.applier == nil {
-		return MutationResult{
+		return &MutationResult{
 			MutationID: mutation.MutationID,
 			Success:    false,
 			ErrorCode:  "no_apply_handler",
 			Message:    "no apply handler configured",
-		}
+		}, nil
 	}
 
 	revision, err := s.applier.Apply(tx, mutation)
 	if err != nil {
-		result := MutationResult{
+		result := &MutationResult{
 			MutationID: mutation.MutationID,
 			Success:    false,
 			ErrorCode:  "apply_failed",
@@ -121,7 +125,7 @@ func (s *PushService) applyMutation(tx *gorm.DB, deviceID, userID string, mutati
 				result.ServerRevision = appErr.ServerRevision
 			}
 		}
-		return result
+		return result, nil
 	}
 
 	record, err := s.changelog.AppendTx(
@@ -133,22 +137,18 @@ func (s *PushService) applyMutation(tx *gorm.DB, deviceID, userID string, mutati
 		mutation.MutationID,
 		deviceID,
 		userID,
+		scope,
 		mutation.Payload,
 	)
 	if err != nil {
-		return MutationResult{
-			MutationID: mutation.MutationID,
-			Success:    false,
-			ErrorCode:  "changelog_failed",
-			Message:    err.Error(),
-		}
+		return nil, fmt.Errorf("changelog append: %w", err)
 	}
 
-	return MutationResult{
+	return &MutationResult{
 		MutationID: mutation.MutationID,
 		Success:    true,
 		ChangeID:   record.ChangeID,
 		Sequence:   record.Sequence,
 		Revision:   record.Revision,
-	}
+	}, nil
 }

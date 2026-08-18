@@ -14,13 +14,17 @@ import (
 type ChangeLogStore interface {
 	Append(record *ChangeRecord) error
 	AppendTx(tx *gorm.DB, record *ChangeRecord) error
-	ListAfter(userID string, cursor Sequence, limit int, entityType EntityType) ([]ChangeRecord, error)
+	ListAfter(userID string, scope CursorScope, cursor Sequence, limit int, entityType EntityType) ([]ChangeRecord, error)
 	Pull(userID string, scope CursorScope, cursor Sequence, limit int, entityType EntityType) ([]ChangeRecord, Sequence, bool, error)
 	GetLatestSequence() (Sequence, error)
 	GetByMutationID(mutationID MutationID) (*ChangeRecord, error)
 	GetByMutationIDAndUser(mutationID MutationID, userID string) (*ChangeRecord, error)
 	GetByMutationIDAndUserTx(tx *gorm.DB, mutationID MutationID, userID string) (*ChangeRecord, error)
 	Count() (int64, error)
+}
+
+type ChangeRecorder interface {
+	RecordChange(tx *gorm.DB, entityType EntityType, entityID EntityID, op OperationType, revision int64, mutationID MutationID, userID string, scope CursorScope, payload []byte) (*ChangeRecord, error)
 }
 
 type sqliteChangeLogStore struct {
@@ -51,11 +55,14 @@ func (s *sqliteChangeLogStore) AppendTx(tx *gorm.DB, record *ChangeRecord) error
 	return tx.Create(record).Error
 }
 
-func (s *sqliteChangeLogStore) ListAfter(userID string, cursor Sequence, limit int, entityType EntityType) ([]ChangeRecord, error) {
+func (s *sqliteChangeLogStore) ListAfter(userID string, scope CursorScope, cursor Sequence, limit int, entityType EntityType) ([]ChangeRecord, error) {
 	var records []ChangeRecord
 	query := s.db.Where("seq > ?", cursor).Order("seq ASC").Limit(limit)
 	if userID != "" {
 		query = query.Where("user_id = ?", userID)
+	}
+	if scope != "" {
+		query = query.Where("scope = ?", scope)
 	}
 	if entityType != "" {
 		query = query.Where("entity_type = ?", entityType)
@@ -65,7 +72,7 @@ func (s *sqliteChangeLogStore) ListAfter(userID string, cursor Sequence, limit i
 }
 
 func (s *sqliteChangeLogStore) Pull(userID string, scope CursorScope, cursor Sequence, limit int, entityType EntityType) ([]ChangeRecord, Sequence, bool, error) {
-	records, err := s.ListAfter(userID, cursor, limit+1, entityType)
+	records, err := s.ListAfter(userID, scope, cursor, limit+1, entityType)
 	if err != nil {
 		return nil, 0, false, err
 	}
@@ -196,7 +203,9 @@ func NewChangeLogService(store ChangeLogStore, sequences SequenceGenerator) *Cha
 	return &ChangeLogService{store: store, sequences: sequences}
 }
 
-func (s *ChangeLogService) Append(entityType EntityType, entityID EntityID, op OperationType, revision int64, mutationID MutationID, originDevice string, userID string, payload []byte) (*ChangeRecord, error) {
+func (s *ChangeLogService) RecordChange(tx *gorm.DB, entityType EntityType, entityID EntityID, op OperationType, revision int64, mutationID MutationID, userID string, scope CursorScope, payload []byte) (*ChangeRecord, error) {
+	return s.AppendTx(tx, entityType, entityID, op, revision, mutationID, "", userID, scope, payload)
+}
 	if mutationID != "" {
 		existing, err := s.store.GetByMutationIDAndUser(mutationID, userID)
 		if err != nil {
@@ -212,10 +221,15 @@ func (s *ChangeLogService) Append(entityType EntityType, entityID EntityID, op O
 		return nil, fmt.Errorf("changelog: next sequence: %w", err)
 	}
 
+	if scope == "" {
+		scope = ScopeDevice
+	}
+
 	record := &ChangeRecord{
 		ChangeID:     ChangeID(fmt.Sprintf("ch_%d", seq)),
 		Sequence:     seq,
 		UserID:       userID,
+		Scope:        scope,
 		EntityType:   entityType,
 		EntityID:     entityID,
 		Operation:    op,
@@ -233,7 +247,7 @@ func (s *ChangeLogService) Append(entityType EntityType, entityID EntityID, op O
 	return record, nil
 }
 
-func (s *ChangeLogService) AppendTx(tx *gorm.DB, entityType EntityType, entityID EntityID, op OperationType, revision int64, mutationID MutationID, originDevice string, userID string, payload []byte) (*ChangeRecord, error) {
+func (s *ChangeLogService) AppendTx(tx *gorm.DB, entityType EntityType, entityID EntityID, op OperationType, revision int64, mutationID MutationID, originDevice string, userID string, scope CursorScope, payload []byte) (*ChangeRecord, error) {
 	if mutationID != "" {
 		existing, err := s.store.GetByMutationIDAndUserTx(tx, mutationID, userID)
 		if err != nil {
@@ -249,10 +263,15 @@ func (s *ChangeLogService) AppendTx(tx *gorm.DB, entityType EntityType, entityID
 		return nil, fmt.Errorf("changelog: next sequence: %w", err)
 	}
 
+	if scope == "" {
+		scope = ScopeDevice
+	}
+
 	record := &ChangeRecord{
 		ChangeID:     ChangeID(fmt.Sprintf("ch_%d", seq)),
 		Sequence:     seq,
 		UserID:       userID,
+		Scope:        scope,
 		EntityType:   entityType,
 		EntityID:     entityID,
 		Operation:    op,
@@ -270,8 +289,8 @@ func (s *ChangeLogService) AppendTx(tx *gorm.DB, entityType EntityType, entityID
 	return record, nil
 }
 
-func (s *ChangeLogService) Pull(userID string, cursor Sequence, limit int, entityType EntityType) ([]ChangeRecord, Sequence, bool, error) {
-	records, err := s.store.ListAfter(userID, cursor, limit+1, entityType)
+func (s *ChangeLogService) Pull(userID string, scope CursorScope, cursor Sequence, limit int, entityType EntityType) ([]ChangeRecord, Sequence, bool, error) {
+	records, err := s.store.ListAfter(userID, scope, cursor, limit+1, entityType)
 	if err != nil {
 		return nil, 0, false, fmt.Errorf("changelog: list: %w", err)
 	}
