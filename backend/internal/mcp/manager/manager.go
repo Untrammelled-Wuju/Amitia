@@ -169,6 +169,7 @@ type Config struct {
 type Manager struct {
 	repository    *mcp.Repository
 	factory       Factory
+	discovery     DiscoveryService
 	config        Config
 	mu            sync.RWMutex
 	connections   map[string]*client.Connection
@@ -177,6 +178,10 @@ type Manager struct {
 	closed        bool
 	root          context.Context
 	cancel        context.CancelFunc
+}
+
+type DiscoveryService interface {
+	Discover(ctx context.Context, serverID string) error
 }
 
 func (m *Manager) RegisterReadyHandler(handler func(context.Context, string)) {
@@ -197,6 +202,12 @@ func New(repository *mcp.Repository, factory Factory, config Config) *Manager {
 	}
 	root, cancel := context.WithCancel(context.Background())
 	return &Manager{repository: repository, factory: factory, config: config, connections: map[string]*client.Connection{}, reconnecting: map[string]bool{}, root: root, cancel: cancel}
+}
+
+func NewWithDiscovery(repository *mcp.Repository, factory Factory, discovery DiscoveryService, config Config) *Manager {
+	m := New(repository, factory, config)
+	m.discovery = discovery
+	return m
 }
 
 func (m *Manager) Restore(ctx context.Context) error {
@@ -251,7 +262,20 @@ func (m *Manager) connect(ctx context.Context, server mcp.Server) error {
 	serverInfo, _ := json.Marshal(initialized.ServerInfo)
 	capabilities, _ := json.Marshal(initialized.Capabilities)
 	persisted := &struct{ ProtocolVersion, ServerInfoJSON, CapabilitiesJSON, Instructions string }{initialized.ProtocolVersion, string(serverInfo), string(capabilities), initialized.Instructions}
-	if err := m.repository.SetServerStatus(context.Background(), server.ID, "ready", "", "", persisted); err != nil {
+	if err := m.repository.SetServerStatus(context.Background(), server.ID, "initializing", "", "", persisted); err != nil {
+		_ = connection.Close(context.Background())
+		return err
+	}
+
+	if m.discovery != nil {
+		if discErr := m.discovery.Discover(context.Background(), server.ID); discErr != nil {
+			_ = connection.Close(context.Background())
+			m.recordFailure(server.ID, discErr)
+			return fmt.Errorf("mcp discovery failed: %w", discErr)
+		}
+	}
+
+	if err := m.repository.SetServerStatus(context.Background(), server.ID, "ready", "", "", nil); err != nil {
 		_ = connection.Close(context.Background())
 		return err
 	}
