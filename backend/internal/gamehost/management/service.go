@@ -328,6 +328,40 @@ func (s *GameCenterManagementService) GetHandshakeStatus(ctx context.Context, co
 	return result, nil
 }
 
+func (s *GameCenterManagementService) GetRuntimeHandshakeStatus(ctx context.Context, runtimeID string) (*HandshakeSummaryDTO, error) {
+	if s.connections == nil || s.handshake == nil {
+		return &HandshakeSummaryDTO{HandshakeState: "unavailable", Ready: false}, nil
+	}
+	connections := s.connections.ListByRuntime(runtimeID)
+	if len(connections) == 0 {
+		return &HandshakeSummaryDTO{HandshakeState: "not_found", Ready: false}, nil
+	}
+
+	result := &HandshakeSummaryDTO{HandshakeState: "ready", Ready: true}
+	for _, conn := range connections {
+		if conn == nil || !conn.Connected {
+			result.HandshakeState = "pending"
+			result.Ready = false
+			continue
+		}
+		state, found := s.handshake.GetState(conn.ConnectionID)
+		if !found || state != handshake.HandshakeStateReady {
+			if found {
+				result.HandshakeState = string(state)
+			} else {
+				result.HandshakeState = "not_found"
+			}
+			result.Ready = false
+		}
+		if snap := s.handshake.GetSnapshot(conn.ConnectionID); snap != nil && result.Protocol == "" {
+			result.Protocol = snap.Protocol
+			result.SDKName = snap.SDKName
+			result.SDKVersion = snap.SDKVersion
+		}
+	}
+	return result, nil
+}
+
 func (s *GameCenterManagementService) GetControlAuthority(ctx context.Context, runtimeID string) (*ControlAuthorityDTO, error) {
 	if s.authority == nil {
 		return &ControlAuthorityDTO{Mode: "unavailable", Epoch: 0}, nil

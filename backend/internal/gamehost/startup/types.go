@@ -10,29 +10,29 @@ import (
 type ResourceType string
 
 const (
-	ResourceOrphanProcess    ResourceType = "orphan_process"
-	ResourceStaleTemp        ResourceType = "stale_temp"
-	ResourceStaleBinary      ResourceType = "stale_binary"
-	ResourceStaleSharedMem   ResourceType = "stale_shared_memory"
-	ResourceStaleEndpoint    ResourceType = "stale_endpoint"
-	ResourceStaleCheckpoint  ResourceType = "stale_checkpoint"
+	ResourceOrphanProcess   ResourceType = "orphan_process"
+	ResourceStaleTemp       ResourceType = "stale_temp"
+	ResourceStaleBinary     ResourceType = "stale_binary"
+	ResourceStaleSharedMem  ResourceType = "stale_shared_memory"
+	ResourceStaleEndpoint   ResourceType = "stale_endpoint"
+	ResourceStaleCheckpoint ResourceType = "stale_checkpoint"
 )
 
 type OwnershipResult string
 
 const (
-	OwnershipVerified   OwnershipResult = "verified"
-	OwnershipUnknown    OwnershipResult = "unknown"
+	OwnershipVerified         OwnershipResult = "verified"
+	OwnershipUnknown          OwnershipResult = "unknown"
 	OwnershipBelongsToForeign OwnershipResult = "foreign"
 )
 
 type CleanupResult string
 
 const (
-	CleanupSuccess    CleanupResult = "success"
-	CleanupSkipped    CleanupResult = "skipped"
-	CleanupFailed     CleanupResult = "failed"
-	CleanupNoOp       CleanupResult = "noop"
+	CleanupSuccess CleanupResult = "success"
+	CleanupSkipped CleanupResult = "skipped"
+	CleanupFailed  CleanupResult = "failed"
+	CleanupNoOp    CleanupResult = "noop"
 )
 
 type OrphanResource struct {
@@ -55,6 +55,8 @@ type OwnershipProof struct {
 	ServiceID      string
 	Generation     uint64
 	ResourceToken  string
+	Executable     string
+	ProcessStartID string
 }
 
 type StartupRecoveryStage string
@@ -73,17 +75,17 @@ const (
 type StartupRecoveryOperationID string
 
 type StartupRecoveryReport struct {
-	OperationID          StartupRecoveryOperationID
-	StartedAt            time.Time
-	CompletedAt          *time.Time
-	Stage                StartupRecoveryStage
-	Candidates           []*OrphanResource
-	Cleaned              []*OrphanResource
-	Skipped              []*OrphanResource
+	OperationID           StartupRecoveryOperationID
+	StartedAt             time.Time
+	CompletedAt           *time.Time
+	Stage                 StartupRecoveryStage
+	Candidates            []*OrphanResource
+	Cleaned               []*OrphanResource
+	Skipped               []*OrphanResource
 	ReconstructedRuntimes []domain.RuntimeInstanceID
-	Errors               []string
-	Success              bool
-	Degraded             bool
+	Errors                []string
+	Success               bool
+	Degraded              bool
 }
 
 type StartupGate struct {

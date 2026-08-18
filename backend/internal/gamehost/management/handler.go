@@ -182,22 +182,24 @@ func (h *Handler) GetHandshakeStatus(c *gin.Context) {
 		return
 	}
 
-	connectionID := strings.TrimSpace(c.Query("connectionId"))
-	runtimeID := strings.TrimSpace(c.Query("runtimeId"))
-
-	target := ""
-	if runtimeID != "" {
-		target = runtimeID
-	} else if connectionID != "" {
-		target = connectionID
+	// Runtime-scoped route: /runtimes/:runtimeId/handshake.
+	// Query-scoped route remains available for explicit runtimeId/connectionId lookup.
+	runtimeID := strings.TrimSpace(c.Param("runtimeId"))
+	if runtimeID == "" {
+		runtimeID = strings.TrimSpace(c.Query("runtimeId"))
 	}
+	connectionID := strings.TrimSpace(c.Query("connectionId"))
 
-	if target == "" {
+	var result *HandshakeSummaryDTO
+	var err error
+	if runtimeID != "" {
+		result, err = h.service.GetRuntimeHandshakeStatus(c.Request.Context(), runtimeID)
+	} else if connectionID != "" {
+		result, err = h.service.GetHandshakeStatus(c.Request.Context(), connectionID)
+	} else {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "runtimeId or connectionId required"})
 		return
 	}
-
-	result, err := h.service.GetHandshakeStatus(c.Request.Context(), target)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
 		return
@@ -212,7 +214,10 @@ func (h *Handler) GetControlAuthority(c *gin.Context) {
 		return
 	}
 
-	runtimeID := strings.TrimSpace(c.Query("runtimeId"))
+	runtimeID := strings.TrimSpace(c.Param("runtimeId"))
+	if runtimeID == "" {
+		runtimeID = strings.TrimSpace(c.Query("runtimeId"))
+	}
 	if runtimeID == "" {
 		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "runtimeId required"})
 		return
