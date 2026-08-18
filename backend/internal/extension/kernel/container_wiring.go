@@ -716,6 +716,12 @@ func (e *containerPlanExecutor) executeDirectInstallSaga(ctx context.Context, pl
 		result.Error = fmt.Sprintf("build definition: %v", err)
 		return 0, err
 	}
+	if definition.ID != extID {
+		err := fmt.Errorf("extension id mismatch: command=%s manifest=%s", extID, definition.ID)
+		result.Status = "failed"
+		result.Error = err.Error()
+		return 0, err
+	}
 	result.Applied = append(result.Applied, "build_candidate_definitions")
 
 	staging, err := e.packageSecurity.ExtractFileToStaging(ctx, artifact.ArchivePath, "direct-install")
