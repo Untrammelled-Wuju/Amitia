@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
@@ -61,7 +62,7 @@ func (b *AgentCapabilityBridge) FindCapabilities(ctx context.Context, input Find
 
 // AcquireCapability translates an AcquireInput into an AcquisitionRequest,
 // invokes the AcquisitionService.Acquire, and returns an AcquireOutput.
-func (b *AgentCapabilityBridge) AcquireCapability(ctx context.Context, input AcquireInput, userID string) (*AcquireOutput, error) {
+func (b *AgentCapabilityBridge) AcquireCapability(ctx context.Context, input AcquireInput, userID string, execCtx *execution.ExecutionContext) (*AcquireOutput, error) {
 	if input.CapabilityID == "" {
 		return nil, NewAcquisitionError("invalid_input", "capabilityId is required", nil)
 	}
@@ -70,6 +71,7 @@ func (b *AgentCapabilityBridge) AcquireCapability(ctx context.Context, input Acq
 		CapabilityID:         capability.CapabilityID(input.CapabilityID),
 		RequestedCandidateID: input.CandidateID,
 		UserID:               runtimeidentity.UserID(userID),
+		ExecContext:          execCtx,
 	}
 
 	yes := input.Approval || input.UserConfirmed

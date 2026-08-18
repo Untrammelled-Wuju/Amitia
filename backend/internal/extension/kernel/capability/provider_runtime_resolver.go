@@ -152,8 +152,13 @@ func (r *ProviderRuntimeExecutionResolver) ResolveRuntimeExecution(
 		return RuntimeExecutionRoute{}, ErrProviderRuntimeBindingInvalid
 	}
 
+	binding := definition.Runtime
+	if tool.Runtime.HandlerName != "" {
+		binding.HandlerName = tool.Runtime.HandlerName
+	}
+
 	route := RuntimeExecutionRoute{
-		Binding:            definition.Runtime,
+		Binding:            binding,
 		Placement:          definition.Placement,
 		ProviderID:         providerID,
 		ProviderInstanceID: instanceID,

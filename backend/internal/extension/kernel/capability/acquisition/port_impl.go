@@ -67,6 +67,20 @@ func (b *packagePortBridge) UninstallPackage(ctx context.Context, extID string) 
 	return nil
 }
 
+func (b *packagePortBridge) ResolveArtifact(ctx context.Context, extID string, version string, packageURI string, hash string) (string, error) {
+	if b.manager == nil {
+		return "", fmt.Errorf("package port bridge: manager not configured")
+	}
+	if packageURI == "" {
+		return "", fmt.Errorf("package port bridge: packageURI is empty")
+	}
+
+	// The PackageURI is passed through to the saga via LifecycleCommand.PackageID
+	// The saga will handle downloading and registering the artifact
+	// Return the packageURI as the identifier - the saga will resolve it to an ArtifactID
+	return packageURI, nil
+}
+
 // ---------------------------------------------------------------------------
 // MCPInstallPort implementation
 // ---------------------------------------------------------------------------

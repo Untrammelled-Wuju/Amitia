@@ -17,6 +17,7 @@ type (
 	PackageInstallPort interface {
 		InstallPackage(ctx context.Context, extID string, version string, packageID string, hash string) (string, error)
 		UninstallPackage(ctx context.Context, extID string) error
+		ResolveArtifact(ctx context.Context, extID string, version string, packageURI string, hash string) (string, error)
 	}
 
 	// MCPInstallPort invokes the real MCP lifecycle.
@@ -102,11 +103,21 @@ func (i *ExtensionPackageInstaller) Install(
 	}
 
 	version := candidate.Version
-	packageID := ""
+	packageURI := ""
 	hash := ""
 	if candidate.Install.ExtensionPackage != nil {
-		packageID = candidate.Install.ExtensionPackage.PackageURI
+		packageURI = candidate.Install.ExtensionPackage.PackageURI
 		hash = candidate.Install.ExtensionPackage.Hash
+	}
+
+	// Resolve PackageURI to ArtifactID before calling InstallPackage
+	packageID := packageURI
+	if packageURI != "" {
+		artifactID, err := i.packagePort.ResolveArtifact(ctx, extID, version, packageURI, hash)
+		if err != nil {
+			return InstalledCapability{}, fmt.Errorf("extension installer: resolve artifact %s: %w", packageURI, err)
+		}
+		packageID = artifactID
 	}
 
 	installID, err := i.packagePort.InstallPackage(ctx, extID, version, packageID, hash)
@@ -256,7 +267,7 @@ func (i *EnableExistingInstaller) Install(
 	var extID string
 	var serverName string
 	switch candidate.Kind {
-	case CandidateExtensionPackage:
+	case CandidateExtensionPackage, CandidateInstalledExtension:
 		extID, _ = candidate.Metadata["extensionId"].(string)
 		if extID == "" {
 			return InstalledCapability{}, fmt.Errorf("enable existing installer: missing extensionId")

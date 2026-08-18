@@ -32,6 +32,7 @@ type LifecycleCommand struct {
 	ContributionID domain.ContributionID
 	TargetVersion  domain.SemanticVersion
 	PackageID      string
+	PackageURI     string
 	SnapshotID     string
 	Reason         string
 	DryRun         bool

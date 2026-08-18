@@ -2,7 +2,11 @@ package acquisition
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
@@ -516,6 +520,11 @@ func (s *GeneratedSkillSource) Search(ctx context.Context, request AcquisitionRe
 		return nil, nil
 	}
 
+	promptStub := request.Description
+	if promptStub == "" {
+		promptStub = fmt.Sprintf("Generate a skill that provides %s capability", capID)
+	}
+
 	return []CapabilityCandidate{
 		{
 			ID:           "generated_" + string(capID),
@@ -525,6 +534,10 @@ func (s *GeneratedSkillSource) Search(ctx context.Context, request AcquisitionRe
 			Capabilities: []capability.CapabilityID{request.CapabilityID},
 			Install: CandidateInstallDescriptor{
 				Method: InstallGeneratedSkill,
+				GeneratedSkill: &GeneratedSkillDescriptor{
+					PromptStub:  promptStub,
+					Description: fmt.Sprintf("Provide %s capability", capID),
+				},
 			},
 			Trust: CandidateTrust{
 				Level: TrustUnverified,
@@ -532,7 +545,6 @@ func (s *GeneratedSkillSource) Search(ctx context.Context, request AcquisitionRe
 			Metadata: map[string]any{
 				"generated":  true,
 				"unverified": true,
-				"note":       "cannot create underlying tools automatically",
 			},
 		},
 	}, nil
@@ -578,7 +590,7 @@ func (s *NewSkillSource) Search(ctx context.Context, request AcquisitionRequest)
 
 	entries, err := s.remoteCatalog.ListSkills(ctx)
 	if err != nil {
-		return nil, nil
+		return nil, fmt.Errorf("remote skill catalog: %w", err)
 	}
 
 	capID := string(request.CapabilityID)
@@ -671,4 +683,52 @@ func containsCapability(caps []string, capID string) bool {
 		}
 	}
 	return false
+}
+
+// RemoteSkillCatalog HTTP 实现，从远程 Skill 仓库获取 Skill 列表
+type RemoteSkillCatalog struct {
+	client  *http.Client
+	apiURL  string
+}
+
+// NewRemoteSkillCatalog 创建 RemoteSkillCatalog 实例
+func NewRemoteSkillCatalog(apiURL string) *RemoteSkillCatalog {
+	return &RemoteSkillCatalog{
+		client: &http.Client{Timeout: 15 * time.Second},
+		apiURL: apiURL,
+	}
+}
+
+func (c *RemoteSkillCatalog) ListSkills(ctx context.Context) ([]RemoteSkillEntry, error) {
+	if c.apiURL == "" {
+		return nil, fmt.Errorf("remote skill catalog: apiURL is empty")
+	}
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.apiURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("remote skill catalog: create request: %w", err)
+	}
+	req.Header.Set("Accept", "application/json")
+
+	resp, err := c.client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("remote skill catalog: request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("remote skill catalog: HTTP %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(io.LimitReader(resp.Body, 10*1024*1024))
+	if err != nil {
+		return nil, fmt.Errorf("remote skill catalog: read body: %w", err)
+	}
+
+	var entries []RemoteSkillEntry
+	if err := json.Unmarshal(body, &entries); err != nil {
+		return nil, fmt.Errorf("remote skill catalog: parse response: %w", err)
+	}
+
+	return entries, nil
 }
