@@ -9,15 +9,16 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/character/card"
+	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/internal/sync"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
 
 type CardPreviewResult struct {
-	Preview      *card.CharacterCardPreview `json:"preview"`
-	SourceHash   string                     `json:"sourceHash"`
-	Format       card.CharacterCardFormat   `json:"format"`
+	Preview    *card.CharacterCardPreview `json:"preview"`
+	SourceHash string                     `json:"sourceHash"`
+	Format     card.CharacterCardFormat   `json:"format"`
 }
 
 type CardImportResult struct {
@@ -54,8 +55,8 @@ type Service interface {
 }
 
 type service struct {
-	repo          Repository
-	db            *gorm.DB
+	repo           Repository
+	db             *gorm.DB
 	changeRecorder sync.ChangeRecorder
 }
 
@@ -80,6 +81,10 @@ func (s *service) GetByID(id string) (*Character, error) {
 }
 
 func (s *service) Create(req *CreateCharacterRequest) (*Character, error) {
+	return s.CreateForUser(req, requestidentity.DefaultUserID)
+}
+
+func (s *service) CreateForUser(req *CreateCharacterRequest, userID string) (*Character, error) {
 	c := &Character{
 		ID: uuid.New().String(), Name: req.Name, Identity: req.Identity,
 		Personality: req.Personality, SpeakingStyle: req.SpeakingStyle,
@@ -131,8 +136,8 @@ func (s *service) Create(req *CreateCharacterRequest) (*Character, error) {
 	if c.VoiceVolume == 0 {
 		c.VoiceVolume = 1.0
 	}
+	c.Revision = 1
 	if req.IsDefault {
-		s.db.Table("characters").Where("is_default = 1").Update("is_default", 0)
 		c.IsDefault = 1
 	}
 	var count int64
@@ -142,6 +147,27 @@ func (s *service) Create(req *CreateCharacterRequest) (*Character, error) {
 
 	var createErr error
 	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if c.IsDefault == 1 {
+			var previousDefaults []Character
+			if err := tx.Where("is_default = 1 AND deleted_at IS NULL").Find(&previousDefaults).Error; err != nil {
+				return err
+			}
+			for i := range previousDefaults {
+				previous := &previousDefaults[i]
+				newRevision := previous.Revision + 1
+				result := tx.Model(&Character{}).Where("id = ? AND revision = ?", previous.ID, previous.Revision).Updates(map[string]interface{}{"is_default": 0, "revision": newRevision, "updated_at": time.Now().Format("2006-01-02 15:04:05")})
+				if result.Error != nil {
+					return result.Error
+				}
+				if result.RowsAffected == 0 {
+					return fmt.Errorf("默认角色版本冲突")
+				}
+				previous.IsDefault, previous.Revision = 0, newRevision
+				if err := s.recordCharacterChangeTx(tx, previous, sync.OpUpdate, userID); err != nil {
+					return err
+				}
+			}
+		}
 		if err := tx.Create(c).Error; err != nil {
 			return err
 		}
@@ -154,8 +180,19 @@ func (s *service) Create(req *CreateCharacterRequest) (*Character, error) {
 			return err
 		}
 		if s.changeRecorder != nil {
-			payload, _ := json.Marshal(map[string]string{"id": c.ID, "name": c.Name})
-			if _, recErr := s.changeRecorder.RecordChange(tx, sync.EntityTypeCharacter, sync.EntityID(c.ID), sync.OpCreate, 1, sync.MutationID("local_"+c.ID+"_create"), "local_user", sync.ScopeUser, payload); recErr != nil {
+			payload, marshalErr := json.Marshal(map[string]interface{}{"id": c.ID, "name": c.Name, "meta": characterSyncMeta(c)})
+			if marshalErr != nil {
+				return marshalErr
+			}
+			if _, recErr := s.changeRecorder.RecordChange(tx, sync.EntityTypeCharacter, sync.EntityID(c.ID), sync.OpCreate, 1, sync.MutationID("business_character_"+c.ID+"_create_"+uuid.NewString()), normalizeCharacterChangeUserID(userID), sync.ScopeDevice, payload); recErr != nil {
+				createErr = recErr
+				return recErr
+			}
+			conversationPayload, marshalErr := json.Marshal(map[string]string{"id": convID, "characterId": c.ID, "title": c.Name, "channel": "web", "source": "system"})
+			if marshalErr != nil {
+				return marshalErr
+			}
+			if _, recErr := s.changeRecorder.RecordChange(tx, sync.EntityTypeConversation, sync.EntityID(convID), sync.OpCreate, 1, sync.MutationID("business_conversation_"+convID+"_create_"+uuid.NewString()), normalizeCharacterChangeUserID(userID), sync.ScopeDevice, conversationPayload); recErr != nil {
 				createErr = recErr
 				return recErr
 			}
@@ -188,6 +225,10 @@ func (s *service) Create(req *CreateCharacterRequest) (*Character, error) {
 }
 
 func (s *service) Update(id string, req *UpdateCharacterRequest) (*Character, error) {
+	return s.UpdateForUser(id, req, requestidentity.DefaultUserID)
+}
+
+func (s *service) UpdateForUser(id string, req *UpdateCharacterRequest, userID string) (*Character, error) {
 	_, err := s.repo.FindByID(id)
 	if err != nil {
 		return nil, fmt.Errorf("角色不存在")
@@ -274,9 +315,9 @@ func (s *service) Update(id string, req *UpdateCharacterRequest) (*Character, er
 	if req.PersonalityConfig != nil {
 		updates["personality_config"] = string(*req.PersonalityConfig)
 	}
+	setExclusiveDefault := req.IsDefault != nil && *req.IsDefault
 	if req.IsDefault != nil {
 		if *req.IsDefault {
-			s.db.Table("characters").Where("is_default = 1").Update("is_default", 0)
 			updates["is_default"] = 1
 		} else {
 			updates["is_default"] = 0
@@ -300,14 +341,42 @@ func (s *service) Update(id string, req *UpdateCharacterRequest) (*Character, er
 		if err := tx.Where("id = ?", id).First(&current).Error; err != nil {
 			return err
 		}
+		if setExclusiveDefault {
+			var previousDefaults []Character
+			if err := tx.Where("is_default = 1 AND id <> ? AND deleted_at IS NULL", id).Find(&previousDefaults).Error; err != nil {
+				return err
+			}
+			for i := range previousDefaults {
+				previous := &previousDefaults[i]
+				newPreviousRevision := previous.Revision + 1
+				result := tx.Model(&Character{}).Where("id = ? AND revision = ?", previous.ID, previous.Revision).Updates(map[string]interface{}{"is_default": 0, "revision": newPreviousRevision, "updated_at": time.Now().Format("2006-01-02 15:04:05")})
+				if result.Error != nil {
+					return result.Error
+				}
+				if result.RowsAffected == 0 {
+					return fmt.Errorf("默认角色版本冲突")
+				}
+				previous.IsDefault, previous.Revision = 0, newPreviousRevision
+				if err := s.recordCharacterChangeTx(tx, previous, sync.OpUpdate, userID); err != nil {
+					return err
+				}
+			}
+		}
 		newRevision := current.Revision + 1
 		updates["revision"] = newRevision
-		if err := tx.Model(&Character{}).Where("id = ?", id).Updates(updates).Error; err != nil {
-			return err
+		result := tx.Model(&Character{}).Where("id = ? AND revision = ? AND deleted_at IS NULL", id, current.Revision).Updates(updates)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return fmt.Errorf("角色版本冲突")
 		}
 		if s.changeRecorder != nil {
-			payload, _ := json.Marshal(map[string]interface{}{"id": id, "revision": newRevision})
-			if _, recErr := s.changeRecorder.RecordChange(tx, sync.EntityTypeCharacter, sync.EntityID(id), sync.OpUpdate, newRevision, sync.MutationID("local_"+id+"_update"), "local_user", sync.ScopeUser, payload); recErr != nil {
+			payload, marshalErr := json.Marshal(map[string]interface{}{"id": id, "revision": newRevision, "meta": updates})
+			if marshalErr != nil {
+				return marshalErr
+			}
+			if _, recErr := s.changeRecorder.RecordChange(tx, sync.EntityTypeCharacter, sync.EntityID(id), sync.OpUpdate, newRevision, sync.MutationID("business_character_"+id+"_update_"+uuid.NewString()), normalizeCharacterChangeUserID(userID), sync.ScopeDevice, payload); recErr != nil {
 				updateErr = recErr
 				return recErr
 			}
@@ -328,21 +397,32 @@ func (s *service) Update(id string, req *UpdateCharacterRequest) (*Character, er
 }
 
 func (s *service) Delete(id string) error {
+	return s.DeleteForUser(id, requestidentity.DefaultUserID)
+}
+
+func (s *service) DeleteForUser(id string, userID string) error {
 	return s.db.Transaction(func(tx *gorm.DB) error {
 		var current Character
 		if err := tx.Where("id = ?", id).First(&current).Error; err != nil {
 			return err
 		}
-		if err := tx.Model(&Character{}).Where("id = ?", id).Updates(map[string]interface{}{
+		result := tx.Model(&Character{}).Where("id = ? AND revision = ? AND deleted_at IS NULL", id, current.Revision).Updates(map[string]interface{}{
 			"deleted_at": time.Now().Format("2006-01-02 15:04:05"),
 			"updated_at": time.Now().Format("2006-01-02 15:04:05"),
 			"revision":   current.Revision + 1,
-		}).Error; err != nil {
-			return err
+		})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return fmt.Errorf("角色版本冲突")
 		}
 		if s.changeRecorder != nil {
-			payload, _ := json.Marshal(map[string]string{"id": id})
-			if _, recErr := s.changeRecorder.RecordChange(tx, sync.EntityTypeCharacter, sync.EntityID(id), sync.OpDelete, current.Revision+1, sync.MutationID("local_"+id+"_delete"), "local_user", sync.ScopeUser, payload); recErr != nil {
+			payload, marshalErr := json.Marshal(map[string]string{"id": id})
+			if marshalErr != nil {
+				return marshalErr
+			}
+			if _, recErr := s.changeRecorder.RecordChange(tx, sync.EntityTypeCharacter, sync.EntityID(id), sync.OpDelete, current.Revision+1, sync.MutationID("business_character_"+id+"_delete_"+uuid.NewString()), normalizeCharacterChangeUserID(userID), sync.ScopeDevice, payload); recErr != nil {
 				return recErr
 			}
 		}
@@ -350,12 +430,117 @@ func (s *service) Delete(id string) error {
 	})
 }
 
-func (s *service) SetActive(id string) (*Character, error) {
-	_, err := s.repo.FindByID(id)
-	if err != nil {
-		return nil, fmt.Errorf("角色不存在")
+func (s *service) updateCharacterFieldsForUser(id string, updates map[string]interface{}, userID string) (*Character, error) {
+	var updated Character
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		var current Character
+		if err := tx.Where("id = ? AND deleted_at IS NULL", id).First(&current).Error; err != nil {
+			return err
+		}
+		newRevision := current.Revision + 1
+		copyUpdates := make(map[string]interface{}, len(updates)+2)
+		for k, v := range updates {
+			copyUpdates[k] = v
+		}
+		copyUpdates["revision"] = newRevision
+		copyUpdates["updated_at"] = time.Now().Format("2006-01-02 15:04:05")
+		result := tx.Model(&Character{}).Where("id = ? AND revision = ?", id, current.Revision).Updates(copyUpdates)
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return fmt.Errorf("角色版本冲突")
+		}
+		if err := tx.Where("id = ?", id).First(&updated).Error; err != nil {
+			return err
+		}
+		return s.recordCharacterChangeTx(tx, &updated, sync.OpUpdate, userID)
+	})
+	return &updated, err
+}
+
+func (s *service) recordCharacterChangeTx(tx *gorm.DB, c *Character, op sync.OperationType, userID string) error {
+	if s.changeRecorder == nil || c == nil {
+		return nil
 	}
-	if err := s.repo.SetActive(id); err != nil {
+	payload, err := json.Marshal(map[string]interface{}{"id": c.ID, "name": c.Name, "revision": c.Revision, "meta": characterSyncMeta(c)})
+	if err != nil {
+		return err
+	}
+	_, err = s.changeRecorder.RecordChange(tx, sync.EntityTypeCharacter, sync.EntityID(c.ID), op, c.Revision, sync.MutationID("business_character_"+c.ID+"_"+string(op)+"_"+uuid.NewString()), normalizeCharacterChangeUserID(userID), sync.ScopeDevice, payload)
+	return err
+}
+
+func normalizeCharacterChangeUserID(userID string) string {
+	return requestidentity.NormalizeUserID(userID)
+}
+
+func characterSyncMeta(c *Character) map[string]interface{} {
+	if c == nil {
+		return nil
+	}
+	return map[string]interface{}{
+		"name": c.Name, "identity": c.Identity, "personality": c.Personality,
+		"speaking_style": c.SpeakingStyle, "relationship_style": c.RelationshipStyle,
+		"character_base": c.CharacterBase, "boundary_rules": c.BoundaryRules,
+		"description": c.Description, "status": c.Status, "is_active": c.IsActive,
+		"sort_order": c.SortOrder, "gender": c.Gender, "pronoun": c.Pronoun,
+		"self_reference": c.SelfReference, "gender_expression": c.GenderExpression,
+		"life_identity": c.LifeIdentity, "voice_config_id": c.VoiceConfigID,
+		"voice_type": c.VoiceType, "voice_speed": c.VoiceSpeed, "voice_pitch": c.VoicePitch,
+		"voice_volume": c.VoiceVolume, "custom_voice_id": c.CustomVoiceID, "voice_mode": c.VoiceMode,
+		"emotion": c.Emotion, "emotion_scale": c.EmotionScale, "silence_duration": c.SilenceDuration,
+		"personality_config": c.PersonalityConfig, "is_default": c.IsDefault,
+		"chat_style_config": c.ChatStyleConfig, "scene_rules": c.SceneRules,
+		"avatar": c.Avatar, "conversation_id": c.ConversationID,
+		"gender_label": c.GenderLabel, "user_addressing_style": c.UserAddressingStyle,
+		"base_prompt": c.BasePrompt, "generated_prompt": c.GeneratedPrompt,
+		"personality_sliders": c.PersonalitySliders, "card_data_json": c.CardDataJSON,
+	}
+}
+
+func (s *service) SetActive(id string) (*Character, error) {
+	return s.SetActiveForUser(id, requestidentity.DefaultUserID)
+}
+
+func (s *service) SetActiveForUser(id string, userID string) (*Character, error) {
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		var chars []Character
+		if err := tx.Where("deleted_at IS NULL AND (is_active = 1 OR id = ?)", id).Find(&chars).Error; err != nil {
+			return err
+		}
+		found := false
+		for i := range chars {
+			c := &chars[i]
+			if c.ID == id {
+				found = true
+			}
+			desired := 0
+			if c.ID == id {
+				desired = 1
+			}
+			if c.IsActive == desired {
+				continue
+			}
+			newRevision := c.Revision + 1
+			result := tx.Model(&Character{}).Where("id = ? AND revision = ? AND deleted_at IS NULL", c.ID, c.Revision).Updates(map[string]interface{}{"is_active": desired, "revision": newRevision, "updated_at": time.Now().Format("2006-01-02 15:04:05")})
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected == 0 {
+				return fmt.Errorf("角色版本冲突")
+			}
+			c.IsActive, c.Revision = desired, newRevision
+			if err := s.recordCharacterChangeTx(tx, c, sync.OpUpdate, userID); err != nil {
+				return err
+			}
+		}
+		if !found {
+			return fmt.Errorf("角色不存在")
+		}
+		return nil
+	})
+	if err != nil {
 		return nil, fmt.Errorf("设置活跃失败: %w", err)
 	}
 	return s.repo.FindByID(id)
@@ -386,6 +571,10 @@ func (s *service) GetRoleProfile(characterID string) (*RoleProfileResponse, erro
 }
 
 func (s *service) UpdateRoleProfile(characterID string, updates map[string]interface{}) (*RoleProfileResponse, error) {
+	return s.UpdateRoleProfileForUser(characterID, updates, requestidentity.DefaultUserID)
+}
+
+func (s *service) UpdateRoleProfileForUser(characterID string, updates map[string]interface{}, userID string) (*RoleProfileResponse, error) {
 	var targetID string
 	if characterID != "" {
 		targetID = characterID
@@ -413,17 +602,21 @@ func (s *service) UpdateRoleProfile(characterID string, updates map[string]inter
 			dbUpdates[col] = v
 		}
 	}
-	if err := s.repo.Update(targetID, dbUpdates); err != nil {
+	if len(dbUpdates) == 0 {
+		return s.GetRoleProfile(targetID)
+	}
+	if _, err := s.updateCharacterFieldsForUser(targetID, dbUpdates, userID); err != nil {
 		return nil, fmt.Errorf("更新失败: %w", err)
 	}
 	return s.GetRoleProfile(targetID)
 }
 func (s *service) UpdateAvatar(id string, avatarUrl string) error {
-	_, err := s.repo.FindByID(id)
-	if err != nil {
-		return fmt.Errorf("角色不存在")
-	}
-	return s.repo.Update(id, map[string]interface{}{"avatar": avatarUrl})
+	return s.UpdateAvatarForUser(id, avatarUrl, requestidentity.DefaultUserID)
+}
+
+func (s *service) UpdateAvatarForUser(id string, avatarURL string, userID string) error {
+	_, err := s.updateCharacterFieldsForUser(id, map[string]interface{}{"avatar": avatarURL}, userID)
+	return err
 }
 
 func (s *service) PreviewCard(data []byte, filename string) (*CardPreviewResult, error) {
@@ -444,6 +637,10 @@ func (s *service) PreviewCard(data []byte, filename string) (*CardPreviewResult,
 }
 
 func (s *service) ImportCard(data []byte, filename string, confirm bool) (*CardImportResult, error) {
+	return s.ImportCardForUser(data, filename, confirm, requestidentity.DefaultUserID)
+}
+
+func (s *service) ImportCardForUser(data []byte, filename string, confirm bool, userID string) (*CardImportResult, error) {
 	parser := card.NewCardParser()
 	c, _, err := parser.Parse(data, filename)
 	if err != nil {
@@ -458,14 +655,14 @@ func (s *service) ImportCard(data []byte, filename string, confirm bool) (*CardI
 	name := c.SanitizeName()
 
 	char := &Character{
-		ID:              uuid.New().String(),
-		Name:            name,
-		Description:     mapping.Description,
-		Personality:     mapping.Personality,
-		BasePrompt:      mapping.SystemPrompt,
-		Status:          "enabled",
-		CardDataJSON:    "",
-		CharacterBase:    mapping.Scenario,
+		ID:            uuid.New().String(),
+		Name:          name,
+		Description:   mapping.Description,
+		Personality:   mapping.Personality,
+		BasePrompt:    mapping.SystemPrompt,
+		Status:        "enabled",
+		CardDataJSON:  "",
+		CharacterBase: mapping.Scenario,
 	}
 
 	cardData := c.ToCardData()
@@ -475,15 +672,38 @@ func (s *service) ImportCard(data []byte, filename string, confirm bool) (*CardI
 	}
 	char.CardDataJSON = string(cardDataBytes)
 
-	if err := s.repo.Create(char); err != nil {
-		return nil, fmt.Errorf("创建角色失败: %w", err)
-	}
-
+	char.Revision = 1
 	convID := uuid.New().String()
 	now := time.Now().Format("2006-01-02 15:04:05")
-	s.db.Exec("INSERT INTO conversations (id, character_id, title, channel, source, created_at, updated_at) VALUES (?, ?, ?, 'web', 'system', ?, ?)",
-		convID, char.ID, char.Name, now, now)
-	s.db.Table("characters").Where("id = ?", char.ID).Update("conversation_id", convID)
+	err = s.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Create(char).Error; err != nil {
+			return err
+		}
+		if err := tx.Exec("INSERT INTO conversations (id, character_id, title, channel, source, created_at, updated_at, revision) VALUES (?, ?, ?, 'web', 'system', ?, ?, 1)", convID, char.ID, char.Name, now, now).Error; err != nil {
+			return err
+		}
+		if err := tx.Model(&Character{}).Where("id = ?", char.ID).Update("conversation_id", convID).Error; err != nil {
+			return err
+		}
+		char.ConversationID = convID
+		if err := s.recordCharacterChangeTx(tx, char, sync.OpCreate, userID); err != nil {
+			return err
+		}
+		if s.changeRecorder != nil {
+			payload, marshalErr := json.Marshal(map[string]string{"id": convID, "characterId": char.ID, "title": char.Name, "channel": "web", "source": "system"})
+			if marshalErr != nil {
+				return marshalErr
+			}
+			_, recErr := s.changeRecorder.RecordChange(tx, sync.EntityTypeConversation, sync.EntityID(convID), sync.OpCreate, 1, sync.MutationID("business_conversation_"+convID+"_create_"+uuid.NewString()), normalizeCharacterChangeUserID(userID), sync.ScopeDevice, payload)
+			if recErr != nil {
+				return recErr
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, fmt.Errorf("创建角色失败: %w", err)
+	}
 
 	return &CardImportResult{
 		CharacterID:  char.ID,
@@ -507,25 +727,25 @@ func (s *service) ExportCard(characterID string, format string) (*CardExportResu
 
 	exporter := card.NewExporter("data")
 	input := card.ExportInput{
-		Name:                char.Name,
-		Description:         char.Description,
-		Personality:         char.Personality,
-		Scenario:            cardData.Scenario,
-		FirstMessage:        cardData.FirstMessage,
-		AlternateGreetings:  cardData.AlternateGreetings,
-		ExampleMessages:     cardData.ExampleMessages,
-		SystemPrompt:        cardData.SystemPrompt,
-		PostHistory:         cardData.PostHistoryInstructions,
-		Creator:             cardData.Creator,
-		CreatorNotes:        cardData.CreatorNotes,
-		CharacterVersion:    cardData.CharacterVersion,
-		Tags:                cardData.Tags,
-		Nickname:            cardData.Nickname,
-		GroupOnlyGreetings:  cardData.GroupOnlyGreetings,
-		Source:              "Amitia",
-		Extensions:          cardData.ExternalExtensions,
-		AvatarURL:           char.Avatar,
-		SourceFormat:        cardData.SourceFormat,
+		Name:               char.Name,
+		Description:        char.Description,
+		Personality:        char.Personality,
+		Scenario:           cardData.Scenario,
+		FirstMessage:       cardData.FirstMessage,
+		AlternateGreetings: cardData.AlternateGreetings,
+		ExampleMessages:    cardData.ExampleMessages,
+		SystemPrompt:       cardData.SystemPrompt,
+		PostHistory:        cardData.PostHistoryInstructions,
+		Creator:            cardData.Creator,
+		CreatorNotes:       cardData.CreatorNotes,
+		CharacterVersion:   cardData.CharacterVersion,
+		Tags:               cardData.Tags,
+		Nickname:           cardData.Nickname,
+		GroupOnlyGreetings: cardData.GroupOnlyGreetings,
+		Source:             "Amitia",
+		Extensions:         cardData.ExternalExtensions,
+		AvatarURL:          char.Avatar,
+		SourceFormat:       cardData.SourceFormat,
 	}
 
 	result, data, err := exporter.Export(input, format)
