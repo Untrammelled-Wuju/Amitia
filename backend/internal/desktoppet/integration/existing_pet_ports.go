@@ -99,6 +99,14 @@ func (p *sqliteResourcePort) ListAttachedResources(ctx context.Context, extensio
 }
 
 func (p *sqliteResourcePort) RebuildFromExisting() error {
+	if p.db == nil {
+		return fmt.Errorf("rebuildFromExisting: db unavailable")
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if err := p.db.Exec("DELETE FROM plugin_resource_attachments").Error; err != nil {
+		return fmt.Errorf("rebuildFromExisting: clear correlation failed: %w", err)
+	}
 	return nil
 }
 
@@ -114,6 +122,9 @@ func NewSQLiteActionPort(db *gorm.DB) ExistingPetActionPort {
 func (p *sqliteActionPort) AttachPluginAction(ctx context.Context, extensionID, contributionID string, revision int, target ExistingPetActionTarget, definition map[string]any) (string, error) {
 	if extensionID == "" || contributionID == "" {
 		return "", fmt.Errorf("extensionID and contributionID required")
+	}
+	if target.InstallationID == "" {
+		return "", fmt.Errorf("AttachPluginAction: target installationID required")
 	}
 	handle := uuid.New().String()
 	defJSON := encodeDefinition(definition)
@@ -146,6 +157,14 @@ func (p *sqliteActionPort) ListAttachedActions(ctx context.Context, extensionID 
 }
 
 func (p *sqliteActionPort) RebuildFromExisting() error {
+	if p.db == nil {
+		return fmt.Errorf("rebuildFromExisting: db unavailable")
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if err := p.db.Exec("DELETE FROM plugin_action_attachments").Error; err != nil {
+		return fmt.Errorf("rebuildFromExisting: clear correlation failed: %w", err)
+	}
 	return nil
 }
 
@@ -192,6 +211,14 @@ func (p *sqliteRuntimePort) ListAttachedRuntimes(ctx context.Context, extensionI
 }
 
 func (p *sqliteRuntimePort) RebuildFromExisting() error {
+	if p.db == nil {
+		return fmt.Errorf("rebuildFromExisting: db unavailable")
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if err := p.db.Exec("DELETE FROM plugin_runtime_attachments").Error; err != nil {
+		return fmt.Errorf("rebuildFromExisting: clear correlation failed: %w", err)
+	}
 	return nil
 }
 
@@ -234,6 +261,14 @@ func (p *sqliteWindowPort) ListAttachedWindows(ctx context.Context, extensionID 
 }
 
 func (p *sqliteWindowPort) RebuildFromExisting() error {
+	if p.db == nil {
+		return fmt.Errorf("rebuildFromExisting: db unavailable")
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if err := p.db.Exec("DELETE FROM plugin_window_attachments").Error; err != nil {
+		return fmt.Errorf("rebuildFromExisting: clear correlation failed: %w", err)
+	}
 	return nil
 }
 
