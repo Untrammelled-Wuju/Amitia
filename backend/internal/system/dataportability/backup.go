@@ -80,11 +80,29 @@ func (c *Coordinator) CreateBackup(ctx context.Context, req BackupRequest, dbPat
 			if err != nil {
 				return nil, c.failBackup(opID, err)
 			}
-			if err := ct.Export(ctx, req, &componentWriterAdapter{w: compWriter, plan: plan, writer: writer}); err != nil {
-				compWriter.Close()
+			hash := sha256.New()
+			counting := &countingWriter{w: io.MultiWriter(compWriter, hash)}
+			adapter := &componentWriterAdapter{w: counting, plan: plan, writer: writer}
+			if err := ct.Export(ctx, req, adapter); err != nil {
+				_ = compWriter.Close()
 				return nil, c.failBackup(opID, err)
 			}
-			compWriter.Close()
+			if err := compWriter.Close(); err != nil {
+				return nil, c.failBackup(opID, err)
+			}
+			manifest.Components = append(manifest.Components, BackupComponentManifest{
+				ID:            plan.ID,
+				Kind:          string(plan.Kind),
+				LogicalName:   plan.LogicalName,
+				Path:          fmt.Sprintf("datasets/%s.ndjson", plan.ID),
+				SizeBytes:     counting.n,
+				ItemCount:     plan.ItemCount,
+				SHA256:        hex.EncodeToString(hash.Sum(nil)),
+				Required:      plan.Required,
+				SourceOfTruth: plan.SourceOfTruth,
+				Rebuildable:   plan.Rebuildable,
+				Sensitive:     plan.Sensitive,
+			})
 		}
 	}
 
@@ -131,6 +149,17 @@ func (c *Coordinator) failBackup(opID string, err error) error {
 		op.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
 	}
 	return err
+}
+
+type countingWriter struct {
+	w io.Writer
+	n int64
+}
+
+func (w *countingWriter) Write(p []byte) (int, error) {
+	n, err := w.w.Write(p)
+	w.n += int64(n)
+	return n, err
 }
 
 type componentWriterAdapter struct {

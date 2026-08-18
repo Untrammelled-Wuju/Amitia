@@ -4,18 +4,19 @@ package system
 
 import (
 	"fmt"
+	"log"
 	"time"
 
 	"gorm.io/gorm"
 )
 
 type AppSetting struct {
-	ID        uint64    `gorm:"column:id;primaryKey;autoIncrement"`
-	Key       string    `gorm:"column:key;not null;uniqueIndex"`
-	Value     string    `gorm:"column:value"`
-	Revision  int64     `gorm:"column:revision;not null;default:1"`
+	ID        uint64         `gorm:"column:id;primaryKey;autoIncrement"`
+	Key       string         `gorm:"column:key;not null;uniqueIndex"`
+	Value     string         `gorm:"column:value"`
+	Revision  int64          `gorm:"column:revision;not null;default:1"`
 	DeletedAt gorm.DeletedAt `gorm:"column:deleted_at;index"`
-	UpdatedAt time.Time `gorm:"column:updated_at"`
+	UpdatedAt time.Time      `gorm:"column:updated_at"`
 }
 
 func (AppSetting) TableName() string {
@@ -42,15 +43,52 @@ func (s *SettingsStore) Get(key string) (string, int64, error) {
 	return row.Value, row.Revision, nil
 }
 
+func (s *SettingsStore) Upsert(key, value string) (int64, error) {
+	var existing AppSetting
+	err := s.db.Where("key = ?", key).Take(&existing).Error
+	if err == gorm.ErrRecordNotFound {
+		setting := AppSetting{
+			Key:       key,
+			Value:     value,
+			Revision:  1,
+			UpdatedAt: time.Now().UTC(),
+		}
+		if err := s.db.Create(&setting).Error; err != nil {
+			return 0, fmt.Errorf("settings create: %w", err)
+		}
+		return 1, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+
+	newRevision := existing.Revision + 1
+	result := s.db.Model(&AppSetting{}).
+		Where("key = ? AND revision = ?", key, existing.Revision).
+		Updates(map[string]interface{}{
+			"value":      value,
+			"revision":   newRevision,
+			"deleted_at": nil,
+			"updated_at": time.Now().UTC(),
+		})
+	if result.Error != nil {
+		return 0, fmt.Errorf("settings upsert: %w", result.Error)
+	}
+	if result.RowsAffected != 1 {
+		return 0, fmt.Errorf("settings upsert conflict for key %s", key)
+	}
+	return newRevision, nil
+}
+
 func (s *SettingsStore) SetWithCAS(key, value string, baseRevision int64) (int64, error) {
 	if baseRevision == 0 {
 		var existing AppSetting
 		err := s.db.Where("key = ?", key).Take(&existing).Error
 		if err == gorm.ErrRecordNotFound {
 			setting := AppSetting{
-				Key:      key,
-				Value:    value,
-				Revision: 1,
+				Key:       key,
+				Value:     value,
+				Revision:  1,
 				UpdatedAt: time.Now().UTC(),
 			}
 			if err := s.db.Create(&setting).Error; err != nil {
@@ -100,7 +138,7 @@ func (s *SettingsStore) DeleteWithTombstone(key string, baseRevision int64) (int
 	result := s.db.Model(&AppSetting{}).
 		Where("key = ? AND revision = ?", key, existing.Revision).
 		Updates(map[string]interface{}{
-			"deleted_at":  gorm.DeletedAt{Time: time.Now().UTC(), Valid: true},
+			"deleted_at": gorm.DeletedAt{Time: time.Now().UTC(), Valid: true},
 			"value":      "",
 			"revision":   newRevision,
 			"updated_at": time.Now().UTC(),
@@ -125,7 +163,9 @@ func (s *service) getAppSetting(key string) string {
 
 func (s *service) setAppSetting(key, val string) {
 	store := NewSettingsStore(s.db)
-	_, _ = store.SetWithCAS(key, val, 0)
+	if _, err := store.Upsert(key, val); err != nil {
+		log.Printf("system settings: persist %q failed: %v", key, err)
+	}
 }
 
 func (s *service) setAppSettingWithRevision(key, val string, baseRevision int64) (int64, error) {
