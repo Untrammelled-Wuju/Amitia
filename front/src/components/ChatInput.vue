@@ -26,9 +26,9 @@ SPDX-License-Identifier: AGPL-3.0-only
           :character-id="characterId"
           :conversation-id="conversationId"
           :channel="channel"
-          :platform="detectPlatform()"
-          :host="window.amitiaDesktop ? 'desktop' : 'web'"
-          :os="detectOS()"
+          :platform="env.platform"
+          :host="env.host"
+          :os="env.os"
           :conversation-state="generating ? 'generating' : 'idle'"
           :capabilities="hostCapabilities"
           :available-skills="agentSkillNames"
@@ -424,9 +424,11 @@ import { useMediaUpload } from "../composables/useMediaUpload";
 import { useVoiceInput } from "../composables/useVoiceInput";
 import { fetchAgentSkills, resolveCharacterId } from "../views/extensions/api";
 import type { AgentSkillDefinition } from "../views/extensions/types";
+import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
 import EmotePicker from "./EmotePicker.vue";
 import ComposerExtensionHost from "./extension/chat/ComposerExtensionHost.vue";
 
+const env = resolveHostEnvironment();
 const props = withDefaults(defineProps<{
   isWechatActive?: boolean;
   isQQActive?: boolean;
@@ -509,8 +511,6 @@ const slashRange = ref<{ start: number; end: number } | null>(null);
 const slashActiveIndex = ref(0);
 const skillsLoading = ref(false);
 const voiceMode = ref(false);
-const hostPlatform = window.amitiaDesktop ? "desktop" : "web";
-
 const agentSkillNames = computed(() =>
   agentSkills.value.map((s) => s.name).filter(Boolean),
 );
@@ -522,24 +522,6 @@ const hostCapabilities = computed(() => {
   }
   return caps;
 });
-
-function detectPlatform(): "windows" | "macos" | "linux" | "web" {
-  if (typeof navigator === "undefined") return "web";
-  const ua = navigator.userAgent.toLowerCase();
-  if (ua.includes("win")) return "windows";
-  if (ua.includes("mac")) return "macos";
-  if (ua.includes("linux")) return "linux";
-  return "web";
-}
-
-function detectOS(): "windows" | "macos" | "linux" | "unknown" {
-  if (typeof navigator === "undefined") return "unknown";
-  const ua = navigator.userAgent.toLowerCase();
-  if (ua.includes("win")) return "windows";
-  if (ua.includes("mac")) return "macos";
-  if (ua.includes("linux")) return "linux";
-  return "unknown";
-}
 
 const { holding, startHold, endHold, cancelHold } = useVoiceInput(
   (blob: Blob, duration?: number) =>

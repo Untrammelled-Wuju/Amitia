@@ -25,7 +25,7 @@ export function resolveHostEnvironment(): HostEnvironment {
   if (cachedEnvironment) return cachedEnvironment;
   const os = detectOS();
   const host: "web" | "desktop" = isDesktopShell() ? "desktop" : "web";
-  const platform = host === "desktop" ? os : (os === "unknown" ? "web" : os);
+  const platform: "windows" | "macos" | "linux" | "web" = (host === "desktop" && os !== "unknown") ? os : "web";
   cachedEnvironment = { host, platform, os };
   return cachedEnvironment;
 }

@@ -1,6 +1,7 @@
 import { ref, computed, type Ref } from "vue";
 import { useExtensionUIStore, type UIContributionSummary } from "@/stores/extensionUI";
 import { useTheme } from "@/composables/useTheme";
+import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
 
 export type ExtensionSurfaceRole = "header" | "status" | "sidebar" | "message" | "composer" | "main" | "overlay";
 
@@ -35,7 +36,7 @@ export interface UseExtensionSlotOptions {
 export function useExtensionSlot(options: UseExtensionSlotOptions) {
   const store = useExtensionUIStore();
   const { slotId } = options;
-  const contextRef = options.context ?? ref({});
+  const contextRef = options.context ?? ref<Record<string, unknown>>({});
   const { resolvedMode } = useTheme();
 
   const slotSnapshot = computed(() => store.slotsById.get(slotId) ?? null);
@@ -50,42 +51,28 @@ export function useExtensionSlot(options: UseExtensionSlotOptions) {
   const slotErrors = computed(() => store.errors.filter((e) => e.slotId === slotId));
 
   function buildContext(): SlotContext {
-    const os = detectOS();
-    const host = isDesktopShell() ? "desktop" : "web";
+    const env = resolveHostEnvironment();
     const surface = options.surface?.value ?? {
       role: "main" as const,
       width: 0,
       height: 0,
       breakpoint: "xs" as const,
     };
-    const capabilities = Array.isArray(contextRef.value.capabilities)
-      ? contextRef.value.capabilities.filter((item): item is string => typeof item === "string")
-      : [];
+  const capabilities = Array.isArray(contextRef.value.capabilities)
+    ? (contextRef.value.capabilities as unknown[]).filter((item): item is string => typeof item === "string")
+    : [];
     return {
       slotId,
       contractVersion: slotSnapshot.value?.contractVersion ?? 1,
-      platform: os === "unknown" ? "web" : os,
+      platform: env.platform,
       theme: { mode: resolvedMode.value, density: surface.breakpoint === "xs" || surface.breakpoint === "sm" ? "compact" : "comfortable" },
       locale: detectLocale(),
       data: { ...contextRef.value },
-      host,
-      os,
+      host: env.host,
+      os: env.os,
       surface,
       capabilities,
     };
-  }
-
-  function detectOS(): "windows" | "macos" | "linux" | "unknown" {
-    if (typeof navigator === "undefined") return "unknown";
-    const ua = navigator.userAgent.toLowerCase();
-    if (ua.includes("win")) return "windows";
-    if (ua.includes("mac")) return "macos";
-    if (ua.includes("linux")) return "linux";
-    return "unknown";
-  }
-
-  function isDesktopShell() {
-    return typeof window !== "undefined" && !!window.amitiaDesktop;
   }
 
   function detectLocale(): string {
