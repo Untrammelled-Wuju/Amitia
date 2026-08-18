@@ -122,7 +122,7 @@ type AppServices struct {
 	RuntimePolicy                runtimeprofile.Policy
 	DB                           *gorm.DB
 	DeviceMesh                   *devicemesh.Runtime
-	ClosureGate                  *Stage2ClosureGate
+	ClosureGate                  *Stage2ClosureGateAdapter
 	DeliveryStore                *delivery.SQLiteDeliveryStore
 	ChatDeliveryAdapter          chat.DeliveryStore
 	DeliveryWorker               *delivery.Worker
@@ -652,10 +652,10 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	configureWorkflowHost(extensionRuntime, chatSvc, memSvc, deliveryStore, kernelContainer.HostEventEmitter)
 	mcpDuplicateStore := mcp.NewDuplicateStore(ctx.DB)
 	kernelContainer.MCPDuplicateProvider = &mcpDuplicateMetricAdapter{store: mcpDuplicateStore}
-	canonicalStdioFactory := extensionmcp.NewCanonicalStdioFactory(commandResolver)
-	canonicalStdioRegistry := extensionmcp.NewCanonicalStdioRegistry(canonicalStdioFactory)
-	canonicalRemoteFactory := extensionmcp.NewCanonicalRemoteFactory()
-	canonicalRemoteRegistry := extensionmcp.NewCanonicalRemoteRegistry(canonicalRemoteFactory)
+	canonicalStdioFactory = extensionmcp.NewCanonicalStdioFactory(commandResolver)
+	canonicalStdioRegistry = extensionmcp.NewCanonicalStdioRegistry(canonicalStdioFactory)
+	canonicalRemoteFactory = extensionmcp.NewCanonicalRemoteFactory()
+	canonicalRemoteRegistry = extensionmcp.NewCanonicalRemoteRegistry(canonicalRemoteFactory)
 	canonicalMCPCaller := NewCanonicalMCPCaller(canonicalStdioRegistry, canonicalRemoteRegistry)
 	kernelContainer.WireMCPAdapter(makeKernelMCPCaller(canonicalMCPCaller), makeKernelMCPHealth(canonicalMCPCaller), nil)
 	desktopPetRepo := desktoppet.NewRepository(ctx.DB, ctx)
@@ -1034,8 +1034,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	chatSvc.SetArtifactResolver(&chatArtifactAdapter{resolver: artifactRuntime.Resolver})
 	chat.SetGlobalArtifactResolver(&chatArtifactAdapter{resolver: artifactRuntime.Resolver})
 
-	syncApplier := syncpkg.NewBusinessApplier(ctx.DB)
-	syncService := syncpkg.NewService(ctx.DB, syncApplier)
+	syncApplier = syncpkg.NewBusinessApplier(ctx.DB)
+	syncService = syncpkg.NewService(ctx.DB, syncApplier)
 
 	services := &AppServices{
 		RuntimeProfile:               runtimeProfile,
@@ -1108,8 +1108,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		DB:                           ctx.DB,
 		NativeBridgeRelay:            newNativeBridgeRelay(),
 	}
-	sqlDB, err := ctx.DB.DB()
-	if err != nil {
+	if _, err := ctx.DB.DB(); err != nil {
 		return nil, fmt.Errorf("failed to get sql.DB from gorm: %w", err)
 	}
 	dispatcher := devicemesh.NewCloudRuntimeDispatcher(kernelContainer.AdapterRegistry)

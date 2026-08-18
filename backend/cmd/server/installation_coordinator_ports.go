@@ -51,13 +51,10 @@ type coordinatorRuntimePublisher struct {
 
 func (p *coordinatorRuntimePublisher) PublishDesiredState(ctx context.Context, deviceCtx device.DeviceContext, snapshot *coordinator.DesiredStateSnapshot) error {
 	if p.facade == nil {
-		return "", fmt.Errorf("runtime v2 unavailable")
+		return fmt.Errorf("runtime v2 unavailable")
 	}
 	if !deviceCtx.IsValid() {
-		return "", fmt.Errorf("invalid device context")
-	}
-	if operationID == "" {
-		return "", fmt.Errorf("operation id is required")
+		return fmt.Errorf("invalid device context")
 	}
 	seq, err := p.facade.Commands().AllocateDeviceSequence(nil, deviceCtx.UserID, deviceCtx.DeviceID, time.Now())
 	if err != nil {
