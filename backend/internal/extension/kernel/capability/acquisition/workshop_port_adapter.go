@@ -1,26 +1,25 @@
-package kernel
+package acquisition
 
 import (
 	"context"
 
 	"github.com/u-ai/backend/internal/extension"
-	"github.com/u-ai/backend/internal/extension/kernel/capability/acquisition"
 )
 
 type workshopGeneratorPortAdapter struct {
 	generator *extension.WorkshopGenerator
 }
 
-func NewWorkshopGeneratorPortAdapter(gen *extension.WorkshopGenerator) acquisition.WorkshopGeneratePort {
+func NewWorkshopGeneratorPortAdapter(gen *extension.WorkshopGenerator) WorkshopGeneratePort {
 	return &workshopGeneratorPortAdapter{generator: gen}
 }
 
-func (a *workshopGeneratorPortAdapter) GenerateInstruction(ctx context.Context, requirement string) (acquisition.WorkshopInstructionDraft, error) {
+func (a *workshopGeneratorPortAdapter) GenerateInstruction(ctx context.Context, requirement string) (WorkshopInstructionDraft, error) {
 	draft, err := a.generator.GenerateInstruction(ctx, requirement)
 	if err != nil {
-		return acquisition.WorkshopInstructionDraft{}, err
+		return WorkshopInstructionDraft{}, err
 	}
-	return acquisition.WorkshopInstructionDraft{
+	return WorkshopInstructionDraft{
 		Name:        draft.Name,
 		Description: draft.Description,
 		DisplayName: draft.DisplayName,
