@@ -8,6 +8,7 @@ import (
 type ChannelResolver interface {
 	Resolve(channelName string) ChannelAdapter
 	Register(adapter ChannelAdapter)
+	Unregister(channelName string)
 	Channels() []string
 	Has(channelName string) bool
 }
