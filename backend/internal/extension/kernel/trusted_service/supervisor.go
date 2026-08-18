@@ -302,17 +302,21 @@ func (s *ProcessSupervisor) HasDefinition(serviceID string) bool {
 }
 
 type StartRequest struct {
-	ServiceID      string
-	InstanceID     string
-	RuntimeID      string
-	Generation     int64
-	PublisherTrust TrustLevel
-	BasePath       string
-	WorkingDir     string
-	SessionToken   string
-	SecretLease    string
-	LogLevel       string
-	Args           map[string]string
+	ServiceID        string
+	InstanceID       string
+	RuntimeID        string
+	PluginID         string
+	LogicalServiceID string
+	ExtensionID      string
+	ContributionID   string
+	Generation       int64
+	PublisherTrust   TrustLevel
+	BasePath         string
+	WorkingDir       string
+	SessionToken     string
+	SecretLease      string
+	LogLevel         string
+	Args             map[string]string
 }
 
 type StartResult struct {

@@ -9,8 +9,11 @@ import (
 	"path/filepath"
 	"time"
 
+	sqlitedriver "github.com/glebarez/sqlite"
+	"gorm.io/gorm"
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/browser"
+	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/integration"
 	"github.com/u-ai/backend/internal/desktoppet/plugin_boundary"
 	"github.com/u-ai/backend/internal/devicemesh/server"
@@ -628,6 +631,24 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	var petPluginSource plugin_boundary.KernelContributionSource
 	if contribRepo != nil && instRepo != nil {
 		petPluginSource = plugin_boundary.NewContainerSource(contribRepo, instRepo)
+	}
+	if b.desktopPetPluginCapabilities == nil && b.dbPath != "" {
+		gormDB, err := openGormDBForExistingPetPorts(b.dbPath)
+		if err == nil {
+			installRepo := installation.NewRepository(gormDB, nil)
+			resPort := integration.NewSQLiteResourcePort(gormDB)
+			actionPort := integration.NewSQLiteActionPort(gormDB)
+			runtimePort := integration.NewSQLiteRuntimePort(gormDB)
+			windowPort := integration.NewSQLiteWindowPort(gormDB)
+			caps := integration.NewProductionCapabilities(integration.ProductionCapabilitiesOptions{
+				InstallationRepo: installRepo,
+				ReleaseService:   resPort,
+				RuntimeFacade:    actionPort,
+				RuntimePort:      runtimePort,
+				FloatingWindow:   windowPort,
+			})
+			b.desktopPetPluginCapabilities = &caps
+		}
 	}
 	var petPluginBoundary *plugin_boundary.DesktopPetPluginBoundary
 	if petPluginSource != nil && b.desktopPetPluginCapabilities != nil {
@@ -1546,32 +1567,12 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	kernelSource := gamehost.NewKernelContributionSource(instRepo, defRepo, contribRepo)
 
 	var archiveUpdater upgrade.KernelArchiveUpdater
+	var productionArchiveUpdater *ProductionArchiveUpdater
 	if b.gameHostArchiveUpdater != nil {
 		archiveUpdater = upgrade.NewKernelArchiveUpdaterAdapterWithArchivePath(b.gameHostArchiveUpdater.GetPreviousArchivePath, b.gameHostArchiveUpdater.UpdateArchive)
 	} else {
-		archiveUpdater = upgrade.NewKernelArchiveUpdaterAdapterWithArchivePath(
-			func(ctx context.Context, extensionID string) (string, error) {
-				return "", fmt.Errorf("kernel archive path lookup not available")
-			},
-			func(ctx context.Context, extensionID string, archivePath string) (*upgrade.KernelUpdateResult, error) {
-				if lifecycleMgr == nil {
-					return nil, fmt.Errorf("kernel lifecycle manager not available")
-				}
-				result, err := lifecycleMgr.Execute(ctx, lifecycle_manager.LifecycleCommand{
-					Kind:        lifecycle_manager.CmdUpdate,
-					ExtensionID: domain.ExtensionID(extensionID),
-					PackageID:   archivePath,
-				})
-				if err != nil {
-					return &upgrade.KernelUpdateResult{Success: false, Reason: err.Error()}, err
-				}
-				return &upgrade.KernelUpdateResult{
-					Success:    result.Status == "completed",
-					NewVersion: "",
-					Reason:     result.Error,
-				}, nil
-			},
-		)
+		productionArchiveUpdater = NewProductionArchiveUpdater()
+		archiveUpdater = upgrade.NewKernelArchiveUpdaterAdapterWithArchivePath(productionArchiveUpdater.GetPreviousArchivePath, productionArchiveUpdater.UpdateArchive)
 	}
 
 	gameHost, err := gamehost.ComposeGameHost(gamehost.GameHostComposeOptions{
@@ -1595,6 +1596,10 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return nil, fmt.Errorf("kernel: compose gamehost: %w", err)
 	}
 	container.GameHost = gameHost
+
+	if productionArchiveUpdater != nil {
+		productionArchiveUpdater.SetContainer(container)
+	}
 
 	permBroker.OnPermissionRevoked = func(extensionID, runtimeID string) {
 		if gameHost != nil && gameHost.SecretSubscriptions != nil {
@@ -1729,6 +1734,22 @@ func validateExecutionWiring(kernel *execution.ExecutionPipeline, adapters *capa
 		return fmt.Errorf("tool registry is nil")
 	}
 	return nil
+}
+
+func openGormDBForExistingPetPorts(dbPath string) (*gorm.DB, error) {
+	gormDB, err := gorm.Open(sqlitedriver.Open(dbPath), &gorm.Config{})
+	if err != nil {
+		return nil, err
+	}
+	if err := gormDB.AutoMigrate(
+		&integration.PluginResourceAttachment{},
+		&integration.PluginActionAttachment{},
+		&integration.PluginRuntimeAttachment{},
+		&integration.PluginWindowAttachment{},
+	); err != nil {
+		return nil, err
+	}
+	return gormDB, nil
 }
 
 func makeSearchCallFunc(cfg search.Config, broker *secret.Broker) capability.SearchCallFunc {
