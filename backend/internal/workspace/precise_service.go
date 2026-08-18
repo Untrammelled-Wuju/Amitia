@@ -233,7 +233,7 @@ func (s *defaultPreciseEditingService) ApplyPatchTx(ctx context.Context, tx *Edi
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
 
-	if tx.State != TxStateActive {
+	if tx.State != TxStateActive && tx.State != TxStatePreviewing {
 		return nil, fmt.Errorf("%w: transaction is not active (state: %s)", ErrOperationUnsupported, tx.State)
 	}
 
@@ -302,7 +302,7 @@ func (s *defaultPreciseEditingService) PreviewDiff(ctx context.Context, tx *Edit
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
 
-	if tx.State != TxStateActive {
+	if tx.State != TxStateActive && tx.State != TxStatePreviewing {
 		return nil, fmt.Errorf("%w: transaction is not active (state: %s)", ErrOperationUnsupported, tx.State)
 	}
 
@@ -343,6 +343,84 @@ func (s *defaultPreciseEditingService) PreviewDiff(ctx context.Context, tx *Edit
 	result.Additions = additions
 	result.Deletions = deletions
 	return result, nil
+}
+
+// MaterializePreview writes staged transaction content to the workspace while
+// keeping the transaction rollback-capable. This exists solely so analyzers
+// and runtime preview can inspect the exact candidate files before commit.
+func (s *defaultPreciseEditingService) MaterializePreview(ctx context.Context, tx *EditTransaction) error {
+	if tx == nil {
+		return fmt.Errorf("%w: transaction is nil", ErrOperationUnsupported)
+	}
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+	if tx.State != TxStateActive && tx.State != TxStatePreviewing {
+		return fmt.Errorf("%w: transaction cannot be previewed (state: %s)", ErrOperationUnsupported, tx.State)
+	}
+	now := time.Now().UTC()
+	if tx.State == TxStateActive {
+		for filePath, baseSnap := range tx.BaseFiles {
+			if _, changed := tx.ChangedFiles[filePath]; !changed {
+				continue
+			}
+			currentContent, err := s.readFile(ctx, tx.WorkspaceID, filePath)
+			if err != nil {
+				return err
+			}
+			if currentHash := ComputeSHA256(currentContent); currentHash != baseSnap.SHA256 {
+				return fmt.Errorf("%w: conflict detected on %q before preview", ErrWriteFailed, filePath)
+			}
+		}
+	}
+	written := make([]string, 0, len(tx.ChangedFiles))
+	for filePath, snap := range tx.ChangedFiles {
+		if err := s.writeFile(ctx, tx.WorkspaceID, filePath, snap.Content); err != nil {
+			for _, restorePath := range written {
+				if base, ok := tx.BaseFiles[restorePath]; ok {
+					_ = s.writeFile(ctx, tx.WorkspaceID, restorePath, base.Content)
+				}
+			}
+			tx.State = TxStateCommitFailed
+			tx.Journal.State = TxStateCommitFailed
+			return fmt.Errorf("%w: preview materialization failed for %q: %v", ErrWriteFailed, filePath, err)
+		}
+		written = append(written, filePath)
+		tx.WrittenFiles[filePath] = snap
+	}
+	tx.State = TxStatePreviewing
+	tx.UpdatedAt = now
+	tx.Journal.State = TxStatePreviewing
+	tx.Journal.UpdatedAt = now
+	tx.Journal.WrittenFiles = written
+	return nil
+}
+
+// FinalizePreviewCommit commits a transaction whose candidate files have
+// already passed preview/analyze and are materialized on disk.
+func (s *defaultPreciseEditingService) FinalizePreviewCommit(ctx context.Context, tx *EditTransaction) error {
+	if tx == nil {
+		return fmt.Errorf("%w: transaction is nil", ErrOperationUnsupported)
+	}
+	tx.mu.Lock()
+	defer tx.mu.Unlock()
+	if tx.State != TxStatePreviewing {
+		return fmt.Errorf("%w: transaction is not previewing (state: %s)", ErrOperationUnsupported, tx.State)
+	}
+	for filePath, snap := range tx.ChangedFiles {
+		content, err := s.readFile(ctx, tx.WorkspaceID, filePath)
+		if err != nil {
+			return err
+		}
+		if ComputeSHA256(content) != snap.SHA256 {
+			return fmt.Errorf("%w: previewed file %q changed before commit", ErrWriteFailed, filePath)
+		}
+	}
+	now := time.Now().UTC()
+	tx.State = TxStateCommitted
+	tx.UpdatedAt = now
+	tx.Journal.State = TxStateCommitted
+	tx.Journal.UpdatedAt = now
+	return nil
 }
 
 // Commit writes all changed files from the transaction to disk.
@@ -412,13 +490,13 @@ func (s *defaultPreciseEditingService) Rollback(ctx context.Context, tx *EditTra
 	tx.mu.Lock()
 	defer tx.mu.Unlock()
 
-	if tx.State != TxStateActive && tx.State != TxStateCommitFailed {
+	if tx.State != TxStateActive && tx.State != TxStatePreviewing && tx.State != TxStateCommitFailed {
 		return fmt.Errorf("%w: transaction is not active or commit_failed (state: %s)", ErrOperationUnsupported, tx.State)
 	}
 
 	now := time.Now().UTC()
 
-	if tx.State == TxStateCommitFailed {
+	if tx.State == TxStatePreviewing || tx.State == TxStateCommitFailed {
 		for writtenPath, baseSnap := range tx.BaseFiles {
 			if _, wasWritten := tx.WrittenFiles[writtenPath]; wasWritten {
 				restoreContent := append([]byte(nil), baseSnap.Content...)
