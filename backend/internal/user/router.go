@@ -15,6 +15,5 @@ func RegisterUserRouter(r *gin.RouterGroup, ctx *app.AppContext) {
 	authGroup := r.Group("/auth")
 	{
 		authGroup.GET("/me", handler.Me)
-		authGroup.POST("/change-password", handler.ChangePassword)
 	}
 }
