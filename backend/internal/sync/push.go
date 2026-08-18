@@ -111,6 +111,22 @@ func (s *PushService) applyMutation(tx *gorm.DB, deviceID, userID string, scope 
 		}, nil
 	}
 
+	if mutation.MutationID != "" {
+		claimed, record, err := s.changelog.ClaimMutationTx(tx, mutation.MutationID, userID, scope)
+		if err != nil {
+			return nil, fmt.Errorf("changelog: claim mutation: %w", err)
+		}
+		if !claimed {
+			return &MutationResult{
+				MutationID: mutation.MutationID,
+				Success:    true,
+				ChangeID:   record.ChangeID,
+				Sequence:   record.Sequence,
+				Revision:   record.Revision,
+			}, nil
+		}
+	}
+
 	revision, err := s.applier.Apply(tx, mutation)
 	if err != nil {
 		result := &MutationResult{

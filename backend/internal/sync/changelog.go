@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strings"
 	"time"
 
 	"gorm.io/gorm"
@@ -14,6 +15,7 @@ import (
 type ChangeLogStore interface {
 	Append(record *ChangeRecord) error
 	AppendTx(tx *gorm.DB, record *ChangeRecord) error
+	ClaimMutationTx(tx *gorm.DB, mutationID MutationID, userID string, scope CursorScope) (bool, *ChangeRecord, error)
 	ListAfter(userID string, scope CursorScope, cursor Sequence, limit int, entityType EntityType) ([]ChangeRecord, error)
 	Pull(userID string, scope CursorScope, cursor Sequence, limit int, entityType EntityType) ([]ChangeRecord, Sequence, bool, error)
 	GetLatestSequence() (Sequence, error)
@@ -53,6 +55,44 @@ func (s *sqliteChangeLogStore) AppendTx(tx *gorm.DB, record *ChangeRecord) error
 		record.Checksum = computeChecksum(record.Payload)
 	}
 	return tx.Create(record).Error
+}
+
+func (s *sqliteChangeLogStore) ClaimMutationTx(tx *gorm.DB, mutationID MutationID, userID string, scope CursorScope) (bool, *ChangeRecord, error) {
+	var existing ChangeRecord
+	err := tx.Where("mutation_id = ? AND user_id = ?", mutationID, userID).Take(&existing).Error
+	if err == nil {
+		return false, &existing, nil
+	}
+	if err != gorm.ErrRecordNotFound {
+		return false, nil, err
+	}
+
+	seq, err := NewSequenceGenerator(s.db).NextSequenceTx(tx)
+	if err != nil {
+		return false, nil, fmt.Errorf("claim mutation: next sequence: %w", err)
+	}
+
+	record := &ChangeRecord{
+		ChangeID:   ChangeID(fmt.Sprintf("ch_%d", seq)),
+		Sequence:   seq,
+		UserID:     userID,
+		Scope:      scope,
+		Revision:   0,
+		MutationID: mutationID,
+		CreatedAt:  time.Now().UTC(),
+	}
+	record.Checksum = computeChecksum(nil)
+
+	if err := tx.Create(record).Error; err != nil {
+		if strings.Contains(err.Error(), "UNIQUE") || strings.Contains(err.Error(), "duplicate") {
+			var conflict ChangeRecord
+			if tx.Where("mutation_id = ? AND user_id = ?", mutationID, userID).Take(&conflict).Error == nil {
+				return false, &conflict, nil
+			}
+		}
+		return false, nil, fmt.Errorf("claim mutation: create: %w", err)
+	}
+	return true, record, nil
 }
 
 func (s *sqliteChangeLogStore) ListAfter(userID string, scope CursorScope, cursor Sequence, limit int, entityType EntityType) ([]ChangeRecord, error) {
@@ -205,6 +245,14 @@ func NewChangeLogService(store ChangeLogStore, sequences SequenceGenerator) *Cha
 
 func (s *ChangeLogService) RecordChange(tx *gorm.DB, entityType EntityType, entityID EntityID, op OperationType, revision int64, mutationID MutationID, userID string, scope CursorScope, payload []byte) (*ChangeRecord, error) {
 	return s.AppendTx(tx, entityType, entityID, op, revision, mutationID, "", userID, scope, payload)
+}
+
+func (s *ChangeLogService) GetByMutationIDAndUserTx(tx *gorm.DB, mutationID MutationID, userID string) (*ChangeRecord, error) {
+	return s.store.GetByMutationIDAndUserTx(tx, mutationID, userID)
+}
+
+func (s *ChangeLogService) ClaimMutationTx(tx *gorm.DB, mutationID MutationID, userID string, scope CursorScope) (bool, *ChangeRecord, error) {
+	return s.store.ClaimMutationTx(tx, mutationID, userID, scope)
 }
 
 func (s *ChangeLogService) Append(entityType EntityType, entityID EntityID, op OperationType, revision int64, mutationID MutationID, originDevice string, userID string, scope CursorScope, payload []byte) (*ChangeRecord, error) {
