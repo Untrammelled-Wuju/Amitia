@@ -62,4 +62,6 @@ const (
 	ErrInvalidResponse               = "MEDIA_INVALID_RESPONSE"
 	ErrTimeout                       = "MEDIA_TIMEOUT"
 	ErrCancelled                     = "MEDIA_CANCELLED"
+	ErrStagingImporterUnavailable    = "MEDIA_STAGING_IMPORTER_UNAVAILABLE"
+	ErrStagingImportFailed           = "MEDIA_STAGING_IMPORT_FAILED"
 )

@@ -16,6 +16,7 @@ const (
 	OperationCameraRecordVideo = "media.camera.record_video"
 	OperationAudioStatus      = "media.audio.status"
 	OperationAudioRecord      = "media.audio.record"
+	OperationStagingImport    = "media.staging.import"
 )
 
 func Operations() []string {
@@ -35,5 +36,6 @@ func Operations() []string {
 		OperationCameraRecordVideo,
 		OperationAudioStatus,
 		OperationAudioRecord,
+		OperationStagingImport,
 	}
 }

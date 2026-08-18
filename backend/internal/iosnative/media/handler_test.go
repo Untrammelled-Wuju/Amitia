@@ -47,14 +47,14 @@ func baseMediaRequest(operation string) nativebridge.Request {
 }
 
 func TestNewMediaHandler(t *testing.T) {
-	h := NewMediaHandler(newMockMediaBridge(nativebridge.Response{}, nil))
+	h := NewMediaHandler(newMockMediaBridge(nativebridge.Response{}, nil), nil)
 	if h == nil {
 		t.Fatal("NewMediaHandler returned nil")
 	}
 }
 
 func TestHandler_Execute_UnknownOperation(t *testing.T) {
-	h := NewMediaHandler(newMockMediaBridge(nativebridge.Response{}, nil))
+	h := NewMediaHandler(newMockMediaBridge(nativebridge.Response{}, nil), nil)
 	req := baseMediaRequest("media.unknown")
 	resp := h.Execute(context.Background(), req)
 	if resp.Status != "error" {
@@ -76,7 +76,7 @@ func TestHandler_Status(t *testing.T) {
 		Result:          map[string]any{"supported": true},
 	}
 	bridge := newMockMediaBridge(expected, nil)
-	h := NewMediaHandler(bridge)
+	h := NewMediaHandler(bridge, nil)
 
 	req := baseMediaRequest(OperationStatus)
 	resp := h.Execute(context.Background(), req)
@@ -97,7 +97,7 @@ func TestHandler_PhotosPick_Defaults(t *testing.T) {
 		Result:          map[string]any{"items": []any{}},
 	}
 	bridge := newMockMediaBridge(expected, nil)
-	h := NewMediaHandler(bridge)
+	h := NewMediaHandler(bridge, nil)
 
 	req := baseMediaRequest(OperationPhotosPick)
 	resp := h.Execute(context.Background(), req)
@@ -123,7 +123,7 @@ func TestHandler_PhotosPick_WithKinds(t *testing.T) {
 		Result:          map[string]any{},
 	}
 	bridge := newMockMediaBridge(expected, nil)
-	h := NewMediaHandler(bridge)
+	h := NewMediaHandler(bridge, nil)
 
 	req := baseMediaRequest(OperationPhotosPick)
 	req.Payload["kinds"] = []any{"image", "video"}
@@ -159,7 +159,7 @@ func TestHandler_PhotosStatus(t *testing.T) {
 		Result:          map[string]any{"authorized": true},
 	}
 	bridge := newMockMediaBridge(expected, nil)
-	h := NewMediaHandler(bridge)
+	h := NewMediaHandler(bridge, nil)
 
 	req := baseMediaRequest(OperationPhotosStatus)
 	resp := h.Execute(context.Background(), req)
@@ -177,7 +177,7 @@ func TestHandler_PhotosList(t *testing.T) {
 		Result:          map[string]any{"assets": []any{}},
 	}
 	bridge := newMockMediaBridge(expected, nil)
-	h := NewMediaHandler(bridge)
+	h := NewMediaHandler(bridge, nil)
 
 	req := baseMediaRequest(OperationPhotosList)
 	req.Payload["mediaType"] = "image"
@@ -209,7 +209,7 @@ func TestHandler_PhotosList_Defaults(t *testing.T) {
 		Result:          map[string]any{},
 	}
 	bridge := newMockMediaBridge(expected, nil)
-	h := NewMediaHandler(bridge)
+	h := NewMediaHandler(bridge, nil)
 
 	req := baseMediaRequest(OperationPhotosList)
 	resp := h.Execute(context.Background(), req)
@@ -224,7 +224,7 @@ func TestHandler_PhotosList_Defaults(t *testing.T) {
 }
 
 func TestHandler_PhotosGet_MissingAssetRef(t *testing.T) {
-	h := NewMediaHandler(newMockMediaBridge(nativebridge.Response{}, nil))
+	h := NewMediaHandler(newMockMediaBridge(nativebridge.Response{}, nil), nil)
 	req := baseMediaRequest(OperationPhotosGet)
 	resp := h.Execute(context.Background(), req)
 
@@ -244,7 +244,7 @@ func TestHandler_PhotosGet_Success(t *testing.T) {
 		Result:          map[string]any{"assetRef": "asset-001"},
 	}
 	bridge := newMockMediaBridge(expected, nil)
-	h := NewMediaHandler(bridge)
+	h := NewMediaHandler(bridge, nil)
 
 	req := baseMediaRequest(OperationPhotosGet)
 	req.Payload["assetRef"] = "asset-001"
@@ -259,7 +259,7 @@ func TestHandler_PhotosGet_Success(t *testing.T) {
 }
 
 func TestHandler_PhotosExport_MissingAssetRef(t *testing.T) {
-	h := NewMediaHandler(newMockMediaBridge(nativebridge.Response{}, nil))
+	h := NewMediaHandler(newMockMediaBridge(nativebridge.Response{}, nil), nil)
 	req := baseMediaRequest(OperationPhotosExport)
 	resp := h.Execute(context.Background(), req)
 
@@ -279,7 +279,7 @@ func TestHandler_PhotosExport_Success(t *testing.T) {
 		Result:          map[string]any{"resourceUri": "amitia://temp/abc"},
 	}
 	bridge := newMockMediaBridge(expected, nil)
-	h := NewMediaHandler(bridge)
+	h := NewMediaHandler(bridge, nil)
 
 	req := baseMediaRequest(OperationPhotosExport)
 	req.Payload["assetRef"] = "asset-001"
@@ -308,7 +308,7 @@ func TestHandler_PhotosExport_Defaults(t *testing.T) {
 		Result:          map[string]any{},
 	}
 	bridge := newMockMediaBridge(expected, nil)
-	h := NewMediaHandler(bridge)
+	h := NewMediaHandler(bridge, nil)
 
 	req := baseMediaRequest(OperationPhotosExport)
 	req.Payload["assetRef"] = "asset-001"
@@ -327,7 +327,7 @@ func TestHandler_PhotosExport_Defaults(t *testing.T) {
 }
 
 func TestHandler_PhotosSave_MissingResourceURI(t *testing.T) {
-	h := NewMediaHandler(newMockMediaBridge(nativebridge.Response{}, nil))
+	h := NewMediaHandler(newMockMediaBridge(nativebridge.Response{}, nil), nil)
 	req := baseMediaRequest(OperationPhotosSave)
 	resp := h.Execute(context.Background(), req)
 
@@ -347,7 +347,7 @@ func TestHandler_PhotosSave_Success(t *testing.T) {
 		Result:          map[string]any{"saved": true},
 	}
 	bridge := newMockMediaBridge(expected, nil)
-	h := NewMediaHandler(bridge)
+	h := NewMediaHandler(bridge, nil)
 
 	req := baseMediaRequest(OperationPhotosSave)
 	req.Payload["resourceUri"] = "amitia://temp/photo.jpg"
@@ -368,7 +368,7 @@ func TestHandler_PhotosSave_Success(t *testing.T) {
 }
 
 func TestHandler_PhotosDelete_MissingAssetRefs(t *testing.T) {
-	h := NewMediaHandler(newMockMediaBridge(nativebridge.Response{}, nil))
+	h := NewMediaHandler(newMockMediaBridge(nativebridge.Response{}, nil), nil)
 	req := baseMediaRequest(OperationPhotosDelete)
 	resp := h.Execute(context.Background(), req)
 
@@ -388,7 +388,7 @@ func TestHandler_PhotosDelete_Success(t *testing.T) {
 		Result:          map[string]any{"deleted": true},
 	}
 	bridge := newMockMediaBridge(expected, nil)
-	h := NewMediaHandler(bridge)
+	h := NewMediaHandler(bridge, nil)
 
 	req := baseMediaRequest(OperationPhotosDelete)
 	req.Payload["assetRefs"] = []any{"asset-001", "asset-002"}
@@ -412,7 +412,7 @@ func TestHandler_PhotosManageLimited(t *testing.T) {
 		Result:          map[string]any{},
 	}
 	bridge := newMockMediaBridge(expected, nil)
-	h := NewMediaHandler(bridge)
+	h := NewMediaHandler(bridge, nil)
 
 	req := baseMediaRequest(OperationPhotosManageLimited)
 	resp := h.Execute(context.Background(), req)
@@ -430,7 +430,7 @@ func TestHandler_CameraStatus(t *testing.T) {
 		Result:          map[string]any{"available": true},
 	}
 	bridge := newMockMediaBridge(expected, nil)
-	h := NewMediaHandler(bridge)
+	h := NewMediaHandler(bridge, nil)
 
 	req := baseMediaRequest(OperationCameraStatus)
 	resp := h.Execute(context.Background(), req)
@@ -448,7 +448,7 @@ func TestHandler_CameraDevices(t *testing.T) {
 		Result:          map[string]any{"devices": []any{}},
 	}
 	bridge := newMockMediaBridge(expected, nil)
-	h := NewMediaHandler(bridge)
+	h := NewMediaHandler(bridge, nil)
 
 	req := baseMediaRequest(OperationCameraDevices)
 	resp := h.Execute(context.Background(), req)
@@ -466,7 +466,7 @@ func TestHandler_CameraCapturePhoto(t *testing.T) {
 		Result:          map[string]any{"resourceUri": "amitia://temp/photo.jpg"},
 	}
 	bridge := newMockMediaBridge(expected, nil)
-	h := NewMediaHandler(bridge)
+	h := NewMediaHandler(bridge, nil)
 
 	req := baseMediaRequest(OperationCameraCapturePhoto)
 	req.Payload["deviceRef"] = "back"
@@ -503,7 +503,7 @@ func TestHandler_CameraCapturePhoto_Defaults(t *testing.T) {
 		Result:          map[string]any{},
 	}
 	bridge := newMockMediaBridge(expected, nil)
-	h := NewMediaHandler(bridge)
+	h := NewMediaHandler(bridge, nil)
 
 	req := baseMediaRequest(OperationCameraCapturePhoto)
 	resp := h.Execute(context.Background(), req)
@@ -524,7 +524,7 @@ func TestHandler_CameraCapturePhoto_Defaults(t *testing.T) {
 }
 
 func TestHandler_CameraRecordVideo_MissingDuration(t *testing.T) {
-	h := NewMediaHandler(newMockMediaBridge(nativebridge.Response{}, nil))
+	h := NewMediaHandler(newMockMediaBridge(nativebridge.Response{}, nil), nil)
 	req := baseMediaRequest(OperationCameraRecordVideo)
 	resp := h.Execute(context.Background(), req)
 
@@ -544,7 +544,7 @@ func TestHandler_CameraRecordVideo_Success(t *testing.T) {
 		Result:          map[string]any{"resourceUri": "amitia://temp/video.mp4"},
 	}
 	bridge := newMockMediaBridge(expected, nil)
-	h := NewMediaHandler(bridge)
+	h := NewMediaHandler(bridge, nil)
 
 	req := baseMediaRequest(OperationCameraRecordVideo)
 	req.Payload["maxDurationMs"] = float64(60000)
@@ -574,7 +574,7 @@ func TestHandler_AudioStatus(t *testing.T) {
 		Result:          map[string]any{"available": true},
 	}
 	bridge := newMockMediaBridge(expected, nil)
-	h := NewMediaHandler(bridge)
+	h := NewMediaHandler(bridge, nil)
 
 	req := baseMediaRequest(OperationAudioStatus)
 	resp := h.Execute(context.Background(), req)
@@ -585,7 +585,7 @@ func TestHandler_AudioStatus(t *testing.T) {
 }
 
 func TestHandler_AudioRecord_MissingDuration(t *testing.T) {
-	h := NewMediaHandler(newMockMediaBridge(nativebridge.Response{}, nil))
+	h := NewMediaHandler(newMockMediaBridge(nativebridge.Response{}, nil), nil)
 	req := baseMediaRequest(OperationAudioRecord)
 	resp := h.Execute(context.Background(), req)
 
@@ -605,7 +605,7 @@ func TestHandler_AudioRecord_Success(t *testing.T) {
 		Result:          map[string]any{"resourceUri": "amitia://temp/audio.m4a"},
 	}
 	bridge := newMockMediaBridge(expected, nil)
-	h := NewMediaHandler(bridge)
+	h := NewMediaHandler(bridge, nil)
 
 	req := baseMediaRequest(OperationAudioRecord)
 	req.Payload["maxDurationMs"] = float64(30000)
@@ -641,7 +641,7 @@ func TestHandler_AudioRecord_Defaults(t *testing.T) {
 		Result:          map[string]any{},
 	}
 	bridge := newMockMediaBridge(expected, nil)
-	h := NewMediaHandler(bridge)
+	h := NewMediaHandler(bridge, nil)
 
 	req := baseMediaRequest(OperationAudioRecord)
 	req.Payload["maxDurationMs"] = float64(30000)
@@ -666,7 +666,7 @@ func TestHandler_ContextCancel(t *testing.T) {
 	bridge := &mockMediaBridge{
 		delay: 5 * time.Second,
 	}
-	h := NewMediaHandler(bridge)
+	h := NewMediaHandler(bridge, nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -684,7 +684,7 @@ func TestHandler_ContextCancel(t *testing.T) {
 
 func TestHandler_BridgeError(t *testing.T) {
 	bridge := newMockMediaBridge(nativebridge.Response{}, errors.New("bridge failed"))
-	h := NewMediaHandler(bridge)
+	h := NewMediaHandler(bridge, nil)
 
 	req := baseMediaRequest(OperationStatus)
 	resp := h.Execute(context.Background(), req)
@@ -695,7 +695,7 @@ func TestHandler_BridgeError(t *testing.T) {
 }
 
 func TestHandler_BridgeUnavailable(t *testing.T) {
-	h := NewMediaHandler(nil)
+	h := NewMediaHandler(nil, nil)
 	req := baseMediaRequest(OperationStatus)
 	resp := h.Execute(context.Background(), req)
 

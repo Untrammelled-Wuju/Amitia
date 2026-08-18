@@ -167,7 +167,7 @@ func (i *StagingImporter) ImportWithBridge(req StagingImportRequest, bridge Nati
 	}
 
 	checksum := hex.EncodeToString(hash.Sum(nil))
-	resourceURI := fmt.Sprintf("amitia://resources/blobs/%s/%s", dateDir, safeFilename)
+	resourceURI := fmt.Sprintf("amitia://native/blobs/%s/%s", dateDir, safeFilename)
 
 	return &StagingImportResult{
 		ResourceURI: resourceURI,
