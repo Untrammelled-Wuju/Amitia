@@ -20,7 +20,7 @@ import (
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/psyche"
 	"github.com/u-ai/backend/internal/qdrant"
-	"github.com/u-ai/backend/internal/sync"
+	syncapi "github.com/u-ai/backend/internal/sync"
 	"github.com/u-ai/backend/internal/temporal"
 	visioncfg "github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/pkg/app"
@@ -132,7 +132,7 @@ type service struct {
 	repo                Repository
 	charRepo            character.Repository
 	db                  *gorm.DB
-	changeRecorder      sync.Recorder
+	changeRecorder      syncapi.ChangeRecorder
 	psycheStore         psyche.PsycheStore
 	memoryPort          MemoryPort
 	profilePort         ProfilePort
@@ -388,7 +388,7 @@ func getVisionModelConfig() (*visioncfg.VisionConfig, error) {
 	return cfg, nil
 }
 
-func NewService(repo Repository, ctx *app.AppContext, memPort MemoryPort, profPort ProfilePort, epiPort EpisodicPort, wbPort WorldBookPort, comp *Compressor, visionPort VisionPort, graphSvc graph.Service, psycheStore psyche.PsycheStore, recorder ...sync.Recorder) Service {
+func NewService(repo Repository, ctx *app.AppContext, memPort MemoryPort, profPort ProfilePort, epiPort EpisodicPort, wbPort WorldBookPort, comp *Compressor, visionPort VisionPort, graphSvc graph.Service, psycheStore psyche.PsycheStore, recorder ...syncapi.ChangeRecorder) Service {
 	if visionPort != nil {
 		SetVisionModelConfigProvider(visionPort.GetActive)
 	}
@@ -406,7 +406,7 @@ func NewService(repo Repository, ctx *app.AppContext, memPort MemoryPort, profPo
 		qdrant.NewQdrantClient(),
 		graphLayer,
 	)
-	var r sync.Recorder
+	var r syncapi.ChangeRecorder
 	if len(recorder) > 0 {
 		r = recorder[0]
 	}
