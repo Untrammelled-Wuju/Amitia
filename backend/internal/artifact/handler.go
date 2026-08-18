@@ -2,7 +2,6 @@ package artifact
 
 import (
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 
@@ -116,12 +115,7 @@ func (h *Handler) GetContent(c *gin.Context) {
 	c.Header("Content-Disposition", fmt.Sprintf(`%s; filename="%s"`, disposition, sanitizeDispositionFilename(filename)))
 	c.Header("Cache-Control", "private, max-age=86400")
 	c.Header("X-Content-Type-Options", "nosniff")
-	rs, ok := rc.(io.ReadSeeker)
-	if !ok {
-		c.JSON(500, gin.H{"error": "artifact.server_error", "message": "blob store does not support seek"})
-		return
-	}
-	http.ServeContent(c.Writer, c.Request, filename, art.UpdatedAt, rs)
+	http.ServeContent(c.Writer, c.Request, filename, art.UpdatedAt, rc)
 	c.Status(200)
 }
 

@@ -3,12 +3,16 @@ package artifact
 import (
 	"context"
 	"io"
+
+	"gorm.io/gorm"
 )
 
 type Resolver interface {
 	Resolve(ctx context.Context, actor string, resourceURI string) (Artifact, error)
 	Open(ctx context.Context, actor string, resourceURI string) (io.ReadCloser, Artifact, error)
 	RegisterReference(artifactID ID, refType string, refID string) error
+	RegisterReferenceGormTx(tx *gorm.DB, artifactID ID, refType string, refID string) error
+	UnregisterReferenceGormTx(tx *gorm.DB, artifactID ID, refType string, refID string) error
 }
 
 type resolver struct {
@@ -41,4 +45,12 @@ func (r *resolver) Open(ctx context.Context, actor string, resourceURI string) (
 
 func (r *resolver) RegisterReference(artifactID ID, refType string, refID string) error {
 	return r.svc.RegisterReference(artifactID, refType, refID)
+}
+
+func (r *resolver) RegisterReferenceGormTx(tx *gorm.DB, artifactID ID, refType string, refID string) error {
+	return r.svc.RegisterReferenceGormTx(tx, artifactID, refType, refID)
+}
+
+func (r *resolver) UnregisterReferenceGormTx(tx *gorm.DB, artifactID ID, refType string, refID string) error {
+	return r.svc.UnregisterReferenceGormTx(tx, artifactID, refType, refID)
 }

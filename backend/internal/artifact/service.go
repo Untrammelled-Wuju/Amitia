@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type CreateRequest struct {
@@ -202,7 +203,7 @@ func (s *Service) Delete(ctx context.Context, ownerUserID string, id ID) error {
 	return nil
 }
 
-func (s *Service) OpenBlob(ctx context.Context, digest BlobDigest) (io.ReadCloser, BlobInfo, error) {
+func (s *Service) OpenBlob(ctx context.Context, digest BlobDigest) (io.ReadSeekCloser, BlobInfo, error) {
 	rc, info, err := s.blobStore.Open(ctx, digest)
 	if err != nil {
 		return nil, BlobInfo{}, ErrBlobMissing(digest)
@@ -238,6 +239,19 @@ func (s *Service) RegisterReferenceSqlTx(tx *sql.Tx, artifactID ID, refType stri
 		ReferenceID:   refID,
 		CreatedAt:     time.Now(),
 	})
+}
+
+func (s *Service) RegisterReferenceGormTx(tx *gorm.DB, artifactID ID, refType string, refID string) error {
+	return tx.Create(&ArtifactReference{
+		ArtifactID:    artifactID,
+		ReferenceType: refType,
+		ReferenceID:   refID,
+		CreatedAt:     time.Now(),
+	}).Error
+}
+
+func (s *Service) UnregisterReferenceGormTx(tx *gorm.DB, artifactID ID, refType string, refID string) error {
+	return tx.Where("artifact_id = ? AND reference_type = ? AND reference_id = ?", artifactID, refType, refID).Delete(&ArtifactReference{}).Error
 }
 
 func (s *Service) UnregisterReference(artifactID ID, refType string, refID string) error {

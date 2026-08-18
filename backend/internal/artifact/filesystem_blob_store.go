@@ -91,7 +91,7 @@ func (s *FilesystemBlobStore) Put(ctx context.Context, reader io.Reader, limit i
 	return BlobInfo{Digest: digest, SizeBytes: written}, nil
 }
 
-func (s *FilesystemBlobStore) Open(ctx context.Context, digest BlobDigest) (io.ReadCloser, BlobInfo, error) {
+func (s *FilesystemBlobStore) Open(ctx context.Context, digest BlobDigest) (io.ReadSeekCloser, BlobInfo, error) {
 	p := s.blobPath(digest)
 	f, err := os.Open(p)
 	if err != nil {
