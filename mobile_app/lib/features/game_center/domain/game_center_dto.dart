@@ -636,3 +636,99 @@ class ControlMutationResult {
     );
   }
 }
+
+class GameCenterHealthResponse {
+  final String status;
+  final String? version;
+  final DateTime? timestamp;
+
+  const GameCenterHealthResponse({
+    required this.status,
+    this.version,
+    this.timestamp,
+  });
+
+  factory GameCenterHealthResponse.fromJson(Map<String, dynamic> json) {
+    return GameCenterHealthResponse(
+      status: (json['status'] ?? '').toString(),
+      version: json['version'] as String?,
+      timestamp: json['timestamp'] != null ? DateTime.tryParse(json['timestamp']) : null,
+    );
+  }
+}
+
+class GameRuntimeServicesResponse {
+  final List<GameServiceSummary> services;
+
+  const GameRuntimeServicesResponse({
+    required this.services,
+  });
+
+  factory GameRuntimeServicesResponse.fromJson(Map<String, dynamic> json) {
+    return GameRuntimeServicesResponse(
+      services: ((json['services'] as List?) ?? [])
+          .map((e) => GameServiceSummary.fromJson(e as Map<String, dynamic>))
+          .toList(),
+    );
+  }
+}
+
+class GameServiceSummary {
+  final String serviceId;
+  final String state;
+  final String health;
+
+  const GameServiceSummary({
+    required this.serviceId,
+    required this.state,
+    required this.health,
+  });
+
+  factory GameServiceSummary.fromJson(Map<String, dynamic> json) {
+    return GameServiceSummary(
+      serviceId: (json['serviceId'] ?? '').toString(),
+      state: (json['state'] ?? '').toString(),
+      health: (json['health'] ?? '').toString(),
+    );
+  }
+}
+
+class GameRuntimeHealthResponse {
+  final String status;
+  final String? runtimeState;
+  final DateTime? lastHeartbeat;
+
+  const GameRuntimeHealthResponse({
+    required this.status,
+    this.runtimeState,
+    this.lastHeartbeat,
+  });
+
+  factory GameRuntimeHealthResponse.fromJson(Map<String, dynamic> json) {
+    return GameRuntimeHealthResponse(
+      status: (json['status'] ?? '').toString(),
+      runtimeState: json['runtimeState'] as String?,
+      lastHeartbeat: json['lastHeartbeat'] != null ? DateTime.tryParse(json['lastHeartbeat']) : null,
+    );
+  }
+}
+
+class GamePluginHandshakeResponse {
+  final bool accepted;
+  final String? protocol;
+  final String? error;
+
+  const GamePluginHandshakeResponse({
+    required this.accepted,
+    this.protocol,
+    this.error,
+  });
+
+  factory GamePluginHandshakeResponse.fromJson(Map<String, dynamic> json) {
+    return GamePluginHandshakeResponse(
+      accepted: (json['accepted'] as bool?) ?? false,
+      protocol: json['protocol'] as String?,
+      error: json['error'] as String?,
+    );
+  }
+}
