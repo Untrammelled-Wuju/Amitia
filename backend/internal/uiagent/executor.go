@@ -42,6 +42,7 @@ type SourceEditor interface {
 // PreviewManager creates and manages preview sessions.
 type PreviewManager interface {
 	Create(workspaceID string, doc *schema.SchemaUIDocument) (*preview.PreviewSession, error)
+	Terminate(id string) error
 }
 
 // PreviewSessionRef references a preview session.
