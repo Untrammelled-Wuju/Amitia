@@ -9,11 +9,9 @@ import (
 	"path/filepath"
 	"time"
 
-	sqlitedriver "github.com/glebarez/sqlite"
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/browser"
 	"github.com/u-ai/backend/internal/delivery"
-	"github.com/u-ai/backend/internal/desktoppet/installation"
 	"github.com/u-ai/backend/internal/desktoppet/integration"
 	"github.com/u-ai/backend/internal/desktoppet/plugin_boundary"
 	"github.com/u-ai/backend/internal/devicemesh/server"
@@ -94,7 +92,6 @@ import (
 	"github.com/u-ai/backend/internal/workspace"
 	"github.com/u-ai/backend/pkg/resourceuri"
 	"github.com/u-ai/backend/pkg/sse"
-	"gorm.io/gorm"
 )
 
 type ContainerBuilder struct {
@@ -653,23 +650,9 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	if contribRepo != nil && instRepo != nil {
 		petPluginSource = plugin_boundary.NewContainerSource(contribRepo, instRepo)
 	}
-	if b.desktopPetPluginCapabilities == nil && b.dbPath != "" {
-		gormDB, err := openGormDBForExistingPetPorts(b.dbPath)
-		if err == nil {
-			installRepo := installation.NewRepository(gormDB, nil)
-			resPort := integration.NewSQLiteResourcePort(gormDB)
-			actionPort := integration.NewSQLiteActionPort(gormDB)
-			runtimePort := integration.NewSQLiteRuntimePort(gormDB)
-			windowPort := integration.NewSQLiteWindowPort(gormDB)
-			caps := integration.NewProductionCapabilities(integration.ProductionCapabilitiesOptions{
-				InstallationRepo: installRepo,
-				ReleaseService:   resPort,
-				RuntimeFacade:    actionPort,
-				RuntimePort:      runtimePort,
-				FloatingWindow:   windowPort,
-			})
-			b.desktopPetPluginCapabilities = &caps
-		}
+	if b.desktopPetPluginCapabilities == nil {
+		caps := integration.NewFixtureCapabilities()
+		b.desktopPetPluginCapabilities = &caps
 	}
 	var petPluginBoundary *plugin_boundary.DesktopPetPluginBoundary
 	if petPluginSource != nil && b.desktopPetPluginCapabilities != nil {
@@ -879,6 +862,10 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 
 	acquisitionSourceRegistry := acquisition.NewSourceRegistry()
+
+	var builtContainer *Container
+	canonicalPackageInstaller := newAcquisitionPackageInstaller(func() *Container { return builtContainer })
+
 	acquisitionSourceRegistry.Register(acquisition.NewInstalledSource(capabilityService, capabilityProviderRegistry))
 	acquisitionSourceRegistry.Register(acquisition.NewAgentSkillSource(agentSkillCatalog))
 	acquisitionSourceRegistry.Register(acquisition.NewGeneratedSkillSource(true))
@@ -898,12 +885,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	mcpProvisioner := kernelmcpinstaller.NewDefaultProvisioner()
 	mcpInstaller := kernelmcpinstaller.NewDefaultInstaller()
 	mcpLifecycle := kernelmcp.NewMCPLifecycle(mcpProvisioner, mcpInstaller)
-	var workshopPort acquisition.WorkshopGeneratePort
-	if b.workshopModelGenerator != nil {
-		workshopPort = NewWorkshopGeneratorPortAdapter(b.workshopModelGenerator)
-	} else {
-		workshopPort = acquisition.NewDefaultWorkshop()
-	}
+	workshopPort := acquisition.NewDefaultWorkshop()
 
 	var mcpInstallPort acquisition.MCPInstallPort
 	if b.mcpRepository != nil {
@@ -1431,9 +1413,6 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	canaryShadowMgr := canary.NewShadowManager()
 	canaryOwnershipResolver := canary.NewBackgroundOwnershipResolver()
 
-	var builtContainer *Container
-	canonicalPackageInstaller := newAcquisitionPackageInstaller(func() *Container { return builtContainer })
-
 	container := &Container{
 		Store:                  store,
 		TransactionManager:     tm,
@@ -1820,21 +1799,6 @@ func validateExecutionWiring(kernel *execution.ExecutionPipeline, adapters *capa
 	return nil
 }
 
-func openGormDBForExistingPetPorts(dbPath string) (*gorm.DB, error) {
-	gormDB, err := gorm.Open(sqlitedriver.Open(dbPath), &gorm.Config{})
-	if err != nil {
-		return nil, err
-	}
-	if err := gormDB.AutoMigrate(
-		&integration.PluginResourceAttachment{},
-		&integration.PluginActionAttachment{},
-		&integration.PluginRuntimeAttachment{},
-		&integration.PluginWindowAttachment{},
-	); err != nil {
-		return nil, err
-	}
-	return gormDB, nil
-}
 
 func makeSearchCallFunc(cfg search.Config, broker *secret.Broker) capability.SearchCallFunc {
 	svc := buildSearchService(cfg, broker)
