@@ -31,6 +31,7 @@ type AcquisitionDependencies struct {
 	DeploymentPlanner *DeploymentPlanner
 	ProviderLifecycle ProviderLifecyclePort
 	Execution         ExecutionPort
+	ResumeRepo        execution.ResumeRepository
 }
 
 // AcquisitionService orchestrates the full capability acquisition lifecycle:
@@ -46,6 +47,7 @@ type AcquisitionService struct {
 	providerRegistry  *capability.ProviderRegistry
 	providerLifecycle ProviderLifecyclePort
 	execution         ExecutionPort
+	resumeRepo        execution.ResumeRepository
 }
 
 // NewAcquisitionService creates an AcquisitionService with explicitly provided
@@ -82,6 +84,7 @@ func NewAcquisitionService(deps AcquisitionDependencies) (*AcquisitionService, e
 		providerRegistry:  deps.ProviderRegistry,
 		providerLifecycle: deps.ProviderLifecycle,
 		execution:         deps.Execution,
+		resumeRepo:        deps.ResumeRepo,
 	}, nil
 }
 
@@ -110,6 +113,14 @@ func (s *AcquisitionService) SetExecution(port ExecutionPort) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.execution = port
+}
+
+// SetResumeRepo sets the resume repository used to persist acquisition resume
+// contexts for cross-session recovery.
+func (s *AcquisitionService) SetResumeRepo(repo execution.ResumeRepository) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.resumeRepo = repo
 }
 
 // SetCapabilityService sets the capability service used to check whether a
@@ -257,6 +268,19 @@ func (s *AcquisitionService) Acquire(ctx context.Context, request AcquisitionReq
 			resume, err := s.execution.CreateResume(acqExecCtx, execution.ResumeTypeCapabilityAcquisition, string(request.CapabilityID))
 			if err == nil && resume != nil {
 				result.ResumeID = resume.ResumeID
+				if s.resumeRepo != nil {
+					resume.RequiredCapabilityID = string(request.CapabilityID)
+					resume.AcquisitionTransactionID = resumeToken
+					if pctx, ok := s.resumeContexts[resumeToken]; ok {
+						if pctx.ConversationID != "" {
+							if resume.Metadata == nil {
+								resume.Metadata = map[string]any{}
+							}
+							resume.Metadata["conversationId"] = pctx.ConversationID
+						}
+					}
+					_ = s.resumeRepo.Save(ctx, *resume)
+				}
 			}
 		}
 
@@ -324,10 +348,29 @@ func (s *AcquisitionService) ResumeAcquire(ctx context.Context, resumeToken stri
 	resumeCtx, ok := s.resumeContexts[resumeToken]
 	if !ok {
 		s.mu.Unlock()
-		return nil, ErrResumeContextMissing
+		if s.resumeRepo != nil {
+			persisted, err := s.resumeRepo.Get(ctx, resumeToken)
+			if err == nil && persisted != nil {
+				resumeCtx = CapabilityResumeContext{
+					CapabilityID:             capability.CapabilityID(persisted.RequiredCapabilityID),
+					AcquisitionTransactionID: persisted.AcquisitionTransactionID,
+					State:                    ResumePending,
+				}
+				if persisted.Metadata != nil {
+					if convID, ok := persisted.Metadata["conversationId"].(string); ok {
+						resumeCtx.ConversationID = convID
+					}
+				}
+				ok = true
+			}
+		}
+		if !ok {
+			return nil, ErrResumeContextMissing
+		}
+	} else {
+		delete(s.resumeContexts, resumeToken)
+		s.mu.Unlock()
 	}
-	delete(s.resumeContexts, resumeToken)
-	s.mu.Unlock()
 
 	if resumeCtx.State != ResumePending {
 		return nil, NewAcquisitionError("invalid_resume_state",

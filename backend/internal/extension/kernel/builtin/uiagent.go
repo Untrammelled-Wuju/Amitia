@@ -11,6 +11,7 @@ const (
 	UIAgentInspectCapabilityID = capability.CapabilityID("ui.inspect")
 	UIAgentModifyCapabilityID  = capability.CapabilityID("ui.modify")
 	UIAgentCreateCapabilityID  = capability.CapabilityID("ui.create")
+	UIAgentPreviewCapabilityID = capability.CapabilityID("ui.preview")
 	UIAgentProviderID          = capability.ProviderID("com.amitia.builtin.uiagent.provider")
 )
 
@@ -35,7 +36,15 @@ func buildUIAgentCreateInputSchema() string {
 }
 
 func buildUIAgentCreateOutputSchema() string {
-	return `{"type":"object","additionalProperties":false,"properties":{"success":{"type":"boolean"},"createdFiles":{"type":"array","items":{"type":"string"}},"schemaId":{"type":"string"}}}`
+	return `{"type":"object","additionalProperties":false,"properties":{"success":{"type":"boolean"},"createdFiles":{"type":"array","items":{"type":"string"}},"schemaId":{"type":"string"},"previewRef":{"type":"string"}}}`
+}
+
+func buildUIAgentPreviewInputSchema() string {
+	return `{"type":"object","additionalProperties":false,"required":["action"],"properties":{"sessionId":{"type":"string"},"action":{"type":"string","enum":["observe","refine"]},"workspaceId":{"type":"string"}}}`
+}
+
+func buildUIAgentPreviewOutputSchema() string {
+	return `{"type":"object","additionalProperties":false,"properties":{"sessionId":{"type":"string"},"state":{"type":"string"},"errors":{"type":"array","items":{"type":"string"}},"warnings":{"type":"array","items":{"type":"string"}},"canRefine":{"type":"boolean"},"changedPaths":{"type":"array","items":{"type":"string"}},"iterations":{"type":"integer"},"converged":{"type":"boolean"}}}`
 }
 
 func BuildUIAgentExtension(version string) Definition {
@@ -83,6 +92,7 @@ func BuildUIAgentExtension(version string) Definition {
 					{ID: string(UIAgentInspectCapabilityID), Version: version},
 					{ID: string(UIAgentModifyCapabilityID), Version: version},
 					{ID: string(UIAgentCreateCapabilityID), Version: version},
+					{ID: string(UIAgentPreviewCapabilityID), Version: version},
 				},
 				Provider: &domain.ProviderMetadata{
 					ID:       string(UIAgentProviderID),
@@ -174,6 +184,26 @@ func buildUIAgentContributions(extID domain.ExtensionID, modID domain.ModuleID) 
 					"runtimeType": "uiagent",
 					"runtimeId":   "default",
 					"handlerName": "uiagent.create",
+				},
+			},
+			Metadata: map[string]any{"system.builtin": true},
+		},
+		{
+			ID:          domain.ContributionID("uiagent_preview"),
+			ModuleID:    modID,
+			ExtensionID: extID,
+			Kind:        domain.ContributionKindTool,
+			Name:        domain.LocalizedText{Default: "UI Preview"},
+			Description: domain.LocalizedText{Default: "Observe and refine UI preview sessions to validate changes."},
+			Definition: map[string]any{
+				"capabilityId": string(UIAgentPreviewCapabilityID),
+				"modelName":    "uiagent.preview",
+				"inputSchema":  buildUIAgentPreviewInputSchema(),
+				"outputSchema": buildUIAgentPreviewOutputSchema(),
+				"runtime": map[string]any{
+					"runtimeType": "uiagent",
+					"runtimeId":   "default",
+					"handlerName": "uiagent.preview",
 				},
 			},
 			Metadata: map[string]any{"system.builtin": true},
