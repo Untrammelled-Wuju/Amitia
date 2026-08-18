@@ -36,7 +36,9 @@ npm run test:fault
 | 变量 | 必填 | 说明 |
 |------|------|------|
 | `MOCK_PLUGIN_ARCHIVE_PATH` | 是 | Mock 插件 v1 归档包路径 |
-| `MOCK_PLUGIN_ARCHIVE_PATH_V2` | 否 | Mock 插件 v2 归档包路径（升级测试需要） |
+| `MOCK_PLUGIN_ARCHIVE_PATH_V2` | 是（lifecycle/fault upgrade） | Mock 插件 v2 归档包路径 |
+| `GAMEHOST_BACKEND_RESTART_COMMAND` | 是（完整 lifecycle） | 由测试运行器提供的后端重启命令；不得在测试内探测/杀本机进程 |
+| `GAMEHOST_BACKEND_CWD` | 否 | 重启命令工作目录，默认当前目录 |
 
 ### 测试矩阵
 

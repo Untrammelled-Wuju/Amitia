@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	"github.com/u-ai/backend/internal/gamehost/domain"
@@ -16,7 +15,6 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/runtime"
 	"github.com/u-ai/backend/internal/gamehost/storage"
 	"github.com/u-ai/backend/internal/gamehost/stream/binary"
-	"github.com/u-ai/backend/internal/platform/process"
 )
 
 type HostIdentity struct {
@@ -93,73 +91,15 @@ func (a *ProcessCleanupProcessAdapter) cleanupDurableOwnedProcess(ctx context.Co
 	if a.supervisor == nil {
 		return fmt.Errorf("cleanupDurableOwnedProcess: supervisor unavailable")
 	}
-	ownerStore := a.supervisor.OwnerStore()
-	if ownerStore == nil {
-		return fmt.Errorf("cleanupDurableOwnedProcess: owner store unavailable")
-	}
-	meta, ok := ownerStore.LookupByProcessInstanceID(instanceID)
-	if !ok {
-		log.Printf("[startup-recovery] cleanupDurableOwnedProcess: no durable record for instance=%s", instanceID)
-		return nil
-	}
+	hostID := ""
 	if a.hostIdentity != nil {
-		actualHostID := a.hostIdentity.GetHostInstanceID()
-		if actualHostID != "" && meta.HostInstanceID != "" && meta.HostInstanceID != actualHostID {
-			log.Printf("[startup-recovery] cleanupDurableOwnedProcess: foreign host instance=%s host=%s", instanceID, meta.HostInstanceID)
-			return nil
-		}
+		hostID = a.hostIdentity.GetHostInstanceID()
 	}
-	if pid > 0 && meta.PID > 0 && pid != meta.PID {
-		return fmt.Errorf("cleanupDurableOwnedProcess: PID mismatch: input=%d durable=%d instance=%s", pid, meta.PID, instanceID)
+	if err := a.supervisor.CleanupDurableOwnedProcess(ctx, instanceID, pid, hostID); err != nil {
+		return fmt.Errorf("cleanupDurableOwnedProcess: %w", err)
 	}
-	killPID := pid
-	if killPID <= 0 {
-		killPID = meta.PID
-	}
-	if killPID > 0 {
-		if err := a.killProcessTree(killPID); err != nil {
-			return fmt.Errorf("cleanupDurableOwnedProcess: kill failed pid=%d instance=%s: %w", killPID, instanceID, err)
-		}
-		if !a.verifyProcessDead(killPID, 10*time.Second) {
-			return fmt.Errorf("cleanupDurableOwnedProcess: process still alive after kill pid=%d instance=%s", killPID, instanceID)
-		}
-	}
-	ownerStore.RemoveOwnership(instanceID)
-	log.Printf("[startup-recovery] cleanupDurableOwnedProcess: cleaned instance=%s pid=%d runtime=%s plugin=%s extension=%s",
-		instanceID, pid, meta.RuntimeID, meta.PluginID, meta.ExtensionID)
+	log.Printf("[startup-recovery] durable process cleanup delegated to ProcessSupervisor: instance=%s pid=%d", instanceID, pid)
 	return nil
-}
-
-func (a *ProcessCleanupProcessAdapter) killProcessTree(pid int) error {
-	if pid <= 0 {
-		return nil
-	}
-	if err := process.TerminateProcessTree(pid, 0); err != nil {
-		proc, findErr := os.FindProcess(pid)
-		if findErr != nil {
-			return fmt.Errorf("find process %d: %w", pid, findErr)
-		}
-		if killErr := proc.Kill(); killErr != nil {
-			return fmt.Errorf("kill process %d: %w", pid, killErr)
-		}
-	}
-	return nil
-}
-
-func (a *ProcessCleanupProcessAdapter) verifyProcessDead(pid int, timeout time.Duration) bool {
-	if pid <= 0 {
-		return true
-	}
-	deadline := time.Now().Add(timeout)
-	for {
-		if !process.IsProcessAlive(pid) {
-			return true
-		}
-		if time.Now().After(deadline) {
-			return false
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
 }
 
 func (a *ProcessCleanupProcessAdapter) ListOrphanCandidates(ctx context.Context) ([]ProcessCandidate, error) {
@@ -169,7 +109,6 @@ func (a *ProcessCleanupProcessAdapter) ListOrphanCandidates(ctx context.Context)
 	candidates := make([]ProcessCandidate, 0)
 	seen := make(map[string]bool)
 
-	ownerStore := a.supervisor.OwnerStore()
 	instances := a.supervisor.List()
 	for _, inst := range instances {
 		if inst == nil || inst.Definition == nil {
@@ -184,7 +123,8 @@ func (a *ProcessCleanupProcessAdapter) ListOrphanCandidates(ctx context.Context)
 			continue
 		}
 		pluginID := resolvePluginID(a.runtimeResolver, domain.RuntimeInstanceID(runtimeID))
-		hostInstanceID, hostSessionID := a.lookupDurableHostID(ownerStore, inst.ProcessInstanceID)
+		ownerMeta, _ := a.supervisor.LookupDurableOwnedProcess(inst.ProcessInstanceID)
+		hostInstanceID, hostSessionID := ownerMeta.HostInstanceID, ownerMeta.HostSessionID
 		pidKey := fmt.Sprintf("pid-%d", inst.PID)
 		seen[pidKey] = true
 		candidates = append(candidates, ProcessCandidate{
@@ -198,6 +138,8 @@ func (a *ProcessCleanupProcessAdapter) ListOrphanCandidates(ctx context.Context)
 			Generation:        uint64(inst.Generation),
 			HostInstanceID:    hostInstanceID,
 			HostSessionID:     hostSessionID,
+			Executable:        ownerMeta.Executable,
+			ProcessStartID:    ownerMeta.ProcessStartID,
 		})
 	}
 
@@ -222,21 +164,12 @@ func (a *ProcessCleanupProcessAdapter) ListOrphanCandidates(ctx context.Context)
 			Generation:        uint64(meta.Generation),
 			HostInstanceID:    meta.HostInstanceID,
 			HostSessionID:     meta.HostSessionID,
+			Executable:        meta.Executable,
+			ProcessStartID:    meta.ProcessStartID,
 		})
 	}
 
 	return candidates, nil
-}
-
-func (a *ProcessCleanupProcessAdapter) lookupDurableHostID(ownerStore *trusted_service.ProcessOwnerStore, processInstanceID string) (string, string) {
-	if ownerStore == nil || processInstanceID == "" {
-		return "", ""
-	}
-	meta, ok := ownerStore.LookupByProcessInstanceID(processInstanceID)
-	if !ok {
-		return "", ""
-	}
-	return meta.HostInstanceID, meta.HostSessionID
 }
 
 func resolvePluginID(resolver interface {

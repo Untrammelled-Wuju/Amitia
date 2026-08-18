@@ -3,6 +3,23 @@ import { GameCenterClient } from '../game_center_client';
 
 const ARCHIVE_PATH = process.env.MOCK_PLUGIN_ARCHIVE_PATH;
 
+async function invokeRuntimeRPC<T>(client: GameCenterClient, runtimeId: string | null, method: string, payload: unknown = {}): Promise<T> {
+  if (!runtimeId) throw new Error(`RPC ${method} requires runtimeId`);
+  const response = await fetch(
+    `${(client as any).baseUrl}/game-center/runtimes/${runtimeId}/services/mock-game-runtime/rpc`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ method, payload }),
+    },
+  );
+  if (!response.ok) throw new Error(`RPC ${method} HTTP ${response.status}`);
+  const body = (await response.json()) as { code: number; msg: string; payload?: T };
+  if (body.code !== 200) throw new Error(`RPC ${method} failed: ${body.code} ${body.msg}`);
+  if (body.payload === undefined) throw new Error(`RPC ${method} returned no payload`);
+  return body.payload;
+}
+
 function requireArchive(): string {
   if (!ARCHIVE_PATH) {
     throw new Error('MOCK_PLUGIN_ARCHIVE_PATH environment variable is required for F15 lifecycle tests');
@@ -172,62 +189,61 @@ describe('G47-F15 E2E Full Flow', () => {
     const customRpcBody = (await customRpcResp.json()) as { code: number; msg: string };
     expect(customRpcBody.code).toBe(200);
 
-    // 7. HostAPI (call mockgame.hostapi.invoke)
-    const hostApiResp = await fetch(
-      `${(client as any).baseUrl}/game-center/runtimes/${runtimeId}/services/mock-game-runtime/rpc`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method: 'mockgame.hostapi.invoke', payload: {} }),
-      },
+    // 7. HostAPI - RPCInvokeResponse uses payload, not the normal management data envelope.
+    const hostApiBody = await invokeRuntimeRPC<{ status?: string; output?: unknown }>(
+      client, runtimeId, 'mockgame.hostapi.invoke', {},
     );
-    expect(hostApiResp.status).toBe(200);
-    const hostApiBody = (await hostApiResp.json()) as { code: number; msg: string; data?: { status?: string; output?: unknown } };
-    expect(hostApiBody.code).toBe(200);
-    expect(hostApiBody.data).toBeDefined();
-    expect(hostApiBody.data?.status).toBeDefined();
-    expect(hostApiBody.data?.output).toBeDefined();
+    expect(hostApiBody.status).toBeDefined();
+    expect(hostApiBody.output).toBeDefined();
 
-    // 8. Secret (via mockgame.secret.acquire RPC)
-    const secretResp = await fetch(
-      `${(client as any).baseUrl}/game-center/runtimes/${runtimeId}/services/mock-game-runtime/rpc`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method: 'mockgame.secret.acquire', payload: {} }),
-      },
+    // 8. Secret lease full lifecycle: acquire -> query(active) -> release -> query(inactive).
+    const secretBody = await invokeRuntimeRPC<{ granted?: boolean; leaseId?: string }>(
+      client, runtimeId, 'mockgame.secret.acquire', {},
     );
-    expect(secretResp.status).toBe(200);
-    const secretBody = (await secretResp.json()) as { code: number; msg: string; data?: { granted?: boolean; leaseId?: string } };
-    expect(secretBody.code).toBe(200);
-    expect(secretBody.data).toBeDefined();
-    expect(secretBody.data?.granted).toBe(true);
-    expect(secretBody.data?.leaseId).toBeDefined();
-    expect(typeof secretBody.data?.leaseId).toBe('string');
-    expect((secretBody.data?.leaseId ?? '').length).toBeGreaterThan(0);
-
-    // 9. Effect (apply mockgame.control.output)
-    const effectResp = await fetch(
-      `${(client as any).baseUrl}/game-center/runtimes/${runtimeId}/services/mock-game-runtime/rpc`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ method: 'mockgame.control.output', payload: { effect: 'test', duration: 1000 } }),
-      },
+    expect(secretBody.granted).toBe(true);
+    expect(typeof secretBody.leaseId).toBe('string');
+    expect((secretBody.leaseId ?? '').length).toBeGreaterThan(0);
+    const activeLease = await invokeRuntimeRPC<{ valid?: boolean; granted?: boolean; leaseId?: string }>(
+      client, runtimeId, 'mockgame.secret.query', {},
     );
-    expect(effectResp.status).toBe(200);
-    const effectBody = (await effectResp.json()) as { code: number; msg: string; data?: { allowed?: boolean; hostState?: string } };
-    expect(effectBody.code).toBe(200);
-    expect(effectBody.data).toBeDefined();
-    expect(effectBody.data?.allowed).toBe(true);
-    const hostState = effectBody.data?.hostState ?? '';
-    expect(hostState === 'accepted' || hostState === 'committed').toBe(true);
+    expect(activeLease.valid).toBe(true);
+    expect(activeLease.granted).toBe(true);
+    expect(activeLease.leaseId).toBe(secretBody.leaseId);
+    await invokeRuntimeRPC(client, runtimeId, 'mockgame.secret.release', {});
+    const releasedLease = await invokeRuntimeRPC<{ valid?: boolean; granted?: boolean }>(
+      client, runtimeId, 'mockgame.secret.query', {},
+    );
+    expect(releasedLease.valid).toBe(false);
+    expect(releasedLease.granted).toBe(false);
 
-    // 10. Takeover → Release
+    // 9. Acquire control BEFORE Effect. observe mode is intentionally not allowed to submit control.output.
     await driver.takeover(runtimeId, 'plugin');
     const afterTakeover = await driver.getRuntime(runtimeId);
     expect(afterTakeover.controlAuthority?.mode).toBe('plugin');
 
+    const beforeEffect = await invokeRuntimeRPC<{ effectCount?: number }>(
+      client, runtimeId, 'mockgame.effect.status', {},
+    );
+    const effectBody = await invokeRuntimeRPC<{ allowed?: boolean; outputId?: string; currentEpoch?: number; generation?: number }>(
+      client, runtimeId, 'mockgame.control.output', {
+        outputId: `e2e-${Date.now()}`,
+        sinkId: 'mockgame.effect',
+        epoch: afterTakeover.controlAuthority?.epoch,
+        data: { effect: 'test', duration: 1000 },
+      },
+    );
+    expect(effectBody.allowed).toBe(true);
+    expect(effectBody.outputId).toBeDefined();
+    expect(effectBody.currentEpoch).toBeDefined();
+    expect(effectBody.generation).toBeDefined();
+    const committedOutputId = effectBody.outputId!;
+    const committedGeneration = effectBody.generation!;
+    const afterEffect = await invokeRuntimeRPC<{ effectCount?: number }>(
+      client, runtimeId, 'mockgame.effect.status', {},
+    );
+    expect(afterEffect.effectCount ?? 0).toBeGreaterThan(beforeEffect.effectCount ?? 0);
+
+    // 10. Release only after the host sink commit has been observed.
     await driver.release(runtimeId, 'observe');
     const afterRelease = await driver.getRuntime(runtimeId);
     expect(afterRelease.controlAuthority?.mode).toBe('observe');
@@ -291,6 +307,7 @@ describe('G47-F15 E2E Full Flow', () => {
       throw new Error('MOCK_PLUGIN_ARCHIVE_PATH_V2 environment variable is required for F15-56 upgrade step - silent skip is forbidden');
     }
     const v1Version = plugin.version;
+    const generationBeforeUpgrade = (await driver.getRuntime(runtimeId!)).process?.processGeneration ?? 0;
     await driver.updatePlugin(extensionId!, archivePathV2);
     const upgradeDeadline = Date.now() + 60000;
     let upgradedVersion = v1Version;
@@ -306,10 +323,22 @@ describe('G47-F15 E2E Full Flow', () => {
 
     if (runtimeId) {
       await driver.waitForRuntimeReady(runtimeId, 60000);
+      const generationAfterUpgrade = (await driver.getRuntime(runtimeId)).process?.processGeneration ?? 0;
+      expect(generationAfterUpgrade).toBeGreaterThan(generationBeforeUpgrade);
+      // A fresh generation must not inherit the pre-upgrade secret/effect/control state.
+      const postUpgradeLease = await invokeRuntimeRPC<{ valid?: boolean; granted?: boolean }>(client, runtimeId, 'mockgame.secret.query', {});
+      expect(postUpgradeLease.valid).toBe(false);
+      expect(postUpgradeLease.granted).toBe(false);
+      const oldEffectAfterUpgrade = await invokeRuntimeRPC<{ found?: boolean; processed?: boolean }>(
+        client, runtimeId, 'mockgame.effect.status', { outputId: committedOutputId },
+      );
+      expect(oldEffectAfterUpgrade.found).toBe(false);
+      expect(oldEffectAfterUpgrade.processed).toBe(false);
+      expect(generationAfterUpgrade).toBeGreaterThan(committedGeneration);
     }
 
-    // 16. Backend Restart - verify state persistence across restart
-    await driver.restartBackend();
+    // 16. Backend Restart - runner-owned command + target uniqueness/orphan proof.
+    await driver.restartBackend({ extensionId: extensionId!, runtimeId: runtimeId! });
 
     // 17. Disable
     const newRuntimes = await driver.listRuntimes({ pluginId: plugin.pluginId });

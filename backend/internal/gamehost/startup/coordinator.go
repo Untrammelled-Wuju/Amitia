@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/gamehost/domain"
+	platformprocess "github.com/u-ai/backend/internal/platform/process"
 )
 
 type HostIdentityProvider interface {
@@ -24,17 +25,19 @@ type ProcessCleanupProvider interface {
 }
 
 type ProcessCandidate struct {
-	PID              int
+	PID               int
 	ProcessInstanceID string
-	RuntimeID        domain.RuntimeInstanceID
-	PluginID         domain.PluginID
-	ExtensionID      string
-	ServiceID        string
-	ModuleID         string
-	Generation       uint64
-	HostInstanceID   string
-	HostSessionID    string
-	Output           string
+	RuntimeID         domain.RuntimeInstanceID
+	PluginID          domain.PluginID
+	ExtensionID       string
+	ServiceID         string
+	ModuleID          string
+	Generation        uint64
+	HostInstanceID    string
+	HostSessionID     string
+	Output            string
+	Executable        string
+	ProcessStartID    string
 }
 
 type TempCleanupProvider interface {
@@ -270,6 +273,8 @@ func (c *StartupRecoveryCoordinator) classifyOrphans(ctx context.Context, report
 				PluginID:       pc.PluginID,
 				ExtensionID:    pc.ExtensionID,
 				Generation:     pc.Generation,
+				Executable:     pc.Executable,
+				ProcessStartID: pc.ProcessStartID,
 			}
 			result := c.verifyProcessOwnership(ctx, pc, proof)
 			if result == OwnershipUnknown || result == OwnershipBelongsToForeign {
@@ -277,17 +282,17 @@ func (c *StartupRecoveryCoordinator) classifyOrphans(ctx context.Context, report
 					pc.PID, pc.RuntimeID, pc.ExtensionID, result)
 				continue
 			}
-		candidates = append(candidates, &OrphanResource{
-			Type:        ResourceOrphanProcess,
-			ResourceID:  fmt.Sprintf("pid-%d", pc.PID),
-			ExtensionID: pc.ExtensionID,
-			PluginID:    pc.PluginID,
-			RuntimeID:   pc.RuntimeID,
-			ServiceName: pc.ProcessInstanceID,
-			Generation:  pc.Generation,
-			Ownership:   proof,
-			Path:        pc.Output,
-		})
+			candidates = append(candidates, &OrphanResource{
+				Type:        ResourceOrphanProcess,
+				ResourceID:  fmt.Sprintf("pid-%d", pc.PID),
+				ExtensionID: pc.ExtensionID,
+				PluginID:    pc.PluginID,
+				RuntimeID:   pc.RuntimeID,
+				ServiceName: pc.ProcessInstanceID,
+				Generation:  pc.Generation,
+				Ownership:   proof,
+				Path:        pc.Output,
+			})
 		}
 	}
 
@@ -504,6 +509,13 @@ func (c *StartupRecoveryCoordinator) verifyProcessOwnership(ctx context.Context,
 		return OwnershipBelongsToForeign
 	}
 	if proof.RuntimeID == "" && proof.PluginID == "" {
+		return OwnershipUnknown
+	}
+	if proof.Executable == "" || proof.ProcessStartID == "" {
+		return OwnershipUnknown
+	}
+	identity, err := platformprocess.ReadProcessIdentity(candidate.PID)
+	if err != nil || !platformprocess.SameProcessIdentity(proof.Executable, proof.ProcessStartID, identity) {
 		return OwnershipUnknown
 	}
 	if c.deps.KernelRecon != nil && proof.ExtensionID != "" {

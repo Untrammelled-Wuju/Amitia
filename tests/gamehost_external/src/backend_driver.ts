@@ -1,13 +1,11 @@
 import { GameCenterClient, createClient, GameRuntimeDetail, GamePluginSummary } from './game_center_client';
 import { waitUntil, sleep, TimeoutError } from './waiters';
-import { exec, spawn } from 'child_process';
+import { exec } from 'child_process';
 import { promisify } from 'util';
 
 const execAsync = promisify(exec);
 
 export { TimeoutError } from './waiters';
-export type { ResidueTarget };
-export { ResidueCheckError };
 
 export interface BackendDriverOptions {
   baseUrl?: string;
@@ -19,6 +17,24 @@ export interface ResidueSnapshot {
   runtimeCount: number;
   runningRuntimes: number;
   readyRuntimes: number;
+}
+
+export interface TargetResidueSnapshot {
+  targetRuntimeId?: string;
+  pluginCount: number;
+  runtimeCount: number;
+  connectionCount: number;
+  handshakeCount: number;
+  pendingRpcCount: number;
+  channelCount: number;
+  streamCount: number;
+  binaryCount: number;
+  secretLeaseCount: number;
+  processCount: number;
+  controlSinkCount: number;
+  hostApiInflight: number;
+  lifecycleIntent?: string;
+  emergencyLatched: boolean;
 }
 
 export type ResidueTarget =
@@ -35,6 +51,8 @@ export class ResidueCheckError extends Error {
 
 export class BackendDriver {
   private client: GameCenterClient;
+  private knownRuntimeIdsByExtension = new Map<string, Set<string>>();
+  private knownRuntimeIdsByPlugin = new Map<string, Set<string>>();
 
   constructor(options: BackendDriverOptions = {}) {
     this.client = options.client ?? createClient(options.baseUrl);
@@ -107,6 +125,18 @@ export class BackendDriver {
 
   async listRuntimes(filter?: { pluginId?: string; status?: string }): Promise<GameRuntimeDetail[]> {
     const resp = await this.client.listRuntimes(filter);
+    for (const runtime of resp.items) {
+      if (runtime.extensionId) {
+        const set = this.knownRuntimeIdsByExtension.get(runtime.extensionId) ?? new Set<string>();
+        set.add(runtime.runtimeId);
+        this.knownRuntimeIdsByExtension.set(runtime.extensionId, set);
+      }
+      if (runtime.pluginId) {
+        const set = this.knownRuntimeIdsByPlugin.get(runtime.pluginId) ?? new Set<string>();
+        set.add(runtime.runtimeId);
+        this.knownRuntimeIdsByPlugin.set(runtime.pluginId, set);
+      }
+    }
     return resp.items as unknown as GameRuntimeDetail[];
   }
 
@@ -246,169 +276,111 @@ export class BackendDriver {
   }
 
   async assertZeroResidueFor(target: ResidueTarget): Promise<void> {
-    const [plugins, runtimes] = await Promise.all([
-      this.listPlugins(),
-      this.listRuntimes(),
-    ]);
-
-    let targetPlugins: typeof plugins = [];
-    let targetRuntimes: typeof runtimes = [];
+    const [plugins, runtimes] = await Promise.all([this.listPlugins(), this.listRuntimes()]);
+    let targetPlugins = plugins.filter(() => false);
+    let targetRuntimes = runtimes.filter(() => false);
+    const runtimeIds = new Set<string>();
 
     switch (target.type) {
       case 'extension':
         targetPlugins = plugins.filter(p => p.extensionId === target.extensionId);
         targetRuntimes = runtimes.filter(r => (r as any).extensionId === target.extensionId);
+        for (const id of this.knownRuntimeIdsByExtension.get(target.extensionId) ?? []) runtimeIds.add(id);
         break;
       case 'plugin':
         targetPlugins = plugins.filter(p => p.pluginId === target.pluginId);
         targetRuntimes = runtimes.filter(r => (r as any).pluginId === target.pluginId);
+        for (const id of this.knownRuntimeIdsByPlugin.get(target.pluginId) ?? []) runtimeIds.add(id);
         break;
       case 'runtime':
         targetRuntimes = runtimes.filter(r => (r as any).runtimeId === target.runtimeId);
+        runtimeIds.add(target.runtimeId);
         break;
     }
+    for (const runtime of targetRuntimes) runtimeIds.add((runtime as any).runtimeId);
 
     const parts: string[] = [];
-    if (targetPlugins.length > 0) {
-      parts.push(`${targetPlugins.length} plugins remain`);
+    if (targetPlugins.length) parts.push(`${targetPlugins.length} plugins remain`);
+    if (targetRuntimes.length) parts.push(`${targetRuntimes.length} runtimes remain`);
+
+    for (const runtimeId of runtimeIds) {
+      const residue = await this.client.get<TargetResidueSnapshot>('/game-center-debug/residue', { runtimeId });
+      const countFields: Array<[keyof TargetResidueSnapshot, number]> = [
+        ['runtimeCount', residue.runtimeCount], ['connectionCount', residue.connectionCount],
+        ['handshakeCount', residue.handshakeCount], ['pendingRpcCount', residue.pendingRpcCount],
+        ['channelCount', residue.channelCount], ['streamCount', residue.streamCount],
+        ['binaryCount', residue.binaryCount], ['secretLeaseCount', residue.secretLeaseCount],
+        ['processCount', residue.processCount], ['controlSinkCount', residue.controlSinkCount],
+        ['hostApiInflight', residue.hostApiInflight],
+      ];
+      for (const [name, value] of countFields) if (value > 0) parts.push(`${runtimeId}:${String(name)}=${value}`);
+      if (residue.emergencyLatched) parts.push(`${runtimeId}:emergencyLatched=true`);
+      if (residue.lifecycleIntent && residue.lifecycleIntent !== 'stopped' && residue.lifecycleIntent !== 'none') {
+        parts.push(`${runtimeId}:lifecycleIntent=${residue.lifecycleIntent}`);
+      }
     }
-    if (targetRuntimes.length > 0) {
-      parts.push(`${targetRuntimes.length} runtimes remain`);
-    }
-    if (parts.length > 0) {
+
+    if (parts.length) {
       const targetDesc = target.type === 'extension'
         ? `extension ${target.extensionId}`
-        : target.type === 'plugin'
-          ? `plugin ${target.pluginId}`
-          : `runtime ${target.runtimeId}`;
+        : target.type === 'plugin' ? `plugin ${target.pluginId}` : `runtime ${target.runtimeId}`;
       throw new ResidueCheckError(`residue [${targetDesc}]: ${parts.join(', ')}`);
     }
   }
 
-  async restartBackend(): Promise<void> {
-    const pluginsBefore = await this.listPlugins();
-    const runtimesBefore = await this.listRuntimes();
-
-    const backendPid = await this.findBackendProcess();
-    if (!backendPid) {
-      throw new Error('backend process (server.exe) not found - cannot restart');
+  async assertRecoveredRuntimeUnique(runtimeId: string): Promise<void> {
+    const residue = await this.client.get<TargetResidueSnapshot>('/game-center-debug/residue', { runtimeId });
+    const problems: string[] = [];
+    if (residue.runtimeCount !== 1) problems.push(`runtimeCount=${residue.runtimeCount}`);
+    if (residue.processCount !== 1) problems.push(`processCount=${residue.processCount}`);
+    if (residue.connectionCount !== 1) problems.push(`connectionCount=${residue.connectionCount}`);
+    if (residue.handshakeCount !== 1) problems.push(`handshakeCount=${residue.handshakeCount}`);
+    if (residue.pendingRpcCount !== 0) problems.push(`pendingRpcCount=${residue.pendingRpcCount}`);
+    if (residue.hostApiInflight !== 0) problems.push(`hostApiInflight=${residue.hostApiInflight}`);
+    if (problems.length) {
+      throw new ResidueCheckError(`restart uniqueness [runtime ${runtimeId}]: ${problems.join(', ')}`);
     }
+  }
 
-    await this.killProcess(backendPid);
-
-    const stopDeadline = Date.now() + 15000;
-    while (Date.now() < stopDeadline) {
-      const stillRunning = await this.isProcessAlive(backendPid);
-      if (!stillRunning) {
-        break;
-      }
-      await sleep(500);
+  async restartBackend(target?: { extensionId?: string; runtimeId?: string }): Promise<void> {
+    const command = process.env.GAMEHOST_BACKEND_RESTART_COMMAND;
+    if (!command) {
+      throw new Error('GAMEHOST_BACKEND_RESTART_COMMAND is required; workstation-specific process discovery is forbidden');
     }
+    const targetExtensionId = target?.extensionId;
+    const targetRuntimeId = target?.runtimeId;
 
-    const stillRunningAfterWait = await this.isProcessAlive(backendPid);
-    if (stillRunningAfterWait) {
-      throw new Error(`backend process (PID=${backendPid}) did not terminate within 15s`);
-    }
-
-    await this.startBackend();
+    await execAsync(command, {
+      cwd: process.env.GAMEHOST_BACKEND_CWD || process.cwd(),
+      env: process.env,
+      shell: process.env.ComSpec || process.env.SHELL,
+      timeout: 60000,
+    });
 
     const recoveryDeadline = Date.now() + 60000;
-    let recovered = false;
     while (Date.now() < recoveryDeadline) {
       try {
-        const pluginsAfter = await this.listPlugins();
-        const runtimesAfter = await this.listRuntimes();
-        if (pluginsAfter.length >= pluginsBefore.length && runtimesAfter.length >= runtimesBefore.length) {
-          recovered = true;
-          break;
-        }
-      } catch {
-        // transient during restart
-      }
-      await sleep(1000);
-    }
-    if (!recovered) {
-      throw new Error('backend did not recover after restart within 60s');
-    }
-  }
-
-  private async findBackendProcess(): Promise<number | null> {
-    try {
-      const { stdout } = await execAsync('tasklist /FI "IMAGENAME eq server.exe" /FO CSV /NH');
-      const lines = stdout.split('\n').filter(line => line.trim() && line.includes('server.exe'));
-      if (lines.length > 0) {
-        const parts = lines[0].split(',');
-        if (parts.length >= 2) {
-          const pid = parseInt(parts[1].replace(/"/g, '').trim(), 10);
-          if (!isNaN(pid) && pid > 0) {
-            return pid;
-          }
-        }
-      }
-    } catch {
-      // fallback to port-based detection
-    }
-
-    try {
-      const { stdout } = await execAsync('netstat -ano | findstr ":18899"');
-      const lines = stdout.split('\n').filter(line => line.includes('LISTENING'));
-      if (lines.length > 0) {
-        const parts = lines[0].trim().split(/\s+/);
-        const pid = parseInt(parts[parts.length - 1], 10);
-        if (!isNaN(pid) && pid > 0) {
-          return pid;
-        }
-      }
-    } catch {
-      // ignore
-    }
-
-    return null;
-  }
-
-  private async killProcess(pid: number): Promise<void> {
-    try {
-      await execAsync(`taskkill /F /PID ${pid}`);
-    } catch (err: any) {
-      if (err.message && err.message.includes('not found')) {
-        return;
-      }
-      throw err;
-    }
-  }
-
-  private async isProcessAlive(pid: number): Promise<boolean> {
-    try {
-      const { stdout } = await execAsync(`tasklist /FI "PID eq ${pid}" /FO CSV /NH`);
-      return stdout.includes(String(pid));
-    } catch {
-      return false;
-    }
-  }
-
-  private async startBackend(): Promise<void> {
-    const backendDir = process.env.BACKEND_DIR || 'D:\\桌面\\跟进项目\\U-Ai\\backend';
-    const serverPath = `${backendDir}\\server.exe`;
-
-    spawn(serverPath, [], {
-      cwd: backendDir,
-      detached: true,
-      stdio: 'ignore',
-      windowsHide: true,
-    }).unref();
-
-    const startDeadline = Date.now() + 30000;
-    while (Date.now() < startDeadline) {
-      try {
         await this.listPlugins();
+        if (targetRuntimeId) {
+          const runtimes = await this.listRuntimes();
+          const matching = runtimes.filter(r => (r as any).runtimeId === targetRuntimeId);
+          if (matching.length !== 1) throw new Error(`restart recovery: expected exactly one target runtime, got ${matching.length}`);
+          await this.waitForRuntimeReady(targetRuntimeId, 5000);
+          await this.assertRecoveredRuntimeUnique(targetRuntimeId);
+        }
+        if (targetExtensionId) {
+          const plugins = await this.listPlugins();
+          const matching = plugins.filter(p => p.extensionId === targetExtensionId);
+          if (matching.length !== 1) throw new Error(`restart recovery: expected exactly one target plugin, got ${matching.length}`);
+        }
         return;
       } catch {
-        // not ready yet
+        await sleep(1000);
       }
-      await sleep(1000);
     }
-    throw new Error('backend did not start within 30s');
+    throw new Error('backend did not recover after restart within 60s');
   }
+
 }
 
 export function createDriver(options?: BackendDriverOptions): BackendDriver {
