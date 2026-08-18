@@ -98,7 +98,9 @@ func (r Runner) Apply(migrations []Migration) error {
 	}
 	if pending && !r.SkipBackup {
 		if err := r.CreatePreMigrationBackup(); err != nil {
-			_ = r.failMigrationOperation(operationID, err.Error())
+			if failErr := r.failMigrationOperation(operationID, err.Error()); failErr != nil {
+				return errors.Join(err, fmt.Errorf("persist migration failure: %w", failErr))
+			}
 			return err
 		}
 	}
@@ -110,11 +112,18 @@ func (r Runner) Apply(migrations []Migration) error {
 			failureMsg = err.Error()
 			break
 		}
-		_ = r.recordMigrationCheckpoint(operationID, migration.Version)
+		if err := r.recordMigrationCheckpoint(operationID, migration.Version); err != nil {
+			failed = true
+			failureMsg = fmt.Sprintf("record migration checkpoint %s: %v", migration.Version, err)
+			break
+		}
 	}
 	if failed {
-		_ = r.failMigrationOperation(operationID, failureMsg)
-		return fmt.Errorf("migration failed at operation %s: %s", operationID, failureMsg)
+		primaryErr := fmt.Errorf("migration failed at operation %s: %s", operationID, failureMsg)
+		if failErr := r.failMigrationOperation(operationID, failureMsg); failErr != nil {
+			return errors.Join(primaryErr, fmt.Errorf("persist migration failure: %w", failErr))
+		}
+		return primaryErr
 	}
 	if err := r.completeMigrationOperation(operationID); err != nil {
 		return err
@@ -211,7 +220,9 @@ func (r Runner) applyOne(migration Migration) error {
 			StartedAt:    now().Format(time.RFC3339),
 			FinishedAt:   now().Format(time.RFC3339),
 		}
-		_ = r.DB.Save(&failed).Error
+		if persistErr := r.DB.Save(&failed).Error; persistErr != nil {
+			return errors.Join(err, fmt.Errorf("persist failed migration record %s: %w", migration.Version, persistErr))
+		}
 		return err
 	}
 	return nil

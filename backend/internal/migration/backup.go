@@ -45,6 +45,17 @@ func BackupMigration() Migration {
 	}
 }
 
+func recordBackupFailure(db *gorm.DB, id, backupPath, startedAt string, now func() time.Time, primary error) error {
+	if primary == nil {
+		return nil
+	}
+	finishedAt := now().UTC().Format(time.RFC3339)
+	if persistErr := insertBackupRecord(db, id, backupPath, 0, "", "failed", startedAt, finishedAt, primary.Error()); persistErr != nil {
+		return errors.Join(primary, fmt.Errorf("persist failed backup record: %w", persistErr))
+	}
+	return primary
+}
+
 func (r Runner) CreatePreMigrationBackup() error {
 	if r.DB == nil {
 		return errors.New("db is required")
@@ -81,17 +92,14 @@ func (r Runner) CreatePreMigrationBackup() error {
 	backupPath := filepath.Join(backupDir, id+".db")
 	startedAt := startedAtTime.Format(time.RFC3339)
 	if err := os.MkdirAll(backupDir, 0755); err != nil {
-		_ = insertBackupRecord(r.DB, id, backupPath, 0, "", "failed", startedAt, now().UTC().Format(time.RFC3339), err.Error())
-		return err
+		return recordBackupFailure(r.DB, id, backupPath, startedAt, now, err)
 	}
 	if err := r.DB.Exec("PRAGMA wal_checkpoint(PASSIVE)").Error; err != nil {
-		_ = insertBackupRecord(r.DB, id, backupPath, 0, "", "failed", startedAt, now().UTC().Format(time.RFC3339), err.Error())
-		return err
+		return recordBackupFailure(r.DB, id, backupPath, startedAt, now, err)
 	}
 	components, err := copySQLiteBackupFiles(sourcePath, backupPath)
 	if err != nil {
-		_ = insertBackupRecord(r.DB, id, backupPath, 0, "", "failed", startedAt, now().UTC().Format(time.RFC3339), err.Error())
-		return err
+		return recordBackupFailure(r.DB, id, backupPath, startedAt, now, err)
 	}
 	manifestPath := filepath.Join(backupDir, id+".json")
 	if err := writeBackupManifest(manifestPath, backupManifest{
@@ -101,13 +109,11 @@ func (r Runner) CreatePreMigrationBackup() error {
 		BackupPath: backupPath,
 		Components: components,
 	}); err != nil {
-		_ = insertBackupRecord(r.DB, id, backupPath, 0, "", "failed", startedAt, now().UTC().Format(time.RFC3339), err.Error())
-		return err
+		return recordBackupFailure(r.DB, id, backupPath, startedAt, now, err)
 	}
 	metadataSize, metadataChecksum, err := fileSizeAndChecksum(manifestPath)
 	if err != nil {
-		_ = insertBackupRecord(r.DB, id, backupPath, 0, "", "failed", startedAt, now().UTC().Format(time.RFC3339), err.Error())
-		return err
+		return recordBackupFailure(r.DB, id, backupPath, startedAt, now, err)
 	}
 	components = append(components, backupComponent{
 		Role:         "metadata",
@@ -121,8 +127,7 @@ func (r Runner) CreatePreMigrationBackup() error {
 	})
 	mainSize, mainChecksum, err := fileSizeAndChecksum(backupPath)
 	if err != nil {
-		_ = insertBackupRecord(r.DB, id, backupPath, 0, "", "failed", startedAt, now().UTC().Format(time.RFC3339), err.Error())
-		return err
+		return recordBackupFailure(r.DB, id, backupPath, startedAt, now, err)
 	}
 	finishedAt := now().UTC().Format(time.RFC3339)
 	if err := insertBackupRecord(r.DB, id, backupPath, mainSize, mainChecksum, "completed", startedAt, finishedAt, ""); err != nil {

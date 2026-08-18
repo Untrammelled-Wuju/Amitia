@@ -145,9 +145,7 @@ CREATE TABLE IF NOT EXISTS characters (
     emotion_scale INTEGER DEFAULT 0,
     silence_duration INTEGER DEFAULT 0,
     character_base TEXT DEFAULT '',
-    card_data_json TEXT DEFAULT '{}',
-    revision INTEGER NOT NULL DEFAULT 0,
-    deleted_at TEXT
+    card_data_json TEXT DEFAULT '{}'
 );
 
 CREATE TABLE IF NOT EXISTS character_templates (
@@ -170,9 +168,7 @@ CREATE TABLE IF NOT EXISTS conversations (
     message_count INTEGER DEFAULT 0,
     state_version TEXT DEFAULT '',
     created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
-    revision INTEGER NOT NULL DEFAULT 0,
-    deleted_at TEXT
+    updated_at TEXT DEFAULT (datetime('now'))
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -207,9 +203,7 @@ CREATE TABLE IF NOT EXISTS messages (
     fallback_asset_reference TEXT NOT NULL DEFAULT '',
     response_group_id TEXT NOT NULL DEFAULT '',
     delivery_sequence INTEGER NOT NULL DEFAULT 0,
-    emote_decision_status TEXT NOT NULL DEFAULT 'none',
-    revision INTEGER NOT NULL DEFAULT 0,
-    deleted_at TEXT
+    emote_decision_status TEXT NOT NULL DEFAULT 'none'
 );
 
 CREATE TABLE IF NOT EXISTS pipeline_checkpoints (
@@ -1845,6 +1839,7 @@ CREATE INDEX IF NOT EXISTS idx_dpinstop_installation ON desktop_pet_installation
 CREATE INDEX IF NOT EXISTS idx_dpinstop_status ON desktop_pet_installation_operations(status);
 CREATE INDEX IF NOT EXISTS idx_dpinstop_device ON desktop_pet_installation_operations(device_id);
 CREATE INDEX IF NOT EXISTS idx_dpinstop_lease ON desktop_pet_installation_operations(lease_owner, lease_expires_at);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_dpinstop_idempotency_unique ON desktop_pet_installation_operations(user_id, device_id, operation_type, idempotency_key) WHERE idempotency_key <> '';
 
 CREATE TABLE IF NOT EXISTS desktop_pet_active_bindings (
     user_id TEXT PRIMARY KEY,
@@ -5433,6 +5428,8 @@ CREATE INDEX IF NOT EXISTS idx_dpmc_conflict_op ON desktop_pet_migration_conflic
 CREATE INDEX IF NOT EXISTS idx_dpmc_lock_expiry ON desktop_pet_migration_locks(lease_expires_at);
 CREATE INDEX IF NOT EXISTS idx_dprc_operation ON desktop_pet_read_cutovers(operation_id);
 CREATE INDEX IF NOT EXISTS idx_dpmc_write_op ON desktop_pet_write_cutovers(operation_id);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_dprc_operation_step_unique ON desktop_pet_read_cutovers(operation_id, step_name);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_dpwc_operation_step_unique ON desktop_pet_write_cutovers(operation_id, step_name);
 
 --- 来源: desktop_pet_runtime_v2_tables.go ---
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_command_attempts (

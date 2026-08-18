@@ -36,9 +36,11 @@ func (p *cutoverSnapshotPort) CreatePortableSnapshot(ctx context.Context, operat
 		existingCount = 0
 	}
 	snapshotID := fmt.Sprintf("snapshot-%s-%d", operationID, existingCount+1)
-	_ = p.deps.DB.WithContext(ctx).Exec(
+	if err := p.deps.DB.WithContext(ctx).Exec(
 		"CREATE TABLE IF NOT EXISTS cutover_snapshots (snapshot_id TEXT, operation_id TEXT, created_at TEXT)",
-	)
+	).Error; err != nil {
+		return "", fmt.Errorf("create cutover_snapshots table: %w", err)
+	}
 	if err := p.deps.DB.WithContext(ctx).Exec(
 		"INSERT INTO cutover_snapshots (snapshot_id, operation_id, created_at) VALUES (?, ?, ?)",
 		snapshotID, operationID, time.Now().Format(time.RFC3339),
@@ -108,13 +110,17 @@ func (p *cutoverMigrationPort) ExecuteLegacyToCanonical(ctx context.Context, ope
 		}
 	}
 	if migrated > 0 {
-		_ = p.deps.DB.WithContext(ctx).Exec(
+		if err := p.deps.DB.WithContext(ctx).Exec(
 			"CREATE TABLE IF NOT EXISTS cutover_migration_log (operation_id TEXT, migrated_tables INTEGER, executed_at TEXT)",
-		)
-		_ = p.deps.DB.WithContext(ctx).Exec(
+		).Error; err != nil {
+			return fmt.Errorf("create cutover_migration_log table: %w", err)
+		}
+		if err := p.deps.DB.WithContext(ctx).Exec(
 			"INSERT OR IGNORE INTO cutover_migration_log (operation_id, migrated_tables, executed_at) VALUES (?, ?, ?)",
 			operationID, migrated, time.Now().Format(time.RFC3339),
-		).Error
+		).Error; err != nil {
+			return fmt.Errorf("persist cutover migration log: %w", err)
+		}
 	}
 	return nil
 }
