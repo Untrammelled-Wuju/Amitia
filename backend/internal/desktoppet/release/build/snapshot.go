@@ -105,7 +105,10 @@ func (sc *SnapshotCreator) Create(ctx context.Context, req *CreateSnapshotReques
 	buildConfigHash := sc.computeBuildConfigHash(req, includedActions, defaultActionKey)
 	inputHash := computeInputHash(req.UserID, identity.ID, activeRevisionSetHash, gateResult.GateID, buildConfigHash)
 
-	actionsJSON, _ := json.Marshal(includedActions)
+	actionsJSON, err := json.Marshal(includedActions)
+	if err != nil {
+		return nil, NewBuildError("SNAPSHOT_ACTIONS_ENCODE_FAILED", "序列化快照动作失败", err)
+	}
 
 	snapshot := &release.ReleaseBuildSnapshot{
 		ID:                     uuid.NewString(),

@@ -292,14 +292,20 @@ func (o *ReleaseOrchestrator) Build(ctx context.Context, req *BuildReleaseReques
 		})
 	}
 
-	resultJSON, _ := json.Marshal(map[string]interface{}{
+	resultJSON, err := json.Marshal(map[string]interface{}{
 		"releaseId":         releaseID,
 		"version":           version,
 		"contentHash":       staged.ContentRootHash,
 		"validationVerdict": validation.Verdict,
 	})
+	if err != nil {
+		return nil, NewBuildError("RESULT_ENCODE_FAILED", "序列化构建结果失败", err)
+	}
 	op.ResultJSON = string(resultJSON)
-	o.updateOperation(op)
+	op.UpdatedAt = formatTimestamp(time.Now())
+	if err := o.repo.UpdateBuildOperation(op); err != nil {
+		return nil, NewBuildError("OPERATION_UPDATE_FAILED", "持久化构建结果失败", err)
+	}
 
 	return &BuildReleaseResult{
 		Release:          releaseData,
