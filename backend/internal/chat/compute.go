@@ -237,7 +237,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 		proactiveTaskInstruction = req.ProactiveTaskInstruction
 	}
 
-	skillScope := extension.ExecutionScope{UserID: req.UserID, CharacterID: charID, ConversationID: convID, Channel: channel, SessionID: req.SessionID, Trigger: extension.TriggerLLM, TraceID: requestID, RequestID: requestID, CorrelationID: trace.CorrelationID, CausationID: trace.CausationID}
+	skillScope := extension.ExecutionScope{UserID: req.UserID, CharacterID: charID, ConversationID: convID, Channel: channel, SessionID: req.SessionID, Trigger: extension.TriggerLLM, TraceID: requestID, RequestID: requestID, CorrelationID: trace.CorrelationID, CausationID: trace.CausationID, ExecContext: req.ExecContext}
 	agentSkillContext := ""
 	agentSkillCatalogIncluded := false
 	agentSkillTrace := []promptir.AgentSkillTrace{}
@@ -394,7 +394,7 @@ func (s *service) ComputeInteraction(ctx context.Context, req *ProcessMessageReq
 			}, nil
 		}
 	}
-	reply, forceVoice, totalTokens, llmErr := s.invokeLLMWithTools(ctx, cfg, messages, trace, promptTrace, userMsgID, convID, charID, channel, requestID, req.UserID, req.SessionID, toolDefs, seenTools, toolExecCtx)
+	reply, forceVoice, totalTokens, llmErr := s.invokeLLMWithTools(ctx, cfg, messages, trace, promptTrace, userMsgID, convID, charID, channel, requestID, req.UserID, req.SessionID, req.ExecContext, toolDefs, seenTools, toolExecCtx)
 	if llmErr != nil {
 		return nil, llmErr
 	}

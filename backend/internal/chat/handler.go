@@ -25,6 +25,18 @@ type Handler struct {
 	unifiedEntry  *interaction.UnifiedEntry
 }
 
+type conversationChangeScopedService interface {
+	CreateConversationForUser(req *CreateConversationRequest, userID string) (*Conversation, error)
+	DeleteConversationForUser(id string, userID string) (bool, error)
+	DeleteAllConversationsForUser(userID string) error
+	ChangeCharacterForUser(convID, charID, userID string) (*Conversation, error)
+}
+
+type messageChangeScopedService interface {
+	DeleteMessagesForUser(convID string, userID string) error
+	DeleteSingleMessageForUser(id string, userID string) error
+}
+
 func NewHandler(srv Service) *Handler {
 	return &Handler{service: srv}
 }
@@ -54,7 +66,13 @@ func (h *Handler) CreateConversation(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
-	conv, err := h.service.CreateConversation(&req)
+	var conv *Conversation
+	var err error
+	if scoped, ok := h.service.(conversationChangeScopedService); ok {
+		conv, err = scoped.CreateConversationForUser(&req, requestidentity.ResolveGin(c, ""))
+	} else {
+		conv, err = h.service.CreateConversation(&req)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
@@ -77,7 +95,13 @@ func (h *Handler) GetMessages(c *gin.Context) {
 
 func (h *Handler) DeleteConversation(c *gin.Context) {
 	id := c.Param("id")
-	characterDeleted, err := h.service.DeleteConversation(id)
+	var characterDeleted bool
+	var err error
+	if scoped, ok := h.service.(conversationChangeScopedService); ok {
+		characterDeleted, err = scoped.DeleteConversationForUser(id, requestidentity.ResolveGin(c, ""))
+	} else {
+		characterDeleted, err = h.service.DeleteConversation(id)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
@@ -86,7 +110,13 @@ func (h *Handler) DeleteConversation(c *gin.Context) {
 }
 
 func (h *Handler) DeleteAllConversations(c *gin.Context) {
-	if err := h.service.DeleteAllConversations(); err != nil {
+	var err error
+	if scoped, ok := h.service.(conversationChangeScopedService); ok {
+		err = scoped.DeleteAllConversationsForUser(requestidentity.ResolveGin(c, ""))
+	} else {
+		err = h.service.DeleteAllConversations()
+	}
+	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
@@ -95,7 +125,13 @@ func (h *Handler) DeleteAllConversations(c *gin.Context) {
 
 func (h *Handler) DeleteMessages(c *gin.Context) {
 	id := c.Param("id")
-	if err := h.service.DeleteMessages(id); err != nil {
+	var err error
+	if scoped, ok := h.service.(messageChangeScopedService); ok {
+		err = scoped.DeleteMessagesForUser(id, requestidentity.ResolveGin(c, ""))
+	} else {
+		err = h.service.DeleteMessages(id)
+	}
+	if err != nil {
 		util.ErrorResponse(c, response.InternalError, err.Error(), nil)
 		return
 	}
@@ -104,7 +140,13 @@ func (h *Handler) DeleteMessages(c *gin.Context) {
 
 func (h *Handler) DeleteSingleMessage(c *gin.Context) {
 	id := c.Param("id")
-	if err := h.service.DeleteSingleMessage(id); err != nil {
+	var err error
+	if scoped, ok := h.service.(messageChangeScopedService); ok {
+		err = scoped.DeleteSingleMessageForUser(id, requestidentity.ResolveGin(c, ""))
+	} else {
+		err = h.service.DeleteSingleMessage(id)
+	}
+	if err != nil {
 		util.ErrorResponse(c, response.NotFound, err.Error(), nil)
 		return
 	}
@@ -135,7 +177,13 @@ func (h *Handler) ChangeCharacter(c *gin.Context) {
 		util.ErrorResponse(c, response.InvalidParams, err.Error(), nil)
 		return
 	}
-	conv, err := h.service.ChangeCharacter(id, body.CharacterID)
+	var conv *Conversation
+	var err error
+	if scoped, ok := h.service.(conversationChangeScopedService); ok {
+		conv, err = scoped.ChangeCharacterForUser(id, body.CharacterID, requestidentity.ResolveGin(c, ""))
+	} else {
+		conv, err = h.service.ChangeCharacter(id, body.CharacterID)
+	}
 	if err != nil {
 		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
 		return
@@ -195,7 +243,7 @@ func (h *Handler) Chat(c *gin.Context) {
 			h.writeUnifiedEntryError(c, err)
 			return
 		}
-	if orchResult == nil || orchResult.Response == nil {
+		if orchResult == nil || orchResult.Response == nil {
 			util.ErrorResponse(c, response.OperationFailed, "统一入口未返回回复", nil)
 			return
 		}

@@ -10,12 +10,13 @@ import (
 
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/decision"
+	coreexec "github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/extension"
 	promptir "github.com/u-ai/backend/internal/prompt"
 	applog "github.com/u-ai/backend/log"
 )
 
-func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, trace applog.TraceFields, promptTrace *promptir.PromptTrace, userMsgID, convID, charID, channel, requestID, userID, sessionID string, toolDefs []tool.Tool, seenTools map[string]bool, toolExecCtx context.Context) (string, bool, int, error) {
+func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, messages []map[string]interface{}, trace applog.TraceFields, promptTrace *promptir.PromptTrace, userMsgID, convID, charID, channel, requestID, userID, sessionID string, execCtx *coreexec.ExecutionContext, toolDefs []tool.Tool, seenTools map[string]bool, toolExecCtx context.Context) (string, bool, int, error) {
 	var reply string
 	var totalTokens int
 	forceVoice := false
@@ -77,7 +78,7 @@ func (s *service) invokeLLMWithTools(ctx context.Context, cfg *ModelConfig, mess
 			activationPrompt := ""
 			var outcome toolExecOutcome
 			if s.toolRuntime != nil {
-				toolScope := SkillScope{UserID: userID, CharacterID: charID, ConversationID: convID, Channel: channel, SessionID: sessionID, Trigger: string(extension.TriggerLLM), TraceID: requestID, RequestID: requestID, ToolCallID: toolCallID, CorrelationID: trace.CorrelationID, CausationID: trace.CausationID}
+				toolScope := SkillScope{UserID: userID, CharacterID: charID, ConversationID: convID, Channel: channel, SessionID: sessionID, Trigger: string(extension.TriggerLLM), TraceID: requestID, RequestID: requestID, ToolCallID: toolCallID, CorrelationID: trace.CorrelationID, CausationID: trace.CausationID, ExecContext: execCtx}
 				toolResult, found := s.toolRuntime.ExecuteModelTool(toolExecCtx, name, json.RawMessage(args), toolScope, "")
 				outcome = toolResultToOutcome(toolResult, found)
 			} else {

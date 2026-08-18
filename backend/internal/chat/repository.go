@@ -49,7 +49,7 @@ func NewRepository(ctx *app.AppContext) Repository {
 }
 
 func (r *repository) ListConversations(q ConversationQuery) ([]Conversation, int64, error) {
-	query := r.db.Model(&Conversation{})
+	query := r.db.Model(&Conversation{}).Where("deleted_at IS NULL")
 	if q.Channel != "" {
 		query = query.Where("channel = ?", q.Channel)
 	}
@@ -83,7 +83,7 @@ func (r *repository) ListConversations(q ConversationQuery) ([]Conversation, int
 
 func (r *repository) GetConversation(id string) (*Conversation, error) {
 	var c Conversation
-	err := r.db.Where("id = ?", id).First(&c).Error
+	err := r.db.Where("id = ? AND deleted_at IS NULL", id).First(&c).Error
 	return &c, err
 }
 
@@ -114,9 +114,9 @@ func (r *repository) GetMessages(convID string, page, pageSize int) ([]Message, 
 	}
 	offset := (page - 1) * pageSize
 	var total int64
-	r.db.Model(&Message{}).Where("conversation_id = ?", convID).Count(&total)
+	r.db.Model(&Message{}).Where("conversation_id = ? AND deleted_at IS NULL", convID).Count(&total)
 	var msgs []Message
-	err := r.db.Where("conversation_id = ?", convID).Order("sequence ASC").Limit(pageSize).Offset(offset).Find(&msgs).Error
+	err := r.db.Where("conversation_id = ? AND deleted_at IS NULL", convID).Order("sequence ASC").Limit(pageSize).Offset(offset).Find(&msgs).Error
 	if msgs == nil {
 		msgs = []Message{}
 	}
@@ -136,7 +136,7 @@ func (r *repository) DeleteMessagesByConv(convID string) error {
 }
 
 func (r *repository) SearchMessages(q MessageSearchQuery) ([]Message, int64, error) {
-	query := r.db.Model(&Message{}).Where("content LIKE ?", "%"+q.Keyword+"%")
+	query := r.db.Model(&Message{}).Where("deleted_at IS NULL AND content LIKE ?", "%"+q.Keyword+"%")
 	if q.ConversationID != "" {
 		query = query.Where("conversation_id = ?", q.ConversationID)
 	}
