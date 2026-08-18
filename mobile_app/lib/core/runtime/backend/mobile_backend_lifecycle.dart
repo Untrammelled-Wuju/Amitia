@@ -4,7 +4,7 @@ import 'backend_topology.dart';
 import 'backend_topology_resolver.dart';
 import 'backend_connection.dart';
 import '../embedded/embedded_runtime_controller.dart';
-import '../backend_transport/connectivity/backend_connectivity_probe.dart';
+import '../../backend_transport/connectivity/backend_connectivity_probe.dart';
 
 export '../embedded/embedded_runtime_controller.dart' show EmbeddedRuntimeStatus;
 

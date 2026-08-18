@@ -35,16 +35,13 @@ public class BackendActionDispatcherImpl: BackendActionDispatcher {
             requestId: requestId,
             platform: "ios",
             operation: operation,
-            requestPayload
+            payload: requestPayload
         )
 
         let response = await host.execute(request)
 
         if response.status == "ok" {
-            if let result = response.result {
-                return result
-            }
-            return ["executed": true, "actionId": actionId]
+            return response.result ?? [:]
         } else {
             let errorCode = response.error?.code ?? "UNKNOWN_ERROR"
             let errorMessage = response.error?.message ?? "Action execution failed"

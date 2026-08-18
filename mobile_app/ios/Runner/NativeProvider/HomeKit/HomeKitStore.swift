@@ -15,7 +15,7 @@ public struct HomeKitRef: Sendable {
     }
 }
 
-public final class HomeKitStore: NSObject, HMHomeManagerDelegate, @unchecked Sendable {
+public final class HomeKitStore: NSObject, HMHomeManagerDelegate, HMHomeDelegate, @unchecked Sendable {
     public static let shared = HomeKitStore()
 
     private var homeManager: HMHomeManager?
@@ -165,6 +165,101 @@ public final class HomeKitStore: NSObject, HMHomeManagerDelegate, @unchecked Sen
             domain: "homekit",
             event: "home.removed",
             data: ["id": home.uniqueIdentifier.uuidString, "name": home.name]
+        ))
+    }
+
+    // MARK: - HMHomeDelegate
+
+    public func home(_ home: HMHome, didAdd accessory: HMAccessory) {
+        queue.sync { generation += 1 }
+        NativeEventEmitter.shared.emit(NativeEventPayload(
+            domain: "homekit",
+            event: "accessory.added",
+            data: [
+                "id": accessory.uniqueIdentifier.uuidString,
+                "name": accessory.name,
+                "homeId": home.uniqueIdentifier.uuidString,
+                "category": accessory.category.localizedDescription
+            ],
+            generation: Int(generation)
+        ))
+    }
+
+    public func home(_ home: HMHome, didRemove accessory: HMAccessory) {
+        queue.sync { generation += 1 }
+        NativeEventEmitter.shared.emit(NativeEventPayload(
+            domain: "homekit",
+            event: "accessory.removed",
+            data: [
+                "id": accessory.uniqueIdentifier.uuidString,
+                "name": accessory.name,
+                "homeId": home.uniqueIdentifier.uuidString
+            ],
+            generation: Int(generation)
+        ))
+    }
+
+    public func home(_ home: HMHome, didUpdateNameFor accessory: HMAccessory) {
+        queue.sync { generation += 1 }
+        NativeEventEmitter.shared.emit(NativeEventPayload(
+            domain: "homekit",
+            event: "accessory.updated",
+            data: [
+                "id": accessory.uniqueIdentifier.uuidString,
+                "name": accessory.name,
+                "homeId": home.uniqueIdentifier.uuidString,
+                "changeType": "name"
+            ],
+            generation: Int(generation)
+        ))
+    }
+
+    public func home(_ home: HMHome, didAdd service: HMService, to accessory: HMAccessory) {
+        queue.sync { generation += 1 }
+        NativeEventEmitter.shared.emit(NativeEventPayload(
+            domain: "homekit",
+            event: "service.added",
+            data: [
+                "id": service.uniqueIdentifier.uuidString,
+                "name": service.name,
+                "serviceType": service.serviceType,
+                "accessoryId": accessory.uniqueIdentifier.uuidString,
+                "homeId": home.uniqueIdentifier.uuidString
+            ],
+            generation: Int(generation)
+        ))
+    }
+
+    public func home(_ home: HMHome, didUpdateNameFor service: HMService) {
+        queue.sync { generation += 1 }
+        NativeEventEmitter.shared.emit(NativeEventPayload(
+            domain: "homekit",
+            event: "service.updated",
+            data: [
+                "id": service.uniqueIdentifier.uuidString,
+                "name": service.name,
+                "serviceType": service.serviceType,
+                "changeType": "name"
+            ],
+            generation: Int(generation)
+        ))
+    }
+
+    public func home(_ home: HMHome, didUpdateValueFor characteristic: HMCharacteristic) {
+        queue.sync { generation += 1 }
+        NativeEventEmitter.shared.emit(NativeEventPayload(
+            domain: "homekit",
+            event: "characteristic.value_changed",
+            data: [
+                "id": characteristic.uniqueIdentifier.uuidString,
+                "characteristicType": characteristic.characteristicType,
+                "value": characteristic.value ?? NSNull(),
+                "serviceId": characteristic.service?.uniqueIdentifier.uuidString ?? "",
+                "accessoryId": characteristic.service?.accessory?.uniqueIdentifier.uuidString ?? "",
+                "homeId": home.uniqueIdentifier.uuidString
+            ],
+            generation: Int(generation),
+            entityRef: characteristic.service?.accessory?.uniqueIdentifier.uuidString
         ))
     }
 }
