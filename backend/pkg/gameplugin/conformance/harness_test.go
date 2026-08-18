@@ -67,8 +67,7 @@ func TestInvalidRequestFixture(t *testing.T) {
 	for _, fixture := range invalidFixtures {
 		data, err := loadFixture(fixture)
 		if err != nil {
-			t.Logf("skipping %s (not found)", fixture)
-			continue
+			t.Fatalf("fixture %s not found: %v", fixture, err)
 		}
 		if err := validator.Validate(data); err == nil {
 			t.Errorf("%s: expected validation to fail", fixture)
@@ -276,8 +275,7 @@ func TestTypeScriptGeneratedFixture(t *testing.T) {
 	for _, f := range fixtures {
 		data, err := loadFixture(f)
 		if err != nil {
-			t.Logf("skipping %s: %v", f, err)
-			continue
+			t.Fatalf("fixture %s not found: %v", f, err)
 		}
 		if err := validator.Validate(data); err != nil {
 			t.Errorf("fixture %s failed: %v", f, err)
