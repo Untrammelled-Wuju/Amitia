@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/agent/tool"
+	coreexec "github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/extension"
 )
 
@@ -21,6 +22,7 @@ type SkillScope struct {
 	ToolCallID     string
 	CorrelationID  string
 	CausationID    string
+	ExecContext    *coreexec.ExecutionContext
 }
 
 type ContextContribution struct {
@@ -93,6 +95,7 @@ func toolScopeFromExtension(es extension.ExecutionScope) SkillScope {
 		ToolCallID:     es.ToolCallID,
 		CorrelationID:  es.CorrelationID,
 		CausationID:    es.CausationID,
+		ExecContext:    es.ExecContext,
 	}
 }
 

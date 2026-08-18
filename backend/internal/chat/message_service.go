@@ -11,6 +11,8 @@ import (
 
 	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/pipelinecheckpoint"
+	"github.com/u-ai/backend/internal/requestidentity"
+	syncapi "github.com/u-ai/backend/internal/sync"
 	"gorm.io/gorm"
 )
 
@@ -41,18 +43,51 @@ func (s *service) removeAttachmentReferences(tx *gorm.DB, attachments []MessageA
 }
 
 func (s *service) DeleteMessages(convID string) error {
+	return s.DeleteMessagesForUser(convID, requestidentity.DefaultUserID)
+}
+
+func (s *service) DeleteMessagesForUser(convID string, userID string) error {
 	var attachments []MessageAttachment
 	if s.artifactResolver != nil {
 		attachments, _ = s.repo.GetAttachmentsByConv(convID)
 	}
 	err := s.db.Transaction(func(tx *gorm.DB) error {
+		var messages []struct {
+			ID             string
+			ConversationID string
+			Role           string
+			Content        string
+			Sequence       int64
+			MsgType        string
+			Source         string
+			Revision       int64
+		}
+		if err := tx.Table("messages").Where("conversation_id = ?", convID).
+			Select("id", "conversation_id", "role", "content", "sequence", "msg_type", "source", "COALESCE(revision, 1) AS revision").Scan(&messages).Error; err != nil {
+			return err
+		}
 		if err := s.removeAttachmentReferences(tx, attachments); err != nil {
 			return err
 		}
-		if err := tx.Where("conversation_id = ?", convID).Delete(&MessageAttachment{}).Error; err != nil {
-			return err
+		for _, row := range messages {
+			message := &Message{ID: row.ID, ConversationID: row.ConversationID, Role: row.Role, Content: row.Content, Sequence: row.Sequence, MsgType: row.MsgType, Source: row.Source}
+			now := time.Now().Format("2006-01-02 15:04:05")
+			result := tx.Table("messages").Where("id = ? AND revision = ? AND deleted_at IS NULL", row.ID, row.Revision).Updates(map[string]interface{}{
+				"deleted_at": now,
+				"updated_at": now,
+				"revision":   row.Revision + 1,
+			})
+			if result.Error != nil {
+				return result.Error
+			}
+			if result.RowsAffected == 0 {
+				return fmt.Errorf("消息版本冲突")
+			}
+			if err := s.recordMessageChangeTx(tx, message, syncapi.OpDelete, row.Revision+1, userID); err != nil {
+				return err
+			}
 		}
-		if err := tx.Where("conversation_id = ?", convID).Delete(&Message{}).Error; err != nil {
+		if err := tx.Where("conversation_id = ?", convID).Delete(&MessageAttachment{}).Error; err != nil {
 			return err
 		}
 		return nil
@@ -71,6 +106,10 @@ func (s *service) DeleteMessagesScoped(convID string, characterID string) error 
 }
 
 func (s *service) DeleteSingleMessage(id string) error {
+	return s.DeleteSingleMessageForUser(id, requestidentity.DefaultUserID)
+}
+
+func (s *service) DeleteSingleMessageForUser(id string, userID string) error {
 	var msg Message
 	if err := s.db.Where("id = ?", id).First(&msg).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -83,13 +122,29 @@ func (s *service) DeleteSingleMessage(id string) error {
 		attachments, _ = s.repo.GetMessageAttachments(id)
 	}
 	err := s.db.Transaction(func(tx *gorm.DB) error {
+		var revision int64
+		if err := tx.Table("messages").Where("id = ?", id).Select("COALESCE(revision, 1)").Scan(&revision).Error; err != nil {
+			return err
+		}
 		if err := s.removeAttachmentReferences(tx, attachments); err != nil {
 			return err
 		}
-		if err := tx.Where("message_id = ?", id).Delete(&MessageAttachment{}).Error; err != nil {
+		now := time.Now().Format("2006-01-02 15:04:05")
+		result := tx.Table("messages").Where("id = ? AND revision = ? AND deleted_at IS NULL", id, revision).Updates(map[string]interface{}{
+			"deleted_at": now,
+			"updated_at": now,
+			"revision":   revision + 1,
+		})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected == 0 {
+			return fmt.Errorf("消息版本冲突")
+		}
+		if err := s.recordMessageChangeTx(tx, &msg, syncapi.OpDelete, revision+1, userID); err != nil {
 			return err
 		}
-		if err := tx.Where("id = ?", id).Delete(&Message{}).Error; err != nil {
+		if err := tx.Where("message_id = ?", id).Delete(&MessageAttachment{}).Error; err != nil {
 			return err
 		}
 		return nil

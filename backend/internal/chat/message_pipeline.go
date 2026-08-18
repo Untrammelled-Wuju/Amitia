@@ -99,6 +99,7 @@ func (s *service) ProcessMessageCtx(ctx context.Context, req *interaction.Proces
 		ReplyToMessageID:         req.ReplyToMessageID,
 		ExpectedStatusVersion:    req.ExpectedStatusVersion,
 		Runtime:                  req.Runtime,
+		ExecContext:              req.ExecContext,
 		IsInternal:               req.IsInternal,
 		ProactiveTimeContext:     req.ProactiveTimeContext,
 		ProactiveRecentContext:   req.ProactiveRecentContext,

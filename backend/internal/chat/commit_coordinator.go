@@ -10,6 +10,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/interaction"
 	newoutbox "github.com/u-ai/backend/internal/outbox"
+	syncapi "github.com/u-ai/backend/internal/sync"
 	"gorm.io/gorm"
 )
 
@@ -188,6 +189,9 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 				if err := tx.Create(emoteMessage).Error; err != nil {
 					return err
 				}
+				if err := s.recordMessageChangeTx(tx, emoteMessage, syncapi.OpCreate, 1, plan.Request.UserID); err != nil {
+					return err
+				}
 				result.LastSequence = emoteMessage.Sequence
 				items = append(items, interaction.MessagePlanItem{MessageID: emoteMessage.ID, Sequence: sequence, Type: "emote", Content: planned.Content, EmoteID: planned.EmoteID, AltText: planned.AltText, IsAnimated: planned.IsAnimated == 1, Width: planned.Width, Height: planned.Height, OriginalAssetReference: planned.Original, FallbackAssetReference: planned.Fallback})
 				emoteInserted = true
@@ -201,6 +205,9 @@ func (s *service) commitInteraction(plan messageCommitPlan) (*messageCommitResul
 			}
 			aiMsg := &Message{ID: aiMsgID, ConversationID: plan.Conversation, Role: "assistant", Content: text, MsgType: "text", Source: plan.Source, Tokens: plan.TotalTokens, RequestID: plan.Request.RequestID, ResponseGroupID: responseGroupID, DeliverySequence: sequence, EmoteDecisionStatus: decisionStatus}
 			if err := tx.Create(aiMsg).Error; err != nil {
+				return err
+			}
+			if err := s.recordMessageChangeTx(tx, aiMsg, syncapi.OpCreate, 1, plan.Request.UserID); err != nil {
 				return err
 			}
 			result.MessageIDs = append(result.MessageIDs, aiMsgID)

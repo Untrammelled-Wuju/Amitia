@@ -5,6 +5,7 @@ package chat
 import (
 	"github.com/google/uuid"
 	"github.com/u-ai/backend/internal/chat/modelprotocol"
+	coreexec "github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/interaction"
 	newoutbox "github.com/u-ai/backend/internal/outbox"
 	"gorm.io/gorm"
@@ -334,6 +335,7 @@ type ProcessMessageRequest struct {
 	InteractionID            string                       `json:"-"`
 	ExpectedStatusVersion    int64                        `json:"-"`
 	Runtime                  *interaction.RuntimeAssembly `json:"-"`
+	ExecContext              *coreexec.ExecutionContext   `json:"-"`
 	IsInternal               bool                         `json:"-"`
 }
 
