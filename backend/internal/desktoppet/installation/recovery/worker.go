@@ -34,6 +34,8 @@ type RecoveryRepo interface {
 	ReleaseOperationLease(operationID, executionID string) error
 	ClaimOperationLease(operationID, owner string, ttl time.Duration, expectedStatuses []string) (*operation.InstallationOperation, error)
 	UpdateOperationStatus(operationID, oldStatus, newStatus, executionID string) (*operation.InstallationOperation, error)
+	CASUpdateOperationStage(operationID, expectedStage, newStage, executionID string) (*operation.InstallationOperation, error)
+	CompleteOperation(operationID, expectedStage, expectedStatus, executionID string) (*operation.InstallationOperation, error)
 	GetCommitJournal(operationID string) (*RecoveryCommitJournal, error)
 	GetSwitchJournal(operationID string) (*RecoverySwitchJournal, error)
 	CASUpdateCommitJournalStage(operationID, expectedStage, newStage, executionID string) (*RecoveryCommitJournal, error)
@@ -317,6 +319,11 @@ func (w *RecoveryWorker) recoverDesiredStateOperationFromRuntimeApplied(ctx cont
 	if err := w.desiredStateFinalizer.FinalizeDesiredStateApplied(ctx, op); err != nil {
 		return fmt.Errorf("installation recovery: finalize desired-state operation op=%s: %w", op.ID, err)
 	}
+	if _, err := w.repo.CompleteOperation(op.ID, operation.OpStageRuntimeApplied, op.Status, w.executionID); err != nil {
+		return fmt.Errorf("installation recovery: complete runtime-applied operation op=%s: %w", op.ID, err)
+	}
+	op.Stage = operation.OpStageCompleted
+	op.Status = operation.OpStatusCompleted
 	return nil
 }
 

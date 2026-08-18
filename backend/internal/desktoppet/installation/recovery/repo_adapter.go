@@ -101,24 +101,118 @@ func (a *installRepoAdapter) ClaimOperationLease(operationID, owner string, ttl 
 func (a *installRepoAdapter) UpdateOperationStatus(operationID, oldStatus, newStatus, executionID string) (*operation.InstallationOperation, error) {
 	var op operation.InstallationOperation
 	err := a.db.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("id = ?", operationID).Take(&op).Error; err != nil {
+		lookup := tx.Where("id = ? AND status = ?", operationID, oldStatus)
+		if executionID != "" {
+			lookup = lookup.Where("lease_owner = ?", executionID)
+		}
+		if err := lookup.Take(&op).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrCASConflict
+			}
 			return err
 		}
-		if op.Status != oldStatus {
-			return errors.New("status mismatch")
+
+		update := tx.Model(&operation.InstallationOperation{}).
+			Where("id = ? AND status = ?", operationID, oldStatus)
+		if executionID != "" {
+			update = update.Where("lease_owner = ?", executionID)
 		}
-		result := tx.Model(&operation.InstallationOperation{}).
-			Where("id = ? AND status = ?", operationID, oldStatus).
-			Updates(map[string]interface{}{
-				"status":     newStatus,
-				"updated_at": time.Now(),
-			})
+		result := update.Updates(map[string]interface{}{
+			"status":     newStatus,
+			"updated_at": time.Now().UTC().Format(time.RFC3339),
+		})
 		if result.Error != nil {
 			return result.Error
 		}
 		if result.RowsAffected != 1 {
-			return errors.New("update failed")
+			return ErrCASConflict
 		}
+		op.Status = newStatus
+		op.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &op, nil
+}
+
+func (a *installRepoAdapter) CASUpdateOperationStage(operationID, expectedStage, newStage, executionID string) (*operation.InstallationOperation, error) {
+	var op operation.InstallationOperation
+	err := a.db.Transaction(func(tx *gorm.DB) error {
+		lookup := tx.Where("id = ? AND stage = ?", operationID, expectedStage)
+		if executionID != "" {
+			lookup = lookup.Where("lease_owner = ?", executionID)
+		}
+		if err := lookup.Take(&op).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrCASConflict
+			}
+			return err
+		}
+
+		update := tx.Model(&operation.InstallationOperation{}).
+			Where("id = ? AND stage = ?", operationID, expectedStage)
+		if executionID != "" {
+			update = update.Where("lease_owner = ?", executionID)
+		}
+		now := time.Now().UTC().Format(time.RFC3339)
+		result := update.Updates(map[string]interface{}{
+			"stage":      newStage,
+			"updated_at": now,
+		})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return ErrCASConflict
+		}
+		op.Stage = newStage
+		op.UpdatedAt = now
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &op, nil
+}
+
+func (a *installRepoAdapter) CompleteOperation(operationID, expectedStage, expectedStatus, executionID string) (*operation.InstallationOperation, error) {
+	var op operation.InstallationOperation
+	err := a.db.Transaction(func(tx *gorm.DB) error {
+		lookup := tx.Where("id = ? AND stage = ? AND status = ?", operationID, expectedStage, expectedStatus)
+		if executionID != "" {
+			lookup = lookup.Where("lease_owner = ?", executionID)
+		}
+		if err := lookup.Take(&op).Error; err != nil {
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				return ErrCASConflict
+			}
+			return err
+		}
+
+		update := tx.Model(&operation.InstallationOperation{}).
+			Where("id = ? AND stage = ? AND status = ?", operationID, expectedStage, expectedStatus)
+		if executionID != "" {
+			update = update.Where("lease_owner = ?", executionID)
+		}
+		now := time.Now().UTC().Format(time.RFC3339)
+		result := update.Updates(map[string]interface{}{
+			"stage":        operation.OpStageCompleted,
+			"status":       operation.OpStatusCompleted,
+			"completed_at": now,
+			"updated_at":   now,
+		})
+		if result.Error != nil {
+			return result.Error
+		}
+		if result.RowsAffected != 1 {
+			return ErrCASConflict
+		}
+		op.Stage = operation.OpStageCompleted
+		op.Status = operation.OpStatusCompleted
+		op.CompletedAt = now
+		op.UpdatedAt = now
 		return nil
 	})
 	if err != nil {

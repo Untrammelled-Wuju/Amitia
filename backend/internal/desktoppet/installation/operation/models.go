@@ -123,8 +123,7 @@ type InstallationOperation struct {
 	LeaseExpiresAt string
 	HeartbeatAt    string
 
-	DesiredRevision         int64
-	ExpectedAppliedRevision int64
+	DesiredRevision int64
 
 	ErrorCode    string
 	ErrorMessage string

@@ -24,7 +24,7 @@ type ReleaseStager interface {
 
 type RuntimeDesiredStatePublisher interface {
 	PublishDesiredState(ctx context.Context, deviceCtx device.DeviceContext, snapshot *DesiredStateSnapshot) error
-	PublishRecenter(ctx context.Context, deviceCtx device.DeviceContext, installationID string) error
+	PublishRecenter(ctx context.Context, deviceCtx device.DeviceContext, installationID, operationID string) (string, error)
 	PublishPlayAction(ctx context.Context, deviceCtx device.DeviceContext, installationID, actionKey string) error
 }
 
@@ -970,7 +970,8 @@ func (c *Coordinator) executeRecenter(ctx context.Context, req RecenterRequest, 
 		return &EnableDisableResult{OperationID: op.ID, Status: operation.OpStatusFailedTerminal, ErrorCode: "OPERATION_CREATE_FAILED"}, err
 	}
 
-	if err := c.runtimePublisher.PublishRecenter(ctx, req.DeviceCtx, req.InstallationID); err != nil {
+	_, err := c.runtimePublisher.PublishRecenter(ctx, req.DeviceCtx, req.InstallationID, op.ID)
+	if err != nil {
 		op.Status = operation.OpStatusFailedTerminal
 		op.ErrorCode = "PUBLISH_FAILED"
 		op.ErrorMessage = err.Error()

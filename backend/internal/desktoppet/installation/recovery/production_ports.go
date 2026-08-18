@@ -247,7 +247,7 @@ func (p *ProductionRuntimeRepo) SendDesiredCommand(ctx context.Context, opID, us
 	}
 	if op.OperationType == operation.TypeRecenter {
 		payload := []byte(fmt.Sprintf(`{"installationId":%q}`, firstNonEmpty(installationID, op.InstallationID)))
-		_, err := p.facade.Commands().CreateEphemeralCommand(userID, deviceID, string(runtimev2.CommandTypeRecenterOnce), fmt.Sprintf("recovery-recenter:%s", opID), payload)
+		_, err := p.facade.Commands().CreateEphemeralCommand(userID, deviceID, string(runtimev2.CommandTypeRecenterOnce), fmt.Sprintf("recenter:%s", opID), payload)
 		if errors.Is(err, runtimev2.ErrCommandDuplication) {
 			return nil
 		}
@@ -281,7 +281,7 @@ func (p *ProductionRuntimeRepo) SendDesiredCommand(ctx context.Context, opID, us
 	if ensureAbsent {
 		commandType = runtimev2.CommandTypeEnsureAbsent
 	}
-	_, err = p.facade.Commands().CreateDurableCommand(userID, deviceID, string(commandType), fmt.Sprintf("recovery:%s:%d", opID, desiredRevision), fmt.Sprintf("desired:%s", deviceID), seq, payload)
+	_, err = p.facade.Commands().CreateDurableCommand(userID, deviceID, string(commandType), fmt.Sprintf("desired:%s:%d", deviceID, desiredRevision), fmt.Sprintf("desired:%s", deviceID), seq, payload)
 	if errors.Is(err, runtimev2.ErrCommandDuplication) {
 		return nil
 	}
@@ -289,23 +289,26 @@ func (p *ProductionRuntimeRepo) SendDesiredCommand(ctx context.Context, opID, us
 }
 
 func (p *ProductionRuntimeRepo) CancelDesiredCommand(ctx context.Context, opID, userID, deviceID, runtimeID string) error {
-	if p == nil || p.db == nil || p.facade == nil {
-		return nil
+	if p == nil || p.db == nil || p.facade == nil || p.facade.Commands() == nil {
+		return errors.New("production runtime recovery: runtime v2 unavailable")
 	}
 	var op operation.InstallationOperation
 	if err := p.db.WithContext(ctx).Where("id = ? AND user_id = ? AND device_id = ?", opID, userID, deviceID).First(&op).Error; err != nil {
 		return err
 	}
-	var command runtimev2.RuntimeCommand
-	err := p.db.WithContext(ctx).Where("user_id = ? AND device_id = ? AND desired_revision = ?", userID, deviceID, op.DesiredRevision).Order("created_at DESC").First(&command).Error
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil
+	idempotencyKey := fmt.Sprintf("desired:%s:%d", deviceID, op.DesiredRevision)
+	if op.OperationType == operation.TypeRecenter {
+		idempotencyKey = fmt.Sprintf("recenter:%s", op.ID)
 	}
+	command, err := p.facade.Commands().GetCommandByIdempotencyKey(idempotencyKey)
 	if err != nil {
 		return err
 	}
-	if command.IsTerminal() {
+	if command == nil || command.IsTerminal() {
 		return nil
+	}
+	if runtimeID != "" && command.RuntimeID != "" && command.RuntimeID != runtimeID {
+		return errors.New("production runtime recovery: command runtime identity mismatch")
 	}
 	return p.facade.Commands().MarkCancelled(command.ID, time.Now())
 }
@@ -339,12 +342,12 @@ func (p *ProductionRuntimeRepo) MarkRuntimeApplied(opID string, appliedRevision 
 	return nil
 }
 
-func (p *ProductionRuntimeRepo) QueryCommandTerminalStatus(ctx context.Context, commandID string) (status string, found bool, err error) {
+func (p *ProductionRuntimeRepo) QueryCommandTerminalStatusByIdempotencyKey(ctx context.Context, idempotencyKey string) (status string, found bool, err error) {
 	if p == nil || p.db == nil {
 		return "", false, errors.New("production runtime recovery: runtime v2 unavailable")
 	}
 	var cmd runtimev2.RuntimeCommand
-	if err := p.db.WithContext(ctx).Where("id = ?", commandID).First(&cmd).Error; err != nil {
+	if err := p.db.WithContext(ctx).Where("idempotency_key = ?", idempotencyKey).Order("created_at DESC").First(&cmd).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			return "", false, nil
 		}
