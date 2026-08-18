@@ -433,3 +433,130 @@ func TestCutoverPlan_ConcurrentRequestCutover_OnlyOneEntersExecution(t *testing.
 	}
 	lock2.Release("cutover-lock")
 }
+
+func TestCutoverPlan_ReadSwitch_V2QueryableButLegacyReaderMustFail(t *testing.T) {
+	v2Queryable := false
+	legacyActive := true
+	plan := NewCutoverPlan(CutoverDependencies{
+		ReadSwitch: &testReadSwitchPort{
+			verifyReadCanonical: func(ctx context.Context) error {
+				v2Queryable = true
+				return nil
+			},
+			verifyProductionReaderNotLegacy: func(ctx context.Context) error {
+				if legacyActive {
+					return errors.New("production reader still uses legacy components")
+				}
+				return nil
+			},
+		},
+		Now: time.Now,
+	})
+	state := &CutoverState{}
+	err := plan.runReadSwitch(context.Background(), state)
+	if err == nil {
+		t.Fatal("expected read switch to fail when production reader still uses legacy, even if V2 tables are queryable")
+	}
+	if !v2Queryable {
+		t.Fatal("expected V2 tables to be checked (queryable) before legacy reader check")
+	}
+	if state.PhaseStatus != "verifying" {
+		t.Fatalf("expected phase status 'verifying', got: %s", state.PhaseStatus)
+	}
+}
+
+func TestCutoverPlan_ReadSwitch_V2QueryableLegacyReaderMigratedPasses(t *testing.T) {
+	plan := NewCutoverPlan(CutoverDependencies{
+		ReadSwitch: &testReadSwitchPort{
+			verifyReadCanonical: func(ctx context.Context) error {
+				return nil
+			},
+			verifyProductionReaderNotLegacy: func(ctx context.Context) error {
+				return nil
+			},
+		},
+		Now: time.Now,
+	})
+	state := &CutoverState{}
+	err := plan.runReadSwitch(context.Background(), state)
+	if err != nil {
+		t.Fatalf("expected read switch to pass when V2 queryable and legacy migrated, got: %v", err)
+	}
+	if state.PhaseStatus == "failed" || state.PhaseStatus == "verifying" {
+		t.Fatalf("expected read switch to not fail, got phase status: %s", state.PhaseStatus)
+	}
+}
+
+func TestCutoverPlan_ConcurrentCutover_TwoBackendInstances_OnlyOneSucceeds(t *testing.T) {
+	db := newTestDB(t)
+	defer closeTestDB(t, db)
+
+	lockDir := t.TempDir()
+	ctx := context.Background()
+	ttl := 30 * time.Second
+
+	lock1 := NewPersistentLock(db, lockDir)
+	lock2 := NewPersistentLock(db, lockDir)
+
+	if err := lock1.Acquire(ctx, "cutover-execution-lock", ttl); err != nil {
+		t.Fatalf("lock1 acquire failed: %v", err)
+	}
+
+	started := make(chan struct{})
+	go func() {
+		close(started)
+		_ = lock2.Acquire(ctx, "cutover-execution-lock", ttl)
+	}()
+
+	<-started
+	time.Sleep(50 * time.Millisecond)
+
+	if err := lock2.Acquire(ctx, "cutover-execution-lock", ttl); err == nil {
+		lock2.Release("cutover-execution-lock")
+		t.Fatal("lock2 should not acquire while lock1 holds the lock")
+	}
+
+	if err := lock1.Release("cutover-execution-lock"); err != nil {
+		t.Fatalf("lock1 release failed: %v", err)
+	}
+
+	if err := lock2.Acquire(ctx, "cutover-execution-lock", ttl); err != nil {
+		t.Fatalf("lock2 should acquire after lock1 releases: %v", err)
+	}
+	lock2.Release("cutover-execution-lock")
+}
+
+func TestCutoverPlan_HeartbeatLost_MustAbortCutover(t *testing.T) {
+	heartbeatLost := false
+
+	plan := NewCutoverPlan(CutoverDependencies{
+		ReadSwitch: &testReadSwitchPort{
+			verifyReadCanonical: func(ctx context.Context) error {
+				if heartbeatLost {
+					return errors.New("heartbeat lost: cannot verify read canonical during stale session")
+				}
+				return nil
+			},
+			verifyProductionReaderNotLegacy: func(ctx context.Context) error {
+				if heartbeatLost {
+					return errors.New("heartbeat lost: cannot verify production reader during stale session")
+				}
+				return nil
+			},
+		},
+		Now: time.Now,
+	})
+
+	state := &CutoverState{}
+	err := plan.runReadSwitch(context.Background(), state)
+	if err != nil {
+		t.Fatalf("expected read switch to pass with active heartbeat, got: %v", err)
+	}
+
+	heartbeatLost = true
+	state2 := &CutoverState{}
+	err = plan.runReadSwitch(context.Background(), state2)
+	if err == nil {
+		t.Fatal("expected read switch to fail when heartbeat is lost mid-cutover")
+	}
+}
