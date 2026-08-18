@@ -20,6 +20,7 @@ import (
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/psyche"
 	"github.com/u-ai/backend/internal/qdrant"
+	"github.com/u-ai/backend/internal/sync"
 	"github.com/u-ai/backend/internal/temporal"
 	visioncfg "github.com/u-ai/backend/internal/vision"
 	"github.com/u-ai/backend/pkg/app"
@@ -111,6 +112,8 @@ type ArtifactResolver interface {
 	Resolve(ctx context.Context, actor string, resourceURI string) (ArtifactResolution, error)
 	Open(ctx context.Context, actor string, resourceURI string) (io.ReadCloser, ArtifactResolution, error)
 	RegisterReference(artifactID string, refType string, refID string) error
+	RegisterReferenceGormTx(tx *gorm.DB, artifactID string, refType string, refID string) error
+	UnregisterReferenceGormTx(tx *gorm.DB, artifactID string, refType string, refID string) error
 }
 
 type ArtifactResolution struct {
@@ -129,6 +132,7 @@ type service struct {
 	repo                Repository
 	charRepo            character.Repository
 	db                  *gorm.DB
+	changeRecorder      sync.Recorder
 	psycheStore         psyche.PsycheStore
 	memoryPort          MemoryPort
 	profilePort         ProfilePort
@@ -384,7 +388,7 @@ func getVisionModelConfig() (*visioncfg.VisionConfig, error) {
 	return cfg, nil
 }
 
-func NewService(repo Repository, ctx *app.AppContext, memPort MemoryPort, profPort ProfilePort, epiPort EpisodicPort, wbPort WorldBookPort, comp *Compressor, visionPort VisionPort, graphSvc graph.Service, psycheStore psyche.PsycheStore) Service {
+func NewService(repo Repository, ctx *app.AppContext, memPort MemoryPort, profPort ProfilePort, epiPort EpisodicPort, wbPort WorldBookPort, comp *Compressor, visionPort VisionPort, graphSvc graph.Service, psycheStore psyche.PsycheStore, recorder ...sync.Recorder) Service {
 	if visionPort != nil {
 		SetVisionModelConfigProvider(visionPort.GetActive)
 	}
@@ -402,5 +406,9 @@ func NewService(repo Repository, ctx *app.AppContext, memPort MemoryPort, profPo
 		qdrant.NewQdrantClient(),
 		graphLayer,
 	)
-	return &service{repo: repo, charRepo: character.NewRepository(ctx), db: ctx.DB, psycheStore: psycheStore, memoryPort: memPort, profilePort: profPort, episodicPort: epiPort, worldBookPort: wbPort, visionPort: visionPort, wmCache: wmCache, stateProvider: stateProvider, compressor: comp, pipeline: p, localModels: make(map[string]LocalModelInfer)}
+	var r sync.Recorder
+	if len(recorder) > 0 {
+		r = recorder[0]
+	}
+	return &service{repo: repo, charRepo: character.NewRepository(ctx), db: ctx.DB, changeRecorder: r, psycheStore: psycheStore, memoryPort: memPort, profilePort: profPort, episodicPort: epiPort, worldBookPort: wbPort, visionPort: visionPort, wmCache: wmCache, stateProvider: stateProvider, compressor: comp, pipeline: p, localModels: make(map[string]LocalModelInfer)}
 }

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/u-ai/backend/internal/artifact"
 	"github.com/u-ai/backend/internal/pipelinecheckpoint"
 	"gorm.io/gorm"
 )
@@ -24,8 +25,39 @@ func (s *service) GetMessagesScoped(convID string, characterID string, page, pag
 	return s.repo.GetMessages(convID, page, pageSize)
 }
 
+func (s *service) removeAttachmentReferences(tx *gorm.DB, attachments []MessageAttachment) error {
+	if s.artifactResolver == nil {
+		return nil
+	}
+	for _, att := range attachments {
+		id, parseErr := artifact.ParseURI(att.ResourceURI)
+		if parseErr == nil {
+			if err := s.artifactResolver.UnregisterReferenceGormTx(tx, string(id), "message_attachment", att.ID); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func (s *service) DeleteMessages(convID string) error {
-	if err := s.repo.DeleteMessagesByConv(convID); err != nil {
+	var attachments []MessageAttachment
+	if s.artifactResolver != nil {
+		attachments, _ = s.repo.GetAttachmentsByConv(convID)
+	}
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := s.removeAttachmentReferences(tx, attachments); err != nil {
+			return err
+		}
+		if err := tx.Where("conversation_id = ?", convID).Delete(&MessageAttachment{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("conversation_id = ?", convID).Delete(&Message{}).Error; err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
 		return err
 	}
 	return pipelinecheckpoint.New(s.db).ResetConversation(convID)
@@ -46,7 +78,23 @@ func (s *service) DeleteSingleMessage(id string) error {
 		}
 		return err
 	}
-	if err := s.repo.DeleteMessage(id); err != nil {
+	var attachments []MessageAttachment
+	if s.artifactResolver != nil {
+		attachments, _ = s.repo.GetMessageAttachments(id)
+	}
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		if err := s.removeAttachmentReferences(tx, attachments); err != nil {
+			return err
+		}
+		if err := tx.Where("message_id = ?", id).Delete(&MessageAttachment{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("id = ?", id).Delete(&Message{}).Error; err != nil {
+			return err
+		}
+		return nil
+	})
+	if err != nil {
 		return err
 	}
 	return pipelinecheckpoint.New(s.db).ResetConversation(msg.ConversationID)
