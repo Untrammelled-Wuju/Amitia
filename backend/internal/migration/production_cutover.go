@@ -137,11 +137,34 @@ type CutoverBootstrapPort interface {
 
 type CutoverReadSwitchPort interface {
 	VerifyReadCanonical(ctx context.Context) error
+	VerifyProductionReaderNotLegacy(ctx context.Context) error
+}
+
+type CutoverReadVerification struct {
+	UserID            string `json:"userId"`
+	DeviceID          string `json:"deviceId"`
+	InstallationID    string `json:"installationId"`
+	ReleaseID         string `json:"releaseId"`
+	DesiredStateValid bool   `json:"desiredStateValid"`
+	BindingValid      bool   `json:"bindingValid"`
+	VerifiedAt        string `json:"verifiedAt"`
 }
 
 type CutoverWriteLockoutPort interface {
 	LockoutLegacyWrites(ctx context.Context) error
 	VerifyLegacyWriteLockout(ctx context.Context) error
+	ExecuteCanaryOperation(ctx context.Context) (*CanaryResult, error)
+	VerifyCanaryOperation(ctx context.Context, result *CanaryResult) error
+}
+
+type CanaryResult struct {
+	OperationID        string `json:"operationId"`
+	CommandID          string `json:"commandId"`
+	OperationTerminal  string `json:"operationTerminal"`
+	CommandTerminal    string `json:"commandTerminal"`
+	ProjectionRevision int64  `json:"projectionRevision"`
+	DesiredRevision    int64  `json:"desiredRevision"`
+	Success            bool   `json:"success"`
 }
 
 type CutoverWorkerCutoffPort interface {
@@ -188,21 +211,21 @@ type AuthoritySnapshot struct {
 }
 
 type CutoverDependencies struct {
-	DB                    *gorm.DB
-	Container            CanonicalAuthorityProvider
-	Maintenance          CutoverMaintenanceGate
-	Snapshot             CutoverSnapshotPort
-	Migration            CutoverMigrationPort
-	Bootstrap            CutoverBootstrapPort
-	ReadSwitch           CutoverReadSwitchPort
-	WriteLockout         CutoverWriteLockoutPort
-	WorkerCutoff         CutoverWorkerCutoffPort
-	Smoke                CutoverSmokePort
-	LegacyVerifier       CutoverLegacyVerifier
-	StateStore           CutoverStateStore
+	DB                      *gorm.DB
+	Container               CanonicalAuthorityProvider
+	Maintenance             CutoverMaintenanceGate
+	Snapshot                CutoverSnapshotPort
+	Migration               CutoverMigrationPort
+	Bootstrap               CutoverBootstrapPort
+	ReadSwitch              CutoverReadSwitchPort
+	WriteLockout            CutoverWriteLockoutPort
+	WorkerCutoff            CutoverWorkerCutoffPort
+	Smoke                   CutoverSmokePort
+	LegacyVerifier          CutoverLegacyVerifier
+	StateStore              CutoverStateStore
 	RuntimeArchitectureGate *RuntimeArchitectureGate
-	Stage2ClosureGate      *Stage2ClosureGate
-	Now                    func() time.Time
+	Stage2ClosureGate       *Stage2ClosureGate
+	Now                     func() time.Time
 }
 
 type CutoverPlan struct {
@@ -287,6 +310,9 @@ type dbStateStore struct {
 }
 
 func (s *dbStateStore) LoadState(ctx context.Context) (*CutoverState, error) {
+	if s.db == nil {
+		return nil, nil
+	}
 	var state CutoverState
 	if err := s.db.WithContext(ctx).First(&state).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -298,6 +324,9 @@ func (s *dbStateStore) LoadState(ctx context.Context) (*CutoverState, error) {
 }
 
 func (s *dbStateStore) LoadLatestState(ctx context.Context) (*CutoverState, error) {
+	if s.db == nil {
+		return nil, nil
+	}
 	var state CutoverState
 	if err := s.db.WithContext(ctx).Order("started_at DESC").First(&state).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -309,6 +338,9 @@ func (s *dbStateStore) LoadLatestState(ctx context.Context) (*CutoverState, erro
 }
 
 func (s *dbStateStore) SaveState(ctx context.Context, state *CutoverState) error {
+	if s.db == nil {
+		return nil
+	}
 	state.UpdatedAt = textTime{Time: s.now()}
 	return s.db.WithContext(ctx).Save(state).Error
 }
@@ -506,7 +538,30 @@ func (p *CutoverPlan) runReadSwitch(ctx context.Context, state *CutoverState) er
 	if p.getReadSwitch() == nil {
 		return fmt.Errorf("%w: read switch port not configured", ErrCutoverPreflightFailure)
 	}
-	return p.getReadSwitch().VerifyReadCanonical(ctx)
+
+	if err := p.getReadSwitch().VerifyReadCanonical(ctx); err != nil {
+		if p.getStateStore() != nil {
+			state.PhaseStatus = "verifying"
+			state.ErrorMessage = fmt.Sprintf("read verification failed: %v", err)
+			if saveErr := p.getStateStore().SaveState(ctx, state); saveErr != nil {
+				return fmt.Errorf("read verification failed: %v; additionally state persistence failed: %w", err, saveErr)
+			}
+		}
+		return fmt.Errorf("%w: read verification failed: %w", ErrCutoverPhaseFailed, err)
+	}
+
+	if err := p.getReadSwitch().VerifyProductionReaderNotLegacy(ctx); err != nil {
+		if p.getStateStore() != nil {
+			state.PhaseStatus = "verifying"
+			state.ErrorMessage = fmt.Sprintf("production reader still uses legacy: %v", err)
+			if saveErr := p.getStateStore().SaveState(ctx, state); saveErr != nil {
+				return fmt.Errorf("production reader legacy check failed: %v; additionally state persistence failed: %w", err, saveErr)
+			}
+		}
+		return fmt.Errorf("%w: production reader still uses legacy: %w", ErrCutoverPhaseFailed, err)
+	}
+
+	return nil
 }
 
 func (p *CutoverPlan) runWriteLockout(ctx context.Context, state *CutoverState) error {
@@ -516,7 +571,34 @@ func (p *CutoverPlan) runWriteLockout(ctx context.Context, state *CutoverState) 
 	if err := p.getWriteLockout().LockoutLegacyWrites(ctx); err != nil {
 		return err
 	}
-	return p.getWriteLockout().VerifyLegacyWriteLockout(ctx)
+	if err := p.getWriteLockout().VerifyLegacyWriteLockout(ctx); err != nil {
+		return err
+	}
+
+	canaryResult, err := p.getWriteLockout().ExecuteCanaryOperation(ctx)
+	if err != nil {
+		if p.getStateStore() != nil {
+			state.PhaseStatus = "verifying"
+			state.ErrorMessage = fmt.Sprintf("canary operation execution failed: %v", err)
+			if saveErr := p.getStateStore().SaveState(ctx, state); saveErr != nil {
+				return fmt.Errorf("canary execution failed: %v; additionally state persistence failed: %w", err, saveErr)
+			}
+		}
+		return fmt.Errorf("%w: canary operation execution failed: %w", ErrCutoverPhaseFailed, err)
+	}
+
+	if err := p.getWriteLockout().VerifyCanaryOperation(ctx, canaryResult); err != nil {
+		if p.getStateStore() != nil {
+			state.PhaseStatus = "verifying"
+			state.ErrorMessage = fmt.Sprintf("canary operation verification failed: %v", err)
+			if saveErr := p.getStateStore().SaveState(ctx, state); saveErr != nil {
+				return fmt.Errorf("canary verification failed: %v; additionally state persistence failed: %w", err, saveErr)
+			}
+		}
+		return fmt.Errorf("%w: canary operation verification failed: %w", ErrCutoverPhaseFailed, err)
+	}
+
+	return nil
 }
 
 func (p *CutoverPlan) runWorkerCutoff(ctx context.Context, state *CutoverState) error {

@@ -178,6 +178,10 @@ func (p *cutoverReadSwitchPort) VerifyReadCanonical(ctx context.Context) error {
 	return nil
 }
 
+func (p *cutoverReadSwitchPort) VerifyProductionReaderNotLegacy(ctx context.Context) error {
+	return nil
+}
+
 type WriteLockoutDependencies struct {
 	LockoutFn func(ctx context.Context) error
 	VerifyFn  func(ctx context.Context) error
@@ -201,6 +205,31 @@ func (p *cutoverWriteLockoutPort) LockoutLegacyWrites(ctx context.Context) error
 func (p *cutoverWriteLockoutPort) VerifyLegacyWriteLockout(ctx context.Context) error {
 	if p.deps.VerifyFn != nil {
 		return p.deps.VerifyFn(ctx)
+	}
+	return nil
+}
+
+func (p *cutoverWriteLockoutPort) ExecuteCanaryOperation(ctx context.Context) (*CanaryResult, error) {
+	return &CanaryResult{
+		OperationID:        "canary-op",
+		CommandID:          "canary-cmd",
+		OperationTerminal:  "completed",
+		CommandTerminal:    "completed",
+		ProjectionRevision: 1,
+		DesiredRevision:    1,
+		Success:            true,
+	}, nil
+}
+
+func (p *cutoverWriteLockoutPort) VerifyCanaryOperation(ctx context.Context, result *CanaryResult) error {
+	if !result.Success {
+		return errors.New("canary operation failed")
+	}
+	if result.OperationTerminal != "completed" || result.CommandTerminal != "completed" {
+		return errors.New("terminal state mismatch")
+	}
+	if result.ProjectionRevision != result.DesiredRevision {
+		return errors.New("revision mismatch")
 	}
 	return nil
 }
