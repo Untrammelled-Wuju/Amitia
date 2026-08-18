@@ -4,9 +4,9 @@ package migration
 
 func DesktopPetMigrationControlMigration() Migration {
 	return Migration{
-		Version:            "202608040004",
-		Name:               "add_desktop_pet_migration_control",
-		AcceptedChecksums:  []string{"6caeceab45cdc7f139c5a64b7aa94815ca993dc830de30512ba2c4bdc7a24bd7"},
+		Version:           "202608040004",
+		Name:              "add_desktop_pet_migration_control",
+		AcceptedChecksums: []string{"6caeceab45cdc7f139c5a64b7aa94815ca993dc830de30512ba2c4bdc7a24bd7"},
 		Up: func(s *Step) error {
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_migration_operations (
   id TEXT PRIMARY KEY,
