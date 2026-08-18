@@ -802,7 +802,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	dbRecovery := installationrecovery.NewDBRecovery(installationRecoveryWorker, recoveryRepo, dbRecoveryPort)
 	runtimeRecovery := installationrecovery.NewRuntimeRecovery(installationRecoveryWorker, recoveryRepo, runtimeRecoveryPort, runtimeFinalizer)
 	switchRecovery := installationrecovery.NewSwitchRecovery(installationRecoveryWorker, recoveryRepo, installationrecovery.NewProductionSwitchRepo(runtimeRecoveryPort))
-	installationRecoveryWorker.ConfigureRecoveries(stagingRecovery, dbRecovery, runtimeRecovery, switchRecovery)
+	installationRecoveryWorker.ConfigureRecoveries(stagingRecovery, dbRecovery, runtimeRecovery, switchRecovery, runtimeFinalizer)
 
 	deviceRepo := device.NewRepository(ctx.DB)
 
