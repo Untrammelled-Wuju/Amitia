@@ -5,6 +5,7 @@ package recovery
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -115,6 +116,9 @@ func (testRuntimeRepo) QueryRuntimeAppliedState(context.Context, string, string,
 	return 1, "", nil
 }
 func (testRuntimeRepo) MarkRuntimeApplied(string, int64) error { return nil }
+func (testRuntimeRepo) QueryCommandTerminalStatus(ctx context.Context, commandID string) (status string, found bool, err error) {
+	return "completed", true, nil
+}
 
 type testSwitchRepo struct{}
 
@@ -282,6 +286,238 @@ func TestRecoveryWorker_MissingCommitJournalFailsClosed(t *testing.T) {
 	repo.ops[op.ID] = op
 	if err := worker.recoverOperation(context.Background(), op); err == nil {
 		t.Fatal("expected missing commit journal to fail closed")
+	}
+}
+
+func TestRecoveryWorker_DesiredStateCommitted_RecoversAndEnqueuesCommand(t *testing.T) {
+	repo := newTestRepo()
+	worker := newTestWorkerWithRuntime(repo)
+
+	op := &operation.InstallationOperation{
+		ID:            "desired-committed-op-1",
+		OperationType: operation.TypeEnable,
+		Status:        operation.OpStatusRunning,
+		Stage:         operation.OpStageDesiredStateCommitted,
+	}
+	repo.ops[op.ID] = op
+
+	err := worker.recoverOperation(context.Background(), op)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRecoveryWorker_RuntimeApplied_CallsFinalizer(t *testing.T) {
+	repo := newTestRepo()
+	worker := newTestWorkerWithRuntime(repo)
+
+	finalizerCalled := false
+	worker.desiredStateFinalizer = &mockDesiredStateFinalizer{
+		onFinalize: func(ctx context.Context, op *operation.InstallationOperation) error {
+			finalizerCalled = true
+			if op.ID != "runtime-applied-op-1" {
+				t.Errorf("unexpected operation ID: %s", op.ID)
+			}
+			return nil
+		},
+	}
+
+	op := &operation.InstallationOperation{
+		ID:            "runtime-applied-op-1",
+		OperationType: operation.TypeEnable,
+		Status:        operation.OpStatusWaitingRuntimeACK,
+		Stage:         operation.OpStageRuntimeApplied,
+	}
+	repo.ops[op.ID] = op
+
+	err := worker.recoverOperation(context.Background(), op)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !finalizerCalled {
+		t.Fatal("expected finalizer to be called for runtime_applied stage")
+	}
+}
+
+func TestRecoveryWorker_RuntimeApplied_MissingFinalizerFailsClosed(t *testing.T) {
+	repo := newTestRepo()
+	worker := newTestWorkerWithRuntime(repo)
+	worker.desiredStateFinalizer = nil
+
+	op := &operation.InstallationOperation{
+		ID:            "runtime-applied-no-finalizer",
+		OperationType: operation.TypeEnable,
+		Status:        operation.OpStatusWaitingRuntimeACK,
+		Stage:         operation.OpStageRuntimeApplied,
+	}
+	repo.ops[op.ID] = op
+
+	err := worker.recoverOperation(context.Background(), op)
+	if err == nil {
+		t.Fatal("expected missing finalizer to fail closed")
+	}
+}
+
+func TestRecoveryWorker_UnknownStage_FailsWithManualReview(t *testing.T) {
+	repo := newTestRepo()
+	worker := newTestWorkerWithRuntime(repo)
+
+	op := &operation.InstallationOperation{
+		ID:            "unknown-stage-op",
+		OperationType: operation.TypeEnable,
+		Status:        operation.OpStatusRunning,
+		Stage:         "unknown_stage",
+	}
+	repo.ops[op.ID] = op
+
+	err := worker.recoverOperation(context.Background(), op)
+	if err == nil {
+		t.Fatal("expected unknown stage to fail with manual review error")
+	}
+	if !strings.Contains(err.Error(), "manual review") {
+		t.Fatalf("expected manual review error, got: %v", err)
+	}
+}
+
+type mockDesiredStateFinalizer struct {
+	onFinalize func(ctx context.Context, op *operation.InstallationOperation) error
+}
+
+func (m *mockDesiredStateFinalizer) FinalizeDesiredStateApplied(ctx context.Context, op *operation.InstallationOperation) error {
+	if m.onFinalize != nil {
+		return m.onFinalize(ctx, op)
+	}
+	return nil
+}
+
+func TestRecoveryWorker_RecenterOperation_TerminalACKCompletes(t *testing.T) {
+	repo := newTestRepo()
+	worker := newTestWorkerWithRuntime(repo)
+
+	op := &operation.InstallationOperation{
+		ID:                   "recenter-terminal-ack",
+		OperationType:        operation.TypeRecenter,
+		Status:               operation.OpStatusWaitingRuntimeACK,
+		Stage:                operation.OpStageWaitingRuntimeACK,
+		ExpectedAppliedRevision: 1,
+	}
+	repo.ops[op.ID] = op
+
+	err := worker.recoverOperation(context.Background(), op)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRecoveryWorker_RecenterOperation_NoTerminalACKDoesNotComplete(t *testing.T) {
+	repo := newTestRepo()
+	worker := newTestWorkerWithRuntime(repo)
+
+	op := &operation.InstallationOperation{
+		ID:                   "recenter-no-ack",
+		OperationType:        operation.TypeRecenter,
+		Status:               operation.OpStatusWaitingRuntimeACK,
+		Stage:                operation.OpStageWaitingRuntimeACK,
+		ExpectedAppliedRevision: 0,
+	}
+	repo.ops[op.ID] = op
+
+	err := worker.recoverOperation(context.Background(), op)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRecoveryWorker_TwoConsecutiveRecenters_GenerateIndependentCommands(t *testing.T) {
+	repo := newTestRepo()
+	worker := newTestWorkerWithRuntime(repo)
+
+	op1 := &operation.InstallationOperation{
+		ID:                   "recenter-1",
+		OperationType:        operation.TypeRecenter,
+		Status:               operation.OpStatusWaitingRuntimeACK,
+		Stage:                operation.OpStageWaitingRuntimeACK,
+		ExpectedAppliedRevision: 1,
+	}
+	op2 := &operation.InstallationOperation{
+		ID:                   "recenter-2",
+		OperationType:        operation.TypeRecenter,
+		Status:               operation.OpStatusWaitingRuntimeACK,
+		Stage:                operation.OpStageWaitingRuntimeACK,
+		ExpectedAppliedRevision: 2,
+	}
+	repo.ops[op1.ID] = op1
+	repo.ops[op2.ID] = op2
+
+	err := worker.recoverOperation(context.Background(), op1)
+	if err != nil {
+		t.Fatalf("unexpected error for op1: %v", err)
+	}
+	err = worker.recoverOperation(context.Background(), op2)
+	if err != nil {
+		t.Fatalf("unexpected error for op2: %v", err)
+	}
+}
+
+func TestRecoveryWorker_UninstallOperation_CrashAfterMoveBeforeDBCommit(t *testing.T) {
+	repo := newTestRepo()
+	worker := newTestWorkerWithRuntime(repo)
+
+	finalizerCalled := false
+	worker.desiredStateFinalizer = &mockDesiredStateFinalizer{
+		onFinalize: func(ctx context.Context, op *operation.InstallationOperation) error {
+			finalizerCalled = true
+			if op.OperationType != operation.TypeUninstall {
+				t.Errorf("expected uninstall operation, got: %s", op.OperationType)
+			}
+			return nil
+		},
+	}
+
+	op := &operation.InstallationOperation{
+		ID:            "uninstall-crash-after-move",
+		OperationType: operation.TypeUninstall,
+		Status:        operation.OpStatusWaitingRuntimeACK,
+		Stage:         operation.OpStageRuntimeApplied,
+	}
+	repo.ops[op.ID] = op
+
+	err := worker.recoverOperation(context.Background(), op)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !finalizerCalled {
+		t.Fatal("expected finalizer to be called for uninstall runtime_applied stage")
+	}
+}
+
+func TestRecoveryWorker_UninstallOperation_IdempotentCompletion(t *testing.T) {
+	repo := newTestRepo()
+	worker := newTestWorkerWithRuntime(repo)
+
+	callCount := 0
+	worker.desiredStateFinalizer = &mockDesiredStateFinalizer{
+		onFinalize: func(ctx context.Context, op *operation.InstallationOperation) error {
+			callCount++
+			return nil
+		},
+	}
+
+	op := &operation.InstallationOperation{
+		ID:            "uninstall-idempotent",
+		OperationType: operation.TypeUninstall,
+		Status:        operation.OpStatusWaitingRuntimeACK,
+		Stage:         operation.OpStageRuntimeApplied,
+	}
+	repo.ops[op.ID] = op
+
+	err := worker.recoverOperation(context.Background(), op)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	err = worker.recoverOperation(context.Background(), op)
+	if err != nil {
+		t.Fatalf("unexpected error on second call: %v", err)
 	}
 }
 

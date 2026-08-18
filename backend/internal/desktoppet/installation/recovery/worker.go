@@ -69,10 +69,11 @@ type RecoveryWorker struct {
 	maxBatch     int
 	executionID  string
 
-	stagingRecovery *StagingRecovery
-	dbRecovery      *DBRecovery
-	runtimeRecovery *RuntimeRecovery
-	switchRecovery  *SwitchRecovery
+	stagingRecovery       *StagingRecovery
+	dbRecovery            *DBRecovery
+	runtimeRecovery       *RuntimeRecovery
+	switchRecovery        *SwitchRecovery
+	desiredStateFinalizer DesiredStateFinalizer
 }
 
 type RecoveryWorkerOption func(*RecoveryWorker)
@@ -93,6 +94,10 @@ func WithSwitchRecovery(r *SwitchRecovery) RecoveryWorkerOption {
 	return func(w *RecoveryWorker) { w.switchRecovery = r }
 }
 
+func WithDesiredStateFinalizer(f DesiredStateFinalizer) RecoveryWorkerOption {
+	return func(w *RecoveryWorker) { w.desiredStateFinalizer = f }
+}
+
 func NewRecoveryWorker(repo RecoveryRepo, opts ...RecoveryWorkerOption) *RecoveryWorker {
 	w := &RecoveryWorker{
 		repo:         repo,
@@ -107,7 +112,7 @@ func NewRecoveryWorker(repo RecoveryRepo, opts ...RecoveryWorkerOption) *Recover
 	return w
 }
 
-func (w *RecoveryWorker) ConfigureRecoveries(staging *StagingRecovery, db *DBRecovery, runtime *RuntimeRecovery, sw *SwitchRecovery) {
+func (w *RecoveryWorker) ConfigureRecoveries(staging *StagingRecovery, db *DBRecovery, runtime *RuntimeRecovery, sw *SwitchRecovery, desiredStateFinalizer DesiredStateFinalizer) {
 	if w == nil {
 		return
 	}
@@ -115,6 +120,7 @@ func (w *RecoveryWorker) ConfigureRecoveries(staging *StagingRecovery, db *DBRec
 	w.dbRecovery = db
 	w.runtimeRecovery = runtime
 	w.switchRecovery = sw
+	w.desiredStateFinalizer = desiredStateFinalizer
 }
 
 func (w *RecoveryWorker) Run(ctx context.Context) error {
@@ -264,8 +270,22 @@ func (w *RecoveryWorker) recoverSwitchOperation(ctx context.Context, op *operati
 	return w.switchRecovery.Recover(ctx, op, journal)
 }
 
+type DesiredStateFinalizer interface {
+	FinalizeDesiredStateApplied(ctx context.Context, op *operation.InstallationOperation) error
+}
+
+func (w *RecoveryWorker) ConfigureDesiredStateFinalizer(finalizer DesiredStateFinalizer) {
+	if w == nil {
+		return
+	}
+	w.desiredStateFinalizer = finalizer
+}
+
 func (w *RecoveryWorker) recoverDesiredStateOperation(ctx context.Context, op *operation.InstallationOperation, lease *operation.Lease) error {
-	if op.Stage == operation.OpStageWaitingRuntimeACK || op.Stage == operation.OpStageRuntimeCommandEnqueued {
+	switch op.Stage {
+	case operation.OpStageDesiredStateCommitted:
+		return w.recoverDesiredStateOperationFromCommitted(ctx, op, lease)
+	case operation.OpStageRuntimeCommandEnqueued, operation.OpStageWaitingRuntimeACK:
 		if w.runtimeRecovery == nil {
 			return errors.New("installation recovery: runtime recovery is not configured")
 		}
@@ -273,6 +293,29 @@ func (w *RecoveryWorker) recoverDesiredStateOperation(ctx context.Context, op *o
 			OperationID: op.ID,
 			Stage:       op.Stage,
 		})
+	case operation.OpStageRuntimeApplied:
+		return w.recoverDesiredStateOperationFromRuntimeApplied(ctx, op, lease)
+	default:
+		return fmt.Errorf("installation recovery: active desired-state operation %s has unexpected stage %s; manual review required", op.ID, op.Stage)
+	}
+}
+
+func (w *RecoveryWorker) recoverDesiredStateOperationFromCommitted(ctx context.Context, op *operation.InstallationOperation, lease *operation.Lease) error {
+	if w.runtimeRecovery == nil {
+		return errors.New("installation recovery: runtime recovery is not configured")
+	}
+	return w.runtimeRecovery.Recover(ctx, op, &RecoveryCommitJournal{
+		OperationID: op.ID,
+		Stage:       operation.OpStageDesiredStateCommitted,
+	})
+}
+
+func (w *RecoveryWorker) recoverDesiredStateOperationFromRuntimeApplied(ctx context.Context, op *operation.InstallationOperation, lease *operation.Lease) error {
+	if w.desiredStateFinalizer == nil {
+		return errors.New("installation recovery: desired-state finalizer is not configured")
+	}
+	if err := w.desiredStateFinalizer.FinalizeDesiredStateApplied(ctx, op); err != nil {
+		return fmt.Errorf("installation recovery: finalize desired-state operation op=%s: %w", op.ID, err)
 	}
 	return nil
 }

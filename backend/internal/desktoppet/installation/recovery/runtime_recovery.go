@@ -27,6 +27,7 @@ type RuntimeRepo interface {
 	CancelDesiredCommand(ctx context.Context, opID, userID, deviceID, runtimeID string) error
 	QueryRuntimeAppliedState(ctx context.Context, userID, deviceID, runtimeID string) (appliedRevision int64, actualReleaseID string, err error)
 	MarkRuntimeApplied(opID string, appliedRevision int64) error
+	QueryCommandTerminalStatus(ctx context.Context, commandID string) (status string, found bool, err error)
 }
 
 func NewRuntimeRecovery(worker *RecoveryWorker, repo RecoveryRepo, runtimeRepo RuntimeRepo, finalizers ...RuntimeAppliedFinalizer) *RuntimeRecovery {
@@ -82,6 +83,10 @@ func (r *RuntimeRecovery) recoverFromDesiredStateCommitted(ctx context.Context, 
 }
 
 func (r *RuntimeRecovery) recoverFromWaitingRuntimeAck(ctx context.Context, op *operation.InstallationOperation, j *RecoveryCommitJournal) error {
+	if op.OperationType == operation.TypeRecenter {
+		return r.recoverRecenterFromWaitingRuntimeAck(ctx, op, j)
+	}
+
 	appliedRevision, _, err := r.runtimeRepo.QueryRuntimeAppliedState(ctx, op.UserID, op.DeviceID, op.RuntimeID)
 	if err != nil {
 		if err := r.runtimeRepo.SendDesiredCommand(ctx, op.ID, op.UserID, op.DeviceID, op.RuntimeID, op.InstallationID, op.DesiredRevision); err != nil {
@@ -89,7 +94,7 @@ func (r *RuntimeRecovery) recoverFromWaitingRuntimeAck(ctx context.Context, op *
 		}
 		return nil
 	}
-	if appliedRevision >= op.DesiredRevision {
+	if appliedRevision >= op.DesiredRevision && op.DesiredRevision > 0 {
 		if err := r.runtimeRepo.MarkRuntimeApplied(op.ID, appliedRevision); err != nil {
 			return fmt.Errorf("runtimeRecovery: mark applied failed op=%s: %w", op.ID, err)
 		}
@@ -102,6 +107,38 @@ func (r *RuntimeRecovery) recoverFromWaitingRuntimeAck(ctx context.Context, op *
 	}
 	if err := r.runtimeRepo.SendDesiredCommand(ctx, op.ID, op.UserID, op.DeviceID, op.RuntimeID, op.InstallationID, op.DesiredRevision); err != nil {
 		return fmt.Errorf("runtimeRecovery: re-send command failed op=%s: %w", op.ID, err)
+	}
+	return nil
+}
+
+func (r *RuntimeRecovery) recoverRecenterFromWaitingRuntimeAck(ctx context.Context, op *operation.InstallationOperation, j *RecoveryCommitJournal) error {
+	if op.ExpectedAppliedRevision > 0 {
+		status, found, err := r.runtimeRepo.QueryCommandTerminalStatus(ctx, fmt.Sprintf("%s", op.ExpectedAppliedRevision))
+		if err != nil {
+			if sendErr := r.runtimeRepo.SendDesiredCommand(ctx, op.ID, op.UserID, op.DeviceID, op.RuntimeID, op.InstallationID, op.DesiredRevision); sendErr != nil {
+				return fmt.Errorf("runtimeRecovery: re-send recenter command failed op=%s: %w", op.ID, sendErr)
+			}
+			return nil
+		}
+		if found {
+			if status == "completed" {
+				if _, err := r.repo.CASUpdateCommitJournalStage(op.ID, operation.OpStageWaitingRuntimeACK, operation.OpStageRuntimeApplied, r.worker.executionID); err != nil {
+					if !errors.Is(err, ErrJournalNotFound) {
+						return fmt.Errorf("runtimeRecovery: CAS update to runtime_applied failed: %w", err)
+					}
+				}
+				return r.recoverFromRuntimeApplied(ctx, op, j)
+			}
+			if status == "failed_terminal" {
+				if _, err := r.repo.UpdateOperationStatus(op.ID, op.Status, operation.OpStatusFailedTerminal, r.worker.executionID); err != nil {
+					return fmt.Errorf("runtimeRecovery: update op to failed_terminal failed op=%s: %w", op.ID, err)
+				}
+				return nil
+			}
+		}
+	}
+	if err := r.runtimeRepo.SendDesiredCommand(ctx, op.ID, op.UserID, op.DeviceID, op.RuntimeID, op.InstallationID, op.DesiredRevision); err != nil {
+		return fmt.Errorf("runtimeRecovery: re-send recenter command failed op=%s: %w", op.ID, err)
 	}
 	return nil
 }
