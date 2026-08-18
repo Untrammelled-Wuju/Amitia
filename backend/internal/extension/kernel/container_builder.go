@@ -85,6 +85,7 @@ import (
 	"github.com/u-ai/backend/internal/search"
 	"github.com/u-ai/backend/internal/uiagent"
 	"github.com/u-ai/backend/internal/uiagent/preview"
+	"github.com/u-ai/backend/internal/uiagent/preview/adapters"
 	"github.com/u-ai/backend/internal/uiagent/schema"
 	"github.com/u-ai/backend/internal/uiagent/source"
 	"github.com/u-ai/backend/internal/vision"
@@ -837,7 +838,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	acquisitionSourceRegistry.Register(acquisition.NewInstalledSource(capabilityService, capabilityProviderRegistry))
 	acquisitionSourceRegistry.Register(acquisition.NewAgentSkillSource(agentSkillCatalog))
 	acquisitionSourceRegistry.Register(acquisition.NewGeneratedSkillSource(true))
-	acquisitionSourceRegistry.Register(acquisition.NewNewSkillSource(nil))
+	remoteSkillCatalog := acquisition.NewRemoteSkillCatalog("https://amitia.untrammelled.top/api/skills")
+	acquisitionSourceRegistry.Register(acquisition.NewNewSkillSource(remoteSkillCatalog))
 
 	extensionCenterService := extension_center.NewCenterService(extension_center.NewKernelCardProvider(defRepo, instRepo))
 	acquisitionSourceRegistry.Register(acquisition.NewExtensionCatalogSource(extensionCenterService))
@@ -1054,8 +1056,8 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	builtin.SetUIAgentInspector(source.NewSourceInspectorWithWorkspace(b.workspaceService))
 	preciseEditingSvc := workspace.NewDefaultPreciseEditingService(b.workspaceService)
 	builtin.SetUIAgentPreciseService(preciseEditingSvc)
-	schemaGenerator := schema.NewSchemaUIGenerator(schema.DefaultCatalog)
-	builtin.SetUIAgentSchemaGenerator(schemaGenerator)
+	schemaGenerator := schema.NewAISchemaGenerator(schema.DefaultCatalog, nil)
+	builtin.SetUIAgentAISchemaGenerator(schemaGenerator)
 	previewSessionMgr := preview.NewSessionManager()
 	previewValidator := schema.NewSchemaValidator(schema.DefaultCatalog)
 	previewObserver := preview.NewObserver(previewSessionMgr, previewValidator)
@@ -1065,8 +1067,14 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	builtin.SetUIAgentPreviewManager(previewSessionMgr)
 	builtin.SetUIAgentObserver(previewObserver)
 	builtin.SetUIAgentRefiner(previewRefiner)
+
+	flutterAnalyzer := adapters.NewFlutterAnalyzer(b.workspaceService)
+	webAnalyzer := adapters.NewWebAnalyzer(b.workspaceService)
+	realDiagnosticRunner := adapters.NewRealDiagnosticRunner(flutterAnalyzer, webAnalyzer)
+	builtin.SetUIAgentDiagnosticRunner(realDiagnosticRunner)
 	uiAgentExecutor := uiagent.NewUIExecutor(
 		uiagent.WithPolicy(uiagent.DefaultPolicy()),
+		uiagent.WithSchemaGenerator(schemaGenerator),
 		uiagent.WithSourceEditor(source.NewSourceEditor(preciseEditingSvc)),
 		uiagent.WithPreviewManager(previewSessionMgr),
 		uiagent.WithObserver(previewObserver),

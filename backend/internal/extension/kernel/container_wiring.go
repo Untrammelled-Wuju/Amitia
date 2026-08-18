@@ -4,9 +4,12 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"io"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
@@ -638,13 +641,26 @@ func (p *containerLifecycleSummaryProvider) Events(ctx context.Context, since ti
 func (e *containerPlanExecutor) executeDirectInstallSaga(ctx context.Context, plan lifecycle_manager.LifecyclePlan, result *lifecycle_manager.LifecycleResult) error {
 	extID := plan.Command.ExtensionID
 	packageID := plan.Command.PackageID
+	packageURI := plan.Command.PackageURI
 	expectedHash, _ := plan.Command.Metadata["hash"].(string)
 
 	if e.packageRepo == nil || e.packageArtifact == nil || e.packageGeneration == nil || e.packageSecurity == nil {
 		return fmt.Errorf("package services unavailable for direct install")
 	}
 
-	artifact, err := e.packageRepo.GetArtifact(ctx, packageID)
+	// Resolve PackageURI to ArtifactID if needed
+	resolvedPackageID := packageID
+	if packageURI != "" && packageID == "" {
+		artifactID, err := e.resolveRemoteArtifact(ctx, string(extID), plan.Command.TargetVersion.String(), packageURI, expectedHash)
+		if err != nil {
+			result.Status = "failed"
+			result.Error = fmt.Sprintf("resolve remote artifact: %v", err)
+			return err
+		}
+		resolvedPackageID = artifactID
+	}
+
+	artifact, err := e.packageRepo.GetArtifact(ctx, resolvedPackageID)
 	if err != nil {
 		result.Status = "failed"
 		result.Error = fmt.Sprintf("get artifact: %v", err)
@@ -784,6 +800,89 @@ func (e *containerPlanExecutor) executeDirectInstallSaga(ctx context.Context, pl
 
 	artifact.InstalledPath = targetPath
 	result.Applied = append(result.Applied, "mark_installation_disabled")
+
+	return nil
+}
+
+// resolveRemoteArtifact downloads a package from a remote URI and registers it as an artifact.
+func (e *containerPlanExecutor) resolveRemoteArtifact(ctx context.Context, extID, version, packageURI, expectedHash string) (string, error) {
+	if packageURI == "" {
+		return "", fmt.Errorf("packageURI is empty")
+	}
+
+	// Check if artifact already exists by URI
+	// For now, we'll download and register a new artifact
+	// In production, this should check for existing artifacts first
+
+	// Download the package to a temp location
+	tmpDir, err := os.MkdirTemp("", "remote_artifact_*")
+	if err != nil {
+		return "", fmt.Errorf("create temp dir: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Extract filename from URI
+	filename := packageURI
+	if idx := strings.LastIndex(packageURI, "/"); idx >= 0 && idx < len(packageURI)-1 {
+		filename = packageURI[idx+1:]
+	}
+	if filename == "" {
+		filename = "package.amitiax"
+	}
+	archivePath := filepath.Join(tmpDir, filename)
+
+	// Download the file
+	if err := downloadFile(ctx, packageURI, archivePath); err != nil {
+		return "", fmt.Errorf("download package: %w", err)
+	}
+
+	// Register the artifact in the repository
+	artifactID := fmt.Sprintf("artifact_%s_%d", extID, time.Now().UnixNano())
+	artifact := PackageArtifact{
+		ArtifactID:  artifactID,
+		ExtensionID: extID,
+		Version:     version,
+		ArchivePath: archivePath,
+	}
+
+	if expectedHash != "" {
+		artifact.ArchiveHash = expectedHash
+	}
+
+	// Put the artifact in the repository
+	if err := e.packageRepo.PutArtifact(ctx, artifact); err != nil {
+		return "", fmt.Errorf("register artifact: %w", err)
+	}
+
+	return artifactID, nil
+}
+
+func downloadFile(ctx context.Context, url, dest string) error {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+
+	client := &http.Client{Timeout: 5 * time.Minute}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("download failed: HTTP %d", resp.StatusCode)
+	}
+
+	f, err := os.Create(dest)
+	if err != nil {
+		return fmt.Errorf("create file: %w", err)
+	}
+	defer f.Close()
+
+	if _, err := io.Copy(f, resp.Body); err != nil {
+		return fmt.Errorf("write file: %w", err)
+	}
 
 	return nil
 }

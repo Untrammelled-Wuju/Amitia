@@ -8,19 +8,22 @@ import (
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/uiagent"
 	"github.com/u-ai/backend/internal/uiagent/preview"
+	"github.com/u-ai/backend/internal/uiagent/preview/adapters"
 	"github.com/u-ai/backend/internal/uiagent/schema"
 	"github.com/u-ai/backend/internal/uiagent/source"
 	"github.com/u-ai/backend/internal/workspace"
 )
 
 var (
-	uiAgentInspector   source.SourceInspector
-	uiAgentExecutor    *uiagent.UIExecutor
-	uiAgentSchemaGen   *schema.SchemaUIGenerator
-	uiAgentPreviewMgr  uiagent.PreviewManager
-	uiAgentObserver    preview.Observer
-	uiAgentRefiner     preview.AutoRefiner
-	uiAgentSourceEditor source.SourceEditor
+	uiAgentInspector       source.SourceInspector
+	uiAgentExecutor        *uiagent.UIExecutor
+	uiAgentSchemaGen       *schema.SchemaUIGenerator
+	uiAgentAISchemaGen     *schema.AISchemaGenerator
+	uiAgentPreviewMgr      uiagent.PreviewManager
+	uiAgentObserver        preview.Observer
+	uiAgentRefiner         preview.AutoRefiner
+	uiAgentSourceEditor    source.SourceEditor
+	uiAgentDiagnosticRunner adapters.DiagnosticRunner
 )
 
 func SetUIAgentInspector(inspector source.SourceInspector) {
@@ -33,6 +36,10 @@ func SetUIAgentExecutor(executor *uiagent.UIExecutor) {
 
 func SetUIAgentSchemaGenerator(gen *schema.SchemaUIGenerator) {
 	uiAgentSchemaGen = gen
+}
+
+func SetUIAgentAISchemaGenerator(gen *schema.AISchemaGenerator) {
+	uiAgentAISchemaGen = gen
 }
 
 func SetUIAgentPreviewManager(mgr uiagent.PreviewManager) {
@@ -53,6 +60,10 @@ func SetUIAgentSourceEditor(editor source.SourceEditor) {
 
 func SetUIAgentPreciseService(svc workspace.PreciseEditingService) {
 	uiAgentSourceEditor = source.NewSourceEditor(svc)
+}
+
+func SetUIAgentDiagnosticRunner(runner adapters.DiagnosticRunner) {
+	uiAgentDiagnosticRunner = runner
 }
 
 func init() {
@@ -183,18 +194,36 @@ func uiagentModifyHandler(ctx context.Context, execCtx tool.ToolExecutionContext
 		WorkspaceID: workspaceID,
 		Operations:  sourceOps,
 		Transaction: true,
+		AutoCommit:  false,
 	}
 
 	// Use the real source editor if available
 	if uiAgentSourceEditor != nil {
-		result, err := uiAgentSourceEditor.ApplyEdits(ctx, srcReq)
+		tx, err := uiAgentSourceEditor.BeginTransaction(ctx, workspaceID)
 		if err != nil {
+			return tool.ErrorResult("modify_failed", fmt.Sprintf("begin transaction failed: %v", err))
+		}
+
+		result, err := uiAgentSourceEditor.ApplyPatchesTx(ctx, tx, srcReq)
+		if err != nil {
+			_ = uiAgentSourceEditor.RollbackTx(ctx, tx)
 			return tool.ErrorResult("modify_failed", fmt.Sprintf("modification failed: %v", err))
 		}
 
-		// No real file changes = not a success
 		if len(result.ChangedFiles) == 0 {
+			_ = uiAgentSourceEditor.RollbackTx(ctx, tx)
 			return tool.ErrorResult("no_changes", "no files were modified")
+		}
+
+		diffResult, err := uiAgentSourceEditor.PreviewDiff(ctx, tx)
+		if err != nil {
+			_ = uiAgentSourceEditor.RollbackTx(ctx, tx)
+			return tool.ErrorResult("preview_failed", fmt.Sprintf("preview diff failed: %v", err))
+		}
+		result.DiffPreview = diffResult.UnifiedDiff
+
+		if err := uiAgentSourceEditor.CommitTx(ctx, tx); err != nil {
+			return tool.ErrorResult("commit_failed", fmt.Sprintf("commit failed: %v", err))
 		}
 
 		response := map[string]interface{}{
@@ -202,6 +231,7 @@ func uiagentModifyHandler(ctx context.Context, execCtx tool.ToolExecutionContext
 			"appliedOperations": result.AppliedOperations,
 			"transactionToken":  result.TransactionToken,
 			"changedFiles":      result.ChangedFiles,
+			"diffPreview":       result.DiffPreview,
 		}
 
 		if wantPreview && uiAgentPreviewMgr != nil {
@@ -272,34 +302,63 @@ func uiagentCreateHandler(ctx context.Context, execCtx tool.ToolExecutionContext
 		return tool.ErrorResult("unsupported_mode", "source mode requires a configured source editor")
 	}
 
-	if uiAgentSchemaGen == nil {
-		return tool.ErrorResult("ui_agent_unavailable", "UI agent schema generator not configured")
+	if uiAgentAISchemaGen == nil {
+		return tool.ErrorResult("ui_agent_unavailable", "UI agent AI schema generator not configured")
 	}
 
-	doc, err := uiAgentSchemaGen.Generate(description, nil)
+	if !uiAgentAISchemaGen.HasLLMCallFunc() {
+		return tool.ErrorResult("ui_agent_unavailable", "UI agent AI schema generator has no LLM function configured")
+	}
+
+	doc, err := uiAgentAISchemaGen.Generate(description, nil)
 	if err != nil {
-		return tool.ErrorResult("create_failed", fmt.Sprintf("schema generation failed: %v", err))
+		return tool.ErrorResult("create_failed", fmt.Sprintf("AI schema generation failed: %v", err))
+	}
+
+	if uiAgentPreviewMgr == nil {
+		return tool.ErrorResult("ui_agent_unavailable", "UI agent preview manager not configured")
+	}
+
+	session, previewErr := uiAgentPreviewMgr.Create(workspaceID, doc)
+	if previewErr != nil {
+		return tool.ErrorResult("preview_failed", fmt.Sprintf("preview session creation failed: %v", previewErr))
+	}
+
+	if uiAgentObserver != nil {
+		obsResult, obsErr := uiAgentObserver.Capture(ctx, session.ID)
+		if obsErr != nil {
+			return tool.ErrorResult("preview_observe_failed", fmt.Sprintf("preview observation failed: %v", obsErr))
+		}
+		if len(obsResult.Errors) > 0 {
+			response := map[string]interface{}{
+				"success":    false,
+				"schemaId":   doc.Title,
+				"previewRef":  session.ID,
+				"errors":     obsResult.Errors,
+				"state":      "needs_manual",
+			}
+			resultJSON, _ := json.Marshal(response)
+			return tool.ToolCallResult{
+				Status:      tool.ToolStatusSuccess,
+				Content:     string(resultJSON),
+				VisibleText: fmt.Sprintf("Schema %s generated but has %d issues requiring manual review", doc.Title, len(obsResult.Errors)),
+			}
+		}
 	}
 
 	response := map[string]interface{}{
-		"success":   true,
-		"schemaId":  doc.Title,
-		"createdBy": "uiagent.create",
-	}
-
-	if uiAgentPreviewMgr != nil {
-		session, previewErr := uiAgentPreviewMgr.Create(workspaceID, doc)
-		if previewErr != nil {
-			return tool.ErrorResult("preview_failed", fmt.Sprintf("preview session creation failed: %v", previewErr))
-		}
-		response["previewRef"] = session.ID
+		"success":    true,
+		"schemaId":   doc.Title,
+		"previewRef":  session.ID,
+		"createdBy":  "uiagent.create",
+		"state":      "published",
 	}
 
 	resultJSON, _ := json.Marshal(response)
 	return tool.ToolCallResult{
 		Status:      tool.ToolStatusSuccess,
 		Content:     string(resultJSON),
-		VisibleText: fmt.Sprintf("Created schema %s in workspace %s", doc.Title, workspaceID),
+		VisibleText: fmt.Sprintf("Created and published schema %s in workspace %s", doc.Title, workspaceID),
 	}
 }
 

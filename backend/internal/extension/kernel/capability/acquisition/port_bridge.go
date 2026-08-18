@@ -17,8 +17,29 @@ func NewMCPPortBridge(lifecycle *mcp.MCPLifecycle) MCPInstallPort {
 	return &mcpInstallPortBridge{lifecycle: lifecycle}
 }
 
+// NewMCPPortBridgeWithDiscovery 创建带工具发现功能的 MCP 安装端口桥接
+func NewMCPPortBridgeWithDiscovery(lifecycle *mcp.MCPLifecycle, toolSync MCPToolSyncPort) MCPInstallPort {
+	return &mcpInstallPortBridge{lifecycle: lifecycle, toolSync: toolSync}
+}
+
+// MCPToolSyncPort defines the interface for syncing MCP tools to the registry
+type MCPToolSyncPort interface {
+	SyncMCPTools(ctx context.Context, serverID string, descriptors []capability.MCPToolDescriptor) (*MCPToolSyncResult, error)
+	ListMCPTools(ctx context.Context, serverID string) ([]capability.MCPToolDescriptor, error)
+}
+
+// MCPToolSyncResult represents the result of syncing MCP tools
+type MCPToolSyncResult struct {
+	ServerID   string
+	Registered int
+	Updated    int
+	Removed    int
+	Total      int
+}
+
 type mcpInstallPortBridge struct {
 	lifecycle *mcp.MCPLifecycle
+	toolSync  MCPToolSyncPort
 }
 
 func (b *mcpInstallPortBridge) InstallMCP(ctx context.Context, serverName string, transport string, command string, args []string, env map[string]string) (string, error) {
@@ -54,6 +75,15 @@ func (b *mcpInstallPortBridge) InstallMCP(ctx context.Context, serverName string
 	if err := b.lifecycle.Start(serverName); err != nil {
 		return "", fmt.Errorf("MCP start: %w", err)
 	}
+
+	// Discover and sync tools from the MCP server
+	if b.toolSync != nil {
+		descriptors, err := b.toolSync.ListMCPTools(ctx, serverName)
+		if err == nil && len(descriptors) > 0 {
+			_, _ = b.toolSync.SyncMCPTools(ctx, serverName, descriptors)
+		}
+	}
+
 	return serverName, nil
 }
 

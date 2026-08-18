@@ -361,7 +361,7 @@ func (f *ToolFacade) handleAcquireCapability(ctx context.Context, input json.Raw
 			Error:       &LegacyToolError{Code: "INVALID_INPUT", Message: err.Error()},
 		}, err
 	}
-	output, err := f.acquisitionBridge.AcquireCapability(ctx, req, scope.UserID)
+	output, err := f.acquisitionBridge.AcquireCapability(ctx, req, scope.UserID, nil)
 	if err != nil {
 		return LegacyToolResult{
 			Status:      "FAILED",
