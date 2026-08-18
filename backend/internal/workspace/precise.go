@@ -121,6 +121,7 @@ type TransactionJournal struct {
 
 const (
 	TxStateActive       = "active"
+	TxStatePreviewing   = "previewing"
 	TxStateCommitted    = "committed"
 	TxStateRolledBack   = "rolled_back"
 	TxStateCommitFailed = "commit_failed"
