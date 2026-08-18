@@ -20,6 +20,12 @@ const (
 	OpSnapshot OperationType = "snapshot"
 )
 
+const (
+	MutationClaimStatusPending     = "pending"
+	MutationClaimStatusCommitted   = "committed"
+	MutationClaimStatusRolledBack  = "rolled_back"
+)
+
 type ChangeRecord struct {
 	ChangeID     ChangeID      `gorm:"column:change_id;primaryKey"`
 	Sequence     Sequence      `gorm:"column:seq;not null;index"`
@@ -38,6 +44,18 @@ type ChangeRecord struct {
 
 func (ChangeRecord) TableName() string {
 	return "sync_changes"
+}
+
+type MutationClaim struct {
+	UserID      string       `gorm:"column:user_id;primaryKey"`
+	Scope       CursorScope  `gorm:"column:scope;primaryKey;not null;default:device"`
+	MutationID  MutationID   `gorm:"column:mutation_id;primaryKey"`
+	Status      string       `gorm:"column:status;not null;default:pending;index"`
+	CreatedAt   time.Time    `gorm:"column:created_at;not null"`
+}
+
+func (MutationClaim) TableName() string {
+	return "sync_mutation_claims"
 }
 
 type CursorScope string
