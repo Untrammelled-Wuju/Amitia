@@ -349,7 +349,7 @@ func (s *AcquisitionService) ResumeAcquire(ctx context.Context, resumeToken stri
 	if !ok {
 		s.mu.Unlock()
 		if s.resumeRepo != nil {
-			persisted, err := s.resumeRepo.Get(ctx, resumeToken)
+			persisted, err := s.resumeRepo.GetByAcquisitionTransactionID(ctx, resumeToken)
 			if err == nil && persisted != nil {
 				resumeCtx = CapabilityResumeContext{
 					CapabilityID:             capability.CapabilityID(persisted.RequiredCapabilityID),

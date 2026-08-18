@@ -88,7 +88,7 @@ func (s *RecoveryService) Recover(
 
 	if needsFresh {
 		s.budget.RecordAttempt(acqID)
-		result, err = s.acquisitionService.Acquire(ctx, request, true)
+		result, err = s.acquisitionService.Acquire(ctx, request, resumeCtx.Approved)
 	} else {
 		// An existing acquisition transaction is available and not in a rolled-back
 		// state. Attempt to resume it via the stored transaction ID. If the
@@ -169,7 +169,7 @@ func (s *RecoveryService) attemptResume(
 	result, err := s.acquisitionService.ResumeAcquire(ctx, resumeCtx.AcquisitionTransactionID)
 	if err != nil {
 		if errors.Is(err, ErrResumeContextMissing) {
-			return s.acquisitionService.Acquire(ctx, request, true)
+			return s.acquisitionService.Acquire(ctx, request, resumeCtx.Approved)
 		}
 		return result, err
 	}

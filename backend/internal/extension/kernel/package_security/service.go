@@ -23,6 +23,7 @@ type PackageSecurityService struct {
 	cleanup   *CleanupManager
 	audit     AuditWriter
 	policy    ArchivePolicy
+	baseDir   string
 }
 
 func NewPackageSecurityService(policy ArchivePolicy, auditWriter AuditWriter) *PackageSecurityService {
@@ -49,6 +50,7 @@ func NewPackageSecurityServiceAtRoot(policy ArchivePolicy, auditWriter AuditWrit
 		cleanup:   NewCleanupManager(stagingMgr, snapshotMgr),
 		audit:     auditWriter,
 		policy:    policy,
+		baseDir:   baseDir,
 	}
 }
 
@@ -258,6 +260,10 @@ func (s *PackageSecurityService) GetIntegrity() *ManifestBindingVerifier {
 
 func (s *PackageSecurityService) GetArchiveInspector() *ArchiveInspector {
 	return s.inspector
+}
+
+func (s *PackageSecurityService) GetInstallRoot() string {
+	return s.baseDir
 }
 
 func (s *PackageSecurityService) auditEvent(ctx context.Context, eventType AuditEventType, report *PackageSecurityReport, details string) error {

@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"fmt"
 	"log"
+	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/amitiax"
@@ -170,16 +172,17 @@ func (c *containerPreflightChecker) Check(ctx context.Context, cmd lifecycle_man
 }
 
 type containerPlanExecutor struct {
-	instRepo           domain.InstallationRepository
-	defRepo            domain.DefinitionRepository
-	moduleRepo         sqlite.ModuleRepository
-	contribRepo        sqlite.ContributionRepository
-	enablement         enablement.StateStore
-	installer          *TypedContributionInstaller
-	packageRepo        *PackageRepository
-	packageArtifact    *PackageArtifactStore
-	packageGeneration  *PackageGenerationStore
-	packageSecurity    *package_security.PackageSecurityService
+	instRepo          domain.InstallationRepository
+	defRepo           domain.DefinitionRepository
+	moduleRepo        sqlite.ModuleRepository
+	contribRepo       sqlite.ContributionRepository
+	enablement        enablement.StateStore
+	installer         *TypedContributionInstaller
+	packageRepo       *PackageRepository
+	packageArtifact   *PackageArtifactStore
+	packageGeneration *PackageGenerationStore
+	packageSecurity   *package_security.PackageSecurityService
+	uiHostNotifier    *SSEUIHostNotifier
 }
 
 func newContainerPlanExecutor(
@@ -193,6 +196,7 @@ func newContainerPlanExecutor(
 	packageArtifact *PackageArtifactStore,
 	packageGeneration *PackageGenerationStore,
 	packageSecurity *package_security.PackageSecurityService,
+	uiHostNotifier *SSEUIHostNotifier,
 ) *containerPlanExecutor {
 	return &containerPlanExecutor{
 		instRepo:          instRepo,
@@ -205,6 +209,7 @@ func newContainerPlanExecutor(
 		packageArtifact:   packageArtifact,
 		packageGeneration: packageGeneration,
 		packageSecurity:   packageSecurity,
+		uiHostNotifier:    uiHostNotifier,
 	}
 }
 
@@ -246,6 +251,10 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 			}
 			result.Applied = append(result.Applied, "activate_contributions")
 		}
+		if e.uiHostNotifier != nil {
+			e.uiHostNotifier.BroadcastExtensionChange("extension_enabled", string(extID), nil)
+			e.uiHostNotifier.BroadcastExtensionChange("extension_contributions_changed", string(extID), nil)
+		}
 
 	case lifecycle_manager.CmdDisable:
 		if plan.CurrentState.Installation != nil {
@@ -274,6 +283,10 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 				return result, err
 			}
 			result.Applied = append(result.Applied, "deactivate_contributions")
+		}
+		if e.uiHostNotifier != nil {
+			e.uiHostNotifier.BroadcastExtensionChange("extension_disabled", string(extID), nil)
+			e.uiHostNotifier.BroadcastExtensionChange("extension_contributions_changed", string(extID), nil)
 		}
 
 	case lifecycle_manager.CmdUninstall:
@@ -312,6 +325,10 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 			_ = e.defRepo.DeleteExtension(ctx, extID, plan.CurrentState.Definition.Version)
 		}
 		result.Applied = append(result.Applied, "uninstall")
+		if e.uiHostNotifier != nil {
+			e.uiHostNotifier.BroadcastExtensionChange("extension_uninstalled", string(extID), nil)
+			e.uiHostNotifier.BroadcastExtensionChange("extension_contributions_changed", string(extID), nil)
+		}
 
 	case lifecycle_manager.CmdInstall:
 		if err := e.executeDirectInstallSaga(ctx, plan, &result); err != nil {
@@ -330,6 +347,11 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 				return result, err
 			}
 			result.Applied = append(result.Applied, "update_version")
+			if e.uiHostNotifier != nil {
+				e.uiHostNotifier.BroadcastExtensionChange("extension_updated", string(extID), nil)
+				e.uiHostNotifier.BroadcastExtensionChange("extension_generation_changed", string(extID), map[string]interface{}{"generation": inst.Generation})
+				e.uiHostNotifier.BroadcastExtensionChange("extension_contributions_changed", string(extID), nil)
+			}
 		} else {
 			result.Status = "failed"
 			result.Error = "installation not found for update"
@@ -349,6 +371,10 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 				return result, err
 			}
 			result.Applied = append(result.Applied, "rollback_version")
+			if e.uiHostNotifier != nil {
+				e.uiHostNotifier.BroadcastExtensionChange("extension_rolled_back", string(extID), map[string]interface{}{"generation": inst.Generation})
+				e.uiHostNotifier.BroadcastExtensionChange("extension_generation_changed", string(extID), map[string]interface{}{"generation": inst.Generation})
+			}
 		} else {
 			result.Status = "failed"
 			result.Error = "installation not found for rollback"
@@ -373,6 +399,10 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 				}
 				result.Applied = append(result.Applied, "repair_contributions")
 			}
+			if e.uiHostNotifier != nil {
+				e.uiHostNotifier.BroadcastExtensionChange("extension_enabled", string(extID), nil)
+				e.uiHostNotifier.BroadcastExtensionChange("extension_contributions_changed", string(extID), nil)
+			}
 		}
 
 	case lifecycle_manager.CmdEnableModule:
@@ -387,6 +417,9 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 			return result, err
 		}
 		result.Applied = append(result.Applied, "enable_module")
+		if e.uiHostNotifier != nil {
+			e.uiHostNotifier.BroadcastExtensionChange("extension_contributions_changed", string(extID), nil)
+		}
 
 	case lifecycle_manager.CmdDisableModule:
 		modSubject := enablement.StateSubject{
@@ -400,6 +433,9 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 			return result, err
 		}
 		result.Applied = append(result.Applied, "disable_module")
+		if e.uiHostNotifier != nil {
+			e.uiHostNotifier.BroadcastExtensionChange("extension_contributions_changed", string(extID), nil)
+		}
 
 	case lifecycle_manager.CmdSetContributionOverride:
 		if plan.Command.ContributionID != "" {
@@ -422,6 +458,9 @@ func (e *containerPlanExecutor) Execute(ctx context.Context, plan lifecycle_mana
 				return result, err
 			}
 			result.Applied = append(result.Applied, "set_contribution_override")
+			if e.uiHostNotifier != nil {
+				e.uiHostNotifier.BroadcastExtensionChange("extension_contributions_changed", string(extID), nil)
+			}
 		}
 
 	default:
@@ -664,10 +703,34 @@ func (e *containerPlanExecutor) executeDirectInstallSaga(ctx context.Context, pl
 		result.Error = fmt.Sprintf("extract to staging: %v", err)
 		return err
 	}
-	defer e.packageSecurity.GetStagingManager().Cleanup(context.Background(), staging.ID)
 	result.Applied = append(result.Applied, "extract_to_staging")
 
-	targetPath := staging.Path
+	installRoot := e.packageSecurity.GetInstallRoot()
+	if installRoot == "" {
+		_ = e.packageSecurity.GetStagingManager().Cleanup(context.Background(), staging.ID)
+		result.Status = "failed"
+		result.Error = "install root not configured"
+		return fmt.Errorf("install root not configured")
+	}
+
+	installDir := filepath.Join(installRoot, string(definition.ID))
+	if err := os.MkdirAll(installDir, 0755); err != nil {
+		_ = e.packageSecurity.GetStagingManager().Cleanup(context.Background(), staging.ID)
+		result.Status = "failed"
+		result.Error = fmt.Sprintf("create install dir: %v", err)
+		return err
+	}
+
+	if err := copyDir(staging.Path, installDir); err != nil {
+		_ = e.packageSecurity.GetStagingManager().Cleanup(context.Background(), staging.ID)
+		result.Status = "failed"
+		result.Error = fmt.Sprintf("copy to install dir: %v", err)
+		return err
+	}
+
+	_ = e.packageSecurity.GetStagingManager().Cleanup(context.Background(), staging.ID)
+
+	targetPath := installDir
 	generation := int64(1)
 	now := time.Now().UTC()
 	installID := fmt.Sprintf("inst_%s_%d", extID, now.UnixNano())
@@ -722,6 +785,34 @@ func (e *containerPlanExecutor) executeDirectInstallSaga(ctx context.Context, pl
 	artifact.InstalledPath = targetPath
 	result.Applied = append(result.Applied, "mark_installation_disabled")
 
+	return nil
+}
+
+func copyDir(src, dst string) error {
+	entries, err := os.ReadDir(src)
+	if err != nil {
+		return fmt.Errorf("read source dir: %w", err)
+	}
+	if err := os.MkdirAll(dst, 0755); err != nil {
+		return fmt.Errorf("create dest dir: %w", err)
+	}
+	for _, entry := range entries {
+		srcPath := filepath.Join(src, entry.Name())
+		dstPath := filepath.Join(dst, entry.Name())
+		if entry.IsDir() {
+			if err := copyDir(srcPath, dstPath); err != nil {
+				return err
+			}
+			continue
+		}
+		data, err := os.ReadFile(srcPath)
+		if err != nil {
+			return fmt.Errorf("read file %s: %w", srcPath, err)
+		}
+		if err := os.WriteFile(dstPath, data, 0644); err != nil {
+			return fmt.Errorf("write file %s: %w", dstPath, err)
+		}
+	}
 	return nil
 }
 

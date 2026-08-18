@@ -16,7 +16,8 @@ type CapabilityResumeContext struct {
 
 	AcquisitionTransactionID string `json:"acquisitionTransactionId,omitempty"`
 
-	State ResumeState `json:"state"`
+	State    ResumeState `json:"state"`
+	Approved bool        `json:"approved"`
 }
 
 type ToolCallSnapshot struct {

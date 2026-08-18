@@ -400,6 +400,7 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 		PluginID:          def.Publisher + "/" + def.ExtensionID,
 		LogicalServiceID:  extractLogicalServiceID(req.ServiceID, req.RuntimeID),
 		ModuleID:          def.ModuleID,
+		Definition:        def,
 		Generation:        req.Generation,
 		Platform:          s.selector.current,
 		Executable:        exe,
