@@ -11,7 +11,9 @@ import (
 	"github.com/u-ai/backend/internal/devicemesh/bootstrap"
 	"github.com/u-ai/backend/internal/devicemesh/credential"
 	"github.com/u-ai/backend/internal/devicemesh/server"
+	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
+	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 )
 
@@ -20,17 +22,19 @@ type dispatcherResolveAdapter interface {
 }
 
 type Runtime struct {
-	DB            *sql.DB
-	BootstrapSvc  *bootstrap.Service
-	CredentialSvc *credential.Service
-	Hub           *server.ConnectionHub
-	Handler       *server.Handler
-	Probe         *server.ProbeService
-	DeviceReg     *host_registry.Registry
-	LocalHandler  *agent.LocalHandler
-	sessions      *deviceruntime.Service
-	dispatcher    dispatcherResolveAdapter
-	taskRuntime   agent.TaskRuntimeExecutor
+	DB                 *sql.DB
+	BootstrapSvc       *bootstrap.Service
+	CredentialSvc      *credential.Service
+	Hub                *server.ConnectionHub
+	Handler            *server.Handler
+	Probe              *server.ProbeService
+	DeviceReg          *host_registry.Registry
+	LocalHandler       *agent.LocalHandler
+	PendingInvocations *capability.PendingInvocationManager
+	PendingTasks       *task_runtime.PendingTaskManager
+	sessions           *deviceruntime.Service
+	dispatcher         dispatcherResolveAdapter
+	taskRuntime        agent.TaskRuntimeExecutor
 }
 
 func NewCloudRuntime(db *sql.DB, deviceReg *host_registry.Registry) (*Runtime, error) {
@@ -113,6 +117,14 @@ func (rt *Runtime) SetDispatcher(d dispatcherResolveAdapter) {
 
 func (rt *Runtime) SetTaskRuntime(tr agent.TaskRuntimeExecutor) {
 	rt.taskRuntime = tr
+}
+
+func (rt *Runtime) SetPendingInvocations(mgr *capability.PendingInvocationManager) {
+	rt.PendingInvocations = mgr
+}
+
+func (rt *Runtime) SetPendingTasks(mgr *task_runtime.PendingTaskManager) {
+	rt.PendingTasks = mgr
 }
 
 func (rt *Runtime) GetSessions() *deviceruntime.Service {
