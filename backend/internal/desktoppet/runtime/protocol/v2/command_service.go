@@ -216,7 +216,7 @@ func (s *commandService) advanceProgress(
 			return err
 		}
 		current := CommandStatus(cmd.Status)
-		if IsCommandTerminal(current) {
+		if current.IsTerminal() {
 			if current == target || current == CommandStatusCompleted {
 				return nil
 			}
@@ -290,7 +290,7 @@ func (s *commandService) MarkFailed(commandID, errCode, errMsg string, t time.Ti
 		if err := tx.Where("id = ?", commandID).Take(&cmd).Error; err != nil {
 			return err
 		}
-		if IsCommandTerminal(CommandStatus(cmd.Status)) {
+		if CommandStatus(cmd.Status).IsTerminal() {
 			if cmd.Status == string(CommandStatusFailedTerminal) {
 				return nil
 			}
@@ -331,7 +331,7 @@ func (s *commandService) MarkExpired(commandID string, t time.Time) error {
 		if err := s.db.Where("id = ?", commandID).Take(&cmd).Error; err != nil {
 			return err
 		}
-		if IsCommandTerminal(CommandStatus(cmd.Status)) || cmd.Status == string(CommandStatusPlaybackStarted) {
+		if CommandStatus(cmd.Status).IsTerminal() || cmd.Status == string(CommandStatusPlaybackStarted) {
 			return nil
 		}
 		return errors.New("command expiration transition updated no rows")
@@ -356,7 +356,7 @@ func (s *commandService) MarkCancelled(commandID string, t time.Time) error {
 		if err := s.db.Where("id = ?", commandID).Take(&cmd).Error; err != nil {
 			return err
 		}
-		if IsCommandTerminal(CommandStatus(cmd.Status)) {
+		if CommandStatus(cmd.Status).IsTerminal() {
 			return nil
 		}
 		return errors.New("command cancellation transition updated no rows")

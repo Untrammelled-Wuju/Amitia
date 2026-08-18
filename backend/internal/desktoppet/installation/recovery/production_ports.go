@@ -339,6 +339,20 @@ func (p *ProductionRuntimeRepo) MarkRuntimeApplied(opID string, appliedRevision 
 	return nil
 }
 
+func (p *ProductionRuntimeRepo) QueryCommandTerminalStatus(ctx context.Context, commandID string) (status string, found bool, err error) {
+	if p == nil || p.db == nil {
+		return "", false, errors.New("production runtime recovery: runtime v2 unavailable")
+	}
+	var cmd runtimev2.RuntimeCommand
+	if err := p.db.WithContext(ctx).Where("id = ?", commandID).First(&cmd).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", false, nil
+		}
+		return "", false, err
+	}
+	return cmd.Status, true, nil
+}
+
 type ProductionSwitchRepo struct {
 	runtime *ProductionRuntimeRepo
 }
@@ -564,8 +578,13 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
+func (f *ProductionRuntimeFinalizer) FinalizeDesiredStateApplied(ctx context.Context, op *operation.InstallationOperation) error {
+	return f.FinalizeRuntimeApplied(ctx, op)
+}
+
 var _ StagingRepo = (*ProductionStagingRepo)(nil)
 var _ DBRepo = (*ProductionDBRepo)(nil)
 var _ RuntimeRepo = (*ProductionRuntimeRepo)(nil)
 var _ SwitchRepo = (*ProductionSwitchRepo)(nil)
 var _ RuntimeAppliedFinalizer = (*ProductionRuntimeFinalizer)(nil)
+var _ DesiredStateFinalizer = (*ProductionRuntimeFinalizer)(nil)

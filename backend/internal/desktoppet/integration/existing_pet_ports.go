@@ -13,7 +13,7 @@ import (
 	"gorm.io/gorm"
 )
 
-type pluginResourceAttachment struct {
+type PluginResourceAttachment struct {
 	Handle         string `gorm:"primaryKey"`
 	ExtensionID    string `gorm:"index"`
 	ContributionID string `gorm:"index"`
@@ -22,9 +22,9 @@ type pluginResourceAttachment struct {
 	CreatedAt      int64
 }
 
-func (pluginResourceAttachment) TableName() string { return "plugin_resource_attachments" }
+func (PluginResourceAttachment) TableName() string { return "plugin_resource_attachments" }
 
-type pluginActionAttachment struct {
+type PluginActionAttachment struct {
 	Handle         string `gorm:"primaryKey"`
 	ExtensionID    string `gorm:"index"`
 	ContributionID string `gorm:"index"`
@@ -34,9 +34,9 @@ type pluginActionAttachment struct {
 	CreatedAt      int64
 }
 
-func (pluginActionAttachment) TableName() string { return "plugin_action_attachments" }
+func (PluginActionAttachment) TableName() string { return "plugin_action_attachments" }
 
-type pluginRuntimeAttachment struct {
+type PluginRuntimeAttachment struct {
 	Handle         string `gorm:"primaryKey"`
 	ExtensionID    string `gorm:"index"`
 	ContributionID string `gorm:"index"`
@@ -45,16 +45,16 @@ type pluginRuntimeAttachment struct {
 	CreatedAt      int64
 }
 
-func (pluginRuntimeAttachment) TableName() string { return "plugin_runtime_attachments" }
+func (PluginRuntimeAttachment) TableName() string { return "plugin_runtime_attachments" }
 
-type pluginWindowAttachment struct {
+type PluginWindowAttachment struct {
 	ExtensionID    string `gorm:"primaryKey"`
 	ContributionID string `gorm:"primaryKey"`
 	Definition     string
 	CreatedAt      int64
 }
 
-func (pluginWindowAttachment) TableName() string { return "plugin_window_attachments" }
+func (PluginWindowAttachment) TableName() string { return "plugin_window_attachments" }
 
 type sqliteResourcePort struct {
 	mu sync.RWMutex
@@ -72,7 +72,7 @@ func (p *sqliteResourcePort) AttachPluginResource(ctx context.Context, extension
 	handle := uuid.New().String()
 	defJSON := encodeDefinition(definition)
 	now := timestampMs()
-	rec := pluginResourceAttachment{Handle: handle, ExtensionID: extensionID, ContributionID: contributionID, Revision: revision, Definition: defJSON, CreatedAt: now}
+	rec := PluginResourceAttachment{Handle: handle, ExtensionID: extensionID, ContributionID: contributionID, Revision: revision, Definition: defJSON, CreatedAt: now}
 	if err := p.db.WithContext(ctx).Create(&rec).Error; err != nil {
 		return "", fmt.Errorf("create resource attachment: %w", err)
 	}
@@ -83,11 +83,11 @@ func (p *sqliteResourcePort) DetachPluginResource(ctx context.Context, handle st
 	if handle == "" {
 		return fmt.Errorf("handle required")
 	}
-	return p.db.WithContext(ctx).Delete(&pluginResourceAttachment{}, "handle = ?", handle).Error
+	return p.db.WithContext(ctx).Delete(&PluginResourceAttachment{}, "handle = ?", handle).Error
 }
 
 func (p *sqliteResourcePort) ListAttachedResources(ctx context.Context, extensionID string) ([]ExistingPetResourceBinding, error) {
-	var rows []pluginResourceAttachment
+	var rows []PluginResourceAttachment
 	if err := p.db.WithContext(ctx).Where("extension_id = ?", extensionID).Find(&rows).Error; err != nil {
 		return nil, fmt.Errorf("list resource attachments: %w", err)
 	}
@@ -119,7 +119,7 @@ func (p *sqliteActionPort) AttachPluginAction(ctx context.Context, extensionID, 
 	defJSON := encodeDefinition(definition)
 	targetJSON := encodeDefinition(map[string]any{"installationID": target.InstallationID, "deviceID": target.DeviceID, "userID": target.UserID})
 	now := timestampMs()
-	rec := pluginActionAttachment{Handle: handle, ExtensionID: extensionID, ContributionID: contributionID, Revision: revision, TargetJSON: targetJSON, Definition: defJSON, CreatedAt: now}
+	rec := PluginActionAttachment{Handle: handle, ExtensionID: extensionID, ContributionID: contributionID, Revision: revision, TargetJSON: targetJSON, Definition: defJSON, CreatedAt: now}
 	if err := p.db.WithContext(ctx).Create(&rec).Error; err != nil {
 		return "", fmt.Errorf("create action attachment: %w", err)
 	}
@@ -130,11 +130,11 @@ func (p *sqliteActionPort) DetachPluginAction(ctx context.Context, handle string
 	if handle == "" {
 		return fmt.Errorf("handle required")
 	}
-	return p.db.WithContext(ctx).Delete(&pluginActionAttachment{}, "handle = ?", handle).Error
+	return p.db.WithContext(ctx).Delete(&PluginActionAttachment{}, "handle = ?", handle).Error
 }
 
 func (p *sqliteActionPort) ListAttachedActions(ctx context.Context, extensionID string) ([]ExistingPetActionBinding, error) {
-	var rows []pluginActionAttachment
+	var rows []PluginActionAttachment
 	if err := p.db.WithContext(ctx).Where("extension_id = ?", extensionID).Find(&rows).Error; err != nil {
 		return nil, fmt.Errorf("list action attachments: %w", err)
 	}
@@ -165,7 +165,7 @@ func (p *sqliteRuntimePort) AttachPluginRuntime(ctx context.Context, extensionID
 	handle := uuid.New().String()
 	defJSON := encodeDefinition(definition)
 	now := timestampMs()
-	rec := pluginRuntimeAttachment{Handle: handle, ExtensionID: extensionID, ContributionID: contributionID, Revision: revision, Definition: defJSON, CreatedAt: now}
+	rec := PluginRuntimeAttachment{Handle: handle, ExtensionID: extensionID, ContributionID: contributionID, Revision: revision, Definition: defJSON, CreatedAt: now}
 	if err := p.db.WithContext(ctx).Create(&rec).Error; err != nil {
 		return "", fmt.Errorf("create runtime attachment: %w", err)
 	}
@@ -176,11 +176,11 @@ func (p *sqliteRuntimePort) DetachPluginRuntime(ctx context.Context, handle stri
 	if handle == "" {
 		return fmt.Errorf("handle required")
 	}
-	return p.db.WithContext(ctx).Delete(&pluginRuntimeAttachment{}, "handle = ?", handle).Error
+	return p.db.WithContext(ctx).Delete(&PluginRuntimeAttachment{}, "handle = ?", handle).Error
 }
 
 func (p *sqliteRuntimePort) ListAttachedRuntimes(ctx context.Context, extensionID string) ([]ExistingPetRuntimeBinding, error) {
-	var rows []pluginRuntimeAttachment
+	var rows []PluginRuntimeAttachment
 	if err := p.db.WithContext(ctx).Where("extension_id = ?", extensionID).Find(&rows).Error; err != nil {
 		return nil, fmt.Errorf("list runtime attachments: %w", err)
 	}
@@ -210,7 +210,7 @@ func (p *sqliteWindowPort) PublishFloatingWindowContribution(ctx context.Context
 	}
 	defJSON := encodeDefinition(definition)
 	now := timestampMs()
-	rec := pluginWindowAttachment{ExtensionID: extensionID, ContributionID: contributionID, Definition: defJSON, CreatedAt: now}
+	rec := PluginWindowAttachment{ExtensionID: extensionID, ContributionID: contributionID, Definition: defJSON, CreatedAt: now}
 	return p.db.WithContext(ctx).Save(&rec).Error
 }
 
@@ -218,11 +218,11 @@ func (p *sqliteWindowPort) RetractFloatingWindowContribution(ctx context.Context
 	if extensionID == "" || contributionID == "" {
 		return fmt.Errorf("extensionID and contributionID required")
 	}
-	return p.db.WithContext(ctx).Delete(&pluginWindowAttachment{}, "extension_id = ? AND contribution_id = ?", extensionID, contributionID).Error
+	return p.db.WithContext(ctx).Delete(&PluginWindowAttachment{}, "extension_id = ? AND contribution_id = ?", extensionID, contributionID).Error
 }
 
 func (p *sqliteWindowPort) ListAttachedWindows(ctx context.Context, extensionID string) ([]ExistingPetWindowBinding, error) {
-	var rows []pluginWindowAttachment
+	var rows []PluginWindowAttachment
 	if err := p.db.WithContext(ctx).Where("extension_id = ?", extensionID).Find(&rows).Error; err != nil {
 		return nil, fmt.Errorf("list window attachments: %w", err)
 	}

@@ -40,7 +40,7 @@ func (s *BehaviorEventSink) RecordHealthChange(runtimeSessionID, previousStatus,
 
 	payload := []byte(`{"previousStatus":"` + previousStatus + `","currentStatus":"` + currentStatus + `","reason":"` + reason + `","changedAt":"` + now + `"}`)
 
-	_, err := s.events.Append(EventHealthChanged, payload, runtimeSessionID, seq, TriggerSourceRuntimeCommand, nil)
+	_, err = s.events.Append(EventHealthChanged, payload, runtimeSessionID, seq, TriggerSourceRuntimeCommand, nil)
 	return err
 }
 
@@ -61,7 +61,7 @@ func (s *BehaviorEventSink) RecordPlaybackEvent(runtimeSessionID, cmdID, eventTy
 		commandID = &cmdID
 	}
 
-	_, err := s.events.Append(eventType, payload, runtimeSessionID, seq, TriggerSourceRuntimeCommand, commandID)
+	_, err = s.events.Append(eventType, payload, runtimeSessionID, seq, TriggerSourceRuntimeCommand, commandID)
 	return err
 }
 
@@ -86,6 +86,6 @@ func (s *BehaviorEventSink) RecordDesiredApplied(runtimeSessionID, cmdID string,
 		commandID = &cmdID
 	}
 
-	_, err := s.events.Append(EventStateDesiredApplied, payload, runtimeSessionID, seq, TriggerSourceRuntimeCommand, commandID)
+	_, err = s.events.Append(EventStateDesiredApplied, payload, runtimeSessionID, seq, TriggerSourceRuntimeCommand, commandID)
 	return err
 }

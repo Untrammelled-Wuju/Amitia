@@ -113,7 +113,7 @@ func (r *RuntimeRecovery) recoverFromWaitingRuntimeAck(ctx context.Context, op *
 
 func (r *RuntimeRecovery) recoverRecenterFromWaitingRuntimeAck(ctx context.Context, op *operation.InstallationOperation, j *RecoveryCommitJournal) error {
 	if op.ExpectedAppliedRevision > 0 {
-		status, found, err := r.runtimeRepo.QueryCommandTerminalStatus(ctx, fmt.Sprintf("%s", op.ExpectedAppliedRevision))
+		status, found, err := r.runtimeRepo.QueryCommandTerminalStatus(ctx, fmt.Sprintf("recovery-recenter:%s", op.ID))
 		if err != nil {
 			if sendErr := r.runtimeRepo.SendDesiredCommand(ctx, op.ID, op.UserID, op.DeviceID, op.RuntimeID, op.InstallationID, op.DesiredRevision); sendErr != nil {
 				return fmt.Errorf("runtimeRecovery: re-send recenter command failed op=%s: %w", op.ID, sendErr)
