@@ -145,7 +145,9 @@ CREATE TABLE IF NOT EXISTS characters (
     emotion_scale INTEGER DEFAULT 0,
     silence_duration INTEGER DEFAULT 0,
     character_base TEXT DEFAULT '',
-    card_data_json TEXT DEFAULT '{}'
+    card_data_json TEXT DEFAULT '{}',
+    revision INTEGER NOT NULL DEFAULT 1,
+    deleted_at DATETIME
 );
 
 CREATE TABLE IF NOT EXISTS character_templates (
@@ -168,7 +170,9 @@ CREATE TABLE IF NOT EXISTS conversations (
     message_count INTEGER DEFAULT 0,
     state_version TEXT DEFAULT '',
     created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    updated_at TEXT DEFAULT (datetime('now')),
+    revision INTEGER NOT NULL DEFAULT 1,
+    deleted_at DATETIME
 );
 
 CREATE TABLE IF NOT EXISTS messages (
@@ -203,7 +207,9 @@ CREATE TABLE IF NOT EXISTS messages (
     fallback_asset_reference TEXT NOT NULL DEFAULT '',
     response_group_id TEXT NOT NULL DEFAULT '',
     delivery_sequence INTEGER NOT NULL DEFAULT 0,
-    emote_decision_status TEXT NOT NULL DEFAULT 'none'
+    emote_decision_status TEXT NOT NULL DEFAULT 'none',
+    revision INTEGER NOT NULL DEFAULT 1,
+    deleted_at DATETIME
 );
 
 CREATE TABLE IF NOT EXISTS pipeline_checkpoints (
@@ -5858,19 +5864,29 @@ CREATE INDEX IF NOT EXISTS idx_sync_changes_scope ON sync_changes(scope);
 CREATE INDEX IF NOT EXISTS idx_sync_changes_entity ON sync_changes(entity_type, entity_id);
 CREATE INDEX IF NOT EXISTS idx_sync_changes_origin ON sync_changes(origin_device);
 CREATE TABLE IF NOT EXISTS sync_cursors (
-	device_id TEXT NOT NULL,
-	user_id TEXT NOT NULL,
-	scope TEXT NOT NULL DEFAULT 'device',
-	last_applied INTEGER NOT NULL DEFAULT 0,
-	last_pushed INTEGER NOT NULL DEFAULT 0,
-	updated_at DATETIME NOT NULL,
-	PRIMARY KEY (user_id, scope, device_id)
+    device_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    scope TEXT NOT NULL DEFAULT 'device',
+    last_applied INTEGER NOT NULL DEFAULT 0,
+    last_pushed INTEGER NOT NULL DEFAULT 0,
+    updated_at DATETIME NOT NULL,
+    PRIMARY KEY (user_id, scope, device_id)
 );
 CREATE INDEX IF NOT EXISTS idx_sync_cursors_user ON sync_cursors(user_id);
 
+CREATE TABLE IF NOT EXISTS sync_mutation_claims (
+    user_id TEXT NOT NULL,
+    scope TEXT NOT NULL DEFAULT 'device',
+    mutation_id TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, scope, mutation_id)
+);
+CREATE INDEX IF NOT EXISTS idx_sync_mutation_claims_status ON sync_mutation_claims(status);
+
 CREATE TABLE IF NOT EXISTS sync_sequence (
-	id INTEGER PRIMARY KEY CHECK (id = 1),
-	seq INTEGER NOT NULL DEFAULT 0
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    seq INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS execution_resumes (
