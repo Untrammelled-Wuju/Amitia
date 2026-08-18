@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
@@ -33,11 +34,14 @@ var validPlatforms = map[string]bool{
 	"ios":     true,
 }
 
+type BackendActionRequestHandler func(ctx context.Context, platform string, payload json.RawMessage) (json.RawMessage, error)
+
 type RelayHandler struct {
-	mu         sync.RWMutex
-	bridges    map[string]RelayBridge
-	sessions   map[string]*RelayConnection
-	eventSinks map[string]bool
+	mu                   sync.RWMutex
+	bridges              map[string]RelayBridge
+	sessions             map[string]*RelayConnection
+	eventSinks           map[string]bool
+	backendActionHandler BackendActionRequestHandler
 
 	connectionCounter atomic.Uint64
 }
@@ -119,6 +123,17 @@ func (h *RelayHandler) HandleWebSocket(c *gin.Context) {
 		}()
 
 		err := relayConn.ReadLoop(func(data []byte) error {
+			var env RelayEnvelope
+			if err := json.Unmarshal(data, &env); err != nil {
+				return fmt.Errorf("decode relay envelope: %w", err)
+			}
+			if env.Type == "backend_action.request" {
+				if env.Generation != bridge.Generation() {
+					return nil
+				}
+				h.handleBackendActionRequest(relayConn, env)
+				return nil
+			}
 			return bridge.HandleRelayEnvelope(data)
 		})
 		if err != nil {
@@ -132,13 +147,59 @@ func sendRelayHello(bridge RelayBridge, conn *RelayConnection) error {
 		Type:       "native_bridge.health",
 		Platform:   conn.Platform,
 		Generation: bridge.Generation(),
-		Payload: json.RawMessage(`{"protocolVersion":1,"ready":true}`),
+		Payload:    json.RawMessage(`{"protocolVersion":1,"ready":true}`),
 	}
 	data, err := json.Marshal(hello)
 	if err != nil {
 		return err
 	}
 	return conn.Transport.Send(data)
+}
+
+func (h *RelayHandler) SetBackendActionHandler(handler BackendActionRequestHandler) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.backendActionHandler = handler
+}
+
+func (h *RelayHandler) handleBackendActionRequest(conn *RelayConnection, env RelayEnvelope) {
+	if conn == nil || env.RequestId == "" {
+		return
+	}
+	h.mu.RLock()
+	handler := h.backendActionHandler
+	h.mu.RUnlock()
+
+	go func() {
+		var payload json.RawMessage
+		if handler == nil {
+			payload = json.RawMessage(`{"status":"error","error":{"code":"BACKEND_ACTION_UNAVAILABLE","message":"backend action handler is not configured"}}`)
+		} else {
+			ctx, cancel := context.WithTimeout(context.Background(), 25*time.Second)
+			defer cancel()
+			result, err := handler(ctx, conn.Platform, env.Payload)
+			if err != nil {
+				encoded, _ := json.Marshal(map[string]any{
+					"status": "error",
+					"error":  map[string]any{"code": "BACKEND_ACTION_FAILED", "message": err.Error()},
+				})
+				payload = encoded
+			} else {
+				payload = result
+			}
+		}
+		response := RelayEnvelope{
+			Type:       "backend_action.response",
+			Platform:   conn.Platform,
+			Generation: env.Generation,
+			RequestId:  env.RequestId,
+			Payload:    payload,
+		}
+		encoded, err := json.Marshal(response)
+		if err == nil {
+			_ = conn.Transport.Send(encoded)
+		}
+	}()
 }
 
 func (h *RelayHandler) GetSession(platform string) (*RelayConnection, bool) {
