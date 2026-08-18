@@ -10,7 +10,6 @@ import (
 	"time"
 
 	sqlitedriver "github.com/glebarez/sqlite"
-	"gorm.io/gorm"
 	"github.com/u-ai/backend/internal/agent/tool"
 	"github.com/u-ai/backend/internal/browser"
 	"github.com/u-ai/backend/internal/desktoppet/installation"
@@ -92,6 +91,7 @@ import (
 	"github.com/u-ai/backend/internal/workspace"
 	"github.com/u-ai/backend/pkg/resourceuri"
 	"github.com/u-ai/backend/pkg/sse"
+	"gorm.io/gorm"
 )
 
 type ContainerBuilder struct {
@@ -431,13 +431,6 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return nil, fmt.Errorf("kernel: restore package trust: %w", err)
 	}
 
-	stateLoader := newContainerStateLoader(instRepo, defRepo, moduleRepo, contribRepo, runtimeRepo, stateStore)
-	preflightChecker := newContainerPreflightChecker(dependencyResolver)
-	typedInstaller := NewTypedContributionInstaller(nil)
-	planExecutor := newContainerPlanExecutor(instRepo, defRepo, moduleRepo, contribRepo, stateStore, typedInstaller, packageRepo, packageArtifactStore, packageGenerationStore, packageSec)
-	lcAuditWriter := newContainerAuditWriter(opRepo)
-	lifecycleMgr := lifecycle_manager.NewManager(stateLoader, preflightChecker, planExecutor, lcAuditWriter)
-
 	adapterRegistry := capability.NewRuntimeAdapterRegistry()
 	toolRegistry := capability.NewToolRegistry()
 
@@ -718,6 +711,14 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return nil, fmt.Errorf("kernel: load device registry: %w", err)
 	}
 
+	uiHostNotifier := NewSSEUIHostNotifierWithRegistry(sse.Global, deviceRegistry)
+	stateLoader := newContainerStateLoader(instRepo, defRepo, moduleRepo, contribRepo, runtimeRepo, stateStore)
+	preflightChecker := newContainerPreflightChecker(dependencyResolver)
+	typedInstaller := NewTypedContributionInstaller(nil)
+	planExecutor := newContainerPlanExecutor(instRepo, defRepo, moduleRepo, contribRepo, stateStore, typedInstaller, packageRepo, packageArtifactStore, packageGenerationStore, packageSec, uiHostNotifier)
+	lcAuditWriter := newContainerAuditWriter(opRepo)
+	lifecycleMgr := lifecycle_manager.NewManager(stateLoader, preflightChecker, planExecutor, lcAuditWriter)
+
 	var providerEventSink capability.ProviderEventSink
 	if b.runtimePolicy.DurableEvents {
 		providerEventSink = eventbridge.NewProviderEventEmitter(eventBridgePublisher)
@@ -905,7 +906,6 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return nil, fmt.Errorf("kernel: registry startup recovery: %w", err)
 	}
 
-	uiHostNotifier := NewSSEUIHostNotifierWithRegistry(sse.Global, deviceRegistry)
 	bridgeClipboardHost := NewBridgeClipboardHostWithRegistry(sse.Global, deviceRegistry)
 	if err := setupDefaultHostAPIRoutes(hostAPIGateway, HostAPIRouteDeps{
 		StateStore:          extensionStateStore,
@@ -1318,14 +1318,16 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	)
 	rollbackExecutorV2.SetCompletionCallback(func(extensionID string, success bool, generation int64) {
 		if uiHostNotifier != nil {
-			extra := map[string]interface{}{"status": "completed"}
-			if !success {
-				extra["status"] = "failed"
+			if success {
+				extra := map[string]interface{}{"status": "completed"}
+				if generation > 0 {
+					extra["generation"] = generation
+				}
+				uiHostNotifier.BroadcastExtensionChange("extension_rolled_back", extensionID, extra)
+				uiHostNotifier.BroadcastExtensionChange("extension_generation_changed", extensionID, map[string]interface{}{"generation": generation})
+			} else {
+				uiHostNotifier.BroadcastExtensionChange("extension_rollback_failed", extensionID, map[string]interface{}{"status": "failed"})
 			}
-			if generation > 0 {
-				extra["generation"] = generation
-			}
-			uiHostNotifier.BroadcastExtensionChange("extension_rolled_back", extensionID, extra)
 		}
 	})
 	recoveryMgr := update.NewRecoveryManager(journalMgr, rollbackExecutorV2, rollbackPlanner, rollbackRepo)
