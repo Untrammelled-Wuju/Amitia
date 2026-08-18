@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	"github.com/u-ai/backend/internal/gamehost/domain"
@@ -15,6 +16,7 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/runtime"
 	"github.com/u-ai/backend/internal/gamehost/storage"
 	"github.com/u-ai/backend/internal/gamehost/stream/binary"
+	"github.com/u-ai/backend/internal/platform/process"
 )
 
 type HostIdentity struct {
@@ -107,9 +109,19 @@ func (a *ProcessCleanupProcessAdapter) cleanupDurableOwnedProcess(ctx context.Co
 			return nil
 		}
 	}
-	if pid > 0 {
-		if err := a.killProcessTree(pid); err != nil {
-			log.Printf("[startup-recovery] cleanupDurableOwnedProcess: kill failed pid=%d: %v", pid, err)
+	if pid > 0 && meta.PID > 0 && pid != meta.PID {
+		return fmt.Errorf("cleanupDurableOwnedProcess: PID mismatch: input=%d durable=%d instance=%s", pid, meta.PID, instanceID)
+	}
+	killPID := pid
+	if killPID <= 0 {
+		killPID = meta.PID
+	}
+	if killPID > 0 {
+		if err := a.killProcessTree(killPID); err != nil {
+			return fmt.Errorf("cleanupDurableOwnedProcess: kill failed pid=%d instance=%s: %w", killPID, instanceID, err)
+		}
+		if !a.verifyProcessDead(killPID, 10*time.Second) {
+			return fmt.Errorf("cleanupDurableOwnedProcess: process still alive after kill pid=%d instance=%s", killPID, instanceID)
 		}
 	}
 	ownerStore.RemoveOwnership(instanceID)
@@ -122,14 +134,32 @@ func (a *ProcessCleanupProcessAdapter) killProcessTree(pid int) error {
 	if pid <= 0 {
 		return nil
 	}
-	proc, err := os.FindProcess(pid)
-	if err != nil {
-		return fmt.Errorf("find process %d: %w", pid, err)
-	}
-	if err := proc.Kill(); err != nil {
-		return fmt.Errorf("kill process %d: %w", pid, err)
+	if err := process.TerminateProcessTree(pid, 0); err != nil {
+		proc, findErr := os.FindProcess(pid)
+		if findErr != nil {
+			return fmt.Errorf("find process %d: %w", pid, findErr)
+		}
+		if killErr := proc.Kill(); killErr != nil {
+			return fmt.Errorf("kill process %d: %w", pid, killErr)
+		}
 	}
 	return nil
+}
+
+func (a *ProcessCleanupProcessAdapter) verifyProcessDead(pid int, timeout time.Duration) bool {
+	if pid <= 0 {
+		return true
+	}
+	deadline := time.Now().Add(timeout)
+	for {
+		if !process.IsProcessAlive(pid) {
+			return true
+		}
+		if time.Now().After(deadline) {
+			return false
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
 }
 
 func (a *ProcessCleanupProcessAdapter) ListOrphanCandidates(ctx context.Context) ([]ProcessCandidate, error) {
