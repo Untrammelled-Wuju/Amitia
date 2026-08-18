@@ -370,6 +370,15 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		log.Error("desktoppet plugin capabilities validation failed:", err)
 	}
 
+	deliveryStore := delivery.NewSQLiteDeliveryStore(ctx.DB)
+	deliveryResolver := delivery.NewMapChannelResolverWith([]delivery.ChannelAdapter{
+		delivery.NewWebChannelAdapter(),
+		delivery.NewQQChannelAdapter("http://127.0.0.1:19877"),
+		delivery.NewWechatChannelAdapter("http://127.0.0.1:19876"),
+	})
+	deliveryWorker := delivery.NewWorker(deliveryStore, deliveryResolver, delivery.DefaultWorkerConfig())
+	channelStore := kernel.NewDeliveryChannelStore(deliveryStore, deliveryResolver)
+
 	kernelBuilder := kernel.NewContainerBuilder().
 		WithDBPath(kernelDBPath).
 		WithExtensionRoot(kernelRoot).
@@ -394,7 +403,8 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 			reg := backgroundremoval.NewRegistry()
 			reg.Register(local.NewLocalProvider(), local.LocalCapabilities())
 			return reg, nil
-		})
+		}).
+		WithChannelStore(channelStore)
 
 	if bootstrap != nil {
 		kernelBuilder.WithRuntimeHost(bootstrap.RuntimeHost())
@@ -531,12 +541,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		panic("failed to init outbox store schema")
 	}
 	runtimeQueue := queue.NewSQLiteRuntimeQueueStore(ctx.DB)
-	deliveryStore := delivery.NewSQLiteDeliveryStore(ctx.DB)
-	deliveryWorker := delivery.NewWorker(deliveryStore, delivery.NewMapChannelResolverWith([]delivery.ChannelAdapter{
-		delivery.NewWebChannelAdapter(),
-		delivery.NewQQChannelAdapter("http://127.0.0.1:19877"),
-		delivery.NewWechatChannelAdapter("http://127.0.0.1:19876"),
-	}), delivery.DefaultWorkerConfig())
+
 	deliveryAdapter := &chatDeliveryAdapter{store: deliveryStore}
 	chatSvc.SetDeliveryStore(deliveryAdapter)
 	emoteSvc := emote.NewService(ctx.DB, deliveryStore)
@@ -1003,7 +1008,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		RuntimeProfile:          runtimeProfile,
 		RuntimePolicy:           policy,
 		Graph:                   graphSvc,
-		ChatDeliveryAdapter:     deliveryAdapter,
+		ChatDeliveryAdapter:     nil,
 		Memory:                  memSvc,
 		Profile:                 profSvc,
 		Episodic:                epiSvc,
@@ -1039,7 +1044,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		VoiceEntry:                   voiceEntry,
 		Extension:                    extensionRuntime,
 		KernelContainer:              kernelContainer,
-		Emote:                        emoteSvc,
+		Emote:                        nil,
 		Temporal:                     temporalSvc,
 		RelTimeCoordinator:           relTimeCoordinator,
 		OwnershipGuard:               ownershipGuard,
