@@ -10,6 +10,10 @@ type RuntimeDispatcher interface {
 	Resolve(handlerName string) RuntimeInvokeHandler
 }
 
+type RuntimeCancelDispatcher interface {
+	CancelInvocation(invocationID string) bool
+}
+
 type defaultRuntimeDispatcher struct {
 	handlers map[string]RuntimeInvokeHandler
 }

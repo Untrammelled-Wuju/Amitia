@@ -3,14 +3,15 @@ package devicemesh
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/u-ai/backend/internal/deviceruntime"
 	"github.com/u-ai/backend/internal/devicemesh/agent"
 	"github.com/u-ai/backend/internal/devicemesh/bootstrap"
 	"github.com/u-ai/backend/internal/devicemesh/credential"
 	"github.com/u-ai/backend/internal/devicemesh/server"
+	"github.com/u-ai/backend/internal/deviceruntime"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/host_registry"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
@@ -157,7 +158,15 @@ func (rt *Runtime) Stop() error {
 }
 
 func NewDeviceAgentRuntime(dataDir string, platform runtimeidentity.Platform, taskRuntime agent.TaskRuntimeExecutor, dispatcher dispatcherResolveAdapter) (*Runtime, error) {
+	if dispatcher == nil {
+		return nil, fmt.Errorf("devicemesh: device-agent runtime dispatcher is required")
+	}
+	if taskRuntime == nil {
+		return nil, fmt.Errorf("devicemesh: device-agent task runtime is required")
+	}
 	localHandler := agent.NewLocalHandler(dataDir, platform)
+	localHandler.SetDispatcher(dispatcher)
+	localHandler.SetTaskRuntime(taskRuntime)
 
 	rt := &Runtime{
 		LocalHandler: localHandler,
@@ -188,9 +197,6 @@ func (rt *Runtime) autoRecoverCredential(handler *agent.LocalHandler) {
 	cursor, _ := handler.LoadCursor()
 
 	dispatcher := rt.dispatcher
-	if dispatcher == nil {
-		dispatcher = agent.NewRuntimeDispatcher()
-	}
 
 	meshClient := agent.NewMeshClient(agent.MeshClientConfig{
 		CloudBaseURL:      cred.CloudBaseUrl,

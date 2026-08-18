@@ -17,15 +17,16 @@ type LocalHandler struct {
 	dataDir       string
 	dispatcher    RuntimeDispatcher
 	taskWorker    TaskWorkerIface
+	taskRuntime   TaskRuntimeExecutor
 	taskWorkerSet bool
 }
 
 func NewLocalHandler(dataDir string, platform runtimeidentity.Platform) *LocalHandler {
 	return &LocalHandler{
-		identity:  NewIdentityStore(dataDir),
-		credStore: NewCredentialStore(dataDir),
-		platform:  platform,
-		dataDir:   dataDir,
+		identity:   NewIdentityStore(dataDir),
+		credStore:  NewCredentialStore(dataDir),
+		platform:   platform,
+		dataDir:    dataDir,
 		dispatcher: NewRuntimeDispatcher(),
 	}
 }
@@ -40,7 +41,12 @@ func (h *LocalHandler) SetDispatcher(d RuntimeDispatcher) {
 
 func (h *LocalHandler) SetTaskWorker(w TaskWorkerIface) {
 	h.taskWorker = w
-	h.taskWorkerSet = true
+	h.taskWorkerSet = w != nil
+}
+
+func (h *LocalHandler) SetTaskRuntime(tr TaskRuntimeExecutor) {
+	h.taskRuntime = tr
+	h.taskWorkerSet = tr != nil || h.taskWorker != nil
 }
 
 func (h *LocalHandler) TaskWorkerSet() bool {
@@ -148,22 +154,28 @@ func (h *LocalHandler) handleBootstrap(c *gin.Context) {
 		log.Printf("devicemesh: agent: load cursor failed: %v", err)
 	}
 
-	var worker TaskWorkerIface
-	worker = NewTaskWorker(h.mesh)
-	if h.taskWorker != nil {
-		worker = h.taskWorker
-		h.taskWorkerSet = true
-	}
-	h.mesh = NewMeshClient(MeshClientConfig{
+	newMesh := NewMeshClient(MeshClientConfig{
 		CloudBaseURL:      req.CloudBaseURL,
 		Credential:        resp.Credential,
 		UserID:            cred.UserID,
 		Identity:          id,
 		Cursor:            cursor,
 		RuntimeDispatcher: h.dispatcher,
-		TaskWorker:        worker,
 	})
-	h.mesh.SetCredentialStore(h.credStore)
+	var worker TaskWorkerIface
+	if h.taskWorker != nil {
+		worker = h.taskWorker
+	} else {
+		defaultWorker := NewTaskWorker(newMesh)
+		if h.taskRuntime != nil {
+			defaultWorker.SetTaskRuntime(h.taskRuntime)
+		}
+		worker = defaultWorker
+	}
+	newMesh.SetTaskWorker(worker)
+	newMesh.SetCredentialStore(h.credStore)
+	h.mesh = newMesh
+	h.taskWorkerSet = worker != nil && h.taskRuntime != nil
 	h.mesh.Start()
 
 	c.JSON(200, gin.H{
