@@ -9,6 +9,7 @@ import (
 	"github.com/u-ai/backend/internal/belief"
 	"github.com/u-ai/backend/internal/personality"
 	"github.com/u-ai/backend/internal/safety"
+	coreexec "github.com/u-ai/backend/internal/execution"
 
 	"github.com/u-ai/backend/internal/decision"
 
@@ -47,6 +48,7 @@ type RuntimeAssembly struct {
 	Goals             RuntimeGoalContext               `json:"goals"`
 	Continuation      *decision.ContinuationDecision   `json:"continuation,omitempty"`
 	DecisionIteration int                              `json:"decisionIteration,omitempty"`
+	ExecContext       *coreexec.ExecutionContext       `json:"-"`
 }
 
 type RuntimePipeline struct {
@@ -203,5 +205,6 @@ func (p *RuntimePipeline) Assemble(ctx context.Context, scope InteractionScope, 
 		BehaviorPlan:   behaviorPlan,
 		ExpressionPlan: expressionPlan,
 		Goals:          goalContext,
+		ExecContext:    req.ExecContext,
 	}
 }

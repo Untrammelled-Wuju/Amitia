@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	coreexec "github.com/u-ai/backend/internal/execution"
 	"github.com/u-ai/backend/internal/temporal"
 )
 
@@ -128,12 +129,13 @@ type UnifiedEntryRequest struct {
 }
 
 type UnifiedEntry struct {
-	orchestrator *Orchestrator
-	resolver     ScopeResolver
-	bpCfg        BackpressureConfig
-	bpState      *BackpressureState
-	mu           sync.Mutex
-	clock        temporal.Clock
+	orchestrator     *Orchestrator
+	resolver         ScopeResolver
+	execService      *coreexec.ExecutionService
+	bpCfg            BackpressureConfig
+	bpState          *BackpressureState
+	mu               sync.Mutex
+	clock            temporal.Clock
 }
 
 func NewUnifiedEntry(orchestrator *Orchestrator, resolver ScopeResolver, clock temporal.Clock) *UnifiedEntry {
@@ -146,6 +148,12 @@ func NewUnifiedEntry(orchestrator *Orchestrator, resolver ScopeResolver, clock t
 	}
 }
 
+func (e *UnifiedEntry) SetExecutionService(svc *coreexec.ExecutionService) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.execService = svc
+}
+
 func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*OrchestrationResult, error) {
 	e.mu.Lock()
 	now := e.clock.Now()
@@ -156,6 +164,7 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 	e.bpState.QueueDepth++
 	e.bpState.updateStatusLocked(e.bpCfg)
 	status := e.bpState.Status
+	execService := e.execService
 	e.mu.Unlock()
 
 	defer func() {
@@ -190,6 +199,17 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		return nil, err
 	}
 
+	var execCtx *coreexec.ExecutionContext
+	if execService != nil {
+		rootID := ""
+		userID := req.UserID
+		if userID == "" {
+			userID = resolution.Scope.UserID
+		}
+		created := execService.StartExecution(ctx, rootID, userID)
+		execCtx = &created
+	}
+
 	procReq := &ProcessRequest{
 		CharacterID:              resolution.Scope.CharacterID,
 		ConversationID:           resolution.Scope.ConversationID,
@@ -216,6 +236,7 @@ func (e *UnifiedEntry) Handle(ctx context.Context, req *UnifiedEntryRequest) (*O
 		ProactiveRelationship:    req.ProactiveRelationship,
 		ProactiveEmotion:         req.ProactiveEmotion,
 		ProactiveMemory:          req.ProactiveMemory,
+		ExecContext:              execCtx,
 	}
 
 	return e.orchestrator.Process(ctx, procReq)

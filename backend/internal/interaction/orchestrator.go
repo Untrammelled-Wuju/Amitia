@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/outbox"
+	coreexec "github.com/u-ai/backend/internal/execution"
 )
 
 var (
@@ -23,34 +24,35 @@ var (
 )
 
 type ProcessRequest struct {
-	CharacterID              string           `json:"characterId,omitempty"`
-	Message                  string           `json:"message"`
-	ConversationID           string           `json:"conversationId,omitempty"`
-	Channel                  string           `json:"channel,omitempty"`
-	Source                   string           `json:"source,omitempty"`
-	ProactiveTaskInstruction string           `json:"-"`
-	ProactiveTimeContext     string           `json:"-"`
-	ProactiveRecentContext   string           `json:"-"`
-	ProactiveRelationship    string           `json:"-"`
-	ProactiveEmotion         string           `json:"-"`
-	ProactiveMemory          string           `json:"-"`
-	PeerID                   string           `json:"peerId,omitempty"`
-	UserID                   string           `json:"userId,omitempty"`
-	DeviceTimezone           string           `json:"deviceTimezone,omitempty"`
-	SessionID                string           `json:"sessionId,omitempty"`
-	AudioUrl                 string           `json:"audioUrl,omitempty"`
-	AudioDuration            float64          `json:"audioDuration,omitempty"`
-	VoiceMessage             bool             `json:"voiceMessage"`
-	ExpressionPlan           *ExpressionPlan  `json:"expressionPlan,omitempty"`
-	ImageUrl                 string           `json:"imageUrl,omitempty"`
-	VideoUrl                 string           `json:"videoUrl,omitempty"`
-	ImageContext             string           `json:"imageContext,omitempty"`
-	ReplyToMessageID         *string          `json:"replyToMessageId,omitempty"`
-	RequestID                string           `json:"requestId,omitempty"`
-	InteractionID            string           `json:"-"`
-	ExpectedStatusVersion    int64            `json:"-"`
-	Runtime                  *RuntimeAssembly `json:"-"`
-	IsInternal               bool             `json:"-"`
+	CharacterID              string                    `json:"characterId,omitempty"`
+	Message                  string                    `json:"message"`
+	ConversationID           string                    `json:"conversationId,omitempty"`
+	Channel                  string                    `json:"channel,omitempty"`
+	Source                   string                    `json:"source,omitempty"`
+	ProactiveTaskInstruction string                    `json:"-"`
+	ProactiveTimeContext     string                    `json:"-"`
+	ProactiveRecentContext   string                    `json:"-"`
+	ProactiveRelationship    string                    `json:"-"`
+	ProactiveEmotion         string                    `json:"-"`
+	ProactiveMemory          string                    `json:"-"`
+	PeerID                   string                    `json:"peerId,omitempty"`
+	UserID                   string                    `json:"userId,omitempty"`
+	DeviceTimezone           string                    `json:"deviceTimezone,omitempty"`
+	SessionID                string                    `json:"sessionId,omitempty"`
+	AudioUrl                 string                    `json:"audioUrl,omitempty"`
+	AudioDuration            float64                   `json:"audioDuration,omitempty"`
+	VoiceMessage             bool                      `json:"voiceMessage"`
+	ExpressionPlan           *ExpressionPlan           `json:"expressionPlan,omitempty"`
+	ImageUrl                 string                    `json:"imageUrl,omitempty"`
+	VideoUrl                 string                    `json:"videoUrl,omitempty"`
+	ImageContext             string                    `json:"imageContext,omitempty"`
+	ReplyToMessageID         *string                   `json:"replyToMessageId,omitempty"`
+	RequestID                string                    `json:"requestId,omitempty"`
+	InteractionID            string                    `json:"-"`
+	ExpectedStatusVersion    int64                     `json:"-"`
+	Runtime                  *RuntimeAssembly          `json:"-"`
+	ExecContext              *coreexec.ExecutionContext `json:"-"`
+	IsInternal               bool                      `json:"-"`
 }
 
 type ProcessResponse struct {
