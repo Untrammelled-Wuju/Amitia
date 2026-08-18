@@ -291,24 +291,30 @@ func (a *businessApplier) applySettings(tx *gorm.DB, mutation ClientMutation) (i
 			if err := tx.Table("app_settings").Create(map[string]interface{}{
 				"key":        settingsKey,
 				"value":      payload.Value,
+				"revision":   1,
 				"updated_at": a.now(),
 			}).Error; err != nil {
 				return 0, &ApplierError{Code: "apply_failed", Message: "create settings: " + err.Error()}
 			}
+			return 1, nil
 		} else {
+			var currentRev struct{ Revision int64 }
+			tx.Table("app_settings").Where("key = ?", settingsKey).Select("revision").Scan(&currentRev)
+			newRev := currentRev.Revision + 1
 			if err := tx.Table("app_settings").Where("key = ?", settingsKey).Updates(map[string]interface{}{
 				"value":      payload.Value,
+				"revision":   newRev,
 				"updated_at": a.now(),
 			}).Error; err != nil {
 				return 0, &ApplierError{Code: "apply_failed", Message: "update settings: " + err.Error()}
 			}
+			return newRev, nil
 		}
-		return 0, nil
 	case OpDelete:
 		if err := tx.Table("app_settings").Where("key = ?", settingsKey).Delete(nil).Error; err != nil {
 			return 0, &ApplierError{Code: "apply_failed", Message: "delete settings: " + err.Error()}
 		}
-		return 0, nil
+		return mutation.BaseRevision + 1, nil
 	}
 	return 0, &ApplierError{Code: "unsupported_operation", Message: "unsupported operation: " + string(mutation.Operation)}
 }
