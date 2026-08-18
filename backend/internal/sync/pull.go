@@ -44,7 +44,7 @@ func (s *PullService) Pull(req PullRequest) (*PullResult, error) {
 		startCursor = cursor.LastApplied
 	}
 
-	changes, nextCursor, hasMore, err := s.changelog.Pull(req.UserID, startCursor, req.Limit, EntityType(req.EntityType))
+	changes, nextCursor, hasMore, err := s.changelog.Pull(req.UserID, scope, startCursor, req.Limit, EntityType(req.EntityType))
 	if err != nil {
 		return nil, fmt.Errorf("pull: changelog: %w", err)
 	}

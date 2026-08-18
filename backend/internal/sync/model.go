@@ -24,6 +24,7 @@ type ChangeRecord struct {
 	ChangeID     ChangeID      `gorm:"column:change_id;primaryKey"`
 	Sequence     Sequence      `gorm:"column:seq;not null;index"`
 	UserID       string        `gorm:"column:user_id;not null;index"`
+	Scope        CursorScope   `gorm:"column:scope;not null;default:device;index"`
 	EntityType   EntityType    `gorm:"column:entity_type;not null;index"`
 	EntityID     EntityID      `gorm:"column:entity_id;not null;index"`
 	Operation    OperationType `gorm:"column:operation;not null"`
@@ -72,7 +73,7 @@ type CursorStatus struct {
 
 type PullRequest struct {
 	DeviceID     string `json:"deviceId" binding:"required"`
-	UserID       string `json:"userId" binding:"required"`
+	UserID       string `json:"userId"`
 	LastCursor   Sequence `json:"lastCursor"`
 	Limit        int    `json:"limit,omitempty"`
 	EntityType   string `json:"entityType,omitempty"`
@@ -88,7 +89,7 @@ type PullResult struct {
 
 type PushRequest struct {
 	DeviceID  string           `json:"deviceId" binding:"required"`
-	UserID    string           `json:"userId" binding:"required"`
+	UserID    string           `json:"userId"`
 	Mutations []ClientMutation `json:"mutations" binding:"required,min=1"`
 }
 

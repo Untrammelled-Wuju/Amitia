@@ -141,6 +141,9 @@ func (a *businessApplier) applyMessage(tx *gorm.DB, mutation ClientMutation) (in
 		if payload.Role == "" {
 			return 0, &ApplierError{Code: "missing_required_field", Message: "message role is required"}
 		}
+		if payload.Content == "" {
+			return 0, &ApplierError{Code: "missing_required_field", Message: "message content is required"}
+		}
 		record := map[string]interface{}{
 			"id":              string(mutation.EntityID),
 			"conversation_id": payload.ConversationID,
@@ -213,7 +216,7 @@ func (a *businessApplier) applyCharacter(tx *gorm.DB, mutation ClientMutation) (
 	case OpCreate:
 		record := map[string]interface{}{
 			"id":         string(mutation.EntityID),
-			"title":      payload.Title,
+			"name":       payload.Title,
 			"created_at": a.now(),
 			"updated_at": a.now(),
 			"revision":   1,
@@ -228,7 +231,7 @@ func (a *businessApplier) applyCharacter(tx *gorm.DB, mutation ClientMutation) (
 			"revision":   gorm.Expr("COALESCE(revision, 0) + 1"),
 		}
 		if payload.Title != "" {
-			updates["title"] = payload.Title
+			updates["name"] = payload.Title
 		}
 		result := tx.Table("characters").Where("id = ? AND revision = ?", mutation.EntityID, mutation.BaseRevision).Updates(updates)
 		if result.Error != nil {
