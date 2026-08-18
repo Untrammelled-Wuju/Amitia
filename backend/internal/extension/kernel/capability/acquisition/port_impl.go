@@ -2,8 +2,13 @@ package acquisition
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
+	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/agent_skill"
@@ -59,8 +64,8 @@ type ArtifactRecord struct {
 
 // packagePortBridge wraps lifecycle_manager.Manager to implement PackageInstallPort.
 type packagePortBridge struct {
-	manager        *lifecycle_manager.Manager
-	artifactStore  RemoteArtifactStorer
+	manager          *lifecycle_manager.Manager
+	artifactStore    RemoteArtifactStorer
 	artifactRegistry RemoteArtifactRegistry
 }
 
@@ -220,8 +225,8 @@ func (b *mcpRepositoryBridge) RemoveMCP(ctx context.Context, serverName string) 
 
 // skillCatalogBridge wraps agent_skill.AgentSkillCatalog to implement SkillServicePort.
 type skillCatalogBridge struct {
-	catalog  *agent_skill.AgentSkillCatalog
-	builder  *agent_skill.SkillDefinitionBuilder
+	catalog *agent_skill.AgentSkillCatalog
+	builder *agent_skill.SkillDefinitionBuilder
 }
 
 // NewSkillCatalogBridge creates a SkillServicePort backed by AgentSkillCatalog.
@@ -233,18 +238,48 @@ func NewSkillCatalogBridge(catalog *agent_skill.AgentSkillCatalog) SkillServiceP
 }
 
 // readSkillSource reads the skill source content from the given URI.
-// Supports file:// scheme and plain file paths.
+// Supports file:// scheme, http/https URLs, and plain file paths.
 func (b *skillCatalogBridge) readSkillSource(sourceURI string) ([]byte, error) {
 	if sourceURI == "" {
 		return nil, fmt.Errorf("skill catalog bridge: source URI is empty")
 	}
-	path := sourceURI
-	if len(path) >= 7 && path[:7] == "file://" {
-		path = path[7:]
+	if len(sourceURI) >= 7 && sourceURI[:7] == "file://" {
+		content, err := os.ReadFile(sourceURI[7:])
+		if err != nil {
+			return nil, fmt.Errorf("skill catalog bridge: read source %s: %w", sourceURI, err)
+		}
+		return content, nil
 	}
-	content, err := os.ReadFile(path)
+	if len(sourceURI) >= 5 && (sourceURI[:5] == "http:" || sourceURI[:6] == "https:") {
+		return b.downloadSkillSource(sourceURI)
+	}
+	content, err := os.ReadFile(sourceURI)
 	if err != nil {
 		return nil, fmt.Errorf("skill catalog bridge: read source %s: %w", sourceURI, err)
+	}
+	return content, nil
+}
+
+func (b *skillCatalogBridge) downloadSkillSource(sourceURI string) ([]byte, error) {
+	client := &http.Client{Timeout: 60 * time.Second}
+	req, err := http.NewRequest(http.MethodGet, sourceURI, nil)
+	if err != nil {
+		return nil, fmt.Errorf("skill catalog bridge: create request for %s: %w", sourceURI, err)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("skill catalog bridge: download %s: %w", sourceURI, err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return nil, fmt.Errorf("skill catalog bridge: download %s returned status %d", sourceURI, resp.StatusCode)
+	}
+	content, err := io.ReadAll(io.LimitReader(resp.Body, 50*1024*1024))
+	if err != nil {
+		return nil, fmt.Errorf("skill catalog bridge: read response from %s: %w", sourceURI, err)
+	}
+	if len(content) == 0 {
+		return nil, fmt.Errorf("skill catalog bridge: downloaded empty content from %s", sourceURI)
 	}
 	return content, nil
 }
@@ -258,6 +293,15 @@ func (b *skillCatalogBridge) ImportSkill(ctx context.Context, sourceURI string, 
 	raw, err := b.readSkillSource(sourceURI)
 	if err != nil {
 		return "", err
+	}
+
+	// Step 1.5: Hash verification — if hash provided, verify integrity
+	if hash != "" {
+		rawHash := sha256.Sum256(raw)
+		computed := hex.EncodeToString(rawHash[:])
+		if !strings.EqualFold(computed, hash) {
+			return "", fmt.Errorf("skill catalog bridge: hash mismatch for %s: expected %s, got %s", skillName, hash, computed)
+		}
 	}
 
 	// Step 2: Parser + Step 3: Validator

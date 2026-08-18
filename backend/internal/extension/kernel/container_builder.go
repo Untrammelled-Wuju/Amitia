@@ -133,7 +133,13 @@ type ContainerBuilder struct {
 
 	backgroundBootstrapFunc func() (backgroundremoval.Registry, error)
 
+	workshopModelGenerator WorkshopModelGenerator
+
 	channelStore capability.ChannelStore
+}
+
+type WorkshopModelGenerator interface {
+	GenerateWorkshopJSON(ctx context.Context, systemPrompt string, userPrompt string) (string, string, string, error)
 }
 
 func NewContainerBuilder() *ContainerBuilder {
@@ -209,6 +215,11 @@ func (b *ContainerBuilder) WithRuntimeHost(
 	host runtimehost.RuntimeHost,
 ) *ContainerBuilder {
 	b.host = host
+	return b
+}
+
+func (b *ContainerBuilder) WithWorkshopModelGenerator(model WorkshopModelGenerator) *ContainerBuilder {
+	b.workshopModelGenerator = model
 	return b
 }
 
@@ -874,7 +885,12 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	mcpProvisioner := kernelmcpinstaller.NewDefaultProvisioner()
 	mcpInstaller := kernelmcpinstaller.NewDefaultInstaller()
 	mcpLifecycle := kernelmcp.NewMCPLifecycle(mcpProvisioner, mcpInstaller)
-	workshopPort := acquisition.NewDefaultWorkshop()
+	var workshopPort acquisition.WorkshopGeneratePort
+	if b.workshopModelGenerator != nil {
+		workshopPort = NewWorkshopGeneratorPortAdapter(b.workshopModelGenerator)
+	} else {
+		workshopPort = acquisition.NewDefaultWorkshop()
+	}
 
 	var mcpInstallPort acquisition.MCPInstallPort
 	if b.mcpRepository != nil {
@@ -1078,7 +1094,17 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	builtin.SetUIAgentInspector(source.NewSourceInspectorWithWorkspace(b.workspaceService))
 	preciseEditingSvc := workspace.NewDefaultPreciseEditingService(b.workspaceService)
 	builtin.SetUIAgentPreciseService(preciseEditingSvc)
-	schemaGenerator := schema.NewAISchemaGenerator(schema.DefaultCatalog, nil)
+	var llmSchemaCall schema.LLMSchemaCallFunc
+	if b.workshopModelGenerator != nil {
+		llmSchemaCall = func(_ interface{}, promptJSON []byte) ([]byte, error) {
+			raw, _, _, err := b.workshopModelGenerator.GenerateWorkshopJSON(context.Background(), "You are a SchemaUI generator. Return valid SchemaUIDocument JSON.", string(promptJSON))
+			if err != nil {
+				return nil, err
+			}
+			return []byte(raw), nil
+		}
+	}
+	schemaGenerator := schema.NewAISchemaGenerator(schema.DefaultCatalog, llmSchemaCall)
 	builtin.SetUIAgentAISchemaGenerator(schemaGenerator)
 	previewSessionMgr := preview.NewSessionManager()
 	previewValidator := schema.NewSchemaValidator(schema.DefaultCatalog)
