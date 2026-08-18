@@ -483,14 +483,14 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 			func(serviceID string) int {
 				inst, err := opts.TrustedSupervisor.Get(serviceID)
 				if err != nil {
-					return 0
+					return -1
 				}
 				return inst.RestartCount
 			},
 			func(serviceID string) int {
 				def, err := opts.TrustedSupervisor.GetDefinition(serviceID)
 				if err != nil {
-					return recovery.DefaultMaxRestarts
+					return -1
 				}
 				return def.Recovery.MaxRestarts
 			},

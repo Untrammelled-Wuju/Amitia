@@ -49,18 +49,32 @@ func (a *processSupervisorAdapter) StartProcess(ctx context.Context, def *truste
 		env["AMITIA_SECRET_LEASE_SESSION"] = execCtx.SecretLeaseSession.SessionID
 	}
 
+	canonicalPluginID := string(execCtx.PluginID)
+	if canonicalPluginID == "" {
+		canonicalPluginID = fmt.Sprintf("%s/%s", execCtx.ExtensionID, execCtx.ContributionID)
+	}
+
+	logicalServiceID := string(execCtx.ServiceID)
+	if logicalServiceID == "" {
+		logicalServiceID = execCtx.DefinitionID
+	}
+
 	startReq := trusted_service.StartRequest{
-		ServiceID:      supervisorKey,
-		InstanceID:     instanceID,
-		RuntimeID:      string(execCtx.RuntimeID),
-		Generation:     execCtx.Generation,
-		PublisherTrust: a.resolveTrustLevel(def),
-		BasePath:       execCtx.BasePath,
-		WorkingDir:     execCtx.ServicePaths.Data,
-		SessionToken:   execCtx.SessionToken,
-		SecretLease:    secretSessionID(execCtx),
-		LogLevel:       "info",
-		Args:           env,
+		ServiceID:         supervisorKey,
+		InstanceID:        instanceID,
+		RuntimeID:         string(execCtx.RuntimeID),
+		PluginID:          canonicalPluginID,
+		LogicalServiceID:  logicalServiceID,
+		ExtensionID:       execCtx.ExtensionID,
+		ContributionID:    execCtx.ContributionID,
+		Generation:        execCtx.Generation,
+		PublisherTrust:    a.resolveTrustLevel(def),
+		BasePath:          execCtx.BasePath,
+		WorkingDir:        execCtx.ServicePaths.Data,
+		SessionToken:      execCtx.SessionToken,
+		SecretLease:       secretSessionID(execCtx),
+		LogLevel:          "info",
+		Args:              env,
 	}
 
 	result, err := a.supervisor.Start(ctx, startReq)

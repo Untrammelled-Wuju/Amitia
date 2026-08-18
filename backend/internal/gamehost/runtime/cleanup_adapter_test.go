@@ -2,7 +2,11 @@ package runtime
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
@@ -72,21 +76,41 @@ func TestCleanupVerifier_RunningServiceNotCleaned(t *testing.T) {
 
 	supervisor := trusted_service.NewProcessSupervisor(t.TempDir())
 
+	exeDir := t.TempDir()
+	exePath := filepath.Join(exeDir, "test-binary.exe")
+	content := []byte("@echo off\ntimeout /t 30 /nobreak >nul\n")
+	if err := os.WriteFile(exePath, content, 0o755); err != nil {
+		t.Fatalf("failed to create test binary: %v", err)
+	}
+
+	hash := sha256.Sum256(content)
+	expectedHash := hex.EncodeToString(hash[:])
+
 	def := &trusted_service.ServiceRuntimeDefinition{
-		ServiceID:  "test-svc",
+		ServiceID:   "test-svc",
 		ExtensionID: "ext-1",
-		ModuleID:   "mod-1",
+		ModuleID:    "mod-1",
+		TrustLevel:  string(trusted_service.TrustLevelTrusted),
+		Executables: []trusted_service.PlatformExecutable{
+			{
+				Platform:  trusted_service.CurrentPlatform(),
+				Path:      exePath,
+				Sha256:    expectedHash,
+				Signature: trusted_service.BinarySignature{Trusted: true, Value: "test-sig"},
+			},
+		},
+		Network: trusted_service.ServiceNetworkPolicy{LoopbackOnly: true},
 	}
 	_ = supervisor.Register(def)
 
 	ctx := context.Background()
 	_, err := supervisor.Start(ctx, trusted_service.StartRequest{
-		ServiceID:  "test-svc",
-		Generation: 1,
-		BasePath:   t.TempDir(),
+		ServiceID:      "test-svc",
+		Generation:     1,
+		PublisherTrust: trusted_service.TrustLevelTrusted,
 	})
 	if err != nil {
-		t.Skipf("skipping: real process start not possible in test env: %v", err)
+		t.Fatalf("failed to start process in test env: %v", err)
 	}
 
 	cleaned, err := verifier.VerifyCleanup(ctx, supervisor, "test-svc")

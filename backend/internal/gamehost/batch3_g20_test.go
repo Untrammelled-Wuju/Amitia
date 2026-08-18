@@ -131,7 +131,7 @@ func TestG20_AuthorityManager_OldEpochReject(t *testing.T) {
 
 	// 使用旧 epoch 尝试输出
 	if c.OutputGate == nil {
-		t.Skip("OutputGate not wired")
+		t.Fatal("OutputGate not wired - core component must be present for this test")
 	}
 
 	// 无法直接调用 PermissionChecker，但可以验证 AuthorityManager GetSnapshot 正确反映旧 epoch 无效
