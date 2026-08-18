@@ -9,6 +9,7 @@ type ChannelResolver interface {
 	Resolve(channelName string) ChannelAdapter
 	Register(adapter ChannelAdapter)
 	Channels() []string
+	Has(channelName string) bool
 }
 
 type MapChannelResolver struct {

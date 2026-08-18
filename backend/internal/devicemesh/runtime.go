@@ -115,6 +115,10 @@ func (rt *Runtime) SetTaskRuntime(tr agent.TaskRuntimeExecutor) {
 	rt.taskRuntime = tr
 }
 
+func (rt *Runtime) GetSessions() *deviceruntime.Service {
+	return rt.sessions
+}
+
 func (rt *Runtime) Start() error {
 	if rt.Hub == nil {
 		rt.Hub = server.NewConnectionHub()
