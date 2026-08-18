@@ -620,12 +620,15 @@ func (c *MeshClient) handleTaskDispatch(env *protocol.Envelope) {
 func (c *MeshClient) handleTaskCancel(env *protocol.Envelope) {
 	var cancel protocol.TaskCancelPayload
 	if err := json.Unmarshal(env.Payload, &cancel); err != nil {
+		c.sendTaskError(env.MessageID, cancel.TaskRunID, "invalid_cancel_payload", err.Error())
 		return
 	}
 
 	if c.conf.TaskWorker != nil {
 		if err := c.conf.TaskWorker.CancelTask(context.Background(), cancel.TaskRunID, cancel.AttemptID); err != nil {
 			log.Printf("devicemesh: agent: cancel task failed: %v", err)
+			c.sendTaskError(env.MessageID, cancel.TaskRunID, "cancel_failed", err.Error())
+			return
 		}
 	}
 }
