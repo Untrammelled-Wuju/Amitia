@@ -248,4 +248,3 @@ func (g *Stage2ClosureGate) ArchitectureReady() bool {
 	}
 	return g.runtimeGate.ArchitectureReady()
 }
-
