@@ -82,6 +82,11 @@ func (h *DurableHostIdentity) save() error {
 		return fmt.Errorf("marshal host identity: %w", err)
 	}
 
+	dir := filepath.Dir(h.dataPath)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("create host identity dir: %w", err)
+	}
+
 	tmp := h.dataPath + ".tmp"
 	if err := os.WriteFile(tmp, data, 0o644); err != nil {
 		return fmt.Errorf("write host identity tmp: %w", err)

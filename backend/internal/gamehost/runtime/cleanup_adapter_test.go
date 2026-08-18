@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"os"
-	"path/filepath"
+	"os/exec"
 	"testing"
 
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
@@ -76,14 +76,16 @@ func TestCleanupVerifier_RunningServiceNotCleaned(t *testing.T) {
 
 	supervisor := trusted_service.NewProcessSupervisor(t.TempDir())
 
-	exeDir := t.TempDir()
-	exePath := filepath.Join(exeDir, "test-binary.exe")
-	content := []byte("@echo off\ntimeout /t 30 /nobreak >nul\n")
-	if err := os.WriteFile(exePath, content, 0o755); err != nil {
-		t.Fatalf("failed to create test binary: %v", err)
+	pingExe, err := exec.LookPath("ping.exe")
+	if err != nil {
+		t.Fatalf("ping.exe not found: %v", err)
 	}
 
-	hash := sha256.Sum256(content)
+	pingContent, err := os.ReadFile(pingExe)
+	if err != nil {
+		t.Fatalf("failed to read ping.exe: %v", err)
+	}
+	hash := sha256.Sum256(pingContent)
 	expectedHash := hex.EncodeToString(hash[:])
 
 	def := &trusted_service.ServiceRuntimeDefinition{
@@ -93,10 +95,11 @@ func TestCleanupVerifier_RunningServiceNotCleaned(t *testing.T) {
 		TrustLevel:  string(trusted_service.TrustLevelTrusted),
 		Executables: []trusted_service.PlatformExecutable{
 			{
-				Platform:  trusted_service.CurrentPlatform(),
-				Path:      exePath,
-				Sha256:    expectedHash,
-				Signature: trusted_service.BinarySignature{Trusted: true, Value: "test-sig"},
+				Platform:     trusted_service.CurrentPlatform(),
+				Path:         pingExe,
+				ArgsTemplate: []string{"127.0.0.1", "-n", "60"},
+				Sha256:       expectedHash,
+				Signature:    trusted_service.BinarySignature{Trusted: true, Value: "test-sig"},
 			},
 		},
 		Network: trusted_service.ServiceNetworkPolicy{LoopbackOnly: true},
@@ -104,7 +107,7 @@ func TestCleanupVerifier_RunningServiceNotCleaned(t *testing.T) {
 	_ = supervisor.Register(def)
 
 	ctx := context.Background()
-	_, err := supervisor.Start(ctx, trusted_service.StartRequest{
+	_, err = supervisor.Start(ctx, trusted_service.StartRequest{
 		ServiceID:      "test-svc",
 		Generation:     1,
 		PublisherTrust: trusted_service.TrustLevelTrusted,
@@ -112,6 +115,14 @@ func TestCleanupVerifier_RunningServiceNotCleaned(t *testing.T) {
 	if err != nil {
 		t.Fatalf("failed to start process in test env: %v", err)
 	}
+
+	t.Cleanup(func() {
+		_, _ = supervisor.Stop(ctx, trusted_service.StopRequest{
+			ServiceID: "test-svc",
+			Reason:    "test_cleanup",
+			Force:     true,
+		})
+	})
 
 	cleaned, err := verifier.VerifyCleanup(ctx, supervisor, "test-svc")
 	if err != nil {
