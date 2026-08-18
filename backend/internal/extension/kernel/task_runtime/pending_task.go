@@ -8,6 +8,16 @@ import (
 	"time"
 )
 
+var sequenceCounter int64
+var sequenceMu sync.Mutex
+
+func nextSequence() int64 {
+	sequenceMu.Lock()
+	defer sequenceMu.Unlock()
+	sequenceCounter++
+	return sequenceCounter
+}
+
 type PendingTask struct {
 	TaskRunID    string
 	AttemptID    string
@@ -83,7 +93,6 @@ func (m *PendingTaskManager) Claim(taskRunID string, workerID string, leaseDurat
 		return false
 	}
 	leaseExp := time.Now().UTC().Add(leaseDuration)
-	pt.LeaseID = generateLeaseID()
 	result := TaskClaimResult{
 		Success:  true,
 		WorkerID: workerID,

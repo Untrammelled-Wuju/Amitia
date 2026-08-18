@@ -305,6 +305,14 @@ func (r *PackageRepository) GetArtifactByIdentity(ctx context.Context, extension
 	return r.GetArtifact(ctx, id)
 }
 
+func (r *PackageRepository) GetArtifactByArchivePath(ctx context.Context, archivePath string) (PackageArtifact, error) {
+	var id string
+	if err := r.db.QueryRowContext(ctx, `SELECT artifact_id FROM extension_package_artifacts WHERE archive_path = ? AND deleted_at = '' LIMIT 1`, archivePath).Scan(&id); err != nil {
+		return PackageArtifact{}, ClassifyRepositoryError("get artifact by archive path", err)
+	}
+	return r.GetArtifact(ctx, id)
+}
+
 func (r *PackageRepository) PutPreview(ctx context.Context, s PackagePreviewSession) error {
 	tx, err := r.db.BeginTx(ctx, nil)
 	if err != nil {

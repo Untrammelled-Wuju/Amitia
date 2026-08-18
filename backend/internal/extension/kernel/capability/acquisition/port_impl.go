@@ -12,18 +12,66 @@ import (
 	legacymcp "github.com/u-ai/backend/internal/mcp"
 )
 
+// RemoteArtifactStorer is the interface needed to resolve a remote PackageURI
+// into a managed ArtifactID. Implemented by the kernel's PackageArtifactStore.
+type RemoteArtifactStorer interface {
+	PutArchiveFromURI(ctx context.Context, uri string, metadata ArtifactStoreMetadata) (StoredArtifact, error)
+	HasArtifactAtHash(expectedHash string) (string, error)
+	ArtifactIDFromHash(hash string) string
+}
+
+// ArtifactStoreMetadata carries metadata for storing a remote artifact.
+type ArtifactStoreMetadata struct {
+	ExtensionID  string
+	Version      string
+	SourceURI    string
+	ExpectedHash string
+}
+
+// StoredArtifact is the result of storing a remote artifact.
+type StoredArtifact struct {
+	ArtifactID   string
+	ArchiveHash  string
+	ArchivePath  string
+	ManifestHash string
+}
+
+// RemoteArtifactRegistry is the interface needed to register an artifact
+// in the package repository.
+type RemoteArtifactRegistry interface {
+	PutArtifact(ctx context.Context, artifact ArtifactRecord) error
+	GetArtifactByArchivePath(ctx context.Context, archivePath string) (*ArtifactRecord, error)
+}
+
+// ArtifactRecord is the canonical artifact record.
+type ArtifactRecord struct {
+	ArtifactID   string
+	ExtensionID  string
+	Version      string
+	ArchiveHash  string
+	ArchivePath  string
+	ManifestHash string
+}
+
 // ---------------------------------------------------------------------------
 // PackageInstallPort implementation
 // ---------------------------------------------------------------------------
 
 // packagePortBridge wraps lifecycle_manager.Manager to implement PackageInstallPort.
 type packagePortBridge struct {
-	manager *lifecycle_manager.Manager
+	manager        *lifecycle_manager.Manager
+	artifactStore  RemoteArtifactStorer
+	artifactRegistry RemoteArtifactRegistry
 }
 
 // NewPackagePortBridgeFromManager creates a PackageInstallPort backed by the lifecycle Manager.
 func NewPackagePortBridgeFromManager(manager *lifecycle_manager.Manager) PackageInstallPort {
 	return &packagePortBridge{manager: manager}
+}
+
+// NewPackagePortBridgeWithResolver creates a PackageInstallPort with artifact resolution for proper URI handling.
+func NewPackagePortBridgeWithResolver(manager *lifecycle_manager.Manager, store RemoteArtifactStorer, registry RemoteArtifactRegistry) PackageInstallPort {
+	return &packagePortBridge{manager: manager, artifactStore: store, artifactRegistry: registry}
 }
 
 func (b *packagePortBridge) InstallPackage(ctx context.Context, extID string, version string, packageID string, hash string) (string, error) {
@@ -74,11 +122,56 @@ func (b *packagePortBridge) ResolveArtifact(ctx context.Context, extID string, v
 	if packageURI == "" {
 		return "", fmt.Errorf("package port bridge: packageURI is empty")
 	}
+	if b.artifactStore == nil || b.artifactRegistry == nil {
+		return "", fmt.Errorf("package port bridge: artifact resolver not configured, cannot resolve remote URI")
+	}
 
-	// The PackageURI is passed through to the saga via LifecycleCommand.PackageID
-	// The saga will handle downloading and registering the artifact
-	// Return the packageURI as the identifier - the saga will resolve it to an ArtifactID
-	return packageURI, nil
+	artifactID, err := b.resolveAndStoreArtifact(ctx, extID, version, packageURI, hash)
+	if err != nil {
+		return "", fmt.Errorf("package port bridge: resolve artifact: %w", err)
+	}
+	return artifactID, nil
+}
+
+// resolveAndStoreArtifact downloads a remote package, stores it in the managed
+// Artifact Store, registers it in the PackageRepository, and returns the canonical ArtifactID.
+func (b *packagePortBridge) resolveAndStoreArtifact(ctx context.Context, extID string, version string, packageURI string, expectedHash string) (string, error) {
+	archivePath, err := b.artifactStore.HasArtifactAtHash(expectedHash)
+	if err == nil && archivePath != "" {
+		if artifact, getErr := b.artifactRegistry.GetArtifactByArchivePath(ctx, archivePath); getErr == nil && artifact != nil {
+			return artifact.ArtifactID, nil
+		}
+	}
+
+	metadata := ArtifactStoreMetadata{
+		ExtensionID:  extID,
+		Version:      version,
+		SourceURI:    packageURI,
+		ExpectedHash: expectedHash,
+	}
+
+	artifact, err := b.artifactStore.PutArchiveFromURI(ctx, packageURI, metadata)
+	if err != nil {
+		return "", fmt.Errorf("store remote artifact: %w", err)
+	}
+
+	artifactID := artifact.ArtifactID
+	if artifactID == "" {
+		artifactID = b.artifactStore.ArtifactIDFromHash(artifact.ArchiveHash)
+	}
+
+	if err := b.artifactRegistry.PutArtifact(ctx, ArtifactRecord{
+		ArtifactID:   artifactID,
+		ExtensionID:  extID,
+		Version:      version,
+		ArchiveHash:  artifact.ArchiveHash,
+		ArchivePath:  artifact.ArchivePath,
+		ManifestHash: artifact.ManifestHash,
+	}); err != nil {
+		return "", fmt.Errorf("register artifact: %w", err)
+	}
+
+	return artifactID, nil
 }
 
 // ---------------------------------------------------------------------------
