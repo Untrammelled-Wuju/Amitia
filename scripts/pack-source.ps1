@@ -1,100 +1,96 @@
-# 使用 git archive 基于 git tracked 白名单打包源码，彻底避免 node_modules/.git 等开发依赖打入包
+# 此文件为工作区代码打包工具，不可更改文件内任何内容，除非用户允许
 param(
     [string]$OutputName = "U-Ai-source"
 )
 
 $scriptDir = if ($PSScriptRoot) { $PSScriptRoot } else { Split-Path -Parent $PSCommandPath }
 $workspace = Split-Path -Parent $scriptDir
-$outputFile = Join-Path $workspace "$OutputName.zip"
-$tempDir = Join-Path $env:TEMP "pack-source-$([guid]::NewGuid().ToString('N'))"
+$parentDir = Split-Path $workspace -Parent
+$folderName = Split-Path $workspace -Leaf
+$outputFile = Join-Path $workspace "$OutputName.tar.gz"
 
 if (Test-Path $outputFile) { Remove-Item $outputFile -Force }
 
-function Add-ZipEntry {
-    param([string]$ZipPath, [string]$SourcePath)
-    $src = [System.IO.Compression.ZipFile]::Open($SourcePath, 'Read')
-    try {
-        $dst = [System.IO.Compression.ZipFile]::Open($ZipPath, 'Update')
-        try {
-            foreach ($entry in $src.Entries) {
-                $ms = New-Object System.IO.MemoryStream
-                $entry.Open().CopyTo($ms)
-                $ms.Position = 0
-                $newEntry = $dst.CreateEntry($entry.FullName)
-                $entryStream = $newEntry.Open()
-                $ms.CopyTo($entryStream)
-                $entryStream.Dispose()
-                $ms.Dispose()
-            }
-        } finally {
-            $dst.Dispose()
-        }
-    } finally {
-        $src.Dispose()
-    }
-}
+$excludes = @(
+    "--exclude=node_modules"
+    "--exclude=.git"
+    "--exclude=*.exe"
+    "--exclude=*.log"
+    "--exclude=desktop/dist"
+    "--exclude=desktop/build"
+    "--exclude=desktop/release"
+    "--exclude=front/dist"
+    "--exclude=mobile_app/build"
+    "--exclude=mobile_app/android/app/build"
+    "--exclude=mobile_app/android/amitia-runtime/build"
+    "--exclude=mobile_app/android/.gradle"
+    "--exclude=backend/pkg/gameplugin/sdk/game-plugin/dist"
+    "--exclude=*.db"
+    "--exclude=*.db-shm"
+    "--exclude=*.db-wal"
+    "--exclude=*.db-journal"
+    "--exclude=qdrant/storage"
+    "--exclude=surrealdb/surreal.exe"
+    "--exclude=desktop/release"
+    "--exclude=desktop/build"
+    "--exclude=desktop/dist-types"
+    "--exclude=desktop/resources/core"
+    "--exclude=sdk/plugin-sdk/dist"
+    "--exclude=sdk/plugin-sdk/node_modules"
+    "--exclude=*.pyc"
+    "--exclude=__pycache__"
+    "--exclude=.DS_Store"
+    "--exclude=Thumbs.db"
+    "--exclude=*.bak"
+    "--exclude=*.tmp"
+    "--exclude=*.orig"
+    "--exclude=.vscode"
+    "--exclude=.idea"
+    "--exclude=.env"
+    "--exclude=.env.local"
+    "--exclude=.publish-config.json"
+    "--exclude=backend/data"
+    "--exclude=backend/cmd/data"
+    "--exclude=data"
+    "--exclude=logs"
+    "--exclude=runtime/out"
+    "--exclude=backend/server_linux_amd64"
+    "--exclude=backend/server_linux_arm64"
+    "--exclude=backend/server"
+    "--exclude=backend/surrealdb/surreal.zip"
+    "--exclude=backend/qdrant/qdrant.zip"
+    "--exclude=backend/node/node.exe.zip"
+    "--exclude=desktop/resources/qdrant/qdrant.zip"
+    "--exclude=desktop/resources/surrealdb/surrealdb/surreal.zip"
+    "--exclude=desktop/resources/surrealdb/surreal.zip"
+    "--exclude=desktop/resources/core/node/node.zip"
+    "--exclude=mobile_app/android/app/src/main/assets/runtime-package"
+    "--exclude=backend/server.exe"
+    "--exclude=backend/server.exe~"
+    "--exclude=backend/cmd/server/server.exe"
+    "--exclude=backend/cmd/server/backend.exe"
+    "--exclude=backend/cmd/server/backend"
+    "--exclude=backend/amitia-ext.exe"
+    "--exclude=backend/amitiax.exe"
+    "--exclude=backend/extension.test.exe"
+    "--exclude=backend/kernel.test.exe"
+    "--exclude=backend/legacy-package-migrate.exe"
+    "--exclude=backend/worker.test.exe"
+    "--exclude=backend/server_*.exe"
+    "--exclude=*.tar"
+    "--exclude=AmitiaData"
+)
 
-function Get-ZipEntryCount {
-    param([string]$ZipPath)
-    $zip = [System.IO.Compression.ZipFile]::OpenRead($ZipPath)
-    try {
-        return $zip.Entries.Count
-    } finally {
-        $zip.Dispose()
-    }
-}
+Set-Location $parentDir
 
-Add-Type -AssemblyName System.IO.Compression.FileSystem 2>$null
-
-Set-Location $workspace
-
-Write-Host "Packing source (git archive) -> $outputFile"
+Write-Host "Packing source: $folderName -> $outputFile"
 $startTime = Get-Date
 
-if (-not (Test-Path $tempDir)) { New-Item -ItemType Directory -Path $tempDir | Out-Null }
+& tar -czf $outputFile @excludes $folderName
 
-try {
-    $mainZip = Join-Path $tempDir "main.zip"
-    git archive --format=zip -o $mainZip HEAD 2>&1
-    if ($LASTEXITCODE -ne 0) {
-        throw "git archive failed for main repo (exit code $LASTEXITCODE)"
-    }
+$elapsed = (Get-Date) - $startTime
+$size = (Get-Item $outputFile).Length
 
-    Copy-Item $mainZip $outputFile -Force
-
-    $submodules = git config --file .gitmodules --get-regexp path 2>&1
-    if ($submodules) {
-        foreach ($line in $submodules) {
-            $smPath = ($line -split ' ', 2)[1]
-            $smFullPath = Join-Path $workspace $smPath
-            $gitFile = Join-Path $smFullPath ".git"
-            if (-not (Test-Path $gitFile)) { continue }
-
-            Write-Host "  Packing submodule: $smPath"
-            $smZip = Join-Path $tempDir "$($smPath -replace '[\\/]','_').zip"
-            Push-Location $smFullPath
-            try {
-                git archive --prefix="$smPath/" --format=zip -o $smZip HEAD 2>&1
-                if ($LASTEXITCODE -ne 0) {
-                    Write-Host "  WARNING: git archive failed for submodule $smPath" -ForegroundColor Yellow
-                    continue
-                }
-
-                Add-ZipEntry -ZipPath $outputFile -SourcePath $smZip
-            } finally {
-                Pop-Location
-            }
-        }
-    }
-
-    $elapsed = (Get-Date) - $startTime
-    $size = (Get-Item $outputFile).Length
-    $fileCount = Get-ZipEntryCount -ZipPath $outputFile
-
-    Write-Host "Done in $($elapsed.ToString('mm\:ss'))"
-    Write-Host "Output: $outputFile"
-    Write-Host "Files: $fileCount"
-    Write-Host "Size: $([math]::Round($size / 1MB, 2)) MB"
-} finally {
-    if (Test-Path $tempDir) { Remove-Item $tempDir -Recurse -Force }
-}
+Write-Host "Done in $($elapsed.ToString('mm\:ss'))"
+Write-Host "Output: $outputFile"
+Write-Host "Size: $([math]::Round($size / 1MB, 2)) MB"
