@@ -181,8 +181,9 @@ func DefaultMigrations() []Migration {
 
 func SyncMutationClaimsMigration() Migration {
 	return Migration{
-		Version: "20260818004",
-		Name:    "create_sync_mutation_claims_table",
+		Version:           "20260818004",
+		Name:              "create_sync_mutation_claims_table",
+		AcceptedChecksums: []string{"c3d4e5f6789012345678901234567890abcdef1234567890abcdef1234567890"},
 		Up: func(s *Step) error {
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS sync_mutation_claims (
 				user_id TEXT NOT NULL,
@@ -237,8 +238,9 @@ func AuthSessionsMissingColumnsMigration() Migration {
 
 func SyncSchemaRevisionDeletedAtMigration() Migration {
 	return Migration{
-		Version: "20260818003",
-		Name:    "add_sync_revision_deleted_at_to_core_tables",
+		Version:           "20260818003",
+		Name:              "add_sync_revision_deleted_at_to_core_tables",
+		AcceptedChecksums: []string{"d4ee01cc64921410e5212b8dc11c39d09d22ca9f72ced95ba02ea758080d464f"},
 		Up: func(s *Step) error {
 			s.AddColumn("characters", "revision", "INTEGER NOT NULL DEFAULT 1")
 			s.AddColumn("characters", "deleted_at", "DATETIME")
@@ -315,8 +317,9 @@ func SyncMutationUserUniqueMigration() Migration {
 
 func SyncChangeLogScopeMigration() Migration {
 	return Migration{
-		Version: "20260818001",
-		Name:    "add_sync_changes_scope_column_and_unique_index",
+		Version:           "20260818001",
+		Name:              "add_sync_changes_scope_column_and_unique_index",
+		AcceptedChecksums: []string{"1e1e5c00c95502f3af8dd55a41aece51599e42ff321935d63025da69c38b5762"},
 		Up: func(s *Step) error {
 			s.AddColumn("sync_changes", "scope", "TEXT NOT NULL DEFAULT 'device'")
 			s.Execute("DROP INDEX IF EXISTS idx_sync_changes_user_mutation")
@@ -329,8 +332,9 @@ func SyncChangeLogScopeMigration() Migration {
 
 func AppSettingsRevisionMigration() Migration {
 	return Migration{
-		Version: "20260818002",
-		Name:    "add_app_settings_revision_column",
+		Version:           "20260818002",
+		Name:              "add_app_settings_revision_column",
+		AcceptedChecksums: []string{"469fef008bc67be2344dc0c5b4c0d8734430c302ca9f7f5bae1f22e893ead64b"},
 		Up: func(s *Step) error {
 			s.AddColumn("app_settings", "revision", "INTEGER NOT NULL DEFAULT 0")
 			return nil
