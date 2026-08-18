@@ -395,10 +395,10 @@ func TestRecoveryWorker_RecenterOperation_TerminalACKCompletes(t *testing.T) {
 	worker := newTestWorkerWithRuntime(repo)
 
 	op := &operation.InstallationOperation{
-		ID:                   "recenter-terminal-ack",
-		OperationType:        operation.TypeRecenter,
-		Status:               operation.OpStatusWaitingRuntimeACK,
-		Stage:                operation.OpStageWaitingRuntimeACK,
+		ID:                      "recenter-terminal-ack",
+		OperationType:           operation.TypeRecenter,
+		Status:                  operation.OpStatusWaitingRuntimeACK,
+		Stage:                   operation.OpStageWaitingRuntimeACK,
 		ExpectedAppliedRevision: 1,
 	}
 	repo.ops[op.ID] = op
@@ -414,10 +414,10 @@ func TestRecoveryWorker_RecenterOperation_NoTerminalACKDoesNotComplete(t *testin
 	worker := newTestWorkerWithRuntime(repo)
 
 	op := &operation.InstallationOperation{
-		ID:                   "recenter-no-ack",
-		OperationType:        operation.TypeRecenter,
-		Status:               operation.OpStatusWaitingRuntimeACK,
-		Stage:                operation.OpStageWaitingRuntimeACK,
+		ID:                      "recenter-no-ack",
+		OperationType:           operation.TypeRecenter,
+		Status:                  operation.OpStatusWaitingRuntimeACK,
+		Stage:                   operation.OpStageWaitingRuntimeACK,
 		ExpectedAppliedRevision: 0,
 	}
 	repo.ops[op.ID] = op
@@ -433,17 +433,17 @@ func TestRecoveryWorker_TwoConsecutiveRecenters_GenerateIndependentCommands(t *t
 	worker := newTestWorkerWithRuntime(repo)
 
 	op1 := &operation.InstallationOperation{
-		ID:                   "recenter-1",
-		OperationType:        operation.TypeRecenter,
-		Status:               operation.OpStatusWaitingRuntimeACK,
-		Stage:                operation.OpStageWaitingRuntimeACK,
+		ID:                      "recenter-1",
+		OperationType:           operation.TypeRecenter,
+		Status:                  operation.OpStatusWaitingRuntimeACK,
+		Stage:                   operation.OpStageWaitingRuntimeACK,
 		ExpectedAppliedRevision: 1,
 	}
 	op2 := &operation.InstallationOperation{
-		ID:                   "recenter-2",
-		OperationType:        operation.TypeRecenter,
-		Status:               operation.OpStatusWaitingRuntimeACK,
-		Stage:                operation.OpStageWaitingRuntimeACK,
+		ID:                      "recenter-2",
+		OperationType:           operation.TypeRecenter,
+		Status:                  operation.OpStatusWaitingRuntimeACK,
+		Stage:                   operation.OpStageWaitingRuntimeACK,
 		ExpectedAppliedRevision: 2,
 	}
 	repo.ops[op1.ID] = op1

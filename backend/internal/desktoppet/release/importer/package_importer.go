@@ -513,8 +513,7 @@ func (pi *PackageImporter) runImportSaga(
 		validation.IntegrityVerified =
 			(validation.IsValid && workspaceReport != nil &&
 				(workspaceReport.Verdict == "valid" || workspaceReport.Verdict == "valid_with_warnings") &&
-				strings.EqualFold(archiveHash, actualHash) &&
-				strings.EqualFold(actualHash, validation.SourcePackageHash))
+				strings.EqualFold(archiveHash, validation.SourcePackageHash))
 		if !validation.IntegrityVerified {
 			integrityErr := release.NewReleaseError("INTEGRITY_NOT_VERIFIED", "桌宠包完整性未验证", nil)
 			if journalErr := pi.failJournal(journal, integrityErr); journalErr != nil {
