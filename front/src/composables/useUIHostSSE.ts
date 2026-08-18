@@ -139,32 +139,34 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
       });
   }
 
-  const EXTENSION_CHANGE_EVENTS = new Set([
-    "extension_installed",
-    "extension_uninstalled",
-    "extension_enabled",
-    "extension_disabled",
-    "extension_paused",
-    "extension_resumed",
-    "extension_updated",
-    "extension_rolled_back",
-    "extension_generation_changed",
-    "extension_contributions_changed",
-  ]);
+	const EXTENSION_CHANGE_EVENTS = new Set([
+		"extension_installed",
+		"extension_uninstalled",
+		"extension_enabled",
+		"extension_disabled",
+		"extension_paused",
+		"extension_resumed",
+		"extension_updated",
+		"extension_rolled_back",
+		"extension_rollback_failed",
+		"extension_generation_changed",
+		"extension_contributions_changed",
+	]);
 
-  function handleExtensionChange(event: MessageEvent) {
-    const envelope = parseEnvelope(event);
-    if (!envelope) return;
-    if (!EXTENSION_CHANGE_EVENTS.has(envelope.eventType)) return;
-    if (extensionRefreshTimer) {
-      clearTimeout(extensionRefreshTimer);
-    }
-    extensionRefreshTimer = setTimeout(() => {
-      extensionRefreshTimer = null;
-      const store = useExtensionUIStore();
-      store.refreshSnapshot(true).catch(() => {});
-    }, 300);
-  }
+	function handleExtensionChange(event: MessageEvent) {
+		const envelope = parseEnvelope(event);
+		if (!envelope) return;
+		if (!EXTENSION_CHANGE_EVENTS.has(envelope.eventType)) return
+		if (envelope.eventType === "extension_rollback_failed") return
+		if (extensionRefreshTimer) {
+			clearTimeout(extensionRefreshTimer);
+		}
+		extensionRefreshTimer = setTimeout(() => {
+			extensionRefreshTimer = null;
+			const store = useExtensionUIStore();
+			store.refreshSnapshot(true).catch(() => {});
+		}, 300);
+	}
 
   function getReconnectDelay(): number {
     const delay = Math.min(
@@ -204,8 +206,9 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
       eventSource.addEventListener("extension_paused", handleExtensionChange);
       eventSource.addEventListener("extension_resumed", handleExtensionChange);
       eventSource.addEventListener("extension_updated", handleExtensionChange);
-      eventSource.addEventListener("extension_rolled_back", handleExtensionChange);
-      eventSource.addEventListener("extension_generation_changed", handleExtensionChange);
+		eventSource.addEventListener("extension_rolled_back", handleExtensionChange);
+		eventSource.addEventListener("extension_rollback_failed", handleExtensionChange);
+		eventSource.addEventListener("extension_generation_changed", handleExtensionChange);
       eventSource.addEventListener("extension_contributions_changed", handleExtensionChange);
       eventSource.onopen = () => {
         isConnected.value = true;

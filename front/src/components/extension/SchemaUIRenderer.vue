@@ -176,6 +176,7 @@ async function loadSchema() {
 
 let restartToken = 0;
 let pendingCreateSessionId = "";
+const activeSessionRegistryKey = ref<string>("");
 
 async function createSession(expectedToken: number): Promise<string | null> {
   if (expectedToken !== restartToken) return null;
@@ -211,6 +212,7 @@ async function createSession(expectedToken: number): Promise<string | null> {
   sessionOrigin.value = data.origin ?? "";
   sessionContractVersion.value = data.contractVersion ?? props.contribution.contractVersion;
   sessionReady.value = true;
+  activeSessionRegistryKey.value = key;
   uiStore.registerSession({
     contributionId: key,
     sessionId: sid,
@@ -223,14 +225,17 @@ async function createSession(expectedToken: number): Promise<string | null> {
 async function disposeSession() {
   if (!sessionId.value) return;
   const oldSessionId = sessionId.value;
-  const contributionKey = `${props.contribution.extensionId}/${props.contribution.contributionId}`;
+  const registryKey = activeSessionRegistryKey.value;
   sessionId.value = "";
   sessionReady.value = false;
+  activeSessionRegistryKey.value = "";
   try {
     await apiClient.delete(`/api/extensions/ui/sessions/${oldSessionId}`);
   } catch {
   }
-  uiStore.unregisterSession(contributionKey);
+  if (registryKey) {
+    uiStore.unregisterSession(registryKey);
+  }
 }
 
 async function restartSession() {
