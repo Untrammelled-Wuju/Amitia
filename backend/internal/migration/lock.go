@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -50,6 +51,12 @@ func (l *PersistentLock) SetLeaseLostHandler(handler LeaseLostHandler) {
 }
 
 func (l *PersistentLock) Acquire(ctx context.Context, lockName string, ttl time.Duration) error {
+	if ttl <= 0 {
+		return errors.New("migration: lock ttl must be positive")
+	}
+	if err := os.MkdirAll(l.lockDir, 0o700); err != nil {
+		return fmt.Errorf("migration: create lock directory: %w", err)
+	}
 	lockFile := filepath.Join(l.lockDir, lockName+".lock")
 	now := time.Now().UTC()
 	nowStr := now.Format(time.RFC3339Nano)
@@ -63,13 +70,19 @@ func (l *PersistentLock) Acquire(ctx context.Context, lockName string, ttl time.
 	}
 
 	var tookOverStaleLease bool
+	var acquiredFreshLease bool
+	var renewedOwnedLease bool
 	err := l.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		var existing migrationLockRecord
 		if err := tx.Where("lock_name = ?", lockName).Take(&existing).Error; err != nil {
 			if !errors.Is(err, gorm.ErrRecordNotFound) {
 				return err
 			}
-			return tx.Create(&lease).Error
+			if err := tx.Create(&lease).Error; err != nil {
+				return err
+			}
+			acquiredFreshLease = true
+			return nil
 		}
 		expiresAt, parseErr := time.Parse(time.RFC3339Nano, existing.LeaseExpiresAt)
 		if parseErr != nil || !expiresAt.After(now) {
@@ -103,6 +116,7 @@ func (l *PersistentLock) Acquire(ctx context.Context, lockName string, ttl time.
 			if result.RowsAffected != 1 {
 				return fmt.Errorf("migration: renew lease CAS failed, rows affected=%d", result.RowsAffected)
 			}
+			renewedOwnedLease = true
 			return nil
 		}
 		return fmt.Errorf("migration: db lease held by %s until %s", existing.OwnerInstanceID, existing.LeaseExpiresAt)
@@ -114,45 +128,115 @@ func (l *PersistentLock) Acquire(ctx context.Context, lockName string, ttl time.
 
 	fh, err := os.OpenFile(lockFile, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 	if err != nil {
-		if errors.Is(err, os.ErrExist) && tookOverStaleLease {
+		mayReplaceStaleFile := acquiredFreshLease || tookOverStaleLease
+		if errors.Is(err, os.ErrExist) && mayReplaceStaleFile {
 			if rmErr := os.Remove(lockFile); rmErr != nil {
-				l.releaseDBLease(lockName)
+				releaseErr := l.releaseDBLease(lockName)
+				if releaseErr != nil {
+					return errors.Join(fmt.Errorf("migration: failed to remove stale lock file: %w", rmErr), fmt.Errorf("rollback db lease: %w", releaseErr))
+				}
 				return fmt.Errorf("migration: failed to remove stale lock file: %w", rmErr)
 			}
 			fh, err = os.OpenFile(lockFile, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
 		}
 		if err != nil {
-			l.releaseDBLease(lockName)
+			if acquiredFreshLease || tookOverStaleLease {
+				if releaseErr := l.releaseDBLease(lockName); releaseErr != nil {
+					return errors.Join(fmt.Errorf("migration: file lock acquisition failed: %w", err), fmt.Errorf("rollback db lease: %w", releaseErr))
+				}
+			}
 			if errors.Is(err, os.ErrExist) {
+				if renewedOwnedLease {
+					return fmt.Errorf("migration: lock is already held by this instance: %s", lockName)
+				}
 				return fmt.Errorf("migration: file lock already exists: %s", lockName)
 			}
 			return fmt.Errorf("migration: file lock open: %w", err)
 		}
 	}
 	if _, err := fmt.Fprintf(fh, "instance=%s\ncreated=%s\n", l.instance, nowStr); err != nil {
-		fh.Close()
-		os.Remove(lockFile)
-		l.releaseDBLease(lockName)
-		return fmt.Errorf("migration: write lock file: %w", err)
+		closeErr := fh.Close()
+		removeErr := os.Remove(lockFile)
+		releaseErr := l.releaseDBLease(lockName)
+		return errors.Join(fmt.Errorf("migration: write lock file: %w", err), closeErr, removeErr, releaseErr)
 	}
-	fh.Close()
+	if err := fh.Sync(); err != nil {
+		closeErr := fh.Close()
+		removeErr := os.Remove(lockFile)
+		releaseErr := l.releaseDBLease(lockName)
+		return errors.Join(fmt.Errorf("migration: sync lock file: %w", err), closeErr, removeErr, releaseErr)
+	}
+	if err := fh.Close(); err != nil {
+		removeErr := os.Remove(lockFile)
+		releaseErr := l.releaseDBLease(lockName)
+		return errors.Join(fmt.Errorf("migration: close lock file: %w", err), removeErr, releaseErr)
+	}
 
 	return nil
 }
 
-func (l *PersistentLock) releaseDBLease(lockName string) {
-	l.db.Where("lock_name = ? AND owner_instance_id = ?", lockName, l.instance).Delete(&migrationLockRecord{})
+func (l *PersistentLock) releaseDBLease(lockName string) error {
+	result := l.db.Where("lock_name = ? AND owner_instance_id = ?", lockName, l.instance).Delete(&migrationLockRecord{})
+	if result.Error != nil {
+		return result.Error
+	}
+	return nil
 }
 
 func (l *PersistentLock) Release(lockName string) error {
 	l.stopHeartbeat(lockName)
-	l.db.Where("lock_name = ? AND owner_instance_id = ?", lockName, l.instance).Delete(&migrationLockRecord{})
+	result := l.db.Where("lock_name = ? AND owner_instance_id = ?", lockName, l.instance).Delete(&migrationLockRecord{})
+	if result.Error != nil {
+		return result.Error
+	}
+	if err := l.removeOwnedLockFile(lockName); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (l *PersistentLock) removeOwnedLockFile(lockName string) error {
 	lockFile := filepath.Join(l.lockDir, lockName+".lock")
-	os.Remove(lockFile)
+	data, err := os.ReadFile(lockFile)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return fmt.Errorf("migration: read lock file before release: %w", err)
+	}
+	owner := ""
+	for _, line := range strings.Split(string(data), "\n") {
+		if strings.HasPrefix(line, "instance=") {
+			owner = strings.TrimPrefix(line, "instance=")
+			break
+		}
+	}
+	if owner != l.instance {
+		return nil
+	}
+	if err := os.Remove(lockFile); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("migration: remove owned lock file: %w", err)
+	}
 	return nil
 }
 
 func (l *PersistentLock) StartHeartbeat(lockName string, interval time.Duration, ttl time.Duration) error {
+	if l == nil || l.db == nil {
+		return errors.New("migration: persistent lock database is not configured")
+	}
+	if strings.TrimSpace(lockName) == "" {
+		return errors.New("migration: heartbeat lock name is required")
+	}
+	if interval <= 0 {
+		return errors.New("migration: heartbeat interval must be positive")
+	}
+	if ttl <= 0 {
+		return errors.New("migration: heartbeat ttl must be positive")
+	}
+	if interval >= ttl {
+		return errors.New("migration: heartbeat interval must be shorter than ttl")
+	}
+
 	l.stopHeartbeat(lockName)
 	ctl := &heartbeatController{
 		stop: make(chan struct{}),

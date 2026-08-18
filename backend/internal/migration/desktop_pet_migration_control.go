@@ -61,6 +61,8 @@ func DesktopPetMigrationControlMigration() Migration {
 			s.CreateIndex("idx_dpmc_lock_expiry", "desktop_pet_migration_locks", []string{"lease_expires_at"}, false)
 			s.CreateIndex("idx_dprc_operation", "desktop_pet_read_cutovers", []string{"operation_id"}, false)
 			s.CreateIndex("idx_dpmc_write_op", "desktop_pet_write_cutovers", []string{"operation_id"}, false)
+			s.CreateIndex("idx_dprc_operation_step_unique", "desktop_pet_read_cutovers", []string{"operation_id", "step_name"}, true)
+			s.CreateIndex("idx_dpwc_operation_step_unique", "desktop_pet_write_cutovers", []string{"operation_id", "step_name"}, true)
 			return nil
 		},
 	}
