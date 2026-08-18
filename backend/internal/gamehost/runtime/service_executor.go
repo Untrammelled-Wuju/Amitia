@@ -14,6 +14,7 @@ type TopologyAccessor interface {
 	GetService(serviceID domain.ServiceID) (*ServiceInstance, error)
 	UpdateServiceState(serviceID domain.ServiceID, next ServiceRuntimeState, now time.Time) error
 	Snapshot() RuntimeTopologySnapshot
+	ListServices() []ServiceInstanceSnapshot
 }
 
 type ServiceExecutor interface {
