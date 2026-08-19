@@ -52,7 +52,7 @@ func (r *HookContributionRepository) Register(ctx context.Context, contrib HookC
 	_, err = r.db.ExecContext(ctx, `
 		INSERT INTO extension_hook_contributions
 		(contribution_id, extension_id, module_id, hook_point_id, contract_version, phase, entry, priority, before_json, after_json, timeout_ms, failure_policy_json, mutation_claims_json, enabled_override, definition_hash, definition_json, created_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '')
 		ON CONFLICT(extension_id, contribution_id) DO UPDATE SET
 			module_id = excluded.module_id,
 			hook_point_id = excluded.hook_point_id,
@@ -455,7 +455,7 @@ func (r *HookCircuitRepository) Save(ctx context.Context, contributionID string,
 	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO extension_hook_circuits
 		(contribution_id, state, consecutive_fails, total_fails, total_success, last_fail_code, last_fail_time, opened_at, updated_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, '')
 		ON CONFLICT(contribution_id) DO UPDATE SET
 			state = excluded.state,
 			consecutive_fails = excluded.consecutive_fails,
