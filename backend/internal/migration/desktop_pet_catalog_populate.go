@@ -132,7 +132,7 @@ func populateCatalogProjections(s *Step) {
 				sort_order=%d,
 				default_frame_count=%d,
 				enabled=%d,
-updated_at=strftime('%Y-%m-%d %H:%M:%S','now')
+			updated_at=strftime('%%Y-%%m-%%d %%H:%%M:%%S','now')
 			WHERE action_key='%s'`,
 				contracts.ActionSpecSchemaVersion,
 			contracts.CatalogVersion,
