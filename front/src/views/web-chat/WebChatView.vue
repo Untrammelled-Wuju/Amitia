@@ -617,7 +617,7 @@ onUnmounted(() => {
   height: 100%;
   width: 100%;
 }
-.chat-surface { display: flex; flex-direction: column; width: min(100%, 1440px); height: 100%; min-height: 0; margin: 0 auto; overflow: hidden; border: 1px solid var(--surface-border); border-radius: var(--radius-lg); background: var(--chat-surface-bg); }
+.chat-surface { display: flex; flex-direction: column; width: min(100%, 1440px); height: 100%; min-height: 0; margin: 0 auto; overflow: hidden; border-radius: var(--radius-lg); background: var(--chat-surface-bg); }
 .chat-header-region { order: 1; flex: 0 0 auto; }
 .chat-status-region { order: 2; display: flex; flex-direction: column; gap: 6px; padding: 0 14px; }
 .composer-region { order: 4; flex: 0 0 auto; }

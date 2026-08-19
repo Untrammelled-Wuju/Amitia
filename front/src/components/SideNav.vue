@@ -32,10 +32,6 @@ SPDX-License-Identifier: AGPL-3.0-only
       </div>
     </div>
 
-    <button class="new-chat" type="button" @click="handleNewChat">
-      <el-icon><Plus /></el-icon>
-      <span v-show="!appStore.sidebarCollapsed">新对话</span>
-    </button>
     <el-menu
       :default-active="activeIndex"
       :collapse="appStore.sidebarCollapsed"
@@ -52,51 +48,35 @@ SPDX-License-Identifier: AGPL-3.0-only
           <el-icon><UserFilled /></el-icon>
           <span>角色</span>
         </template>
-        <el-menu-item index="/character">角色管理</el-menu-item>
-        <el-menu-item index="/reminders">日程提醒</el-menu-item>
-        <el-menu-item index="/profiles">用户画像</el-menu-item>
-        <el-menu-item index="/world-book">世界书</el-menu-item>
+        <el-menu-item index="/character"><el-icon><User /></el-icon><span>角色管理</span></el-menu-item>
+        <el-menu-item index="/reminders"><el-icon><Calendar /></el-icon><span>日程提醒</span></el-menu-item>
+        <el-menu-item index="/profiles"><el-icon><Avatar /></el-icon><span>用户画像</span></el-menu-item>
+        <el-menu-item index="/world-book"><el-icon><Collection /></el-icon><span>世界书</span></el-menu-item>
       </el-sub-menu>
       <el-sub-menu index="memory">
         <template #title>
           <el-icon><Grid /></el-icon>
           <span>记忆</span>
         </template>
-        <el-menu-item index="/memory-manager">记忆总览</el-menu-item>
-        <el-menu-item index="/episodic">情景记忆</el-menu-item>
-        <el-menu-item index="/graph">记忆图谱</el-menu-item>
-        <el-menu-item index="/memory-timeline">时间线</el-menu-item>
-        <el-menu-item index="/logs">聊天记录</el-menu-item>
-        <el-menu-item index="/import">导入记录</el-menu-item>
+        <el-menu-item index="/memory-manager"><el-icon><List /></el-icon><span>记忆总览</span></el-menu-item>
+        <el-menu-item index="/episodic"><el-icon><Film /></el-icon><span>情景记忆</span></el-menu-item>
+        <el-menu-item index="/graph"><el-icon><Share /></el-icon><span>记忆图谱</span></el-menu-item>
+        <el-menu-item index="/memory-timeline"><el-icon><Timer /></el-icon><span>时间线</span></el-menu-item>
+        <el-menu-item index="/logs"><el-icon><ChatLineRound /></el-icon><span>聊天记录</span></el-menu-item>
+        <el-menu-item index="/import"><el-icon><Download /></el-icon><span>导入记录</span></el-menu-item>
       </el-sub-menu>
       <el-sub-menu index="more">
         <template #title><el-icon><Odometer /></el-icon><span>更多</span></template>
-        <el-menu-item index="/dashboard/run">运行概览</el-menu-item>
-        <el-menu-item index="/dashboard/data">运行数据</el-menu-item>
+        <el-menu-item index="/dashboard/run"><el-icon><DataLine /></el-icon><span>运行概览</span></el-menu-item>
+        <el-menu-item index="/dashboard/data"><el-icon><DataAnalysis /></el-icon><span>运行数据</span></el-menu-item>
         <el-menu-item index="/wechat"><el-icon><Connection /></el-icon>微信连接</el-menu-item>
         <el-menu-item index="/qq"><el-icon><ChatDotSquare /></el-icon>QQ 连接</el-menu-item>
-        <el-menu-item index="/emotes">表情包管理</el-menu-item>
-        <el-menu-item index="/extensions">扩展中心</el-menu-item>
+        <el-menu-item index="/emotes"><el-icon><StarFilled /></el-icon><span>表情包管理</span></el-menu-item>
+        <el-menu-item index="/extensions"><el-icon><Menu /></el-icon><span>扩展中心</span></el-menu-item>
         <el-menu-item index="/creative-workshop"><el-icon><MagicStick /></el-icon>创意工坊</el-menu-item>
         <el-menu-item index="/settings"><el-icon><Setting /></el-icon>设置</el-menu-item>
       </el-sub-menu>
     </el-menu>
-
-    <section v-show="!appStore.sidebarCollapsed && recentConversations.length" class="recent-section">
-      <div class="section-caption">最近</div>
-      <button
-        v-for="conversation in recentConversations"
-        :key="conversation.id"
-        type="button"
-        class="recent-item"
-        :class="{ active: activeConversationId === conversation.id && route.path === '/chat' }"
-        :title="conversation.title || '新对话'"
-        @click="handleSelectRecent(conversation)"
-      >
-        <el-icon><Clock /></el-icon>
-        <span>{{ conversation.title || "新对话" }}</span>
-      </button>
-    </section>
 
     <div class="side-nav-bottom">
       <div class="side-status" :title="statusTitle">
@@ -143,6 +123,20 @@ import {
   Moon,
   Sunny,
   Clock,
+  User,
+  Calendar,
+  Avatar,
+  Collection,
+  List,
+  Film,
+  Share,
+  Timer,
+  ChatLineRound,
+  Download,
+  DataLine,
+  DataAnalysis,
+  StarFilled,
+  Menu,
 } from "@element-plus/icons-vue";
 import { ElMessage } from "element-plus";
 import { useAppStore } from "@/stores/app";
@@ -167,6 +161,7 @@ defineEmits<{ toggleTheme: [] }>();
 const searchModal = ref<InstanceType<typeof SearchModal> | null>(null);
 const recentConversations = ref<any[]>([]);
 const activeConversationId = ref(localStorage.getItem("webchat-conv-id") || "");
+let isMounted = false;
 
 const statusTitle = computed(() => {
   if (props.modelStatus === "not_configured" || props.modelStatus === "unconfigured") return "模型未配置";
@@ -181,9 +176,13 @@ const statusTitle = computed(() => {
 async function fetchRecentConversations() {
   try {
     const result = await get<any>("/api/web-chat/conversations", { page: 1, pageSize: 7, channel: "web" });
-    recentConversations.value = (result?.items || result?.conversations || []).slice(0, 7);
+    if (isMounted) {
+      recentConversations.value = (result?.items || result?.conversations || []).slice(0, 7);
+    }
   } catch {
-    recentConversations.value = [];
+    if (isMounted) {
+      recentConversations.value = [];
+    }
   }
 }
 
@@ -208,8 +207,9 @@ async function createNewConversation() {
 }
 
 async function handleNewChat() {
+  if (!isMounted) return;
   const newConvId = await createNewConversation();
-  if (!newConvId) return;
+  if (!newConvId || !isMounted) return;
   activeConversationId.value = newConvId;
   localStorage.setItem("webchat-conv-id", newConvId);
   localStorage.setItem("webchat-last-conv", "char");
@@ -223,7 +223,7 @@ async function handleNewChat() {
 }
 
 async function handleSelectRecent(conversation: any) {
-  if (!conversation?.id) return;
+  if (!conversation?.id || !isMounted) return;
   activeConversationId.value = conversation.id;
   localStorage.setItem("webchat-conv-id", conversation.id);
   localStorage.setItem("webchat-last-conv", "char");
@@ -237,6 +237,7 @@ async function handleSelectRecent(conversation: any) {
 }
 
 function handleConversationListChanged() {
+  if (!isMounted) return;
   activeConversationId.value = localStorage.getItem("webchat-conv-id") || "";
   void fetchRecentConversations();
 }
@@ -283,11 +284,13 @@ function openUserProfile() {
 }
 
 onMounted(() => {
+  isMounted = true;
   void fetchRecentConversations();
   window.addEventListener("amitia:conversation-list-changed", handleConversationListChanged);
 });
 
 onUnmounted(() => {
+  isMounted = false;
   window.removeEventListener("amitia:conversation-list-changed", handleConversationListChanged);
 });
 </script>

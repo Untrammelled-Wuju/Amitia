@@ -4,6 +4,7 @@ import { ElNotification, ElMessageBox } from "element-plus";
 import { resolveApiUrl, createAuthorizedRequestInit } from "../runtime/runtime-adapter";
 import { isNavigationAllowed } from "../navigation/nav-whitelist";
 import { useExtensionUIStore } from "../stores/extensionUI";
+import { getAccessToken } from "../stores/refresh-coordinator";
 
 interface SSEEventEnvelope {
   eventType: string;
@@ -30,7 +31,8 @@ const DEDUP_MAX_SIZE = 200;
 
 export function useUIHostSSE(connected?: Ref<boolean>) {
   const router = useRouter();
-  let eventSource: EventSource | null = null;
+  let abortController: AbortController | null = null;
+  let connectionVersion = 0;
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   let reconnectAttempts = 0;
   let dedupCleanupTimer: ReturnType<typeof setInterval> | null = null;
@@ -191,47 +193,104 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
     }, delay);
   }
 
+  function dispatchEvent(eventName: string, data: string) {
+    const event = new MessageEvent(eventName, { data });
+    switch (eventName) {
+      case "ui_notify":
+        handleNotify(event);
+        break;
+      case "ui_navigate":
+        handleNavigate(event);
+        break;
+      case "ui_dialog":
+        handleDialog(event);
+        break;
+      case "extension_installed":
+      case "extension_uninstalled":
+      case "extension_enabled":
+      case "extension_disabled":
+      case "extension_paused":
+      case "extension_resumed":
+      case "extension_updated":
+      case "extension_rolled_back":
+      case "extension_rollback_failed":
+      case "extension_generation_changed":
+      case "extension_contributions_changed":
+        handleExtensionChange(event);
+        break;
+    }
+  }
+
+  function processEvents(chunk: string) {
+    for (const block of chunk.replace(/\r/g, "").split("\n\n")) {
+      if (!block) continue;
+      let eventName = "message";
+      const data: string[] = [];
+      for (const line of block.split("\n")) {
+        if (line.startsWith("event:")) {
+          eventName = line.slice(6).trim();
+        } else if (line.startsWith("data:")) {
+          data.push(line.slice(5).trimStart());
+        }
+      }
+      if (data.length > 0) dispatchEvent(eventName, data.join("\n"));
+    }
+  }
+
+  async function consumeStream(response: Response, version: number) {
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error("SSE 响应缺少数据流");
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (version === connectionVersion) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true }).replace(/\r/g, "");
+      const boundary = buffer.lastIndexOf("\n\n");
+      if (boundary < 0) continue;
+      processEvents(buffer.slice(0, boundary));
+      buffer = buffer.slice(boundary + 2);
+    }
+  }
+
   async function connect() {
     disconnect();
+    const version = ++connectionVersion;
+    const controller = new AbortController();
+    abortController = controller;
     try {
       const url = await resolveApiUrl(`/api/proactive-sse?clientId=ui-host`);
-      eventSource = new EventSource(url);
-      eventSource.addEventListener("ui_notify", handleNotify);
-      eventSource.addEventListener("ui_navigate", handleNavigate);
-      eventSource.addEventListener("ui_dialog", handleDialog);
-      eventSource.addEventListener("extension_installed", handleExtensionChange);
-      eventSource.addEventListener("extension_uninstalled", handleExtensionChange);
-      eventSource.addEventListener("extension_enabled", handleExtensionChange);
-      eventSource.addEventListener("extension_disabled", handleExtensionChange);
-      eventSource.addEventListener("extension_paused", handleExtensionChange);
-      eventSource.addEventListener("extension_resumed", handleExtensionChange);
-      eventSource.addEventListener("extension_updated", handleExtensionChange);
-		eventSource.addEventListener("extension_rolled_back", handleExtensionChange);
-		eventSource.addEventListener("extension_rollback_failed", handleExtensionChange);
-		eventSource.addEventListener("extension_generation_changed", handleExtensionChange);
-      eventSource.addEventListener("extension_contributions_changed", handleExtensionChange);
-      eventSource.onopen = () => {
-        isConnected.value = true;
-        reconnectAttempts = 0;
-        const store = useExtensionUIStore();
-        store.refreshSnapshot(true).catch(() => {});
-      };
-      eventSource.onerror = () => {
+      const init = await createAuthorizedRequestInit({
+        headers: { Accept: "text/event-stream" },
+        signal: controller.signal,
+      });
+      const token = getAccessToken();
+      if (token) {
+        (init.headers as Record<string, string>).Authorization = `Bearer ${token}`;
+      }
+      const response = await fetch(url, init);
+      if (!response.ok || !response.headers.get("content-type")?.includes("text/event-stream")) {
+        throw new Error("SSE 连接未建立");
+      }
+      if (version !== connectionVersion || controller.signal.aborted) return;
+      isConnected.value = true;
+      reconnectAttempts = 0;
+      useExtensionUIStore().refreshSnapshot(true).catch(() => {});
+      await consumeStream(response, version);
+      if (version === connectionVersion && !controller.signal.aborted) {
         isConnected.value = false;
-        if (eventSource && eventSource.readyState === EventSource.CLOSED) {
-          disconnect();
-          scheduleReconnect();
-        } else {
-          disconnect();
-          scheduleReconnect();
-        }
-      };
+        scheduleReconnect();
+      }
     } catch {
-      scheduleReconnect();
+      if (version === connectionVersion && !controller.signal.aborted) {
+        isConnected.value = false;
+        scheduleReconnect();
+      }
     }
   }
 
   function disconnect() {
+    connectionVersion++;
     if (reconnectTimer) {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
@@ -240,9 +299,9 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
       clearTimeout(extensionRefreshTimer);
       extensionRefreshTimer = null;
     }
-    if (eventSource) {
-      eventSource.close();
-      eventSource = null;
+    if (abortController) {
+      abortController.abort();
+      abortController = null;
     }
     isConnected.value = false;
   }

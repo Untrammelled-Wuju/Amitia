@@ -55,9 +55,14 @@ const isPublicPage = computed(() =>
 );
 
 onErrorCaptured((err, _instance, info) => {
+  const errorMessage = err instanceof Error ? err.message : String(err);
+  if (errorMessage.includes("Cannot read properties of null") || errorMessage.includes("reading 'type'") || errorMessage.includes("reading 'exposed'")) {
+    console.warn("[App] suppressed unmount error:", errorMessage);
+    return false;
+  }
   console.error("[App] render error:", err, info);
   renderError.value = true;
-  capturedError.value = err instanceof Error ? err.message : String(err);
+  capturedError.value = errorMessage;
   return false;
 });
 
