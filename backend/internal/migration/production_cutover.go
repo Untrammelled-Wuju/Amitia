@@ -90,7 +90,7 @@ type CutoverState struct {
 	ErrorMessage        string       `gorm:"column:error_message" json:"error_message"`
 	StartedAt           textTime     `gorm:"column:started_at" json:"started_at"`
 	UpdatedAt           textTime     `gorm:"column:updated_at" json:"updated_at"`
-	CompletedAt         *textTime    `gorm:"column:completed_at" json:"completed_at,omitempty"`
+	CompletedAt         textTime     `gorm:"column:completed_at" json:"completed_at"`
 	CanonicalGeneration int64        `gorm:"column:canonical_generation" json:"canonical_generation"`
 	PlanVersion         int          `gorm:"column:plan_version" json:"plan_version"`
 }
@@ -633,7 +633,7 @@ func (p *CutoverPlan) runCommit(ctx context.Context, state *CutoverState) error 
 	}
 
 	commitTime := textTime{Time: p.deps.Now()}
-	state.CompletedAt = &commitTime
+	state.CompletedAt = commitTime
 	state.PhaseStatus = "completed"
 	state.Status = "committed"
 	state.UpdatedAt = commitTime
