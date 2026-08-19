@@ -65,7 +65,7 @@ type AuditEvent struct {
 	UserAgent     string `gorm:"column:user_agent;size:500" json:"userAgent"`
 	ReasonCode    string `gorm:"column:reason_code;size:100" json:"reasonCode"`
 	DetailsJSON   string `gorm:"column:details_json" json:"detailsJson"`
-	OccurredAt    string `gorm:"column:occurred_at;not null;default:CURRENT_TIMESTAMP;index:idx_audit_time" json:"occurredAt"`
+	OccurredAt    string `gorm:"column:occurred_at;not null;index:idx_audit_time" json:"occurredAt"`
 }
 
 func (AuditEvent) TableName() string { return "security_audit_events" }

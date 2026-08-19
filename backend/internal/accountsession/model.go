@@ -42,7 +42,7 @@ type Session struct {
 	UserAgent        string     `gorm:"column:user_agent;size:500" json:"userAgent"`
 	Revision         int64      `gorm:"column:revision;not null;default:1" json:"-"`
 	TokenHash        *string    `gorm:"column:token_hash;size:255" json:"-"`
-	CreatedAt        time.Time  `gorm:"column:created_at;not null;default:CURRENT_TIMESTAMP" json:"createdAt"`
+	CreatedAt        time.Time  `gorm:"column:created_at;not null" json:"createdAt"`
 	LastActiveAt     *time.Time `gorm:"column:last_active_at" json:"lastActiveAt"`
 	LastRefreshedAt  *time.Time `gorm:"column:last_refreshed_at" json:"lastRefreshedAt"`
 	ExpiresAt        *time.Time `gorm:"column:expires_at" json:"expiresAt"`
@@ -63,7 +63,7 @@ type RefreshToken struct {
 	UsedAt           *time.Time `gorm:"column:used_at" json:"usedAt"`
 	RevokedAt        *time.Time `gorm:"column:revoked_at" json:"-"`
 	ReplacedByTokenID *string   `gorm:"column:replaced_by_token_id;size:64" json:"-"`
-	CreatedAt        time.Time  `gorm:"column:created_at;not null;default:CURRENT_TIMESTAMP" json:"-"`
+	CreatedAt        time.Time  `gorm:"column:created_at;not null" json:"-"`
 }
 
 func (RefreshToken) TableName() string { return "auth_refresh_tokens" }
@@ -74,7 +74,7 @@ type LoginGuard struct {
 	FailureCount   int64     `gorm:"column:failure_count;not null;default:0" json:"-"`
 	WindowStartedAt time.Time `gorm:"column:window_started_at;not null" json:"-"`
 	BlockedUntil   *time.Time `gorm:"column:blocked_until" json:"-"`
-	UpdatedAt      time.Time `gorm:"column:updated_at;not null;default:CURRENT_TIMESTAMP" json:"-"`
+	UpdatedAt      time.Time `gorm:"column:updated_at;not null" json:"-"`
 }
 
 func (LoginGuard) TableName() string { return "auth_login_guards" }
@@ -84,7 +84,7 @@ type RecoveryCode struct {
 	UserID    int64      `gorm:"column:user_id;not null;index:idx_recovery_user" json:"-"`
 	CodeHash  string     `gorm:"column:code_hash;size:255;not null;uniqueIndex" json:"-"`
 	Status    string     `gorm:"column:status;size:20;not null;index:idx_recovery_user" json:"-"`
-	CreatedAt time.Time  `gorm:"column:created_at;not null;default:CURRENT_TIMESTAMP" json:"-"`
+	CreatedAt time.Time  `gorm:"column:created_at;not null" json:"-"`
 	UsedAt    *time.Time `gorm:"column:used_at" json:"-"`
 	ExpiresAt *time.Time `gorm:"column:expires_at" json:"-"`
 	Generation int64     `gorm:"column:generation;not null;default:1" json:"-"`
@@ -97,7 +97,7 @@ type RecoveryGrant struct {
 	UserID    int64      `gorm:"column:user_id;not null;index:idx_grant_user" json:"-"`
 	GrantHash string     `gorm:"column:grant_hash;size:255;not null;uniqueIndex" json:"-"`
 	Status    string     `gorm:"column:status;size:20;not null" json:"-"`
-	CreatedAt time.Time  `gorm:"column:created_at;not null;default:CURRENT_TIMESTAMP" json:"-"`
+	CreatedAt time.Time  `gorm:"column:created_at;not null" json:"-"`
 	ExpiresAt time.Time  `gorm:"column:expires_at;not null" json:"-"`
 	ConsumedAt *time.Time `gorm:"column:consumed_at" json:"-"`
 }

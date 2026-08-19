@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS auth_users (
     password_hash TEXT NOT NULL,
     role TEXT DEFAULT 'admin',
     is_active INTEGER DEFAULT 1,
-    created_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
     last_login_at TEXT
 );
 
@@ -27,9 +27,9 @@ token_hash TEXT NOT NULL,
 device_name TEXT DEFAULT '',
 ip_address TEXT DEFAULT '',
 user_agent TEXT DEFAULT '',
-last_active_at TEXT DEFAULT (datetime('now')),
+    last_active_at TEXT DEFAULT '',
 expires_at TEXT,
-created_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
 public_id TEXT UNIQUE,
 status TEXT NOT NULL DEFAULT 'active',
 revision INTEGER NOT NULL DEFAULT 1,
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS auth_refresh_tokens (
     used_at DATETIME,
     revoked_at DATETIME,
     replaced_by_token_id TEXT,
-    created_at DATETIME NOT NULL DEFAULT (datetime('now'))
+    created_at DATETIME NOT NULL DEFAULT '')
 );
 
 CREATE TABLE IF NOT EXISTS auth_login_guards (
@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS auth_login_guards (
     failure_count INTEGER NOT NULL DEFAULT 0,
     window_started_at DATETIME NOT NULL,
     blocked_until DATETIME,
-    updated_at DATETIME NOT NULL DEFAULT (datetime('now')),
+    updated_at DATETIME NOT NULL DEFAULT '',
     PRIMARY KEY(guard_key, dimension)
 );
 
@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS security_audit_events (
     detail TEXT,
     details_json TEXT,
     occurred_at TEXT,
-    created_at DATETIME NOT NULL DEFAULT (datetime('now'))
+    created_at DATETIME NOT NULL DEFAULT '')
 );
 
 CREATE TABLE IF NOT EXISTS auth_recovery_codes (
@@ -87,7 +87,7 @@ CREATE TABLE IF NOT EXISTS auth_recovery_codes (
     user_id INTEGER NOT NULL,
     code_hash TEXT NOT NULL UNIQUE,
     status TEXT NOT NULL DEFAULT 'active',
-    created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+    created_at DATETIME NOT NULL DEFAULT '',
     used_at DATETIME,
     expires_at DATETIME,
     generation INTEGER NOT NULL DEFAULT 1
@@ -98,7 +98,7 @@ CREATE TABLE IF NOT EXISTS auth_recovery_grants (
     user_id INTEGER NOT NULL,
     grant_hash TEXT NOT NULL UNIQUE,
     status TEXT NOT NULL DEFAULT 'active',
-    created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+    created_at DATETIME NOT NULL DEFAULT '',
     expires_at DATETIME NOT NULL,
     consumed_at DATETIME
 );
@@ -125,8 +125,8 @@ CREATE TABLE IF NOT EXISTS characters (
     is_active INTEGER DEFAULT 0,
     sort_order INTEGER DEFAULT 0,
     conversation_id TEXT DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
     gender TEXT DEFAULT 'UNSPECIFIED',
     gender_label TEXT,
     pronoun TEXT DEFAULT 'TA',
@@ -157,7 +157,7 @@ CREATE TABLE IF NOT EXISTS character_templates (
     description TEXT DEFAULT '',
     builtin INTEGER DEFAULT 0,
     template_json TEXT DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '')
 );
 
 CREATE TABLE IF NOT EXISTS conversations (
@@ -169,8 +169,8 @@ CREATE TABLE IF NOT EXISTS conversations (
     peer_id TEXT DEFAULT '',
     message_count INTEGER DEFAULT 0,
     state_version TEXT DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
     revision INTEGER NOT NULL DEFAULT 1,
     deleted_at DATETIME
 );
@@ -196,8 +196,8 @@ CREATE TABLE IF NOT EXISTS messages (
     reply_to_role TEXT DEFAULT '',
     reply_to_excerpt TEXT DEFAULT '',
     tool_call_id TEXT DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
     emote_id TEXT NOT NULL DEFAULT '',
     alt_text TEXT NOT NULL DEFAULT '',
     is_animated INTEGER NOT NULL DEFAULT 0,
@@ -234,8 +234,8 @@ CREATE TABLE IF NOT EXISTS tool_call_intents (
     args_json TEXT DEFAULT '',
     idempotency_key TEXT DEFAULT '',
     status TEXT DEFAULT 'PENDING',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '')
 );
 
 CREATE TABLE IF NOT EXISTS tool_call_results (
@@ -257,7 +257,7 @@ CREATE TABLE IF NOT EXISTS tool_call_results (
     audit_json TEXT DEFAULT '{}',
     confidence REAL DEFAULT 0,
     force_voice INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '')
 );
 
 CREATE INDEX IF NOT EXISTS idx_tool_call_intents_request ON tool_call_intents(request_id, tool_name);
@@ -285,8 +285,8 @@ CREATE TABLE IF NOT EXISTS model_configs (
     max_output_tokens INTEGER DEFAULT 0,
     capabilities_json TEXT DEFAULT '',
     provider_config_json TEXT DEFAULT '{}',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '')
 );
 
 CREATE TABLE IF NOT EXISTS tts_configs (
@@ -308,8 +308,8 @@ CREATE TABLE IF NOT EXISTS tts_configs (
     realtime_access_token TEXT DEFAULT '',
     realtime_secret_key TEXT DEFAULT '',
     clone_resource_id TEXT DEFAULT 'volc.megatts.timbre',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '')
 );
 
 CREATE TABLE IF NOT EXISTS asr_configs (
@@ -320,8 +320,8 @@ CREATE TABLE IF NOT EXISTS asr_configs (
     base_url TEXT DEFAULT '',
     resource_id TEXT DEFAULT 'volc.seedasr.auc',
     is_active INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '')
 );
 
 CREATE TABLE IF NOT EXISTS vision_configs (
@@ -332,8 +332,8 @@ CREATE TABLE IF NOT EXISTS vision_configs (
     model_name TEXT DEFAULT 'doubao-seed-2-0-lite-260428',
     base_url TEXT DEFAULT 'https://ark.cn-beijing.volces.com/api/v3',
     is_active INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '')
 );
 
 CREATE TABLE IF NOT EXISTS sleep_settings (
@@ -344,8 +344,8 @@ CREATE TABLE IF NOT EXISTS sleep_settings (
     enabled INTEGER DEFAULT 1,
     sleep_reply_enabled INTEGER DEFAULT 0,
     sleep_reply_mode TEXT DEFAULT 'NO_REPLY',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '')
 );
 
 CREATE TABLE IF NOT EXISTS fixed_events (
@@ -363,8 +363,8 @@ CREATE TABLE IF NOT EXISTS fixed_events (
     prepare_max_minutes INTEGER DEFAULT 40,
     reply_mode TEXT DEFAULT 'SHORT_REPLY',
     enabled INTEGER DEFAULT 1,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '')
 );
 
 CREATE TABLE IF NOT EXISTS special_events (
@@ -388,8 +388,8 @@ CREATE TABLE IF NOT EXISTS special_events (
     affect_meal INTEGER DEFAULT 0,
     affect_energy INTEGER DEFAULT 0,
     payload TEXT DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '')
 );
 
 CREATE TABLE IF NOT EXISTS class_adjustments (
@@ -400,8 +400,8 @@ CREATE TABLE IF NOT EXISTS class_adjustments (
     class_name TEXT DEFAULT '',
     adjust_type TEXT DEFAULT 'swap',
     description TEXT DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '')
 );
 
 CREATE TABLE IF NOT EXISTS lifestyle_tendencies (
@@ -417,7 +417,7 @@ CREATE TABLE IF NOT EXISTS lifestyle_tendencies (
     care_tendency INTEGER DEFAULT 50,
     daily_share_tendency INTEGER DEFAULT 50,
     manually_configured INTEGER DEFAULT 0,
-    updated_at TEXT DEFAULT (datetime('now'))
+    updated_at TEXT DEFAULT '')
 );
 
 CREATE TABLE IF NOT EXISTS work_profiles (
@@ -442,7 +442,7 @@ CREATE TABLE IF NOT EXISTS work_profiles (
     delayed_reply_enabled INTEGER DEFAULT 0,
     commute_home_share_enabled INTEGER DEFAULT 1,
     commute_home_share_probability INTEGER DEFAULT 60,
-    updated_at TEXT DEFAULT (datetime('now'))
+    updated_at TEXT DEFAULT '')
 );
 
 CREATE TABLE IF NOT EXISTS role_profiles (
@@ -455,8 +455,8 @@ CREATE TABLE IF NOT EXISTS role_profiles (
     self_reference TEXT DEFAULT '我',
     user_addressing_style TEXT DEFAULT '',
     gender_expression INTEGER DEFAULT 30,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '')
 );
 
 CREATE TABLE IF NOT EXISTS active_message_settings (
@@ -471,8 +471,8 @@ CREATE TABLE IF NOT EXISTS active_message_settings (
     max_per_day INTEGER DEFAULT 6,
     max_daily_calls INTEGER DEFAULT 10,
     channel TEXT DEFAULT 'all',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '')
 );
 
 CREATE TABLE IF NOT EXISTS active_message_task (
@@ -498,8 +498,8 @@ CREATE TABLE IF NOT EXISTS active_message_task (
     cancel_reason TEXT DEFAULT '',
     source TEXT DEFAULT 'schedule_based',
     lock_until TEXT,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '')
 );
 
 CREATE TABLE IF NOT EXISTS proactive_rules (
@@ -517,8 +517,8 @@ CREATE TABLE IF NOT EXISTS proactive_rules (
     prompt_template TEXT DEFAULT '',
     random_minutes INTEGER DEFAULT 0,
     last_sent_at TEXT,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '')
 );
 
 CREATE TABLE IF NOT EXISTS proactive_messages (
@@ -532,8 +532,8 @@ CREATE TABLE IF NOT EXISTS proactive_messages (
     prompt TEXT DEFAULT '',
     error TEXT DEFAULT '',
     sent_at TEXT,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
     interaction_id TEXT DEFAULT '',
     delivery_intent_id TEXT DEFAULT '',
     delivery_id TEXT DEFAULT '',
@@ -554,8 +554,8 @@ CREATE TABLE IF NOT EXISTS reminders (
     repeat_rule TEXT DEFAULT '',
     enabled INTEGER DEFAULT 1,
     last_triggered_at TEXT DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '')
 );
 
 CREATE TABLE IF NOT EXISTS memories (
@@ -576,8 +576,8 @@ CREATE TABLE IF NOT EXISTS memories (
     verified_status TEXT DEFAULT 'unverified',
     last_verified_at TEXT,
     expires_at TEXT,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
     use_count INTEGER DEFAULT 0,
     last_used_at TEXT,
     sensitivity_level TEXT DEFAULT 'internal',
@@ -605,7 +605,7 @@ CREATE TABLE IF NOT EXISTS memory_events (
     last_verified_at TEXT DEFAULT NULL,
     source TEXT DEFAULT '',
     character_id TEXT DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
     version INTEGER NOT NULL DEFAULT 1,
     operation_id TEXT NOT NULL DEFAULT '',
     snapshot_hash TEXT NOT NULL DEFAULT '',
@@ -621,7 +621,7 @@ CREATE TABLE IF NOT EXISTS memory_candidates (
     source_text TEXT DEFAULT '',
     conversation_id TEXT DEFAULT '',
     character_id TEXT DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
     sensitivity_level TEXT DEFAULT 'internal',
     allow_proactive_mention INTEGER DEFAULT 1,
     requires_confirmation INTEGER DEFAULT 0,
@@ -662,7 +662,7 @@ CREATE INDEX IF NOT EXISTS idx_memories_derivation_key ON memories(derivation_ke
 
 CREATE TABLE IF NOT EXISTS memory_embeddings (
     memory_id TEXT PRIMARY KEY,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '')
 );
 
 CREATE TABLE IF NOT EXISTS episodic_memories (
@@ -678,8 +678,8 @@ CREATE TABLE IF NOT EXISTS episodic_memories (
     message_id_start TEXT DEFAULT '',
     message_id_end TEXT DEFAULT '',
     source_conv_id TEXT DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
     message_time_start TEXT NOT NULL DEFAULT '',
     message_time_end TEXT NOT NULL DEFAULT ''
 );
@@ -699,8 +699,8 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     confidence INTEGER DEFAULT 50,
     source_conv_id TEXT DEFAULT '',
     verified_at TEXT DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '')
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_user_profiles_uid_cat_attr ON user_profiles(user_id, character_id, category, attribute_name);
@@ -715,8 +715,8 @@ CREATE TABLE IF NOT EXISTS world_book (
     inject_content TEXT NOT NULL DEFAULT '',
     priority INTEGER DEFAULT 0,
     hit_count INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '')
 );
 
 CREATE INDEX IF NOT EXISTS idx_world_book_match_type ON world_book(match_type);
@@ -729,7 +729,7 @@ CREATE TABLE IF NOT EXISTS conversation_summaries (
     round_end INTEGER NOT NULL DEFAULT 0,
     summary_text TEXT NOT NULL DEFAULT '',
     parent_summary_id TEXT DEFAULT '',
-    compressed_at TEXT DEFAULT (datetime('now'))
+    compressed_at TEXT DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_conv_summaries_conv_round ON conversation_summaries(conversation_id, round_start);
@@ -740,7 +740,7 @@ CREATE TABLE IF NOT EXISTS message_feedback (
     message_id TEXT DEFAULT '',
     rating INTEGER DEFAULT 0,
     comment TEXT DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '')
 );
 
 CREATE TABLE IF NOT EXISTS safety_events (
@@ -750,7 +750,7 @@ CREATE TABLE IF NOT EXISTS safety_events (
     description TEXT DEFAULT '',
     direction TEXT DEFAULT '',
     handled INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '')
 );
 
 CREATE TABLE IF NOT EXISTS moods (
@@ -759,7 +759,7 @@ CREATE TABLE IF NOT EXISTS moods (
     mood TEXT DEFAULT '',
     mood_value TEXT DEFAULT '',
     level INTEGER DEFAULT 50,
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '')
 );
 
 CREATE TABLE IF NOT EXISTS need_states (
@@ -779,7 +779,7 @@ CREATE TABLE IF NOT EXISTS app_settings (
     value TEXT DEFAULT '',
     revision INTEGER NOT NULL DEFAULT 1,
     deleted_at DATETIME,
-    updated_at TEXT DEFAULT (datetime('now'))
+    updated_at TEXT DEFAULT '')
 );
 CREATE INDEX IF NOT EXISTS idx_app_settings_key ON app_settings(key);
 CREATE INDEX IF NOT EXISTS idx_app_settings_deleted_at ON app_settings(deleted_at);
@@ -813,7 +813,7 @@ CREATE TABLE IF NOT EXISTS retrieval_logs (
     query_text TEXT NOT NULL DEFAULT '',
     retrieved_memory_ids TEXT DEFAULT '[]',
     scoring_details TEXT DEFAULT '{}',
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '')
 );
 
 CREATE INDEX IF NOT EXISTS idx_retrieval_logs_conv_created ON retrieval_logs(conversation_id, created_at);
@@ -829,8 +829,8 @@ CREATE TABLE IF NOT EXISTS embedding_configs (
     base_url TEXT DEFAULT 'https://ark.cn-beijing.volces.com/api/v3',
     is_active INTEGER DEFAULT 0,
     provider_config_json TEXT DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '')
 );
 
 CREATE TABLE IF NOT EXISTS image_gen_configs (
@@ -842,8 +842,8 @@ CREATE TABLE IF NOT EXISTS image_gen_configs (
     base_url TEXT DEFAULT 'https://ark.cn-beijing.volces.com/api/v3',
     is_active INTEGER DEFAULT 0,
     enabled INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '')
 );
 
 CREATE TABLE IF NOT EXISTS mcp_duplicate_tool_registrations (
@@ -893,8 +893,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_action_definitions (
     generation_spec_version INTEGER NOT NULL DEFAULT 1,
     spec_json TEXT NOT NULL DEFAULT '{}',
     spec_hash TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '')
 );
 
 CREATE TABLE IF NOT EXISTS desktop_pet_generation_tasks (
@@ -921,8 +921,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_generation_tasks (
     estimated_generation_count INTEGER NOT NULL DEFAULT 0,
     error_code TEXT DEFAULT '',
     error_message TEXT DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
     started_at TEXT DEFAULT '',
     completed_at TEXT DEFAULT '',
     execution_id TEXT DEFAULT '',
@@ -975,8 +975,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_generation_task_actions (
     progress INTEGER NOT NULL DEFAULT 0,
     error_code TEXT DEFAULT '',
     error_message TEXT DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
     started_at TEXT DEFAULT '',
     completed_at TEXT DEFAULT '',
     attempt_number INTEGER NOT NULL DEFAULT 1,
@@ -1056,8 +1056,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_generation_frames (
     provider_seed TEXT DEFAULT '',
     error_code TEXT DEFAULT '',
     error_message TEXT DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
     started_at TEXT DEFAULT '',
     completed_at TEXT DEFAULT '',
     row_version INTEGER NOT NULL DEFAULT 0,
@@ -1091,7 +1091,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_generation_call_logs (
     usage TEXT DEFAULT '',
     error_code TEXT DEFAULT '',
     error_message TEXT DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
     attempt_id TEXT NOT NULL DEFAULT '',
     artifact_id TEXT NOT NULL DEFAULT '',
     call_type TEXT NOT NULL DEFAULT 'primary',
@@ -1135,8 +1135,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_processing_tasks (
     error_message TEXT DEFAULT '',
     started_at TEXT DEFAULT '',
     completed_at TEXT DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
     row_version INTEGER NOT NULL DEFAULT 0,
     status_reason TEXT NOT NULL DEFAULT '',
     failure_stage TEXT NOT NULL DEFAULT '',
@@ -1182,8 +1182,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_processing_actions (
     row_version INTEGER NOT NULL DEFAULT 0,
     error_code TEXT DEFAULT '',
     error_message TEXT DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
     started_at TEXT DEFAULT '',
     completed_at TEXT DEFAULT '',
     current_stage TEXT NOT NULL DEFAULT 'created',
@@ -1239,8 +1239,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_processing_action_attempts (
     error_message TEXT NOT NULL DEFAULT '',
     started_at TEXT NOT NULL DEFAULT '',
     completed_at TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_dppaa_task ON desktop_pet_processing_action_attempts(processing_task_id);
@@ -1267,8 +1267,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_processed_frames (
     execution_id TEXT NOT NULL DEFAULT '',
     error_code TEXT DEFAULT '',
     error_message TEXT DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
     row_version INTEGER NOT NULL DEFAULT 0,
     current_stage TEXT NOT NULL DEFAULT 'created',
     status_reason TEXT NOT NULL DEFAULT '',
@@ -1309,8 +1309,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_packages (
     action_count INTEGER NOT NULL DEFAULT 0,
     package_hash TEXT DEFAULT '',
     included_actions TEXT DEFAULT '[]',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
     row_version INTEGER NOT NULL DEFAULT 0,
     current_stage TEXT NOT NULL DEFAULT 'created',
     status_reason TEXT NOT NULL DEFAULT '',
@@ -1343,11 +1343,11 @@ CREATE TABLE IF NOT EXISTS desktop_pet_installations (
     canvas_width INTEGER NOT NULL DEFAULT 0,
     canvas_height INTEGER NOT NULL DEFAULT 0,
     package_hash TEXT DEFAULT '',
-    installed_at TEXT DEFAULT (datetime('now')),
+    installed_at TEXT DEFAULT ''),
     last_enabled_at TEXT DEFAULT '',
     last_disabled_at TEXT DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
     pet_id TEXT NOT NULL DEFAULT '',
     current_release_id TEXT NOT NULL DEFAULT '',
     lifecycle_state TEXT NOT NULL DEFAULT 'installed',
@@ -1401,8 +1401,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_settings (
     last_window_width INTEGER NOT NULL DEFAULT 0,
     last_window_height INTEGER NOT NULL DEFAULT 0,
     position_updated_at TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '')
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_dprts_installation ON desktop_pet_runtime_settings(installation_id);
@@ -1422,8 +1422,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_clients (
   last_seen_at TEXT NOT NULL DEFAULT '',
   last_connected_at TEXT NOT NULL DEFAULT '',
   last_disconnected_at TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_commands (
@@ -1447,8 +1447,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_commands (
   last_error_code TEXT NOT NULL DEFAULT '',
   last_error_message TEXT NOT NULL DEFAULT '',
   result_json TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
   completed_at TEXT NOT NULL DEFAULT ''
 );
 
@@ -1472,7 +1472,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_actual_states (
   health TEXT NOT NULL DEFAULT 'unknown',
   state_json TEXT NOT NULL DEFAULT '{}',
   observed_at TEXT NOT NULL DEFAULT '',
-  updated_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT '',
   PRIMARY KEY(runtime_id, installation_id)
 );
 
@@ -1526,7 +1526,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_behavior_inbox (
     last_error_code TEXT NOT NULL DEFAULT '',
     last_error_message TEXT NOT NULL DEFAULT '',
     processed_at TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '')
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_desktop_pet_behavior_inbox_dedup ON desktop_pet_behavior_inbox(dedup_key);
@@ -1550,7 +1550,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_behavior_decisions (
     reason_code TEXT NOT NULL DEFAULT '',
     rejected_candidates_json TEXT NOT NULL DEFAULT '[]',
     runtime_command_id TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
     started_at TEXT NOT NULL DEFAULT '',
     completed_at TEXT NOT NULL DEFAULT ''
 );
@@ -1580,8 +1580,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_behavior_bindings (
     cooldown_ms INTEGER NOT NULL DEFAULT 0,
     enabled INTEGER NOT NULL DEFAULT 1,
     version INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '')
 );
 
 CREATE INDEX IF NOT EXISTS idx_behavior_bindings_user_char ON desktop_pet_behavior_bindings(user_id, character_id);
@@ -1596,8 +1596,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_identities (
     upstream_pet_id TEXT NOT NULL DEFAULT '',
     next_release_sequence INTEGER NOT NULL DEFAULT 0,
     default_action_key TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '')
 );
 CREATE INDEX IF NOT EXISTS idx_dpident_owner ON desktop_pet_identities(owner_user_id);
 CREATE INDEX IF NOT EXISTS idx_dpident_character ON desktop_pet_identities(source_character_id);
@@ -1635,8 +1635,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_package_releases (
     integrity_status TEXT NOT NULL DEFAULT 'unknown',
     compatibility_status TEXT NOT NULL DEFAULT 'unknown',
     lifecycle TEXT NOT NULL DEFAULT 'building',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
     UNIQUE(pet_id, version)
 );
 CREATE INDEX IF NOT EXISTS idx_dprel_pet ON desktop_pet_package_releases(pet_id);
@@ -1656,7 +1656,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_release_files (
     role TEXT NOT NULL DEFAULT '',
     action_key TEXT NOT NULL DEFAULT '',
     frame_id TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
     UNIQUE(release_id, path)
 );
 CREATE INDEX IF NOT EXISTS idx_dprf_release ON desktop_pet_release_files(release_id);
@@ -1681,8 +1681,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_package_operations (
     lease_expires_at TEXT NOT NULL DEFAULT '',
     heartbeat_at TEXT NOT NULL DEFAULT '',
     snapshot_id TEXT NOT NULL DEFAULT '',
-    started_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    started_at TEXT DEFAULT ''),
+    updated_at TEXT DEFAULT '',
     completed_at TEXT NOT NULL DEFAULT '',
     UNIQUE(user_id, idempotency_key, operation_type)
 );
@@ -1718,7 +1718,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_release_build_snapshots (
     input_hash TEXT NOT NULL DEFAULT '',
     snapshot_hash TEXT NOT NULL DEFAULT '',
     evaluation_set_hash TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_drbs_pet ON desktop_pet_release_build_snapshots(pet_id);
 CREATE INDEX IF NOT EXISTS idx_drbs_task ON desktop_pet_release_build_snapshots(processing_task_id);
@@ -1745,8 +1745,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_release_build_operations (
     error_message TEXT NOT NULL DEFAULT '',
     retry_count INTEGER NOT NULL DEFAULT 0,
     result_json TEXT NOT NULL DEFAULT '{}',
-    started_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    started_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT '',
     completed_at TEXT NOT NULL DEFAULT '',
     UNIQUE(user_id, idempotency_key)
 );
@@ -1777,8 +1777,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_release_publish_journals (
     total_bytes INTEGER NOT NULL DEFAULT 0,
     archive_bytes INTEGER NOT NULL DEFAULT 0,
     completed_at TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_drpj_operation ON desktop_pet_release_publish_journals(operation_id);
 CREATE INDEX IF NOT EXISTS idx_drpj_release ON desktop_pet_release_publish_journals(release_id);
@@ -1796,8 +1796,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_legacy_package_mappings (
     source_manifest_hash TEXT NOT NULL DEFAULT '',
     migration_operation_id TEXT NOT NULL DEFAULT '',
     error_message TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT '',
     UNIQUE(legacy_package_id)
 );
 CREATE INDEX IF NOT EXISTS idx_dlpm_status ON desktop_pet_legacy_package_mappings(migration_status);
@@ -1811,8 +1811,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_legacy_package_migration_operations (
     staging_path TEXT NOT NULL DEFAULT '',
     error_code TEXT NOT NULL DEFAULT '',
     error_message TEXT NOT NULL DEFAULT '',
-    started_at TEXT NOT NULL DEFAULT (datetime('now')),
-    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    started_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT '',
     completed_at TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_dlpmo_legacy ON desktop_pet_legacy_package_migration_operations(legacy_package_id);
@@ -1840,8 +1840,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_installation_operations (
     error_code TEXT NOT NULL DEFAULT '',
     error_message TEXT NOT NULL DEFAULT '',
     retry_count INTEGER NOT NULL DEFAULT 0,
-    started_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    started_at TEXT DEFAULT ''),
+    updated_at TEXT DEFAULT '',
     completed_at TEXT NOT NULL DEFAULT '',
     UNIQUE(user_id, idempotency_key, operation_type)
 );
@@ -1864,8 +1864,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_active_bindings (
     desired_state TEXT NOT NULL DEFAULT 'disabled',
     runtime_sync_state TEXT NOT NULL DEFAULT 'pending',
     desired_updated_at TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '')
 );
 CREATE INDEX IF NOT EXISTS idx_dpab_installation ON desktop_pet_active_bindings(installation_id);
 CREATE INDEX IF NOT EXISTS idx_dpab_user_device ON desktop_pet_active_bindings(user_id, device_id);
@@ -1880,8 +1880,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_installation_release_history (
     deactivated_at TEXT NOT NULL DEFAULT '',
     deactivation_reason TEXT NOT NULL DEFAULT '',
     is_current INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '')
 );
 CREATE INDEX IF NOT EXISTS idx_dpirh_installation ON desktop_pet_installation_release_history(installation_id);
 CREATE INDEX IF NOT EXISTS idx_dpirh_current ON desktop_pet_installation_release_history(installation_id, is_current);
@@ -1896,8 +1896,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_package_validation_reports (
     file_count INTEGER NOT NULL DEFAULT 0,
     error_count INTEGER NOT NULL DEFAULT 0,
     warning_count INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '')
 );
 CREATE INDEX IF NOT EXISTS idx_dpvr_release ON desktop_pet_package_validation_reports(release_id);
 CREATE INDEX IF NOT EXISTS idx_dpvr_operation ON desktop_pet_package_validation_reports(operation_id);
@@ -1935,8 +1935,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_action_revisions (
   created_from_session_id TEXT NOT NULL DEFAULT '',
   change_summary TEXT NOT NULL DEFAULT '',
   source_summary_json TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT '',
   ready_at TEXT NOT NULL DEFAULT '',
   user_id TEXT NOT NULL DEFAULT '',
   character_id TEXT NOT NULL DEFAULT '',
@@ -1976,8 +1976,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_action_active_revisions (
   binding_version INTEGER NOT NULL DEFAULT 0,
   activated_by TEXT NOT NULL DEFAULT '',
   reason TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT '',
   user_id TEXT NOT NULL DEFAULT '',
   character_id TEXT NOT NULL DEFAULT '',
   active_action_revision_id TEXT NOT NULL DEFAULT '',
@@ -2003,7 +2003,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_frame_assets (
   original_hash TEXT NOT NULL DEFAULT '',
   created_by TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'staging',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT '',
   user_id TEXT NOT NULL DEFAULT '',
   character_id TEXT NOT NULL DEFAULT '',
   storage_key TEXT NOT NULL DEFAULT '',
@@ -2034,7 +2034,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_action_revision_frames (
   transform_json TEXT NOT NULL DEFAULT '{}',
   metadata_json TEXT NOT NULL DEFAULT '{}',
   copied_from_frame_id TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT '',
   source_processing_frame_artifact_id TEXT NOT NULL DEFAULT '',
   source_processing_revision_id TEXT NOT NULL DEFAULT '',
   source_processing_attempt_id TEXT NOT NULL DEFAULT '',
@@ -2059,8 +2059,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_edit_sessions (
   checkpoint_id TEXT NOT NULL DEFAULT '',
   client_instance_id TEXT NOT NULL DEFAULT '',
   expires_at TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT '',
   committed_revision_id TEXT NOT NULL DEFAULT '',
   base_action_content_hash TEXT NOT NULL DEFAULT '',
   base_binding_revision INTEGER NOT NULL DEFAULT 0
@@ -2082,7 +2082,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_edit_operations (
   result_version INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'applied',
   created_by TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_deo_session ON desktop_pet_edit_operations(session_id);
@@ -2096,7 +2096,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_edit_checkpoints (
   manifest_json TEXT NOT NULL DEFAULT '{}',
   manifest_hash TEXT NOT NULL DEFAULT '',
   frame_count INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_dec_session ON desktop_pet_edit_checkpoints(session_id);
@@ -2116,8 +2116,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_regeneration_jobs (
   cost_actual_json TEXT NOT NULL DEFAULT '{}',
   error_code TEXT NOT NULL DEFAULT '',
   error_message TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT '',
   mode TEXT NOT NULL DEFAULT '',
   active_attempt_id TEXT NOT NULL DEFAULT '',
   provider_receipt_id TEXT NOT NULL DEFAULT '',
@@ -2173,7 +2173,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_edit_candidates (
   metadata_json TEXT NOT NULL DEFAULT '{}',
   decided_by TEXT NOT NULL DEFAULT '',
   decided_at TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT '',
   source_type TEXT NOT NULL DEFAULT '',
   parent_action_revision_id TEXT NOT NULL DEFAULT '',
   base_binding_revision INTEGER NOT NULL DEFAULT 0,
@@ -2212,7 +2212,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_regeneration_journals (
   candidate_revision_id TEXT NOT NULL DEFAULT '',
   quality_evaluation_id TEXT NOT NULL DEFAULT '',
   error_message TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_drj_journal_job ON desktop_pet_regeneration_journals(job_id);
@@ -2229,8 +2229,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_candidate_revision_metadata (
   frame_set_hash TEXT NOT NULL DEFAULT '',
   action_config_hash TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'candidate_committing',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT ''
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dcrm_candidate ON desktop_pet_candidate_revision_metadata(candidate_revision_id);
@@ -2252,7 +2252,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_edit_draft_snapshots (
   frames_json TEXT NOT NULL DEFAULT '[]',
   frame_set_hash TEXT NOT NULL DEFAULT '',
   snapshot_hash TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_deds_session ON desktop_pet_edit_draft_snapshots(session_id);
@@ -2277,7 +2277,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_regeneration_job_input_snapshots (
   cost_estimate_json TEXT NOT NULL DEFAULT '{}',
   cost_estimate_hash TEXT NOT NULL DEFAULT '',
   cost_confirmation_id TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_dris_session ON desktop_pet_regeneration_job_input_snapshots(session_id);
@@ -2292,7 +2292,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_candidate_acceptance_operations (
   idempotency_key TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'pending',
   error_message TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT '',
   updated_at TEXT NOT NULL DEFAULT '',
   completed_at TEXT NOT NULL DEFAULT ''
 );
@@ -2311,9 +2311,9 @@ CREATE TABLE IF NOT EXISTS desktop_pet_editing_event_outbox (
   payload_hash TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'pending',
   attempt_count INTEGER NOT NULL DEFAULT 0,
-  available_at TEXT NOT NULL DEFAULT (datetime('now')),
+    available_at TEXT NOT NULL DEFAULT '',
   last_error TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT '',
   published_at TEXT NOT NULL DEFAULT ''
 );
 
@@ -2334,7 +2334,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_edit_audit_logs (
   previous_active_revision_id TEXT NOT NULL DEFAULT '',
   new_active_revision_id TEXT NOT NULL DEFAULT '',
   reason TEXT NOT NULL DEFAULT '',
-  occurred_at TEXT NOT NULL DEFAULT (datetime('now'))
+    occurred_at TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_deal_session ON desktop_pet_edit_audit_logs(edit_session_id);
@@ -2356,7 +2356,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_mask_patches (
   canvas_height INTEGER NOT NULL DEFAULT 0,
   algorithm_version TEXT NOT NULL DEFAULT '',
   operation_seq INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_dmp_session_frame ON desktop_pet_mask_patches(session_id, frame_id);
@@ -2371,7 +2371,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_publish_journal (
   final_dir_path TEXT NOT NULL DEFAULT '',
   manifest_path TEXT NOT NULL DEFAULT '',
   error_message TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT '',
   completed_at TEXT NOT NULL DEFAULT ''
 );
 
@@ -2386,7 +2386,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_edit_idempotency (
   endpoint TEXT NOT NULL DEFAULT '',
   result_json TEXT NOT NULL DEFAULT '{}',
   status TEXT NOT NULL DEFAULT 'pending',
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT ''
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dei_user_session_key ON desktop_pet_edit_idempotency(user_id, session_id, idempotency_key);
@@ -2416,10 +2416,10 @@ CREATE TABLE IF NOT EXISTS desktop_pet_processing_revisions (
   active INTEGER NOT NULL DEFAULT 0,
   error_code TEXT NOT NULL DEFAULT '',
   error_message TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT '',
   published_at TEXT NOT NULL DEFAULT '',
   committed_at TEXT NOT NULL DEFAULT '',
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT '',
   activated_at TEXT NOT NULL DEFAULT ''
 );
 
@@ -2442,7 +2442,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_processing_artifacts (
   source_artifact_id TEXT NOT NULL DEFAULT '',
   source_cell_index INTEGER,
   metadata_json TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_dppa_revision ON desktop_pet_processing_artifacts(revision_id);
@@ -2459,7 +2459,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_processing_transforms (
   matrix_json TEXT NOT NULL DEFAULT '[]',
   parameters_json TEXT NOT NULL DEFAULT '{}',
   algorithm_version TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_dppt_revision ON desktop_pet_processing_transforms(revision_id);
@@ -2479,8 +2479,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_frame_measurements (
   clipping_json TEXT NOT NULL DEFAULT '{}',
   trajectory_json TEXT NOT NULL DEFAULT '{}',
   measurement_json TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_dpfm_revision ON desktop_pet_frame_measurements(revision_id);
@@ -2555,8 +2555,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_processing_commit_journals (
   final_path TEXT NOT NULL DEFAULT '',
   content_root_hash TEXT NOT NULL DEFAULT '',
   pipeline_result_hash TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT '',
   last_error TEXT NOT NULL DEFAULT ''
 );
 
@@ -2570,7 +2570,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_processing_event_outbox (
   aggregate_id TEXT NOT NULL DEFAULT '',
   payload TEXT NOT NULL DEFAULT '{}',
   status TEXT NOT NULL DEFAULT 'pending',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT '',
   published_at TEXT NOT NULL DEFAULT '',
   error TEXT NOT NULL DEFAULT '',
   retry_count INTEGER NOT NULL DEFAULT 0
@@ -2619,7 +2619,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_processing_source_manifests (
   action_spec_hash TEXT NOT NULL DEFAULT '',
   source_config_hash TEXT NOT NULL DEFAULT '',
   manifest_hash TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_dppsm_task ON desktop_pet_processing_source_manifests(processing_task_id);
@@ -2640,8 +2640,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_processing_publish_journals (
   content_root_hash TEXT NOT NULL DEFAULT '',
   detail TEXT NOT NULL DEFAULT '',
   error_message TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT '',
   completed_at TEXT NOT NULL DEFAULT ''
 );
 
@@ -2656,8 +2656,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_processing_revision_active_bindings (
   bound_at TEXT NOT NULL DEFAULT '',
   bound_reason TEXT NOT NULL DEFAULT '',
   superseded_revision_id TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_dprab_revision ON desktop_pet_processing_revision_active_bindings(active_revision_id);
@@ -2674,8 +2674,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_processing_workspace_leases (
   heartbeat_at TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'active',
   cleanup_reason TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_dpwl_task ON desktop_pet_processing_workspace_leases(processing_task_id);
@@ -2694,8 +2694,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_processing_retry_requests (
   allocated_attempt_id TEXT NOT NULL DEFAULT '',
   error_code TEXT NOT NULL DEFAULT '',
   error_message TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT '',
   completed_at TEXT NOT NULL DEFAULT ''
 );
 
@@ -2742,8 +2742,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_quality_evaluations (
   heartbeat_at TEXT NOT NULL DEFAULT '',
   attempt_count INTEGER NOT NULL DEFAULT 0,
   idempotency_key TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dpqe_input ON desktop_pet_quality_evaluations(action_revision_id, profile_hash, engine_version);
 CREATE INDEX IF NOT EXISTS idx_dpqe_task ON desktop_pet_quality_evaluations(processing_task_id);
@@ -2771,7 +2771,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_quality_findings (
   suggested_action TEXT DEFAULT '',
   evidence_ref TEXT DEFAULT '',
   sort_key TEXT NOT NULL,
-  created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_dpqf_eval ON desktop_pet_quality_findings(evaluation_id);
 CREATE INDEX IF NOT EXISTS idx_dpqf_rule ON desktop_pet_quality_findings(rule_code);
@@ -2786,7 +2786,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_quality_dimension_scores (
   confidence REAL NOT NULL DEFAULT 0,
   weight REAL NOT NULL DEFAULT 0,
   details_json TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
   UNIQUE(evaluation_id, dimension_key)
 );
 
@@ -2807,8 +2807,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_quality_gate_results (
   ruleset_version TEXT NOT NULL DEFAULT '',
   invalidated_at TEXT NOT NULL DEFAULT '',
   profile_id TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dpqg_task_snapshot ON desktop_pet_quality_gate_results(processing_task_id, snapshot_hash);
 
@@ -3007,7 +3007,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_data_repair_audit (
     kept_id TEXT NOT NULL DEFAULT '',
     removed_ids TEXT NOT NULL DEFAULT '[]',
     details TEXT NOT NULL DEFAULT '{}',
-    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS desktop_pet_state_transitions (
@@ -3828,7 +3828,7 @@ CREATE TABLE IF NOT EXISTS qdrant_collection_versions (
 				collection_name TEXT PRIMARY KEY,
 				vector_dim INTEGER NOT NULL,
 				distance TEXT NOT NULL DEFAULT 'Cosine',
-				created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT ''
 			);
 
 -- 来源: runtime_queue.go
@@ -3849,7 +3849,7 @@ CREATE TABLE IF NOT EXISTS surreal_schema_versions (
 				schema_version TEXT PRIMARY KEY,
 				entity_types TEXT NOT NULL DEFAULT '',
 				edge_types TEXT NOT NULL DEFAULT '',
-				created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT ''
 			);
 
 -- 来源: temporal_core.go
@@ -4448,8 +4448,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_active_quality_evaluation_bindings (
   active_evaluation_id TEXT NOT NULL,
   binding_revision INTEGER NOT NULL DEFAULT 1,
   bound_at TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dpaqeb_revision_profile ON desktop_pet_active_quality_evaluation_bindings(action_revision_id, profile_id);
 
@@ -4460,7 +4460,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_quality_commit_journals (
   status TEXT NOT NULL DEFAULT 'pending',
   steps_completed TEXT NOT NULL DEFAULT '',
   error_message TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
   completed_at TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_dpqcj_eval ON desktop_pet_quality_commit_journals(evaluation_id);
@@ -4473,7 +4473,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_quality_review_decisions (
   reason TEXT NOT NULL DEFAULT '',
   reviewer TEXT NOT NULL DEFAULT '',
   reviewed_at TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dpqrd_eval ON desktop_pet_quality_review_decisions(evaluation_id);
 CREATE INDEX IF NOT EXISTS idx_dpqrd_revision ON desktop_pet_quality_review_decisions(action_revision_id);
@@ -4494,7 +4494,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_quality_measurement_cache (
   mime_type TEXT NOT NULL DEFAULT '',
   pixel_hash TEXT NOT NULL DEFAULT '',
   measurements_json TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dpqmc_artifact_hash_ver ON desktop_pet_quality_measurement_cache(frame_artifact_id, content_hash, measurement_version);
 
@@ -4503,7 +4503,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_quality_outbox_events (
   event_type TEXT NOT NULL,
   payload_json TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending',
-  created_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
   published_at TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_dpqoe_status ON desktop_pet_quality_outbox_events(status);
@@ -4543,7 +4543,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_command_acks (
   status TEXT NOT NULL DEFAULT '',
   reject_reason TEXT NOT NULL DEFAULT '',
   received_at TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
   UNIQUE(runtime_instance_id, command_id)
 );
 
@@ -4556,7 +4556,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_event_inbox (
   event_type TEXT NOT NULL DEFAULT '',
   payload_hash TEXT NOT NULL DEFAULT '',
   processed_at TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
   UNIQUE(runtime_instance_id, event_id),
   UNIQUE(runtime_instance_id, event_sequence)
 );
@@ -4573,7 +4573,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_protocol_errors (
   playback_id TEXT NOT NULL DEFAULT '',
   action_key TEXT NOT NULL DEFAULT '',
   occurred_at TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_desired_states (
@@ -4593,8 +4593,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_desired_states (
     click_through_mode TEXT NOT NULL DEFAULT 'off',
     position_policy TEXT NOT NULL DEFAULT '',
     revision INTEGER NOT NULL DEFAULT 0,
-    updated_at TEXT DEFAULT (datetime('now')),
-    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT '',
+    created_at TEXT DEFAULT '',
     UNIQUE(installation_id)
 );
 CREATE INDEX IF NOT EXISTS idx_dprds_installation ON desktop_pet_runtime_desired_states(installation_id);
@@ -4617,8 +4617,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_installation_commit_journals (
     rollback_reason TEXT NOT NULL DEFAULT '',
     error_code TEXT NOT NULL DEFAULT '',
     error_message TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '')
 );
 CREATE INDEX IF NOT EXISTS idx_dpicj_operation ON desktop_pet_installation_commit_journals(operation_id);
 CREATE INDEX IF NOT EXISTS idx_dpicj_installation ON desktop_pet_installation_commit_journals(installation_id);
@@ -4635,8 +4635,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_installation_switch_journals (
     new_desired_revision INTEGER NOT NULL DEFAULT 0,
     binding_revision INTEGER NOT NULL DEFAULT 0,
     state TEXT NOT NULL DEFAULT 'pending',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '')
 );
 CREATE INDEX IF NOT EXISTS idx_dpisj_operation ON desktop_pet_installation_switch_journals(operation_id);
 
@@ -4652,8 +4652,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_legacy_installation_mappings (
     source_content_hash TEXT NOT NULL DEFAULT '',
     error_code TEXT NOT NULL DEFAULT '',
     error_message TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
     UNIQUE(legacy_installation_id)
 );
 CREATE INDEX IF NOT EXISTS idx_dplim_legacy ON desktop_pet_legacy_installation_mappings(legacy_installation_id);
@@ -4774,8 +4774,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_action_streams (
   root_processing_task_id TEXT NOT NULL DEFAULT '',
   stream_key TEXT NOT NULL DEFAULT '',
   next_revision_number INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_das_stream_key ON desktop_pet_action_streams(stream_key);
 
@@ -4788,8 +4788,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_revision_bridge_journals (
   status TEXT NOT NULL DEFAULT 'processing_published',
   last_error TEXT NOT NULL DEFAULT '',
   retry_count INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT '',
   event_id TEXT NOT NULL DEFAULT '',
   user_id TEXT NOT NULL DEFAULT '',
   character_id TEXT NOT NULL DEFAULT '',
@@ -4813,8 +4813,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_active_action_revision_bindings (
   bound_reason TEXT NOT NULL DEFAULT '',
   bound_by TEXT NOT NULL DEFAULT '',
   bound_at TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT '',
   action_stream_id TEXT NOT NULL DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_daarb_action_stream_id ON desktop_pet_active_action_revision_bindings(action_stream_id);
@@ -4827,7 +4827,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_action_revision_binding_history (
   new_revision_id TEXT NOT NULL DEFAULT '',
   reason TEXT NOT NULL DEFAULT '',
   actor TEXT NOT NULL DEFAULT '',
-  occurred_at TEXT NOT NULL DEFAULT (datetime('now')),
+    occurred_at TEXT NOT NULL DEFAULT '',
   correlation_id TEXT NOT NULL DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_darbh_stream_rev ON desktop_pet_action_revision_binding_history(action_stream_id, binding_revision);
@@ -4843,7 +4843,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_action_revision_bridge_inbox (
   lease_owner TEXT NOT NULL DEFAULT '',
   lease_expires_at TEXT NOT NULL DEFAULT '',
   last_error TEXT NOT NULL DEFAULT '',
-  received_at TEXT NOT NULL DEFAULT (datetime('now')),
+    received_at TEXT NOT NULL DEFAULT '',
   processed_at TEXT NOT NULL DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_darbi_event_id ON desktop_pet_action_revision_bridge_inbox(event_id);
@@ -4865,9 +4865,9 @@ CREATE TABLE IF NOT EXISTS desktop_pet_action_revision_event_outbox (
   payload_hash TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'pending',
   attempt_count INTEGER NOT NULL DEFAULT 0,
-  available_at TEXT NOT NULL DEFAULT (datetime('now')),
+    available_at TEXT NOT NULL DEFAULT '',
   last_error TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT '',
   published_at TEXT NOT NULL DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dareo_event_id ON desktop_pet_action_revision_event_outbox(event_id);
@@ -4880,7 +4880,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_legacy_revision_mappings (
   new_action_revision_id TEXT NOT NULL DEFAULT '',
   action_stream_id TEXT NOT NULL DEFAULT '',
   legacy_revision_number INTEGER NOT NULL DEFAULT 0,
-  migrated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    migrated_at TEXT NOT NULL DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dlrm_legacy_rev ON desktop_pet_legacy_revision_mappings(legacy_revision_id);
 
@@ -4891,7 +4891,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_legacy_binding_mappings (
   legacy_revision_id TEXT NOT NULL DEFAULT '',
   new_binding_id TEXT NOT NULL DEFAULT '',
   action_stream_id TEXT NOT NULL DEFAULT '',
-  migrated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    migrated_at TEXT NOT NULL DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dlbm_legacy ON desktop_pet_legacy_binding_mappings(legacy_processing_task_id, legacy_action_key);
 
@@ -4912,7 +4912,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_quality_evaluation_request_inbox (
   last_error TEXT NOT NULL DEFAULT '',
   received_at TEXT NOT NULL DEFAULT '',
   processed_at TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dpeqri_event ON desktop_pet_quality_evaluation_request_inbox(event_id);
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dpeqri_idem ON desktop_pet_quality_evaluation_request_inbox(idempotency_key);
@@ -4935,7 +4935,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_quality_input_snapshots (
   expected_frame_count INTEGER NOT NULL DEFAULT 0,
   frame_inputs_json TEXT NOT NULL DEFAULT '[]',
   snapshot_hash TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dpqis_snap ON desktop_pet_quality_input_snapshots(action_revision_id, snapshot_hash);
 
@@ -4951,7 +4951,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_quality_measurement_sets (
   canvas_height INTEGER NOT NULL DEFAULT 0,
   measurement_set_hash TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'building',
-  created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dpqms_set ON desktop_pet_quality_measurement_sets(action_revision_id, measurement_set_hash);
 
@@ -4974,7 +4974,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_quality_frame_measurements (
   decodable INTEGER NOT NULL DEFAULT 0,
   subject_box_json TEXT NOT NULL DEFAULT '{}',
   transform_hash TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_dpqfm_set ON desktop_pet_quality_frame_measurements(measurement_set_id);
 CREATE INDEX IF NOT EXISTS idx_dpqfm_frame ON desktop_pet_quality_frame_measurements(frame_artifact_id);
@@ -4990,7 +4990,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_quality_sequence_measurements (
   edge_contact_json TEXT NOT NULL DEFAULT '[]',
   centroid_x REAL NOT NULL DEFAULT 0,
   centroid_y REAL NOT NULL DEFAULT 0,
-  created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_dpqsm_set ON desktop_pet_quality_sequence_measurements(measurement_set_id);
 
@@ -5002,7 +5002,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_quality_report_artifacts (
   byte_size INTEGER NOT NULL DEFAULT 0,
   schema_version TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'staging',
-  created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dpqra_eval ON desktop_pet_quality_report_artifacts(evaluation_id);
 
@@ -5045,7 +5045,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_quality_gate_snapshots (
   gate_hash TEXT NOT NULL DEFAULT '',
   invalidated_at TEXT NOT NULL DEFAULT '',
   invalidation_reason TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_dpqgs_task ON desktop_pet_quality_gate_snapshots(processing_task_id);
 CREATE INDEX IF NOT EXISTS idx_dpqgs_rsh ON desktop_pet_quality_gate_snapshots(active_revision_set_hash);
@@ -5058,8 +5058,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_active_quality_gate_bindings (
   active_revision_set_hash TEXT NOT NULL DEFAULT '',
   evaluation_set_hash TEXT NOT NULL DEFAULT '',
   binding_revision INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dpaqgbind ON desktop_pet_active_quality_gate_bindings(processing_task_id, gate_profile_hash);
 
@@ -5070,7 +5070,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_quality_gate_rebuild_requests (
   source_event_id TEXT NOT NULL DEFAULT '',
   reason TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'pending',
-  created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_dpqgrr_task ON desktop_pet_quality_gate_rebuild_requests(processing_task_id);
 
@@ -5084,9 +5084,9 @@ CREATE TABLE IF NOT EXISTS desktop_pet_quality_outbox_events_v2 (
   payload_hash TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'pending',
   attempt_count INTEGER NOT NULL DEFAULT 0,
-  available_at TEXT NOT NULL DEFAULT (datetime('now')),
+    available_at TEXT NOT NULL DEFAULT '',
   last_error TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
   published_at TEXT NOT NULL DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dpqoev2_event ON desktop_pet_quality_outbox_events_v2(event_id);
@@ -5105,8 +5105,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_quality_commit_journals_v2 (
   report_hash TEXT NOT NULL DEFAULT '',
   result_hash TEXT NOT NULL DEFAULT '',
   last_error TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
   completed_at TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_dpqcjv2_eval ON desktop_pet_quality_commit_journals_v2(evaluation_id);
@@ -5127,8 +5127,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_release_validation_reports (
   manifest_hash TEXT NOT NULL DEFAULT '',
   content_root_hash TEXT NOT NULL DEFAULT '',
   archive_hash TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_dprvr_release ON desktop_pet_release_validation_reports(release_id);
 CREATE INDEX IF NOT EXISTS idx_dprvr_operation ON desktop_pet_release_validation_reports(operation_id);
@@ -5145,9 +5145,9 @@ CREATE TABLE IF NOT EXISTS desktop_pet_release_event_outbox (
   payload_hash TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'pending',
   attempt_count INTEGER NOT NULL DEFAULT 0,
-  available_at TEXT NOT NULL DEFAULT (datetime('now')),
+    available_at TEXT NOT NULL DEFAULT '',
   last_error TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT '',
   published_at TEXT NOT NULL DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_drevo_event_id ON desktop_pet_release_event_outbox(event_id);
@@ -5165,7 +5165,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_release_build_request_inbox (
   payload_hash TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'pending',
   operation_id TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at TEXT NOT NULL DEFAULT '',
   processed_at TEXT NOT NULL DEFAULT '',
   last_error TEXT NOT NULL DEFAULT ''
 );
@@ -5190,8 +5190,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_import_package_snapshots (
   operation_id TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'preparing',
   last_error TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_dips_staging ON desktop_pet_import_package_snapshots(import_staging_id);
 CREATE INDEX IF NOT EXISTS idx_dips_release ON desktop_pet_import_package_snapshots(release_id);
@@ -5208,8 +5208,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_device_active_installation_bindings (
     bound_reason TEXT NOT NULL DEFAULT 'install_bound',
     bound_at TEXT NOT NULL DEFAULT '',
     bound_by TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
     PRIMARY KEY(user_id, device_id)
 );
 CREATE INDEX IF NOT EXISTS idx_dpdainst_installation ON desktop_pet_device_active_installation_bindings(installation_id);
@@ -5234,7 +5234,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_device_desired_revision_counters (
     user_id TEXT NOT NULL,
     device_id TEXT NOT NULL,
     current_revision INTEGER NOT NULL DEFAULT 0,
-    updated_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT '',
     PRIMARY KEY(user_id, device_id)
 );
 
@@ -5254,8 +5254,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_installation_runtime_projections (
     runtime_sync_state TEXT NOT NULL DEFAULT 'pending',
     last_applied_at TEXT NOT NULL DEFAULT '',
     last_heartbeat_at TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '')
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_drirp_user_device ON desktop_pet_installation_runtime_projections(user_id, device_id);
 CREATE INDEX IF NOT EXISTS idx_drirp_installation ON desktop_pet_installation_runtime_projections(installation_id);
@@ -5276,7 +5276,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_desired_state_outbox (
     attempt_count INTEGER NOT NULL DEFAULT 0,
     available_at TEXT NOT NULL DEFAULT '',
     last_error TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
     published_at TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_drdso_user_device_status ON desktop_pet_runtime_desired_state_outbox(user_id, device_id, status);
@@ -5302,8 +5302,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_sessions (
   disconnected_at TEXT NOT NULL DEFAULT '',
   superseded_at TEXT NOT NULL DEFAULT '',
   superseded_by TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_rtsessv2_user_device ON desktop_pet_runtime_sessions(user_id, device_id);
 CREATE INDEX IF NOT EXISTS idx_rtsessv2_user_device_runtime_status ON desktop_pet_runtime_sessions(user_id, device_id, runtime_id, status);
@@ -5339,9 +5339,9 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_commands_v2 (
   last_attempt_id TEXT NOT NULL DEFAULT '',
   error_code TEXT NOT NULL DEFAULT '',
   error_message TEXT NOT NULL DEFAULT '',
-  inserted_at TEXT DEFAULT (datetime('now')),
+    inserted_at TEXT DEFAULT '',
   created_at TEXT NOT NULL DEFAULT '',
-  updated_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT '',
   dispatch_at TEXT NOT NULL DEFAULT '',
   transport_dispatched_at TEXT NOT NULL DEFAULT '',
   runtime_received_at TEXT NOT NULL DEFAULT '',
@@ -5456,8 +5456,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_command_attempts (
   finished_at TEXT NOT NULL DEFAULT '',
   error_code TEXT NOT NULL DEFAULT '',
   error_message TEXT NOT NULL DEFAULT '',
-  inserted_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now'))
+    inserted_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_rtca_command ON desktop_pet_runtime_command_attempts(command_id);
 
@@ -5475,8 +5475,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_command_results (
   event_sequence INTEGER NOT NULL DEFAULT 0,
   error_code TEXT NOT NULL DEFAULT '',
   error_message TEXT NOT NULL DEFAULT '',
-  inserted_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now')),
+    inserted_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
   UNIQUE(command_id, runtime_id)
 );
 CREATE INDEX IF NOT EXISTS idx_rtcr_command ON desktop_pet_runtime_command_results(command_id);
@@ -5488,8 +5488,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_device_command_sequences (
   device_id TEXT NOT NULL DEFAULT '',
   sequence INTEGER NOT NULL DEFAULT 0,
   last_reserved_at TEXT NOT NULL DEFAULT '',
-  inserted_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now')),
+    inserted_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
   PRIMARY KEY(user_id, device_id)
 );
 
@@ -5506,7 +5506,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_event_records (
   occurred_at TEXT NOT NULL DEFAULT '',
   delivered INTEGER NOT NULL DEFAULT 0,
   delivered_at TEXT NOT NULL DEFAULT '',
-  inserted_at TEXT DEFAULT (datetime('now')),
+    inserted_at TEXT DEFAULT '',
   UNIQUE(runtime_session_id, sequence)
 );
 CREATE INDEX IF NOT EXISTS idx_rter_session_seq ON desktop_pet_runtime_event_records(runtime_session_id, sequence);
@@ -5538,7 +5538,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_actual_states_v2 (
   actual_state_hash TEXT NOT NULL DEFAULT '',
   health_status TEXT NOT NULL DEFAULT '',
   last_error_code TEXT NOT NULL DEFAULT '',
-  updated_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT '',
   PRIMARY KEY(user_id, device_id, runtime_id)
 );
 CREATE INDEX IF NOT EXISTS idx_rtasv2_user_device ON desktop_pet_runtime_actual_states_v2(user_id, device_id);
@@ -5554,8 +5554,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_domain_event_outbox (
   idempotency_key TEXT NOT NULL DEFAULT '',
   claim_expires_at TEXT NOT NULL DEFAULT '',
   last_error TEXT NOT NULL DEFAULT '',
-  inserted_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now')),
+    inserted_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
   published_at TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_dteo_status ON desktop_pet_runtime_domain_event_outbox(status, inserted_at);
@@ -5568,8 +5568,8 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_command_dedup (
   idempotency_key TEXT NOT NULL DEFAULT '',
   nak_count INTEGER NOT NULL DEFAULT 0,
   last_nak_at TEXT NOT NULL DEFAULT '',
-  inserted_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now'))
+    inserted_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_rtcdd_user_device_idem ON desktop_pet_runtime_command_dedup(user_id, device_id, idempotency_key);
 
@@ -5577,8 +5577,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_rtcdd_user_device_idem ON desktop_pet_runti
 CREATE TABLE IF NOT EXISTS desktop_pet_runtime_reconcile_leases (
   reconciler_id TEXT PRIMARY KEY,
   last_heartbeat_at TEXT NOT NULL DEFAULT '',
-  inserted_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now'))
+    inserted_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS desktop_pet_installation_trash_entries (
@@ -5590,7 +5590,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_installation_trash_entries (
     content_hash TEXT NOT NULL DEFAULT '',
     retain_until TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'active',
-    created_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
     purged_at TEXT NOT NULL DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_dptein_installation ON desktop_pet_installation_trash_entries(installation_id);
@@ -5883,7 +5883,7 @@ CREATE TABLE IF NOT EXISTS sync_mutation_claims (
     scope TEXT NOT NULL DEFAULT 'device',
     mutation_id TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',
-    created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+    created_at DATETIME NOT NULL DEFAULT '',
     PRIMARY KEY (user_id, scope, mutation_id)
 );
 CREATE INDEX IF NOT EXISTS idx_sync_mutation_claims_status ON sync_mutation_claims(status);
