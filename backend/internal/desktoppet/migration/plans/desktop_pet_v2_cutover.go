@@ -172,7 +172,8 @@ WHERE i.status IN ('active','installed') AND d.id IS NULL`).Scan(&broken).Error;
 						return fmt.Errorf("%s write cutover is not verified", stepName)
 					}
 				}
-				if err := deps.DB.Exec("INSERT OR REPLACE INTO desktop_pet_migration_flags (flag_name, flag_value, updated_at) VALUES (?, ?, datetime('now'))", "legacy_writes_blocked", "true").Error; err != nil {
+				nowStr := time.Now().Format("2006-01-02 15:04:05")
+			if err := deps.DB.Exec("INSERT OR REPLACE INTO desktop_pet_migration_flags (flag_name, flag_value, updated_at) VALUES (?, ?, ?)", "legacy_writes_blocked", "true", nowStr).Error; err != nil {
 					return fmt.Errorf("block legacy writes: %w", err)
 				}
 				return nil

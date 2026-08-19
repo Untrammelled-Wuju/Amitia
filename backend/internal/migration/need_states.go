@@ -35,8 +35,8 @@ func NeedStatesMigration() Migration {
 				last_test_status TEXT DEFAULT '',
 				last_test_message TEXT DEFAULT '',
 				last_test_at TEXT DEFAULT '',
-				created_at TEXT DEFAULT (datetime('now')),
-				updated_at TEXT DEFAULT (datetime('now'))
+				created_at TEXT DEFAULT '',
+				updated_at TEXT DEFAULT ''
 			)`)
 
 			return step.AddColumn("conversations", "message_count", "INTEGER DEFAULT 0")

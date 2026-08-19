@@ -125,7 +125,7 @@ func DesktopPetActionRevisionBridgeV2Migration() Migration {
   new_revision_id TEXT NOT NULL DEFAULT '',
   reason TEXT NOT NULL DEFAULT '',
   actor TEXT NOT NULL DEFAULT '',
-  occurred_at TEXT NOT NULL DEFAULT (datetime('now')),
+  occurred_at TEXT NOT NULL DEFAULT '',
   correlation_id TEXT NOT NULL DEFAULT ''
 )`)
 			s.CreateIndex("uq_darbh_stream_rev", "desktop_pet_action_revision_binding_history", []string{"action_stream_id", "binding_revision"}, true)
@@ -141,7 +141,7 @@ func DesktopPetActionRevisionBridgeV2Migration() Migration {
   lease_owner TEXT NOT NULL DEFAULT '',
   lease_expires_at TEXT NOT NULL DEFAULT '',
   last_error TEXT NOT NULL DEFAULT '',
-  received_at TEXT NOT NULL DEFAULT (datetime('now')),
+  received_at TEXT NOT NULL DEFAULT '',
   processed_at TEXT NOT NULL DEFAULT ''
 )`)
 			s.CreateIndex("uq_darbi_event_id", "desktop_pet_action_revision_bridge_inbox", []string{"event_id"}, true)
@@ -163,9 +163,9 @@ func DesktopPetActionRevisionBridgeV2Migration() Migration {
   payload_hash TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'pending',
   attempt_count INTEGER NOT NULL DEFAULT 0,
-  available_at TEXT NOT NULL DEFAULT (datetime('now')),
+  available_at TEXT NOT NULL DEFAULT '',
   last_error TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at TEXT NOT NULL DEFAULT '',
   published_at TEXT NOT NULL DEFAULT ''
 )`)
 			s.CreateIndex("uq_dareo_event_id", "desktop_pet_action_revision_event_outbox", []string{"event_id"}, true)
@@ -178,7 +178,7 @@ func DesktopPetActionRevisionBridgeV2Migration() Migration {
   new_action_revision_id TEXT NOT NULL DEFAULT '',
   action_stream_id TEXT NOT NULL DEFAULT '',
   legacy_revision_number INTEGER NOT NULL DEFAULT 0,
-  migrated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  migrated_at TEXT NOT NULL DEFAULT ''
 )`)
 			s.CreateIndex("uq_dlrm_legacy_rev", "desktop_pet_legacy_revision_mappings", []string{"legacy_revision_id"}, true)
 
@@ -189,7 +189,7 @@ func DesktopPetActionRevisionBridgeV2Migration() Migration {
   legacy_revision_id TEXT NOT NULL DEFAULT '',
   new_binding_id TEXT NOT NULL DEFAULT '',
   action_stream_id TEXT NOT NULL DEFAULT '',
-  migrated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  migrated_at TEXT NOT NULL DEFAULT ''
 )`)
 			s.CreateIndex("uq_dlbm_legacy", "desktop_pet_legacy_binding_mappings", []string{"legacy_processing_task_id", "legacy_action_key"}, true)
 

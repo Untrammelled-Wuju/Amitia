@@ -18,12 +18,12 @@ func DesktopPetRuntimeClientsMigration() Migration {
   protocol_version TEXT NOT NULL DEFAULT '',
   capabilities_json TEXT NOT NULL DEFAULT '[]',
   last_process_instance_id TEXT NOT NULL DEFAULT '',
-  last_session_id TEXT NOT NULL DEFAULT '',
-  last_seen_at TEXT NOT NULL DEFAULT '',
-  last_connected_at TEXT NOT NULL DEFAULT '',
-  last_disconnected_at TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now'))
+last_session_id TEXT NOT NULL DEFAULT '',
+last_seen_at TEXT NOT NULL DEFAULT '',
+last_connected_at TEXT NOT NULL DEFAULT '',
+last_disconnected_at TEXT NOT NULL DEFAULT '',
+created_at TEXT DEFAULT '',
+updated_at TEXT DEFAULT ''
 )`)
 			return nil
 		},

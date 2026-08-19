@@ -37,10 +37,10 @@ func createReleaseValidationReportsTableV2(s *Step) error {
   warning_count INTEGER NOT NULL DEFAULT 0,
   manifest_hash TEXT NOT NULL DEFAULT '',
   content_root_hash TEXT NOT NULL DEFAULT '',
-  archive_hash TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-)`)
+archive_hash TEXT NOT NULL DEFAULT '',
+created_at TEXT NOT NULL DEFAULT '',
+updated_at TEXT NOT NULL DEFAULT ''
+)
 	s.CreateIndex("idx_dprvr_release", "desktop_pet_release_validation_reports", []string{"release_id"}, false)
 	s.CreateIndex("idx_dprvr_operation", "desktop_pet_release_validation_reports", []string{"operation_id"}, false)
 	s.CreateIndex("uq_dprvr_release", "desktop_pet_release_validation_reports", []string{"release_id"}, true)
@@ -57,12 +57,12 @@ func createReleaseEventOutboxTableV2(s *Step) error {
   aggregate_sequence INTEGER NOT NULL DEFAULT 0,
   payload_json TEXT NOT NULL DEFAULT '',
   payload_hash TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'pending',
-  attempt_count INTEGER NOT NULL DEFAULT 0,
-  available_at TEXT NOT NULL DEFAULT (datetime('now')),
-  last_error TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  published_at TEXT NOT NULL DEFAULT ''
+status TEXT NOT NULL DEFAULT 'pending',
+attempt_count INTEGER NOT NULL DEFAULT 0,
+available_at TEXT NOT NULL DEFAULT '',
+last_error TEXT NOT NULL DEFAULT '',
+created_at TEXT NOT NULL DEFAULT '',
+published_at TEXT NOT NULL DEFAULT ''
 )`)
 	s.CreateIndex("uq_drevo_event_id", "desktop_pet_release_event_outbox", []string{"event_id"}, true)
 	s.CreateIndex("uq_drevo_agg_seq_type", "desktop_pet_release_event_outbox", []string{"aggregate_id", "aggregate_sequence", "event_type"}, true)
@@ -79,11 +79,11 @@ func createReleaseBuildRequestInboxTableV2(s *Step) error {
   input_hash TEXT NOT NULL DEFAULT '',
   payload_json TEXT NOT NULL DEFAULT '',
   payload_hash TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'pending',
-  operation_id TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  processed_at TEXT NOT NULL DEFAULT '',
-  last_error TEXT NOT NULL DEFAULT ''
+status TEXT NOT NULL DEFAULT 'pending',
+operation_id TEXT NOT NULL DEFAULT '',
+created_at TEXT NOT NULL DEFAULT '',
+processed_at TEXT NOT NULL DEFAULT '',
+last_error TEXT NOT NULL DEFAULT ''
 )`)
 	s.CreateIndex("uq_drbrbi_request_id", "desktop_pet_release_build_request_inbox", []string{"request_id"}, true)
 	s.CreateIndex("uq_drbrbi_idempotent", "desktop_pet_release_build_request_inbox", []string{"user_id", "idempotency_key"}, true)
@@ -105,10 +105,10 @@ func createImportPackageSnapshotsTableV2(s *Step) error {
   runtime_compatibility TEXT NOT NULL DEFAULT '',
   user_id TEXT NOT NULL DEFAULT '',
   pet_id TEXT NOT NULL DEFAULT '',
-  release_id TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-)`)
+release_id TEXT NOT NULL DEFAULT '',
+created_at TEXT NOT NULL DEFAULT '',
+updated_at TEXT NOT NULL DEFAULT ''
+)
 	s.CreateIndex("uq_dips_staging", "desktop_pet_import_package_snapshots", []string{"import_staging_id"}, true)
 	s.CreateIndex("idx_dips_release", "desktop_pet_import_package_snapshots", []string{"release_id"}, false)
 	return nil

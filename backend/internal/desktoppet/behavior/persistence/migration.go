@@ -57,7 +57,7 @@ var DesktopPetBehaviorTableSQL = []string{
     last_error_code TEXT NOT NULL DEFAULT '',
     last_error_message TEXT NOT NULL DEFAULT '',
     processed_at TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT ''
 )`,
 	`CREATE TABLE IF NOT EXISTS desktop_pet_behavior_decisions (
     decision_id TEXT PRIMARY KEY,
@@ -77,7 +77,7 @@ var DesktopPetBehaviorTableSQL = []string{
     reason_code TEXT NOT NULL DEFAULT '',
     rejected_candidates_json TEXT NOT NULL DEFAULT '[]',
     runtime_command_id TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
     started_at TEXT NOT NULL DEFAULT '',
     completed_at TEXT NOT NULL DEFAULT ''
 )`,
@@ -103,8 +103,8 @@ var DesktopPetBehaviorTableSQL = []string{
     cooldown_ms INTEGER NOT NULL DEFAULT 0,
     enabled INTEGER NOT NULL DEFAULT 1,
     version INTEGER NOT NULL DEFAULT 1,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT ''
 )`,
 }
 

@@ -23,11 +23,11 @@ default_action_key TEXT DEFAULT '',
 canvas_width INTEGER NOT NULL DEFAULT 0,
 canvas_height INTEGER NOT NULL DEFAULT 0,
 package_hash TEXT DEFAULT '',
-installed_at TEXT DEFAULT (datetime('now')),
+installed_at TEXT DEFAULT '',
 last_enabled_at TEXT DEFAULT '',
 last_disabled_at TEXT DEFAULT '',
-created_at TEXT DEFAULT (datetime('now')),
-updated_at TEXT DEFAULT (datetime('now'))
+created_at TEXT DEFAULT '',
+updated_at TEXT DEFAULT ''
 )`)
 			if err := s.CreateIndex("idx_dpinst_user", "desktop_pet_installations", []string{"user_id"}, false); err != nil {
 				return err

@@ -23,7 +23,7 @@ attempt_number INTEGER NOT NULL DEFAULT 0,
 usage TEXT DEFAULT '',
 error_code TEXT DEFAULT '',
 error_message TEXT DEFAULT '',
-created_at TEXT DEFAULT (datetime('now'))
+created_at TEXT DEFAULT ''
 )`)
 			if err := s.CreateIndex("idx_dpgcl_task", "desktop_pet_generation_call_logs", []string{"task_id"}, false); err != nil {
 				return err

@@ -13,8 +13,8 @@ func DesktopPetPackageReleaseMigration() Migration {
     slug TEXT NOT NULL DEFAULT '',
     binding_policy TEXT NOT NULL DEFAULT 'character_locked',
     upstream_pet_id TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT ''
 )`)
 			s.CreateIndex("idx_dpident_owner", "desktop_pet_identities", []string{"owner_user_id"}, false)
 			s.CreateIndex("idx_dpident_character", "desktop_pet_identities", []string{"source_character_id"}, false)
@@ -45,8 +45,8 @@ func DesktopPetPackageReleaseMigration() Migration {
     published_at TEXT NOT NULL DEFAULT '',
     legacy_package_id TEXT NOT NULL DEFAULT '',
     legacy_version INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
     UNIQUE(pet_id, version)
 )`)
 			s.CreateIndex("idx_dprel_pet", "desktop_pet_package_releases", []string{"pet_id"}, false)
@@ -65,7 +65,7 @@ func DesktopPetPackageReleaseMigration() Migration {
     role TEXT NOT NULL DEFAULT '',
     action_key TEXT NOT NULL DEFAULT '',
     frame_id TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
     UNIQUE(release_id, path)
 )`)
 			s.CreateIndex("idx_dprf_release", "desktop_pet_release_files", []string{"release_id"}, false)
@@ -86,8 +86,8 @@ func DesktopPetPackageReleaseMigration() Migration {
     error_message TEXT NOT NULL DEFAULT '',
     retry_count INTEGER NOT NULL DEFAULT 0,
     result_json TEXT NOT NULL DEFAULT '{}',
-    started_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    started_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
     completed_at TEXT NOT NULL DEFAULT '',
     UNIQUE(user_id, idempotency_key, operation_type)
 )`)
@@ -112,8 +112,8 @@ func DesktopPetPackageReleaseMigration() Migration {
     error_code TEXT NOT NULL DEFAULT '',
     error_message TEXT NOT NULL DEFAULT '',
     retry_count INTEGER NOT NULL DEFAULT 0,
-    started_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    started_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
     completed_at TEXT NOT NULL DEFAULT '',
     UNIQUE(user_id, idempotency_key, operation_type)
 )`)
@@ -130,8 +130,8 @@ func DesktopPetPackageReleaseMigration() Migration {
     desired_state TEXT NOT NULL DEFAULT 'disabled',
     runtime_sync_state TEXT NOT NULL DEFAULT 'pending',
     desired_updated_at TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT ''
 )`)
 			s.CreateIndex("idx_dpab_installation", "desktop_pet_active_bindings", []string{"installation_id"}, false)
 
@@ -145,8 +145,8 @@ func DesktopPetPackageReleaseMigration() Migration {
     deactivated_at TEXT NOT NULL DEFAULT '',
     deactivation_reason TEXT NOT NULL DEFAULT '',
     is_current INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT ''
 )`)
 			s.CreateIndex("idx_dpirh_installation", "desktop_pet_installation_release_history", []string{"installation_id"}, false)
 			s.CreateIndex("idx_dpirh_current", "desktop_pet_installation_release_history", []string{"installation_id", "is_current"}, false)
@@ -161,8 +161,8 @@ func DesktopPetPackageReleaseMigration() Migration {
     file_count INTEGER NOT NULL DEFAULT 0,
     error_count INTEGER NOT NULL DEFAULT 0,
     warning_count INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT ''
 )`)
 			s.CreateIndex("idx_dpvr_release", "desktop_pet_package_validation_reports", []string{"release_id"}, false)
 			s.CreateIndex("idx_dpvr_operation", "desktop_pet_package_validation_reports", []string{"operation_id"}, false)

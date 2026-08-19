@@ -13,8 +13,8 @@ api_key TEXT DEFAULT '',
 model_name TEXT DEFAULT 'doubao-seedream-5-0',
 base_url TEXT DEFAULT 'https://ark.cn-beijing.volces.com/api/v3',
 is_active INTEGER DEFAULT 0,
-created_at TEXT DEFAULT (datetime('now')),
-updated_at TEXT DEFAULT (datetime('now'))
+created_at TEXT DEFAULT '',
+updated_at TEXT DEFAULT ''
 )`)
 			return nil
 		},
