@@ -155,19 +155,36 @@ func (p *surrealProvider) Start(ctx context.Context) error {
 	if p.started {
 		return nil
 	}
-	if err := p.dep.StartSurreal(); err != nil {
-		return p.startFail("StartSurreal", err)
+
+	spec, err := surrealdbpkg.BuildSurrealProcessSpec(p.host.RuntimeInstanceID())
+	if err != nil {
+		return p.startFail("BuildSurrealProcessSpec", err)
 	}
-	if err := p.dep.WaitForSurreal(p.config.SurrealDB.Port); err != nil {
-		p.dep.StopSurreal()
-		return p.startFail("WaitForSurreal", err)
+
+	supervisor := p.host.Processes()
+	if supervisor == nil {
+		return p.startFail("Processes", fmt.Errorf("host process supervisor not available"))
 	}
+
+	if err := supervisor.Register(spec); err != nil {
+		return p.startFail("Register", err)
+	}
+
+	if err := supervisor.Start(ctx, runtimehost.ProcessIDSurrealDB); err != nil {
+		return p.startFail("Start", err)
+	}
+
+	if err := supervisor.WaitReady(ctx, runtimehost.ProcessIDSurrealDB); err != nil {
+		supervisor.Stop(ctx, runtimehost.ProcessIDSurrealDB)
+		return p.startFail("WaitReady", err)
+	}
+
 	cfg := p.dep.GetConfig()
 	var client *graph.Client
 	for i := 0; i < 30; i++ {
 		select {
 		case <-ctx.Done():
-			p.dep.StopSurreal()
+			supervisor.Stop(ctx, runtimehost.ProcessIDSurrealDB)
 			return ctx.Err()
 		case <-time.After(1 * time.Second):
 		}
@@ -178,7 +195,7 @@ func (p *surrealProvider) Start(ctx context.Context) error {
 		}
 	}
 	if client == nil {
-		p.dep.StopSurreal()
+		supervisor.Stop(ctx, runtimehost.ProcessIDSurrealDB)
 		return p.startFail("NewClient", context.DeadlineExceeded)
 	}
 	svc := p.dep.NewGraphService(client)
@@ -186,10 +203,7 @@ func (p *surrealProvider) Start(ctx context.Context) error {
 	p.capability = svc
 	p.mu.Unlock()
 
-	p.dep.SetRestartCallback(p.handleRestart)
-	p.dep.StartSurrealMonitor()
 	p.started = true
-
 	p.notifySubscribers(svc)
 	return nil
 }
@@ -210,10 +224,10 @@ func (p *surrealProvider) Stop(ctx context.Context) error {
 	if p.stopped {
 		return nil
 	}
-	p.dep.SetSurrealShuttingDown()
-	p.dep.SetRestartCallback(nil)
-	p.dep.StopSurrealMonitor()
-	p.dep.StopSurreal()
+	supervisor := p.host.Processes()
+	if supervisor != nil {
+		_ = supervisor.Stop(ctx, runtimehost.ProcessIDSurrealDB)
+	}
 	p.mu.Lock()
 	p.capability = nil
 	var subs []func(any)
@@ -262,6 +276,7 @@ func (p *surrealProvider) handleRestart() {
 	svc := p.dep.NewGraphService(client)
 
 	p.mu.Lock()
+	p.capability = svc
 	p.mu.Unlock()
 
 	for _, fn := range subs {
