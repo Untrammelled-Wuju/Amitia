@@ -3,6 +3,8 @@
 package user
 
 import (
+	"time"
+
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
@@ -53,7 +55,8 @@ func (r *repository) Create(user *AuthUser) error {
 }
 
 func (r *repository) UpdateLoginTime(id int) error {
-	return r.db.Model(&AuthUser{}).Where("id = ?", id).Update("last_login_at", gorm.Expr("datetime('now')")).Error
+	nowStr := time.Now().Format("2006-01-02 15:04:05")
+	return r.db.Model(&AuthUser{}).Where("id = ?", id).Update("last_login_at", nowStr).Error
 }
 
 func (r *repository) UpdatePassword(id int, hash string) error {
