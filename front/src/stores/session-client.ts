@@ -64,7 +64,7 @@ export async function logoutUser(): Promise<void> {
 
 export async function revokeRefreshToken(): Promise<void> {
   try {
-    await apiClient.post("/api/auth/logout/revoke");
+    await apiClient.post("/api/public/auth/logout/revoke");
   } catch {
   }
 }
