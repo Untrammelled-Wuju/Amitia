@@ -40,7 +40,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       class="side-menu"
     >
       <el-menu-item index="/chat">
-        <el-icon><ChatDotRound /></el-icon>
+        <el-icon><ChatLineRound /></el-icon>
         <span>聊天</span>
       </el-menu-item>
       <el-sub-menu index="character">
@@ -74,20 +74,53 @@ SPDX-License-Identifier: AGPL-3.0-only
         <el-menu-item index="/emotes"><el-icon><StarFilled /></el-icon><span>表情包管理</span></el-menu-item>
         <el-menu-item index="/extensions"><el-icon><Menu /></el-icon><span>扩展中心</span></el-menu-item>
         <el-menu-item index="/creative-workshop"><el-icon><MagicStick /></el-icon>创意工坊</el-menu-item>
-        <el-menu-item index="/settings"><el-icon><Setting /></el-icon>设置</el-menu-item>
       </el-sub-menu>
     </el-menu>
 
     <div class="side-nav-bottom">
-      <div class="side-status" :title="statusTitle">
-        <span class="side-status__dot" :class="{ 'is-off': modelStatus !== 'configured' }"></span>
-        <span v-show="!appStore.sidebarCollapsed">{{ statusTitle }}</span>
+      <div
+        v-if="profileMenuOpen"
+        class="profile-menu"
+        role="menu"
+        aria-label="账户选项"
+        @click.stop
+      >
+        <button type="button" role="menuitem" class="profile-menu__item" @click="openSettings">
+          <el-icon><Setting /></el-icon>
+          <span>设置</span>
+        </button>
+        <button type="button" role="menuitem" class="profile-menu__item" @click="openUserProfile">
+          <el-icon><UserFilled /></el-icon>
+          <span>用户信息</span>
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          class="profile-menu__item"
+          :aria-label="theme === 'dark' ? '切换为亮色模式' : '切换为暗色模式'"
+          @click="toggleTheme"
+        >
+          <el-icon><Moon v-if="theme === 'light'" /><Sunny v-else /></el-icon>
+          <span>{{ theme === 'dark' ? '切换为亮色模式' : '切换为暗色模式' }}</span>
+        </button>
+        <button
+          type="button"
+          role="menuitem"
+          class="profile-menu__item profile-menu__item--logout"
+          :disabled="logoutLoading"
+          @click="handleLogout"
+        >
+          <el-icon><SwitchButton /></el-icon>
+          <span>{{ logoutLoading ? '正在退出…' : '退出登录' }}</span>
+        </button>
       </div>
       <button
         class="user-profile"
         type="button"
         :title="username || '管理员'"
-        @click="openUserProfile"
+        :aria-expanded="profileMenuOpen"
+        aria-haspopup="menu"
+        @click.stop="profileMenuOpen = !profileMenuOpen"
       >
         <span class="user-avatar">
           <img v-if="avatar" :src="avatar" alt="用户头像" />
@@ -98,7 +131,6 @@ SPDX-License-Identifier: AGPL-3.0-only
           <span>当前用户</span>
         </span>
       </button>
-      <button v-show="!appStore.sidebarCollapsed" type="button" class="theme-entry" :aria-label="theme === 'dark' ? '切换为亮色主题' : '切换为暗色主题'" @click="$emit('toggleTheme')"><el-icon><Moon v-if="theme === 'light'" /><Sunny v-else /></el-icon><span>{{ theme === 'dark' ? '暗色主题' : '亮色主题' }}</span></button>
     </div>
     <SearchModal ref="searchModal" />
   </nav>
@@ -108,7 +140,6 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
-  ChatDotRound,
   Odometer,
   Connection,
   UserFilled,
@@ -122,6 +153,7 @@ import {
   Search,
   Moon,
   Sunny,
+  SwitchButton,
   Clock,
   User,
   Calendar,
@@ -138,10 +170,11 @@ import {
   StarFilled,
   Menu,
 } from "@element-plus/icons-vue";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { useAppStore } from "@/stores/app";
 import { useBrandLogo } from "@/composables/useBrandLogo";
-import { useApi } from "@/composables/useApi";
+import { apiClient, useApi } from "@/composables/useApi";
+import { forceCleanupSession } from "@/stores/refresh-coordinator";
 import SearchModal from "./SearchModal.vue";
 
 const route = useRoute();
@@ -149,29 +182,18 @@ const router = useRouter();
 const appStore = useAppStore();
 const { logoUrl } = useBrandLogo();
 const { get, post } = useApi();
-const props = defineProps<{
+defineProps<{
   username?: string;
   avatar?: string;
-  wechatStatus?: string;
-  qqStatus?: string;
-  modelStatus?: string;
   theme?: "light" | "dark";
 }>();
-defineEmits<{ toggleTheme: [] }>();
+const emit = defineEmits<{ toggleTheme: [] }>();
 const searchModal = ref<InstanceType<typeof SearchModal> | null>(null);
 const recentConversations = ref<any[]>([]);
 const activeConversationId = ref(localStorage.getItem("webchat-conv-id") || "");
+const profileMenuOpen = ref(false);
+const logoutLoading = ref(false);
 let isMounted = false;
-
-const statusTitle = computed(() => {
-  if (props.modelStatus === "not_configured" || props.modelStatus === "unconfigured") return "模型未配置";
-  if (props.modelStatus === "error") return "核心服务异常";
-  const channels = [
-    props.wechatStatus === "connected" ? "微信" : "",
-    props.qqStatus === "connected" || props.qqStatus === "online" ? "QQ" : "",
-  ].filter(Boolean);
-  return channels.length ? `核心服务正常 · ${channels.join(" / ")} 已连接` : "核心服务正常";
-});
 
 async function fetchRecentConversations() {
   try {
@@ -280,18 +302,61 @@ const activeIndex = computed(() => {
 });
 
 function openUserProfile() {
+  profileMenuOpen.value = false;
   router.push("/user-settings");
+}
+
+function openSettings() {
+  profileMenuOpen.value = false;
+  router.push("/settings");
+}
+
+function toggleTheme() {
+  emit("toggleTheme");
+}
+
+async function handleLogout() {
+  try {
+    await ElMessageBox.confirm("退出后需要重新登录，确定继续吗？", "退出登录", {
+      confirmButtonText: "退出登录",
+      cancelButtonText: "取消",
+      type: "warning",
+      confirmButtonClass: "el-button--danger",
+    });
+  } catch {
+    return;
+  }
+  profileMenuOpen.value = false;
+  logoutLoading.value = true;
+  try {
+    await apiClient.post("/api/auth/logout");
+  } catch {}
+  forceCleanupSession();
+  await router.replace("/login");
+  logoutLoading.value = false;
+}
+
+function closeProfileMenu() {
+  profileMenuOpen.value = false;
+}
+
+function handleKeydown(event: KeyboardEvent) {
+  if (event.key === "Escape") closeProfileMenu();
 }
 
 onMounted(() => {
   isMounted = true;
   void fetchRecentConversations();
   window.addEventListener("amitia:conversation-list-changed", handleConversationListChanged);
+  window.addEventListener("click", closeProfileMenu);
+  window.addEventListener("keydown", handleKeydown);
 });
 
 onUnmounted(() => {
   isMounted = false;
   window.removeEventListener("amitia:conversation-list-changed", handleConversationListChanged);
+  window.removeEventListener("click", closeProfileMenu);
+  window.removeEventListener("keydown", handleKeydown);
 });
 </script>
 
@@ -321,7 +386,7 @@ onUnmounted(() => {
 .new-chat { display: flex; align-items: center; gap: 9px; min-height: 34px; width: 100%; margin: 2px 0 7px; padding: 0 9px; border: 0; border-radius: 7px; background: transparent; color: var(--text-primary); cursor: pointer; font: inherit; font-size: 13px; text-align: left; }
 .new-chat:hover, .new-chat:focus-visible { background: var(--workbench-sidebar-hover); outline: none; }
 .side-nav.is-collapsed .new-chat { justify-content: center; padding: 0; }
-.side-menu { border-right: none; background: transparent; flex: 0 1 auto; width: 100%; overflow: visible; }
+.side-menu { border-right: none; background: transparent; flex: 1 1 auto; min-height: 0; width: 100%; overflow-y: auto; overflow-x: visible; }
 .side-menu :deep(.el-menu-item), .side-menu :deep(.el-sub-menu__title) { height: 34px; line-height: 34px; min-height: 34px; margin: 1px 0; padding: 0 9px !important; border-radius: 7px; font-size: 13px; color: var(--text-secondary); }
 .side-menu :deep(.el-icon) { width: 18px; font-size: 15px; margin-right: 8px; }
 .side-menu :deep(.el-menu-item:hover), .side-menu :deep(.el-sub-menu__title:hover) { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
@@ -335,20 +400,23 @@ onUnmounted(() => {
 .recent-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .recent-item:hover, .recent-item.active { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
 .recent-item.active { background: var(--workbench-sidebar-active); }
-.side-nav-bottom { flex: 0 0 auto; border-top: 1px solid var(--surface-border); padding: 7px 0 8px; }
-.side-status { display: flex; align-items: center; gap: 7px; min-height: 25px; padding: 0 9px 5px; color: var(--text-muted); font-size: 10px; overflow: hidden; white-space: nowrap; }
-.side-status__dot { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--ac-color-success); }
-.side-status__dot.is-off { background: var(--ac-color-warning); }
-.user-profile, .theme-entry { display: flex; align-items: center; width: 100%; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); cursor: pointer; text-align: left; }
+.side-nav-bottom { position: relative; flex: 0 0 auto; margin-top: auto; border-top: 1px solid var(--surface-border); padding: 7px 0 8px; }
+.profile-menu { position: absolute; right: 0; bottom: calc(100% + 8px); display: grid; gap: 2px; width: 100%; padding: 5px; border: 1px solid var(--surface-border); border-radius: 10px; background: var(--ac-color-surface); }
+.profile-menu__item { display: flex; align-items: center; gap: 9px; min-height: 34px; width: 100%; padding: 0 8px; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: 12px; text-align: left; transition: background-color 0.18s ease, color 0.18s ease; }
+.profile-menu__item:hover, .profile-menu__item:focus-visible { background: var(--workbench-sidebar-hover); color: var(--text-primary); outline: none; }
+.profile-menu__item .el-icon { font-size: 15px; }
+.profile-menu__item--logout { margin-top: 4px; border-top: 1px solid var(--surface-border); border-radius: 0 0 7px 7px; color: var(--el-color-danger); }
+.profile-menu__item--logout:hover, .profile-menu__item--logout:focus-visible { background: color-mix(in srgb, var(--el-color-danger) 10%, transparent); color: var(--el-color-danger); }
+.profile-menu__item:disabled { cursor: wait; opacity: 0.7; }
+.user-profile { display: flex; align-items: center; width: 100%; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); cursor: pointer; text-align: left; }
 .user-profile { gap: 9px; min-height: 38px; padding: 4px 7px; }
-.user-profile:hover, .theme-entry:hover { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
+.user-profile:hover { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
 .user-avatar { display: grid; place-items: center; width: 28px; height: 28px; flex: 0 0 auto; border-radius: 50%; background: color-mix(in srgb, var(--tp-primary) 72%, var(--surface-bg)); color: var(--tp-text-on-primary); font-size: 12px; overflow: hidden; }
 .user-avatar img { width: 100%; height: 100%; object-fit: cover; }
 .user-copy { min-width: 0; }
 .user-copy strong, .user-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .user-copy strong { max-width: 132px; color: var(--text-primary); font-size: 12px; font-weight: 550; }
 .user-copy span { margin-top: 1px; color: var(--text-muted); font-size: 10px; }
-.theme-entry { gap: 8px; min-height: 31px; margin-top: 2px; padding: 0 9px; font: inherit; font-size: 11px; }
-.side-nav.is-collapsed .side-status { justify-content: center; padding-inline: 0; }
 .side-nav.is-collapsed .user-profile { justify-content: center; padding-inline: 0; }
+.side-nav.is-collapsed .profile-menu { width: 188px; }
 </style>

@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <div class="app-shell" :class="{ 'is-mobile': isMobile }">
     <div class="app-body workbench">
-      <SideNav v-if="!isMobile" :username="authUsername" :avatar="authAvatar" :wechat-status="health.wechat" :qq-status="health.qq" :model-status="health.model" :theme="resolvedTheme" @toggle-theme="toggleTheme" />
+      <SideNav v-if="!isMobile" :username="authUsername" :avatar="authAvatar" :theme="resolvedTheme" @toggle-theme="toggleTheme" />
 
       <div class="app-main workspace">
         <main class="app-content workspace-surface" :class="{ 'is-login': isLoginPage, 'workspace-surface--chat': isChatPage }">
@@ -21,14 +21,15 @@ SPDX-License-Identifier: AGPL-3.0-only
             class="content-scroll"
             :class="{ 'no-padding': isChatPage || isLoginPage }"
           >
-            <slot />
+            <div class="content-scroll-inner">
+              <slot />
+            </div>
           </div>
         </main>
       </div>
     </div>
 
     <MobileNav v-if="isMobile && !isLoginPage" />
-    <div id="amitia-overlay-root" aria-live="polite"></div>
   </div>
 </template>
 
@@ -270,12 +271,17 @@ onUnmounted(() => {
   padding: 0;
 }
 
+.content-scroll-inner {
+  padding: 20px 24px;
+}
+
 .workspace-surface--chat .content-scroll {
   display: flex;
   min-height: 0;
 }
 
-.workspace-surface--chat .content-scroll > * {
+.workspace-surface--chat .content-scroll-inner {
+  display: flex;
   min-width: 0;
   flex: 1;
 }

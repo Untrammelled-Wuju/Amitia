@@ -175,10 +175,6 @@
   margin-top: 0;
 }
 
-.el-menu .el-menu-item {
-  margin: 3px 12px 0 !important;
-}
-
 .el-menu-item.is-active {
   color: var(--nav-active-color);
   border-bottom-color: var(--nav-active-color);
