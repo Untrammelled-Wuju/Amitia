@@ -1,7 +1,5 @@
 class RuntimeBootstrapPolicy {
   final bool autoStartInstalledRuntime;
 
-  const RuntimeBootstrapPolicy({
-    this.autoStartInstalledRuntime = false,
-  });
+  const RuntimeBootstrapPolicy({this.autoStartInstalledRuntime = true});
 }

@@ -60,6 +60,13 @@ class DefaultRuntimeBootstrap implements RuntimeBootstrap {
 
     final phase = _mapToBootstrapPhase(snapshot);
     _updatePhase(phase, snapshot);
+
+    if (!_autoStartDecided &&
+        _policy.autoStartInstalledRuntime &&
+        snapshot.state == RuntimeBridgeState.stopped) {
+      _autoStartDecided = true;
+      unawaited(_requestStart());
+    }
   }
 
   RuntimeBootstrapPhase _mapToBootstrapPhase(RuntimeBridgeSnapshot snapshot) {

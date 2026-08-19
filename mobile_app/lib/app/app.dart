@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../core/native_bridge/providers/native_bridge_relay_bootstrap_provider.dart';
@@ -29,7 +31,9 @@ class _AmitiaAppRootState extends ConsumerState<AmitiaAppRoot> {
   }
 
   Future<void> _initializeBootstrap() async {
-    final deploymentNotifier = ref.read(mobileDeploymentConfigProvider.notifier);
+    final deploymentNotifier = ref.read(
+      mobileDeploymentConfigProvider.notifier,
+    );
     await deploymentNotifier.init();
 
     final runtimeBootstrap = ref.read(runtimeBootstrapProvider);
@@ -37,19 +41,16 @@ class _AmitiaAppRootState extends ConsumerState<AmitiaAppRoot> {
 
     final config = ref.read(mobileDeploymentConfigProvider);
     final lifecycle = ref.read(mobileBackendLifecycleProvider);
-    await lifecycle.reconcile(config);
-
     if (mounted) {
       setState(() => _bootstrapInitialized = true);
     }
+    unawaited(lifecycle.reconcile(config));
   }
 
   @override
   Widget build(BuildContext context) {
     ref.watch(debugRuntimeLogBridgeProvider);
-    return _BootstrapGate(
-      bootstrapInitialized: _bootstrapInitialized,
-    );
+    return _BootstrapGate(bootstrapInitialized: _bootstrapInitialized);
   }
 }
 
@@ -79,10 +80,7 @@ class _BootstrapGate extends ConsumerWidget {
       }
     }
 
-    return Directionality(
-      textDirection: TextDirection.ltr,
-      child: content,
-    );
+    return Directionality(textDirection: TextDirection.ltr, child: content);
   }
 
   Widget _buildAppForPhase(
@@ -117,11 +115,7 @@ class _BootstrapInitializingWidget extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       home: Stack(
         children: [
-          const Scaffold(
-            body: Center(
-              child: CircularProgressIndicator(),
-            ),
-          ),
+          const Scaffold(body: Center(child: CircularProgressIndicator())),
           const DebugLogOverlay(),
         ],
       ),
@@ -198,7 +192,9 @@ class _BootstrapInstallRequiredWidgetState
                     const SizedBox(height: 16),
                     Text(
                       _errorMessage!,
-                      style: TextStyle(color: Theme.of(context).colorScheme.error),
+                      style: TextStyle(
+                        color: Theme.of(context).colorScheme.error,
+                      ),
                       textAlign: TextAlign.center,
                     ),
                   ],
@@ -222,11 +218,7 @@ class _BootstrapFailedWidget extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       home: Stack(
         children: [
-          const Scaffold(
-            body: Center(
-              child: Text('Runtime startup failed'),
-            ),
-          ),
+          const Scaffold(body: Center(child: Text('Runtime startup failed'))),
           const DebugLogOverlay(),
         ],
       ),
@@ -243,11 +235,7 @@ class _BootstrapUnavailableWidget extends StatelessWidget {
       debugShowCheckedModeBanner: false,
       home: Stack(
         children: [
-          const Scaffold(
-            body: Center(
-              child: Text('Runtime unavailable'),
-            ),
-          ),
+          const Scaffold(body: Center(child: Text('Runtime unavailable'))),
           const DebugLogOverlay(),
         ],
       ),
@@ -265,9 +253,7 @@ class _BootstrapErrorWidget extends StatelessWidget {
       home: Stack(
         children: [
           const Scaffold(
-            body: Center(
-              child: Text('Failed to initialize runtime'),
-            ),
+            body: Center(child: Text('Failed to initialize runtime')),
           ),
           const DebugLogOverlay(),
         ],
@@ -294,10 +280,7 @@ class AmitiaApp extends ConsumerWidget {
       routerConfig: router,
       builder: (context, child) {
         return Stack(
-          children: [
-            if (child != null) child,
-            const DebugLogOverlay(),
-          ],
+          children: [if (child != null) child, const DebugLogOverlay()],
         );
       },
     );
