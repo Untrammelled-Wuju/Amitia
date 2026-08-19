@@ -29,10 +29,14 @@ class RuntimeBridgeSnapshot {
       runtimeInstalled: map['runtimeInstalled'] as bool? ?? false,
       runtimeAvailable: map['runtimeAvailable'] as bool? ?? false,
       lastError: RuntimeBridgeError.fromMap(
-        map['lastError'] as Map<String, dynamic>?,
+        map['lastError'] is Map
+            ? Map<String, dynamic>.from(map['lastError'] as Map)
+            : null,
       ),
       manifest: RuntimeManifestSummary.fromMap(
-        map['manifest'] as Map<String, dynamic>?,
+        map['manifest'] is Map
+            ? Map<String, dynamic>.from(map['manifest'] as Map)
+            : null,
       ),
     );
   }

@@ -18,10 +18,14 @@ class RuntimeBridgeCommandResult {
     return RuntimeBridgeCommandResult(
       accepted: map['accepted'] as bool? ?? false,
       snapshot: RuntimeBridgeSnapshot.fromMap(
-        map['snapshot'] as Map<String, dynamic>? ?? {},
+        map['snapshot'] is Map
+            ? Map<String, dynamic>.from(map['snapshot'] as Map)
+            : const {},
       ),
-      error: map['error'] != null && map['error'] is Map<String, dynamic>
-          ? RuntimeBridgeError.fromMap(map['error'] as Map<String, dynamic>)
+      error: map['error'] is Map
+          ? RuntimeBridgeError.fromMap(
+              Map<String, dynamic>.from(map['error'] as Map),
+            )
           : null,
     );
   }
