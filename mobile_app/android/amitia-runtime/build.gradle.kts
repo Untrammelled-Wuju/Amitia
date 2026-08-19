@@ -16,7 +16,7 @@ android {
     }
 
     buildFeatures {
-        buildConfig = false
+        buildConfig = true
         resValues = false
         aidl = false
     }
@@ -27,6 +27,28 @@ android {
             abiFilters.clear()
             abiFilters.add("arm64-v8a")
         }
+
+        val frozenRuntimePackagePath: String? = System.getenv("FROZEN_RUNTIME_PACKAGE_PATH")
+        val isCandidateBuild: Boolean = System.getenv("AMITIA_RUNTIME_CANDIDATE_BUILD") == "1"
+        val runtimeSha = if (isCandidateBuild && frozenRuntimePackagePath != null) {
+            val srcFile = file(frozenRuntimePackagePath)
+            if (srcFile.exists()) {
+                srcFile.inputStream().use { input ->
+                    val digest = MessageDigest.getInstance("SHA-256")
+                    val buffer = ByteArray(8192)
+                    var read: Int
+                    while (input.read(buffer).also { read = it } != -1) {
+                        digest.update(buffer, 0, read)
+                    }
+                    digest.digest().joinToString("") { it.toInt().and(0xFF).toString(16).padStart(2, '0') }
+                }
+            } else {
+                "ASSET_FILE_MISSING"
+            }
+        } else {
+            "NO_CANDIDATE_BUILD"
+        }
+        buildConfigField("String", "RUNTIME_PACKAGE_SHA256", "\"$runtimeSha\"")
     }
 
     sourceSets {

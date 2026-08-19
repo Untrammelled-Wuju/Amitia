@@ -1,5 +1,6 @@
 package com.amitia.amitia_app.runtime.packagetrusted
 
+import com.amitia.amitia_app.runtime.BuildConfig
 import java.io.File
 
 data class RuntimePackageReference(
@@ -13,7 +14,7 @@ data class RuntimePackageReference(
 object TrustedRuntimePackageSource {
 
     const val RUNTIME_VERSION: String = "1.0.0"
-    const val PACKAGE_SHA256: String = "3f061598a5c0b815cdb1d536694d9e251652be13f301fb215f1d1aae0c5f7f57"
+    val PACKAGE_SHA256: String = BuildConfig.RUNTIME_PACKAGE_SHA256
     const val GUEST_OS: String = "linux"
     const val ARCHITECTURE: String = "arm64"
     const val FILE_NAME: String = "amitia-runtime-1.0.0.zip"
