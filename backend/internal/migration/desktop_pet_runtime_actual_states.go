@@ -20,11 +20,11 @@ func DesktopPetRuntimeActualStatesMigration() Migration {
   position_y INTEGER NOT NULL DEFAULT 0,
   screen_id TEXT NOT NULL DEFAULT '',
   scale REAL NOT NULL DEFAULT 1.0,
-health TEXT NOT NULL DEFAULT 'unknown',
-state_json TEXT NOT NULL DEFAULT '{}',
-observed_at TEXT NOT NULL DEFAULT '',
-updated_at TEXT DEFAULT '',
-PRIMARY KEY(runtime_id, installation_id)
+  health TEXT NOT NULL DEFAULT 'unknown',
+  state_json TEXT NOT NULL DEFAULT '{}',
+  observed_at TEXT NOT NULL DEFAULT '',
+  updated_at TEXT DEFAULT (datetime('now')),
+  PRIMARY KEY(runtime_id, installation_id)
 )`)
 			return nil
 		},

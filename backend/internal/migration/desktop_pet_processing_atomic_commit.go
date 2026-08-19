@@ -116,8 +116,8 @@ func createProcessingCommitJournalsTable(s *Step) error {
   final_path TEXT NOT NULL DEFAULT '',
   content_root_hash TEXT NOT NULL DEFAULT '',
   pipeline_result_hash TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT '',
-  updated_at TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   last_error TEXT NOT NULL DEFAULT ''
 )`)
 	s.CreateIndex("idx_dppcj_commit", "desktop_pet_processing_commit_journals", []string{"commit_id"}, false)
@@ -133,7 +133,7 @@ func createProcessingEventOutboxTable(s *Step) error {
   aggregate_id TEXT NOT NULL DEFAULT '',
   payload TEXT NOT NULL DEFAULT '{}',
   status TEXT NOT NULL DEFAULT 'pending',
-  created_at TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
   published_at TEXT NOT NULL DEFAULT '',
   error TEXT NOT NULL DEFAULT '',
   retry_count INTEGER NOT NULL DEFAULT 0

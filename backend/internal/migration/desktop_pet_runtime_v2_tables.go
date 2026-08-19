@@ -26,8 +26,8 @@ func DesktopPetRuntimeV2TablesMigration() Migration {
   disconnected_at TEXT NOT NULL DEFAULT '',
   superseded_at TEXT NOT NULL DEFAULT '',
   superseded_by TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT '',
-  updated_at TEXT DEFAULT ''
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
 )`)
 			s.AddColumn("desktop_pet_runtime_sessions", "runtime_id", "TEXT NOT NULL DEFAULT ''")
 			s.AddColumn("desktop_pet_runtime_sessions", "runtime_instance_id", "TEXT NOT NULL DEFAULT ''")
@@ -53,8 +53,8 @@ func DesktopPetRuntimeV2TablesMigration() Migration {
   attempt INTEGER NOT NULL DEFAULT 0,
   error_code TEXT NOT NULL DEFAULT '',
   error_message TEXT NOT NULL DEFAULT '',
-  inserted_at TEXT DEFAULT '',
-  updated_at TEXT DEFAULT '',
+  inserted_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
   dispatch_at TEXT NOT NULL DEFAULT '',
   transport_dispatched_at TEXT NOT NULL DEFAULT '',
   runtime_received_at TEXT NOT NULL DEFAULT '',
@@ -82,7 +82,7 @@ func DesktopPetRuntimeV2TablesMigration() Migration {
   occurred_at TEXT NOT NULL DEFAULT '',
   delivered INTEGER NOT NULL DEFAULT 0,
   delivered_at TEXT NOT NULL DEFAULT '',
-  inserted_at TEXT DEFAULT '',
+  inserted_at TEXT DEFAULT (datetime('now')),
   UNIQUE(runtime_session_id, sequence)
 )`)
 			s.Execute("CREATE INDEX IF NOT EXISTS idx_rter_session_seq ON desktop_pet_runtime_event_records(runtime_session_id, sequence)")
@@ -113,7 +113,7 @@ func DesktopPetRuntimeV2TablesMigration() Migration {
   actual_state_hash TEXT NOT NULL DEFAULT '',
   health_status TEXT NOT NULL DEFAULT '',
   last_error_code TEXT NOT NULL DEFAULT '',
-  updated_at TEXT DEFAULT '',
+  updated_at TEXT DEFAULT (datetime('now')),
   PRIMARY KEY(user_id, device_id, runtime_id)
 )`)
 			s.Execute("CREATE INDEX IF NOT EXISTS idx_rtasv2_user_device ON desktop_pet_runtime_actual_states_v2(user_id, device_id)")
@@ -131,8 +131,8 @@ func DesktopPetRuntimeV2TablesMigration() Migration {
   finished_at TEXT NOT NULL DEFAULT '',
   error_code TEXT NOT NULL DEFAULT '',
   error_message TEXT NOT NULL DEFAULT '',
-  inserted_at TEXT DEFAULT '',
-  updated_at TEXT DEFAULT ''
+  inserted_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
 )`)
 			s.Execute("CREATE INDEX IF NOT EXISTS idx_rtca_command ON desktop_pet_runtime_command_attempts(command_id)")
 
@@ -149,8 +149,8 @@ func DesktopPetRuntimeV2TablesMigration() Migration {
   event_sequence INTEGER NOT NULL DEFAULT 0,
   error_code TEXT NOT NULL DEFAULT '',
   error_message TEXT NOT NULL DEFAULT '',
-  inserted_at TEXT DEFAULT '',
-  updated_at TEXT DEFAULT '',
+  inserted_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
   UNIQUE(command_id, runtime_id)
 )`)
 			s.Execute("CREATE INDEX IF NOT EXISTS idx_rtcr_command ON desktop_pet_runtime_command_results(command_id)")
@@ -161,8 +161,8 @@ func DesktopPetRuntimeV2TablesMigration() Migration {
   device_id TEXT NOT NULL DEFAULT '',
   sequence INTEGER NOT NULL DEFAULT 0,
   last_reserved_at TEXT NOT NULL DEFAULT '',
-  inserted_at TEXT DEFAULT '',
-  updated_at TEXT DEFAULT '',
+  inserted_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
   PRIMARY KEY(user_id, device_id)
 )`)
 
@@ -176,8 +176,8 @@ func DesktopPetRuntimeV2TablesMigration() Migration {
   idempotency_key TEXT NOT NULL DEFAULT '',
   claim_expires_at TEXT NOT NULL DEFAULT '',
   last_error TEXT NOT NULL DEFAULT '',
-  inserted_at TEXT DEFAULT '',
-  updated_at TEXT DEFAULT '',
+  inserted_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
   published_at TEXT NOT NULL DEFAULT ''
 )`)
 			s.Execute("CREATE INDEX IF NOT EXISTS idx_dteo_status ON desktop_pet_runtime_domain_event_outbox(status, inserted_at)")
@@ -189,16 +189,16 @@ func DesktopPetRuntimeV2TablesMigration() Migration {
   idempotency_key TEXT NOT NULL DEFAULT '',
   nak_count INTEGER NOT NULL DEFAULT 0,
   last_nak_at TEXT NOT NULL DEFAULT '',
-  inserted_at TEXT DEFAULT '',
-  updated_at TEXT DEFAULT ''
+  inserted_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
 )`)
 			s.Execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_rtcdd_user_device_idem ON desktop_pet_runtime_command_dedup(user_id, device_id, idempotency_key)")
 
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_runtime_reconcile_leases (
   reconciler_id TEXT PRIMARY KEY,
   last_heartbeat_at TEXT NOT NULL DEFAULT '',
-  inserted_at TEXT DEFAULT '',
-  updated_at TEXT DEFAULT ''
+  inserted_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
 )`)
 
 			return nil

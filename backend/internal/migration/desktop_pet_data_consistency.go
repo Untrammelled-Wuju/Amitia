@@ -15,7 +15,7 @@ decision TEXT NOT NULL DEFAULT '',
 kept_id TEXT NOT NULL DEFAULT '',
 removed_ids TEXT NOT NULL DEFAULT '[]',
 details TEXT NOT NULL DEFAULT '{}',
-created_at TEXT NOT NULL DEFAULT ''
+created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`)
 
 			if err := s.AddColumn("desktop_pet_generation_task_actions", "row_version", "INTEGER NOT NULL DEFAULT 0"); err != nil {
@@ -135,8 +135,8 @@ error_code TEXT NOT NULL DEFAULT '',
 error_message TEXT NOT NULL DEFAULT '',
 started_at TEXT NOT NULL DEFAULT '',
 completed_at TEXT NOT NULL DEFAULT '',
-created_at TEXT NOT NULL DEFAULT '',
-updated_at TEXT NOT NULL DEFAULT ''
+created_at TEXT NOT NULL DEFAULT (datetime('now')),
+updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`)
 
 			s.Execute(`CREATE TEMP TABLE IF NOT EXISTS tmp_keep_dppa AS

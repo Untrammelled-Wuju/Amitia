@@ -149,7 +149,7 @@ func (s *service) RunActiveMessageTaskContext(ctx context.Context, id int, chara
 	convID := s.resolveConversationID(characterID, channelSetting, "")
 	if convID == "" {
 		nowStr := time.Now().Format("2006-01-02 15:04:05")
-	s.db.Exec("UPDATE active_message_task SET status='FAILED', updated_at=? WHERE id=? AND character_id=?", nowStr, id, characterID)
+		s.db.Exec("UPDATE active_message_task SET status='FAILED', updated_at=? WHERE id=? AND character_id=?", nowStr, id, characterID)
 		return map[string]interface{}{"id": id, "status": "NO_CONVERSATION", "taskType": taskType, "channel": channelSetting}
 	}
 
@@ -189,9 +189,8 @@ func (s *service) RunActiveMessageTaskContext(ctx context.Context, id int, chara
 			}
 		}
 	}
-
+	nowStr = time.Now().Format("2006-01-02 15:04:05")
 	s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, interaction_id, delivery_id, request_id, delivery_status, created_at, updated_at) VALUES (0, ?, ?, ?, 'queued', ?, ?, ?, 'PENDING', ?, ?)", convID, messageContent, channelSetting, interactionID, deliveryID, requestID, nowStr, nowStr)
-	nowStr := time.Now().Format("2006-01-02 15:04:05")
 	s.db.Exec("UPDATE active_message_task SET status='QUEUED', updated_at=? WHERE id=? AND character_id=?", nowStr, id, characterID)
 
 	log.Printf("[Companion] RunActiveMessageTask queued type=%s id=%d channel=%s deliveryID=%s", taskType, id, channelSetting, deliveryID)
@@ -203,3 +202,4 @@ func (s *service) CancelActiveMessageTask(id int, characterID string) map[string
 	s.db.Exec("UPDATE active_message_task SET status='CANCELLED', cancel_reason='manual', updated_at=? WHERE id=? AND character_id=?", nowStr, id, characterID)
 	return map[string]interface{}{"id": id, "cancelled": true}
 }
+

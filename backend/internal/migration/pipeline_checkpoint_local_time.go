@@ -15,9 +15,9 @@ func PipelineCheckpointLocalTimeMigration() Migration {
 				return err
 			}
 			if hasLeaseExpires {
-				step.Execute("UPDATE pipeline_checkpoints SET created_at = CASE WHEN created_at != '' THEN strftime('%Y-%m-%d %H:%M:%S', created_at, 'localtime') ELSE created_at END, updated_at = CASE WHEN updated_at != '' THEN strftime('%Y-%m-%d %H:%M:%S', updated_at, 'localtime') ELSE updated_at END, lease_expires_at = CASE WHEN lease_expires_at != '' THEN strftime('%Y-%m-%d %H:%M:%S', lease_expires_at, 'localtime') ELSE lease_expires_at END")
+				step.Execute("UPDATE pipeline_checkpoints SET created_at = CASE WHEN created_at != '' THEN datetime(created_at, 'localtime') ELSE created_at END, updated_at = CASE WHEN updated_at != '' THEN datetime(updated_at, 'localtime') ELSE updated_at END, lease_expires_at = CASE WHEN lease_expires_at != '' THEN datetime(lease_expires_at, 'localtime') ELSE lease_expires_at END")
 			} else {
-				step.Execute("UPDATE pipeline_checkpoints SET created_at = CASE WHEN created_at != '' THEN strftime('%Y-%m-%d %H:%M:%S', created_at, 'localtime') ELSE created_at END, updated_at = CASE WHEN updated_at != '' THEN strftime('%Y-%m-%d %H:%M:%S', updated_at, 'localtime') ELSE updated_at END")
+				step.Execute("UPDATE pipeline_checkpoints SET created_at = CASE WHEN created_at != '' THEN datetime(created_at, 'localtime') ELSE created_at END, updated_at = CASE WHEN updated_at != '' THEN datetime(updated_at, 'localtime') ELSE updated_at END")
 			}
 			return nil
 		},

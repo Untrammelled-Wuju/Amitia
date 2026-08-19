@@ -33,8 +33,8 @@ func DesktopPetQualitySystemMigration() Migration {
   is_active INTEGER NOT NULL DEFAULT 0,
   started_at TEXT DEFAULT '',
   completed_at TEXT DEFAULT '',
-  created_at TEXT DEFAULT '',
-  updated_at TEXT DEFAULT ''
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
 )`)
 
 			s.CreateIndex("uq_dpqe_input", "desktop_pet_quality_evaluations", []string{"action_revision_id", "profile_hash", "engine_version"}, true)
@@ -63,7 +63,7 @@ func DesktopPetQualitySystemMigration() Migration {
   suggested_action TEXT DEFAULT '',
   evidence_ref TEXT DEFAULT '',
   sort_key TEXT NOT NULL,
-  created_at TEXT DEFAULT ''
+  created_at TEXT DEFAULT (datetime('now'))
 )`)
 
 			s.CreateIndex("idx_dpqf_eval", "desktop_pet_quality_findings", []string{"evaluation_id"}, false)
@@ -79,7 +79,7 @@ func DesktopPetQualitySystemMigration() Migration {
   confidence REAL NOT NULL DEFAULT 0,
   weight REAL NOT NULL DEFAULT 0,
   details_json TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now')),
   UNIQUE(evaluation_id, dimension_key)
 )`)
 
@@ -95,8 +95,8 @@ func DesktopPetQualitySystemMigration() Migration {
   failed_evaluation_count INTEGER NOT NULL DEFAULT 0,
   snapshot_json TEXT NOT NULL,
   snapshot_hash TEXT NOT NULL,
-  created_at TEXT DEFAULT '',
-  updated_at TEXT DEFAULT ''
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
 )`)
 
 			s.CreateIndex("uq_dpqg_task_snapshot", "desktop_pet_quality_gate_results", []string{"processing_task_id", "snapshot_hash"}, true)

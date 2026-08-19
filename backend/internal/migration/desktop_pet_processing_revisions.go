@@ -22,9 +22,9 @@ func DesktopPetProcessingRevisionsMigration() Migration {
   active INTEGER NOT NULL DEFAULT 0,
   error_code TEXT NOT NULL DEFAULT '',
   error_message TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
   published_at TEXT NOT NULL DEFAULT '',
-  updated_at TEXT NOT NULL DEFAULT ''
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`)
 
 			s.CreateIndex("idx_dppr_task", "desktop_pet_processing_revisions", []string{"processing_task_id"}, false)
@@ -46,7 +46,7 @@ func DesktopPetProcessingRevisionsMigration() Migration {
   source_artifact_id TEXT NOT NULL DEFAULT '',
   source_cell_index INTEGER,
   metadata_json TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT NOT NULL DEFAULT ''
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`)
 
 			s.CreateIndex("idx_dppa_revision", "desktop_pet_processing_artifacts", []string{"revision_id"}, false)
@@ -63,7 +63,7 @@ func DesktopPetProcessingRevisionsMigration() Migration {
   matrix_json TEXT NOT NULL DEFAULT '[]',
   parameters_json TEXT NOT NULL DEFAULT '{}',
   algorithm_version TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT ''
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`)
 
 			s.CreateIndex("idx_dppt_revision", "desktop_pet_processing_transforms", []string{"revision_id"}, false)
@@ -83,8 +83,8 @@ func DesktopPetProcessingRevisionsMigration() Migration {
   clipping_json TEXT NOT NULL DEFAULT '{}',
   trajectory_json TEXT NOT NULL DEFAULT '{}',
   measurement_json TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT NOT NULL DEFAULT '',
-  updated_at TEXT NOT NULL DEFAULT ''
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`)
 
 			s.CreateIndex("idx_dpfm_revision", "desktop_pet_frame_measurements", []string{"revision_id"}, false)

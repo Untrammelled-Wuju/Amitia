@@ -14,8 +14,8 @@ func DesktopPetQualityBridgeMigration() Migration {
   active_evaluation_id TEXT NOT NULL,
   binding_revision INTEGER NOT NULL DEFAULT 1,
   bound_at TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT '',
-  updated_at TEXT DEFAULT ''
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now'))
 )`)
 			s.CreateIndex("uq_dpaqeb_revision_profile", "desktop_pet_active_quality_evaluation_bindings", []string{"action_revision_id", "profile_id"}, true)
 
@@ -26,7 +26,7 @@ func DesktopPetQualityBridgeMigration() Migration {
   status TEXT NOT NULL DEFAULT 'pending',
   steps_completed TEXT NOT NULL DEFAULT '',
   error_message TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now')),
   completed_at TEXT DEFAULT ''
 )`)
 			s.CreateIndex("idx_dpqcj_eval", "desktop_pet_quality_commit_journals", []string{"evaluation_id"}, false)
@@ -39,7 +39,7 @@ func DesktopPetQualityBridgeMigration() Migration {
   reason TEXT NOT NULL DEFAULT '',
   reviewer TEXT NOT NULL DEFAULT '',
   reviewed_at TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT ''
+  created_at TEXT DEFAULT (datetime('now'))
 )`)
 			s.CreateIndex("uq_dpqrd_eval", "desktop_pet_quality_review_decisions", []string{"evaluation_id"}, true)
 			s.CreateIndex("idx_dpqrd_revision", "desktop_pet_quality_review_decisions", []string{"action_revision_id"}, false)
@@ -60,7 +60,7 @@ func DesktopPetQualityBridgeMigration() Migration {
   mime_type TEXT NOT NULL DEFAULT '',
   pixel_hash TEXT NOT NULL DEFAULT '',
   measurements_json TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT DEFAULT ''
+  created_at TEXT DEFAULT (datetime('now'))
 )`)
 			s.CreateIndex("uq_dpqmc_artifact_hash_ver", "desktop_pet_quality_measurement_cache", []string{"frame_artifact_id", "content_hash", "measurement_version"}, true)
 
@@ -69,7 +69,7 @@ func DesktopPetQualityBridgeMigration() Migration {
   event_type TEXT NOT NULL,
   payload_json TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'pending',
-  created_at TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now')),
   published_at TEXT DEFAULT ''
 )`)
 			s.CreateIndex("idx_dpqoe_status", "desktop_pet_quality_outbox_events", []string{"status"}, false)
