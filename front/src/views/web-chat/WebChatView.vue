@@ -48,6 +48,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       <MemoryInjectPanel
         :visible="showMemInject"
         :conv-id="convId"
+        :character-id="characterId"
         @close="showMemInject = false"
       />
       <MessagesArea
@@ -86,6 +87,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       :voice-type="ttsVoiceType"
       :resource-id="ttsResourceId"
       :conversation-id="convId"
+      @state-change="handleCallStateChange"
     />
     </div>
     <div class="composer-region"><ChatInput
@@ -199,6 +201,13 @@ async function handleToggleCall() {
   }
   callActive.value = !callActive.value;
 }
+
+function handleCallStateChange(state: string) {
+  if (state === "idle" || state === "error") {
+    callActive.value = false;
+  }
+}
+
 const { get, post } = useApi();
 const { cachedGet, invalidateCache } = useCachedApi();
 const currentCharName = inject<any>("currentCharName", null);

@@ -8,6 +8,10 @@ import {
   resolveApiUrl,
 } from "../runtime/runtime-adapter";
 import { createRequestEnvelope } from "../utils/requestEnvelope";
+import {
+  compareChatMessages,
+  normalizeRealtimeMessage,
+} from "@/utils/message-order";
 
 export function useWebChatSend(
   messages: Ref<any[]>,
@@ -397,29 +401,58 @@ export function useWebChatSend(
   }
 
   async function handleRegenerate() {
-    if (!canRegenerate.value || !convId.value) return;
+    if (!canRegenerate.value || !convId.value || sending.value) return;
     sending.value = true;
     generating.value = true;
+    modelError.value = "";
     clearSendingTimer();
+    clearGenerationPhaseTimer();
     try {
       const res = await post<any>(
         `/api/web-chat/conversations/${convId.value}/regenerate`,
       );
-      if (res) {
-        if (res.assistantMessage) {
-          const lastIdx = messages.value.length - 1;
-          if (messages.value[lastIdx]?.role === "assistant") {
-            messages.value[lastIdx] = res.assistantMessage;
-          } else {
-            messages.value.push(res.assistantMessage);
+      const regenerated = (res?.assistantMessages || [])
+        .map(normalizeRealtimeMessage)
+        .filter((message: any) => message?.id);
+      if (regenerated.length > 0) {
+        let lastUserIndex = -1;
+        for (let i = messages.value.length - 1; i >= 0; i -= 1) {
+          if (messages.value[i]?.role === "user") {
+            lastUserIndex = i;
+            break;
           }
         }
-        scrollToBottom(true);
+        const prefix =
+          lastUserIndex >= 0
+            ? messages.value.slice(0, lastUserIndex + 1)
+            : messages.value.filter((message: any) => message?.role !== "assistant");
+        messages.value = [...prefix, ...regenerated].sort(compareChatMessages);
+        lastPolledMsgId = regenerated[regenerated.length - 1]?.id || lastPolledMsgId;
+      } else if (res?.reply) {
+        const first = await get<any>(
+          `/api/web-chat/conversations/${convId.value}/messages`,
+          { page: 1, pageSize: 50 },
+        );
+        const totalPages = Math.max(1, Number(first?.totalPages || 1));
+        const latest =
+          totalPages > 1
+            ? await get<any>(
+                `/api/web-chat/conversations/${convId.value}/messages`,
+                { page: totalPages, pageSize: 50 },
+              )
+            : first;
+        messages.value = (latest?.items || latest?.messages || [])
+          .map(normalizeRealtimeMessage)
+          .sort(compareChatMessages);
+        lastPolledMsgId = messages.value[messages.value.length - 1]?.id || null;
       }
+      scrollToBottom(true);
+      if (fetchWebMsgCount) fetchWebMsgCount();
     } catch (err: any) {
       ElMessage.error(err?.message || "重新生成失败");
     } finally {
       sending.value = false;
+      generating.value = false;
     }
   }
 

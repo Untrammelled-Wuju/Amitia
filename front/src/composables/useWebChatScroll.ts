@@ -18,7 +18,7 @@ export function useWebChatScroll(
   const isPulling = ref(false);
   const pullReady = ref(false);
   const pullLoading = ref(false);
-  const pullText = ref("Pull down to load earlier messages");
+  const pullText = ref("下拉加载更早消息");
   const pullStartY = ref(0);
   const isLoadingHistory = ref(false);
   const hasMoreHistory = ref(true);
@@ -123,7 +123,7 @@ export function useWebChatScroll(
     if (!el || el.scrollTop > 5) return;
     pullStartY.value = e.touches[0].clientY;
     isPulling.value = true;
-    pullText.value = "Pull down to load earlier messages";
+    pullText.value = "下拉加载更早消息";
     pullReady.value = false;
   }
 
@@ -132,10 +132,10 @@ export function useWebChatScroll(
     const dy = e.touches[0].clientY - pullStartY.value;
     if (dy > 60) {
       pullReady.value = true;
-      pullText.value = "Release to load";
+      pullText.value = "松开加载";
     } else {
       pullReady.value = false;
-      pullText.value = "Pull down to load earlier messages";
+      pullText.value = "下拉加载更早消息";
     }
   }
 
@@ -143,13 +143,13 @@ export function useWebChatScroll(
     if (!isPulling.value) return;
     if (pullReady.value && hasMoreHistory.value && !isLoadingHistory.value) {
       pullLoading.value = true;
-      pullText.value = "Loading...";
+      pullText.value = "加载中...";
       await loadOlderMessages();
       pullLoading.value = false;
     }
     isPulling.value = false;
     pullReady.value = false;
-    pullText.value = "Pull down to load earlier messages";
+    pullText.value = "下拉加载更早消息";
   }
 
   return {
