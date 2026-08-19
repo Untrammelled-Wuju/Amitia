@@ -17,6 +17,7 @@ const PUBLIC_AUTH_PATHS = new Set([
   "/api/public/auth/login",
   "/api/public/auth/refresh",
   "/api/public/onboarding/status",
+  "/api/public/onboarding/complete",
 ]);
 
 export const apiClient: AxiosInstance = axios.create({
