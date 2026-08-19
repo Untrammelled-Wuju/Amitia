@@ -654,6 +654,7 @@ async function deleteCurrent() {
 .char-layout {
   display: flex;
   height: 100%;
+  min-height: 100%;
   gap: 0;
 }
 .char-sidebar {

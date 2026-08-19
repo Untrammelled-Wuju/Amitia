@@ -4,7 +4,12 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <div class="logs-page">
-    <h2 class="page-title">聊天记录</h2>
+    <div class="page-heading">
+      <h2 class="page-title">聊天记录</h2>
+      <el-button size="small" type="primary" plain @click="goToImport">
+        导入记录
+      </el-button>
+    </div>
 
     <div class="logs-layout">
       <ConversationListPanel
@@ -394,11 +399,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 
 <script setup lang="ts">
 import { onMounted } from "vue";
+import { useRouter } from "vue-router";
 import { ArrowDown } from "@element-plus/icons-vue";
 import ConversationListPanel from "./components/ConversationListPanel.vue";
 import ContextPreviewDialog from "./components/ContextPreviewDialog.vue";
 import { useConversationLogs } from "./useConversationLogs";
 import { channelLabel, fmtTime, moodEmoji } from "./utils";
+
+const router = useRouter();
 
 const {
   characters,
@@ -449,6 +457,10 @@ onMounted(() => {
   fetchConvs();
   loadCharacters();
 });
+
+function goToImport() {
+  router.push("/import");
+}
 </script>
 
 <style scoped>
@@ -460,6 +472,12 @@ onMounted(() => {
   font-weight: 600;
   margin: 0 0 14px 0;
   color: var(--ac-color-text);
+}
+.page-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
 }
 .logs-layout {
   display: flex;
