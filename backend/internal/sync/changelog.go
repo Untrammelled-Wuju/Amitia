@@ -212,8 +212,14 @@ func NewSequenceGenerator(db *gorm.DB) SequenceGenerator {
 
 func (g *sqliteSequenceGenerator) NextSequence() (Sequence, error) {
 	var nextSeq int64
-	err := g.db.Raw("UPDATE sync_sequence SET seq = seq + 1 RETURNING seq").Scan(&nextSeq).Error
-	if err != nil {
+	result := g.db.Raw(`UPDATE sync_sequence
+SET seq = CASE
+  WHEN seq < COALESCE((SELECT MAX(seq) FROM sync_changes), 0)
+    THEN COALESCE((SELECT MAX(seq) FROM sync_changes), 0) + 1
+  ELSE seq + 1
+END
+RETURNING seq`).Scan(&nextSeq)
+	if result.Error != nil || result.RowsAffected == 0 {
 		return g.fallbackNextSequence()
 	}
 	return Sequence(nextSeq), nil
@@ -221,8 +227,14 @@ func (g *sqliteSequenceGenerator) NextSequence() (Sequence, error) {
 
 func (g *sqliteSequenceGenerator) NextSequenceTx(tx *gorm.DB) (Sequence, error) {
 	var nextSeq int64
-	err := tx.Raw("UPDATE sync_sequence SET seq = seq + 1 RETURNING seq").Scan(&nextSeq).Error
-	if err != nil {
+	result := tx.Raw(`UPDATE sync_sequence
+SET seq = CASE
+  WHEN seq < COALESCE((SELECT MAX(seq) FROM sync_changes), 0)
+    THEN COALESCE((SELECT MAX(seq) FROM sync_changes), 0) + 1
+  ELSE seq + 1
+END
+RETURNING seq`).Scan(&nextSeq)
+	if result.Error != nil || result.RowsAffected == 0 {
 		return g.fallbackNextSequenceTx(tx)
 	}
 	return Sequence(nextSeq), nil
@@ -246,7 +258,13 @@ func (g *sqliteSequenceGenerator) fallbackNextSequence() (Sequence, error) {
 
 func (g *sqliteSequenceGenerator) fallbackNextSequenceTx(tx *gorm.DB) (Sequence, error) {
 	var nextSeq int64
-	if err := tx.Exec("INSERT INTO sync_sequence (id, seq) VALUES (1, 1) ON CONFLICT(id) DO UPDATE SET seq = seq + 1").Error; err != nil {
+	if err := tx.Exec(`INSERT INTO sync_sequence (id, seq)
+VALUES (1, COALESCE((SELECT MAX(seq) FROM sync_changes), 0) + 1)
+ON CONFLICT(id) DO UPDATE SET seq = CASE
+  WHEN sync_sequence.seq < COALESCE((SELECT MAX(seq) FROM sync_changes), 0)
+    THEN COALESCE((SELECT MAX(seq) FROM sync_changes), 0) + 1
+  ELSE sync_sequence.seq + 1
+END`).Error; err != nil {
 		return 0, err
 	}
 	if err := tx.Raw("SELECT seq FROM sync_sequence WHERE id = 1").Scan(&nextSeq).Error; err != nil {
