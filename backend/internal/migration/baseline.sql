@@ -27,9 +27,9 @@ token_hash TEXT NOT NULL,
 device_name TEXT DEFAULT '',
 ip_address TEXT DEFAULT '',
 user_agent TEXT DEFAULT '',
-    last_active_at TEXT DEFAULT '',
-expires_at TEXT,
-    created_at TEXT DEFAULT '',
+    last_active_at DATETIME,
+expires_at DATETIME,
+    created_at DATETIME,
 public_id TEXT UNIQUE,
 status TEXT NOT NULL DEFAULT 'active',
 revision INTEGER NOT NULL DEFAULT 1,
@@ -5651,10 +5651,10 @@ CREATE TABLE IF NOT EXISTS desktop_pet_local_sessions (
     desktop_instance_id TEXT NOT NULL DEFAULT '',
     token_hash TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'active',
-    created_at TEXT NOT NULL DEFAULT '',
-    expires_at TEXT NOT NULL DEFAULT '',
-    last_used_at TEXT NOT NULL DEFAULT '',
-    revoked_at TEXT DEFAULT NULL
+    created_at DATETIME NOT NULL,
+    expires_at DATETIME NOT NULL,
+    last_used_at DATETIME NOT NULL,
+    revoked_at DATETIME
 );
 CREATE INDEX IF NOT EXISTS idx_dpls_token ON desktop_pet_local_sessions(token_hash, status);
 CREATE INDEX IF NOT EXISTS idx_dpls_user ON desktop_pet_local_sessions(user_id, status);

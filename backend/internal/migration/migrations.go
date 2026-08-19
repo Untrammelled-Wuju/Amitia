@@ -171,11 +171,13 @@ func DefaultMigrations() []Migration {
 		SyncMutationUserUniqueMigration(),
 		SyncChangeLogScopeMigration(),
 		AppSettingsRevisionMigration(),
+		AppSettingsTombstoneMigration(),
 		SecurityAuditEventsColumnsMigration(),
 		SecurityAuditEventsOccurredAtMigration(),
 		AuthSessionsMissingColumnsMigration(),
 		SyncSchemaRevisionDeletedAtMigration(),
 		SyncMutationClaimsMigration(),
+		SessionTimestampCompatibilityMigration(),
 	}
 }
 
