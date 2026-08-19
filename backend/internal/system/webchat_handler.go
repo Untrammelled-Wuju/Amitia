@@ -95,20 +95,6 @@ func (h *Handler) WebChatCreateConv(c *gin.Context) {
 	if body.Source == "" {
 		body.Source = "web"
 	}
-	if body.CharacterID != "" {
-		var existingConvID string
-		h.db.Table("characters").Select("conversation_id").Where("id = ?", body.CharacterID).Limit(1).Row().Scan(&existingConvID)
-		if existingConvID != "" {
-			var conv struct {
-				ID, Title, Channel, Source, CharacterID string
-			}
-			h.db.Table("conversations").Select("id, title, channel, source, character_id").Where("id = ?", existingConvID).Limit(1).Row().Scan(&conv.ID, &conv.Title, &conv.Channel, &conv.Source, &conv.CharacterID)
-			if conv.ID != "" {
-				util.SuccessResponse(c, gin.H{"id": conv.ID, "title": conv.Title, "channel": conv.Channel, "source": conv.Source, "characterId": conv.CharacterID})
-				return
-			}
-		}
-	}
 	if body.Channel == "wechat" || body.Channel == "qq" {
 		existingChannelConv, err := h.chatSvc.EnsureChannelConversation(body.Channel)
 		if err == nil && existingChannelConv != nil {
@@ -171,22 +157,151 @@ func (h *Handler) WebChatDeleteConvMessages(c *gin.Context) {
 }
 
 func (h *Handler) WebChatRegenerate(c *gin.Context) {
-	convID := c.Param("id")
+	convID := strings.TrimSpace(c.Param("id"))
 	if convID == "" {
 		util.ErrorResponse(c, response.InvalidParams, "缺少会话ID", nil)
 		return
 	}
-	type lastMsg struct {
-		Role    string
-		Content string
-	}
-	var msg lastMsg
-	if err := h.db.Table("messages").Select("role, content").Where("conversation_id = ?", convID).Order("created_at DESC").Limit(1).Row().Scan(&msg.Role, &msg.Content); err != nil || msg.Role != "user" {
+
+	var userMsg chat.Message
+	if err := h.db.Where("conversation_id = ? AND role = ?", convID, "user").Order("sequence DESC").First(&userMsg).Error; err != nil {
 		util.ErrorResponse(c, response.DataNotFound, "没有可重新生成的消息", nil)
 		return
 	}
-	h.db.Exec("DELETE FROM messages WHERE id = (SELECT id FROM messages WHERE conversation_id = ? AND role = 'assistant' ORDER BY created_at DESC LIMIT 1)", convID)
-	h.WebChatSend(c)
+
+	var previousAssistants []chat.Message
+	if err := h.db.Where("conversation_id = ? AND role = ? AND sequence > ?", convID, "assistant", userMsg.Sequence).Order("sequence ASC").Find(&previousAssistants).Error; err != nil {
+		util.ErrorResponse(c, response.InternalError, "读取上一条回复失败", nil)
+		return
+	}
+	if len(previousAssistants) == 0 {
+		util.ErrorResponse(c, response.DataNotFound, "没有可重新生成的回复", nil)
+		return
+	}
+
+	var conversation chat.Conversation
+	if err := h.db.Where("id = ?", convID).First(&conversation).Error; err != nil {
+		util.ErrorResponse(c, response.DataNotFound, "会话不存在", nil)
+		return
+	}
+	if strings.TrimSpace(conversation.CharacterID) == "" {
+		util.ErrorResponse(c, response.OperationFailed, "当前会话未绑定角色", nil)
+		return
+	}
+
+	requestID := "regenerate-" + uuid.New().String()
+	oldRequestID := userMsg.RequestID
+	oldStatus := userMsg.Status
+	oldUpdatedAt := userMsg.UpdatedAt
+	assistantIDs := make([]string, 0, len(previousAssistants))
+	assistantInclude := make(map[string]int, len(previousAssistants))
+	for _, msg := range previousAssistants {
+		assistantIDs = append(assistantIDs, msg.ID)
+		assistantInclude[msg.ID] = msg.IncludeInCtx
+	}
+
+	restorePreviousState := func() {
+		_ = h.db.Transaction(func(tx *gorm.DB) error {
+			if err := tx.Model(&chat.Message{}).Where("id = ?", userMsg.ID).Updates(map[string]interface{}{
+				"request_id": oldRequestID,
+				"status":     oldStatus,
+				"updated_at": oldUpdatedAt,
+			}).Error; err != nil {
+				return err
+			}
+			for id, include := range assistantInclude {
+				if err := tx.Model(&chat.Message{}).Where("id = ?", id).Update("include_in_context", include).Error; err != nil {
+					return err
+				}
+			}
+			return tx.Where("conversation_id = ? AND request_id = ? AND role = ?", convID, requestID, "assistant").Delete(&chat.Message{}).Error
+		})
+	}
+
+	if err := h.db.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Model(&chat.Message{}).Where("id = ?", userMsg.ID).Updates(map[string]interface{}{
+			"request_id": requestID,
+			"status":     "sent",
+			"updated_at": time.Now().Format("2006-01-02 15:04:05"),
+		}).Error; err != nil {
+			return err
+		}
+		if len(assistantIDs) > 0 {
+			return tx.Model(&chat.Message{}).Where("id IN ?", assistantIDs).Update("include_in_context", 0).Error
+		}
+		return nil
+	}).Error; err != nil {
+		util.ErrorResponse(c, response.InternalError, "准备重新生成失败", nil)
+		return
+	}
+
+	imageContext := ""
+	if strings.TrimSpace(userMsg.ImageUrl) != "" {
+		if visionError := chat.GetBuffer().AnalyzeImage(convID, userMsg.ImageUrl); visionError != "" {
+			h.publishModelError(modelerror.Event{ModelType: "vision", ConversationID: convID, RequestID: requestID, Channel: "web", RawError: visionError})
+		}
+		imageContext = chat.GetBuffer().GetImageContexts(convID)
+		chat.GetBuffer().ClearImageContexts(convID)
+	}
+	if strings.TrimSpace(userMsg.VideoUrl) != "" {
+		chat.GetBuffer().AnalyzeVideo(convID, userMsg.VideoUrl)
+	}
+
+	source := strings.TrimSpace(userMsg.Source)
+	if source == "" {
+		source = "web"
+	}
+	orchResult, err := h.unifiedEntry.Handle(c.Request.Context(), &interaction.UnifiedEntryRequest{
+		ConversationID:   convID,
+		Channel:          "web",
+		Source:           source,
+		RequestID:        requestID,
+		SessionID:        convID,
+		CharacterID:      conversation.CharacterID,
+		Message:          userMsg.Content,
+		AudioUrl:         userMsg.AudioUrl,
+		AudioDuration:    userMsg.AudioDuration,
+		VoiceMessage:     strings.TrimSpace(userMsg.AudioUrl) != "",
+		ImageUrl:         userMsg.ImageUrl,
+		VideoUrl:         userMsg.VideoUrl,
+		ImageContext:     imageContext,
+		ReplyToMessageID: userMsg.ReplyToMessageID,
+	})
+	if err != nil || orchResult == nil || orchResult.Response == nil {
+		restorePreviousState()
+		if errors.Is(err, interaction.ErrOrchestratorProcessing) {
+			util.ErrorResponse(c, response.OperationFailed, "重新生成仍在处理中，请稍后重试", nil)
+			return
+		}
+		if err != nil {
+			h.publishTextModelError(convID, requestID, "web", err)
+			util.ErrorResponse(c, response.InternalError, err.Error(), nil)
+			return
+		}
+		util.ErrorResponse(c, response.InternalError, "重新生成失败", nil)
+		return
+	}
+
+	if len(assistantIDs) > 0 {
+		if err := h.db.Where("id IN ?", assistantIDs).Delete(&chat.Message{}).Error; err != nil {
+			applog.Error(fmt.Sprintf("[WebChatRegenerate] delete previous assistant messages failed: %v", err))
+			restorePreviousState()
+			util.ErrorResponse(c, response.InternalError, "替换旧回复失败，已恢复原回复，请重试", nil)
+			return
+		}
+	}
+
+	var generatedMessages []chat.Message
+	if len(orchResult.Response.MessageIDs) > 0 {
+		_ = h.db.Where("id IN ?", orchResult.Response.MessageIDs).Order("sequence ASC").Find(&generatedMessages).Error
+	}
+	util.SuccessResponse(c, gin.H{
+		"conversationId":    orchResult.Response.ConversationID,
+		"reply":             orchResult.Response.Reply,
+		"messageIds":        orchResult.Response.MessageIDs,
+		"assistantMessages": generatedMessages,
+		"requestId":         requestID,
+	})
 }
 
 func (h *Handler) WebChatReplyTimingForce(c *gin.Context) {
