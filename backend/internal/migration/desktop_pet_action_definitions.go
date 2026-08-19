@@ -6,7 +6,7 @@ func DesktopPetActionDefinitionsMigration() Migration {
 	return Migration{
 		Version:           "202607240002",
 		Name:              "add_desktop_pet_action_definitions_table",
-		AcceptedChecksums: []string{"147f91eaafa7413b3b7a8b94294d0208578ee3009133f6e13aba2e1bdd57d0db"},
+		AcceptedChecksums: []string{"147f91eaafa7413b3b7a8b94294d0208578ee3009133f6e13aba2e1bdd57d0db", "eb439d67ba0575950aabd9f0d3cec2e4acff7667e551a84cca0d5a6355cfdbbc"},
 		Up: func(s *Step) error {
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_action_definitions (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
