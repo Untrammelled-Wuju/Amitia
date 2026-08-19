@@ -341,9 +341,10 @@ func saveProfile(callCtx context.Context, execCtx ToolExecutionContext, args map
 		if newConf > 100 {
 			newConf = 100
 		}
+		nowStr := time.Now().Format("2006-01-02 15:04:05")
 		toolDB.Exec(
-			"UPDATE user_profiles SET attribute_value = ?, confidence = ?, source_conv_id = ?, updated_at = datetime('now','localtime') WHERE id = ?",
-			attrValue, newConf, convID, existingID)
+			"UPDATE user_profiles SET attribute_value = ?, confidence = ?, source_conv_id = ?, updated_at = ? WHERE id = ?",
+			attrValue, newConf, convID, nowStr, existingID)
 		if OnProfileSaved != nil {
 			OnProfileSaved(existingID)
 		}
@@ -425,9 +426,10 @@ func saveEpisodicMemory(callCtx context.Context, execCtx ToolExecutionContext, a
 	convID := execCtx.ConversationID
 
 	id := uuid.New().String()
+	nowStr := time.Now().Format("2006-01-02 15:04:05")
 	toolDB.Exec(
-		"INSERT INTO episodic_memories (id, user_id, scene_type, title, content, sentiment_score, source_conv_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now','localtime'), datetime('now','localtime'))",
-		id, userID, sceneType, title, content, int(score), convID)
+		"INSERT INTO episodic_memories (id, user_id, scene_type, title, content, sentiment_score, source_conv_id, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		id, userID, sceneType, title, content, int(score), convID, nowStr, nowStr)
 	if OnEpisodicSaved != nil {
 		OnEpisodicSaved(id)
 	}

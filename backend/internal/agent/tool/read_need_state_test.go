@@ -26,7 +26,7 @@ func setupNeedTestDB(t *testing.T) (*gorm.DB, *sql.DB, func()) {
 			need_key TEXT NOT NULL,
 			current_value REAL NOT NULL DEFAULT 0.5,
 			baseline REAL NOT NULL DEFAULT 0.5,
-			updated_at TEXT NOT NULL DEFAULT (datetime('now','localtime')),
+			updated_at TEXT NOT NULL,
 			PRIMARY KEY (character_id, need_key)
 		)`,
 		`CREATE TABLE tool_call_intents (id TEXT PRIMARY KEY, request_id TEXT, conversation_id TEXT, character_id TEXT, channel TEXT, tool_call_id TEXT, tool_name TEXT, args_json TEXT, idempotency_key TEXT, status TEXT, created_at TEXT, updated_at TEXT)`,
