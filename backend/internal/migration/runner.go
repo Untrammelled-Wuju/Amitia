@@ -30,13 +30,14 @@ type Record struct {
 }
 
 type Runner struct {
-	DB         *gorm.DB
-	Locker     Locker
-	LockName   string
-	LockTTL    time.Duration
-	Now        func() time.Time
-	BackupDir  string
-	SkipBackup bool
+	DB                          *gorm.DB
+	Locker                      Locker
+	LockName                    string
+	LockTTL                     time.Duration
+	Now                         func() time.Time
+	BackupDir                   string
+	SkipBackup                  bool
+	AllowUnknownAppliedChecksum bool
 }
 
 type Step struct {
@@ -174,7 +175,7 @@ func (r Runner) applyOne(migration Migration) error {
 					break
 				}
 			}
-			if !accepted {
+			if !accepted && !r.AllowUnknownAppliedChecksum {
 				return fmt.Errorf("checksum mismatch for migration %s: recorded=%s current=%s", migration.Version, existing.Checksum, currentChecksum)
 			}
 			if err := r.DB.Model(&Record{}).Where("version = ?", migration.Version).Update("checksum", currentChecksum).Error; err != nil {
