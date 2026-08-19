@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/config"
-	"gorm.io/gorm"
 	"golang.org/x/crypto/scrypt"
+	"gorm.io/gorm"
 )
 
 const (
@@ -136,11 +136,11 @@ func (s *AccountSessionService) AuditLogger() AuditLogger {
 }
 
 type LoginRequestInternal struct {
-	Username  string
-	Password  string
+	Username   string
+	Password   string
 	ClientType string
-	IPAddress string
-	UserAgent string
+	IPAddress  string
+	UserAgent  string
 }
 
 type LoginResponseInternal struct {
@@ -240,6 +240,11 @@ func (s *AccountSessionService) createSessionAndTokens(userID int, username, rol
 	if err != nil {
 		return nil, err
 	}
+	accessToken, accessExpiresAt, err := tokenSvc.SignAccessToken(userID, username, role, sessionPublicID)
+	if err != nil {
+		return nil, err
+	}
+	accessTokenHash := HashToken(accessToken)
 
 	err = s.db.Transaction(func(tx *gorm.DB) error {
 		activeCount, err := s.sessions.CountActiveSessions(int64(userID))
@@ -273,6 +278,7 @@ func (s *AccountSessionService) createSessionAndTokens(userID int, username, rol
 			IPAddress:         ip,
 			UserAgent:         ua,
 			Revision:          1,
+			TokenHash:         &accessTokenHash,
 			CreatedAt:         now,
 			ExpiresAt:         &expiresAt,
 			AbsoluteExpiresAt: &absoluteExpiresAt,
@@ -296,17 +302,6 @@ func (s *AccountSessionService) createSessionAndTokens(userID int, username, rol
 		return nil
 	})
 	if err != nil {
-		return nil, err
-	}
-
-	accessToken, accessExpiresAt, err := tokenSvc.SignAccessToken(userID, username, role, sessionPublicID)
-	if err != nil {
-		if revokeErr := s.sessions.Revoke(sessionPublicID, "token_sign_failure"); revokeErr != nil {
-			return nil, fmt.Errorf("令牌签名失败且撤销会话失败: %v: %w", revokeErr, err)
-		}
-		if revokeErr := s.refresh.RevokeBySession(sessionPublicID); revokeErr != nil {
-			return nil, fmt.Errorf("令牌签名失败且撤销刷新令牌失败: %v: %w", revokeErr, err)
-		}
 		return nil, err
 	}
 
