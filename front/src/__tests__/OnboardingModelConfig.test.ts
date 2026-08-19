@@ -21,4 +21,9 @@ describe("引导页模型配置保存", () => {
     expect(onboardingSource).not.toContain('apiType: "vector"');
     expect(onboardingSource).not.toContain('apiType: "vision"');
   });
+
+  it("完成引导后调用公开完成接口并进入聊天页", () => {
+    expect(onboardingSource).toContain('post("/api/public/onboarding/complete"');
+    expect(onboardingSource).toContain('router.push("/chat")');
+  });
 });
