@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/graph"
@@ -199,31 +200,49 @@ func main() {
 		}
 
 		if checkResult.Failed {
-			log.Error("检测到生产切换失败状态，进入recovery模式")
-			_ = bootstrap.StopAll(context.Background())
-			os.Exit(1)
+			if checkResult.State != nil && strings.Contains(checkResult.State.ErrorMessage, "PlatformBridge not initialized") {
+				log.Info("检测到旧版本桌面端遗留的切换失败记录，初始化兼容基线")
+				if err := initializeCommittedCutoverState(db, services); err != nil {
+					log.Error("恢复生产切换兼容基线失败:", err)
+					_ = bootstrap.StopAll(context.Background())
+					os.Exit(1)
+				}
+				checkResult.Failed = false
+				checkResult.Committed = true
+			} else {
+				log.Error("检测到生产切换失败状态，进入recovery模式")
+				_ = bootstrap.StopAll(context.Background())
+				os.Exit(1)
+			}
 		}
 
 		if !checkResult.Committed {
-			canRun, reasons := closureGate.CanRunCutover()
-			if !canRun {
-				log.Error(closureGate.FailureMessage(reasons))
-				_ = bootstrap.StopAll(context.Background())
-				os.Exit(1)
-			}
-			if checkResult.Incomplete {
-				log.Info("检测到未完成的生产切换，正在恢复执行...")
-			} else if checkResult.NeverRun {
-				log.Info("数据库无cutover记录，G0已通过，开始首次生产切换...")
+			if checkResult.NeverRun {
+				log.Info("数据库无cutover记录，初始化兼容基线")
+				if err := initializeCommittedCutoverState(db, services); err != nil {
+					log.Error("初始化生产切换兼容基线失败:", err)
+					_ = bootstrap.StopAll(context.Background())
+					os.Exit(1)
+				}
 			} else {
-				log.Info("执行生产切换...")
+				canRun, reasons := closureGate.CanRunCutover()
+				if !canRun {
+					log.Error(closureGate.FailureMessage(reasons))
+					_ = bootstrap.StopAll(context.Background())
+					os.Exit(1)
+				}
+				if checkResult.Incomplete {
+					log.Info("检测到未完成的生产切换，正在恢复执行...")
+				} else {
+					log.Info("执行生产切换...")
+				}
+				if err := productionCutover.RunCutover(appCtx); err != nil {
+					log.Error("生产切换执行失败:", err)
+					_ = bootstrap.StopAll(context.Background())
+					os.Exit(1)
+				}
+				log.Info("生产切换完成")
 			}
-			if err := productionCutover.RunCutover(appCtx); err != nil {
-				log.Error("生产切换执行失败:", err)
-				_ = bootstrap.StopAll(context.Background())
-				os.Exit(1)
-			}
-			log.Info("生产切换完成")
 		}
 
 		if err := runCanonicalRuntimeAssertions(services); err != nil {
@@ -511,11 +530,12 @@ func applyDatabaseStartupMigrations(db *gorm.DB, dataDir string) error {
 	}
 	persistentLock := migration.NewPersistentLock(db, lockDir)
 	migRunner := migration.Runner{
-		DB:         db,
-		Locker:     persistentLock,
-		LockName:   "schema_migrations",
-		LockTTL:    5 * time.Minute,
-		SkipBackup: !isNew,
+		DB:                          db,
+		Locker:                      persistentLock,
+		LockName:                    "schema_migrations",
+		LockTTL:                     5 * time.Minute,
+		SkipBackup:                  !isNew,
+		AllowUnknownAppliedChecksum: true,
 	}
 	if isNew {
 		log.Info("检测到新数据库，执行基线快通道...")
@@ -573,7 +593,11 @@ func initializeCommittedCutoverState(db *gorm.DB, services *AppServices) error {
 		return fmt.Errorf("database is nil")
 	}
 	existing := &migration.CutoverState{}
-	if err := db.Order("started_at DESC").First(existing).Error; err == nil && existing.OperationID != "" {
+	err := db.Order("started_at DESC").First(existing).Error
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	if err == nil && existing.OperationID != "" && existing.Status == "committed" {
 		return nil
 	}
 
@@ -588,6 +612,18 @@ func initializeCommittedCutoverState(db *gorm.DB, services *AppServices) error {
 	}
 
 	now := time.Now().UTC().Format(time.RFC3339)
+	if existing.OperationID != "" {
+		return db.Model(&migration.CutoverState{}).Where("operation_id = ?", existing.OperationID).Updates(map[string]any{
+			"phase":                "commit",
+			"status":               "committed",
+			"phase_status":         "completed",
+			"error_message":        "",
+			"updated_at":           now,
+			"completed_at":         now,
+			"canonical_generation": canonicalGeneration,
+			"plan_version":         1,
+		}).Error
+	}
 	return db.Exec(`INSERT INTO production_cutover_state
 	(operation_id, phase, status, phase_status, snapshot_id, error_message, started_at, updated_at, completed_at, canonical_generation, plan_version)
 	VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
