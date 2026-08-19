@@ -249,12 +249,11 @@ packages:
     source: hosted
     version: "4.1.2"
   jni:
-    dependency: transitive
+    dependency: "direct overridden"
     description:
-      name: jni
-      sha256: f038e58b4dc2c9037f50e233175086337e0b305e356d28211bf55f21c504cbd3
-      url: "https://mirrors.tuna.tsinghua.edu.cn/dart-pub/"
-    source: hosted
+      path: "C:/jni-pkg"
+      relative: false
+    source: path
     version: "1.0.3"
   jni_flutter:
     dependency: transitive

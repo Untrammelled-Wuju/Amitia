@@ -25,5 +25,9 @@ dev_dependencies:
     sdk: flutter
   flutter_lints: ^6.0.0
 
+dependency_overrides:
+  jni:
+    path: C:/jni-pkg
+
 flutter:
   uses-material-design: true
