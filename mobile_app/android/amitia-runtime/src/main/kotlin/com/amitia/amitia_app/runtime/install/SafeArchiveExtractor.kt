@@ -206,7 +206,7 @@ internal class DefaultSafeArchiveExtractor(
 
                             validateAndExtractEntry(tarIn, entry, targetDir)
 
-                            if (rootBoundary != null) {
+                            if (rootBoundary != null && !entry.isSymbolicLink) {
                                 val extractedFile = File(targetDir, entryName).canonicalFile
                                 val boundary = File(rootBoundary).canonicalFile
                                 if (!extractedFile.canonicalPath.startsWith(boundary.canonicalPath)) {
@@ -258,7 +258,7 @@ internal class DefaultSafeArchiveExtractor(
             }
             entry.isSymbolicLink -> {
                 val linkName = entry.linkName
-                if (linkName.contains("..") || linkName.startsWith("/")) {
+                if (linkName.split('/').any { it == ".." }) {
                     throw IOException("symlink target invalid: $linkName")
                 }
                 createSymlink(targetFile, linkName)
