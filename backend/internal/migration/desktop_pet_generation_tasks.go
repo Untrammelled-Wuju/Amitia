@@ -31,8 +31,8 @@ selected_action_count INTEGER NOT NULL DEFAULT 0,
 estimated_generation_count INTEGER NOT NULL DEFAULT 0,
 error_code TEXT DEFAULT '',
 error_message TEXT DEFAULT '',
-created_at TEXT DEFAULT (datetime('now')),
-updated_at TEXT DEFAULT (datetime('now')),
+created_at TEXT DEFAULT '',
+updated_at TEXT DEFAULT '',
 started_at TEXT DEFAULT '',
 completed_at TEXT DEFAULT ''
 )`)
@@ -54,8 +54,8 @@ status TEXT NOT NULL DEFAULT 'pending',
 progress INTEGER NOT NULL DEFAULT 0,
 error_code TEXT DEFAULT '',
 error_message TEXT DEFAULT '',
-created_at TEXT DEFAULT (datetime('now')),
-updated_at TEXT DEFAULT (datetime('now')),
+created_at TEXT DEFAULT '',
+updated_at TEXT DEFAULT '',
 started_at TEXT DEFAULT '',
 completed_at TEXT DEFAULT ''
 )`)

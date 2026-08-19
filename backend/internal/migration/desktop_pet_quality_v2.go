@@ -25,7 +25,7 @@ func DesktopPetQualityV2Migration() Migration {
   last_error TEXT NOT NULL DEFAULT '',
   received_at TEXT NOT NULL DEFAULT '',
   processed_at TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now'))
+  created_at TEXT DEFAULT ''
 )`)
 			s.CreateIndex("uq_dpeqri_event", "desktop_pet_quality_evaluation_request_inbox", []string{"event_id"}, true)
 			s.CreateIndex("uq_dpeqri_idem", "desktop_pet_quality_evaluation_request_inbox", []string{"idempotency_key"}, true)
@@ -48,7 +48,7 @@ func DesktopPetQualityV2Migration() Migration {
   expected_frame_count INTEGER NOT NULL DEFAULT 0,
   frame_inputs_json TEXT NOT NULL DEFAULT '[]',
   snapshot_hash TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now'))
+  created_at TEXT DEFAULT ''
 )`)
 			s.CreateIndex("uq_dpqis_snap", "desktop_pet_quality_input_snapshots", []string{"action_revision_id", "snapshot_hash"}, true)
 
@@ -64,7 +64,7 @@ func DesktopPetQualityV2Migration() Migration {
   canvas_height INTEGER NOT NULL DEFAULT 0,
   measurement_set_hash TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'building',
-  created_at TEXT DEFAULT (datetime('now'))
+  created_at TEXT DEFAULT ''
 )`)
 			s.CreateIndex("uq_dpqms_set", "desktop_pet_quality_measurement_sets", []string{"action_revision_id", "measurement_set_hash"}, true)
 
@@ -87,7 +87,7 @@ func DesktopPetQualityV2Migration() Migration {
   decodable INTEGER NOT NULL DEFAULT 0,
   subject_box_json TEXT NOT NULL DEFAULT '{}',
   transform_hash TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now'))
+  created_at TEXT DEFAULT ''
 )`)
 			s.CreateIndex("idx_dpqfm_set", "desktop_pet_quality_frame_measurements", []string{"measurement_set_id"}, false)
 			s.CreateIndex("idx_dpqfm_frame", "desktop_pet_quality_frame_measurements", []string{"frame_artifact_id"}, false)
@@ -103,7 +103,7 @@ func DesktopPetQualityV2Migration() Migration {
   edge_contact_json TEXT NOT NULL DEFAULT '[]',
   centroid_x REAL NOT NULL DEFAULT 0,
   centroid_y REAL NOT NULL DEFAULT 0,
-  created_at TEXT DEFAULT (datetime('now'))
+  created_at TEXT DEFAULT ''
 )`)
 			s.CreateIndex("idx_dpqsm_set", "desktop_pet_quality_sequence_measurements", []string{"measurement_set_id"}, false)
 
@@ -115,7 +115,7 @@ func DesktopPetQualityV2Migration() Migration {
   byte_size INTEGER NOT NULL DEFAULT 0,
   schema_version TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'staging',
-  created_at TEXT DEFAULT (datetime('now'))
+  created_at TEXT DEFAULT ''
 )`)
 			s.CreateIndex("uq_dpqra_eval", "desktop_pet_quality_report_artifacts", []string{"evaluation_id"}, true)
 
@@ -158,7 +158,7 @@ func DesktopPetQualityV2Migration() Migration {
   gate_hash TEXT NOT NULL DEFAULT '',
   invalidated_at TEXT NOT NULL DEFAULT '',
   invalidation_reason TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now'))
+  created_at TEXT DEFAULT ''
 )`)
 			s.CreateIndex("idx_dpqgs_task", "desktop_pet_quality_gate_snapshots", []string{"processing_task_id"}, false)
 			s.CreateIndex("idx_dpqgs_rsh", "desktop_pet_quality_gate_snapshots", []string{"active_revision_set_hash"}, false)
@@ -171,8 +171,8 @@ func DesktopPetQualityV2Migration() Migration {
   active_revision_set_hash TEXT NOT NULL DEFAULT '',
   evaluation_set_hash TEXT NOT NULL DEFAULT '',
   binding_revision INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now'))
+  created_at TEXT DEFAULT '',
+  updated_at TEXT DEFAULT ''
 )`)
 			s.CreateIndex("uq_dpaqgbind", "desktop_pet_active_quality_gate_bindings", []string{"processing_task_id", "gate_profile_hash"}, true)
 
@@ -183,7 +183,7 @@ func DesktopPetQualityV2Migration() Migration {
   source_event_id TEXT NOT NULL DEFAULT '',
   reason TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'pending',
-  created_at TEXT DEFAULT (datetime('now'))
+  created_at TEXT DEFAULT ''
 )`)
 			s.CreateIndex("idx_dpqgrr_task", "desktop_pet_quality_gate_rebuild_requests", []string{"processing_task_id"}, false)
 
@@ -205,9 +205,9 @@ func DesktopPetQualityV2Migration() Migration {
   payload_hash TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'pending',
   attempt_count INTEGER NOT NULL DEFAULT 0,
-  available_at TEXT NOT NULL DEFAULT (datetime('now')),
+  available_at TEXT NOT NULL DEFAULT '',
   last_error TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now')),
+  created_at TEXT DEFAULT '',
   published_at TEXT NOT NULL DEFAULT ''
 )`)
 			s.CreateIndex("uq_dpqoev2_event", "desktop_pet_quality_outbox_events_v2", []string{"event_id"}, true)
@@ -226,8 +226,8 @@ func DesktopPetQualityV2Migration() Migration {
   report_hash TEXT NOT NULL DEFAULT '',
   result_hash TEXT NOT NULL DEFAULT '',
   last_error TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now')),
+  created_at TEXT DEFAULT '',
+  updated_at TEXT DEFAULT '',
   completed_at TEXT NOT NULL DEFAULT ''
 )`)
 			s.CreateIndex("idx_dpqcjv2_eval", "desktop_pet_quality_commit_journals_v2", []string{"evaluation_id"}, false)

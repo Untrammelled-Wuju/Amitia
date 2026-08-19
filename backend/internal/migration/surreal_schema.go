@@ -9,7 +9,7 @@ func SurrealSchemaMigration() Migration {
 				schema_version TEXT PRIMARY KEY,
 				entity_types TEXT NOT NULL DEFAULT '',
 				edge_types TEXT NOT NULL DEFAULT '',
-				created_at TEXT DEFAULT (datetime('now'))
+				created_at TEXT DEFAULT ''
 			)`)
 			return nil
 		},

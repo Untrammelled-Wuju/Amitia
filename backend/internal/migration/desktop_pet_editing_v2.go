@@ -59,9 +59,9 @@ func DesktopPetEditingV2Migration() Migration {
   artifact_id TEXT NOT NULL DEFAULT '',
   processing_revision_id TEXT NOT NULL DEFAULT '',
   candidate_revision_id TEXT NOT NULL DEFAULT '',
-  quality_evaluation_id TEXT NOT NULL DEFAULT '',
-  error_message TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+quality_evaluation_id TEXT NOT NULL DEFAULT '',
+error_message TEXT NOT NULL DEFAULT '',
+created_at TEXT NOT NULL DEFAULT ''
 )`)
 			s.CreateIndex("idx_drj_job", "desktop_pet_regeneration_journals", []string{"job_id"}, false)
 			s.CreateIndex("idx_drj_state", "desktop_pet_regeneration_journals", []string{"state"}, false)
@@ -75,10 +75,10 @@ func DesktopPetEditingV2Migration() Migration {
   regeneration_job_id TEXT NOT NULL DEFAULT '',
   content_hash TEXT NOT NULL DEFAULT '',
   frame_set_hash TEXT NOT NULL DEFAULT '',
-  action_config_hash TEXT NOT NULL DEFAULT '',
-  status TEXT NOT NULL DEFAULT 'candidate_committing',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+action_config_hash TEXT NOT NULL DEFAULT '',
+status TEXT NOT NULL DEFAULT 'candidate_committing',
+created_at TEXT NOT NULL DEFAULT '',
+updated_at TEXT NOT NULL DEFAULT ''
 )`)
 			s.CreateIndex("uq_dcrm_candidate", "desktop_pet_candidate_revision_metadata", []string{"candidate_revision_id"}, true)
 			s.CreateIndex("idx_dcrm_job", "desktop_pet_candidate_revision_metadata", []string{"regeneration_job_id"}, false)
@@ -95,8 +95,8 @@ func DesktopPetEditingV2Migration() Migration {
   candidate_revision_id TEXT NOT NULL DEFAULT '',
   previous_active_revision_id TEXT NOT NULL DEFAULT '',
   new_active_revision_id TEXT NOT NULL DEFAULT '',
-  reason TEXT NOT NULL DEFAULT '',
-  occurred_at TEXT NOT NULL DEFAULT (datetime('now'))
+reason TEXT NOT NULL DEFAULT '',
+occurred_at TEXT NOT NULL DEFAULT ''
 )`)
 			s.CreateIndex("idx_deal_session", "desktop_pet_edit_audit_logs", []string{"edit_session_id"}, false)
 			s.CreateIndex("idx_deal_event", "desktop_pet_edit_audit_logs", []string{"event_type"}, false)

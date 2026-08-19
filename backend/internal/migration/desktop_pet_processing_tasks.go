@@ -30,8 +30,8 @@ error_code TEXT DEFAULT '',
 error_message TEXT DEFAULT '',
 started_at TEXT DEFAULT '',
 completed_at TEXT DEFAULT '',
-created_at TEXT DEFAULT (datetime('now')),
-updated_at TEXT DEFAULT (datetime('now'))
+created_at TEXT DEFAULT '',
+updated_at TEXT DEFAULT ''
 )`)
 			if err := s.CreateIndex("idx_dppt_gen_task", "desktop_pet_processing_tasks", []string{"generation_task_id"}, false); err != nil {
 				return err

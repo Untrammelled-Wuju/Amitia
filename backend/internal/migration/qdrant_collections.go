@@ -9,7 +9,7 @@ func QdrantCollectionsMigration() Migration {
 				collection_name TEXT PRIMARY KEY,
 				vector_dim INTEGER NOT NULL,
 				distance TEXT NOT NULL DEFAULT 'Cosine',
-				created_at TEXT DEFAULT (datetime('now'))
+				created_at TEXT DEFAULT ''
 			)`)
 			return nil
 		},

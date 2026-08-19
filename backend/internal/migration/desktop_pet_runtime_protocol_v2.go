@@ -29,7 +29,7 @@ func DesktopPetRuntimeProtocolV2Migration() Migration {
   status TEXT NOT NULL DEFAULT '',
   reject_reason TEXT NOT NULL DEFAULT '',
   received_at TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now')),
+  created_at TEXT DEFAULT '',
   UNIQUE(runtime_instance_id, command_id)
 )`)
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_runtime_event_inbox (
@@ -40,7 +40,7 @@ func DesktopPetRuntimeProtocolV2Migration() Migration {
   event_type TEXT NOT NULL DEFAULT '',
   payload_hash TEXT NOT NULL DEFAULT '',
   processed_at TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now')),
+  created_at TEXT DEFAULT '',
   UNIQUE(runtime_instance_id, event_id),
   UNIQUE(runtime_instance_id, event_sequence)
 )`)
@@ -55,7 +55,7 @@ func DesktopPetRuntimeProtocolV2Migration() Migration {
   playback_id TEXT NOT NULL DEFAULT '',
   action_key TEXT NOT NULL DEFAULT '',
   occurred_at TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now'))
+  created_at TEXT DEFAULT ''
 )`)
 			return nil
 		},

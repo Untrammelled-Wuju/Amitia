@@ -25,8 +25,8 @@ preview_path TEXT DEFAULT '',
 action_count INTEGER NOT NULL DEFAULT 0,
 package_hash TEXT DEFAULT '',
 included_actions TEXT DEFAULT '[]',
-created_at TEXT DEFAULT (datetime('now')),
-updated_at TEXT DEFAULT (datetime('now'))
+created_at TEXT DEFAULT '',
+updated_at TEXT DEFAULT ''
 )`)
 			if err := s.CreateIndex("idx_dppkg_user", "desktop_pet_packages", []string{"user_id"}, false); err != nil {
 				return err
