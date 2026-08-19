@@ -6,7 +6,7 @@ func DesktopPetProcessingTasksMigration() Migration {
 	return Migration{
 		Version:           "202607240009",
 		Name:              "add_desktop_pet_processing_tasks_table",
-		AcceptedChecksums: []string{"568b930c05ffba566b772a87b2682bf37ca4ed2356c166dc3ae5ae97d7365e2c"},
+		AcceptedChecksums: []string{"568b930c05ffba566b772a87b2682bf37ca4ed2356c166dc3ae5ae97d7365e2c", "7aca1b9cc1e9690932a3cd8bb120620da0b8281e9080e79b5e577e3c3249895b"},
 		Up: func(s *Step) error {
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_processing_tasks (
 id TEXT PRIMARY KEY,

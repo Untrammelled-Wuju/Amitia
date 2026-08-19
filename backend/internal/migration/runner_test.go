@@ -68,3 +68,34 @@ func TestRunnerRejectsUnknownChecksum(t *testing.T) {
 		t.Fatalf("expected checksum mismatch, got %v", err)
 	}
 }
+
+func TestRunnerNormalizesUnknownChecksumWhenCompatibilityEnabled(t *testing.T) {
+	db, err := gorm.Open(sqlite.Open("file:runner-checksum-compat?mode=memory&cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	runner := Runner{DB: db, SkipBackup: true, AllowUnknownAppliedChecksum: true}
+	migration := InteractionRecordsCreateMigration()
+	if err := runner.Apply([]Migration{migration}); err != nil {
+		t.Fatal(err)
+	}
+	if err := db.Model(&Record{}).Where("version = ?", migration.Version).Update("checksum", "legacy-release-checksum").Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := runner.Apply([]Migration{migration}); err != nil {
+		t.Fatal(err)
+	}
+
+	var record Record
+	if err := db.Where("version = ?", migration.Version).First(&record).Error; err != nil {
+		t.Fatal(err)
+	}
+	currentChecksum, err := runner.computeMigrationChecksum(migration)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if record.Checksum != currentChecksum {
+		t.Fatalf("checksum = %s, want %s", record.Checksum, currentChecksum)
+	}
+}

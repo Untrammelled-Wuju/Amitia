@@ -6,7 +6,10 @@ func DesktopPetProcessedFramesMigration() Migration {
 	return Migration{
 		Version:           "202607240011",
 		Name:              "add_desktop_pet_processed_frames_table",
-		AcceptedChecksums: []string{"c285ffd9ff5bd50d36120756b3f4184c5f31e9e737a1281fbde97ebcd1628890"},
+		AcceptedChecksums: []string{
+			"c285ffd9ff5bd50d36120756b3f4184c5f31e9e737a1281fbde97ebcd1628890",
+			"1a4a56b861e2f53eafaf181db3b91f0b4c33dbfda5c0ab18d07fa4532d88455d",
+		},
 		Up: func(s *Step) error {
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_processed_frames (
 id TEXT PRIMARY KEY,

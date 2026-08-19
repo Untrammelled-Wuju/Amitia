@@ -6,7 +6,7 @@ func DesktopPetGenerationCallLogsMigration() Migration {
 	return Migration{
 		Version:           "202607240008",
 		Name:              "add_desktop_pet_generation_call_logs_table",
-		AcceptedChecksums: []string{"d942ea1a3bb0f576e09b46a8c27feca2a9438f2f88c443ec6f070bf9088df6fc"},
+		AcceptedChecksums: []string{"d942ea1a3bb0f576e09b46a8c27feca2a9438f2f88c443ec6f070bf9088df6fc", "e733b5edec628668d8f6528a03f16d0e2e6f80d60f6fd03c1270537cb4c83ab2"},
 		Up: func(s *Step) error {
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_generation_call_logs (
 id TEXT PRIMARY KEY,
