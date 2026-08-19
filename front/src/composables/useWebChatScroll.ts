@@ -77,28 +77,35 @@ export function useWebChatScroll(
   }
 
   async function loadOlderMessages() {
-    if (isLoadingHistory.value || !hasMoreHistory.value || !convId.value)
+    if (
+      isLoadingHistory.value ||
+      !hasMoreHistory.value ||
+      !convId.value ||
+      msgPage.value <= 1
+    ) {
+      hasMoreHistory.value = msgPage.value > 1;
       return;
+    }
     isLoadingHistory.value = true;
     try {
+      const targetPage = msgPage.value - 1;
       const r = await get<any>(
         `/api/web-chat/conversations/${convId.value}/messages`,
         {
-          page: msgPage.value + 1,
+          page: targetPage,
           pageSize: HISTORY_PAGE_SIZE,
         },
       );
-      const older = (r?.items || []).map(normalizeRealtimeMessage);
+      const older = (r?.items || r?.messages || []).map(normalizeRealtimeMessage);
       if (older.length === 0) {
         hasMoreHistory.value = false;
       } else {
         const el = msgAreaRef.value?.rootEl;
         const prevHeight = el?.scrollHeight || 0;
         attachLocalImages(older);
-        messages.value = [...older, ...messages.value].sort(
-          compareChatMessages,
-        );
-        msgPage.value++;
+        messages.value = [...older, ...messages.value].sort(compareChatMessages);
+        msgPage.value = targetPage;
+        hasMoreHistory.value = targetPage > 1;
         nextTick(() => {
           if (el) {
             el.scrollTop = el.scrollHeight - prevHeight;
