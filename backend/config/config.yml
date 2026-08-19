@@ -23,6 +23,8 @@ app:
 security:
   mode: "local_single_user"
   localToken: "9tCnnqQaku7MnpimQtuxd8DiDcntIPZTdbMuYG8Kp-I"
+  allowedOrigins:
+    - "http://localhost:5178"
 
 providers:
   scriptRuntime:
