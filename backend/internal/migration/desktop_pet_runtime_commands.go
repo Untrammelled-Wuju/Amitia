@@ -28,8 +28,8 @@ func DesktopPetRuntimeCommandsMigration() Migration {
   last_error_code TEXT NOT NULL DEFAULT '',
   last_error_message TEXT NOT NULL DEFAULT '',
   result_json TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT '',
-  updated_at TEXT DEFAULT '',
+  created_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT (datetime('now')),
   completed_at TEXT NOT NULL DEFAULT ''
 )`)
 			if err := s.CreateIndex("idx_dprcmd_idempotency", "desktop_pet_runtime_commands", []string{"runtime_id", "idempotency_key"}, true); err != nil {

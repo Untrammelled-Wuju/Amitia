@@ -9,10 +9,10 @@ func DesktopPetRevisionBridgeMigration() Migration {
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL DEFAULT '',
   character_id TEXT NOT NULL DEFAULT '',
-action_key TEXT NOT NULL DEFAULT '',
-next_revision_number INTEGER NOT NULL DEFAULT 1,
-created_at TEXT NOT NULL DEFAULT '',
-updated_at TEXT NOT NULL DEFAULT ''
+  action_key TEXT NOT NULL DEFAULT '',
+  next_revision_number INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`)
 			s.CreateIndex("uq_das_user_char_action", "desktop_pet_action_streams", []string{"user_id", "character_id", "action_key"}, true)
 
@@ -24,9 +24,9 @@ updated_at TEXT NOT NULL DEFAULT ''
   target_action_key TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'processing_published',
   last_error TEXT NOT NULL DEFAULT '',
-retry_count INTEGER NOT NULL DEFAULT 0,
-created_at TEXT NOT NULL DEFAULT '',
-updated_at TEXT NOT NULL DEFAULT ''
+  retry_count INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`)
 			s.CreateIndex("idx_drbj_status", "desktop_pet_revision_bridge_journals", []string{"status"}, false)
 			s.CreateIndex("idx_drbj_proc_rev", "desktop_pet_revision_bridge_journals", []string{"processing_revision_id"}, false)
@@ -40,9 +40,9 @@ updated_at TEXT NOT NULL DEFAULT ''
   binding_revision INTEGER NOT NULL DEFAULT 0,
   bound_reason TEXT NOT NULL DEFAULT '',
   bound_by TEXT NOT NULL DEFAULT '',
-bound_at TEXT NOT NULL DEFAULT '',
-created_at TEXT NOT NULL DEFAULT '',
-updated_at TEXT NOT NULL DEFAULT ''
+  bound_at TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`)
 			s.CreateIndex("uq_daarb_user_char_action", "desktop_pet_active_action_revision_bindings", []string{"user_id", "character_id", "action_key"}, true)
 

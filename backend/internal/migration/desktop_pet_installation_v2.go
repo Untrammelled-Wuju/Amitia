@@ -17,8 +17,8 @@ func DesktopPetInstallationV2Migration() Migration {
     bound_reason TEXT NOT NULL DEFAULT 'install_bound',
     bound_at TEXT NOT NULL DEFAULT '',
     bound_by TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
     PRIMARY KEY(user_id, device_id)
 )`)
 			if err := s.CreateIndex("idx_dpdainst_installation", "desktop_pet_device_active_installation_bindings", []string{"installation_id"}, false); err != nil {
@@ -51,7 +51,7 @@ func DesktopPetInstallationV2Migration() Migration {
     user_id TEXT NOT NULL,
     device_id TEXT NOT NULL,
     current_revision INTEGER NOT NULL DEFAULT 0,
-    updated_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT (datetime('now')),
     PRIMARY KEY(user_id, device_id)
 )`)
 
@@ -71,8 +71,8 @@ func DesktopPetInstallationV2Migration() Migration {
     runtime_sync_state TEXT NOT NULL DEFAULT 'pending',
     last_applied_at TEXT NOT NULL DEFAULT '',
     last_heartbeat_at TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT ''
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
 )`)
 			if err := s.CreateIndex("uq_drirp_user_device", "desktop_pet_installation_runtime_projections", []string{"user_id", "device_id"}, true); err != nil {
 				return err
@@ -99,7 +99,7 @@ func DesktopPetInstallationV2Migration() Migration {
     attempt_count INTEGER NOT NULL DEFAULT 0,
     available_at TEXT NOT NULL DEFAULT '',
     last_error TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
     published_at TEXT NOT NULL DEFAULT ''
 )`)
 			if err := s.CreateIndex("idx_drdso_user_device_status", "desktop_pet_runtime_desired_state_outbox", []string{"user_id", "device_id", "status"}, false); err != nil {
@@ -118,7 +118,7 @@ func DesktopPetInstallationV2Migration() Migration {
     content_hash TEXT NOT NULL DEFAULT '',
     retain_until TEXT NOT NULL DEFAULT '',
     status TEXT NOT NULL DEFAULT 'active',
-    created_at TEXT DEFAULT '',
+    created_at TEXT DEFAULT (datetime('now')),
     purged_at TEXT NOT NULL DEFAULT ''
 )`)
 			if err := s.CreateIndex("idx_dptein_installation", "desktop_pet_installation_trash_entries", []string{"installation_id"}, false); err != nil {
@@ -148,8 +148,8 @@ func DesktopPetInstallationV2Migration() Migration {
     trash_path_key TEXT NOT NULL DEFAULT '',
     error_code TEXT NOT NULL DEFAULT '',
     error_message TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT ''
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
 )`)
 			if err := s.CreateIndex("idx_dpcj_operation", "desktop_pet_installation_commit_journals", []string{"operation_id"}, true); err != nil {
 				return err
@@ -175,8 +175,8 @@ func DesktopPetInstallationV2Migration() Migration {
     expected_old_stage TEXT NOT NULL DEFAULT '',
     error_code TEXT NOT NULL DEFAULT '',
     error_message TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT ''
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
 )`)
 			if err := s.CreateIndex("idx_dpsj_operation", "desktop_pet_installation_switch_journals", []string{"operation_id"}, true); err != nil {
 				return err
@@ -190,8 +190,8 @@ func DesktopPetInstallationV2Migration() Migration {
     device_id TEXT NOT NULL DEFAULT '',
     migration_status TEXT NOT NULL DEFAULT 'pending',
     error_message TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT ''
+    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now'))
 )`)
 			if err := s.CreateIndex("idx_dplim_legacy", "desktop_pet_legacy_installation_mappings", []string{"legacy_installation_id"}, true); err != nil {
 				return err

@@ -32,8 +32,8 @@ func DesktopPetEditingMigration() Migration {
   created_from_session_id TEXT NOT NULL DEFAULT '',
   change_summary TEXT NOT NULL DEFAULT '',
   source_summary_json TEXT NOT NULL DEFAULT '{}',
-  created_at TEXT NOT NULL DEFAULT '',
-  updated_at TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   ready_at TEXT NOT NULL DEFAULT ''
 )`)
 
@@ -49,8 +49,8 @@ func DesktopPetEditingMigration() Migration {
   binding_version INTEGER NOT NULL DEFAULT 0,
   activated_by TEXT NOT NULL DEFAULT '',
   reason TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT '',
-  updated_at TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
   PRIMARY KEY(processing_task_id, action_key)
 )`)
 
@@ -69,7 +69,7 @@ func DesktopPetEditingMigration() Migration {
   original_hash TEXT NOT NULL DEFAULT '',
   created_by TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'staging',
-  created_at TEXT NOT NULL DEFAULT ''
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`)
 
 			s.CreateIndex("uq_dfa_hash", "desktop_pet_frame_assets", []string{"content_hash", "mime_type"}, true)
@@ -94,7 +94,7 @@ func DesktopPetEditingMigration() Migration {
   transform_json TEXT NOT NULL DEFAULT '{}',
   metadata_json TEXT NOT NULL DEFAULT '{}',
   copied_from_frame_id TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT ''
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`)
 
 			s.CreateIndex("idx_dparf_revision", "desktop_pet_action_revision_frames", []string{"revision_id"}, false)
@@ -113,10 +113,10 @@ func DesktopPetEditingMigration() Migration {
   last_operation_seq INTEGER NOT NULL DEFAULT 0,
   checkpoint_id TEXT NOT NULL DEFAULT '',
   client_instance_id TEXT NOT NULL DEFAULT '',
-expires_at TEXT NOT NULL DEFAULT '',
-created_at TEXT NOT NULL DEFAULT '',
-updated_at TEXT NOT NULL DEFAULT '',
-committed_revision_id TEXT NOT NULL DEFAULT ''
+  expires_at TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  committed_revision_id TEXT NOT NULL DEFAULT ''
 )`)
 
 			s.CreateIndex("idx_des_user", "desktop_pet_edit_sessions", []string{"user_id"}, false)
@@ -135,7 +135,7 @@ committed_revision_id TEXT NOT NULL DEFAULT ''
   result_version INTEGER NOT NULL DEFAULT 0,
   status TEXT NOT NULL DEFAULT 'applied',
   created_by TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT ''
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`)
 
 			s.CreateIndex("idx_deo_session", "desktop_pet_edit_operations", []string{"session_id"}, false)
@@ -149,7 +149,7 @@ committed_revision_id TEXT NOT NULL DEFAULT ''
   manifest_json TEXT NOT NULL DEFAULT '{}',
   manifest_hash TEXT NOT NULL DEFAULT '',
   frame_count INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT ''
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`)
 
 			s.CreateIndex("idx_dec_session", "desktop_pet_edit_checkpoints", []string{"session_id"}, false)
@@ -169,8 +169,8 @@ committed_revision_id TEXT NOT NULL DEFAULT ''
   cost_actual_json TEXT NOT NULL DEFAULT '{}',
   error_code TEXT NOT NULL DEFAULT '',
   error_message TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT '',
-  updated_at TEXT NOT NULL DEFAULT ''
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`)
 
 			s.CreateIndex("idx_drj_session", "desktop_pet_regeneration_jobs", []string{"session_id"}, false)
@@ -189,7 +189,7 @@ committed_revision_id TEXT NOT NULL DEFAULT ''
   metadata_json TEXT NOT NULL DEFAULT '{}',
   decided_by TEXT NOT NULL DEFAULT '',
   decided_at TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT ''
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`)
 
 			s.CreateIndex("idx_dec_session_job", "desktop_pet_edit_candidates", []string{"session_id", "job_id"}, false)
@@ -211,7 +211,7 @@ committed_revision_id TEXT NOT NULL DEFAULT ''
   canvas_height INTEGER NOT NULL DEFAULT 0,
   algorithm_version TEXT NOT NULL DEFAULT '',
   operation_seq INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT ''
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`)
 
 			s.CreateIndex("idx_dmp_session_frame", "desktop_pet_mask_patches", []string{"session_id", "frame_id"}, false)
@@ -226,7 +226,7 @@ committed_revision_id TEXT NOT NULL DEFAULT ''
   final_dir_path TEXT NOT NULL DEFAULT '',
   manifest_path TEXT NOT NULL DEFAULT '',
   error_message TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
   completed_at TEXT NOT NULL DEFAULT ''
 )`)
 
@@ -241,7 +241,7 @@ committed_revision_id TEXT NOT NULL DEFAULT ''
   endpoint TEXT NOT NULL DEFAULT '',
   result_json TEXT NOT NULL DEFAULT '{}',
   status TEXT NOT NULL DEFAULT 'pending',
-  created_at TEXT NOT NULL DEFAULT ''
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`)
 
 			s.CreateIndex("uq_dei_user_session_key", "desktop_pet_edit_idempotency", []string{"user_id", "session_id", "idempotency_key"}, true)

@@ -19,9 +19,9 @@ func DesktopPetEditingV3Migration() Migration {
   action_config_snapshot_json TEXT NOT NULL DEFAULT '{}',
   action_config_hash TEXT NOT NULL DEFAULT '',
   frames_json TEXT NOT NULL DEFAULT '[]',
-frame_set_hash TEXT NOT NULL DEFAULT '',
-snapshot_hash TEXT NOT NULL DEFAULT '',
-created_at TEXT NOT NULL DEFAULT ''
+  frame_set_hash TEXT NOT NULL DEFAULT '',
+  snapshot_hash TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`)
 
 			s.CreateIndex("idx_deds_session", "desktop_pet_edit_draft_snapshots", []string{"session_id"}, false)
@@ -45,8 +45,8 @@ created_at TEXT NOT NULL DEFAULT ''
   quality_profile_id TEXT NOT NULL DEFAULT '',
   cost_estimate_json TEXT NOT NULL DEFAULT '{}',
   cost_estimate_hash TEXT NOT NULL DEFAULT '',
-cost_confirmation_id TEXT NOT NULL DEFAULT '',
-created_at TEXT NOT NULL DEFAULT ''
+  cost_confirmation_id TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
 )`)
 
 			s.CreateIndex("idx_dris_session", "desktop_pet_regeneration_job_input_snapshots", []string{"session_id"}, false)
@@ -59,10 +59,10 @@ created_at TEXT NOT NULL DEFAULT ''
   user_id TEXT NOT NULL DEFAULT '',
   action TEXT NOT NULL DEFAULT '',
   idempotency_key TEXT NOT NULL DEFAULT '',
-status TEXT NOT NULL DEFAULT 'pending',
-error_message TEXT NOT NULL DEFAULT '',
-created_at TEXT NOT NULL DEFAULT '',
-completed_at TEXT NOT NULL DEFAULT ''
+  status TEXT NOT NULL DEFAULT 'pending',
+  error_message TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  completed_at TEXT NOT NULL DEFAULT ''
 )`)
 
 			s.CreateIndex("uq_dcao_candidate_idem", "desktop_pet_candidate_acceptance_operations", []string{"candidate_id", "idempotency_key"}, true)
@@ -79,12 +79,12 @@ completed_at TEXT NOT NULL DEFAULT ''
   user_id TEXT NOT NULL DEFAULT '',
   payload_json TEXT NOT NULL DEFAULT '{}',
   payload_hash TEXT NOT NULL DEFAULT '',
-status TEXT NOT NULL DEFAULT 'pending',
-attempt_count INTEGER NOT NULL DEFAULT 0,
-available_at TEXT NOT NULL DEFAULT '',
-last_error TEXT NOT NULL DEFAULT '',
-created_at TEXT NOT NULL DEFAULT '',
-published_at TEXT NOT NULL DEFAULT ''
+  status TEXT NOT NULL DEFAULT 'pending',
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  available_at TEXT NOT NULL DEFAULT (datetime('now')),
+  last_error TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  published_at TEXT NOT NULL DEFAULT ''
 )`)
 
 			s.CreateIndex("uq_deeo_event", "desktop_pet_editing_event_outbox", []string{"event_id"}, true)
