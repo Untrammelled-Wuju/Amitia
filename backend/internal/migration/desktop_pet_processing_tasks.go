@@ -4,8 +4,9 @@ package migration
 
 func DesktopPetProcessingTasksMigration() Migration {
 	return Migration{
-		Version: "202607240009",
-		Name:    "add_desktop_pet_processing_tasks_table",
+		Version:           "202607240009",
+		Name:              "add_desktop_pet_processing_tasks_table",
+		AcceptedChecksums: []string{"568b930c05ffba566b772a87b2682bf37ca4ed2356c166dc3ae5ae97d7365e2c"},
 		Up: func(s *Step) error {
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_processing_tasks (
 id TEXT PRIMARY KEY,
@@ -30,8 +31,8 @@ error_code TEXT DEFAULT '',
 error_message TEXT DEFAULT '',
 started_at TEXT DEFAULT '',
 completed_at TEXT DEFAULT '',
-created_at TEXT DEFAULT (datetime('now')),
-updated_at TEXT DEFAULT (datetime('now'))
+created_at TEXT DEFAULT '',
+updated_at TEXT DEFAULT ''
 )`)
 			if err := s.CreateIndex("idx_dppt_gen_task", "desktop_pet_processing_tasks", []string{"generation_task_id"}, false); err != nil {
 				return err

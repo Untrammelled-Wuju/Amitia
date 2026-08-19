@@ -2,8 +2,9 @@ package migration
 
 func DesktopPetReleaseDomainV2Migration() Migration {
 	return Migration{
-		Version: "202607310022",
-		Name:    "add_desktop_pet_release_domain_v2_tables",
+		Version:           "202607310022",
+		Name:              "add_desktop_pet_release_domain_v2_tables",
+		AcceptedChecksums: []string{"8a2714d2aac7144f000f36b87507cd24f23179b9c6ab2d8a8b54e942fbe93ada"},
 		Up: func(s *Step) error {
 			if err := createReleaseValidationReportsTableV2(s); err != nil {
 				return err
@@ -38,8 +39,8 @@ func createReleaseValidationReportsTableV2(s *Step) error {
   manifest_hash TEXT NOT NULL DEFAULT '',
   content_root_hash TEXT NOT NULL DEFAULT '',
   archive_hash TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT ''
 )`)
 	s.CreateIndex("idx_dprvr_release", "desktop_pet_release_validation_reports", []string{"release_id"}, false)
 	s.CreateIndex("idx_dprvr_operation", "desktop_pet_release_validation_reports", []string{"operation_id"}, false)
@@ -59,9 +60,9 @@ func createReleaseEventOutboxTableV2(s *Step) error {
   payload_hash TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'pending',
   attempt_count INTEGER NOT NULL DEFAULT 0,
-  available_at TEXT NOT NULL DEFAULT (datetime('now')),
+  available_at TEXT NOT NULL DEFAULT '',
   last_error TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at TEXT NOT NULL DEFAULT '',
   published_at TEXT NOT NULL DEFAULT ''
 )`)
 	s.CreateIndex("uq_drevo_event_id", "desktop_pet_release_event_outbox", []string{"event_id"}, true)
@@ -81,7 +82,7 @@ func createReleaseBuildRequestInboxTableV2(s *Step) error {
   payload_hash TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'pending',
   operation_id TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at TEXT NOT NULL DEFAULT '',
   processed_at TEXT NOT NULL DEFAULT '',
   last_error TEXT NOT NULL DEFAULT ''
 )`)
@@ -106,8 +107,8 @@ func createImportPackageSnapshotsTableV2(s *Step) error {
   user_id TEXT NOT NULL DEFAULT '',
   pet_id TEXT NOT NULL DEFAULT '',
   release_id TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT ''
 )`)
 	s.CreateIndex("uq_dips_staging", "desktop_pet_import_package_snapshots", []string{"import_staging_id"}, true)
 	s.CreateIndex("idx_dips_release", "desktop_pet_import_package_snapshots", []string{"release_id"}, false)

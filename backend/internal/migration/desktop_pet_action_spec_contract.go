@@ -13,8 +13,9 @@ import (
 
 func DesktopPetActionSpecContractMigration() Migration {
 	return Migration{
-		Version: "202607300005",
-		Name:    "add_desktop_pet_action_spec_contract",
+		Version:           "202607300005",
+		Name:              "add_desktop_pet_action_spec_contract",
+		AcceptedChecksums: []string{"8a2714d2aac7144f000f36b87507cd24f23179b9c6ab2d8a8b54e942fbe93ada"},
 		Up: func(s *Step) error {
 			if err := addActionDefinitionColumns(s); err != nil {
 				return err
@@ -169,9 +170,9 @@ func upsertCatalogProjections(s *Step) {
 				recommended=%d,
 				sort_order=%d,
 				default_frame_count=%d,
-				updated_at=datetime('now')
+updated_at=strftime('%Y-%m-%d %H:%M:%S','now')
 			WHERE action_key='%s' AND (catalog_version < %d OR catalog_version IS NULL OR playback_mode IS NULL OR playback_mode='')`,
-			contracts.ActionSpecSchemaVersion,
+				contracts.ActionSpecSchemaVersion,
 			contracts.CatalogVersion,
 			spec.Playback.DefaultFPS,
 			string(spec.Playback.Mode),

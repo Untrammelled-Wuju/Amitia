@@ -4,8 +4,9 @@ package migration
 
 func DesktopPetGenerationCallLogsMigration() Migration {
 	return Migration{
-		Version: "202607240008",
-		Name:    "add_desktop_pet_generation_call_logs_table",
+		Version:           "202607240008",
+		Name:              "add_desktop_pet_generation_call_logs_table",
+		AcceptedChecksums: []string{"d942ea1a3bb0f576e09b46a8c27feca2a9438f2f88c443ec6f070bf9088df6fc"},
 		Up: func(s *Step) error {
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_generation_call_logs (
 id TEXT PRIMARY KEY,
@@ -23,7 +24,7 @@ attempt_number INTEGER NOT NULL DEFAULT 0,
 usage TEXT DEFAULT '',
 error_code TEXT DEFAULT '',
 error_message TEXT DEFAULT '',
-created_at TEXT DEFAULT (datetime('now'))
+created_at TEXT DEFAULT ''
 )`)
 			if err := s.CreateIndex("idx_dpgcl_task", "desktop_pet_generation_call_logs", []string{"task_id"}, false); err != nil {
 				return err

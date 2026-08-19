@@ -2,8 +2,9 @@ package migration
 
 func DesktopPetDataConsistencyMigration() Migration {
 	return Migration{
-		Version: "202607300004",
-		Name:    "desktop_pet_data_consistency_rebuild",
+		Version:           "202607300004",
+		Name:              "desktop_pet_data_consistency_rebuild",
+		AcceptedChecksums: []string{"9a483a951428a1989212154199fcff461cee7849efedfed4049fdb080622f578"},
 		Up: func(s *Step) error {
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_data_repair_audit (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -15,7 +16,7 @@ decision TEXT NOT NULL DEFAULT '',
 kept_id TEXT NOT NULL DEFAULT '',
 removed_ids TEXT NOT NULL DEFAULT '[]',
 details TEXT NOT NULL DEFAULT '{}',
-created_at TEXT NOT NULL DEFAULT (datetime('now'))
+created_at TEXT NOT NULL DEFAULT ''
 )`)
 
 			if err := s.AddColumn("desktop_pet_generation_task_actions", "row_version", "INTEGER NOT NULL DEFAULT 0"); err != nil {
@@ -135,8 +136,8 @@ error_code TEXT NOT NULL DEFAULT '',
 error_message TEXT NOT NULL DEFAULT '',
 started_at TEXT NOT NULL DEFAULT '',
 completed_at TEXT NOT NULL DEFAULT '',
-created_at TEXT NOT NULL DEFAULT (datetime('now')),
-updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+created_at TEXT NOT NULL DEFAULT '',
+updated_at TEXT NOT NULL DEFAULT ''
 )`)
 
 			s.Execute(`CREATE TEMP TABLE IF NOT EXISTS tmp_keep_dppa AS

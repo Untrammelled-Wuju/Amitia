@@ -2,8 +2,9 @@ package migration
 
 func DesktopPetReleaseDomainMigration() Migration {
 	return Migration{
-		Version: "202607310021",
-		Name:    "add_desktop_pet_release_domain_tables",
+		Version:           "202607310021",
+		Name:              "add_desktop_pet_release_domain_tables",
+		AcceptedChecksums: []string{"d4ee01cc64921410e5212b8dc11c39d09d22ca9f72ced95ba02ea758080d464f"},
 		Up: func(s *Step) error {
 			if err := createReleaseBuildSnapshotsTable(s); err != nil {
 				return err
@@ -49,9 +50,11 @@ func createReleaseBuildSnapshotsTable(s *Step) error {
   package_schema_version INTEGER NOT NULL DEFAULT 2,
   runtime_contract_version TEXT NOT NULL DEFAULT '',
   build_config_hash TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+created_at TEXT NOT NULL DEFAULT ''
 )`)
-	s.CreateIndex("idx_drbs_pet", "desktop_pet_release_build_snapshots", []string{"pet_id"}, false)
+	if err := s.CreateIndex("idx_drbs_pet", "desktop_pet_release_build_snapshots", []string{"pet_id"}, false); err != nil {
+		return err
+	}
 	s.CreateIndex("idx_drbs_task", "desktop_pet_release_build_snapshots", []string{"processing_task_id"}, false)
 	s.CreateIndex("idx_drbs_input_hash", "desktop_pet_release_build_snapshots", []string{"build_config_hash"}, false)
 	return nil
@@ -77,12 +80,14 @@ func createReleaseBuildOperationsTable(s *Step) error {
   error_message TEXT NOT NULL DEFAULT '',
   retry_count INTEGER NOT NULL DEFAULT 0,
   result_json TEXT NOT NULL DEFAULT '{}',
-  started_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+started_at TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT '',
   completed_at TEXT NOT NULL DEFAULT '',
   UNIQUE(user_id, idempotency_key)
 )`)
-	s.CreateIndex("idx_drbo_user", "desktop_pet_release_build_operations", []string{"user_id"}, false)
+	if err := s.CreateIndex("idx_drbo_user", "desktop_pet_release_build_operations", []string{"user_id"}, false); err != nil {
+		return err
+	}
 	s.CreateIndex("idx_drbo_state", "desktop_pet_release_build_operations", []string{"state"}, false)
 	s.CreateIndex("idx_drbo_release", "desktop_pet_release_build_operations", []string{"release_id"}, false)
 	s.CreateIndex("idx_drbo_lease", "desktop_pet_release_build_operations", []string{"lease_expires_at"}, false)
@@ -100,10 +105,12 @@ func createReleasePublishJournalsTable(s *Step) error {
   staging_path TEXT NOT NULL DEFAULT '',
   published_path TEXT NOT NULL DEFAULT '',
   error_message TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+created_at TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT ''
 )`)
-	s.CreateIndex("idx_drpj_operation", "desktop_pet_release_publish_journals", []string{"operation_id"}, false)
+	if err := s.CreateIndex("idx_drpj_operation", "desktop_pet_release_publish_journals", []string{"operation_id"}, false); err != nil {
+		return err
+	}
 	s.CreateIndex("idx_drpj_release", "desktop_pet_release_publish_journals", []string{"release_id"}, false)
 	s.CreateIndex("idx_drpj_stage", "desktop_pet_release_publish_journals", []string{"stage"}, false)
 	return nil
@@ -118,11 +125,13 @@ func createLegacyPackageMappingsTable(s *Step) error {
   migration_status TEXT NOT NULL DEFAULT 'pending',
   source_content_hash TEXT NOT NULL DEFAULT '',
   error_message TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+created_at TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT '',
   UNIQUE(legacy_package_id)
 )`)
-	s.CreateIndex("idx_dlpm_status", "desktop_pet_legacy_package_mappings", []string{"migration_status"}, false)
+	if err := s.CreateIndex("idx_dlpm_status", "desktop_pet_legacy_package_mappings", []string{"migration_status"}, false); err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -135,11 +144,13 @@ func createLegacyPackageMigrationOperationsTable(s *Step) error {
   staging_path TEXT NOT NULL DEFAULT '',
   error_code TEXT NOT NULL DEFAULT '',
   error_message TEXT NOT NULL DEFAULT '',
-  started_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+started_at TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT '',
   completed_at TEXT NOT NULL DEFAULT ''
 )`)
-	s.CreateIndex("idx_dlpmo_legacy", "desktop_pet_legacy_package_migration_operations", []string{"legacy_package_id"}, false)
+	if err := s.CreateIndex("idx_dlpmo_legacy", "desktop_pet_legacy_package_migration_operations", []string{"legacy_package_id"}, false); err != nil {
+		return err
+	}
 	s.CreateIndex("idx_dlpmo_state", "desktop_pet_legacy_package_migration_operations", []string{"state"}, false)
 	return nil
 }

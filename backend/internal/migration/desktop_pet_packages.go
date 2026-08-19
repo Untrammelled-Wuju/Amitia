@@ -4,8 +4,9 @@ package migration
 
 func DesktopPetPackagesMigration() Migration {
 	return Migration{
-		Version: "202607240012",
-		Name:    "add_desktop_pet_packages_table",
+		Version:           "202607240012",
+		Name:              "add_desktop_pet_packages_table",
+		AcceptedChecksums: []string{"4d608d1bfbedb38bef7b10d47d15fe82d8d7a26183dc59df5f9d1210dc52d0c8"},
 		Up: func(s *Step) error {
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_packages (
 id TEXT PRIMARY KEY,
@@ -25,8 +26,8 @@ preview_path TEXT DEFAULT '',
 action_count INTEGER NOT NULL DEFAULT 0,
 package_hash TEXT DEFAULT '',
 included_actions TEXT DEFAULT '[]',
-created_at TEXT DEFAULT (datetime('now')),
-updated_at TEXT DEFAULT (datetime('now'))
+created_at TEXT DEFAULT '',
+updated_at TEXT DEFAULT ''
 )`)
 			if err := s.CreateIndex("idx_dppkg_user", "desktop_pet_packages", []string{"user_id"}, false); err != nil {
 				return err

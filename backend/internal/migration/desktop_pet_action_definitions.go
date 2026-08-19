@@ -4,8 +4,9 @@ package migration
 
 func DesktopPetActionDefinitionsMigration() Migration {
 	return Migration{
-		Version: "202607240002",
-		Name:    "add_desktop_pet_action_definitions_table",
+		Version:           "202607240002",
+		Name:              "add_desktop_pet_action_definitions_table",
+		AcceptedChecksums: []string{"147f91eaafa7413b3b7a8b94294d0208578ee3009133f6e13aba2e1bdd57d0db"},
 		Up: func(s *Step) error {
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_action_definitions (
 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -21,8 +22,8 @@ sort_order INTEGER NOT NULL DEFAULT 0,
 definition_version INTEGER NOT NULL DEFAULT 1,
 default_frame_count INTEGER NOT NULL DEFAULT 8,
 estimated_generation_count INTEGER NOT NULL DEFAULT 1,
-created_at TEXT DEFAULT (datetime('now')),
-updated_at TEXT DEFAULT (datetime('now'))
+created_at TEXT DEFAULT '',
+updated_at TEXT DEFAULT ''
 )`)
 			s.Execute(`INSERT OR IGNORE INTO desktop_pet_action_definitions (action_key,name,description,category_key,category_name,supports_default_idle,recommended,enabled,sort_order,definition_version,default_frame_count,estimated_generation_count) VALUES ('idle_normal','普通待机','角色保持站立并进行自然轻微活动','idle','待机动作',1,1,1,10,1,8,1)`)
 			s.Execute(`INSERT OR IGNORE INTO desktop_pet_action_definitions (action_key,name,description,category_key,category_name,supports_default_idle,recommended,enabled,sort_order,definition_version,default_frame_count,estimated_generation_count) VALUES ('idle_breathing','呼吸待机','角色保持站立并进行缓慢呼吸','idle','待机动作',1,1,1,11,1,8,1)`)

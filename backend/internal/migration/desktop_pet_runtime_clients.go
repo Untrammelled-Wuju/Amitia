@@ -4,8 +4,9 @@ package migration
 
 func DesktopPetRuntimeClientsMigration() Migration {
 	return Migration{
-		Version: "202607310001",
-		Name:    "add_desktop_pet_runtime_clients_table",
+		Version:           "202607310001",
+		Name:              "add_desktop_pet_runtime_clients_table",
+		AcceptedChecksums: []string{"b11e2fcb9bc79fa50f5fd2766edf8cd8cae3a61432dfb6dd069ea3c8661b4a57"},
 		Up: func(s *Step) error {
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_runtime_clients (
   runtime_id TEXT PRIMARY KEY,
@@ -22,10 +23,10 @@ func DesktopPetRuntimeClientsMigration() Migration {
   last_seen_at TEXT NOT NULL DEFAULT '',
   last_connected_at TEXT NOT NULL DEFAULT '',
   last_disconnected_at TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now'))
+  created_at TEXT DEFAULT '',
+  updated_at TEXT DEFAULT ''
 )`)
-			return nil
+		return nil
 		},
 	}
 }

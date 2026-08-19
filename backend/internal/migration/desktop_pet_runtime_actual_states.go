@@ -4,8 +4,9 @@ package migration
 
 func DesktopPetRuntimeActualStatesMigration() Migration {
 	return Migration{
-		Version: "202607310003",
-		Name:    "add_desktop_pet_runtime_actual_states_table",
+		Version:           "202607310003",
+		Name:              "add_desktop_pet_runtime_actual_states_table",
+		AcceptedChecksums: []string{"e5af76b522fd54202f6d0225705327bebef4e781a26796c7e1bc059dad92c936"},
 		Up: func(s *Step) error {
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_runtime_actual_states (
   runtime_id TEXT NOT NULL,
@@ -23,7 +24,7 @@ func DesktopPetRuntimeActualStatesMigration() Migration {
   health TEXT NOT NULL DEFAULT 'unknown',
   state_json TEXT NOT NULL DEFAULT '{}',
   observed_at TEXT NOT NULL DEFAULT '',
-  updated_at TEXT DEFAULT (datetime('now')),
+  updated_at TEXT DEFAULT '',
   PRIMARY KEY(runtime_id, installation_id)
 )`)
 			return nil

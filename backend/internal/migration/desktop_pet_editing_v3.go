@@ -2,8 +2,9 @@ package migration
 
 func DesktopPetEditingV3Migration() Migration {
 	return Migration{
-		Version: "202608020003",
-		Name:    "editing_step9_draft_snapshot_and_job_enhancements",
+		Version:           "202608020003",
+		Name:              "editing_step9_draft_snapshot_and_job_enhancements",
+		AcceptedChecksums: []string{"b7eb16662292998f147104dbe18dfad658659aeaca580a84e2c7eb084a86ff81"},
 		Up: func(s *Step) error {
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_edit_draft_snapshots (
   id TEXT PRIMARY KEY,
@@ -21,7 +22,7 @@ func DesktopPetEditingV3Migration() Migration {
   frames_json TEXT NOT NULL DEFAULT '[]',
   frame_set_hash TEXT NOT NULL DEFAULT '',
   snapshot_hash TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT ''
 )`)
 
 			s.CreateIndex("idx_deds_session", "desktop_pet_edit_draft_snapshots", []string{"session_id"}, false)
@@ -46,7 +47,7 @@ func DesktopPetEditingV3Migration() Migration {
   cost_estimate_json TEXT NOT NULL DEFAULT '{}',
   cost_estimate_hash TEXT NOT NULL DEFAULT '',
   cost_confirmation_id TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT ''
 )`)
 
 			s.CreateIndex("idx_dris_session", "desktop_pet_regeneration_job_input_snapshots", []string{"session_id"}, false)
@@ -61,7 +62,7 @@ func DesktopPetEditingV3Migration() Migration {
   idempotency_key TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'pending',
   error_message TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at TEXT NOT NULL DEFAULT '',
   completed_at TEXT NOT NULL DEFAULT ''
 )`)
 
@@ -81,9 +82,9 @@ func DesktopPetEditingV3Migration() Migration {
   payload_hash TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'pending',
   attempt_count INTEGER NOT NULL DEFAULT 0,
-  available_at TEXT NOT NULL DEFAULT (datetime('now')),
+  available_at TEXT NOT NULL DEFAULT '',
   last_error TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at TEXT NOT NULL DEFAULT '',
   published_at TEXT NOT NULL DEFAULT ''
 )`)
 
