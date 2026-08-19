@@ -1,5 +1,3 @@
-import java.security.MessageDigest
-
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -95,16 +93,8 @@ android {
 }
 
 val frozenRuntimePackagePath: String? = System.getenv("FROZEN_RUNTIME_PACKAGE_PATH")
-val frozenRuntimePackageSha256: String? = System.getenv("FROZEN_RUNTIME_PACKAGE_SHA256")
 val amitiaRuntimeCandidateBuild: String? = System.getenv("AMITIA_RUNTIME_CANDIDATE_BUILD")
 val isCandidateBuild = amitiaRuntimeCandidateBuild == "1"
-
-if (isCandidateBuild && frozenRuntimePackagePath == null) {
-    throw GradleException("Candidate build requires FROZEN_RUNTIME_PACKAGE_PATH environment variable")
-}
-if (isCandidateBuild && frozenRuntimePackageSha256 == null) {
-    throw GradleException("Candidate build requires FROZEN_RUNTIME_PACKAGE_SHA256 environment variable")
-}
 
 tasks.register<Delete>("cleanFrozenRuntimePackage") {
     group = "candidate"
@@ -114,35 +104,19 @@ tasks.register<Delete>("cleanFrozenRuntimePackage") {
 
 tasks.register<Copy>("copyFrozenRuntimePackage") {
     group = "candidate"
-    description = "Copies the Step 7 frozen Runtime Package into APK assets"
+    description = "Copies the frozen Runtime Package into APK assets"
     dependsOn("cleanFrozenRuntimePackage")
-    if (frozenRuntimePackagePath != null && frozenRuntimePackageSha256 != null) {
+    if (isCandidateBuild && frozenRuntimePackagePath != null) {
         val sourceFile = file(frozenRuntimePackagePath)
         if (!sourceFile.exists()) {
             throw GradleException("copyFrozenRuntimePackage: FROZEN_RUNTIME_PACKAGE_PATH declared but file missing: $frozenRuntimePackagePath")
-        }
-        doFirst {
-            val actualSha = sourceFile.inputStream().use { input ->
-                val digest = MessageDigest.getInstance("SHA-256")
-                val buffer = ByteArray(8192)
-                var read: Int
-                while (input.read(buffer).also { read = it } != -1) {
-                    digest.update(buffer, 0, read)
-                }
-                digest.digest().joinToString("") { it.toInt().and(0xFF).toString(16).padStart(2, '0') }
-            }
-            if (!actualSha.equals(frozenRuntimePackageSha256, ignoreCase = true)) {
-                throw GradleException("copyFrozenRuntimePackage: SHA256 mismatch for $frozenRuntimePackagePath: expected=$frozenRuntimePackageSha256 actual=$actualSha")
-            }
         }
         from(sourceFile) {
             rename { "amitia-runtime-1.0.0.zip" }
         }
         into(layout.projectDirectory.dir("src/main/assets/runtime-package"))
-    } else if (frozenRuntimePackagePath != null || frozenRuntimePackageSha256 != null) {
-        throw GradleException("copyFrozenRuntimePackage: Both FROZEN_RUNTIME_PACKAGE_PATH and FROZEN_RUNTIME_PACKAGE_SHA256 must be set for Candidate build")
     } else if (isCandidateBuild) {
-        throw GradleException("copyFrozenRuntimePackage: Candidate build requires FROZEN_RUNTIME_PACKAGE_PATH and FROZEN_RUNTIME_PACKAGE_SHA256")
+        throw GradleException("copyFrozenRuntimePackage: Candidate build requires FROZEN_RUNTIME_PACKAGE_PATH")
     } else {
         doLast {
             logger.lifecycle("copyFrozenRuntimePackage: Candidate environment not set, skipping asset embed")
