@@ -56,6 +56,20 @@ export function useWebChatConversation(
     return id.startsWith("user-") || id.startsWith("failed-");
   }
 
+  async function fetchLatestMessagesPage(conversationID: string) {
+    const url = `/api/web-chat/conversations/${encodeURIComponent(conversationID)}/messages`;
+    const first = await get<any>(url, { page: 1, pageSize: HISTORY_PAGE_SIZE });
+    const totalPages = Math.max(1, Number(first?.totalPages || 1));
+    if (totalPages <= 1) {
+      return { response: first, page: 1, totalPages };
+    }
+    const latest = await get<any>(url, {
+      page: totalPages,
+      pageSize: HISTORY_PAGE_SIZE,
+    });
+    return { response: latest, page: totalPages, totalPages };
+  }
+
   function mergeMessages(serverItems: any[]) {
     const serverMap = new Map<string, any>();
     for (const item of serverItems) {
@@ -145,19 +159,16 @@ export function useWebChatConversation(
     convTitle.value = c?.name ? `${c.name} 的对话` : "";
     const version = ++messagesVersion;
     try {
-      const r = await get<any>(
-        `/api/web-chat/conversations/${dedicatedConvId}/messages`,
-      );
+      const latestPage = await fetchLatestMessagesPage(dedicatedConvId);
       if (version !== messagesVersion) return;
+      const r = latestPage.response;
       const items = r?.messages || r?.items || [];
+      msgPage.value = latestPage.page;
+      hasMoreHistory.value = latestPage.page > 1;
       if (items.length) {
-        if (items.length < 50 && (r?.totalPages || 1) <= 1)
-          hasMoreHistory.value = false;
         mergeMessages(items);
-        msgPage.value = 1;
-        hasMoreHistory.value = items.length >= HISTORY_PAGE_SIZE;
         scrollToBottom();
-      } else if (messages.value.length === 0) {
+      } else {
         messages.value = [];
       }
       setLastPolledMsgId(messages.value[messages.value.length - 1]?.id || null);
@@ -220,26 +231,17 @@ export function useWebChatConversation(
           ? "微信聊天"
           : conv.title || "";
     msgPage.value = 1;
-    hasMoreHistory.value = true;
+    hasMoreHistory.value = false;
     const version = ++messagesVersion;
     try {
-      const url = `/api/web-chat/conversations/${encodeURIComponent(conv.id)}/messages`;
-      const r = await get<any>(url, { page: 1, pageSize: HISTORY_PAGE_SIZE });
+      const latestPage = await fetchLatestMessagesPage(String(conv.id));
       if (version !== messagesVersion) return;
+      const r = latestPage.response;
       const items = r?.messages || r?.items || [];
+      msgPage.value = latestPage.page;
+      hasMoreHistory.value = latestPage.page > 1;
       if (items.length) {
         mergeMessages(items);
-        const cid = conv.characterId || conv.character_id;
-        if (cid && cid !== characterId.value) {
-          const c = characters.value.find((x: any) => x.id === cid);
-          if (c) selectCharacter(c);
-        } else if (!characterId.value || !charName.value) {
-          const defaultChar =
-            characters.value.find((c: any) => c.isDefault) ||
-            characters.value.find((c: any) => c.isActive) ||
-            characters.value[0];
-          if (defaultChar) selectCharacter(defaultChar);
-        }
         scrollToBottom();
       } else {
         messages.value = [];
@@ -391,25 +393,22 @@ export function useWebChatConversation(
 
   async function handleContinueImport(batch: any) {
     showDrawer.value = false;
+    if (!batch?.id) return;
     try {
-      const r = await get<any>("/api/web-chat/conversations", {
-        importBatchId: batch.id,
+      await post<any>("/api/web-chat/conversations/from-import", {
+        conversationId: batch.id,
       });
-      const convs = r?.items || [];
-      if (convs.length > 0) {
-        await handleSelectConv(convs[0]);
-      } else {
-        const created = await post<any>("/api/web-chat/conversations", {
-          characterId: characterId.value,
-          title: `[导入] ${batch.title}`,
-        });
-        if (created?.id) {
-          convId.value = created.id;
-          messages.value = [];
-        }
-      }
+      await handleSelectConv({
+        ...batch,
+        id: batch.id,
+        channel: batch.channel || "web",
+        source: batch.source || "import",
+        characterId: batch.characterId || batch.character_id || characterId.value,
+      });
       ElMessage.success("已切换到导入记录对话");
-    } catch {}
+    } catch (error: any) {
+      ElMessage.error(error?.response?.data?.msg || "无法继续导入记录对话");
+    }
   }
 
   async function handleViewMemories() {
