@@ -165,9 +165,10 @@ export function useWebChatSSE(
     }
   }
 
-  function connectProactiveSSE() {
+  async function connectProactiveSSE() {
     try {
-      proactiveSSE = new EventSource("/api/proactive-sse");
+      const url = await resolveApiUrl("/api/proactive-sse");
+      proactiveSSE = new EventSource(url);
       proactiveSSE.addEventListener("proactive_message", (e) => {
         try {
           const msg = normalizeRealtimeMessage(JSON.parse(e.data));
@@ -188,10 +189,10 @@ export function useWebChatSSE(
       });
       proactiveSSE.onerror = () => {
         proactiveSSE?.close();
-        setTimeout(connectProactiveSSE, 5000);
+        setTimeout(() => void connectProactiveSSE(), 5000);
       };
     } catch {
-      setTimeout(connectProactiveSSE, 5000);
+      setTimeout(() => void connectProactiveSSE(), 5000);
     }
   }
 
