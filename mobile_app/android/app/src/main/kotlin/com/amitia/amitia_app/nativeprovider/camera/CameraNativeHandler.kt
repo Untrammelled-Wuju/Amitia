@@ -100,7 +100,7 @@ internal class CameraNativeHandler(
             hasBackCamera = hasBack,
             camera2Level = "limited",
             state = if (cameras.isNotEmpty()) "available" else "unavailable",
-            reason = if (cameras.isNotEmpty()) "" : "no camera devices found",
+            reason = if (cameras.isNotEmpty()) "" else "no camera devices found",
         )
     }
 

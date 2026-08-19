@@ -2,6 +2,7 @@ package com.amitia.amitia_app.nativeprovider.display
 
 import android.content.Context
 import android.hardware.display.DisplayManager
+import android.util.DisplayMetrics
 import android.view.Display
 import com.amitia.amitia_app.nativeprovider.AndroidNativeOperationHandler
 import com.amitia.amitia_app.nativeprovider.model.NativeBridgeError
@@ -110,12 +111,14 @@ internal class DisplayNativeHandler(
             val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as? DisplayManager
                 ?: return emptyList()
             displayManager.displays?.map { display ->
+                val metrics = DisplayMetrics()
+                display.getMetrics(metrics)
                 DisplayInfo(
                     displayId = display.displayId,
                     name = display.name ?: "Display ${display.displayId}",
                     width = display.width,
                     height = display.height,
-                    densityDpi = display.densityDpi,
+                    densityDpi = metrics.densityDpi,
                     rotation = display.rotation,
                     refreshRate = display.refreshRate,
                     isPrimary = display.displayId == Display.DEFAULT_DISPLAY,

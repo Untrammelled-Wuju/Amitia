@@ -184,7 +184,7 @@ internal class ShizukuNativeHandler(
             return future
         }
 
-        if (Shizuku.isPreV11) {
+        if (Shizuku.isPreV11()) {
             future.complete(-1)
             permissionWaiters.remove(code)
         } else {
@@ -313,7 +313,7 @@ internal class ShizukuNativeHandler(
         timeoutMs: Long,
         maxOutputBytes: Long,
     ): String {
-        val argsJson = (args ?: emptyList<Any>).joinToString(",") { "\"${it.toString().replace("\"", "\\\"")}\"" }
+        val argsJson = (args ?: emptyList<Any>()).joinToString(",") { "\"${it.toString().replace("\"", "\\\"")}\"" }
         val stdinJson = stdin?.let { "\"${it.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")}\"" } ?: "null"
         return """{"executable":"${executable.replace("\"", "\\\"")}","args":[$argsJson],"stdin":$stdinJson,"timeoutMs":$timeoutMs,"maxOutputBytes":$maxOutputBytes}"""
     }
@@ -416,9 +416,9 @@ internal class ShizukuNativeHandler(
     }
 
     private suspend fun ensureServiceReady(timeoutMs: Long): IPrivilegedCommandService {
-        if (!Shizuku.pingBinder()) throw BinderUnavailable
+        if (!Shizuku.pingBinder()) throw BinderUnavailable()
         if (Shizuku.checkSelfPermission() != PackageManager.PERMISSION_GRANTED) {
-            throw PermissionRequired
+            throw PermissionRequired()
         }
 
         ShizukuCommandServiceHolder.currentService()?.let { return it }
@@ -431,18 +431,18 @@ internal class ShizukuNativeHandler(
         val bound = ShizukuCommandServiceHolder.bindService()
         if (!bound) {
             ShizukuCommandServiceHolder.setServiceConnectedListener(null)
-            throw ServiceBindFailed
+            throw ServiceBindFailed()
         }
 
         val awaited = latch.await(timeoutMs, TimeUnit.MILLISECONDS)
         ShizukuCommandServiceHolder.setServiceConnectedListener(null)
 
         if (!awaited) {
-            throw ServiceBindTimeout
+            throw ServiceBindTimeout()
         }
 
         return ShizukuCommandServiceHolder.currentService()
-            ?: throw ServiceBindFailed
+            ?: throw ServiceBindFailed()
     }
 
     private fun detectShizukuState(): ShizukuCapabilityState {
@@ -519,7 +519,7 @@ internal class ShizukuNativeHandler(
     }
 }
 
-private class BinderUnavailable : Exception("Shizuku binder not available")
-private class PermissionRequired : Exception("Shizuku permission not granted")
-private class ServiceBindFailed : Exception("Shizuku UserService bind failed")
-private class ServiceBindTimeout : Exception("Shizuku UserService bind timed out")
+internal class BinderUnavailable : Exception("Shizuku binder not available")
+internal class PermissionRequired : Exception("Shizuku permission not granted")
+internal class ServiceBindFailed : Exception("Shizuku UserService bind failed")
+internal class ServiceBindTimeout : Exception("Shizuku UserService bind timed out")

@@ -7,6 +7,7 @@ import android.os.RemoteException
 import rikka.shizuku.Shizuku
 import java.io.BufferedReader
 import java.io.InputStreamReader
+import java.util.concurrent.Callable
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
@@ -16,14 +17,9 @@ class ShizukuCommandService : IPrivilegedCommandService.Stub() {
     private val ioExecutor = Executors.newFixedThreadPool(2)
     private val destroyed = AtomicBoolean(false)
 
+    override fun asBinder(): IBinder = this as IBinder
+
     override fun onTransact(code: Int, data: Parcel, reply: Parcel?, flags: Int): Boolean {
-        if (code == IBinder.INTERFACE_TRANSACTION) {
-            return try {
-                super.onTransact(code, data, reply, flags)
-            } catch (e: Exception) {
-                false
-            }
-        }
         if (destroyed.get()) {
             return false
         }
@@ -61,10 +57,6 @@ class ShizukuCommandService : IPrivilegedCommandService.Stub() {
                 ioExecutor.awaitTermination(250, TimeUnit.MILLISECONDS)
             } catch (_: Exception) {
             } finally {
-                // Shizuku UserService processes are not normal Android service
-                // processes and are not killed by unbindUserService alone. The
-                // official destroy transaction is responsible for terminating
-                // the privileged process after cleanup.
                 System.exit(0)
             }
         }
@@ -193,13 +185,13 @@ class ShizukuCommandService : IPrivilegedCommandService.Stub() {
 
             val timedOut = AtomicBoolean(false)
 
-            val stdoutFuture = ioExecutor.submit {
+            val stdoutFuture = ioExecutor.submit(Callable<String> {
                 readBounded(process.inputStream, maxOutputBytes)
-            }
+            })
 
-            val stderrFuture = ioExecutor.submit {
+            val stderrFuture = ioExecutor.submit(Callable<String> {
                 readBounded(process.errorStream, maxOutputBytes)
-            }
+            })
 
             val finished = process.waitFor(timeoutMs, TimeUnit.MILLISECONDS)
 
@@ -259,8 +251,6 @@ class ShizukuCommandService : IPrivilegedCommandService.Stub() {
     }
 
     companion object {
-        const val TRANSACTION_executeCommand: Int = IBinder.FIRST_CALL_TRANSACTION
-
         fun createArgs(): Shizuku.UserServiceArgs {
             return Shizuku.UserServiceArgs(
                 ComponentName(

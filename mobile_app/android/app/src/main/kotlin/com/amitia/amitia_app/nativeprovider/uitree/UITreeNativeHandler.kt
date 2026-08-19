@@ -1,3 +1,5 @@
+package com.amitia.amitia_app.nativeprovider.uitree
+
 import android.accessibilityservice.AccessibilityService
 import android.content.Context
 import android.graphics.Rect
