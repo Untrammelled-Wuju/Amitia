@@ -136,6 +136,12 @@ class _BootstrapInstallRequiredWidgetState
   bool _installing = false;
   String? _errorMessage;
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _installRuntime());
+  }
+
   Future<void> _installRuntime() async {
     if (_installing) return;
 
@@ -176,18 +182,14 @@ class _BootstrapInstallRequiredWidgetState
               child: Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
-                  const Text('运行环境尚未安装'),
+                  const Text('正在准备运行环境'),
                   const SizedBox(height: 16),
-                  ElevatedButton(
-                    onPressed: _installing ? null : _installRuntime,
-                    child: _installing
-                        ? const SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(strokeWidth: 2),
-                          )
-                        : const Text('安装运行环境'),
-                  ),
+                  if (_installing)
+                    const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    ),
                   if (_errorMessage != null) ...[
                     const SizedBox(height: 16),
                     Text(
@@ -196,6 +198,11 @@ class _BootstrapInstallRequiredWidgetState
                         color: Theme.of(context).colorScheme.error,
                       ),
                       textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: _installRuntime,
+                      child: const Text('重试'),
                     ),
                   ],
                 ],
