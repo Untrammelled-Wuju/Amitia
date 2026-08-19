@@ -48,19 +48,17 @@ func (s *SettingsStore) Get(key string) (string, int64, error) {
 
 func (s *SettingsStore) Upsert(key, value string) (int64, error) {
 	var existing struct {
-		ID       uint64
 		Revision int64
 	}
-	err := s.db.Model(&AppSetting{}).Select("id, revision").Where("key = ?", key).Take(&existing).Error
+	err := s.db.Model(&AppSetting{}).Select("revision").Where("key = ?", key).Take(&existing).Error
 	if err == gorm.ErrRecordNotFound {
 		now := time.Now().UTC()
-		setting := AppSetting{
-			Key:       key,
-			Value:     value,
-			Revision:  1,
-			UpdatedAt: &now,
-		}
-		if err := s.db.Create(&setting).Error; err != nil {
+		if err := s.db.Table("app_settings").Create(map[string]interface{}{
+			"key":        key,
+			"value":      value,
+			"revision":   1,
+			"updated_at": now,
+		}).Error; err != nil {
 			return 0, fmt.Errorf("settings create: %w", err)
 		}
 		return 1, nil
@@ -91,19 +89,17 @@ func (s *SettingsStore) Upsert(key, value string) (int64, error) {
 func (s *SettingsStore) SetWithCAS(key, value string, baseRevision int64) (int64, error) {
 	if baseRevision == 0 {
 		var existing struct {
-			ID       uint64
 			Revision int64
 		}
-		err := s.db.Model(&AppSetting{}).Select("id, revision").Where("key = ?", key).Take(&existing).Error
+		err := s.db.Model(&AppSetting{}).Select("revision").Where("key = ?", key).Take(&existing).Error
 		if err == gorm.ErrRecordNotFound {
 			now := time.Now().UTC()
-			setting := AppSetting{
-				Key:       key,
-				Value:     value,
-				Revision:  1,
-				UpdatedAt: &now,
-			}
-			if err := s.db.Create(&setting).Error; err != nil {
+			if err := s.db.Table("app_settings").Create(map[string]interface{}{
+				"key":        key,
+				"value":      value,
+				"revision":   1,
+				"updated_at": now,
+			}).Error; err != nil {
 				return 0, fmt.Errorf("settings create: %w", err)
 			}
 			return 1, nil
@@ -133,11 +129,10 @@ func (s *SettingsStore) SetWithCAS(key, value string, baseRevision int64) (int64
 
 func (s *SettingsStore) DeleteWithTombstone(key string, baseRevision int64) (int64, error) {
 	var existing struct {
-		ID        uint64
 		Revision  int64
 		DeletedAt gorm.DeletedAt
 	}
-	err := s.db.Model(&AppSetting{}).Select("id, revision, deleted_at").Where("key = ?", key).Take(&existing).Error
+	err := s.db.Model(&AppSetting{}).Select("revision, deleted_at").Where("key = ?", key).Take(&existing).Error
 	if err == gorm.ErrRecordNotFound {
 		return 0, fmt.Errorf("key not found")
 	}
