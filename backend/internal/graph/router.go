@@ -9,12 +9,14 @@ import (
 )
 
 func RegisterGraphRouter(r *gin.RouterGroup, cfg config.SurrealConfig) {
+	var svc Service
 	client, err := NewClient(cfg)
 	if err != nil {
-		log.Warn("Graph 路由未注册: SurrealDB 连接失败:", err)
-		return
+		log.Warn("Graph SurrealDB 初始连接失败，将使用延迟连接:", err)
+		svc = NewRetryingService(cfg)
+	} else {
+		svc = NewService(client)
 	}
-	svc := NewService(client)
 	handler := NewHandler(svc)
 
 	g := r.Group("/graph")

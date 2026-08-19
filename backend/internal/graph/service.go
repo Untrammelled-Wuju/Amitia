@@ -7,8 +7,10 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/surrealdb/surrealdb.go"
+	"github.com/u-ai/backend/config"
 )
 
 type Service interface {
@@ -382,6 +384,80 @@ func extractTypes(results *[]surrealdb.QueryResult[any]) []map[string]interface{
 }
 
 var _ Service = (*service)(nil)
+
+type retryingService struct {
+	cfg    config.SurrealConfig
+	mu     sync.Mutex
+	cached Service
+}
+
+func NewRetryingService(cfg config.SurrealConfig) Service {
+	return &retryingService{cfg: cfg}
+}
+
+func (r *retryingService) get() Service {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.cached != nil {
+		return r.cached
+	}
+	client, err := NewClient(r.cfg)
+	if err != nil {
+		return NewStubService()
+	}
+	r.cached = NewService(client)
+	return r.cached
+}
+
+func (r *retryingService) Name() string { return "图谱关系" }
+
+func (r *retryingService) Process(ctx context.Context, convID string, messages []map[string]string, newReply string) error {
+	return nil
+}
+
+func (r *retryingService) SyncNode(entityType, entityID, label string, properties map[string]interface{}) error {
+	return r.get().SyncNode(entityType, entityID, label, properties)
+}
+
+func (r *retryingService) SyncEdge(sourceID, targetID, relationType string, weight float64) error {
+	return r.get().SyncEdge(sourceID, targetID, relationType, weight)
+}
+
+func (r *retryingService) DeleteNode(entityID string) error {
+	return r.get().DeleteNode(entityID)
+}
+
+func (r *retryingService) DeleteNodeIfOrphan(entityID string) error {
+	return r.get().DeleteNodeIfOrphan(entityID)
+}
+
+func (r *retryingService) DeleteNodesByProperty(entityType, propertyKey, propertyValue string) error {
+	return r.get().DeleteNodesByProperty(entityType, propertyKey, propertyValue)
+}
+
+func (r *retryingService) QueryNeighbors(entityID string, depth int, userID string) (map[string]interface{}, error) {
+	return r.get().QueryNeighbors(entityID, depth, userID)
+}
+
+func (r *retryingService) FindPaths(sourceID, targetID string, maxDepth int) ([]map[string]interface{}, error) {
+	return r.get().FindPaths(sourceID, targetID, maxDepth)
+}
+
+func (r *retryingService) DeleteOrphanNodes() error {
+	return r.get().DeleteOrphanNodes()
+}
+
+func (r *retryingService) GetStats(userID string) (map[string]interface{}, error) {
+	return r.get().GetStats(userID)
+}
+
+func (r *retryingService) GetAllNodes(userID string) ([]map[string]interface{}, error) {
+	return r.get().GetAllNodes(userID)
+}
+
+func (r *retryingService) GetAllEdges(userID string) ([]map[string]interface{}, error) {
+	return r.get().GetAllEdges(userID)
+}
 
 type stubService struct{}
 
