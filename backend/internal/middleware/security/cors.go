@@ -44,6 +44,9 @@ func CorsMiddleware(cfg CorsConfig) gin.HandlerFunc {
 					break
 				}
 			}
+			if !allowed && isDesktopDevelopmentOrigin(origin) {
+				allowed = true
+			}
 		}
 
 		if origin != "" {
