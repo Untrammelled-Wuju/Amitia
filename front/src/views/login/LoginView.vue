@@ -39,7 +39,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           </div>
 
           <template v-else>
-            <div class="login-form">
+            <form class="login-form" @submit.prevent="handleLogin">
               <label class="login-input-label">
                 账号
                 <input
@@ -59,10 +59,11 @@ SPDX-License-Identifier: AGPL-3.0-only
                   @keyup.enter="handleLogin"
                 />
               </label>
-            </div>
+            </form>
             <div class="login-error">{{ errorMsg }}</div>
             <button
               class="login-action"
+              type="button"
               :disabled="loading"
               @click="handleLogin"
             >

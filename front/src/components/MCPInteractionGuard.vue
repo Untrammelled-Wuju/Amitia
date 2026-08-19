@@ -161,6 +161,7 @@ const current = ref<MCPPendingInteraction>();
 const resolving = ref(false);
 const formValues = reactive<Record<string, any>>({});
 let timer: ReturnType<typeof setInterval> | undefined;
+let interactionsAvailable = true;
 const visible = computed({
   get: () => Boolean(current.value),
   set: () => undefined,
@@ -232,11 +233,21 @@ watch(current, () => {
           ? undefined
           : "";
 });
-async function load() {
-  if (current.value) return;
+async function load(): Promise<boolean> {
+  if (!interactionsAvailable || current.value) return interactionsAvailable;
   try {
     current.value = (await listMCPInteractions())[0];
-  } catch {}
+  } catch (error: any) {
+    const status = error?.response?.status ?? error?.code ?? error?.raw?.status;
+    if (status === 404) {
+      interactionsAvailable = false;
+      if (timer) {
+        clearInterval(timer);
+        timer = undefined;
+      }
+    }
+  }
+  return interactionsAvailable;
 }
 async function resolve(action: "accept" | "decline" | "cancel") {
   if (!current.value) return;
@@ -289,8 +300,13 @@ function formatTime(value: string) {
   return Number.isNaN(date.getTime()) ? value : date.toLocaleString();
 }
 onMounted(() => {
-  void load();
-  timer = setInterval(load, 2000);
+  void load().then((available) => {
+    if (available) {
+      timer = setInterval(() => {
+        void load();
+      }, 2000);
+    }
+  });
 });
 onBeforeUnmount(() => {
   if (timer) clearInterval(timer);

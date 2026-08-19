@@ -4,8 +4,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <DesktopTitleBar v-if="isDesktopShell()" />
+  <div id="amitia-overlay-root" aria-live="polite"></div>
   <UpdateDialog />
-  <MCPInteractionGuard v-if="!isPublicPage && !renderError" />
   <PrivacyConsent v-if="!isPublicPage && !renderError" />
   <NotFoundView v-if="renderError" :error="capturedError" />
   <Transition v-else name="route-slide" mode="out-in">
@@ -31,7 +31,6 @@ import { apiClient } from "./ui-index";
 import PrivacyConsent from "./components/PrivacyConsent.vue";
 import UpdateDialog from "./components/UpdateDialog.vue";
 import DesktopTitleBar from "./components/DesktopTitleBar.vue";
-import MCPInteractionGuard from "./components/MCPInteractionGuard.vue";
 import { useTheme } from "./ui-index";
 import { isDesktopShell } from "./runtime/runtime-capabilities";
 import NotFoundView from "./views/NotFoundView.vue";

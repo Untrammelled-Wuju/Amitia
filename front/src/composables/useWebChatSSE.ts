@@ -1,7 +1,11 @@
 // SPDX-FileCopyrightText: 2026 彭旭
 // SPDX-License-Identifier: AGPL-3.0-only
 import { type Ref, nextTick } from "vue";
-import { resolveApiUrl } from "../runtime/runtime-adapter";
+import {
+  createAuthorizedRequestInit,
+  resolveApiUrl,
+} from "../runtime/runtime-adapter";
+import { getAccessToken } from "../stores/refresh-coordinator";
 import { calcTypingDelay } from "@/utils/typing";
 import {
   compareChatMessages,
@@ -39,9 +43,11 @@ export function useWebChatSSE(
   fetchQQStatus: () => void,
   sending: Ref<boolean>,
 ) {
-  let eventSource: EventSource | null = null;
+  let eventAbortController: AbortController | null = null;
   let lastPolledMsgId: string | null = null;
-  let proactiveSSE: EventSource | null = null;
+  let eventReconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let proactiveListener: ((event: Event) => void) | null = null;
+  let active = true;
 
   const typingQueue: any[] = [];
   let typingTimer: ReturnType<typeof setTimeout> | null = null;
@@ -143,33 +149,96 @@ export function useWebChatSSE(
     } catch {}
   }
 
+  function scheduleEventReconnect() {
+    if (!active || !convId.value || eventReconnectTimer) return;
+    eventReconnectTimer = setTimeout(() => {
+      eventReconnectTimer = null;
+      void connectSSE();
+    }, 3000);
+  }
+
+  async function consumeMessageStream(response: Response, signal: AbortSignal) {
+    if (!response.body) return;
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    try {
+      while (!signal.aborted) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true }).replace(/\r\n/g, "\n");
+        let boundary = buffer.indexOf("\n\n");
+        while (boundary !== -1) {
+          const block = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+          const type = block
+            .split("\n")
+            .find((line) => line.startsWith("event:"))
+            ?.slice(6)
+            .trim();
+          const data = block
+            .split("\n")
+            .filter((line) => line.startsWith("data:"))
+            .map((line) => line.slice(5).trimStart())
+            .join("\n");
+          if (
+            data &&
+            (type === "message_created" || type === "message_updated")
+          ) {
+            handleMessageEvent({ data } as MessageEvent);
+          }
+          boundary = buffer.indexOf("\n\n");
+        }
+      }
+    } finally {
+      reader.releaseLock();
+    }
+  }
+
   async function connectSSE() {
+    if (!active) return;
     disconnectSSE();
     if (!convId.value) return;
-    const url = (await resolveApiUrl("/api/messages/events")) + "?channel=web";
-    eventSource = new EventSource(url);
-    eventSource.addEventListener("message_created", handleMessageEvent);
-    eventSource.addEventListener("message_updated", handleMessageEvent);
-    eventSource.onerror = () => {
-      disconnectSSE();
-      setTimeout(() => {
-        if (convId.value) connectSSE();
-      }, 3000);
-    };
+    const controller = new AbortController();
+    eventAbortController = controller;
+    try {
+      const url =
+        (await resolveApiUrl("/api/messages/events")) + "?channel=web";
+      const init = await createAuthorizedRequestInit({
+        headers: { Accept: "text/event-stream" },
+        signal: controller.signal,
+      });
+      const token = getAccessToken();
+      if (token) {
+        (init.headers as Record<string, string>).Authorization = `Bearer ${token}`;
+      }
+      const response = await fetch(url, init);
+      if (!response.ok || !response.headers.get("content-type")?.includes("text/event-stream")) {
+        throw new Error("聊天事件流不可用");
+      }
+      await consumeMessageStream(response, controller.signal);
+    } catch {}
+    if (!controller.signal.aborted) scheduleEventReconnect();
   }
 
   function disconnectSSE() {
-    if (eventSource) {
-      eventSource.close();
-      eventSource = null;
+    if (eventReconnectTimer) {
+      clearTimeout(eventReconnectTimer);
+      eventReconnectTimer = null;
+    }
+    if (eventAbortController) {
+      eventAbortController.abort();
+      eventAbortController = null;
     }
   }
 
   async function connectProactiveSSE() {
-    try {
-      const url = await resolveApiUrl("/api/proactive-sse");
-      proactiveSSE = new EventSource(url);
-      proactiveSSE.addEventListener("proactive_message", (e) => {
+    if (!active || proactiveListener) return;
+    proactiveListener = (event) => {
+      const data = (event as CustomEvent<string>).detail;
+      if (!data) return;
+      try {
+        const e = { data };
         try {
           const msg = normalizeRealtimeMessage(JSON.parse(e.data));
           if (msg.conversationId === convId.value) {
@@ -186,22 +255,19 @@ export function useWebChatSSE(
         } catch {}
         fetchWechatMsgCount();
         fetchQQStatus();
-      });
-      proactiveSSE.onerror = () => {
-        proactiveSSE?.close();
-        setTimeout(() => void connectProactiveSSE(), 5000);
-      };
-    } catch {
-      setTimeout(() => void connectProactiveSSE(), 5000);
-    }
+      } catch {}
+    };
+    window.addEventListener("amitia:proactive-message", proactiveListener);
   }
 
   function disconnectProactiveSSE() {
-    proactiveSSE?.close();
-    proactiveSSE = null;
+    if (!proactiveListener) return;
+    window.removeEventListener("amitia:proactive-message", proactiveListener);
+    proactiveListener = null;
   }
 
   function cleanup() {
+    active = false;
     disconnectSSE();
     disconnectProactiveSSE();
     clearTypingQueue();

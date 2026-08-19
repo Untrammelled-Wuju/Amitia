@@ -205,6 +205,11 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
       case "ui_dialog":
         handleDialog(event);
         break;
+      case "proactive_message":
+        window.dispatchEvent(
+          new CustomEvent("amitia:proactive-message", { detail: data }),
+        );
+        break;
       case "extension_installed":
       case "extension_uninstalled":
       case "extension_enabled":
