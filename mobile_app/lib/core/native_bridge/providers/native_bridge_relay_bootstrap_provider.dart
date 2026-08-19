@@ -8,7 +8,7 @@ import '../../backend_connection/providers/backend_connection_providers.dart';
 import '../../backend_transport/providers/backend_transport_providers.dart';
 import 'native_bridge_relay_provider.dart';
 
-final nativeBridgeRelayBootstrapProvider = Provider((ref) {
+final nativeBridgeRelayBootstrapProvider = Provider<int?>((ref) {
   final connectionAsync = ref.watch(backendConnectionProvider);
   final transportGeneration = ref.watch(backendTransportGenerationProvider);
   final relayNotifier = ref.watch(nativeBridgeRelayClientProvider.notifier);
@@ -16,15 +16,15 @@ final nativeBridgeRelayBootstrapProvider = Provider((ref) {
   final connection = connectionAsync.asData?.value;
   if (connection is! BackendConnectionAvailable) {
     relayNotifier.attachBackend(null, isAndroid: Platform.isAndroid, isIOS: Platform.isIOS);
-    return;
+    return null;
   }
   if (kIsWeb) {
-    return;
+    return null;
   }
   final isAndroid = Platform.isAndroid;
   final isIOS = Platform.isIOS;
   if (!isAndroid && !isIOS) {
-    return;
+    return null;
   }
   relayNotifier.attachBackend(
     connection.config,

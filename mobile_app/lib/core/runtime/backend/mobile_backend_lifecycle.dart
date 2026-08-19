@@ -409,7 +409,7 @@ class _ConnectivityProbeAdapter implements RemoteCoreProbe {
   _ConnectivityProbeAdapter(this._probe);
 
   @override
-  Future<BackendConnectivityResult> probe(Uri baseUri, {Duration timeout}) async {
+  Future<BackendConnectivityResult> probe(Uri baseUri, {Duration timeout = const Duration(seconds: 5)}) async {
     return _probe.probe();
   }
 }

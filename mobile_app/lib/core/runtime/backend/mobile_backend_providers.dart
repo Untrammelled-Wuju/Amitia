@@ -77,7 +77,7 @@ final mobileBackendStatusProvider =
 
 class _NoopRemoteCoreProbe implements RemoteCoreProbe {
   @override
-  Future<BackendConnectivityResult> probe(Uri baseUri, {Duration timeout}) async {
+  Future<BackendConnectivityResult> probe(Uri baseUri, {Duration timeout = const Duration(seconds: 5)}) async {
     return BackendConnectivityResult.unreachable;
   }
 }

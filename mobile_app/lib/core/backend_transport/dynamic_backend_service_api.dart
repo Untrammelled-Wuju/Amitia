@@ -69,6 +69,16 @@ final class DynamicBackendServiceApiProxy implements BackendServiceApi {
   }
 
   @override
+  Future<T?> postPayload<T>(
+    String path, {
+    Object? data,
+    T Function(dynamic)? fromJson,
+  }) {
+    final api = _requireCurrentApi();
+    return api.postPayload<T>(path, data: data, fromJson: fromJson);
+  }
+
+  @override
   Future<T?> put<T>(
     String path, {
     Object? data,

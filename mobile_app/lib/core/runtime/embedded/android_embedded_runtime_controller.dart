@@ -95,7 +95,7 @@ class AndroidEmbeddedRuntimeController implements EmbeddedRuntimeController {
   @override
   Future<BackendEndpoint> getEndpoint() async {
     if (_lastEndpoint != null) return _lastEndpoint!;
-    const endpoint = BackendEndpoint(
+    final endpoint = BackendEndpoint(
       role: BackendEndpointRole.localRuntime,
       httpBaseUri: Uri(scheme: 'http', host: '127.0.0.1', port: 18899),
       websocketBaseUri: Uri(scheme: 'ws', host: '127.0.0.1', port: 18899),

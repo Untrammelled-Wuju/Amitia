@@ -1,6 +1,7 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../backend_connection_availability.dart';
 import '../backend_connection_config.dart';
+import '../backend_connection_credential.dart';
 import '../backend_connection_endpoint.dart';
 import '../backend_connection_repository.dart';
 import '../backend_connection_source.dart';
