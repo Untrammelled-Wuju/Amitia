@@ -36,7 +36,7 @@ id INTEGER PRIMARY KEY AUTOINCREMENT,
 character_id TEXT DEFAULT '',
 mood TEXT DEFAULT '',
 level INTEGER DEFAULT 50,
-created_at TEXT DEFAULT (datetime('now'))
+created_at TEXT
 )`).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ id INTEGER PRIMARY KEY AUTOINCREMENT,
 character_id TEXT DEFAULT '',
 mood TEXT DEFAULT '',
 level INTEGER DEFAULT 50,
-created_at TEXT DEFAULT (datetime('now'))
+created_at TEXT
 )`).Error; err != nil {
 		t.Fatal(err)
 	}
@@ -153,7 +153,7 @@ id INTEGER PRIMARY KEY AUTOINCREMENT,
 character_id TEXT DEFAULT '',
 mood TEXT DEFAULT '',
 level INTEGER DEFAULT 50,
-created_at TEXT DEFAULT (datetime('now'))
+created_at TEXT
 )`).Error; err != nil {
 		t.Fatal(err)
 	}
