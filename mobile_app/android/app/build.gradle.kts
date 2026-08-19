@@ -1,3 +1,5 @@
+import java.security.MessageDigest
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -121,13 +123,13 @@ tasks.register<Copy>("copyFrozenRuntimePackage") {
         }
         doFirst {
             val actualSha = sourceFile.inputStream().use { input ->
-                val digest = java.security.MessageDigest.getInstance("SHA-256")
+                val digest = MessageDigest.getInstance("SHA-256")
                 val buffer = ByteArray(8192)
                 var read: Int
                 while (input.read(buffer).also { read = it } != -1) {
                     digest.update(buffer, 0, read)
                 }
-                digest.digest().joinToString("") { "%02x".format(it) }
+                digest.digest().joinToString("") { it.toInt().and(0xFF).toString(16).padStart(2, '0') }
             }
             if (!actualSha.equals(frozenRuntimePackageSha256, ignoreCase = true)) {
                 throw GradleException("copyFrozenRuntimePackage: SHA256 mismatch for $frozenRuntimePackagePath: expected=$frozenRuntimePackageSha256 actual=$actualSha")
