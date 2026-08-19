@@ -2278,7 +2278,7 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 				return fmt.Errorf("sqlite: apply migration %d: %w", version, err)
 			}
 		}
-		if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations (version, applied_at, checksum) VALUES (?, datetime('now'), ?)`, version, checksum); err != nil {
+		if _, err := tx.ExecContext(ctx, `INSERT INTO schema_migrations (version, applied_at, checksum) VALUES (?, '', ?)`, version, checksum); err != nil {
 			return fmt.Errorf("sqlite: record migration %d: %w", version, err)
 		}
 	}
