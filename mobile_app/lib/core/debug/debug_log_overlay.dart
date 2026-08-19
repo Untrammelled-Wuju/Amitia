@@ -18,6 +18,7 @@ class _DebugLogOverlayState extends ConsumerState<DebugLogOverlay> {
   DebugLogLevel _minLevel = DebugLogLevel.debug;
   final ScrollController _scrollCtrl = ScrollController();
   bool _autoScroll = true;
+  int? _expandedIndex;
 
   static const List<String> _sources = ['all', 'flutter', 'runtime', 'backend', 'sidecar', 'proot', 'unhandled', 'flutter.error'];
 
@@ -103,7 +104,7 @@ class _DebugLogOverlayState extends ConsumerState<DebugLogOverlay> {
                       controller: _scrollCtrl,
                       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                       itemCount: filtered.length,
-                      itemBuilder: (context, i) => _buildLogItem(filtered[i]),
+                      itemBuilder: (context, i) => _buildLogItem(filtered[i], i),
                     ),
                   ),
               ],
@@ -249,49 +250,85 @@ class _DebugLogOverlayState extends ConsumerState<DebugLogOverlay> {
     );
   }
 
-  Widget _buildLogItem(DebugLogEntry entry) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 2),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 56,
-            child: Text(
-              entry.timeStr,
-              style: const TextStyle(color: Color(0xFF777777), fontSize: 9, fontFamily: 'monospace'),
+  Widget _buildLogItem(DebugLogEntry entry, int index) {
+    final hasStack = entry.stackTrace != null && entry.stackTrace!.isNotEmpty;
+    final isExpanded = _expandedIndex == index;
+
+    return GestureDetector(
+      onTap: hasStack
+          ? () => setState(() => _expandedIndex = isExpanded ? null : index)
+          : null,
+      child: Padding(
+        padding: const EdgeInsets.only(bottom: 2),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                SizedBox(
+                  width: 56,
+                  child: Text(
+                    entry.timeStr,
+                    style: const TextStyle(color: Color(0xFF777777), fontSize: 9, fontFamily: 'monospace'),
+                  ),
+                ),
+                Container(
+                  width: 28,
+                  alignment: Alignment.center,
+                  child: Text(
+                    entry.levelStr,
+                    style: TextStyle(
+                      color: _levelColor(entry.level),
+                      fontSize: 8,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                Container(
+                  width: 50,
+                  child: Text(
+                    entry.source,
+                    style: const TextStyle(color: Color(0xFF9C27B0), fontSize: 9),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                if (hasStack)
+                  Icon(
+                    isExpanded ? Icons.expand_less : Icons.expand_more,
+                    size: 12,
+                    color: const Color(0xFF777777),
+                  ),
+                Expanded(
+                  child: Text(
+                    entry.message,
+                    style: const TextStyle(color: Color(0xFFDDDDDD), fontSize: 9, fontFamily: 'monospace'),
+                    maxLines: isExpanded ? 10 : 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
-          ),
-          Container(
-            width: 28,
-            alignment: Alignment.center,
-            child: Text(
-              entry.levelStr,
-              style: TextStyle(
-                color: _levelColor(entry.level),
-                fontSize: 8,
-                fontWeight: FontWeight.bold,
+            if (isExpanded && hasStack)
+              Container(
+                margin: const EdgeInsets.only(top: 4, left: 8, right: 8),
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0D0D0D),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: SelectableText(
+                  entry.stackTrace!,
+                  style: const TextStyle(
+                    color: Color(0xFFAAAAAA),
+                    fontSize: 8,
+                    fontFamily: 'monospace',
+                  ),
+                ),
               ),
-            ),
-          ),
-          Container(
-            width: 50,
-            child: Text(
-              entry.source,
-              style: const TextStyle(color: Color(0xFF9C27B0), fontSize: 9),
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          const SizedBox(width: 4),
-          Expanded(
-            child: Text(
-              entry.message,
-              style: const TextStyle(color: Color(0xFFDDDDDD), fontSize: 9, fontFamily: 'monospace'),
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

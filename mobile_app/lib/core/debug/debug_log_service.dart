@@ -10,12 +10,14 @@ class DebugLogEntry {
   final DebugLogLevel level;
   final String source;
   final String message;
+  final String? stackTrace;
 
   DebugLogEntry({
     required this.time,
     required this.level,
     required this.source,
     required this.message,
+    this.stackTrace,
   });
 
   String get timeStr {
@@ -89,6 +91,7 @@ class DebugLogService {
         level: DebugLogLevel.error,
         source: 'flutter.error',
         message: '${details.exception}',
+        stackTrace: details.stack?.toString(),
       );
     };
 
@@ -97,6 +100,7 @@ class DebugLogService {
         level: DebugLogLevel.error,
         source: 'unhandled',
         message: '$error',
+        stackTrace: stack.toString(),
       );
       return false;
     };
@@ -148,12 +152,14 @@ class DebugLogService {
     required DebugLogLevel level,
     required String source,
     required String message,
+    String? stackTrace,
   }) {
     final entry = DebugLogEntry(
       time: DateTime.now(),
       level: level,
       source: source,
       message: message,
+      stackTrace: stackTrace,
     );
     _entries.add(entry);
     if (_entries.length > _maxEntries) {
