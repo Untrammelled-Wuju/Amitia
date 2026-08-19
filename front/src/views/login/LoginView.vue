@@ -185,6 +185,13 @@ async function handleLogin() {
   overflow: hidden;
 }
 
+:global(html.amitia-desktop-shell) .login-world {
+  position: fixed;
+  inset: 0;
+  width: auto;
+  height: auto;
+}
+
 .login-world button,
 .login-world input {
   font: inherit;

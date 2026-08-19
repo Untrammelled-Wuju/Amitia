@@ -53,6 +53,13 @@
   overflow: hidden;
 }
 
+html.amitia-desktop-shell .onboarding-world {
+  position: fixed;
+  inset: 0;
+  width: auto;
+  height: auto;
+}
+
 .onboarding-world::before {
   content: "";
   position: fixed;
