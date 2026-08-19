@@ -20,17 +20,19 @@ class DefaultRuntimeBootstrap implements RuntimeBootstrap {
   bool _autoStartDecided = false;
   int _lastGeneration = 0;
 
-  RuntimeBootstrapSnapshot _current =
-      RuntimeBootstrapSnapshot.initial();
+  RuntimeBootstrapSnapshot _current = RuntimeBootstrapSnapshot.initial();
 
   DefaultRuntimeBootstrap({
     required RuntimeBridge bridge,
     RuntimeBootstrapPolicy policy = const RuntimeBootstrapPolicy(),
-  })  : _bridge = bridge,
-        _policy = policy;
+  }) : _bridge = bridge,
+       _policy = policy;
 
   @override
-  Stream<RuntimeBootstrapSnapshot> get snapshots => _snapshotController.stream;
+  Stream<RuntimeBootstrapSnapshot> get snapshots async* {
+    yield _current;
+    yield* _snapshotController.stream;
+  }
 
   @override
   Future<void> initialize() async {
@@ -81,7 +83,10 @@ class DefaultRuntimeBootstrap implements RuntimeBootstrap {
     }
   }
 
-  void _updatePhase(RuntimeBootstrapPhase phase, RuntimeBridgeSnapshot snapshot) {
+  void _updatePhase(
+    RuntimeBootstrapPhase phase,
+    RuntimeBridgeSnapshot snapshot,
+  ) {
     _current = RuntimeBootstrapSnapshot(
       phase: phase,
       runtime: snapshot,
