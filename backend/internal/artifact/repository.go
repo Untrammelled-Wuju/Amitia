@@ -81,10 +81,10 @@ func (r *sqliteRepository) SoftDelete(tx *gorm.DB, id ID) error {
 }
 
 func (r *sqliteRepository) SoftDeleteSqlTx(tx *sql.Tx, id ID) error {
-	now := time.Now().Unix()
+	nowStr := time.Now().Format("2006-01-02 15:04:05")
 	_, err := tx.Exec(
-		`UPDATE artifacts SET status = ?, deleted_at = datetime(?, 'unixepoch'), revision = revision + 1 WHERE artifact_id = ?`,
-		StatusDeleted, now, id,
+		`UPDATE artifacts SET status = ?, deleted_at = ?, revision = revision + 1 WHERE artifact_id = ?`,
+		StatusDeleted, nowStr, id,
 	)
 	return err
 }
