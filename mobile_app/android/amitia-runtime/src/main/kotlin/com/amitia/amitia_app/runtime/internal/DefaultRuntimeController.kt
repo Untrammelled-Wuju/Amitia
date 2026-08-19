@@ -189,6 +189,9 @@ internal class DefaultRuntimeController(
                     }
                 }
             }
+            is RuntimeServiceHostEvent.SnapshotUpdated -> {
+                // Snapshot updated, no action needed
+            }
         }
     }
 

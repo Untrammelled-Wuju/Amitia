@@ -30,6 +30,7 @@ import com.amitia.amitia_app.runtime.manifest.RuntimeManifestComponent
 import com.amitia.amitia_app.runtime.manifest.RuntimeManifestPayload
 import com.amitia.amitia_app.runtime.manifest.RuntimeManifestResult
 import com.amitia.amitia_app.runtime.manifest.RuntimeManifestStore
+import com.amitia.amitia_app.runtime.manifest.internal.DefaultRuntimeManifestBuilder
 import com.amitia.amitia_app.runtime.manifest.internal.InstalledTreeHasher
 import java.io.File
 
@@ -53,7 +54,7 @@ internal class DefaultRuntimeInstaller(
     ),
     private val receiptStore: com.amitia.amitia_app.runtime.install.InstallReceiptStore = DefaultInstallReceiptStore(layout),
     private val manifestStore: RuntimeManifestStore,
-    private val manifestBuilder: RuntimeManifestBuilder,
+    private val manifestBuilder: DefaultRuntimeManifestBuilder,
     private val activeRuntimeManager: ActiveRuntimeManager,
 ) : RuntimeInstaller {
 

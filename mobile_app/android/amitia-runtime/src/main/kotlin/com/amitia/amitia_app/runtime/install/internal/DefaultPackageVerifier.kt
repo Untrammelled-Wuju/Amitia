@@ -11,6 +11,9 @@ import com.amitia.amitia_app.runtime.install.PackageVerifier
 import com.amitia.amitia_app.runtime.install.PayloadRef
 import com.amitia.amitia_app.runtime.install.RuntimeInstallErrorCode
 import com.amitia.amitia_app.runtime.install.VerifiedPackage
+import com.amitia.amitia_app.runtime.proot.MountRole
+import com.amitia.amitia_app.runtime.proot.MountSpec
+import com.amitia.amitia_app.runtime.proot.ProotBindMount
 import java.io.File
 import java.security.MessageDigest
 import java.util.zip.ZipFile
@@ -593,15 +596,15 @@ internal class DefaultPackageVerifier : PackageVerifier {
     private fun parseMountContractFromZip(zip: ZipFile, entryPath: String): MountContract? {
         val text = readZipEntryText(zip, entryPath) ?: return null
         return try {
-            val binds = mutableListOf<BindMount>()
+            val binds = mutableListOf<ProotBindMount>()
             val bindsArray = extractJsonArray(text, "binds")
             for (bindObj in bindsArray) {
                 val source = extractJsonString(bindObj, "source")
                 val target = extractJsonString(bindObj, "target")
                 val readOnly = extractJsonBoolean(bindObj, "readOnly")
-                binds.add(BindMount(source = source, target = target, readOnly = readOnly))
+                binds.add(ProotBindMount.create(source, target, readOnly))
             }
-            MountContract(binds = binds)
+            MountContract(mounts = binds.map { MountSpec(role = MountRole.PROGRAM, hostSource = it.host, guestTarget = it.guest, writable = !it.readOnly) })
         } catch (_: Exception) {
             null
         }
