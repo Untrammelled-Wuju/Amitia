@@ -3,8 +3,6 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'debug_log_service.dart';
 
-final debugLogOverlayVisibleProvider = StateProvider<bool>((ref) => false);
-
 class DebugLogOverlay extends ConsumerStatefulWidget {
   const DebugLogOverlay({super.key});
 
@@ -15,7 +13,7 @@ class DebugLogOverlay extends ConsumerStatefulWidget {
 class _DebugLogOverlayState extends ConsumerState<DebugLogOverlay> {
   double _right = 16;
   double _top = 100;
-  bool _expanded = false;
+  bool _expanded = true;
   String _filterSource = 'all';
   DebugLogLevel _minLevel = DebugLogLevel.debug;
   final ScrollController _scrollCtrl = ScrollController();
@@ -62,9 +60,6 @@ class _DebugLogOverlayState extends ConsumerState<DebugLogOverlay> {
 
   @override
   Widget build(BuildContext context) {
-    final isVisible = ref.watch(debugLogOverlayVisibleProvider);
-    if (!isVisible) return const SizedBox.shrink();
-
     final entriesAsync = ref.watch(debugLogEntriesProvider);
     final entries = entriesAsync.valueOrNull ?? [];
     final filtered = _filter(entries);
@@ -78,7 +73,7 @@ class _DebugLogOverlayState extends ConsumerState<DebugLogOverlay> {
     }
 
     return Positioned(
-      right: _right,
+      right: _expanded ? _right : _right,
       top: _top,
       child: GestureDetector(
         onPanUpdate: (d) {
@@ -297,27 +292,6 @@ class _DebugLogOverlayState extends ConsumerState<DebugLogOverlay> {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class DebugLogToggleFAB extends ConsumerWidget {
-  const DebugLogToggleFAB({super.key});
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final isVisible = ref.watch(debugLogOverlayVisibleProvider);
-    return FloatingActionButton.small(
-      heroTag: 'debug_log_fab',
-      onPressed: () {
-        ref.read(debugLogOverlayVisibleProvider.notifier).state = !isVisible;
-      },
-      backgroundColor: isVisible ? const Color(0xFF3D5AFE) : const Color(0xFF424242),
-      child: Icon(
-        isVisible ? Icons.bug_report : Icons.bug_report_outlined,
-        size: 18,
-        color: Colors.white,
       ),
     );
   }

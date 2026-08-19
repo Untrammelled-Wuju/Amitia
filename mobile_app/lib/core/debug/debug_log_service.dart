@@ -71,13 +71,15 @@ class DebugLogService {
 
     debugPrint = (String? message, {int? wrapWidth}) {
       if (message != null && message.isNotEmpty) {
-        final level = message.contains('Error') || message.contains('Exception')
+        final msg = message.trim();
+        if (_shouldFilterOut(msg)) return;
+        final level = msg.contains('Error') || msg.contains('Exception')
             ? DebugLogLevel.error
             : DebugLogLevel.debug;
         _addEntry(
           level: level,
           source: 'flutter',
-          message: message,
+          message: msg,
         );
       }
     };
@@ -86,7 +88,7 @@ class DebugLogService {
       _addEntry(
         level: DebugLogLevel.error,
         source: 'flutter.error',
-        message: '${details.exception}\n${details.stack}',
+        message: '${details.exception}',
       );
     };
 
@@ -94,10 +96,23 @@ class DebugLogService {
       _addEntry(
         level: DebugLogLevel.error,
         source: 'unhandled',
-        message: '$error\n$stack',
+        message: '$error',
       );
       return false;
     };
+  }
+
+  bool _shouldFilterOut(String msg) {
+    if (msg.length > 500) return true;
+    final lower = msg.toLowerCase();
+    if (lower.contains('building ')) return true;
+    if (lower.contains('layout ')) return true;
+    if (lower.contains('paint ')) return true;
+    if (lower.contains('frame ')) return true;
+    if (lower.contains('wfp ')) return true;
+    if (lower.contains('chunk ')) return true;
+    if (lower.startsWith('')) return false;
+    return false;
   }
 
   void log(DebugLogLevel level, String source, String message) {

@@ -11,24 +11,6 @@ void main() {
   container.read(debugLogServiceProvider).init();
   runApp(UncontrolledProviderScope(
     container: container,
-    child: const _DebugRoot(),
+    child: const AmitiaAppRoot(),
   ));
-}
-
-class _DebugRoot extends ConsumerWidget {
-  const _DebugRoot();
-
-  @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    ref.watch(debugRuntimeLogBridgeProvider);
-    return Directionality(
-      textDirection: TextDirection.ltr,
-      child: Stack(
-        children: [
-          const AmitiaAppRoot(),
-          const DebugLogOverlay(),
-        ],
-      ),
-    );
-  }
 }
