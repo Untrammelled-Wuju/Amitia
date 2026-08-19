@@ -170,7 +170,8 @@ func (s *service) ProcessDueActiveMessageTasksContext(ctx context.Context, chara
 	}
 	now := time.Now()
 	nowStr := now.Format("2006-01-02 15:04:05")
-	s.db.Exec("UPDATE active_message_task SET status='PENDING', lock_until=NULL, updated_at=datetime('now', 'localtime') WHERE status='PROCESSING' AND updated_at < datetime('now', 'localtime', '-5 minutes') AND character_id = ?", characterID)
+	fiveMinAgo := now.Add(-5 * time.Minute).Format("2006-01-02 15:04:05")
+	s.db.Exec("UPDATE active_message_task SET status='PENDING', lock_until=NULL, updated_at=? WHERE status='PROCESSING' AND updated_at < ? AND character_id = ?", nowStr, fiveMinAgo, characterID)
 	var tasks []map[string]interface{}
 	s.db.Table("active_message_task").Where("status = 'PENDING' AND due_time <= ? AND character_id = ?", nowStr, characterID).Order("due_time ASC").Limit(20).Find(&tasks)
 	var processed, sent, delayed, failed int
@@ -190,7 +191,8 @@ func (s *service) ProcessDueActiveMessageTasksContext(ctx context.Context, chara
 		if prompt == "" {
 			continue
 		}
-		result := s.db.Exec("UPDATE active_message_task SET status='PROCESSING', lock_until=datetime('now', 'localtime', '+5 minutes') WHERE id = ? AND status='PENDING' AND character_id = ?", id, characterID)
+		fiveMinLater := time.Now().Add(5 * time.Minute).Format("2006-01-02 15:04:05")
+		result := s.db.Exec("UPDATE active_message_task SET status='PROCESSING', lock_until=? WHERE id = ? AND status='PENDING' AND character_id = ?", fiveMinLater, id, characterID)
 		if result.RowsAffected == 0 {
 			continue
 		}
@@ -199,7 +201,8 @@ func (s *service) ProcessDueActiveMessageTasksContext(ctx context.Context, chara
 		if currentState == "SLEEPING" || currentState == "IN_CLASS" || currentState == "IN_EXAM" || currentState == "BUSY" {
 			delayMin := 10
 			newDue := now.Add(time.Duration(delayMin) * time.Minute).Format("2006-01-02 15:04:05")
-			s.db.Exec("UPDATE active_message_task SET status='PENDING', lock_until=NULL, due_time=?, updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", newDue, id, characterID)
+			nowStr := time.Now().Format("2006-01-02 15:04:05")
+			s.db.Exec("UPDATE active_message_task SET status='PENDING', lock_until=NULL, due_time=?, updated_at=? WHERE id=? AND character_id=?", newDue, nowStr, id, characterID)
 			delayed++
 			continue
 		}
@@ -220,19 +223,21 @@ func (s *service) ProcessDueActiveMessageTasksContext(ctx context.Context, chara
 				}
 			}
 			retryCount++
+			nowStr := time.Now().Format("2006-01-02 15:04:05")
 			if retryCount >= 3 {
-				s.db.Exec("UPDATE active_message_task SET status='FAILED', retry_count=?, updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", retryCount, id, characterID)
+				s.db.Exec("UPDATE active_message_task SET status='FAILED', retry_count=?, updated_at=? WHERE id=? AND character_id=?", retryCount, nowStr, id, characterID)
 				failed++
 			} else {
 				newDue := now.Add(time.Duration(5*retryCount) * time.Minute).Format("2006-01-02 15:04:05")
-				s.db.Exec("UPDATE active_message_task SET status='PENDING', lock_until=NULL, due_time=?, retry_count=?, updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", newDue, retryCount, id, characterID)
+				s.db.Exec("UPDATE active_message_task SET status='PENDING', lock_until=NULL, due_time=?, retry_count=?, updated_at=? WHERE id=? AND character_id=?", newDue, retryCount, nowStr, id, characterID)
 				delayed++
 			}
 			continue
 		}
 		if dispatchResult == nil {
 			newDue := now.Add(30 * time.Minute).Format("2006-01-02 15:04:05")
-			s.db.Exec("UPDATE active_message_task SET status='PENDING', lock_until=NULL, due_time=?, updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", newDue, id, characterID)
+			nowStr := time.Now().Format("2006-01-02 15:04:05")
+			s.db.Exec("UPDATE active_message_task SET status='PENDING', lock_until=NULL, due_time=?, updated_at=? WHERE id=? AND character_id=?", newDue, nowStr, id, characterID)
 			delayed++
 			continue
 		}
@@ -251,7 +256,8 @@ func (s *service) ProcessDueActiveMessageTasksContext(ctx context.Context, chara
 		}
 		deliveryID := uuid.New().String()
 		s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, interaction_id, delivery_id, request_id, delivery_status, created_at, updated_at) VALUES (0, ?, ?, ?, 'queued', ?, ?, ?, 'PENDING', ?, ?)", convID, messageContent, channelSetting, interactionID, deliveryID, requestID, nowStr, nowStr)
-		s.db.Exec("UPDATE active_message_task SET status='PROCESSED', sent_at=?, updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", nowStr, id, characterID)
+		nowUpdate := time.Now().Format("2006-01-02 15:04:05")
+		s.db.Exec("UPDATE active_message_task SET status='PROCESSED', sent_at=?, updated_at=? WHERE id=? AND character_id=?", nowStr, nowUpdate, id, characterID)
 		log.Printf("[Companion] ProcessDueActiveMessageTasks sent type=%s id=%v", taskType, id)
 		sent++
 	}

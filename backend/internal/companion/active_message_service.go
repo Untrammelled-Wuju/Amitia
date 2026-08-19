@@ -86,7 +86,8 @@ func (s *service) UpdateActiveMessageSetting(body map[string]interface{}, charac
 
 func (s *service) GetActiveMessageTasksToday(characterID string) []map[string]interface{} {
 	var raw []map[string]interface{}
-	s.db.Table("active_message_task").Where("date(due_time) = date('now', 'localtime') AND character_id = ?", characterID).Order("due_time ASC").Find(&raw)
+	todayDate := time.Now().Format("2006-01-02")
+	s.db.Table("active_message_task").Where("date(due_time) = ? AND character_id = ?", todayDate, characterID).Order("due_time ASC").Find(&raw)
 	tasks := make([]map[string]interface{}, len(raw))
 	for i, r := range raw {
 		tasks[i] = map[string]interface{}{
@@ -113,7 +114,10 @@ func (s *service) GetActiveMessageTasksToday(characterID string) []map[string]in
 }
 
 func (s *service) RegenerateActiveMessageTasks(characterID string) map[string]interface{} {
-	s.db.Exec("UPDATE active_message_task SET status='CANCELLED', cancel_reason='regenerate', updated_at=datetime('now', 'localtime') WHERE date(due_time)=date('now', 'localtime') AND status='PENDING' AND character_id = ?", characterID)
+	now := time.Now()
+	nowDate := now.Format("2006-01-02")
+	nowStr := now.Format("2006-01-02 15:04:05")
+	s.db.Exec("UPDATE active_message_task SET status='CANCELLED', cancel_reason='regenerate', updated_at=? WHERE date(due_time)=? AND status='PENDING' AND character_id = ?", nowStr, nowDate, characterID)
 	return map[string]interface{}{"regenerated": true}
 }
 
@@ -144,7 +148,8 @@ func (s *service) RunActiveMessageTaskContext(ctx context.Context, id int, chara
 	}
 	convID := s.resolveConversationID(characterID, channelSetting, "")
 	if convID == "" {
-		s.db.Exec("UPDATE active_message_task SET status='FAILED', updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", id, characterID)
+		nowStr := time.Now().Format("2006-01-02 15:04:05")
+	s.db.Exec("UPDATE active_message_task SET status='FAILED', updated_at=? WHERE id=? AND character_id=?", nowStr, id, characterID)
 		return map[string]interface{}{"id": id, "status": "NO_CONVERSATION", "taskType": taskType, "channel": channelSetting}
 	}
 
@@ -152,7 +157,8 @@ func (s *service) RunActiveMessageTaskContext(ctx context.Context, id int, chara
 
 	result, err := s.submitProactiveMessage(ctx, characterID, convID, channelSetting, prompt, proactiveRequestID("proactive-task", id))
 	if err != nil {
-		s.db.Exec("UPDATE active_message_task SET status='FAILED', updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", id, characterID)
+		nowStr := time.Now().Format("2006-01-02 15:04:05")
+		s.db.Exec("UPDATE active_message_task SET status='FAILED', updated_at=? WHERE id=? AND character_id=?", nowStr, id, characterID)
 		return map[string]interface{}{"id": id, "status": "FAILED", "taskType": taskType, "channel": channelSetting, "error": err.Error()}
 	}
 	if result == nil {
@@ -185,13 +191,15 @@ func (s *service) RunActiveMessageTaskContext(ctx context.Context, id int, chara
 	}
 
 	s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, interaction_id, delivery_id, request_id, delivery_status, created_at, updated_at) VALUES (0, ?, ?, ?, 'queued', ?, ?, ?, 'PENDING', ?, ?)", convID, messageContent, channelSetting, interactionID, deliveryID, requestID, nowStr, nowStr)
-	s.db.Exec("UPDATE active_message_task SET status='QUEUED', updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", id, characterID)
+	nowStr := time.Now().Format("2006-01-02 15:04:05")
+	s.db.Exec("UPDATE active_message_task SET status='QUEUED', updated_at=? WHERE id=? AND character_id=?", nowStr, id, characterID)
 
 	log.Printf("[Companion] RunActiveMessageTask queued type=%s id=%d channel=%s deliveryID=%s", taskType, id, channelSetting, deliveryID)
 	return map[string]interface{}{"id": id, "status": "QUEUED", "taskType": taskType, "channel": channelSetting}
 }
 
 func (s *service) CancelActiveMessageTask(id int, characterID string) map[string]interface{} {
-	s.db.Exec("UPDATE active_message_task SET status='CANCELLED', cancel_reason='manual', updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", id, characterID)
+	nowStr := time.Now().Format("2006-01-02 15:04:05")
+	s.db.Exec("UPDATE active_message_task SET status='CANCELLED', cancel_reason='manual', updated_at=? WHERE id=? AND character_id=?", nowStr, id, characterID)
 	return map[string]interface{}{"id": id, "cancelled": true}
 }
