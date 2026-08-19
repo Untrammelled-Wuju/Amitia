@@ -4,8 +4,9 @@ package migration
 
 func DesktopPetProcessedFramesMigration() Migration {
 	return Migration{
-		Version: "202607240011",
-		Name:    "add_desktop_pet_processed_frames_table",
+		Version:           "202607240011",
+		Name:              "add_desktop_pet_processed_frames_table",
+		AcceptedChecksums: []string{"c285ffd9ff5bd50d36120756b3f4184c5f31e9e737a1281fbde97ebcd1628890"},
 		Up: func(s *Step) error {
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_processed_frames (
 id TEXT PRIMARY KEY,
@@ -25,8 +26,8 @@ alpha_coverage REAL DEFAULT 0,
 quality_flags TEXT DEFAULT '',
 error_code TEXT DEFAULT '',
 error_message TEXT DEFAULT '',
-created_at TEXT DEFAULT (datetime('now')),
-updated_at TEXT DEFAULT (datetime('now'))
+created_at TEXT DEFAULT '',
+updated_at TEXT DEFAULT ''
 )`)
 			if err := s.CreateIndex("idx_dppf_action", "desktop_pet_processed_frames", []string{"processing_action_id"}, false); err != nil {
 				return err

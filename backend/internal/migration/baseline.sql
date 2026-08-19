@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS auth_refresh_tokens (
     used_at DATETIME,
     revoked_at DATETIME,
     replaced_by_token_id TEXT,
-    created_at DATETIME NOT NULL DEFAULT '')
+    created_at DATETIME NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS auth_login_guards (
@@ -79,7 +79,7 @@ CREATE TABLE IF NOT EXISTS security_audit_events (
     detail TEXT,
     details_json TEXT,
     occurred_at TEXT,
-    created_at DATETIME NOT NULL DEFAULT '')
+    created_at DATETIME NOT NULL DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS auth_recovery_codes (
@@ -157,7 +157,7 @@ CREATE TABLE IF NOT EXISTS character_templates (
     description TEXT DEFAULT '',
     builtin INTEGER DEFAULT 0,
     template_json TEXT DEFAULT '',
-    created_at TEXT DEFAULT '')
+    created_at TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS conversations (
@@ -235,7 +235,7 @@ CREATE TABLE IF NOT EXISTS tool_call_intents (
     idempotency_key TEXT DEFAULT '',
     status TEXT DEFAULT 'PENDING',
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS tool_call_results (
@@ -257,7 +257,7 @@ CREATE TABLE IF NOT EXISTS tool_call_results (
     audit_json TEXT DEFAULT '{}',
     confidence REAL DEFAULT 0,
     force_voice INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT '')
+    created_at TEXT DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_tool_call_intents_request ON tool_call_intents(request_id, tool_name);
@@ -286,7 +286,7 @@ CREATE TABLE IF NOT EXISTS model_configs (
     capabilities_json TEXT DEFAULT '',
     provider_config_json TEXT DEFAULT '{}',
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS tts_configs (
@@ -309,7 +309,7 @@ CREATE TABLE IF NOT EXISTS tts_configs (
     realtime_secret_key TEXT DEFAULT '',
     clone_resource_id TEXT DEFAULT 'volc.megatts.timbre',
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS asr_configs (
@@ -321,7 +321,7 @@ CREATE TABLE IF NOT EXISTS asr_configs (
     resource_id TEXT DEFAULT 'volc.seedasr.auc',
     is_active INTEGER DEFAULT 0,
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS vision_configs (
@@ -333,7 +333,7 @@ CREATE TABLE IF NOT EXISTS vision_configs (
     base_url TEXT DEFAULT 'https://ark.cn-beijing.volces.com/api/v3',
     is_active INTEGER DEFAULT 0,
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS sleep_settings (
@@ -345,7 +345,7 @@ CREATE TABLE IF NOT EXISTS sleep_settings (
     sleep_reply_enabled INTEGER DEFAULT 0,
     sleep_reply_mode TEXT DEFAULT 'NO_REPLY',
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS fixed_events (
@@ -364,7 +364,7 @@ CREATE TABLE IF NOT EXISTS fixed_events (
     reply_mode TEXT DEFAULT 'SHORT_REPLY',
     enabled INTEGER DEFAULT 1,
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS special_events (
@@ -389,7 +389,7 @@ CREATE TABLE IF NOT EXISTS special_events (
     affect_energy INTEGER DEFAULT 0,
     payload TEXT DEFAULT '',
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS class_adjustments (
@@ -401,7 +401,7 @@ CREATE TABLE IF NOT EXISTS class_adjustments (
     adjust_type TEXT DEFAULT 'swap',
     description TEXT DEFAULT '',
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS lifestyle_tendencies (
@@ -417,7 +417,7 @@ CREATE TABLE IF NOT EXISTS lifestyle_tendencies (
     care_tendency INTEGER DEFAULT 50,
     daily_share_tendency INTEGER DEFAULT 50,
     manually_configured INTEGER DEFAULT 0,
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS work_profiles (
@@ -442,7 +442,7 @@ CREATE TABLE IF NOT EXISTS work_profiles (
     delayed_reply_enabled INTEGER DEFAULT 0,
     commute_home_share_enabled INTEGER DEFAULT 1,
     commute_home_share_probability INTEGER DEFAULT 60,
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS role_profiles (
@@ -456,7 +456,7 @@ CREATE TABLE IF NOT EXISTS role_profiles (
     user_addressing_style TEXT DEFAULT '',
     gender_expression INTEGER DEFAULT 30,
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS active_message_settings (
@@ -472,7 +472,7 @@ CREATE TABLE IF NOT EXISTS active_message_settings (
     max_daily_calls INTEGER DEFAULT 10,
     channel TEXT DEFAULT 'all',
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS active_message_task (
@@ -499,7 +499,7 @@ CREATE TABLE IF NOT EXISTS active_message_task (
     source TEXT DEFAULT 'schedule_based',
     lock_until TEXT,
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS proactive_rules (
@@ -518,7 +518,7 @@ CREATE TABLE IF NOT EXISTS proactive_rules (
     random_minutes INTEGER DEFAULT 0,
     last_sent_at TEXT,
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS proactive_messages (
@@ -555,7 +555,7 @@ CREATE TABLE IF NOT EXISTS reminders (
     enabled INTEGER DEFAULT 1,
     last_triggered_at TEXT DEFAULT '',
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS memories (
@@ -662,7 +662,7 @@ CREATE INDEX IF NOT EXISTS idx_memories_derivation_key ON memories(derivation_ke
 
 CREATE TABLE IF NOT EXISTS memory_embeddings (
     memory_id TEXT PRIMARY KEY,
-    created_at TEXT DEFAULT '')
+    created_at TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS episodic_memories (
@@ -700,7 +700,7 @@ CREATE TABLE IF NOT EXISTS user_profiles (
     source_conv_id TEXT DEFAULT '',
     verified_at TEXT DEFAULT '',
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_user_profiles_uid_cat_attr ON user_profiles(user_id, character_id, category, attribute_name);
@@ -716,7 +716,7 @@ CREATE TABLE IF NOT EXISTS world_book (
     priority INTEGER DEFAULT 0,
     hit_count INTEGER DEFAULT 0,
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_world_book_match_type ON world_book(match_type);
@@ -740,7 +740,7 @@ CREATE TABLE IF NOT EXISTS message_feedback (
     message_id TEXT DEFAULT '',
     rating INTEGER DEFAULT 0,
     comment TEXT DEFAULT '',
-    created_at TEXT DEFAULT '')
+    created_at TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS safety_events (
@@ -750,7 +750,7 @@ CREATE TABLE IF NOT EXISTS safety_events (
     description TEXT DEFAULT '',
     direction TEXT DEFAULT '',
     handled INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT '')
+    created_at TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS moods (
@@ -759,7 +759,7 @@ CREATE TABLE IF NOT EXISTS moods (
     mood TEXT DEFAULT '',
     mood_value TEXT DEFAULT '',
     level INTEGER DEFAULT 50,
-    created_at TEXT DEFAULT '')
+    created_at TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS need_states (
@@ -779,7 +779,7 @@ CREATE TABLE IF NOT EXISTS app_settings (
     value TEXT DEFAULT '',
     revision INTEGER NOT NULL DEFAULT 1,
     deleted_at DATETIME,
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_app_settings_key ON app_settings(key);
 CREATE INDEX IF NOT EXISTS idx_app_settings_deleted_at ON app_settings(deleted_at);
@@ -813,7 +813,7 @@ CREATE TABLE IF NOT EXISTS retrieval_logs (
     query_text TEXT NOT NULL DEFAULT '',
     retrieved_memory_ids TEXT DEFAULT '[]',
     scoring_details TEXT DEFAULT '{}',
-    created_at TEXT DEFAULT '')
+    created_at TEXT DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_retrieval_logs_conv_created ON retrieval_logs(conversation_id, created_at);
@@ -830,7 +830,7 @@ CREATE TABLE IF NOT EXISTS embedding_configs (
     is_active INTEGER DEFAULT 0,
     provider_config_json TEXT DEFAULT '',
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS image_gen_configs (
@@ -843,7 +843,7 @@ CREATE TABLE IF NOT EXISTS image_gen_configs (
     is_active INTEGER DEFAULT 0,
     enabled INTEGER NOT NULL DEFAULT 1,
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS mcp_duplicate_tool_registrations (
@@ -894,7 +894,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_action_definitions (
     spec_json TEXT NOT NULL DEFAULT '{}',
     spec_hash TEXT NOT NULL DEFAULT '',
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 
 CREATE TABLE IF NOT EXISTS desktop_pet_generation_tasks (
@@ -1343,7 +1343,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_installations (
     canvas_width INTEGER NOT NULL DEFAULT 0,
     canvas_height INTEGER NOT NULL DEFAULT 0,
     package_hash TEXT DEFAULT '',
-    installed_at TEXT DEFAULT ''),
+    installed_at TEXT DEFAULT '',
     last_enabled_at TEXT DEFAULT '',
     last_disabled_at TEXT DEFAULT '',
     created_at TEXT DEFAULT '',
@@ -1402,7 +1402,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_runtime_settings (
     last_window_height INTEGER NOT NULL DEFAULT 0,
     position_updated_at TEXT NOT NULL DEFAULT '',
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS idx_dprts_installation ON desktop_pet_runtime_settings(installation_id);
@@ -1526,7 +1526,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_behavior_inbox (
     last_error_code TEXT NOT NULL DEFAULT '',
     last_error_message TEXT NOT NULL DEFAULT '',
     processed_at TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT '')
+    created_at TEXT DEFAULT ''
 );
 
 CREATE UNIQUE INDEX IF NOT EXISTS ux_desktop_pet_behavior_inbox_dedup ON desktop_pet_behavior_inbox(dedup_key);
@@ -1581,7 +1581,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_behavior_bindings (
     enabled INTEGER NOT NULL DEFAULT 1,
     version INTEGER NOT NULL DEFAULT 1,
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 
 CREATE INDEX IF NOT EXISTS idx_behavior_bindings_user_char ON desktop_pet_behavior_bindings(user_id, character_id);
@@ -1597,7 +1597,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_identities (
     next_release_sequence INTEGER NOT NULL DEFAULT 0,
     default_action_key TEXT NOT NULL DEFAULT '',
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_dpident_owner ON desktop_pet_identities(owner_user_id);
 CREATE INDEX IF NOT EXISTS idx_dpident_character ON desktop_pet_identities(source_character_id);
@@ -1681,7 +1681,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_package_operations (
     lease_expires_at TEXT NOT NULL DEFAULT '',
     heartbeat_at TEXT NOT NULL DEFAULT '',
     snapshot_id TEXT NOT NULL DEFAULT '',
-    started_at TEXT DEFAULT ''),
+    started_at TEXT DEFAULT '',
     updated_at TEXT DEFAULT '',
     completed_at TEXT NOT NULL DEFAULT '',
     UNIQUE(user_id, idempotency_key, operation_type)
@@ -1840,7 +1840,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_installation_operations (
     error_code TEXT NOT NULL DEFAULT '',
     error_message TEXT NOT NULL DEFAULT '',
     retry_count INTEGER NOT NULL DEFAULT 0,
-    started_at TEXT DEFAULT ''),
+    started_at TEXT DEFAULT '',
     updated_at TEXT DEFAULT '',
     completed_at TEXT NOT NULL DEFAULT '',
     UNIQUE(user_id, idempotency_key, operation_type)
@@ -1865,7 +1865,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_active_bindings (
     runtime_sync_state TEXT NOT NULL DEFAULT 'pending',
     desired_updated_at TEXT NOT NULL DEFAULT '',
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_dpab_installation ON desktop_pet_active_bindings(installation_id);
 CREATE INDEX IF NOT EXISTS idx_dpab_user_device ON desktop_pet_active_bindings(user_id, device_id);
@@ -1881,7 +1881,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_installation_release_history (
     deactivation_reason TEXT NOT NULL DEFAULT '',
     is_current INTEGER NOT NULL DEFAULT 0,
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_dpirh_installation ON desktop_pet_installation_release_history(installation_id);
 CREATE INDEX IF NOT EXISTS idx_dpirh_current ON desktop_pet_installation_release_history(installation_id, is_current);
@@ -1897,7 +1897,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_package_validation_reports (
     error_count INTEGER NOT NULL DEFAULT 0,
     warning_count INTEGER NOT NULL DEFAULT 0,
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_dpvr_release ON desktop_pet_package_validation_reports(release_id);
 CREATE INDEX IF NOT EXISTS idx_dpvr_operation ON desktop_pet_package_validation_reports(operation_id);
@@ -4618,7 +4618,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_installation_commit_journals (
     error_code TEXT NOT NULL DEFAULT '',
     error_message TEXT NOT NULL DEFAULT '',
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_dpicj_operation ON desktop_pet_installation_commit_journals(operation_id);
 CREATE INDEX IF NOT EXISTS idx_dpicj_installation ON desktop_pet_installation_commit_journals(installation_id);
@@ -4636,7 +4636,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_installation_switch_journals (
     binding_revision INTEGER NOT NULL DEFAULT 0,
     state TEXT NOT NULL DEFAULT 'pending',
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 CREATE INDEX IF NOT EXISTS idx_dpisj_operation ON desktop_pet_installation_switch_journals(operation_id);
 
@@ -5255,7 +5255,7 @@ CREATE TABLE IF NOT EXISTS desktop_pet_installation_runtime_projections (
     last_applied_at TEXT NOT NULL DEFAULT '',
     last_heartbeat_at TEXT NOT NULL DEFAULT '',
     created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '')
+    updated_at TEXT DEFAULT ''
 );
 CREATE UNIQUE INDEX IF NOT EXISTS uq_drirp_user_device ON desktop_pet_installation_runtime_projections(user_id, device_id);
 CREATE INDEX IF NOT EXISTS idx_drirp_installation ON desktop_pet_installation_runtime_projections(installation_id);

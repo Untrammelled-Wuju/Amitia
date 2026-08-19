@@ -2,8 +2,9 @@ package migration
 
 func DesktopPetInstallationCoordinatorMigration() Migration {
 	return Migration{
-		Version: "202607310013",
-		Name:    "add_desktop_pet_installation_coordinator_system",
+		Version:           "202607310013",
+		Name:              "add_desktop_pet_installation_coordinator_system",
+		AcceptedChecksums: []string{"568b930c05ffba566b772a87b2682bf37ca4ed2356c166dc3ae5ae97d7365e2c"},
 		Up: func(s *Step) error {
 			s.AddColumn("desktop_pet_installations", "device_id", "TEXT NOT NULL DEFAULT ''")
 			s.AddColumn("desktop_pet_installations", "preview_artifact_path", "TEXT NOT NULL DEFAULT ''")
@@ -44,8 +45,8 @@ func DesktopPetInstallationCoordinatorMigration() Migration {
     click_through_mode TEXT NOT NULL DEFAULT 'off',
     position_policy TEXT NOT NULL DEFAULT '',
     revision INTEGER NOT NULL DEFAULT 0,
-    updated_at TEXT DEFAULT (datetime('now')),
-    created_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT '',
+    created_at TEXT DEFAULT '',
     UNIQUE(installation_id)
 )`)
 			s.CreateIndex("idx_dprds_installation", "desktop_pet_runtime_desired_states", []string{"installation_id"}, false)
@@ -68,8 +69,8 @@ func DesktopPetInstallationCoordinatorMigration() Migration {
     rollback_reason TEXT NOT NULL DEFAULT '',
     error_code TEXT NOT NULL DEFAULT '',
     error_message TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT ''
 )`)
 			s.CreateIndex("idx_dpicj_operation", "desktop_pet_installation_commit_journals", []string{"operation_id"}, false)
 			s.CreateIndex("idx_dpicj_installation", "desktop_pet_installation_commit_journals", []string{"installation_id"}, false)
@@ -86,8 +87,8 @@ func DesktopPetInstallationCoordinatorMigration() Migration {
     new_desired_revision INTEGER NOT NULL DEFAULT 0,
     binding_revision INTEGER NOT NULL DEFAULT 0,
     state TEXT NOT NULL DEFAULT 'pending',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now'))
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT ''
 )`)
 			s.CreateIndex("idx_dpisj_operation", "desktop_pet_installation_switch_journals", []string{"operation_id"}, false)
 
@@ -103,8 +104,8 @@ func DesktopPetInstallationCoordinatorMigration() Migration {
     source_content_hash TEXT NOT NULL DEFAULT '',
     error_code TEXT NOT NULL DEFAULT '',
     error_message TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT (datetime('now')),
-    updated_at TEXT DEFAULT (datetime('now')),
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
     UNIQUE(legacy_installation_id)
 )`)
 			s.CreateIndex("idx_dplim_legacy", "desktop_pet_legacy_installation_mappings", []string{"legacy_installation_id"}, false)

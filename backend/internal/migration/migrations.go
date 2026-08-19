@@ -190,7 +190,7 @@ func SyncMutationClaimsMigration() Migration {
 				scope TEXT NOT NULL DEFAULT 'device',
 				mutation_id TEXT NOT NULL,
 				status TEXT NOT NULL DEFAULT 'pending',
-				created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+				created_at DATETIME NOT NULL DEFAULT '',
 				PRIMARY KEY (user_id, scope, mutation_id)
 			)`)
 			s.CreateIndex("idx_sync_mutation_claims_status", "sync_mutation_claims", []string{"status"}, false)
@@ -456,7 +456,7 @@ func AccountSessionSecurityMigration() Migration {
 				used_at DATETIME,
 				revoked_at DATETIME,
 				replaced_by_token_id TEXT,
-				created_at DATETIME NOT NULL DEFAULT (datetime('now'))
+				created_at DATETIME NOT NULL DEFAULT ''
 			)`)
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS auth_login_guards (
 				guard_key TEXT NOT NULL,
@@ -464,7 +464,7 @@ func AccountSessionSecurityMigration() Migration {
 				failure_count INTEGER NOT NULL DEFAULT 0,
 				window_started_at DATETIME NOT NULL,
 				blocked_until DATETIME,
-				updated_at DATETIME NOT NULL DEFAULT (datetime('now')),
+				updated_at DATETIME NOT NULL DEFAULT '',
 				PRIMARY KEY(guard_key, dimension)
 			)`)
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS security_audit_events (
@@ -479,14 +479,14 @@ func AccountSessionSecurityMigration() Migration {
 				user_agent TEXT,
 				device_name TEXT,
 				detail TEXT,
-				created_at DATETIME NOT NULL DEFAULT (datetime('now'))
+				created_at DATETIME NOT NULL DEFAULT ''
 			)`)
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS auth_recovery_codes (
 				code_id TEXT PRIMARY KEY,
 				user_id INTEGER NOT NULL,
 				code_hash TEXT NOT NULL UNIQUE,
 				status TEXT NOT NULL DEFAULT 'active',
-				created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+				created_at DATETIME NOT NULL DEFAULT '',
 				used_at DATETIME,
 				expires_at DATETIME,
 				generation INTEGER NOT NULL DEFAULT 1
@@ -496,7 +496,7 @@ func AccountSessionSecurityMigration() Migration {
 				user_id INTEGER NOT NULL,
 				grant_hash TEXT NOT NULL UNIQUE,
 				status TEXT NOT NULL DEFAULT 'active',
-				created_at DATETIME NOT NULL DEFAULT (datetime('now')),
+				created_at DATETIME NOT NULL DEFAULT '',
 				expires_at DATETIME NOT NULL,
 				consumed_at DATETIME
 			)`)
@@ -571,7 +571,7 @@ func TaskRunPauseColumnsMigration() Migration {
 		Version: "20260815001",
 		Name:    "add_task_run_pause_and_updated_columns",
 		Up: func(s *Step) error {
-			s.AddColumn("extension_task_runs", "updated_at", "DATETIME NOT NULL DEFAULT (datetime('now'))")
+			s.AddColumn("extension_task_runs", "updated_at", "DATETIME NOT NULL DEFAULT ''")
 			s.AddColumn("extension_task_runs", "pause_reason", "TEXT")
 			s.AddColumn("extension_task_runs", "pause_requested_at", "DATETIME")
 			s.AddColumn("extension_task_runs", "paused_at", "DATETIME")

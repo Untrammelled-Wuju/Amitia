@@ -2,8 +2,9 @@ package migration
 
 func DesktopPetRevisionBridgeMigration() Migration {
 	return Migration{
-		Version: "202608020002",
-		Name:    "add_desktop_pet_revision_bridge_tables",
+		Version:           "202608020002",
+		Name:              "add_desktop_pet_revision_bridge_tables",
+		AcceptedChecksums: []string{"945a99577a235cd6c38ba8c5a55e52b27c221df35931606b31772041c768accc"},
 		Up: func(s *Step) error {
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_action_streams (
   id TEXT PRIMARY KEY,
@@ -11,10 +12,10 @@ func DesktopPetRevisionBridgeMigration() Migration {
   character_id TEXT NOT NULL DEFAULT '',
   action_key TEXT NOT NULL DEFAULT '',
   next_revision_number INTEGER NOT NULL DEFAULT 1,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT ''
 )`)
-			s.CreateIndex("uq_das_user_char_action", "desktop_pet_action_streams", []string{"user_id", "character_id", "action_key"}, true)
+		s.CreateIndex("uq_das_user_char_action", "desktop_pet_action_streams", []string{"user_id", "character_id", "action_key"}, true)
 
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_revision_bridge_journals (
   id TEXT PRIMARY KEY,
@@ -25,10 +26,12 @@ func DesktopPetRevisionBridgeMigration() Migration {
   status TEXT NOT NULL DEFAULT 'processing_published',
   last_error TEXT NOT NULL DEFAULT '',
   retry_count INTEGER NOT NULL DEFAULT 0,
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
-)`)
-			s.CreateIndex("idx_drbj_status", "desktop_pet_revision_bridge_journals", []string{"status"}, false)
+created_at TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT ''
+)
+	if err := s.CreateIndex("idx_drbj_status", "desktop_pet_revision_bridge_journals", []string{"status"}, false); err != nil {
+				return err
+			}
 			s.CreateIndex("idx_drbj_proc_rev", "desktop_pet_revision_bridge_journals", []string{"processing_revision_id"}, false)
 
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_active_action_revision_bindings (
@@ -41,10 +44,12 @@ func DesktopPetRevisionBridgeMigration() Migration {
   bound_reason TEXT NOT NULL DEFAULT '',
   bound_by TEXT NOT NULL DEFAULT '',
   bound_at TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+created_at TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT ''
 )`)
-			s.CreateIndex("uq_daarb_user_char_action", "desktop_pet_active_action_revision_bindings", []string{"user_id", "character_id", "action_key"}, true)
+			if err := s.CreateIndex("uq_daarb_user_char_action", "desktop_pet_active_action_revision_bindings", []string{"user_id", "character_id", "action_key"}, true); err != nil {
+			return err
+		}
 
 			if err := s.AddColumn("desktop_pet_action_revisions", "user_id", "TEXT NOT NULL DEFAULT ''"); err != nil {
 				return err

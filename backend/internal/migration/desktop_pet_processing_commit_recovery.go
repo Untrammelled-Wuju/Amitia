@@ -2,8 +2,9 @@ package migration
 
 func DesktopPetProcessingCommitRecoveryMigration() Migration {
 	return Migration{
-		Version: "202607310012",
-		Name:    "add_desktop_pet_processing_commit_recovery_tables",
+		Version:           "202607310012",
+		Name:              "add_desktop_pet_processing_commit_recovery_tables",
+		AcceptedChecksums: []string{"8a2714d2aac7144f000f36b87507cd24f23179b9c6ab2d8a8b54e942fbe93ada"},
 		Up: func(s *Step) error {
 			if err := createProcessingSourceManifestsTable(s); err != nil {
 				return err
@@ -66,7 +67,7 @@ func createProcessingSourceManifestsTable(s *Step) error {
   action_spec_snapshot_json TEXT NOT NULL DEFAULT '{}',
   source_config_hash TEXT NOT NULL DEFAULT '',
   manifest_hash TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT ''
 )`)
 	s.CreateIndex("idx_dppsm_task", "desktop_pet_processing_source_manifests", []string{"processing_task_id"}, false)
 	s.CreateIndex("idx_dppsm_gen_action", "desktop_pet_processing_source_manifests", []string{"generation_action_id"}, false)
@@ -89,8 +90,8 @@ func createProcessingPublishJournalsTable(s *Step) error {
   content_root_hash TEXT NOT NULL DEFAULT '',
   detail TEXT NOT NULL DEFAULT '',
   error_message TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT '',
   completed_at TEXT NOT NULL DEFAULT ''
 )`)
 	s.Execute("CREATE INDEX IF NOT EXISTS idx_dppj_revision ON desktop_pet_processing_publish_journals(revision_id)")
@@ -107,8 +108,8 @@ func createProcessingRevisionActiveBindingsTable(s *Step) error {
   bound_at TEXT NOT NULL DEFAULT '',
   bound_reason TEXT NOT NULL DEFAULT '',
   superseded_revision_id TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT ''
 )`)
 	s.Execute("CREATE INDEX IF NOT EXISTS idx_dprab_revision ON desktop_pet_processing_revision_active_bindings(active_revision_id)")
 	return nil
@@ -127,8 +128,8 @@ func createProcessingWorkspaceLeasesTable(s *Step) error {
   heartbeat_at TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'active',
   cleanup_reason TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT ''
 )`)
 	s.Execute("CREATE INDEX IF NOT EXISTS idx_dpwl_task ON desktop_pet_processing_workspace_leases(processing_task_id)")
 	s.Execute("CREATE INDEX IF NOT EXISTS idx_dpwl_attempt ON desktop_pet_processing_workspace_leases(processing_attempt_id)")
@@ -149,8 +150,8 @@ func createProcessingRetryRequestsTable(s *Step) error {
   allocated_attempt_id TEXT NOT NULL DEFAULT '',
   error_code TEXT NOT NULL DEFAULT '',
   error_message TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT '',
   completed_at TEXT NOT NULL DEFAULT ''
 )`)
 	s.Execute("CREATE INDEX IF NOT EXISTS idx_dprr_task ON desktop_pet_processing_retry_requests(processing_task_id)")

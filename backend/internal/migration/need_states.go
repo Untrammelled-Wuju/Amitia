@@ -2,8 +2,9 @@ package migration
 
 func NeedStatesMigration() Migration {
 	return Migration{
-		Version: "202607090001",
-		Name:    "add_need_states_model_configs_message_count",
+		Version:           "202607090001",
+		Name:              "add_need_states_model_configs_message_count",
+		AcceptedChecksums: []string{"399b307e5d9dd6a7a7a9899e49cbd2b4e6eae2ac99e12719cd29e5066ed70524"},
 		Up: func(step *Step) error {
 			step.CreateTable(`CREATE TABLE IF NOT EXISTS need_states (
 				id TEXT PRIMARY KEY,
@@ -35,8 +36,8 @@ func NeedStatesMigration() Migration {
 				last_test_status TEXT DEFAULT '',
 				last_test_message TEXT DEFAULT '',
 				last_test_at TEXT DEFAULT '',
-				created_at TEXT DEFAULT (datetime('now')),
-				updated_at TEXT DEFAULT (datetime('now'))
+				created_at TEXT DEFAULT '',
+				updated_at TEXT DEFAULT ''
 			)`)
 
 			return step.AddColumn("conversations", "message_count", "INTEGER DEFAULT 0")

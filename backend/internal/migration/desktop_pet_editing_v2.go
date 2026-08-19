@@ -2,8 +2,9 @@ package migration
 
 func DesktopPetEditingV2Migration() Migration {
 	return Migration{
-		Version: "202607310014",
-		Name:    "add_desktop_pet_editing_v2_regeneration_candidate",
+		Version:           "202607310014",
+		Name:              "add_desktop_pet_editing_v2_regeneration_candidate",
+		AcceptedChecksums: []string{"c285ffd9ff5bd50d36120756b3f4184c5f31e9e737a1281fbde97ebcd1628890"},
 		Up: func(s *Step) error {
 			s.AddColumn("desktop_pet_edit_sessions", "base_action_content_hash", "TEXT NOT NULL DEFAULT ''")
 			s.AddColumn("desktop_pet_edit_sessions", "base_binding_revision", "INTEGER NOT NULL DEFAULT 0")
@@ -61,7 +62,7 @@ func DesktopPetEditingV2Migration() Migration {
   candidate_revision_id TEXT NOT NULL DEFAULT '',
   quality_evaluation_id TEXT NOT NULL DEFAULT '',
   error_message TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT ''
 )`)
 			s.CreateIndex("idx_drj_job", "desktop_pet_regeneration_journals", []string{"job_id"}, false)
 			s.CreateIndex("idx_drj_state", "desktop_pet_regeneration_journals", []string{"state"}, false)
@@ -77,8 +78,8 @@ func DesktopPetEditingV2Migration() Migration {
   frame_set_hash TEXT NOT NULL DEFAULT '',
   action_config_hash TEXT NOT NULL DEFAULT '',
   status TEXT NOT NULL DEFAULT 'candidate_committing',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+  created_at TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT ''
 )`)
 			s.CreateIndex("uq_dcrm_candidate", "desktop_pet_candidate_revision_metadata", []string{"candidate_revision_id"}, true)
 			s.CreateIndex("idx_dcrm_job", "desktop_pet_candidate_revision_metadata", []string{"regeneration_job_id"}, false)
@@ -96,7 +97,7 @@ func DesktopPetEditingV2Migration() Migration {
   previous_active_revision_id TEXT NOT NULL DEFAULT '',
   new_active_revision_id TEXT NOT NULL DEFAULT '',
   reason TEXT NOT NULL DEFAULT '',
-  occurred_at TEXT NOT NULL DEFAULT (datetime('now'))
+  occurred_at TEXT NOT NULL DEFAULT ''
 )`)
 			s.CreateIndex("idx_deal_session", "desktop_pet_edit_audit_logs", []string{"edit_session_id"}, false)
 			s.CreateIndex("idx_deal_event", "desktop_pet_edit_audit_logs", []string{"event_type"}, false)

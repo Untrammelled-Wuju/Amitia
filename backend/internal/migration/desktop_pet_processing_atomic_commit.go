@@ -2,8 +2,9 @@ package migration
 
 func DesktopPetProcessingAtomicCommitMigration() Migration {
 	return Migration{
-		Version: "202607311003",
-		Name:    "add_desktop_pet_processing_atomic_commit_columns",
+		Version:           "202607311003",
+		Name:              "add_desktop_pet_processing_atomic_commit_columns",
+		AcceptedChecksums: []string{"e5af76b522fd54202f6d0225705327bebef4e781a26796c7e1bc059dad92c936"},
 		Up: func(s *Step) error {
 			if err := extendProcessingTasksForAtomicCommit(s); err != nil {
 				return err
@@ -116,8 +117,8 @@ func createProcessingCommitJournalsTable(s *Step) error {
   final_path TEXT NOT NULL DEFAULT '',
   content_root_hash TEXT NOT NULL DEFAULT '',
   pipeline_result_hash TEXT NOT NULL DEFAULT '',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+created_at TEXT NOT NULL DEFAULT '',
+  updated_at TEXT NOT NULL DEFAULT '',
   last_error TEXT NOT NULL DEFAULT ''
 )`)
 	s.CreateIndex("idx_dppcj_commit", "desktop_pet_processing_commit_journals", []string{"commit_id"}, false)
@@ -133,7 +134,7 @@ func createProcessingEventOutboxTable(s *Step) error {
   aggregate_id TEXT NOT NULL DEFAULT '',
   payload TEXT NOT NULL DEFAULT '{}',
   status TEXT NOT NULL DEFAULT 'pending',
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  created_at TEXT NOT NULL DEFAULT '',
   published_at TEXT NOT NULL DEFAULT '',
   error TEXT NOT NULL DEFAULT '',
   retry_count INTEGER NOT NULL DEFAULT 0

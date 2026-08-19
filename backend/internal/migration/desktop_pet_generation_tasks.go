@@ -4,8 +4,9 @@ package migration
 
 func DesktopPetGenerationTasksMigration() Migration {
 	return Migration{
-		Version: "202607240004",
-		Name:    "add_desktop_pet_generation_tasks_tables",
+		Version:           "202607240004",
+		Name:              "add_desktop_pet_generation_tasks_tables",
+		AcceptedChecksums: []string{"66afcc9e8af0ecc7e147977f30ee23d4436333f99b6d32c83731d6d88aa69d3b"},
 		Up: func(s *Step) error {
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_generation_tasks (
 id TEXT PRIMARY KEY,
@@ -31,8 +32,8 @@ selected_action_count INTEGER NOT NULL DEFAULT 0,
 estimated_generation_count INTEGER NOT NULL DEFAULT 0,
 error_code TEXT DEFAULT '',
 error_message TEXT DEFAULT '',
-created_at TEXT DEFAULT (datetime('now')),
-updated_at TEXT DEFAULT (datetime('now')),
+created_at TEXT DEFAULT '',
+updated_at TEXT DEFAULT '',
 started_at TEXT DEFAULT '',
 completed_at TEXT DEFAULT ''
 )`)
@@ -54,8 +55,8 @@ status TEXT NOT NULL DEFAULT 'pending',
 progress INTEGER NOT NULL DEFAULT 0,
 error_code TEXT DEFAULT '',
 error_message TEXT DEFAULT '',
-created_at TEXT DEFAULT (datetime('now')),
-updated_at TEXT DEFAULT (datetime('now')),
+created_at TEXT DEFAULT '',
+updated_at TEXT DEFAULT '',
 started_at TEXT DEFAULT '',
 completed_at TEXT DEFAULT ''
 )`)

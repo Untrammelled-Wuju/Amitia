@@ -4,8 +4,9 @@ package migration
 
 func DesktopPetGenerationFramesMigration() Migration {
 	return Migration{
-		Version: "202607240007",
-		Name:    "add_desktop_pet_generation_frames_table",
+		Version:           "202607240007",
+		Name:              "add_desktop_pet_generation_frames_table",
+		AcceptedChecksums: []string{"bffc083ef1fe063c267db20517cda0f2084a9d5ee67e94f8ece2917339404e27"},
 		Up: func(s *Step) error {
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_generation_frames (
 id TEXT PRIMARY KEY,
@@ -33,8 +34,8 @@ result_hash TEXT DEFAULT '',
 provider_seed TEXT DEFAULT '',
 error_code TEXT DEFAULT '',
 error_message TEXT DEFAULT '',
-created_at TEXT DEFAULT (datetime('now')),
-updated_at TEXT DEFAULT (datetime('now')),
+created_at TEXT DEFAULT '',
+updated_at TEXT DEFAULT '',
 started_at TEXT DEFAULT '',
 completed_at TEXT DEFAULT ''
 )`)

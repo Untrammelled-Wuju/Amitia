@@ -4,8 +4,9 @@ package migration
 
 func DesktopPetRuntimeCommandsMigration() Migration {
 	return Migration{
-		Version: "202607310002",
-		Name:    "add_desktop_pet_runtime_commands_table",
+		Version:           "202607310002",
+		Name:              "add_desktop_pet_runtime_commands_table",
+		AcceptedChecksums: []string{"e5af76b522fd54202f6d0225705327bebef4e781a26796c7e1bc059dad92c936"},
 		Up: func(s *Step) error {
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_runtime_commands (
   id TEXT PRIMARY KEY,
@@ -28,8 +29,8 @@ func DesktopPetRuntimeCommandsMigration() Migration {
   last_error_code TEXT NOT NULL DEFAULT '',
   last_error_message TEXT NOT NULL DEFAULT '',
   result_json TEXT NOT NULL DEFAULT '',
-  created_at TEXT DEFAULT (datetime('now')),
-  updated_at TEXT DEFAULT (datetime('now')),
+  created_at TEXT DEFAULT '',
+  updated_at TEXT DEFAULT '',
   completed_at TEXT NOT NULL DEFAULT ''
 )`)
 			if err := s.CreateIndex("idx_dprcmd_idempotency", "desktop_pet_runtime_commands", []string{"runtime_id", "idempotency_key"}, true); err != nil {

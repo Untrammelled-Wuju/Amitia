@@ -11,8 +11,9 @@ import (
 
 func DesktopPetCatalogPopulateMigration() Migration {
 	return Migration{
-		Version: "202607300008",
-		Name:    "populate_desktop_pet_action_definitions_from_catalog",
+		Version:           "202607300008",
+		Name:              "populate_desktop_pet_action_definitions_from_catalog",
+		AcceptedChecksums: []string{"4d608d1bfbedb38bef7b10d47d15fe82d8d7a26183dc59df5f9d1210dc52d0c8"},
 		Up: func(s *Step) error {
 			populateCatalogProjections(s)
 			return nil
@@ -131,9 +132,9 @@ func populateCatalogProjections(s *Step) {
 				sort_order=%d,
 				default_frame_count=%d,
 				enabled=%d,
-				updated_at=datetime('now')
+updated_at=strftime('%Y-%m-%d %H:%M:%S','now')
 			WHERE action_key='%s'`,
-			contracts.ActionSpecSchemaVersion,
+				contracts.ActionSpecSchemaVersion,
 			contracts.CatalogVersion,
 			spec.Playback.DefaultFPS,
 			string(spec.Playback.Mode),
