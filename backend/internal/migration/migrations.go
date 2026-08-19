@@ -176,7 +176,6 @@ func DefaultMigrations() []Migration {
 		AuthSessionsMissingColumnsMigration(),
 		SyncSchemaRevisionDeletedAtMigration(),
 		SyncMutationClaimsMigration(),
-		AppSettingsTombstoneMigration(),
 	}
 }
 
