@@ -4,10 +4,10 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <div class="app-shell" :class="{ 'is-mobile': isMobile }">
-    <div class="app-body workbench">
+    <div class="app-body workbench" :class="{ 'is-desktop-shell': isDesktopShell() }">
       <SideNav v-if="!isMobile" :username="authUsername" :avatar="authAvatar" :theme="resolvedTheme" @toggle-theme="toggleTheme" />
 
-      <div class="app-main workspace">
+      <div class="app-main workspace" :class="{ 'is-desktop-shell': isDesktopShell() }">
         <main class="app-content workspace-surface" :class="{ 'is-login': isLoginPage, 'workspace-surface--chat': isChatPage }">
           <header v-if="isMobile && !isLoginPage" class="mobile-header">
             <span class="mobile-title">{{ pageTitle }}</span>
@@ -54,6 +54,7 @@ import { getAccessToken } from "../stores/refresh-coordinator";
 import { getPageTitle } from "@/navigation/app-nav";
 import { useAppStore } from "@/stores/app";
 import { useExtensionUIStore } from "@/stores/extensionUI";
+import { isDesktopShell } from "../runtime/runtime-capabilities";
 
 const router = useRouter();
 const { connect: connectUIHost, disconnect: disconnectUIHost } = useUIHostSSE();
@@ -255,6 +256,10 @@ onUnmounted(() => {
   overflow: hidden;
 }
 
+.app-body.is-desktop-shell {
+  background: var(--workbench-sidebar-bg);
+}
+
 .app-main {
   flex: 1;
   min-width: 0;
@@ -263,6 +268,11 @@ onUnmounted(() => {
   overflow: hidden;
   background: var(--workbench-bg);
   border-left: 1px solid var(--surface-border);
+}
+
+.app-main.is-desktop-shell {
+  border-top: 1px solid var(--surface-border);
+  border-top-left-radius: 20px;
 }
 
 .app-content {

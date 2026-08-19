@@ -142,8 +142,17 @@ router.beforeEach(async (to, _from, next) => {
   console.log(`[GUARD-RUN] path=${to.path} isPublic=${isPublic} token=${token ? "Y" : "N"}`)
 
   if (isPublic) {
-    if (token && to.path === "/login") {
-      return next("/chat")
+    if (to.path === "/login") {
+      try {
+        const res = await apiClient.get("/api/public/onboarding/status")
+        const data = res.data?.data || res.data
+        if (!data?.completed) {
+          return next("/onboarding")
+        }
+      } catch {}
+      if (token) {
+        return next("/chat")
+      }
     }
     if (to.path === "/onboarding") {
       try {
@@ -195,4 +204,3 @@ router.beforeEach(async (to, _from, next) => {
 })
 
 export default router
-

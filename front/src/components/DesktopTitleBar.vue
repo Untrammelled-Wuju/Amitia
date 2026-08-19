@@ -1,11 +1,28 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { onMounted, onUnmounted, ref } from "vue";
+
+const props = defineProps<{ transparent?: boolean }>();
 
 const isMaximized = ref(false);
+const hasOnboardingWorld = ref(false);
+let documentObserver: MutationObserver | null = null;
+
+function syncOnboardingWorld() {
+  hasOnboardingWorld.value =
+    document.querySelector(".onboarding-world, .login-world") !== null;
+}
 
 onMounted(async () => {
   document.documentElement.classList.add("amitia-desktop-shell");
+  syncOnboardingWorld();
+  documentObserver = new MutationObserver(syncOnboardingWorld);
+  documentObserver.observe(document.body, { childList: true, subtree: true });
   isMaximized.value = await window.electronWindowApi!.isMaximized();
+});
+
+onUnmounted(() => {
+  documentObserver?.disconnect();
+  documentObserver = null;
 });
 
 async function handleMinimize() {
@@ -22,7 +39,11 @@ async function handleClose() {
 </script>
 
 <template>
-  <div id="WindowControlButtons" class="drag">
+  <div
+    id="WindowControlButtons"
+    class="drag"
+    :class="{ 'is-onboarding': props.transparent || hasOnboardingWorld }"
+  >
     <div class="window-actions">
       <div
         class="icon no-drag"
@@ -90,8 +111,7 @@ async function handleClose() {
   display: flex;
   align-items: center;
   justify-content: flex-end;
-  background: var(--tp-glass-bg-strong);
-  border-bottom: 1px solid var(--tp-glass-border);
+  background: var(--workbench-sidebar-bg);
   color: var(--ac-color-text);
   font:
     12px/1.2 system-ui,
@@ -103,12 +123,17 @@ async function handleClose() {
   -webkit-app-region: drag;
 }
 
-:global(html[data-theme="dark"]) #WindowControlButtons {
-  background: var(--tp-glass-bg-strong);
-  border-bottom-color: var(--tp-glass-border);
+:global(html[data-theme="dark"]) #WindowControlButtons:not(.is-onboarding) {
+  background: var(--workbench-sidebar-bg);
   -webkit-backdrop-filter: blur(var(--tp-glass-blur))
     saturate(var(--tp-glass-saturate));
   backdrop-filter: blur(var(--tp-glass-blur)) saturate(var(--tp-glass-saturate));
+}
+
+#WindowControlButtons.is-onboarding {
+  background: transparent;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 #WindowControlButtons .window-actions {
   height: 100%;

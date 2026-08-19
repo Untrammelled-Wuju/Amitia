@@ -3,7 +3,7 @@ SPDX-FileCopyrightText: 2026 彭旭
 SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
-  <DesktopTitleBar v-if="isDesktopShell()" />
+  <DesktopTitleBar v-if="isDesktopShell()" :transparent="isOnboardingPage" />
   <div id="amitia-overlay-root" aria-live="polite"></div>
   <UpdateDialog />
   <PrivacyConsent v-if="!isPublicPage && !renderError" />
@@ -24,7 +24,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { computed, onErrorCaptured, onMounted, onUnmounted, ref } from "vue";
+import { computed, onErrorCaptured, onMounted, onUnmounted, ref, watch } from "vue";
 import { useRouter, useRoute } from "vue-router";
 import { AppLayout } from "./ui-index";
 import { apiClient } from "./ui-index";
@@ -51,6 +51,20 @@ const publicPaths = [
 ];
 const isPublicPage = computed(() =>
   publicPaths.some((p) => route.path === p || route.path.startsWith(p + "/")),
+);
+const isOnboardingPage = computed(
+  () => route.path === "/onboarding" || route.path.startsWith("/onboarding/"),
+);
+
+watch(
+  isOnboardingPage,
+  (isOnboarding) => {
+    document.documentElement.classList.toggle(
+      "amitia-desktop-onboarding",
+      isDesktopShell() && isOnboarding,
+    );
+  },
+  { immediate: true },
 );
 
 onErrorCaptured((err, _instance, info) => {
@@ -106,7 +120,9 @@ onMounted(async () => {
   }
 });
 
-onUnmounted(() => {});
+onUnmounted(() => {
+  document.documentElement.classList.remove("amitia-desktop-onboarding");
+});
 </script>
 
 <style>
@@ -142,6 +158,29 @@ html.amitia-desktop-shell .el-drawer.btt {
 
 html.amitia-desktop-shell .search-overlay {
   top: 34px !important;
+}
+
+html.amitia-desktop-shell.amitia-desktop-onboarding body {
+  padding-top: 0;
+}
+
+html.amitia-desktop-shell.amitia-desktop-onboarding #app {
+  height: 100vh;
+}
+
+html.amitia-desktop-shell:has(.onboarding-world) body {
+  padding-top: 0 !important;
+}
+
+html.amitia-desktop-shell:has(.onboarding-world) #app {
+  height: 100vh !important;
+}
+
+html.amitia-desktop-shell:has(.onboarding-world) #WindowControlButtons {
+  position: fixed !important;
+  background: transparent !important;
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
 }
 .public-root {
   width: 100%;

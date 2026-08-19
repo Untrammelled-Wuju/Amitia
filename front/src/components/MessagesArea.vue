@@ -123,14 +123,13 @@ defineExpose({ rootEl });
 
 <style scoped>
 .messages-area {
-  align-self: center;
   width: 100%;
   margin: 0 auto;
   flex: 1 1 0;
   min-height: 0;
   overflow-y: scroll;
   overscroll-behavior-y: contain;
-  padding: 22px 32px 28px;
+  padding: 0 32px 28px;
   position: relative;
 }
 
@@ -193,20 +192,25 @@ defineExpose({ rootEl });
   align-items: center;
   justify-content: center;
   gap: 8px;
-  padding: 8px 0;
+  padding: 0;
   font-size: var(--ac-font-size-xs);
   color: var(--ac-color-text-muted);
   transition: opacity var(--ac-transition-fast);
   opacity: 0;
-  height: 36px;
+  height: 0;
+  overflow: hidden;
 }
 
 .pull-indicator.pulling {
   opacity: 0.6;
+  height: 36px;
+  padding: 8px 0;
 }
 .pull-indicator.ready {
   opacity: 1;
   color: var(--ac-color-primary);
+  height: 36px;
+  padding: 8px 0;
 }
 
 .pull-icon.spin {
