@@ -79,11 +79,9 @@ class _BootstrapGate extends ConsumerWidget {
       }
     }
 
-    return Stack(
-      children: [
-        content,
-        const DebugLogOverlay(),
-      ],
+    return Directionality(
+      textDirection: TextDirection.ltr,
+      child: content,
     );
   }
 
