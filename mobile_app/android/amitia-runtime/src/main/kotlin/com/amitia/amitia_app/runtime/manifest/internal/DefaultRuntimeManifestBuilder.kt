@@ -27,7 +27,7 @@ internal class DefaultRuntimeManifestBuilder(
         return this
     }
 
-    fun buildFromInstalledTree(
+    override fun buildFromInstalledTree(
         runtimeVersion: String,
         sourceCommit: String,
         packageId: String,

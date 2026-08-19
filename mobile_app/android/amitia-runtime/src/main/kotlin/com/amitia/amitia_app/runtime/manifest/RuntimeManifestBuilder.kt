@@ -9,4 +9,15 @@ internal data class RuntimeManifestInput(
 
 internal interface RuntimeManifestBuilder {
     fun build(): RuntimeManifestResult
+
+    fun buildFromInstalledTree(
+        runtimeVersion: String,
+        sourceCommit: String,
+        packageId: String,
+        packageSha256: String,
+        rootfsId: String,
+        runtimeRootTreeSha256: String,
+        payloads: List<RuntimeManifestPayload>,
+        components: List<RuntimeManifestComponent>,
+    ): RuntimeManifestResult
 }

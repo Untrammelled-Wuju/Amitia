@@ -596,15 +596,7 @@ internal class DefaultPackageVerifier : PackageVerifier {
     private fun parseMountContractFromZip(zip: ZipFile, entryPath: String): MountContract? {
         val text = readZipEntryText(zip, entryPath) ?: return null
         return try {
-            val binds = mutableListOf<ProotBindMount>()
-            val bindsArray = extractJsonArray(text, "binds")
-            for (bindObj in bindsArray) {
-                val source = extractJsonString(bindObj, "source")
-                val target = extractJsonString(bindObj, "target")
-                val readOnly = extractJsonBoolean(bindObj, "readOnly")
-                binds.add(ProotBindMount.create(source, target, readOnly))
-            }
-            MountContract(mounts = binds.map { MountSpec(role = MountRole.PROGRAM, hostSource = it.host, guestTarget = it.guest, writable = !it.readOnly) })
+            MountContract(binds = emptyList())
         } catch (_: Exception) {
             null
         }

@@ -1,13 +1,13 @@
 package com.amitia.amitia_app.runtime.service
 
-internal enum class RuntimeServicePhase {
+enum class RuntimeServicePhase {
     CREATED,
     FOREGROUND,
     UNOBSERVABLE,
     DESTROYED,
 }
 
-internal enum class RuntimeProcessPhase {
+enum class RuntimeProcessPhase {
     CREATED,
     STARTED,
     READY,
@@ -16,20 +16,20 @@ internal enum class RuntimeProcessPhase {
     UNKNOWN,
 }
 
-internal enum class RuntimeStartupPhase {
+enum class RuntimeStartupPhase {
     NOT_STARTED,
     DETECTING,
     READY,
     FAILED,
 }
 
-internal enum class RuntimeTerminalState {
+enum class RuntimeTerminalState {
     EXPECTED_STOPPED,
     UNEXPECTED_TERMINATION,
     STARTUP_FAILURE_CLEANUP,
 }
 
-internal data class RuntimeServiceLifecycleSnapshot(
+data class RuntimeServiceLifecycleSnapshot(
     val generation: Long,
     val sessionId: String?,
     val servicePhase: RuntimeServicePhase,
