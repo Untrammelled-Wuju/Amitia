@@ -951,7 +951,7 @@ internal class DefaultRuntimeController(
                         operationId = operationId,
                         type = RuntimeOperationType.VERIFY,
                         error = RuntimeError(
-                            code = RuntimeErrorCode.RUNTIME_VERIFY_FAILED,
+                            code = RuntimeErrorCode.VERIFY_FAILED,
                             message = verifyResult.message,
                             recoverable = true
                         ),
