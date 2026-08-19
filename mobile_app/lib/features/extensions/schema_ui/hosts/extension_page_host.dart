@@ -133,7 +133,7 @@ class _ErrorBoundaryState extends State<ErrorBoundary> {
   @override
   void initState() {
     super.initState();
-    _previousHandler = FlutterError.onError!;
+    _previousHandler = FlutterError.onError ?? _defaultErrorHandler;
     FlutterError.onError = (FlutterErrorDetails details) {
       if (details.library == 'widgets library' || details.library?.contains('schema_ui') == true) {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -147,6 +147,10 @@ class _ErrorBoundaryState extends State<ErrorBoundary> {
       }
       _previousHandler(details);
     };
+  }
+
+  static void _defaultErrorHandler(FlutterErrorDetails details) {
+    FlutterError.dumpErrorToConsole(details);
   }
 
   @override
