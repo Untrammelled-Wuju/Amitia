@@ -263,7 +263,6 @@ onUnmounted(() => {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 20px 24px;
   background: transparent;
 }
 
@@ -328,7 +327,6 @@ onUnmounted(() => {
 
 .is-mobile .content-scroll {
   transition: background-color 0.3s ease;
-  padding: 10px 12px;
   padding-bottom: calc(10px + var(--ac-safe-area-bottom));
 }
 
