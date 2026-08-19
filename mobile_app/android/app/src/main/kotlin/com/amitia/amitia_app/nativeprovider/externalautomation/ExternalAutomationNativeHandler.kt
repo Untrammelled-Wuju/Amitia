@@ -340,24 +340,24 @@ internal class ExternalAutomationNativeHandler(
         return try {
             val intent = Intent(action).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            request.payload["data"]?.let { data ->
-                if (data is String) this.data = Uri.parse(data)
-            }
-            request.payload["packageName"]?.let { pkg ->
-                if (pkg is String) setPackage(pkg)
-            }
-            request.payload["componentName"]?.let { comp ->
-                if (comp is String) {
-                    request.payload["packageName"]?.let { pkg ->
-                        if (pkg is String) setClassName(pkg, comp)
+                request.payload["data"]?.let { data ->
+                    if (data is String) this@apply.data = Uri.parse(data)
+                }
+                request.payload["packageName"]?.let { pkg ->
+                    if (pkg is String) this@apply.setPackage(pkg)
+                }
+                request.payload["componentName"]?.let { comp ->
+                    if (comp is String) {
+                        request.payload["packageName"]?.let { pkg ->
+                            if (pkg is String) this@apply.setClassName(pkg, comp)
+                        }
                     }
                 }
-            }
-            request.payload["categories"]?.let { cats ->
-                if (cats is List<*>) {
-                    cats.forEach { cat ->
-                        if (cat is String) addCategory(cat)
+                request.payload["categories"]?.let { cats ->
+                    if (cats is List<*>) {
+                        cats.forEach { cat ->
+                            if (cat is String) this@apply.addCategory(cat)
+                        }
                     }
                 }
             }

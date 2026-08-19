@@ -45,7 +45,7 @@ internal class AndroidNativeHost private constructor(
                 }
                 handlers[op] = handler
             }
-            capabilityCache.clear()
+            capabilityCache.set(emptyMap())
         }
     }
 
@@ -135,11 +135,12 @@ internal class AndroidNativeHost private constructor(
 
     private fun buildCapabilities(): Map<String, Boolean> {
         capabilityCache.get()?.let { return it }
-        val snapshot = handlerMutex.let {
-            LinkedHashMap(handlers.keys)
+        val snapshot = LinkedHashMap<String, Boolean>()
+        for (op in handlers.keys) {
+            snapshot[op] = false
         }
         val capabilities = linkedMapOf<String, Boolean>()
-        for (op in snapshot) {
+        for ((op, _) in snapshot) {
             capabilities[op] = true
         }
         capabilityCache.compareAndSet(capabilities, capabilities)
