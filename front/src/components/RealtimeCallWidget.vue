@@ -93,11 +93,16 @@ const statusLabel = computed(() => {
 
 watch(
   () => props.visible,
-  (v) => {
-    if (!v && callState.value === "connected") {
+  (visible) => {
+    if (visible && callState.value === "idle") {
+      void start();
+      return;
+    }
+    if (!visible && callState.value !== "idle") {
       stop();
     }
   },
+  { immediate: true },
 );
 
 function formatDuration(s: number): string {
@@ -204,7 +209,7 @@ async function start() {
 
   ws.onclose = () => {
     cleanupCall();
-    if (callState.value === "connected") {
+    if (callState.value !== "idle" && callState.value !== "error") {
       callState.value = "idle";
       emit("stateChange", "idle");
     }
@@ -219,23 +224,27 @@ async function start() {
 }
 
 function stop() {
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ event: "stop" }));
+  const activeSocket = ws;
+  if (activeSocket && activeSocket.readyState === WebSocket.OPEN) {
+    activeSocket.send(JSON.stringify({ event: "stop" }));
     setTimeout(() => {
-      if (ws) ws.close();
+      if (activeSocket.readyState === WebSocket.OPEN || activeSocket.readyState === WebSocket.CLOSING) {
+        activeSocket.close();
+      }
     }, 500);
   }
   cleanupCall();
   callState.value = "idle";
   emit("stateChange", "idle");
   callDuration.value = 0;
+}
+
+function cleanupCall() {
   if (durationTimer) {
     clearInterval(durationTimer);
     durationTimer = null;
   }
-}
-
-function cleanupCall() {
+  ws = null;
   if (scriptNode) {
     scriptNode.disconnect();
     scriptNode = null;

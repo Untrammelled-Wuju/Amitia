@@ -4,14 +4,38 @@ SPDX-License-Identifier: AGPL-3.0-only
 -->
 <template>
   <nav class="side-nav" :class="{ 'is-collapsed': appStore.sidebarCollapsed }">
-    <div class="brand">
-      <img class="brand-mark" :src="logoUrl" alt="Amitia" />
-      <div v-show="!appStore.sidebarCollapsed" class="brand-name">Amitia</div>
+    <div class="brand-row">
+      <div class="brand">
+        <img class="brand-mark" :src="logoUrl" alt="Amitia" />
+        <div v-show="!appStore.sidebarCollapsed" class="brand-name">Amitia</div>
+      </div>
+      <div class="brand-actions">
+        <button
+          v-show="!appStore.sidebarCollapsed"
+          type="button"
+          class="icon-btn"
+          aria-label="搜索"
+          title="搜索"
+          @click="searchModal?.open()"
+        >
+          <el-icon><Search /></el-icon>
+        </button>
+        <button
+          type="button"
+          class="icon-btn"
+          :aria-label="appStore.sidebarCollapsed ? '展开导航' : '收起导航'"
+          :title="appStore.sidebarCollapsed ? '展开导航' : '收起导航'"
+          @click="appStore.toggleSidebar"
+        >
+          <el-icon><DArrowRight v-if="appStore.sidebarCollapsed" /><DArrowLeft v-else /></el-icon>
+        </button>
+      </div>
     </div>
-    <button v-show="appStore.sidebarCollapsed" class="side-collapse side-collapse--collapsed" type="button" aria-label="展开导航" @click="appStore.toggleSidebar"><el-icon><DArrowRight /></el-icon></button>
-    <button v-show="!appStore.sidebarCollapsed" class="side-collapse" type="button" aria-label="收起导航" @click="appStore.toggleSidebar"><el-icon><DArrowLeft /></el-icon></button>
-    <button v-show="!appStore.sidebarCollapsed" type="button" class="nav-search" @click="searchModal?.open()"><el-icon><Search /></el-icon><span>搜索功能、角色、会话、记忆</span></button>
-    <button class="new-chat" type="button" @click="handleNewChat"><el-icon><Plus /></el-icon><span v-show="!appStore.sidebarCollapsed">新对话</span></button>
+
+    <button class="new-chat" type="button" @click="handleNewChat">
+      <el-icon><Plus /></el-icon>
+      <span v-show="!appStore.sidebarCollapsed">新对话</span>
+    </button>
     <el-menu
       :default-active="activeIndex"
       :collapse="appStore.sidebarCollapsed"
@@ -58,6 +82,22 @@ SPDX-License-Identifier: AGPL-3.0-only
       </el-sub-menu>
     </el-menu>
 
+    <section v-show="!appStore.sidebarCollapsed && recentConversations.length" class="recent-section">
+      <div class="section-caption">最近</div>
+      <button
+        v-for="conversation in recentConversations"
+        :key="conversation.id"
+        type="button"
+        class="recent-item"
+        :class="{ active: activeConversationId === conversation.id && route.path === '/chat' }"
+        :title="conversation.title || '新对话'"
+        @click="handleSelectRecent(conversation)"
+      >
+        <el-icon><Clock /></el-icon>
+        <span>{{ conversation.title || "新对话" }}</span>
+      </button>
+    </section>
+
     <div class="side-nav-bottom">
       <div class="side-status" :title="statusTitle">
         <span class="side-status__dot" :class="{ 'is-off': modelStatus !== 'configured' }"></span>
@@ -85,8 +125,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { computed, ref } from "vue";
-
+import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   ChatDotRound,
@@ -103,19 +142,19 @@ import {
   Search,
   Moon,
   Sunny,
+  Clock,
 } from "@element-plus/icons-vue";
+import { ElMessage } from "element-plus";
 import { useAppStore } from "@/stores/app";
 import { useBrandLogo } from "@/composables/useBrandLogo";
 import { useApi } from "@/composables/useApi";
-import { ElMessage } from "element-plus";
 import SearchModal from "./SearchModal.vue";
 
 const route = useRoute();
 const router = useRouter();
-
 const appStore = useAppStore();
 const { logoUrl } = useBrandLogo();
-const { post } = useApi();
+const { get, post } = useApi();
 const props = defineProps<{
   username?: string;
   avatar?: string;
@@ -126,12 +165,27 @@ const props = defineProps<{
 }>();
 defineEmits<{ toggleTheme: [] }>();
 const searchModal = ref<InstanceType<typeof SearchModal> | null>(null);
+const recentConversations = ref<any[]>([]);
+const activeConversationId = ref(localStorage.getItem("webchat-conv-id") || "");
+
 const statusTitle = computed(() => {
-  if (props.modelStatus === "unconfigured") return "模型未配置";
+  if (props.modelStatus === "not_configured" || props.modelStatus === "unconfigured") return "模型未配置";
   if (props.modelStatus === "error") return "核心服务异常";
-  const channels = [props.wechatStatus === "connected" ? "微信" : "", props.qqStatus === "connected" || props.qqStatus === "online" ? "QQ" : ""].filter(Boolean);
+  const channels = [
+    props.wechatStatus === "connected" ? "微信" : "",
+    props.qqStatus === "connected" || props.qqStatus === "online" ? "QQ" : "",
+  ].filter(Boolean);
   return channels.length ? `核心服务正常 · ${channels.join(" / ")} 已连接` : "核心服务正常";
 });
+
+async function fetchRecentConversations() {
+  try {
+    const result = await get<any>("/api/web-chat/conversations", { page: 1, pageSize: 7, channel: "web" });
+    recentConversations.value = (result?.items || result?.conversations || []).slice(0, 7);
+  } catch {
+    recentConversations.value = [];
+  }
+}
 
 async function createNewConversation() {
   try {
@@ -156,12 +210,35 @@ async function createNewConversation() {
 async function handleNewChat() {
   const newConvId = await createNewConversation();
   if (!newConvId) return;
+  activeConversationId.value = newConvId;
   localStorage.setItem("webchat-conv-id", newConvId);
+  localStorage.setItem("webchat-last-conv", "char");
+  await fetchRecentConversations();
+  window.dispatchEvent(new CustomEvent("amitia:conversation-list-changed"));
   if (route.path === "/chat") {
     window.dispatchEvent(new CustomEvent("amitia:new-chat", { detail: { conversationId: newConvId } }));
   } else {
     await router.push("/chat");
   }
+}
+
+async function handleSelectRecent(conversation: any) {
+  if (!conversation?.id) return;
+  activeConversationId.value = conversation.id;
+  localStorage.setItem("webchat-conv-id", conversation.id);
+  localStorage.setItem("webchat-last-conv", "char");
+  const charId = conversation.characterId || conversation.character_id;
+  if (charId) localStorage.setItem("webchat-char-id", charId);
+  if (route.path === "/chat") {
+    window.dispatchEvent(new CustomEvent("amitia:select-conversation", { detail: { conversation } }));
+  } else {
+    await router.push("/chat");
+  }
+}
+
+function handleConversationListChanged() {
+  activeConversationId.value = localStorage.getItem("webchat-conv-id") || "";
+  void fetchRecentConversations();
 }
 
 const CHAR_PATHS = [
@@ -204,6 +281,15 @@ const activeIndex = computed(() => {
 function openUserProfile() {
   router.push("/user-settings");
 }
+
+onMounted(() => {
+  void fetchRecentConversations();
+  window.addEventListener("amitia:conversation-list-changed", handleConversationListChanged);
+});
+
+onUnmounted(() => {
+  window.removeEventListener("amitia:conversation-list-changed", handleConversationListChanged);
+});
 </script>
 
 <style scoped>
@@ -212,204 +298,54 @@ function openUserProfile() {
   height: 100%;
   background: var(--workbench-sidebar-bg);
   border-right: 1px solid var(--surface-border);
-  box-shadow: none;
   display: flex;
   flex-direction: column;
-  padding: 16px 0 0;
+  padding: 8px 8px 0;
   user-select: none;
   flex-shrink: 0;
-  transition: width 0.3s ease;
+  transition: width 0.2s ease;
 }
-
-:global(html[data-theme="dark"]) .side-nav {
-  background: var(--workbench-sidebar-bg);
-  border-right-color: var(--surface-border);
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-}
-
-.side-nav.is-collapsed {
-  width: 60px;
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 0 14px 14px;
-  flex-shrink: 0;
-}
-
-.side-nav.is-collapsed .brand {
-  justify-content: center;
-  padding: 0 10px 14px;
-}
-
-.brand-mark {
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  object-fit: contain;
-  flex-shrink: 0;
-}
-
-.brand-name {
-  color: var(--console-text);
-  font-size: 18px;
-  font-weight: 650;
-  letter-spacing: 0;
-  white-space: nowrap;
-  overflow: hidden;
-}
-.side-collapse { display: grid; place-items: center; width: 28px; height: 28px; margin-left: auto; border: 0; border-radius: var(--radius-xs); background: transparent; color: var(--text-muted); cursor: pointer; }
-.side-collapse:hover, .side-collapse:focus-visible { background: var(--workbench-sidebar-hover); color: var(--text-primary); outline: none; }
-.side-nav.is-collapsed .side-collapse { margin-left: 0; }
-.side-collapse--collapsed { width: 36px; height: 36px; margin: 0 auto 12px; border: 1px solid var(--surface-border); border-radius: var(--radius-sm); }
-.side-collapse--collapsed:hover { border-color: var(--surface-border-hover); }
-.new-chat { display: flex; align-items: center; justify-content: center; gap: 8px; min-height: 38px; margin: 0 12px 12px; border: 1px solid var(--surface-border); border-radius: var(--radius-sm); background: var(--surface-bg); color: var(--text-primary); cursor: pointer; font: inherit; }
-.new-chat:hover, .new-chat:focus-visible { border-color: var(--surface-border-hover); background: var(--control-hover-bg); outline: none; }
-.side-nav.is-collapsed .new-chat { width: 40px; margin: 0 auto 12px; }
-.nav-search, .theme-entry { display: flex; align-items: center; gap: 8px; width: calc(100% - 24px); min-height: 34px; margin: 0 12px 10px; padding: 0 10px; border: 1px solid transparent; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); cursor: pointer; font: inherit; font-size: 12px; text-align: left; }
-.nav-search:hover, .nav-search:focus-visible, .theme-entry:hover, .theme-entry:focus-visible { border-color: var(--surface-border); background: var(--control-hover-bg); color: var(--text-primary); outline: none; }
-
-.side-menu {
-  border-right: none;
-  background: transparent;
-  flex: 1;
-  width: 100%;
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-
-.side-menu :deep(.el-menu-item),
-.side-menu :deep(.el-sub-menu__title) {
-  height: 40px;
-  line-height: 40px;
-  font-size: calc(var(--ac-font-size-base) - 1px);
-  margin: 0 12px;
-  padding: 0 20px 0 12px !important;
-  border-radius: var(--radius-sm);
-}
-
-.side-menu :deep(.el-menu-item:hover),
-.side-menu :deep(.el-sub-menu__title:hover) {
-  background: var(--workbench-sidebar-hover);
-  color: var(--nav-hover-color);
-}
-
-.side-menu :deep(.el-menu-item.is-active) {
-  background: var(--workbench-sidebar-active);
-  color: var(--nav-active-color);
-  font-weight: 600;
-}
-
-.side-menu :deep(.el-sub-menu.is-active > .el-sub-menu__title) {
-  background: var(--nav-active-bg);
-  color: var(--nav-active-color);
-  font-weight: 600;
-}
-.side-menu :deep(.el-sub-menu .el-menu) {
-  background: transparent;
-}
-
-.side-menu :deep(.el-sub-menu .el-menu-item) {
-  padding-left: 52px !important;
-  height: 36px;
-  line-height: 36px;
-  font-size: var(--ac-font-size-sm);
-}
-
-.menu-divider {
-  height: 1px;
-  background: var(--console-border-soft);
-  margin: 8px 28px;
-}
-
-.side-nav.is-collapsed .menu-divider {
-  margin: 8px 14px;
-}
-
-.side-nav-bottom {
-  flex-shrink: 0;
-  border-top: 1px solid var(--console-border-soft);
-  margin: 0 12px;
-  padding: 8px 0;
-}
-
-.side-status { display: flex; align-items: center; gap: 7px; min-height: 28px; padding: 0 10px 8px; color: var(--text-muted); font-size: 11px; overflow: hidden; white-space: nowrap; }
-.side-status__dot { width: 7px; height: 7px; flex: 0 0 auto; border-radius: 50%; background: var(--ac-color-success); }
+.side-nav.is-collapsed { width: 52px; padding-inline: 6px; }
+.brand-row { display: flex; align-items: center; justify-content: space-between; min-height: 42px; padding: 0 4px 6px; gap: 6px; }
+.brand { display: flex; align-items: center; min-width: 0; gap: 8px; }
+.brand-mark { width: 26px; height: 26px; border-radius: 7px; object-fit: contain; flex: 0 0 auto; }
+.brand-name { color: var(--text-primary); font-size: 14px; font-weight: 650; white-space: nowrap; }
+.brand-actions { display: flex; align-items: center; gap: 2px; }
+.icon-btn { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--text-muted); cursor: pointer; }
+.icon-btn:hover, .icon-btn:focus-visible { background: var(--workbench-sidebar-hover); color: var(--text-primary); outline: none; }
+.side-nav.is-collapsed .brand-row { justify-content: center; flex-direction: column; padding-bottom: 8px; }
+.side-nav.is-collapsed .brand-actions { width: 100%; justify-content: center; }
+.new-chat { display: flex; align-items: center; gap: 9px; min-height: 34px; width: 100%; margin: 2px 0 7px; padding: 0 9px; border: 0; border-radius: 7px; background: transparent; color: var(--text-primary); cursor: pointer; font: inherit; font-size: 13px; text-align: left; }
+.new-chat:hover, .new-chat:focus-visible { background: var(--workbench-sidebar-hover); outline: none; }
+.side-nav.is-collapsed .new-chat { justify-content: center; padding: 0; }
+.side-menu { border-right: none; background: transparent; flex: 0 1 auto; width: 100%; overflow: visible; }
+.side-menu :deep(.el-menu-item), .side-menu :deep(.el-sub-menu__title) { height: 34px; line-height: 34px; min-height: 34px; margin: 1px 0; padding: 0 9px !important; border-radius: 7px; font-size: 13px; color: var(--text-secondary); }
+.side-menu :deep(.el-icon) { width: 18px; font-size: 15px; margin-right: 8px; }
+.side-menu :deep(.el-menu-item:hover), .side-menu :deep(.el-sub-menu__title:hover) { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
+.side-menu :deep(.el-menu-item.is-active), .side-menu :deep(.el-sub-menu.is-active > .el-sub-menu__title) { background: var(--workbench-sidebar-active); color: var(--text-primary); font-weight: 550; }
+.side-menu :deep(.el-sub-menu .el-menu) { background: transparent; }
+.side-menu :deep(.el-sub-menu .el-menu-item) { padding-left: 34px !important; height: 31px; min-height: 31px; line-height: 31px; font-size: 12px; }
+.recent-section { min-height: 0; flex: 1 1 auto; overflow-y: auto; padding: 12px 0 8px; }
+.section-caption { padding: 0 9px 5px; color: var(--text-muted); font-size: 11px; font-weight: 550; }
+.recent-item { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 31px; padding: 0 9px; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: 12px; text-align: left; }
+.recent-item .el-icon { flex: 0 0 auto; font-size: 13px; color: var(--text-muted); }
+.recent-item span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.recent-item:hover, .recent-item.active { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
+.recent-item.active { background: var(--workbench-sidebar-active); }
+.side-nav-bottom { flex: 0 0 auto; border-top: 1px solid var(--surface-border); padding: 7px 0 8px; }
+.side-status { display: flex; align-items: center; gap: 7px; min-height: 25px; padding: 0 9px 5px; color: var(--text-muted); font-size: 10px; overflow: hidden; white-space: nowrap; }
+.side-status__dot { width: 6px; height: 6px; flex: 0 0 auto; border-radius: 50%; background: var(--ac-color-success); }
 .side-status__dot.is-off { background: var(--ac-color-warning); }
-.theme-entry { margin: 0 0 4px; width: 100%; }
-
-.side-nav.is-collapsed .side-nav-bottom {
-  margin: 0 8px;
-}
-
-.user-profile {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  padding: 10px;
-  border: 1px solid var(--console-border);
-  border-radius: 14px;
-  background: var(--tp-profile-bg);
-  color: var(--console-text);
-  cursor: pointer;
-  text-align: left;
-}
-
-.user-profile:focus-visible {
-  outline: 2px solid var(--tp-primary);
-  outline-offset: 2px;
-}
-
-.user-avatar {
-  display: grid;
-  place-items: center;
-  width: 34px;
-  height: 34px;
-  flex: 0 0 auto;
-  border-radius: 11px;
-  background: var(--tp-primary);
-  color: var(--tp-text-on-primary);
-  font-size: 13px;
-  font-weight: 800;
-  overflow: hidden;
-}
-
-.user-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.user-copy {
-  min-width: 0;
-}
-
-.user-copy strong,
-.user-copy span {
-  display: block;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.user-copy strong {
-  max-width: 126px;
-  font-size: 13px;
-  font-weight: 650;
-}
-
-.user-copy span {
-  margin-top: 2px;
-  color: var(--console-text-muted);
-  font-size: 11px;
-}
-
-.side-nav.is-collapsed .user-profile {
-  justify-content: center;
-  padding: 10px;
-}
+.user-profile, .theme-entry { display: flex; align-items: center; width: 100%; border: 0; border-radius: 7px; background: transparent; color: var(--text-secondary); cursor: pointer; text-align: left; }
+.user-profile { gap: 9px; min-height: 38px; padding: 4px 7px; }
+.user-profile:hover, .theme-entry:hover { background: var(--workbench-sidebar-hover); color: var(--text-primary); }
+.user-avatar { display: grid; place-items: center; width: 28px; height: 28px; flex: 0 0 auto; border-radius: 50%; background: color-mix(in srgb, var(--tp-primary) 72%, var(--surface-bg)); color: var(--tp-text-on-primary); font-size: 12px; overflow: hidden; }
+.user-avatar img { width: 100%; height: 100%; object-fit: cover; }
+.user-copy { min-width: 0; }
+.user-copy strong, .user-copy span { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.user-copy strong { max-width: 132px; color: var(--text-primary); font-size: 12px; font-weight: 550; }
+.user-copy span { margin-top: 1px; color: var(--text-muted); font-size: 10px; }
+.theme-entry { gap: 8px; min-height: 31px; margin-top: 2px; padding: 0 9px; font: inherit; font-size: 11px; }
+.side-nav.is-collapsed .side-status { justify-content: center; padding-inline: 0; }
+.side-nav.is-collapsed .user-profile { justify-content: center; padding-inline: 0; }
 </style>

@@ -52,6 +52,7 @@ const router = useRouter();
 const { connect: connectUIHost, disconnect: disconnectUIHost } = useUIHostSSE();
 let electronNavCleanup: (() => void) | null = null;
 let disposeExtensionListener: (() => void) | null = null;
+let healthInterval: number | null = null;
 const {
   state: theme,
   resolvedMode: resolvedTheme,
@@ -86,6 +87,10 @@ const extensionRuntimeAvailable = ref(false);
 const modelClass = computed(() =>
   health.value.model === "configured" ? "status-on" : "status-off",
 );
+
+function handleWindowResize() {
+  windowWidth.value = window.innerWidth;
+}
 
 provide("theme", theme);
 async function refreshAll() {
@@ -166,9 +171,7 @@ async function fetchUserInfo() {
 }
 
 onMounted(() => {
-  window.addEventListener("resize", () => {
-    windowWidth.value = window.innerWidth;
-  });
+  window.addEventListener("resize", handleWindowResize);
   fetchHealth();
   fetchQQStatus();
   if (getAccessToken()) {
@@ -192,23 +195,28 @@ onMounted(() => {
     });
   }
 
-  const interval = setInterval(() => {
-    fetchHealth();
-    fetchQQStatus();
+  healthInterval = window.setInterval(() => {
+    void fetchHealth();
+    void fetchQQStatus();
   }, 30000);
-  onUnmounted(() => {
-    clearInterval(interval);
-    disconnectUIHost();
-    extensionUIStore.invalidateSnapshot();
-    if (electronNavCleanup) {
-      electronNavCleanup();
-      electronNavCleanup = null;
-    }
-    if (disposeExtensionListener) {
-      disposeExtensionListener();
-      disposeExtensionListener = null;
-    }
-  });
+});
+
+onUnmounted(() => {
+  if (healthInterval !== null) {
+    window.clearInterval(healthInterval);
+    healthInterval = null;
+  }
+  disconnectUIHost();
+  extensionUIStore.invalidateSnapshot();
+  if (electronNavCleanup) {
+    electronNavCleanup();
+    electronNavCleanup = null;
+  }
+  if (disposeExtensionListener) {
+    disposeExtensionListener();
+    disposeExtensionListener = null;
+  }
+  window.removeEventListener("resize", handleWindowResize);
 });
 </script>
 

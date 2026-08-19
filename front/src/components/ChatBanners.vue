@@ -35,8 +35,9 @@ SPDX-License-Identifier: AGPL-3.0-only
         @close="$emit('closeImport')"
       >
         <template #title>
-          Chatting based on imported records
+          基于导入记录继续对话
           <span class="import-badge">import</span>
+          <button type="button" class="detail-btn" @click="$emit('toggleImportDetail')">{{ showImportDetail ? "收起" : "详情" }}</button>
         </template>
         <template #default v-if="showImportDetail">
           <div class="import-detail">
@@ -44,7 +45,7 @@ SPDX-License-Identifier: AGPL-3.0-only
               {{ importContext.summary }}
             </p>
             <p v-if="importContext.memoryCount" class="import-memories">
-              {{ importContext.memoryCount }} confirmed memories available
+              {{ importContext.memoryCount }} 条导入记录可用于上下文
             </p>
           </div>
         </template>
@@ -87,67 +88,23 @@ defineEmits<{
   closeError: [];
   closeImport: [];
   toggleSummary: [];
+  toggleImportDetail: [];
 }>();
 </script>
 
 <style scoped>
-.config-banner {
-  flex-shrink: 0;
-  margin: 0 0 8px;
-}
-
-.offline-banner,
-.error-banner {
-  flex-shrink: 0;
-  margin: 0 0 8px;
-}
-
-.banner-link {
-  font-weight: 600;
-  text-decoration: underline;
-  color: var(--el-color-warning-dark-2);
-}
-
-.import-banner {
-  flex-shrink: 0;
-  margin: 0 0 8px;
-}
-
-.import-badge {
-  font-size: 10px;
-  background: var(--ac-color-success);
-  color: var(--ac-color-text-on-primary);
-  border-radius: 3px;
-  padding: 0 4px;
-  margin-left: 6px;
-}
-
-.import-detail {
-  margin-top: 4px;
-}
-
-.import-summary {
-  font-size: var(--ac-font-size-xs);
-  color: var(--ac-color-text-secondary);
-  margin: 0;
-}
-
-.import-memories {
-  font-size: var(--ac-font-size-xs);
-  color: var(--ac-color-text-muted);
-  margin: 2px 0 0;
-}
-
-.summary-banner {
-  margin-bottom: 6px;
-  flex-shrink: 0;
-}
-
-.summary-text {
-  white-space: pre-wrap;
-  font-size: var(--ac-font-size-xs);
-  line-height: 1.6;
-  color: var(--ac-color-text-secondary);
-  margin-top: 4px;
-}
+.chat-banners { flex: 0 0 auto; padding: 8px 14px 0; }
+.config-banner, .offline-banner, .error-banner, .import-banner, .summary-banner { flex-shrink: 0; margin: 0 0 6px; }
+.chat-banners :deep(.el-alert) { min-height: 34px; padding: 6px 10px; border: 1px solid color-mix(in srgb, currentColor 12%, transparent); border-radius: 7px; }
+.chat-banners :deep(.el-alert__title) { font-size: 11px; line-height: 1.4; }
+.banner-link { color: var(--ac-color-warning); font-weight: 600; text-decoration: none; }
+.banner-link:hover { text-decoration: underline; }
+.import-badge { margin-left: 6px; padding: 1px 5px; border-radius: 999px; background: var(--ac-color-success-bg); color: var(--ac-color-success); font-size: 9px; }
+.detail-btn { margin-left: 8px; padding: 0; border: 0; background: transparent; color: var(--text-secondary); cursor: pointer; font: inherit; font-size: 10px; }
+.detail-btn:hover { color: var(--text-primary); }
+.import-detail { margin-top: 4px; }
+.import-summary, .import-memories { margin: 0; color: var(--text-muted); font-size: 10px; }
+.import-memories { margin-top: 2px; }
+.summary-text { margin-top: 4px; white-space: pre-wrap; color: var(--text-secondary); font-size: 11px; line-height: 1.55; }
+@media (max-width: 768px) { .chat-banners { padding: 6px 8px 0; } }
 </style>

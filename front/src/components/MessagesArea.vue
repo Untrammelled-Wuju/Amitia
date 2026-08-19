@@ -130,7 +130,7 @@ defineExpose({ rootEl });
   min-height: 0;
   overflow-y: scroll;
   overscroll-behavior-y: contain;
-  padding: 20px 24px;
+  padding: 22px 32px 28px;
   position: relative;
 }
 
@@ -146,25 +146,27 @@ defineExpose({ rootEl });
 
 .empty-icon {
   color: var(--ac-color-text-muted);
-  margin-bottom: 16px;
-  opacity: 0.5;
+  margin-bottom: 14px;
+  opacity: 0.58;
 }
 
 .empty-text {
-  font-size: var(--ac-font-size-lg);
-  color: var(--ac-color-text-secondary);
-  margin-bottom: 8px;
+  margin-bottom: 7px;
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 520;
+  letter-spacing: -0.2px;
 }
 
 .empty-hint {
-  font-size: var(--ac-font-size-sm);
-  color: var(--ac-color-text-muted);
-  max-width: 280px;
+  max-width: 360px;
+  color: var(--text-muted);
+  font-size: 12px;
 }
 
 .empty-chat :deep(.extension-slot) { width: min(100%, 680px); margin-top: 20px; }
 
-.messages-area > [data-message-id] { width: min(100%, 960px); margin: 0 auto; }
+.messages-area > [data-message-id] { width: min(100%, 820px); margin: 0 auto; }
 @media (max-width: 768px) { .messages-area { padding: 12px 8px; } }
 
 .scroll-btn {

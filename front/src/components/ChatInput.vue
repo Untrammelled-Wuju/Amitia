@@ -517,7 +517,7 @@ const agentSkillNames = computed(() =>
 
 const hostCapabilities = computed(() => {
   const caps = ["text", "browser"];
-  if (window.amitiaDesktop) {
+  if (env.host === "desktop") {
     caps.push("desktop", "clipboard-host");
   }
   return caps;
@@ -1403,4 +1403,72 @@ defineExpose({ focus, setText, clear: clearText });
     animation: none;
   }
 }
+
+/* Codex-like composer shell: floating, two-level, while retaining Amitia actions. */
+.chat-input-bar {
+  padding: 8px 24px 22px;
+  border-top: 0;
+  background: transparent;
+}
+.composer-stack {
+  flex-basis: 760px;
+  width: min(100%, 760px);
+}
+.input-wrapper {
+  gap: 4px;
+  padding: 8px 10px 9px;
+  border-color: color-mix(in srgb, var(--composer-border) 88%, transparent);
+  border-radius: 14px;
+  background: var(--composer-bg);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+.input-wrapper:focus-within {
+  border-color: color-mix(in srgb, var(--composer-border-focus) 72%, var(--composer-border));
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--composer-border-focus) 18%, transparent), 0 8px 24px rgba(0, 0, 0, 0.14);
+}
+.input-row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  grid-template-rows: auto 34px;
+  align-items: center;
+  gap: 2px 6px;
+}
+.input-body {
+  grid-column: 1 / -1;
+  grid-row: 1;
+  min-height: 44px;
+  align-items: flex-start;
+}
+.input-left-actions {
+  grid-column: 1;
+  grid-row: 2;
+  min-height: 32px;
+  align-self: end;
+}
+.input-actions {
+  grid-column: 3;
+  grid-row: 2;
+  min-height: 32px;
+  align-self: end;
+}
+.input-field {
+  min-height: 44px;
+  max-height: 180px;
+  padding: 8px 3px 7px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+.add-btn, .voice-mode-toggle {
+  width: 30px;
+  height: 30px;
+}
+.composer-context { padding-bottom: 4px; }
+.reply-preview-bar { margin-bottom: 2px; }
+@media (max-width: 768px) {
+  .chat-input-bar { padding: 6px 8px calc(10px + var(--ac-safe-area-bottom)); }
+  .composer-stack { flex-basis: 100%; width: 100%; }
+  .input-wrapper { border-radius: 13px; }
+  .input-field { max-height: 132px; }
+}
+
 </style>
