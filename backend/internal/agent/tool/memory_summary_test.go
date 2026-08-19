@@ -62,10 +62,11 @@ func seedMemories(t *testing.T, db *sql.DB) {
 		{"m6", "char-1", "工作", "是一名软件工程师", "personal_info", "character", "2026-06-15", 9, 90},
 		{"m7", "char-1", "旅行计划", "计划去日本旅行", "plan", "character", "", 6, 60},
 	}
+	nowStr := time.Now().Format("2006-01-02 15:04:05")
 	for _, e := range entries {
 		_, err := db.Exec(
-			"INSERT INTO memories (id, character_id, key, value, memory_type, importance, confidence, scope, last_used_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'), datetime('now'))",
-			e.id, e.charID, e.key, e.value, e.memType, e.importance, e.confidence, e.scope, e.lastUsed,
+			"INSERT INTO memories (id, character_id, key, value, memory_type, importance, confidence, scope, last_used_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+			e.id, e.charID, e.key, e.value, e.memType, e.importance, e.confidence, e.scope, e.lastUsed, nowStr, nowStr,
 		)
 		if err != nil {
 			t.Fatal(err)
