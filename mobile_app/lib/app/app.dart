@@ -7,6 +7,8 @@ import '../core/runtime/runtime_bridge_provider.dart';
 import '../core/runtime/backend/mobile_backend_providers.dart';
 import '../core/runtime/backend/mobile_deployment_mode.dart';
 import '../core/widgets/amitia_drawer.dart';
+import '../core/debug/debug_log_overlay.dart';
+import '../core/debug/debug_runtime_bridge.dart';
 import 'theme/app_theme.dart';
 import 'router.dart';
 
@@ -44,6 +46,7 @@ class _AmitiaAppRootState extends ConsumerState<AmitiaAppRoot> {
 
   @override
   Widget build(BuildContext context) {
+    ref.watch(debugRuntimeLogBridgeProvider);
     return _BootstrapGate(
       bootstrapInitialized: _bootstrapInitialized,
     );
@@ -57,23 +60,30 @@ class _BootstrapGate extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    Widget content;
     if (!bootstrapInitialized) {
-      return const _BootstrapInitializingWidget();
+      content = const _BootstrapInitializingWidget();
+    } else {
+      final deployment = ref.watch(mobileDeploymentConfigProvider);
+
+      if (deployment.mode == MobileDeploymentMode.cloud ||
+          deployment.mode == MobileDeploymentMode.hybrid) {
+        content = const AmitiaApp();
+      } else {
+        final bootstrapAsync = ref.watch(runtimeBootstrapSnapshotProvider);
+        content = bootstrapAsync.when(
+          data: (snapshot) => _buildAppForPhase(context, ref, snapshot.phase),
+          loading: () => const _BootstrapInitializingWidget(),
+          error: (_, __) => const _BootstrapErrorWidget(),
+        );
+      }
     }
 
-    final deployment = ref.watch(mobileDeploymentConfigProvider);
-
-    if (deployment.mode == MobileDeploymentMode.cloud ||
-        deployment.mode == MobileDeploymentMode.hybrid) {
-      return const AmitiaApp();
-    }
-
-    final bootstrapAsync = ref.watch(runtimeBootstrapSnapshotProvider);
-
-    return bootstrapAsync.when(
-      data: (snapshot) => _buildAppForPhase(context, ref, snapshot.phase),
-      loading: () => const _BootstrapInitializingWidget(),
-      error: (_, __) => const _BootstrapErrorWidget(),
+    return Stack(
+      children: [
+        content,
+        const DebugLogOverlay(),
+      ],
     );
   }
 
@@ -105,11 +115,17 @@ class _BootstrapInitializingWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      home: Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(),
-        ),
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Stack(
+        children: [
+          const Scaffold(
+            body: Center(
+              child: CircularProgressIndicator(),
+            ),
+          ),
+          const DebugLogOverlay(),
+        ],
       ),
     );
   }
@@ -160,34 +176,40 @@ class _BootstrapInstallRequiredWidgetState
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      home: Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Text('运行环境尚未安装'),
-              const SizedBox(height: 16),
-              ElevatedButton(
-                onPressed: _installing ? null : _installRuntime,
-                child: _installing
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
-                    : const Text('安装运行环境'),
+      debugShowCheckedModeBanner: false,
+      home: Stack(
+        children: [
+          Scaffold(
+            body: Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Text('运行环境尚未安装'),
+                  const SizedBox(height: 16),
+                  ElevatedButton(
+                    onPressed: _installing ? null : _installRuntime,
+                    child: _installing
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('安装运行环境'),
+                  ),
+                  if (_errorMessage != null) ...[
+                    const SizedBox(height: 16),
+                    Text(
+                      _errorMessage!,
+                      style: TextStyle(color: Theme.of(context).colorScheme.error),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ],
               ),
-              if (_errorMessage != null) ...[
-                const SizedBox(height: 16),
-                Text(
-                  _errorMessage!,
-                  style: TextStyle(color: Theme.of(context).colorScheme.error),
-                  textAlign: TextAlign.center,
-                ),
-              ],
-            ],
+            ),
           ),
-        ),
+          const DebugLogOverlay(),
+        ],
       ),
     );
   }
@@ -198,11 +220,17 @@ class _BootstrapFailedWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      home: Scaffold(
-        body: Center(
-          child: Text('Runtime startup failed'),
-        ),
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Stack(
+        children: [
+          const Scaffold(
+            body: Center(
+              child: Text('Runtime startup failed'),
+            ),
+          ),
+          const DebugLogOverlay(),
+        ],
       ),
     );
   }
@@ -213,11 +241,17 @@ class _BootstrapUnavailableWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      home: Scaffold(
-        body: Center(
-          child: Text('Runtime unavailable'),
-        ),
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Stack(
+        children: [
+          const Scaffold(
+            body: Center(
+              child: Text('Runtime unavailable'),
+            ),
+          ),
+          const DebugLogOverlay(),
+        ],
       ),
     );
   }
@@ -228,11 +262,17 @@ class _BootstrapErrorWidget extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const MaterialApp(
-      home: Scaffold(
-        body: Center(
-          child: Text('Failed to initialize runtime'),
-        ),
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: Stack(
+        children: [
+          const Scaffold(
+            body: Center(
+              child: Text('Failed to initialize runtime'),
+            ),
+          ),
+          const DebugLogOverlay(),
+        ],
       ),
     );
   }
@@ -254,6 +294,14 @@ class AmitiaApp extends ConsumerWidget {
       darkTheme: AppTheme.darkTheme(),
       themeMode: themeMode,
       routerConfig: router,
+      builder: (context, child) {
+        return Stack(
+          children: [
+            if (child != null) child,
+            const DebugLogOverlay(),
+          ],
+        );
+      },
     );
   }
 }
