@@ -39,6 +39,11 @@ SPDX-License-Identifier: AGPL-3.0-only
       router
       class="side-menu"
     >
+      <el-sub-menu index="overview">
+        <template #title><el-icon><Odometer /></el-icon><span>概览</span></template>
+        <el-menu-item index="/dashboard/run"><el-icon><DataLine /></el-icon><span>运行概览</span></el-menu-item>
+        <el-menu-item index="/dashboard/data"><el-icon><DataAnalysis /></el-icon><span>运行数据</span></el-menu-item>
+      </el-sub-menu>
       <el-menu-item index="/chat">
         <el-icon><ChatLineRound /></el-icon>
         <span>聊天</span>
@@ -52,6 +57,9 @@ SPDX-License-Identifier: AGPL-3.0-only
         <el-menu-item index="/reminders"><el-icon><Calendar /></el-icon><span>日程提醒</span></el-menu-item>
         <el-menu-item index="/profiles"><el-icon><Avatar /></el-icon><span>用户画像</span></el-menu-item>
         <el-menu-item index="/world-book"><el-icon><Collection /></el-icon><span>世界书</span></el-menu-item>
+        <el-menu-item index="/wechat"><el-icon><Connection /></el-icon><span>微信连接</span></el-menu-item>
+        <el-menu-item index="/qq"><el-icon><ChatDotSquare /></el-icon><span>QQ 连接</span></el-menu-item>
+        <el-menu-item index="/emotes"><el-icon><StarFilled /></el-icon><span>表情包管理</span></el-menu-item>
       </el-sub-menu>
       <el-sub-menu index="memory">
         <template #title>
@@ -63,18 +71,15 @@ SPDX-License-Identifier: AGPL-3.0-only
         <el-menu-item index="/graph"><el-icon><Share /></el-icon><span>记忆图谱</span></el-menu-item>
         <el-menu-item index="/memory-timeline"><el-icon><Timer /></el-icon><span>时间线</span></el-menu-item>
         <el-menu-item index="/logs"><el-icon><ChatLineRound /></el-icon><span>聊天记录</span></el-menu-item>
-        <el-menu-item index="/import"><el-icon><Download /></el-icon><span>导入记录</span></el-menu-item>
       </el-sub-menu>
-      <el-sub-menu index="more">
-        <template #title><el-icon><Odometer /></el-icon><span>更多</span></template>
-        <el-menu-item index="/dashboard/run"><el-icon><DataLine /></el-icon><span>运行概览</span></el-menu-item>
-        <el-menu-item index="/dashboard/data"><el-icon><DataAnalysis /></el-icon><span>运行数据</span></el-menu-item>
-        <el-menu-item index="/wechat"><el-icon><Connection /></el-icon>微信连接</el-menu-item>
-        <el-menu-item index="/qq"><el-icon><ChatDotSquare /></el-icon>QQ 连接</el-menu-item>
-        <el-menu-item index="/emotes"><el-icon><StarFilled /></el-icon><span>表情包管理</span></el-menu-item>
-        <el-menu-item index="/extensions"><el-icon><Menu /></el-icon><span>扩展中心</span></el-menu-item>
-        <el-menu-item index="/creative-workshop"><el-icon><MagicStick /></el-icon>创意工坊</el-menu-item>
-      </el-sub-menu>
+      <el-menu-item index="/creative-workshop">
+        <el-icon><MagicStick /></el-icon>
+        <span>创意工坊</span>
+      </el-menu-item>
+      <el-menu-item index="/extensions">
+        <el-icon><Menu /></el-icon>
+        <span>扩展中心</span>
+      </el-menu-item>
     </el-menu>
 
     <div class="side-nav-bottom">
@@ -164,7 +169,6 @@ import {
   Share,
   Timer,
   ChatLineRound,
-  Download,
   DataLine,
   DataAnalysis,
   StarFilled,
@@ -365,7 +369,6 @@ onUnmounted(() => {
   width: var(--ac-sidebar-width);
   height: 100%;
   background: var(--workbench-sidebar-bg);
-  border-right: 1px solid var(--surface-border);
   display: flex;
   flex-direction: column;
   padding: 8px 8px 0;

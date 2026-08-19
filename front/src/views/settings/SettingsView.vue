@@ -18,12 +18,6 @@ SPDX-License-Identifier: AGPL-3.0-only
         >部署模式</router-link
       >
       <router-link
-        to="/settings/ai-config"
-        class="settings-tab"
-        active-class="settings-tab-active"
-        >AI 配置</router-link
-      >
-      <router-link
         to="/settings/system"
         class="settings-tab"
         active-class="settings-tab-active"

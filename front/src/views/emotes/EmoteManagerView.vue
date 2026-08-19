@@ -729,6 +729,7 @@ onMounted(async () => {
 <style scoped>
 .emote-page {
   height: 100%;
+  min-height: 100%;
   display: flex;
   flex-direction: column;
   padding: 0;
