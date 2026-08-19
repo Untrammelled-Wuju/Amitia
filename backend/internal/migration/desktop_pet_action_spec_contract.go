@@ -170,7 +170,7 @@ func upsertCatalogProjections(s *Step) {
 				recommended=%d,
 				sort_order=%d,
 				default_frame_count=%d,
-updated_at=strftime('%Y-%m-%d %H:%M:%S','now')
+			updated_at=strftime('%%Y-%%m-%%d %%H:%%M:%%S','now')
 			WHERE action_key='%s' AND (catalog_version < %d OR catalog_version IS NULL OR playback_mode IS NULL OR playback_mode='')`,
 				contracts.ActionSpecSchemaVersion,
 			contracts.CatalogVersion,

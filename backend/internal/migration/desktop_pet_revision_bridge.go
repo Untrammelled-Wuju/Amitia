@@ -26,13 +26,13 @@ func DesktopPetRevisionBridgeMigration() Migration {
   status TEXT NOT NULL DEFAULT 'processing_published',
   last_error TEXT NOT NULL DEFAULT '',
   retry_count INTEGER NOT NULL DEFAULT 0,
-created_at TEXT NOT NULL DEFAULT '',
+  created_at TEXT NOT NULL DEFAULT '',
   updated_at TEXT NOT NULL DEFAULT ''
-)
-	if err := s.CreateIndex("idx_drbj_status", "desktop_pet_revision_bridge_journals", []string{"status"}, false); err != nil {
-				return err
-			}
-			s.CreateIndex("idx_drbj_proc_rev", "desktop_pet_revision_bridge_journals", []string{"processing_revision_id"}, false)
+)`)
+		if err := s.CreateIndex("idx_drbj_status", "desktop_pet_revision_bridge_journals", []string{"status"}, false); err != nil {
+			return err
+		}
+		s.CreateIndex("idx_drbj_proc_rev", "desktop_pet_revision_bridge_journals", []string{"processing_revision_id"}, false)
 
 			s.CreateTable(`CREATE TABLE IF NOT EXISTS desktop_pet_active_action_revision_bindings (
   id TEXT PRIMARY KEY,
