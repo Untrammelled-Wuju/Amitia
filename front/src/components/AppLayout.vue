@@ -19,9 +19,15 @@ SPDX-License-Identifier: AGPL-3.0-only
 
           <div
             class="content-scroll"
-            :class="{ 'no-padding': isChatPage || isLoginPage }"
+            :class="{ 'no-padding': isContentPaddingDisabled }"
           >
-            <div class="content-scroll-inner">
+            <div
+              class="content-scroll-inner"
+              :class="{
+                'no-padding': isContentPaddingDisabled,
+                'fill-height': isContentFullHeight,
+              }"
+            >
               <slot />
             </div>
           </div>
@@ -65,6 +71,19 @@ const isMobile = computed(() => windowWidth.value < 768);
 const isLoginPage = computed(() => router.currentRoute.value.path === "/login");
 
 const isChatPage = computed(() => router.currentRoute.value.path === "/chat");
+const isContentPaddingDisabled = computed(() => {
+  const path = router.currentRoute.value.path;
+  return (
+    path === "/chat" ||
+    path === "/login" ||
+    path === "/emotes" ||
+    path.startsWith("/character")
+  );
+});
+const isContentFullHeight = computed(() => {
+  const path = router.currentRoute.value.path;
+  return path === "/emotes" || path.startsWith("/character");
+});
 const pageTitle = computed(() => getPageTitle(router.currentRoute.value.path));
 
 const health = ref({
@@ -243,6 +262,7 @@ onUnmounted(() => {
   flex-direction: column;
   overflow: hidden;
   background: var(--workbench-bg);
+  border-left: 1px solid var(--surface-border);
 }
 
 .app-content {
@@ -273,6 +293,16 @@ onUnmounted(() => {
 
 .content-scroll-inner {
   padding: 20px 24px;
+}
+
+.content-scroll-inner.no-padding {
+  padding: 0;
+}
+
+.content-scroll-inner.fill-height {
+  height: 100%;
+  min-height: 100%;
+  box-sizing: border-box;
 }
 
 .workspace-surface--chat .content-scroll {
@@ -329,6 +359,10 @@ onUnmounted(() => {
 
 .mobile-status .status-off {
   background: var(--ac-color-text-muted);
+}
+
+.is-mobile .app-main {
+  border-left: 0;
 }
 
 .is-mobile .content-scroll {

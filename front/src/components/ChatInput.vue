@@ -845,7 +845,7 @@ defineExpose({ focus, setText, clear: clearText });
   padding: 8px 9px;
   border: 1px solid var(--composer-border);
   border-radius: var(--radius-composer);
-  background: var(--composer-bg);
+  background: var(--workbench-sidebar-bg);
   box-shadow: var(--composer-shadow);
   transition:
     border-color 0.18s ease,
@@ -1419,7 +1419,7 @@ defineExpose({ focus, setText, clear: clearText });
   padding: 8px 10px 9px;
   border-color: color-mix(in srgb, var(--composer-border) 88%, transparent);
   border-radius: 14px;
-  background: var(--composer-bg);
+  background: var(--workbench-sidebar-bg);
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
 }
 .input-wrapper:focus-within {
