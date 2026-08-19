@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/url"
 	"regexp"
 	"strings"
 
@@ -98,6 +99,29 @@ func validateOrigin(c *gin.Context, allowedOrigins []string) error {
 	return errors.New("origin not allowed")
 }
 
+func validateLocalOrigin(c *gin.Context, allowedOrigins []string) error {
+	if err := validateOrigin(c, allowedOrigins); err == nil {
+		return nil
+	}
+	if isDesktopDevelopmentOrigin(c.GetHeader("Origin")) {
+		return nil
+	}
+	return errors.New("origin not allowed")
+}
+
+func isDesktopDevelopmentOrigin(origin string) bool {
+	parsed, err := url.Parse(strings.TrimSpace(origin))
+	if err != nil || parsed.Scheme != "http" || parsed.Port() != "5178" {
+		return false
+	}
+	host := strings.ToLower(parsed.Hostname())
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
 func AuthenticationMiddleware(cfg AuthConfig) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		switch cfg.Mode {
@@ -128,7 +152,7 @@ func LocalAdminAuthenticationMiddleware(cfg AuthConfig) gin.HandlerFunc {
 			return
 		}
 
-		if err := validateOrigin(c, cfg.AllowedOrigins); err != nil {
+		if err := validateLocalOrigin(c, cfg.AllowedOrigins); err != nil {
 			util.ErrorResponse(c, response.Unauthorized, "来源不允许", nil)
 			c.Abort()
 			return
@@ -259,7 +283,7 @@ func handleLocalSingleUserAuth(c *gin.Context, cfg AuthConfig) {
 		return
 	}
 
-	if err := validateOrigin(c, cfg.AllowedOrigins); err != nil {
+	if err := validateLocalOrigin(c, cfg.AllowedOrigins); err != nil {
 		util.ErrorResponse(c, response.Unauthorized, "来源不允许", nil)
 		c.Abort()
 		return
