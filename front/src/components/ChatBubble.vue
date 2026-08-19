@@ -496,4 +496,19 @@ async function copyContent() {
   background: var(--ac-color-primary-bg);
   border: 1px solid var(--ac-color-primary);
 }
+
+/* Keep companion semantics but use Codex-like restrained message surfaces. */
+.chat-bubble { padding: 10px 0; gap: 10px; }
+.bubble-body { max-width: min(82%, 720px); }
+.chat-bubble.user .bubble-content {
+  background: var(--surface-bg-elevated);
+  border-color: var(--surface-border);
+  border-radius: 12px;
+}
+.chat-bubble.assistant .bubble-content { background: transparent; }
+.chat-bubble.assistant .bubble-text { padding: 5px 1px 7px; }
+.chat-bubble.user .bubble-text { padding: 8px 12px 9px; }
+.bubble-meta { margin-bottom: 2px; }
+.bubble-actions { padding-inline: 1px; }
+
 </style>
