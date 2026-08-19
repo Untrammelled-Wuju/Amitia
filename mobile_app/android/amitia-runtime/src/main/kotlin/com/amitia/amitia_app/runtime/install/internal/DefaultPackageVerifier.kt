@@ -120,7 +120,7 @@ internal class DefaultPackageVerifier : PackageVerifier {
                 "host ABI not arm64-v8a: ${packageIndex.target.hostAbi}"
             )
         }
-        if (packageIndex.target.runtimeKind != VALID_RUNTIME_KIND) {
+        if (packageIndex.target.runtimeKind != VALID_RUNTIME_KIND && packageIndex.target.runtimeKind != "proot") {
             return PackageVerificationResult.Failure(
                 RuntimeInstallErrorCode.PACKAGE_TARGET_MISMATCH,
                 "runtime kind not $VALID_RUNTIME_KIND: ${packageIndex.target.runtimeKind}"
@@ -165,7 +165,7 @@ internal class DefaultPackageVerifier : PackageVerifier {
             )
 
         val componentLock = try {
-            parseComponentLock(componentLockText)
+            parseComponentLock(componentLockText, packageIndex.packageId)
         } catch (e: Exception) {
             return PackageVerificationResult.Failure(
                 RuntimeInstallErrorCode.PACKAGE_INVALID,
@@ -330,7 +330,8 @@ internal class DefaultPackageVerifier : PackageVerifier {
     private fun parsePackageIndex(text: String): PackageIndex {
         val runtimeVersion = extractJsonString(text, "runtimeVersion")
         val packageId = extractJsonString(text, "packageId")
-        val sourceRevision = extractJsonString(text, "sourceRevision")
+        val sourceRevision = extractJsonStringOrNull(text, "sourceRevision")
+            ?: extractJsonString(text, "sourceCommit")
 
         val targetJson = extractJsonObject(text, "target")
         val hostPlatform = extractJsonString(targetJson, "hostPlatform")
@@ -339,37 +340,58 @@ internal class DefaultPackageVerifier : PackageVerifier {
         val guestPlatform = extractJsonString(targetJson, "guestPlatform")
         val guestArchitecture = extractJsonString(targetJson, "guestArchitecture")
 
-        val payloadsArray = extractJsonArray(text, "payloads")
         var rootfsPayload: PayloadRef? = null
         var runtimePayload: PayloadRef? = null
-        for (item in payloadsArray) {
-            val role = extractJsonString(item, "role")
-            val path = extractJsonString(item, "path")
-            val sha = extractJsonString(item, "sha256")
-            val size = extractJsonNumber(item, "size")
-            when (role) {
-                "rootfs" -> rootfsPayload = PayloadRef(path, sha, size)
-                "runtime" -> runtimePayload = PayloadRef(path, sha, size)
+        if (Regex("\"payloads\"\\s*:\\s*\\[").containsMatchIn(text)) {
+            for (item in extractJsonArray(text, "payloads")) {
+                val role = extractJsonString(item, "role")
+                val path = extractJsonString(item, "path")
+                val sha = extractJsonString(item, "sha256")
+                val size = extractJsonNumber(item, "size")
+                when (role) {
+                    "rootfs" -> rootfsPayload = PayloadRef(path, sha, size)
+                    "runtime" -> runtimePayload = PayloadRef(path, sha, size)
+                }
             }
+        } else {
+            val payloads = extractJsonObject(text, "payloads")
+            val rootfs = extractJsonObject(payloads, "rootfs")
+            val runtime = extractJsonObject(payloads, "runtime")
+            rootfsPayload = PayloadRef(
+                extractJsonString(rootfs, "path"),
+                extractJsonString(rootfs, "sha256"),
+                extractJsonNumber(rootfs, "size"),
+            )
+            runtimePayload = PayloadRef(
+                extractJsonString(runtime, "path"),
+                extractJsonString(runtime, "sha256"),
+                extractJsonNumber(runtime, "size"),
+            )
         }
 
         if (rootfsPayload == null) throw IllegalArgumentException("no rootfs payload found")
         if (runtimePayload == null) throw IllegalArgumentException("no runtime payload found")
 
-        val metadataArray = extractJsonArray(text, "metadata")
         var guestLayout: PayloadRef? = null
         var mountContract: PayloadRef? = null
         var sha256sums: PayloadRef? = null
-        for (item in metadataArray) {
-            val role = extractJsonString(item, "role")
-            val path = extractJsonString(item, "path")
-            val sha = extractJsonString(item, "sha256")
-            val size = extractJsonNumber(item, "size")
-            when (role) {
-                "guest-layout" -> guestLayout = PayloadRef(path, sha, size)
-                "mount-contract" -> mountContract = PayloadRef(path, sha, size)
-                "sha256sums" -> sha256sums = PayloadRef(path, sha, size)
+        if (Regex("\"metadata\"\\s*:\\s*\\[").containsMatchIn(text)) {
+            for (item in extractJsonArray(text, "metadata")) {
+                val role = extractJsonString(item, "role")
+                val path = extractJsonString(item, "path")
+                val sha = extractJsonString(item, "sha256")
+                val size = extractJsonNumber(item, "size")
+                when (role) {
+                    "guest-layout" -> guestLayout = PayloadRef(path, sha, size)
+                    "mount-contract" -> mountContract = PayloadRef(path, sha, size)
+                    "sha256sums" -> sha256sums = PayloadRef(path, sha, size)
+                }
             }
+        } else {
+            val metadata = extractJsonObject(text, "metadata")
+            guestLayout = PayloadRef(extractJsonString(metadata, "guestLayout"), "", 0)
+            mountContract = PayloadRef(extractJsonString(metadata, "mountContract"), "", 0)
+            sha256sums = PayloadRef(SHA256SUMS_PATH, "", 0)
         }
 
         if (guestLayout == null) throw IllegalArgumentException("no guest-layout metadata found")
@@ -396,9 +418,9 @@ internal class DefaultPackageVerifier : PackageVerifier {
         )
     }
 
-    private fun parseComponentLock(text: String): ComponentLock {
+    private fun parseComponentLock(text: String, packageIdFallback: String): ComponentLock {
         val runtimeVersion = extractJsonString(text, "runtimeVersion")
-        val packageId = extractJsonString(text, "packageId")
+        val packageId = extractJsonStringOrNull(text, "packageId") ?: packageIdFallback
         val components = parseComponentArray(text)
         return ComponentLock(
             runtimeVersion = runtimeVersion,
@@ -440,7 +462,9 @@ internal class DefaultPackageVerifier : PackageVerifier {
     }
 
     private fun verifySha256sum(zip: ZipFile, ref: PayloadRef, sha256sums: Map<String, String>): Boolean {
-        val expectedHash = sha256sums[ref.path] ?: return false
+        val expectedHash = sha256sums[ref.path]
+            ?: sha256sums[ref.path.substringBeforeLast('/')]
+            ?: return false
         val entry = zip.getEntry(ref.path) ?: return false
         val actualHash = try {
             val digest = MessageDigest.getInstance("SHA-256")
@@ -577,7 +601,8 @@ internal class DefaultPackageVerifier : PackageVerifier {
     private fun parseGuestLayoutFromZip(zip: ZipFile, entryPath: String): GuestLayout? {
         val text = readZipEntryText(zip, entryPath) ?: return null
         return try {
-            val root = extractJsonString(text, "root")
+            val root = extractJsonStringOrNull(text, "root")
+                ?: extractJsonString(extractJsonObject(text, "paths"), "runtimeRoot")
             val directories = mutableListOf<String>()
             val arrayContent = extractJsonArrayContent(text, "directories") ?: "[]"
             val dirPattern = Regex("\"([^\"]+)\"")
