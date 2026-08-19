@@ -23,7 +23,10 @@ func newSetupServiceTest(t *testing.T) *service {
 	})
 	if err := db.Exec(`CREATE TABLE app_settings (
 		key TEXT PRIMARY KEY,
-		value TEXT DEFAULT ''
+		value TEXT DEFAULT '',
+		revision INTEGER NOT NULL DEFAULT 0,
+		deleted_at DATETIME,
+		updated_at TEXT DEFAULT ''
 	)`).Error; err != nil {
 		t.Fatal(err)
 	}
