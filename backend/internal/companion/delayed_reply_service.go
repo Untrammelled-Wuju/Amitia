@@ -40,7 +40,8 @@ func (s *service) ListDelayedReplies(characterID string) []map[string]interface{
 }
 
 func (s *service) CancelDelayedReply(id int, characterID string) map[string]interface{} {
-	s.db.Exec("UPDATE delayed_replies SET status='cancelled', updated_at=datetime('now', 'localtime') WHERE id=? AND character_id=?", id, characterID)
+	nowStr := time.Now().Format("2006-01-02 15:04:05")
+	s.db.Exec("UPDATE delayed_replies SET status='cancelled', updated_at=? WHERE id=? AND character_id=?", nowStr, id, characterID)
 	return map[string]interface{}{"id": id, "cancelled": true}
 }
 
@@ -79,15 +80,17 @@ func (s *service) ProcessDelayedReplies(characterID string) map[string]interface
 			if wakeTime.Before(now) {
 				wakeTime = wakeTime.Add(24 * time.Hour)
 			}
-			s.db.Exec("UPDATE delayed_replies SET scheduled_at = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
-				wakeTime.Format("2006-01-02 15:04:05"), id)
+			nowStr := time.Now().Format("2006-01-02 15:04:05")
+			s.db.Exec("UPDATE delayed_replies SET scheduled_at = ?, updated_at = ? WHERE id = ?",
+			wakeTime.Format("2006-01-02 15:04:05"), nowStr, id)
 			delayed++
 		} else if currentState == "IN_CLASS" || currentState == "IN_EXAM" || currentState == "BUSY" {
 			canSend = false
 			delayMin := 10 + rand.Intn(21)
 			newTime := now.Add(time.Duration(delayMin) * time.Minute)
-			s.db.Exec("UPDATE delayed_replies SET scheduled_at = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
-				newTime.Format("2006-01-02 15:04:05"), id)
+			nowStr := time.Now().Format("2006-01-02 15:04:05")
+			s.db.Exec("UPDATE delayed_replies SET scheduled_at = ?, updated_at = ? WHERE id = ?",
+				newTime.Format("2006-01-02 15:04:05"), nowStr, id)
 			delayed++
 		}
 
@@ -114,16 +117,18 @@ func (s *service) ProcessDelayedReplies(characterID string) map[string]interface
 					}
 				}
 				retryCount++
+				nowStr := time.Now().Format("2006-01-02 15:04:05")
 				if retryCount >= 3 {
-					s.db.Exec("UPDATE delayed_replies SET status='FAILED', retry_count=?, updated_at=datetime('now', 'localtime') WHERE id = ?", retryCount, id)
+					s.db.Exec("UPDATE delayed_replies SET status='FAILED', retry_count=?, updated_at=? WHERE id = ?", retryCount, nowStr, id)
 					failed++
 				} else {
-					s.db.Exec("UPDATE delayed_replies SET retry_count=?, updated_at=datetime('now', 'localtime') WHERE id = ?", retryCount, id)
+					s.db.Exec("UPDATE delayed_replies SET retry_count=?, updated_at=? WHERE id = ?", retryCount, nowStr, id)
 				}
 			} else if dispatchResult == nil {
 				newTime := now.Add(30 * time.Minute)
-				s.db.Exec("UPDATE delayed_replies SET scheduled_at = ?, updated_at = datetime('now', 'localtime') WHERE id = ?",
-					newTime.Format("2006-01-02 15:04:05"), id)
+				nowStr := time.Now().Format("2006-01-02 15:04:05")
+				s.db.Exec("UPDATE delayed_replies SET scheduled_at = ?, updated_at = ? WHERE id = ?",
+					newTime.Format("2006-01-02 15:04:05"), nowStr, id)
 				delayed++
 			} else {
 				messageContent := content
@@ -137,7 +142,8 @@ func (s *service) ProcessDelayedReplies(characterID string) map[string]interface
 				deliveryID := uuid.New().String()
 				s.db.Exec("INSERT INTO proactive_messages (rule_id, conversation_id, message_content, channel, status, interaction_id, delivery_id, request_id, delivery_status, created_at, updated_at) VALUES (0, ?, ?, ?, 'queued', ?, ?, ?, 'PENDING', ?, ?)",
 					convID, messageContent, channel, interactionID, deliveryID, requestID, nowStr, nowStr)
-				s.db.Exec("UPDATE delayed_replies SET status='PROCESSED', sent_at=?, updated_at=datetime('now', 'localtime') WHERE id = ?", nowStr, id)
+				nowUpdate := time.Now().Format("2006-01-02 15:04:05")
+				s.db.Exec("UPDATE delayed_replies SET status='PROCESSED', sent_at=?, updated_at=? WHERE id = ?", nowStr, nowUpdate, id)
 				sent++
 			}
 		}

@@ -155,7 +155,8 @@ func (s *service) ScheduleBasedGenerator(date string, characterID string) map[st
 		tasks = filtered
 	}
 
-	s.db.Exec("UPDATE active_message_task SET status='CANCELLED', cancel_reason='regenerated', updated_at=datetime('now', 'localtime') WHERE date(due_time)=? AND status='PENDING' AND source='system' AND character_id = ?", date, characterID)
+	nowStr := time.Now().Format("2006-01-02 15:04:05")
+	s.db.Exec("UPDATE active_message_task SET status='CANCELLED', cancel_reason='regenerated', updated_at=? WHERE date(due_time)=? AND status='PENDING' AND source='system' AND character_id = ?", nowStr, date, characterID)
 
 	if proactive.IdleChaseThreshold(proactive.ClassifyIdle(idleDuration)) {
 		var lastChase string
@@ -171,8 +172,9 @@ func (s *service) ScheduleBasedGenerator(date string, characterID string) map[st
 	}
 
 	for _, t := range tasks {
-		s.db.Exec("INSERT INTO active_message_task (task_type, due_time, prompt, status, source, character_id, created_at, updated_at) VALUES (?, ?, ?, 'PENDING', 'system', ?, datetime('now', 'localtime'), datetime('now', 'localtime'))",
-			t.Type, t.DueTime.Format("2006-01-02 15:04:05"), t.Prompt, characterID)
+		nowStr := time.Now().Format("2006-01-02 15:04:05")
+		s.db.Exec("INSERT INTO active_message_task (task_type, due_time, prompt, status, source, character_id, created_at, updated_at) VALUES (?, ?, ?, 'PENDING', 'system', ?, ?, ?)",
+			t.Type, t.DueTime.Format("2006-01-02 15:04:05"), t.Prompt, characterID, nowStr, nowStr)
 	}
 
 	resultMaps := make([]map[string]interface{}, len(tasks))
@@ -220,7 +222,8 @@ func (s *service) GenerateSharePrompt(characterID string, taskType string, sched
 		}
 	}
 	if len(recentMemories) == 0 {
-		rows, err := s.db.Table("memories").Select("value").Where("character_id = ? AND allow_proactive_mention = 1 AND verified_status NOT IN ('deleted','invalidated','expired','rejected','tombstone','tombstoned','inactive') AND (expires_at IS NULL OR expires_at > datetime('now'))", characterID).Order("created_at DESC").Limit(5).Rows()
+		nowStr := time.Now().Format("2006-01-02 15:04:05")
+		rows, err := s.db.Table("memories").Select("value").Where("character_id = ? AND allow_proactive_mention = 1 AND verified_status NOT IN ('deleted','invalidated','expired','rejected','tombstone','tombstoned','inactive') AND (expires_at IS NULL OR expires_at > ?)", characterID, nowStr).Order("created_at DESC").Limit(5).Rows()
 		if err == nil {
 			defer rows.Close()
 			for rows.Next() {
