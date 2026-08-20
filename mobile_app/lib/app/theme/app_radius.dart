@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'design_tokens.dart';
 
+/// Backward-compatible radius facade backed by the active ui.tokens provider.
 class AppRadius {
   AppRadius._();
 
