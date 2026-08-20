@@ -36,7 +36,7 @@ class _MemoryGraphPageState extends ConsumerState<MemoryGraphPage> {
       body: SafeArea(
         top: false,
         child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.pagePadding),
+          padding: EdgeInsets.all(AppSpacing.pagePadding),
           child: statusData.when(
             loading: () => const Center(child: CircularProgressIndicator()),
             error: (err, _) => Center(
@@ -77,11 +77,11 @@ class _MemoryGraphPageState extends ConsumerState<MemoryGraphPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const AmitiaSectionHeader(title: '向量索引状态'),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
         Expanded(
           child: ListView.separated(
             itemCount: entries.length,
-            separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+            separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
             itemBuilder: (context, index) {
               final entry = entries[index];
               final value = entry.value;
@@ -97,7 +97,7 @@ class _MemoryGraphPageState extends ConsumerState<MemoryGraphPage> {
                       ),
                       child: Icon(Icons.insights, size: 20, color: context.accentPrimary),
                     ),
-                    const SizedBox(width: AppSpacing.md),
+                    SizedBox(width: AppSpacing.md),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,

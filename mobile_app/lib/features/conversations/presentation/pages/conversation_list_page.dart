@@ -83,7 +83,7 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(
+            padding: EdgeInsets.symmetric(
               horizontal: AppSpacing.pagePadding,
               vertical: AppSpacing.sm,
             ),
@@ -104,7 +104,7 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
                     ),
                   ),
                 ),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
                 AmitiaIconButton(
                   icon: Icons.add_comment_outlined,
                   backgroundColor: context.accentPrimary,
@@ -154,13 +154,13 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
                   );
                 }
                 return ListView(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+                  padding: EdgeInsets.only(bottom: AppSpacing.lg),
                   children: groups.entries.map((entry) {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Padding(
-                          padding: const EdgeInsets.fromLTRB(
+                          padding: EdgeInsets.fromLTRB(
                             AppSpacing.pagePadding,
                             AppSpacing.md,
                             AppSpacing.pagePadding,
@@ -190,13 +190,13 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
     showModalBottomSheet(
       context: context,
       backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(AppRadius.large)),
       ),
       builder: (sheetContext) {
         return SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(
+            padding: EdgeInsets.fromLTRB(
               AppSpacing.lg,
               AppSpacing.sm,
               AppSpacing.lg,
@@ -216,7 +216,7 @@ class _ConversationListPageState extends ConsumerState<ConversationListPage> {
                     ),
                   ),
                 ),
-                const SizedBox(height: AppSpacing.lg),
+                SizedBox(height: AppSpacing.lg),
                 _SheetActionItem(
                   icon: Icons.edit_outlined,
                   label: '重命名',
@@ -257,7 +257,7 @@ class _ConversationItem extends StatelessWidget {
       onTap: onTap,
       onLongPress: onMore,
       child: Container(
-        margin: const EdgeInsets.symmetric(
+        margin: EdgeInsets.symmetric(
           horizontal: AppSpacing.pagePadding,
           vertical: 3,
         ),

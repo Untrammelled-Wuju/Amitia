@@ -75,7 +75,7 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
 
   Widget _buildStepIndicator(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.md),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.md),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
@@ -128,19 +128,19 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
 
   Widget _buildSourceStep(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('选择导入来源', style: AppTypography.sectionTitle(context)),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Text('选择聊天记录的来源渠道', style: AppTypography.caption(context)),
-          const SizedBox(height: AppSpacing.lg),
+          SizedBox(height: AppSpacing.lg),
           ..._sources.map((s) {
             final isSelected = _selectedSource == s['name'];
             final color = Color(int.parse('FF${(s['color'] as String).replaceAll('#', '')}', radix: 16));
             return Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              padding: EdgeInsets.only(bottom: AppSpacing.sm),
               child: AmitiaCard(
                 border: Border.all(color: isSelected ? color : context.borderPrimary, width: isSelected ? 1.5 : 0.5),
                 backgroundColor: isSelected ? color.withValues(alpha: 0.05) : null,
@@ -153,7 +153,7 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
                       decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: AppRadius.brSmall),
                       child: Icon(s['icon'] as IconData, size: 22, color: color),
                     ),
-                    const SizedBox(width: AppSpacing.md),
+                    SizedBox(width: AppSpacing.md),
                     Expanded(child: Text(s['name'] as String, style: AppTypography.cardTitle(context))),
                     Icon(isSelected ? Icons.check_circle : Icons.radio_button_unchecked, size: 22, color: isSelected ? color : context.textTertiary),
                   ],
@@ -168,20 +168,20 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
 
   Widget _buildInputStep(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('输入聊天内容', style: AppTypography.sectionTitle(context)),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Text('来源：$_selectedSource', style: AppTypography.caption(context)),
-          const SizedBox(height: AppSpacing.lg),
+          SizedBox(height: AppSpacing.lg),
           AmitiaTextField(
             controller: _contentController,
             maxLines: 12,
             hintText: '粘贴或输入聊天记录内容...\n\n格式示例：\n[2026-07-30 09:00] 用户: 你好\n[2026-07-30 09:01] AI: 你好！',
           ),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           Row(
             children: [
               AmitiaButtonOutline(
@@ -190,7 +190,7 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请选择文件'), duration: Duration(seconds: 1)));
                 },
               ),
-              const SizedBox(width: AppSpacing.sm),
+              SizedBox(width: AppSpacing.sm),
               AmitiaButtonOutline(
                 label: '使用示例',
                 onPressed: () {
@@ -206,27 +206,27 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
 
   Widget _buildParseStep(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('解析预览', style: AppTypography.sectionTitle(context)),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(AppSpacing.md),
+            padding: EdgeInsets.all(AppSpacing.md),
             decoration: BoxDecoration(color: context.success.withValues(alpha: 0.08), borderRadius: AppRadius.brMedium),
             child: Row(
               children: [
                 Icon(Icons.check_circle, size: 20, color: context.success),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
                 Expanded(child: Text('成功解析 ${_parsedMessages.length} 条消息', style: AppTypography.bodySmall(context).copyWith(color: context.success))),
               ],
             ),
           ),
-          const SizedBox(height: AppSpacing.lg),
+          SizedBox(height: AppSpacing.lg),
           ..._parsedMessages.map((m) => Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+            padding: EdgeInsets.only(bottom: AppSpacing.sm),
             child: AmitiaCard(
               child: Row(
                 children: [
@@ -239,7 +239,7 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
                     ),
                     child: Center(child: Text(m['role'] == 'user' ? '我' : 'AI', style: const TextStyle(color: Colors.white, fontSize: 11))),
                   ),
-                  const SizedBox(width: AppSpacing.sm),
+                  SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -262,7 +262,7 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.all(AppSpacing.pagePadding),
+          padding: EdgeInsets.all(AppSpacing.pagePadding),
           child: Row(
             children: [
               Text('编辑消息', style: AppTypography.sectionTitle(context)),
@@ -275,9 +275,9 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
         ),
         Expanded(
           child: ListView.separated(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
             itemCount: _parsedMessages.length,
-            separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+            separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
             itemBuilder: (context, index) {
               final m = _parsedMessages[index];
               return AmitiaCard(
@@ -292,7 +292,7 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
                       ),
                       child: Center(child: Text(m['role'] == 'user' ? '我' : 'AI', style: const TextStyle(color: Colors.white, fontSize: 11))),
                     ),
-                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(width: AppSpacing.sm),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -320,25 +320,25 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
 
   Widget _buildCharacterStep(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('选择关联角色', style: AppTypography.sectionTitle(context)),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Text('选择将这批聊天记录关联到哪个角色', style: AppTypography.caption(context)),
-          const SizedBox(height: AppSpacing.lg),
+          SizedBox(height: AppSpacing.lg),
           ..._characters.map((c) {
             final isSelected = _selectedCharacter == c;
             return Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              padding: EdgeInsets.only(bottom: AppSpacing.sm),
               child: AmitiaCard(
                 border: Border.all(color: isSelected ? context.accentPrimary : context.borderPrimary, width: isSelected ? 1.5 : 0.5),
                 onTap: () => setState(() => _selectedCharacter = c),
                 child: Row(
                   children: [
                     AmitiaAvatar(initial: c[0], colorHex: '#7668EE', size: 40),
-                    const SizedBox(width: AppSpacing.md),
+                    SizedBox(width: AppSpacing.md),
                     Expanded(child: Text(c, style: AppTypography.cardTitle(context))),
                     Icon(isSelected ? Icons.check_circle : Icons.radio_button_unchecked, size: 22, color: isSelected ? context.accentPrimary : context.textTertiary),
                   ],
@@ -353,14 +353,14 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
 
   Widget _buildSummaryStep(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('生成会话摘要', style: AppTypography.sectionTitle(context)),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Text('AI 正在为这批聊天记录生成摘要', style: AppTypography.caption(context)),
-          const SizedBox(height: AppSpacing.lg),
+          SizedBox(height: AppSpacing.lg),
           AmitiaCard(
             backgroundColor: context.accentSoft,
             child: Column(
@@ -369,16 +369,16 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
                 Row(
                   children: [
                     Icon(Icons.auto_awesome, size: 18, color: context.accentPrimary),
-                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(width: AppSpacing.sm),
                     Text('会话摘要', style: AppTypography.cardTitle(context)),
                   ],
                 ),
-                const SizedBox(height: AppSpacing.sm),
+                SizedBox(height: AppSpacing.sm),
                 Text(
                   '本次会话主要包含日常问候和文件整理请求。用户询问了天气情况，随后请求整理文件。AI 响应迅速，提供了天气信息和文件扫描服务。',
                   style: AppTypography.bodySmall(context).copyWith(height: 1.6),
                 ),
-                const SizedBox(height: AppSpacing.sm),
+                SizedBox(height: AppSpacing.sm),
                 Wrap(
                   spacing: AppSpacing.sm,
                   children: [
@@ -397,26 +397,26 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
 
   Widget _buildMemoryStep(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('提取记忆候选', style: AppTypography.sectionTitle(context)),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Text('AI 从聊天记录中提取了以下记忆候选', style: AppTypography.caption(context)),
-          const SizedBox(height: AppSpacing.lg),
+          SizedBox(height: AppSpacing.lg),
           ...[
             {'content': '用户习惯在早上9点左右开始活动', 'type': '习惯', 'confidence': 0.85},
             {'content': '用户有整理文件的需求', 'type': '偏好', 'confidence': 0.75},
             {'content': '用户关心天气情况', 'type': '事实', 'confidence': 0.9},
           ].map((m) {
             return Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              padding: EdgeInsets.only(bottom: AppSpacing.sm),
               child: AmitiaCard(
                 child: Row(
                   children: [
                     Icon(Icons.memory, size: 20, color: context.accentPrimary),
-                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(width: AppSpacing.sm),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -426,7 +426,7 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
                           Row(
                             children: [
                               AmitiaStatusBadge(label: m['type'] as String, type: BadgeType.accent),
-                              const SizedBox(width: AppSpacing.sm),
+                              SizedBox(width: AppSpacing.sm),
                               Text('置信度：${((m['confidence'] as double) * 100).round()}%', style: AppTypography.label(context)),
                             ],
                           ),
@@ -446,29 +446,29 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
 
   Widget _buildConfirmStep(BuildContext context) {
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('确认导入', style: AppTypography.sectionTitle(context)),
-          const SizedBox(height: AppSpacing.lg),
+          SizedBox(height: AppSpacing.lg),
           AmitiaCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildSummaryRow(context, '导入来源', _selectedSource),
-                const Divider(height: AppSpacing.lg),
+                Divider(height: AppSpacing.lg),
                 _buildSummaryRow(context, '消息数量', '${_parsedMessages.length} 条'),
-                const Divider(height: AppSpacing.lg),
+                Divider(height: AppSpacing.lg),
                 _buildSummaryRow(context, '关联角色', _selectedCharacter.isEmpty ? '未选择' : _selectedCharacter),
-                const Divider(height: AppSpacing.lg),
+                Divider(height: AppSpacing.lg),
                 _buildSummaryRow(context, '已生成摘要', '是'),
-                const Divider(height: AppSpacing.lg),
+                Divider(height: AppSpacing.lg),
                 _buildSummaryRow(context, '记忆候选', '3 条'),
               ],
             ),
           ),
-          const SizedBox(height: AppSpacing.lg),
+          SizedBox(height: AppSpacing.lg),
           AmitiaButton(
             label: '确认导入',
             icon: Icons.download,
@@ -483,7 +483,7 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
   Widget _buildCompleteStep(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xxl),
+        padding: EdgeInsets.all(AppSpacing.xxl),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
@@ -493,27 +493,27 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
               decoration: BoxDecoration(color: context.success.withValues(alpha: 0.12), shape: BoxShape.circle),
               child: Icon(Icons.check_circle, size: 48, color: context.success),
             ),
-            const SizedBox(height: AppSpacing.lg),
+            SizedBox(height: AppSpacing.lg),
             Text('导入完成', style: AppTypography.pageTitle(context)),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             Text('已成功导入 ${_parsedMessages.length} 条消息', style: AppTypography.caption(context)),
-            const SizedBox(height: AppSpacing.xl),
+            SizedBox(height: AppSpacing.xl),
             AmitiaCard(
               child: Column(
                 children: [
                   _buildSummaryRow(context, '来源', _selectedSource),
-                  const Divider(height: AppSpacing.lg),
+                  Divider(height: AppSpacing.lg),
                   _buildSummaryRow(context, '消息数', '${_parsedMessages.length} 条'),
-                  const Divider(height: AppSpacing.lg),
+                  Divider(height: AppSpacing.lg),
                   _buildSummaryRow(context, '关联角色', _selectedCharacter),
-                  const Divider(height: AppSpacing.lg),
+                  Divider(height: AppSpacing.lg),
                   _buildSummaryRow(context, '记忆候选', '3 条已提取'),
-                  const Divider(height: AppSpacing.lg),
+                  Divider(height: AppSpacing.lg),
                   _buildSummaryRow(context, '摘要', '已生成'),
                 ],
               ),
             ),
-            const SizedBox(height: AppSpacing.xl),
+            SizedBox(height: AppSpacing.xl),
             AmitiaButton(
               label: '查看导入批次',
               isFullWidth: true,
@@ -540,7 +540,7 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
     final isLastStep = _currentStep == _steps.length - 1;
     final isFirstStep = _currentStep == 0;
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       decoration: BoxDecoration(color: context.surfacePrimary, border: Border(top: BorderSide(color: context.borderPrimary, width: 0.5))),
       child: Row(
         children: [
@@ -552,7 +552,7 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
                 onPressed: () => setState(() => _currentStep--),
               ),
             ),
-          if (!isFirstStep && !isLastStep) const SizedBox(width: AppSpacing.sm),
+          if (!isFirstStep && !isLastStep) SizedBox(width: AppSpacing.sm),
           if (!isLastStep)
             Expanded(
               child: AmitiaButton(
@@ -634,7 +634,7 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           AmitiaStatusBadge(label: batch.status, type: BadgeType.success),
-                          const SizedBox(width: AppSpacing.sm),
+                          SizedBox(width: AppSpacing.sm),
                           GestureDetector(
                             onTap: () => _showDeleteBatchConfirm(context, batch),
                             child: Icon(Icons.delete_outline, size: 18, color: context.error),
@@ -663,11 +663,11 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildSummaryRow(context, '来源', batch.source),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             _buildSummaryRow(context, '消息数', '${batch.messageCount} 条'),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             _buildSummaryRow(context, '导入时间', _formatTime(batch.importTime)),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             _buildSummaryRow(context, '状态', batch.status),
           ],
         ),

@@ -91,9 +91,9 @@ class _UserProfilesPageState extends ConsumerState<UserProfilesPage> {
                           onAction: () => _showProfileEditor(context, null),
                         )
                       : ListView.separated(
-                          padding: const EdgeInsets.all(AppSpacing.pagePadding),
+                          padding: EdgeInsets.all(AppSpacing.pagePadding),
                           itemCount: filtered.length,
-                          separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+                          separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
                           itemBuilder: (context, index) => _buildProfileCard(context, filtered[index]),
                         ),
                 ),
@@ -110,15 +110,15 @@ class _UserProfilesPageState extends ConsumerState<UserProfilesPage> {
       height: 38,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
         itemCount: _categories.length,
-        separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.sm),
+        separatorBuilder: (_, _) => SizedBox(width: AppSpacing.sm),
         itemBuilder: (context, index) {
           final isSelected = _selectedCategory == _categories[index];
           return GestureDetector(
             onTap: () => setState(() => _selectedCategory = _categories[index]),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 8),
+              padding: EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 8),
               decoration: BoxDecoration(
                 color: isSelected ? context.accentPrimary : context.surfaceSecondary,
                 borderRadius: AppRadius.brTag,
@@ -154,17 +154,17 @@ class _UserProfilesPageState extends ConsumerState<UserProfilesPage> {
                 ),
                 child: Icon(_getCategoryIcon(category), size: 20, color: _getCategoryColor(context, category)),
               ),
-              const SizedBox(width: AppSpacing.md),
+              SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Text(fact, style: AppTypography.body(context)),
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Row(
             children: [
               AmitiaStatusBadge(label: category, type: _getCategoryBadge(category)),
-              const SizedBox(width: AppSpacing.sm),
+              SizedBox(width: AppSpacing.sm),
               Icon(Icons.source, size: 12, color: context.textTertiary),
               const SizedBox(width: 2),
               Text(profile.gender.isNotEmpty ? profile.gender : '系统生成', style: AppTypography.label(context)),
@@ -172,7 +172,7 @@ class _UserProfilesPageState extends ConsumerState<UserProfilesPage> {
               Text(_formatDateString(profile.createdAt), style: AppTypography.label(context)),
             ],
           ),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Row(
             children: [
               GestureDetector(
@@ -190,7 +190,7 @@ class _UserProfilesPageState extends ConsumerState<UserProfilesPage> {
                   ),
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
+              SizedBox(width: AppSpacing.sm),
               GestureDetector(
                 onTap: () => _showDeleteConfirm(context, profile),
                 child: Container(
@@ -232,27 +232,27 @@ class _UserProfilesPageState extends ConsumerState<UserProfilesPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: context.borderPrimary, borderRadius: BorderRadius.circular(2)))),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               Text(isEdit ? '编辑画像' : '新增画像', style: AppTypography.sectionTitle(context)),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               Text('名称', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               AmitiaTextField(controller: nameCtrl, hintText: '输入名称'),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('职业', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               AmitiaTextField(controller: occupationCtrl, hintText: '输入职业'),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('性格', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               AmitiaTextField(controller: personalityCtrl, maxLines: 2, hintText: '输入性格描述'),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('背景', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               AmitiaTextField(controller: backgroundCtrl, maxLines: 2, hintText: '输入背景信息'),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('性别', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               Wrap(
                 spacing: AppSpacing.sm,
                 children: ['未知', '男', '女'].map((c) {
@@ -270,7 +270,7 @@ class _UserProfilesPageState extends ConsumerState<UserProfilesPage> {
                   );
                 }).toList(),
               ),
-              const SizedBox(height: AppSpacing.xl),
+              SizedBox(height: AppSpacing.xl),
               AmitiaButton(
                 label: isEdit ? '保存' : '创建',
                 isFullWidth: true,

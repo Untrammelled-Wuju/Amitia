@@ -73,6 +73,19 @@ class ConversationRuntimeController extends ChangeNotifier {
     );
   }
 
+  static const _mockPrefix = '[mock]';
+  static const _image = 'image';
+  static const _video = 'video';
+  static const _audio = 'audio';
+  static const _emote = 'emote';
+  static const _code = 'code';
+
+  static String mockImagePayload(String name) => '$_mockPrefix$_image|$name';
+  static String mockVideoPayload(String title) => '$_mockPrefix$_video|$title';
+  static String mockAudioPayload(String duration) => '$_mockPrefix$_audio|$duration';
+  static String mockEmotePayload(String emoji, String name) => '$_mockPrefix$_emote|$emoji|$name';
+  static String mockCodePayload(String lang, String body) => '$_mockPrefix$_code|$lang|$body';
+
   Future<void> sendImage(String name) => sendText(mockImagePayload(name));
 
   Future<void> sendCode(String language, String code) =>

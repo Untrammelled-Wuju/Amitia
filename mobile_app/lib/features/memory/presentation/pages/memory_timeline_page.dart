@@ -70,12 +70,12 @@ class _MemoryTimelinePageState extends ConsumerState<MemoryTimelinePage> {
                           subtitle: '互动后将自动生成时间线',
                         )
                       : ListView(
-                          padding: const EdgeInsets.all(AppSpacing.pagePadding),
+                          padding: EdgeInsets.all(AppSpacing.pagePadding),
                           children: [
                             ...grouped.entries.map((entry) {
                               return _buildDateGroup(context, entry.key, entry.value);
                             }),
-                            const SizedBox(height: AppSpacing.xxl),
+                            SizedBox(height: AppSpacing.xxl),
                           ],
                         ),
                 ),
@@ -113,15 +113,15 @@ class _MemoryTimelinePageState extends ConsumerState<MemoryTimelinePage> {
 
   Widget _buildFilters(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
             _buildFilterChip(context, '月份', _monthFilter, _months, (v) => setState(() => _monthFilter = v)),
-            const SizedBox(width: AppSpacing.sm),
+            SizedBox(width: AppSpacing.sm),
             _buildFilterChip(context, '类型', _typeFilter, _types, (v) => setState(() => _typeFilter = v)),
-            const SizedBox(width: AppSpacing.sm),
+            SizedBox(width: AppSpacing.sm),
             _buildFilterChip(context, '角色', _characterFilter, _characters, (v) => setState(() => _characterFilter = v)),
           ],
         ),
@@ -134,13 +134,13 @@ class _MemoryTimelinePageState extends ConsumerState<MemoryTimelinePage> {
       onTap: () => showModalBottomSheet(
         context: context,
         builder: (ctx) => Container(
-          padding: const EdgeInsets.all(AppSpacing.xl),
+          padding: EdgeInsets.all(AppSpacing.xl),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('$label筛选', style: AppTypography.sectionTitle(context)),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Wrap(
                 spacing: AppSpacing.sm,
                 runSpacing: AppSpacing.sm,
@@ -156,7 +156,7 @@ class _MemoryTimelinePageState extends ConsumerState<MemoryTimelinePage> {
                   ),
                 )).toList(),
               ),
-              const SizedBox(height: AppSpacing.xl),
+              SizedBox(height: AppSpacing.xl),
             ],
           ),
         ),
@@ -185,7 +185,7 @@ class _MemoryTimelinePageState extends ConsumerState<MemoryTimelinePage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(bottom: AppSpacing.sm, top: AppSpacing.sm),
+          padding: EdgeInsets.only(bottom: AppSpacing.sm, top: AppSpacing.sm),
           child: Row(
             children: [
               Container(
@@ -202,14 +202,14 @@ class _MemoryTimelinePageState extends ConsumerState<MemoryTimelinePage> {
             Column(children: entries.map((e) => _buildTimelineItem(context, e)).toList()),
           ],
         ),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
       ],
     );
   }
 
   Widget _buildTimelineItem(BuildContext context, _TimelineEntry entry) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: EdgeInsets.only(bottom: AppSpacing.sm),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -237,7 +237,7 @@ class _MemoryTimelinePageState extends ConsumerState<MemoryTimelinePage> {
               ),
             ),
           ),
-          const SizedBox(width: AppSpacing.xs),
+          SizedBox(width: AppSpacing.xs),
           Expanded(
             child: AmitiaCard(
               border: Border.all(
@@ -251,25 +251,25 @@ class _MemoryTimelinePageState extends ConsumerState<MemoryTimelinePage> {
                   Row(
                     children: [
                       Icon(_getTypeIcon(entry.type), size: 16, color: _getTypeColor(context, entry.type)),
-                      const SizedBox(width: AppSpacing.xs),
+                      SizedBox(width: AppSpacing.xs),
                       Expanded(child: Text(entry.title, style: AppTypography.cardTitle(context))),
                       if (entry.isImportant)
                         Padding(
-                          padding: const EdgeInsets.only(left: AppSpacing.xs),
+                          padding: EdgeInsets.only(left: AppSpacing.xs),
                           child: Icon(Icons.star, size: 14, color: context.warning),
                         ),
                       AmitiaStatusBadge(label: entry.type, type: _getTypeBadge(entry.type)),
                     ],
                   ),
-                  const SizedBox(height: AppSpacing.xs),
+                  SizedBox(height: AppSpacing.xs),
                   Text(entry.description, style: AppTypography.caption(context)),
-                  const SizedBox(height: AppSpacing.sm),
+                  SizedBox(height: AppSpacing.sm),
                   Row(
                     children: [
                       if (entry.characterId != null)
                         Text('角色：${_getCharacterName(entry.characterId!)}', style: AppTypography.label(context)),
                       if (entry.isImportant) ...[
-                        const SizedBox(width: AppSpacing.sm),
+                        SizedBox(width: AppSpacing.sm),
                         AmitiaStatusBadge(label: '重要', type: BadgeType.warning),
                       ],
                       const Spacer(),

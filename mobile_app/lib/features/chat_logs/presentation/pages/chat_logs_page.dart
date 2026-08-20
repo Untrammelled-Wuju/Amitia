@@ -153,13 +153,13 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
 
   Widget _buildFilters(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
             _buildFilterChip(context, '角色', _characterFilter, _characters, (v) => setState(() => _characterFilter = v)),
-            const SizedBox(width: AppSpacing.sm),
+            SizedBox(width: AppSpacing.sm),
             _buildFilterChip(context, '渠道', _channelFilter, _channels, (v) => setState(() => _channelFilter = v)),
           ],
         ),
@@ -172,13 +172,13 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
       onTap: () => showModalBottomSheet(
         context: context,
         builder: (ctx) => Container(
-          padding: const EdgeInsets.all(AppSpacing.xl),
+          padding: EdgeInsets.all(AppSpacing.xl),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('$label筛选', style: AppTypography.sectionTitle(context)),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Wrap(
                 spacing: AppSpacing.sm,
                 runSpacing: AppSpacing.sm,
@@ -194,7 +194,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
                   ),
                 )).toList(),
               ),
-              const SizedBox(height: AppSpacing.xl),
+              SizedBox(height: AppSpacing.xl),
             ],
           ),
         ),
@@ -217,7 +217,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
   Widget _buildConversationList(BuildContext context) {
     final filtered = _filteredConversations;
     return ListView.separated(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.sm),
       itemCount: filtered.length,
       separatorBuilder: (_, _) => const Divider(height: 1),
       itemBuilder: (context, index) {
@@ -232,7 +232,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
             _loadMessages(conv.id);
           },
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.md),
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.md),
             decoration: BoxDecoration(
               color: isSelected ? context.accentSoft : Colors.transparent,
               borderRadius: AppRadius.brSmall,
@@ -274,7 +274,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
 
   Widget _buildMessageHeader(BuildContext context, ConversationDto conv) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
       decoration: BoxDecoration(color: context.surfacePrimary, border: Border(bottom: BorderSide(color: context.borderPrimary, width: 0.5))),
       child: Row(
         children: [
@@ -298,9 +298,9 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
       return const Center(child: CircularProgressIndicator());
     }
     return ListView.separated(
-      padding: const EdgeInsets.all(AppSpacing.sm),
+      padding: EdgeInsets.all(AppSpacing.sm),
       itemCount: _messages.length,
-      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.xs),
+      separatorBuilder: (_, _) => SizedBox(height: AppSpacing.xs),
       itemBuilder: (context, index) => _buildMessageItem(context, _messages[index]),
     );
   }
@@ -309,7 +309,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
     final isUser = message.role == 'user';
     return GestureDetector(
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
         decoration: BoxDecoration(
           color: isUser ? context.accentSoft : context.surfacePrimary,
           borderRadius: AppRadius.brSmall,
@@ -331,13 +331,13 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
                     child: Text(isUser ? '我' : 'AI', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600)),
                   ),
                 ),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
                 Text(isUser ? '用户' : '角色', style: AppTypography.label(context).copyWith(fontWeight: FontWeight.w500)),
                 const Spacer(),
                 Text(_formatMsgTime(message.createdAt), style: AppTypography.label(context)),
               ],
             ),
-            const SizedBox(height: AppSpacing.xs),
+            SizedBox(height: AppSpacing.xs),
             Text(message.content, style: AppTypography.bodySmall(context)),
           ],
         ),
@@ -358,17 +358,17 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(conv?.title ?? '未选择会话', style: AppTypography.cardTitle(context)),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(AppSpacing.lg),
+                padding: EdgeInsets.all(AppSpacing.lg),
                 decoration: BoxDecoration(color: context.accentSoft, borderRadius: AppRadius.brMedium),
                 child: Text(
                   '${_getCharacterName(conv?.characterId ?? "")} · ${_messages.length}条消息',
                   style: AppTypography.bodySmall(context).copyWith(height: 1.6),
                 ),
               ),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('消息数：${conv?.messageCount ?? 0}', style: AppTypography.caption(context)),
             ],
           ),

@@ -93,7 +93,7 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
               children: [
                 if (_searchVisible)
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xs),
+                    padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xs),
                     child: AmitiaSearchField(
                       hintText: '语义搜索记忆...',
                       controller: _searchController,
@@ -112,9 +112,9 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                           onAction: () => _showMemoryEditor(context, null),
                         )
                       : ListView.separated(
-                          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
+                          padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
                           itemCount: filtered.length,
-                          separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+                          separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
                           itemBuilder: (context, index) => _buildMemoryCard(context, filtered[index]),
                         ),
                 ),
@@ -161,15 +161,15 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
 
   Widget _buildFilters(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
           children: [
             _buildFilterChip(context, '类型: $_typeFilter', _types, (v) => setState(() => _typeFilter = v)),
-            const SizedBox(width: AppSpacing.sm),
+            SizedBox(width: AppSpacing.sm),
             _buildFilterChip(context, '重要度: $_importanceFilter', _importances, (v) => setState(() => _importanceFilter = v)),
-            const SizedBox(width: AppSpacing.sm),
+            SizedBox(width: AppSpacing.sm),
           ],
         ),
       ),
@@ -202,13 +202,13 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
     showModalBottomSheet(
       context: context,
       builder: (ctx) => Container(
-        padding: const EdgeInsets.all(AppSpacing.xl),
+        padding: EdgeInsets.all(AppSpacing.xl),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(title, style: AppTypography.sectionTitle(context)),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Wrap(
               spacing: AppSpacing.sm,
               runSpacing: AppSpacing.sm,
@@ -227,7 +227,7 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                 ),
               )).toList(),
             ),
-            const SizedBox(height: AppSpacing.xl),
+            SizedBox(height: AppSpacing.xl),
           ],
         ),
       ),
@@ -236,7 +236,7 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
 
   Widget _buildBatchBar(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
       color: context.accentSoft,
       child: Row(
         children: [
@@ -284,7 +284,7 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
         children: [
           if (_batchMode)
             Padding(
-              padding: const EdgeInsets.only(top: 2, right: AppSpacing.sm),
+              padding: EdgeInsets.only(top: 2, right: AppSpacing.sm),
               child: Icon(
                 isSelected ? Icons.check_circle : Icons.radio_button_unchecked,
                 size: 20,
@@ -300,27 +300,27 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                     Expanded(child: Text(memory.content, style: AppTypography.body(context), maxLines: 2, overflow: TextOverflow.ellipsis)),
                   ],
                 ),
-                const SizedBox(height: AppSpacing.sm),
+                SizedBox(height: AppSpacing.sm),
                 Row(
                   children: [
                     AmitiaStatusBadge(label: _importanceIntToString(memory.importance), type: _importanceToBadgeType(memory.importance)),
-                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(width: AppSpacing.sm),
                     AmitiaStatusBadge(label: memory.type, type: BadgeType.neutral),
-                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(width: AppSpacing.sm),
                     Text(memory.status, style: AppTypography.label(context)),
                     const Spacer(),
                     Text(_formatTimeString(memory.createdAt), style: AppTypography.label(context)),
                   ],
                 ),
                 if (!_batchMode) ...[
-                  const SizedBox(height: AppSpacing.sm),
+                  SizedBox(height: AppSpacing.sm),
                   Row(
                     children: [
                       GestureDetector(
                         onTap: () => _showMemoryEditor(context, memory),
                         child: _buildMiniButton(context, '编辑', context.accentPrimary),
                       ),
-                      const SizedBox(width: AppSpacing.sm),
+                      SizedBox(width: AppSpacing.sm),
                       GestureDetector(
                         onTap: () => _showDeleteConfirm(context, memory),
                         child: _buildMiniButton(context, '删除', context.error),
@@ -364,15 +364,15 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: context.borderPrimary, borderRadius: BorderRadius.circular(2)))),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               Text(isEdit ? '编辑记忆' : '新建记忆', style: AppTypography.sectionTitle(context)),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               Text('记忆内容', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               AmitiaTextField(controller: contentCtrl, maxLines: 4, hintText: '输入记忆内容'),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('重要程度', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               Wrap(
                 spacing: AppSpacing.sm,
                 children: ['高', '较高', '中', '低'].map((i) {
@@ -390,9 +390,9 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                   );
                 }).toList(),
               ),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('分类', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               Wrap(
                 spacing: AppSpacing.sm,
                 children: ['长期记忆', '情景记忆', '关系记忆', '世界设定'].map((c) {
@@ -410,7 +410,7 @@ class _MemoryManagerPageState extends ConsumerState<MemoryManagerPage> {
                   );
                 }).toList(),
               ),
-              const SizedBox(height: AppSpacing.xl),
+              SizedBox(height: AppSpacing.xl),
               AmitiaButton(
                 label: isEdit ? '保存' : '创建',
                 isFullWidth: true,
