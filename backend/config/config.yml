@@ -22,7 +22,7 @@ app:
 
 security:
   mode: "local_single_user"
-  localToken: "9tCnnqQaku7MnpimQtuxd8DiDcntIPZTdbMuYG8Kp-I"
+  localToken: "la7JIwvz-ef688fiAjBP2_06eRArAGslkeJofvyvIJE"
   allowedOrigins:
     - "http://localhost:5178"
 
