@@ -48,7 +48,7 @@ class AmitiaStatusBadge extends StatelessWidget {
         fgColor = context.textSecondary;
     }
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(color: bgColor, borderRadius: AppRadius.brTag),
       child: Text(
         label,
@@ -106,12 +106,12 @@ class AmitiaEmptyState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xxl),
+        padding: EdgeInsets.all(AppSpacing.xxl),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(icon, size: 56, color: context.textTertiary),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Text(title, style: AppTypography.cardTitle(context)),
             if (subtitle != null) ...[
               const SizedBox(height: 4),
@@ -122,7 +122,7 @@ class AmitiaEmptyState extends StatelessWidget {
               ),
             ],
             if (actionText != null && onAction != null) ...[
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               AmitiaButtonOutline(label: actionText!, onPressed: onAction),
             ],
           ],
@@ -143,7 +143,7 @@ class AmitiaButtonOutline extends StatelessWidget {
     return GestureDetector(
       onTap: onPressed,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         decoration: BoxDecoration(
           border: Border.all(color: context.accentPrimary, width: 1.5),
           borderRadius: AppRadius.brMedium,
@@ -177,7 +177,7 @@ class AmitiaLoadingState extends StatelessWidget {
             color: context.accentPrimary,
           ),
           if (message != null) ...[
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Text(message!, style: AppTypography.caption(context)),
           ],
         ],
@@ -196,19 +196,19 @@ class AmitiaErrorState extends StatelessWidget {
   Widget build(BuildContext context) {
     return Center(
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xxl),
+        padding: EdgeInsets.all(AppSpacing.xxl),
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.error_outline, size: 48, color: context.error),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Text(
               message,
               style: AppTypography.body(context),
               textAlign: TextAlign.center,
             ),
             if (onRetry != null) ...[
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               AmitiaButton(label: '重试', onPressed: onRetry),
             ],
           ],
@@ -235,7 +235,7 @@ class AmitiaSwitchTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(
+      padding: EdgeInsets.symmetric(
         horizontal: AppSpacing.lg,
         vertical: 4,
       ),
@@ -248,7 +248,7 @@ class AmitiaSwitchTile extends StatelessWidget {
                 Text(title, style: AppTypography.body(context)),
                 if (subtitle != null)
                   Padding(
-                    padding: const EdgeInsets.only(top: 2),
+                    padding: EdgeInsets.only(top: 2),
                     child: Text(subtitle!, style: AppTypography.label(context)),
                   ),
               ],
@@ -290,7 +290,7 @@ class AmitiaSegmentedControl extends StatelessWidget {
               child: AnimatedContainer(
                 duration: AppMotion.standard,
                 curve: AppMotion.standardCurve,
-                padding: const EdgeInsets.symmetric(vertical: 8),
+                padding: EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(
                   color: isSelected
                       ? context.surfacePrimary

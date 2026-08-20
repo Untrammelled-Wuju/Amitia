@@ -16,7 +16,7 @@ class AmitiaButton extends StatelessWidget {
   final double? width;
   final double height;
 
-  const AmitiaButton({
+  AmitiaButton({
     super.key,
     required this.label,
     this.onPressed,
@@ -184,7 +184,7 @@ class AmitiaSearchField extends StatelessWidget {
           hintStyle: TextStyle(color: context.textTertiary, fontSize: 14),
           prefixIcon: Icon(Icons.search, size: 20, color: context.textTertiary),
           isDense: true,
-          contentPadding: const EdgeInsets.symmetric(vertical: 0),
+          contentPadding: EdgeInsets.symmetric(vertical: 0),
         ),
       ),
     );

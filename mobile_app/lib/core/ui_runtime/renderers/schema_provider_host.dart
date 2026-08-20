@@ -40,6 +40,7 @@ class _SchemaProviderHostState extends ConsumerState<SchemaProviderHost> {
     try {
       final raw = await ref.read(extensionServiceProvider).getUISchema(widget.provider.extensionId, contributionId);
       if (!mounted) return;
+      if (raw == null) { setState(() { _error = 'Empty schema response'; _loading = false; }); return; }
       setState(() { _document = SchemaUIDocument.fromJson(raw); _loading = false; });
     } catch (e) {
       if (!mounted) return;

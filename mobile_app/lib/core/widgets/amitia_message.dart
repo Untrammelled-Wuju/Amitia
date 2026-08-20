@@ -97,7 +97,7 @@ class AmitiaMessageBubble extends StatelessWidget {
   Widget build(BuildContext context) {
     if (message.type == MessageType.systemNotice) {
       return Padding(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+        padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
         child: Center(
           child: Text(
             message.content,
@@ -153,7 +153,7 @@ class AmitiaMessageBubble extends StatelessWidget {
                 _buildContent(context, isUser, mock),
                 if (message.status == MessageStatus.error)
                   Padding(
-                    padding: const EdgeInsets.only(top: 4),
+                    padding: EdgeInsets.only(top: 4),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
@@ -218,7 +218,7 @@ class AmitiaMessageBubble extends StatelessWidget {
       constraints: BoxConstraints(
         maxWidth: MediaQuery.sizeOf(context).width * (isUser ? 0.78 : 0.82),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: isUser ? context.accentSoft : context.surfacePrimary,
         borderRadius: BorderRadius.only(
@@ -380,7 +380,7 @@ class _MockImageMessage extends StatelessWidget {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               child: Text(
                 name,
                 style: const TextStyle(fontSize: 12, color: Colors.white),
@@ -475,7 +475,7 @@ class _MockVideoMessage extends StatelessWidget {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
             child: Row(
               children: [
                 Icon(
@@ -514,7 +514,7 @@ class _MockAudioMessage extends StatelessWidget {
       constraints: BoxConstraints(
         maxWidth: MediaQuery.sizeOf(context).width * 0.62,
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: isUser ? context.accentSoft : context.surfacePrimary,
         borderRadius: AppRadius.brMedium,
@@ -543,7 +543,7 @@ class _MockAudioMessage extends StatelessWidget {
                   children: List.generate(
                     18,
                     (i) => Container(
-                      margin: const EdgeInsets.only(right: 2),
+                      margin: EdgeInsets.only(right: 2),
                       width: 2,
                       height: 6 + (i % 4) * 5.0,
                       color: context.accentPrimary.withValues(alpha: 0.5),
@@ -588,7 +588,7 @@ class _MockEmoteMessage extends StatelessWidget {
         ),
         if (name.isNotEmpty)
           Padding(
-            padding: const EdgeInsets.only(top: 4),
+            padding: EdgeInsets.only(top: 4),
             child: Text(name, style: AppTypography.label(context)),
           ),
       ],
@@ -620,7 +620,7 @@ class _MockCodeMessage extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             child: Row(
               children: [
                 Icon(
@@ -641,7 +641,7 @@ class _MockCodeMessage extends StatelessWidget {
           ),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
             child: SelectableText(
               body,
               style: const TextStyle(
@@ -693,7 +693,7 @@ class _AgentTaskMessage extends StatelessWidget {
     final isRunning = statusLabel == '运行中';
     final isPaused = statusLabel == '已暂停';
     return Padding(
-      padding: const EdgeInsets.only(
+      padding: EdgeInsets.only(
         left: AppSpacing.lg,
         right: 60,
         bottom: AppSpacing.sm,
@@ -735,7 +735,7 @@ class _AgentTaskMessage extends StatelessWidget {
                   const SizedBox(height: 12),
                   ...(message.agentTaskSteps ?? []).map(
                     (step) => Padding(
-                      padding: const EdgeInsets.only(bottom: 6),
+                      padding: EdgeInsets.only(bottom: 6),
                       child: Row(
                         children: [
                           Container(
@@ -789,7 +789,7 @@ class _AgentTaskMessage extends StatelessWidget {
                         GestureDetector(
                           onTap: onPauseAgentTask,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(
+                            padding: EdgeInsets.symmetric(
                               horizontal: 12,
                               vertical: 6,
                             ),
@@ -810,7 +810,7 @@ class _AgentTaskMessage extends StatelessWidget {
                         GestureDetector(
                           onTap: onResumeAgentTask,
                           child: Container(
-                            padding: const EdgeInsets.symmetric(
+                            padding: EdgeInsets.symmetric(
                               horizontal: 12,
                               vertical: 6,
                             ),
@@ -846,7 +846,7 @@ class _ToolCallMessage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(
+      padding: EdgeInsets.only(
         left: AppSpacing.lg,
         right: 60,
         bottom: AppSpacing.sm,
@@ -857,7 +857,7 @@ class _ToolCallMessage extends StatelessWidget {
           const SizedBox(width: 40),
           Flexible(
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               decoration: BoxDecoration(
                 color: context.surfaceSecondary,
                 borderRadius: AppRadius.brSmall,
@@ -1001,7 +1001,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
       builder: (sheetCtx) {
         return SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 34),
+            padding: EdgeInsets.fromLTRB(20, 0, 20, 34),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1091,7 +1091,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
       builder: (sheetCtx) {
         return SafeArea(
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 34),
+            padding: EdgeInsets.fromLTRB(20, 0, 20, 34),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1320,7 +1320,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
       ),
       builder: (sheetContext) => SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+          padding: EdgeInsets.fromLTRB(16, 8, 16, 20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -1377,7 +1377,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
     return SafeArea(
       top: false,
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 8, 12, 12),
+        padding: EdgeInsets.fromLTRB(12, 8, 12, 12),
         child: AnimatedContainer(
           key: const ValueKey('chat-composer-surface'),
           duration: AppMotion.standard,
@@ -1414,7 +1414,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
                     fontSize: 16,
                   ),
                   isDense: true,
-                  contentPadding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
+                  contentPadding: EdgeInsets.fromLTRB(16, 14, 16, 8),
                   border: InputBorder.none,
                   enabledBorder: InputBorder.none,
                   focusedBorder: InputBorder.none,
@@ -1427,7 +1427,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
                 ),
               ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+                padding: EdgeInsets.fromLTRB(8, 0, 8, 8),
                 child: Row(
                   children: [
                     IconButton(
@@ -1512,7 +1512,7 @@ class _ClaudeStyleAgentChip extends StatelessWidget {
         onTap: onTap,
         child: Container(
           height: 32,
-          padding: const EdgeInsets.symmetric(horizontal: 10),
+          padding: EdgeInsets.symmetric(horizontal: 10),
           decoration: BoxDecoration(
             color: isEnabled ? context.accentSoft : context.backgroundPrimary,
             borderRadius: BorderRadius.circular(16),
@@ -1649,7 +1649,7 @@ class _VoiceRecorderSheetState extends State<_VoiceRecorderSheet> {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(20, 0, 20, 34),
+        padding: EdgeInsets.fromLTRB(20, 0, 20, 34),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1733,7 +1733,7 @@ class _VoiceRecorderSheetState extends State<_VoiceRecorderSheet> {
                 onPressed: _pause,
               ),
             ),
-            const SizedBox(width: AppSpacing.md),
+            SizedBox(width: AppSpacing.md),
             Expanded(
               child: AmitiaButton(
                 label: '完成',
@@ -1756,7 +1756,7 @@ class _VoiceRecorderSheetState extends State<_VoiceRecorderSheet> {
                 onPressed: _resume,
               ),
             ),
-            const SizedBox(width: AppSpacing.md),
+            SizedBox(width: AppSpacing.md),
             Expanded(
               child: AmitiaButton(
                 label: '完成',
@@ -1779,7 +1779,7 @@ class _VoiceRecorderSheetState extends State<_VoiceRecorderSheet> {
                 onPressed: _reset,
               ),
             ),
-            const SizedBox(width: AppSpacing.md),
+            SizedBox(width: AppSpacing.md),
             Expanded(
               child: AmitiaButton(
                 label: '发送',
@@ -1810,7 +1810,7 @@ class _EmotePickerState extends State<_EmotePicker> {
     final group = _mockEmotes[_group];
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(12, 0, 12, 20),
+        padding: EdgeInsets.fromLTRB(12, 0, 12, 20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -1827,18 +1827,18 @@ class _EmotePickerState extends State<_EmotePicker> {
             ),
             const SizedBox(height: 16),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8),
+              padding: EdgeInsets.symmetric(horizontal: 8),
               child: Row(
                 children: List.generate(_mockEmotes.length, (i) {
                   final isSelected = i == _group;
                   return GestureDetector(
                     onTap: () => setState(() => _group = i),
                     child: Container(
-                      padding: const EdgeInsets.symmetric(
+                      padding: EdgeInsets.symmetric(
                         horizontal: 14,
                         vertical: 6,
                       ),
-                      margin: const EdgeInsets.only(right: 8),
+                      margin: EdgeInsets.only(right: 8),
                       decoration: BoxDecoration(
                         color: isSelected
                             ? context.accentSoft
@@ -1866,7 +1866,7 @@ class _EmotePickerState extends State<_EmotePicker> {
             SizedBox(
               height: 220,
               child: GridView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 4),
+                padding: EdgeInsets.symmetric(horizontal: 4),
                 gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                   crossAxisCount: 5,
                   mainAxisSpacing: 4,
@@ -1920,7 +1920,7 @@ class AmitiaPermissionSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 0, 20, 34),
+      padding: EdgeInsets.fromLTRB(20, 0, 20, 34),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1931,7 +1931,7 @@ class AmitiaPermissionSheet extends StatelessWidget {
           const SizedBox(height: 20),
           ...permissions.map(
             (p) => Padding(
-              padding: const EdgeInsets.only(bottom: 12),
+              padding: EdgeInsets.only(bottom: 12),
               child: Row(
                 children: [
                   Icon(

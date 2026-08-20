@@ -132,8 +132,12 @@ class UIProviderDefinition {
 
   UIProviderEntry? entryFor(String platform) {
     if (entries[platform] case final direct?) return direct;
-    if ((platform == 'android' || platform == 'ios') && entries['mobile'] case final mobile?) return mobile;
-    if ((platform == 'windows' || platform == 'macos' || platform == 'linux') && entries['desktop'] case final desktop?) return desktop;
+    if ((platform == 'android' || platform == 'ios')) {
+      if (entries['mobile'] case final mobile?) return mobile;
+    }
+    if ((platform == 'windows' || platform == 'macos' || platform == 'linux')) {
+      if (entries['desktop'] case final desktop?) return desktop;
+    }
     return entries['*'];
   }
 }

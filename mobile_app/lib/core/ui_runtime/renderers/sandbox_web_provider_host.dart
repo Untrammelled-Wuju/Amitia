@@ -146,7 +146,7 @@ class _SandboxWebProviderHostState
         'locale': WidgetsBinding.instance.platformDispatcher.locale.toLanguageTag(),
       });
 
-      createdSessionId = session['sessionId']?.toString();
+      createdSessionId = session?['sessionId']?.toString();
       if (createdSessionId == null || createdSessionId.isEmpty) {
         throw StateError('web UI session did not return sessionId');
       }
@@ -157,7 +157,7 @@ class _SandboxWebProviderHostState
       _sessionId = createdSessionId;
 
       final rawUrl =
-          (session['resourceUrl'] ?? session['entryUrl'] ?? '').toString();
+          (session?['resourceUrl'] ?? session?['entryUrl'] ?? '').toString();
       if (rawUrl.isEmpty) {
         throw StateError('web UI session did not return resourceUrl');
       }
@@ -211,7 +211,7 @@ class _SandboxWebProviderHostState
                   };
                 }
               } else {
-                result = await service.invokeWebUIBridge(sid, payload);
+                result = await service.invokeWebUIBridge(sid, payload) ?? const <String, dynamic>{};
               }
               final response = <String, dynamic>{
                 ...result,

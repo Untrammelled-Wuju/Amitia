@@ -5,6 +5,7 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_typography.dart';
+import '../../app/theme/design_tokens.dart';
 
 enum AmitiaAppBarNavigation {
   drawer,
@@ -126,7 +127,7 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
   });
 
   @override
-  Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+  Size get preferredSize => Size.fromHeight(DesignTokenRuntime.components.toolbarHeight);
 
   @override
   Widget build(BuildContext context) {
@@ -161,6 +162,8 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
       }
     }
     return AppBar(
+      toolbarHeight: context.uiComponents.toolbarHeight,
+      iconTheme: IconThemeData(size: context.uiIcons.navigation),
       title: titleWidget ?? (title != null ? Text(title!, style: AppTypography.pageTitle(context)) : null),
       actions: actions,
       leading: effectiveLeading,
@@ -197,7 +200,7 @@ class AmitiaCard extends StatelessWidget {
       onTap: onTap,
       child: Container(
         margin: margin,
-        padding: padding ?? const EdgeInsets.all(AppSpacing.cardPadding),
+        padding: padding ?? EdgeInsets.all(AppSpacing.cardPadding),
         decoration: BoxDecoration(
           color: backgroundColor ?? context.surfacePrimary,
           borderRadius: borderRadius ?? AppRadius.brMedium,
@@ -224,7 +227,7 @@ class AmitiaSectionHeader extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -264,7 +267,7 @@ class AmitiaListTile extends StatelessWidget {
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 14),
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 14),
         decoration: BoxDecoration(
           color: isSelected ? context.accentSoft : Colors.transparent,
           borderRadius: AppRadius.brSmall,
@@ -282,7 +285,7 @@ class AmitiaListTile extends StatelessWidget {
                   Text(title, style: AppTypography.body(context)),
                   if (subtitle != null)
                     Padding(
-                      padding: const EdgeInsets.only(top: 2),
+                      padding: EdgeInsets.only(top: 2),
                       child: Text(subtitle!, style: AppTypography.caption(context)),
                     ),
                 ],
