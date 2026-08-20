@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/extension/kernel/chat_ui_extension"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
@@ -40,6 +41,8 @@ type HTTPHandler struct {
 	sandboxHost          *sandbox_webui.Host
 	chatRegistry         *chat_ui_extension.ChatExtensionRegistry
 	providerRegistry     *ui_provider.Registry
+	providerContext      func(*http.Request, string) ui_provider.ResolveContext
+	providerBroadcaster  func(string, map[string]interface{})
 	authorizer           *permission.UISessionAuthorizer
 	schemaLookup         func(extensionID, contributionID string) (json.RawMessage, bool)
 	scopeSnapshotCreator func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error)
@@ -66,6 +69,21 @@ func NewHTTPHandler(
 
 func (h *HTTPHandler) SetProviderRegistry(registry *ui_provider.Registry) {
 	h.providerRegistry = registry
+}
+
+func (h *HTTPHandler) SetProviderContextResolver(fn func(*http.Request, string) ui_provider.ResolveContext) {
+	h.providerContext = fn
+}
+
+func (h *HTTPHandler) SetProviderChangeBroadcaster(fn func(string, map[string]interface{})) {
+	h.providerBroadcaster = fn
+}
+
+func (h *HTTPHandler) resolveProviderContext(r *http.Request, platform string) ui_provider.ResolveContext {
+	if h.providerContext != nil {
+		return h.providerContext(r, platform).Normalize()
+	}
+	return ui_provider.ResolveContext{Platform: platform}.Normalize()
 }
 
 func (h *HTTPHandler) SetAuthorizer(a *permission.UISessionAuthorizer) {
@@ -162,14 +180,17 @@ func (h *HTTPHandler) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 		"timestamp":     time.Now().UTC(),
 	}
 	if h.providerRegistry != nil {
-		platform := r.URL.Query().Get("platform")
+		platform := strings.TrimSpace(r.URL.Query().Get("platform"))
 		if platform == "" {
 			platform = "web"
 		}
-		providerSnapshot := h.providerRegistry.Snapshot(platform)
+		resolveContext := h.resolveProviderContext(r, platform)
+		providerSnapshot := h.providerRegistry.SnapshotWithContext(r.Context(), resolveContext)
 		payload["providers"] = providerSnapshot.Providers
 		payload["profile"] = providerSnapshot.Profile
+		payload["profileLayers"] = providerSnapshot.ProfileLayers
 		payload["resolved"] = providerSnapshot.Resolved
+		payload["providerContext"] = providerSnapshot.Context
 		payload["providerVersion"] = providerSnapshot.Version
 	}
 	writeJSON(w, http.StatusOK, payload)
@@ -206,7 +227,8 @@ func (h *HTTPHandler) handleProviderResolve(w http.ResponseWriter, r *http.Reque
 	if platform == "" {
 		platform = "web"
 	}
-	writeJSON(w, http.StatusOK, h.providerRegistry.Resolve(capability, platform))
+	resolveContext := h.resolveProviderContext(r, platform)
+	writeJSON(w, http.StatusOK, h.providerRegistry.ResolveWithContext(r.Context(), capability, resolveContext))
 }
 
 func trustedModuleProvider(p *ui_provider.ProviderDefinition) bool {
@@ -299,21 +321,86 @@ func (h *HTTPHandler) handleProfile(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusServiceUnavailable, "ui_provider_registry_unavailable", "ui provider registry unavailable")
 		return
 	}
+	platform := strings.TrimSpace(r.URL.Query().Get("platform"))
+	if platform == "" {
+		platform = "web"
+	}
+	resolveContext := h.resolveProviderContext(r, platform)
+	scopeKind := ui_provider.ProfileScopeKind(strings.TrimSpace(r.URL.Query().Get("scope")))
+	if scopeKind == "" {
+		scopeKind = ui_provider.ProfileScopeUser
+	}
+	if scopeKind == ui_provider.ProfileScopeGlobal && r.Method != http.MethodGet {
+		actor, ok := auth.FromContext(r.Context())
+		if !ok || actor == nil || (!actor.HasRole("admin") && !actor.IsSystemActor()) {
+			writeError(w, http.StatusForbidden, "global_profile_forbidden", "global UI profile requires administrator privileges")
+			return
+		}
+	}
 	switch r.Method {
 	case http.MethodGet:
-		writeJSON(w, http.StatusOK, h.providerRegistry.Profile())
+		profile, layers, err := h.providerRegistry.ProfileForContext(r.Context(), resolveContext)
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "profile_load_failed", err.Error())
+			return
+		}
+		scopeProfile, scopeExists, err := h.providerRegistry.ProfileForScope(r.Context(), resolveContext, scopeKind)
+		if err != nil {
+			writeError(w, http.StatusBadRequest, "profile_scope_invalid", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"profile": profile, "layers": layers, "context": resolveContext,
+			"scope": scopeKind, "scopeProfile": scopeProfile, "scopeExists": scopeExists,
+		})
 	case http.MethodPut, http.MethodPost:
 		var profile ui_provider.Profile
 		if err := decodeJSON(r, &profile); err != nil {
 			writeError(w, http.StatusBadRequest, "payload_invalid", err.Error())
 			return
 		}
+		expectedRevision := profile.Revision
 		profile.UpdatedAt = time.Now().UTC().UnixMilli()
-		if err := h.providerRegistry.SetProfile(profile); err != nil {
+		saved, err := h.providerRegistry.SetProfileForContext(r.Context(), resolveContext, scopeKind, profile, expectedRevision)
+		if err != nil {
+			if errors.Is(err, ui_provider.ErrRevisionConflict) {
+				writeError(w, http.StatusConflict, "profile_revision_conflict", err.Error())
+				return
+			}
 			writeError(w, http.StatusBadRequest, "profile_invalid", err.Error())
 			return
 		}
-		writeJSON(w, http.StatusOK, h.providerRegistry.Profile())
+		if h.providerBroadcaster != nil {
+			h.providerBroadcaster("ui_profile_changed", map[string]interface{}{
+				// SSE extension events are broadcast to all connected UI hosts. Do not
+				// expose user/device identifiers in a global event. Every client simply
+				// refreshes its own authenticated/scoped snapshot after this signal.
+				"scope": scopeKind, "revision": saved.Revision,
+			})
+		}
+		writeJSON(w, http.StatusOK, saved)
+	case http.MethodDelete:
+		expectedRevision := int64(-1)
+		if raw := strings.TrimSpace(r.URL.Query().Get("revision")); raw != "" {
+			if _, err := fmt.Sscanf(raw, "%d", &expectedRevision); err != nil {
+				writeError(w, http.StatusBadRequest, "revision_invalid", "revision must be an integer")
+				return
+			}
+		}
+		if err := h.providerRegistry.DeleteProfileScope(r.Context(), resolveContext, scopeKind, expectedRevision); err != nil {
+			if errors.Is(err, ui_provider.ErrRevisionConflict) {
+				writeError(w, http.StatusConflict, "profile_revision_conflict", err.Error())
+				return
+			}
+			writeError(w, http.StatusBadRequest, "profile_delete_failed", err.Error())
+			return
+		}
+		if h.providerBroadcaster != nil {
+			h.providerBroadcaster("ui_profile_changed", map[string]interface{}{
+				"scope": scopeKind, "deleted": true,
+			})
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"deleted": true, "scope": scopeKind})
 	default:
 		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
 	}
