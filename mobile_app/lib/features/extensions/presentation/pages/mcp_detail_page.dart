@@ -127,7 +127,7 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
             _buildTabBar(context),
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xxxl),
+                padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xxxl),
                 child: _buildTabContent(context, server),
               ),
             ),
@@ -140,11 +140,11 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
   Widget _buildTabBar(BuildContext context) {
     return Container(
       height: 44,
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: _tabs.length,
-        separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.sm),
+        separatorBuilder: (_, _) => SizedBox(width: AppSpacing.sm),
         itemBuilder: (context, index) {
           final isSelected = _selectedTab == index;
           return GestureDetector(
@@ -219,7 +219,7 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
                   AmitiaStatusBadge(label: _statusLabel(status), type: _statusBadgeType(status)),
                 ],
               ),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               _InfoRow(label: 'Transport', value: _transportLabel(transport)),
               _InfoRow(label: '地址/命令', value: address),
               _InfoRow(label: '工具数', value: '$toolCount'),
@@ -228,9 +228,9 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
             ],
           ),
         ),
-        const SizedBox(height: AppSpacing.sectionGap),
+        SizedBox(height: AppSpacing.sectionGap),
         Text('能力统计', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -259,7 +259,7 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
         final description = (tool['description'] ?? '').toString();
         final isEnabled = _toolEnabledState[name] ?? ((tool['isEnabled'] as bool?) ?? ((tool['enabled'] as int?) == 1));
         return Padding(
-          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+          padding: EdgeInsets.only(bottom: AppSpacing.sm),
           child: AmitiaCard(
             child: Row(
               children: [
@@ -299,7 +299,7 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
         final description = (prompt['description'] ?? '').toString();
         final content = (prompt['content'] ?? '').toString();
         return Padding(
-          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+          padding: EdgeInsets.only(bottom: AppSpacing.sm),
           child: AmitiaCard(
             onTap: () => _showUsePromptDialog(name, description, content),
             child: Row(
@@ -337,7 +337,7 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
         final mimeType = (resource['mimeType'] ?? resource['mime_type'] ?? '').toString();
         final content = resource['content']?.toString();
         return Padding(
-          padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+          padding: EdgeInsets.only(bottom: AppSpacing.sm),
           child: AmitiaCard(
             onTap: () => _showResourceContentDialog(name, uri, mimeType, content),
             child: Row(
@@ -386,7 +386,7 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
           AmitiaEmptyState(icon: Icons.task_outlined, title: '不支持 Tasks', subtitle: '该 MCP 服务未启用 Tasks 能力')
         else
           ...mockTasks.map((task) => Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                padding: EdgeInsets.only(bottom: AppSpacing.sm),
                 child: AmitiaCard(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -406,7 +406,7 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: AppSpacing.sm),
+                      SizedBox(height: AppSpacing.sm),
                       AmitiaProgressBar(progress: task['progress'] as double),
                     ],
                   ),
@@ -442,7 +442,7 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
                   Text('权限设置', style: AppTypography.sectionTitle(context)),
                 ],
               ),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               ...permissions.map((p) => AmitiaSwitchTile(
                     title: p['name'] as String,
                     subtitle: p['desc'] as String,
@@ -456,7 +456,7 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
             ],
           ),
         ),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
         if (hasOAuth)
           AmitiaCard(
             onTap: () => _showOAuthDialog(),
@@ -480,7 +480,7 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
               ],
             ),
           ),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
         AmitiaButton(
           label: '管理能力配置',
           isFullWidth: true,

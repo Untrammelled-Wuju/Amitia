@@ -86,9 +86,9 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
       body: SafeArea(
         top: false,
         child: ListView.separated(
-          padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xxxl),
+          padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xxxl),
           itemCount: _packages.length,
-          separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+          separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
           itemBuilder: (context, index) => _buildPackageCard(context, _packages[index]),
         ),
       ),
@@ -146,7 +146,7 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
               AmitiaStatusBadge(label: status, type: _statusBadgeType(status)),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           Wrap(
             spacing: 6,
             runSpacing: 6,
@@ -159,7 +159,7 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
               child: Text(p, style: AppTypography.label(context)),
             )).toList(),
           ),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           if (hasUpdate)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -175,7 +175,7 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
                 ],
               ),
             ),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           _buildActionButtons(context, pkg),
         ],
       ),
@@ -479,7 +479,7 @@ class _InstallPreviewSheet extends StatelessWidget {
               Expanded(
                 child: AmitiaButton(label: '取消', isSecondary: true, onPressed: () => Navigator.pop(context)),
               ),
-              const SizedBox(width: AppSpacing.sm),
+              SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: AmitiaButton(label: '确认安装', onPressed: onConfirm),
               ),

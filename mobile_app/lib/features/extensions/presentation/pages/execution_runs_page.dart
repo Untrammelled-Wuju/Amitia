@@ -120,7 +120,7 @@ class _ExecutionRunsPageState extends ConsumerState<ExecutionRunsPage> {
         child: Column(
           children: [
             _buildFilterBar(context),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             Expanded(
               child: _filteredRuns.isEmpty
                   ? AmitiaEmptyState(
@@ -129,9 +129,9 @@ class _ExecutionRunsPageState extends ConsumerState<ExecutionRunsPage> {
                       subtitle: '$_selectedFilter 状态下没有记录',
                     )
                   : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, 0, AppSpacing.pagePadding, AppSpacing.xxxl),
+                      padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, 0, AppSpacing.pagePadding, AppSpacing.xxxl),
                       itemCount: _filteredRuns.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+                      separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
                       itemBuilder: (context, index) => _buildRunCard(context, _filteredRuns[index]),
                     ),
             ),
@@ -146,9 +146,9 @@ class _ExecutionRunsPageState extends ConsumerState<ExecutionRunsPage> {
       height: 38,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
         itemCount: _filters.length,
-        separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.sm),
+        separatorBuilder: (_, _) => SizedBox(width: AppSpacing.sm),
         itemBuilder: (context, index) {
           final isSelected = _selectedFilter == _filters[index];
           return GestureDetector(
@@ -215,7 +215,7 @@ class _ExecutionRunsPageState extends ConsumerState<ExecutionRunsPage> {
               AmitiaStatusBadge(label: status, type: _statusBadgeType(status)),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           Row(
             children: [
               Icon(Icons.build_outlined, size: 14, color: context.textTertiary),

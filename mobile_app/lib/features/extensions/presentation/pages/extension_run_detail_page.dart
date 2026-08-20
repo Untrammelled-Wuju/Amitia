@@ -90,22 +90,22 @@ class _ExtensionRunDetailPageState extends ConsumerState<ExtensionRunDetailPage>
       body: SafeArea(
         top: false,
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xxxl),
+          padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xxxl),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildStatusCard(context, status, duration, startTimeStr),
-              const SizedBox(height: AppSpacing.sectionGap),
+              SizedBox(height: AppSpacing.sectionGap),
               _buildInputSection(context, input),
-              const SizedBox(height: AppSpacing.sectionGap),
+              SizedBox(height: AppSpacing.sectionGap),
               _buildOutputSection(context, output),
               if (error != null) ...[
-                const SizedBox(height: AppSpacing.sectionGap),
+                SizedBox(height: AppSpacing.sectionGap),
                 _buildErrorSection(context, error),
               ],
-              const SizedBox(height: AppSpacing.sectionGap),
+              SizedBox(height: AppSpacing.sectionGap),
               _buildToolCallsSection(context, toolCalls),
-              const SizedBox(height: AppSpacing.xxl),
+              SizedBox(height: AppSpacing.xxl),
               if (status == '运行中')
                 AmitiaButton(
                   label: '取消任务',
@@ -133,7 +133,7 @@ class _ExtensionRunDetailPageState extends ConsumerState<ExtensionRunDetailPage>
               AmitiaStatusBadge(label: status, type: _statusBadgeType(status)),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           Row(
             children: [
               Icon(Icons.timer_outlined, size: 16, color: context.textTertiary),
@@ -146,7 +146,7 @@ class _ExtensionRunDetailPageState extends ConsumerState<ExtensionRunDetailPage>
             ],
           ),
           if (status == '运行中') ...[
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
@@ -154,7 +154,7 @@ class _ExtensionRunDetailPageState extends ConsumerState<ExtensionRunDetailPage>
                 Text('65%', style: AppTypography.caption(context).copyWith(color: context.accentPrimary, fontWeight: FontWeight.w600)),
               ],
             ),
-            const SizedBox(height: AppSpacing.xs),
+            SizedBox(height: AppSpacing.xs),
             const AmitiaProgressBar(progress: 0.65),
           ],
         ],
@@ -167,7 +167,7 @@ class _ExtensionRunDetailPageState extends ConsumerState<ExtensionRunDetailPage>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('输入', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
         AmitiaCard(
           child: Container(
             width: double.infinity,
@@ -188,7 +188,7 @@ class _ExtensionRunDetailPageState extends ConsumerState<ExtensionRunDetailPage>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('输出', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
         AmitiaCard(
           child: Container(
             width: double.infinity,
@@ -214,7 +214,7 @@ class _ExtensionRunDetailPageState extends ConsumerState<ExtensionRunDetailPage>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('错误信息', style: AppTypography.sectionTitle(context).copyWith(color: context.error)),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
         Container(
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
@@ -242,9 +242,9 @@ class _ExtensionRunDetailPageState extends ConsumerState<ExtensionRunDetailPage>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('工具调用 (${toolCalls.length})', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
         ...toolCalls.map((call) => Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              padding: EdgeInsets.only(bottom: AppSpacing.sm),
               child: _ToolCallCard(call: call),
             )),
       ],
@@ -304,7 +304,7 @@ class _ToolCallCard extends StatelessWidget {
     final duration = (call['duration'] ?? '').toString();
 
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.cardPadding),
+      padding: EdgeInsets.all(AppSpacing.cardPadding),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
         borderRadius: AppRadius.brMedium,
@@ -323,11 +323,11 @@ class _ToolCallCard extends StatelessWidget {
               AmitiaStatusBadge(label: status, type: _statusBadgeType(status)),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           _InfoRow(label: '输入', value: input),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           _InfoRow(label: '输出', value: output),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Row(
             children: [
               Icon(Icons.timer_outlined, size: 14, color: context.textTertiary),

@@ -70,9 +70,9 @@ class _SystemPluginsPageState extends ConsumerState<SystemPluginsPage> {
       body: SafeArea(
         top: false,
         child: ListView.separated(
-          padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xxxl),
+          padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xxxl),
           itemCount: _plugins.length,
-          separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+          separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
           itemBuilder: (context, index) => _buildPluginCard(context, _plugins[index]),
         ),
       ),
@@ -136,7 +136,7 @@ class _SystemPluginsPageState extends ConsumerState<SystemPluginsPage> {
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           Row(
             children: [
               Container(
@@ -156,9 +156,9 @@ class _SystemPluginsPageState extends ConsumerState<SystemPluginsPage> {
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           _buildInfoChips(context, hooks, events, schedules, registeredSkills),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           Row(
             children: [
               GestureDetector(
@@ -458,7 +458,7 @@ class _PluginDetailSheet extends StatelessWidget {
                   onPressed: onPermissionTap,
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
+              SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: AmitiaButton(
                   label: '关闭',

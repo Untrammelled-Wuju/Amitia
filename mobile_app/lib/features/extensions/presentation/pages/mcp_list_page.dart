@@ -88,9 +88,9 @@ class _McpListPageState extends ConsumerState<McpListPage> {
       body: SafeArea(
         top: false,
         child: ListView.separated(
-          padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xxxl),
+          padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xxxl),
           itemCount: _servers.length,
-          separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+          separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
           itemBuilder: (context, index) => _buildServerCard(context, _servers[index]),
         ),
       ),
@@ -159,7 +159,7 @@ class _McpListPageState extends ConsumerState<McpListPage> {
               AmitiaStatusBadge(label: _statusLabel(status), type: _statusBadgeType(status)),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           Wrap(
             spacing: 6,
             runSpacing: 6,
@@ -177,7 +177,7 @@ class _McpListPageState extends ConsumerState<McpListPage> {
                 _CapabilityTag(label: 'OAuth', icon: Icons.lock_outline, color: context.error),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           Row(
             children: [
               GestureDetector(
@@ -369,7 +369,7 @@ class _AddServerSheetState extends State<_AddServerSheet> {
               Expanded(
                 child: AmitiaButton(label: '取消', isSecondary: true, onPressed: () => Navigator.pop(context)),
               ),
-              const SizedBox(width: AppSpacing.sm),
+              SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: AmitiaButton(label: '添加', onPressed: widget.onConfirm),
               ),

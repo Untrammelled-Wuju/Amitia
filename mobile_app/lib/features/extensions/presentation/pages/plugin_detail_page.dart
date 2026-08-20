@@ -74,7 +74,7 @@ class _PluginDetailPageState extends ConsumerState<PluginDetailPage> {
       body: SafeArea(
         top: false,
         child: ListView(
-          padding: const EdgeInsets.all(AppSpacing.pagePadding),
+          padding: EdgeInsets.all(AppSpacing.pagePadding),
           children: [
             AmitiaCard(
               child: Column(
@@ -100,14 +100,14 @@ class _PluginDetailPageState extends ConsumerState<PluginDetailPage> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: AppSpacing.md),
+                  SizedBox(height: AppSpacing.md),
                   _InfoRow(label: '类型', value: 'Plugin'),
                   _InfoRow(label: '状态', value: isInstalled ? '已安装' : '未安装'),
                   _InfoRow(label: '启用', value: isEnabled ? '已启用' : '已禁用'),
                 ],
               ),
             ),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             AmitiaButton(
               label: isInstalled ? '卸载' : '安装',
               isFullWidth: true,
