@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,6 +13,12 @@ import '../../../../core/widgets/amitia_message.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_drawer.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/ui_runtime/ui_provider.dart';
+import '../../../../core/ui_runtime/ui_provider_host.dart';
+import '../../../../core/ui_runtime/ui_runtime_controller.dart';
+import '../../../../core/ui_runtime/ui_message_renderer_registry.dart';
+import '../../../../core/ui_runtime/conversation_ui_contract.dart';
+import '../../runtime/conversation_runtime_controller.dart';
 import '../../../../shared/models/models.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
@@ -22,12 +29,26 @@ class ChatPage extends ConsumerStatefulWidget {
 }
 
 class _ChatPageState extends ConsumerState<ChatPage> {
-  final List<ChatMessage> _messages = [];
   final _scrollController = ScrollController();
-  final Map<String, String> _agentTaskStatus = {};
+  late final ConversationRuntimeController _runtime;
+
+  @override
+  void initState() {
+    super.initState();
+    _runtime = ConversationRuntimeController(ref.read(chatServiceProvider));
+    _runtime.addListener(_onRuntimeChanged);
+  }
+
+  void _onRuntimeChanged() {
+    if (!mounted) return;
+    setState(() {});
+    _scrollToBottom();
+  }
 
   @override
   void dispose() {
+    _runtime.removeListener(_onRuntimeChanged);
+    _runtime.dispose();
     _scrollController.dispose();
     super.dispose();
   }
@@ -59,206 +80,52 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     });
   }
 
-  ChatMessage _cloneWithStatus(ChatMessage m, MessageStatus s) {
-    return ChatMessage(
-      id: m.id,
-      role: m.role,
-      type: m.type,
-      content: m.content,
-      time: m.time,
-      status: s,
-      agentTaskTitle: m.agentTaskTitle,
-      agentTaskSteps: m.agentTaskSteps,
-      agentTaskProgress: m.agentTaskProgress,
-      agentTaskElapsed: m.agentTaskElapsed,
-      fileName: m.fileName,
-      fileSizeKB: m.fileSizeKB,
-      toolName: m.toolName,
-      toolResult: m.toolResult,
-    );
-  }
-
   void _retryMessage(int index) {
-    if (index < 0 || index >= _messages.length) return;
-    final msg = _messages[index];
-    setState(() {
-      _messages[index] = _cloneWithStatus(msg, MessageStatus.sending);
-    });
-    Future.delayed(const Duration(milliseconds: 600), () {
-      if (!mounted) return;
-      setState(() {
-        if (index < _messages.length && _messages[index].id == msg.id) {
-          _messages[index] = _cloneWithStatus(
-            _messages[index],
-            MessageStatus.sent,
-          );
-        }
-      });
-    });
+    _runtime.retryMessage(index);
   }
 
   void _pauseAgentTask(int index) {
-    if (index < 0 || index >= _messages.length) return;
-    final id = _messages[index].id;
-    setState(() => _agentTaskStatus[id] = '已暂停');
+    _runtime.pauseAgentTask(index);
     amitiaSnackBar(context, '任务已暂停');
   }
 
   void _resumeAgentTask(int index) {
-    if (index < 0 || index >= _messages.length) return;
-    final id = _messages[index].id;
-    setState(() => _agentTaskStatus[id] = '运行中');
+    _runtime.resumeAgentTask(index);
     amitiaSnackBar(context, '任务已继续执行');
   }
 
-  void _addUserMessage(ChatMessage message) {
-    setState(() => _messages.add(message));
-    _scrollToBottom();
-    _replyAfter(message);
-  }
-
-  void _replyAfter(ChatMessage userMessage) {
-    final chatApi = ref.read(chatServiceProvider);
-    final content = userMessage.content;
-
-    String strippedContent = content;
-    if (content.startsWith('__mock:audio|')) {
-      strippedContent = '[语音消息]';
-    } else if (content.startsWith('__mock:emote|')) {
-      strippedContent = '[表情]';
-    } else if (content.startsWith('__mock:code|')) {
-      strippedContent = content.substring('__mock:code|'.length);
-    }
-
-    chatApi.chat(strippedContent).then((response) {
-      if (!mounted) return;
-      final replyTime = DateTime.now();
-      String reply = '已收到你的消息';
-      if (response != null) {
-        reply = response['reply'] as String? ??
-            response['content'] as String? ??
-            response['message'] as String? ??
-            '已收到你的消息';
-      }
-      setState(() {
-        _messages.add(
-          ChatMessage(
-            id: 'a${replyTime.millisecondsSinceEpoch}',
-            role: MessageRole.assistant,
-            type: MessageType.text,
-            content: reply,
-            time: replyTime,
-          ),
-        );
-      });
-      _scrollToBottom();
-    }).catchError((err) {
-      if (!mounted) return;
-      final replyTime = DateTime.now();
-      setState(() {
-        _messages.add(
-          ChatMessage(
-            id: 'a${replyTime.millisecondsSinceEpoch}',
-            role: MessageRole.assistant,
-            type: MessageType.text,
-            content: '连接失败: ${err.toString().replaceFirst('Exception: ', '')}',
-            time: replyTime,
-            status: MessageStatus.error,
-          ),
-        );
-      });
-      _scrollToBottom();
-    });
-  }
-
   void _onSend(String text) {
-    final now = DateTime.now();
-    _addUserMessage(
-      ChatMessage(
-        id: 'u${now.millisecondsSinceEpoch}',
-        role: MessageRole.user,
-        type: MessageType.text,
-        content: text,
-        time: now,
-      ),
-    );
+    _runtime.sendText(text);
   }
 
   void _onSendFile(String fileName, int sizeKB) {
-    final now = DateTime.now();
-    _addUserMessage(
-      ChatMessage(
-        id: 'u${now.millisecondsSinceEpoch}',
-        role: MessageRole.user,
-        type: MessageType.file,
-        content: fileName,
-        time: now,
-        fileName: fileName,
-        fileSizeKB: sizeKB,
-      ),
-    );
+    _runtime.sendFile(fileName, sizeKB);
   }
 
   void _onSendImage(String name) {
-    final now = DateTime.now();
-    _addUserMessage(
-      ChatMessage(
-        id: 'u${now.millisecondsSinceEpoch}',
-        role: MessageRole.user,
-        type: MessageType.text,
-        content: mockImagePayload(name),
-        time: now,
-      ),
-    );
+    _runtime.sendImage(name);
   }
 
   void _onSendCode(String lang, String code) {
-    final now = DateTime.now();
-    _addUserMessage(
-      ChatMessage(
-        id: 'u${now.millisecondsSinceEpoch}',
-        role: MessageRole.user,
-        type: MessageType.text,
-        content: mockCodePayload(lang, code),
-        time: now,
-      ),
-    );
+    _runtime.sendCode(lang, code);
   }
 
   void _onSendVoice(String duration) {
-    final now = DateTime.now();
-    _addUserMessage(
-      ChatMessage(
-        id: 'u${now.millisecondsSinceEpoch}',
-        role: MessageRole.user,
-        type: MessageType.text,
-        content: mockAudioPayload(duration),
-        time: now,
-      ),
-    );
+    _runtime.sendVoice(duration);
   }
 
   void _onSendEmote(String emoji, String name) {
-    final now = DateTime.now();
-    _addUserMessage(
-      ChatMessage(
-        id: 'u${now.millisecondsSinceEpoch}',
-        role: MessageRole.user,
-        type: MessageType.text,
-        content: mockEmotePayload(emoji, name),
-        time: now,
-      ),
-    );
+    _runtime.sendEmote(emoji, name);
   }
 
   bool _shouldShowAvatar(int index) {
-    final current = _messages[index];
+    final current = _runtime.messages[index];
     if (current.role != MessageRole.assistant) return false;
     if (current.type == MessageType.agentTask ||
         current.type == MessageType.toolCall)
       return false;
     if (index == 0) return true;
-    final previous = _messages[index - 1];
+    final previous = _runtime.messages[index - 1];
     if (previous.role != MessageRole.assistant) return true;
     return false;
   }
@@ -273,7 +140,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       ),
       builder: (sheetCtx) {
         return _MessageSearchSheet(
-          messages: _messages,
+          messages: _runtime.messages,
           onJump: (index) {
             Navigator.pop(sheetCtx);
             _jumpToMessage(index);
@@ -327,19 +194,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             isDestructive: true,
           ).then((confirmed) {
             if (confirmed == true && mounted) {
-              setState(() {
-                _messages.clear();
-                _agentTaskStatus.clear();
-                _messages.add(
-                  ChatMessage(
-                    id: 'sys${DateTime.now().millisecondsSinceEpoch}',
-                    role: MessageRole.system,
-                    type: MessageType.systemNotice,
-                    content: '聊天记录已清空',
-                    time: DateTime.now(),
-                  ),
-                );
-              });
+              _runtime.clear(addSystemNotice: true);
               amitiaSnackBar(context, '聊天记录已清空');
             }
           });
@@ -362,6 +217,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     Scaffold.of(context).openDrawer();
   }
 
+  Map<String, dynamic> _providerMessage(ChatMessage message) =>
+      _runtime.serializeMessage(message);
+
   @override
   Widget build(BuildContext context) {
     final isAgentMode = ref.watch(isAgentModeProvider);
@@ -381,7 +239,94 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         '#${(((character?.name.hashCode ?? 0) & 0xFFFFFF) | 0xFF000000).toRadixString(16).padLeft(8, '0')}';
     final characterName = character?.name ?? '';
 
-    return AmitiaScaffold(
+    final providerContext = <String, dynamic>{
+      'route': '/chat',
+      'character': {
+        'id': characterId,
+        'name': characterName,
+        'avatarInitial': avatarInitial,
+        'avatarColor': avatarColor,
+      },
+      'messages': _runtime.messages.map(_providerMessage).toList(growable: false),
+      'agentMode': isAgentMode,
+      'conversationState': _runtime.state,
+      'sending': _runtime.sending,
+      'conversationId': _runtime.conversationId,
+    };
+    final providerActions = <String, FutureOr<dynamic> Function(dynamic)>{
+      ConversationUIAction.send: (input) {
+        final value = input is Map ? input['text'] : input;
+        final text = value?.toString() ?? '';
+        if (text.trim().isNotEmpty) _onSend(text);
+        return null;
+      },
+      ConversationUIAction.retry: (input) {
+        final id = input is Map ? input['messageId']?.toString() : input?.toString();
+        final index = _runtime.messages.indexWhere((message) => message.id == id);
+        if (index >= 0) _retryMessage(index);
+        return null;
+      },
+      ConversationUIAction.regenerate: (input) {
+        final id = input is Map ? input['messageId']?.toString() : input?.toString();
+        return _runtime.regenerate(messageId: id);
+      },
+      ConversationUIAction.stop: (_) {
+        _runtime.stop();
+        return null;
+      },
+      ConversationUIAction.delete: (input) {
+        final id = input is Map ? input['messageId']?.toString() : input?.toString();
+        if (id != null && id.isNotEmpty) _runtime.deleteMessage(id);
+        return null;
+      },
+      ConversationUIAction.newConversation: (_) =>
+          _runtime.createConversation(characterId),
+      ConversationUIAction.openDrawer: (_) {
+        _openDrawer(context);
+        return null;
+      },
+      ConversationUIAction.sendFile: (input) {
+        final row = input is Map ? input : const <String, dynamic>{};
+        final name = row['fileName']?.toString() ?? '';
+        final size = row['sizeKB'] is num ? (row['sizeKB'] as num).toInt() : 0;
+        if (name.isNotEmpty) _runtime.sendFile(name, size);
+        return null;
+      },
+      ConversationUIAction.sendImage: (input) {
+        final name = input is Map ? input['name']?.toString() : input?.toString();
+        if (name != null && name.isNotEmpty) _runtime.sendImage(name);
+        return null;
+      },
+      ConversationUIAction.sendCode: (input) {
+        final row = input is Map ? input : const <String, dynamic>{};
+        final language = row['language']?.toString() ?? 'text';
+        final code = row['code']?.toString() ?? '';
+        if (code.isNotEmpty) _runtime.sendCode(language, code);
+        return null;
+      },
+      ConversationUIAction.sendVoice: (input) {
+        final duration = input is Map ? input['duration']?.toString() : input?.toString();
+        if (duration != null && duration.isNotEmpty) _runtime.sendVoice(duration);
+        return null;
+      },
+      ConversationUIAction.sendEmote: (input) {
+        final row = input is Map ? input : const <String, dynamic>{};
+        final emoji = row['emoji']?.toString() ?? '';
+        final name = row['name']?.toString() ?? '';
+        if (emoji.isNotEmpty || name.isNotEmpty) _runtime.sendEmote(emoji, name);
+        return null;
+      },
+    };
+
+    final uiSnapshot = ref.watch(uiRuntimeProvider).valueOrNull;
+    bool externalProvider(String capability) {
+      final provider = uiSnapshot?.resolve(capability);
+      return provider != null && provider.enabled && !provider.builtin;
+    }
+    final hasSidebarProvider = externalProvider(UICapability.conversationSidebar);
+    final hasOverlayProvider = externalProvider(UICapability.conversationOverlay);
+
+    final builtinConversation = AmitiaScaffold(
       resizeToAvoidBottomInset: false,
       body: Stack(
         key: const ValueKey('ime-single-scaffold-20260805-0325'),
@@ -392,17 +337,21 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               child: Column(
                 children: [
                   Expanded(
-                    child: Stack(
-                      children: [
-                        ListView.builder(
+                    child: UIProviderHost(
+                      capability: UICapability.conversationMessages,
+                      context: providerContext,
+                      actions: providerActions,
+                      fallback: Stack(
+                        children: [
+                          ListView.builder(
                           controller: _scrollController,
                           padding: const EdgeInsets.symmetric(vertical: 32),
-                          itemCount: _messages.length,
+                          itemCount: _runtime.messages.length,
                           itemBuilder: (context, index) {
-                            final message = _messages[index];
+                            final message = _runtime.messages[index];
                             final isAgentTask =
                                 message.type == MessageType.agentTask;
-                            return AmitiaMessageBubble(
+                            final builtinMessage = AmitiaMessageBubble(
                               message: message,
                               showAvatar: _shouldShowAvatar(index),
                               avatarInitial: avatarInitial,
@@ -422,8 +371,20 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                   ? () => _resumeAgentTask(index)
                                   : null,
                               agentTaskStatusLabel: isAgentTask
-                                  ? (_agentTaskStatus[message.id] ?? '运行中')
+                                  ? (_runtime.agentTaskStatus[message.id] ?? '运行中')
                                   : null,
+                            );
+                            final messageRenderer = UIMessageRendererRegistry.resolve(
+                              uiSnapshot,
+                              messageType: message.type.name,
+                              role: message.role.name,
+                            );
+                            return UIProviderHost(
+                              capability: UICapability.conversationMessageRenderer,
+                              providerId: messageRenderer?.providerId,
+                              fallback: builtinMessage,
+                              context: { ...providerContext, 'message': _providerMessage(message), 'messageIndex': index },
+                              actions: providerActions,
                             );
                           },
                         ),
@@ -440,10 +401,15 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                           end: Alignment.topCenter,
                           color: context.backgroundPrimary,
                         ),
-                      ],
+                        ],
+                      ),
                     ),
                   ),
-                  AmitiaChatInput(
+                  UIProviderHost(
+                    capability: UICapability.conversationComposer,
+                    context: providerContext,
+                    actions: providerActions,
+                    fallback: AmitiaChatInput(
                     onSend: _onSend,
                     isAgentMode: isAgentMode,
                     onAgentModeChanged: (value) {
@@ -454,6 +420,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     onSendCode: _onSendCode,
                     onSendVoice: _onSendVoice,
                     onSendEmote: _onSendEmote,
+                    ),
                   ),
                 ],
               ),
@@ -463,24 +430,54 @@ class _ChatPageState extends ConsumerState<ChatPage> {
             top: 0,
             left: 0,
             right: 0,
-            child: _ChatTopBar(
+            child: UIProviderHost(
+              capability: UICapability.conversationHeader,
+              context: providerContext,
+              actions: providerActions,
+              fallback: _ChatTopBar(
               onOpenDrawer: () => _openDrawer(context),
               onNewConversation: () {
-                final chatApi = ref.read(chatServiceProvider);
-                chatApi.createConversation(characterId).then((conv) {
-                  if (conv != null && mounted) {
-                    setState(() {
-                      _messages.clear();
-                      _agentTaskStatus.clear();
-                    });
-                  }
-                });
+                _runtime.createConversation(characterId);
               },
               onMore: () => _showChatActionsSheet(context),
+              ),
             ),
           ),
+          if (hasSidebarProvider)
+            Positioned(
+              top: _chatTopBarHeight,
+              right: 0,
+              bottom: 0,
+              child: SizedBox(
+                width: MediaQuery.sizeOf(context).width.clamp(240.0, 360.0).toDouble(),
+                child: UIProviderHost(
+                  capability: UICapability.conversationSidebar,
+                  context: {...providerContext, 'surface': 'sidebar'},
+                  actions: providerActions,
+                  fallback: const SizedBox.shrink(),
+                ),
+              ),
+            ),
+          if (hasOverlayProvider)
+            Positioned.fill(
+              child: UIProviderHost(
+                capability: UICapability.conversationOverlay,
+                context: {...providerContext, 'surface': 'overlay'},
+                actions: providerActions,
+                fallback: const SizedBox.shrink(),
+              ),
+            ),
         ],
       ),
+    );
+
+
+
+    return UIProviderHost(
+      capability: UICapability.conversationShell,
+      fallback: builtinConversation,
+      context: providerContext,
+      actions: providerActions,
     );
   }
 }

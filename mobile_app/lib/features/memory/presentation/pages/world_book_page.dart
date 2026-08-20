@@ -85,9 +85,9 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
                           onAction: () => _showEntryEditor(context, null),
                         )
                       : ListView.separated(
-                          padding: const EdgeInsets.all(AppSpacing.pagePadding),
+                          padding: EdgeInsets.all(AppSpacing.pagePadding),
                           itemCount: filtered.length,
-                          separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+                          separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
                           itemBuilder: (context, index) => _buildEntryCard(context, filtered[index]),
                         ),
                 ),
@@ -104,16 +104,16 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
       height: 38,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
         itemCount: categories.length,
-        separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.sm),
+        separatorBuilder: (_, _) => SizedBox(width: AppSpacing.sm),
         itemBuilder: (context, index) {
           final cat = categories[index];
           final isSelected = _selectedCategory == cat;
           return GestureDetector(
             onTap: () => setState(() => _selectedCategory = cat),
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 8),
+              padding: EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 8),
               decoration: BoxDecoration(
                 color: isSelected ? context.accentPrimary : context.surfaceSecondary,
                 borderRadius: AppRadius.brTag,
@@ -146,7 +146,7 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
                 ),
                 child: Icon(Icons.menu_book_outlined, size: 20, color: isEnabled ? context.accentPrimary : context.textTertiary),
               ),
-              const SizedBox(width: AppSpacing.md),
+              SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -154,7 +154,7 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
                     Row(
                       children: [
                         Text(keywordStr, style: AppTypography.cardTitle(context)),
-                        const SizedBox(width: AppSpacing.sm),
+                        SizedBox(width: AppSpacing.sm),
                         AmitiaStatusBadge(label: 'P${entry.priority}', type: _getPriorityBadge(entry.priority)),
                       ],
                     ),
@@ -169,14 +169,14 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(AppSpacing.md),
+            padding: EdgeInsets.all(AppSpacing.md),
             decoration: BoxDecoration(color: context.surfaceSecondary, borderRadius: AppRadius.brSmall),
             child: Text(entry.content, style: AppTypography.bodySmall(context).copyWith(height: 1.5)),
           ),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Row(
             children: [
               GestureDetector(
@@ -194,7 +194,7 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
                   ),
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
+              SizedBox(width: AppSpacing.sm),
               GestureDetector(
                 onTap: () => _showDeleteConfirm(context, entry),
                 child: Container(
@@ -257,31 +257,31 @@ class _WorldBookPageState extends ConsumerState<WorldBookPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: context.borderPrimary, borderRadius: BorderRadius.circular(2)))),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               Text(isEdit ? '编辑条目' : '新增条目', style: AppTypography.sectionTitle(context)),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               Text('标题', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               AmitiaTextField(controller: titleCtrl, hintText: '输入标题'),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('内容', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               AmitiaTextField(controller: contentCtrl, maxLines: 4, hintText: '输入世界书内容'),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('关键词', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               AmitiaTextField(controller: keywordCtrl, hintText: '输入关键词，用逗号分隔'),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('优先级：$priority/10', style: AppTypography.label(context)),
               Slider(value: priority.toDouble(), min: 1, max: 10, divisions: 9, activeColor: context.accentPrimary, onChanged: (v) => setSheetState(() => priority = v.round())),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               AmitiaSwitchTile(
                 title: '启用条目',
                 subtitle: '启用后该条目将在对话中生效',
                 value: enabled == 1,
                 onChanged: (v) => setSheetState(() => enabled = v ? 1 : 0),
               ),
-              const SizedBox(height: AppSpacing.xl),
+              SizedBox(height: AppSpacing.xl),
               AmitiaButton(
                 label: isEdit ? '保存' : '创建',
                 isFullWidth: true,

@@ -117,7 +117,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                 _buildMemoryTools(context),
                 if (_searchVisible)
                   Padding(
-                    padding: const EdgeInsets.fromLTRB(
+                    padding: EdgeInsets.fromLTRB(
                       AppSpacing.pagePadding,
                       AppSpacing.sm,
                       AppSpacing.pagePadding,
@@ -134,7 +134,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                     ),
                   ),
                 _buildCategoryTabs(context),
-                const SizedBox(height: AppSpacing.sm),
+                SizedBox(height: AppSpacing.sm),
                 Expanded(
                   child: filtered.isEmpty
                       ? AmitiaEmptyState(
@@ -143,11 +143,11 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                           subtitle: '与角色对话后，记忆会自动生成',
                         )
                       : ListView.separated(
-                          padding: const EdgeInsets.symmetric(
+                          padding: EdgeInsets.symmetric(
                             horizontal: AppSpacing.pagePadding,
                           ),
                           itemCount: filtered.length,
-                          separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+                          separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
                           itemBuilder: (context, index) {
                             return _buildMemoryCard(context, filtered[index]);
                           },
@@ -166,9 +166,9 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
       height: 38,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
         itemCount: _categories.length,
-        separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.sm),
+        separatorBuilder: (_, _) => SizedBox(width: AppSpacing.sm),
         itemBuilder: (context, index) {
           final isSelected = _selectedCategory == index;
           return GestureDetector(
@@ -178,7 +178,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
               });
             },
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 8),
+              padding: EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 8),
               decoration: BoxDecoration(
                 color: isSelected ? context.accentPrimary : context.surfaceSecondary,
                 borderRadius: AppRadius.brTag,
@@ -224,14 +224,14 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                     ),
                   ],
                 ),
-                const SizedBox(height: AppSpacing.sm),
+                SizedBox(height: AppSpacing.sm),
                 Row(
                   children: [
                     AmitiaStatusBadge(
                       label: _importanceIntToString(memory.importance),
                       type: _importanceToBadgeType(memory.importance),
                     ),
-                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(width: AppSpacing.sm),
                     Flexible(
                       child: Text(
                         memory.type,
@@ -239,7 +239,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(width: AppSpacing.sm),
                     Text(
                       _formatTimeString(memory.createdAt),
                       style: AppTypography.label(context),
@@ -274,15 +274,15 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         const AmitiaSectionHeader(title: '记忆工具'),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
           child: GridView.builder(
             shrinkWrap: true,
             physics: const NeverScrollableScrollPhysics(),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+            gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
               mainAxisSpacing: AppSpacing.sm,
               crossAxisSpacing: AppSpacing.sm,
@@ -294,7 +294,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
               return GestureDetector(
                 onTap: () => context.push(t.route),
                 child: AmitiaCard(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
+                  padding: EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.xs),
                   child: Row(
                     children: [
                       Container(
@@ -306,7 +306,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
                         ),
                         child: Icon(t.icon, size: 18, color: context.accentPrimary),
                       ),
-                      const SizedBox(width: AppSpacing.sm),
+                      SizedBox(width: AppSpacing.sm),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -325,7 +325,7 @@ class _MemoryPageState extends ConsumerState<MemoryPage> {
             },
           ),
         ),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
       ],
     );
   }

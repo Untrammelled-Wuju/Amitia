@@ -62,9 +62,9 @@ class EpisodicMemoryPage extends ConsumerWidget {
               );
             }
             return ListView.separated(
-              padding: const EdgeInsets.all(AppSpacing.pagePadding),
+              padding: EdgeInsets.all(AppSpacing.pagePadding),
               itemCount: memories.length,
-              separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+              separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
               itemBuilder: (context, index) => _buildMemoryCard(context, ref, memories[index]),
             );
           },
@@ -90,7 +90,7 @@ class EpisodicMemoryPage extends ConsumerWidget {
                 ),
                 child: Icon(Icons.psychology_outlined, size: 22, color: _getEmotionColor(context, memory.emotion)),
               ),
-              const SizedBox(width: AppSpacing.md),
+              SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -104,9 +104,9 @@ class EpisodicMemoryPage extends ConsumerWidget {
               AmitiaStatusBadge(label: memory.emotion, type: _getEmotionBadge(memory.emotion)),
             ],
           ),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Text(memory.content, style: AppTypography.caption(context), maxLines: 2, overflow: TextOverflow.ellipsis),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Row(
             children: [
               GestureDetector(
@@ -157,12 +157,12 @@ class EpisodicMemoryPage extends ConsumerWidget {
         minChildSize: 0.5,
         expand: false,
         builder: (ctx, controller) => Container(
-          padding: const EdgeInsets.all(AppSpacing.xl),
+          padding: EdgeInsets.all(AppSpacing.xl),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: context.borderPrimary, borderRadius: BorderRadius.circular(2)))),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               Row(
                 children: [
                   Container(
@@ -174,7 +174,7 @@ class EpisodicMemoryPage extends ConsumerWidget {
                     ),
                     child: Icon(Icons.psychology_outlined, size: 28, color: _getEmotionColor(context, memory.emotion)),
                   ),
-                  const SizedBox(width: AppSpacing.md),
+                  SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -188,7 +188,7 @@ class EpisodicMemoryPage extends ConsumerWidget {
                   AmitiaStatusBadge(label: memory.emotion, type: _getEmotionBadge(memory.emotion)),
                 ],
               ),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               Expanded(
                 child: SingleChildScrollView(
                   controller: controller,
@@ -197,12 +197,12 @@ class EpisodicMemoryPage extends ConsumerWidget {
                     children: [
                       _buildDetailSection(context, '标题', memory.title),
                       _buildDetailSection(context, '情绪', memory.emotion),
-                      const SizedBox(height: AppSpacing.md),
+                      SizedBox(height: AppSpacing.md),
                       Text('详细内容', style: AppTypography.cardTitle(context)),
-                      const SizedBox(height: AppSpacing.sm),
+                      SizedBox(height: AppSpacing.sm),
                       Container(
                         width: double.infinity,
-                        padding: const EdgeInsets.all(AppSpacing.lg),
+                        padding: EdgeInsets.all(AppSpacing.lg),
                         decoration: BoxDecoration(color: context.surfaceSecondary, borderRadius: AppRadius.brMedium),
                         child: Text(memory.content.isNotEmpty ? memory.content : memory.summary, style: AppTypography.bodySmall(context).copyWith(height: 1.6)),
                       ),
@@ -210,7 +210,7 @@ class EpisodicMemoryPage extends ConsumerWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               AmitiaButton(
                 label: '关闭',
                 isFullWidth: true,
@@ -226,7 +226,7 @@ class EpisodicMemoryPage extends ConsumerWidget {
 
   Widget _buildDetailSection(BuildContext context, String label, String value) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: EdgeInsets.only(bottom: AppSpacing.sm),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
