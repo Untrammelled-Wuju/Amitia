@@ -133,6 +133,7 @@ function messageRendererId(msg: any): string | undefined {
     store.getProviders("conversation.message_renderer"),
     store.getResolvedProvider("conversation.message_renderer"),
     msg,
+    store.snapshot?.providerContext,
   )?.providerId;
 }
 function messageActions(msg: any) {

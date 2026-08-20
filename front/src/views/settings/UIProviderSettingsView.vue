@@ -29,7 +29,9 @@
           <strong>{{ capability }}</strong>
           <span>{{ providerLabel(capability) }}</span>
         </div>
+        <el-tag v-if="isRegistryCapability(capability)" type="info">自动组合 {{ activeRegistryCount(capability) }} 个 Provider</el-tag>
         <el-select
+          v-else
           :model-value="selection(capability)"
           :loading="saving === capability"
           @change="(value: unknown) => choose(capability, String(value || ''))"
@@ -75,10 +77,17 @@ const scopeHint = computed(() => {
   return [ctx?.runtimeProfile, ctx?.platform, ctx?.deviceId ? `设备 ${ctx.deviceId}` : "未绑定设备"].filter(Boolean).join(" · ");
 });
 
+function isRegistryCapability(capability: UIProviderCapability) {
+  return capability === "route.registry";
+}
+function activeRegistryCount(capability: UIProviderCapability) {
+  return store.getProviders(capability).filter((provider) => provider.enabled && !provider.builtin).length;
+}
 function selection(capability: UIProviderCapability) {
   return store.scopeProfile?.selections?.[capability] ?? "";
 }
 function providerLabel(capability: UIProviderCapability) {
+  if (isRegistryCapability(capability)) return `组合：所有启用且兼容的 ${capability} Provider（冲突按 priority）`;
   const provider = store.getResolvedProvider(capability);
   const inherited = !selection(capability) ? " · 当前层继承" : "";
   return provider ? `有效：${provider.providerId}${inherited}` : "有效：无可用 Provider";

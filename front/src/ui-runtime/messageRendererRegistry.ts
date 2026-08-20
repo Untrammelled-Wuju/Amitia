@@ -1,4 +1,7 @@
-import type { UIProviderDefinition } from "./types";
+import type { UIProviderDefinition, UIProviderResolveContext } from "./types";
+import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
+import { isProviderCompatible } from "./providerRuntime";
+import { providerHasMessageSelectors } from "./providerCollection";
 
 function stringList(value: unknown): string[] {
   return Array.isArray(value) ? value.map((item) => String(item ?? "").trim().toLowerCase()).filter(Boolean) : [];
@@ -48,17 +51,25 @@ function scoreProvider(provider: UIProviderDefinition, message: Record<string, a
   return (provider.priority ?? 0) * 100 + specificity;
 }
 
+/** Selector-specific renderers from all enabled plugins compete; selector-less renderers remain profile-global. */
 export function resolveMessageRenderer(
   providers: UIProviderDefinition[],
   resolved: UIProviderDefinition | null,
   message: Record<string, any>,
+  context?: UIProviderResolveContext,
 ): UIProviderDefinition | null {
-  const builtin = providers.find((provider) => provider.enabled && provider.builtin) ?? null;
-  if (!resolved || !resolved.enabled) return builtin;
-  if (resolved.builtin) return resolved;
+  const platform = resolveHostEnvironment().platform;
+  const builtin = providers.find((provider) => provider.enabled && provider.builtin && isProviderCompatible(provider, context, platform)) ?? null;
+  const candidates = providers
+    .filter((provider) => !provider.builtin && providerHasMessageSelectors(provider) && isProviderCompatible(provider, context, platform))
+    .map((provider) => ({ provider, score: scoreProvider(provider, message) }))
+    .filter((item): item is { provider: UIProviderDefinition; score: number } => item.score !== null)
+    .sort((a, b) => b.score - a.score || a.provider.providerId.localeCompare(b.provider.providerId));
+  if (candidates.length > 0) return candidates[0].provider;
 
-  // Installation/enabling is not activation. Message selectors only refine the
-  // profile-selected renderer; they must never let an arbitrary enabled plugin
-  // take over a message surface without an explicit profile selection.
-  return scoreProvider(resolved, message) !== null ? resolved : builtin;
+  if (resolved?.enabled && resolved.capability === "conversation.message_renderer" && isProviderCompatible(resolved, context, platform)) {
+    if (resolved.builtin) return resolved;
+    if (!providerHasMessageSelectors(resolved) && scoreProvider(resolved, message) !== null) return resolved;
+  }
+  return builtin;
 }

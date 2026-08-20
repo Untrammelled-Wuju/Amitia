@@ -12,6 +12,7 @@ SPDX-License-Identifier: AGPL-3.0-only
       class="tab-item"
       :class="{ 'tab-active': isActive(item) }"
       :aria-current="isActive(item) ? 'page' : undefined"
+      :style="navigationItemStyle"
     >
       <el-icon><component :is="item.icon" /></el-icon>
       <span>{{ item.label }}</span>
@@ -22,9 +23,11 @@ SPDX-License-Identifier: AGPL-3.0-only
 <script setup lang="ts">
 import { useRoute } from "vue-router";
 import { isUINavigationItemActive, useUINavigationRegistry, type UINavigationItem } from "@/ui-runtime/navigationRegistry";
+import { useUIComponentVariant } from "@/ui-runtime/componentRegistry";
 
 const route = useRoute();
 const { mobileItems } = useUINavigationRegistry();
+const { style: navigationItemStyle } = useUIComponentVariant("navigationItem");
 
 function isActive(item: UINavigationItem) {
   return isUINavigationItemActive(route.path, item);
@@ -62,7 +65,7 @@ function isActive(item: UINavigationItem) {
 }
 
 .tab-item .el-icon {
-  font-size: 22px;
+  font-size: var(--ui-component-icon-size, 22px);
 }
 
 .tab-active {

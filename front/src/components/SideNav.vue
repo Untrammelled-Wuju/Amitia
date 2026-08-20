@@ -45,12 +45,12 @@ SPDX-License-Identifier: AGPL-3.0-only
             <el-icon><component :is="group.icon" /></el-icon>
             <span>{{ group.label }}</span>
           </template>
-          <el-menu-item v-for="item in group.items" :key="item.id" :index="item.route">
+          <el-menu-item v-for="item in group.items" :key="item.id" :index="item.route" :style="navigationItemStyle">
             <el-icon><component :is="item.icon" /></el-icon>
             <span>{{ item.label }}</span>
           </el-menu-item>
         </el-sub-menu>
-        <el-menu-item v-for="item in group.label && group.items.length > 1 ? [] : group.items" :key="item.id" :index="item.route">
+        <el-menu-item v-for="item in group.label && group.items.length > 1 ? [] : group.items" :key="item.id" :index="item.route" :style="navigationItemStyle">
           <el-icon><component :is="item.icon" /></el-icon>
           <span>{{ item.label }}</span>
         </el-menu-item>
@@ -136,11 +136,13 @@ import { apiClient, useApi } from "@/composables/useApi";
 import { forceCleanupSession } from "@/stores/refresh-coordinator";
 import SearchModal from "./SearchModal.vue";
 import { isUINavigationItemActive, useUINavigationRegistry } from "@/ui-runtime/navigationRegistry";
+import { useUIComponentVariant } from "@/ui-runtime/componentRegistry";
 
 const route = useRoute();
 const router = useRouter();
 const appStore = useAppStore();
 const { groups: navigationGroups, items: navigationItems } = useUINavigationRegistry();
+const { style: navigationItemStyle } = useUIComponentVariant("navigationItem");
 const { logoUrl } = useBrandLogo();
 const { get, post } = useApi();
 defineProps<{
@@ -348,4 +350,8 @@ onUnmounted(() => {
 .user-copy span { margin-top: 1px; color: var(--text-muted); font-size: 10px; }
 .side-nav.is-collapsed .user-profile { justify-content: center; padding-inline: 0; }
 .side-nav.is-collapsed .profile-menu { width: 188px; }
+
+.side-menu .el-icon {
+  font-size: var(--ui-component-icon-size, inherit);
+}
 </style>

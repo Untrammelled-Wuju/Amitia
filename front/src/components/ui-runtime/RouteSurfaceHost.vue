@@ -32,6 +32,7 @@ const providerId = computed(() => {
     store.getResolvedProvider(capability.value),
     capability.value,
     route.path,
+    store.snapshot?.providerContext,
   );
   return selected?.providerId;
 });

@@ -22,6 +22,9 @@ import {
 } from "@element-plus/icons-vue";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 import type { UIProviderDefinition } from "@/ui-runtime/types";
+import { collectRegistryProviders } from "@/ui-runtime/providerCollection";
+import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
+import { selectProviderEntry, trustedWebModuleExport } from "@/ui-runtime/providerRuntime";
 
 export interface UINavigationItem {
   id: string;
@@ -94,12 +97,12 @@ const builtinItems: UINavigationItem[] = [
 
 function activeNavigationProviders(store: ReturnType<typeof useExtensionUIStore>) {
   const providers = [
-    store.getResolvedProvider("app.navigation"),
-    store.getResolvedProvider("route.registry"),
+    ...collectRegistryProviders(store, "app.navigation"),
+    ...collectRegistryProviders(store, "route.registry"),
   ];
   const seen = new Set<string>();
   return providers.filter((provider): provider is UIProviderDefinition => {
-    if (!provider || !provider.enabled || provider.builtin || seen.has(provider.providerId)) return false;
+    if (!provider || seen.has(provider.providerId)) return false;
     seen.add(provider.providerId);
     return true;
   });
@@ -141,10 +144,22 @@ function applyIconProvider(store: ReturnType<typeof useExtensionUIStore>, items:
   const provider = store.getResolvedProvider("ui.icons");
   if (!provider || !provider.enabled || provider.builtin) return items;
   const aliases = provider.metadata?.iconAliases;
-  if (!aliases || typeof aliases !== "object" || Array.isArray(aliases)) return items;
-  const map = aliases as Record<string, unknown>;
+  const aliasMap = aliases && typeof aliases === "object" && !Array.isArray(aliases)
+    ? aliases as Record<string, unknown>
+    : {};
+  const exports = provider.metadata?.iconExports;
+  const exportMap = exports && typeof exports === "object" && !Array.isArray(exports)
+    ? exports as Record<string, unknown>
+    : {};
+  const entry = selectProviderEntry(provider, resolveHostEnvironment().platform);
+
   return items.map((item) => {
-    const name = map[item.id] ?? map[item.group] ?? map.default;
+    const exportName = exportMap[item.id] ?? exportMap[item.group] ?? exportMap.default;
+    if (entry && exportName) {
+      const component = trustedWebModuleExport(provider, entry, String(exportName));
+      if (component) return { ...item, icon: component };
+    }
+    const name = aliasMap[item.id] ?? aliasMap[item.group] ?? aliasMap.default;
     return name ? { ...item, icon: resolveNavigationIcon(String(name)) } : item;
   });
 }
@@ -159,7 +174,7 @@ export function useUINavigationRegistry() {
     const map = new Map<string, UINavigationGroup>();
     let groupOrder = 0;
     for (const item of items.value) {
-      const current = map.get(item.group) ?? {
+      const current: UINavigationGroup = map.get(item.group) ?? {
         id: item.group,
         label: item.groupLabel,
         icon: item.groupIcon,
@@ -171,7 +186,7 @@ export function useUINavigationRegistry() {
     }
     return [...map.values()].sort((a, b) => a.order - b.order);
   });
-  const mobileItems = computed(() => items.value.filter((item) => item.mobile));
+  const mobileItems = computed<UINavigationItem[]>(() => items.value.filter((item: UINavigationItem) => item.mobile));
   return { items, groups, mobileItems };
 }
 

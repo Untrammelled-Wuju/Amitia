@@ -140,9 +140,13 @@ watch(
     () => extensionUIStore.snapshot?.resolved?.["ui.icons"],
     () => extensionUIStore.snapshot?.resolved?.["ui.components"],
     () => themeRuntime.resolvedMode.value,
+    () => isUIProviderRecoveryPage.value,
   ],
-  ([themeProvider, tokenProvider, iconProvider, componentProvider, mode]) =>
-    applyProviderTheme([themeProvider ?? null, tokenProvider ?? null, iconProvider ?? null, componentProvider ?? null], mode),
+  ([themeProvider, tokenProvider, iconProvider, componentProvider, mode, recovery]) =>
+    applyProviderTheme(
+      recovery ? [] : [themeProvider ?? null, tokenProvider ?? null, iconProvider ?? null, componentProvider ?? null],
+      mode,
+    ),
   { immediate: true },
 );
 
@@ -152,13 +156,41 @@ onUnmounted(() => {
 </script>
 
 <style>
+/* Cross-platform declarative ui.components primitives. These variables are
+   emitted by providerTheme.ts from metadata.componentVariants. */
+.el-button {
+  min-height: var(--ui-component-button-min-height, var(--el-component-size));
+  border-radius: var(--ui-component-button-radius, var(--el-border-radius-base));
+  gap: var(--ui-component-button-gap, 6px);
+  font-size: var(--ui-component-button-font-size, inherit);
+  font-weight: var(--ui-component-button-font-weight, inherit);
+  padding-left: var(--ui-component-button-padding-x, var(--el-button-padding-horizontal));
+  padding-right: var(--ui-component-button-padding-x, var(--el-button-padding-horizontal));
+}
+.el-input__wrapper, .el-textarea__inner {
+  min-height: var(--ui-component-input-min-height, var(--el-component-size));
+  border-radius: var(--ui-component-input-radius, var(--el-input-border-radius, var(--el-border-radius-base)));
+}
+.el-input__wrapper {
+  padding-left: var(--ui-component-input-padding-x, 11px);
+  padding-right: var(--ui-component-input-padding-x, 11px);
+}
+.el-dialog {
+  border-radius: var(--ui-component-dialog-radius, var(--el-border-radius-base));
+}
+.el-card {
+  border-radius: var(--ui-component-card-radius, var(--el-card-border-radius, var(--el-border-radius-base)));
+}
+
 .ui-provider-recovery-root {
   width: 100%;
   height: 100%;
   overflow: auto;
   box-sizing: border-box;
   padding: 24px;
-  background: var(--el-bg-color-page, #f5f7fa);
+  color: #303133;
+  background: #f5f7fa;
+  font-family: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 html.amitia-desktop-shell body {
   padding-top: 34px;
