@@ -209,14 +209,44 @@ export interface UIMessageRendererSelector {
   extensionTypes?: string[];
 }
 
+export interface UIDesignColorTokens {
+  primary?: string; accent?: string; background?: string; surface?: string;
+  backgroundPrimary?: string; backgroundSecondary?: string;
+  surfacePrimary?: string; surfaceSecondary?: string;
+  accentPrimary?: string; accentSecondary?: string; accentSoft?: string; accentPressed?: string;
+  textPrimary?: string; textSecondary?: string; textTertiary?: string; textMuted?: string; textDisabled?: string;
+  border?: string; borderPrimary?: string; borderSecondary?: string;
+  success?: string; warning?: string; error?: string; danger?: string; info?: string; scrim?: string; overlay?: string;
+}
+
 export interface UIDesignTokenSet {
-  colors?: Record<string, string>;
-  spacing?: Record<string, string | number>;
-  radius?: Record<string, string | number>;
-  typography?: Record<string, string | number>;
-  icons?: Record<string, string | number>;
-  components?: Record<string, string | number>;
+  colors?: UIDesignColorTokens;
+  spacing?: Partial<Record<"xs" | "sm" | "md" | "lg" | "xl" | "xxl" | "xxxl" | "page" | "card" | "section" | "component" | "tight", string | number>>;
+  radius?: Partial<Record<"xs" | "sm" | "md" | "lg" | "tag" | "pill", string | number>>;
+  typography?: Partial<Record<
+    "fontFamily" | "pageTitleSize" | "pageLargeTitleSize" | "sectionTitleSize" | "cardTitleSize" | "titleSize" |
+    "bodySize" | "bodySmallSize" | "captionSize" | "labelSize" | "statusLabelSize" | "buttonSize" |
+    "weightRegular" | "weightMedium" | "weightBold" | "pageTitleWeight" | "sectionTitleWeight" | "cardTitleWeight" |
+    "bodyWeight" | "labelWeight" | "buttonWeight",
+    string | number
+  >>;
+  icons?: Partial<Record<"extraSmall" | "small" | "medium" | "size" | "large" | "navigation" | "navigationSize", string | number>>;
+  components?: Partial<Record<"toolbarHeight" | "drawerWidth" | "drawerMaxWidth" | "controlHeight" | "compactControlHeight" | "borderWidth", string | number>>;
   [key: `--${string}`]: unknown;
+}
+
+export interface UIComponentVariantDefinition {
+  minHeight?: number; height?: number; paddingX?: number; paddingY?: number;
+  outerPaddingX?: number; outerPaddingY?: number; radius?: number; gap?: number;
+  fontSize?: number; fontWeight?: number; iconSize?: number; borderWidth?: number; opacity?: number;
+  [key: string]: string | number | boolean | undefined;
+}
+
+export interface UIIconGlyphDefinition {
+  codePoint: number;
+  fontFamily?: string;
+  fontPackage?: string;
+  matchTextDirection?: boolean;
 }
 
 export interface UIProviderMetadata extends UIMessageRendererSelector {
@@ -226,6 +256,12 @@ export interface UIProviderMetadata extends UIMessageRendererSelector {
   tokens?: UIDesignTokenSet | { light?: UIDesignTokenSet; dark?: UIDesignTokenSet };
   cssVariables?: Record<string, string>;
   iconAliases?: Record<string, string>;
+  /** Trusted Web module named exports for semantic icons. */
+  iconExports?: Record<string, string>;
+  /** Flutter-safe glyph definitions for semantic icons. */
+  iconGlyphs?: Record<string, number | UIIconGlyphDefinition>;
+  /** Declarative primitive variants consumed by both Web and Flutter host components. */
+  componentVariants?: Record<string, UIComponentVariantDefinition>;
   components?: Record<string, unknown>;
   [key: string]: unknown;
 }

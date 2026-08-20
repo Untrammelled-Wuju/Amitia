@@ -228,13 +228,12 @@ function assertUIProviderMetadata(definition: UIProviderDefinition): void {
   if (definition.capability === "route.registry" && metadata.routes !== undefined) {
     if (!Array.isArray(metadata.routes)) throw new ValidationError("route.registry metadata.routes must be an array");
     for (const route of metadata.routes) {
-      if (typeof route === "string") continue;
       if (!route || typeof route !== "object" || !("id" in route) || !("path" in route) || !("providerId" in route)) {
-        throw new ValidationError("route.registry routes require id, path and providerId");
+        throw new ValidationError("route.registry routes require object entries with id, path and providerId");
       }
     }
   }
-  if (definition.capability === "app.navigation" && metadata.navigationItems !== undefined) {
+  if (["app.navigation", "route.registry"].includes(definition.capability) && metadata.navigationItems !== undefined) {
     if (!Array.isArray(metadata.navigationItems)) throw new ValidationError("app.navigation metadata.navigationItems must be an array");
     for (const item of metadata.navigationItems) {
       if (!item?.id || !item.label || !item.route?.startsWith("/")) {
@@ -247,6 +246,19 @@ function assertUIProviderMetadata(definition: UIProviderDefinition): void {
       const value = metadata[key];
       if (value !== undefined && !Array.isArray(value)) {
         throw new ValidationError(`conversation.message_renderer metadata.${key} must be an array`);
+      }
+    }
+  }
+  if (definition.capability === "ui.components" && metadata.componentVariants !== undefined) {
+    if (!metadata.componentVariants || typeof metadata.componentVariants !== "object" || Array.isArray(metadata.componentVariants)) {
+      throw new ValidationError("ui.components metadata.componentVariants must be an object");
+    }
+  }
+  if (definition.capability === "ui.icons") {
+    for (const key of ["iconAliases", "iconExports", "iconGlyphs"] as const) {
+      const value = metadata[key];
+      if (value !== undefined && (!value || typeof value !== "object" || Array.isArray(value))) {
+        throw new ValidationError(`ui.icons metadata.${key} must be an object`);
       }
     }
   }
@@ -276,6 +288,9 @@ function assertUIProviderEntry(
       return;
     }
     case "web_module":
+      if (["android", "ios", "mobile"].includes(platform.trim().toLowerCase())) {
+        throw new ValidationError(`web_module cannot be used for Flutter AOT platform ${platform}; use schema_renderer or sandbox web`);
+      }
       if (!entry.path?.trim()) throw new ValidationError(`web_module path required for ${platform}`);
       return;
     case "schema_renderer":
