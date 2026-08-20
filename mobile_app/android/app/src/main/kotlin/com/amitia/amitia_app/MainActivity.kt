@@ -7,6 +7,7 @@ import android.view.ViewGroup
 import com.amitia.amitia_app.nativeprovider.AndroidNativeBridgePlugin
 import com.amitia.amitia_app.nativeprovider.AndroidNativeCompositionRoot
 import com.amitia.amitia_app.runtime.bridge.RuntimeBridgePlugin
+import com.amitia.amitia_app.realtime.RealtimeAudioPlugin
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.android.FlutterView
 import io.flutter.embedding.engine.FlutterEngine
@@ -23,6 +24,7 @@ class MainActivity : FlutterActivity() {
         super.configureFlutterEngine(flutterEngine)
         flutterEngine.plugins.add(RuntimeBridgePlugin())
         flutterEngine.plugins.add(AndroidNativeBridgePlugin())
+        flutterEngine.plugins.add(RealtimeAudioPlugin())
     }
 
     override fun onPostResume() {
