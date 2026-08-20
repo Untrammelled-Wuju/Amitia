@@ -79,7 +79,9 @@ $excludes = @(
     "--exclude=backend/worker.test.exe"
     "--exclude=backend/server_*.exe"
     "--exclude=*.tar"
+    "--exclude=*.tar.gz"
     "--exclude=AmitiaData"
+    "--exclude=U-Ai-source.tar.gz"
 )
 
 Set-Location $parentDir
