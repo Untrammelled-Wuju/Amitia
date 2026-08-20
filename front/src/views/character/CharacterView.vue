@@ -62,6 +62,18 @@ SPDX-License-Identifier: AGPL-3.0-only
               :key="`voice-${selectedId}`"
             />
           </el-tab-pane>
+          <el-tab-pane label="记忆" name="memory">
+            <MemoryManagerView
+              v-if="activeTab === 'memory'"
+              :key="`memory-${selectedId}`"
+            />
+          </el-tab-pane>
+          <el-tab-pane label="时间线" name="timeline">
+            <MemoryTimeline
+              v-if="activeTab === 'timeline'"
+              :key="`timeline-${selectedId}`"
+            />
+          </el-tab-pane>
           <el-tab-pane label="主动消息" name="proactive">
             <ProactiveRulesView
               v-if="activeTab === 'proactive'"
@@ -242,6 +254,8 @@ import {
   CompanionDebugView,
 } from "../../ui-index";
 import CharacterPsycheView from "./CharacterPsycheView.vue";
+import MemoryManagerView from "@/views/memory-manager/MemoryManagerView.vue";
+import MemoryTimeline from "@/views/memory-timeline/MemoryTimeline.vue";
 
 const router = useRouter();
 const route = useRoute();
@@ -319,6 +333,8 @@ const selectedChar = ref<any>(null);
 const activeTab = computed(() => {
   const p = route.path;
   if (p.endsWith("/voice")) return "voice";
+  if (p.endsWith("/memory")) return "memory";
+  if (p.endsWith("/timeline")) return "timeline";
   if (p.endsWith("/proactive")) return "proactive";
   if (p.endsWith("/debug")) return "debug";
   if (p.endsWith("/psyche")) return "psyche";

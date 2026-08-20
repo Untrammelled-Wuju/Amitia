@@ -61,6 +61,8 @@ export const desktopNavGroups: AppNavGroup[] = [
   {
     key: "system",
     items: [
+      { key: "gameCenter", to: "/game-center", label: "游戏中心", icon: MagicStick },
+      { key: "devices", to: "/devices", label: "我的设备", icon: Connection },
       {
         key: "runtimeDebug",
         to: "/runtime-debug",
@@ -123,6 +125,11 @@ const extraTitles = [
   { path: "/kernel/dev-console", label: "开发者诊断控制台" },
   { path: "/kernel/migrations", label: "迁移与灰度中心" },
   { path: "/kernel/dev-mode", label: "开发模式中心" },
+  { path: "/game-center", label: "游戏中心" },
+  { path: "/devices", label: "我的设备" },
+  { path: "/asr", label: "语音识别" },
+  { path: "/realtime-voice", label: "实时语音" },
+  { path: "/long-running", label: "长期运行维护" },
 ];
 
 export function isNavItemActive(path: string, item: AppNavItem) {
