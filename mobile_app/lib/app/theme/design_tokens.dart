@@ -149,6 +149,7 @@ class AmitiaLayoutTokens extends ThemeExtension<AmitiaLayoutTokens> {
     this.radiusMedium = 16,
     this.radiusLarge = 22,
     this.radiusTag = 10,
+    this.radiusPill = 999,
     this.density = 1,
   });
 
@@ -173,6 +174,7 @@ class AmitiaLayoutTokens extends ThemeExtension<AmitiaLayoutTokens> {
   final double radiusMedium;
   final double radiusLarge;
   final double radiusTag;
+  final double radiusPill;
   final double density;
 
   @override
@@ -198,6 +200,7 @@ class AmitiaLayoutTokens extends ThemeExtension<AmitiaLayoutTokens> {
     double? radiusMedium,
     double? radiusLarge,
     double? radiusTag,
+    double? radiusPill,
     double? density,
   }) {
     return AmitiaLayoutTokens(
@@ -222,6 +225,7 @@ class AmitiaLayoutTokens extends ThemeExtension<AmitiaLayoutTokens> {
       radiusMedium: radiusMedium ?? this.radiusMedium,
       radiusLarge: radiusLarge ?? this.radiusLarge,
       radiusTag: radiusTag ?? this.radiusTag,
+      radiusPill: radiusPill ?? this.radiusPill,
       density: density ?? this.density,
     );
   }
@@ -252,6 +256,7 @@ class AmitiaLayoutTokens extends ThemeExtension<AmitiaLayoutTokens> {
       radiusMedium: l(radiusMedium, other.radiusMedium),
       radiusLarge: l(radiusLarge, other.radiusLarge),
       radiusTag: l(radiusTag, other.radiusTag),
+      radiusPill: l(radiusPill, other.radiusPill),
       density: l(density, other.density),
     );
   }
@@ -459,6 +464,25 @@ class AmitiaComponentTokens extends ThemeExtension<AmitiaComponentTokens> {
   }
 }
 
+@immutable
+class AmitiaComponentVariants extends ThemeExtension<AmitiaComponentVariants> {
+  const AmitiaComponentVariants({this.values = const <String, Map<String, Object>>{}});
+
+  final Map<String, Map<String, Object>> values;
+
+  Map<String, Object> variant(String key) => values[key] ?? const <String, Object>{};
+
+  @override
+  AmitiaComponentVariants copyWith({Map<String, Map<String, Object>>? values}) =>
+      AmitiaComponentVariants(values: values ?? this.values);
+
+  @override
+  AmitiaComponentVariants lerp(covariant AmitiaComponentVariants? other, double t) {
+    if (other == null || t < .5) return this;
+    return other;
+  }
+}
+
 /// Runtime fallback for provider-aware widgets that are built outside a
 /// ThemeData scope. AppSpacing/AppRadius are compatibility facades over this
 /// state, so legacy pages receive runtime provider values as well.
@@ -504,6 +528,9 @@ extension AmitiaDesignTokenContext on BuildContext {
       Theme.of(this).extension<AmitiaIconTokens>() ?? DesignTokenRuntime.icons;
   AmitiaComponentTokens get uiComponents =>
       Theme.of(this).extension<AmitiaComponentTokens>() ?? DesignTokenRuntime.components;
+  AmitiaComponentVariants get uiComponentVariants =>
+      Theme.of(this).extension<AmitiaComponentVariants>() ?? const AmitiaComponentVariants();
+  Map<String, Object> uiComponentVariant(String key) => uiComponentVariants.variant(key);
 }
 
 FontWeight designFontWeight(int weight) {

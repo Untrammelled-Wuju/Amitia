@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../core/services/providers.dart' show startupStageProvider;
+import 'theme/app_theme.dart';
 import '../core/ui_runtime/route_surface_provider_host.dart';
 import '../core/ui_runtime/routing/builtin_route_catalog.dart';
 import '../core/ui_runtime/ui_provider.dart';
@@ -80,20 +81,16 @@ class _AppShellState extends ConsumerState<AppShell> {
       },
       child: ShellDrawerScope(
         openDrawer: () {
-          if (isChatRoute) {
-            _scaffoldKey.currentState?.openDrawer();
-          }
+          _scaffoldKey.currentState?.openDrawer();
         },
         child: Scaffold(
           key: _scaffoldKey,
           resizeToAvoidBottomInset: true,
-          drawer: isChatRoute
-              ? UIProviderHost(
-                  capability: UICapability.appNavigation,
-                  context: {'route': widget.currentRoute, 'surface': 'drawer'},
-                  fallback: const AmitiaDrawer(currentRoute: AppRoutes.chat),
-                )
-              : null,
+          drawer: UIProviderHost(
+            capability: UICapability.appNavigation,
+            context: {'route': widget.currentRoute, 'surface': 'drawer'},
+            fallback: AmitiaDrawer(currentRoute: widget.currentRoute),
+          ),
           body: UIProviderHost(
             capability: UICapability.appWorkspace,
             context: {'route': widget.currentRoute},
@@ -106,7 +103,12 @@ class _AppShellState extends ConsumerState<AppShell> {
 }
 
 final goRouterProvider = Provider<GoRouter>((ref) {
-  final providerSnapshot = ref.watch(uiRuntimeProvider).valueOrNull;
+  // Recreate GoRouter only when the effective extension route table changes.
+  // Theme/profile polling must not destroy the active navigation stack.
+  ref.watch(
+    uiRuntimeProvider.select((state) => uiRouteRegistrySignature(state.valueOrNull)),
+  );
+  final providerSnapshot = ref.read(uiRuntimeProvider).valueOrNull;
   return GoRouter(
     initialLocation: AppRoutes.chat,
     navigatorKey: _shellNavigatorKey,
@@ -165,7 +167,12 @@ final goRouterProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) => slideFadePage(
           context: context,
           state: state,
-          child: const UIProviderSettingsPage(),
+          child: Theme(
+            data: Theme.of(context).brightness == Brightness.dark
+                ? AppTheme.darkTheme()
+                : AppTheme.lightTheme(),
+            child: const UIProviderSettingsPage(),
+          ),
         ),
       ),
       ShellRoute(

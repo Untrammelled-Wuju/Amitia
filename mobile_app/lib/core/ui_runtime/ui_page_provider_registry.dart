@@ -8,20 +8,14 @@ abstract final class UIPageProviderRegistry {
   }) {
     if (snapshot == null) return null;
     final platform = currentUIPlatform();
-    final selected = snapshot.resolve(capability);
-    if (selected != null &&
-        selected.enabled &&
-        selected.entryFor(platform) != null &&
-        _matchesRoute(selected, route)) {
-      return selected;
-    }
 
     final candidates = snapshot.providers
         .where((provider) =>
             provider.enabled &&
             !provider.builtin &&
             provider.capability == capability &&
-            provider.entryFor(platform) != null &&
+            provider.compatibleWith(snapshot.context, platform) &&
+            _hasSelectors(provider) &&
             _matchesRoute(provider, route))
         .toList()
       ..sort((a, b) {
@@ -31,41 +25,59 @@ abstract final class UIPageProviderRegistry {
       });
     if (candidates.isNotEmpty) return candidates.first;
 
+    final selected = snapshot.resolve(capability);
+    if (selected != null &&
+        selected.enabled &&
+        selected.compatibleWith(snapshot.context, platform) &&
+        (selected.builtin || !_hasSelectors(selected))) {
+      return selected;
+    }
+
     for (final provider in snapshot.providers) {
       if (provider.builtin &&
           provider.enabled &&
           provider.capability == capability &&
-          provider.entryFor(platform) != null) {
+          provider.compatibleWith(snapshot.context, platform)) {
         return provider;
       }
     }
     return null;
   }
 
+  static bool _hasSelectors(UIProviderDefinition provider) {
+    final metadata = provider.metadata;
+    return ((metadata['routes'] as List?)?.isNotEmpty ?? false) ||
+        ((metadata['routePatterns'] as List?)?.isNotEmpty ?? false);
+  }
+
   static bool _matchesRoute(UIProviderDefinition provider, String route) {
     final metadata = provider.metadata;
-    final routes = ((metadata['routes'] as List?) ?? const <dynamic>[])
-        .map((e) => e.toString())
-        .where((e) => e.isNotEmpty)
-        .toList();
-    final patterns = ((metadata['routePatterns'] as List?) ?? const <dynamic>[])
-        .map((e) => e.toString())
-        .where((e) => e.isNotEmpty)
-        .toList();
-    if (routes.isEmpty && patterns.isEmpty) return true;
-    if (routes.any((candidate) => _routeFamily(route, candidate))) return true;
-    return patterns.any((pattern) => _globMatch(route, pattern));
+    final selectors = <String>[
+      ...((metadata['routes'] as List?) ?? const <dynamic>[]).whereType<String>(),
+      ...((metadata['routePatterns'] as List?) ?? const <dynamic>[]).whereType<String>(),
+    ].map((e) => e.trim()).where((e) => e.isNotEmpty);
+    return selectors.any((pattern) => _matchesPattern(route, pattern));
   }
 
-  static bool _routeFamily(String route, String root) {
-    if (root == '*') return true;
-    if (!root.startsWith('/')) return false;
-    return route == root || route.startsWith('$root/');
+  static bool _matchesPattern(String route, String pattern) {
+    final clean = pattern.trim();
+    if (clean.isEmpty) return false;
+    if (clean == '*' || clean == '/*') return true;
+    if (clean == route) return true;
+    if (clean.endsWith('/*')) {
+      final prefix = clean.substring(0, clean.length - 2);
+      return route == prefix || route.startsWith('$prefix/');
+    }
+    if (!clean.contains(':')) return false;
+    final routeParts = route.split('/').where((part) => part.isNotEmpty).toList();
+    final patternParts = clean.split('/').where((part) => part.isNotEmpty).toList();
+    if (routeParts.length != patternParts.length) return false;
+    for (var index = 0; index < patternParts.length; index++) {
+      final part = patternParts[index];
+      if (part == '*' || part.startsWith(':')) continue;
+      if (part != routeParts[index]) return false;
+    }
+    return true;
   }
 
-  static bool _globMatch(String route, String pattern) {
-    if (pattern == '*' || pattern == '/*') return true;
-    final escaped = RegExp.escape(pattern).replaceAll(r'\*', '.*');
-    return RegExp('^$escaped\$').hasMatch(route);
-  }
 }

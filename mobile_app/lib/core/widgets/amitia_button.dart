@@ -32,6 +32,19 @@ class AmitiaButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final variant = context.uiComponentVariant('button');
+    double number(String key, double fallback) =>
+        variant[key] is num ? (variant[key] as num).toDouble() : fallback;
+    final effectiveHeight = number('height', number('minHeight', height));
+    final radius = number('radius', AppRadius.medium);
+    final iconSize = number('iconSize', 18);
+    final gap = number('gap', 8);
+    final fontSize = number('fontSize', context.uiTypography.buttonSize);
+    final rawWeight = variant['fontWeight'];
+    final fontWeight = rawWeight is num
+        ? designFontWeight(rawWeight.toInt())
+        : designFontWeight(context.uiTypography.buttonWeight);
+
     Color bgColor;
     Color fgColor;
     if (isDestructive) {
@@ -45,27 +58,42 @@ class AmitiaButton extends StatelessWidget {
       fgColor = Colors.white;
     }
 
-    return GestureDetector(
+    final button = GestureDetector(
       onTap: onPressed,
       child: Container(
         width: isFullWidth ? double.infinity : width,
-        height: height,
+        height: effectiveHeight,
+        padding: EdgeInsets.symmetric(
+          horizontal: number('paddingX', 0),
+          vertical: number('paddingY', 0),
+        ),
         decoration: BoxDecoration(
           color: bgColor,
-          borderRadius: AppRadius.brMedium,
+          borderRadius: BorderRadius.circular(radius),
         ),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             if (icon != null) ...[
-              Icon(icon, size: 18, color: fgColor),
-              const SizedBox(width: 8),
+              Icon(icon, size: iconSize, color: fgColor),
+              SizedBox(width: gap),
             ],
-            Text(label, style: AppTypography.button(context).copyWith(color: fgColor)),
+            Text(
+              label,
+              style: AppTypography.button(context).copyWith(
+                color: fgColor,
+                fontSize: fontSize,
+                fontWeight: fontWeight,
+              ),
+            ),
           ],
         ),
       ),
     );
+    final opacity = variant['opacity'];
+    return opacity is num
+        ? Opacity(opacity: opacity.toDouble().clamp(0.0, 1.0).toDouble(), child: button)
+        : button;
   }
 }
 
@@ -89,19 +117,27 @@ class AmitiaIconButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final variant = context.uiComponentVariant('iconButton');
+    double number(String key, double fallback) =>
+        variant[key] is num ? (variant[key] as num).toDouble() : fallback;
+    final buttonSize = number('height', number('minHeight', 40));
     final btn = GestureDetector(
       onTap: onPressed,
       behavior: HitTestBehavior.opaque,
       child: Tooltip(
         message: tooltip ?? '',
         child: Container(
-          width: 40,
-          height: 40,
+          width: buttonSize,
+          height: buttonSize,
           decoration: BoxDecoration(
             color: backgroundColor ?? Colors.transparent,
-            shape: BoxShape.circle,
+            borderRadius: BorderRadius.circular(number('radius', buttonSize / 2)),
           ),
-          child: Icon(icon, size: size, color: color ?? context.textSecondary),
+          child: Icon(
+            icon,
+            size: number('iconSize', size),
+            color: color ?? context.textSecondary,
+          ),
         ),
       ),
     );
@@ -139,7 +175,22 @@ class AmitiaTextField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return TextField(
+    final variant = context.uiComponentVariant('input');
+    double number(String key, double fallback) =>
+        variant[key] is num ? (variant[key] as num).toDouble() : fallback;
+    final radius = number('radius', AppRadius.medium);
+    final normalBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(radius),
+      borderSide: BorderSide.none,
+    );
+    final focusedBorder = OutlineInputBorder(
+      borderRadius: BorderRadius.circular(radius),
+      borderSide: BorderSide(
+        color: context.accentPrimary,
+        width: number('borderWidth', 1.5),
+      ),
+    );
+    final field = TextField(
       controller: controller,
       obscureText: obscureText,
       maxLines: maxLines,
@@ -148,15 +199,31 @@ class AmitiaTextField extends StatelessWidget {
       onTap: onTap,
       onChanged: onChanged,
       keyboardType: keyboardType,
-      style: AppTypography.body(context),
+      style: AppTypography.body(context).copyWith(
+        fontSize: number('fontSize', context.uiTypography.bodySize),
+      ),
       decoration: InputDecoration(
         hintText: hintText,
         hintStyle: TextStyle(color: context.textTertiary),
         prefixIcon: prefixIcon,
         suffixIcon: suffixIcon,
         isDense: true,
+        contentPadding: EdgeInsets.symmetric(
+          horizontal: number('paddingX', AppSpacing.lg),
+          vertical: number('paddingY', AppSpacing.md),
+        ),
+        border: normalBorder,
+        enabledBorder: normalBorder,
+        focusedBorder: focusedBorder,
       ),
     );
+    final minHeight = variant['minHeight'];
+    return minHeight is num
+        ? ConstrainedBox(
+            constraints: BoxConstraints(minHeight: minHeight.toDouble()),
+            child: field,
+          )
+        : field;
   }
 }
 
@@ -174,18 +241,34 @@ class AmitiaSearchField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final variant = context.uiComponentVariant('input');
+    double number(String key, double fallback) =>
+        variant[key] is num ? (variant[key] as num).toDouble() : fallback;
     return SizedBox(
-      height: 44,
+      height: number('height', number('minHeight', 44)),
       child: TextField(
         controller: controller,
         onChanged: onChanged,
-        style: AppTypography.bodySmall(context),
+        style: AppTypography.bodySmall(context).copyWith(
+          fontSize: number('fontSize', context.uiTypography.bodySmallSize),
+        ),
         decoration: InputDecoration(
           hintText: hintText,
           hintStyle: TextStyle(color: context.textTertiary, fontSize: 14),
-          prefixIcon: Icon(Icons.search, size: 20, color: context.textTertiary),
+          prefixIcon: Icon(
+            Icons.search,
+            size: number('iconSize', context.uiIcons.medium),
+            color: context.textTertiary,
+          ),
           isDense: true,
-          contentPadding: EdgeInsets.symmetric(vertical: 0),
+          contentPadding: EdgeInsets.symmetric(
+            horizontal: number('paddingX', 0),
+            vertical: number('paddingY', 0),
+          ),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(number('radius', AppRadius.medium)),
+            borderSide: BorderSide.none,
+          ),
         ),
       ),
     );

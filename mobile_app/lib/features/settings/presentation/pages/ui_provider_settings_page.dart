@@ -2,9 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../core/ui_runtime/ui_provider.dart';
 import '../../../../core/ui_runtime/ui_runtime_controller.dart';
-import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/app_spacing.dart';
-import '../../../../core/widgets/amitia_scaffold.dart';
 
 class UIProviderSettingsPage extends ConsumerStatefulWidget {
   const UIProviderSettingsPage({super.key});
@@ -107,28 +104,32 @@ class _UIProviderSettingsPageState extends ConsumerState<UIProviderSettingsPage>
     final envelope = _envelope;
     final ctx = snapshot?.context;
 
-    return AmitiaScaffold(
-      appBar: AmitiaAppBar(title: '界面提供者', navigation: AmitiaAppBarNavigation.back),
+    final scheme = Theme.of(context).colorScheme;
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('界面提供者'),
+        leading: BackButton(onPressed: () => Navigator.of(context).maybePop()),
+      ),
       body: RefreshIndicator(
         onRefresh: () async {
           await ref.read(uiRuntimeProvider.notifier).ensureLoaded(force: true);
           await _loadScope();
         },
         child: ListView(
-          padding: EdgeInsets.all(AppSpacing.pagePadding),
+          padding: EdgeInsets.all(24),
           children: [
-            Text('UI Profile 按云端默认 → 用户 → 平台/设备 → 运行时分层合并；本页只修改当前 override 层。', style: TextStyle(color: context.textSecondary)),
-            SizedBox(height: AppSpacing.md),
+            Text('UI Profile 按云端默认 → 用户 → 平台/设备 → 运行时分层合并；本页只修改当前 override 层。', style: TextStyle(color: scheme.onSurfaceVariant)),
+            SizedBox(height: 12),
             if (usingLkg) ...[
-              Card(child: Padding(padding: EdgeInsets.all(AppSpacing.md), child: const Text('云端当前不可用，正在使用 Last-Known-Good UI 配置；连接恢复后会自动同步。'))),
-              SizedBox(height: AppSpacing.md),
+              Card(child: Padding(padding: EdgeInsets.all(12), child: const Text('云端当前不可用，正在使用 Last-Known-Good UI 配置；连接恢复后会自动同步。'))),
+              SizedBox(height: 12),
             ],
             Card(
               child: Padding(
-                padding: EdgeInsets.all(AppSpacing.md),
+                padding: EdgeInsets.all(12),
                 child: Wrap(
-                  spacing: AppSpacing.md,
-                  runSpacing: AppSpacing.sm,
+                  spacing: 12,
+                  runSpacing: 8,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
                     DropdownButton<UIProfileScopeKind>(
@@ -136,15 +137,15 @@ class _UIProviderSettingsPageState extends ConsumerState<UIProviderSettingsPage>
                       items: UIProfileScopeKind.values.map((value) => DropdownMenuItem(value: value, child: Text(_scopeLabel(value)))).toList(),
                       onChanged: _scopeLoading ? null : _changeScope,
                     ),
-                    Text('revision ${envelope?.scopeProfile.revision ?? 0}', style: TextStyle(color: context.textTertiary, fontSize: 12)),
-                    if (ctx != null) Text('${ctx.runtimeProfile ?? ''} · ${ctx.platform ?? currentUIPlatform()}${(ctx.deviceId ?? '').isNotEmpty ? ' · ${ctx.deviceId}' : ''}', style: TextStyle(color: context.textTertiary, fontSize: 12)),
+                    Text('revision ${envelope?.scopeProfile.revision ?? 0}', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
+                    if (ctx != null) Text('${ctx.runtimeProfile ?? ''} · ${ctx.platform ?? currentUIPlatform()}${(ctx.deviceId ?? '').isNotEmpty ? ' · ${ctx.deviceId}' : ''}', style: TextStyle(color: scheme.onSurfaceVariant, fontSize: 12)),
                     if (_scope != UIProfileScopeKind.global && envelope?.scopeExists == true)
                       TextButton(onPressed: _scopeLoading ? null : _resetScope, child: const Text('清除此层覆盖')),
                   ],
                 ),
               ),
             ),
-            SizedBox(height: AppSpacing.lg),
+            SizedBox(height: 20),
             if (runtime.isLoading && snapshot == null)
               const Center(child: Padding(padding: EdgeInsets.all(80), child: CircularProgressIndicator(strokeWidth: 2)))
             else if (runtime.hasError && snapshot == null)
@@ -152,7 +153,7 @@ class _UIProviderSettingsPageState extends ConsumerState<UIProviderSettingsPage>
             else if (snapshot != null)
               for (final group in _groups.entries) ...[
                 Text(group.key, style: Theme.of(context).textTheme.titleMedium),
-                SizedBox(height: AppSpacing.sm),
+                SizedBox(height: 8),
                 Card(
                   margin: EdgeInsets.zero,
                   child: Column(children: [
@@ -165,7 +166,7 @@ class _UIProviderSettingsPageState extends ConsumerState<UIProviderSettingsPage>
                     ],
                   ]),
                 ),
-                SizedBox(height: AppSpacing.lg),
+                SizedBox(height: 20),
               ],
           ],
         ),
@@ -184,7 +185,9 @@ class _ProviderRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
     final candidates = snapshot.providers.where((p) => p.capability == capability).toList()..sort((a, b) => b.priority.compareTo(a.priority));
+    final registryCapability = capability == UICapability.routeRegistry;
     final requested = scopeProfile?.selections[capability] ?? '';
     final explicit = candidates.any((provider) => provider.providerId == requested) ? requested : '';
     final resolved = snapshot.resolved[capability];
@@ -194,10 +197,19 @@ class _ProviderRow extends StatelessWidget {
         Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           Text(capability, style: const TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(height: 2),
-          Text('有效：${resolved?.providerId ?? '无可用 Provider'}${explicit.isEmpty ? ' · 当前层继承' : ''}', style: TextStyle(fontSize: 12, color: context.textTertiary)),
+          Text(
+            registryCapability
+                ? '自动组合所有启用且兼容的 Route Registry；冲突按 priority 处理'
+                : '有效：${resolved?.providerId ?? '无可用 Provider'}${explicit.isEmpty ? ' · 当前层继承' : ''}',
+            style: TextStyle(fontSize: 12, color: scheme.onSurfaceVariant),
+          ),
         ])),
         const SizedBox(width: 12),
-        if (saving) const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2)) else
+        if (registryCapability)
+          Chip(label: Text('自动组合 ${candidates.where((p) => p.enabled && !p.builtin).length}'))
+        else if (saving)
+          const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+        else
           DropdownButton<String>(
             value: explicit,
             items: [

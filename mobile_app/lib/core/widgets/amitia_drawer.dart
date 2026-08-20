@@ -654,24 +654,34 @@ class _MainMenuItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final variant = context.uiComponentVariant('navigationItem');
+    double number(String key, double fallback) =>
+        variant[key] is num ? (variant[key] as num).toDouble() : fallback;
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+        padding: EdgeInsets.symmetric(
+          horizontal: number('outerPaddingX', 12),
+          vertical: number('outerPaddingY', 2),
+        ),
         child: AnimatedContainer(
           duration: AppMotion.standard,
           curve: AppMotion.standardCurve,
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+          constraints: BoxConstraints(minHeight: number('minHeight', 44)),
+          padding: EdgeInsets.symmetric(
+            horizontal: number('paddingX', 12),
+            vertical: number('paddingY', 11),
+          ),
           decoration: BoxDecoration(
             color: isSelected ? context.accentSoft : Colors.transparent,
-            borderRadius: AppRadius.brSmall,
+            borderRadius: BorderRadius.circular(number('radius', AppRadius.small)),
           ),
           child: Row(
             children: [
               Icon(
                 icon,
-                size: 20,
+                size: number('iconSize', 20),
                 color: isSelected
                     ? context.accentPrimary
                     : context.textSecondary,

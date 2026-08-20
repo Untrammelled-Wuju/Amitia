@@ -2,7 +2,19 @@ import 'package:flutter/material.dart';
 import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_typography.dart';
+import '../../app/theme/design_tokens.dart';
 import 'amitia_button.dart';
+
+
+double _componentNumber(
+  BuildContext context,
+  String component,
+  String key,
+  double fallback,
+) {
+  final value = context.uiComponentVariant(component)[key];
+  return value is num ? value.toDouble() : fallback;
+}
 
 Future<bool?> showAmitiaConfirmDialog(
   BuildContext context, {
@@ -17,7 +29,11 @@ Future<bool?> showAmitiaConfirmDialog(
     builder: (ctx) {
       return AlertDialog(
         backgroundColor: context.surfacePrimary,
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(
+            _componentNumber(context, 'dialog', 'radius', AppRadius.medium),
+          ),
+        ),
         title: Text(title, style: AppTypography.cardTitle(ctx)),
         content: Text(message, style: AppTypography.body(ctx)),
         actions: [
@@ -49,7 +65,11 @@ Future<void> showAmitiaInfoDialog(
     builder: (ctx) {
       return AlertDialog(
         backgroundColor: context.surfacePrimary,
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(
+            _componentNumber(context, 'dialog', 'radius', AppRadius.medium),
+          ),
+        ),
         title: Text(title, style: AppTypography.cardTitle(ctx)),
         content: Text(message, style: AppTypography.body(ctx)),
         actions: [
@@ -72,7 +92,11 @@ Future<T?> showAmitiaActionSheet<T>(
   return showModalBottomSheet<T>(
     context: context,
     backgroundColor: context.surfacePrimary,
-    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(
+        top: Radius.circular(_componentNumber(context, 'bottomSheet', 'radius', 20)),
+      ),
+    ),
     builder: (sheetCtx) {
       return SafeArea(
         child: Padding(

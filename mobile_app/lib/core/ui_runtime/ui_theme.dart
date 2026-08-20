@@ -19,7 +19,9 @@ Map<String, dynamic> _providerTokens(
   final meta = provider.metadata;
   final raw = _map(meta['tokens']).isNotEmpty
       ? _map(meta['tokens'])
-      : _map(meta['cssVariables']);
+      : _map(meta['theme']).isNotEmpty
+          ? _map(meta['theme'])
+          : _map(meta['cssVariables']);
   final brightnessKey = brightness == Brightness.dark ? 'dark' : 'light';
   final scoped = _map(raw[brightnessKey]);
   return scoped.isEmpty ? raw : <String, dynamic>{...raw, ...scoped};
@@ -32,7 +34,9 @@ Map<String, dynamic> _globalProviderTokens(UIProviderDefinition? provider) {
   final meta = provider.metadata;
   final raw = _map(meta['tokens']).isNotEmpty
       ? _map(meta['tokens'])
-      : _map(meta['cssVariables']);
+      : _map(meta['theme']).isNotEmpty
+          ? _map(meta['theme'])
+          : _map(meta['cssVariables']);
   // Layout is intentionally brightness-independent. Prefer an explicit layout
   // namespace, then the root token object. Light/dark maps only affect visual
   // tokens such as colors and typography.
@@ -50,6 +54,22 @@ double _double(Map<String, dynamic> source, String key, double fallback) {
 int _int(Map<String, dynamic> source, String key, int fallback) {
   final value = source[key];
   return value is num ? value.toInt() : fallback;
+}
+
+double _doubleAlias(Map<String, dynamic> source, List<String> keys, double fallback) {
+  for (final key in keys) {
+    final value = source[key];
+    if (value is num) return value.toDouble();
+  }
+  return fallback;
+}
+
+int _intAlias(Map<String, dynamic> source, List<String> keys, int fallback) {
+  for (final key in keys) {
+    final value = source[key];
+    if (value is num) return value.toInt();
+  }
+  return fallback;
 }
 
 String? _string(Map<String, dynamic> source, String key, String? fallback) {
@@ -104,6 +124,7 @@ AmitiaLayoutTokens mergeLayoutTokens(
     radiusMedium: radiusValue('md', 'radiusMedium', defaults.radiusMedium),
     radiusLarge: radiusValue('lg', 'radiusLarge', defaults.radiusLarge),
     radiusTag: radiusValue('tag', 'radiusTag', defaults.radiusTag),
+    radiusPill: radiusValue('pill', 'radiusPill', defaults.radiusPill),
     density: _double(source, 'density', defaults.density),
   );
 }
@@ -116,7 +137,7 @@ AmitiaTypographyTokens _mergeTypography(
   final values = typography.isEmpty ? source : <String, dynamic>{...source, ...typography};
   return AmitiaTypographyTokens(
     fontFamily: _string(values, 'fontFamily', defaults.fontFamily),
-    pageTitleSize: _double(values, 'pageTitleSize', defaults.pageTitleSize),
+    pageTitleSize: _doubleAlias(values, const ['pageTitleSize', 'titleSize'], defaults.pageTitleSize),
     pageLargeTitleSize: _double(
       values,
       'pageLargeTitleSize',
@@ -129,7 +150,7 @@ AmitiaTypographyTokens _mergeTypography(
     ),
     cardTitleSize: _double(values, 'cardTitleSize', defaults.cardTitleSize),
     bodySize: _double(values, 'bodySize', defaults.bodySize),
-    bodySmallSize: _double(values, 'bodySmallSize', defaults.bodySmallSize),
+    bodySmallSize: _doubleAlias(values, const ['bodySmallSize', 'smallBodySize'], defaults.bodySmallSize),
     captionSize: _double(values, 'captionSize', defaults.captionSize),
     labelSize: _double(values, 'labelSize', defaults.labelSize),
     statusLabelSize: _double(
@@ -138,24 +159,12 @@ AmitiaTypographyTokens _mergeTypography(
       defaults.statusLabelSize,
     ),
     buttonSize: _double(values, 'buttonSize', defaults.buttonSize),
-    pageTitleWeight: _int(
-      values,
-      'pageTitleWeight',
-      defaults.pageTitleWeight,
-    ),
-    sectionTitleWeight: _int(
-      values,
-      'sectionTitleWeight',
-      defaults.sectionTitleWeight,
-    ),
-    cardTitleWeight: _int(
-      values,
-      'cardTitleWeight',
-      defaults.cardTitleWeight,
-    ),
-    bodyWeight: _int(values, 'bodyWeight', defaults.bodyWeight),
-    labelWeight: _int(values, 'labelWeight', defaults.labelWeight),
-    buttonWeight: _int(values, 'buttonWeight', defaults.buttonWeight),
+    pageTitleWeight: _intAlias(values, const ['pageTitleWeight', 'weightBold'], defaults.pageTitleWeight),
+    sectionTitleWeight: _intAlias(values, const ['sectionTitleWeight', 'weightMedium'], defaults.sectionTitleWeight),
+    cardTitleWeight: _intAlias(values, const ['cardTitleWeight', 'weightMedium'], defaults.cardTitleWeight),
+    bodyWeight: _intAlias(values, const ['bodyWeight', 'weightRegular'], defaults.bodyWeight),
+    labelWeight: _intAlias(values, const ['labelWeight', 'weightRegular'], defaults.labelWeight),
+    buttonWeight: _intAlias(values, const ['buttonWeight', 'weightMedium'], defaults.buttonWeight),
   );
 }
 
@@ -166,11 +175,11 @@ AmitiaIconTokens _mergeIcons(
   final icons = _map(source['icons']);
   final values = icons.isEmpty ? source : <String, dynamic>{...source, ...icons};
   return AmitiaIconTokens(
-    extraSmall: _double(values, 'extraSmall', _double(values, 'iconExtraSmall', defaults.extraSmall)),
-    small: _double(values, 'small', _double(values, 'iconSmall', defaults.small)),
-    medium: _double(values, 'medium', _double(values, 'iconMedium', defaults.medium)),
-    large: _double(values, 'large', _double(values, 'iconLarge', defaults.large)),
-    navigation: _double(values, 'navigationSize', _double(values, 'navigation', _double(values, 'iconNavigation', defaults.navigation))),
+    extraSmall: _doubleAlias(values, const ['extraSmall', 'iconExtraSmall'], defaults.extraSmall),
+    small: _doubleAlias(values, const ['small', 'iconSmall'], defaults.small),
+    medium: _doubleAlias(values, const ['medium', 'size', 'iconMedium'], defaults.medium),
+    large: _doubleAlias(values, const ['large', 'iconLarge'], defaults.large),
+    navigation: _doubleAlias(values, const ['navigation', 'navigationSize', 'iconNavigation'], defaults.navigation),
   );
 }
 
@@ -184,7 +193,7 @@ AmitiaComponentTokens _mergeComponents(
       : <String, dynamic>{...source, ...components};
   return AmitiaComponentTokens(
     toolbarHeight: _double(values, 'toolbarHeight', defaults.toolbarHeight),
-    drawerMaxWidth: _double(values, 'drawerMaxWidth', defaults.drawerMaxWidth),
+    drawerMaxWidth: _doubleAlias(values, const ['drawerWidth', 'drawerMaxWidth'], defaults.drawerMaxWidth),
     borderWidth: _double(values, 'borderWidth', defaults.borderWidth),
     controlHeight: _double(values, 'controlHeight', defaults.controlHeight),
     compactControlHeight: _double(
@@ -193,6 +202,26 @@ AmitiaComponentTokens _mergeComponents(
       defaults.compactControlHeight,
     ),
   );
+}
+
+AmitiaComponentVariants _mergeComponentVariants(
+  AmitiaComponentVariants defaults,
+  UIProviderDefinition provider,
+) {
+  final raw = provider.metadata['componentVariants'];
+  if (raw is! Map) return defaults;
+  final merged = <String, Map<String, Object>>{...defaults.values};
+  for (final entry in raw.entries) {
+    if (entry.value is! Map) continue;
+    final values = <String, Object>{};
+    for (final value in (entry.value as Map).entries) {
+      if (value.value is String || value.value is num || value.value is bool) {
+        values[value.key.toString()] = value.value as Object;
+      }
+    }
+    if (values.isNotEmpty) merged[entry.key.toString()] = values;
+  }
+  return AmitiaComponentVariants(values: merged);
 }
 
 /// Applies one visual provider layer. Multiple capabilities (ui.theme,
@@ -216,6 +245,9 @@ ThemeData applyUIThemeProvider(ThemeData base, UIProviderDefinition? provider) {
   final componentDefault =
       base.extension<AmitiaComponentTokens>() ??
       const AmitiaComponentTokens();
+  final componentVariantsDefault =
+      base.extension<AmitiaComponentVariants>() ??
+      const AmitiaComponentVariants();
 
   final colorSource = _map(source['colors']);
   final colorValues = colorSource.isEmpty ? source : <String, dynamic>{...source, ...colorSource};
@@ -252,6 +284,15 @@ ThemeData applyUIThemeProvider(ThemeData base, UIProviderDefinition? provider) {
   final typography = _mergeTypography(typographyDefault, source);
   final icons = _mergeIcons(iconDefault, source);
   final components = _mergeComponents(componentDefault, source);
+  final componentVariants = _mergeComponentVariants(componentVariantsDefault, provider);
+  double componentNumber(String component, String key, double fallback) {
+    final value = componentVariants.variant(component)[key];
+    return value is num ? value.toDouble() : fallback;
+  }
+  int componentWeight(String component, String key, int fallback) {
+    final value = componentVariants.variant(component)[key];
+    return value is num ? value.toInt() : fallback;
+  }
   DesignTokenRuntime.activate(
     layout: layout,
     typography: typography,
@@ -276,53 +317,113 @@ ThemeData applyUIThemeProvider(ThemeData base, UIProviderDefinition? provider) {
     cardTheme: base.cardTheme.copyWith(
       color: colors.surfacePrimary,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(layout.radiusMedium),
-        side: BorderSide(color: colors.borderPrimary, width: components.borderWidth),
+        borderRadius: BorderRadius.circular(
+          componentNumber('card', 'radius', layout.radiusMedium),
+        ),
+        side: BorderSide(
+          color: colors.borderPrimary,
+          width: componentNumber('card', 'borderWidth', components.borderWidth),
+        ),
       ),
     ),
     inputDecorationTheme: base.inputDecorationTheme.copyWith(
       fillColor: colors.surfaceSecondary,
       contentPadding: EdgeInsets.symmetric(
-        horizontal: layout.lg,
-        vertical: layout.md,
+        horizontal: componentNumber('input', 'paddingX', layout.lg),
+        vertical: componentNumber('input', 'paddingY', layout.md),
       ),
       enabledBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(layout.radiusMedium),
+        borderRadius: BorderRadius.circular(
+          componentNumber('input', 'radius', layout.radiusMedium),
+        ),
         borderSide: BorderSide.none,
       ),
       focusedBorder: OutlineInputBorder(
-        borderRadius: BorderRadius.circular(layout.radiusMedium),
-        borderSide: BorderSide(color: colors.accentPrimary, width: 1.5),
+        borderRadius: BorderRadius.circular(
+          componentNumber('input', 'radius', layout.radiusMedium),
+        ),
+        borderSide: BorderSide(
+          color: colors.accentPrimary,
+          width: componentNumber('input', 'borderWidth', 1.5),
+        ),
+      ),
+    ),
+    filledButtonTheme: FilledButtonThemeData(
+      style: ButtonStyle(
+        minimumSize: WidgetStatePropertyAll(
+          Size(0, componentNumber('button', 'minHeight', components.controlHeight)),
+        ),
+        padding: WidgetStatePropertyAll(
+          EdgeInsets.symmetric(
+            horizontal: componentNumber('button', 'paddingX', layout.lg),
+            vertical: componentNumber('button', 'paddingY', layout.sm),
+          ),
+        ),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(
+              componentNumber('button', 'radius', layout.radiusMedium),
+            ),
+          ),
+        ),
+        textStyle: WidgetStatePropertyAll(
+          TextStyle(
+            fontSize: componentNumber('button', 'fontSize', typography.buttonSize),
+            fontWeight: designFontWeight(
+              componentWeight('button', 'fontWeight', typography.buttonWeight),
+            ),
+          ),
+        ),
+      ),
+    ),
+    textButtonTheme: TextButtonThemeData(
+      style: ButtonStyle(
+        minimumSize: WidgetStatePropertyAll(
+          Size(0, componentNumber('button', 'minHeight', components.compactControlHeight)),
+        ),
+        shape: WidgetStatePropertyAll(
+          RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(
+              componentNumber('button', 'radius', layout.radiusMedium),
+            ),
+          ),
+        ),
       ),
     ),
     dialogTheme: base.dialogTheme.copyWith(
       backgroundColor: colors.surfacePrimary,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(layout.radiusLarge),
+        borderRadius: BorderRadius.circular(
+          componentNumber('dialog', 'radius', layout.radiusLarge),
+        ),
       ),
     ),
     bottomSheetTheme: base.bottomSheetTheme.copyWith(
       backgroundColor: colors.surfacePrimary,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(
-          top: Radius.circular(layout.radiusLarge),
+          top: Radius.circular(
+            componentNumber('bottomSheet', 'radius', layout.radiusLarge),
+          ),
         ),
       ),
     ),
     listTileTheme: base.listTileTheme.copyWith(
       contentPadding: EdgeInsets.symmetric(
-        horizontal: layout.lg,
-        vertical: layout.xs,
+        horizontal: componentNumber('listTile', 'paddingX', layout.lg),
+        vertical: componentNumber('listTile', 'paddingY', layout.xs),
       ),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(layout.radiusSmall),
+        borderRadius: BorderRadius.circular(
+          componentNumber('listTile', 'radius', layout.radiusSmall),
+        ),
       ),
     ),
     textTheme: typography.fontFamily == null
         ? base.textTheme
         : base.textTheme.apply(fontFamily: typography.fontFamily),
     iconTheme: base.iconTheme.copyWith(size: icons.medium),
-    extensions: _buildThemeExtensions(base, colors, layout, typography, icons, components),
+    extensions: _buildThemeExtensions(base, colors, layout, typography, icons, components, componentVariants),
   );
 }
 
@@ -333,13 +434,15 @@ Iterable<ThemeExtension<dynamic>> _buildThemeExtensions(
   AmitiaTypographyTokens typography,
   AmitiaIconTokens icons,
   AmitiaComponentTokens components,
+  AmitiaComponentVariants componentVariants,
 ) sync* {
   for (final e in base.extensions.values) {
     if (e is! AmitiaColorTokens &&
         e is! AmitiaLayoutTokens &&
         e is! AmitiaTypographyTokens &&
         e is! AmitiaIconTokens &&
-        e is! AmitiaComponentTokens) {
+        e is! AmitiaComponentTokens &&
+        e is! AmitiaComponentVariants) {
       yield e;
     }
   }
@@ -348,4 +451,5 @@ Iterable<ThemeExtension<dynamic>> _buildThemeExtensions(
   yield typography;
   yield icons;
   yield components;
+  yield componentVariants;
 }
