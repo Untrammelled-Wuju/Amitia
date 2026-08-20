@@ -270,6 +270,27 @@ internal class DefaultSafeArchiveExtractor(
                 }
                 createSymlink(targetFile, linkName)
             }
+            entry.isLink -> {
+                val linkName = entry.linkName
+                if (linkName.isEmpty() || linkName.startsWith("/") || linkName.contains("..")) {
+                    throw IOException("hardlink target invalid: $linkName")
+                }
+                val boundaryPath = targetDir.absoluteFile.toPath().normalize()
+                val linkTargetPath = boundaryPath.resolve(linkName).normalize()
+                if (!linkTargetPath.startsWith(boundaryPath)) {
+                    throw IOException("hardlink target invalid: $linkName")
+                }
+                val linkTargetFile = linkTargetPath.toFile().canonicalFile
+                if (!linkTargetFile.isFile) {
+                    throw IOException("hardlink target not found: $linkName")
+                }
+                if (targetFile.exists() && !targetFile.delete()) {
+                    throw IOException("cannot replace hardlink entry: $entryName")
+                }
+                targetFile.parentFile?.mkdirs()
+                linkTargetFile.copyTo(targetFile, overwrite = false)
+                applyFilePermissions(targetFile, entry.mode)
+            }
             entry.isFile -> {
                 val parentDir = targetFile.parentFile
                 if (parentDir != null && !parentDir.exists()) {

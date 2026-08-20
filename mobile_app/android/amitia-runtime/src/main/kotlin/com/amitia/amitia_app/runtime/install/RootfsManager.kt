@@ -55,6 +55,9 @@ internal class DefaultRootfsManager(
         }
 
         val rootfsDir = File(rootfsRoot.toPath().toString())
+        if (rootfsDir.exists()) {
+            rootfsDir.deleteRecursively()
+        }
         rootfsDir.mkdirs()
 
         val extractResult = extractor.extractTarXz(

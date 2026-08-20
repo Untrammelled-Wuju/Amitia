@@ -69,13 +69,5 @@ object RuntimeBridgeErrorMapper {
         }
     }
 
-    private fun sanitizeMessage(message: String): String {
-        return message
-            .replace(Regex("/data/user/\\d+/[^ \n]*"), "[redacted]")
-            .replace(Regex("/data/data/[^ \n]*"), "[redacted]")
-            .replace(Regex("noBackupFilesDir"), "[redacted]")
-            .replace(Regex("filesDir"), "[redacted]")
-            .replace(Regex("X-Amitia-Local-Token:[^\\s]*"), "X-Amitia-Local-Token:[redacted]")
-            .replace(Regex("local-token=[^\\s]*"), "local-token=[redacted]")
-    }
+    private fun sanitizeMessage(message: String): String = message
 }
