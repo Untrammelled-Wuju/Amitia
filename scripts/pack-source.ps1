@@ -80,6 +80,7 @@ $excludes = @(
     "--exclude=backend/server_*.exe"
     "--exclude=*.tar"
     "--exclude=*.tar.gz"
+    "--exclude=artifacts"
     "--exclude=AmitiaData"
     "--exclude=U-Ai-source.tar.gz"
 )
