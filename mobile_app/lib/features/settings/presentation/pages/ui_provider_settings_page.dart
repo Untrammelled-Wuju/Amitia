@@ -25,7 +25,7 @@ class UIProviderSettingsPage extends ConsumerWidget {
       body: RefreshIndicator(
         onRefresh: () => ref.read(uiRuntimeProvider.notifier).ensureLoaded(force: true),
         child: runtime.when(
-          loading: () => const ListView(children: [SizedBox(height: 240), Center(child: CircularProgressIndicator(strokeWidth: 2))]),
+          loading: () => ListView(children: const [SizedBox(height: 240), Center(child: CircularProgressIndicator(strokeWidth: 2))]),
           error: (error, _) => ListView(padding: EdgeInsets.all(AppSpacing.pagePadding), children: [Text('加载 UI Provider 失败：$error')]),
           data: (_) => ListView(
             padding: EdgeInsets.all(AppSpacing.pagePadding),

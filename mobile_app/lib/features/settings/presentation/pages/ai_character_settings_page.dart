@@ -146,20 +146,20 @@ class _CharacterContentState extends ConsumerState<_CharacterContent> {
             padding: EdgeInsets.zero,
             children: [
               _buildInfoCard(context),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               _buildPersonalityCard(context),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               _buildPersonalityCard(context, title: '情感与氛围', sectionKey: 'emotion'),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               _buildGenderCard(context),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               _buildSleepCard(context),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
             ],
           ),
         ),
         Padding(
-          padding: const EdgeInsets.all(AppSpacing.pagePadding),
+          padding: EdgeInsets.all(AppSpacing.pagePadding),
           child: AmitiaButton(
             label: _saving ? '保存中...' : '保存',
             icon: Icons.check,
@@ -173,7 +173,7 @@ class _CharacterContentState extends ConsumerState<_CharacterContent> {
 
   Widget _buildInfoCard(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
@@ -258,7 +258,7 @@ class _CharacterContentState extends ConsumerState<_CharacterContent> {
         : _personality.keys.where((k) => k != '温暖度' && k != '安慰倾向' && k != '陪伴感' && k != '边界感' && k != '依赖回避' && k != '亲密度表达' && k != '调侃度').toList();
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
@@ -314,7 +314,7 @@ class _CharacterContentState extends ConsumerState<_CharacterContent> {
 
   Widget _buildGenderCard(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
@@ -375,7 +375,7 @@ class _CharacterContentState extends ConsumerState<_CharacterContent> {
 
   Widget _buildSleepCard(BuildContext context) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: context.surfacePrimary,

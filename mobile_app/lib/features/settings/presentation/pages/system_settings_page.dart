@@ -50,14 +50,14 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '系统设置', showBackButton: true, fallbackRoute: AppRoutes.settings),
       body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+        padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
         children: [
           _SectionLabel(text: '系统状态'),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           _buildHealthCard(),
-          const SizedBox(height: AppSpacing.sectionGap),
+          SizedBox(height: AppSpacing.sectionGap),
           _SectionLabel(text: '通用'),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           _buildCard([
             _buildDropdownTile(
               icon: Icons.language,
@@ -81,9 +81,9 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
               onChanged: (v) => setState(() => _notifications = v),
             ),
           ]),
-          const SizedBox(height: AppSpacing.sectionGap),
+          SizedBox(height: AppSpacing.sectionGap),
           _SectionLabel(text: '功能入口'),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           _buildCard([
             _buildNavTile(icon: Icons.record_voice_over_outlined, title: '语音设置', onTap: () => _showTip('语音设置')),
             _divider(),
@@ -95,9 +95,9 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
             _divider(),
             _buildNavTile(icon: Icons.cleaning_services_outlined, title: '存储清理', onTap: () => context.push(AppRoutes.settingsStorage)),
           ]),
-          const SizedBox(height: AppSpacing.sectionGap),
+          SizedBox(height: AppSpacing.sectionGap),
           _SectionLabel(text: '高级'),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           _buildCard([
             AmitiaSwitchTile(
               title: '开发者模式',
@@ -111,7 +111,7 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
               },
             ),
           ]),
-          const SizedBox(height: AppSpacing.xl),
+          SizedBox(height: AppSpacing.xl),
         ],
       ),
     );
@@ -119,7 +119,7 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
 
   Widget _buildCard(List<Widget> children) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
         borderRadius: AppRadius.brMedium,
@@ -131,20 +131,20 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
 
   Widget _buildHealthCard() {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
         borderRadius: AppRadius.brMedium,
         border: Border.all(color: context.borderPrimary, width: 0.5),
       ),
       child: _loadingHealth
-          ? const Padding(
+          ? Padding(
               padding: EdgeInsets.all(AppSpacing.lg),
               child: Center(child: CircularProgressIndicator()),
             )
           : _healthError != null
               ? Padding(
-                  padding: const EdgeInsets.all(AppSpacing.md),
+                  padding: EdgeInsets.all(AppSpacing.md),
                   child: Text('获取系统状态失败: $_healthError', style: TextStyle(color: context.error)),
                 )
               : _buildHealthContent(),
@@ -160,7 +160,7 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
     final status = (_healthData?['status'] ?? 'unknown').toString();
 
     return Padding(
-      padding: const EdgeInsets.all(AppSpacing.cardPadding),
+      padding: EdgeInsets.all(AppSpacing.cardPadding),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -174,16 +174,16 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
                   shape: BoxShape.circle,
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
+              SizedBox(width: AppSpacing.sm),
               Text('系统 $status', style: AppTypography.body(context)),
               const Spacer(),
               if (version.isNotEmpty) Text('v$version', style: AppTypography.label(context)),
-              const SizedBox(width: AppSpacing.sm),
+              SizedBox(width: AppSpacing.sm),
               Icon(Icons.refresh, size: 18, color: context.textTertiary),
             ],
           ),
           if (components.isNotEmpty) ...[
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Wrap(
               spacing: AppSpacing.sm,
               runSpacing: AppSpacing.xs,
@@ -223,7 +223,7 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
         child: Row(
           children: [
             Container(
@@ -252,7 +252,7 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
       behavior: HitTestBehavior.opaque,
       onTap: () => _showOptionSheet(title, options, value, onChanged),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
         child: Row(
           children: [
             Container(
@@ -283,7 +283,7 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Padding(
-                padding: const EdgeInsets.all(AppSpacing.lg),
+                padding: EdgeInsets.all(AppSpacing.lg),
                 child: Text(title, style: AppTypography.sectionTitle(context)),
               ),
               ...options.map((opt) {
@@ -301,7 +301,7 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
                   },
                 );
               }),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
             ],
           ),
         );
@@ -323,7 +323,7 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.sm),
+      padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.sm),
       child: Text(text, style: AppTypography.caption(context)),
     );
   }

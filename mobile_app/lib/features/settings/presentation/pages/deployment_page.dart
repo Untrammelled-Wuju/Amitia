@@ -62,12 +62,12 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+              padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
               children: [
                 _SectionLabel(text: '选择部署模式'),
-                const SizedBox(height: AppSpacing.sm),
+                SizedBox(height: AppSpacing.sm),
                 ..._modes.map((m) => Padding(
-                      padding: const EdgeInsets.only(left: AppSpacing.pagePadding, right: AppSpacing.pagePadding, bottom: AppSpacing.md),
+                      padding: EdgeInsets.only(left: AppSpacing.pagePadding, right: AppSpacing.pagePadding, bottom: AppSpacing.md),
                       child: _ModeCard(
                         mode: m.$1,
                         icon: m.$2,
@@ -78,17 +78,17 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
                     )),
                 if (currentConfig.mode == MobileDeploymentMode.cloud ||
                     currentConfig.mode == MobileDeploymentMode.hybrid) ...[
-                  const SizedBox(height: AppSpacing.sm),
+                  SizedBox(height: AppSpacing.sm),
                   _SectionLabel(text: '远程核心地址'),
-                  const SizedBox(height: AppSpacing.sm),
+                  SizedBox(height: AppSpacing.sm),
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                    padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
                     child: TextField(
                       controller: _remoteUriController,
                       decoration: InputDecoration(
                         hintText: 'https://example.com:18899',
                         border: OutlineInputBorder(borderRadius: AppRadius.brSmall),
-                        contentPadding: const EdgeInsets.symmetric(
+                        contentPadding: EdgeInsets.symmetric(
                           horizontal: AppSpacing.md,
                           vertical: AppSpacing.sm,
                         ),
@@ -97,13 +97,13 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
                     ),
                   ),
                 ],
-                const SizedBox(height: AppSpacing.sm),
+                SizedBox(height: AppSpacing.sm),
                 _SectionLabel(text: '当前配置'),
-                const SizedBox(height: AppSpacing.sm),
+                SizedBox(height: AppSpacing.sm),
                 _buildConfigCard(connectionAsync),
-                const SizedBox(height: AppSpacing.sectionGap),
+                SizedBox(height: AppSpacing.sectionGap),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                  padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
                   child: AmitiaButton(
                     label: _testState ? '检查中...' : '检查运行时状态',
                     icon: Icons.wifi_protected_setup,
@@ -111,7 +111,7 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
                     onPressed: _testState ? null : _checkRuntimeStatus,
                   ),
                 ),
-                const SizedBox(height: AppSpacing.xl),
+                SizedBox(height: AppSpacing.xl),
               ],
             ),
     );
@@ -120,8 +120,8 @@ class _DeploymentPageState extends ConsumerState<DeploymentPage> {
   Widget _buildConfigCard(AsyncValue<BackendConnectionAvailability> connectionAsync) {
     final statusAsync = ref.watch(mobileBackendStatusProvider);
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-      padding: const EdgeInsets.all(AppSpacing.cardPadding),
+      margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.cardPadding),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
         borderRadius: AppRadius.brMedium,
@@ -265,7 +265,7 @@ class _ModeCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(AppSpacing.cardPadding),
+        padding: EdgeInsets.all(AppSpacing.cardPadding),
         decoration: BoxDecoration(
           color: context.surfacePrimary,
           borderRadius: AppRadius.brMedium,
@@ -285,7 +285,7 @@ class _ModeCard extends StatelessWidget {
               ),
               child: Icon(icon, size: 24, color: isSelected ? context.accentPrimary : context.textSecondary),
             ),
-            const SizedBox(width: AppSpacing.md),
+            SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -320,7 +320,7 @@ class _InfoRow extends StatelessWidget {
       child: Row(
         children: [
           SizedBox(width: 72, child: Text(label, style: AppTypography.label(context))),
-          const SizedBox(width: AppSpacing.md),
+          SizedBox(width: AppSpacing.md),
           Expanded(child: Text(value, style: AppTypography.bodySmall(context), textAlign: TextAlign.end)),
         ],
       ),
@@ -335,7 +335,7 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.sm),
+      padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.sm),
       child: Text(text, style: AppTypography.caption(context)),
     );
   }

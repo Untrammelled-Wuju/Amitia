@@ -24,12 +24,12 @@ class ModelSettingsPage extends ConsumerWidget {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '模型设置', showBackButton: true, fallbackRoute: AppRoutes.settings),
       body: ListView(
-        padding: const EdgeInsets.all(AppSpacing.pagePadding),
+        padding: EdgeInsets.all(AppSpacing.pagePadding),
         children: [
           Text('选择模型类型进行配置', style: AppTypography.caption(context)),
-          const SizedBox(height: AppSpacing.lg),
+          SizedBox(height: AppSpacing.lg),
           ..._types.map((t) => Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                padding: EdgeInsets.only(bottom: AppSpacing.md),
                 child: _ModelTypeCard(
                   icon: t.$1,
                   title: t.$2,
@@ -37,7 +37,7 @@ class ModelSettingsPage extends ConsumerWidget {
                   onTap: () => context.push(AppRoutes.modelConfig(t.$4)),
                 ),
               )),
-          const SizedBox(height: AppSpacing.xl),
+          SizedBox(height: AppSpacing.xl),
         ],
       ),
     );
@@ -62,7 +62,7 @@ class _ModelTypeCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(AppSpacing.cardPadding),
+        padding: EdgeInsets.all(AppSpacing.cardPadding),
         decoration: BoxDecoration(
           color: context.surfacePrimary,
           borderRadius: AppRadius.brMedium,

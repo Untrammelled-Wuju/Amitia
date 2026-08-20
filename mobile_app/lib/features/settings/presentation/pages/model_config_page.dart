@@ -51,10 +51,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
         data: (allConfigs) {
           final configs = _filterConfigs(allConfigs);
           return ListView(
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+            padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
             children: [
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
                 child: Row(
                   children: [
                     Icon(Icons.psychology_outlined, size: 20, color: context.accentPrimary),
@@ -79,7 +79,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                   ],
                 ),
               ),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               ...configs.map((c) => _buildConfigCard(c)),
               if (configs.isEmpty)
                 AmitiaEmptyState(
@@ -87,7 +87,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                   title: '暂无配置',
                   subtitle: '点击右上角新建配置',
                 ),
-              const SizedBox(height: AppSpacing.xl),
+              SizedBox(height: AppSpacing.xl),
             ],
           );
         },
@@ -97,10 +97,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Icon(Icons.error_outline, size: 48, color: context.error),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('加载失败', style: AppTypography.body(context)),
               Text(err.toString(), style: AppTypography.caption(context)),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               AmitiaButton(
                 label: '重试',
                 isSecondary: true,
@@ -116,8 +116,8 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
   Widget _buildConfigCard(ModelConfigDto config) {
     final testState = _testStates[config.id] ?? 0;
     return Container(
-      margin: const EdgeInsets.only(left: AppSpacing.pagePadding, right: AppSpacing.pagePadding, bottom: AppSpacing.md),
-      padding: const EdgeInsets.all(AppSpacing.cardPadding),
+      margin: EdgeInsets.only(left: AppSpacing.pagePadding, right: AppSpacing.pagePadding, bottom: AppSpacing.md),
+      padding: EdgeInsets.all(AppSpacing.cardPadding),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
         borderRadius: AppRadius.brMedium,
@@ -137,10 +137,10 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                 AmitiaStatusBadge(label: '未激活', type: BadgeType.neutral),
             ],
           ),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           _InfoRow(label: '提供商', value: config.provider),
           _InfoRow(label: '模型名', value: config.model),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           Row(
             children: [
               Expanded(
@@ -151,7 +151,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                   onPressed: testState == 1 ? null : () => _testConnection(config.id),
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
+              SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: AmitiaButton(
                   label: '编辑',
@@ -163,7 +163,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
             ],
           ),
           if (testState == 2) ...[
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             Row(
               children: [
                 Icon(Icons.check_circle, size: 14, color: context.success),
@@ -172,7 +172,7 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
               ],
             ),
           ],
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Row(
             children: [
               Expanded(
@@ -232,21 +232,21 @@ class _ModelConfigPageState extends ConsumerState<ModelConfigPage> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(existing == null ? '新建配置' : '编辑配置', style: AppTypography.sectionTitle(context)),
-                    const SizedBox(height: AppSpacing.lg),
+                    SizedBox(height: AppSpacing.lg),
                     _SheetField(label: '配置名称', controller: nameCtrl, hint: '如：GPT-4 主力'),
-                    const SizedBox(height: AppSpacing.md),
+                    SizedBox(height: AppSpacing.md),
                     _SheetField(label: '提供商', controller: providerCtrl, hint: '如：OpenAI'),
-                    const SizedBox(height: AppSpacing.md),
+                    SizedBox(height: AppSpacing.md),
                     _SheetField(label: '模型名', controller: modelCtrl, hint: '如：gpt-4'),
-                    const SizedBox(height: AppSpacing.md),
+                    SizedBox(height: AppSpacing.md),
                     _SheetField(label: 'API 地址', controller: baseUrlCtrl, hint: 'https://api.openai.com/v1'),
-                    const SizedBox(height: AppSpacing.md),
+                    SizedBox(height: AppSpacing.md),
                     AmitiaSwitchTile(
                       title: '激活此配置',
                       value: isActive,
                       onChanged: (v) => setSheetState(() => isActive = v),
                     ),
-                    const SizedBox(height: AppSpacing.lg),
+                    SizedBox(height: AppSpacing.lg),
                     AmitiaButton(
                       label: '保存',
                       isFullWidth: true,
@@ -341,7 +341,7 @@ class _InfoRow extends StatelessWidget {
       child: Row(
         children: [
           SizedBox(width: 60, child: Text(label, style: AppTypography.label(context))),
-          const SizedBox(width: AppSpacing.md),
+          SizedBox(width: AppSpacing.md),
           Expanded(child: Text(value, style: AppTypography.bodySmall(context))),
         ],
       ),

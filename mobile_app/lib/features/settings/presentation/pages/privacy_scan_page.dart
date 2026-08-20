@@ -47,21 +47,21 @@ class _PrivacyScanPageState extends ConsumerState<PrivacyScanPage> {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '隐私扫描', showBackButton: true, fallbackRoute: AppRoutes.settings),
       body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+        padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
         children: [
           _SectionLabel(text: '扫描范围'),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
             child: AmitiaSegmentedControl(
               segments: _scanRanges,
               selectedIndex: _scanRangeIndex,
               onChanged: (i) => setState(() => _scanRangeIndex = i),
             ),
           ),
-          const SizedBox(height: AppSpacing.sectionGap),
+          SizedBox(height: AppSpacing.sectionGap),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
             child: AmitiaButton(
               label: _scanning ? '扫描中...' : '开始扫描',
               icon: Icons.radar,
@@ -70,9 +70,9 @@ class _PrivacyScanPageState extends ConsumerState<PrivacyScanPage> {
             ),
           ),
           if (_scanning || _scanProgress > 0) ...[
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+              padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
               child: Column(
                 children: [
                   AmitiaProgressBar(progress: _scanProgress, height: 8),
@@ -82,19 +82,19 @@ class _PrivacyScanPageState extends ConsumerState<PrivacyScanPage> {
               ),
             ),
           ],
-          const SizedBox(height: AppSpacing.sectionGap),
+          SizedBox(height: AppSpacing.sectionGap),
           AmitiaSectionHeader(
             title: '风险结果 (${_results.length})',
             actionText: '脱敏',
             onAction: _confirmDesensitize,
           ),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           ..._results.map((r) => _buildResultTile(r)),
-          const SizedBox(height: AppSpacing.sectionGap),
+          SizedBox(height: AppSpacing.sectionGap),
           _SectionLabel(text: '扫描历史'),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           ..._history.map((h) => _buildHistoryTile(h.$1, h.$2, h.$3)),
-          const SizedBox(height: AppSpacing.xl),
+          SizedBox(height: AppSpacing.xl),
         ],
       ),
     );
@@ -108,8 +108,8 @@ class _PrivacyScanPageState extends ConsumerState<PrivacyScanPage> {
       _ => (BadgeType.success, context.success),
     };
     return Container(
-      margin: const EdgeInsets.only(left: AppSpacing.pagePadding, right: AppSpacing.pagePadding, bottom: AppSpacing.sm),
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 12),
+      margin: EdgeInsets.only(left: AppSpacing.pagePadding, right: AppSpacing.pagePadding, bottom: AppSpacing.sm),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 12),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
         borderRadius: AppRadius.brMedium,
@@ -149,8 +149,8 @@ class _PrivacyScanPageState extends ConsumerState<PrivacyScanPage> {
       _ => (context.success, Icons.check_circle_outline),
     };
     return Container(
-      margin: const EdgeInsets.only(left: AppSpacing.pagePadding, right: AppSpacing.pagePadding, bottom: AppSpacing.sm),
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 12),
+      margin: EdgeInsets.only(left: AppSpacing.pagePadding, right: AppSpacing.pagePadding, bottom: AppSpacing.sm),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 12),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
         borderRadius: AppRadius.brMedium,
@@ -225,7 +225,7 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.sm),
+      padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.sm),
       child: Text(text, style: AppTypography.caption(context)),
     );
   }

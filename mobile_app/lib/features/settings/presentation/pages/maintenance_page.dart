@@ -97,21 +97,21 @@ class _MaintenanceContentState extends ConsumerState<_MaintenanceContent> {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+      padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
       children: [
         _SectionLabel(text: '服务状态'),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         _buildCard(
           _checks.map((c) => Column(children: [
             _buildStatusTile(c),
             if (c != _checks.last) _divider(),
           ])).expand((w) => [w]).toList(),
         ),
-        const SizedBox(height: AppSpacing.sectionGap),
+        SizedBox(height: AppSpacing.sectionGap),
         _SectionLabel(text: '诊断操作'),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
           child: Column(
             children: [
               AmitiaButton(
@@ -120,7 +120,7 @@ class _MaintenanceContentState extends ConsumerState<_MaintenanceContent> {
                 isFullWidth: true,
                 onPressed: _diagnosing ? null : _runDiagnostic,
               ),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               Row(
                 children: [
                   Expanded(
@@ -131,7 +131,7 @@ class _MaintenanceContentState extends ConsumerState<_MaintenanceContent> {
                       onPressed: _confirmRepair,
                     ),
                   ),
-                  const SizedBox(width: AppSpacing.sm),
+                  SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: AmitiaButton(
                       label: '导出诊断',
@@ -145,9 +145,9 @@ class _MaintenanceContentState extends ConsumerState<_MaintenanceContent> {
             ],
           ),
         ),
-        const SizedBox(height: AppSpacing.sectionGap),
+        SizedBox(height: AppSpacing.sectionGap),
         _SectionLabel(text: '数据一致性'),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         _buildCard([
           _buildInfoTile('数据库完整性', '通过', BadgeType.success),
           _divider(),
@@ -155,14 +155,14 @@ class _MaintenanceContentState extends ConsumerState<_MaintenanceContent> {
           _divider(),
           _buildInfoTile('缓存状态', '83 MB · 正常', BadgeType.info),
         ]),
-        const SizedBox(height: AppSpacing.xl),
+        SizedBox(height: AppSpacing.xl),
       ],
     );
   }
 
   Widget _buildCard(List<Widget> children) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
         borderRadius: AppRadius.brMedium,
@@ -182,7 +182,7 @@ class _MaintenanceContentState extends ConsumerState<_MaintenanceContent> {
   Widget _buildStatusTile(_CheckItem check) {
     final isNormal = check.isNormal;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
       child: Row(
         children: [
           Icon(
@@ -212,7 +212,7 @@ class _MaintenanceContentState extends ConsumerState<_MaintenanceContent> {
 
   Widget _buildInfoTile(String title, String value, BadgeType type) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
       child: Row(
         children: [
           Expanded(child: Text(title, style: AppTypography.body(context))),
@@ -302,7 +302,7 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.sm),
+      padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.sm),
       child: Text(text, style: AppTypography.caption(context)),
     );
   }
