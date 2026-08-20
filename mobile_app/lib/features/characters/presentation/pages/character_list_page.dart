@@ -55,7 +55,7 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(
+              padding: EdgeInsets.fromLTRB(
                 AppSpacing.pagePadding,
                 AppSpacing.sm,
                 AppSpacing.pagePadding,
@@ -101,14 +101,14 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                     );
                   }
                   return ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(
+                    padding: EdgeInsets.fromLTRB(
                       AppSpacing.pagePadding,
                       AppSpacing.xs,
                       AppSpacing.pagePadding,
                       AppSpacing.md,
                     ),
                     itemCount: activeChars.length,
-                    separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+                    separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
                     itemBuilder: (context, index) {
                       final character = activeChars[index];
                       final isDefault = character.id == _defaultCharacterId;
@@ -128,7 +128,7 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.fromLTRB(
+              padding: EdgeInsets.fromLTRB(
                 AppSpacing.pagePadding,
                 AppSpacing.xs,
                 AppSpacing.pagePadding,
@@ -144,7 +144,7 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                       onPressed: () => context.push(AppRoutes.charactersCreate),
                     ),
                   ),
-                  const SizedBox(width: AppSpacing.md),
+                  SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: AmitiaButton(
                       label: '管理角色',

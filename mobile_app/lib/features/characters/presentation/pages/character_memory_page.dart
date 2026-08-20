@@ -65,7 +65,7 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
           children: [
             if (_searchVisible)
               Padding(
-                padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xs),
+                padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xs),
                 child: AmitiaSearchField(
                   hintText: '搜索记忆',
                   controller: _searchController,
@@ -95,7 +95,7 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
                     grouped.putIfAbsent(m.type, () => []).add(m);
                   }
                   return ListView(
-                    padding: const EdgeInsets.all(AppSpacing.pagePadding),
+                    padding: EdgeInsets.all(AppSpacing.pagePadding),
                     children: grouped.entries.map((entry) {
                       return _buildMemoryGroup(context, entry.key, entry.value);
                     }).toList(),
@@ -114,7 +114,7 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(bottom: AppSpacing.sm, top: AppSpacing.sm),
+          padding: EdgeInsets.only(bottom: AppSpacing.sm, top: AppSpacing.sm),
           child: Row(
             children: [
               Container(
@@ -125,41 +125,41 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
+              SizedBox(width: AppSpacing.sm),
               Text(category, style: AppTypography.sectionTitle(context)),
-              const SizedBox(width: AppSpacing.sm),
+              SizedBox(width: AppSpacing.sm),
               Text('(${memories.length})', style: AppTypography.label(context)),
             ],
           ),
         ),
         ...memories.map((m) => _buildMemoryCard(context, m)),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
       ],
     );
   }
 
   Widget _buildMemoryCard(BuildContext context, MemoryDto memory) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: EdgeInsets.only(bottom: AppSpacing.sm),
       child: AmitiaCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(memory.content, style: AppTypography.body(context)),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             Row(
               children: [
                 AmitiaStatusBadge(
                   label: '${memory.importance}',
                   type: memory.importance >= 7 ? BadgeType.error : memory.importance >= 4 ? BadgeType.info : BadgeType.neutral,
                 ),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
                 Text(memory.status, style: AppTypography.label(context)),
                 const Spacer(),
                 Text(_formatTime(memory.createdAt), style: AppTypography.label(context)),
               ],
             ),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             Row(
               children: [
                 GestureDetector(
@@ -180,7 +180,7 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
                     ),
                   ),
                 ),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
                 GestureDetector(
                   onTap: () => _deleteMemory(memory),
                   child: Container(
@@ -239,13 +239,13 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               Text(isEdit ? '编辑记忆' : '新建记忆', style: AppTypography.sectionTitle(context)),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               Text('记忆内容', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               AmitiaTextField(controller: contentCtrl, maxLines: 4, hintText: '输入记忆内容'),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('重要程度: $importance', style: AppTypography.label(context)),
               Slider(
                 value: importance.toDouble(),
@@ -255,9 +255,9 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
                 activeColor: context.accentPrimary,
                 onChanged: (v) => setSheetState(() => importance = v.round()),
               ),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('分类', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               Wrap(
                 spacing: AppSpacing.sm,
                 children: ['长期记忆', '情景记忆', '关系记忆', '世界设定'].map((c) {
@@ -275,7 +275,7 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
                   );
                 }).toList(),
               ),
-              const SizedBox(height: AppSpacing.xl),
+              SizedBox(height: AppSpacing.xl),
               AmitiaButton(
                 label: isEdit ? '保存' : '创建',
                 isFullWidth: true,

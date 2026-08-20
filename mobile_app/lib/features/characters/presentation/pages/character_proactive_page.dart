@@ -39,10 +39,10 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
       body: SafeArea(
         top: false,
         child: ListView(
-          padding: const EdgeInsets.all(AppSpacing.pagePadding),
+          padding: EdgeInsets.all(AppSpacing.pagePadding),
           children: [
             _buildMasterSwitch(context),
-            const SizedBox(height: AppSpacing.sectionGap),
+            SizedBox(height: AppSpacing.sectionGap),
             FutureBuilder<List<Map<String, dynamic>>>(
               future: ref.read(proactiveServiceProvider).rules(),
               builder: (context, snapshot) {
@@ -59,7 +59,7 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
                 return Column(
                   children: [
                     ...rules.map((r) => _buildRuleCard(context, r)),
-                    const SizedBox(height: AppSpacing.xxl),
+                    SizedBox(height: AppSpacing.xxl),
                   ],
                 );
               },
@@ -89,7 +89,7 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
                 ),
                 child: const Icon(Icons.notifications_active, color: Colors.white, size: 24),
               ),
-              const SizedBox(width: AppSpacing.md),
+              SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -130,7 +130,7 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
     final id = rule['id']?.toString() ?? '';
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: EdgeInsets.only(bottom: AppSpacing.sm),
       child: AmitiaCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -150,7 +150,7 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
                     color: enabled ? context.accentPrimary : context.textTertiary,
                   ),
                 ),
-                const SizedBox(width: AppSpacing.md),
+                SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -158,7 +158,7 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
                       Row(
                         children: [
                           Text(name, style: AppTypography.cardTitle(context)),
-                          const SizedBox(width: AppSpacing.sm),
+                          SizedBox(width: AppSpacing.sm),
                           AmitiaStatusBadge(label: category, type: BadgeType.accent),
                         ],
                       ),
@@ -176,9 +176,9 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
                 ),
               ],
             ),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             Container(
-              padding: const EdgeInsets.all(AppSpacing.md),
+              padding: EdgeInsets.all(AppSpacing.md),
               decoration: BoxDecoration(
                 color: context.surfaceSecondary,
                 borderRadius: AppRadius.brSmall,
@@ -186,12 +186,12 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
               child: Column(
                 children: [
                   _buildParamRow(context, '触发概率', '$probability%', probability / 100, context.accentPrimary),
-                  const SizedBox(height: AppSpacing.sm),
+                  SizedBox(height: AppSpacing.sm),
                   _buildParamRow(context, '冷却时间', '$cooldown分钟', (cooldown / 180).clamp(0.0, 1.0), context.info),
                 ],
               ),
             ),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             Row(
               children: [
                 GestureDetector(
@@ -212,7 +212,7 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
                     ),
                   ),
                 ),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
                 GestureDetector(
                   onTap: () => _testRule(id, name),
                   child: Container(
@@ -265,11 +265,11 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
           width: 80,
           child: Text(label, style: AppTypography.label(context)),
         ),
-        const SizedBox(width: AppSpacing.sm),
+        SizedBox(width: AppSpacing.sm),
         Expanded(
           child: AmitiaProgressBar(progress: progress, color: color),
         ),
-        const SizedBox(width: AppSpacing.sm),
+        SizedBox(width: AppSpacing.sm),
         SizedBox(
           width: 60,
           child: Text(value, style: AppTypography.label(context).copyWith(color: color, fontWeight: FontWeight.w600), textAlign: TextAlign.right),
@@ -330,13 +330,13 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
                   ),
                 ),
               ),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               Text(isEdit ? '编辑规则' : '新建规则', style: AppTypography.sectionTitle(context)),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               Text('规则名称', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               AmitiaTextField(controller: nameCtrl, hintText: '输入规则名称'),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Row(
                 children: [
                   Expanded(
@@ -344,27 +344,27 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('触发场景', style: AppTypography.label(context)),
-                        const SizedBox(height: AppSpacing.xs),
+                        SizedBox(height: AppSpacing.xs),
                         AmitiaTextField(controller: triggerCtrl, hintText: '如：起床'),
                       ],
                     ),
                   ),
-                  const SizedBox(width: AppSpacing.md),
+                  SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text('触发时间', style: AppTypography.label(context)),
-                        const SizedBox(width: AppSpacing.xs),
+                        SizedBox(width: AppSpacing.xs),
                         AmitiaTextField(controller: timeCtrl, hintText: '08:00'),
                       ],
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('分类', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               Wrap(
                 spacing: AppSpacing.sm,
                 children: ['起床', '吃饭', '午睡', '睡觉', '工作', '日常'].map((c) {
@@ -382,7 +382,7 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
                   );
                 }).toList(),
               ),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('触发概率：$probability%', style: AppTypography.label(context)),
               Slider(
                 value: probability.toDouble(),
@@ -401,7 +401,7 @@ class _CharacterProactivePageState extends ConsumerState<CharacterProactivePage>
                 activeColor: context.info,
                 onChanged: (v) => setSheetState(() => cooldown = v.round()),
               ),
-              const SizedBox(height: AppSpacing.xl),
+              SizedBox(height: AppSpacing.xl),
               AmitiaButton(
                 label: isEdit ? '保存' : '创建',
                 isFullWidth: true,
