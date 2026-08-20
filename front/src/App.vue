@@ -9,8 +9,13 @@ SPDX-License-Identifier: AGPL-3.0-only
   <PrivacyConsent v-if="!isPublicPage && !renderError" />
   <NotFoundView v-if="renderError" :error="capturedError" />
   <Transition v-else name="route-slide" mode="out-in">
-    <AppLayout v-if="!isPublicPage" key="app">
+    <div v-if="isUIProviderRecoveryPage" key="ui-provider-recovery" class="ui-provider-recovery-root">
       <router-view />
+    </div>
+    <AppLayout v-else-if="!isPublicPage" key="app">
+      <router-view v-slot="{ Component }">
+        <RouteSurfaceHost v-if="Component" :fallback="Component" />
+      </router-view>
     </AppLayout>
     <div
       v-else
@@ -35,12 +40,16 @@ import { useTheme } from "./ui-index";
 import { isDesktopShell } from "./runtime/runtime-capabilities";
 import NotFoundView from "./views/NotFoundView.vue";
 import { useExtensionUIStore } from "./stores/extensionUI";
+import { syncProviderRoutes } from "./ui-runtime/providerRoutes";
+import { applyProviderTheme } from "./ui-runtime/providerTheme";
+import RouteSurfaceHost from "./components/ui-runtime/RouteSurfaceHost.vue";
 
 const router = useRouter();
 const route = useRoute();
 const renderError = ref(false);
 const capturedError = ref<string | null>(null);
 const extensionUIStore = useExtensionUIStore();
+const themeRuntime = useTheme();
 
 const publicPaths = [
   "/onboarding",
@@ -55,6 +64,7 @@ const isPublicPage = computed(() =>
 const isOnboardingPage = computed(
   () => route.path === "/onboarding" || route.path.startsWith("/onboarding/"),
 );
+const isUIProviderRecoveryPage = computed(() => route.path === "/settings/ui-providers");
 
 watch(
   isOnboardingPage,
@@ -81,8 +91,7 @@ onErrorCaptured((err, _instance, info) => {
 
 onMounted(async () => {
   try {
-    const { loadFromServer } = useTheme();
-    await loadFromServer();
+    await themeRuntime.loadFromServer();
   } catch {}
 
   if (publicPaths.some((p) => route.path === p)) {
@@ -113,12 +122,29 @@ onMounted(async () => {
     if (!userData?.id) {
       router.replace("/login");
     } else {
-      extensionUIStore.refreshSnapshot(true).catch(() => {});
+      extensionUIStore.refreshSnapshot(true).then(() => syncProviderRoutes(router, extensionUIStore)).catch(() => {});
     }
   } catch {
     router.replace("/login");
   }
 });
+
+watch(() => extensionUIStore.snapshot?.providerVersion, () => {
+  syncProviderRoutes(router, extensionUIStore);
+});
+
+watch(
+  [
+    () => extensionUIStore.snapshot?.resolved?.["ui.theme"],
+    () => extensionUIStore.snapshot?.resolved?.["ui.tokens"],
+    () => extensionUIStore.snapshot?.resolved?.["ui.icons"],
+    () => extensionUIStore.snapshot?.resolved?.["ui.components"],
+    () => themeRuntime.resolvedMode.value,
+  ],
+  ([themeProvider, tokenProvider, iconProvider, componentProvider, mode]) =>
+    applyProviderTheme([themeProvider ?? null, tokenProvider ?? null, iconProvider ?? null, componentProvider ?? null], mode),
+  { immediate: true },
+);
 
 onUnmounted(() => {
   document.documentElement.classList.remove("amitia-desktop-onboarding");
@@ -126,6 +152,14 @@ onUnmounted(() => {
 </script>
 
 <style>
+.ui-provider-recovery-root {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  box-sizing: border-box;
+  padding: 24px;
+  background: var(--el-bg-color-page, #f5f7fa);
+}
 html.amitia-desktop-shell body {
   padding-top: 34px;
   box-sizing: border-box;

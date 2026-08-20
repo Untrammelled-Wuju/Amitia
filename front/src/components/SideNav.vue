@@ -39,47 +39,22 @@ SPDX-License-Identifier: AGPL-3.0-only
       router
       class="side-menu"
     >
-      <el-sub-menu index="overview">
-        <template #title><el-icon><Odometer /></el-icon><span>概览</span></template>
-        <el-menu-item index="/dashboard/run"><el-icon><DataLine /></el-icon><span>运行概览</span></el-menu-item>
-        <el-menu-item index="/dashboard/data"><el-icon><DataAnalysis /></el-icon><span>运行数据</span></el-menu-item>
-      </el-sub-menu>
-      <el-menu-item index="/chat">
-        <el-icon><ChatLineRound /></el-icon>
-        <span>聊天</span>
-      </el-menu-item>
-      <el-sub-menu index="character">
-        <template #title>
-          <el-icon><UserFilled /></el-icon>
-          <span>角色</span>
-        </template>
-        <el-menu-item index="/character"><el-icon><User /></el-icon><span>角色管理</span></el-menu-item>
-        <el-menu-item index="/reminders"><el-icon><Calendar /></el-icon><span>日程提醒</span></el-menu-item>
-        <el-menu-item index="/profiles"><el-icon><Avatar /></el-icon><span>用户画像</span></el-menu-item>
-        <el-menu-item index="/world-book"><el-icon><Collection /></el-icon><span>世界书</span></el-menu-item>
-        <el-menu-item index="/wechat"><el-icon><Connection /></el-icon><span>微信连接</span></el-menu-item>
-        <el-menu-item index="/qq"><el-icon><ChatDotSquare /></el-icon><span>QQ 连接</span></el-menu-item>
-        <el-menu-item index="/emotes"><el-icon><StarFilled /></el-icon><span>表情包管理</span></el-menu-item>
-      </el-sub-menu>
-      <el-sub-menu index="memory">
-        <template #title>
-          <el-icon><Grid /></el-icon>
-          <span>记忆</span>
-        </template>
-        <el-menu-item index="/memory-manager"><el-icon><List /></el-icon><span>记忆总览</span></el-menu-item>
-        <el-menu-item index="/episodic"><el-icon><Film /></el-icon><span>情景记忆</span></el-menu-item>
-        <el-menu-item index="/graph"><el-icon><Share /></el-icon><span>记忆图谱</span></el-menu-item>
-        <el-menu-item index="/memory-timeline"><el-icon><Timer /></el-icon><span>时间线</span></el-menu-item>
-        <el-menu-item index="/logs"><el-icon><ChatLineRound /></el-icon><span>聊天记录</span></el-menu-item>
-      </el-sub-menu>
-      <el-menu-item index="/creative-workshop">
-        <el-icon><MagicStick /></el-icon>
-        <span>创意工坊</span>
-      </el-menu-item>
-      <el-menu-item index="/extensions">
-        <el-icon><Menu /></el-icon>
-        <span>扩展中心</span>
-      </el-menu-item>
+      <template v-for="group in navigationGroups" :key="group.id">
+        <el-sub-menu v-if="group.label && group.items.length > 1" :index="group.id">
+          <template #title>
+            <el-icon><component :is="group.icon" /></el-icon>
+            <span>{{ group.label }}</span>
+          </template>
+          <el-menu-item v-for="item in group.items" :key="item.id" :index="item.route">
+            <el-icon><component :is="item.icon" /></el-icon>
+            <span>{{ item.label }}</span>
+          </el-menu-item>
+        </el-sub-menu>
+        <el-menu-item v-for="item in group.label && group.items.length > 1 ? [] : group.items" :key="item.id" :index="item.route">
+          <el-icon><component :is="item.icon" /></el-icon>
+          <span>{{ item.label }}</span>
+        </el-menu-item>
+      </template>
     </el-menu>
 
     <div class="side-nav-bottom">
@@ -145,34 +120,14 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
-  Odometer,
-  Connection,
-  UserFilled,
-  ChatDotSquare,
-  Setting,
-  Grid,
-  MagicStick,
-  Plus,
   DArrowLeft,
   DArrowRight,
-  Search,
   Moon,
+  Search,
+  Setting,
   Sunny,
   SwitchButton,
-  Clock,
-  User,
-  Calendar,
-  Avatar,
-  Collection,
-  List,
-  Film,
-  Share,
-  Timer,
-  ChatLineRound,
-  DataLine,
-  DataAnalysis,
-  StarFilled,
-  Menu,
+  UserFilled,
 } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useAppStore } from "@/stores/app";
@@ -180,10 +135,12 @@ import { useBrandLogo } from "@/composables/useBrandLogo";
 import { apiClient, useApi } from "@/composables/useApi";
 import { forceCleanupSession } from "@/stores/refresh-coordinator";
 import SearchModal from "./SearchModal.vue";
+import { isUINavigationItemActive, useUINavigationRegistry } from "@/ui-runtime/navigationRegistry";
 
 const route = useRoute();
 const router = useRouter();
 const appStore = useAppStore();
+const { groups: navigationGroups, items: navigationItems } = useUINavigationRegistry();
 const { logoUrl } = useBrandLogo();
 const { get, post } = useApi();
 defineProps<{
@@ -268,41 +225,10 @@ function handleConversationListChanged() {
   void fetchRecentConversations();
 }
 
-const CHAR_PATHS = [
-  "/character",
-  "/reminders",
-  "/memory-manager",
-  "/emotes",
-  "/episodic",
-  "/graph",
-  "/memory-timeline",
-  "/profiles",
-  "/world-book",
-  "/logs",
-  "/import",
-];
-
 const activeIndex = computed(() => {
   const path = route.path;
-  if (CHAR_PATHS.some((p) => path.startsWith(p))) {
-    return path;
-  }
-  if (path.startsWith("/dashboard")) {
-    return path;
-  }
-  if (path.startsWith("/extensions")) {
-    if (route.query.from === "creative-workshop") {
-      return "/creative-workshop";
-    }
-    return "/extensions";
-  }
-  if (path.startsWith("/kernel")) {
-    return "/extensions";
-  }
-  if (path.startsWith("/creative-workshop")) {
-    return "/creative-workshop";
-  }
-  return path;
+  const active = navigationItems.value.find((item) => isUINavigationItemActive(path, item));
+  return active?.route ?? path;
 });
 
 function openUserProfile() {

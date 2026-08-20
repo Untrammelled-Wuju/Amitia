@@ -33,7 +33,12 @@ SPDX-License-Identifier: AGPL-3.0-only
     </div>
 
     <div v-for="msg in messages" :key="msg.id" :data-message-id="msg.id">
-      <ChatBubble
+      <UIProviderHost
+        capability="conversation.message_renderer"
+        :provider-id="messageRendererId(msg)"
+        :fallback="ChatBubble"
+        :context="{ ...(extensionContext || {}), message: messageContext(msg) }"
+        :actions="messageActions(msg)"
         :message="msg"
         :char-name="charName"
         :char-avatar="charAvatar"
@@ -57,7 +62,7 @@ SPDX-License-Identifier: AGPL-3.0-only
         }"
         :character-id="characterId"
         :conversation-id="msg.conversationId || ''"
-      /></template><template #actions><MessageActionExtensionHost :message-id="msg.id" :message-type="msg.type || 'text'" :direction="msg.role === 'user' ? 'outgoing' : msg.role === 'assistant' ? 'incoming' : 'system'" :sender-type="msg.role === 'user' ? 'user' : msg.role === 'assistant' ? 'character' : 'system'" :character-id="characterId" :conversation-id="msg.conversationId || ''" /></template></ChatBubble>
+      /></template><template #actions><MessageActionExtensionHost :message-id="msg.id" :message-type="msg.type || 'text'" :direction="msg.role === 'user' ? 'outgoing' : msg.role === 'assistant' ? 'incoming' : 'system'" :sender-type="msg.role === 'user' ? 'user' : msg.role === 'assistant' ? 'character' : 'system'" :character-id="characterId" :conversation-id="msg.conversationId || ''" /></template></UIProviderHost>
     </div>
 
     <transition name="fade">
@@ -74,15 +79,18 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { onMounted, ref } from "vue";
 import { ChatDotRound, ArrowDown, Loading } from "@element-plus/icons-vue";
 import ChatBubble from "./ChatBubble.vue";
 import MessageExtensionHost from "./extension/chat/MessageExtensionHost.vue";
 import ChatEmptyStateExtensionHost from "./extension/chat/ChatEmptyStateExtensionHost.vue";
 import MessageActionExtensionHost from "./extension/chat/MessageActionExtensionHost.vue";
 import MessageBadgeExtensionHost from "./extension/chat/MessageBadgeExtensionHost.vue";
+import UIProviderHost from "./ui-runtime/UIProviderHost.vue";
+import { useExtensionUIStore } from "@/stores/extensionUI";
+import { resolveMessageRenderer } from "@/ui-runtime/messageRendererRegistry";
 
-defineProps<{
+const props = defineProps<{
   messages: any[];
   charName: string;
   charAvatar: string;
@@ -94,9 +102,10 @@ defineProps<{
   pullLoading: boolean;
   pullText: string;
   extensionContext?: Record<string, unknown>;
+  providerActions?: Record<string, (input?: unknown) => unknown | Promise<unknown>>;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   scroll: [];
   wheel: [e: WheelEvent];
   touchStart: [e: TouchEvent];
@@ -106,6 +115,35 @@ defineEmits<{
   reply: [msg: any];
   scrollToBottom: [];
 }>();
+
+const store = useExtensionUIStore();
+function messageContext(msg: any) {
+  return {
+    messageId: msg.id,
+    type: msg.type || "text",
+    role: msg.role,
+    status: msg.status,
+    content: msg.content || msg.text || "",
+    attachments: msg.attachments || [],
+    metadata: msg.metadata || {},
+  };
+}
+function messageRendererId(msg: any): string | undefined {
+  return resolveMessageRenderer(
+    store.getProviders("conversation.message_renderer"),
+    store.getResolvedProvider("conversation.message_renderer"),
+    msg,
+  )?.providerId;
+}
+function messageActions(msg: any) {
+  return {
+    ...(props.providerActions ?? {}),
+    "conversation.retry": async () => emit("retry", msg),
+    "conversation.reply": async () => emit("reply", msg),
+    "conversation.scrollToMessage": async (input?: unknown) => scrollToMessage(String((input as any)?.messageId ?? input ?? msg.id)),
+  };
+}
+onMounted(() => { if (!store.snapshot) void store.refreshSnapshot(); });
 
 function scrollToMessage(messageId: string) {
   if (!rootEl.value) return;
