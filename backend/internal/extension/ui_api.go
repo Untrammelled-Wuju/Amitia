@@ -37,6 +37,7 @@ func (api *UIAPI) RegisterRoutes(extensions *gin.RouterGroup, parent *gin.Router
 		container.ChatExtensionRegistry,
 	)
 	handler.SetExtensionRoot(container.ExtRoot)
+	handler.SetProviderRegistry(container.UIProviderRegistry)
 
 	if container.UIHostNotifier != nil {
 		handler.SetDialogResolver(container.UIHostNotifier)
