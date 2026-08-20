@@ -146,7 +146,10 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
             }
           },
         );
-      } else if (navigation == AmitiaAppBarNavigation.drawer) {
+      } else if (navigation == AmitiaAppBarNavigation.drawer ||
+          (navigation == AmitiaAppBarNavigation.none &&
+              !showBackButton &&
+              ShellDrawerScope.of(context) != null)) {
         effectiveLeading = IconButton(
           icon: const Icon(Icons.menu, size: 20),
           constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
@@ -196,15 +199,22 @@ class AmitiaCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final variant = context.uiComponentVariant('card');
+    double number(String key, double fallback) =>
+        variant[key] is num ? (variant[key] as num).toDouble() : fallback;
+    final paddingX = number('paddingX', AppSpacing.cardPadding);
+    final paddingY = number('paddingY', AppSpacing.cardPadding);
+    final radius = number('radius', AppRadius.medium);
+    final borderWidth = number('borderWidth', context.uiComponents.borderWidth);
     return GestureDetector(
       onTap: onTap,
       child: Container(
         margin: margin,
-        padding: padding ?? EdgeInsets.all(AppSpacing.cardPadding),
+        padding: padding ?? EdgeInsets.symmetric(horizontal: paddingX, vertical: paddingY),
         decoration: BoxDecoration(
           color: backgroundColor ?? context.surfacePrimary,
-          borderRadius: borderRadius ?? AppRadius.brMedium,
-          border: border ?? Border.all(color: context.borderPrimary, width: 0.5),
+          borderRadius: borderRadius ?? BorderRadius.circular(radius),
+          border: border ?? Border.all(color: context.borderPrimary, width: borderWidth),
         ),
         child: child,
       ),
@@ -263,14 +273,21 @@ class AmitiaListTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final variant = context.uiComponentVariant('listTile');
+    double number(String key, double fallback) =>
+        variant[key] is num ? (variant[key] as num).toDouble() : fallback;
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 14),
+        constraints: BoxConstraints(minHeight: number('minHeight', context.uiLayout.listItemMinHeight)),
+        padding: EdgeInsets.symmetric(
+          horizontal: number('paddingX', AppSpacing.lg),
+          vertical: number('paddingY', 14),
+        ),
         decoration: BoxDecoration(
           color: isSelected ? context.accentSoft : Colors.transparent,
-          borderRadius: AppRadius.brSmall,
+          borderRadius: BorderRadius.circular(number('radius', AppRadius.small)),
         ),
         child: Row(
           children: [

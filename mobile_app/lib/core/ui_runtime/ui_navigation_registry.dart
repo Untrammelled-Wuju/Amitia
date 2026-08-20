@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../app/app_routes.dart';
 import 'ui_provider.dart';
+import 'ui_icon_registry.dart';
 
 enum UINavigationPanel { main, more }
 
@@ -191,19 +192,25 @@ abstract final class UINavigationRegistry {
   static List<UINavigationItem> resolve(UIProviderSnapshot? snapshot) {
     final items = <UINavigationItem>[...builtinItems];
     if (snapshot == null) return _sorted(items);
+    final platform = currentUIPlatform();
 
-    // Navigation metadata is consumed only from profile-resolved providers.
-    // Merely installing/enabling an extension must never mutate global nav.
-    final sources = <UIProviderDefinition>[];
-    for (final capability in <String>[
-      UICapability.appNavigation,
-      UICapability.routeRegistry,
-    ]) {
-      final provider = snapshot.resolve(capability);
-      if (provider == null || !provider.enabled || provider.builtin) continue;
-      if (sources.any((item) => item.providerId == provider.providerId)) continue;
-      sources.add(provider);
-    }
+    // Navigation items are registry contributions: every enabled compatible
+    // provider may add items. app.navigation selection still controls the whole
+    // navigation surface through UIProviderHost; it does not suppress other
+    // providers' item contributions.
+    final sources = snapshot.providers
+        .where((provider) =>
+            provider.enabled &&
+            !provider.builtin &&
+            (provider.capability == UICapability.appNavigation ||
+                provider.capability == UICapability.routeRegistry) &&
+            provider.compatibleWith(snapshot.context, platform) &&
+            provider.metadata['navigationItems'] is List)
+        .toList()
+      ..sort((a, b) {
+        final priority = b.priority.compareTo(a.priority);
+        return priority != 0 ? priority : a.providerId.compareTo(b.providerId);
+      });
 
     final seenIds = <String>{};
     for (final provider in sources) {
@@ -216,18 +223,16 @@ abstract final class UINavigationRegistry {
         final label = (row['label'] ?? '').toString().trim();
         final route = (row['route'] ?? '').toString().trim();
         final compositeId = '${provider.extensionId}:$id';
-        if (id.isEmpty ||
-            label.isEmpty ||
-            !route.startsWith('/') ||
-            !seenIds.add(compositeId)) {
+        if (id.isEmpty || label.isEmpty || !route.startsWith('/') || !seenIds.add(compositeId)) {
           continue;
         }
+        final baseIcon = UIIconRegistry.iconFromName((row['icon'] ?? 'extension').toString());
         items.add(
           UINavigationItem(
             id: compositeId,
             label: label,
             route: route,
-            icon: iconFromName((row['icon'] ?? 'extension').toString()),
+            icon: baseIcon,
             panel: (row['panel'] ?? 'more').toString() == 'main'
                 ? UINavigationPanel.main
                 : UINavigationPanel.more,
@@ -243,26 +248,19 @@ abstract final class UINavigationRegistry {
       }
     }
 
-    final iconProvider = snapshot.resolve(UICapability.icons);
-    final aliases = iconProvider?.metadata['iconAliases'];
-    final iconAliases = aliases is Map ? aliases.cast<String, dynamic>() : const <String, dynamic>{};
     final withIconOverrides = items
-        .map((item) {
-          final alias = iconAliases[item.id] ?? iconAliases[item.group] ?? iconAliases['default'];
-          if (alias == null) return item;
-          return UINavigationItem(
-            id: item.id,
-            label: item.label,
-            route: item.route,
-            icon: iconFromName(alias.toString()),
-            panel: item.panel,
-            group: item.group,
-            order: item.order,
-            routePrefixes: item.routePrefixes,
-            builtin: item.builtin,
-            extensionId: item.extensionId,
-          );
-        })
+        .map((item) => UINavigationItem(
+              id: item.id,
+              label: item.label,
+              route: item.route,
+              icon: UIIconRegistry.resolve(snapshot, item.id, item.icon),
+              panel: item.panel,
+              group: item.group,
+              order: item.order,
+              routePrefixes: item.routePrefixes,
+              builtin: item.builtin,
+              extensionId: item.extensionId,
+            ))
         .toList();
     return _sorted(withIconOverrides);
   }
@@ -280,23 +278,5 @@ abstract final class UINavigationRegistry {
     return items;
   }
 
-  static IconData iconFromName(String raw) {
-    return switch (raw.toLowerCase()) {
-      'chat' || 'message' => Icons.chat_bubble_outline,
-      'task' || 'sparkles' => Icons.auto_awesome,
-      'people' || 'character' => Icons.people_outline,
-      'memory' => Icons.memory,
-      'devices' => Icons.devices_outlined,
-      'settings' => Icons.settings_outlined,
-      'game' => Icons.sports_esports_outlined,
-      'dashboard' => Icons.dashboard_outlined,
-      'history' => Icons.history_edu_outlined,
-      'download' => Icons.file_download_outlined,
-      'brush' || 'workshop' => Icons.brush_outlined,
-      'pet' => Icons.pets_outlined,
-      'notification' || 'reminder' => Icons.notifications_active_outlined,
-      'link' || 'channel' => Icons.sync_alt,
-      _ => Icons.extension_outlined,
-    };
-  }
+  static IconData iconFromName(String raw) => UIIconRegistry.iconFromName(raw);
 }

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
-import 'app_radius.dart';
 import 'design_tokens.dart';
 
 class AppTheme {
@@ -17,6 +16,7 @@ class AppTheme {
         const AmitiaTypographyTokens(),
         const AmitiaIconTokens(),
         const AmitiaComponentTokens(),
+        const AmitiaComponentVariants(),
       ],
       scaffoldBackgroundColor: colors.backgroundPrimary,
       colorScheme: ColorScheme.light(
@@ -40,7 +40,7 @@ class AppTheme {
         color: colors.surfacePrimary,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: AppRadius.brMedium,
+          borderRadius: BorderRadius.circular(16),
           side: BorderSide(color: colors.borderPrimary, width: 0.5),
         ),
         margin: EdgeInsets.zero,
@@ -54,15 +54,15 @@ class AppTheme {
         filled: true,
         fillColor: colors.surfaceSecondary,
         border: OutlineInputBorder(
-          borderRadius: AppRadius.brMedium,
+          borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: AppRadius.brMedium,
+          borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: AppRadius.brMedium,
+          borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide(color: colors.accentPrimary, width: 1.5),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -72,7 +72,7 @@ class AppTheme {
         backgroundColor: colors.textPrimary,
         contentTextStyle: TextStyle(color: Colors.white, fontSize: 14),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.brSmall),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: colors.surfacePrimary,
@@ -86,11 +86,11 @@ class AppTheme {
       dialogTheme: DialogThemeData(
         backgroundColor: colors.surfacePrimary,
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
       ),
       listTileTheme: ListTileThemeData(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.brSmall),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) {
@@ -122,6 +122,7 @@ class AppTheme {
         const AmitiaTypographyTokens(),
         const AmitiaIconTokens(),
         const AmitiaComponentTokens(),
+        const AmitiaComponentVariants(),
       ],
       scaffoldBackgroundColor: colors.backgroundPrimary,
       colorScheme: ColorScheme.dark(
@@ -145,7 +146,7 @@ class AppTheme {
         color: colors.surfacePrimary,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: AppRadius.brMedium,
+          borderRadius: BorderRadius.circular(16),
           side: BorderSide(color: colors.borderPrimary, width: 0.5),
         ),
         margin: EdgeInsets.zero,
@@ -159,15 +160,15 @@ class AppTheme {
         filled: true,
         fillColor: colors.surfaceSecondary,
         border: OutlineInputBorder(
-          borderRadius: AppRadius.brMedium,
+          borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: AppRadius.brMedium,
+          borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
-          borderRadius: AppRadius.brMedium,
+          borderRadius: BorderRadius.circular(16),
           borderSide: BorderSide(color: colors.accentPrimary, width: 1.5),
         ),
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -177,7 +178,7 @@ class AppTheme {
         backgroundColor: colors.surfaceSecondary,
         contentTextStyle: TextStyle(color: colors.textPrimary, fontSize: 14),
         behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.brSmall),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: colors.surfacePrimary,
@@ -191,11 +192,11 @@ class AppTheme {
       dialogTheme: DialogThemeData(
         backgroundColor: colors.surfacePrimary,
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
       ),
       listTileTheme: ListTileThemeData(
         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.brSmall),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
       switchTheme: SwitchThemeData(
         thumbColor: WidgetStateProperty.resolveWith((states) {

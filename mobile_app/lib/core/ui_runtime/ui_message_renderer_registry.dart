@@ -1,8 +1,7 @@
 import 'ui_provider.dart';
 
-/// Resolves the most specific renderer by message/role/mime/extension selectors.
-/// Selector-specific renderers outrank the profile-global renderer; the host's
-/// fallback chain still guarantees a built-in renderer on failure.
+/// Resolves selector-specific renderers from every enabled compatible plugin.
+/// Selector-less renderers remain profile-global replacements.
 abstract final class UIMessageRendererRegistry {
   static UIProviderDefinition? resolve(
     UIProviderSnapshot? snapshot, {
@@ -18,7 +17,8 @@ abstract final class UIMessageRendererRegistry {
             provider.enabled &&
             !provider.builtin &&
             provider.capability == UICapability.conversationMessageRenderer &&
-            provider.entryFor(platform) != null &&
+            provider.compatibleWith(snapshot.context, platform) &&
+            _hasSelectors(provider) &&
             _supports(provider, messageType, role, mimeType, extensionType))
         .toList()
       ..sort((a, b) {
@@ -33,10 +33,17 @@ abstract final class UIMessageRendererRegistry {
     final selected = snapshot.resolve(UICapability.conversationMessageRenderer);
     if (selected != null &&
         selected.enabled &&
-        selected.entryFor(platform) != null) {
+        selected.compatibleWith(snapshot.context, platform) &&
+        (selected.builtin || !_hasSelectors(selected))) {
       return selected;
     }
     return null;
+  }
+
+  static bool _hasSelectors(UIProviderDefinition provider) {
+    final metadata = provider.metadata;
+    return <String>['messageTypes', 'roles', 'mimeTypes', 'extensionTypes']
+        .any((key) => (metadata[key] as List?)?.isNotEmpty == true);
   }
 
   static int _score(UIProviderDefinition provider) {
@@ -74,9 +81,8 @@ abstract final class UIMessageRendererRegistry {
         !messageTypes.contains('*') &&
         !messageTypes.contains(normalizedType)) return false;
     if (roles.isNotEmpty &&
-        normalizedRole != null &&
         !roles.contains('*') &&
-        !roles.contains(normalizedRole)) return false;
+        (normalizedRole == null || !roles.contains(normalizedRole))) return false;
     if (extensionTypes.isNotEmpty &&
         !extensionTypes.contains('*') &&
         (normalizedExtension == null || !extensionTypes.contains(normalizedExtension))) return false;
