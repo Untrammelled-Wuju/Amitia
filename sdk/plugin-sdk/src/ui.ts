@@ -1,4 +1,5 @@
 import { AmitiaError, ValidationError, PermissionDeniedError } from "./errors";
+import type { UIProviderDefinition, UIProviderEntry } from "./manifest";
 
 export interface UIActionRequest {
   readonly actionId: string;
@@ -189,5 +190,106 @@ export function mapUIError(cause: unknown): AmitiaError {
 export function assertUIActionAllowed(actionId: string, allowed: string[]): void {
   if (!allowed.includes(actionId)) {
     throw new PermissionDeniedError(`UI action ${actionId} not allowed`);
+  }
+}
+
+
+/**
+ * Define a replaceable UI provider contribution with SDK-side fail-fast validation.
+ * The manifest contribution id remains the authority for extension/module identity;
+ * the host normalizes and verifies those fields again during installation.
+ */
+export function defineUIProvider(definition: UIProviderDefinition): UIProviderDefinition {
+  if (!definition.providerId?.trim()) {
+    throw new ValidationError("ui provider providerId is required");
+  }
+  if (!definition.capability) {
+    throw new ValidationError("ui provider capability is required");
+  }
+  const entries = definition.entries ?? {};
+  if (Object.keys(entries).length === 0) {
+    throw new ValidationError("ui provider requires at least one platform entry");
+  }
+  for (const [platform, entry] of Object.entries(entries)) {
+    assertUIProviderEntry(platform, entry, definition.capability);
+  }
+  assertUIProviderMetadata(definition);
+  return {
+    ...definition,
+    providerId: definition.providerId.trim(),
+    mode: definition.mode ?? "replace",
+    entries: { ...entries },
+  };
+}
+
+function assertUIProviderMetadata(definition: UIProviderDefinition): void {
+  const metadata = definition.metadata;
+  if (!metadata) return;
+  if (definition.capability === "route.registry" && metadata.routes !== undefined) {
+    if (!Array.isArray(metadata.routes)) throw new ValidationError("route.registry metadata.routes must be an array");
+    for (const route of metadata.routes) {
+      if (typeof route === "string") continue;
+      if (!route || typeof route !== "object" || !("id" in route) || !("path" in route) || !("providerId" in route)) {
+        throw new ValidationError("route.registry routes require id, path and providerId");
+      }
+    }
+  }
+  if (definition.capability === "app.navigation" && metadata.navigationItems !== undefined) {
+    if (!Array.isArray(metadata.navigationItems)) throw new ValidationError("app.navigation metadata.navigationItems must be an array");
+    for (const item of metadata.navigationItems) {
+      if (!item?.id || !item.label || !item.route?.startsWith("/")) {
+        throw new ValidationError("navigation items require id, label and an absolute route");
+      }
+    }
+  }
+  if (definition.capability === "conversation.message_renderer") {
+    for (const key of ["messageTypes", "roles", "mimeTypes", "extensionTypes"] as const) {
+      const value = metadata[key];
+      if (value !== undefined && !Array.isArray(value)) {
+        throw new ValidationError(`conversation.message_renderer metadata.${key} must be an array`);
+      }
+    }
+  }
+}
+
+function assertUIProviderEntry(
+  platform: string,
+  entry: UIProviderEntry,
+  capability: UIProviderDefinition["capability"],
+): void {
+  if (!platform.trim()) throw new ValidationError("ui provider platform key is required");
+  switch (entry.type) {
+    case "builtin_native":
+      throw new ValidationError("builtin_native is reserved for host built-in providers");
+    case "declarative": {
+      const allowed = new Set<UIProviderDefinition["capability"]>([
+        "app.navigation",
+        "route.registry",
+        "ui.theme",
+        "ui.tokens",
+        "ui.icons",
+        "ui.components",
+      ]);
+      if (!allowed.has(capability)) {
+        throw new ValidationError(`declarative entry is not supported for ${capability}`);
+      }
+      return;
+    }
+    case "web_module":
+      if (!entry.path?.trim()) throw new ValidationError(`web_module path required for ${platform}`);
+      return;
+    case "schema_renderer":
+      if (!entry.contributionId?.trim()) {
+        throw new ValidationError(`schema_renderer contributionId required for ${platform}`);
+      }
+      return;
+    case "web_restricted":
+    case "web_isolated":
+      if (!entry.contributionId?.trim()) {
+        throw new ValidationError(`${entry.type} contributionId required for ${platform}`);
+      }
+      return;
+    default:
+      throw new ValidationError(`unsupported UI provider entry type for ${platform}`);
   }
 }
