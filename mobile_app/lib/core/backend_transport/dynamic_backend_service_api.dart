@@ -82,16 +82,22 @@ final class DynamicBackendServiceApiProxy implements BackendServiceApi {
   Future<T?> put<T>(
     String path, {
     Object? data,
+    Map<String, dynamic>? queryParameters,
     T Function(dynamic)? fromJson,
   }) {
     final api = _requireCurrentApi();
-    return api.put<T>(path, data: data, fromJson: fromJson);
+    return api.put<T>(
+      path,
+      data: data,
+      queryParameters: queryParameters,
+      fromJson: fromJson,
+    );
   }
 
   @override
-  Future<void> delete(String path) {
+  Future<void> delete(String path, {Map<String, dynamic>? queryParameters}) {
     final api = _requireCurrentApi();
-    return api.delete(path);
+    return api.delete(path, queryParameters: queryParameters);
   }
 
   @override

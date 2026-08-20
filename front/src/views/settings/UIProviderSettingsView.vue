@@ -32,7 +32,7 @@
         <el-select
           :model-value="selection(capability)"
           :loading="saving === capability"
-          @change="(value) => choose(capability, String(value || ''))"
+          @change="(value: unknown) => choose(capability, String(value || ''))"
         >
           <el-option label="此层继承（自动解析）" value="" />
           <el-option
