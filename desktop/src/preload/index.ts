@@ -72,6 +72,12 @@ const api = {
   getBackendAuthHeaders(): Promise<Record<string, string>> {
     return ipcRenderer.invoke(IPC_CHANNELS.getBackendAuthHeaders);
   },
+  getMeshIdentity(): Promise<{ deviceId: string; runtimeId: string; platform: string } | null> {
+    return ipcRenderer.invoke(IPC_CHANNELS.meshGetIdentity);
+  },
+  getMeshStatus(): Promise<{ state: string; deviceId: string; runtimeId: string; runtimeSessionId: string } | null> {
+    return ipcRenderer.invoke(IPC_CHANNELS.meshGetStatus);
+  },
   onUINavigate(callback: (target: string) => void): () => void {
     const listener = (
       _event: Electron.IpcRendererEvent,
