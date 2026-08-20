@@ -29,12 +29,12 @@ class _ThemeSettingsPageState extends ConsumerState<ThemeSettingsPage> {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '主题设置', showBackButton: true, fallbackRoute: AppRoutes.settings),
       body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+        padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
         children: [
           _SectionLabel(text: '主题模式'),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
             child: AmitiaSegmentedControl(
               segments: const ['亮色', '暗色', '跟随系统'],
               selectedIndex: themeIndex,
@@ -45,12 +45,12 @@ class _ThemeSettingsPageState extends ConsumerState<ThemeSettingsPage> {
               },
             ),
           ),
-          const SizedBox(height: AppSpacing.sectionGap),
+          SizedBox(height: AppSpacing.sectionGap),
           _SectionLabel(text: '强调色'),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Container(
-            margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-            padding: const EdgeInsets.all(AppSpacing.cardPadding),
+            margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            padding: EdgeInsets.all(AppSpacing.cardPadding),
             decoration: BoxDecoration(
               color: context.surfacePrimary,
               borderRadius: AppRadius.brMedium,
@@ -67,7 +67,7 @@ class _ThemeSettingsPageState extends ConsumerState<ThemeSettingsPage> {
                   ),
                   child: const Icon(Icons.check, size: 20, color: Colors.white),
                 ),
-                const SizedBox(width: AppSpacing.md),
+                SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -81,11 +81,11 @@ class _ThemeSettingsPageState extends ConsumerState<ThemeSettingsPage> {
               ],
             ),
           ),
-          const SizedBox(height: AppSpacing.sectionGap),
+          SizedBox(height: AppSpacing.sectionGap),
           _SectionLabel(text: '字体缩放 (${(_fontScale * 100).round()}%)'),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
             child: Slider(
               value: _fontScale,
               min: 0.8,
@@ -95,11 +95,11 @@ class _ThemeSettingsPageState extends ConsumerState<ThemeSettingsPage> {
               onChanged: (v) => setState(() => _fontScale = v),
             ),
           ),
-          const SizedBox(height: AppSpacing.sectionGap),
+          SizedBox(height: AppSpacing.sectionGap),
           _SectionLabel(text: '动效'),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Container(
-            margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
             decoration: BoxDecoration(
               color: context.surfacePrimary,
               borderRadius: AppRadius.brMedium,
@@ -112,12 +112,12 @@ class _ThemeSettingsPageState extends ConsumerState<ThemeSettingsPage> {
               onChanged: (v) => setState(() => _animationEnabled = v),
             ),
           ),
-          const SizedBox(height: AppSpacing.sectionGap),
+          SizedBox(height: AppSpacing.sectionGap),
           _SectionLabel(text: '预览'),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Container(
-            margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-            padding: const EdgeInsets.all(AppSpacing.cardPadding),
+            margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            padding: EdgeInsets.all(AppSpacing.cardPadding),
             decoration: BoxDecoration(
               color: context.surfacePrimary,
               borderRadius: AppRadius.brMedium,
@@ -127,9 +127,9 @@ class _ThemeSettingsPageState extends ConsumerState<ThemeSettingsPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('预览效果', style: AppTypography.cardTitle(context).copyWith(fontSize: 16 * _fontScale)),
-                const SizedBox(height: AppSpacing.sm),
+                SizedBox(height: AppSpacing.sm),
                 Text('这是一段正文文字，用于展示当前字体缩放效果。', style: AppTypography.body(context).copyWith(fontSize: 15 * _fontScale)),
-                const SizedBox(height: AppSpacing.md),
+                SizedBox(height: AppSpacing.md),
                 Row(
                   children: [
                     AmitiaButton(
@@ -138,7 +138,7 @@ class _ThemeSettingsPageState extends ConsumerState<ThemeSettingsPage> {
                         const SnackBar(content: Text('预览按钮点击'), duration: Duration(seconds: 1)),
                       ),
                     ),
-                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(width: AppSpacing.sm),
                     AmitiaButton(
                       label: '次按钮',
                       isSecondary: true,
@@ -146,22 +146,22 @@ class _ThemeSettingsPageState extends ConsumerState<ThemeSettingsPage> {
                     ),
                   ],
                 ),
-                const SizedBox(height: AppSpacing.md),
+                SizedBox(height: AppSpacing.md),
                 AmitiaProgressBar(progress: 0.65),
-                const SizedBox(height: AppSpacing.sm),
+                SizedBox(height: AppSpacing.sm),
                 Row(
                   children: [
                     AmitiaStatusBadge(label: '正常', type: BadgeType.success),
-                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(width: AppSpacing.sm),
                     AmitiaStatusBadge(label: '警告', type: BadgeType.warning),
-                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(width: AppSpacing.sm),
                     AmitiaStatusBadge(label: '错误', type: BadgeType.error),
                   ],
                 ),
               ],
             ),
           ),
-          const SizedBox(height: AppSpacing.xl),
+          SizedBox(height: AppSpacing.xl),
         ],
       ),
     );
@@ -175,7 +175,7 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.sm),
+      padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.sm),
       child: Text(text, style: AppTypography.caption(context)),
     );
   }

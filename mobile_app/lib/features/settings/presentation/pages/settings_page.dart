@@ -18,6 +18,7 @@ final _settingsGroups = <SettingGroup>[
     SettingItem(title: 'AI 配置', icon: Icons.smart_toy_outlined, route: AppRoutes.settingsAi),
     SettingItem(title: '外观设置', icon: Icons.palette_outlined, value: '亮色', route: AppRoutes.settingsAppearance),
     SettingItem(title: '主题设置', icon: Icons.color_lens_outlined, route: AppRoutes.settingsTheme),
+    SettingItem(title: '界面提供者', icon: Icons.dashboard_customize_outlined, route: AppRoutes.settingsUIProviders),
     SettingItem(title: '用户设置', icon: Icons.person_outline, route: AppRoutes.settingsUser),
     SettingItem(title: '时间感知', icon: Icons.schedule_outlined, route: AppRoutes.settingsTemporal),
   ]),
@@ -53,21 +54,21 @@ class SettingsPage extends ConsumerWidget {
         navigation: AmitiaAppBarNavigation.back,
       ),
       body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+        padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(
+            padding: EdgeInsets.symmetric(
               horizontal: AppSpacing.pagePadding,
             ),
             child: _buildUserInfoCard(context, ref),
           ),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           for (int i = 0; i < groups.length; i++) ...[
             _SettingGroup(
               group: groups[i],
               leading: groups[i].title == '系统与维护'
                   ? Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                      padding: EdgeInsets.only(bottom: AppSpacing.sm),
                       child: _DevModeToggle(
                         isDevMode: isDevMode,
                         onTap: () {
@@ -79,9 +80,9 @@ class SettingsPage extends ConsumerWidget {
                   : null,
             ),
             if (i < groups.length - 1)
-              const SizedBox(height: AppSpacing.sectionGap),
+              SizedBox(height: AppSpacing.sectionGap),
           ],
-          const SizedBox(height: AppSpacing.xl),
+          SizedBox(height: AppSpacing.xl),
         ],
       ),
     );
@@ -244,7 +245,7 @@ class _DevModeToggle extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: isDevMode
               ? context.accentPrimary.withValues(alpha: 0.12)
@@ -290,7 +291,7 @@ class _DevModeToggle extends StatelessWidget {
                 child: Container(
                   width: 16,
                   height: 16,
-                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                  margin: EdgeInsets.symmetric(horizontal: 2),
                   decoration: const BoxDecoration(
                     color: Colors.white,
                     shape: BoxShape.circle,
@@ -318,7 +319,7 @@ class _SettingGroup extends StatelessWidget {
       children: [
         if (leading != null) leading!,
         Padding(
-          padding: const EdgeInsets.fromLTRB(
+          padding: EdgeInsets.fromLTRB(
             AppSpacing.pagePadding,
             AppSpacing.sm,
             AppSpacing.pagePadding,
@@ -327,7 +328,7 @@ class _SettingGroup extends StatelessWidget {
           child: Text(group.title, style: AppTypography.caption(context)),
         ),
         Container(
-          margin: const EdgeInsets.symmetric(
+          margin: EdgeInsets.symmetric(
             horizontal: AppSpacing.pagePadding,
           ),
           decoration: BoxDecoration(
@@ -341,7 +342,7 @@ class _SettingGroup extends StatelessWidget {
                 _SettingTile(item: group.items[i]),
                 if (i < group.items.length - 1)
                   Padding(
-                    padding: const EdgeInsets.only(left: 56),
+                    padding: EdgeInsets.only(left: 56),
                     child: Divider(
                       height: 1,
                       thickness: 0.5,
@@ -368,7 +369,7 @@ class _SettingTile extends StatelessWidget {
       behavior: HitTestBehavior.opaque,
       onTap: () => context.push(item.route),
       child: Padding(
-        padding: const EdgeInsets.symmetric(
+        padding: EdgeInsets.symmetric(
           horizontal: AppSpacing.lg,
           vertical: 13,
         ),
@@ -391,7 +392,7 @@ class _SettingTile extends StatelessWidget {
                   Text(item.title, style: AppTypography.body(context)),
                   if (item.subtitle != null)
                     Padding(
-                      padding: const EdgeInsets.only(top: 2),
+                      padding: EdgeInsets.only(top: 2),
                       child: Text(
                         item.subtitle!,
                         style: AppTypography.caption(context),

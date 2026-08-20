@@ -106,10 +106,10 @@ class _AiConfigContentState extends State<_AiConfigContent> {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+      padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
       children: [
         _SectionLabel(text: '全局 AI 行为'),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         _buildCard([
           _buildDropdownTile(
             icon: Icons.person_outline,
@@ -135,9 +135,9 @@ class _AiConfigContentState extends State<_AiConfigContent> {
             onChanged: (v) => setState(() => _contextStrategy = v),
           ),
         ]),
-        const SizedBox(height: AppSpacing.sectionGap),
+        SizedBox(height: AppSpacing.sectionGap),
         _SectionLabel(text: '输出与调用'),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         _buildCard([
           AmitiaSwitchTile(
             title: '流式输出',
@@ -160,9 +160,9 @@ class _AiConfigContentState extends State<_AiConfigContent> {
             onChanged: (v) => setState(() => _toolCalls = v),
           ),
         ]),
-        const SizedBox(height: AppSpacing.sectionGap),
+        SizedBox(height: AppSpacing.sectionGap),
         _SectionLabel(text: '异常处理'),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         _buildCard([
           _buildDropdownTile(
             icon: Icons.error_outline,
@@ -172,9 +172,9 @@ class _AiConfigContentState extends State<_AiConfigContent> {
             onChanged: (v) => setState(() => _errorFallback = v),
           ),
         ]),
-        const SizedBox(height: AppSpacing.xl),
+        SizedBox(height: AppSpacing.xl),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
           child: AmitiaButton(
             label: '管理模型配置',
             icon: Icons.settings,
@@ -182,14 +182,14 @@ class _AiConfigContentState extends State<_AiConfigContent> {
             onPressed: null,
           ),
         ),
-        const SizedBox(height: AppSpacing.xl),
+        SizedBox(height: AppSpacing.xl),
       ],
     );
   }
 
   Widget _buildCard(List<Widget> children) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
         borderRadius: AppRadius.brMedium,
@@ -217,7 +217,7 @@ class _AiConfigContentState extends State<_AiConfigContent> {
       behavior: HitTestBehavior.opaque,
       onTap: () => _showOptionSheet(title, options, value, onChanged),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
         child: Row(
           children: [
             Container(
@@ -248,7 +248,7 @@ class _AiConfigContentState extends State<_AiConfigContent> {
             mainAxisSize: MainAxisSize.min,
             children: [
               Padding(
-                padding: const EdgeInsets.all(AppSpacing.lg),
+                padding: EdgeInsets.all(AppSpacing.lg),
                 child: Text(title, style: AppTypography.sectionTitle(context)),
               ),
               ...options.map((opt) {
@@ -266,7 +266,7 @@ class _AiConfigContentState extends State<_AiConfigContent> {
                   },
                 );
               }),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
             ],
           ),
         );
@@ -282,7 +282,7 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.sm),
+      padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.sm),
       child: Text(text, style: AppTypography.caption(context)),
     );
   }

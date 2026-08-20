@@ -63,18 +63,18 @@ class DevicesPage extends ConsumerWidget {
                 ];
 
           return ListView(
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+            padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
             children: [
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
                 child: Text(
                   '已登录的设备 (${deviceItems.length})',
                   style: AppTypography.caption(context),
                 ),
               ),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               Container(
-                margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
                 decoration: BoxDecoration(
                   color: context.surfacePrimary,
                   borderRadius: AppRadius.brMedium,

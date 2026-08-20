@@ -107,10 +107,10 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+      padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
       children: [
         _SectionLabel(text: '权限审批'),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         _buildCard([
           _buildDropdownTile(
             icon: Icons.shield_outlined,
@@ -141,9 +141,9 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
             onChanged: (v) => setState(() => _outputBoundary = v),
           ),
         ]),
-        const SizedBox(height: AppSpacing.sectionGap),
+        SizedBox(height: AppSpacing.sectionGap),
         _SectionLabel(text: '隐私与边界'),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         _buildCard([
           _buildNavTile(icon: Icons.privacy_tip_outlined, title: '隐私说明', onTap: () => _showTip('隐私说明')),
           _divider(),
@@ -151,9 +151,9 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
           _divider(),
           _buildNavTile(icon: Icons.security, title: '隐私扫描', onTap: null),
         ]),
-        const SizedBox(height: AppSpacing.sectionGap),
+        SizedBox(height: AppSpacing.sectionGap),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
           child: AmitiaButton(
             label: _saving ? '保存中...' : '保存配置',
             icon: Icons.check,
@@ -161,14 +161,14 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
             onPressed: _saving ? null : _saveConfig,
           ),
         ),
-        const SizedBox(height: AppSpacing.xl),
+        SizedBox(height: AppSpacing.xl),
       ],
     );
   }
 
   Widget _buildCard(List<Widget> children) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
         borderRadius: AppRadius.brMedium,
@@ -191,7 +191,7 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
         child: Row(
           children: [
             Container(
@@ -220,7 +220,7 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
       behavior: HitTestBehavior.opaque,
       onTap: () => _showOptionSheet(title, options, value, onChanged),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
         child: Row(
           children: [
             Container(
@@ -249,14 +249,14 @@ class _SafetyContentState extends ConsumerState<_SafetyContent> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Padding(padding: const EdgeInsets.all(AppSpacing.lg), child: Text(title, style: AppTypography.sectionTitle(context))),
+            Padding(padding: EdgeInsets.all(AppSpacing.lg), child: Text(title, style: AppTypography.sectionTitle(context))),
             ...options.map((opt) => ListTile(
                   leading: Icon(opt == current ? Icons.radio_button_checked : Icons.radio_button_off,
                       size: 20, color: opt == current ? context.accentPrimary : context.textTertiary),
                   title: Text(opt, style: AppTypography.body(context)),
                   onTap: () { onChanged(opt); Navigator.pop(ctx); },
                 )),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
           ],
         ),
       ),
@@ -277,7 +277,7 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.sm),
+      padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.sm),
       child: Text(text, style: AppTypography.caption(context)),
     );
   }

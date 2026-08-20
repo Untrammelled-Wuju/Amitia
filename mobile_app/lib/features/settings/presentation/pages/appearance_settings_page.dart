@@ -41,11 +41,11 @@ class _AppearanceSettingsPageState extends ConsumerState<AppearanceSettingsPage>
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '外观设置', showBackButton: true, fallbackRoute: AppRoutes.settings),
       body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+        padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
         children: [
           const _SectionLabel(text: '主题模式'),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
             child: AmitiaSegmentedControl(
               segments: const ['亮色', '暗色', '跟随系统'],
               selectedIndex: themeIndex,
@@ -56,20 +56,20 @@ class _AppearanceSettingsPageState extends ConsumerState<AppearanceSettingsPage>
               },
             ),
           ),
-          const SizedBox(height: AppSpacing.sectionGap),
+          SizedBox(height: AppSpacing.sectionGap),
           const _SectionLabel(text: '字体大小'),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
             child: _OptionChips(
               options: const ['小', '标准', '大', '超大'],
               selectedIndex: _fontSizeIndex,
               onChanged: (i) => setState(() => _fontSizeIndex = i),
             ),
           ),
-          const SizedBox(height: AppSpacing.sectionGap),
+          SizedBox(height: AppSpacing.sectionGap),
           const _SectionLabel(text: '主题色调'),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
             child: Row(
               children: [
                 for (int i = 0; i < _accentColors.length; i++) ...[
@@ -79,26 +79,26 @@ class _AppearanceSettingsPageState extends ConsumerState<AppearanceSettingsPage>
                     onTap: () => setState(() => _accentColorIndex = i),
                   ),
                   if (i < _accentColors.length - 1)
-                    const SizedBox(width: AppSpacing.lg),
+                    SizedBox(width: AppSpacing.lg),
                 ],
               ],
             ),
           ),
-          const SizedBox(height: AppSpacing.sectionGap),
+          SizedBox(height: AppSpacing.sectionGap),
           const _SectionLabel(text: '圆角风格'),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
             child: _OptionChips(
               options: const ['克制', '标准', '圆润'],
               selectedIndex: _cornerStyleIndex,
               onChanged: (i) => setState(() => _cornerStyleIndex = i),
             ),
           ),
-          const SizedBox(height: AppSpacing.sectionGap),
+          SizedBox(height: AppSpacing.sectionGap),
           const _SectionLabel(text: '其他'),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Container(
-            margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
             decoration: BoxDecoration(
               color: context.surfacePrimary,
               borderRadius: AppRadius.brMedium,
@@ -126,7 +126,7 @@ class _AppearanceSettingsPageState extends ConsumerState<AppearanceSettingsPage>
               ],
             ),
           ),
-          const SizedBox(height: AppSpacing.xl),
+          SizedBox(height: AppSpacing.xl),
         ],
       ),
     );
@@ -141,7 +141,7 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
+      padding: EdgeInsets.fromLTRB(
         AppSpacing.pagePadding,
         AppSpacing.sm,
         AppSpacing.pagePadding,
@@ -173,7 +173,7 @@ class _OptionChips extends StatelessWidget {
           GestureDetector(
             onTap: () => onChanged(i),
             child: Container(
-              padding: const EdgeInsets.symmetric(
+              padding: EdgeInsets.symmetric(
                 horizontal: AppSpacing.lg,
                 vertical: 9,
               ),

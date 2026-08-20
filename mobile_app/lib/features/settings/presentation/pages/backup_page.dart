@@ -92,21 +92,21 @@ class _BackupPageState extends ConsumerState<BackupPage> {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '数据与备份', showBackButton: true, fallbackRoute: AppRoutes.settings),
       body: ListView(
-        padding: const EdgeInsets.all(AppSpacing.pagePadding),
+        padding: EdgeInsets.all(AppSpacing.pagePadding),
         children: [
           Text('数据概览', style: AppTypography.sectionTitle(context)),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           _DataOverview(
             charactersCount: charactersAsync.valueOrNull?.length ?? 0,
             conversationsCount: conversationsAsync.valueOrNull?.length ?? 0,
             memoriesCount: memoriesAsync.valueOrNull?.length ?? 0,
             isLoading: charactersAsync.isLoading || conversationsAsync.isLoading || memoriesAsync.isLoading,
           ),
-          const SizedBox(height: AppSpacing.sectionGap),
+          SizedBox(height: AppSpacing.sectionGap),
           Text('操作', style: AppTypography.sectionTitle(context)),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           _ActionGrid(onAction: _handleAction),
-          const SizedBox(height: AppSpacing.sectionGap),
+          SizedBox(height: AppSpacing.sectionGap),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -117,20 +117,20 @@ class _BackupPageState extends ConsumerState<BackupPage> {
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           if (_loadingBackups)
-            const Padding(
+            Padding(
               padding: EdgeInsets.all(AppSpacing.lg),
               child: Center(child: CircularProgressIndicator()),
             )
           else if (_backupsError != null)
             Padding(
-              padding: const EdgeInsets.all(AppSpacing.md),
+              padding: EdgeInsets.all(AppSpacing.md),
               child: Text('加载失败: $_backupsError', style: TextStyle(color: context.error)),
             )
           else if (_backups.isEmpty)
             Padding(
-              padding: const EdgeInsets.all(AppSpacing.lg),
+              padding: EdgeInsets.all(AppSpacing.lg),
               child: Center(
                 child: Text('暂无备份记录', style: AppTypography.body(context).copyWith(color: context.textTertiary)),
               ),
@@ -138,7 +138,7 @@ class _BackupPageState extends ConsumerState<BackupPage> {
           else
             ..._backups.map(
               (b) => Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                padding: EdgeInsets.only(bottom: AppSpacing.sm),
                 child: _BackupRecord(
                   time: (b['time'] ?? b['created_at'] ?? '').toString(),
                   size: (b['size'] ?? '').toString(),
@@ -173,7 +173,7 @@ class _DataOverview extends StatelessWidget {
       ('记忆数据', isLoading ? '...' : '$memoriesCount 条', Icons.memory),
     ];
     return Container(
-      padding: const EdgeInsets.symmetric(
+      padding: EdgeInsets.symmetric(
         vertical: AppSpacing.lg,
         horizontal: AppSpacing.sm,
       ),
@@ -212,7 +212,7 @@ class _DataItem extends StatelessWidget {
             ),
             child: Icon(icon, size: 16, color: context.accentPrimary),
           ),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Text(value, style: AppTypography.cardTitle(context)),
           const SizedBox(height: 2),
           Text(
@@ -305,7 +305,7 @@ class _BackupRecord extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(
+      padding: EdgeInsets.symmetric(
         horizontal: AppSpacing.lg,
         vertical: 14,
       ),
@@ -317,7 +317,7 @@ class _BackupRecord extends StatelessWidget {
       child: Row(
         children: [
           Icon(Icons.history, size: 20, color: context.textTertiary),
-          const SizedBox(width: AppSpacing.md),
+          SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

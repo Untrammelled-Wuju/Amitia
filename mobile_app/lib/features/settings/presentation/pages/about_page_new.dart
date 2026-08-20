@@ -49,9 +49,9 @@ class AboutPageNew extends ConsumerWidget {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '关于', showBackButton: true, fallbackRoute: AppRoutes.settings),
       body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xxl),
+        padding: EdgeInsets.symmetric(vertical: AppSpacing.xxl),
         children: [
-          const SizedBox(height: AppSpacing.xl),
+          SizedBox(height: AppSpacing.xl),
           Center(
             child: Container(
               width: 96,
@@ -74,7 +74,7 @@ class AboutPageNew extends ConsumerWidget {
               child: const Icon(Icons.auto_awesome, size: 48, color: Colors.white),
             ),
           ),
-          const SizedBox(height: AppSpacing.lg),
+          SizedBox(height: AppSpacing.lg),
           Center(child: Text('Amitia', style: AppTypography.pageLargeTitle(context))),
           const SizedBox(height: 4),
           Center(
@@ -93,22 +93,22 @@ class AboutPageNew extends ConsumerWidget {
               ],
             ),
           ),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           Center(
             child: Text('你的专属 AI 伙伴', style: AppTypography.caption(context)),
           ),
-          const SizedBox(height: AppSpacing.sectionGap),
+          SizedBox(height: AppSpacing.sectionGap),
           _SectionLabel(text: '应用信息'),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           _buildCard(context, [
             for (int i = 0; i < _infoItems.length; i++) ...[
               _buildInfoTile(context, _infoItems[i].$1, _infoItems[i].$2),
               if (i < _infoItems.length - 1) _divider(context),
             ],
           ]),
-          const SizedBox(height: AppSpacing.sectionGap),
+          SizedBox(height: AppSpacing.sectionGap),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
             child: AmitiaButton(
               label: '检查更新',
               icon: Icons.system_update,
@@ -116,16 +116,16 @@ class AboutPageNew extends ConsumerWidget {
               onPressed: () => _checkUpdate(context),
             ),
           ),
-          const SizedBox(height: AppSpacing.sectionGap),
+          SizedBox(height: AppSpacing.sectionGap),
           _SectionLabel(text: '开源组件'),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           _buildCard(context, [
             for (int i = 0; i < _components.length; i++) ...[
               _buildComponentTile(context, _components[i].$1, _components[i].$2, _components[i].$3),
               if (i < _components.length - 1) _divider(context),
             ],
           ]),
-          const SizedBox(height: AppSpacing.sectionGap),
+          SizedBox(height: AppSpacing.sectionGap),
           Center(
             child: Text(
               'Copyright (c) 2026 Amitia\n保留所有权利',
@@ -133,7 +133,7 @@ class AboutPageNew extends ConsumerWidget {
               style: AppTypography.label(context),
             ),
           ),
-          const SizedBox(height: AppSpacing.xl),
+          SizedBox(height: AppSpacing.xl),
         ],
       ),
     );
@@ -141,7 +141,7 @@ class AboutPageNew extends ConsumerWidget {
 
   Widget _buildCard(BuildContext context, List<Widget> children) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
         borderRadius: AppRadius.brMedium,
@@ -153,7 +153,7 @@ class AboutPageNew extends ConsumerWidget {
 
   Widget _divider(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(left: AppSpacing.lg),
+      padding: EdgeInsets.only(left: AppSpacing.lg),
       child: Divider(height: 1, thickness: 0.5, color: context.borderSecondary),
     );
   }
@@ -167,7 +167,7 @@ class AboutPageNew extends ConsumerWidget {
         );
       },
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 14),
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 14),
         child: Row(
           children: [
             Expanded(child: Text(title, style: AppTypography.body(context))),
@@ -184,7 +184,7 @@ class AboutPageNew extends ConsumerWidget {
 
   Widget _buildComponentTile(BuildContext context, String name, String license, String desc) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 12),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 12),
       child: Row(
         children: [
           Expanded(
@@ -230,7 +230,7 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.sm),
+      padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.sm),
       child: Text(text, style: AppTypography.caption(context)),
     );
   }

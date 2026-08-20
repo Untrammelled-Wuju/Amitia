@@ -55,9 +55,9 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
       body: _loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
-              padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+              padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
               children: [
-                const SizedBox(height: AppSpacing.lg),
+                SizedBox(height: AppSpacing.lg),
                 Center(
                   child: Container(
                     width: 80,
@@ -74,13 +74,13 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
                     ),
                   ),
                 ),
-                const SizedBox(height: AppSpacing.md),
+                SizedBox(height: AppSpacing.md),
                 Center(child: Text(_nickname, style: AppTypography.sectionTitle(context))),
                 const SizedBox(height: 4),
                 Center(child: Text('@$_username', style: AppTypography.caption(context))),
-                const SizedBox(height: AppSpacing.sectionGap),
+                SizedBox(height: AppSpacing.sectionGap),
                 _SectionLabel(text: '基础资料'),
-                const SizedBox(height: AppSpacing.sm),
+                SizedBox(height: AppSpacing.sm),
                 _buildCard([
                   _buildEditTile('昵称', _nickname, () => _showEditSheet('昵称', _nickname, (v) => setState(() => _nickname = v))),
                   _divider(),
@@ -90,17 +90,17 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
                   _divider(),
                   _buildEditTile('个人简介', _bio.isEmpty ? '未设置' : _bio, () => _showEditSheet('个人简介', _bio, (v) => setState(() => _bio = v), maxLines: 3)),
                 ]),
-                const SizedBox(height: AppSpacing.sectionGap),
+                SizedBox(height: AppSpacing.sectionGap),
                 _SectionLabel(text: '账号安全'),
-                const SizedBox(height: AppSpacing.sm),
+                SizedBox(height: AppSpacing.sm),
                 _buildCard([
                   _buildNavTile(icon: Icons.lock_outline, title: '修改密码', onTap: _showPasswordSheet),
                   _divider(),
                   _buildNavTile(icon: Icons.devices_outlined, title: '登录设备管理', onTap: () => _showTip('登录设备管理')),
                 ]),
-                const SizedBox(height: AppSpacing.sectionGap),
+                SizedBox(height: AppSpacing.sectionGap),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                  padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
                   child: AmitiaButton(
                     label: '退出登录',
                     icon: Icons.logout,
@@ -109,7 +109,7 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
                     onPressed: _confirmLogout,
                   ),
                 ),
-                const SizedBox(height: AppSpacing.xl),
+                SizedBox(height: AppSpacing.xl),
               ],
             ),
     );
@@ -117,7 +117,7 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
 
   Widget _buildCard(List<Widget> children) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
         borderRadius: AppRadius.brMedium,
@@ -139,7 +139,7 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
         child: Row(
           children: [
             Expanded(child: Text(title, style: AppTypography.body(context))),
@@ -159,7 +159,7 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
       behavior: HitTestBehavior.opaque,
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
         child: Row(
           children: [
             Container(
@@ -192,9 +192,9 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('编辑$title', style: AppTypography.sectionTitle(context)),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               AmitiaTextField(hintText: '请输入$title', controller: ctrl, maxLines: maxLines),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               AmitiaButton(
                 label: '保存',
                 isFullWidth: true,
@@ -231,19 +231,19 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('修改密码', style: AppTypography.sectionTitle(context)),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               Text('当前密码', style: AppTypography.label(context)),
               const SizedBox(height: 4),
               AmitiaTextField(hintText: '输入当前密码', controller: oldCtrl, obscureText: true),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('新密码', style: AppTypography.label(context)),
               const SizedBox(height: 4),
               AmitiaTextField(hintText: '输入新密码', controller: newCtrl, obscureText: true),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('确认密码', style: AppTypography.label(context)),
               const SizedBox(height: 4),
               AmitiaTextField(hintText: '再次输入新密码', controller: confirmCtrl, obscureText: true),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               AmitiaButton(
                 label: '确认修改',
                 isFullWidth: true,
@@ -300,7 +300,7 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.sm),
+      padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.sm),
       child: Text(text, style: AppTypography.caption(context)),
     );
   }

@@ -101,10 +101,10 @@ class _StorageContentState extends ConsumerState<_StorageContent> {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+      padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
       children: [
         _SectionLabel(text: '数据库健康'),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         _buildCard([
           _buildInfoTile('SQLite 主库', '正常', BadgeType.success),
           _divider(),
@@ -114,20 +114,20 @@ class _StorageContentState extends ConsumerState<_StorageContent> {
           _divider(),
           _buildInfoTile('数据库完整性', '通过', BadgeType.success),
         ]),
-        const SizedBox(height: AppSpacing.sectionGap),
+        SizedBox(height: AppSpacing.sectionGap),
         _SectionLabel(text: '存储占用'),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         _buildCard(
           _storageItems.map((s) => Column(children: [
             _buildStorageTile(s),
             if (s != _storageItems.last) _divider(),
           ])).expand((w) => [w]).toList(),
         ),
-        const SizedBox(height: AppSpacing.sectionGap),
+        SizedBox(height: AppSpacing.sectionGap),
         _SectionLabel(text: '操作'),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
           child: Column(
             children: [
               AmitiaButton(
@@ -137,7 +137,7 @@ class _StorageContentState extends ConsumerState<_StorageContent> {
                 isSecondary: true,
                 onPressed: _confirmCleanCache,
               ),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               AmitiaButton(
                 label: '数据迁移',
                 icon: Icons.swap_horiz,
@@ -145,14 +145,14 @@ class _StorageContentState extends ConsumerState<_StorageContent> {
                 isSecondary: true,
                 onPressed: _confirmMigrate,
               ),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               AmitiaButton(
                 label: '加密备份',
                 icon: Icons.enhanced_encryption_outlined,
                 isFullWidth: true,
                 onPressed: _doEncryptBackup,
               ),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               AmitiaButton(
                 label: '恢复备份',
                 icon: Icons.restore,
@@ -163,14 +163,14 @@ class _StorageContentState extends ConsumerState<_StorageContent> {
             ],
           ),
         ),
-        const SizedBox(height: AppSpacing.xl),
+        SizedBox(height: AppSpacing.xl),
       ],
     );
   }
 
   Widget _buildCard(List<Widget> children) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
         borderRadius: AppRadius.brMedium,
@@ -189,7 +189,7 @@ class _StorageContentState extends ConsumerState<_StorageContent> {
 
   Widget _buildInfoTile(String title, String value, BadgeType type) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
       child: Row(
         children: [
           Expanded(child: Text(title, style: AppTypography.body(context))),
@@ -201,7 +201,7 @@ class _StorageContentState extends ConsumerState<_StorageContent> {
 
   Widget _buildStorageTile(_StorageItem info) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -292,11 +292,11 @@ class _StorageContentState extends ConsumerState<_StorageContent> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('恢复加密备份', style: AppTypography.sectionTitle(context)),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               Text('请输入备份文件密码', style: AppTypography.label(context)),
               const SizedBox(height: 4),
               AmitiaTextField(hintText: '输入密码', controller: pwdCtrl, obscureText: true),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               AmitiaButton(
                 label: '恢复',
                 isFullWidth: true,
@@ -348,7 +348,7 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.sm),
+      padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.sm),
       child: Text(text, style: AppTypography.caption(context)),
     );
   }

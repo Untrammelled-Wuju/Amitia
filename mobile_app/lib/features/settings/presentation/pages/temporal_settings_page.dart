@@ -154,10 +154,10 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
   @override
   Widget build(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+      padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
       children: [
         _SectionLabel(text: '基础设置'),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         _buildCard([
           AmitiaSwitchTile(
             title: '时间感知',
@@ -182,27 +182,27 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
             onChanged: (v) => setState(() => _dateFormat = v),
           ),
         ]),
-        const SizedBox(height: AppSpacing.sectionGap),
+        SizedBox(height: AppSpacing.sectionGap),
         AmitiaSectionHeader(
           title: '周期锚点',
           actionText: '新增',
           onAction: () => _showAnchorSheet(null),
         ),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         ..._periodicAnchors.map((a) => _buildAnchorTile(a)),
         if (_periodicAnchors.isEmpty) _buildEmpty('暂无周期锚点'),
-        const SizedBox(height: AppSpacing.sectionGap),
+        SizedBox(height: AppSpacing.sectionGap),
         AmitiaSectionHeader(
           title: '特殊日期',
           actionText: '新增',
           onAction: () => _showAnchorSheet(null, isSpecial: true),
         ),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         ..._specialDates.map((a) => _buildAnchorTile(a)),
         if (_specialDates.isEmpty) _buildEmpty('暂无特殊日期'),
-        const SizedBox(height: AppSpacing.sectionGap),
+        SizedBox(height: AppSpacing.sectionGap),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
           child: AmitiaButton(
             label: '保存配置',
             icon: Icons.check,
@@ -210,14 +210,14 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
             onPressed: _saveConfig,
           ),
         ),
-        const SizedBox(height: AppSpacing.xl),
+        SizedBox(height: AppSpacing.xl),
       ],
     );
   }
 
   Widget _buildCard(List<Widget> children) {
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
         borderRadius: AppRadius.brMedium,
@@ -236,8 +236,8 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
 
   Widget _buildAnchorTile(TimeAnchor anchor) {
     return Container(
-      margin: const EdgeInsets.only(left: AppSpacing.pagePadding, right: AppSpacing.pagePadding, bottom: AppSpacing.sm),
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 12),
+      margin: EdgeInsets.only(left: AppSpacing.pagePadding, right: AppSpacing.pagePadding, bottom: AppSpacing.sm),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 12),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
         borderRadius: AppRadius.brMedium,
@@ -288,7 +288,7 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
 
   Widget _buildEmpty(String text) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.lg),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.lg),
       child: Center(child: Text(text, style: AppTypography.caption(context))),
     );
   }
@@ -304,7 +304,7 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
       behavior: HitTestBehavior.opaque,
       onTap: () => _showOptionSheet(title, options, value, onChanged),
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 13),
         child: Row(
           children: [
             Container(
@@ -333,14 +333,14 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Padding(padding: const EdgeInsets.all(AppSpacing.lg), child: Text(title, style: AppTypography.sectionTitle(context))),
+            Padding(padding: EdgeInsets.all(AppSpacing.lg), child: Text(title, style: AppTypography.sectionTitle(context))),
             ...options.map((opt) => ListTile(
                   leading: Icon(opt == current ? Icons.radio_button_checked : Icons.radio_button_off,
                       size: 20, color: opt == current ? context.accentPrimary : context.textTertiary),
                   title: Text(opt, style: AppTypography.body(context)),
                   onTap: () { onChanged(opt); Navigator.pop(ctx); },
                 )),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
           ],
         ),
       ),
@@ -367,21 +367,21 @@ class _TemporalContentState extends ConsumerState<_TemporalContent> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(existing == null ? '新增时间锚点' : '编辑时间锚点', style: AppTypography.sectionTitle(context)),
-                  const SizedBox(height: AppSpacing.lg),
+                  SizedBox(height: AppSpacing.lg),
                   AmitiaSegmentedControl(
                     segments: const ['周期锚点', '特殊日期'],
                     selectedIndex: isPeriodic ? 0 : 1,
                     onChanged: (i) => setSheetState(() => isPeriodic = i == 0),
                   ),
-                  const SizedBox(height: AppSpacing.md),
+                  SizedBox(height: AppSpacing.md),
                   Text('名称', style: AppTypography.label(context)),
                   const SizedBox(height: 4),
                   AmitiaTextField(hintText: isPeriodic ? '如：起床' : '如：生日', controller: nameCtrl),
-                  const SizedBox(height: AppSpacing.md),
+                  SizedBox(height: AppSpacing.md),
                   Text(isPeriodic ? '时间 (HH:mm)' : '日期 (YYYY-MM-DD)', style: AppTypography.label(context)),
                   const SizedBox(height: 4),
                   AmitiaTextField(hintText: isPeriodic ? '07:00' : '1995-06-15', controller: valueCtrl),
-                  const SizedBox(height: AppSpacing.lg),
+                  SizedBox(height: AppSpacing.lg),
                   AmitiaButton(
                     label: '保存',
                     isFullWidth: true,
@@ -456,7 +456,7 @@ class _SectionLabel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.sm),
+      padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.sm),
       child: Text(text, style: AppTypography.caption(context)),
     );
   }
