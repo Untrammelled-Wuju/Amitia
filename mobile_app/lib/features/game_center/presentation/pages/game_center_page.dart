@@ -75,7 +75,7 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
     return RefreshIndicator(
       onRefresh: () => ref.read(gameCenterControllerProvider.notifier).refreshPlugins(),
       child: ListView.builder(
-        padding: const EdgeInsets.all(AppSpacing.pagePadding),
+        padding: EdgeInsets.all(AppSpacing.pagePadding),
         itemCount: state.plugins.length,
         itemBuilder: (context, index) {
           final plugin = state.plugins[index];
@@ -167,12 +167,12 @@ class _PluginCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Card(
-      margin: const EdgeInsets.only(bottom: AppSpacing.md),
+      margin: EdgeInsets.only(bottom: AppSpacing.md),
       child: InkWell(
         onTap: isOperating ? null : onTap,
         borderRadius: BorderRadius.circular(12),
         child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.md),
+          padding: EdgeInsets.all(AppSpacing.md),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -192,7 +192,7 @@ class _PluginCard extends StatelessWidget {
                 ],
               ),
               if (plugin.description.isNotEmpty) ...[
-                const SizedBox(height: AppSpacing.sm),
+                SizedBox(height: AppSpacing.sm),
                 Text(
                   plugin.description,
                   style: AppTypography.bodySmall(context),
@@ -200,7 +200,7 @@ class _PluginCard extends StatelessWidget {
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               Row(
                 children: [
                   if (plugin.runtimeCount > 0)
@@ -222,13 +222,13 @@ class _PluginCard extends StatelessWidget {
                         onPressed: onEnable,
                       ),
                     if (onDisable != null) ...[
-                      const SizedBox(width: AppSpacing.sm),
+                      SizedBox(width: AppSpacing.sm),
                       AmitiaButtonOutline(
                         label: '禁用',
                         onPressed: onDisable,
                       ),
                     ],
-                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(width: AppSpacing.sm),
                     AmitiaButtonOutline(
                       label: '卸载',
                       onPressed: onUninstall,
@@ -251,7 +251,7 @@ class _PluginCard extends StatelessWidget {
           label: plugin.enabled ? '已启用' : '已禁用',
           type: plugin.enabled ? BadgeType.success : BadgeType.neutral,
         ),
-        const SizedBox(width: AppSpacing.xs),
+        SizedBox(width: AppSpacing.xs),
         if (plugin.health.isNotEmpty)
           AmitiaStatusBadge(
             label: _healthLabel(plugin.health),

@@ -159,18 +159,18 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
         _buildActionBarTabs(context),
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.all(AppSpacing.pagePadding),
+            padding: EdgeInsets.all(AppSpacing.pagePadding),
             children: [
               _buildQualityBanner(context),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               _buildAttemptSelector(context),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               _buildFrameGrid(context),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               _buildOriginalResult(context),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               _buildActionButtons(context),
-              const SizedBox(height: AppSpacing.xxl),
+              SizedBox(height: AppSpacing.xxl),
             ],
           ),
         ),
@@ -180,7 +180,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
 
   Widget _buildTaskHeader(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
         border: Border(bottom: BorderSide(color: context.borderPrimary, width: 0.5)),
@@ -196,7 +196,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
             ),
             child: Icon(Icons.pets_outlined, size: 20, color: context.accentPrimary),
           ),
-          const SizedBox(width: AppSpacing.md),
+          SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -220,9 +220,9 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
       height: 44,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
         itemCount: _processingTasks.length,
-        separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.xs),
+        separatorBuilder: (_, _) => SizedBox(width: AppSpacing.xs),
         itemBuilder: (context, index) {
           final task = _processingTasks[index];
           final actionName = task['name']?.toString() ?? task['actionName']?.toString() ?? '';
@@ -235,7 +235,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
               });
             },
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md),
+              padding: EdgeInsets.symmetric(horizontal: AppSpacing.md),
               decoration: BoxDecoration(
                 color: isSelected ? context.accentPrimary : context.surfaceSecondary,
                 borderRadius: AppRadius.brTag,
@@ -277,7 +277,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
       child: Row(
         children: [
           Icon(Icons.verified_outlined, size: 22, color: context.accentPrimary),
-          const SizedBox(width: AppSpacing.sm),
+          SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -313,7 +313,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
         child: Row(
           children: [
             Icon(Icons.history, size: 20, color: context.textTertiary),
-            const SizedBox(width: AppSpacing.sm),
+            SizedBox(width: AppSpacing.sm),
             Expanded(
               child: Text('暂无 Attempt 记录', style: AppTypography.caption(context)),
             ),
@@ -326,9 +326,9 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('Attempt 切换', style: AppTypography.label(context)),
-        const SizedBox(height: AppSpacing.xs),
+        SizedBox(height: AppSpacing.xs),
         AmitiaCard(
-          padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+          padding: EdgeInsets.symmetric(vertical: AppSpacing.xs),
           child: Row(
             children: attempts.asMap().entries.map((entry) {
               final i = entry.key;
@@ -372,11 +372,11 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('帧列表', style: AppTypography.label(context)),
-        const SizedBox(height: AppSpacing.xs),
+        SizedBox(height: AppSpacing.xs),
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 4,
             mainAxisSpacing: AppSpacing.sm,
             crossAxisSpacing: AppSpacing.sm,
@@ -413,7 +413,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
               size: 24,
               color: _frameIconColor(context, status, qualityLabel),
             ),
-            const SizedBox(height: AppSpacing.xs),
+            SizedBox(height: AppSpacing.xs),
             Text(
               '帧 ${index + 1}',
               style: TextStyle(
@@ -474,19 +474,19 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('原始结果', style: AppTypography.label(context)),
-        const SizedBox(height: AppSpacing.xs),
+        SizedBox(height: AppSpacing.xs),
         AmitiaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildResultRow(context, '动作', actionName),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               _buildResultRow(context, '帧数', '$totalFrames 帧'),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               _buildResultRow(context, '已完成', '$completedFrames 帧'),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               _buildResultRow(context, 'Attempt', attemptLabel),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               _buildResultRow(context, '质量', qualityStatus),
             ],
           ),
@@ -522,7 +522,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
                 onPressed: () => context.push(AppRoutes.petActionEditor(widget.taskId, actionKey)),
               ),
             ),
-            const SizedBox(width: AppSpacing.sm),
+            SizedBox(width: AppSpacing.sm),
             Expanded(
               child: AmitiaButton(
                 label: '重处理',
@@ -533,7 +533,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
             ),
           ],
         ),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         Row(
           children: [
             Expanded(
@@ -544,7 +544,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
                 onPressed: () => _showExcludeConfirm(actionName),
               ),
             ),
-            const SizedBox(width: AppSpacing.sm),
+            SizedBox(width: AppSpacing.sm),
             Expanded(
               child: AmitiaButton(
                 label: '打包',
@@ -554,7 +554,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
             ),
           ],
         ),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         AmitiaButton(
           label: '安装到桌宠',
           icon: Icons.install_desktop,
@@ -575,12 +575,12 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
         return Dialog(
           shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
           child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.lg),
+            padding: EdgeInsets.all(AppSpacing.lg),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text('帧 ${index + 1} 预览', style: AppTypography.cardTitle(context)),
-                const SizedBox(height: AppSpacing.md),
+                SizedBox(height: AppSpacing.md),
                 Container(
                   width: 200,
                   height: 200,
@@ -591,7 +591,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
                   ),
                   child: Icon(Icons.image, size: 64, color: _frameIconColor(context, status, qualityLabel)),
                 ),
-                const SizedBox(height: AppSpacing.md),
+                SizedBox(height: AppSpacing.md),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
@@ -600,7 +600,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
                       type: status == '已完成' ? BadgeType.success : BadgeType.neutral,
                     ),
                     if (qualityLabel.isNotEmpty) ...[
-                      const SizedBox(width: AppSpacing.sm),
+                      SizedBox(width: AppSpacing.sm),
                       AmitiaStatusBadge(
                         label: qualityLabel,
                         type: qualityLabel == '不合格'
@@ -612,7 +612,7 @@ class _PetProcessingPageState extends ConsumerState<PetProcessingPage> {
                     ],
                   ],
                 ),
-                const SizedBox(height: AppSpacing.lg),
+                SizedBox(height: AppSpacing.lg),
                 AmitiaButton(
                   label: '关闭',
                   isSecondary: true,

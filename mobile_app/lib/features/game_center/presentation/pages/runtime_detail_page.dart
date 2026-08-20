@@ -72,16 +72,16 @@ class RuntimeDetailPage extends ConsumerWidget {
     }
 
     return ListView(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       children: [
         _buildStatusSection(context, detail),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         _buildControlSection(context, detail, hasOp, controller, state),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         _buildConnectionSection(context, detail),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         _buildServicesSection(context, detail),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         _buildOperationsSection(context, detail, hasOp, controller),
       ],
     );
@@ -90,12 +90,12 @@ class RuntimeDetailPage extends ConsumerWidget {
   Widget _buildStatusSection(BuildContext context, GameRuntimeDetail detail) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
+        padding: EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('运行状态', style: AppTypography.sectionTitle(context)),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             _buildInfoRow(context, '状态', _stateLabel(detail.runtimeState)),
             if (detail.healthSummary != null)
               _buildInfoRow(context, '健康', _healthLabel(detail.healthSummary!.status)),
@@ -123,14 +123,14 @@ class RuntimeDetailPage extends ConsumerWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
+        padding: EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('控制权', style: AppTypography.sectionTitle(context)),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             Text('当前模式: ${_modeLabel(mode)}', style: AppTypography.body(context)),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             if (hasOp)
               const SizedBox(
                 width: 16,
@@ -179,12 +179,12 @@ class RuntimeDetailPage extends ConsumerWidget {
   Widget _buildConnectionSection(BuildContext context, GameRuntimeDetail detail) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
+        padding: EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('连接与会话', style: AppTypography.sectionTitle(context)),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             if (detail.connection != null) ...[
               _buildInfoRow(context, '连接状态', detail.connection!.connected ? '已连接' : '未连接'),
               if (detail.connection!.protocolVersion != null)
@@ -207,17 +207,17 @@ class RuntimeDetailPage extends ConsumerWidget {
   Widget _buildServicesSection(BuildContext context, GameRuntimeDetail detail) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
+        padding: EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('服务 (${detail.services.length})', style: AppTypography.sectionTitle(context)),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             if (detail.services.isEmpty)
               Text('暂无服务', style: AppTypography.caption(context))
             else
               ...detail.services.map((svc) => Padding(
-                    padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                    padding: EdgeInsets.only(bottom: AppSpacing.sm),
                     child: Row(
                       children: [
                         Expanded(
@@ -255,12 +255,12 @@ class RuntimeDetailPage extends ConsumerWidget {
 
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
+        padding: EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('运行操作', style: AppTypography.sectionTitle(context)),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             if (hasOp)
               const SizedBox(
                 width: 16,

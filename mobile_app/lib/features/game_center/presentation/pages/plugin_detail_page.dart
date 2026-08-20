@@ -73,12 +73,12 @@ class PluginDetailPage extends ConsumerWidget {
     }
 
     return ListView(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       children: [
         _buildInfoSection(context, detail),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         _buildActionsSection(context, detail, hasOp, controller),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         _buildRuntimesSection(context, detail, state),
       ],
     );
@@ -87,12 +87,12 @@ class PluginDetailPage extends ConsumerWidget {
   Widget _buildInfoSection(BuildContext context, GamePluginDetail detail) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
+        padding: EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('插件信息', style: AppTypography.sectionTitle(context)),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             _buildInfoRow(context, '名称', detail.name),
             _buildInfoRow(context, '版本', detail.version),
             _buildInfoRow(context, '状态', detail.enabled ? '已启用' : '已禁用'),
@@ -108,7 +108,7 @@ class PluginDetailPage extends ConsumerWidget {
             if (detail.packageRevision != null)
               _buildInfoRow(context, 'PackageRevision', detail.packageRevision!),
             if (detail.permissions.isNotEmpty) ...[
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               Text('权限', style: AppTypography.caption(context)),
               const SizedBox(height: 4),
               Wrap(
@@ -133,12 +133,12 @@ class PluginDetailPage extends ConsumerWidget {
   ) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
+        padding: EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('插件操作', style: AppTypography.sectionTitle(context)),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             if (hasOp)
               const SizedBox(
                 width: 16,
@@ -187,12 +187,12 @@ class PluginDetailPage extends ConsumerWidget {
   Widget _buildRuntimesSection(BuildContext context, GamePluginDetail detail, GameCenterState state) {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
+        padding: EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('运行实例 (${detail.runtimes.length})', style: AppTypography.sectionTitle(context)),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             if (detail.runtimes.isEmpty)
               Text('尚无运行实例', style: AppTypography.caption(context))
             else
@@ -209,7 +209,7 @@ class PluginDetailPage extends ConsumerWidget {
                       );
                     },
                     child: Padding(
-                      padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+                      padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
                       child: Row(
                         children: [
                           Expanded(

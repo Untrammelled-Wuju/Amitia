@@ -131,7 +131,7 @@ class _SkillWorkshopContentState extends ConsumerState<_SkillWorkshopContent> {
               onAction: _showCreateBottomSheet,
             )
           : ListView.builder(
-              padding: const EdgeInsets.all(AppSpacing.pagePadding),
+              padding: EdgeInsets.all(AppSpacing.pagePadding),
               itemCount: widget.sessions.length,
               itemBuilder: (context, index) {
                 return _buildSessionCard(context, widget.sessions[index]);
@@ -147,7 +147,7 @@ class _SkillWorkshopContentState extends ConsumerState<_SkillWorkshopContent> {
     final updated = DateTime.tryParse((session['updatedAt'] ?? '').toString()) ?? DateTime.now();
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: EdgeInsets.only(bottom: AppSpacing.sm),
       child: AmitiaCard(
         onTap: () => _openDraftEditor(session),
         child: Column(
@@ -164,7 +164,7 @@ class _SkillWorkshopContentState extends ConsumerState<_SkillWorkshopContent> {
                   ),
                   child: Icon(Icons.psychology_outlined, size: 22, color: context.accentPrimary),
                 ),
-                const SizedBox(width: AppSpacing.md),
+                SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -181,7 +181,7 @@ class _SkillWorkshopContentState extends ConsumerState<_SkillWorkshopContent> {
                 AmitiaStatusBadge(label: status, type: _statusBadgeType(status)),
               ],
             ),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Row(
               children: [
                 Expanded(
@@ -192,7 +192,7 @@ class _SkillWorkshopContentState extends ConsumerState<_SkillWorkshopContent> {
                     onPressed: () => _openDraftEditor(session),
                   ),
                 ),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: AmitiaButton(
                     label: '归档',
@@ -201,7 +201,7 @@ class _SkillWorkshopContentState extends ConsumerState<_SkillWorkshopContent> {
                     onPressed: () => _showArchiveConfirm(session),
                   ),
                 ),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: AmitiaButton(
                     label: '安装',
@@ -248,17 +248,17 @@ class _SkillWorkshopContentState extends ConsumerState<_SkillWorkshopContent> {
                   ),
                 ),
               ),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               Text('新建技能', style: AppTypography.sectionTitle(context)),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('描述你要创建的技能，系统将自动生成结构化草稿', style: AppTypography.caption(context)),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               AmitiaTextField(
                 hintText: '例如：帮我自动分类下载目录中的文件',
                 controller: _descController,
                 maxLines: 4,
               ),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               AmitiaButton(
                 label: '创建草稿',
                 icon: Icons.auto_awesome_outlined,

@@ -62,7 +62,7 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
             _buildStepIndicator(context),
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.all(AppSpacing.pagePadding),
+                padding: EdgeInsets.all(AppSpacing.pagePadding),
                 child: _buildStepContent(context),
               ),
             ),
@@ -75,7 +75,7 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
 
   Widget _buildStepIndicator(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.md),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.md),
       child: Row(
         children: List.generate(_totalSteps, (i) {
           final isCompleted = i < _currentStep;
@@ -140,9 +140,9 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('上传角色图', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         Text('上传一张角色立绘图片，系统将基于此生成桌宠动作', style: AppTypography.caption(context)),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         GestureDetector(
           onTap: () {
             setState(() { _imageUploaded = true; });
@@ -169,12 +169,12 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
                   size: 48,
                   color: _imageUploaded ? context.success : context.textTertiary,
                 ),
-                const SizedBox(height: AppSpacing.sm),
+                SizedBox(height: AppSpacing.sm),
                 Text(
                   _imageUploaded ? '角色图已上传' : '点击上传角色图',
                   style: AppTypography.body(context),
                 ),
-                const SizedBox(height: AppSpacing.xs),
+                SizedBox(height: AppSpacing.xs),
                 Text(
                   _imageUploaded ? '点击重新上传' : '支持 PNG、JPG 格式',
                   style: AppTypography.label(context),
@@ -183,9 +183,9 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
             ),
           ),
         ),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         Text('桌宠名称', style: AppTypography.label(context)),
-        const SizedBox(height: AppSpacing.xs),
+        SizedBox(height: AppSpacing.xs),
         AmitiaTextField(
           hintText: '输入桌宠名称',
           controller: _nameController,
@@ -199,13 +199,13 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('选择生成动作', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         Text('选择需要生成的桌宠动作，已选 ${_selectedActions.length} 个', style: AppTypography.caption(context)),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         GridView.builder(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2,
             mainAxisSpacing: AppSpacing.sm,
             crossAxisSpacing: AppSpacing.sm,
@@ -226,7 +226,7 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
                 });
               },
               child: Container(
-                padding: const EdgeInsets.all(AppSpacing.md),
+                padding: EdgeInsets.all(AppSpacing.md),
                 decoration: BoxDecoration(
                   color: isSelected ? context.accentSoft : context.surfacePrimary,
                   borderRadius: AppRadius.brMedium,
@@ -242,7 +242,7 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
                       size: 22,
                       color: isSelected ? context.accentPrimary : context.textSecondary,
                     ),
-                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(width: AppSpacing.sm),
                     Expanded(
                       child: Text(
                         action.$2,
@@ -271,12 +271,12 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('动作说明', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         Text('为每个动作添加描述说明（可选）', style: AppTypography.caption(context)),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         ...selectedList.map((action) {
           return Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.md),
+            padding: EdgeInsets.only(bottom: AppSpacing.md),
             child: AmitiaCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -284,11 +284,11 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
                   Row(
                     children: [
                       Icon(action.$3, size: 20, color: context.accentPrimary),
-                      const SizedBox(width: AppSpacing.sm),
+                      SizedBox(width: AppSpacing.sm),
                       Text(action.$2, style: AppTypography.cardTitle(context)),
                     ],
                   ),
-                  const SizedBox(height: AppSpacing.sm),
+                  SizedBox(height: AppSpacing.sm),
                   AmitiaTextField(
                     hintText: '描述${action.$2}动作的表现...',
                     maxLines: 2,
@@ -316,21 +316,21 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('模型配置', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         Text('选择生成模型和配置参数', style: AppTypography.caption(context)),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         Text('生成模型', style: AppTypography.label(context)),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         ..._modelOptions.map((model) {
           final isSelected = model == _selectedModel;
           return Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+            padding: EdgeInsets.only(bottom: AppSpacing.xs),
             child: GestureDetector(
               onTap: () {
                 setState(() { _selectedModel = model; });
               },
               child: Container(
-                padding: const EdgeInsets.all(AppSpacing.md),
+                padding: EdgeInsets.all(AppSpacing.md),
                 decoration: BoxDecoration(
                   color: isSelected ? context.accentSoft : context.surfacePrimary,
                   borderRadius: AppRadius.brSmall,
@@ -346,7 +346,7 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
                       size: 20,
                       color: isSelected ? context.accentPrimary : context.textTertiary,
                     ),
-                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(width: AppSpacing.sm),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -363,9 +363,9 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
             ),
           );
         }),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         Text('生成缩放倍数', style: AppTypography.label(context)),
-        const SizedBox(height: AppSpacing.xs),
+        SizedBox(height: AppSpacing.xs),
         Row(
           children: [
             Expanded(
@@ -405,19 +405,19 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('确认创建', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         Text('请确认以下信息无误后创建生成任务', style: AppTypography.caption(context)),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         AmitiaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildConfirmRow(context, '桌宠名称', _nameController.text.isEmpty ? '未填写' : _nameController.text),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               _buildConfirmRow(context, '角色图', _imageUploaded ? '已上传' : '未上传'),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               _buildConfirmRow(context, '动作数量', '${_selectedActions.length} 个'),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               _buildConfirmRow(
                 context,
                 '动作列表',
@@ -428,9 +428,9 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
                   return k;
                 }).join('、'),
               ),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               _buildConfirmRow(context, '生成模型', _selectedModel),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               _buildConfirmRow(context, '缩放倍数', '${_modelScale.toStringAsFixed(1)}x'),
             ],
           ),
@@ -452,7 +452,7 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
   Widget _buildBottomNav(BuildContext context) {
     final canProceed = _canProceed() && !_submitting;
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
         border: Border(top: BorderSide(color: context.borderPrimary, width: 0.5)),
@@ -469,7 +469,7 @@ class _PetCreatePageState extends ConsumerState<PetCreatePage> {
                 },
               ),
             ),
-          if (_currentStep > 0) const SizedBox(width: AppSpacing.sm),
+          if (_currentStep > 0) SizedBox(width: AppSpacing.sm),
           Expanded(
             child: AmitiaButton(
               label: _currentStep == _totalSteps - 1

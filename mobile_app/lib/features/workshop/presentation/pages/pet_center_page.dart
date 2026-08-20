@@ -81,25 +81,25 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
       body: SafeArea(
         top: false,
         child: ListView(
-          padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
+          padding: EdgeInsets.only(bottom: AppSpacing.xxl),
           children: [
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             if (runningPet != null) _buildRunningPetCard(context, runningPet),
-            if (runningPet != null) const SizedBox(height: AppSpacing.sectionGap),
+            if (runningPet != null) SizedBox(height: AppSpacing.sectionGap),
             const AmitiaSectionHeader(title: '快速操作'),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             _buildQuickActions(context),
-            const SizedBox(height: AppSpacing.sectionGap),
+            SizedBox(height: AppSpacing.sectionGap),
             AmitiaSectionHeader(
               title: '生成任务',
               actionText: '查看全部',
               onAction: () => context.push(AppRoutes.workshopPetTasks),
             ),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             _buildTaskListCard(context, activeSessions),
-            const SizedBox(height: AppSpacing.sectionGap),
+            SizedBox(height: AppSpacing.sectionGap),
             const AmitiaSectionHeader(title: '最近记录'),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             _buildRecentRecords(context, recentSessions),
           ],
         ),
@@ -115,7 +115,7 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
     final scale = (pet['scale'] is num) ? (pet['scale'] as num).toDouble() : 1.0;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       child: AmitiaCard(
         child: Row(
           children: [
@@ -137,7 +137,7 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
                 ),
               ),
             ),
-            const SizedBox(width: AppSpacing.md),
+            SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -165,20 +165,20 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
       (Icons.install_desktop, '安装管理', () => context.push(AppRoutes.workshopPetInstallations)),
     ];
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       child: Row(
         children: actions.map((action) {
           return Expanded(
             child: Padding(
-              padding: const EdgeInsets.only(right: AppSpacing.sm),
+              padding: EdgeInsets.only(right: AppSpacing.sm),
               child: GestureDetector(
                 onTap: action.$3,
                 child: AmitiaCard(
-                  padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+                  padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
                   child: Column(
                     children: [
                       Icon(action.$1, size: 26, color: context.accentPrimary),
-                      const SizedBox(height: AppSpacing.xs),
+                      SizedBox(height: AppSpacing.xs),
                       Text(action.$2, style: AppTypography.bodySmall(context)),
                     ],
                   ),
@@ -194,7 +194,7 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
   Widget _buildTaskListCard(BuildContext context, List<Map<String, dynamic>> tasks) {
     if (tasks.isEmpty) {
       return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
         child: AmitiaCard(
           child: AmitiaEmptyState(
             icon: Icons.check_circle_outline,
@@ -205,9 +205,9 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
       );
     }
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       child: AmitiaCard(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+        padding: EdgeInsets.symmetric(vertical: AppSpacing.xs),
         child: Column(
           children: [
             for (int i = 0; i < tasks.length; i++) ...[
@@ -232,7 +232,7 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
       onTap: () => context.push(AppRoutes.petProcessing(sessionId)),
       behavior: HitTestBehavior.opaque,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.cardPadding, vertical: 12),
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.cardPadding, vertical: 12),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -244,18 +244,18 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
                 AmitiaStatusBadge(label: _statusLabel(status), type: _statusBadgeType(status)),
               ],
             ),
-            const SizedBox(height: AppSpacing.xs),
+            SizedBox(height: AppSpacing.xs),
             Row(
               children: [
                 Text(
                   '$completedActions/$totalActions 动作',
                   style: AppTypography.caption(context),
                 ),
-                const SizedBox(width: AppSpacing.md),
+                SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: AmitiaProgressBar(progress: progress / 100.0),
                 ),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
                 Text('$progress%', style: AppTypography.caption(context)),
               ],
             ),
@@ -267,9 +267,9 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
 
   Widget _buildRecentRecords(BuildContext context, List<Map<String, dynamic>> records) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       child: AmitiaCard(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.xs),
+        padding: EdgeInsets.symmetric(vertical: AppSpacing.xs),
         child: Column(
           children: [
             for (int i = 0; i < records.length; i++) ...[
@@ -290,7 +290,7 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
     final progress = (task['progress'] is num) ? (task['progress'] as num).toInt() : 0;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.cardPadding, vertical: 10),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.cardPadding, vertical: 10),
       child: Row(
         children: [
           Container(
@@ -302,7 +302,7 @@ class _PetCenterPageState extends ConsumerState<PetCenterPage> {
             ),
             child: Icon(Icons.pets_outlined, size: 18, color: context.accentPrimary),
           ),
-          const SizedBox(width: AppSpacing.md),
+          SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,

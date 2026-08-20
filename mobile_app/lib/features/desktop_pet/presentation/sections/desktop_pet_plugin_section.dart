@@ -45,7 +45,7 @@ class _DesktopPetPluginSectionState extends ConsumerState<DesktopPetPluginSectio
               ),
           ],
         ),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         _buildContent(context, state, controller),
       ],
     );
@@ -58,7 +58,7 @@ class _DesktopPetPluginSectionState extends ConsumerState<DesktopPetPluginSectio
   ) {
     if (state.loading) {
       return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
         child: AmitiaCard(
           child: Center(
             child: Padding(
@@ -72,7 +72,7 @@ class _DesktopPetPluginSectionState extends ConsumerState<DesktopPetPluginSectio
 
     if (state.error != null && state.plugins.isEmpty) {
       return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
         child: AmitiaCard(
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 24),
@@ -87,7 +87,7 @@ class _DesktopPetPluginSectionState extends ConsumerState<DesktopPetPluginSectio
 
     if (state.plugins.isEmpty) {
       return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
         child: AmitiaCard(
           child: AmitiaEmptyState(
             icon: Icons.extension_outlined,
@@ -101,21 +101,21 @@ class _DesktopPetPluginSectionState extends ConsumerState<DesktopPetPluginSectio
     }
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       child: Column(
         children: [
           if (state.refreshing)
-            const Padding(
+            Padding(
               padding: EdgeInsets.only(bottom: AppSpacing.xs),
               child: LinearProgressIndicator(minHeight: 2),
             ),
           if (state.error != null)
             Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+              padding: EdgeInsets.only(bottom: AppSpacing.xs),
               child: AmitiaCard(
                 backgroundColor: context.error.withValues(alpha: 0.08),
                 child: Padding(
-                  padding: const EdgeInsets.all(AppSpacing.sm),
+                  padding: EdgeInsets.all(AppSpacing.sm),
                   child: Row(
                     children: [
                       Icon(Icons.warning_amber_rounded, size: 16, color: context.error),
@@ -163,7 +163,7 @@ class _DesktopPetPluginSectionState extends ConsumerState<DesktopPetPluginSectio
       behavior: HitTestBehavior.opaque,
       onTap: () => _showDetailSheet(context, plugin, controller),
       child: Padding(
-        padding: const EdgeInsets.symmetric(
+        padding: EdgeInsets.symmetric(
           horizontal: AppSpacing.cardPadding,
           vertical: 10,
         ),
@@ -182,7 +182,7 @@ class _DesktopPetPluginSectionState extends ConsumerState<DesktopPetPluginSectio
                 color: context.accentPrimary,
               ),
             ),
-            const SizedBox(width: AppSpacing.md),
+            SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -203,12 +203,12 @@ class _DesktopPetPluginSectionState extends ConsumerState<DesktopPetPluginSectio
                 ],
               ),
             ),
-            const SizedBox(width: AppSpacing.xs),
+            SizedBox(width: AppSpacing.xs),
             AmitiaStatusBadge(
               label: plugin.enabled ? '已启用' : '已禁用',
               type: plugin.enabled ? BadgeType.success : BadgeType.neutral,
             ),
-            const SizedBox(width: AppSpacing.sm),
+            SizedBox(width: AppSpacing.sm),
             if (isOperating)
               SizedBox(
                 width: 20,
@@ -437,7 +437,7 @@ class _PluginDetailSheetState extends State<_PluginDetailSheet> {
                                 },
                         ),
                 ),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: AmitiaButtonOutline(
                     label: hasOp ? '处理中...' : '更新',
@@ -451,7 +451,7 @@ class _PluginDetailSheetState extends State<_PluginDetailSheet> {
                 ),
               ],
             ),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             Row(
               children: [
                 Expanded(
