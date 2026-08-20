@@ -1,0 +1,89 @@
+param(
+    [ValidateSet('Debug', 'Release')]
+    [string]$Configuration = 'Debug',
+    [string]$RuntimePackagePath,
+    [string]$OutputDirectory,
+    [switch]$SkipRuntimeBuild,
+    [switch]$SkipPubGet
+)
+
+$ErrorActionPreference = 'Stop'
+$root = Split-Path -Parent $PSCommandPath
+$mobile = Join-Path $root 'mobile_app'
+$pubspec = Join-Path $mobile 'pubspec.yaml'
+$localProperties = Join-Path $mobile 'android\local.properties'
+$runtimeOutput = Join-Path $root 'runtime\out\runtime-package\android-arm64\amitia-runtime-current-android-arm64.zip'
+
+function Invoke-Checked([string]$file, [string[]]$arguments, [string]$directory) {
+    Push-Location $directory
+    try {
+        & $file @arguments
+        if ($LASTEXITCODE -ne 0) { throw "命令执行失败: $file $($arguments -join ' ')" }
+    }
+    finally { Pop-Location }
+}
+
+function Build-Runtime {
+    $stage = Join-Path 'D:\' ('amitia-runtime-' + [guid]::NewGuid().ToString('N'))
+    $backend = Join-Path $root 'backend'
+    $go = 'C:\Code\Go\bin\go.exe'
+    $node = Join-Path $backend 'node\node.exe'
+    $builder = Join-Path $root 'runtime\build\runtime-package\android-arm64\refresh.py'
+    $base = Join-Path $root 'runtime\out\runtime-package\android-arm64\amitia-runtime-1.0.0-android-arm64.zip'
+    foreach ($item in @($go, $node, $builder, $base)) { if (-not (Test-Path -LiteralPath $item)) { throw "缺少构建依赖: $item" } }
+    New-Item -ItemType Directory -Path $stage | Out-Null
+    try {
+        $server = Join-Path $stage 'amitia-server'
+        $oldOs = $env:GOOS; $oldArch = $env:GOARCH; $oldCgo = $env:CGO_ENABLED
+        try {
+            $env:GOOS = 'linux'; $env:GOARCH = 'arm64'; $env:CGO_ENABLED = '0'
+            Invoke-Checked $go @('build', '-trimpath', '-ldflags=-s -w', '-o', $server, './cmd/server') $backend
+        }
+        finally { $env:GOOS = $oldOs; $env:GOARCH = $oldArch; $env:CGO_ENABLED = $oldCgo }
+        $wechat = Join-Path $stage 'sidecar-bundle.mjs'; $qq = Join-Path $stage 'qq-sidecar-bundle.mjs'
+        foreach ($name in @('sidecar', 'qq-sidecar')) {
+            $folder = Join-Path $backend $name
+            $esbuild = Get-ChildItem (Join-Path $folder 'node_modules') -Recurse -Filter esbuild.exe | Select-Object -First 1 -ExpandProperty FullName
+            if (-not $esbuild) { throw "缺少侧车构建器: $name" }
+            $out = if ($name -eq 'sidecar') { $wechat } else { $qq }
+            Invoke-Checked $esbuild @('src/index.ts', '--bundle', '--platform=node', '--format=esm', '--target=node20', "--outfile=$out") $folder
+        }
+        $python = (Get-Command python.exe).Source
+        Invoke-Checked $python @($builder, '--base-package', $base, '--backend', $server, '--wechat-bundle', $wechat, '--wechat-launcher', (Join-Path $backend 'sidecar\launcher.mjs'), '--qq-bundle', $qq, '--qq-launcher', (Join-Path $backend 'qq-sidecar\launcher.mjs'), '--output', $runtimeOutput) $root
+    }
+    finally { if (Test-Path -LiteralPath $stage) { Remove-Item -LiteralPath $stage -Recurse -Force } }
+}
+
+if (-not $SkipRuntimeBuild) { Build-Runtime; $RuntimePackagePath = $runtimeOutput }
+if (-not $RuntimePackagePath) { $RuntimePackagePath = $runtimeOutput }
+if (-not (Test-Path -LiteralPath $RuntimePackagePath -PathType Leaf)) { throw "未找到运行时包: $RuntimePackagePath" }
+$sdk = ((Get-Content $localProperties | Where-Object { $_ -match '^flutter\.sdk=' } | Select-Object -First 1) -replace '^flutter\.sdk=', '').Trim()
+$flutter = Join-Path $sdk 'bin\flutter.bat'
+if (-not (Test-Path -LiteralPath $flutter)) { throw '未找到 Flutter SDK。' }
+$version = (((Get-Content $pubspec | Where-Object { $_ -match '^version:' } | Select-Object -First 1) -replace '^version:\s*', '').Trim() -split '\+')[0]
+$mode = $Configuration.ToLowerInvariant()
+if (-not $OutputDirectory) { $OutputDirectory = Join-Path $root 'artifacts\apk' }
+New-Item -ItemType Directory -Path $OutputDirectory -Force | Out-Null
+$target = Join-Path ([System.IO.Path]::GetFullPath($OutputDirectory)) "amitia-$version-$mode-arm64-v8a.apk"
+$temp = Join-Path 'D:\' ('amitia-apk-build-' + [guid]::NewGuid().ToString('N'))
+try {
+    New-Item -ItemType Directory -Path $temp | Out-Null
+    Get-ChildItem $mobile -Force | Where-Object { $_.Name -notin @('build', '.dart_tool', '.idea') } | ForEach-Object { Copy-Item $_.FullName $temp -Recurse -Force }
+    Push-Location $temp
+    try {
+        & '.\android\gradlew.bat' --stop; & $flutter clean
+        if (-not $SkipPubGet) { & $flutter pub get }
+        $env:AMITIA_RUNTIME_CANDIDATE_BUILD = '1'; $env:FROZEN_RUNTIME_PACKAGE_PATH = [System.IO.Path]::GetFullPath($RuntimePackagePath)
+        & $flutter build apk "--$mode" --target-platform android-arm64
+        $source = Join-Path $temp "android\app\build\outputs\flutter-apk\app-$mode.apk"
+        if (-not (Test-Path -LiteralPath $source)) { throw 'Flutter APK 构建失败。' }
+        Copy-Item $source $target -Force
+    }
+    finally { Remove-Item Env:AMITIA_RUNTIME_CANDIDATE_BUILD -ErrorAction SilentlyContinue; Remove-Item Env:FROZEN_RUNTIME_PACKAGE_PATH -ErrorAction SilentlyContinue; Pop-Location }
+}
+finally { if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Recurse -Force } }
+$apk = Get-Item $target
+Write-Host "APK 打包完成: $target"
+Write-Host "大小: $([Math]::Round($apk.Length / 1MB, 2)) MB"
+Write-Host "SHA-256: $((Get-FileHash $target -Algorithm SHA256).Hash.ToLowerInvariant())"
+Start-Process explorer.exe -ArgumentList $OutputDirectory
