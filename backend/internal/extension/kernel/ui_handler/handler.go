@@ -270,6 +270,10 @@ func (h *HTTPHandler) handleProviderModuleResource(w http.ResponseWriter, r *htt
 		writeError(w, http.StatusInternalServerError, "read_failed", err.Error())
 		return
 	}
+	// The entry module may carry an explicit digest in the provider manifest.
+	// Verify it at the serving boundary so a trusted provider cannot silently
+	// execute a module that drifted after package verification. Relative support
+	// modules remain covered by the extension package content-tree integrity.
 	for _, entry := range provider.Entries {
 		if entry.Type != ui_provider.EntryWebModule || strings.TrimPrefix(entry.Path, "/") != cleanPath || strings.TrimSpace(entry.ContentHash) == "" {
 			continue
