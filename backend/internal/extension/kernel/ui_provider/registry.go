@@ -228,6 +228,10 @@ func (d ProviderDefinition) Validate() error {
 				return fmt.Errorf("ui_provider: declarative entry is not supported for capability %s", d.Capability)
 			}
 		case EntryWebModule:
+			platformKey := strings.ToLower(strings.TrimSpace(platform))
+			if platformKey == "android" || platformKey == "ios" || platformKey == "mobile" {
+				return fmt.Errorf("ui_provider: web_module cannot target Flutter AOT platform %s; use schema_renderer or sandbox web", platform)
+			}
 			if strings.TrimSpace(entry.Path) == "" {
 				return fmt.Errorf("ui_provider: web_module path required for %s", platform)
 			}
@@ -238,6 +242,103 @@ func (d ProviderDefinition) Validate() error {
 		case EntryWebRestricted, EntryWebIsolated:
 			if strings.TrimSpace(entry.ContributionID) == "" {
 				return fmt.Errorf("ui_provider: sandbox web entry contributionId required for %s", platform)
+			}
+		}
+	}
+	if err := validateProviderMetadata(d); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateProviderMetadata(d ProviderDefinition) error {
+	if d.Metadata == nil {
+		return nil
+	}
+	objectField := func(name string) error {
+		value, ok := d.Metadata[name]
+		if !ok || value == nil {
+			return nil
+		}
+		switch value.(type) {
+		case map[string]any, map[string]string:
+			return nil
+		default:
+			return fmt.Errorf("ui_provider: metadata.%s must be an object", name)
+		}
+	}
+	arrayField := func(name string) ([]any, error) {
+		value, ok := d.Metadata[name]
+		if !ok || value == nil {
+			return nil, nil
+		}
+		rows, ok := value.([]any)
+		if !ok {
+			return nil, fmt.Errorf("ui_provider: metadata.%s must be an array", name)
+		}
+		return rows, nil
+	}
+
+	if d.Capability == CapabilityRouteRegistry {
+		routes, err := arrayField("routes")
+		if err != nil {
+			return err
+		}
+		for _, raw := range routes {
+			row, ok := raw.(map[string]any)
+			if !ok {
+				return errors.New("ui_provider: route.registry metadata.routes entries must be objects")
+			}
+			field := func(name string) string {
+				value, exists := row[name]
+				if !exists || value == nil {
+					return ""
+				}
+				return strings.TrimSpace(fmt.Sprint(value))
+			}
+			if field("id") == "" || field("path") == "" || field("providerId") == "" {
+				return errors.New("ui_provider: route.registry routes require id, path and providerId")
+			}
+		}
+	}
+	if d.Capability == CapabilityAppNavigation || d.Capability == CapabilityRouteRegistry {
+		items, err := arrayField("navigationItems")
+		if err != nil {
+			return err
+		}
+		for _, raw := range items {
+			row, ok := raw.(map[string]any)
+			if !ok {
+				return errors.New("ui_provider: navigationItems entries must be objects")
+			}
+			field := func(name string) string {
+				value, exists := row[name]
+				if !exists || value == nil {
+					return ""
+				}
+				return strings.TrimSpace(fmt.Sprint(value))
+			}
+			if field("id") == "" || field("label") == "" || !strings.HasPrefix(field("route"), "/") {
+				return errors.New("ui_provider: navigationItems require id, label and absolute route")
+			}
+		}
+	}
+	if d.Capability == CapabilityConversationMessageRenderer {
+		for _, name := range []string{"messageTypes", "roles", "mimeTypes", "extensionTypes"} {
+			if _, err := arrayField(name); err != nil {
+				return err
+			}
+		}
+	}
+	if d.Capability == CapabilityComponents {
+		if err := objectField("componentVariants"); err != nil {
+			return err
+		}
+	}
+	if d.Capability == CapabilityIcons {
+		for _, name := range []string{"iconAliases", "iconExports", "iconGlyphs"} {
+			if err := objectField(name); err != nil {
+				return err
 			}
 		}
 	}
