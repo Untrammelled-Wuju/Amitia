@@ -8,6 +8,7 @@ const (
 	ContributionTypeWorkflow          ContributionType = "workflow"
 	ContributionTypeMCP               ContributionType = "mcp"
 	ContributionTypeUI                ContributionType = "ui"
+	ContributionTypeUIProvider        ContributionType = "ui_provider"
 	ContributionTypeHook              ContributionType = "hook"
 	ContributionTypeEventSubscription ContributionType = "event_subscription"
 	ContributionTypeBackgroundTask    ContributionType = "background_task"

@@ -63,6 +63,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_ordering"
+	"github.com/u-ai/backend/internal/extension/kernel/ui_provider"
 	"github.com/u-ai/backend/internal/extension/kernel/update"
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
@@ -121,7 +122,7 @@ type ContainerBuilder struct {
 	runtimeProfile               runtimeprofile.Profile
 	runtimePolicy                runtimeprofile.Policy
 
-	mcpRepository *mcp.Repository
+	mcpRepository         *mcp.Repository
 	mcpRuntimeConnectPort acquisition.MCPRuntimeConnectPort
 
 	meshHub                  *server.ConnectionHub
@@ -1149,6 +1150,14 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	runtimeState := NewRuntimeState()
 
 	uiHost := ui_contribution.NewUIHost()
+	uiProviderRegistry := ui_provider.NewRegistryWithBuiltins()
+	uiProviderProfileStore := ui_provider.NewSQLiteProfileStore(db)
+	if err := uiProviderProfileStore.Init(ctx); err != nil {
+		return nil, fmt.Errorf("kernel: init UI provider profile store: %w", err)
+	}
+	if err := uiProviderRegistry.AttachStore(ctx, uiProviderProfileStore); err != nil {
+		return nil, fmt.Errorf("kernel: load UI provider profile: %w", err)
+	}
 	uiHost.Bridge().SetScopeSnapshotFactory(func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error) {
 		invocationID := fmt.Sprintf("ui-sess-%d", time.Now().UnixNano())
 		scopes := []scope.ScopeRef{
@@ -1518,6 +1527,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		SandboxHost:           sandboxHost,
 		ChatExtensionRegistry: chatExtRegistry,
 		OrderingEngine:        orderingEngine,
+		UIProviderRegistry:    uiProviderRegistry,
 		ExtRoot:               b.extRoot,
 
 		DesktopHost:              desktopHost,

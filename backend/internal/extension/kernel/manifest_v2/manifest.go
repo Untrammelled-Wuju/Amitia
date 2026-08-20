@@ -398,7 +398,7 @@ func (m Manifest) Validate() ValidationReport {
 		"provider":   true, "hook": true, "event_subscription": true,
 		"schedule": true, "background_task": true,
 		"ui_page": true, "ui_panel": true, "ui_chat": true,
-		"ui_context_action": true, "ui_desktop": true,
+		"ui_context_action": true, "ui_desktop": true, "ui_provider": true,
 		"game_plugin": true, "desktop_pet_plugin": true,
 	}
 	contributionIDs := make(map[string]bool)
@@ -561,6 +561,18 @@ func (m Manifest) ToExtensionDefinition() (domain.ExtensionDefinition, error) {
 		moduleDef, err := mod.ToDomain(domain.ExtensionID(normalized.Extension.ID))
 		if err != nil {
 			return domain.ExtensionDefinition{}, err
+		}
+		for idx := range moduleDef.Contributions {
+			c := &moduleDef.Contributions[idx]
+			if c.Kind == domain.ContributionKindUIProvider {
+				if c.Definition == nil {
+					c.Definition = map[string]any{}
+				}
+				c.Definition["trustLevel"] = normalized.Publisher.TrustLevel
+				if len(c.RequiredPermissions) > 0 {
+					c.Definition["permissions"] = append([]string(nil), c.RequiredPermissions...)
+				}
+			}
 		}
 		def.Modules = append(def.Modules, moduleDef)
 	}

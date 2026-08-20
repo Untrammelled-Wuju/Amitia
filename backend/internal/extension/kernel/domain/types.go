@@ -473,6 +473,7 @@ const (
 	ContributionKindUIChat            ContributionKind = "ui_chat"
 	ContributionKindUIContextAction   ContributionKind = "ui_context_action"
 	ContributionKindUIDesktop         ContributionKind = "ui_desktop"
+	ContributionKindUIProvider        ContributionKind = "ui_provider"
 	ContributionKindBackgroundTask    ContributionKind = "background_task"
 	ContributionKindBackgroundService ContributionKind = "background_task"
 	// Deprecated: legacy manifest input only. Production definitions must use Module.Provider.

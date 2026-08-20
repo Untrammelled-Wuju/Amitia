@@ -265,6 +265,8 @@ window.amitiaUI = (function() {
   const generation = ` + fmt.Sprintf("%d", session.Generation) + `;
   const contributionId = "` + session.ContributionID + `";
   const protocolVersion = "` + ProtocolVersion + `";
+  const characterId = "` + session.CharacterID + `";
+  const nativeBridgeAvailable = typeof window.AmitiaNativeBridge !== "undefined" && window.AmitiaNativeBridge && typeof window.AmitiaNativeBridge.postMessage === "function";
   const allowedMethods = ["ready","context.get","action.invoke","data.query","data.subscribe","navigation.request","resize.request","dialog.request","resource.open","resource.read","artifact.create","log","session.ping","clipboard.read","clipboard.write","network.request","storage"];
   let port = null;
   let pendingMessages = [];
@@ -299,6 +301,7 @@ window.amitiaUI = (function() {
       token: token,
       generation: generation,
       session: sessionId,
+      characterId: characterId,
       input: input || null,
       timestamp: Date.now()
     };
@@ -307,6 +310,8 @@ window.amitiaUI = (function() {
     }
     if (port) {
       port.postMessage(msg);
+    } else if (nativeBridgeAvailable) {
+      window.AmitiaNativeBridge.postMessage(JSON.stringify(msg));
     } else {
       pendingMessages.push(msg);
     }
@@ -330,7 +335,7 @@ window.amitiaUI = (function() {
       if (cb) {
         pendingCallbacks.delete(data.id);
         if (data.error) { cb(new Error(data.error), null); }
-        else { cb(null, data.output || data); }
+        else { cb(null, Object.prototype.hasOwnProperty.call(data, "output") ? data.output : data); }
       }
       return;
     }
@@ -376,7 +381,13 @@ if (eventType === "ui.host.context") {
   }
 
   window.addEventListener("message", acceptPort);
-  window.parent.postMessage({type:"amitia.extension.ready",protocolVersion:protocolVersion,session:sessionId,nonce:nonce,generation:generation,contributionId:contributionId}, "*");
+  if (nativeBridgeAvailable) {
+    window.addEventListener("amitia:native-bridge-response", function(event) {
+      handlePortMessage({ data: event && event.detail ? event.detail : {} });
+    });
+  } else {
+    window.parent.postMessage({type:"amitia.extension.ready",protocolVersion:protocolVersion,session:sessionId,nonce:nonce,generation:generation,contributionId:contributionId}, "*");
+  }
 
   var hostContextChangeCallbacks = [];
   var themeChangeCallbacks = [];
@@ -384,6 +395,18 @@ if (eventType === "ui.host.context") {
   var onHostContextChange = null;
   var onThemeChange = null;
   var onResize = null;
+
+  if (nativeBridgeAvailable) {
+    window.addEventListener("amitia:host-context", function(event) {
+      handleHostEvent({ event: "ui.host.context", payload: event && event.detail ? event.detail : {} });
+    });
+    window.addEventListener("amitia:host-theme", function(event) {
+      handleHostEvent({ event: "ui.host.theme", payload: event && event.detail ? event.detail : {} });
+    });
+    window.addEventListener("amitia:host-resize", function(event) {
+      handleHostEvent({ event: "ui.host.resize", payload: event && event.detail ? event.detail : {} });
+    });
+  }
 
   var api = {
     ready: function() {
