@@ -8,7 +8,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../core/services/providers.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 
 class SchedulesPage extends ConsumerStatefulWidget {
   const SchedulesPage({super.key});
@@ -34,16 +34,30 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
       _error = null;
     });
     try {
-      final svc = ref.read(systemServiceProvider);
-      final data = await svc.diagnostics();
+      final api = ref.read(backendServiceProvider);
+      final data = await api.get<Map<String, dynamic>>(
+        '/api/extensions/schedules',
+        fromJson: (e) => Map<String, dynamic>.from(e as Map),
+      );
+      final items = data?['items'] as List<dynamic>? ?? const [];
+      final schedules = items.whereType<Map>().map((entry) {
+        final item = Map<String, dynamic>.from(entry);
+        final def = item['definition'] is Map ? Map<String, dynamic>.from(item['definition'] as Map) : <String, dynamic>{};
+        final state = item['state'] is Map ? Map<String, dynamic>.from(item['state'] as Map) : <String, dynamic>{};
+        final status = (state['status'] ?? state['Status'] ?? '').toString();
+        return <String, dynamic>{
+          'id': (def['scheduleId'] ?? def['ScheduleID'] ?? state['scheduleId'] ?? state['ScheduleID'] ?? '').toString(),
+          'name': (def['name'] ?? def['Name'] ?? '调度').toString(),
+          'enabled': !{'disabled', 'paused', 'quarantined'}.contains(status.toLowerCase()),
+          'next_run': (state['nextRunAt'] ?? state['NextRunAt'] ?? '').toString(),
+          'last_run': (state['lastRunAt'] ?? state['LastRunAt'] ?? '').toString(),
+          'status': status,
+          'raw': item,
+        };
+      }).toList();
       if (mounted) {
-        if (data != null) {
-          final schedules = data['schedules'];
-          if (schedules is List) {
-            _schedules = schedules.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-          }
-        }
         setState(() {
+          _schedules = schedules;
           _loading = false;
         });
       }
@@ -285,9 +299,17 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
               child: Text('取消', style: TextStyle(color: context.textSecondary)),
             ),
             TextButton(
-              onPressed: () {
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已触发执行：${schedule['name']}')));
+              onPressed: () async {
+                final id = (schedule['id'] ?? '').toString();
+                try {
+                  await ref.read(backendServiceProvider).post('/api/extensions/schedules/$id/run-now');
+                  if (!context.mounted) return;
+                  Navigator.pop(context);
+                  await _load();
+                  if (mounted) ScaffoldMessenger.of(this.context).showSnackBar(SnackBar(content: Text('已触发执行：${schedule['name']}')));
+                } catch (e) {
+                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('执行失败：$e')));
+                }
               },
               child: Text('执行', style: TextStyle(color: context.accentPrimary)),
             ),
@@ -312,15 +334,17 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
               child: Text('取消', style: TextStyle(color: context.textSecondary)),
             ),
             TextButton(
-              onPressed: () {
-                setState(() {
-                  final idx = _schedules.indexWhere((s) => s['id'] == schedule['id']);
-                  if (idx >= 0) {
-                    _schedules[idx]['last_run'] = DateTime.now().toIso8601String();
-                  }
-                });
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已跳过调度：${schedule['name']}')));
+              onPressed: () async {
+                final id = (schedule['id'] ?? '').toString();
+                try {
+                  await ref.read(backendServiceProvider).post('/api/extensions/schedules/$id/skip-next');
+                  if (!context.mounted) return;
+                  Navigator.pop(context);
+                  await _load();
+                  if (mounted) ScaffoldMessenger.of(this.context).showSnackBar(SnackBar(content: Text('已跳过调度：${schedule['name']}')));
+                } catch (e) {
+                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('跳过失败：$e')));
+                }
               },
               child: Text('跳过', style: TextStyle(color: context.warning)),
             ),

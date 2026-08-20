@@ -120,6 +120,46 @@ class AuthService {
     await _sessionStore.clear();
   }
 
+
+  Future<List<Map<String, dynamic>>> sessions() async {
+    final response = await _api.get<List<dynamic>>('/api/auth/sessions');
+    if (response == null) return const [];
+    return response.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
+  }
+
+  Future<void> revokeSession(String sessionId) async {
+    await _api.delete('/api/auth/sessions/${Uri.encodeComponent(sessionId)}');
+  }
+
+  Future<int> revokeOtherSessions() async {
+    final response = await _api.deleteWithResponse<Map<String, dynamic>>('/api/auth/sessions');
+    return (response?['revokedCount'] as num?)?.toInt() ?? 0;
+  }
+
+  Future<void> changePassword(String oldPassword, String newPassword) async {
+    final response = await _api.post<Map<String, dynamic>>(
+      '/api/auth/change-password',
+      data: {'oldPassword': oldPassword, 'newPassword': newPassword},
+    );
+    if (response == null) throw ServiceApiException(code: 10000, message: '修改密码响应为空');
+    final user = response['user'] is Map
+        ? UserInfo.fromJson(Map<String, dynamic>.from(response['user'] as Map))
+        : await currentUser;
+    if (user == null) throw ServiceApiException(code: 10000, message: '用户会话信息缺失');
+    final session = response['session'] is Map ? Map<String, dynamic>.from(response['session'] as Map) : const <String, dynamic>{};
+    final accessToken = (response['accessToken'] ?? response['token'] ?? '').toString();
+    if (accessToken.isEmpty) throw ServiceApiException(code: 10000, message: '新访问令牌缺失');
+    await saveSession(
+      accessToken: accessToken,
+      refreshToken: response['refreshToken']?.toString(),
+      sessionId: session['sessionId']?.toString(),
+      accessTokenExpiresAt: response['accessTokenExpiresAt']?.toString(),
+      userId: user.id,
+      username: user.username,
+      role: user.role,
+    );
+  }
+
   Future<Map<String, dynamic>?> setup(String username, String password) async {
     final resp = await _api.post<Map<String, dynamic>>(
       '/api/public/auth/setup',

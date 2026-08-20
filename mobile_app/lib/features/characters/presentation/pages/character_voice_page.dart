@@ -333,8 +333,8 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
     final nameCtrl = TextEditingController(text: existing?.name ?? '');
     final providerCtrl = TextEditingController(text: existing?.provider ?? '');
     final voiceIdCtrl = TextEditingController(text: existing?.voiceId ?? '');
-    int speed = existing?.speed ?? 1;
-    int pitch = existing?.pitch ?? 1;
+    double speed = existing?.speed ?? 1;
+    double pitch = existing?.pitch ?? 1;
 
     showModalBottomSheet(
       context: context,
@@ -383,7 +383,7 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
                 max: 3,
                 divisions: 4,
                 activeColor: context.accentPrimary,
-                onChanged: (v) => setSheetState(() => speed = v.round()),
+                onChanged: (v) => setSheetState(() => speed = v),
               ),
               Text('音调: $pitch', style: AppTypography.label(context)),
               Slider(
@@ -392,7 +392,7 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
                 max: 3,
                 divisions: 4,
                 activeColor: context.accentPrimary,
-                onChanged: (v) => setSheetState(() => pitch = v.round()),
+                onChanged: (v) => setSheetState(() => pitch = v),
               ),
               SizedBox(height: AppSpacing.xl),
               AmitiaButton(
@@ -404,8 +404,8 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
                   final svc = ref.read(ttsServiceProvider);
                   final data = {
                     'name': nameCtrl.text.trim(),
-                    'provider': providerCtrl.text.trim(),
-                    'voiceId': voiceIdCtrl.text.trim(),
+                    'apiType': providerCtrl.text.trim(),
+                    'voiceType': voiceIdCtrl.text.trim(),
                     'speed': speed,
                     'pitch': pitch,
                   };

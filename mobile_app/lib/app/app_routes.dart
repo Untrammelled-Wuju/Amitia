@@ -41,6 +41,7 @@ abstract final class AppRoutes {
   static const settingsPermissions = '/settings/permissions';
   static const settingsBackup = '/settings/backup';
   static const settingsAi = '/settings/ai';
+  static const settingsAsr = '/settings/asr';
   static const settingsSystem = '/settings/system';
   static const settingsTemporal = '/settings/temporal';
   static const settingsSafety = '/settings/safety';

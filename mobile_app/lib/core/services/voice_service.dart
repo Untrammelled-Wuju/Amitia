@@ -67,7 +67,7 @@ class TTSService {
       '/api/tts/synthesize',
       data: {
         'text': text,
-        if (voiceId != null) 'voiceId': voiceId,
+        if (voiceId != null) 'voiceId': int.tryParse(voiceId) ?? 0,
       },
     );
     return resp;

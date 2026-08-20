@@ -96,7 +96,7 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
                 _buildCard([
                   _buildNavTile(icon: Icons.lock_outline, title: '修改密码', onTap: _showPasswordSheet),
                   _divider(),
-                  _buildNavTile(icon: Icons.devices_outlined, title: '登录设备管理', onTap: () => _showTip('登录设备管理')),
+                  _buildNavTile(icon: Icons.devices_outlined, title: '登录设备管理', onTap: _showSessionsSheet),
                 ]),
                 SizedBox(height: AppSpacing.sectionGap),
                 Padding(
@@ -218,52 +218,160 @@ class _UserSettingsPageState extends ConsumerState<UserSettingsPage> {
     final oldCtrl = TextEditingController();
     final newCtrl = TextEditingController();
     final confirmCtrl = TextEditingController();
+    bool saving = false;
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: context.surfacePrimary,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.lg),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('修改密码', style: AppTypography.sectionTitle(context)),
-              SizedBox(height: AppSpacing.lg),
-              Text('当前密码', style: AppTypography.label(context)),
-              const SizedBox(height: 4),
-              AmitiaTextField(hintText: '输入当前密码', controller: oldCtrl, obscureText: true),
-              SizedBox(height: AppSpacing.md),
-              Text('新密码', style: AppTypography.label(context)),
-              const SizedBox(height: 4),
-              AmitiaTextField(hintText: '输入新密码', controller: newCtrl, obscureText: true),
-              SizedBox(height: AppSpacing.md),
-              Text('确认密码', style: AppTypography.label(context)),
-              const SizedBox(height: 4),
-              AmitiaTextField(hintText: '再次输入新密码', controller: confirmCtrl, obscureText: true),
-              SizedBox(height: AppSpacing.lg),
-              AmitiaButton(
-                label: '确认修改',
-                isFullWidth: true,
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('密码已修改'), duration: Duration(seconds: 1)),
-                  );
-                },
-              ),
-            ],
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (sheetContext, setSheetState) => SafeArea(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(AppSpacing.lg, AppSpacing.lg, AppSpacing.lg, MediaQuery.of(sheetContext).viewInsets.bottom + AppSpacing.lg),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('修改密码', style: AppTypography.sectionTitle(context)),
+                SizedBox(height: AppSpacing.lg),
+                Text('当前密码', style: AppTypography.label(context)),
+                const SizedBox(height: 4),
+                AmitiaTextField(hintText: '输入当前密码', controller: oldCtrl, obscureText: true),
+                SizedBox(height: AppSpacing.md),
+                Text('新密码', style: AppTypography.label(context)),
+                const SizedBox(height: 4),
+                AmitiaTextField(hintText: '至少 6 位', controller: newCtrl, obscureText: true),
+                SizedBox(height: AppSpacing.md),
+                Text('确认密码', style: AppTypography.label(context)),
+                const SizedBox(height: 4),
+                AmitiaTextField(hintText: '再次输入新密码', controller: confirmCtrl, obscureText: true),
+                SizedBox(height: AppSpacing.lg),
+                AmitiaButton(
+                  label: saving ? '修改中...' : '确认修改',
+                  isFullWidth: true,
+                  onPressed: saving
+                      ? null
+                      : () async {
+                          if (newCtrl.text.length < 6) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('新密码至少 6 位')));
+                            return;
+                          }
+                          if (newCtrl.text != confirmCtrl.text) {
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('两次输入的新密码不一致')));
+                            return;
+                          }
+                          setSheetState(() => saving = true);
+                          try {
+                            await ref.read(authServiceProvider).changePassword(oldCtrl.text, newCtrl.text);
+                            if (!mounted) return;
+                            Navigator.pop(sheetContext);
+                            ref.invalidate(currentUserProvider);
+                            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('密码已修改，其他登录会话已按安全策略处理')));
+                          } catch (e) {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('修改失败：$e')));
+                            }
+                          } finally {
+                            if (sheetContext.mounted) setSheetState(() => saving = false);
+                          }
+                        },
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  void _showTip(String title) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$title · 即将开放'), duration: const Duration(seconds: 1)),
+  Future<void> _showSessionsSheet() async {
+    List<Map<String, dynamic>> sessions;
+    try {
+      sessions = await ref.read(authServiceProvider).sessions();
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('加载登录会话失败：$e')));
+      return;
+    }
+    if (!mounted) return;
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: context.surfacePrimary,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.sizeOf(sheetContext).height * 0.68,
+          child: Column(
+            children: [
+              Padding(
+                padding: EdgeInsets.all(AppSpacing.lg),
+                child: Row(
+                  children: [
+                    Expanded(child: Text('登录设备管理', style: AppTypography.sectionTitle(sheetContext))),
+                    TextButton(
+                      onPressed: sessions.length <= 1
+                          ? null
+                          : () async {
+                              try {
+                                final count = await ref.read(authServiceProvider).revokeOtherSessions();
+                                if (!sheetContext.mounted) return;
+                                Navigator.pop(sheetContext);
+                                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已退出 $count 个其他登录会话')));
+                              } catch (e) {
+                                if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('操作失败：$e')));
+                              }
+                            },
+                      child: const Text('退出其他设备'),
+                    ),
+                  ],
+                ),
+              ),
+              Expanded(
+                child: sessions.isEmpty
+                    ? Center(child: Text('暂无活跃登录会话', style: AppTypography.caption(sheetContext)))
+                    : ListView.separated(
+                        padding: EdgeInsets.fromLTRB(AppSpacing.lg, 0, AppSpacing.lg, AppSpacing.lg),
+                        itemCount: sessions.length,
+                        separatorBuilder: (_, __) => const Divider(height: 1),
+                        itemBuilder: (_, index) {
+                          final session = sessions[index];
+                          final current = session['current'] == true;
+                          final sessionId = (session['sessionId'] ?? '').toString();
+                          final device = (session['deviceName'] ?? '').toString();
+                          final agent = (session['userAgent'] ?? '').toString();
+                          final ip = (session['ipAddress'] ?? '').toString();
+                          final lastActive = (session['lastActiveAt'] ?? session['createdAt'] ?? '').toString();
+                          return ListTile(
+                            contentPadding: EdgeInsets.zero,
+                            leading: Icon(current ? Icons.devices : Icons.devices_other_outlined, color: current ? sheetContext.accentPrimary : sheetContext.textTertiary),
+                            title: Text(device.isEmpty ? (current ? '当前设备' : '登录会话') : device),
+                            subtitle: Text([if (ip.isNotEmpty) ip, if (agent.isNotEmpty) agent, if (lastActive.isNotEmpty) lastActive].join(' · '), maxLines: 2, overflow: TextOverflow.ellipsis),
+                            trailing: current
+                                ? const Text('当前')
+                                : IconButton(
+                                    tooltip: '退出该会话',
+                                    icon: const Icon(Icons.logout),
+                                    onPressed: sessionId.isEmpty
+                                        ? null
+                                        : () async {
+                                            try {
+                                              await ref.read(authServiceProvider).revokeSession(sessionId);
+                                              if (!sheetContext.mounted) return;
+                                              Navigator.pop(sheetContext);
+                                              _showSessionsSheet();
+                                            } catch (e) {
+                                              if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('退出失败：$e')));
+                                            }
+                                          },
+                                  ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 

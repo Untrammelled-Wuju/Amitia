@@ -1,14 +1,17 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
+import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
-import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../core/services/providers.dart';
+import '../../../../core/widgets/amitia_scaffold.dart';
 
 class MigrationsPage extends ConsumerStatefulWidget {
   const MigrationsPage({super.key});
@@ -17,15 +20,37 @@ class MigrationsPage extends ConsumerStatefulWidget {
   ConsumerState<MigrationsPage> createState() => _MigrationsPageState();
 }
 
-class _MigrationsPageState extends ConsumerState<MigrationsPage> {
+class _MigrationsPageState extends ConsumerState<MigrationsPage> with SingleTickerProviderStateMixin {
+  late final TabController _tabController;
   bool _loading = true;
   String? _error;
-  List<Map<String, dynamic>> _plans = [];
+  List<Map<String, dynamic>> _migrations = [];
+  List<Map<String, dynamic>> _rollbacks = [];
+  List<Map<String, dynamic>> _recovery = [];
 
   @override
   void initState() {
     super.initState();
+    _tabController = TabController(length: 3, vsync: this);
     _load();
+  }
+
+  @override
+  void dispose() {
+    _tabController.dispose();
+    super.dispose();
+  }
+
+  Future<Map<String, dynamic>?> _get(String path) {
+    return ref.read(backendServiceProvider).get<Map<String, dynamic>>(
+          path,
+          fromJson: (value) => Map<String, dynamic>.from(value as Map),
+        );
+  }
+
+  List<Map<String, dynamic>> _items(Map<String, dynamic>? data) {
+    final raw = data?['items'] as List<dynamic>? ?? const [];
+    return raw.whereType<Map>().map((item) => Map<String, dynamic>.from(item)).toList();
   }
 
   Future<void> _load() async {
@@ -34,73 +59,170 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> {
       _error = null;
     });
     try {
-      final svc = ref.read(systemServiceProvider);
-      final data = await svc.diagnostics();
-      if (mounted) {
-        if (data != null) {
-          final migrations = data['migrations'];
-          if (migrations is List) {
-            _plans = migrations.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-          }
-        }
-        setState(() {
-          _loading = false;
-        });
-      }
+      final results = await Future.wait([
+        _get('/api/extensions/migrations'),
+        _get('/api/extensions/rollbacks'),
+        _get('/api/extensions/recovery/scan'),
+      ]);
+      if (!mounted) return;
+      setState(() {
+        _migrations = _items(results[0]);
+        _rollbacks = _items(results[1]);
+        _recovery = _items(results[2]);
+        _loading = false;
+      });
     } catch (e) {
-      if (mounted) {
-        setState(() {
-          _error = e.toString();
-          _loading = false;
-        });
-      }
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) return const AmitiaLoadingState();
-    if (_error != null) return AmitiaErrorState(message: _error!, onRetry: _load);
-    if (_plans.isEmpty) {
-      return const AmitiaEmptyState(icon: Icons.merge_type_outlined, title: '暂无迁移计划');
-    }
-
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
-        title: '迁移与灰度',
+        title: '迁移与恢复',
         showBackButton: true,
         fallbackRoute: AppRoutes.developer,
         actions: [
-          AmitiaIconButton(
-            icon: Icons.refresh,
-            onPressed: _resumeScan,
-            color: context.accentPrimary,
-            tooltip: '恢复扫描',
-          ),
+          AmitiaIconButton(icon: Icons.refresh, onPressed: _load, tooltip: '刷新'),
+          AmitiaIconButton(icon: Icons.playlist_add, onPressed: _showMigrationDialog, tooltip: '执行迁移'),
         ],
-      ),
-      body: SafeArea(
-        top: false,
-        child: ListView.builder(
-          padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
-          itemCount: _plans.length,
-          itemBuilder: (context, index) => _buildMigrationCard(context, _plans[index]),
+        bottom: TabBar(
+          controller: _tabController,
+          tabs: const [Tab(text: '迁移定义'), Tab(text: '回滚'), Tab(text: '恢复')],
         ),
+      ),
+      body: SafeArea(top: false, child: _buildBody(context)),
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
+    if (_loading) return const AmitiaLoadingState();
+    if (_error != null) return AmitiaErrorState(message: _error!, onRetry: _load);
+    return TabBarView(
+      controller: _tabController,
+      children: [
+        _list(context, _migrations, _migrationCard, Icons.merge_type_outlined, '暂无迁移定义'),
+        _list(context, _rollbacks, _rollbackCard, Icons.undo_outlined, '暂无回滚计划'),
+        _list(context, _recovery, _recoveryCard, Icons.healing_outlined, '暂无待恢复操作'),
+      ],
+    );
+  }
+
+  Widget _list(
+    BuildContext context,
+    List<Map<String, dynamic>> items,
+    Widget Function(BuildContext, Map<String, dynamic>) builder,
+    IconData icon,
+    String emptyTitle,
+  ) {
+    if (items.isEmpty) return AmitiaEmptyState(icon: icon, title: emptyTitle);
+    return RefreshIndicator(
+      onRefresh: _load,
+      child: ListView.builder(
+        padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
+        itemCount: items.length,
+        itemBuilder: (context, index) => builder(context, items[index]),
       ),
     );
   }
 
-  Widget _buildMigrationCard(BuildContext context, Map<String, dynamic> plan) {
-    final name = plan['name'] as String? ?? '迁移计划';
-    final id = plan['id'] as String? ?? '';
-    final status = plan['status'] as String? ?? '灰度中';
-    final progress = (plan['progress'] as num?)?.toDouble() ?? 0.0;
-    final rollbackReason = plan['rollback_reason'] as String?;
+  Widget _migrationCard(BuildContext context, Map<String, dynamic> item) {
+    final id = (item['migration_id'] ?? '').toString();
+    final extensionId = (item['extension_id'] ?? '').toString();
+    final from = (item['from_version_range'] ?? '').toString();
+    final to = (item['to_version'] ?? '').toString();
+    final reversibility = (item['reversibility'] ?? '').toString();
+    return _card(
+      context,
+      icon: Icons.merge_type_outlined,
+      title: id.isEmpty ? '迁移定义' : id,
+      subtitle: extensionId,
+      chips: ['$from → $to', reversibility],
+      raw: item,
+      actions: [
+        AmitiaButton(
+          label: '按此定义迁移',
+          isSecondary: true,
+          icon: Icons.play_arrow,
+          onPressed: () => _showMigrationDialog(seed: item),
+        ),
+      ],
+    );
+  }
 
+  Widget _rollbackCard(BuildContext context, Map<String, dynamic> item) {
+    final id = (item['rollback_id'] ?? item['rollbackId'] ?? item['id'] ?? '').toString();
+    final extensionId = (item['extension_id'] ?? item['extensionId'] ?? '').toString();
+    final status = (item['status'] ?? 'unknown').toString();
+    return _card(
+      context,
+      icon: Icons.undo_outlined,
+      title: id.isEmpty ? '回滚计划' : id,
+      subtitle: extensionId,
+      chips: [status],
+      raw: item,
+      actions: [
+        AmitiaButton(
+          label: '执行回滚',
+          isDestructive: true,
+          icon: Icons.undo,
+          onPressed: id.isEmpty ? null : () => _post('/api/extensions/rollbacks/$id/execute', success: '回滚执行完成'),
+        ),
+        AmitiaButton(
+          label: '恢复回滚',
+          isSecondary: true,
+          icon: Icons.restore,
+          onPressed: id.isEmpty ? null : () => _post('/api/extensions/rollbacks/$id/recover', success: '回滚恢复完成'),
+        ),
+      ],
+    );
+  }
+
+  Widget _recoveryCard(BuildContext context, Map<String, dynamic> item) {
+    final operationId = (item['operation_id'] ?? item['operationId'] ?? '').toString();
+    final strategy = (item['strategy'] ?? '').toString();
+    final detail = (item['detail'] ?? '').toString();
+    return _card(
+      context,
+      icon: Icons.healing_outlined,
+      title: operationId.isEmpty ? '恢复操作' : operationId,
+      subtitle: detail,
+      chips: [if (strategy.isNotEmpty) strategy],
+      raw: item,
+      actions: [
+        AmitiaButton(
+          label: '执行恢复',
+          icon: Icons.play_arrow,
+          onPressed: operationId.isEmpty || strategy.isEmpty
+              ? null
+              : () => _post(
+                    '/api/extensions/recovery/execute',
+                    data: {'operationId': operationId, 'strategy': strategy, 'detail': detail},
+                    success: '恢复操作已执行',
+                  ),
+        ),
+      ],
+    );
+  }
+
+  Widget _card(
+    BuildContext context, {
+    required IconData icon,
+    required String title,
+    required String subtitle,
+    required List<String> chips,
+    required Map<String, dynamic> raw,
+    required List<Widget> actions,
+  }) {
     return Padding(
       padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
       child: AmitiaCard(
-        onTap: () => _showCanaryDetailSheet(context, plan),
+        onTap: () => _showJson('详情', raw),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -109,322 +231,126 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> {
                 Container(
                   width: 40,
                   height: 40,
-                  decoration: BoxDecoration(
-                    color: _statusColor(context, status).withValues(alpha: 0.1),
-                    borderRadius: AppRadius.brSmall,
-                  ),
-                  child: Icon(_statusIcon(status), size: 22, color: _statusColor(context, status)),
+                  decoration: BoxDecoration(color: context.accentSoft, borderRadius: AppRadius.brSmall),
+                  child: Icon(icon, color: context.accentPrimary),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(name, style: AppTypography.cardTitle(context)),
-                      const SizedBox(height: 2),
-                      Text('ID: $id', style: AppTypography.label(context)),
+                      Text(title, style: AppTypography.cardTitle(context)),
+                      if (subtitle.isNotEmpty)
+                        Text(subtitle, maxLines: 2, overflow: TextOverflow.ellipsis, style: AppTypography.caption(context)),
                     ],
                   ),
                 ),
-                _buildStatusBadge(status),
               ],
             ),
-            SizedBox(height: AppSpacing.md),
-            if (status == '灰度中') ...[
-              Row(
-                children: [
-                  Text('灰度进度', style: AppTypography.label(context)),
-                  const SizedBox(width: 8),
-                  Expanded(child: AmitiaProgressBar(progress: progress / 100)),
-                  const SizedBox(width: 8),
-                  Text('${progress.toInt()}%', style: AppTypography.label(context).copyWith(color: context.textSecondary)),
-                ],
-              ),
+            if (chips.where((value) => value.isNotEmpty).isNotEmpty) ...[
               SizedBox(height: AppSpacing.md),
-            ],
-            if (rollbackReason != null) ...[
-              Container(
-                width: double.infinity,
-                padding: EdgeInsets.all(AppSpacing.sm),
-                decoration: BoxDecoration(
-                  color: context.error.withValues(alpha: 0.08),
-                  borderRadius: AppRadius.brSmall,
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.error_outline, size: 16, color: context.error),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text('回滚原因: $rollbackReason', style: AppTypography.caption(context).copyWith(color: context.error)),
-                    ),
-                  ],
-                ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: chips
+                    .where((value) => value.isNotEmpty)
+                    .map((value) => Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+                          decoration: BoxDecoration(color: context.surfaceSecondary, borderRadius: AppRadius.brTag),
+                          child: Text(value, style: AppTypography.label(context)),
+                        ))
+                    .toList(),
               ),
-              SizedBox(height: AppSpacing.md),
             ],
-            Row(
-              children: _buildActionButtons(context, plan),
-            ),
+            if (actions.isNotEmpty) ...[
+              SizedBox(height: AppSpacing.md),
+              Wrap(spacing: 8, runSpacing: 8, children: actions),
+            ],
           ],
         ),
       ),
     );
   }
 
-  List<Widget> _buildActionButtons(BuildContext context, Map<String, dynamic> plan) {
-    final buttons = <Widget>[];
-    final status = plan['status'] as String? ?? '';
-
-    if (status == '灰度中') {
-      buttons.add(Expanded(
-        child: AmitiaButton(
-          label: '灰度详情',
-          isSecondary: true,
-          icon: Icons.info_outline,
-          onPressed: () => _showCanaryDetailSheet(context, plan),
-        ),
-      ));
-      buttons.add(SizedBox(width: AppSpacing.sm));
-      buttons.add(Expanded(
-        child: AmitiaButton(
-          label: '回滚',
-          isDestructive: true,
-          icon: Icons.undo,
-          onPressed: () => _showRollbackConfirm(context, plan),
-        ),
-      ));
-    } else if (status == '已完成') {
-      buttons.add(Expanded(
-        child: AmitiaButton(
-          label: '回滚',
-          isSecondary: true,
-          isDestructive: true,
-          icon: Icons.undo,
-          onPressed: () => _showRollbackConfirm(context, plan),
-        ),
-      ));
-    } else if (status == '已回滚') {
-      buttons.add(Expanded(
-        child: AmitiaButton(
-          label: '重新迁移',
-          icon: Icons.refresh,
-          onPressed: () => _showRiskConfirm(context, plan),
-        ),
-      ));
-    }
-
-    return buttons;
-  }
-
-  Color _statusColor(BuildContext context, String status) {
-    switch (status) {
-      case '已完成':
-        return context.success;
-      case '灰度中':
-        return context.accentPrimary;
-      case '已回滚':
-        return context.error;
-      default:
-        return context.textSecondary;
+  Future<void> _post(String path, {Object? data, required String success}) async {
+    try {
+      await ref.read(backendServiceProvider).post<Map<String, dynamic>>(
+        path,
+        data: data ?? const <String, dynamic>{},
+        fromJson: (value) => Map<String, dynamic>.from(value as Map),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(success)));
+      await _load();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
-  IconData _statusIcon(String status) {
-    switch (status) {
-      case '已完成':
-        return Icons.check_circle_outline;
-      case '灰度中':
-        return Icons.flaky_outlined;
-      case '已回滚':
-        return Icons.undo;
-      default:
-        return Icons.pending_outlined;
-    }
-  }
-
-  AmitiaStatusBadge _buildStatusBadge(String status) {
-    switch (status) {
-      case '已完成':
-        return const AmitiaStatusBadge(label: '已完成', type: BadgeType.success);
-      case '灰度中':
-        return const AmitiaStatusBadge(label: '灰度中', type: BadgeType.accent);
-      case '已回滚':
-        return const AmitiaStatusBadge(label: '已回滚', type: BadgeType.error);
-      default:
-        return AmitiaStatusBadge(label: status, type: BadgeType.neutral);
-    }
-  }
-
-  void _showCanaryDetailSheet(BuildContext context, Map<String, dynamic> plan) {
-    final name = plan['name'] as String? ?? '';
-    final id = plan['id'] as String? ?? '';
-    final status = plan['status'] as String? ?? '';
-    final progress = (plan['progress'] as num?)?.toDouble() ?? 0.0;
-    final rollbackReason = plan['rollback_reason'] as String?;
-
-    showModalBottomSheet(
+  Future<void> _showMigrationDialog({Map<String, dynamic>? seed}) async {
+    final extensionController = TextEditingController(text: (seed?['extension_id'] ?? '').toString());
+    final fromController = TextEditingController(text: (seed?['from_version_range'] ?? '').toString());
+    final toController = TextEditingController(text: (seed?['to_version'] ?? '').toString());
+    final fromHashController = TextEditingController();
+    final toHashController = TextEditingController(text: (seed?['definition_hash'] ?? '').toString());
+    final result = await showDialog<bool>(
       context: context,
-      backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) {
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(20, 0, 20, 34),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 8),
-                Center(
-                  child: Container(width: 40, height: 4, decoration: BoxDecoration(color: context.borderPrimary, borderRadius: BorderRadius.circular(2))),
-                ),
-                const SizedBox(height: 20),
-                Text('灰度发布详情', style: AppTypography.pageTitle(context)),
-                const SizedBox(height: 16),
-                _buildDetailRow(context, '迁移计划', name),
-                _buildDetailRow(context, '计划 ID', id),
-                _buildDetailRow(context, '状态', status),
-                _buildDetailRow(context, '进度', '${progress.toInt()}%'),
-                if (rollbackReason != null)
-                  _buildDetailRow(context, '回滚原因', rollbackReason),
-                _buildDetailRow(context, '灰度比例', '35%'),
-                _buildDetailRow(context, '目标比例', '100%'),
-                _buildDetailRow(context, '健康检查', '正常'),
-                _buildDetailRow(context, '错误率', '0.2%'),
-                const SizedBox(height: 20),
-                AmitiaButton(
-                  label: '关闭',
-                  isFullWidth: true,
-                  isSecondary: true,
-                  onPressed: () => Navigator.pop(context),
-                ),
-              ],
-            ),
+      builder: (context) => AlertDialog(
+        title: const Text('执行迁移'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(controller: extensionController, decoration: const InputDecoration(labelText: 'Extension ID')),
+              TextField(controller: fromController, decoration: const InputDecoration(labelText: '当前版本')),
+              TextField(controller: toController, decoration: const InputDecoration(labelText: '目标版本')),
+              TextField(controller: fromHashController, decoration: const InputDecoration(labelText: '当前 Definition Hash（可选）')),
+              TextField(controller: toHashController, decoration: const InputDecoration(labelText: '目标 Definition Hash（可选）')),
+            ],
           ),
-        );
-      },
-    );
-  }
-
-  Widget _buildDetailRow(BuildContext context, String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 80,
-            child: Text(label, style: AppTypography.label(context).copyWith(color: context.textTertiary)),
-          ),
-          Expanded(child: Text(value, style: AppTypography.body(context))),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('执行')),
         ],
       ),
     );
-  }
-
-  void _showRollbackConfirm(BuildContext context, Map<String, dynamic> plan) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: context.surfacePrimary,
-          shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
-          title: Text('回滚迁移', style: AppTypography.cardTitle(context)),
-          content: Text('确定要回滚「${plan['name']}」吗？回滚后数据将恢复到迁移前的状态。', style: AppTypography.body(context)),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text('取消', style: TextStyle(color: context.textSecondary)),
-            ),
-            TextButton(
-              onPressed: () {
-                setState(() {
-                  final idx = _plans.indexWhere((p) => p['id'] == plan['id']);
-                  if (idx >= 0) {
-                    _plans[idx]['status'] = '已回滚';
-                    _plans[idx]['progress'] = 0;
-                    _plans[idx]['rollback_reason'] = '手动回滚';
-                  }
-                });
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已回滚：${plan['name']}')));
-              },
-              child: Text('确认回滚', style: TextStyle(color: context.error)),
-            ),
-          ],
-        );
+    if (result != true) return;
+    final extensionId = extensionController.text.trim();
+    final fromVersion = fromController.text.trim();
+    final toVersion = toController.text.trim();
+    if (extensionId.isEmpty || fromVersion.isEmpty || toVersion.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Extension ID、当前版本、目标版本不能为空')));
+      return;
+    }
+    await _post(
+      '/api/extensions/migrations/execute',
+      data: {
+        'extensionId': extensionId,
+        'fromVersion': fromVersion,
+        'toVersion': toVersion,
+        'fromDefinitionHash': fromHashController.text.trim(),
+        'toDefinitionHash': toHashController.text.trim(),
       },
+      success: '迁移操作已创建',
     );
   }
 
-  void _showRiskConfirm(BuildContext context, Map<String, dynamic> plan) {
-    showDialog(
+  void _showJson(String title, Map<String, dynamic> data) {
+    showDialog<void>(
       context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: context.surfacePrimary,
-          shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
-          title: Text('风险确认', style: AppTypography.cardTitle(context)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('重新迁移「${plan['name']}」存在以下风险：', style: AppTypography.body(context)),
-              const SizedBox(height: 8),
-              Row(
-                children: [
-                  Icon(Icons.warning_amber_rounded, size: 16, color: context.warning),
-                  const SizedBox(width: 6),
-                  Expanded(child: Text('数据可能不一致', style: AppTypography.caption(context))),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Icon(Icons.warning_amber_rounded, size: 16, color: context.warning),
-                  const SizedBox(width: 6),
-                  Expanded(child: Text('服务可能短暂中断', style: AppTypography.caption(context))),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  Icon(Icons.warning_amber_rounded, size: 16, color: context.warning),
-                  const SizedBox(width: 6),
-                  Expanded(child: Text('之前的问题可能重现', style: AppTypography.caption(context))),
-                ],
-              ),
-            ],
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: SelectableText(const JsonEncoder.withIndent('  ').convert(data)),
           ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text('取消', style: TextStyle(color: context.textSecondary)),
-            ),
-            TextButton(
-              onPressed: () {
-                setState(() {
-                  final idx = _plans.indexWhere((p) => p['id'] == plan['id']);
-                  if (idx >= 0) {
-                    _plans[idx]['status'] = '灰度中';
-                    _plans[idx]['progress'] = 0;
-                    _plans[idx].remove('rollback_reason');
-                  }
-                });
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已开始重新迁移：${plan['name']}')));
-              },
-              child: Text('确认风险并继续', style: TextStyle(color: context.warning)),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _resumeScan() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已恢复迁移扫描')),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('关闭'))],
+      ),
     );
   }
 }

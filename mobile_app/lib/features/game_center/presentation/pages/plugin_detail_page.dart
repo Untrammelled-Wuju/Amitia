@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
@@ -168,7 +169,7 @@ class PluginDetailPage extends ConsumerWidget {
                     label: '更新',
                     isSecondary: true,
                     height: 36,
-                    onPressed: null,
+                    onPressed: () => _pickUpdate(context, controller, detail),
                   ),
                   AmitiaButton(
                     label: '卸载',
@@ -290,6 +291,25 @@ class PluginDetailPage extends ConsumerWidget {
       default:
         return mode;
     }
+  }
+
+  Future<void> _pickUpdate(
+    BuildContext context,
+    GameCenterController controller,
+    GamePluginDetail detail,
+  ) async {
+    final result = await FilePicker.platform.pickFiles(
+      allowMultiple: false,
+      type: FileType.custom,
+      allowedExtensions: const ['zip', 'amitia', 'tar', 'gz'],
+    );
+    final path = result?.files.single.path;
+    if (path == null || path.isEmpty) return;
+    final ok = await controller.update(detail.extensionId, path);
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(ok ? '插件更新完成' : '插件更新失败')),
+    );
   }
 
   void _confirmUninstall(BuildContext context, GameCenterController controller, GamePluginDetail detail) {

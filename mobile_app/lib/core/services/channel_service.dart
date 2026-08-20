@@ -57,6 +57,91 @@ class MCPService {
     return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 
+  Future<List<Map<String, dynamic>>> prompts(String id) async {
+    final resp = await _api.get<List<dynamic>>('/api/mcp/servers/$id/prompts');
+    if (resp == null) return [];
+    return resp.map((e) => e as Map<String, dynamic>).toList();
+  }
+
+  Future<Map<String, dynamic>> resources(String id) async {
+    final resp = await _api.get<Map<String, dynamic>>('/api/mcp/servers/$id/resources');
+    return resp ?? <String, dynamic>{'resources': <dynamic>[], 'resourceTemplates': <dynamic>[]};
+  }
+
+  Future<List<Map<String, dynamic>>> tasks(String id) async {
+    final resp = await _api.get<List<dynamic>>('/api/mcp/servers/$id/tasks');
+    if (resp == null) return [];
+    return resp.map((e) => e as Map<String, dynamic>).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> logs(String id, {int limit = 100}) async {
+    final resp = await _api.get<List<dynamic>>(
+      '/api/mcp/servers/$id/logs',
+      queryParameters: {'limit': limit},
+    );
+    if (resp == null) return [];
+    return resp.map((e) => e as Map<String, dynamic>).toList();
+  }
+
+  Future<List<Map<String, dynamic>>> capabilities(String id) async {
+    final resp = await _api.get<List<dynamic>>('/api/mcp/servers/$id/capabilities');
+    if (resp == null) return [];
+    return resp.map((e) => e as Map<String, dynamic>).toList();
+  }
+
+  Future<void> setToolEnabled(String serverId, String toolId, bool enabled) async {
+    await _api.put<Map<String, dynamic>>(
+      '/api/mcp/servers/$serverId/tools/$toolId/scope',
+      data: {'characterId': '', 'enabled': enabled},
+    );
+  }
+
+  Future<void> setCapability(
+    String serverId,
+    String capability,
+    bool enabled, {
+    Map<String, dynamic>? configuration,
+  }) async {
+    await _api.put<Map<String, dynamic>>(
+      '/api/mcp/servers/$serverId/capabilities/$capability',
+      data: {
+        'enabled': enabled,
+        'configuration': configuration ?? <String, dynamic>{},
+      },
+    );
+  }
+
+  Future<Map<String, dynamic>?> readResource(String serverId, String uri) =>
+      _api.post<Map<String, dynamic>>(
+        '/api/mcp/servers/$serverId/resources/read',
+        data: {'characterId': '', 'uri': uri},
+      );
+
+  Future<Map<String, dynamic>?> getPrompt(
+    String serverId,
+    String name, {
+    Map<String, String> arguments = const {},
+  }) =>
+      _api.post<Map<String, dynamic>>(
+        '/api/mcp/servers/$serverId/prompts/get',
+        data: {'characterId': '', 'name': name, 'arguments': arguments},
+      );
+
+  Future<Map<String, dynamic>?> startOAuth(
+    String serverId, {
+    required String resourceUrl,
+    String redirectUri = '',
+    List<String> scopes = const [],
+  }) =>
+      _api.post<Map<String, dynamic>>(
+        '/api/mcp/servers/$serverId/oauth/start',
+        data: {
+          'resourceUrl': resourceUrl,
+          'redirectUri': redirectUri,
+          'scopes': scopes,
+        },
+      );
+
   Future<List<Map<String, dynamic>>> interactions() async {
     final resp = await _api.get<List<dynamic>>('/api/mcp/interactions');
     if (resp == null) return [];
@@ -73,6 +158,49 @@ class MCPService {
     if (resp == null) return [];
     return resp.map((e) => e as Map<String, dynamic>).toList();
   }
+}
+
+class WechatService {
+  final BackendServiceApi _api;
+
+  WechatService(this._api);
+
+  Future<Map<String, dynamic>?> status() =>
+      _api.get<Map<String, dynamic>>('/api/wechat/status');
+
+  Future<Map<String, dynamic>?> bridgeStatus() =>
+      _api.get<Map<String, dynamic>>('/api/wechat/bridge/status-detail');
+
+  Future<Map<String, dynamic>?> qrCode() =>
+      _api.get<Map<String, dynamic>>('/api/wechat/bridge/qrcode');
+
+  Future<List<Map<String, dynamic>>> events() async {
+    final response = await _api.get<Map<String, dynamic>>('/api/wechat/events');
+    final raw = response?['events'];
+    if (raw is! List) return const [];
+    return raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
+  }
+
+  Future<Map<String, dynamic>?> startLogin() =>
+      _api.get<Map<String, dynamic>>('/api/wechat/login/start');
+
+  Future<Map<String, dynamic>?> rescan() =>
+      _api.post<Map<String, dynamic>>('/api/wechat/login/rescan');
+
+  Future<Map<String, dynamic>?> reconnect() =>
+      _api.post<Map<String, dynamic>>('/api/wechat/login/reconnect');
+
+  Future<Map<String, dynamic>?> waitForLogin() =>
+      _api.post<Map<String, dynamic>>('/api/wechat/login/wait');
+
+  Future<Map<String, dynamic>?> recoverBridge() =>
+      _api.post<Map<String, dynamic>>('/api/wechat/bridge/recover');
+
+  Future<Map<String, dynamic>?> riskSummary() =>
+      _api.get<Map<String, dynamic>>('/api/wechat/cloud-check/risk-summary');
+
+  Future<Map<String, dynamic>?> runCloudCheck() =>
+      _api.post<Map<String, dynamic>>('/api/wechat/cloud-check/run');
 }
 
 class QQService {

@@ -19,29 +19,123 @@ class SystemSettingsPage extends ConsumerStatefulWidget {
 
 class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
   String _language = '简体中文';
-  bool _autoStart = false;
   bool _notifications = true;
-  bool _developerMode = false;
+  bool _notificationsUpdating = false;
   Map<String, dynamic>? _healthData;
   bool _loadingHealth = true;
   String? _healthError;
 
   static const _languages = ['简体中文', 'English', '日本語'];
+  static const _languageCodes = <String, String>{
+    '简体中文': 'zh-CN',
+    'English': 'en-US',
+    '日本語': 'ja-JP',
+  };
 
   @override
   void initState() {
     super.initState();
-    _loadHealth();
+    _loadSettings();
   }
 
-  Future<void> _loadHealth() async {
-    setState(() { _loadingHealth = true; _healthError = null; });
+  Future<void> _loadSettings() async {
+    setState(() {
+      _loadingHealth = true;
+      _healthError = null;
+    });
     try {
       final svc = ref.read(systemServiceProvider);
-      final result = await svc.health();
-      if (mounted) setState(() { _healthData = result; _loadingHealth = false; });
+      final results = await Future.wait([
+        svc.health(),
+        svc.notificationSettings(),
+        svc.config(),
+      ]);
+      final health = results[0];
+      final notifications = results[1];
+      final config = results[2];
+      if (!mounted) return;
+      final languageCode = (config?['language'] ?? 'zh-CN').toString();
+      var language = '简体中文';
+      for (final entry in _languageCodes.entries) {
+        if (entry.value == languageCode) {
+          language = entry.key;
+          break;
+        }
+      }
+      setState(() {
+        _healthData = health;
+        _notifications = notifications?['enabled'] != false;
+        _language = language;
+        _loadingHealth = false;
+      });
     } catch (e) {
-      if (mounted) setState(() { _healthError = e.toString(); _loadingHealth = false; });
+      if (mounted) {
+        setState(() {
+          _healthError = e.toString();
+          _loadingHealth = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _setNotifications(bool enabled) async {
+    if (_notificationsUpdating) return;
+    setState(() => _notificationsUpdating = true);
+    try {
+      final svc = ref.read(systemServiceProvider);
+      final result = enabled
+          ? await svc.subscribeNotifications()
+          : await svc.unsubscribeNotifications();
+      final settings = await svc.notificationSettings();
+      if (!mounted) return;
+      setState(() => _notifications = settings?['enabled'] == true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(_notifications ? '通知已开启' : '通知已关闭'),
+          duration: const Duration(seconds: 1),
+        ),
+      );
+      if (result == null) return;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('更新通知设置失败: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _notificationsUpdating = false);
+    }
+  }
+
+  Future<void> _setLanguage(String language) async {
+    final code = _languageCodes[language];
+    if (code == null) return;
+    try {
+      await ref.read(systemServiceProvider).updateConfig({'language': code});
+      if (mounted) setState(() => _language = language);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('保存语言设置失败: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _testNotification() async {
+    try {
+      final result = await ref.read(systemServiceProvider).testNotification();
+      if (!mounted) return;
+      final sentAt = result?['sentAt']?.toString();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(sentAt == null ? '测试通知已发送' : '测试通知已发送 · $sentAt')),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('发送测试通知失败: $e')),
+        );
+      }
     }
   }
 
@@ -64,28 +158,23 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
               title: '语言选择',
               value: _language,
               options: _languages,
-              onChanged: (v) => setState(() => _language = v),
-            ),
-            _divider(),
-            AmitiaSwitchTile(
-              title: '开机启动',
-              subtitle: '系统启动时自动运行 Amitia',
-              value: _autoStart,
-              onChanged: (v) => setState(() => _autoStart = v),
+              onChanged: _setLanguage,
             ),
             _divider(),
             AmitiaSwitchTile(
               title: '通知设置',
               subtitle: '接收消息和提醒通知',
               value: _notifications,
-              onChanged: (v) => setState(() => _notifications = v),
+              onChanged: _notificationsUpdating ? null : _setNotifications,
             ),
+            _divider(),
+            _buildNavTile(icon: Icons.notifications_active_outlined, title: '发送测试通知', onTap: _testNotification),
           ]),
           SizedBox(height: AppSpacing.sectionGap),
           _SectionLabel(text: '功能入口'),
           SizedBox(height: AppSpacing.sm),
           _buildCard([
-            _buildNavTile(icon: Icons.record_voice_over_outlined, title: '语音设置', onTap: () => _showTip('语音设置')),
+            _buildNavTile(icon: Icons.record_voice_over_outlined, title: '语音识别', onTap: () => context.push(AppRoutes.settingsAsr)),
             _divider(),
             _buildNavTile(icon: Icons.palette_outlined, title: '外观设置', onTap: () => context.push(AppRoutes.settingsAppearance)),
             _divider(),
@@ -99,16 +188,10 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
           _SectionLabel(text: '高级'),
           SizedBox(height: AppSpacing.sm),
           _buildCard([
-            AmitiaSwitchTile(
+            _buildNavTile(
+              icon: Icons.developer_mode_outlined,
               title: '开发者模式',
-              subtitle: '启用高级调试和开发选项',
-              value: _developerMode,
-              onChanged: (v) {
-                setState(() => _developerMode = v);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(v ? '开发者模式已开启' : '开发者模式已关闭'), duration: const Duration(seconds: 1)),
-                );
-              },
+              onTap: () => context.push(AppRoutes.kernelPage('dev-mode')),
             ),
           ]),
           SizedBox(height: AppSpacing.xl),
@@ -309,11 +392,6 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
     );
   }
 
-  void _showTip(String title) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$title · 即将开放'), duration: const Duration(seconds: 1)),
-    );
-  }
 }
 
 class _SectionLabel extends StatelessWidget {

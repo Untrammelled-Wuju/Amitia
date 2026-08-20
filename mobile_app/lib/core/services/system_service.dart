@@ -16,6 +16,14 @@ class SystemService {
     return resp;
   }
 
+  Future<Map<String, dynamic>?> config() async {
+    return _api.get<Map<String, dynamic>>('/api/config');
+  }
+
+  Future<Map<String, dynamic>?> updateConfig(Map<String, dynamic> data) async {
+    return _api.put<Map<String, dynamic>>('/api/config', data: data);
+  }
+
   Future<Map<String, dynamic>?> runDiagnostics() async {
     final resp = await _api.post<Map<String, dynamic>>('/api/diagnostics/run');
     return resp;
@@ -29,6 +37,36 @@ class SystemService {
   Future<Map<String, dynamic>?> about() async {
     final resp = await _api.get<Map<String, dynamic>>('/api/about');
     return resp;
+  }
+
+  Future<Map<String, dynamic>?> notificationSettings() async {
+    return _api.get<Map<String, dynamic>>('/api/notifications/settings');
+  }
+
+  Future<Map<String, dynamic>?> updateNotificationSettings(bool enabled) async {
+    return _api.put<Map<String, dynamic>>(
+      '/api/notifications/settings',
+      data: {'enabled': enabled},
+    );
+  }
+
+  Future<Map<String, dynamic>?> notificationStatus() async {
+    return _api.get<Map<String, dynamic>>('/api/notifications/status');
+  }
+
+  Future<Map<String, dynamic>?> subscribeNotifications({Map<String, dynamic>? subscription}) async {
+    return _api.post<Map<String, dynamic>>(
+      '/api/notifications/subscribe',
+      data: subscription ?? <String, dynamic>{},
+    );
+  }
+
+  Future<Map<String, dynamic>?> unsubscribeNotifications() async {
+    return _api.post<Map<String, dynamic>>('/api/notifications/unsubscribe');
+  }
+
+  Future<Map<String, dynamic>?> testNotification() async {
+    return _api.post<Map<String, dynamic>>('/api/notifications/test');
   }
 
   Future<Map<String, dynamic>?> setupStatus() async {

@@ -3,6 +3,7 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_motion.dart';
@@ -13,6 +14,9 @@ import '../../../../core/widgets/amitia_message.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_drawer.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/artifact/artifact_model.dart';
+import '../../../../core/artifact/artifact_providers.dart';
+import '../../../../core/artifact/artifact_service.dart';
 import '../../../../core/ui_runtime/ui_provider.dart';
 import '../../../../core/ui_runtime/ui_provider_host.dart';
 import '../../../../core/ui_runtime/ui_runtime_controller.dart';
@@ -20,6 +24,7 @@ import '../../../../core/ui_runtime/ui_message_renderer_registry.dart';
 import '../../../../core/ui_runtime/conversation_ui_contract.dart';
 import '../../runtime/conversation_runtime_controller.dart';
 import '../../../../shared/models/models.dart';
+import 'realtime_voice_call_sheet.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
   const ChatPage({super.key});
@@ -98,20 +103,116 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _runtime.sendText(text);
   }
 
-  void _onSendFile(String fileName, int sizeKB) {
-    _runtime.sendFile(fileName, sizeKB);
+  Future<void> _pickAndSendFile() async {
+    await _withArtifactUpload((service) async {
+      final artifact = await service.pickAndUploadFile();
+      switch (artifact.kind) {
+        case ArtifactKind.image:
+          await _sendImageArtifact(service, artifact);
+          return;
+        case ArtifactKind.video:
+          await _sendVideoArtifact(service, artifact);
+          return;
+        case ArtifactKind.audio:
+          await _sendAudioArtifact(service, artifact);
+          return;
+        case ArtifactKind.file:
+          await _runtime.sendFile(
+            resourceUri: artifact.resourceUri,
+            fileName: artifact.filename,
+            sizeBytes: artifact.sizeBytes,
+            mimeType: artifact.mimeType,
+          );
+          return;
+      }
+    });
   }
 
-  void _onSendImage(String name) {
-    _runtime.sendImage(name);
+  Future<void> _pickAndSendImage(bool camera) async {
+    await _withArtifactUpload((service) async {
+      final artifact = await service.pickAndUploadImage(
+        source: camera ? ImageSource.camera : ImageSource.gallery,
+      );
+      await _sendImageArtifact(service, artifact);
+    });
+  }
+
+  Future<void> _pickAndSendVideo(bool camera) async {
+    await _withArtifactUpload((service) async {
+      final artifact = await service.pickAndUploadVideo(
+        source: camera ? ImageSource.camera : ImageSource.gallery,
+      );
+      await _sendVideoArtifact(service, artifact);
+    });
+  }
+
+  Future<void> _pickAndSendAudio() async {
+    await _withArtifactUpload((service) async {
+      final artifact = await service.pickAndUploadAudio();
+      await _sendAudioArtifact(service, artifact);
+    });
+  }
+
+  Future<void> _sendImageArtifact(
+    ArtifactService service,
+    ArtifactMetadata artifact,
+  ) {
+    return _runtime.sendImage(
+      resourceUri: artifact.resourceUri,
+      displayUrl: service.contentUrl(artifact.id),
+      fileName: artifact.filename,
+      mimeType: artifact.mimeType,
+    );
+  }
+
+  Future<void> _sendVideoArtifact(
+    ArtifactService service,
+    ArtifactMetadata artifact,
+  ) {
+    return _runtime.sendVideo(
+      resourceUri: artifact.resourceUri,
+      displayUrl: service.contentUrl(artifact.id),
+      fileName: artifact.filename,
+      mimeType: artifact.mimeType,
+      durationMs: artifact.durationMs,
+    );
+  }
+
+  Future<void> _sendAudioArtifact(
+    ArtifactService service,
+    ArtifactMetadata artifact,
+  ) {
+    return _runtime.sendVoice(
+      resourceUri: artifact.resourceUri,
+      displayUrl: service.contentUrl(artifact.id),
+      fileName: artifact.filename,
+      mimeType: artifact.mimeType,
+      durationMs: artifact.durationMs,
+    );
+  }
+
+  Future<void> _withArtifactUpload(
+    Future<void> Function(ArtifactService service) action,
+  ) async {
+    try {
+      final service = await ref.read(artifactServiceProvider.future);
+      await action(service);
+    } on ArtifactServiceException catch (error) {
+      if (error.message != 'user_cancelled' && mounted) {
+        amitiaSnackBar(context, '附件处理失败：${error.message}');
+      }
+    } catch (error) {
+      if (mounted) {
+        amitiaSnackBar(
+          context,
+          '附件处理失败：${error.toString().replaceFirst('Exception: ', '')}',
+        );
+      }
+    }
   }
 
   void _onSendCode(String lang, String code) {
     _runtime.sendCode(lang, code);
-  }
-
-  void _onSendVoice(String duration) {
-    _runtime.sendVoice(duration);
   }
 
   void _onSendEmote(String emoji, String name) {
@@ -128,6 +229,37 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final previous = _runtime.messages[index - 1];
     if (previous.role != MessageRole.assistant) return true;
     return false;
+  }
+
+  Future<void> _startRealtimeCall(String characterId, String characterName) async {
+    var conversationId = _runtime.conversationId;
+    if (conversationId == null || conversationId.isEmpty) {
+      try {
+        final created = await _runtime.createConversation(characterId);
+        if (!created) {
+          if (mounted) amitiaSnackBar(context, '无法创建语音通话会话');
+          return;
+        }
+        conversationId = _runtime.conversationId;
+      } catch (error) {
+        if (mounted) amitiaSnackBar(context, '创建会话失败：$error');
+        return;
+      }
+    }
+    if (!mounted || conversationId == null || conversationId.isEmpty) return;
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: context.surfacePrimary,
+      useSafeArea: false,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) => RealtimeVoiceCallSheet(
+        conversationId: conversationId!,
+        characterName: characterName,
+      ),
+    );
   }
 
   void _showMessageSearch(BuildContext context) {
@@ -224,6 +356,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Widget build(BuildContext context) {
     final isAgentMode = ref.watch(isAgentModeProvider);
     final characterId = ref.watch(currentCharacterIdProvider);
+    _runtime.setCharacterId(characterId);
     final charactersAsync = ref.watch(characterListProvider);
 
     final character = charactersAsync.when(
@@ -270,10 +403,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         final id = input is Map ? input['messageId']?.toString() : input?.toString();
         return _runtime.regenerate(messageId: id);
       },
-      ConversationUIAction.stop: (_) {
-        _runtime.stop();
-        return null;
-      },
+      ConversationUIAction.stop: (_) => _runtime.stop(),
       ConversationUIAction.delete: (input) {
         final id = input is Map ? input['messageId']?.toString() : input?.toString();
         if (id != null && id.isNotEmpty) _runtime.deleteMessage(id);
@@ -285,17 +415,10 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         _openDrawer(context);
         return null;
       },
-      ConversationUIAction.sendFile: (input) {
-        final row = input is Map ? input : const <String, dynamic>{};
-        final name = row['fileName']?.toString() ?? '';
-        final size = row['sizeKB'] is num ? (row['sizeKB'] as num).toInt() : 0;
-        if (name.isNotEmpty) _runtime.sendFile(name, size);
-        return null;
-      },
+      ConversationUIAction.sendFile: (_) => _pickAndSendFile(),
       ConversationUIAction.sendImage: (input) {
-        final name = input is Map ? input['name']?.toString() : input?.toString();
-        if (name != null && name.isNotEmpty) _runtime.sendImage(name);
-        return null;
+        final camera = input is Map && input['source']?.toString() == 'camera';
+        return _pickAndSendImage(camera);
       },
       ConversationUIAction.sendCode: (input) {
         final row = input is Map ? input : const <String, dynamic>{};
@@ -304,11 +427,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         if (code.isNotEmpty) _runtime.sendCode(language, code);
         return null;
       },
-      ConversationUIAction.sendVoice: (input) {
-        final duration = input is Map ? input['duration']?.toString() : input?.toString();
-        if (duration != null && duration.isNotEmpty) _runtime.sendVoice(duration);
-        return null;
-      },
+      ConversationUIAction.sendVoice: (_) => _pickAndSendAudio(),
       ConversationUIAction.sendEmote: (input) {
         final row = input is Map ? input : const <String, dynamic>{};
         final emoji = row['emoji']?.toString() ?? '';
@@ -415,10 +534,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     onAgentModeChanged: (value) {
                       ref.read(isAgentModeProvider.notifier).state = value;
                     },
-                    onSendFile: _onSendFile,
-                    onSendImage: _onSendImage,
+                    onPickFile: _pickAndSendFile,
+                    onPickImage: _pickAndSendImage,
+                    onPickVideo: _pickAndSendVideo,
+                    onPickAudio: _pickAndSendAudio,
                     onSendCode: _onSendCode,
-                    onSendVoice: _onSendVoice,
                     onSendEmote: _onSendEmote,
                     ),
                   ),
@@ -439,6 +559,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
               onNewConversation: () {
                 _runtime.createConversation(characterId);
               },
+              onCall: () => _startRealtimeCall(characterId, characterName),
               onMore: () => _showChatActionsSheet(context),
               ),
             ),
@@ -523,11 +644,13 @@ class _ChatScrollFade extends StatelessWidget {
 class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
   final VoidCallback onOpenDrawer;
   final VoidCallback onNewConversation;
+  final VoidCallback onCall;
   final VoidCallback onMore;
 
   const _ChatTopBar({
     required this.onOpenDrawer,
     required this.onNewConversation,
+    required this.onCall,
     required this.onMore,
   });
 
@@ -567,14 +690,32 @@ class _ChatTopBar extends StatelessWidget implements PreferredSizeWidget {
                 child: Row(
                   children: [
                     Tooltip(
-                      message: '新建聊天',
+                      message: '实时语音通话',
                       child: InkWell(
                         borderRadius: const BorderRadius.horizontal(
                           left: Radius.circular(20),
                         ),
+                        onTap: onCall,
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(10, 0, 7, 0),
+                          child: Icon(
+                            Icons.call_outlined,
+                            size: 19,
+                            color: context.textPrimary,
+                          ),
+                        ),
+                      ),
+                    ),
+                    Container(width: 1, height: 18, color: context.borderPrimary),
+                    Tooltip(
+                      message: '新建聊天',
+                      child: InkWell(
+                        borderRadius: const BorderRadius.horizontal(
+                          right: Radius.circular(20),
+                        ),
                         onTap: onNewConversation,
                         child: Padding(
-                          padding: const EdgeInsets.fromLTRB(10, 0, 6, 0),
+                          padding: const EdgeInsets.fromLTRB(7, 0, 10, 0),
                           child: Icon(
                             Icons.edit_square,
                             size: 20,
@@ -639,15 +780,11 @@ class _MessageSearchSheetState extends State<_MessageSearchSheet> {
 
   String _preview(ChatMessage m) {
     if (m.type == MessageType.file) return '[文件] ${m.fileName ?? m.content}';
-    if (m.content.startsWith('__mock:image|'))
-      return '[图片] ${m.content.split('|').last}';
-    if (m.content.startsWith('__mock:video|'))
-      return '[视频] ${m.content.split('|').last}';
-    if (m.content.startsWith('__mock:audio|'))
-      return '[语音] ${m.content.split('|').last}';
-    if (m.content.startsWith('__mock:emote|')) return '[表情]';
-    if (m.content.startsWith('__mock:code|'))
-      return '[代码] ${m.content.split('|').last}';
+    if (m.type == MessageType.image) return '[图片] ${m.fileName ?? ''}';
+    if (m.type == MessageType.video) return '[视频] ${m.fileName ?? ''}';
+    if (m.type == MessageType.audio) return '[语音] ${m.fileName ?? ''}';
+    if (m.type == MessageType.emote) return '[表情] ${m.content}';
+    if (m.type == MessageType.code) return '[代码] ${m.content}';
     return m.content;
   }
 

@@ -1,13 +1,19 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/app_typography.dart';
-import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
-import '../../../../core/widgets/amitia_scaffold.dart';
+import '../../../../app/theme/app_spacing.dart';
+import '../../../../app/theme/app_typography.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
+import '../../../../core/models/character.dart';
+import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../shared/models/models.dart';
+import '../../../../core/widgets/amitia_scaffold.dart';
 
 class ChatImportPage extends ConsumerStatefulWidget {
   const ChatImportPage({super.key});
@@ -17,33 +23,261 @@ class ChatImportPage extends ConsumerStatefulWidget {
 }
 
 class _ChatImportPageState extends ConsumerState<ChatImportPage> {
-  int _currentStep = 0;
-  final List<ImportBatch> _batches = [];
-  String _selectedSource = '';
   final _contentController = TextEditingController();
-  String _selectedCharacter = '';
+  final _titleController = TextEditingController(text: '已导入的聊天');
+  final List<Map<String, dynamic>> _parsedMessages = [];
+  final List<Map<String, dynamic>> _memoryCandidates = [];
+  int _currentStep = 0;
+  String _selectedSource = '';
+  String _selectedCharacterId = '';
+  String _selectedCharacterName = '';
+  String _detectedFormat = '';
+  String _summary = '';
+  String _conversationId = '';
+  bool _busy = false;
 
-  final _sources = [
-    {'name': '微信聊天记录', 'icon': Icons.chat, 'color': '#52B788'},
-    {'name': 'QQ 聊天记录', 'icon': Icons.message, 'color': '#6C8FEA'},
-    {'name': 'Telegram', 'icon': Icons.send, 'color': '#E9A23B'},
-    {'name': '手动输入', 'icon': Icons.edit_note, 'color': '#7668EE'},
-  ];
-
-  final _characters = ['Amitia', '小雨', 'Epsilon', 'Karin'];
-  final _steps = ['选择来源', '输入内容', '解析预览', '编辑消息', '选择角色', '生成摘要', '提取记忆', '确认导入', '完成'];
-
-  final _parsedMessages = [
-    {'role': 'user', 'content': '你好，今天天气怎么样？', 'time': '2026-07-30 09:00'},
-    {'role': 'assistant', 'content': '今天天气不错，阳光明媚。', 'time': '2026-07-30 09:01'},
-    {'role': 'user', 'content': '帮我整理一下文件', 'time': '2026-07-30 09:15'},
-    {'role': 'assistant', 'content': '好的，我来帮你扫描目录。', 'time': '2026-07-30 09:16'},
+  final _steps = const ['选择来源', '输入内容', '解析预览', '编辑消息', '选择角色', '确认导入', '生成摘要', '提取记忆', '完成'];
+  final _sources = const [
+    ('微信聊天记录', Icons.chat, '#52B788'),
+    ('QQ 聊天记录', Icons.message, '#6C8FEA'),
+    ('Telegram', Icons.send, '#E9A23B'),
+    ('手动输入', Icons.edit_note, '#7668EE'),
   ];
 
   @override
   void dispose() {
     _contentController.dispose();
+    _titleController.dispose();
     super.dispose();
+  }
+
+  void _show(String text, {bool error = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(text), backgroundColor: error ? context.error : null),
+    );
+  }
+
+  Future<T?> _run<T>(Future<T> Function() action) async {
+    if (_busy) return null;
+    setState(() => _busy = true);
+    try {
+      return await action();
+    } catch (e) {
+      _show(e.toString(), error: true);
+      return null;
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _pickFile() async {
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['txt', 'log', 'csv', 'md', 'json'],
+    );
+    if (picked == null || picked.files.isEmpty) return;
+    final file = picked.files.first;
+    if (file.path == null || file.path!.isEmpty) {
+      _show('无法读取所选文件', error: true);
+      return;
+    }
+    try {
+      final text = await File(file.path!).readAsString();
+      if (mounted) setState(() => _contentController.text = text);
+    } catch (e) {
+      _show('读取文件失败：$e', error: true);
+    }
+  }
+
+  Future<bool> _parse() async {
+    final raw = _contentController.text.trim();
+    if (raw.isEmpty) {
+      _show('请先输入或选择聊天记录', error: true);
+      return false;
+    }
+    final result = await _run(() => ref.read(backendServiceProvider).post<Map<String, dynamic>>(
+          '/api/imports/parse-text',
+          data: {
+            'rawText': raw,
+            'format': 'auto',
+            'defaultRole': 'user',
+          },
+        ));
+    if (result == null) return false;
+    final rows = result['items'];
+    if (rows is! List || rows.isEmpty) {
+      _show('没有解析出可导入的消息', error: true);
+      return false;
+    }
+    setState(() {
+      _detectedFormat = (result['detectedFormat'] ?? 'auto').toString();
+      _parsedMessages
+        ..clear()
+        ..addAll(rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)));
+    });
+    return true;
+  }
+
+  Future<bool> _confirmImport() async {
+    if (_selectedCharacterId.isEmpty) {
+      _show('请选择关联角色', error: true);
+      return false;
+    }
+    if (_parsedMessages.isEmpty) {
+      _show('没有可导入的消息', error: true);
+      return false;
+    }
+    final result = await _run(() => ref.read(backendServiceProvider).post<Map<String, dynamic>>(
+          '/api/imports/confirm',
+          data: {
+            'characterId': _selectedCharacterId,
+            'title': _titleController.text.trim().isEmpty ? '已导入的聊天' : _titleController.text.trim(),
+            'items': _parsedMessages,
+            'defaultRole': 'user',
+          },
+        ));
+    if (result == null || result['confirmed'] != true) {
+      _show((result?['message'] ?? '导入未完成').toString(), error: true);
+      return false;
+    }
+    final conversationId = (result['conversationId'] ?? '').toString();
+    if (conversationId.isEmpty) {
+      _show('后端未返回导入会话 ID', error: true);
+      return false;
+    }
+    setState(() => _conversationId = conversationId);
+    ref.invalidate(conversationListProvider);
+    return true;
+  }
+
+  Future<void> _generateSummary() async {
+    if (_conversationId.isEmpty) return;
+    final result = await _run(() => ref.read(backendServiceProvider).post<Map<String, dynamic>>(
+          '/api/imports/batches/${Uri.encodeComponent(_conversationId)}/generate-summary',
+        ));
+    if (result == null) return;
+    setState(() => _summary = (result['summary'] ?? '').toString());
+  }
+
+  Future<void> _extractMemories() async {
+    if (_conversationId.isEmpty) return;
+    final result = await _run(() => ref.read(backendServiceProvider).post<Map<String, dynamic>>(
+          '/api/imports/batches/${Uri.encodeComponent(_conversationId)}/extract-memory-candidates',
+        ));
+    if (result == null) return;
+    final rows = result['candidates'];
+    setState(() {
+      _memoryCandidates
+        ..clear()
+        ..addAll(rows is List ? rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)) : const []);
+    });
+  }
+
+  Future<void> _next() async {
+    if (_busy) return;
+    if (_currentStep == 0 && _selectedSource.isEmpty) {
+      _show('请选择导入来源', error: true);
+      return;
+    }
+    if (_currentStep == 1 && !await _parse()) return;
+    if (_currentStep == 4 && _selectedCharacterId.isEmpty) {
+      _show('请选择关联角色', error: true);
+      return;
+    }
+    if (_currentStep == 5 && !await _confirmImport()) return;
+    if (_currentStep == 6) await _generateSummary();
+    if (_currentStep == 7) await _extractMemories();
+    if (mounted && _currentStep < _steps.length - 1) {
+      setState(() => _currentStep++);
+    }
+  }
+
+  Future<void> _editMessage(int index) async {
+    final item = _parsedMessages[index];
+    final controller = TextEditingController(text: (item['content'] ?? '').toString());
+    String role = (item['role'] ?? 'user').toString();
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('编辑消息'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              DropdownButtonFormField<String>(
+                initialValue: role == 'assistant' ? 'assistant' : 'user',
+                items: const [
+                  DropdownMenuItem(value: 'user', child: Text('用户')),
+                  DropdownMenuItem(value: 'assistant', child: Text('AI')),
+                ],
+                onChanged: (value) => setDialogState(() => role = value ?? 'user'),
+              ),
+              const SizedBox(height: 12),
+              TextField(controller: controller, minLines: 2, maxLines: 8),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+            FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('保存')),
+          ],
+        ),
+      ),
+    );
+    if (saved == true && controller.text.trim().isNotEmpty && mounted) {
+      setState(() {
+        item['role'] = role;
+        item['content'] = controller.text.trim();
+      });
+    }
+    controller.dispose();
+  }
+
+  Future<void> _showBatchList() async {
+    final result = await _run(() => ref.read(backendServiceProvider).get<Map<String, dynamic>>('/api/imports/batches'));
+    if (!mounted || result == null) return;
+    final rows = result['items'];
+    final batches = rows is List ? rows.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList() : <Map<String, dynamic>>[];
+    await showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('导入批次'),
+        content: SizedBox(
+          width: 520,
+          child: batches.isEmpty
+              ? const Padding(padding: EdgeInsets.all(24), child: Center(child: Text('暂无导入记录')))
+              : ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: batches.length,
+                  separatorBuilder: (_, _) => const Divider(height: 1),
+                  itemBuilder: (_, index) {
+                    final batch = batches[index];
+                    final id = (batch['id'] ?? '').toString();
+                    final count = batch['message_count'] ?? batch['totalItems'] ?? 0;
+                    final title = (batch['title'] ?? '已导入的聊天').toString();
+                    final createdAt = (batch['created_at'] ?? batch['createdAt'] ?? '').toString();
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(title),
+                      subtitle: Text('$count 条消息 · $createdAt'),
+                      trailing: IconButton(
+                        icon: Icon(Icons.delete_outline, color: context.error),
+                        onPressed: id.isEmpty
+                            ? null
+                            : () async {
+                                await ref.read(backendServiceProvider).delete('/api/imports/batches/${Uri.encodeComponent(id)}');
+                                if (ctx.mounted) Navigator.pop(ctx);
+                                _show('导入批次已删除');
+                                ref.invalidate(conversationListProvider);
+                              },
+                      ),
+                    );
+                  },
+                ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭'))],
+      ),
+    );
   }
 
   @override
@@ -52,57 +286,54 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
       appBar: AmitiaAppBar(
         title: '导入聊天记录',
         navigation: AmitiaAppBarNavigation.back,
-        actions: [
-          AmitiaIconButton(
-            icon: Icons.history,
-            tooltip: '导入批次',
-            onPressed: () => _showBatchList(context),
-          ),
-        ],
+        actions: [AmitiaIconButton(icon: Icons.history, tooltip: '导入批次', onPressed: _busy ? null : _showBatchList)],
       ),
-      body: SafeArea(
-        top: false,
-        child: Column(
-          children: [
-            _buildStepIndicator(context),
-            Expanded(child: _buildStepContent(context)),
-            _buildNavigationButtons(context),
-          ],
-        ),
+      body: Stack(
+        children: [
+          SafeArea(
+            top: false,
+            child: Column(
+              children: [
+                _stepIndicator(context),
+                Expanded(child: _content(context)),
+                _navigation(context),
+              ],
+            ),
+          ),
+          if (_busy)
+            Positioned.fill(
+              child: ColoredBox(color: Colors.black.withValues(alpha: 0.08), child: const Center(child: CircularProgressIndicator())),
+            ),
+        ],
       ),
     );
   }
 
-  Widget _buildStepIndicator(BuildContext context) {
-    return Container(
+  Widget _stepIndicator(BuildContext context) {
+    return Padding(
       padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.md),
       child: SingleChildScrollView(
         scrollDirection: Axis.horizontal,
         child: Row(
           children: List.generate(_steps.length, (index) {
-            final isCurrent = index == _currentStep;
-            final isCompleted = index < _currentStep;
+            final current = index == _currentStep;
+            final completed = index < _currentStep;
             return Row(
               children: [
                 Container(
                   width: 28,
                   height: 28,
                   decoration: BoxDecoration(
-                    color: isCurrent ? context.accentPrimary : (isCompleted ? context.success : context.surfaceSecondary),
+                    color: current ? context.accentPrimary : completed ? context.success : context.surfaceSecondary,
                     shape: BoxShape.circle,
                   ),
                   child: Center(
-                    child: isCompleted
-                        ? Icon(Icons.check, size: 16, color: Colors.white)
-                        : Text('${index + 1}', style: TextStyle(fontSize: 12, color: isCurrent ? Colors.white : context.textTertiary, fontWeight: FontWeight.w600)),
+                    child: completed
+                        ? const Icon(Icons.check, size: 16, color: Colors.white)
+                        : Text('${index + 1}', style: TextStyle(fontSize: 12, color: current ? Colors.white : context.textTertiary)),
                   ),
                 ),
-                if (index < _steps.length - 1)
-                  Container(
-                    width: 20,
-                    height: 2,
-                    color: isCompleted ? context.success : context.borderPrimary,
-                  ),
+                if (index < _steps.length - 1) Container(width: 20, height: 2, color: completed ? context.success : context.borderPrimary),
               ],
             );
           }),
@@ -111,596 +342,287 @@ class _ChatImportPageState extends ConsumerState<ChatImportPage> {
     );
   }
 
-  Widget _buildStepContent(BuildContext context) {
+  Widget _content(BuildContext context) {
     switch (_currentStep) {
-      case 0: return _buildSourceStep(context);
-      case 1: return _buildInputStep(context);
-      case 2: return _buildParseStep(context);
-      case 3: return _buildEditStep(context);
-      case 4: return _buildCharacterStep(context);
-      case 5: return _buildSummaryStep(context);
-      case 6: return _buildMemoryStep(context);
-      case 7: return _buildConfirmStep(context);
-      case 8: return _buildCompleteStep(context);
-      default: return const SizedBox.shrink();
+      case 0:
+        return _sourceStep(context);
+      case 1:
+        return _inputStep(context);
+      case 2:
+        return _messageList(context, title: '解析预览', editable: false);
+      case 3:
+        return _messageList(context, title: '编辑消息', editable: true);
+      case 4:
+        return _characterStep(context);
+      case 5:
+        return _confirmStep(context);
+      case 6:
+        return _summaryStep(context);
+      case 7:
+        return _memoryStep(context);
+      default:
+        return _completeStep(context);
     }
   }
 
-  Widget _buildSourceStep(BuildContext context) {
-    return SingleChildScrollView(
+  Widget _sourceStep(BuildContext context) {
+    return ListView(
       padding: EdgeInsets.all(AppSpacing.pagePadding),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('选择导入来源', style: AppTypography.sectionTitle(context)),
-          SizedBox(height: AppSpacing.sm),
-          Text('选择聊天记录的来源渠道', style: AppTypography.caption(context)),
-          SizedBox(height: AppSpacing.lg),
-          ..._sources.map((s) {
-            final isSelected = _selectedSource == s['name'];
-            final color = Color(int.parse('FF${(s['color'] as String).replaceAll('#', '')}', radix: 16));
-            return Padding(
-              padding: EdgeInsets.only(bottom: AppSpacing.sm),
-              child: AmitiaCard(
-                border: Border.all(color: isSelected ? color : context.borderPrimary, width: isSelected ? 1.5 : 0.5),
-                backgroundColor: isSelected ? color.withValues(alpha: 0.05) : null,
-                onTap: () => setState(() => _selectedSource = s['name'] as String),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: AppRadius.brSmall),
-                      child: Icon(s['icon'] as IconData, size: 22, color: color),
-                    ),
-                    SizedBox(width: AppSpacing.md),
-                    Expanded(child: Text(s['name'] as String, style: AppTypography.cardTitle(context))),
-                    Icon(isSelected ? Icons.check_circle : Icons.radio_button_unchecked, size: 22, color: isSelected ? color : context.textTertiary),
-                  ],
-                ),
+      children: [
+        Text('选择导入来源', style: AppTypography.sectionTitle(context)),
+        SizedBox(height: AppSpacing.lg),
+        for (final source in _sources)
+          Padding(
+            padding: EdgeInsets.only(bottom: AppSpacing.sm),
+            child: AmitiaCard(
+              onTap: () => setState(() => _selectedSource = source.$1),
+              border: Border.all(color: _selectedSource == source.$1 ? context.accentPrimary : context.borderPrimary),
+              child: Row(
+                children: [
+                  Icon(source.$2, color: context.accentPrimary),
+                  SizedBox(width: AppSpacing.md),
+                  Expanded(child: Text(source.$1, style: AppTypography.cardTitle(context))),
+                  Icon(_selectedSource == source.$1 ? Icons.check_circle : Icons.radio_button_unchecked, color: _selectedSource == source.$1 ? context.accentPrimary : context.textTertiary),
+                ],
               ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildInputStep(BuildContext context) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(AppSpacing.pagePadding),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('输入聊天内容', style: AppTypography.sectionTitle(context)),
-          SizedBox(height: AppSpacing.sm),
-          Text('来源：$_selectedSource', style: AppTypography.caption(context)),
-          SizedBox(height: AppSpacing.lg),
-          AmitiaTextField(
-            controller: _contentController,
-            maxLines: 12,
-            hintText: '粘贴或输入聊天记录内容...\n\n格式示例：\n[2026-07-30 09:00] 用户: 你好\n[2026-07-30 09:01] AI: 你好！',
-          ),
-          SizedBox(height: AppSpacing.md),
-          Row(
-            children: [
-              AmitiaButtonOutline(
-                label: '从文件导入',
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请选择文件'), duration: Duration(seconds: 1)));
-                },
-              ),
-              SizedBox(width: AppSpacing.sm),
-              AmitiaButtonOutline(
-                label: '使用示例',
-                onPressed: () {
-                  _contentController.text = '[2026-07-30 09:00] 用户: 你好，今天天气怎么样？\n[2026-07-30 09:01] AI: 今天天气不错，阳光明媚。\n[2026-07-30 09:15] 用户: 帮我整理一下文件\n[2026-07-30 09:16] AI: 好的，我来帮你扫描目录。';
-                },
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildParseStep(BuildContext context) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(AppSpacing.pagePadding),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('解析预览', style: AppTypography.sectionTitle(context)),
-          SizedBox(height: AppSpacing.sm),
-          Container(
-            width: double.infinity,
-            padding: EdgeInsets.all(AppSpacing.md),
-            decoration: BoxDecoration(color: context.success.withValues(alpha: 0.08), borderRadius: AppRadius.brMedium),
-            child: Row(
-              children: [
-                Icon(Icons.check_circle, size: 20, color: context.success),
-                SizedBox(width: AppSpacing.sm),
-                Expanded(child: Text('成功解析 ${_parsedMessages.length} 条消息', style: AppTypography.bodySmall(context).copyWith(color: context.success))),
-              ],
             ),
           ),
-          SizedBox(height: AppSpacing.lg),
-          ..._parsedMessages.map((m) => Padding(
+      ],
+    );
+  }
+
+  Widget _inputStep(BuildContext context) {
+    return ListView(
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
+      children: [
+        Text('输入聊天内容', style: AppTypography.sectionTitle(context)),
+        SizedBox(height: AppSpacing.sm),
+        Text('来源：$_selectedSource', style: AppTypography.caption(context)),
+        SizedBox(height: AppSpacing.lg),
+        AmitiaTextField(
+          controller: _contentController,
+          maxLines: 14,
+          hintText: '[2026-07-30 09:00] 用户: 你好\n[2026-07-30 09:01] AI: 你好！',
+        ),
+        SizedBox(height: AppSpacing.md),
+        Row(
+          children: [
+            AmitiaButtonOutline(label: '从文件导入', onPressed: _pickFile),
+            SizedBox(width: AppSpacing.sm),
+            AmitiaButtonOutline(
+              label: '使用示例',
+              onPressed: () => setState(() {
+                _contentController.text = '[2026-07-30 09:00] 用户: 你好，今天天气怎么样？\n[2026-07-30 09:01] AI: 今天天气不错。';
+              }),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _messageList(BuildContext context, {required String title, required bool editable}) {
+    return ListView(
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
+      children: [
+        Row(
+          children: [
+            Text(title, style: AppTypography.sectionTitle(context)),
+            const Spacer(),
+            Text('${_parsedMessages.length} 条 · $_detectedFormat', style: AppTypography.caption(context)),
+          ],
+        ),
+        SizedBox(height: AppSpacing.md),
+        for (var index = 0; index < _parsedMessages.length; index++)
+          Padding(
             padding: EdgeInsets.only(bottom: AppSpacing.sm),
             child: AmitiaCard(
               child: Row(
                 children: [
-                  Container(
-                    width: 32,
-                    height: 32,
-                    decoration: BoxDecoration(
-                      color: m['role'] == 'user' ? context.accentPrimary : context.info,
-                      shape: BoxShape.circle,
-                    ),
-                    child: Center(child: Text(m['role'] == 'user' ? '我' : 'AI', style: const TextStyle(color: Colors.white, fontSize: 11))),
+                  CircleAvatar(
+                    radius: 16,
+                    backgroundColor: _parsedMessages[index]['role'] == 'assistant' ? context.info : context.accentPrimary,
+                    child: Text(_parsedMessages[index]['role'] == 'assistant' ? 'AI' : '我', style: const TextStyle(color: Colors.white, fontSize: 11)),
                   ),
                   SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(m['content'] as String, style: AppTypography.bodySmall(context), maxLines: 1, overflow: TextOverflow.ellipsis),
-                        Text(m['time'] as String, style: AppTypography.label(context)),
+                        Text((_parsedMessages[index]['content'] ?? '').toString(), style: AppTypography.bodySmall(context)),
+                        if ((_parsedMessages[index]['timestamp'] ?? '').toString().isNotEmpty)
+                          Text((_parsedMessages[index]['timestamp'] ?? '').toString(), style: AppTypography.label(context)),
+                      ],
+                    ),
+                  ),
+                  if (editable) ...[
+                    AmitiaIconButton(icon: Icons.edit_outlined, size: 17, onPressed: () => _editMessage(index)),
+                    AmitiaIconButton(icon: Icons.delete_outline, size: 17, color: context.error, onPressed: () => setState(() => _parsedMessages.removeAt(index))),
+                  ],
+                ],
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _characterStep(BuildContext context) {
+    final characters = ref.watch(characterListProvider);
+    return characters.when(
+      loading: () => const Center(child: CircularProgressIndicator()),
+      error: (error, _) => Center(child: Text('角色加载失败：$error')),
+      data: (items) => ListView(
+        padding: EdgeInsets.all(AppSpacing.pagePadding),
+        children: [
+          Text('选择关联角色', style: AppTypography.sectionTitle(context)),
+          SizedBox(height: AppSpacing.lg),
+          if (items.isEmpty) const Text('暂无角色，请先创建角色'),
+          for (final CharacterDto character in items)
+            Padding(
+              padding: EdgeInsets.only(bottom: AppSpacing.sm),
+              child: AmitiaCard(
+                onTap: () => setState(() {
+                  _selectedCharacterId = character.id;
+                  _selectedCharacterName = character.name;
+                }),
+                border: Border.all(color: _selectedCharacterId == character.id ? context.accentPrimary : context.borderPrimary),
+                child: Row(
+                  children: [
+                    CircleAvatar(child: Text(character.name.isEmpty ? '?' : character.name.substring(0, 1))),
+                    SizedBox(width: AppSpacing.md),
+                    Expanded(child: Text(character.name, style: AppTypography.cardTitle(context))),
+                    Icon(_selectedCharacterId == character.id ? Icons.check_circle : Icons.radio_button_unchecked, color: _selectedCharacterId == character.id ? context.accentPrimary : context.textTertiary),
+                  ],
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _confirmStep(BuildContext context) {
+    return ListView(
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
+      children: [
+        Text('确认导入', style: AppTypography.sectionTitle(context)),
+        SizedBox(height: AppSpacing.lg),
+        AmitiaTextField(controller: _titleController, hintText: '会话标题'),
+        SizedBox(height: AppSpacing.md),
+        AmitiaCard(
+          child: Column(
+            children: [
+              _row(context, '来源', _selectedSource),
+              _row(context, '关联角色', _selectedCharacterName),
+              _row(context, '消息数量', '${_parsedMessages.length} 条'),
+              _row(context, '识别格式', _detectedFormat),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _summaryStep(BuildContext context) {
+    return ListView(
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
+      children: [
+        Text('会话摘要', style: AppTypography.sectionTitle(context)),
+        SizedBox(height: AppSpacing.lg),
+        AmitiaCard(
+          backgroundColor: context.accentSoft,
+          child: Text(_summary.isEmpty ? '后端未生成摘要，可继续完成导入。' : _summary, style: AppTypography.bodySmall(context).copyWith(height: 1.6)),
+        ),
+      ],
+    );
+  }
+
+  Widget _memoryStep(BuildContext context) {
+    return ListView(
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
+      children: [
+        Text('记忆候选', style: AppTypography.sectionTitle(context)),
+        SizedBox(height: AppSpacing.sm),
+        Text('候选由当前后端模型从已导入会话中实时提取。', style: AppTypography.caption(context)),
+        SizedBox(height: AppSpacing.lg),
+        if (_memoryCandidates.isEmpty) const Text('没有提取到长期记忆候选'),
+        for (final item in _memoryCandidates)
+          Padding(
+            padding: EdgeInsets.only(bottom: AppSpacing.sm),
+            child: AmitiaCard(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.memory, size: 20, color: context.accentPrimary),
+                  SizedBox(width: AppSpacing.sm),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text((item['key'] ?? '记忆').toString(), style: AppTypography.cardTitle(context)),
+                        const SizedBox(height: 4),
+                        Text((item['value'] ?? '').toString(), style: AppTypography.bodySmall(context)),
+                        const SizedBox(height: 4),
+                        Text('重要性：${item['importance'] ?? 0}/10', style: AppTypography.label(context)),
                       ],
                     ),
                   ),
                 ],
               ),
             ),
-          )),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildEditStep(BuildContext context) {
-    return Column(
-      children: [
-        Padding(
-          padding: EdgeInsets.all(AppSpacing.pagePadding),
-          child: Row(
-            children: [
-              Text('编辑消息', style: AppTypography.sectionTitle(context)),
-              const Spacer(),
-              AmitiaIconButton(icon: Icons.add, color: context.accentPrimary, onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('添加新消息'), duration: Duration(seconds: 1)));
-              }),
-            ],
           ),
-        ),
-        Expanded(
-          child: ListView.separated(
-            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
-            itemCount: _parsedMessages.length,
-            separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
-            itemBuilder: (context, index) {
-              final m = _parsedMessages[index];
-              return AmitiaCard(
-                child: Row(
-                  children: [
-                    Container(
-                      width: 32,
-                      height: 32,
-                      decoration: BoxDecoration(
-                        color: m['role'] == 'user' ? context.accentPrimary : context.info,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Center(child: Text(m['role'] == 'user' ? '我' : 'AI', style: const TextStyle(color: Colors.white, fontSize: 11))),
-                    ),
-                    SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(m['content'] as String, style: AppTypography.bodySmall(context)),
-                          Text(m['time'] as String, style: AppTypography.label(context)),
-                        ],
-                      ),
-                    ),
-                    AmitiaIconButton(icon: Icons.edit_outlined, size: 16, onPressed: () {
-                      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('编辑消息 ${index + 1}'), duration: const Duration(seconds: 1)));
-                    }),
-                    AmitiaIconButton(icon: Icons.delete_outline, size: 16, color: context.error, onPressed: () {
-                      setState(() => _parsedMessages.removeAt(index));
-                    }),
-                  ],
-                ),
-              );
-            },
-          ),
-        ),
       ],
     );
   }
 
-  Widget _buildCharacterStep(BuildContext context) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(AppSpacing.pagePadding),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('选择关联角色', style: AppTypography.sectionTitle(context)),
-          SizedBox(height: AppSpacing.sm),
-          Text('选择将这批聊天记录关联到哪个角色', style: AppTypography.caption(context)),
-          SizedBox(height: AppSpacing.lg),
-          ..._characters.map((c) {
-            final isSelected = _selectedCharacter == c;
-            return Padding(
-              padding: EdgeInsets.only(bottom: AppSpacing.sm),
-              child: AmitiaCard(
-                border: Border.all(color: isSelected ? context.accentPrimary : context.borderPrimary, width: isSelected ? 1.5 : 0.5),
-                onTap: () => setState(() => _selectedCharacter = c),
-                child: Row(
-                  children: [
-                    AmitiaAvatar(initial: c[0], colorHex: '#7668EE', size: 40),
-                    SizedBox(width: AppSpacing.md),
-                    Expanded(child: Text(c, style: AppTypography.cardTitle(context))),
-                    Icon(isSelected ? Icons.check_circle : Icons.radio_button_unchecked, size: 22, color: isSelected ? context.accentPrimary : context.textTertiary),
-                  ],
-                ),
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSummaryStep(BuildContext context) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(AppSpacing.pagePadding),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('生成会话摘要', style: AppTypography.sectionTitle(context)),
-          SizedBox(height: AppSpacing.sm),
-          Text('AI 正在为这批聊天记录生成摘要', style: AppTypography.caption(context)),
-          SizedBox(height: AppSpacing.lg),
-          AmitiaCard(
-            backgroundColor: context.accentSoft,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.auto_awesome, size: 18, color: context.accentPrimary),
-                    SizedBox(width: AppSpacing.sm),
-                    Text('会话摘要', style: AppTypography.cardTitle(context)),
-                  ],
-                ),
-                SizedBox(height: AppSpacing.sm),
-                Text(
-                  '本次会话主要包含日常问候和文件整理请求。用户询问了天气情况，随后请求整理文件。AI 响应迅速，提供了天气信息和文件扫描服务。',
-                  style: AppTypography.bodySmall(context).copyWith(height: 1.6),
-                ),
-                SizedBox(height: AppSpacing.sm),
-                Wrap(
-                  spacing: AppSpacing.sm,
-                  children: [
-                    AmitiaStatusBadge(label: '日常对话', type: BadgeType.accent),
-                    AmitiaStatusBadge(label: '文件处理', type: BadgeType.info),
-                    AmitiaStatusBadge(label: '4条消息', type: BadgeType.neutral),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMemoryStep(BuildContext context) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(AppSpacing.pagePadding),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('提取记忆候选', style: AppTypography.sectionTitle(context)),
-          SizedBox(height: AppSpacing.sm),
-          Text('AI 从聊天记录中提取了以下记忆候选', style: AppTypography.caption(context)),
-          SizedBox(height: AppSpacing.lg),
-          ...[
-            {'content': '用户习惯在早上9点左右开始活动', 'type': '习惯', 'confidence': 0.85},
-            {'content': '用户有整理文件的需求', 'type': '偏好', 'confidence': 0.75},
-            {'content': '用户关心天气情况', 'type': '事实', 'confidence': 0.9},
-          ].map((m) {
-            return Padding(
-              padding: EdgeInsets.only(bottom: AppSpacing.sm),
-              child: AmitiaCard(
-                child: Row(
-                  children: [
-                    Icon(Icons.memory, size: 20, color: context.accentPrimary),
-                    SizedBox(width: AppSpacing.sm),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(m['content'] as String, style: AppTypography.bodySmall(context)),
-                          const SizedBox(height: 2),
-                          Row(
-                            children: [
-                              AmitiaStatusBadge(label: m['type'] as String, type: BadgeType.accent),
-                              SizedBox(width: AppSpacing.sm),
-                              Text('置信度：${((m['confidence'] as double) * 100).round()}%', style: AppTypography.label(context)),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                    Icon(Icons.check_circle, size: 20, color: context.success),
-                  ],
-                ),
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildConfirmStep(BuildContext context) {
-    return SingleChildScrollView(
-      padding: EdgeInsets.all(AppSpacing.pagePadding),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('确认导入', style: AppTypography.sectionTitle(context)),
-          SizedBox(height: AppSpacing.lg),
-          AmitiaCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _buildSummaryRow(context, '导入来源', _selectedSource),
-                Divider(height: AppSpacing.lg),
-                _buildSummaryRow(context, '消息数量', '${_parsedMessages.length} 条'),
-                Divider(height: AppSpacing.lg),
-                _buildSummaryRow(context, '关联角色', _selectedCharacter.isEmpty ? '未选择' : _selectedCharacter),
-                Divider(height: AppSpacing.lg),
-                _buildSummaryRow(context, '已生成摘要', '是'),
-                Divider(height: AppSpacing.lg),
-                _buildSummaryRow(context, '记忆候选', '3 条'),
-              ],
-            ),
-          ),
-          SizedBox(height: AppSpacing.lg),
-          AmitiaButton(
-            label: '确认导入',
-            icon: Icons.download,
-            isFullWidth: true,
-            onPressed: () => _showImportConfirmDialog(context),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildCompleteStep(BuildContext context) {
+  Widget _completeStep(BuildContext context) {
     return Center(
       child: Padding(
-        padding: EdgeInsets.all(AppSpacing.xxl),
+        padding: EdgeInsets.all(AppSpacing.pagePadding),
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(color: context.success.withValues(alpha: 0.12), shape: BoxShape.circle),
-              child: Icon(Icons.check_circle, size: 48, color: context.success),
-            ),
+            Icon(Icons.check_circle, size: 64, color: context.success),
             SizedBox(height: AppSpacing.lg),
             Text('导入完成', style: AppTypography.pageTitle(context)),
             SizedBox(height: AppSpacing.sm),
-            Text('已成功导入 ${_parsedMessages.length} 条消息', style: AppTypography.caption(context)),
-            SizedBox(height: AppSpacing.xl),
-            AmitiaCard(
-              child: Column(
-                children: [
-                  _buildSummaryRow(context, '来源', _selectedSource),
-                  Divider(height: AppSpacing.lg),
-                  _buildSummaryRow(context, '消息数', '${_parsedMessages.length} 条'),
-                  Divider(height: AppSpacing.lg),
-                  _buildSummaryRow(context, '关联角色', _selectedCharacter),
-                  Divider(height: AppSpacing.lg),
-                  _buildSummaryRow(context, '记忆候选', '3 条已提取'),
-                  Divider(height: AppSpacing.lg),
-                  _buildSummaryRow(context, '摘要', '已生成'),
-                ],
-              ),
-            ),
-            SizedBox(height: AppSpacing.xl),
-            AmitiaButton(
-              label: '查看导入批次',
-              isFullWidth: true,
-              isSecondary: true,
-              onPressed: () => _showBatchList(context),
-            ),
+            Text('${_parsedMessages.length} 条消息已写入真实会话数据。', style: AppTypography.caption(context), textAlign: TextAlign.center),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSummaryRow(BuildContext context, String label, String value) {
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: [
-        Text(label, style: AppTypography.caption(context)),
-        Text(value, style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600)),
-      ],
-    );
-  }
-
-  Widget _buildNavigationButtons(BuildContext context) {
-    final isLastStep = _currentStep == _steps.length - 1;
-    final isFirstStep = _currentStep == 0;
+  Widget _navigation(BuildContext context) {
     return Container(
       padding: EdgeInsets.all(AppSpacing.pagePadding),
-      decoration: BoxDecoration(color: context.surfacePrimary, border: Border(top: BorderSide(color: context.borderPrimary, width: 0.5))),
+      decoration: BoxDecoration(border: Border(top: BorderSide(color: context.borderPrimary))),
       child: Row(
         children: [
-          if (!isFirstStep && !isLastStep)
-            Expanded(
-              child: AmitiaButton(
-                label: '上一步',
-                isSecondary: true,
-                onPressed: () => setState(() => _currentStep--),
-              ),
+          if (_currentStep > 0 && _currentStep < _steps.length - 1)
+            Expanded(child: AmitiaButtonOutline(label: '上一步', onPressed: _busy ? null : () => setState(() => _currentStep--))),
+          if (_currentStep > 0 && _currentStep < _steps.length - 1) SizedBox(width: AppSpacing.md),
+          Expanded(
+            child: AmitiaButton(
+              label: _currentStep == _steps.length - 1 ? '完成' : _currentStep == 5 ? '确认并导入' : '下一步',
+              onPressed: _busy ? null : _currentStep == _steps.length - 1 ? () => Navigator.maybePop(context) : _next,
             ),
-          if (!isFirstStep && !isLastStep) SizedBox(width: AppSpacing.sm),
-          if (!isLastStep)
-            Expanded(
-              child: AmitiaButton(
-                label: _currentStep == 7 ? '确认导入' : '下一步',
-                onPressed: () {
-                  if (_currentStep == 0 && _selectedSource.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请选择导入来源'), duration: Duration(seconds: 1)));
-                    return;
-                  }
-                  if (_currentStep == 4 && _selectedCharacter.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请选择关联角色'), duration: Duration(seconds: 1)));
-                    return;
-                  }
-                  setState(() => _currentStep++);
-                },
-              ),
-            ),
-          if (isLastStep)
-            Expanded(
-              child: AmitiaButton(
-                label: '完成',
-                onPressed: () => Navigator.pop(context),
-              ),
-            ),
-        ],
-      ),
-    );
-  }
-
-  void _showImportConfirmDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('确认导入', style: AppTypography.cardTitle(context)),
-        content: Text('确定要导入这 ${_parsedMessages.length} 条消息吗？导入后将关联到角色「$_selectedCharacter」。', style: AppTypography.bodySmall(context)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              setState(() {
-                _batches.add(ImportBatch(
-                  id: 'ib${DateTime.now().millisecondsSinceEpoch}',
-                  source: _selectedSource,
-                  messageCount: _parsedMessages.length,
-                  importTime: DateTime.now(),
-                ));
-                _currentStep++;
-              });
-            },
-            child: Text('确认导入', style: TextStyle(color: context.accentPrimary)),
           ),
         ],
       ),
     );
   }
 
-  void _showBatchList(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('导入批次', style: AppTypography.cardTitle(context)),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: _batches.isEmpty
-              ? Text('暂无导入批次', style: AppTypography.caption(context))
-              : ListView.separated(
-                  shrinkWrap: true,
-                  itemCount: _batches.length,
-                  separatorBuilder: (_, _) => const Divider(height: 1),
-                  itemBuilder: (context, index) {
-                    final batch = _batches[index];
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(Icons.history, size: 20, color: context.accentPrimary),
-                      title: Text(batch.source, style: AppTypography.bodySmall(context)),
-                      subtitle: Text('${batch.messageCount}条 · ${_formatTime(batch.importTime)}', style: AppTypography.label(context)),
-                      trailing: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          AmitiaStatusBadge(label: batch.status, type: BadgeType.success),
-                          SizedBox(width: AppSpacing.sm),
-                          GestureDetector(
-                            onTap: () => _showDeleteBatchConfirm(context, batch),
-                            child: Icon(Icons.delete_outline, size: 18, color: context.error),
-                          ),
-                        ],
-                      ),
-                      onTap: () => _showBatchDetail(context, batch),
-                    );
-                  },
-                ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭')),
+  Widget _row(BuildContext context, String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
+        children: [
+          SizedBox(width: 88, child: Text(label, style: AppTypography.label(context))),
+          Expanded(child: Text(value, style: AppTypography.bodySmall(context))),
         ],
       ),
     );
-  }
-
-  void _showBatchDetail(BuildContext context, ImportBatch batch) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('批次详情', style: AppTypography.cardTitle(context)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildSummaryRow(context, '来源', batch.source),
-            SizedBox(height: AppSpacing.sm),
-            _buildSummaryRow(context, '消息数', '${batch.messageCount} 条'),
-            SizedBox(height: AppSpacing.sm),
-            _buildSummaryRow(context, '导入时间', _formatTime(batch.importTime)),
-            SizedBox(height: AppSpacing.sm),
-            _buildSummaryRow(context, '状态', batch.status),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭')),
-        ],
-      ),
-    );
-  }
-
-  void _showDeleteBatchConfirm(BuildContext context, ImportBatch batch) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('删除批次', style: AppTypography.cardTitle(context)),
-        content: Text('确定要删除来自「${batch.source}」的导入批次吗？', style: AppTypography.bodySmall(context)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              Navigator.pop(context);
-              setState(() => _batches.removeWhere((b) => b.id == batch.id));
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('批次已删除'), duration: Duration(seconds: 1)));
-            },
-            child: Text('删除', style: TextStyle(color: context.error)),
-          ),
-        ],
-      ),
-    );
-  }
-
-  String _formatTime(DateTime time) {
-    return '${time.month}月${time.day}日 ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
   }
 }

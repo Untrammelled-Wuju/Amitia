@@ -8,7 +8,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../core/services/providers.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 
 class HooksPage extends ConsumerStatefulWidget {
   const HooksPage({super.key});
@@ -34,16 +34,28 @@ class _HooksPageState extends ConsumerState<HooksPage> {
       _error = null;
     });
     try {
-      final svc = ref.read(systemServiceProvider);
-      final data = await svc.diagnostics();
+      final api = ref.read(backendServiceProvider);
+      final data = await api.get<Map<String, dynamic>>(
+        '/api/extensions/hooks/contributions',
+        fromJson: (e) => Map<String, dynamic>.from(e as Map),
+      );
+      final raw = data?['contributions'] as List<dynamic>? ?? const [];
+      final hooks = raw.whereType<Map>().map((entry) {
+        final item = Map<String, dynamic>.from(entry);
+        final enabled = item['enabled'] == true;
+        final circuit = (item['circuitState'] ?? '').toString();
+        return <String, dynamic>{
+          'id': (item['contributionId'] ?? '').toString(),
+          'point': (item['hookPointId'] ?? '').toString(),
+          'contributor': (item['extensionId'] ?? '').toString(),
+          'priority': item['priority'] ?? 0,
+          'status': circuit == 'open' ? 'circuit_open' : (enabled ? 'active' : 'inactive'),
+          'raw': item,
+        };
+      }).toList();
       if (mounted) {
-        if (data != null) {
-          final hooks = data['hooks'];
-          if (hooks is List) {
-            _hooks = hooks.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-          }
-        }
         setState(() {
+          _hooks = hooks;
           _loading = false;
         });
       }
@@ -311,15 +323,17 @@ class _HooksPageState extends ConsumerState<HooksPage> {
                   label: '重置熔断器',
                   isFullWidth: true,
                   icon: Icons.refresh,
-                  onPressed: () {
-                    setState(() {
-                      final idx = _hooks.indexWhere((h) => h['id'] == hook['id']);
-                      if (idx >= 0) {
-                        _hooks[idx]['status'] = 'active';
-                      }
-                    });
-                    Navigator.pop(context);
-                    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已重置熔断器：$point')));
+                  onPressed: () async {
+                    final id = (hook['id'] ?? '').toString();
+                    try {
+                      await ref.read(backendServiceProvider).post('/api/extensions/hooks/contributions/$id/circuit/reset');
+                      if (!context.mounted) return;
+                      Navigator.pop(context);
+                      await _load();
+                      if (mounted) ScaffoldMessenger.of(this.context).showSnackBar(SnackBar(content: Text('已重置熔断器：$point')));
+                    } catch (e) {
+                      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('重置失败：$e')));
+                    }
                   },
                 ),
               ],
@@ -348,15 +362,18 @@ class _HooksPageState extends ConsumerState<HooksPage> {
               child: Text('取消', style: TextStyle(color: context.textSecondary)),
             ),
             TextButton(
-              onPressed: () {
-                setState(() {
-                  final idx = _hooks.indexWhere((h) => h['id'] == hook['id']);
-                  if (idx >= 0) {
-                    _hooks[idx]['status'] = isActive ? 'inactive' : 'active';
-                  }
-                });
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已$action：$point')));
+              onPressed: () async {
+                final id = (hook['id'] ?? '').toString();
+                try {
+                  final suffix = isActive ? 'disable' : 'enable';
+                  await ref.read(backendServiceProvider).post('/api/extensions/hooks/contributions/$id/$suffix');
+                  if (!context.mounted) return;
+                  Navigator.pop(context);
+                  await _load();
+                  if (mounted) ScaffoldMessenger.of(this.context).showSnackBar(SnackBar(content: Text('已$action：$point')));
+                } catch (e) {
+                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$action失败：$e')));
+                }
               },
               child: Text(action, style: TextStyle(color: isActive ? context.warning : context.accentPrimary)),
             ),

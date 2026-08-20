@@ -109,19 +109,19 @@ class _PluginDetailPageState extends ConsumerState<PluginDetailPage> {
             ),
             SizedBox(height: AppSpacing.md),
             AmitiaButton(
-              label: isInstalled ? '卸载' : '安装',
+              label: isEnabled ? '停用' : '启用',
               isFullWidth: true,
               onPressed: () async {
                 try {
                   final svc = ref.read(extensionServiceProvider);
-                  if (isInstalled) {
+                  if (isEnabled) {
                     await svc.disablePlugin(widget.pluginId);
                   } else {
                     await svc.enablePlugin(widget.pluginId);
                   }
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(isInstalled ? '已卸载' : '已安装'), backgroundColor: context.success),
+                      SnackBar(content: Text(isEnabled ? '已停用' : '已启用'), backgroundColor: context.success),
                     );
                     context.pop();
                   }

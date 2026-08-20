@@ -16,6 +16,7 @@ final _settingsGroups = <SettingGroup>[
   SettingGroup(title: 'AI 与个性化', items: [
     SettingItem(title: '模型设置', icon: Icons.psychology_outlined, value: 'GPT-4', route: AppRoutes.settingsModels),
     SettingItem(title: 'AI 配置', icon: Icons.smart_toy_outlined, route: AppRoutes.settingsAi),
+    SettingItem(title: '语音识别', icon: Icons.transcribe_outlined, route: AppRoutes.settingsAsr),
     SettingItem(title: '外观设置', icon: Icons.palette_outlined, value: '亮色', route: AppRoutes.settingsAppearance),
     SettingItem(title: '主题设置', icon: Icons.color_lens_outlined, route: AppRoutes.settingsTheme),
     SettingItem(title: '界面提供者', icon: Icons.dashboard_customize_outlined, route: AppRoutes.settingsUIProviders),

@@ -4,7 +4,6 @@ import 'dart:io';
 import 'package:dio/dio.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:video_picker/video_picker.dart';
 
 import 'artifact_model.dart';
 
@@ -68,6 +67,10 @@ abstract class ArtifactService {
   });
 
   Future<ArtifactMetadata> pickAndUploadFile({
+    UploadProgressCallback? onProgress,
+  });
+
+  Future<ArtifactMetadata> pickAndUploadAudio({
     UploadProgressCallback? onProgress,
   });
 }
@@ -209,9 +212,36 @@ class HttpArtifactService implements ArtifactService {
       throw ArtifactServiceException('user_cancelled');
     }
     final file = result.files.first;
+    if (file.path == null || file.path!.isEmpty) {
+      throw ArtifactServiceException('file_path_unavailable');
+    }
     return uploadFile(
       filePath: file.path!,
-      kind: ArtifactKind.file,
+      kind: ArtifactKind.fromMime(_detectMimeType(file.name)),
+      fileName: file.name,
+      onProgress: onProgress,
+    );
+  }
+
+  @override
+  Future<ArtifactMetadata> pickAndUploadAudio({
+    UploadProgressCallback? onProgress,
+  }) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['mp3', 'wav', 'm4a', 'aac', 'ogg', 'webm'],
+      withReadStream: true,
+    );
+    if (result == null || result.files.isEmpty) {
+      throw ArtifactServiceException('user_cancelled');
+    }
+    final file = result.files.first;
+    if (file.path == null || file.path!.isEmpty) {
+      throw ArtifactServiceException('file_path_unavailable');
+    }
+    return uploadFile(
+      filePath: file.path!,
+      kind: ArtifactKind.audio,
       fileName: file.name,
       onProgress: onProgress,
     );

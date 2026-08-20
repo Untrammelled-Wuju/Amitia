@@ -39,25 +39,59 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
   }
 
   Future<void> _loadServer() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final svc = ref.read(mcpServiceProvider);
       final data = await svc.getServer(widget.mcpId);
       if (data != null) {
-        final tools = data['tools'] as List? ?? [];
+        final tools = await svc.tools(widget.mcpId);
+        final prompts = await svc.prompts(widget.mcpId);
+        final resourceData = await svc.resources(widget.mcpId);
+        final capabilities = await svc.capabilities(widget.mcpId);
+        final logs = await svc.logs(widget.mcpId);
+
+        _toolEnabledState = {};
         for (final tool in tools) {
-          final t = tool as Map<String, dynamic>;
-          _toolEnabledState[(t['name'] ?? '').toString()] = (t['isEnabled'] as bool?) ?? ((t['enabled'] as int?) == 1);
+          final key = (tool['remoteName'] ?? tool['name'] ?? '').toString();
+          _toolEnabledState[key] = (tool['enabled'] as int? ?? 0) == 1;
         }
         _capabilityState = {
-          'sampling': (data['hasSampling'] ?? false) as bool,
-          'tasks': (data['hasTasks'] ?? false) as bool,
-          'roots': (data['hasRoots'] ?? false) as bool,
+          for (final capability in capabilities)
+            (capability['capability'] ?? '').toString(): (capability['enabled'] as int? ?? 0) == 1,
         };
+
+        final tasksEnabled = _capabilityState['tasks'] ?? false;
+        final tasks = tasksEnabled ? await svc.tasks(widget.mcpId) : <Map<String, dynamic>>[];
+        data['tools'] = tools;
+        data['prompts'] = prompts;
+        data['resources'] = (resourceData['resources'] as List? ?? []).cast<Map<String, dynamic>>();
+        data['resourceTemplates'] = (resourceData['resourceTemplates'] as List? ?? []).cast<Map<String, dynamic>>();
+        data['tasks'] = tasks;
+        data['logs'] = logs;
+        data['toolCount'] = tools.length;
+        data['promptCount'] = prompts.length;
+        data['resourceCount'] = (data['resources'] as List).length;
+        data['hasSampling'] = _capabilityState['sampling'] ?? false;
+        data['hasTasks'] = tasksEnabled;
+        data['hasRoots'] = _capabilityState['roots'] ?? false;
+        data['hasOAuth'] = (data['authType'] ?? '').toString().toLowerCase() == 'oauth';
       }
-      if (mounted) setState(() { _server = data; _loading = false; });
+      if (mounted) {
+        setState(() {
+          _server = data;
+          _loading = false;
+        });
+      }
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+      if (mounted) {
+        setState(() {
+          _error = e.toString();
+          _loading = false;
+        });
+      }
     }
   }
 
@@ -71,7 +105,7 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
 
   String _statusLabel(dynamic status) {
     final s = status.toString().toLowerCase();
-    if (s.contains('connected') && !s.contains('dis')) return '已连接';
+    if (s == 'ready' || (s.contains('connected') && !s.contains('dis'))) return '已连接';
     if (s.contains('disconnected') || s.contains('disconnect')) return '未连接';
     if (s.contains('error')) return '错误';
     if (s.contains('connecting')) return '连接中';
@@ -80,7 +114,7 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
 
   BadgeType _statusBadgeType(dynamic status) {
     final s = status.toString().toLowerCase();
-    if (s.contains('connected') && !s.contains('dis')) return BadgeType.success;
+    if (s == 'ready' || (s.contains('connected') && !s.contains('dis'))) return BadgeType.success;
     if (s.contains('disconnected') || s.contains('disconnect')) return BadgeType.neutral;
     if (s.contains('error')) return BadgeType.error;
     if (s.contains('connecting')) return BadgeType.warning;
@@ -196,7 +230,7 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
   Widget _buildOverviewTab(BuildContext context, Map<String, dynamic> server) {
     final status = server['status'];
     final transport = server['transport'];
-    final address = (server['address'] ?? server['url'] ?? '').toString();
+    final address = (server['endpoint'] ?? server['command'] ?? '').toString();
     final toolCount = (server['toolCount'] ?? server['tools'] ?? 0) as int;
     final promptCount = (server['promptCount'] ?? server['prompts'] ?? 0) as int;
     final resourceCount = (server['resourceCount'] ?? server['resources'] ?? 0) as int;
@@ -255,9 +289,9 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
     }
     return Column(
       children: tools.map((tool) {
-        final name = (tool['name'] ?? '').toString();
+        final name = (tool['remoteName'] ?? tool['name'] ?? '').toString();
         final description = (tool['description'] ?? '').toString();
-        final isEnabled = _toolEnabledState[name] ?? ((tool['isEnabled'] as bool?) ?? ((tool['enabled'] as int?) == 1));
+        final isEnabled = _toolEnabledState[name] ?? ((tool['enabled'] as int? ?? 0) == 1);
         return Padding(
           padding: EdgeInsets.only(bottom: AppSpacing.sm),
           child: AmitiaCard(
@@ -277,7 +311,7 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
                 ),
                 Switch(
                   value: isEnabled,
-                  onChanged: (val) => setState(() => _toolEnabledState[name] = val),
+                  onChanged: (val) => _setToolEnabled(tool, name, val),
                   materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 ),
               ],
@@ -295,13 +329,12 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
     }
     return Column(
       children: prompts.map((prompt) {
-        final name = (prompt['name'] ?? '').toString();
+        final name = (prompt['remoteName'] ?? prompt['name'] ?? '').toString();
         final description = (prompt['description'] ?? '').toString();
-        final content = (prompt['content'] ?? '').toString();
         return Padding(
           padding: EdgeInsets.only(bottom: AppSpacing.sm),
           child: AmitiaCard(
-            onTap: () => _showUsePromptDialog(name, description, content),
+            onTap: () => _showUsePromptDialog(name, description),
             child: Row(
               children: [
                 Icon(Icons.short_text, size: 20, color: context.info),
@@ -335,11 +368,10 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
         final name = (resource['name'] ?? '').toString();
         final uri = (resource['uri'] ?? '').toString();
         final mimeType = (resource['mimeType'] ?? resource['mime_type'] ?? '').toString();
-        final content = resource['content']?.toString();
         return Padding(
           padding: EdgeInsets.only(bottom: AppSpacing.sm),
           child: AmitiaCard(
-            onTap: () => _showResourceContentDialog(name, uri, mimeType, content),
+            onTap: () => _showResourceContentDialog(name, uri, mimeType),
             child: Row(
               children: [
                 Icon(_resourceIcon(mimeType), size: 20, color: context.success),
@@ -374,60 +406,50 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
 
   Widget _buildTasksTab(BuildContext context, Map<String, dynamic> server) {
     final hasTasks = (server['hasTasks'] ?? false) as bool;
-    final mockTasks = [
-      {'id': 'task1', 'name': '文件索引更新', 'status': '运行中', 'progress': 0.65},
-      {'id': 'task2', 'name': '目录扫描', 'status': '已完成', 'progress': 1.0},
-      {'id': 'task3', 'name': '权限验证', 'status': '等待中', 'progress': 0.0},
-    ];
+    final tasks = (server['tasks'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    if (!hasTasks) {
+      return AmitiaEmptyState(icon: Icons.task_outlined, title: '不支持 Tasks', subtitle: '该 MCP 服务未启用 Tasks 能力');
+    }
+    if (tasks.isEmpty) {
+      return AmitiaEmptyState(icon: Icons.task_outlined, title: '暂无任务', subtitle: '服务当前没有远端任务');
+    }
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        if (!hasTasks)
-          AmitiaEmptyState(icon: Icons.task_outlined, title: '不支持 Tasks', subtitle: '该 MCP 服务未启用 Tasks 能力')
-        else
-          ...mockTasks.map((task) => Padding(
-                padding: EdgeInsets.only(bottom: AppSpacing.sm),
-                child: AmitiaCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Icon(Icons.task_alt, size: 18, color: context.accentPrimary),
-                          const SizedBox(width: 8),
-                          Expanded(child: Text(task['name'] as String, style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600))),
-                          AmitiaStatusBadge(
-                            label: task['status'] as String,
-                            type: (task['status'] == '已完成')
-                                ? BadgeType.success
-                                : (task['status'] == '运行中')
-                                    ? BadgeType.accent
-                                    : BadgeType.warning,
-                          ),
-                        ],
-                      ),
-                      SizedBox(height: AppSpacing.sm),
-                      AmitiaProgressBar(progress: task['progress'] as double),
-                    ],
-                  ),
+      children: tasks.map((task) {
+        final status = (task['status'] ?? 'unknown').toString();
+        final message = (task['statusMessage'] ?? '').toString();
+        final remoteId = (task['remoteTaskId'] ?? task['id'] ?? '').toString();
+        return Padding(
+          padding: EdgeInsets.only(bottom: AppSpacing.sm),
+          child: AmitiaCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.task_alt, size: 18, color: context.accentPrimary),
+                    const SizedBox(width: 8),
+                    Expanded(child: Text(remoteId, style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600))),
+                    AmitiaStatusBadge(label: _taskStatusLabel(status), type: _taskStatusType(status)),
+                  ],
                 ),
-              )),
-      ],
+                if (message.isNotEmpty) ...[
+                  SizedBox(height: AppSpacing.sm),
+                  Text(message, style: AppTypography.caption(context)),
+                ],
+              ],
+            ),
+          ),
+        );
+      }).toList(),
     );
   }
 
   Widget _buildPermissionsTab(BuildContext context, Map<String, dynamic> server) {
-    final transport = server['transport'];
+    final transport = (server['transport'] ?? '').toString();
     final hasOAuth = (server['hasOAuth'] ?? false) as bool;
-    final isStdio = transport.toString().toLowerCase().contains('stdio');
-    final isNetwork = !isStdio;
+    final isStdio = transport.toLowerCase().contains('stdio');
+    final privateNetwork = _capabilityState['private_network'] ?? false;
 
-    final permissions = [
-      {'name': '文件系统访问', 'desc': '读写本地文件和目录', 'enabled': true},
-      {'name': '网络访问', 'desc': '访问互联网资源', 'enabled': isNetwork},
-      {'name': '执行子进程', 'desc': '启动和管理子进程', 'enabled': isStdio},
-      {'name': '环境变量读取', 'desc': '读取系统环境变量', 'enabled': true},
-    ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -439,27 +461,20 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
                 children: [
                   Icon(Icons.shield_outlined, size: 20, color: context.warning),
                   const SizedBox(width: 8),
-                  Text('权限设置', style: AppTypography.sectionTitle(context)),
+                  Text('运行权限', style: AppTypography.sectionTitle(context)),
                 ],
               ),
               SizedBox(height: AppSpacing.md),
-              ...permissions.map((p) => AmitiaSwitchTile(
-                    title: p['name'] as String,
-                    subtitle: p['desc'] as String,
-                    value: p['enabled'] as bool,
-                    onChanged: (val) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('${p['name']} 已${val ? '开启' : '关闭'}'), backgroundColor: context.accentPrimary),
-                      );
-                    },
-                  )),
+              _InfoRow(label: '运行方式', value: isStdio ? '本地子进程（STDIO）' : '远程网络服务'),
+              _InfoRow(label: '私网访问', value: privateNetwork ? '已授权' : '未授权'),
+              _InfoRow(label: '认证方式', value: (server['authType'] ?? 'none').toString()),
             ],
           ),
         ),
-        SizedBox(height: AppSpacing.md),
-        if (hasOAuth)
+        if (hasOAuth) ...[
+          SizedBox(height: AppSpacing.md),
           AmitiaCard(
-            onTap: () => _showOAuthDialog(),
+            onTap: _showOAuthDialog,
             child: Row(
               children: [
                 Icon(Icons.lock_outline, size: 20, color: context.error),
@@ -470,52 +485,40 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
                     children: [
                       Text('OAuth 授权', style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600)),
                       const SizedBox(height: 2),
-                      Text('该服务需要 OAuth 授权', style: AppTypography.caption(context)),
+                      Text('打开真实 OAuth 授权流程', style: AppTypography.caption(context)),
                     ],
                   ),
                 ),
-                AmitiaStatusBadge(label: '需授权', type: BadgeType.warning),
-                const SizedBox(width: 8),
                 Icon(Icons.chevron_right, color: context.textTertiary, size: 20),
               ],
             ),
           ),
+        ],
         SizedBox(height: AppSpacing.md),
         AmitiaButton(
           label: '管理能力配置',
           isFullWidth: true,
           isSecondary: true,
           icon: Icons.tune,
-          onPressed: () => _showCapabilityDialog(),
+          onPressed: _showCapabilityDialog,
         ),
       ],
     );
   }
 
   Widget _buildLogsTab(BuildContext context, Map<String, dynamic> server) {
-    final toolCount = (server['toolCount'] ?? server['tools'] ?? 0) as int;
-    final promptCount = (server['promptCount'] ?? server['prompts'] ?? 0) as int;
-    final mockLogs = [
-      {'time': '09:18:23', 'level': 'INFO', 'message': 'MCP 服务已连接'},
-      {'time': '09:18:25', 'level': 'INFO', 'message': '工具列表已同步 ($toolCount 个)'},
-      {'time': '09:18:26', 'level': 'INFO', 'message': 'Prompt 列表已同步 ($promptCount 个)'},
-      {'time': '09:19:01', 'level': 'DEBUG', 'message': '调用工具 read_file'},
-      {'time': '09:19:03', 'level': 'DEBUG', 'message': '工具返回结果，耗时 1.8s'},
-      {'time': '09:20:15', 'level': 'WARN', 'message': '工具 delete_file 已被禁用'},
-    ];
+    final logs = (server['logs'] as List?)?.cast<Map<String, dynamic>>() ?? [];
+    if (logs.isEmpty) {
+      return AmitiaEmptyState(icon: Icons.receipt_long_outlined, title: '暂无日志', subtitle: '该 MCP 服务还没有审计记录');
+    }
     return Column(
-      children: mockLogs.map((log) {
-        Color levelColor;
-        switch (log['level']) {
-          case 'INFO':
-            levelColor = context.info;
-          case 'WARN':
-            levelColor = context.warning;
-          case 'ERROR':
-            levelColor = context.error;
-          default:
-            levelColor = context.textTertiary;
-        }
+      children: logs.map((log) {
+        final status = (log['status'] ?? '').toString();
+        final operation = (log['operation'] ?? '').toString();
+        final createdAt = (log['createdAt'] ?? '').toString();
+        final message = (log['errorMessage'] ?? '').toString();
+        final isError = status.toLowerCase().contains('fail') || message.isNotEmpty;
+        final levelColor = isError ? context.error : context.info;
         return Padding(
           padding: const EdgeInsets.only(bottom: 6),
           child: Container(
@@ -528,24 +531,83 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(log['time'] as String, style: AppTypography.label(context).copyWith(fontFamily: 'monospace')),
-                const SizedBox(width: 10),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                  decoration: BoxDecoration(
-                    color: levelColor.withValues(alpha: 0.12),
-                    borderRadius: AppRadius.brTag,
-                  ),
-                  child: Text(log['level'] as String, style: TextStyle(fontSize: 10, color: levelColor, fontWeight: FontWeight.w600)),
+                  decoration: BoxDecoration(color: levelColor.withValues(alpha: 0.12), borderRadius: AppRadius.brTag),
+                  child: Text(isError ? 'ERROR' : 'INFO', style: TextStyle(fontSize: 10, color: levelColor, fontWeight: FontWeight.w600)),
                 ),
                 const SizedBox(width: 10),
-                Expanded(child: Text(log['message'] as String, style: AppTypography.bodySmall(context))),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(operation.isEmpty ? status : operation, style: AppTypography.bodySmall(context)),
+                      if (message.isNotEmpty) Text(message, style: AppTypography.caption(context)),
+                      if (createdAt.isNotEmpty) Text(createdAt, style: AppTypography.label(context)),
+                    ],
+                  ),
+                ),
               ],
             ),
           ),
         );
       }).toList(),
     );
+  }
+
+  Future<void> _setToolEnabled(Map<String, dynamic> tool, String name, bool enabled) async {
+    final toolId = (tool['id'] ?? '').toString();
+    if (toolId.isEmpty) return;
+    final previous = _toolEnabledState[name] ?? false;
+    setState(() => _toolEnabledState[name] = enabled);
+    try {
+      await ref.read(mcpServiceProvider).setToolEnabled(widget.mcpId, toolId, enabled);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('$name 已${enabled ? '启用' : '禁用'}')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _toolEnabledState[name] = previous);
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('更新工具状态失败：$e')));
+      }
+    }
+  }
+
+  String _taskStatusLabel(String status) {
+    switch (status.toLowerCase()) {
+      case 'working':
+      case 'running':
+        return '运行中';
+      case 'completed':
+      case 'succeeded':
+        return '已完成';
+      case 'failed':
+        return '失败';
+      case 'cancelled':
+      case 'canceled':
+        return '已取消';
+      case 'input_required':
+        return '等待输入';
+      default:
+        return status;
+    }
+  }
+
+  BadgeType _taskStatusType(String status) {
+    switch (status.toLowerCase()) {
+      case 'completed':
+      case 'succeeded':
+        return BadgeType.success;
+      case 'failed':
+        return BadgeType.error;
+      case 'working':
+      case 'running':
+        return BadgeType.accent;
+      default:
+        return BadgeType.warning;
+    }
   }
 
   IconData _resourceIcon(String mimeType) {
@@ -556,54 +618,78 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
     return Icons.insert_drive_file_outlined;
   }
 
-  void _showUsePromptDialog(String name, String description, String content) {
+  Future<void> _showUsePromptDialog(String name, String description) async {
+    Map<String, dynamic>? promptResult;
+    String? loadError;
+    try {
+      promptResult = await ref.read(mcpServiceProvider).getPrompt(widget.mcpId, name);
+    } catch (e) {
+      loadError = e.toString();
+    }
+    if (!mounted) return;
+    final messages = (promptResult?['messages'] as List? ?? const []).map((item) {
+      if (item is Map<String, dynamic>) {
+        return '${item['role'] ?? ''}: ${item['content'] ?? ''}';
+      }
+      return item.toString();
+    }).join('\n\n');
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: context.surfacePrimary,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: dialogContext.surfacePrimary,
         shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
-        title: Text('使用 Prompt', style: AppTypography.cardTitle(context)),
+        title: Text('Prompt 预览', style: AppTypography.cardTitle(dialogContext)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(name, style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            Text(description, style: AppTypography.caption(context)),
+            Text(name, style: AppTypography.bodySmall(dialogContext).copyWith(fontWeight: FontWeight.w600)),
+            if (description.isNotEmpty) ...[
+              const SizedBox(height: 8),
+              Text(description, style: AppTypography.caption(dialogContext)),
+            ],
             const SizedBox(height: 12),
             Container(
+              constraints: const BoxConstraints(maxHeight: 260),
               padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: context.surfaceSecondary,
-                borderRadius: AppRadius.brSmall,
+              decoration: BoxDecoration(color: dialogContext.surfaceSecondary, borderRadius: AppRadius.brSmall),
+              child: SingleChildScrollView(
+                child: Text(
+                  loadError ?? (messages.isEmpty ? '服务未返回 Prompt 内容' : messages),
+                  style: AppTypography.label(dialogContext).copyWith(fontFamily: 'monospace'),
+                ),
               ),
-              child: Text(content, style: AppTypography.label(context).copyWith(fontFamily: 'monospace')),
             ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('取消', style: TextStyle(color: context.textSecondary))),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(this.context).showSnackBar(
-                SnackBar(content: Text('Prompt「$name」已使用'), backgroundColor: context.accentPrimary),
-              );
-            },
-            child: Text('使用', style: TextStyle(color: context.accentPrimary)),
-          ),
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: Text('关闭', style: TextStyle(color: dialogContext.textSecondary))),
         ],
       ),
     );
   }
 
-  void _showResourceContentDialog(String name, String uri, String mimeType, String? content) {
+  Future<void> _showResourceContentDialog(String name, String uri, String mimeType) async {
+    Map<String, dynamic>? result;
+    String? loadError;
+    try {
+      result = await ref.read(mcpServiceProvider).readResource(widget.mcpId, uri);
+    } catch (e) {
+      loadError = e.toString();
+    }
+    if (!mounted) return;
+    final contents = (result?['contents'] as List? ?? const []).map((item) {
+      if (item is Map<String, dynamic>) {
+        return (item['text'] ?? item['blob'] ?? '').toString();
+      }
+      return item.toString();
+    }).where((value) => value.isNotEmpty).join('\n\n');
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: context.surfacePrimary,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: dialogContext.surfacePrimary,
         shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
-        title: Text(name, style: AppTypography.cardTitle(context)),
+        title: Text(name, style: AppTypography.cardTitle(dialogContext)),
         content: SizedBox(
           width: double.maxFinite,
           child: Column(
@@ -613,19 +699,16 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
               _InfoRow(label: 'URI', value: uri),
               _InfoRow(label: '类型', value: mimeType),
               const SizedBox(height: 12),
-              Text('内容', style: AppTypography.caption(context)),
+              Text('内容', style: AppTypography.caption(dialogContext)),
               const SizedBox(height: 6),
               Container(
-                constraints: const BoxConstraints(maxHeight: 200),
+                constraints: const BoxConstraints(maxHeight: 240),
                 padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: context.surfaceSecondary,
-                  borderRadius: AppRadius.brSmall,
-                ),
+                decoration: BoxDecoration(color: dialogContext.surfaceSecondary, borderRadius: AppRadius.brSmall),
                 child: SingleChildScrollView(
                   child: Text(
-                    content ?? '(无内容或目录类型资源)',
-                    style: AppTypography.label(context).copyWith(fontFamily: 'monospace'),
+                    loadError ?? (contents.isEmpty ? '(服务未返回可显示内容)' : contents),
+                    style: AppTypography.label(dialogContext).copyWith(fontFamily: 'monospace'),
                   ),
                 ),
               ),
@@ -633,7 +716,7 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('关闭', style: TextStyle(color: context.textSecondary))),
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: Text('关闭', style: TextStyle(color: dialogContext.textSecondary))),
         ],
       ),
     );
@@ -642,11 +725,11 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
   void _showCapabilityDialog() {
     showDialog(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setDialogState) => AlertDialog(
-          backgroundColor: context.surfacePrimary,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          backgroundColor: dialogContext.surfacePrimary,
           shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
-          title: Text('能力配置', style: AppTypography.cardTitle(context)),
+          title: Text('能力配置', style: AppTypography.cardTitle(dialogContext)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -654,122 +737,94 @@ class _McpDetailPageState extends ConsumerState<McpDetailPage> {
                 label: 'Sampling',
                 desc: '允许服务端请求 LLM 采样',
                 value: _capabilityState['sampling'] ?? false,
-                onChanged: (val) {
-                  setDialogState(() => _capabilityState['sampling'] = val);
-                  if (val) {
-                    Navigator.pop(context);
-                    _showEnableCapabilityConfirm('Sampling');
-                  }
-                },
+                onChanged: (value) => _updateCapability('sampling', value, setDialogState),
               ),
               _CapabilityToggle(
                 label: 'Tasks',
-                desc: '启用任务管理能力',
+                desc: '启用远端任务管理能力',
                 value: _capabilityState['tasks'] ?? false,
-                onChanged: (val) {
-                  setDialogState(() => _capabilityState['tasks'] = val);
-                  if (val) {
-                    Navigator.pop(context);
-                    _showEnableCapabilityConfirm('Tasks');
-                  }
-                },
+                onChanged: (value) => _updateCapability('tasks', value, setDialogState),
               ),
               _CapabilityToggle(
                 label: 'Roots',
-                desc: '启用根目录能力',
+                desc: '允许 MCP 服务请求 Roots',
                 value: _capabilityState['roots'] ?? false,
-                onChanged: (val) {
-                  setDialogState(() => _capabilityState['roots'] = val);
-                  if (val) {
-                    Navigator.pop(context);
-                    _showEnableCapabilityConfirm('Roots');
-                  }
-                },
+                onChanged: (value) => _updateCapability('roots', value, setDialogState),
+              ),
+              _CapabilityToggle(
+                label: 'Private Network',
+                desc: '允许连接局域网/private 地址',
+                value: _capabilityState['private_network'] ?? false,
+                onChanged: (value) => _updateCapability('private_network', value, setDialogState),
               ),
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(context), child: Text('关闭', style: TextStyle(color: context.textSecondary))),
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: Text('关闭', style: TextStyle(color: dialogContext.textSecondary))),
           ],
         ),
       ),
     );
   }
 
-  void _showEnableCapabilityConfirm(String capability) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: context.surfacePrimary,
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
-        title: Text('启用能力', style: AppTypography.cardTitle(context)),
-        content: Text('确定要启用 $capability 能力吗？启用后该 MCP 服务将获得相应权限。', style: AppTypography.bodySmall(context)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('取消', style: TextStyle(color: context.textSecondary))),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(this.context).showSnackBar(
-                SnackBar(content: Text('$capability 能力已启用'), backgroundColor: context.success),
-              );
-            },
-            child: Text('确认启用', style: TextStyle(color: context.accentPrimary)),
-          ),
-        ],
-      ),
-    );
+  Future<void> _updateCapability(String capability, bool enabled, StateSetter setDialogState) async {
+    final previous = _capabilityState[capability] ?? false;
+    setState(() => _capabilityState[capability] = enabled);
+    setDialogState(() {});
+    Map<String, dynamic> configuration = const {};
+    if (enabled && capability == 'sampling') {
+      configuration = {'maxTokens': 2048, 'timeoutSeconds': 60, 'maxConcurrent': 1};
+    } else if (enabled && capability == 'tasks') {
+      configuration = {'maxConcurrent': 4, 'maxTTLSeconds': 86400};
+    }
+    try {
+      await ref.read(mcpServiceProvider).setCapability(
+            widget.mcpId,
+            capability,
+            enabled,
+            configuration: configuration,
+          );
+      await _loadServer();
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _capabilityState[capability] = previous);
+      setDialogState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('能力更新失败：$e')));
+    }
   }
 
-  void _showOAuthDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: context.surfacePrimary,
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
-        title: Row(
-          children: [
-            Icon(Icons.lock_outline, color: context.warning, size: 22),
-            const SizedBox(width: 8),
-            Text('OAuth 授权', style: AppTypography.cardTitle(context)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('该 MCP 服务需要 OAuth 授权才能使用全部功能。', style: AppTypography.bodySmall(context)),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: context.warning.withValues(alpha: 0.08),
-                borderRadius: AppRadius.brSmall,
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.security, size: 16, color: context.warning),
-                  const SizedBox(width: 8),
-                  Expanded(child: Text('授权后将获取访问令牌，请确认你信任该服务。', style: AppTypography.label(context).copyWith(color: context.warning))),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('暂不授权', style: TextStyle(color: context.textSecondary))),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(this.context).showSnackBar(
-                SnackBar(content: const Text('OAuth 授权流程已启动'), backgroundColor: context.accentPrimary),
-              );
-            },
-            child: Text('前往授权', style: TextStyle(color: context.accentPrimary)),
+  Future<void> _showOAuthDialog() async {
+    final endpoint = (_server?['endpoint'] ?? '').toString();
+    if (endpoint.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('该 MCP 服务没有可用于 OAuth 的资源地址')));
+      return;
+    }
+    try {
+      final result = await ref.read(mcpServiceProvider).startOAuth(widget.mcpId, resourceUrl: endpoint);
+      if (!mounted) return;
+      final authorizationUrl = (result?['authorizationUrl'] ?? '').toString();
+      showDialog(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: dialogContext.surfacePrimary,
+          shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
+          title: Text('OAuth 授权地址', style: AppTypography.cardTitle(dialogContext)),
+          content: SelectableText(
+            authorizationUrl.isEmpty ? '服务未返回授权地址' : authorizationUrl,
+            style: AppTypography.bodySmall(dialogContext),
           ),
-        ],
-      ),
-    );
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: Text('关闭', style: TextStyle(color: dialogContext.textSecondary))),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('启动 OAuth 失败：$e')));
+      }
+    }
   }
+
 }
 
 class _InfoRow extends StatelessWidget {

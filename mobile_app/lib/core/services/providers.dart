@@ -19,6 +19,8 @@ import 'extension_view_invalidator.dart';
 import 'system_service.dart';
 import 'channel_service.dart';
 import 'workspace_service.dart';
+import 'device_mesh_service.dart';
+import 'privacy_service.dart';
 import 'temporal_service.dart' as temporal_config;
 import '../models/character.dart';
 import '../models/conversation.dart';
@@ -69,6 +71,8 @@ final safetyServiceProvider = Provider<SafetyService>((ref) => SafetyService(_ge
 
 final mcpServiceProvider = Provider<MCPService>((ref) => MCPService(_getDynamicServiceApi(ref)));
 
+final wechatServiceProvider = Provider<WechatService>((ref) => WechatService(_getDynamicServiceApi(ref)));
+
 final qqServiceProvider = Provider<QQService>((ref) => QQService(_getDynamicServiceApi(ref)));
 
 final imageGenServiceProvider = Provider<ImageGenService>((ref) => ImageGenService(_getDynamicServiceApi(ref)));
@@ -84,6 +88,10 @@ final proactiveServiceProvider = Provider<ProactiveService>((ref) => ProactiveSe
 final temporalServiceProvider = Provider<temporal_config.TemporalService>((ref) => temporal_config.TemporalService(_getDynamicServiceApi(ref)));
 
 final workspaceServiceProvider = Provider<WorkspaceService>((ref) => WorkspaceService(_getDynamicServiceApi(ref)));
+
+final deviceMeshServiceProvider = Provider<DeviceMeshService>((ref) => DeviceMeshService(_getDynamicServiceApi(ref)));
+
+final privacyServiceProvider = Provider<PrivacyService>((ref) => PrivacyService(_getDynamicServiceApi(ref)));
 
 final moodServiceProvider = Provider<MoodService>((ref) => MoodService(_getDynamicServiceApi(ref)));
 

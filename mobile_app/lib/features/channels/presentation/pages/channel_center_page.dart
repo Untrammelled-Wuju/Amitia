@@ -36,13 +36,9 @@ class _ChannelCenterPageState extends ConsumerState<ChannelCenterPage> {
       if (mounted) setState(() { _qqStatus = qqData; });
     } catch (_) {}
     try {
-      final mcpSvc = ref.read(mcpServiceProvider);
-      final servers = await mcpSvc.servers();
-      if (mounted) {
-        setState(() {
-          _wechatStatus = servers.isNotEmpty ? {'connected' : true} : {'connected': false};
-        });
-      }
+      final wechatSvc = ref.read(wechatServiceProvider);
+      final data = await wechatSvc.status();
+      if (mounted) setState(() => _wechatStatus = data);
     } catch (_) {}
     if (mounted) setState(() => _loading = false);
   }
@@ -98,20 +94,6 @@ class _ChannelCenterPageState extends ConsumerState<ChannelCenterPage> {
                     syncTime: _qqSyncTime(),
                     onTap: () => context.push(AppRoutes.channelsQq),
                   ),
-                  SizedBox(height: AppSpacing.sm),
-                  _ChannelCard(
-                    icon: Icons.add_circle_outline,
-                    iconColor: context.textTertiary,
-                    title: '更多渠道',
-                    subtitle: '后续渠道占位',
-                    syncTime: null,
-                    onTap: () {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('更多渠道即将上线')),
-                      );
-                    },
-                    isPlaceholder: true,
-                  ),
                 ],
               ),
       ),
@@ -126,7 +108,6 @@ class _ChannelCard extends StatelessWidget {
   final String subtitle;
   final String? syncTime;
   final VoidCallback onTap;
-  final bool isPlaceholder;
 
   const _ChannelCard({
     required this.icon,
@@ -135,7 +116,6 @@ class _ChannelCard extends StatelessWidget {
     required this.subtitle,
     required this.syncTime,
     required this.onTap,
-    this.isPlaceholder = false,
   });
 
   @override
