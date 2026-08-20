@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -18,19 +19,29 @@ import (
 	"github.com/u-ai/backend/internal/mcp/discovery"
 	"github.com/u-ai/backend/internal/mcp/features"
 	"github.com/u-ai/backend/internal/mcp/host"
-	"github.com/u-ai/backend/internal/mcp/manager"
-	"github.com/u-ai/backend/internal/mcp/skill"
-	"github.com/u-ai/backend/internal/user"
 	"github.com/u-ai/backend/pkg/app"
 	"gorm.io/gorm"
 )
 
+type ConnectionManager interface {
+	Connect(context.Context, string) error
+	Disconnect(context.Context, string) error
+	Reconnect(context.Context, string) error
+	Call(context.Context, string, string, any, client.CallOptions) (json.RawMessage, error)
+	Connection(string) (*client.Connection, bool)
+}
+
+type ToolSyncer interface {
+	RegisterServer(context.Context, string) error
+	UnregisterServer(context.Context, string) error
+}
+
 type Services struct {
 	Repository   *mcp.Repository
-	Connections  *manager.Manager
+	Connections  ConnectionManager
 	Auth         *auth.Manager
 	Discovery    *discovery.Service
-	Skills       *skill.Runtime
+	Skills       ToolSyncer
 	Secrets      auth.SecretStore
 	Extensions   *extension.Runtime
 	Features     *features.Service
@@ -46,12 +57,14 @@ type serverRequest struct {
 	PrivateNetworkConfirmed bool            `json:"privateNetworkConfirmed"`
 }
 
-func RegisterRouter(group *gin.RouterGroup, appContext *app.AppContext, services Services) {
+func RegisterOAuthCallback(routes gin.IRoutes, services Services) {
 	handler := &Handler{services: services}
-	userService := user.NewService(user.NewRepository(appContext), appContext)
+	routes.GET("/api/mcp/oauth/callback", handler.oauthCallback)
+}
+
+func RegisterRouter(group *gin.RouterGroup, _ *app.AppContext, services Services) {
+	handler := &Handler{services: services}
 	routes := group.Group("/mcp")
-	routes.GET("/oauth/callback", handler.oauthCallback)
-	routes.Use(authentication(userService))
 	routes.GET("/servers", handler.listServers)
 	routes.POST("/servers", handler.createServer)
 	routes.GET("/servers/:id", handler.getServer)
@@ -88,22 +101,6 @@ func RegisterRouter(group *gin.RouterGroup, appContext *app.AppContext, services
 	routes.GET("/operations/:id", handler.operation)
 	routes.GET("/interactions", handler.interactions)
 	routes.POST("/interactions/:id/resolve", handler.resolveInteraction)
-}
-
-func authentication(service user.Service) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		authorization := c.GetHeader("Authorization")
-		if !strings.HasPrefix(authorization, "Bearer ") {
-			problem(c, http.StatusUnauthorized, "UNAUTHORIZED", "需要登录")
-			return
-		}
-		me, err := service.GetMe(strings.TrimPrefix(authorization, "Bearer "))
-		if err != nil || me == nil || me.ID == 0 {
-			problem(c, http.StatusUnauthorized, "UNAUTHORIZED", "登录凭证无效")
-			return
-		}
-		c.Next()
-	}
 }
 
 func (h *Handler) listServers(c *gin.Context) {
@@ -147,7 +144,7 @@ func (h *Handler) createServer(c *gin.Context) {
 		return
 	}
 	if request.Enabled {
-		go h.services.Connections.Connect(context.Background(), record.ID)
+		go h.connectAndSync(context.Background(), record.ID)
 	}
 	record.PrivateNetworkConfirmed = request.PrivateNetworkConfirmed
 	c.JSON(http.StatusCreated, gin.H{"data": record})
@@ -171,7 +168,7 @@ func (h *Handler) updateServer(c *gin.Context) {
 	}
 	if err == nil {
 		if record.Enabled == 1 {
-			go h.services.Connections.Reconnect(context.Background(), record.ID)
+			go h.reconnectAndSync(context.Background(), record.ID)
 		} else {
 			_ = h.services.Skills.UnregisterServer(c, record.ID)
 			go h.services.Connections.Disconnect(context.Background(), record.ID)
@@ -228,13 +225,15 @@ func (h *Handler) testServer(c *gin.Context) {
 	respond(c, gin.H{"ok": err == nil}, err)
 }
 func (h *Handler) connectServer(c *gin.Context) {
-	respond(c, gin.H{"connected": true}, h.services.Connections.Connect(c, c.Param("id")))
+	err := h.connectAndSync(c, c.Param("id"))
+	respond(c, gin.H{"connected": err == nil}, err)
 }
 func (h *Handler) disconnectServer(c *gin.Context) {
 	respond(c, gin.H{"disconnected": true}, h.services.Connections.Disconnect(c, c.Param("id")))
 }
 func (h *Handler) reconnectServer(c *gin.Context) {
-	respond(c, gin.H{"connected": true}, h.services.Connections.Reconnect(c, c.Param("id")))
+	err := h.reconnectAndSync(c, c.Param("id"))
+	respond(c, gin.H{"connected": err == nil}, err)
 }
 func (h *Handler) refreshServer(c *gin.Context) {
 	err := h.services.Discovery.Discover(c, c.Param("id"))
@@ -243,6 +242,41 @@ func (h *Handler) refreshServer(c *gin.Context) {
 	}
 	respond(c, gin.H{"refreshed": err == nil}, err)
 }
+
+func (h *Handler) connectAndSync(ctx context.Context, serverID string) error {
+	if h.services.Connections == nil || h.services.Discovery == nil || h.services.Skills == nil {
+		return fmt.Errorf("MCP runtime unavailable")
+	}
+	if err := h.services.Connections.Connect(ctx, serverID); err != nil {
+		return err
+	}
+	if err := h.services.Discovery.Discover(ctx, serverID); err != nil {
+		_ = h.services.Connections.Disconnect(context.Background(), serverID)
+		return err
+	}
+	if err := h.services.Skills.RegisterServer(ctx, serverID); err != nil {
+		_ = h.services.Connections.Disconnect(context.Background(), serverID)
+		return err
+	}
+	return nil
+}
+
+func (h *Handler) reconnectAndSync(ctx context.Context, serverID string) error {
+	if h.services.Connections == nil {
+		return fmt.Errorf("MCP runtime unavailable")
+	}
+	if err := h.services.Connections.Reconnect(ctx, serverID); err != nil {
+		return err
+	}
+	if h.services.Discovery == nil || h.services.Skills == nil {
+		return fmt.Errorf("MCP runtime unavailable")
+	}
+	if err := h.services.Discovery.Discover(ctx, serverID); err != nil {
+		return err
+	}
+	return h.services.Skills.RegisterServer(ctx, serverID)
+}
+
 func (h *Handler) tools(c *gin.Context) {
 	records, err := h.services.Repository.ListTools(c, c.Param("id"), false)
 	respond(c, records, err)
@@ -480,8 +514,33 @@ func (h *Handler) oauthStart(c *gin.Context) {
 		problem(c, http.StatusBadRequest, "MCP_OAUTH_DISCOVERY_FAILED", "授权配置无效")
 		return
 	}
+	if strings.TrimSpace(request.RedirectURI) == "" {
+		request.RedirectURI = oauthCallbackURL(c)
+	}
 	result, err := h.services.Auth.Begin(c, auth.BeginRequest{ServerID: c.Param("id"), ResourceURL: request.ResourceURL, MetadataURL: request.MetadataURL, RedirectURI: request.RedirectURI, ClientID: request.ClientID, ClientSecret: request.ClientSecret, Scopes: request.Scopes})
 	respond(c, result, err)
+}
+
+func oauthCallbackURL(c *gin.Context) string {
+	scheme := strings.TrimSpace(c.GetHeader("X-Forwarded-Proto"))
+	if comma := strings.Index(scheme, ","); comma >= 0 {
+		scheme = strings.TrimSpace(scheme[:comma])
+	}
+	if scheme != "http" && scheme != "https" {
+		if c.Request.TLS != nil {
+			scheme = "https"
+		} else {
+			scheme = "http"
+		}
+	}
+	host := strings.TrimSpace(c.GetHeader("X-Forwarded-Host"))
+	if comma := strings.Index(host, ","); comma >= 0 {
+		host = strings.TrimSpace(host[:comma])
+	}
+	if host == "" {
+		host = c.Request.Host
+	}
+	return scheme + "://" + host + "/api/mcp/oauth/callback"
 }
 
 func (h *Handler) oauthCallback(c *gin.Context) {
