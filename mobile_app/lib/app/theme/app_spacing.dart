@@ -1,22 +1,25 @@
+import 'package:flutter/material.dart';
+import 'design_tokens.dart';
+
 class AppSpacing {
   AppSpacing._();
 
-  static const double xs = 4;
-  static const double sm = 8;
-  static const double md = 12;
-  static const double lg = 16;
-  static const double xl = 20;
-  static const double xxl = 24;
-  static const double xxxl = 32;
+  static double get xs => DesignTokenRuntime.layout.xs;
+  static double get sm => DesignTokenRuntime.layout.sm;
+  static double get md => DesignTokenRuntime.layout.md;
+  static double get lg => DesignTokenRuntime.layout.lg;
+  static double get xl => DesignTokenRuntime.layout.xl;
+  static double get xxl => DesignTokenRuntime.layout.xxl;
+  static double get xxxl => DesignTokenRuntime.layout.xxxl;
 
-  static const double pagePadding = 16;
-  static const double cardPadding = 16;
-  static const double sectionGap = 24;
-  static const double componentGap = 12;
-  static const double tightGap = 8;
+  static double get pagePadding => DesignTokenRuntime.layout.pagePadding;
+  static double get cardPadding => DesignTokenRuntime.layout.cardPadding;
+  static double get sectionGap => DesignTokenRuntime.layout.sectionGap;
+  static double get componentGap => DesignTokenRuntime.layout.componentGap;
+  static double get tightGap => DesignTokenRuntime.layout.tightGap;
 
-  static const double listItemMinHeight = 56;
-  static const double listItemMaxHeight = 68;
-  static const double buttonHeight = 48;
-  static const double inputMinHeight = 48;
+  static double get listItemMinHeight => DesignTokenRuntime.layout.listItemMinHeight;
+  static double get listItemMaxHeight => DesignTokenRuntime.layout.listItemMaxHeight;
+  static double get buttonHeight => DesignTokenRuntime.layout.buttonHeight;
+  static double get inputMinHeight => DesignTokenRuntime.layout.inputMinHeight;
 }
