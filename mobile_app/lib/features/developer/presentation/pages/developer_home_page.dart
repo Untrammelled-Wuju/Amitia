@@ -21,10 +21,10 @@ class DeveloperHomePage extends ConsumerWidget {
       body: SafeArea(
         top: false,
         child: ListView(
-          padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+          padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+              padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
               child: AmitiaCard(
                 backgroundColor: context.accentSoft,
                 border: Border.all(color: context.accentPrimary.withValues(alpha: 0.2), width: 0.5),
@@ -58,9 +58,9 @@ class DeveloperHomePage extends ConsumerWidget {
                 ),
               ),
             ),
-            const SizedBox(height: AppSpacing.xl),
+            SizedBox(height: AppSpacing.xl),
             const AmitiaSectionHeader(title: '功能入口'),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             ..._buildEntries(context),
           ],
         ),
@@ -146,7 +146,7 @@ class DeveloperHomePage extends ConsumerWidget {
 
     return entries.map((e) {
       return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 2),
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 2),
         child: AmitiaListTile(
           leading: Container(
             width: 36,

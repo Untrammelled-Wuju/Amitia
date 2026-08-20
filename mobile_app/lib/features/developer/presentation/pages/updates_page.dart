@@ -77,12 +77,12 @@ class _UpdatesPageState extends ConsumerState<UpdatesPage> {
       body: SafeArea(
         top: false,
         child: ListView(
-          padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+          padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
           children: [
             _buildAvailableUpdateCard(context),
-            const SizedBox(height: AppSpacing.xl),
+            SizedBox(height: AppSpacing.xl),
             const AmitiaSectionHeader(title: '更新历史'),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             ..._updateHistory.map((u) => _buildHistoryItem(context, u)),
           ],
         ),
@@ -95,7 +95,7 @@ class _UpdatesPageState extends ConsumerState<UpdatesPage> {
     final releaseDate = _updateInfo?['release_date'] as String? ?? '';
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       child: AmitiaCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -130,12 +130,12 @@ class _UpdatesPageState extends ConsumerState<UpdatesPage> {
                   const AmitiaStatusBadge(label: '已安装', type: BadgeType.success),
               ],
             ),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Text('更新内容', style: AppTypography.cardTitle(context).copyWith(fontSize: 14)),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             ..._buildUpdateNotes(context),
             if (_isDownloading) ...[
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Row(
                 children: [
                   Text('下载中', style: AppTypography.label(context).copyWith(color: context.textSecondary)),
@@ -147,7 +147,7 @@ class _UpdatesPageState extends ConsumerState<UpdatesPage> {
               ),
             ],
             if (_isInstalling) ...[
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Row(
                 children: [
                   SizedBox(
@@ -160,7 +160,7 @@ class _UpdatesPageState extends ConsumerState<UpdatesPage> {
                 ],
               ),
             ],
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             if (!_isDownloading && !_isInstalling && !_isInstalled)
               AmitiaButton(
                 label: '下载并安装',
@@ -216,7 +216,7 @@ class _UpdatesPageState extends ConsumerState<UpdatesPage> {
     final status = update['status'] as String? ?? '已安装';
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
       child: AmitiaCard(
         child: Row(
           children: [

@@ -77,7 +77,7 @@ class _HooksPageState extends ConsumerState<HooksPage> {
                 subtitle: 'Hook 点将在扩展注册后自动生成',
               )
             : ListView.builder(
-                padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+                padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
                 itemCount: _hooks.length,
                 itemBuilder: (context, index) => _buildHookCard(context, _hooks[index]),
               ),
@@ -93,7 +93,7 @@ class _HooksPageState extends ConsumerState<HooksPage> {
     final id = hook['id'] as String? ?? '';
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
       child: AmitiaCard(
         onTap: () => _showHookDetailSheet(context, hook),
         child: Column(
@@ -124,15 +124,15 @@ class _HooksPageState extends ConsumerState<HooksPage> {
                 _buildStatusBadge(status),
               ],
             ),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Row(
               children: [
                 _buildInfoChip(context, '优先级', '$priority'),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
                 _buildInfoChip(context, '贡献者', contributor),
               ],
             ),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Row(
               children: [
                 if (status == 'circuit_open')
@@ -153,7 +153,7 @@ class _HooksPageState extends ConsumerState<HooksPage> {
                       onPressed: () => _showToggleConfirm(context, hook),
                     ),
                   ),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: AmitiaButton(
                     label: '贡献详情',
@@ -285,7 +285,7 @@ class _HooksPageState extends ConsumerState<HooksPage> {
                 ),
                 const SizedBox(height: 16),
                 Container(
-                  padding: const EdgeInsets.all(AppSpacing.md),
+                  padding: EdgeInsets.all(AppSpacing.md),
                   decoration: BoxDecoration(
                     color: context.error.withValues(alpha: 0.08),
                     borderRadius: AppRadius.brSmall,

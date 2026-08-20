@@ -85,7 +85,7 @@ class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
                 subtitle: '点击右上角注册新服务',
               )
             : ListView.builder(
-                padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+                padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
                 itemCount: _services.length,
                 itemBuilder: (context, index) => _buildServiceCard(context, _services[index]),
               ),
@@ -101,7 +101,7 @@ class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
     final isRunning = runStatus == '已启动';
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
       child: AmitiaCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -147,7 +147,7 @@ class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
                 ),
               ],
             ),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Wrap(
               spacing: AppSpacing.sm,
               runSpacing: AppSpacing.sm,
@@ -308,7 +308,7 @@ class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
               const SizedBox(height: 8),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(AppSpacing.md),
+                padding: EdgeInsets.all(AppSpacing.md),
                 decoration: BoxDecoration(
                   color: context.surfaceSecondary,
                   borderRadius: AppRadius.brSmall,

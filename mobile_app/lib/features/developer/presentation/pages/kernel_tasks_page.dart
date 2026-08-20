@@ -82,7 +82,7 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
                 subtitle: '任务将在内核运行时自动创建',
               )
             : ListView.builder(
-                padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+                padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
                 itemCount: _tasks.length,
                 itemBuilder: (context, index) => _buildTaskCard(context, _tasks[index]),
               ),
@@ -99,7 +99,7 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
     final hasCheckpoint = task['hasCheckpoint'] as bool? ?? false;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
       child: AmitiaCard(
         onTap: () => _showTaskDetailSheet(context, task),
         child: Column(
@@ -131,10 +131,10 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
               ],
             ),
             if (output != null) ...[
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(AppSpacing.sm),
+                padding: EdgeInsets.all(AppSpacing.sm),
                 decoration: BoxDecoration(
                   color: context.surfaceSecondary,
                   borderRadius: AppRadius.brSmall,
@@ -149,10 +149,10 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
               ),
             ],
             if (error != null) ...[
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(AppSpacing.sm),
+                padding: EdgeInsets.all(AppSpacing.sm),
                 decoration: BoxDecoration(
                   color: context.error.withValues(alpha: 0.08),
                   borderRadius: AppRadius.brSmall,
@@ -167,7 +167,7 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
               ),
             ],
             if (hasCheckpoint) ...[
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               Row(
                 children: [
                   Icon(Icons.bookmark_outlined, size: 14, color: context.info),
@@ -176,7 +176,7 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
                 ],
               ),
             ],
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Row(
               children: _buildActionButtons(context, task),
             ),
@@ -218,7 +218,7 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
       ));
     }
 
-    buttons.add(const SizedBox(width: AppSpacing.sm));
+    buttons.add(SizedBox(width: AppSpacing.sm));
     buttons.add(Expanded(
       child: AmitiaButton(
         label: '详情',

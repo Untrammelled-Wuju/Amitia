@@ -82,7 +82,7 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> {
       body: SafeArea(
         top: false,
         child: ListView.builder(
-          padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+          padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
           itemCount: _plans.length,
           itemBuilder: (context, index) => _buildMigrationCard(context, _plans[index]),
         ),
@@ -98,7 +98,7 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> {
     final rollbackReason = plan['rollback_reason'] as String?;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
       child: AmitiaCard(
         onTap: () => _showCanaryDetailSheet(context, plan),
         child: Column(
@@ -129,7 +129,7 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> {
                 _buildStatusBadge(status),
               ],
             ),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             if (status == '灰度中') ...[
               Row(
                 children: [
@@ -140,12 +140,12 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> {
                   Text('${progress.toInt()}%', style: AppTypography.label(context).copyWith(color: context.textSecondary)),
                 ],
               ),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
             ],
             if (rollbackReason != null) ...[
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(AppSpacing.sm),
+                padding: EdgeInsets.all(AppSpacing.sm),
                 decoration: BoxDecoration(
                   color: context.error.withValues(alpha: 0.08),
                   borderRadius: AppRadius.brSmall,
@@ -160,7 +160,7 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> {
                   ],
                 ),
               ),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
             ],
             Row(
               children: _buildActionButtons(context, plan),
@@ -184,7 +184,7 @@ class _MigrationsPageState extends ConsumerState<MigrationsPage> {
           onPressed: () => _showCanaryDetailSheet(context, plan),
         ),
       ));
-      buttons.add(const SizedBox(width: AppSpacing.sm));
+      buttons.add(SizedBox(width: AppSpacing.sm));
       buttons.add(Expanded(
         child: AmitiaButton(
           label: '回滚',

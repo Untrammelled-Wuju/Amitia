@@ -77,33 +77,33 @@ class _DesktopContributionsPageState extends ConsumerState<DesktopContributionsP
       body: SafeArea(
         top: false,
         child: ListView(
-          padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+          padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
           children: [
             _buildConflictWarning(context),
             if (shortcuts.isNotEmpty) ...[
               const AmitiaSectionHeader(title: '快捷键'),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               ...shortcuts.map((c) => _buildContributionCard(context, c)),
-              const SizedBox(height: AppSpacing.xl),
+              SizedBox(height: AppSpacing.xl),
             ],
             if (menus.isNotEmpty) ...[
               const AmitiaSectionHeader(title: '菜单贡献'),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               ...menus.map((c) => _buildContributionCard(context, c)),
-              const SizedBox(height: AppSpacing.xl),
+              SizedBox(height: AppSpacing.xl),
             ],
             if (windows.isNotEmpty) ...[
               const AmitiaSectionHeader(title: '桌面窗口'),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               ...windows.map((c) => _buildContributionCard(context, c)),
-              const SizedBox(height: AppSpacing.xl),
+              SizedBox(height: AppSpacing.xl),
             ],
             if (trays.isNotEmpty) ...[
               const AmitiaSectionHeader(title: '托盘贡献'),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               ...trays.map((c) => _buildContributionCard(context, c)),
             ],
-            const SizedBox(height: AppSpacing.xl),
+            SizedBox(height: AppSpacing.xl),
           ],
         ),
       ),
@@ -112,7 +112,7 @@ class _DesktopContributionsPageState extends ConsumerState<DesktopContributionsP
 
   Widget _buildConflictWarning(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       child: AmitiaCard(
         backgroundColor: context.warning.withValues(alpha: 0.06),
         border: Border.all(color: context.warning.withValues(alpha: 0.3), width: 0.5),
@@ -136,7 +136,7 @@ class _DesktopContributionsPageState extends ConsumerState<DesktopContributionsP
     final value = contribution['value'] as String? ?? '';
     final isShortcut = type == '快捷键';
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
       child: AmitiaCard(
         child: Row(
           children: [

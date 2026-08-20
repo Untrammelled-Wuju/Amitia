@@ -115,7 +115,7 @@ class _DevConsolePageState extends ConsumerState<DevConsolePage> {
                     )
                   : ListView.builder(
                       reverse: true,
-                      padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+                      padding: EdgeInsets.only(bottom: AppSpacing.lg),
                       itemCount: _filteredLogs.length,
                       itemBuilder: (context, index) {
                         final log = _filteredLogs[_filteredLogs.length - 1 - index];
@@ -131,7 +131,7 @@ class _DevConsolePageState extends ConsumerState<DevConsolePage> {
 
   Widget _buildFilterBar(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
         border: Border(bottom: BorderSide(color: context.borderPrimary, width: 0.5)),
@@ -139,9 +139,9 @@ class _DevConsolePageState extends ConsumerState<DevConsolePage> {
       child: Column(
         children: [
           _buildFilterRow(context, '级别', _levels, _selectedLevel, (i) => setState(() => _selectedLevel = i)),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           _buildFilterRow(context, '模块', _modules, _selectedModule, (i) => setState(() => _selectedModule = i)),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           _buildFieldSelector(context),
         ],
       ),
@@ -227,7 +227,7 @@ class _DevConsolePageState extends ConsumerState<DevConsolePage> {
   Widget _buildPausedBanner(BuildContext context) {
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 8),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 8),
       color: context.warning.withValues(alpha: 0.1),
       child: Row(
         children: [
@@ -251,8 +251,8 @@ class _DevConsolePageState extends ConsumerState<DevConsolePage> {
     final timeStr = log['time'] as String? ?? '';
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 1),
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 8),
+      margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 1),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 8),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
         border: Border(bottom: BorderSide(color: context.borderSecondary, width: 0.5)),

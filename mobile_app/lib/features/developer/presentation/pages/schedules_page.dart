@@ -74,7 +74,7 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
       body: SafeArea(
         top: false,
         child: ListView.builder(
-          padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+          padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
           itemCount: _schedules.length,
           itemBuilder: (context, index) => _buildScheduleCard(context, _schedules[index]),
         ),
@@ -90,7 +90,7 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
     final lastRun = schedule['last_run'] as String?;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
       child: AmitiaCard(
         onTap: () => _showScheduleDetailSheet(context, schedule),
         child: Column(
@@ -128,11 +128,11 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
                 ),
               ],
             ),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             _buildTimeRow(context, '下次执行', nextRun, Icons.schedule),
             if (lastRun != null)
               _buildTimeRow(context, '最近执行', lastRun, Icons.history),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Row(
               children: [
                 Expanded(
@@ -143,7 +143,7 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
                     onPressed: isEnabled ? () => _showExecuteConfirm(context, schedule) : null,
                   ),
                 ),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: AmitiaButton(
                     label: '跳过',
@@ -224,7 +224,7 @@ class _SchedulesPageState extends ConsumerState<SchedulesPage> {
                             : null,
                       ),
                     ),
-                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(width: AppSpacing.sm),
                     Expanded(
                       child: AmitiaButton(
                         label: '跳过',
