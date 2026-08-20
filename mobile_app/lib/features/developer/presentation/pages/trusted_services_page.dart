@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/app_routes.dart';
@@ -8,7 +9,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../core/services/providers.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 
 class TrustedServicesPage extends ConsumerStatefulWidget {
   const TrustedServicesPage({super.key});
@@ -34,16 +35,37 @@ class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
       _error = null;
     });
     try {
-      final svc = ref.read(systemServiceProvider);
-      final data = await svc.diagnostics();
+      final api = ref.read(backendServiceProvider);
+      final results = await Future.wait([
+        api.get<Map<String, dynamic>>(
+          '/api/extensions/services',
+          fromJson: (e) => Map<String, dynamic>.from(e as Map),
+        ),
+        api.get<Map<String, dynamic>>(
+          '/api/extensions/services/quarantine/list',
+          fromJson: (e) => Map<String, dynamic>.from(e as Map),
+        ),
+      ]);
+      final quarantined = (results[1]?['active'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((e) => (e['service_id'] ?? '').toString())
+          .toSet();
+      final raw = results[0]?['services'] as List<dynamic>? ?? const [];
+      final services = raw.whereType<Map>().map((entry) {
+        final item = Map<String, dynamic>.from(entry);
+        final id = (item['service_id'] ?? '').toString();
+        final state = (item['state'] ?? '').toString().toLowerCase();
+        return <String, dynamic>{
+          'id': id,
+          'name': (item['name'] ?? id).toString(),
+          'run_status': state == 'running' || state == 'ready' ? '已启动' : '已停止',
+          'isolated': quarantined.contains(id),
+          'raw': item,
+        };
+      }).toList();
       if (mounted) {
-        if (data != null) {
-          final services = data['trusted_services'];
-          if (services is List) {
-            _services = services.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-          }
-        }
         setState(() {
+          _services = services;
           _loading = false;
         });
       }
@@ -229,50 +251,67 @@ class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
   }
 
   void _showRegisterSheet(BuildContext context) {
-    final nameController = TextEditingController();
+    final definitionController = TextEditingController(
+      text: const JsonEncoder.withIndent('  ').convert({
+        'service_id': 'service.example',
+        'extension_id': 'manual',
+        'module_id': 'service.example',
+        'name': 'Example Service',
+        'publisher': 'local',
+        'trust_level': 'trusted',
+        'protocol': 'stdio_jsonrpc',
+        'executables': [],
+        'auto_start': false,
+      }),
+    );
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: context.surfacePrimary,
       shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) {
+      builder: (sheetContext) {
         return Padding(
-          padding: EdgeInsets.fromLTRB(20, 0, 20, MediaQuery.of(context).viewInsets.bottom + 34),
+          padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(sheetContext).viewInsets.bottom + 34),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Text('注册可信服务', style: AppTypography.pageTitle(sheetContext)),
               const SizedBox(height: 8),
-              Center(
-                child: Container(width: 40, height: 4, decoration: BoxDecoration(color: context.borderPrimary, borderRadius: BorderRadius.circular(2))),
+              Text('填写完整 ServiceRuntimeDefinition JSON', style: AppTypography.caption(sheetContext)),
+              const SizedBox(height: 12),
+              SizedBox(
+                height: 260,
+                child: TextField(
+                  controller: definitionController,
+                  expands: true,
+                  maxLines: null,
+                  minLines: null,
+                  style: AppTypography.bodySmall(sheetContext).copyWith(fontFamily: 'monospace'),
+                  decoration: const InputDecoration(border: OutlineInputBorder()),
+                ),
               ),
-              const SizedBox(height: 20),
-              Text('注册可信服务', style: AppTypography.pageTitle(context)),
-              const SizedBox(height: 20),
-              Text('服务名称', style: AppTypography.label(context).copyWith(color: context.textSecondary)),
-              const SizedBox(height: 6),
-              AmitiaTextField(hintText: '请输入服务名称', controller: nameController),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
               AmitiaButton(
                 label: '注册服务',
                 isFullWidth: true,
                 icon: Icons.check,
-                onPressed: () {
-                  final name = nameController.text.trim();
-                  if (name.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('请输入服务名称')));
-                    return;
+                onPressed: () async {
+                  try {
+                    final decoded = jsonDecode(definitionController.text);
+                    if (decoded is! Map) throw const FormatException('JSON 必须为对象');
+                    await ref.read(backendServiceProvider).post(
+                      '/api/extensions/services',
+                      data: Map<String, dynamic>.from(decoded),
+                    );
+                    if (!sheetContext.mounted) return;
+                    Navigator.pop(sheetContext);
+                    await _load();
+                  } catch (e) {
+                    if (sheetContext.mounted) {
+                      ScaffoldMessenger.of(sheetContext).showSnackBar(SnackBar(content: Text('注册失败：$e')));
+                    }
                   }
-                  setState(() {
-                    _services.add({
-                      'id': 'ts${_services.length + 1}',
-                      'name': name,
-                      'run_status': '已停止',
-                      'isolated': false,
-                    });
-                  });
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已注册服务：$name')));
                 },
               ),
             ],
@@ -282,53 +321,56 @@ class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
     );
   }
 
-  void _toggleService(BuildContext context, Map<String, dynamic> service, String newStatus) {
-    setState(() {
-      final idx = _services.indexWhere((s) => s['id'] == service['id']);
-      if (idx >= 0) {
-        _services[idx]['run_status'] = newStatus;
+  void _toggleService(BuildContext context, Map<String, dynamic> service, String newStatus) async {
+    final id = (service['id'] ?? '').toString();
+    try {
+      final action = newStatus == '已启动' ? 'start' : 'stop';
+      await ref.read(backendServiceProvider).post(
+        '/api/extensions/services/$id/$action',
+        data: action == 'stop' ? {'reason': 'mobile_user', 'force': false} : <String, dynamic>{},
+      );
+      await _load();
+      if (mounted) {
+        ScaffoldMessenger.of(this.context).showSnackBar(
+          SnackBar(content: Text('服务「${service['name']}」已${newStatus == '已启动' ? '启动' : '停止'}')),
+        );
       }
-    });
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('服务「${service['name']}」已${newStatus == '已启动' ? '启动' : '停止'}')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(this.context).showSnackBar(SnackBar(content: Text('操作失败：$e')));
+    }
   }
 
-  void _showCallResult(BuildContext context, Map<String, dynamic> service) {
-    showDialog(
-      context: context,
-      builder: (context) {
-        return AlertDialog(
-          backgroundColor: context.surfacePrimary,
-          shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
-          title: Text('调用结果', style: AppTypography.cardTitle(context)),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('服务: ${service['name']}', style: AppTypography.body(context)),
-              const SizedBox(height: 8),
-              Container(
-                width: double.infinity,
-                padding: EdgeInsets.all(AppSpacing.md),
-                decoration: BoxDecoration(
-                  color: context.surfaceSecondary,
-                  borderRadius: AppRadius.brSmall,
-                ),
-                child: Text(
-                  '{\n  "status": "ok",\n  "latency": "12ms",\n  "result": "操作成功"\n}',
-                  style: AppTypography.bodySmall(context).copyWith(fontFamily: 'monospace'),
-                ),
+  void _showCallResult(BuildContext context, Map<String, dynamic> service) async {
+    final id = (service['id'] ?? '').toString();
+    try {
+      final result = await ref.read(backendServiceProvider).get<Map<String, dynamic>>(
+        '/api/extensions/services/$id/health',
+        fromJson: (e) => Map<String, dynamic>.from(e as Map),
+      );
+      if (!context.mounted) return;
+      showDialog(
+        context: context,
+        builder: (dialogContext) {
+          return AlertDialog(
+            backgroundColor: dialogContext.surfacePrimary,
+            shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
+            title: Text('健康检查', style: AppTypography.cardTitle(dialogContext)),
+            content: SelectableText(
+              const JsonEncoder.withIndent('  ').convert(result ?? const {}),
+              style: AppTypography.bodySmall(dialogContext).copyWith(fontFamily: 'monospace'),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text('关闭', style: TextStyle(color: dialogContext.accentPrimary)),
               ),
             ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text('关闭', style: TextStyle(color: context.accentPrimary)),
-            ),
-          ],
-        );
-      },
-    );
+          );
+        },
+      );
+    } catch (e) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('健康检查失败：$e')));
+    }
   }
 
   void _showUnregisterConfirm(BuildContext context, Map<String, dynamic> service) {
@@ -346,12 +388,16 @@ class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
               child: Text('取消', style: TextStyle(color: context.textSecondary)),
             ),
             TextButton(
-              onPressed: () {
-                setState(() {
-                  _services.removeWhere((s) => s['id'] == service['id']);
-                });
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已注销服务：${service['name']}')));
+              onPressed: () async {
+                final id = (service['id'] ?? '').toString();
+                try {
+                  await ref.read(backendServiceProvider).delete('/api/extensions/services/$id');
+                  if (!context.mounted) return;
+                  Navigator.pop(context);
+                  await _load();
+                } catch (e) {
+                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('注销失败：$e')));
+                }
               },
               child: Text('注销', style: TextStyle(color: context.error)),
             ),
@@ -376,16 +422,19 @@ class _TrustedServicesPageState extends ConsumerState<TrustedServicesPage> {
               child: Text('取消', style: TextStyle(color: context.textSecondary)),
             ),
             TextButton(
-              onPressed: () {
-                setState(() {
-                  final idx = _services.indexWhere((s) => s['id'] == service['id']);
-                  if (idx >= 0) {
-                    _services[idx]['run_status'] = '已停止';
-                    _services[idx]['isolated'] = false;
-                  }
-                });
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已解除隔离：${service['name']}')));
+              onPressed: () async {
+                final id = (service['id'] ?? '').toString();
+                try {
+                  await ref.read(backendServiceProvider).post(
+                    '/api/extensions/services/quarantine/$id/release',
+                    data: {'reason': 'mobile_user'},
+                  );
+                  if (!context.mounted) return;
+                  Navigator.pop(context);
+                  await _load();
+                } catch (e) {
+                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('解除失败：$e')));
+                }
               },
               child: Text('解除', style: TextStyle(color: context.success)),
             ),

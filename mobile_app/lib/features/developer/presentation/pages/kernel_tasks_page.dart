@@ -8,7 +8,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../core/services/providers.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 
 class KernelTasksPage extends ConsumerStatefulWidget {
   const KernelTasksPage({super.key});
@@ -34,19 +34,29 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
       _error = null;
     });
     try {
-      final svc = ref.read(systemServiceProvider);
-      final nodes = await svc.graphNodes();
+      final api = ref.read(backendServiceProvider);
+      final data = await api.get<Map<String, dynamic>>(
+        '/api/extensions/tasks',
+        queryParameters: {'limit': 200},
+        fromJson: (e) => Map<String, dynamic>.from(e as Map),
+      );
+      final items = data?['items'] as List<dynamic>? ?? const [];
+      final tasks = items.whereType<Map>().map((entry) {
+        final item = Map<String, dynamic>.from(entry);
+        final status = (item['status'] ?? '').toString();
+        return <String, dynamic>{
+          'id': (item['taskRunId'] ?? '').toString(),
+          'name': (item['taskDefinitionId'] ?? item['taskRunId'] ?? '任务').toString(),
+          'status': _taskStatusLabel(status),
+          'output': item['resultArtifactId']?.toString(),
+          'error': item['errorMessage']?.toString(),
+          'hasCheckpoint': item['checkpointId'] != null,
+          'taskDefinitionId': (item['taskDefinitionId'] ?? '').toString(),
+          'input': item['input'],
+          'rawStatus': status,
+        };
+      }).toList();
       if (mounted) {
-        final tasks = nodes.map((n) {
-          return {
-            'id': n['id'] ?? '',
-            'name': n['label'] ?? n['name'] ?? '任务',
-            'status': n['status'] ?? '已完成',
-            'output': n['output'],
-            'error': n['error'],
-            'hasCheckpoint': n['has_checkpoint'] ?? false,
-          };
-        }).toList();
         setState(() {
           _tasks = tasks;
           _loading = false;
@@ -59,6 +69,27 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
           _loading = false;
         });
       }
+    }
+  }
+
+  String _taskStatusLabel(String status) {
+    switch (status.toLowerCase()) {
+      case 'running':
+      case 'leased':
+      case 'queued':
+        return '运行中';
+      case 'paused':
+      case 'pause_requested':
+        return '已暂停';
+      case 'succeeded':
+        return '已完成';
+      case 'failed':
+        return '失败';
+      case 'cancelled':
+      case 'cancelling':
+        return '已取消';
+      default:
+        return status;
     }
   }
 
@@ -342,16 +373,23 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
               child: Text('取消', style: TextStyle(color: context.textSecondary)),
             ),
             TextButton(
-              onPressed: () {
-                setState(() {
-                  final idx = _tasks.indexWhere((t) => t['id'] == task['id']);
-                  if (idx >= 0) {
-                    _tasks[idx]['status'] = '运行中';
-                    _tasks[idx]['output'] = '处理中...';
-                  }
-                });
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已开始执行：${task['name']}')));
+              onPressed: () async {
+                final definitionId = (task['taskDefinitionId'] ?? '').toString();
+                try {
+                  await ref.read(backendServiceProvider).post(
+                    '/api/extensions/tasks',
+                    data: {
+                      'taskDefinitionId': definitionId,
+                      'input': task['input'] ?? <String, dynamic>{},
+                      'source': 'mobile_manual',
+                    },
+                  );
+                  if (!context.mounted) return;
+                  Navigator.pop(context);
+                  await _load();
+                } catch (e) {
+                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('执行失败：$e')));
+                }
               },
               child: Text('执行', style: TextStyle(color: context.accentPrimary)),
             ),
@@ -376,16 +414,19 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
               child: Text('返回', style: TextStyle(color: context.textSecondary)),
             ),
             TextButton(
-              onPressed: () {
-                setState(() {
-                  final idx = _tasks.indexWhere((t) => t['id'] == task['id']);
-                  if (idx >= 0) {
-                    _tasks[idx]['status'] = '已暂停';
-                    _tasks[idx]['hasCheckpoint'] = true;
-                  }
-                });
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已取消任务：${task['name']}')));
+              onPressed: () async {
+                final id = (task['id'] ?? '').toString();
+                try {
+                  await ref.read(backendServiceProvider).post(
+                    '/api/extensions/tasks/$id/cancel',
+                    data: {'reason': 'mobile_user'},
+                  );
+                  if (!context.mounted) return;
+                  Navigator.pop(context);
+                  await _load();
+                } catch (e) {
+                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('取消失败：$e')));
+                }
               },
               child: Text('确认取消', style: TextStyle(color: context.warning)),
             ),
@@ -395,14 +436,15 @@ class _KernelTasksPageState extends ConsumerState<KernelTasksPage> {
     );
   }
 
-  void _resumeTask(BuildContext context, Map<String, dynamic> task) {
-    setState(() {
-      final idx = _tasks.indexWhere((t) => t['id'] == task['id']);
-      if (idx >= 0) {
-        _tasks[idx]['status'] = '运行中';
-        _tasks[idx]['output'] = '处理中...';
-      }
-    });
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已恢复任务：${task['name']}')));
+  void _resumeTask(BuildContext context, Map<String, dynamic> task) async {
+    final id = (task['id'] ?? '').toString();
+    try {
+      await ref.read(backendServiceProvider).post('/api/extensions/tasks/$id/resume');
+      await _load();
+      if (mounted) ScaffoldMessenger.of(this.context).showSnackBar(SnackBar(content: Text('已恢复任务：${task['name']}')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(this.context).showSnackBar(SnackBar(content: Text('恢复失败：$e')));
+    }
   }
+
 }

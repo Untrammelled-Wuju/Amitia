@@ -18,6 +18,7 @@ class DefaultRuntimeBootstrap implements RuntimeBootstrap {
   Future<void>? _initialization;
   bool _disposed = false;
   bool _autoStartDecided = false;
+  bool _autoInstallDecided = false;
   int _lastGeneration = 0;
 
   RuntimeBootstrapSnapshot _current = RuntimeBootstrapSnapshot.initial();
@@ -60,6 +61,13 @@ class DefaultRuntimeBootstrap implements RuntimeBootstrap {
 
     final phase = _mapToBootstrapPhase(snapshot);
     _updatePhase(phase, snapshot);
+
+    if (!_autoInstallDecided &&
+        _policy.autoInstallRuntime &&
+        snapshot.state == RuntimeBridgeState.notInstalled) {
+      _autoInstallDecided = true;
+      unawaited(_requestInstall());
+    }
 
     if (!_autoStartDecided &&
         _policy.autoStartInstalledRuntime &&
@@ -104,6 +112,14 @@ class DefaultRuntimeBootstrap implements RuntimeBootstrap {
 
   Future<void> _requestStart() async {
     await _bridge.start();
+  }
+
+  Future<void> _requestInstall() async {
+    final result = await _bridge.install();
+    if (_disposed) return;
+    if (result.accepted) {
+      await _bridge.start();
+    }
   }
 
   void _handleBridgeError() {

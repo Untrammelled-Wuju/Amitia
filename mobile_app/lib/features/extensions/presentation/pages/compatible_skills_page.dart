@@ -8,6 +8,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/widgets/amitia_drawer.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/services/error_utils.dart';
 
@@ -22,6 +23,7 @@ class _CompatibleSkillsPageState extends ConsumerState<CompatibleSkillsPage> {
   List<Map<String, dynamic>> _skills = [];
   bool _loading = true;
   String? _error;
+  String _characterId = '';
 
   @override
   void initState() {
@@ -29,12 +31,27 @@ class _CompatibleSkillsPageState extends ConsumerState<CompatibleSkillsPage> {
     _loadSkills();
   }
 
+  Future<String> _resolveCharacterId() async {
+    final selected = ref.read(currentCharacterIdProvider);
+    final characters = await ref.read(characterServiceProvider).list();
+    if (characters.isEmpty) {
+      throw StateError('请先创建角色后再管理兼容技能');
+    }
+    final match = characters.where((item) => item.id == selected).firstOrNull;
+    final resolved = match?.id ??
+        characters.where((item) => item.isActive == 1).firstOrNull?.id ??
+        characters.first.id;
+    ref.read(currentCharacterIdProvider.notifier).state = resolved;
+    return resolved;
+  }
+
   Future<void> _loadSkills() async {
     setState(() { _loading = true; _error = null; });
     try {
       final svc = ref.read(extensionServiceProvider);
-      final data = await svc.skills();
-      if (mounted) setState(() { _skills = data; _loading = false; });
+      final characterId = await _resolveCharacterId();
+      final data = await svc.skills(characterId: characterId);
+      if (mounted) setState(() { _characterId = characterId; _skills = data; _loading = false; });
     } catch (e) {
       if (mounted) setState(() { _error = safeErrorMessage(e); _loading = false; });
     }
@@ -206,73 +223,58 @@ class _CompatibleSkillsPageState extends ConsumerState<CompatibleSkillsPage> {
     );
   }
 
-  void _showVersionCompareDialog(Map<String, dynamic> skill) {
-    final version = (skill['version'] ?? '1.0.0').toString();
-    final previousVersion = skill['previousVersion']?.toString();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: context.surfacePrimary,
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
-        title: Text('版本比较', style: AppTypography.cardTitle(context)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
+  Future<void> _showVersionCompareDialog(Map<String, dynamic> skill) async {
+    final id = (skill['id'] ?? '').toString();
+    try {
+      final detail = await ref.read(extensionServiceProvider).getSkill(id, characterId: _characterId);
+      if (!mounted || detail == null) return;
+      final versions = ((detail['versions'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList(growable: false);
+      final currentVersion = (detail['version'] ?? skill['version'] ?? '').toString();
+      final current = versions.where((item) => item['version']?.toString() == currentVersion).firstOrNull;
+      final previous = versions.where((item) => item['version']?.toString() != currentVersion).firstOrNull;
+      if (!mounted) return;
+      showDialog(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: dialogContext.surfacePrimary,
+          shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
+          title: Text('版本信息', style: AppTypography.cardTitle(dialogContext)),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: context.surfaceSecondary,
-                      borderRadius: AppRadius.brSmall,
-                    ),
-                    child: Column(
-                      children: [
-                        Text('旧版本', style: AppTypography.label(context)),
-                        const SizedBox(height: 4),
-                        Text('v${previousVersion ?? 'N/A'}', style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600)),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Icon(Icons.arrow_forward, color: context.accentPrimary),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: context.accentSoft,
-                      borderRadius: AppRadius.brSmall,
-                    ),
-                    child: Column(
-                      children: [
-                        Text('当前版本', style: AppTypography.label(context).copyWith(color: context.accentPrimary)),
-                        const SizedBox(height: 4),
-                        Text('v$version', style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600, color: context.accentPrimary)),
-                      ],
-                    ),
-                  ),
+                _VersionInfoCard(label: '当前版本', version: currentVersion, record: current, highlighted: true),
+                if (previous != null) ...[
+                  const SizedBox(height: 10),
+                  _VersionInfoCard(label: '上一可用版本', version: (previous['version'] ?? '').toString(), record: previous),
+                ],
+                const SizedBox(height: 12),
+                Text('能力声明', style: AppTypography.caption(dialogContext).copyWith(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 6),
+                Text(
+                  ((detail['capabilities'] as List?) ?? const []).map((e) => e.toString()).join('、').trim().isEmpty
+                      ? '未声明额外能力'
+                      : ((detail['capabilities'] as List?) ?? const []).map((e) => e.toString()).join('、'),
+                  style: AppTypography.bodySmall(dialogContext),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
-            Text('变更内容', style: AppTypography.caption(context).copyWith(fontWeight: FontWeight.w600)),
-            const SizedBox(height: 8),
-            _CompareItem(text: '接口签名兼容', isPositive: true),
-            _CompareItem(text: '性能提升约 15%', isPositive: true),
-            _CompareItem(text: '新增 2 个可选参数', isPositive: true),
-            if (previousVersion != null && version.split('.').first != previousVersion.split('.').first)
-              _CompareItem(text: '主版本升级，存在破坏性变更', isPositive: false),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: Text('关闭', style: TextStyle(color: dialogContext.textSecondary))),
           ],
         ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('关闭', style: TextStyle(color: context.textSecondary))),
-        ],
-      ),
-    );
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('读取版本信息失败: ${safeErrorMessage(e)}'), backgroundColor: context.error));
+      }
+    }
   }
 
   void _showDisableConfirm(Map<String, dynamic> skill) {
@@ -305,9 +307,9 @@ class _CompatibleSkillsPageState extends ConsumerState<CompatibleSkillsPage> {
     try {
       final svc = ref.read(extensionServiceProvider);
       if (isEnabled) {
-        await svc.disableSkill(id);
+        await svc.disableSkill(id, characterId: _characterId);
       } else {
-        await svc.enableSkill(id);
+        await svc.enableSkill(id, characterId: _characterId);
       }
       _loadSkills();
       if (mounted) {
@@ -325,68 +327,135 @@ class _CompatibleSkillsPageState extends ConsumerState<CompatibleSkillsPage> {
   }
 
   void _showRollbackConfirm(Map<String, dynamic> skill) {
+    final id = (skill['id'] ?? '').toString();
     final name = (skill['name'] ?? '').toString();
-    final version = (skill['version'] ?? '1.0.0').toString();
+    final version = (skill['version'] ?? '').toString();
     final previousVersion = skill['previousVersion']?.toString();
+    if (previousVersion == null || previousVersion.isEmpty) return;
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: context.surfacePrimary,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: dialogContext.surfacePrimary,
         shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
-        title: Text('回滚版本', style: AppTypography.cardTitle(context)),
-        content: Text('确定要将「$name」从 v$version 回滚到 v$previousVersion 吗？', style: AppTypography.bodySmall(context)),
+        title: Text('回滚版本', style: AppTypography.cardTitle(dialogContext)),
+        content: Text('确定要将「$name」从 v$version 回滚到 v$previousVersion 吗？', style: AppTypography.bodySmall(dialogContext)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('取消', style: TextStyle(color: context.textSecondary))),
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: Text('取消', style: TextStyle(color: dialogContext.textSecondary))),
           TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(this.context).showSnackBar(
-                SnackBar(content: Text('$name 已回滚到 v$previousVersion'), backgroundColor: context.info),
-              );
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              try {
+                await ref.read(extensionServiceProvider).rollbackSkill(id, previousVersion, characterId: _characterId);
+                await _loadSkills();
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('$name 已回滚到 v$previousVersion'), backgroundColor: context.info));
+                }
+              } catch (e) {
+                if (mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('回滚失败: ${safeErrorMessage(e)}'), backgroundColor: context.error));
+                }
+              }
             },
-            child: Text('回滚', style: TextStyle(color: context.warning)),
+            child: Text('回滚', style: TextStyle(color: dialogContext.warning)),
           ),
         ],
       ),
     );
   }
 
-  void _showPermissionSettings(Map<String, dynamic> skill) {
-    showDialog(
-      context: context,
-      builder: (context) => _PermissionDialog(skillName: (skill['name'] ?? '').toString()),
-    );
-  }
-
-  void _runTest(Map<String, dynamic> skill) {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => _TestRunningDialog(skillName: (skill['name'] ?? '').toString()),
-    );
-    Future.delayed(const Duration(seconds: 2), () {
+  Future<void> _showPermissionSettings(Map<String, dynamic> skill) async {
+    final id = (skill['id'] ?? '').toString();
+    final name = (skill['name'] ?? '').toString();
+    try {
+      final detail = await ref.read(extensionServiceProvider).getSkill(id, characterId: _characterId);
+      if (!mounted || detail == null) return;
+      final grants = ((detail['permissions'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList(growable: false);
+      final capabilities = ((detail['capabilities'] as List?) ?? const []).map((e) => e.toString()).toList(growable: false);
       if (!mounted) return;
-      Navigator.pop(context);
       showDialog(
         context: context,
-        builder: (context) => _TestResultDialog(
-          skillName: (skill['name'] ?? '').toString(),
-          isPassed: true,
-          onConfirm: () {
-            Navigator.pop(context);
+        builder: (dialogContext) => _PermissionDialog(
+          skillName: name,
+          characterId: _characterId,
+          capabilities: capabilities,
+          grants: grants,
+          onSave: (updated) async {
+            await ref.read(extensionServiceProvider).updatePermissions(id, {
+              'characterId': _characterId,
+              'grants': updated,
+            });
           },
         ),
       );
-    });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('读取权限失败: ${safeErrorMessage(e)}'), backgroundColor: context.error));
+      }
+    }
   }
 
-  void _showExecutionHistory(Map<String, dynamic> skill) {
-    showModalBottomSheet(
+  Future<void> _runTest(Map<String, dynamic> skill) async {
+    final id = (skill['id'] ?? '').toString();
+    final name = (skill['name'] ?? '').toString();
+    showDialog(
       context: context,
-      backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
-      builder: (context) => _ExecutionHistorySheet(skillName: (skill['name'] ?? '').toString()),
+      barrierDismissible: false,
+      builder: (dialogContext) => _TestRunningDialog(skillName: name),
     );
+    Map<String, dynamic>? result;
+    Object? failure;
+    try {
+      result = await ref.read(extensionServiceProvider).executeSkill(id, {
+        'characterId': _characterId,
+        'channel': 'mobile',
+        'input': <String, dynamic>{},
+        'idempotencyKey': 'mobile-test-$id-${DateTime.now().microsecondsSinceEpoch}',
+      });
+    } catch (e) {
+      failure = e;
+    }
+    if (!mounted) return;
+    Navigator.of(context, rootNavigator: true).pop();
+    final status = (result?['status'] ?? '').toString();
+    final passed = failure == null && (status == 'succeeded' || status == 'partially_succeeded');
+    showDialog(
+      context: context,
+      builder: (dialogContext) => _TestResultDialog(
+        skillName: name,
+        isPassed: passed,
+        result: result ?? const <String, dynamic>{},
+        errorText: failure == null ? null : safeErrorMessage(failure),
+        onConfirm: () => Navigator.pop(dialogContext),
+      ),
+    );
+    await _loadSkills();
+  }
+
+  Future<void> _showExecutionHistory(Map<String, dynamic> skill) async {
+    final id = (skill['id'] ?? '').toString();
+    final name = (skill['name'] ?? '').toString();
+    try {
+      final page = await ref.read(extensionServiceProvider).skillRuns(id, _characterId);
+      final runs = ((page['items'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList(growable: false);
+      if (!mounted) return;
+      showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: context.surfacePrimary,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+        builder: (sheetContext) => _ExecutionHistorySheet(skillName: name, runs: runs),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('读取执行历史失败: ${safeErrorMessage(e)}'), backgroundColor: context.error));
+      }
+    }
   }
 }
 
@@ -421,21 +490,39 @@ class _ActionChip extends StatelessWidget {
   }
 }
 
-class _CompareItem extends StatelessWidget {
-  final String text;
-  final bool isPositive;
+class _VersionInfoCard extends StatelessWidget {
+  final String label;
+  final String version;
+  final Map<String, dynamic>? record;
+  final bool highlighted;
 
-  const _CompareItem({required this.text, required this.isPositive});
+  const _VersionInfoCard({required this.label, required this.version, this.record, this.highlighted = false});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
+    final checksum = (record?['checksum'] ?? '').toString();
+    final createdAt = (record?['createdAt'] ?? '').toString();
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: highlighted ? context.accentSoft : context.surfaceSecondary,
+        borderRadius: AppRadius.brSmall,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(isPositive ? Icons.check_circle : Icons.warning, size: 16, color: isPositive ? context.success : context.warning),
-          const SizedBox(width: 8),
-          Expanded(child: Text(text, style: AppTypography.bodySmall(context))),
+          Text(label, style: AppTypography.label(context).copyWith(color: highlighted ? context.accentPrimary : context.textSecondary)),
+          const SizedBox(height: 4),
+          Text('v${version.isEmpty ? '未知' : version}', style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600)),
+          if (createdAt.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text('创建时间：$createdAt', style: AppTypography.label(context)),
+          ],
+          if (checksum.isNotEmpty) ...[
+            const SizedBox(height: 2),
+            Text('校验：${checksum.length > 20 ? '${checksum.substring(0, 20)}…' : checksum}', style: AppTypography.label(context)),
+          ],
         ],
       ),
     );
@@ -444,20 +531,71 @@ class _CompareItem extends StatelessWidget {
 
 class _PermissionDialog extends StatefulWidget {
   final String skillName;
+  final String characterId;
+  final List<String> capabilities;
+  final List<Map<String, dynamic>> grants;
+  final Future<void> Function(List<Map<String, dynamic>> grants) onSave;
 
-  const _PermissionDialog({required this.skillName});
+  const _PermissionDialog({
+    required this.skillName,
+    required this.characterId,
+    required this.capabilities,
+    required this.grants,
+    required this.onSave,
+  });
 
   @override
   State<_PermissionDialog> createState() => _PermissionDialogState();
 }
 
 class _PermissionDialogState extends State<_PermissionDialog> {
-  final _permissions = {
-    '文件读取': true,
-    '网络访问': true,
-    '进程执行': false,
-    '系统配置': false,
+  late final Map<String, String> _decisions;
+  bool _saving = false;
+  String? _error;
+
+  static const _decisionLabels = <String, String>{
+    'deny': '拒绝',
+    'allow_once': '允许一次',
+    'allow_character': '允许当前角色',
+    'allow_always': '始终允许',
   };
+
+  @override
+  void initState() {
+    super.initState();
+    _decisions = <String, String>{};
+    for (final capability in widget.capabilities) {
+      final current = widget.grants.where((grant) => grant['capability']?.toString() == capability).firstOrNull;
+      final decision = (current?['decision'] ?? 'deny').toString();
+      _decisions[capability] = _decisionLabels.containsKey(decision) ? decision : 'deny';
+    }
+  }
+
+  List<Map<String, dynamic>> _buildGrants() {
+    return widget.capabilities.map((capability) {
+      final decision = _decisions[capability] ?? 'deny';
+      final global = decision == 'allow_always';
+      return <String, dynamic>{
+        'capability': capability,
+        'decision': decision,
+        'scopeType': global ? 'global' : 'character',
+        'scopeId': global ? '' : widget.characterId,
+      };
+    }).toList(growable: false);
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() { _saving = true; _error = null; });
+    try {
+      await widget.onSave(_buildGrants());
+      if (!mounted) return;
+      Navigator.pop(context);
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${widget.skillName} 权限已更新'), backgroundColor: context.success));
+    } catch (e) {
+      if (mounted) setState(() { _saving = false; _error = safeErrorMessage(e); });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -467,26 +605,42 @@ class _PermissionDialogState extends State<_PermissionDialog> {
       title: Text('${widget.skillName} - 权限', style: AppTypography.cardTitle(context)),
       content: SizedBox(
         width: double.maxFinite,
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: _permissions.entries.map((e) => AmitiaSwitchTile(
-                title: e.key,
-                value: e.value,
-                onChanged: (val) => setState(() => _permissions[e.key] = val),
-              )).toList(),
-        ),
+        child: widget.capabilities.isEmpty
+            ? Text('该技能未声明权限能力。', style: AppTypography.bodySmall(context))
+            : SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final capability in widget.capabilities)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 10),
+                        child: Row(
+                          children: [
+                            Expanded(child: Text(capability, style: AppTypography.bodySmall(context))),
+                            const SizedBox(width: 12),
+                            DropdownButton<String>(
+                              value: _decisions[capability] ?? 'deny',
+                              underline: const SizedBox.shrink(),
+                              items: _decisionLabels.entries
+                                  .map((entry) => DropdownMenuItem(value: entry.key, child: Text(entry.value)))
+                                  .toList(growable: false),
+                              onChanged: _saving ? null : (value) => setState(() => _decisions[capability] = value ?? 'deny'),
+                            ),
+                          ],
+                        ),
+                      ),
+                    if (_error != null)
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: Text(_error!, style: AppTypography.label(context).copyWith(color: context.error)),
+                      ),
+                  ],
+                ),
+              ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: Text('取消', style: TextStyle(color: context.textSecondary))),
-        TextButton(
-          onPressed: () {
-            Navigator.pop(context);
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('${widget.skillName} 权限已更新'), backgroundColor: context.success),
-            );
-          },
-          child: Text('保存', style: TextStyle(color: context.accentPrimary)),
-        ),
+        TextButton(onPressed: _saving ? null : () => Navigator.pop(context), child: Text('取消', style: TextStyle(color: context.textSecondary))),
+        TextButton(onPressed: _saving || widget.capabilities.isEmpty ? null : _save, child: Text(_saving ? '保存中...' : '保存', style: TextStyle(color: context.accentPrimary))),
       ],
     );
   }
@@ -507,9 +661,9 @@ class _TestRunningDialog extends StatelessWidget {
         children: [
           CircularProgressIndicator(color: context.accentPrimary),
           SizedBox(height: AppSpacing.md),
-          Text('正在测试「$skillName」...', style: AppTypography.bodySmall(context)),
+          Text('正在执行「$skillName」...', style: AppTypography.bodySmall(context)),
           const SizedBox(height: 4),
-          Text('请稍候', style: AppTypography.label(context)),
+          Text('执行结果由后端运行时返回', style: AppTypography.label(context)),
         ],
       ),
     );
@@ -519,12 +673,26 @@ class _TestRunningDialog extends StatelessWidget {
 class _TestResultDialog extends StatelessWidget {
   final String skillName;
   final bool isPassed;
+  final Map<String, dynamic> result;
+  final String? errorText;
   final VoidCallback onConfirm;
 
-  const _TestResultDialog({required this.skillName, required this.isPassed, required this.onConfirm});
+  const _TestResultDialog({
+    required this.skillName,
+    required this.isPassed,
+    required this.result,
+    required this.errorText,
+    required this.onConfirm,
+  });
 
   @override
   Widget build(BuildContext context) {
+    final status = (result['status'] ?? (isPassed ? 'succeeded' : 'failed')).toString();
+    final duration = (result['durationMs'] ?? 0).toString();
+    final runId = (result['runId'] ?? '').toString();
+    final visibleText = (result['visibleText'] ?? '').toString();
+    final backendError = result['error'];
+    final detail = errorText ?? (backendError is Map ? (backendError['detail'] ?? backendError['message'])?.toString() : null);
     return AlertDialog(
       backgroundColor: context.surfacePrimary,
       shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
@@ -532,31 +700,25 @@ class _TestResultDialog extends StatelessWidget {
         children: [
           Icon(isPassed ? Icons.check_circle : Icons.cancel, color: isPassed ? context.success : context.error, size: 28),
           const SizedBox(width: 10),
-          Text('测试结果', style: AppTypography.cardTitle(context)),
+          Text('执行结果', style: AppTypography.cardTitle(context)),
         ],
       ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('$skillName 测试${isPassed ? '通过' : '失败'}', style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600)),
-          const SizedBox(height: 12),
-          _ResultRow(label: '接口测试', passed: true),
-          _ResultRow(label: '参数验证', passed: true),
-          _ResultRow(label: '超时测试', passed: true),
-          _ResultRow(label: '并发测试', passed: isPassed),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: (isPassed ? context.success : context.error).withValues(alpha: 0.08),
-              borderRadius: AppRadius.brSmall,
-            ),
-            child: Text(
-              isPassed ? '全部测试项通过，技能运行正常。' : '并发测试未通过，建议检查资源占用。',
-              style: AppTypography.label(context).copyWith(color: isPassed ? context.success : context.error),
-            ),
-          ),
+          Text('$skillName · $status', style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600)),
+          const SizedBox(height: 10),
+          if (runId.isNotEmpty) Text('Run ID：$runId', style: AppTypography.label(context)),
+          Text('耗时：${duration}ms', style: AppTypography.label(context)),
+          if (visibleText.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(visibleText, style: AppTypography.bodySmall(context)),
+          ],
+          if (detail != null && detail.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            Text(detail, style: AppTypography.bodySmall(context).copyWith(color: context.error)),
+          ],
         ],
       ),
       actions: [
@@ -566,88 +728,76 @@ class _TestResultDialog extends StatelessWidget {
   }
 }
 
-class _ResultRow extends StatelessWidget {
-  final String label;
-  final bool passed;
-
-  const _ResultRow({required this.label, required this.passed});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Row(
-        children: [
-          Icon(passed ? Icons.check : Icons.close, size: 16, color: passed ? context.success : context.error),
-          const SizedBox(width: 8),
-          Expanded(child: Text(label, style: AppTypography.bodySmall(context))),
-          Text(passed ? '通过' : '失败', style: TextStyle(fontSize: 12, color: passed ? context.success : context.error, fontWeight: FontWeight.w500)),
-        ],
-      ),
-    );
-  }
-}
-
 class _ExecutionHistorySheet extends StatelessWidget {
   final String skillName;
+  final List<Map<String, dynamic>> runs;
 
-  const _ExecutionHistorySheet({required this.skillName});
+  const _ExecutionHistorySheet({required this.skillName, required this.runs});
 
   @override
   Widget build(BuildContext context) {
-    final history = [
-      {'time': '2026-07-30 09:18', 'status': '成功', 'duration': '1.2秒'},
-      {'time': '2026-07-29 14:22', 'status': '成功', 'duration': '0.8秒'},
-      {'time': '2026-07-28 10:05', 'status': '失败', 'duration': '超时'},
-      {'time': '2026-07-27 16:40', 'status': '成功', 'duration': '1.5秒'},
-      {'time': '2026-07-26 11:12', 'status': '成功', 'duration': '0.9秒'},
-    ];
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 34),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(width: 40, height: 4, decoration: BoxDecoration(color: context.borderPrimary, borderRadius: BorderRadius.circular(2))),
-          ),
-          const SizedBox(height: 20),
-          Text('$skillName - 执行历史', style: AppTypography.pageTitle(context)),
-          const SizedBox(height: 16),
-          ...history.map((h) => Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: context.surfacePrimary,
-                    borderRadius: AppRadius.brSmall,
-                    border: Border.all(color: context.borderPrimary, width: 0.5),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(h['status'] == '成功' ? Icons.check_circle : Icons.error, size: 18, color: h['status'] == '成功' ? context.success : context.error),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(h['time']!, style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w500)),
-                            const SizedBox(height: 2),
-                            Text('耗时：${h['duration']}', style: AppTypography.label(context)),
-                          ],
-                        ),
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: context.borderPrimary, borderRadius: BorderRadius.circular(2)))),
+            const SizedBox(height: 20),
+            Text('$skillName - 执行历史', style: AppTypography.pageTitle(context)),
+            const SizedBox(height: 16),
+            if (runs.isEmpty)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 28),
+                child: Center(child: Text('暂无真实执行记录', style: AppTypography.bodySmall(context))),
+              )
+            else
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: runs.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final run = runs[index];
+                    final status = (run['status'] ?? '').toString();
+                    final success = status == 'succeeded' || status == 'partially_succeeded';
+                    final duration = (run['durationMs'] ?? 0).toString();
+                    final startedAt = (run['startedAt'] ?? '').toString();
+                    final detail = (run['errorDetail'] ?? run['outputSummary'] ?? '').toString();
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: context.surfacePrimary,
+                        borderRadius: AppRadius.brSmall,
+                        border: Border.all(color: context.borderPrimary, width: 0.5),
                       ),
-                      AmitiaStatusBadge(
-                        label: h['status']!,
-                        type: h['status'] == '成功' ? BadgeType.success : BadgeType.error,
+                      child: Row(
+                        children: [
+                          Icon(success ? Icons.check_circle : Icons.error_outline, size: 18, color: success ? context.success : context.error),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(startedAt.isEmpty ? (run['runId'] ?? '').toString() : startedAt, style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w500)),
+                                const SizedBox(height: 2),
+                                Text('耗时：${duration}ms${detail.isEmpty ? '' : ' · $detail'}', style: AppTypography.label(context), maxLines: 2, overflow: TextOverflow.ellipsis),
+                              ],
+                            ),
+                          ),
+                          AmitiaStatusBadge(label: status.isEmpty ? '未知' : status, type: success ? BadgeType.success : BadgeType.error),
+                        ],
                       ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
-              )),
-          const SizedBox(height: 8),
-          AmitiaButton(label: '关闭', isFullWidth: true, isSecondary: true, onPressed: () => Navigator.pop(context)),
-        ],
+              ),
+            const SizedBox(height: 12),
+            AmitiaButton(label: '关闭', isFullWidth: true, isSecondary: true, onPressed: () => Navigator.pop(context)),
+          ],
+        ),
       ),
     );
   }

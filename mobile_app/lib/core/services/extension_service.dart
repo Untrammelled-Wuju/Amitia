@@ -187,61 +187,175 @@ class ExtensionService {
     return ExtensionCenterView.fromJson(resp);
   }
 
-  Future<List<Map<String, dynamic>>> skills() async {
-    final resp = await _api.get<List<dynamic>>('/api/extensions/skills');
+  Future<List<Map<String, dynamic>>> skills({String characterId = ''}) async {
+    final resp = await _api.get<List<dynamic>>(
+      '/api/extensions/skills',
+      queryParameters: {if (characterId.isNotEmpty) 'characterId': characterId},
+    );
     if (resp == null) return [];
     return resp.map((e) => e as Map<String, dynamic>).toList();
   }
 
-  Future<bool> enableSkill(String id) async {
-    await _api.post('/api/extensions/skills/$id/enable');
+  Future<bool> enableSkill(String id, {String characterId = ''}) async {
+    await _api.post(
+      '/api/extensions/skills/${Uri.encodeComponent(id)}/enable${characterId.isNotEmpty ? '?characterId=${Uri.encodeQueryComponent(characterId)}' : ''}',
+    );
     return true;
   }
 
-  Future<bool> disableSkill(String id) async {
-    await _api.post('/api/extensions/skills/$id/disable');
+  Future<bool> disableSkill(String id, {String characterId = ''}) async {
+    await _api.post(
+      '/api/extensions/skills/${Uri.encodeComponent(id)}/disable${characterId.isNotEmpty ? '?characterId=${Uri.encodeQueryComponent(characterId)}' : ''}',
+    );
     return true;
   }
 
-  Future<Map<String, dynamic>?> getSkill(String id) async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/extensions/skills/$id');
+  Future<Map<String, dynamic>?> getSkill(String id, {String characterId = ''}) async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/extensions/skills/${Uri.encodeComponent(id)}',
+      queryParameters: {if (characterId.isNotEmpty) 'characterId': characterId},
+    );
     return resp;
   }
 
-  Future<Map<String, dynamic>?> getPermissions(String id) async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/extensions/skills/$id/permissions');
-    return resp;
+  Future<List<Map<String, dynamic>>> getPermissions(String id, {String characterId = ''}) async {
+    final resp = await _api.get<List<dynamic>>(
+      '/api/extensions/skills/${Uri.encodeComponent(id)}/permissions',
+      queryParameters: {if (characterId.isNotEmpty) 'characterId': characterId},
+    );
+    return (resp ?? const []).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
   }
 
   Future<bool> updatePermissions(String id, Map<String, dynamic> data) async {
-    await _api.put('/api/extensions/skills/$id/permissions', data: data);
+    await _api.put('/api/extensions/skills/${Uri.encodeComponent(id)}/permissions', data: data);
     return true;
   }
 
-  Future<Map<String, dynamic>?> getSkillConfig(String id) async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/extensions/skills/$id/config');
+  Future<Map<String, dynamic>?> getSkillConfig(String id, {String characterId = ''}) async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/extensions/skills/${Uri.encodeComponent(id)}/config',
+      queryParameters: {if (characterId.isNotEmpty) 'characterId': characterId},
+    );
     return resp;
   }
 
-  Future<bool> updateSkillConfig(String id, Map<String, dynamic> data) async {
-    await _api.put('/api/extensions/skills/$id/config', data: data);
+  Future<bool> updateSkillConfig(String id, Map<String, dynamic> data, {String characterId = ''}) async {
+    await _api.put(
+      '/api/extensions/skills/${Uri.encodeComponent(id)}/config',
+      data: data,
+      queryParameters: {if (characterId.isNotEmpty) 'characterId': characterId},
+    );
     return true;
   }
 
-  Future<bool> resetSkillConfig(String id) async {
-    await _api.post('/api/extensions/skills/$id/config/reset');
+  Future<bool> resetSkillConfig(String id, {String characterId = ''}) async {
+    await _api.post(
+      '/api/extensions/skills/${Uri.encodeComponent(id)}/config/reset${characterId.isNotEmpty ? '?characterId=${Uri.encodeQueryComponent(characterId)}' : ''}',
+    );
     return true;
   }
 
   Future<Map<String, dynamic>?> executeSkill(String id, Map<String, dynamic> params) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/extensions/skills/$id/execute', data: params);
-    return resp;
+    return _api.post<Map<String, dynamic>>(
+      '/api/extensions/skills/${Uri.encodeComponent(id)}/execute',
+      data: params,
+    );
   }
 
-  Future<List<Map<String, dynamic>>> plugins() async {
-    final resp = await _api.get<List<dynamic>>('/api/extensions/plugins');
-    if (resp == null) return [];
-    return resp.map((e) => e as Map<String, dynamic>).toList();
+  Future<Map<String, dynamic>?> rollbackSkill(String id, String version, {String characterId = ''}) async {
+    return _api.post<Map<String, dynamic>>(
+      '/api/extensions/skills/${Uri.encodeComponent(id)}/versions/${Uri.encodeComponent(version)}/rollback${characterId.isNotEmpty ? '?characterId=${Uri.encodeQueryComponent(characterId)}' : ''}',
+    );
+  }
+
+  Future<Map<String, dynamic>> skillRuns(String id, String characterId, {int page = 1, int pageSize = 50}) async {
+    return await _api.get<Map<String, dynamic>>(
+          '/api/extensions/runs',
+          queryParameters: {
+            'characterId': characterId,
+            'skillId': id,
+            'page': page,
+            'pageSize': pageSize,
+          },
+        ) ??
+        <String, dynamic>{'items': <dynamic>[], 'total': 0, 'page': page, 'pageSize': pageSize};
+  }
+
+
+  Future<List<Map<String, dynamic>>> kernelExtensions() async {
+    final resp = await _api.get<Map<String, dynamic>>('/api/extensions/kernel/extensions');
+    final items = resp?['extensions'];
+    if (items is! List) return const [];
+    return items.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>> kernelExtension(String id) async {
+    return await _api.get<Map<String, dynamic>>(
+          '/api/extensions/kernel/extension',
+          queryParameters: {'id': id},
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<void> setKernelExtensionEnabled(String id, bool enabled) async {
+    await _api.post(
+      enabled ? '/api/extensions/kernel/extensions/enable' : '/api/extensions/kernel/extensions/disable',
+      data: {'id': id},
+    );
+  }
+
+  Future<Map<String, dynamic>> previewKernelUninstall(String id, {String scopeType = 'global', String scopeId = ''}) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/kernel/extensions/uninstall/preview',
+          data: {'extensionId': id, 'scopeType': scopeType, 'scopeId': scopeId},
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> confirmKernelUninstall(
+    String id,
+    Map<String, bool> confirmations, {
+    String scopeType = 'global',
+    String scopeId = '',
+  }) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/kernel/extensions/uninstall/confirm',
+          data: {
+            'extensionId': id,
+            'scopeType': scopeType,
+            'scopeId': scopeId,
+            'confirmations': confirmations,
+          },
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> uninstallKernelExtension(
+    String id,
+    String confirmationToken, {
+    String scopeType = 'global',
+    String scopeId = '',
+  }) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/kernel/extensions/uninstall',
+          data: {
+            'extensionId': id,
+            'scopeType': scopeType,
+            'scopeId': scopeId,
+            'confirmationToken': confirmationToken,
+          },
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<List<Map<String, dynamic>>> plugins({int page = 1, int pageSize = 100}) async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/extensions/plugins',
+      queryParameters: {'page': page, 'pageSize': pageSize},
+    );
+    final items = resp?['items'];
+    if (items is! List) return const [];
+    return items.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
   }
 
   Future<bool> enablePlugin(String id) async {
@@ -274,10 +388,18 @@ class ExtensionService {
     return resp;
   }
 
-  Future<List<Map<String, dynamic>>> agentSkills() async {
-    final resp = await _api.get<List<dynamic>>('/api/extensions/agent-skills');
-    if (resp == null) return [];
-    return resp.map((e) => e as Map<String, dynamic>).toList();
+  Future<List<Map<String, dynamic>>> agentSkills({int page = 1, int pageSize = 100, String characterId = ''}) async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/extensions/agent-skills',
+      queryParameters: {
+        'page': page,
+        'pageSize': pageSize,
+        if (characterId.isNotEmpty) 'characterId': characterId,
+      },
+    );
+    final items = resp?['items'];
+    if (items is! List) return const [];
+    return items.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
   }
 
   Future<bool> enableAgentSkill(String id) async {
@@ -306,10 +428,18 @@ class ExtensionService {
     return resp;
   }
 
-  Future<List<Map<String, dynamic>>> extensionRuns() async {
-    final resp = await _api.get<List<dynamic>>('/api/extensions/runs');
-    if (resp == null) return [];
-    return resp.map((e) => e as Map<String, dynamic>).toList();
+  Future<List<Map<String, dynamic>>> extensionRuns({String characterId = '', int page = 1, int pageSize = 100}) async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/extensions/runs',
+      queryParameters: {
+        'page': page,
+        'pageSize': pageSize,
+        if (characterId.isNotEmpty) 'characterId': characterId,
+      },
+    );
+    final items = resp?['items'];
+    if (items is! List) return const [];
+    return items.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
   }
 
   Future<Map<String, dynamic>?> getExtensionRun(String runId) async {

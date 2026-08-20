@@ -204,60 +204,53 @@ class _QqPageState extends ConsumerState<QqPage> {
   }
 
   Future<void> _testMessage() async {
-    if (!_isConnected) {
-      _snack('请先连接 QQ Bot', color: context.warning);
-      return;
-    }
     setState(() => _testState = 1);
-    await Future.delayed(const Duration(milliseconds: 1000));
-    if (!mounted) return;
-    setState(() => _testState = 2);
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
-        title: Text('测试消息结果', style: AppTypography.cardTitle(context)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Icon(Icons.check_circle, size: 20, color: context.success),
-                SizedBox(width: AppSpacing.sm),
-                Text('发送成功', style: AppTypography.body(context).copyWith(color: context.success)),
-              ],
-            ),
-            SizedBox(height: AppSpacing.md),
-            Container(
-              padding: EdgeInsets.all(AppSpacing.md),
-              decoration: BoxDecoration(
-                color: context.surfaceSecondary,
-                borderRadius: AppRadius.brSmall,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('目标: 测试群', style: AppTypography.label(context)),
-                  Text('内容: Amitia 测试消息', style: AppTypography.label(context)),
-                  Text('延迟: 128ms', style: AppTypography.label(context)),
-                  Text('状态: 已送达', style: AppTypography.label(context)),
-                ],
-              ),
+    try {
+      final status = await ref.read(qqServiceProvider).status();
+      if (!mounted) return;
+      final online = status?['qqOnline'] == true || status?['connected'] == true;
+      final state = (status?['status'] ?? '').toString();
+      final accountId = (status?['accountId'] ?? '').toString();
+      final messageCount = status?['messageCount'] ?? 0;
+      final replyCount = status?['replyCount'] ?? 0;
+      setState(() {
+        _testState = online ? 2 : 0;
+        _status = online ? _QqStatus.connected : _QqStatus.disconnected;
+        _wsStatus = online ? '已连接' : '未连接';
+      });
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
+          title: Text('连接检查', style: AppTypography.cardTitle(context)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(online ? 'QQ Bot 当前在线' : 'QQ Bot 当前离线', style: AppTypography.body(context)),
+              SizedBox(height: AppSpacing.md),
+              Text('状态: $state', style: AppTypography.label(context)),
+              if (accountId.isNotEmpty) Text('账号: $accountId', style: AppTypography.label(context)),
+              Text('收到消息: $messageCount', style: AppTypography.label(context)),
+              Text('已回复: $replyCount', style: AppTypography.label(context)),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.pop(ctx);
+                setState(() => _testState = 0);
+              },
+              child: Text('关闭', style: TextStyle(color: context.accentPrimary)),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              setState(() => _testState = 0);
-            },
-            child: Text('关闭', style: TextStyle(color: context.accentPrimary)),
-          ),
-        ],
-      ),
-    );
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _testState = 0);
+      _snack('连接检查失败: ${safeErrorMessage(e)}', color: context.error);
+    }
   }
 
   String _maskToken(String token) {
@@ -495,8 +488,8 @@ class _QqPageState extends ConsumerState<QqPage> {
               onPressed: _isConnected ? _disconnect : null,
             ),
             AmitiaButton(
-              label: _testState == 1 ? '发送中...' : '测试消息',
-              icon: _testState == 2 ? Icons.check_circle : Icons.send_outlined,
+              label: _testState == 1 ? '检查中...' : '连接检查',
+              icon: _testState == 2 ? Icons.check_circle : Icons.wifi_tethering_outlined,
               isSecondary: true,
               onPressed: _testState == 1 ? null : _testMessage,
             ),

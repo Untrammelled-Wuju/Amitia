@@ -1,14 +1,21 @@
+import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
+import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
-import '../../../../core/widgets/amitia_scaffold.dart';
-import '../../../../core/widgets/amitia_button.dart';
-import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/artifact/artifact_providers.dart';
+import '../../../../core/backend_connection/backend_connection_availability.dart';
+import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
+import '../../../../core/services/error_utils.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/widgets/amitia_button.dart';
+import '../../../../core/widgets/amitia_scaffold.dart';
 
 class ExtensionPackagesPage extends ConsumerStatefulWidget {
   const ExtensionPackagesPage({super.key});
@@ -18,8 +25,9 @@ class ExtensionPackagesPage extends ConsumerStatefulWidget {
 }
 
 class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
-  List<Map<String, dynamic>> _packages = [];
+  List<Map<String, dynamic>> _packages = const [];
   bool _loading = true;
+  bool _busy = false;
   String? _error;
 
   @override
@@ -29,85 +37,83 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
   }
 
   Future<void> _loadPackages() async {
-    setState(() { _loading = true; _error = null; });
+    if (mounted) setState(() { _loading = true; _error = null; });
     try {
-      final svc = ref.read(extensionServiceProvider);
-      final data = await svc.plugins();
+      final data = await ref.read(extensionServiceProvider).kernelExtensions();
       if (mounted) setState(() { _packages = data; _loading = false; });
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+      if (mounted) setState(() { _error = safeErrorMessage(e); _loading = false; });
     }
   }
 
-  BadgeType _statusBadgeType(String status) {
-    switch (status) {
-      case '运行中':
-        return BadgeType.success;
-      case '已暂停':
-        return BadgeType.warning;
-      case '已安装':
-        return BadgeType.info;
-      default:
-        return BadgeType.neutral;
-    }
+  Future<Dio> _dio() async {
+    final availability = await ref.read(backendConnectionProvider.future);
+    if (availability is! BackendConnectionAvailable) throw StateError('后端当前不可用');
+    return createAuthenticatedDio(availability.config);
+  }
+
+  void _toast(String message, {bool error = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: error ? context.error : null),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return AmitiaScaffold(
-        appBar: AmitiaAppBar(title: '扩展包', showBackButton: true, fallbackRoute: AppRoutes.extensions, actions: [
-          AmitiaIconButton(icon: Icons.download_outlined, onPressed: _showInstallLocalSheet, tooltip: '安装本地包'),
-        ]),
-        body: SafeArea(top: false, child: const AmitiaLoadingState(message: '加载中...')),
-      );
-    }
-    if (_error != null) {
-      return AmitiaScaffold(
-        appBar: AmitiaAppBar(title: '扩展包', showBackButton: true, fallbackRoute: AppRoutes.extensions, actions: [
-          AmitiaIconButton(icon: Icons.download_outlined, onPressed: _showInstallLocalSheet, tooltip: '安装本地包'),
-        ]),
-        body: SafeArea(top: false, child: AmitiaErrorState(message: '加载失败: $_error', onRetry: _loadPackages)),
-      );
-    }
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
         title: '扩展包',
         showBackButton: true,
         fallbackRoute: AppRoutes.extensions,
         actions: [
-          AmitiaIconButton(
-            icon: Icons.download_outlined,
-            onPressed: _showInstallLocalSheet,
-            tooltip: '安装本地包',
-          ),
+          AmitiaIconButton(icon: Icons.refresh, onPressed: _busy ? null : _loadPackages, tooltip: '刷新'),
+          AmitiaIconButton(icon: Icons.download_outlined, onPressed: _busy ? null : _showInstallLocalSheet, tooltip: '安装本地包'),
         ],
       ),
-      body: SafeArea(
-        top: false,
-        child: ListView.separated(
-          padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xxxl),
-          itemCount: _packages.length,
-          separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
-          itemBuilder: (context, index) => _buildPackageCard(context, _packages[index]),
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showInstallLocalSheet,
-        backgroundColor: context.accentPrimary,
-        child: const Icon(Icons.add, color: Colors.white),
+      body: SafeArea(top: false, child: _body()),
+      floatingActionButton: _loading
+          ? null
+          : FloatingActionButton(
+              onPressed: _busy ? null : _showInstallLocalSheet,
+              backgroundColor: context.accentPrimary,
+              child: _busy
+                  ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                  : const Icon(Icons.add, color: Colors.white),
+            ),
+    );
+  }
+
+  Widget _body() {
+    if (_loading) return const AmitiaLoadingState(message: '加载已安装扩展...');
+    if (_error != null) return AmitiaErrorState(message: '加载失败: $_error', onRetry: _loadPackages);
+    if (_packages.isEmpty) {
+      return AmitiaEmptyState(
+        icon: Icons.inventory_2_outlined,
+        title: '暂无扩展包',
+        subtitle: '安装 Manifest v2 扩展包后会显示在这里',
+        actionText: '安装本地包',
+        onAction: _showInstallLocalSheet,
+      );
+    }
+    return RefreshIndicator(
+      onRefresh: _loadPackages,
+      child: ListView.separated(
+        padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xxxl),
+        itemCount: _packages.length,
+        separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
+        itemBuilder: (context, index) => _buildPackageCard(_packages[index]),
       ),
     );
   }
 
-  Widget _buildPackageCard(BuildContext context, Map<String, dynamic> pkg) {
-    final name = (pkg['name'] ?? '').toString();
-    final description = (pkg['description'] ?? '').toString();
-    final version = (pkg['version'] ?? '1.0.0').toString();
-    final status = (pkg['status'] ?? '已安装').toString();
-    final permissions = (pkg['permissions'] as List?)?.map((e) => e.toString()).toList() ?? [];
-    final hasUpdate = (pkg['hasUpdate'] as bool?) ?? false;
-    final isEnabled = (pkg['isEnabled'] as bool?) ?? ((pkg['enabled'] as int?) == 1);
+  Widget _buildPackageCard(Map<String, dynamic> pkg) {
+    final id = (pkg['extensionId'] ?? '').toString();
+    final version = (pkg['version'] ?? '').toString();
+    final state = (pkg['state'] ?? '').toString();
+    final enablement = (pkg['enablement'] ?? '').toString();
+    final enabled = enablement == 'enabled';
+    final statusText = enabled ? '已启用' : (state.isEmpty ? '已停用' : state);
 
     return AmitiaCard(
       onTap: () => _showExtensionDetail(pkg),
@@ -119,10 +125,7 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
               Container(
                 width: 44,
                 height: 44,
-                decoration: BoxDecoration(
-                  color: context.accentSoft,
-                  borderRadius: AppRadius.brSmall,
-                ),
+                decoration: BoxDecoration(color: context.accentSoft, borderRadius: AppRadius.brSmall),
                 child: Icon(Icons.extension_outlined, size: 22, color: context.accentPrimary),
               ),
               const SizedBox(width: 12),
@@ -130,250 +133,234 @@ class _ExtensionPackagesPageState extends ConsumerState<ExtensionPackagesPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: [
-                        Text(name, style: AppTypography.cardTitle(context)),
-                        const SizedBox(width: 8),
-                        Text('v$version', style: AppTypography.label(context)),
-                      ],
-                    ),
+                    Text(id.isEmpty ? '未命名扩展' : id, style: AppTypography.cardTitle(context), maxLines: 1, overflow: TextOverflow.ellipsis),
                     const SizedBox(height: 4),
-                    Text(description, style: AppTypography.caption(context), maxLines: 1, overflow: TextOverflow.ellipsis),
+                    Text(version.isEmpty ? '版本未知' : 'v$version', style: AppTypography.caption(context)),
                   ],
                 ),
               ),
-              const SizedBox(width: 8),
-              AmitiaStatusBadge(label: status, type: _statusBadgeType(status)),
+              AmitiaStatusBadge(label: statusText, type: enabled ? BadgeType.success : BadgeType.neutral),
             ],
           ),
           SizedBox(height: AppSpacing.md),
           Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: permissions.map((p) => Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: context.surfaceSecondary,
-                borderRadius: AppRadius.brTag,
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _MiniButton(
+                label: enabled ? '停用' : '启用',
+                icon: enabled ? Icons.pause_circle_outline : Icons.play_circle_outline,
+                color: enabled ? context.warning : context.success,
+                onTap: () => _toggleExtension(pkg, !enabled),
               ),
-              child: Text(p, style: AppTypography.label(context)),
-            )).toList(),
-          ),
-          SizedBox(height: AppSpacing.md),
-          if (hasUpdate)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: context.accentSoft,
-                borderRadius: AppRadius.brSmall,
+              _MiniButton(
+                label: '详情',
+                icon: Icons.info_outline,
+                color: context.accentPrimary,
+                onTap: () => _showExtensionDetail(pkg),
               ),
-              child: Row(
-                children: [
-                  Icon(Icons.system_update, size: 16, color: context.accentPrimary),
-                  const SizedBox(width: 6),
-                  Text('有新版本可用', style: AppTypography.label(context).copyWith(color: context.accentPrimary)),
-                ],
+              _MiniButton(
+                label: '卸载',
+                icon: Icons.delete_outline,
+                color: context.error,
+                onTap: () => _showUninstallConfirm(pkg),
               ),
-            ),
-          SizedBox(height: AppSpacing.sm),
-          _buildActionButtons(context, pkg),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionButtons(BuildContext context, Map<String, dynamic> pkg) {
-    final status = (pkg['status'] ?? '已安装').toString();
-    final name = (pkg['name'] ?? '').toString();
-    final isEnabled = (pkg['isEnabled'] as bool?) ?? ((pkg['enabled'] as int?) == 1);
-    final hasUpdate = (pkg['hasUpdate'] as bool?) ?? false;
-    final isRunning = status == '运行中';
-    final isPaused = status == '已暂停';
-
-    return Wrap(
-      spacing: AppSpacing.sm,
-      runSpacing: AppSpacing.sm,
-      children: [
-        if (hasUpdate)
-          _MiniButton(
-            label: '更新',
-            icon: Icons.system_update,
-            color: context.accentPrimary,
-            onTap: () => _showUpdateDialog(pkg),
-          ),
-        if (isRunning)
-          _MiniButton(
-            label: '暂停',
-            icon: Icons.pause_circle_outline,
-            color: context.warning,
-            onTap: () => _showPauseConfirm(pkg),
-          ),
-        if (isPaused)
-          _MiniButton(
-            label: '恢复',
-            icon: Icons.play_circle_outline,
-            color: context.success,
-            onTap: () => _togglePlugin(pkg),
-          ),
-        if (isEnabled && !isPaused)
-          _MiniButton(
-            label: '暂停',
-            icon: Icons.pause_circle_outline,
-            color: context.warning,
-            onTap: () => _togglePlugin(pkg),
-          ),
-        if (!isEnabled)
-          _MiniButton(
-            label: '启用',
-            icon: Icons.play_circle_outline,
-            color: context.success,
-            onTap: () => _togglePlugin(pkg),
-          ),
-        _MiniButton(
-          label: '卸载',
-          icon: Icons.delete_outline,
-          color: context.error,
-          onTap: () => _showUninstallConfirm(pkg),
-        ),
-      ],
-    );
-  }
-
-  void _showInstallLocalSheet() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
-      builder: (context) => _InstallPreviewSheet(onConfirm: () {
-        Navigator.pop(context);
-        ScaffoldMessenger.of(this.context).showSnackBar(
-          SnackBar(content: const Text('安装预览已确认，正在安装...'), backgroundColor: context.accentPrimary),
-        );
-      }),
-    );
-  }
-
-  void _showExtensionDetail(Map<String, dynamic> pkg) {
-    showDialog(
-      context: context,
-      builder: (context) => _ExtensionDetailDialog(pkg: pkg),
-    );
-  }
-
-  void _showUpdateDialog(Map<String, dynamic> pkg) {
-    final name = (pkg['name'] ?? '').toString();
-    final version = (pkg['version'] ?? '1.0.0').toString();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: context.surfacePrimary,
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
-        title: Text('更新扩展', style: AppTypography.cardTitle(context)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('$name 有新版本可用', style: AppTypography.bodySmall(context)),
-            const SizedBox(height: 12),
-            _DetailRow(label: '当前版本', value: 'v$version'),
-            _DetailRow(label: '新版本', value: 'v1.3.0'),
-            _DetailRow(label: '更新大小', value: '1.2 MB'),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: context.accentSoft,
-                borderRadius: AppRadius.brSmall,
-              ),
-              child: Text('更新日志：\n- 优化性能\n- 修复已知问题\n- 新增 API 支持', style: AppTypography.label(context).copyWith(color: context.accentPrimary)),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('稍后', style: TextStyle(color: context.textSecondary))),
-          TextButton(onPressed: () {
-            Navigator.pop(context);
-            ScaffoldMessenger.of(this.context).showSnackBar(
-              SnackBar(content: Text('$name 已更新到最新版本'), backgroundColor: context.success),
-            );
-          }, child: Text('立即更新', style: TextStyle(color: context.accentPrimary))),
-        ],
-      ),
-    );
-  }
-
-  void _showPauseConfirm(Map<String, dynamic> pkg) {
-    final name = (pkg['name'] ?? '').toString();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: context.surfacePrimary,
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
-        title: Text('暂停扩展', style: AppTypography.cardTitle(context)),
-        content: Text('确定要暂停「$name」吗？暂停后该扩展将停止运行，相关功能将不可用。', style: AppTypography.bodySmall(context)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('取消', style: TextStyle(color: context.textSecondary))),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _togglePlugin(pkg);
-            },
-            child: Text('暂停', style: TextStyle(color: context.warning)),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Future<void> _togglePlugin(Map<String, dynamic> pkg) async {
-    final id = (pkg['id'] ?? '').toString();
-    final name = (pkg['name'] ?? '').toString();
-    final isEnabled = (pkg['isEnabled'] as bool?) ?? ((pkg['enabled'] as int?) == 1);
+  Future<void> _toggleExtension(Map<String, dynamic> pkg, bool enabled) async {
+    if (_busy) return;
+    final id = (pkg['extensionId'] ?? '').toString();
+    if (id.isEmpty) return;
+    setState(() => _busy = true);
     try {
-      final svc = ref.read(extensionServiceProvider);
-      if (isEnabled) {
-        await svc.disablePlugin(id);
-      } else {
-        await svc.enablePlugin(id);
-      }
-      _loadPackages();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('$name 已${isEnabled ? '停用' : '启用'}'), backgroundColor: context.success),
-        );
-      }
+      await ref.read(extensionServiceProvider).setKernelExtensionEnabled(id, enabled);
+      await _loadPackages();
+      _toast('$id 已${enabled ? '启用' : '停用'}');
     } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('操作失败: $e'), backgroundColor: context.error),
-        );
-      }
+      _toast('操作失败: ${safeErrorMessage(e)}', error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
-  void _showUninstallConfirm(Map<String, dynamic> pkg) {
-    final name = (pkg['name'] ?? '').toString();
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: context.surfacePrimary,
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
-        title: Text('卸载扩展', style: AppTypography.cardTitle(context)),
-        content: Text('确定要卸载「$name」吗？此操作不可撤销，相关数据将被清除。', style: AppTypography.bodySmall(context)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: Text('取消', style: TextStyle(color: context.textSecondary))),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(this.context).showSnackBar(
-                SnackBar(content: Text('$name 已卸载'), backgroundColor: context.error),
-              );
-            },
-            child: Text('卸载', style: TextStyle(color: context.error)),
-          ),
-        ],
-      ),
+  Future<void> _showExtensionDetail(Map<String, dynamic> pkg) async {
+    final id = (pkg['extensionId'] ?? '').toString();
+    if (id.isEmpty) return;
+    try {
+      final detail = await ref.read(extensionServiceProvider).kernelExtension(id);
+      if (!mounted) return;
+      showDialog(context: context, builder: (dialogContext) => _ExtensionDetailDialog(detail: detail));
+    } catch (e) {
+      _toast('读取扩展详情失败: ${safeErrorMessage(e)}', error: true);
+    }
+  }
+
+  Future<void> _showInstallLocalSheet() async {
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['amitiax', 'zip'],
+      withData: false,
     );
+    if (picked == null || picked.files.isEmpty) return;
+    final file = picked.files.first;
+    if (file.path == null || file.path!.isEmpty) {
+      _toast('无法读取所选文件', error: true);
+      return;
+    }
+
+    Dio? dio;
+    if (mounted) setState(() => _busy = true);
+    try {
+      dio = await _dio();
+      final previewResponse = await dio.post(
+        '/api/extensions/packages/artifacts',
+        data: FormData.fromMap({
+          'scopeType': 'global',
+          'scopeId': '',
+          'file': await MultipartFile.fromFile(file.path!, filename: file.name),
+        }),
+      );
+      dynamic raw = previewResponse.data;
+      if (raw is! Map || raw['preview'] is! Map) throw StateError('后端未返回扩展包预览');
+      final preview = Map<String, dynamic>.from(raw['preview'] as Map);
+      if (!mounted) return;
+
+      final accepted = await showModalBottomSheet<bool>(
+        context: context,
+        isScrollControlled: true,
+        backgroundColor: context.surfacePrimary,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+        builder: (sheetContext) => _PackagePreviewSheet(fileName: file.name, preview: preview),
+      );
+      if (accepted != true) return;
+
+      final sessionId = (preview['sessionId'] ?? '').toString();
+      if (sessionId.isEmpty) throw StateError('预览会话无效');
+      final confirmations = _buildInstallConfirmations(preview);
+      final confirmResponse = await dio.post(
+        '/api/extensions/packages/previews/${Uri.encodeComponent(sessionId)}/confirm',
+        data: {
+          'scopeType': (preview['scopeType'] ?? 'global').toString(),
+          'scopeId': (preview['scopeId'] ?? '').toString(),
+          'confirmations': confirmations,
+        },
+      );
+      dynamic confirmed = confirmResponse.data;
+      if (confirmed is Map && confirmed['data'] is Map) confirmed = confirmed['data'];
+      if (confirmed is! Map) throw StateError('安装确认失败');
+      final token = (confirmed['confirmationToken'] ?? '').toString();
+      if (token.isEmpty) throw StateError('安装确认令牌缺失');
+
+      final isUpdate = (preview['currentVersion'] ?? '').toString().isNotEmpty;
+      final extensionId = (preview['id'] ?? '').toString();
+      final operationResponse = await dio.post(
+        isUpdate ? '/api/extensions/packages/operations/update' : '/api/extensions/packages/operations/install',
+        data: {
+          'sessionId': sessionId,
+          'scopeType': (preview['scopeType'] ?? 'global').toString(),
+          'scopeId': (preview['scopeId'] ?? '').toString(),
+          'confirmationToken': token,
+          if (isUpdate && extensionId.isNotEmpty) 'expectedExtensionId': extensionId,
+          'idempotencyKey': 'mobile-package-${DateTime.now().microsecondsSinceEpoch}',
+        },
+      );
+      dynamic operation = operationResponse.data;
+      if (operation is Map && operation['data'] is Map) operation = operation['data'];
+      final operationId = operation is Map ? (operation['operationId'] ?? '').toString() : '';
+      await _loadPackages();
+      _toast(operationId.isEmpty ? '扩展包操作已提交' : '扩展包操作已提交 · $operationId');
+    } catch (e) {
+      _toast('安装失败: ${safeErrorMessage(e)}', error: true);
+    } finally {
+      dio?.close(force: true);
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Map<String, bool> _buildInstallConfirmations(Map<String, dynamic> preview) {
+    final result = <String, bool>{};
+    for (final value in (preview['capabilityConfirmations'] as List?) ?? const []) {
+      final key = value.toString();
+      if (key.isNotEmpty) result[key] = true;
+    }
+    final signature = preview['signature'];
+    final signatureStatus = signature is Map ? (signature['status'] ?? '').toString() : '';
+    if (signatureStatus == 'unsigned') result['confirm.unsigned_dev'] = true;
+    final scriptCount = (preview['scripts'] as num?)?.toInt() ?? 0;
+    if (scriptCount > 0) result['confirm.scripts'] = true;
+    if ((preview['currentVersion'] ?? '').toString().isNotEmpty) result['confirm.version_change'] = true;
+    if (((preview['highRiskCapabilities'] as List?) ?? const []).isNotEmpty) result['confirm.permission_escalation'] = true;
+    if (preview['upgradeDiff'] is Map) {
+      final diff = preview['upgradeDiff'] as Map;
+      if (diff['signerChanged'] == true) result['confirm.signer_change'] = true;
+      if (diff['configMigrationRequired'] == true) result['confirm.config_migration'] = true;
+    }
+    return result;
+  }
+
+  Future<void> _showUninstallConfirm(Map<String, dynamic> pkg) async {
+    if (_busy) return;
+    final id = (pkg['extensionId'] ?? '').toString();
+    if (id.isEmpty) return;
+    setState(() => _busy = true);
+    try {
+      final svc = ref.read(extensionServiceProvider);
+      final preview = await svc.previewKernelUninstall(id);
+      if (!mounted) return;
+      final dependents = ((preview['dependents'] as List?) ?? const []).map((e) => e.toString()).toList(growable: false);
+      final required = ((preview['requiredConfirmations'] as List?) ?? const []).map((e) => e.toString()).toList(growable: false);
+      final allowed = preview['uninstallable'] != false;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: dialogContext.surfacePrimary,
+          shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
+          title: Text('卸载扩展', style: AppTypography.cardTitle(dialogContext)),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('扩展：$id', style: AppTypography.bodySmall(dialogContext)),
+              const SizedBox(height: 6),
+              Text('当前版本：${preview['currentVersion'] ?? pkg['version'] ?? ''}', style: AppTypography.label(dialogContext)),
+              Text('制品策略：${preview['artifactPolicy'] ?? 'unknown'}', style: AppTypography.label(dialogContext)),
+              if (dependents.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text('依赖此扩展：${dependents.join('、')}', style: AppTypography.label(dialogContext).copyWith(color: dialogContext.warning)),
+              ],
+              if (!allowed) ...[
+                const SizedBox(height: 8),
+                Text('后端判定当前不可卸载。', style: AppTypography.label(dialogContext).copyWith(color: dialogContext.error)),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+            FilledButton(
+              onPressed: allowed ? () => Navigator.pop(dialogContext, true) : null,
+              child: const Text('确认卸载'),
+            ),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+      final confirmation = await svc.confirmKernelUninstall(id, {for (final key in required) key: true});
+      final token = (confirmation['confirmationToken'] ?? '').toString();
+      if (token.isEmpty) throw StateError('卸载确认令牌缺失');
+      final result = await svc.uninstallKernelExtension(id, token);
+      await _loadPackages();
+      final operationId = (result['operationId'] ?? '').toString();
+      _toast(operationId.isEmpty ? '$id 卸载操作已提交' : '$id 卸载操作已提交 · $operationId');
+    } catch (e) {
+      _toast('卸载失败: ${safeErrorMessage(e)}', error: true);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 }
 
@@ -391,10 +378,7 @@ class _MiniButton extends StatelessWidget {
       onTap: onTap,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: 0.1),
-          borderRadius: AppRadius.brTag,
-        ),
+        decoration: BoxDecoration(color: color.withValues(alpha: 0.1), borderRadius: AppRadius.brTag),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -408,161 +392,109 @@ class _MiniButton extends StatelessWidget {
   }
 }
 
-class _InstallPreviewSheet extends StatelessWidget {
-  final VoidCallback onConfirm;
+class _PackagePreviewSheet extends StatelessWidget {
+  final String fileName;
+  final Map<String, dynamic> preview;
 
-  const _InstallPreviewSheet({required this.onConfirm});
+  const _PackagePreviewSheet({required this.fileName, required this.preview});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 34),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(width: 40, height: 4, decoration: BoxDecoration(color: context.borderPrimary, borderRadius: BorderRadius.circular(2))),
-          ),
-          const SizedBox(height: 20),
-          Text('安装本地扩展包', style: AppTypography.pageTitle(context)),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: context.surfaceSecondary,
-              borderRadius: AppRadius.brMedium,
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    final errors = ((preview['errors'] as List?) ?? const []).map((e) => e.toString()).toList(growable: false);
+    final warnings = ((preview['warnings'] as List?) ?? const []).map((e) => e.toString()).toList(growable: false);
+    final risks = ((preview['risks'] as List?) ?? const []).whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
+    final compatible = preview['compatible'] != false && errors.isEmpty;
+    final currentVersion = (preview['currentVersion'] ?? '').toString();
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: context.borderPrimary, borderRadius: BorderRadius.circular(2)))),
+            const SizedBox(height: 20),
+            Text(currentVersion.isEmpty ? '安装扩展包' : '更新扩展包', style: AppTypography.pageTitle(context)),
+            const SizedBox(height: 14),
+            _DetailRow(label: '文件', value: fileName),
+            _DetailRow(label: '扩展 ID', value: (preview['id'] ?? '').toString()),
+            _DetailRow(label: '名称', value: (preview['name'] ?? '').toString()),
+            _DetailRow(label: '版本', value: (preview['version'] ?? '').toString()),
+            if (currentVersion.isNotEmpty) _DetailRow(label: '当前版本', value: currentVersion),
+            _DetailRow(label: '签名', value: preview['signature'] is Map ? ((preview['signature'] as Map)['status'] ?? 'unknown').toString() : 'unknown'),
+            _DetailRow(label: '兼容性', value: (preview['compatibility'] ?? (compatible ? 'compatible' : 'blocked')).toString()),
+            if (warnings.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text('警告', style: AppTypography.sectionTitle(context)),
+              const SizedBox(height: 4),
+              ...warnings.take(5).map((item) => Text('• $item', style: AppTypography.label(context))),
+            ],
+            if (risks.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text('风险', style: AppTypography.sectionTitle(context)),
+              const SizedBox(height: 4),
+              ...risks.take(5).map((item) => Text('• ${item['message'] ?? item['code'] ?? item}', style: AppTypography.label(context).copyWith(color: context.warning))),
+            ],
+            if (errors.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              ...errors.take(5).map((item) => Text('• $item', style: AppTypography.label(context).copyWith(color: context.error))),
+            ],
+            const SizedBox(height: 18),
+            Row(
               children: [
-                Row(
-                  children: [
-                    Icon(Icons.archive_outlined, size: 28, color: context.accentPrimary),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('example-extension-1.0.0.zip', style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600)),
-                          const SizedBox(height: 2),
-                          Text('2.4 MB · 选择文件', style: AppTypography.label(context)),
-                        ],
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: null,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: context.accentSoft,
-                          borderRadius: AppRadius.brTag,
-                        ),
-                        child: Text('选择', style: TextStyle(fontSize: 13, color: context.accentPrimary, fontWeight: FontWeight.w500)),
-                      ),
-                    ),
-                  ],
-                ),
+                Expanded(child: OutlinedButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消'))),
+                const SizedBox(width: 10),
+                Expanded(child: FilledButton(onPressed: compatible ? () => Navigator.pop(context, true) : null, child: Text(currentVersion.isEmpty ? '确认安装' : '确认更新'))),
               ],
             ),
-          ),
-          const SizedBox(height: 16),
-          Text('安装预览', style: AppTypography.sectionTitle(context)),
-          const SizedBox(height: 12),
-          _PreviewRow(label: '扩展名称', value: '示例扩展'),
-          _PreviewRow(label: '版本', value: '1.0.0'),
-          _PreviewRow(label: '所需权限', value: '文件读写、网络访问'),
-          _PreviewRow(label: '依赖项', value: '无'),
-          const SizedBox(height: 20),
-          Row(
-            children: [
-              Expanded(
-                child: AmitiaButton(label: '取消', isSecondary: true, onPressed: () => Navigator.pop(context)),
-              ),
-              SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: AmitiaButton(label: '确认安装', onPressed: onConfirm),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-}
-
-class _PreviewRow extends StatelessWidget {
-  final String label;
-  final String value;
-
-  const _PreviewRow({required this.label, required this.value});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          SizedBox(width: 80, child: Text(label, style: AppTypography.label(context))),
-          Expanded(child: Text(value, style: AppTypography.bodySmall(context))),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
 class _ExtensionDetailDialog extends StatelessWidget {
-  final Map<String, dynamic> pkg;
+  final Map<String, dynamic> detail;
 
-  const _ExtensionDetailDialog({required this.pkg});
+  const _ExtensionDetailDialog({required this.detail});
 
   @override
   Widget build(BuildContext context) {
-    final name = (pkg['name'] ?? '').toString();
-    final description = (pkg['description'] ?? '').toString();
-    final version = (pkg['version'] ?? '1.0.0').toString();
-    final status = (pkg['status'] ?? '已安装').toString();
-    final permissions = (pkg['permissions'] as List?)?.map((e) => e.toString()).toList() ?? [];
-
+    final modules = ((detail['modules'] as List?) ?? const []).whereType<Map>().toList(growable: false);
+    final contributions = ((detail['contributions'] as List?) ?? const []).whereType<Map>().toList(growable: false);
     return AlertDialog(
       backgroundColor: context.surfacePrimary,
       shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
-      title: Row(
-        children: [
-          Icon(Icons.extension_outlined, color: context.accentPrimary, size: 24),
-          const SizedBox(width: 10),
-          Expanded(child: Text(name, style: AppTypography.cardTitle(context))),
-        ],
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(description, style: AppTypography.bodySmall(context)),
-          const SizedBox(height: 16),
-          _DetailRow(label: '版本', value: 'v$version'),
-          _DetailRow(label: '状态', value: status),
-          _DetailRow(label: '权限', value: permissions.join('、')),
-          const SizedBox(height: 12),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: context.surfaceSecondary,
-              borderRadius: AppRadius.brSmall,
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.info_outline, size: 16, color: context.textTertiary),
-                const SizedBox(width: 8),
-                Expanded(child: Text('扩展运行于隔离沙箱中，权限受系统管控', style: AppTypography.label(context))),
+      title: Text((detail['extensionId'] ?? '扩展详情').toString(), style: AppTypography.cardTitle(context)),
+      content: SizedBox(
+        width: double.maxFinite,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _DetailRow(label: '版本', value: (detail['version'] ?? '').toString()),
+              _DetailRow(label: '状态', value: (detail['state'] ?? '').toString()),
+              _DetailRow(label: '启用状态', value: (detail['enablement'] ?? '').toString()),
+              _DetailRow(label: '安装 ID', value: (detail['installationId'] ?? '').toString()),
+              _DetailRow(label: 'Generation', value: (detail['generation'] ?? '').toString()),
+              _DetailRow(label: '模块数量', value: modules.length.toString()),
+              _DetailRow(label: '贡献数量', value: contributions.length.toString()),
+              if (modules.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Text('模块', style: AppTypography.sectionTitle(context)),
+                ...modules.take(12).map((module) => Padding(
+                      padding: const EdgeInsets.only(top: 5),
+                      child: Text('${module['id'] ?? ''} · ${module['type'] ?? ''} · ${module['runtime'] ?? ''}', style: AppTypography.label(context)),
+                    )),
               ],
-            ),
+            ],
           ),
-        ],
+        ),
       ),
-      actions: [
-        TextButton(onPressed: () => Navigator.pop(context), child: Text('关闭', style: TextStyle(color: context.textSecondary))),
-      ],
+      actions: [TextButton(onPressed: () => Navigator.pop(context), child: const Text('关闭'))],
     );
   }
 }
@@ -576,12 +508,12 @@ class _DetailRow extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          SizedBox(width: 60, child: Text(label, style: AppTypography.label(context))),
-          Expanded(child: Text(value, style: AppTypography.bodySmall(context))),
+          SizedBox(width: 84, child: Text(label, style: AppTypography.label(context))),
+          Expanded(child: Text(value.isEmpty ? '-' : value, style: AppTypography.bodySmall(context))),
         ],
       ),
     );

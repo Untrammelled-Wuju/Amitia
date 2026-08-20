@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/app_routes.dart';
@@ -7,6 +9,10 @@ import '../../../../app/theme/app_radius.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/widgets/amitia_drawer.dart';
+import '../../../../core/backend_connection/backend_connection_availability.dart';
+import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
+import '../../../../core/artifact/artifact_providers.dart';
 import '../../../../core/services/error_utils.dart';
 import '../../../../core/services/providers.dart';
 
@@ -21,6 +27,7 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
   List<Map<String, dynamic>> _skills = [];
   bool _loading = true;
   String? _error;
+  String _characterId = '';
 
   @override
   void initState() {
@@ -28,25 +35,49 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
     _loadSkills();
   }
 
+  Future<String> _resolveCharacterId() async {
+    final selected = ref.read(currentCharacterIdProvider);
+    final characters = await ref.read(characterServiceProvider).list();
+    if (characters.isEmpty) return '';
+    final match = characters.where((item) => item.id == selected).firstOrNull;
+    final resolved = match?.id ?? characters.where((item) => item.isActive == 1).firstOrNull?.id ?? characters.first.id;
+    ref.read(currentCharacterIdProvider.notifier).state = resolved;
+    return resolved;
+  }
+
   Future<void> _loadSkills() async {
     setState(() { _loading = true; _error = null; });
     try {
       final svc = ref.read(extensionServiceProvider);
-      final data = await svc.agentSkills();
-      if (mounted) setState(() { _skills = data; _loading = false; });
+      final characterId = await _resolveCharacterId();
+      final data = await svc.agentSkills(characterId: characterId);
+      if (mounted) setState(() { _characterId = characterId; _skills = data; _loading = false; });
     } catch (e) {
       if (mounted) setState(() { _error = safeErrorMessage(e); _loading = false; });
     }
   }
 
+  Future<Dio> _dio() async {
+    final availability = await ref.read(backendConnectionProvider.future);
+    if (availability is! BackendConnectionAvailable) throw StateError('后端当前不可用');
+    return createAuthenticatedDio(availability.config);
+  }
+
   BadgeType _compatibilityBadgeType(String compatibility) {
-    switch (compatibility) {
+    switch (compatibility.toLowerCase()) {
+      case 'compatible':
+      case 'fully_compatible':
       case '完全兼容':
         return BadgeType.success;
-      case '兼容':
-        return BadgeType.info;
+      case 'partial':
+      case 'partially_compatible':
       case '部分兼容':
         return BadgeType.warning;
+      case 'incompatible':
+      case '不兼容':
+        return BadgeType.error;
+      case '兼容':
+        return BadgeType.info;
       default:
         return BadgeType.neutral;
     }
@@ -97,13 +128,13 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
   }
 
   Widget _buildSkillCard(BuildContext context, Map<String, dynamic> skill) {
-    final isEnabled = (skill['isEnabled'] as bool?) ?? ((skill['enabled'] as int?) == 1);
+    final isEnabled = (skill['enabled'] as bool?) ?? ((skill['isEnabled'] as bool?) ?? false);
     final name = (skill['name'] ?? '').toString();
     final description = (skill['description'] ?? '').toString();
-    final version = (skill['version'] ?? '1.0.0').toString();
-    final skillMd = (skill['skillMd'] ?? skill['skill_md'] ?? '').toString();
-    final compatibility = (skill['compatibility'] ?? '兼容').toString();
-    final requiredMcp = (skill['requiredMcp'] as List?)?.map((e) => e.toString()).toList() ?? [];
+    final version = ((skill['metadata'] as Map?)?['version'] ?? '').toString();
+    final skillMd = (skill['rawSkillMd'] ?? skill['body'] ?? '').toString();
+    final compatibility = (skill['compatibilityStatus'] ?? skill['compatibility'] ?? 'unknown').toString();
+    final requiredMcp = ((skill['mcpDependencies'] as List?) ?? const []).whereType<Map>().map((e) => (e['id'] ?? e['description'] ?? '').toString()).where((e) => e.isNotEmpty).toList();
 
     return AmitiaCard(
       onTap: () => _showDetailSheet(skill),
@@ -130,7 +161,7 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
                       children: [
                         Text(name, style: AppTypography.cardTitle(context)),
                         const SizedBox(width: 8),
-                        Text('v$version', style: AppTypography.label(context)),
+                        if (version.isNotEmpty) Text('v$version', style: AppTypography.label(context)),
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -282,19 +313,100 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
     );
   }
 
-  void _showImportSheet() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
-      builder: (context) => _ImportSkillSheet(onConfirm: () {
-        Navigator.pop(context);
-        _loadSkills();
-        ScaffoldMessenger.of(this.context).showSnackBar(
-          SnackBar(content: const Text('Agent Skill 导入成功'), backgroundColor: context.success),
-        );
-      }),
+  Future<void> _showImportSheet() async {
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['zip'],
+      withData: false,
     );
+    if (picked == null || picked.files.isEmpty) return;
+    final file = picked.files.first;
+    if (file.path == null || file.path!.isEmpty) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('无法读取所选文件')));
+      return;
+    }
+    Dio? dio;
+    try {
+      dio = await _dio();
+      final previewResponse = await dio.post(
+        '/api/extensions/agent-skills/import/preview',
+        data: FormData.fromMap({
+          'file': await MultipartFile.fromFile(file.path!, filename: file.name),
+        }),
+      );
+      dynamic preview = previewResponse.data;
+      if (preview is Map && preview['data'] is Map) preview = preview['data'];
+      if (preview is! Map) throw StateError('后端未返回导入预览');
+      final previewMap = Map<String, dynamic>.from(preview);
+      final previewId = (previewMap['previewId'] ?? '').toString();
+      if (previewId.isEmpty) throw StateError('导入预览缺少 previewId');
+      final definition = previewMap['definition'] is Map ? Map<String, dynamic>.from(previewMap['definition'] as Map) : <String, dynamic>{};
+      final report = previewMap['compatibilityReport'] is Map ? Map<String, dynamic>.from(previewMap['compatibilityReport'] as Map) : <String, dynamic>{};
+      if (!mounted) return;
+      String scope = 'global';
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => StatefulBuilder(
+          builder: (dialogContext, setDialogState) => AlertDialog(
+            backgroundColor: dialogContext.surfacePrimary,
+            shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
+            title: Text('Agent Skill 导入预览', style: AppTypography.cardTitle(dialogContext)),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text((definition['displayName'] ?? definition['name'] ?? file.name).toString(), style: AppTypography.bodySmall(dialogContext).copyWith(fontWeight: FontWeight.w600)),
+                  const SizedBox(height: 6),
+                  Text((definition['description'] ?? '').toString(), style: AppTypography.caption(dialogContext)),
+                  const SizedBox(height: 10),
+                  Text('兼容性：${report['status'] ?? definition['compatibilityStatus'] ?? 'unknown'}', style: AppTypography.label(dialogContext)),
+                  Text('文件数：${(previewMap['files'] as List?)?.length ?? 0}', style: AppTypography.label(dialogContext)),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    initialValue: scope,
+                    decoration: const InputDecoration(labelText: '安装范围'),
+                    items: [
+                      const DropdownMenuItem(value: 'global', child: Text('全局')),
+                      if (_characterId.isNotEmpty) const DropdownMenuItem(value: 'character', child: Text('当前角色')),
+                    ],
+                    onChanged: (value) => setDialogState(() => scope = value ?? 'global'),
+                  ),
+                  if (((report['errors'] as List?) ?? const []).isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Text('存在兼容性错误，后端可能拒绝安装。', style: AppTypography.label(dialogContext).copyWith(color: dialogContext.error)),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+              FilledButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('安装')),
+            ],
+          ),
+        ),
+      );
+      if (confirmed != true) return;
+      final installResponse = await dio.post(
+        '/api/extensions/agent-skills/import/install',
+        data: {
+          'previewId': previewId,
+          'scope': scope,
+          'characterId': scope == 'character' ? _characterId : '',
+          'enable': true,
+        },
+      );
+      dynamic installed = installResponse.data;
+      if (installed is Map && installed['data'] != null) installed = installed['data'];
+      if (installed == null) throw StateError('安装未完成');
+      await _loadSkills();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: const Text('Agent Skill 已安装'), backgroundColor: context.success));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('导入失败: ${safeErrorMessage(e)}'), backgroundColor: context.error));
+    } finally {
+      dio?.close(force: true);
+    }
   }
 
   void _showDetailSheet(Map<String, dynamic> skill) {
@@ -309,7 +421,7 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
 
   Future<void> _toggleSkill(Map<String, dynamic> skill) async {
     final id = (skill['id'] ?? '').toString();
-    final isEnabled = (skill['isEnabled'] as bool?) ?? ((skill['enabled'] as int?) == 1);
+    final isEnabled = (skill['enabled'] as bool?) ?? ((skill['isEnabled'] as bool?) ?? false);
     try {
       final svc = ref.read(extensionServiceProvider);
       if (isEnabled) {
@@ -375,65 +487,23 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
   }
 }
 
-class _ImportSkillSheet extends StatelessWidget {
-  final VoidCallback onConfirm;
-
-  const _ImportSkillSheet({required this.onConfirm});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 34),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(width: 40, height: 4, decoration: BoxDecoration(color: context.borderPrimary, borderRadius: BorderRadius.circular(2))),
-          ),
-          const SizedBox(height: 20),
-          Text('导入 Agent Skill', style: AppTypography.pageTitle(context)),
-          const SizedBox(height: 16),
-          GestureDetector(
-            onTap: null,
-            child: Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: context.surfaceSecondary,
-                borderRadius: AppRadius.brMedium,
-                border: Border.all(color: context.borderPrimary, width: 1, strokeAlign: BorderSide.strokeAlignOutside),
-              ),
-              child: Column(
-                children: [
-                  Icon(Icons.cloud_upload_outlined, size: 40, color: context.accentPrimary),
-                  const SizedBox(height: 8),
-                  Text('点击选择文件', style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600)),
-                  const SizedBox(height: 4),
-                  Text('支持 .skill.md, .zip, .tar.gz 格式', style: AppTypography.label(context)),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: context.accentSoft,
-              borderRadius: AppRadius.brSmall,
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.info_outline, size: 16, color: context.accentPrimary),
-                const SizedBox(width: 8),
-                Expanded(child: Text('导入后将自动解析 SKILL.md 并验证兼容性', style: AppTypography.label(context).copyWith(color: context.accentPrimary))),
-              ],
-            ),
-          ),
-          const SizedBox(height: 20),
-          AmitiaButton(label: '确认导入', isFullWidth: true, icon: Icons.file_download_done, onPressed: onConfirm),
-        ],
-      ),
-    );
+BadgeType _compatibilityBadgeTypeStatic(String compatibility) {
+  switch (compatibility.toLowerCase()) {
+    case 'compatible':
+    case 'fully_compatible':
+    case '完全兼容':
+      return BadgeType.success;
+    case 'partial':
+    case 'partially_compatible':
+    case '部分兼容':
+      return BadgeType.warning;
+    case 'incompatible':
+    case '不兼容':
+      return BadgeType.error;
+    case '兼容':
+      return BadgeType.info;
+    default:
+      return BadgeType.neutral;
   }
 }
 
@@ -444,13 +514,13 @@ class _SkillDetailSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final isEnabled = (skill['isEnabled'] as bool?) ?? ((skill['enabled'] as int?) == 1);
+    final isEnabled = (skill['enabled'] as bool?) ?? ((skill['isEnabled'] as bool?) ?? false);
     final name = (skill['name'] ?? '').toString();
     final description = (skill['description'] ?? '').toString();
-    final version = (skill['version'] ?? '1.0.0').toString();
-    final skillMd = (skill['skillMd'] ?? skill['skill_md'] ?? '').toString();
-    final compatibility = (skill['compatibility'] ?? '兼容').toString();
-    final requiredMcp = (skill['requiredMcp'] as List?)?.map((e) => e.toString()).toList() ?? [];
+    final version = ((skill['metadata'] as Map?)?['version'] ?? '').toString();
+    final skillMd = (skill['rawSkillMd'] ?? skill['body'] ?? '').toString();
+    final compatibility = (skill['compatibilityStatus'] ?? skill['compatibility'] ?? 'unknown').toString();
+    final requiredMcp = ((skill['mcpDependencies'] as List?) ?? const []).whereType<Map>().map((e) => (e['id'] ?? e['description'] ?? '').toString()).where((e) => e.isNotEmpty).toList();
 
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 12, 20, 34),
@@ -480,7 +550,7 @@ class _SkillDetailSheet extends StatelessWidget {
                   children: [
                     Text(name, style: AppTypography.cardTitle(context)),
                     const SizedBox(height: 2),
-                    Text('v$version', style: AppTypography.label(context)),
+                    if (version.isNotEmpty) Text('v$version', style: AppTypography.label(context)),
                   ],
                 ),
               ),
@@ -526,7 +596,7 @@ class _SkillDetailSheet extends StatelessWidget {
           Row(
             children: [
               Expanded(child: Text('兼容性', style: AppTypography.caption(context))),
-              AmitiaStatusBadge(label: compatibility, type: compatibility == '完全兼容' ? BadgeType.success : (compatibility == '部分兼容' ? BadgeType.warning : BadgeType.info)),
+              AmitiaStatusBadge(label: compatibility, type: _compatibilityBadgeTypeStatic(compatibility)),
             ],
           ),
           const SizedBox(height: 20),

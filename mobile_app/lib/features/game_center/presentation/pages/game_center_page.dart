@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:file_picker/file_picker.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
@@ -122,8 +123,20 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
             child: const Text('取消'),
           ),
           TextButton(
-            onPressed: () {
+            onPressed: () async {
               Navigator.pop(ctx);
+              final result = await FilePicker.platform.pickFiles(
+                allowMultiple: false,
+                type: FileType.custom,
+                allowedExtensions: const ['zip', 'amitia', 'tar', 'gz'],
+              );
+              final path = result?.files.single.path;
+              if (path == null || path.isEmpty) return;
+              final ok = await ref.read(gameCenterControllerProvider.notifier).install(path);
+              if (!context.mounted) return;
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text(ok ? '游戏插件安装完成' : '游戏插件安装失败')),
+              );
             },
             child: const Text('选择文件'),
           ),

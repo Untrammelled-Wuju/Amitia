@@ -10,63 +10,6 @@ import '../../shared/models/models.dart';
 import 'amitia_button.dart';
 import 'amitia_misc.dart';
 
-const _mockPrefix = '__mock:';
-
-enum _MockType { image, video, audio, emote, code }
-
-class _MockKind {
-  final _MockType type;
-  final List<String> args;
-  const _MockKind(this.type, this.args);
-}
-
-_MockKind? _parseMock(String content) {
-  if (!content.startsWith(_mockPrefix)) return null;
-  final body = content.substring(_mockPrefix.length);
-  final firstPipe = body.indexOf('|');
-  if (firstPipe == -1) return null;
-  final type = body.substring(0, firstPipe);
-  final rest = body.substring(firstPipe + 1);
-  switch (type) {
-    case 'image':
-      return _MockKind(_MockType.image, [rest]);
-    case 'video':
-      return _MockKind(_MockType.video, [rest]);
-    case 'audio':
-      return _MockKind(_MockType.audio, [rest]);
-    case 'emote':
-      final p = rest.indexOf('|');
-      if (p == -1) return _MockKind(_MockType.emote, [rest, '']);
-      return _MockKind(_MockType.emote, [
-        rest.substring(0, p),
-        rest.substring(p + 1),
-      ]);
-    case 'code':
-      final p = rest.indexOf('|');
-      if (p == -1) return _MockKind(_MockType.code, [rest, '']);
-      return _MockKind(_MockType.code, [
-        rest.substring(0, p),
-        rest.substring(p + 1),
-      ]);
-    default:
-      return null;
-  }
-}
-
-String mockImagePayload(String name) => '$_mockPrefix$_image|$name';
-String mockVideoPayload(String title) => '$_mockPrefix$_video|$title';
-String mockAudioPayload(String duration) => '$_mockPrefix$_audio|$duration';
-String mockEmotePayload(String emoji, String name) =>
-    '$_mockPrefix$_emote|$emoji|$name';
-String mockCodePayload(String lang, String body) =>
-    '$_mockPrefix$_code|$lang|$body';
-
-const _image = 'image';
-const _video = 'video';
-const _audio = 'audio';
-const _emote = 'emote';
-const _code = 'code';
-
 class AmitiaMessageBubble extends StatelessWidget {
   final ChatMessage message;
   final bool showAvatar;
@@ -122,7 +65,6 @@ class AmitiaMessageBubble extends StatelessWidget {
     }
 
     final isUser = message.role == MessageRole.user;
-    final mock = _parseMock(message.content);
 
     return Padding(
       padding: EdgeInsets.only(
@@ -150,7 +92,7 @@ class AmitiaMessageBubble extends StatelessWidget {
                   ? CrossAxisAlignment.end
                   : CrossAxisAlignment.start,
               children: [
-                _buildContent(context, isUser, mock),
+                _buildContent(context, isUser),
                 if (message.status == MessageStatus.error)
                   Padding(
                     padding: EdgeInsets.only(top: 4),
@@ -184,35 +126,50 @@ class AmitiaMessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildContent(BuildContext context, bool isUser, _MockKind? mock) {
-    if (mock != null) {
-      switch (mock.type) {
-        case _MockType.image:
-          return _MockImageMessage(name: mock.args[0], isUser: isUser);
-        case _MockType.video:
-          return _MockVideoMessage(title: mock.args[0], isUser: isUser);
-        case _MockType.audio:
-          return _MockAudioMessage(duration: mock.args[0], isUser: isUser);
-        case _MockType.emote:
-          return _MockEmoteMessage(
-            emoji: mock.args[0],
-            name: mock.args[1],
-            isUser: isUser,
-          );
-        case _MockType.code:
-          return _MockCodeMessage(
-            lang: mock.args[0],
-            body: mock.args[1],
-            isUser: isUser,
-          );
-      }
-    }
-    if (message.type == MessageType.file) {
-      return _FileMessage(
-        fileName: message.fileName ?? '',
-        fileSizeKB: message.fileSizeKB ?? 0,
-        isUser: isUser,
-      );
+  Widget _buildContent(BuildContext context, bool isUser) {
+    switch (message.type) {
+      case MessageType.image:
+        return _ImageMessage(
+          name: message.fileName ?? '图片',
+          url: message.mediaUrl,
+          isUser: isUser,
+        );
+      case MessageType.video:
+        return _VideoMessage(
+          title: message.fileName ?? '视频',
+          durationMs: message.durationMs ?? 0,
+          isUser: isUser,
+        );
+      case MessageType.audio:
+        return _AudioMessage(
+          title: message.fileName ?? '语音消息',
+          durationMs: message.durationMs ?? 0,
+          isUser: isUser,
+        );
+      case MessageType.emote:
+        return _EmoteMessage(
+          emoji: message.content,
+          name: '',
+          isUser: isUser,
+        );
+      case MessageType.code:
+        final parsed = _parseCodeFence(message.content);
+        return _CodeMessage(
+          lang: parsed.$1,
+          body: parsed.$2,
+          isUser: isUser,
+        );
+      case MessageType.file:
+        return _FileMessage(
+          fileName: message.fileName ?? message.content,
+          fileSizeKB: message.fileSizeKB ?? 0,
+          isUser: isUser,
+        );
+      case MessageType.text:
+      case MessageType.agentTask:
+      case MessageType.toolCall:
+      case MessageType.systemNotice:
+        break;
     }
     return Container(
       constraints: BoxConstraints(
@@ -240,6 +197,20 @@ class AmitiaMessageBubble extends StatelessWidget {
       ),
     );
   }
+
+  (String, String) _parseCodeFence(String content) {
+    final trimmed = content.trim();
+    if (!trimmed.startsWith('```') || !trimmed.endsWith('```')) {
+      return ('text', content);
+    }
+    final withoutPrefix = trimmed.substring(3);
+    final newline = withoutPrefix.indexOf('\n');
+    if (newline < 0) return ('text', withoutPrefix.replaceFirst(RegExp(r'```$'), ''));
+    final language = withoutPrefix.substring(0, newline).trim();
+    final body = withoutPrefix.substring(newline + 1, withoutPrefix.length - 3);
+    return (language.isEmpty ? 'text' : language, body);
+  }
+
 }
 
 class _MiniAvatar extends StatelessWidget {
@@ -340,50 +311,49 @@ class _FileMessage extends StatelessWidget {
   }
 }
 
-class _MockImageMessage extends StatelessWidget {
+class _ImageMessage extends StatelessWidget {
   final String name;
+  final String? url;
   final bool isUser;
-  const _MockImageMessage({required this.name, required this.isUser});
+  const _ImageMessage({required this.name, this.url, required this.isUser});
 
   @override
   Widget build(BuildContext context) {
+    final hasUrl = url != null && url!.isNotEmpty;
     return GestureDetector(
-      onTap: () => _preview(context),
+      onTap: hasUrl ? () => _preview(context) : null,
       child: Container(
         constraints: BoxConstraints(
           maxWidth: MediaQuery.sizeOf(context).width * 0.6,
         ),
         decoration: BoxDecoration(
-          color: _parseHex('#7668EE'),
+          color: context.surfaceSecondary,
           borderRadius: AppRadius.brMedium,
           border: isUser
               ? null
               : Border.all(color: context.borderPrimary, width: 0.5),
         ),
+        clipBehavior: Clip.antiAlias,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Container(
-              height: 140,
-              decoration: BoxDecoration(
-                color: _parseHex('#7668EE'),
-                borderRadius: const BorderRadius.vertical(
-                  top: Radius.circular(16),
-                ),
-              ),
-              child: Center(
-                child: Icon(
-                  Icons.image_outlined,
-                  size: 40,
-                  color: Colors.white.withValues(alpha: 0.8),
-                ),
-              ),
+            SizedBox(
+              height: 160,
+              width: double.infinity,
+              child: hasUrl
+                  ? Image.network(
+                      url!,
+                      fit: BoxFit.cover,
+                      errorBuilder: (_, __, ___) => _placeholder(context),
+                    )
+                  : _placeholder(context),
             ),
             Padding(
-              padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
               child: Text(
                 name,
-                style: const TextStyle(fontSize: 12, color: Colors.white),
+                style: AppTypography.label(context),
+                overflow: TextOverflow.ellipsis,
               ),
             ),
           ],
@@ -392,36 +362,36 @@ class _MockImageMessage extends StatelessWidget {
     );
   }
 
+  Widget _placeholder(BuildContext context) => Container(
+        color: context.accentSoft,
+        alignment: Alignment.center,
+        child: Icon(
+          Icons.image_outlined,
+          size: 40,
+          color: context.accentPrimary,
+        ),
+      );
+
   void _preview(BuildContext context) {
+    final value = url;
+    if (value == null || value.isEmpty) return;
     showDialog(
       context: context,
       builder: (ctx) => GestureDetector(
         onTap: () => Navigator.pop(ctx),
         child: Material(
-          color: Colors.black54,
-          child: Center(
-            child: Container(
-              width: MediaQuery.sizeOf(context).width * 0.8,
-              height: MediaQuery.sizeOf(context).width * 0.8,
-              decoration: BoxDecoration(
-                color: _parseHex('#7668EE'),
-                borderRadius: AppRadius.brMedium,
-              ),
-              child: Center(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      Icons.image_outlined,
-                      size: 64,
-                      color: Colors.white.withValues(alpha: 0.8),
-                    ),
-                    const SizedBox(height: 12),
-                    Text(
-                      name,
-                      style: const TextStyle(color: Colors.white, fontSize: 16),
-                    ),
-                  ],
+          color: Colors.black87,
+          child: SafeArea(
+            child: Center(
+              child: InteractiveViewer(
+                child: Image.network(
+                  value,
+                  fit: BoxFit.contain,
+                  errorBuilder: (_, __, ___) => const Icon(
+                    Icons.broken_image_outlined,
+                    color: Colors.white,
+                    size: 64,
+                  ),
                 ),
               ),
             ),
@@ -432,10 +402,23 @@ class _MockImageMessage extends StatelessWidget {
   }
 }
 
-class _MockVideoMessage extends StatelessWidget {
+class _VideoMessage extends StatelessWidget {
   final String title;
+  final int durationMs;
   final bool isUser;
-  const _MockVideoMessage({required this.title, required this.isUser});
+  const _VideoMessage({
+    required this.title,
+    required this.durationMs,
+    required this.isUser,
+  });
+
+  String get _duration {
+    if (durationMs <= 0) return '视频';
+    final total = durationMs ~/ 1000;
+    final min = total ~/ 60;
+    final sec = (total % 60).toString().padLeft(2, '0');
+    return '$min:$sec';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -443,57 +426,41 @@ class _MockVideoMessage extends StatelessWidget {
       constraints: BoxConstraints(
         maxWidth: MediaQuery.sizeOf(context).width * 0.6,
       ),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E1E2E),
+        color: isUser ? context.accentSoft : context.surfacePrimary,
         borderRadius: AppRadius.brMedium,
+        border: isUser
+            ? null
+            : Border.all(color: context.borderPrimary, width: 0.5),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            height: 120,
+            width: 44,
+            height: 44,
             decoration: BoxDecoration(
-              color: const Color(0xFF1E1E2E),
-              borderRadius: const BorderRadius.vertical(
-                top: Radius.circular(16),
-              ),
+              color: context.accentSoft,
+              borderRadius: AppRadius.brSmall,
             ),
-            child: Center(
-              child: Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.2),
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.play_arrow,
-                  color: Colors.white,
-                  size: 28,
-                ),
-              ),
+            child: Icon(
+              Icons.videocam_outlined,
+              color: context.accentPrimary,
             ),
           ),
-          Padding(
-            padding: EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            child: Row(
+          const SizedBox(width: 10),
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  Icons.videocam_outlined,
-                  size: 14,
-                  color: Colors.white.withValues(alpha: 0.7),
+                Text(
+                  title,
+                  style: AppTypography.bodySmall(context),
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(width: 6),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: Colors.white.withValues(alpha: 0.9),
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
+                const SizedBox(height: 2),
+                Text(_duration, style: AppTypography.label(context)),
               ],
             ),
           ),
@@ -503,10 +470,23 @@ class _MockVideoMessage extends StatelessWidget {
   }
 }
 
-class _MockAudioMessage extends StatelessWidget {
-  final String duration;
+class _AudioMessage extends StatelessWidget {
+  final String title;
+  final int durationMs;
   final bool isUser;
-  const _MockAudioMessage({required this.duration, required this.isUser});
+  const _AudioMessage({
+    required this.title,
+    required this.durationMs,
+    required this.isUser,
+  });
+
+  String get _duration {
+    if (durationMs <= 0) return '语音消息';
+    final total = durationMs ~/ 1000;
+    final min = total ~/ 60;
+    final sec = (total % 60).toString().padLeft(2, '0');
+    return '$min:$sec';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -514,7 +494,7 @@ class _MockAudioMessage extends StatelessWidget {
       constraints: BoxConstraints(
         maxWidth: MediaQuery.sizeOf(context).width * 0.62,
       ),
-      padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
         color: isUser ? context.accentSoft : context.surfacePrimary,
         borderRadius: AppRadius.brMedium,
@@ -529,29 +509,27 @@ class _MockAudioMessage extends StatelessWidget {
             width: 36,
             height: 36,
             decoration: BoxDecoration(
-              color: context.accentPrimary,
+              color: context.accentSoft,
               shape: BoxShape.circle,
             ),
-            child: const Icon(Icons.play_arrow, color: Colors.white, size: 20),
+            child: Icon(
+              Icons.graphic_eq_rounded,
+              color: context.accentPrimary,
+              size: 20,
+            ),
           ),
           const SizedBox(width: 10),
-          Expanded(
+          Flexible(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  children: List.generate(
-                    18,
-                    (i) => Container(
-                      margin: EdgeInsets.only(right: 2),
-                      width: 2,
-                      height: 6 + (i % 4) * 5.0,
-                      color: context.accentPrimary.withValues(alpha: 0.5),
-                    ),
-                  ),
+                Text(
+                  title,
+                  style: AppTypography.bodySmall(context),
+                  overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 4),
-                Text(duration, style: AppTypography.label(context)),
+                const SizedBox(height: 2),
+                Text(_duration, style: AppTypography.label(context)),
               ],
             ),
           ),
@@ -561,11 +539,11 @@ class _MockAudioMessage extends StatelessWidget {
   }
 }
 
-class _MockEmoteMessage extends StatelessWidget {
+class _EmoteMessage extends StatelessWidget {
   final String emoji;
   final String name;
   final bool isUser;
-  const _MockEmoteMessage({
+  const _EmoteMessage({
     required this.emoji,
     required this.name,
     required this.isUser,
@@ -596,11 +574,11 @@ class _MockEmoteMessage extends StatelessWidget {
   }
 }
 
-class _MockCodeMessage extends StatelessWidget {
+class _CodeMessage extends StatelessWidget {
   final String lang;
   final String body;
   final bool isUser;
-  const _MockCodeMessage({
+  const _CodeMessage({
     required this.lang,
     required this.body,
     required this.isUser,
@@ -897,27 +875,7 @@ class _ToolCallMessage extends StatelessWidget {
   }
 }
 
-const List<(String, String)> _mockImages = [
-  ('风景照', '#7668EE'),
-  ('截图', '#52B788'),
-  ('头像', '#E9A23B'),
-  ('壁纸', '#6C8FEA'),
-  ('相册', '#E76F51'),
-  ('照片', '#9B5DE5'),
-  ('图标', '#00BBF9'),
-  ('插画', '#F15BB5'),
-];
-
-const List<(String, int)> _mockFiles = [
-  ('产品需求文档.pdf', 2048),
-  ('周报模板.docx', 512),
-  ('数据统计.xlsx', 1024),
-  ('设计稿.png', 4096),
-  ('笔记.md', 64),
-  ('演示.pptx', 3072),
-];
-
-const List<(String, List<String>)> _mockEmotes = [
+const List<(String, List<String>)> _emojiGroups = [
   ('常用', ['😀', '😂', '🥰', '😎', '🤔', '😴', '👍', '❤️', '🔥', '🎉']),
   ('Amitia', ['😊', '🤗', '✨', '🌟', '💫', '🌸', '🌈', '☕']),
   ('动物', ['🐶', '🐱', '🐰', '🦊', '🐼', '🐨', '🐯', '🐸']),
@@ -937,10 +895,11 @@ class AmitiaChatInput extends StatefulWidget {
   final ValueChanged<String> onSend;
   final bool isAgentMode;
   final ValueChanged<bool>? onAgentModeChanged;
-  final void Function(String fileName, int sizeKB)? onSendFile;
-  final ValueChanged<String>? onSendImage;
+  final FutureOr<void> Function()? onPickFile;
+  final FutureOr<void> Function(bool camera)? onPickImage;
+  final FutureOr<void> Function(bool camera)? onPickVideo;
+  final FutureOr<void> Function()? onPickAudio;
   final void Function(String lang, String code)? onSendCode;
-  final ValueChanged<String>? onSendVoice;
   final void Function(String emoji, String name)? onSendEmote;
 
   const AmitiaChatInput({
@@ -948,10 +907,11 @@ class AmitiaChatInput extends StatefulWidget {
     required this.onSend,
     this.isAgentMode = false,
     this.onAgentModeChanged,
-    this.onSendFile,
-    this.onSendImage,
+    this.onPickFile,
+    this.onPickImage,
+    this.onPickVideo,
+    this.onPickAudio,
     this.onSendCode,
-    this.onSendVoice,
     this.onSendEmote,
   });
 
@@ -998,86 +958,32 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (sheetCtx) {
-        return SafeArea(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(20, 0, 20, 34),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 8),
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: context.borderPrimary,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
+      builder: (sheetCtx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('添加文件', style: AppTypography.pageTitle(context)),
+              const SizedBox(height: 12),
+              ListTile(
+                leading: _sheetIcon(
+                  context,
+                  Icons.folder_open_outlined,
+                  context.accentPrimary,
                 ),
-                const SizedBox(height: 20),
-                Text('选择文件', style: AppTypography.pageTitle(context)),
-                const SizedBox(height: 12),
-                ListTile(
-                  leading: _sheetIcon(
-                    context,
-                    Icons.folder_outlined,
-                    context.accentPrimary,
-                  ),
-                  title: const Text('选择文件'),
-                  onTap: () {
-                    Navigator.pop(sheetCtx);
-                    final f = _mockFiles.first;
-                    widget.onSendFile?.call(f.$1, f.$2);
-                  },
-                ),
-                ListTile(
-                  leading: _sheetIcon(
-                    context,
-                    Icons.history,
-                    context.accentPrimary,
-                  ),
-                  title: const Text('从工作区选择'),
-                  onTap: () {
-                    Navigator.pop(sheetCtx);
-                    final f = _mockFiles[2];
-                    widget.onSendFile?.call(f.$1, f.$2);
-                  },
-                ),
-                const Divider(height: 1),
-                const SizedBox(height: 8),
-                Text(
-                  '最近文件',
-                  style: AppTypography.label(
-                    context,
-                  ).copyWith(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 4),
-                ..._mockFiles.map(
-                  (f) => ListTile(
-                    leading: _sheetIcon(
-                      context,
-                      Icons.description_outlined,
-                      context.textTertiary,
-                    ),
-                    title: Text(f.$1, style: AppTypography.bodySmall(context)),
-                    trailing: Text(
-                      '${(f.$2 / 1024).toStringAsFixed(1)} MB',
-                      style: AppTypography.label(context),
-                    ),
-                    onTap: () {
-                      Navigator.pop(sheetCtx);
-                      widget.onSendFile?.call(f.$1, f.$2);
-                    },
-                  ),
-                ),
-              ],
-            ),
+                title: const Text('从本机选择'),
+                subtitle: const Text('上传后作为真实 Artifact 发送'),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  widget.onPickFile?.call();
+                },
+              ),
+            ],
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
@@ -1088,77 +994,90 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
       shape: const RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
       ),
-      builder: (sheetCtx) {
-        return SafeArea(
-          child: Padding(
-            padding: EdgeInsets.fromLTRB(20, 0, 20, 34),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 8),
-                Center(
-                  child: Container(
-                    width: 40,
-                    height: 4,
-                    decoration: BoxDecoration(
-                      color: context.borderPrimary,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
+      builder: (sheetCtx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('添加图片', style: AppTypography.pageTitle(context)),
+              const SizedBox(height: 12),
+              ListTile(
+                leading: _sheetIcon(
+                  context,
+                  Icons.photo_library_outlined,
+                  context.accentPrimary,
                 ),
-                const SizedBox(height: 20),
-                Text('选择图片', style: AppTypography.pageTitle(context)),
-                const SizedBox(height: 16),
-                GridView.builder(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                    crossAxisCount: 4,
-                    mainAxisSpacing: 10,
-                    crossAxisSpacing: 10,
-                    childAspectRatio: 1,
-                  ),
-                  itemCount: _mockImages.length,
-                  itemBuilder: (ctx, i) {
-                    final img = _mockImages[i];
-                    return GestureDetector(
-                      onTap: () {
-                        Navigator.pop(sheetCtx);
-                        widget.onSendImage?.call(img.$1);
-                      },
-                      child: Container(
-                        decoration: BoxDecoration(
-                          color: _parseHex(img.$2),
-                          borderRadius: AppRadius.brSmall,
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.image_outlined,
-                              color: Colors.white.withValues(alpha: 0.85),
-                              size: 22,
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              img.$1,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 11,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    );
-                  },
+                title: const Text('从相册选择'),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  widget.onPickImage?.call(false);
+                },
+              ),
+              ListTile(
+                leading: _sheetIcon(
+                  context,
+                  Icons.photo_camera_outlined,
+                  context.accentPrimary,
                 ),
-              ],
-            ),
+                title: const Text('拍照'),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  widget.onPickImage?.call(true);
+                },
+              ),
+            ],
           ),
-        );
-      },
+        ),
+      ),
+    );
+  }
+
+  void _showVideoPicker() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: context.surfacePrimary,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetCtx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('添加视频', style: AppTypography.pageTitle(context)),
+              const SizedBox(height: 12),
+              ListTile(
+                leading: _sheetIcon(
+                  context,
+                  Icons.video_library_outlined,
+                  context.accentPrimary,
+                ),
+                title: const Text('从相册选择'),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  widget.onPickVideo?.call(false);
+                },
+              ),
+              ListTile(
+                leading: _sheetIcon(
+                  context,
+                  Icons.videocam_outlined,
+                  context.accentPrimary,
+                ),
+                title: const Text('拍摄视频'),
+                onTap: () {
+                  Navigator.pop(sheetCtx);
+                  widget.onPickVideo?.call(true);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -1263,22 +1182,7 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
   }
 
   void _showVoiceSheet() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      isScrollControlled: true,
-      builder: (sheetCtx) {
-        return _VoiceRecorderSheet(
-          onSend: (duration) {
-            Navigator.pop(sheetCtx);
-            widget.onSendVoice?.call(duration);
-          },
-        );
-      },
-    );
+    widget.onPickAudio?.call();
   }
 
   void _showEmotePicker() {
@@ -1339,6 +1243,14 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
                 onTap: () {
                   Navigator.pop(sheetContext);
                   _showImagePicker();
+                },
+              ),
+              _ComposerTool(
+                icon: Icons.video_library_outlined,
+                label: '添加视频',
+                onTap: () {
+                  Navigator.pop(sheetContext);
+                  _showVideoPicker();
                 },
               ),
               _ComposerTool(
@@ -1581,219 +1493,6 @@ class _ComposerTool extends StatelessWidget {
   }
 }
 
-enum _VoiceState { idle, recording, paused, done }
-
-class _VoiceRecorderSheet extends StatefulWidget {
-  final ValueChanged<String> onSend;
-  const _VoiceRecorderSheet({required this.onSend});
-
-  @override
-  State<_VoiceRecorderSheet> createState() => _VoiceRecorderSheetState();
-}
-
-class _VoiceRecorderSheetState extends State<_VoiceRecorderSheet> {
-  _VoiceState _state = _VoiceState.idle;
-  int _seconds = 0;
-  Timer? _timer;
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  void _start() {
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted) return;
-      setState(() => _seconds++);
-    });
-    setState(() => _state = _VoiceState.recording);
-  }
-
-  void _pause() {
-    _timer?.cancel();
-    _timer = null;
-    setState(() => _state = _VoiceState.paused);
-  }
-
-  void _resume() {
-    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!mounted) return;
-      setState(() => _seconds++);
-    });
-    setState(() => _state = _VoiceState.recording);
-  }
-
-  void _finish() {
-    _timer?.cancel();
-    _timer = null;
-    setState(() => _state = _VoiceState.done);
-  }
-
-  void _reset() {
-    _timer?.cancel();
-    _timer = null;
-    setState(() {
-      _state = _VoiceState.idle;
-      _seconds = 0;
-    });
-  }
-
-  String get _duration {
-    final m = (_seconds ~/ 60).toString().padLeft(2, '0');
-    final s = (_seconds % 60).toString().padLeft(2, '0');
-    return '$m:$s';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(20, 0, 20, 34),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const SizedBox(height: 8),
-            Center(
-              child: Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: context.borderPrimary,
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
-            ),
-            const SizedBox(height: 20),
-            Text('语音录制', style: AppTypography.pageTitle(context)),
-            const SizedBox(height: 24),
-            Container(
-              width: 96,
-              height: 96,
-              decoration: BoxDecoration(
-                color: _state == _VoiceState.recording
-                    ? context.error.withValues(alpha: 0.12)
-                    : context.accentSoft,
-                shape: BoxShape.circle,
-              ),
-              child: Center(
-                child: Icon(
-                  _state == _VoiceState.recording ? Icons.mic : Icons.mic_none,
-                  size: 44,
-                  color: _state == _VoiceState.recording
-                      ? context.error
-                      : context.accentPrimary,
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              _duration,
-              style: AppTypography.pageLargeTitle(
-                context,
-              ).copyWith(fontFeatures: const [FontFeature.tabularFigures()]),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              _state == _VoiceState.idle
-                  ? '点击开始录音'
-                  : _state == _VoiceState.recording
-                  ? '正在录音……'
-                  : _state == _VoiceState.paused
-                  ? '已暂停'
-                  : '录制完成',
-              style: AppTypography.caption(context),
-            ),
-            const SizedBox(height: 24),
-            _buildControls(),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildControls() {
-    switch (_state) {
-      case _VoiceState.idle:
-        return AmitiaButton(
-          label: '开始录音',
-          icon: Icons.fiber_manual_record,
-          isFullWidth: true,
-          onPressed: _start,
-        );
-      case _VoiceState.recording:
-        return Row(
-          children: [
-            Expanded(
-              child: AmitiaButton(
-                label: '暂停',
-                icon: Icons.pause,
-                isSecondary: true,
-                isFullWidth: true,
-                onPressed: _pause,
-              ),
-            ),
-            SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: AmitiaButton(
-                label: '完成',
-                icon: Icons.stop,
-                isFullWidth: true,
-                onPressed: _finish,
-              ),
-            ),
-          ],
-        );
-      case _VoiceState.paused:
-        return Row(
-          children: [
-            Expanded(
-              child: AmitiaButton(
-                label: '继续',
-                icon: Icons.play_arrow,
-                isSecondary: true,
-                isFullWidth: true,
-                onPressed: _resume,
-              ),
-            ),
-            SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: AmitiaButton(
-                label: '完成',
-                icon: Icons.stop,
-                isFullWidth: true,
-                onPressed: _finish,
-              ),
-            ),
-          ],
-        );
-      case _VoiceState.done:
-        return Row(
-          children: [
-            Expanded(
-              child: AmitiaButton(
-                label: '重录',
-                icon: Icons.refresh,
-                isSecondary: true,
-                isFullWidth: true,
-                onPressed: _reset,
-              ),
-            ),
-            SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: AmitiaButton(
-                label: '发送',
-                icon: Icons.send,
-                isFullWidth: true,
-                onPressed: () => widget.onSend(_duration),
-              ),
-            ),
-          ],
-        );
-    }
-  }
-}
-
 class _EmotePicker extends StatefulWidget {
   final void Function(String emoji, String name) onSend;
   const _EmotePicker({required this.onSend});
@@ -1807,7 +1506,7 @@ class _EmotePickerState extends State<_EmotePicker> {
 
   @override
   Widget build(BuildContext context) {
-    final group = _mockEmotes[_group];
+    final group = _emojiGroups[_group];
     return SafeArea(
       child: Padding(
         padding: EdgeInsets.fromLTRB(12, 0, 12, 20),
@@ -1829,7 +1528,7 @@ class _EmotePickerState extends State<_EmotePicker> {
             Padding(
               padding: EdgeInsets.symmetric(horizontal: 8),
               child: Row(
-                children: List.generate(_mockEmotes.length, (i) {
+                children: List.generate(_emojiGroups.length, (i) {
                   final isSelected = i == _group;
                   return GestureDetector(
                     onTap: () => setState(() => _group = i),
@@ -1846,7 +1545,7 @@ class _EmotePickerState extends State<_EmotePicker> {
                         borderRadius: AppRadius.brTag,
                       ),
                       child: Text(
-                        _mockEmotes[i].$1,
+                        _emojiGroups[i].$1,
                         style: TextStyle(
                           fontSize: 13,
                           fontWeight: isSelected

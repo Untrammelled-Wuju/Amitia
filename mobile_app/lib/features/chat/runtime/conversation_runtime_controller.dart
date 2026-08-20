@@ -1,12 +1,17 @@
+import 'dart:async';
 import 'dart:collection';
 
 import 'package:flutter/foundation.dart';
 
+import '../../../core/models/conversation.dart';
 import '../../../core/services/chat_service.dart';
 import '../../../shared/models/models.dart';
 
-/// UI-agnostic conversation state. Native, schema and sandbox-web providers all
-/// consume the same runtime through a serialized context/action contract.
+/// UI-agnostic conversation runtime shared by the built-in UI and extension UI.
+///
+/// Mobile uses the same asynchronous web-chat contract as the desktop client:
+/// submit -> generation status -> persisted messages. This keeps cancellation,
+/// retries and media messages backed by real server state instead of UI mocks.
 class ConversationRuntimeController extends ChangeNotifier {
   ConversationRuntimeController(this._chatService);
 
@@ -14,8 +19,10 @@ class ConversationRuntimeController extends ChangeNotifier {
   final List<ChatMessage> _messages = <ChatMessage>[];
   final Map<String, String> _agentTaskStatus = <String, String>{};
   String? _conversationId;
+  String? _characterId;
   bool _sending = false;
   Object? _lastError;
+  int _generationEpoch = 0;
 
   UnmodifiableListView<ChatMessage> get messages =>
       UnmodifiableListView<ChatMessage>(_messages);
@@ -26,147 +33,407 @@ class ConversationRuntimeController extends ChangeNotifier {
   Object? get lastError => _lastError;
   String get state => _sending ? 'sending' : 'idle';
 
-  ChatMessage _cloneWithStatus(ChatMessage message, MessageStatus status) {
+  void setCharacterId(String? characterId) {
+    _characterId = characterId?.trim().isEmpty == true ? null : characterId;
+  }
+
+  ChatMessage _copy(
+    ChatMessage message, {
+    String? id,
+    MessageStatus? status,
+  }) {
     return ChatMessage(
-      id: message.id,
+      id: id ?? message.id,
       role: message.role,
       type: message.type,
       content: message.content,
       time: message.time,
-      status: status,
+      status: status ?? message.status,
       agentTaskTitle: message.agentTaskTitle,
       agentTaskSteps: message.agentTaskSteps,
       agentTaskProgress: message.agentTaskProgress,
       agentTaskElapsed: message.agentTaskElapsed,
       fileName: message.fileName,
       fileSizeKB: message.fileSizeKB,
+      resourceUri: message.resourceUri,
+      mediaUrl: message.mediaUrl,
+      mimeType: message.mimeType,
+      durationMs: message.durationMs,
       toolName: message.toolName,
       toolResult: message.toolResult,
     );
   }
 
-  Future<void> sendText(String text) {
-    final now = DateTime.now();
-    return addUserMessage(
+  Future<void> sendText(String text) async {
+    final value = text.trim();
+    if (value.isEmpty || _sending) return;
+    await _send(
       ChatMessage(
-        id: 'u${now.millisecondsSinceEpoch}',
+        id: _localId('u'),
         role: MessageRole.user,
         type: MessageType.text,
-        content: text,
-        time: now,
+        content: value,
+        time: DateTime.now(),
+        status: MessageStatus.sending,
       ),
+      message: value,
     );
   }
 
-  Future<void> sendFile(String fileName, int sizeKB) {
-    final now = DateTime.now();
-    return addUserMessage(
+  Future<void> sendCode(String language, String code) async {
+    final body = code.trim();
+    if (body.isEmpty || _sending) return;
+    final lang = language.trim().isEmpty ? 'text' : language.trim();
+    final content = '```$lang\n$body\n```';
+    await _send(
       ChatMessage(
-        id: 'u${now.millisecondsSinceEpoch}',
+        id: _localId('u'),
+        role: MessageRole.user,
+        type: MessageType.code,
+        content: content,
+        time: DateTime.now(),
+        status: MessageStatus.sending,
+      ),
+      message: content,
+    );
+  }
+
+  Future<void> sendEmote(String emoji, String name) async {
+    final value = emoji.trim().isNotEmpty ? emoji.trim() : name.trim();
+    if (value.isEmpty || _sending) return;
+    await _send(
+      ChatMessage(
+        id: _localId('u'),
+        role: MessageRole.user,
+        type: MessageType.emote,
+        content: value,
+        time: DateTime.now(),
+        status: MessageStatus.sending,
+      ),
+      message: value,
+    );
+  }
+
+  Future<void> sendImage({
+    required String resourceUri,
+    required String displayUrl,
+    required String fileName,
+    String mimeType = 'image/*',
+  }) async {
+    if (_sending) return;
+    await _send(
+      ChatMessage(
+        id: _localId('u'),
+        role: MessageRole.user,
+        type: MessageType.image,
+        content: '[图片]',
+        time: DateTime.now(),
+        status: MessageStatus.sending,
+        fileName: fileName,
+        resourceUri: resourceUri,
+        mediaUrl: displayUrl,
+        mimeType: mimeType,
+      ),
+      message: '[图片]',
+      imageUrl: resourceUri,
+    );
+  }
+
+  Future<void> sendVideo({
+    required String resourceUri,
+    required String displayUrl,
+    required String fileName,
+    String mimeType = 'video/*',
+    int durationMs = 0,
+  }) async {
+    if (_sending) return;
+    await _send(
+      ChatMessage(
+        id: _localId('u'),
+        role: MessageRole.user,
+        type: MessageType.video,
+        content: '[视频]',
+        time: DateTime.now(),
+        status: MessageStatus.sending,
+        fileName: fileName,
+        resourceUri: resourceUri,
+        mediaUrl: displayUrl,
+        mimeType: mimeType,
+        durationMs: durationMs,
+      ),
+      message: '[视频]',
+      videoUrl: resourceUri,
+    );
+  }
+
+  Future<void> sendVoice({
+    required String resourceUri,
+    required String displayUrl,
+    required String fileName,
+    String mimeType = 'audio/*',
+    int durationMs = 0,
+  }) async {
+    if (_sending) return;
+    await _send(
+      ChatMessage(
+        id: _localId('u'),
+        role: MessageRole.user,
+        type: MessageType.audio,
+        content: '[语音]',
+        time: DateTime.now(),
+        status: MessageStatus.sending,
+        fileName: fileName,
+        resourceUri: resourceUri,
+        mediaUrl: displayUrl,
+        mimeType: mimeType,
+        durationMs: durationMs,
+      ),
+      message: '[语音]',
+      audioUrl: resourceUri,
+      audioDuration: durationMs / 1000.0,
+    );
+  }
+
+  Future<void> sendFile({
+    required String resourceUri,
+    required String fileName,
+    required int sizeBytes,
+    String mimeType = 'application/octet-stream',
+  }) async {
+    if (_sending) return;
+    final content = '[文件] $fileName\n$resourceUri';
+    await _send(
+      ChatMessage(
+        id: _localId('u'),
         role: MessageRole.user,
         type: MessageType.file,
-        content: fileName,
-        time: now,
+        content: content,
+        time: DateTime.now(),
+        status: MessageStatus.sending,
         fileName: fileName,
-        fileSizeKB: sizeKB,
+        fileSizeKB: (sizeBytes / 1024).ceil(),
+        resourceUri: resourceUri,
+        mimeType: mimeType,
       ),
+      message: content,
     );
   }
 
-  static const _mockPrefix = '[mock]';
-  static const _image = 'image';
-  static const _video = 'video';
-  static const _audio = 'audio';
-  static const _emote = 'emote';
-  static const _code = 'code';
-
-  static String mockImagePayload(String name) => '$_mockPrefix$_image|$name';
-  static String mockVideoPayload(String title) => '$_mockPrefix$_video|$title';
-  static String mockAudioPayload(String duration) => '$_mockPrefix$_audio|$duration';
-  static String mockEmotePayload(String emoji, String name) => '$_mockPrefix$_emote|$emoji|$name';
-  static String mockCodePayload(String lang, String body) => '$_mockPrefix$_code|$lang|$body';
-
-  Future<void> sendImage(String name) => sendText(mockImagePayload(name));
-
-  Future<void> sendCode(String language, String code) =>
-      sendText(mockCodePayload(language, code));
-
-  Future<void> sendVoice(String duration) =>
-      sendText(mockAudioPayload(duration));
-
-  Future<void> sendEmote(String emoji, String name) =>
-      sendText(mockEmotePayload(emoji, name));
-
   Future<void> addUserMessage(ChatMessage message) async {
-    _messages.add(message);
-    _lastError = null;
-    notifyListeners();
-    await _replyAfter(message);
+    if (message.content.trim().isEmpty || _sending) return;
+    await _send(message, message: message.content);
   }
 
-  Future<void> _replyAfter(ChatMessage userMessage) async {
-    var content = userMessage.content;
-    if (content.startsWith('__mock:audio|')) {
-      content = '[语音消息]';
-    } else if (content.startsWith('__mock:emote|')) {
-      content = '[表情]';
-    } else if (content.startsWith('__mock:code|')) {
-      content = content.substring('__mock:code|'.length);
-    }
-
+  Future<void> _send(
+    ChatMessage localMessage, {
+    required String message,
+    String? imageUrl,
+    String? audioUrl,
+    double audioDuration = 0,
+    String? videoUrl,
+  }) async {
+    _messages.add(localMessage);
+    _lastError = null;
     _sending = true;
+    final epoch = ++_generationEpoch;
     notifyListeners();
+
     try {
-      final response = await _chatService.chat(
-        content,
+      final result = await _chatService.submitMessage(
+        message: message,
         conversationId: _conversationId,
+        characterId: _characterId,
+        imageUrl: imageUrl,
+        audioUrl: audioUrl,
+        audioDuration: audioDuration,
+        videoUrl: videoUrl,
       );
-      final replyTime = DateTime.now();
-      final reply = response?['reply'] as String? ??
-          response?['content'] as String? ??
-          response?['message'] as String? ??
-          '已收到你的消息';
-      _messages.add(
-        ChatMessage(
-          id: 'a${replyTime.millisecondsSinceEpoch}',
-          role: MessageRole.assistant,
-          type: MessageType.text,
-          content: reply,
-          time: replyTime,
-        ),
-      );
+      if (epoch != _generationEpoch) return;
+      if (result.conversationId.isNotEmpty) {
+        _conversationId = result.conversationId;
+      }
+      final localIndex = _messages.indexWhere((m) => m.id == localMessage.id);
+      if (localIndex >= 0) {
+        _messages[localIndex] = _copy(
+          _messages[localIndex],
+          id: result.userMessageId.isEmpty ? null : result.userMessageId,
+          status: MessageStatus.sent,
+        );
+      }
+      notifyListeners();
+      await _awaitGeneration(epoch);
       _lastError = null;
     } catch (error) {
+      if (epoch != _generationEpoch) return;
       _lastError = error;
-      final replyTime = DateTime.now();
-      _messages.add(
-        ChatMessage(
-          id: 'a${replyTime.millisecondsSinceEpoch}',
-          role: MessageRole.assistant,
-          type: MessageType.text,
-          content: '连接失败: ${error.toString().replaceFirst('Exception: ', '')}',
-          time: replyTime,
+      final localIndex = _messages.indexWhere((m) => m.id == localMessage.id);
+      if (localIndex >= 0) {
+        _messages[localIndex] = _copy(
+          _messages[localIndex],
           status: MessageStatus.error,
-        ),
-      );
+        );
+      }
     } finally {
-      _sending = false;
-      notifyListeners();
+      if (epoch == _generationEpoch) {
+        _sending = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  Future<void> _awaitGeneration(int epoch) async {
+    final conv = _conversationId;
+    if (conv == null || conv.isEmpty) return;
+    final deadline = DateTime.now().add(const Duration(minutes: 2));
+    var sawActiveState = false;
+    while (epoch == _generationEpoch && DateTime.now().isBefore(deadline)) {
+      final status = await _chatService.generationStatus(conv);
+      if (status == 'collecting' || status == 'processing') {
+        sawActiveState = true;
+        await Future<void>.delayed(const Duration(milliseconds: 250));
+        continue;
+      }
+      if (status == 'failed') {
+        throw StateError('AI 生成失败');
+      }
+      if (status == 'cancelled') {
+        await _syncMessages();
+        return;
+      }
+      if (status == 'completed' || (status == 'idle' && sawActiveState)) {
+        await _syncMessages();
+        return;
+      }
+      // The submit goroutine may not have entered collecting/processing yet.
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+    }
+    if (epoch != _generationEpoch) return;
+    await _syncMessages();
+  }
+
+  Future<void> _syncMessages() async {
+    final conv = _conversationId;
+    if (conv == null || conv.isEmpty) return;
+    final persisted = await _chatService.getMessages(conv);
+    if (persisted.isEmpty) return;
+
+    final localById = <String, ChatMessage>{
+      for (final message in _messages) message.id: message,
+    };
+    final mapped = persisted.map((dto) {
+      final existing = localById[dto.id];
+      final type = _typeForDto(dto, existing);
+      return ChatMessage(
+        id: dto.id,
+        role: _roleFor(dto.role),
+        type: type,
+        content: dto.content,
+        time: DateTime.tryParse(dto.createdAt) ?? existing?.time ?? DateTime.now(),
+        status: dto.status == 'failed'
+            ? MessageStatus.error
+            : MessageStatus.delivered,
+        fileName: existing?.fileName,
+        fileSizeKB: existing?.fileSizeKB,
+        resourceUri: _resourceForDto(dto, existing),
+        mediaUrl: existing?.mediaUrl,
+        mimeType: existing?.mimeType,
+        durationMs: dto.audioDuration > 0
+            ? (dto.audioDuration * 1000).round()
+            : existing?.durationMs,
+      );
+    }).toList(growable: false);
+    _messages
+      ..clear()
+      ..addAll(mapped);
+    notifyListeners();
+  }
+
+  MessageType _typeForDto(MessageDto dto, ChatMessage? existing) {
+    if (existing != null && existing.type != MessageType.text) {
+      return existing.type;
+    }
+    if (dto.imageUrl.isNotEmpty) return MessageType.image;
+    if (dto.videoUrl.isNotEmpty) return MessageType.video;
+    if (dto.audioUrl.isNotEmpty) return MessageType.audio;
+    if ((dto.emoteId ?? '').isNotEmpty) return MessageType.emote;
+    if (dto.content.startsWith('```') && dto.content.endsWith('```')) {
+      return MessageType.code;
+    }
+    return MessageType.text;
+  }
+
+  String? _resourceForDto(MessageDto dto, ChatMessage? existing) {
+    if (dto.imageUrl.isNotEmpty) return dto.imageUrl;
+    if (dto.videoUrl.isNotEmpty) return dto.videoUrl;
+    if (dto.audioUrl.isNotEmpty) return dto.audioUrl;
+    return existing?.resourceUri;
+  }
+
+  MessageRole _roleFor(String role) {
+    switch (role) {
+      case 'user':
+        return MessageRole.user;
+      case 'system':
+        return MessageRole.system;
+      default:
+        return MessageRole.assistant;
     }
   }
 
   Future<void> retryMessage(int index) async {
-    if (index < 0 || index >= _messages.length) return;
+    if (_sending || index < 0 || index >= _messages.length) return;
     final message = _messages[index];
-    _messages[index] = _cloneWithStatus(message, MessageStatus.sending);
+    if (message.role != MessageRole.user) return;
+    _messages.removeAt(index);
     notifyListeners();
-    await Future<void>.delayed(const Duration(milliseconds: 600));
-    if (index < _messages.length && _messages[index].id == message.id) {
-      _messages[index] = _cloneWithStatus(
-        _messages[index],
-        MessageStatus.sent,
-      );
-      notifyListeners();
+    switch (message.type) {
+      case MessageType.image:
+        if (message.resourceUri == null || message.mediaUrl == null) {
+          return sendText(message.content);
+        }
+        return sendImage(
+          resourceUri: message.resourceUri!,
+          displayUrl: message.mediaUrl!,
+          fileName: message.fileName ?? 'image',
+          mimeType: message.mimeType ?? 'image/*',
+        );
+      case MessageType.video:
+        if (message.resourceUri == null || message.mediaUrl == null) {
+          return sendText(message.content);
+        }
+        return sendVideo(
+          resourceUri: message.resourceUri!,
+          displayUrl: message.mediaUrl!,
+          fileName: message.fileName ?? 'video',
+          mimeType: message.mimeType ?? 'video/*',
+          durationMs: message.durationMs ?? 0,
+        );
+      case MessageType.audio:
+        if (message.resourceUri == null || message.mediaUrl == null) {
+          return sendText(message.content);
+        }
+        return sendVoice(
+          resourceUri: message.resourceUri!,
+          displayUrl: message.mediaUrl!,
+          fileName: message.fileName ?? 'audio',
+          mimeType: message.mimeType ?? 'audio/*',
+          durationMs: message.durationMs ?? 0,
+        );
+      case MessageType.file:
+        if (message.resourceUri == null) return sendText(message.content);
+        return sendFile(
+          resourceUri: message.resourceUri!,
+          fileName: message.fileName ?? 'file',
+          sizeBytes: (message.fileSizeKB ?? 0) * 1024,
+          mimeType: message.mimeType ?? 'application/octet-stream',
+        );
+      case MessageType.code:
+      case MessageType.emote:
+      case MessageType.text:
+      case MessageType.agentTask:
+      case MessageType.toolCall:
+      case MessageType.systemNotice:
+        return sendText(message.content);
     }
   }
 
@@ -182,29 +449,24 @@ class ConversationRuntimeController extends ChangeNotifier {
     notifyListeners();
   }
 
-
   Future<void> regenerate({String? messageId}) async {
-    ChatMessage? source;
-    if (messageId != null && messageId.isNotEmpty) {
-      final index = _messages.indexWhere((message) => message.id == messageId);
-      if (index >= 0) {
-        for (var i = index; i >= 0; i--) {
-          if (_messages[i].role == MessageRole.user) {
-            source = _messages[i];
-            break;
-          }
-        }
+    final conv = _conversationId;
+    if (_sending || conv == null || conv.isEmpty) return;
+    _sending = true;
+    final epoch = ++_generationEpoch;
+    _lastError = null;
+    notifyListeners();
+    try {
+      await _chatService.regenerate(conv);
+      if (epoch == _generationEpoch) await _syncMessages();
+    } catch (error) {
+      if (epoch == _generationEpoch) _lastError = error;
+    } finally {
+      if (epoch == _generationEpoch) {
+        _sending = false;
+        notifyListeners();
       }
     }
-    if (source == null) {
-      for (var i = _messages.length - 1; i >= 0; i--) {
-        if (_messages[i].role == MessageRole.user) {
-          source = _messages[i];
-          break;
-        }
-      }
-    }
-    if (source != null) await _replyAfter(source);
   }
 
   void deleteMessage(String messageId) {
@@ -215,19 +477,28 @@ class ConversationRuntimeController extends ChangeNotifier {
     notifyListeners();
   }
 
-  void stop() {
-    // The current mobile ChatService is request/response based and does not yet
-    // expose a cancellation token. Keep the runtime contract stable and mark
-    // the visual state idle; streaming transports can bind cancellation here.
+  Future<void> stop() async {
     if (!_sending) return;
+    final conv = _conversationId;
+    ++_generationEpoch;
     _sending = false;
     notifyListeners();
+    if (conv != null && conv.isNotEmpty) {
+      try {
+        await _chatService.cancelGeneration(conv);
+        await _syncMessages();
+      } catch (error) {
+        _lastError = error;
+        notifyListeners();
+      }
+    }
   }
 
   Future<bool> createConversation(String? characterId) async {
     final conversation = await _chatService.createConversation(characterId);
     if (conversation == null) return false;
     _conversationId = conversation.id;
+    _characterId = characterId;
     _messages.clear();
     _agentTaskStatus.clear();
     _lastError = null;
@@ -241,16 +512,19 @@ class ConversationRuntimeController extends ChangeNotifier {
     if (addSystemNotice) {
       _messages.add(
         ChatMessage(
-          id: 'sys${DateTime.now().millisecondsSinceEpoch}',
+          id: _localId('sys'),
           role: MessageRole.system,
           type: MessageType.systemNotice,
-          content: '聊天记录已清空',
+          content: '聊天记录已从当前界面清空',
           time: DateTime.now(),
         ),
       );
     }
     notifyListeners();
   }
+
+  String _localId(String prefix) =>
+      '$prefix${DateTime.now().microsecondsSinceEpoch}';
 
   Map<String, dynamic> serializeMessage(ChatMessage message) =>
       <String, dynamic>{
@@ -262,6 +536,10 @@ class ConversationRuntimeController extends ChangeNotifier {
         'status': message.status.name,
         if (message.fileName != null) 'fileName': message.fileName,
         if (message.fileSizeKB != null) 'fileSizeKB': message.fileSizeKB,
+        if (message.resourceUri != null) 'resourceUri': message.resourceUri,
+        if (message.mediaUrl != null) 'mediaUrl': message.mediaUrl,
+        if (message.mimeType != null) 'mimeType': message.mimeType,
+        if (message.durationMs != null) 'durationMs': message.durationMs,
         if (message.toolName != null) 'toolName': message.toolName,
         if (message.toolResult != null) 'toolResult': message.toolResult,
       };

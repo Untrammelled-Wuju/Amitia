@@ -179,7 +179,7 @@ class _AiConfigContentState extends State<_AiConfigContent> {
             label: '管理模型配置',
             icon: Icons.settings,
             isFullWidth: true,
-            onPressed: null,
+            onPressed: () => context.push(AppRoutes.settingsModels),
           ),
         ),
         SizedBox(height: AppSpacing.xl),

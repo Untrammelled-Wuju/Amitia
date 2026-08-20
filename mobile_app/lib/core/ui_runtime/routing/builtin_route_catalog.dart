@@ -62,6 +62,7 @@ import '../../../features/runtime/presentation/pages/runtime_page.dart';
 import '../../../features/permissions/presentation/pages/permissions_page.dart';
 import '../../../features/settings/presentation/pages/backup_page.dart';
 import '../../../features/settings/presentation/pages/ai_config_page.dart';
+import '../../../features/settings/presentation/pages/asr_page.dart';
 import '../../../features/settings/presentation/pages/deployment_page.dart';
 import '../../../features/settings/presentation/pages/system_settings_page.dart';
 import '../../../features/settings/presentation/pages/temporal_settings_page.dart';
@@ -587,6 +588,14 @@ GoRoute(
     context: context,
     state: state,
     child: const AiConfigPage(),
+  ),
+),
+GoRoute(
+  path: '/settings/asr',
+  pageBuilder: (context, state) => slideFadePage(
+    context: context,
+    state: state,
+    child: const AsrPage(),
   ),
 ),
 GoRoute(

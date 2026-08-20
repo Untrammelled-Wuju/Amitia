@@ -112,6 +112,7 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
   final bool centerTitle;
   final double elevation;
   final String fallbackRoute;
+  final PreferredSizeWidget? bottom;
 
   const AmitiaAppBar({
     super.key,
@@ -124,10 +125,12 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
     this.centerTitle = false,
     this.elevation = 0,
     this.fallbackRoute = AppRoutes.chat,
+    this.bottom,
   });
 
   @override
-  Size get preferredSize => Size.fromHeight(DesignTokenRuntime.components.toolbarHeight);
+  Size get preferredSize => Size.fromHeight(
+        DesignTokenRuntime.components.toolbarHeight + (bottom?.preferredSize.height ?? 0));
 
   @override
   Widget build(BuildContext context) {
@@ -173,6 +176,7 @@ class AmitiaAppBar extends StatelessWidget implements PreferredSizeWidget {
       centerTitle: centerTitle,
       elevation: elevation,
       scrolledUnderElevation: 0,
+      bottom: bottom,
     );
   }
 }

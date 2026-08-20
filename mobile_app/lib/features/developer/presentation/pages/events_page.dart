@@ -8,7 +8,7 @@ import '../../../../app/theme/app_typography.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../core/services/providers.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 
 class EventsPage extends ConsumerStatefulWidget {
   const EventsPage({super.key});
@@ -23,6 +23,7 @@ class _EventsPageState extends ConsumerState<EventsPage> {
   int _selectedTab = 0;
   final _tabs = ['事件历史', '死信队列', '事件类型'];
   List<Map<String, dynamic>> _events = [];
+  List<Map<String, dynamic>> _eventTypes = [];
 
   @override
   void initState() {
@@ -36,16 +37,53 @@ class _EventsPageState extends ConsumerState<EventsPage> {
       _error = null;
     });
     try {
-      final svc = ref.read(systemServiceProvider);
-      final data = await svc.diagnostics();
+      final api = ref.read(backendServiceProvider);
+      final results = await Future.wait([
+        api.get<Map<String, dynamic>>(
+          '/api/extensions/events/deliveries',
+          queryParameters: {'limit': 200},
+          fromJson: (e) => Map<String, dynamic>.from(e as Map),
+        ),
+        api.get<Map<String, dynamic>>(
+          '/api/extensions/events/dead-letters',
+          queryParameters: {'limit': 200},
+          fromJson: (e) => Map<String, dynamic>.from(e as Map),
+        ),
+        api.get<Map<String, dynamic>>(
+          '/api/extensions/events/types',
+          fromJson: (e) => Map<String, dynamic>.from(e as Map),
+        ),
+      ]);
+      final deliveries = (results[0]?['items'] as List<dynamic>? ?? const []).whereType<Map>().map((entry) {
+        final item = Map<String, dynamic>.from(entry);
+        return <String, dynamic>{
+          'id': (item['DeliveryID'] ?? item['deliveryId'] ?? '').toString(),
+          'type': (item['EventID'] ?? item['eventId'] ?? 'event').toString(),
+          'status': (item['Status'] ?? item['status'] ?? '').toString() == 'succeeded' ? '已处理' : (item['Status'] ?? item['status'] ?? '').toString(),
+          'time': (item['FinishedAt'] ?? item['finishedAt'] ?? item['CreatedAt'] ?? item['createdAt'] ?? '').toString(),
+          'detail': (item['ErrorMessage'] ?? item['errorMessage'] ?? '').toString(),
+          'raw': item,
+        };
+      });
+      final deadLetters = (results[1]?['items'] as List<dynamic>? ?? const []).whereType<Map>().map((entry) {
+        final item = Map<String, dynamic>.from(entry);
+        return <String, dynamic>{
+          'id': (item['DeadLetterID'] ?? item['deadLetterId'] ?? '').toString(),
+          'type': (item['EventTypeID'] ?? item['eventTypeId'] ?? item['EventID'] ?? 'event').toString(),
+          'status': '死信',
+          'time': (item['CreatedAt'] ?? item['createdAt'] ?? '').toString(),
+          'detail': (item['ErrorMessage'] ?? item['errorMessage'] ?? item['Reason'] ?? item['reason'] ?? '').toString(),
+          'raw': item,
+        };
+      });
+      final types = (results[2]?['items'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((e) => Map<String, dynamic>.from(e))
+          .toList();
       if (mounted) {
-        if (data != null) {
-          final events = data['events'];
-          if (events is List) {
-            _events = events.map((e) => Map<String, dynamic>.from(e as Map)).toList();
-          }
-        }
         setState(() {
+          _events = [...deliveries, ...deadLetters];
+          _eventTypes = types;
           _loading = false;
         });
       }
@@ -194,18 +232,22 @@ class _EventsPageState extends ConsumerState<EventsPage> {
   }
 
   Widget _buildEventTypeList(BuildContext context) {
-    final types = <String, bool>{
-      'message.receive': true,
-      'message.send': true,
-      'memory.created': true,
-      'memory.updated': true,
-      'hook.error': true,
-      'task.completed': true,
-    };
-
-    return ListView(
+    if (_eventTypes.isEmpty) {
+      return const AmitiaEmptyState(
+        icon: Icons.bolt_outlined,
+        title: '暂无事件类型',
+        subtitle: '扩展注册事件类型后会显示在这里',
+      );
+    }
+    return ListView.builder(
       padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
-      children: types.entries.map((e) {
+      itemCount: _eventTypes.length,
+      itemBuilder: (context, index) {
+        final type = _eventTypes[index];
+        final id = (type['EventTypeID'] ?? type['eventTypeId'] ?? '').toString();
+        final version = type['Version'] ?? type['version'] ?? '';
+        final risk = (type['RiskLevel'] ?? type['riskLevel'] ?? '').toString();
+        final description = (type['Description'] ?? type['description'] ?? '').toString();
         return Padding(
           padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 2),
           child: AmitiaCard(
@@ -214,10 +256,7 @@ class _EventsPageState extends ConsumerState<EventsPage> {
                 Container(
                   width: 36,
                   height: 36,
-                  decoration: BoxDecoration(
-                    color: context.accentSoft,
-                    borderRadius: AppRadius.brSmall,
-                  ),
+                  decoration: BoxDecoration(color: context.accentSoft, borderRadius: AppRadius.brSmall),
                   child: Icon(Icons.bolt, size: 18, color: context.accentPrimary),
                 ),
                 const SizedBox(width: 12),
@@ -225,25 +264,17 @@ class _EventsPageState extends ConsumerState<EventsPage> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(e.key, style: AppTypography.body(context).copyWith(fontFamily: 'monospace', fontSize: 14)),
+                      Text(id, style: AppTypography.body(context).copyWith(fontFamily: 'monospace', fontSize: 14)),
                       const SizedBox(height: 2),
-                      Text(e.value ? '已订阅' : '未订阅', style: AppTypography.label(context)),
+                      Text(description.isEmpty ? '版本 $version · 风险 $risk' : '$description · v$version · $risk', style: AppTypography.label(context)),
                     ],
                   ),
-                ),
-                Switch(
-                  value: e.value,
-                  onChanged: (v) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('${v ? '已订阅' : '已取消订阅'}：${e.key}')),
-                    );
-                  },
                 ),
               ],
             ),
           ),
         );
-      }).toList(),
+      },
     );
   }
 
@@ -376,15 +407,20 @@ class _EventsPageState extends ConsumerState<EventsPage> {
               child: Text('取消', style: TextStyle(color: context.textSecondary)),
             ),
             TextButton(
-              onPressed: () {
-                setState(() {
-                  final idx = _events.indexWhere((e) => e['id'] == event['id']);
-                  if (idx >= 0) {
-                    _events[idx]['status'] = '已处理';
-                  }
-                });
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已重放事件：${event['type']}')));
+              onPressed: () async {
+                final id = (event['id'] ?? '').toString();
+                try {
+                  await ref.read(backendServiceProvider).post(
+                    '/api/extensions/events/dead-letters/$id/replay',
+                    data: {'strategy': 'replay_same_subscription', 'requestedBy': 'mobile_app', 'reason': 'manual_replay'},
+                  );
+                  if (!context.mounted) return;
+                  Navigator.pop(context);
+                  await _load();
+                  if (mounted) ScaffoldMessenger.of(this.context).showSnackBar(SnackBar(content: Text('已重放事件：${event['type']}')));
+                } catch (e) {
+                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('重放失败：$e')));
+                }
               },
               child: Text('重放', style: TextStyle(color: context.accentPrimary)),
             ),
@@ -409,12 +445,17 @@ class _EventsPageState extends ConsumerState<EventsPage> {
               child: Text('取消', style: TextStyle(color: context.textSecondary)),
             ),
             TextButton(
-              onPressed: () {
-                setState(() {
-                  _events.removeWhere((e) => e['id'] == event['id']);
-                });
-                Navigator.pop(context);
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已丢弃事件：${event['type']}')));
+              onPressed: () async {
+                final id = (event['id'] ?? '').toString();
+                try {
+                  await ref.read(backendServiceProvider).post('/api/extensions/events/dead-letters/$id/discard');
+                  if (!context.mounted) return;
+                  Navigator.pop(context);
+                  await _load();
+                  if (mounted) ScaffoldMessenger.of(this.context).showSnackBar(SnackBar(content: Text('已丢弃事件：${event['type']}')));
+                } catch (e) {
+                  if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('丢弃失败：$e')));
+                }
               },
               child: Text('丢弃', style: TextStyle(color: context.error)),
             ),

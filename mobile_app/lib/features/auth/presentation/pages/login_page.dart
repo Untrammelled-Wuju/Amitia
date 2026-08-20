@@ -177,25 +177,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: [
-                      GestureDetector(
-                        onTap: null,
-                        child: Container(
-                          width: 20,
-                          height: 20,
-                          decoration: BoxDecoration(
-                            color: context.accentSoft,
-                            borderRadius: AppRadius.brTag,
-                            border: Border.all(color: context.accentPrimary, width: 1.5),
-                          ),
-                          child: Icon(Icons.check, size: 14, color: context.accentPrimary),
-                        ),
-                      ),
-                      SizedBox(width: AppSpacing.sm),
-                      Text('记住密码', style: AppTypography.caption(context)),
-                    ],
-                  ),
+                  const SizedBox.shrink(),
                   GestureDetector(
                     onTap: () {
                       ScaffoldMessenger.of(context).showSnackBar(

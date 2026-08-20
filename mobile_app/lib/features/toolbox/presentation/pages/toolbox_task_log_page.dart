@@ -39,15 +39,16 @@ class _ToolboxTaskLogPageState extends ConsumerState<ToolboxTaskLogPage> {
     setState(() { _loading = true; _error = null; });
     try {
       final api = ref.watch(backendServiceProvider);
-      final resp = await api.get<List<dynamic>>('/api/agent/tasks');
-      final items = resp ?? [];
+      final resp = await api.get<Map<String, dynamic>>('/api/extensions/tasks', queryParameters: const {'limit': 200});
+      final rows = resp?['items'];
+      final items = rows is List ? rows : const <dynamic>[];
       final logs = items.map((e) {
-        final m = e as Map<String, dynamic>? ?? {};
+        final m = e is Map ? Map<String, dynamic>.from(e) : <String, dynamic>{};
         return _TaskEntry(
-          name: (m['name'] ?? m['taskName'] ?? m['title'] ?? '').toString(),
+          name: (m['taskDefinitionId'] ?? m['taskRunId'] ?? '').toString(),
           status: (m['status'] ?? m['state'] ?? '未知').toString(),
-          time: (m['completedAt'] ?? m['updatedAt'] ?? m['time'] ?? '').toString(),
-          description: (m['result'] ?? m['description'] ?? m['message'] ?? '').toString(),
+          time: (m['finishedAt'] ?? m['startedAt'] ?? m['createdAt'] ?? '').toString(),
+          description: (m['errorMessage'] ?? m['extensionId'] ?? m['moduleId'] ?? '').toString(),
         );
       }).toList();
       if (mounted) {

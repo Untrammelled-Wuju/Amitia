@@ -6,12 +6,12 @@ class TemporalService {
   TemporalService(this._api);
 
   Future<Map<String, dynamic>?> config() async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/temporal/config');
+    final resp = await _api.get<Map<String, dynamic>>('/api/temporal/profile');
     return resp;
   }
 
   Future<bool> updateConfig(Map<String, dynamic> data) async {
-    await _api.put('/api/temporal/config', data: data);
+    await _api.put('/api/temporal/profile', data: data);
     return true;
   }
 

@@ -11,7 +11,7 @@ export 'kernel_models.dart';
 
 enum MessageRole { user, assistant, system }
 enum MessageStatus { sending, sent, delivered, error }
-enum MessageType { text, file, image, agentTask, toolCall, systemNotice }
+enum MessageType { text, file, image, video, audio, emote, code, agentTask, toolCall, systemNotice }
 
 class ChatMessage {
   final String id;
@@ -26,6 +26,10 @@ class ChatMessage {
   final String? agentTaskElapsed;
   final String? fileName;
   final int? fileSizeKB;
+  final String? resourceUri;
+  final String? mediaUrl;
+  final String? mimeType;
+  final int? durationMs;
   final String? toolName;
   final String? toolResult;
 
@@ -42,6 +46,10 @@ class ChatMessage {
     this.agentTaskElapsed,
     this.fileName,
     this.fileSizeKB,
+    this.resourceUri,
+    this.mediaUrl,
+    this.mimeType,
+    this.durationMs,
     this.toolName,
     this.toolResult,
   });
