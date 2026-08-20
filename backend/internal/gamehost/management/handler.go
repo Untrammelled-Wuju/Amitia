@@ -3,6 +3,7 @@ package management
 import (
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -13,6 +14,29 @@ type Handler struct {
 
 func NewHandler(service *GameCenterManagementService) *Handler {
 	return &Handler{service: service}
+}
+
+func (h *Handler) GetCenterHealth(c *gin.Context) {
+	if h.service == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "service unavailable"})
+		return
+	}
+
+	result, err := h.service.ListPlugins(c.Request.Context(), PluginFilter{}.Normalize())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 200,
+		"msg":  "ok",
+		"data": gin.H{
+			"status":      "healthy",
+			"pluginCount": result.Total,
+			"timestamp":   time.Now().UTC().Format(time.RFC3339),
+		},
+	})
 }
 
 func (h *Handler) ListPlugins(c *gin.Context) {

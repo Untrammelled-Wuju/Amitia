@@ -9,6 +9,7 @@ func RegisterGameCenterRouter(group *gin.RouterGroup, service *GameCenterManagem
 
 	gameCenter := group.Group("/game-center")
 	{
+		gameCenter.GET("/health", handler.GetCenterHealth)
 		gameCenter.GET("/plugins", handler.ListPlugins)
 		gameCenter.GET("/plugins/:pluginId", handler.GetPlugin)
 		gameCenter.GET("/plugins/:pluginId/health", handler.GetPluginHealth)
