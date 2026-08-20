@@ -125,6 +125,14 @@ export interface BackendUIProviderDefinition {
   fallbackProviderId?: string;
   trustLevel?: string;
   permissions?: string[];
+  placement?: "any" | "cloud" | "device" | "hybrid";
+  deviceRequirements?: {
+    platforms?: string[];
+    architectures?: string[];
+    minAppVersion?: string;
+    minRuntimeVersion?: string;
+    requiredFeatures?: string[];
+  };
   generation?: number;
   enabled: boolean;
   builtin?: boolean;
@@ -135,6 +143,8 @@ export interface BackendUIProfile {
   profileId: string;
   name: string;
   selections: Record<string, string>;
+  scope?: { userId?: string; deviceId?: string; platform?: string; runtimeProfile?: string };
+  revision?: number;
   updatedAt?: number;
 }
 
@@ -144,7 +154,9 @@ export interface BackendUIContributionSnapshot {
   timestamp: string;
   providers?: BackendUIProviderDefinition[];
   profile?: BackendUIProfile;
+  profileLayers?: BackendUIProfile[];
   resolved?: Record<string, BackendUIProviderDefinition>;
+  providerContext?: Record<string, unknown>;
   providerVersion?: number;
 }
 

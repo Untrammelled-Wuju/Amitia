@@ -153,6 +153,8 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
 		"extension_rollback_failed",
 		"extension_generation_changed",
 		"extension_contributions_changed",
+		"ui_provider_changed",
+		"ui_profile_changed",
 	]);
 
 	function handleExtensionChange(event: MessageEvent) {
@@ -221,6 +223,8 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
       case "extension_rollback_failed":
       case "extension_generation_changed":
       case "extension_contributions_changed":
+      case "ui_provider_changed":
+      case "ui_profile_changed":
         handleExtensionChange(event);
         break;
     }

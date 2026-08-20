@@ -4,7 +4,7 @@ import { useRoute } from "vue-router";
 import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
 import ExtensionContributionRenderer from "@/components/extension/ExtensionContributionRenderer.vue";
 import { useExtensionUIStore } from "@/stores/extensionUI";
-import { selectProviderEntry, trustedWebModule } from "@/ui-runtime/providerRuntime";
+import { isProviderCompatible, selectProviderEntry, trustedWebModule } from "@/ui-runtime/providerRuntime";
 import type { UIProviderCapability, UIProviderDefinition, UIProviderRenderContext } from "@/ui-runtime/types";
 
 const props = defineProps<{
@@ -36,13 +36,13 @@ const providerChain = computed<UIProviderDefinition[]>(() => {
   let current = requestedProvider.value;
   while (current && !seen.has(current.providerId)) {
     seen.add(current.providerId);
-    if (current.enabled) chain.push(current);
+    if (isProviderCompatible(current, store.snapshot?.providerContext, env.platform)) chain.push(current);
     const nextId = current.fallbackProviderId?.trim();
     current = nextId ? byId.get(nextId) ?? null : null;
   }
   // A built-in provider is always the final recovery boundary even when an
   // extension forgot to declare fallbackProviderId.
-  const builtin = providers.find((item) => item.builtin && item.enabled);
+  const builtin = providers.find((item) => item.builtin && isProviderCompatible(item, store.snapshot?.providerContext, env.platform));
   if (builtin && !seen.has(builtin.providerId)) chain.push(builtin);
   return chain;
 });

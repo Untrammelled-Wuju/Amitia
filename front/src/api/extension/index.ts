@@ -1,6 +1,7 @@
 import { apiClient } from "@/composables/useApi";
+import { uiClientQueryParams } from "@/ui-runtime/clientInfo";
 import type { UIContributionSummary, UIContributionSnapshot, SlotSnapshot } from "@/stores/extensionUI";
-import type { UIProviderDefinition, UIProfile, UIProviderCapability } from "@/ui-runtime/types";
+import type { UIProviderDefinition, UIProfile, UIProviderCapability, UIProfileEnvelope, UIProfileScopeKind } from "@/ui-runtime/types";
 import type {
   BackendUIContributionDefinition,
   BackendUIContributionSnapshot,
@@ -65,13 +66,17 @@ function transformSnapshot(raw: BackendUIContributionSnapshot): UIContributionSn
     version: 1,
     providers: (raw.providers ?? []) as UIProviderDefinition[],
     profile: raw.profile as UIProfile | undefined,
+    profileLayers: (raw.profileLayers ?? []) as UIProfile[],
     resolved: (raw.resolved ?? {}) as Partial<Record<UIProviderCapability, UIProviderDefinition>>,
+    providerContext: raw.providerContext as UIContributionSnapshot["providerContext"],
     providerVersion: raw.providerVersion ?? 1,
   };
 }
 
-export async function fetchUISnapshot(platform = "web"): Promise<UIContributionSnapshot> {
-  const res = await apiClient.get<BackendUIContributionSnapshot>("/api/extensions/ui/snapshot", { params: { platform } });
+export async function fetchUISnapshot(platform = "web", deviceId = ""): Promise<UIContributionSnapshot> {
+  const res = await apiClient.get<BackendUIContributionSnapshot>("/api/extensions/ui/snapshot", {
+    params: { platform, ...(deviceId ? { deviceId } : {}), ...(await uiClientQueryParams()) },
+  });
   return transformSnapshot(res.data);
 }
 
@@ -177,17 +182,32 @@ export async function fetchUIProviders(): Promise<UIProviderDefinition[]> {
   return res.data.providers ?? [];
 }
 
-export async function fetchUIProfile(): Promise<UIProfile> {
-  const res = await apiClient.get<UIProfile>("/api/extensions/ui/profile");
+export async function fetchUIProfile(params: { platform?: string; deviceId?: string; scope?: UIProfileScopeKind } = {}): Promise<UIProfileEnvelope> {
+  const res = await apiClient.get<UIProfileEnvelope>("/api/extensions/ui/profile", {
+    params: { ...params, ...(await uiClientQueryParams()) },
+  });
   return res.data;
 }
 
-export async function updateUIProfile(profile: UIProfile): Promise<UIProfile> {
-  const res = await apiClient.put<UIProfile>("/api/extensions/ui/profile", profile);
+export async function updateUIProfile(
+  profile: UIProfile,
+  params: { platform?: string; deviceId?: string; scope?: UIProfileScopeKind } = {},
+): Promise<UIProfile> {
+  const res = await apiClient.put<UIProfile>("/api/extensions/ui/profile", profile, {
+    params: { ...params, ...(await uiClientQueryParams()) },
+  });
   return res.data;
 }
 
-export async function resolveUIProvider(capability: UIProviderCapability, platform: string): Promise<UIProviderDefinition | null> {
-  const res = await apiClient.get<{ provider?: UIProviderDefinition }>("/api/extensions/ui/providers/resolve", { params: { capability, platform } });
+export async function deleteUIProfileOverride(params: { platform?: string; deviceId?: string; scope: UIProfileScopeKind; revision?: number }): Promise<void> {
+  await apiClient.delete("/api/extensions/ui/profile", {
+    params: { ...params, ...(await uiClientQueryParams()) },
+  });
+}
+
+export async function resolveUIProvider(capability: UIProviderCapability, platform: string, deviceId = ""): Promise<UIProviderDefinition | null> {
+  const res = await apiClient.get<{ provider?: UIProviderDefinition }>("/api/extensions/ui/providers/resolve", {
+    params: { capability, platform, ...(deviceId ? { deviceId } : {}), ...(await uiClientQueryParams()) },
+  });
   return res.data.provider ?? null;
 }

@@ -102,6 +102,8 @@ export interface AmitiaDesktopAPI {
   onUpdateError(callback: (event: unknown, data: unknown) => void): () => void;
   setAuthToken(token: string): Promise<void>;
   getBackendAuthHeaders(): Promise<Record<string, string>>;
+  getMeshIdentity(): Promise<{ deviceId: string; runtimeId: string; platform: string } | null>;
+  getMeshStatus(): Promise<{ state: string; deviceId: string; runtimeId: string; runtimeSessionId: string } | null>;
   onUINavigate(callback: (target: string) => void): () => void;
 }
 
