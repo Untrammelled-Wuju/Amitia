@@ -62,7 +62,7 @@ class _PrivacyPageState extends ConsumerState<PrivacyPage> {
           Expanded(
             child: ListView(
               controller: _scrollController,
-              padding: const EdgeInsets.all(AppSpacing.pagePadding),
+              padding: EdgeInsets.all(AppSpacing.pagePadding),
               children: [
                 _Section(
                   icon: Icons.shield_outlined,
@@ -74,7 +74,7 @@ class _PrivacyPageState extends ConsumerState<PrivacyPage> {
                     '在云端部署模式下，数据将通过端到端加密传输至你指定的服务器，传输过程使用 TLS 1.3 加密协议。',
                   ],
                 ),
-                const SizedBox(height: AppSpacing.lg),
+                SizedBox(height: AppSpacing.lg),
                 _Section(
                   icon: Icons.psychology_outlined,
                   title: '二、AI 模型调用',
@@ -85,7 +85,7 @@ class _PrivacyPageState extends ConsumerState<PrivacyPage> {
                     '模型服务商的数据处理遵循其各自的隐私政策，Amitia 不控制也不对模型服务商的数据处理行为承担责任。',
                   ],
                 ),
-                const SizedBox(height: AppSpacing.lg),
+                SizedBox(height: AppSpacing.lg),
                 _Section(
                   icon: Icons.build_outlined,
                   title: '三、Agent 模式与工具调用',
@@ -96,7 +96,7 @@ class _PrivacyPageState extends ConsumerState<PrivacyPage> {
                     '建议你定期在设置 > 系统权限中审查已授权的权限列表，及时撤销不再需要的权限。',
                   ],
                 ),
-                const SizedBox(height: AppSpacing.lg),
+                SizedBox(height: AppSpacing.lg),
                 _Section(
                   icon: Icons.memory,
                   title: '四、记忆系统',
@@ -107,7 +107,7 @@ class _PrivacyPageState extends ConsumerState<PrivacyPage> {
                     '你可以随时在记忆管理页面查看、编辑或删除任何记忆条目，也可以导出全部记忆数据。',
                   ],
                 ),
-                const SizedBox(height: AppSpacing.lg),
+                SizedBox(height: AppSpacing.lg),
                 _Section(
                   icon: Icons.devices_other,
                   title: '五、渠道连接（微信/QQ）',
@@ -118,7 +118,7 @@ class _PrivacyPageState extends ConsumerState<PrivacyPage> {
                     '你可以随时在渠道管理页面断开连接，断开后 Amitia 将不再接收或发送该渠道的消息。',
                   ],
                 ),
-                const SizedBox(height: AppSpacing.lg),
+                SizedBox(height: AppSpacing.lg),
                 _Section(
                   icon: Icons.security,
                   title: '六、使用边界与免责声明',
@@ -130,7 +130,7 @@ class _PrivacyPageState extends ConsumerState<PrivacyPage> {
                     '请遵守当地法律法规，不得将 Amitia 用于任何违法或侵权的活动。',
                   ],
                 ),
-                const SizedBox(height: AppSpacing.lg),
+                SizedBox(height: AppSpacing.lg),
                 _Section(
                   icon: Icons.update,
                   title: '七、条款更新',
@@ -140,15 +140,15 @@ class _PrivacyPageState extends ConsumerState<PrivacyPage> {
                     '你可以在设置 > 关于 中随时查看最新版本的条款。',
                   ],
                 ),
-                const SizedBox(height: AppSpacing.lg),
+                SizedBox(height: AppSpacing.lg),
                 if (!_hasScrolledToBottom)
                   Center(
                     child: Padding(
-                      padding: const EdgeInsets.all(AppSpacing.md),
+                      padding: EdgeInsets.all(AppSpacing.md),
                       child: Column(
                         children: [
                           Icon(Icons.arrow_downward, size: 20, color: context.textTertiary),
-                          const SizedBox(height: AppSpacing.xs),
+                          SizedBox(height: AppSpacing.xs),
                           Text('向下滚动查看完整条款', style: AppTypography.label(context)),
                         ],
                       ),
@@ -158,7 +158,7 @@ class _PrivacyPageState extends ConsumerState<PrivacyPage> {
             ),
           ),
           Container(
-            padding: const EdgeInsets.all(AppSpacing.pagePadding),
+            padding: EdgeInsets.all(AppSpacing.pagePadding),
             decoration: BoxDecoration(
               color: context.surfacePrimary,
               border: Border(top: BorderSide(color: context.borderSecondary, width: 1)),
@@ -176,7 +176,7 @@ class _PrivacyPageState extends ConsumerState<PrivacyPage> {
                           size: 22,
                           color: _agreed ? context.accentPrimary : context.textTertiary,
                         ),
-                        const SizedBox(width: AppSpacing.sm),
+                        SizedBox(width: AppSpacing.sm),
                         Expanded(
                           child: Text(
                             '我已阅读并同意以上隐私条款与使用边界',
@@ -186,7 +186,7 @@ class _PrivacyPageState extends ConsumerState<PrivacyPage> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: AppSpacing.md),
+                  SizedBox(height: AppSpacing.md),
                   AmitiaButton(
                     label: '同意并继续',
                     icon: Icons.check_circle_outline,
@@ -219,7 +219,7 @@ class _Section extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.cardPadding),
+      padding: EdgeInsets.all(AppSpacing.cardPadding),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
         borderRadius: AppRadius.brMedium,
@@ -239,15 +239,15 @@ class _Section extends StatelessWidget {
                 ),
                 child: Icon(icon, size: 20, color: color),
               ),
-              const SizedBox(width: AppSpacing.md),
+              SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Text(title, style: AppTypography.cardTitle(context)),
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           ...paragraphs.map((p) => Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+            padding: EdgeInsets.only(bottom: AppSpacing.sm),
             child: Text(
               p,
               style: AppTypography.bodySmall(context).copyWith(height: 1.6),

@@ -173,7 +173,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
           _buildProgress(),
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.all(AppSpacing.pagePadding),
+              padding: EdgeInsets.all(AppSpacing.pagePadding),
               child: _buildStepContent(),
             ),
           ),
@@ -185,14 +185,14 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
 
   Widget _buildProgress() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
       child: Row(
         children: [
           Text(
             '步骤 ${_currentStep + 1}/${_steps.length}',
             style: AppTypography.label(context),
           ),
-          const SizedBox(width: AppSpacing.md),
+          SizedBox(width: AppSpacing.md),
           Expanded(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(3),
@@ -204,7 +204,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
               ),
             ),
           ),
-          const SizedBox(width: AppSpacing.md),
+          SizedBox(width: AppSpacing.md),
           Text(
             _steps[_currentStep],
             style: AppTypography.caption(context).copyWith(color: context.accentPrimary),
@@ -217,7 +217,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   Widget _buildBottomBar() {
     final isLast = _currentStep == _steps.length - 1;
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
         border: Border(top: BorderSide(color: context.borderSecondary, width: 1)),
@@ -236,7 +236,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
               )
             else
               const Spacer(),
-            const SizedBox(width: AppSpacing.md),
+            SizedBox(width: AppSpacing.md),
             Expanded(
               child: AmitiaButton(
                 label: isLast ? '进入 Amitia' : '下一步',
@@ -321,7 +321,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: AppSpacing.xxl),
+        SizedBox(height: AppSpacing.xxl),
         Center(
           child: Container(
             width: 100,
@@ -333,24 +333,24 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             child: Icon(Icons.auto_awesome, size: 50, color: context.accentPrimary),
           ),
         ),
-        const SizedBox(height: AppSpacing.xl),
+        SizedBox(height: AppSpacing.xl),
         Center(
           child: Text('欢迎使用 Amitia', style: AppTypography.pageLargeTitle(context)),
         ),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
         Center(
           child: Text(
             '你的专属 AI 伙伴平台',
             style: AppTypography.body(context).copyWith(color: context.textSecondary),
           ),
         ),
-        const SizedBox(height: AppSpacing.sectionGap),
+        SizedBox(height: AppSpacing.sectionGap),
         AmitiaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('接下来我们将引导你完成以下配置：', style: AppTypography.body(context)),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               ...[
                 '运行环境与部署模式',
                 '管理员账号初始化',
@@ -358,11 +358,11 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                 'AI 角色头像、名字与性格',
                 '初始记忆设定',
               ].map((item) => Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                padding: EdgeInsets.only(bottom: AppSpacing.sm),
                 child: Row(
                   children: [
                     Icon(Icons.check_circle_outline, size: 18, color: context.accentPrimary),
-                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(width: AppSpacing.sm),
                     Text(item, style: AppTypography.bodySmall(context)),
                   ],
                 ),
@@ -370,13 +370,13 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             ],
           ),
         ),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         AmitiaCard(
           backgroundColor: context.accentSoft,
           child: Row(
             children: [
               Icon(Icons.info_outline, size: 20, color: context.accentPrimary),
-              const SizedBox(width: AppSpacing.md),
+              SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Text(
                   '整个过程大约需要 5 分钟，你可以随时返回上一步修改配置。',
@@ -397,17 +397,17 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('运行环境检查', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         Text('请确认以下组件状态正常，以确保 Amitia 正常运行。', style: AppTypography.caption(context)),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         if (!_envChecked && _envResults.isEmpty)
           AmitiaCard(
             child: Column(
               children: [
                 Icon(Icons.search, size: 40, color: context.textTertiary),
-                const SizedBox(height: AppSpacing.md),
+                SizedBox(height: AppSpacing.md),
                 Text('点击下方按钮开始检查', style: AppTypography.caption(context)),
-                const SizedBox(height: AppSpacing.md),
+                SizedBox(height: AppSpacing.md),
                 AmitiaButton(
                   label: '开始检查',
                   icon: Icons.play_arrow,
@@ -423,7 +423,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
               child: Column(
                 children: [
                   CircularProgressIndicator(strokeWidth: 2.5, color: context.accentPrimary),
-                  const SizedBox(height: AppSpacing.md),
+                  SizedBox(height: AppSpacing.md),
                   Text('正在检查环境...', style: AppTypography.caption(context)),
                 ],
               ),
@@ -433,7 +433,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
           ...List.generate(checks.length, (i) {
             final ok = _envResults[i];
             return Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              padding: EdgeInsets.only(bottom: AppSpacing.sm),
               child: AmitiaCard(
                 child: Row(
                   children: [
@@ -450,7 +450,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                         color: ok ? context.success : context.warning,
                       ),
                     ),
-                    const SizedBox(width: AppSpacing.md),
+                    SizedBox(width: AppSpacing.md),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -475,7 +475,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
               child: Row(
                 children: [
                   Icon(Icons.shield_outlined, size: 18, color: context.warning),
-                  const SizedBox(width: AppSpacing.sm),
+                  SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(
                       '部分组件未就绪，你可以继续配置并在后续启动后再处理。',
@@ -499,18 +499,18 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('选择部署模式', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         Text('不同的部署模式影响数据存储和访问方式。', style: AppTypography.caption(context)),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         ...List.generate(modes.length, (i) {
           final mode = modes[i];
           final isSelected = _deployMode == i;
           return Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.md),
+            padding: EdgeInsets.only(bottom: AppSpacing.md),
             child: GestureDetector(
               onTap: () => setState(() => _deployMode = i),
               child: Container(
-                padding: const EdgeInsets.all(AppSpacing.cardPadding),
+                padding: EdgeInsets.all(AppSpacing.cardPadding),
                 decoration: BoxDecoration(
                   color: isSelected ? context.accentSoft : context.surfacePrimary,
                   borderRadius: AppRadius.brMedium,
@@ -530,7 +530,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                       ),
                       child: Icon(mode.$3, size: 24, color: isSelected ? Colors.white : context.accentPrimary),
                     ),
-                    const SizedBox(width: AppSpacing.md),
+                    SizedBox(width: AppSpacing.md),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -539,7 +539,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                             children: [
                               Text(mode.$1, style: AppTypography.cardTitle(context)),
                               if (mode.$4) ...[
-                                const SizedBox(width: AppSpacing.sm),
+                                SizedBox(width: AppSpacing.sm),
                                 AmitiaStatusBadge(label: '推荐', type: BadgeType.accent),
                               ],
                             ],
@@ -569,32 +569,32 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('管理员账号初始化', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         Text('创建管理员账号用于管理 Amitia 平台。', style: AppTypography.caption(context)),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         AmitiaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('用户名', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               AmitiaTextField(
                 hintText: '请输入管理员用户名',
                 controller: _adminUserController,
                 prefixIcon: Icon(Icons.person_outline, size: 20, color: context.textTertiary),
               ),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               Text('密码', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               AmitiaTextField(
                 hintText: '请输入密码',
                 controller: _adminPassController,
                 obscureText: true,
                 prefixIcon: Icon(Icons.lock_outline, size: 20, color: context.textTertiary),
               ),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               Container(
-                padding: const EdgeInsets.all(AppSpacing.md),
+                padding: EdgeInsets.all(AppSpacing.md),
                 decoration: BoxDecoration(
                   color: context.accentSoft,
                   borderRadius: AppRadius.brSmall,
@@ -602,7 +602,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                 child: Row(
                   children: [
                     Icon(Icons.security, size: 18, color: context.accentPrimary),
-                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(width: AppSpacing.sm),
                     Expanded(
                       child: Text(
                         '密码将使用加密存储，仅你本人可登录管理后台。',
@@ -629,12 +629,12 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('使用边界确认', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         Text('请仔细阅读并确认以下使用边界。', style: AppTypography.caption(context)),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         ...List.generate(boundaries.length, (i) {
           return Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.md),
+            padding: EdgeInsets.only(bottom: AppSpacing.md),
             child: GestureDetector(
               onTap: () => setState(() => _boundaryAgreed[i] = !_boundaryAgreed[i]),
               child: AmitiaCard(
@@ -646,7 +646,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                       size: 22,
                       color: _boundaryAgreed[i] ? context.accentPrimary : context.textTertiary,
                     ),
-                    const SizedBox(width: AppSpacing.md),
+                    SizedBox(width: AppSpacing.md),
                     Expanded(
                       child: Text(boundaries[i], style: AppTypography.bodySmall(context)),
                     ),
@@ -682,7 +682,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
               ),
               child: Icon(icon, size: 22, color: context.accentPrimary),
             ),
-            const SizedBox(width: AppSpacing.md),
+            SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -694,40 +694,40 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             ),
           ],
         ),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         AmitiaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('服务商', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               AmitiaTextField(
                 hintText: '如 OpenAI / Anthropic / DeepSeek',
                 controller: providerCtrl,
                 prefixIcon: Icon(Icons.business, size: 20, color: context.textTertiary),
               ),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               Text('模型名称', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               AmitiaTextField(
                 hintText: '如 GPT-4o / Claude 3.5 Sonnet',
                 controller: modelCtrl,
                 prefixIcon: Icon(Icons.psychology_outlined, size: 20, color: context.textTertiary),
               ),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               Text('API Key', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               AmitiaTextField(
                 hintText: '请输入 API Key',
                 controller: keyCtrl,
                 obscureText: true,
                 prefixIcon: Icon(Icons.key, size: 20, color: context.textTertiary),
               ),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Row(
                 children: [
                   Icon(Icons.info_outline, size: 14, color: context.textTertiary),
-                  const SizedBox(width: AppSpacing.xs),
+                  SizedBox(width: AppSpacing.xs),
                   Expanded(
                     child: Text(
                       'API Key 将加密存储，不会明文显示。',
@@ -748,9 +748,9 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('选择角色头像颜色', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         Text('为你的 AI 角色选择一个标识颜色。', style: AppTypography.caption(context)),
-        const SizedBox(height: AppSpacing.xl),
+        SizedBox(height: AppSpacing.xl),
         Center(
           child: Container(
             width: 100,
@@ -774,9 +774,9 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             ),
           ),
         ),
-        const SizedBox(height: AppSpacing.xxl),
+        SizedBox(height: AppSpacing.xxl),
         Text('选择颜色', style: AppTypography.label(context)),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
         Wrap(
           spacing: AppSpacing.md,
           runSpacing: AppSpacing.md,
@@ -815,9 +815,9 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('角色名字', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         Text('为你的 AI 角色取一个名字。', style: AppTypography.caption(context)),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         Center(
           child: Container(
             width: 80,
@@ -834,22 +834,22 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             ),
           ),
         ),
-        const SizedBox(height: AppSpacing.xl),
+        SizedBox(height: AppSpacing.xl),
         AmitiaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('角色名称', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               AmitiaTextField(
                 hintText: '如 Amitia / 小雨 / Epsilon',
                 controller: _charNameCtrl,
                 prefixIcon: Icon(Icons.badge_outlined, size: 20, color: context.textTertiary),
                 onChanged: (_) => setState(() {}),
               ),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('推荐名称', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               Wrap(
                 spacing: AppSpacing.sm,
                 runSpacing: AppSpacing.sm,
@@ -888,15 +888,15 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('角色身份', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         Text('定义 ${_charNameCtrl.text.isNotEmpty ? _charNameCtrl.text : '角色'} 的身份定位。', style: AppTypography.caption(context)),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         AmitiaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('自定义身份', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               AmitiaTextField(
                 hintText: '输入角色身份描述',
                 controller: _charIdentityCtrl,
@@ -905,14 +905,14 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             ],
           ),
         ),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         Text('或选择预设身份', style: AppTypography.label(context)),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
         ...List.generate(identities.length, (i) {
           final id = identities[i];
           final isSelected = _charIdentityCtrl.text == id.$1;
           return Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+            padding: EdgeInsets.only(bottom: AppSpacing.sm),
             child: GestureDetector(
               onTap: () {
                 _charIdentityCtrl.text = id.$1;
@@ -931,7 +931,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                       size: 22,
                       color: isSelected ? context.accentPrimary : context.textTertiary,
                     ),
-                    const SizedBox(width: AppSpacing.md),
+                    SizedBox(width: AppSpacing.md),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -956,9 +956,9 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('角色性格', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         Text('选择 ${_charNameCtrl.text.isNotEmpty ? _charNameCtrl.text : '角色'} 的性格特质（可多选）。', style: AppTypography.caption(context)),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         Wrap(
           spacing: AppSpacing.md,
           runSpacing: AppSpacing.md,
@@ -988,14 +988,14 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             );
           }),
         ),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         if (_selectedTraits.asMap().entries.where((e) => e.value).isNotEmpty)
           AmitiaCard(
             backgroundColor: context.accentSoft,
             child: Row(
               children: [
                 Icon(Icons.check_circle, size: 18, color: context.accentPrimary),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Text(
                     '已选择 ${_selectedTraits.where((v) => v).length} 个性格特质',
@@ -1014,28 +1014,28 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('初始记忆', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         Text('为 ${_charNameCtrl.text.isNotEmpty ? _charNameCtrl.text : '角色'} 设定一些初始记忆，让它更了解你。', style: AppTypography.caption(context)),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         AmitiaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('记忆内容', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               AmitiaTextField(
                 hintText: '例如：我喜欢喝咖啡，主要做全栈开发...',
                 controller: _initMemoryCtrl,
                 maxLines: 5,
               ),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('也可以在后续使用中逐步添加记忆。', style: AppTypography.label(context)),
             ],
           ),
         ),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         Text('快速添加', style: AppTypography.label(context)),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         Wrap(
           spacing: AppSpacing.sm,
           runSpacing: AppSpacing.sm,
@@ -1088,9 +1088,9 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('设置汇总', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         Text('请确认以下配置信息，确认无误后即可进入 Amitia。', style: AppTypography.caption(context)),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         Center(
           child: Container(
             width: 72,
@@ -1107,7 +1107,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             ),
           ),
         ),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         AmitiaCard(
           child: Column(
             children: [
@@ -1121,7 +1121,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
                         width: 90,
                         child: Text(items[i].$1, style: AppTypography.label(context)),
                       ),
-                      const SizedBox(width: AppSpacing.md),
+                      SizedBox(width: AppSpacing.md),
                       Expanded(
                         child: Text(
                           items[i].$2,
@@ -1145,7 +1145,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
   Widget _buildFinish() {
     return Column(
       children: [
-        const SizedBox(height: AppSpacing.xxl),
+        SizedBox(height: AppSpacing.xxl),
         Center(
           child: Container(
             width: 100,
@@ -1157,35 +1157,35 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             child: Icon(Icons.celebration, size: 50, color: context.accentPrimary),
           ),
         ),
-        const SizedBox(height: AppSpacing.xl),
+        SizedBox(height: AppSpacing.xl),
         Center(
           child: Text('一切就绪！', style: AppTypography.pageLargeTitle(context)),
         ),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
         Center(
           child: Text(
             '${_charNameCtrl.text.isNotEmpty ? _charNameCtrl.text : '你的 AI 伙伴'} 正在等你',
             style: AppTypography.body(context).copyWith(color: context.textSecondary),
           ),
         ),
-        const SizedBox(height: AppSpacing.sectionGap),
+        SizedBox(height: AppSpacing.sectionGap),
         AmitiaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('你可以随时在设置中修改以上配置。', style: AppTypography.bodySmall(context)),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               ...[
                 '在对话页面与角色聊天',
                 '通过 Agent 模式执行任务',
                 '在设置中管理模型和权限',
                 '在角色页面自定义角色属性',
               ].map((item) => Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+                padding: EdgeInsets.only(bottom: AppSpacing.sm),
                 child: Row(
                   children: [
                     Icon(Icons.arrow_right, size: 18, color: context.accentPrimary),
-                    const SizedBox(width: AppSpacing.xs),
+                    SizedBox(width: AppSpacing.xs),
                     Text(item, style: AppTypography.bodySmall(context)),
                   ],
                 ),
@@ -1193,7 +1193,7 @@ class _OnboardingPageState extends ConsumerState<OnboardingPage> {
             ],
           ),
         ),
-        const SizedBox(height: AppSpacing.lg),
+        SizedBox(height: AppSpacing.lg),
         AmitiaButton(
           label: '进入 Amitia',
           icon: Icons.rocket_launch,

@@ -140,12 +140,12 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: 'Ubuntu Runtime', showBackButton: true, fallbackRoute: AppRoutes.settings),
       body: ListView(
-        padding: const EdgeInsets.all(AppSpacing.pagePadding),
+        padding: EdgeInsets.all(AppSpacing.pagePadding),
         children: [
           _StatusCard(status: status),
-          const SizedBox(height: AppSpacing.sectionGap),
+          SizedBox(height: AppSpacing.sectionGap),
           Text('运行组件', style: AppTypography.sectionTitle(context)),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           Container(
             decoration: BoxDecoration(
               color: context.surfacePrimary,
@@ -153,16 +153,16 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
               border: Border.all(color: context.borderPrimary, width: 0.5),
             ),
             child: Padding(
-              padding: const EdgeInsets.all(AppSpacing.cardPadding),
+              padding: EdgeInsets.all(AppSpacing.cardPadding),
               child: Text(
                 'Runtime 版本: ${status.runtimeVersion.isEmpty ? '未知' : status.runtimeVersion}',
                 style: AppTypography.caption(context),
               ),
             ),
           ),
-          const SizedBox(height: AppSpacing.sectionGap),
+          SizedBox(height: AppSpacing.sectionGap),
           Text('操作', style: AppTypography.sectionTitle(context)),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           Wrap(
             spacing: AppSpacing.md,
             runSpacing: AppSpacing.md,
@@ -235,7 +235,7 @@ class _StatusCard extends StatelessWidget {
     final backendLabel = _backendStateLabel(status);
 
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.cardPadding),
+      padding: EdgeInsets.all(AppSpacing.cardPadding),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
         borderRadius: AppRadius.brMedium,

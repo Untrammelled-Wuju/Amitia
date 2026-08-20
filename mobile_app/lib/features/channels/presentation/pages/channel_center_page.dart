@@ -79,7 +79,7 @@ class _ChannelCenterPageState extends ConsumerState<ChannelCenterPage> {
         child: _loading
             ? const AmitiaLoadingState(message: '加载中...')
             : ListView(
-                padding: const EdgeInsets.all(AppSpacing.pagePadding),
+                padding: EdgeInsets.all(AppSpacing.pagePadding),
                 children: [
                   _ChannelCard(
                     icon: Icons.chat_bubble,
@@ -89,7 +89,7 @@ class _ChannelCenterPageState extends ConsumerState<ChannelCenterPage> {
                     syncTime: null,
                     onTap: () => context.push(AppRoutes.channelsWechat),
                   ),
-                  const SizedBox(height: AppSpacing.sm),
+                  SizedBox(height: AppSpacing.sm),
                   _ChannelCard(
                     icon: Icons.account_circle,
                     iconColor: const Color(0xFF12B7F5),
@@ -98,7 +98,7 @@ class _ChannelCenterPageState extends ConsumerState<ChannelCenterPage> {
                     syncTime: _qqSyncTime(),
                     onTap: () => context.push(AppRoutes.channelsQq),
                   ),
-                  const SizedBox(height: AppSpacing.sm),
+                  SizedBox(height: AppSpacing.sm),
                   _ChannelCard(
                     icon: Icons.add_circle_outline,
                     iconColor: context.textTertiary,

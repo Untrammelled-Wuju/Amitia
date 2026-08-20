@@ -71,7 +71,7 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.sm),
+              padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.sm),
               child: AmitiaSegmentedControl(
                 segments: _segments,
                 selectedIndex: _selectedSegment,
@@ -92,9 +92,9 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                               onAction: () => _showReminderEditor(context, null),
                             )
                           : ListView.separated(
-                              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                              padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
                               itemCount: _filteredReminders.length,
-                              separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+                              separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
                               itemBuilder: (context, index) => _buildReminderCard(context, _filteredReminders[index]),
                             ),
             ),
@@ -207,7 +207,7 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                   color: _getCategoryColor(context, category),
                 ),
               ),
-              const SizedBox(width: AppSpacing.md),
+              SizedBox(width: AppSpacing.md),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -224,7 +224,7 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Row(
             children: [
               Icon(Icons.access_time, size: 14, color: context.textTertiary),
@@ -239,7 +239,7 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                 AmitiaStatusBadge(label: '已启用', type: BadgeType.accent),
             ],
           ),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Row(
             children: [
               if (!isCompleted) ...[
@@ -247,7 +247,7 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                   onTap: () => _showTestResult(context, title),
                   child: _buildActionButton(context, '测试', Icons.science_outlined, context.success),
                 ),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
                 GestureDetector(
                   onTap: () => _toggleReminder(id, !isEnabled),
                   child: _buildActionButton(
@@ -257,7 +257,7 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                     context.warning,
                   ),
                 ),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
               ],
               GestureDetector(
                 onTap: () => _showReminderEditor(context, reminder),
@@ -313,23 +313,23 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: context.borderPrimary, borderRadius: BorderRadius.circular(2)))),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               Text(isEdit ? '编辑提醒' : '新建提醒', style: AppTypography.sectionTitle(context)),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               Text('标题', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               AmitiaTextField(controller: titleCtrl, hintText: '输入提醒标题'),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('描述', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               AmitiaTextField(controller: descCtrl, maxLines: 2, hintText: '输入提醒描述'),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('Cron 表达式', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               AmitiaTextField(controller: TextEditingController(text: cronExpr), hintText: '例如：0 9 * * *'),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('分类', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               Wrap(
                 spacing: AppSpacing.sm,
                 children: ['工作', '社交', '生活', '健康', '日常'].map((c) {
@@ -347,7 +347,7 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
                   );
                 }).toList(),
               ),
-              const SizedBox(height: AppSpacing.xl),
+              SizedBox(height: AppSpacing.xl),
               AmitiaButton(
                 label: isEdit ? '保存' : '创建',
                 isFullWidth: true,
@@ -399,7 +399,7 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
           children: [
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(AppSpacing.lg),
+              padding: EdgeInsets.all(AppSpacing.lg),
               decoration: BoxDecoration(
                 color: context.success.withValues(alpha: 0.08),
                 borderRadius: AppRadius.brMedium,
@@ -407,12 +407,12 @@ class _RemindersPageState extends ConsumerState<RemindersPage> {
               child: Column(
                 children: [
                   Icon(Icons.check_circle, size: 36, color: context.success),
-                  const SizedBox(height: AppSpacing.sm),
+                  SizedBox(height: AppSpacing.sm),
                   Text('提醒发送成功', style: AppTypography.cardTitle(context).copyWith(color: context.success)),
                 ],
               ),
             ),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Text('提醒标题：$title', style: AppTypography.bodySmall(context)),
             const SizedBox(height: 4),
             Text('通知渠道：系统通知', style: AppTypography.caption(context)),

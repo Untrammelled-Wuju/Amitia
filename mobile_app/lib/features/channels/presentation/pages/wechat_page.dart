@@ -86,9 +86,9 @@ class _WechatPageState extends ConsumerState<WechatPage> {
           mainAxisSize: MainAxisSize.min,
           children: [
             Icon(Icons.check_circle, size: 48, color: context.success),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Text('连接成功', style: AppTypography.cardTitle(context)),
-            const SizedBox(height: AppSpacing.xs),
+            SizedBox(height: AppSpacing.xs),
             Text('微信已成功连接', style: AppTypography.caption(context)),
           ],
         ),
@@ -182,20 +182,20 @@ class _WechatPageState extends ConsumerState<WechatPage> {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '微信连接', showBackButton: true, fallbackRoute: AppRoutes.channels),
       body: ListView(
-        padding: const EdgeInsets.all(AppSpacing.pagePadding),
+        padding: EdgeInsets.all(AppSpacing.pagePadding),
         children: [
           _buildStatusCard(),
-          const SizedBox(height: AppSpacing.sectionGap),
+          SizedBox(height: AppSpacing.sectionGap),
           _buildQRCard(),
-          const SizedBox(height: AppSpacing.sectionGap),
+          SizedBox(height: AppSpacing.sectionGap),
           _buildAccountInfo(),
-          const SizedBox(height: AppSpacing.sectionGap),
+          SizedBox(height: AppSpacing.sectionGap),
           _buildMessageStatus(),
-          const SizedBox(height: AppSpacing.sectionGap),
+          SizedBox(height: AppSpacing.sectionGap),
           _buildActions(),
-          const SizedBox(height: AppSpacing.sectionGap),
+          SizedBox(height: AppSpacing.sectionGap),
           _buildLogs(),
-          const SizedBox(height: AppSpacing.sectionGap),
+          SizedBox(height: AppSpacing.sectionGap),
           _buildRiskWarning(),
         ],
       ),
@@ -221,7 +221,7 @@ class _WechatPageState extends ConsumerState<WechatPage> {
               color: _isConnected ? context.success : context.warning,
             ),
           ),
-          const SizedBox(width: AppSpacing.md),
+          SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -242,7 +242,7 @@ class _WechatPageState extends ConsumerState<WechatPage> {
       child: Column(
         children: [
           Text('登录二维码', style: AppTypography.cardTitle(context)),
-          const SizedBox(height: AppSpacing.lg),
+          SizedBox(height: AppSpacing.lg),
           Container(
             width: 200,
             height: 200,
@@ -256,7 +256,7 @@ class _WechatPageState extends ConsumerState<WechatPage> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(Icons.check_circle, size: 56, color: context.success),
-                      const SizedBox(height: AppSpacing.sm),
+                      SizedBox(height: AppSpacing.sm),
                       Text('已登录', style: AppTypography.body(context).copyWith(color: context.success)),
                     ],
                   )
@@ -264,12 +264,12 @@ class _WechatPageState extends ConsumerState<WechatPage> {
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Icon(Icons.qr_code_2, size: 80, color: context.textTertiary),
-                      const SizedBox(height: AppSpacing.sm),
+                      SizedBox(height: AppSpacing.sm),
                       Text('扫描二维码登录', style: AppTypography.caption(context)),
                     ],
                   ),
           ),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           if (!_isConnected)
             AmitiaButton(
               label: '重新生成二维码',
@@ -288,7 +288,7 @@ class _WechatPageState extends ConsumerState<WechatPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('账号信息', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
         AmitiaCard(
           child: Column(
             children: [
@@ -307,7 +307,7 @@ class _WechatPageState extends ConsumerState<WechatPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('消息状态', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
         Row(
           children: [
             Expanded(
@@ -317,7 +317,7 @@ class _WechatPageState extends ConsumerState<WechatPage> {
                 isActive: _receiving,
               ),
             ),
-            const SizedBox(width: AppSpacing.md),
+            SizedBox(width: AppSpacing.md),
             Expanded(
               child: _MessageStatusCard(
                 icon: Icons.upload,
@@ -336,7 +336,7 @@ class _WechatPageState extends ConsumerState<WechatPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('操作', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
         Wrap(
           spacing: AppSpacing.md,
           runSpacing: AppSpacing.md,
@@ -370,9 +370,9 @@ class _WechatPageState extends ConsumerState<WechatPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('日志摘要', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
         Container(
-          padding: const EdgeInsets.all(AppSpacing.cardPadding),
+          padding: EdgeInsets.all(AppSpacing.cardPadding),
           decoration: BoxDecoration(
             color: context.surfacePrimary,
             borderRadius: AppRadius.brMedium,
@@ -388,7 +388,7 @@ class _WechatPageState extends ConsumerState<WechatPage> {
                   children: _logs.take(8).map((log) {
                     final isError = log.contains('失败') || log.contains('断开');
                     return Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                      padding: EdgeInsets.only(bottom: AppSpacing.xs),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -401,7 +401,7 @@ class _WechatPageState extends ConsumerState<WechatPage> {
                               shape: BoxShape.circle,
                             ),
                           ),
-                          const SizedBox(width: AppSpacing.sm),
+                          SizedBox(width: AppSpacing.sm),
                           Expanded(
                             child: Text(
                               log,
@@ -428,13 +428,13 @@ class _WechatPageState extends ConsumerState<WechatPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(Icons.warning_amber, size: 20, color: context.warning),
-          const SizedBox(width: AppSpacing.md),
+          SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('风险提示', style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600, color: context.warning)),
-                const SizedBox(height: AppSpacing.xs),
+                SizedBox(height: AppSpacing.xs),
                 Text(
                   '微信渠道使用网页版协议，存在被封号风险。建议仅在必要时使用，不要频繁重新连接或发送大量消息。',
                   style: AppTypography.caption(context).copyWith(color: context.warning, height: 1.5),
@@ -479,7 +479,7 @@ class _MessageStatusCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
+      padding: EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
         borderRadius: AppRadius.brMedium,
@@ -491,9 +491,9 @@ class _MessageStatusCard extends StatelessWidget {
       child: Column(
         children: [
           Icon(icon, size: 28, color: isActive ? context.success : context.textTertiary),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Text(label, style: AppTypography.caption(context)),
-          const SizedBox(height: AppSpacing.xs),
+          SizedBox(height: AppSpacing.xs),
           AmitiaStatusBadge(
             label: isActive ? '正常' : '暂停',
             type: isActive ? BadgeType.success : BadgeType.neutral,
