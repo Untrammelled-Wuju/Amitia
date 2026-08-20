@@ -16,7 +16,7 @@ func NewGitHandler(controller *GitController) *GitHandler {
 }
 
 func (h *GitHandler) RegisterRoutes(r gin.IRouter) {
-	git := r.Group("/api/workspaces/git")
+	git := r.Group("/workspaces/git")
 	{
 		git.POST("/status", h.handleStatus)
 		git.POST("/diff", h.handleDiff)
@@ -31,7 +31,7 @@ func (h *GitHandler) RegisterRoutes(r gin.IRouter) {
 		git.POST("/push", h.handlePush)
 		git.POST("/remotes", h.handleListRemotes)
 	}
-	isolated := r.Group("/api/workspaces/isolated")
+	isolated := r.Group("/workspaces/isolated")
 	{
 		isolated.POST("", h.handleCreateIsolated)
 		isolated.POST("/delete", h.handleDeleteIsolated)
@@ -41,7 +41,7 @@ func (h *GitHandler) RegisterRoutes(r gin.IRouter) {
 
 func (h *GitHandler) handleStatus(c *gin.Context) {
 	var req struct {
-		WorkspaceURI  string `json:"workspaceUri" binding:"required"`
+		WorkspaceURI   string `json:"workspaceUri" binding:"required"`
 		IncludeIgnored bool   `json:"includeIgnored"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
