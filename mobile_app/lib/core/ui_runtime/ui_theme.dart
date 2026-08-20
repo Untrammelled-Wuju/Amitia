@@ -323,14 +323,14 @@ ThemeData applyUIThemeProvider(ThemeData base, UIProviderDefinition? provider) {
         : base.textTheme.apply(fontFamily: typography.fontFamily),
     iconTheme: base.iconTheme.copyWith(size: icons.medium),
     extensions: <ThemeExtension<dynamic>>[
-      ...base.extensions.where(
+      ...base.extensions.values.where(
         (extension) =>
             extension is! AmitiaColorTokens &&
             extension is! AmitiaLayoutTokens &&
             extension is! AmitiaTypographyTokens &&
             extension is! AmitiaIconTokens &&
             extension is! AmitiaComponentTokens,
-      ),
+      ).toList().cast<ThemeExtension<dynamic>>(),
       colors,
       layout,
       typography,

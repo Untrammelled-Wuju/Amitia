@@ -15,7 +15,9 @@ class UIRuntimeController extends StateNotifier<AsyncValue<UIProviderSnapshot?>>
     if (state.valueOrNull == null) state = const AsyncValue.loading();
     try {
       final json = await _service.getUISnapshot(currentUIPlatform());
-      state = AsyncValue.data(UIProviderSnapshot.fromJson(json));
+      if (json != null) {
+        state = AsyncValue.data(UIProviderSnapshot.fromJson(json));
+      }
     } catch (error, stack) {
       state = AsyncValue.error(error, stack);
     } finally {

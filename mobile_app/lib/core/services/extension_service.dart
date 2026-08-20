@@ -206,4 +206,53 @@ class ExtensionService {
     final resp = await _api.get<Map<String, dynamic>>('/api/extensions/runs/$runId');
     return resp;
   }
+
+  Future<Map<String, dynamic>?> getUISnapshot(String platform) async {
+    final resp = await _api.get<Map<String, dynamic>>('/api/extensions/ui/snapshot', queryParameters: {'platform': platform});
+    return resp;
+  }
+
+  Future<bool> updateUIProfile(Map<String, dynamic> profile) async {
+    await _api.post('/api/extensions/ui/profile', data: profile);
+    return true;
+  }
+
+  Future<Map<String, dynamic>?> getUISchema(String extensionId, String contributionId) async {
+    final resp = await _api.get<Map<String, dynamic>>('/api/extensions/ui/schema', queryParameters: {'extensionId': extensionId, 'contributionId': contributionId});
+    return resp;
+  }
+
+  Future<Map<String, dynamic>?> openExtensionPage(String extensionId, String pageId, {String? scopeSnapshot}) async {
+    final resp = await _api.post<Map<String, dynamic>>('/api/extensions/page/open', data: {
+      'extensionId': extensionId,
+      'pageId': pageId,
+      'scopeSnapshot': scopeSnapshot,
+    });
+    return resp;
+  }
+
+  Future<Map<String, dynamic>?> getExtensionPageSessionStatus(String sessionId) async {
+    final resp = await _api.get<Map<String, dynamic>>('/api/extensions/page/session/$sessionId/status');
+    return resp;
+  }
+
+  Future<bool> closeExtensionPageSession(String sessionId) async {
+    await _api.post('/api/extensions/page/session/$sessionId/close');
+    return true;
+  }
+
+  Future<Map<String, dynamic>?> createWebUISession(Map<String, dynamic> params) async {
+    final resp = await _api.post<Map<String, dynamic>>('/api/extensions/web-ui/session/create', data: params);
+    return resp;
+  }
+
+  Future<bool> revokeWebUISession(String sessionId) async {
+    await _api.post('/api/extensions/web-ui/session/$sessionId/revoke');
+    return true;
+  }
+
+  Future<Map<String, dynamic>?> invokeWebUIBridge(String sessionId, Map<String, dynamic> payload) async {
+    final resp = await _api.post<Map<String, dynamic>>('/api/extensions/web-ui/session/$sessionId/invoke', data: payload);
+    return resp;
+  }
 }
