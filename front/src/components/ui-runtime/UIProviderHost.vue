@@ -120,8 +120,10 @@ onMounted(() => { if (!store.snapshot) void store.refreshSnapshot(); });
     </template>
   </component>
 
-  <!-- augment keeps the built-in surface alive and layers the provider beside it. -->
-  <template v-else-if="mode === 'augment'">
+  <!-- augment/compose have one cross-platform contract: keep the built-in
+       surface alive and layer the dynamic provider over the same bounds.
+       Flutter uses Stack; Web uses an equivalent one-cell CSS grid. -->
+  <div v-else-if="mode === 'augment' || mode === 'compose'" class="ui-provider-compose-stack" :data-provider-mode="mode">
     <component :is="fallback" v-bind="$attrs">
       <template v-for="(_, name) in $slots" #[name]="slotProps">
         <slot :name="name" v-bind="slotProps || {}" />
@@ -146,45 +148,7 @@ onMounted(() => { if (!store.snapshot) void store.refreshSnapshot(); });
       :host-actions="actions"
       @error="advanceFallback"
     />
-  </template>
-
-  <!-- compose lets trusted Vue providers wrap the built-in child. Schema/Web
-       providers cannot host a native Vue subtree, so they compose as a stable
-       built-in base plus provider surface. -->
-  <template v-else-if="mode === 'compose'">
-    <component
-      ref="activeRef"
-      :is="trustedComponent"
-      v-if="trustedComponent"
-      v-bind="$attrs"
-      :ui-context="mergedContext"
-      :provider="provider"
-      :ui-actions="actions"
-      @error="advanceFallback"
-    >
-      <component :is="fallback" v-bind="$attrs">
-        <template v-for="(_, name) in $slots" #[name]="slotProps">
-          <slot :name="name" v-bind="slotProps || {}" />
-        </template>
-      </component>
-    </component>
-    <template v-else>
-      <component :is="fallback" v-bind="$attrs">
-        <template v-for="(_, name) in $slots" #[name]="slotProps">
-          <slot :name="name" v-bind="slotProps || {}" />
-        </template>
-      </component>
-      <ExtensionContributionRenderer
-        ref="activeRef"
-        v-if="sourceContribution"
-        :contribution="sourceContribution"
-        :context="mergedContext"
-        :slot-id="`provider:${capability}`"
-        :host-actions="actions"
-        @error="advanceFallback"
-      />
-    </template>
-  </template>
+  </div>
 
   <!-- replace is the normal provider boundary. -->
   <component
@@ -212,3 +176,16 @@ onMounted(() => { if (!store.snapshot) void store.refreshSnapshot(); });
     @error="advanceFallback"
   />
 </template>
+
+<style scoped>
+.ui-provider-compose-stack {
+  display: grid;
+  min-width: 0;
+  min-height: 0;
+}
+.ui-provider-compose-stack > * {
+  grid-area: 1 / 1;
+  min-width: 0;
+  min-height: 0;
+}
+</style>

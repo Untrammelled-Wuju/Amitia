@@ -2,6 +2,9 @@ import type { RouteRecordNormalized, Router } from "vue-router";
 import ProviderRouteHost from "@/components/ui-runtime/ProviderRouteHost.vue";
 import type { useExtensionUIStore } from "@/stores/extensionUI";
 import { isUIProviderCapability, type UIProviderCapability, type UIProviderDefinition } from "./types";
+import { collectRegistryProviders } from "./providerCollection";
+import { isProviderCompatible } from "./providerRuntime";
+import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
 
 type ExtensionUIStore = ReturnType<typeof useExtensionUIStore>;
 
@@ -54,13 +57,19 @@ function providerRoutes(provider: UIProviderDefinition): ProviderRouteDefinition
   return routes;
 }
 
+/** All enabled compatible route registries contribute. Path conflicts are deterministic. */
 function readRoutes(store: ExtensionUIStore): ProviderRouteDefinition[] {
-  const provider = store.getResolvedProvider("route.registry");
-  if (!provider || !provider.enabled || provider.builtin) return [];
+  const candidates = collectRegistryProviders(store, "route.registry")
+    .flatMap(providerRoutes)
+    .sort((a, b) => b.priority - a.priority || a.extensionId.localeCompare(b.extensionId) || a.id.localeCompare(b.id));
   const routes: ProviderRouteDefinition[] = [];
   const seenPaths = new Set<string>();
-  for (const route of providerRoutes(provider)) {
+  const platform = resolveHostEnvironment().platform;
+  for (const route of candidates) {
     if (seenPaths.has(route.path)) continue;
+    const target = store.getProviders(route.capability ?? "page.provider")
+      .find((provider: UIProviderDefinition) => provider.providerId === route.providerId);
+    if (!target || !target.enabled || !isProviderCompatible(target, store.snapshot?.providerContext, platform)) continue;
     seenPaths.add(route.path);
     routes.push(route);
   }
@@ -89,7 +98,7 @@ export function syncProviderRoutes(router: Router, store: ExtensionUIStore): voi
     }
   }
 
-  const corePaths = new Set(router.getRoutes().filter((route) => !isProviderRoute(route)).map((route) => route.path));
+  const corePaths = new Set(router.getRoutes().filter((route: RouteRecordNormalized) => !isProviderRoute(route)).map((route: RouteRecordNormalized) => route.path));
   for (const [name, route] of desired) {
     if (corePaths.has(route.path) || shadowsProtectedRoute(route.path)) continue;
     if (router.hasRoute(name)) {

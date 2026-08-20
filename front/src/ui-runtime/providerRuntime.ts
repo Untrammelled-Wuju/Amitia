@@ -69,6 +69,26 @@ function providerModuleURL(provider: UIProviderDefinition, path: string): string
   return `/api/extensions/ui/provider-module/${encodeURIComponent(provider.providerId)}/${clean}`;
 }
 
+export function trustedWebModuleExport(
+  provider: UIProviderDefinition,
+  entry: UIProviderEntry,
+  exportName: string,
+): Component | null {
+  if (!canLoadTrustedWebModule(provider, entry) || !entry.path || !exportName.trim()) return null;
+  const name = exportName.trim();
+  const key = `${provider.providerId}:${provider.generation ?? 0}:${entry.path}:export:${name}`;
+  const cached = trustedModuleCache.get(key);
+  if (cached) return cached;
+  const component = markRaw(defineAsyncComponent(async () => {
+    const mod = await import(/* @vite-ignore */ providerModuleURL(provider, entry.path!));
+    const exported = mod[name] ?? mod.default?.[name] ?? mod.components?.[name] ?? mod.icons?.[name];
+    if (!exported) throw new Error(`UI provider ${provider.providerId} module does not export ${name}`);
+    return exported;
+  }));
+  trustedModuleCache.set(key, component);
+  return component;
+}
+
 export function trustedWebModule(provider: UIProviderDefinition, entry: UIProviderEntry): Component | null {
   if (!canLoadTrustedWebModule(provider, entry) || !entry.path) return null;
   const key = `${provider.providerId}:${provider.generation ?? 0}:${entry.path}:${entry.exportName ?? "default"}`;
