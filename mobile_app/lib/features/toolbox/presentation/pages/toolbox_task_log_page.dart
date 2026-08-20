@@ -77,13 +77,13 @@ class _ToolboxTaskLogPageState extends ConsumerState<ToolboxTaskLogPage> {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '任务日志', showBackButton: true, fallbackRoute: AppRoutes.settingsToolbox),
       body: ListView.separated(
-        padding: const EdgeInsets.all(AppSpacing.pagePadding),
+        padding: EdgeInsets.all(AppSpacing.pagePadding),
         itemCount: _logs.length,
-        separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
+        separatorBuilder: (_, _) => SizedBox(height: AppSpacing.md),
         itemBuilder: (context, i) {
           final l = _logs[i];
           return Container(
-            padding: const EdgeInsets.all(AppSpacing.cardPadding),
+            padding: EdgeInsets.all(AppSpacing.cardPadding),
             decoration: BoxDecoration(
               color: context.surfacePrimary,
               borderRadius: AppRadius.brMedium,

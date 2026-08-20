@@ -96,17 +96,17 @@ class _ToolboxFileBrowserPageState extends ConsumerState<ToolboxFileBrowserPage>
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '文件浏览', showBackButton: true, fallbackRoute: AppRoutes.settingsToolbox),
       body: ListView(
-        padding: const EdgeInsets.symmetric(vertical: AppSpacing.md),
+        padding: EdgeInsets.symmetric(vertical: AppSpacing.md),
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
             child: Text('当前路径：/storage/emulated/0', style: AppTypography.caption(context)),
           ),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           _files.isEmpty
               ? const AmitiaEmptyState(icon: Icons.folder_open, title: '暂无文件', subtitle: '目录为空或无法访问')
               : Container(
-                  margin: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                  margin: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
                   decoration: BoxDecoration(
                     color: context.surfacePrimary,
                     borderRadius: AppRadius.brMedium,
@@ -116,7 +116,7 @@ class _ToolboxFileBrowserPageState extends ConsumerState<ToolboxFileBrowserPage>
                     children: [
                       for (int i = 0; i < _files.length; i++) ...[
                         Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 12),
+                          padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 12),
                           child: Row(
                             children: [
                               Icon(_files[i].icon, size: 22,
@@ -144,7 +144,7 @@ class _ToolboxFileBrowserPageState extends ConsumerState<ToolboxFileBrowserPage>
                     ],
                   ),
                 ),
-          const SizedBox(height: AppSpacing.xl),
+          SizedBox(height: AppSpacing.xl),
         ],
       ),
     );

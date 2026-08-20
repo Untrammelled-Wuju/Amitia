@@ -103,13 +103,13 @@ class _ToolboxDatabaseStatusPageState extends ConsumerState<ToolboxDatabaseStatu
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '数据库状态', showBackButton: true, fallbackRoute: AppRoutes.settingsToolbox),
       body: ListView(
-        padding: const EdgeInsets.all(AppSpacing.pagePadding),
+        padding: EdgeInsets.all(AppSpacing.pagePadding),
         children: [
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4),
             child: Text('最后检查：刚刚 · 自动每 5 分钟刷新', style: AppTypography.caption(context)),
           ),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           if (_databases.isEmpty)
             const AmitiaEmptyState(icon: Icons.storage, title: '暂无数据库组件', subtitle: '未检测到数据库服务')
           else
@@ -119,9 +119,9 @@ class _ToolboxDatabaseStatusPageState extends ConsumerState<ToolboxDatabaseStatu
               final detail = (d['version'] ?? d['detail'] ?? d['info'] ?? '').toString();
               final size = _sizeInfo(name);
               return Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                padding: EdgeInsets.only(bottom: AppSpacing.md),
                 child: Container(
-                  padding: const EdgeInsets.all(AppSpacing.cardPadding),
+                  padding: EdgeInsets.all(AppSpacing.cardPadding),
                   decoration: BoxDecoration(
                     color: context.surfacePrimary,
                     borderRadius: AppRadius.brMedium,
@@ -143,7 +143,7 @@ class _ToolboxDatabaseStatusPageState extends ConsumerState<ToolboxDatabaseStatu
                           AmitiaStatusBadge(label: status.isEmpty ? '未知' : status, type: _badgeForStatus(status)),
                         ],
                       ),
-                      const SizedBox(height: AppSpacing.sm),
+                      SizedBox(height: AppSpacing.sm),
                       Row(
                         children: [
                           Text('详情', style: AppTypography.label(context)),
@@ -160,7 +160,7 @@ class _ToolboxDatabaseStatusPageState extends ConsumerState<ToolboxDatabaseStatu
                 ),
               );
             }),
-          const SizedBox(height: AppSpacing.xl),
+          SizedBox(height: AppSpacing.xl),
         ],
       ),
     );

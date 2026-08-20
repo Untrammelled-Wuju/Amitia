@@ -99,7 +99,7 @@ class _ToolboxLogPageState extends ConsumerState<ToolboxLogPage> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(AppSpacing.pagePadding),
+            padding: EdgeInsets.all(AppSpacing.pagePadding),
             child: Row(
               children: [
                 Expanded(
@@ -109,7 +109,7 @@ class _ToolboxLogPageState extends ConsumerState<ToolboxLogPage> {
                     onChanged: (_) => setState(() {}),
                   ),
                 ),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10),
                   decoration: BoxDecoration(
@@ -130,7 +130,7 @@ class _ToolboxLogPageState extends ConsumerState<ToolboxLogPage> {
             ),
           ),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
             child: Row(
               children: [
                 Text('共 ${_filtered.length} 条', style: AppTypography.caption(context)),
@@ -156,12 +156,12 @@ class _ToolboxLogPageState extends ConsumerState<ToolboxLogPage> {
               ],
             ),
           ),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Expanded(
             child: _filtered.isEmpty
                 ? const AmitiaEmptyState(icon: Icons.inbox_outlined, title: '暂无日志', subtitle: '尝试调整筛选或清空搜索')
                 : ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, 0, AppSpacing.pagePadding, AppSpacing.xl),
+                    padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, 0, AppSpacing.pagePadding, AppSpacing.xl),
                     itemCount: _filtered.length,
                     separatorBuilder: (_, _) => Divider(height: 1, thickness: 0.5, color: context.borderSecondary),
                     itemBuilder: (context, i) {

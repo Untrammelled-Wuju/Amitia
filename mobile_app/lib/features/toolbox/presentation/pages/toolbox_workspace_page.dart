@@ -117,15 +117,15 @@ class _ToolboxWorkspacePageState extends ConsumerState<ToolboxWorkspacePage> {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '工作区', showBackButton: true, fallbackRoute: AppRoutes.settingsToolbox),
       body: ListView.separated(
-        padding: const EdgeInsets.all(AppSpacing.pagePadding),
+        padding: EdgeInsets.all(AppSpacing.pagePadding),
         itemCount: _workspaces.length,
-        separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
+        separatorBuilder: (_, _) => SizedBox(height: AppSpacing.md),
         itemBuilder: (context, i) {
           final w = _workspaces[i];
           final kindLabel = _kindLabel(w.kind);
           final statusLabel = _statusLabel(w.status);
           return Container(
-            padding: const EdgeInsets.all(AppSpacing.cardPadding),
+            padding: EdgeInsets.all(AppSpacing.cardPadding),
             decoration: BoxDecoration(
               color: context.surfacePrimary,
               borderRadius: AppRadius.brMedium,
