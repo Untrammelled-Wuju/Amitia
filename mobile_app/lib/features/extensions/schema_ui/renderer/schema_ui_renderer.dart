@@ -679,7 +679,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   Widget _buildErrorWidget(BuildContext context, String message) {
     return Container(
       padding: EdgeInsets.all(AppSpacing.sm),
-      margin: EdgeInsets.symmetric(vertical: 4),
+      margin: const EdgeInsets.symmetric(vertical: 4),
       decoration: BoxDecoration(
         color: context.error.withValues(alpha: 0.08),
         borderRadius: AppRadius.brSmall,

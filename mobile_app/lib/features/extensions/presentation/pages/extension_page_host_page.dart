@@ -81,7 +81,7 @@ class _ExtensionPageHostPageState extends ConsumerState<ExtensionPageHostPage> {
         }),
       );
       if (!mounted) return;
-      _applyResult(result);
+      if (result != null) _applyResult(result);
       if (_state == 'loading' || _state == 'runtime_starting') _schedulePoll();
     } catch (error) {
       if (!mounted) return;
