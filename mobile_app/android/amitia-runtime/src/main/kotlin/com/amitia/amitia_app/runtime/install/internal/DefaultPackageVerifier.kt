@@ -24,6 +24,7 @@ internal class DefaultPackageVerifier : PackageVerifier {
         const val METADATA_DIR = "metadata"
         const val PACKAGE_INDEX_PATH = "metadata/package-index.json"
         const val COMPONENT_LOCK_PATH = "metadata/component-lock.json"
+        const val COMPONENT_INDEX_PATH = "metadata/component-index.json"
         const val SHA256SUMS_PATH = "metadata/SHA256SUMS"
         const val ROOTFS_PAYLOAD_PATH = "payload/rootfs/rootfs.tar.xz"
         const val RUNTIME_PAYLOAD_PATH = "payload/runtime/runtime.tar.xz"
@@ -164,8 +165,10 @@ internal class DefaultPackageVerifier : PackageVerifier {
                 "missing component lock: $COMPONENT_LOCK_PATH"
             )
 
+        val componentIndexText = readZipEntryText(zip, COMPONENT_INDEX_PATH)
+
         val componentLock = try {
-            parseComponentLock(componentLockText, packageIndex.packageId)
+            parseComponentLock(componentLockText, packageIndex.packageId, componentIndexText)
         } catch (e: Exception) {
             return PackageVerificationResult.Failure(
                 RuntimeInstallErrorCode.PACKAGE_INVALID,
@@ -418,15 +421,72 @@ internal class DefaultPackageVerifier : PackageVerifier {
         )
     }
 
-    private fun parseComponentLock(text: String, packageIdFallback: String): ComponentLock {
+    private fun parseComponentLock(
+        text: String,
+        packageIdFallback: String,
+        componentIndexText: String?,
+    ): ComponentLock {
         val runtimeVersion = extractJsonString(text, "runtimeVersion")
         val packageId = extractJsonStringOrNull(text, "packageId") ?: packageIdFallback
-        val components = parseComponentArray(text)
+        val indexedComponents = componentIndexText?.let { parseComponentIndex(it) } ?: emptyList()
+        val legacyComponents = if (componentIndexText != null) emptyList() else parseComponentArray(text)
+        val objectComponents = if (componentIndexText != null) emptyList() else parseComponentObject(text)
+        val components = indexedComponents.ifEmpty { legacyComponents.ifEmpty { objectComponents } }
+        if (components.isEmpty()) {
+            throw IllegalArgumentException(
+                "no runtime components; indexLength=${componentIndexText?.length ?: 0} " +
+                    "indexed=${indexedComponents.size} legacy=${legacyComponents.size} object=${objectComponents.size}"
+            )
+        }
         return ComponentLock(
             runtimeVersion = runtimeVersion,
             packageId = packageId,
             components = components,
         )
+    }
+
+    private fun parseComponentIndex(text: String): List<ComponentRef> {
+        val componentsArrayContent = extractJsonArrayContent(text, "components") ?: return emptyList()
+        val objectPattern = Regex("\\{[^{}]+\\}")
+        return objectPattern.findAll(componentsArrayContent).map { objMatch ->
+            val obj = objMatch.value
+            ComponentRef(
+                id = extractJsonString(obj, "id"),
+                version = extractJsonStringOrNull(obj, "version"),
+                architecture = extractJsonStringOrNull(obj, "architecture"),
+                path = extractJsonString(obj, "root"),
+                sha256 = extractJsonStringOrNull(obj, "sha256")
+                    ?: extractJsonStringOrNull(obj, "treeSha256")
+                    ?: throw IllegalArgumentException("component has no sha256"),
+            )
+        }.toList()
+    }
+
+    private fun parseComponentObject(text: String): List<ComponentRef> {
+        val componentsObject = extractJsonObject(text, "components")
+        val entryPattern = Regex("\"([^\\s\"]+)\"\\s*:\\s*\\{[^{}]+\\}")
+        val runtimeComponentIds = setOf(
+            "runtime.backend",
+            "runtime.node",
+            "runtime.qdrant",
+            "runtime.plugin-host",
+            "runtime.task-host",
+        )
+        return entryPattern.findAll(componentsObject).mapNotNull { entryMatch ->
+            val entry = entryMatch.value
+            val componentId = extractJsonStringOrNull(entry, "componentId") ?: return@mapNotNull null
+            if (componentId !in runtimeComponentIds) return@mapNotNull null
+            val root = entryMatch.groupValues[1]
+            ComponentRef(
+                id = componentId,
+                version = extractJsonStringOrNull(entry, "version"),
+                architecture = extractJsonStringOrNull(entry, "architecture"),
+                path = root,
+                sha256 = extractJsonStringOrNull(entry, "sha256")
+                    ?: extractJsonStringOrNull(entry, "treeSha256")
+                    ?: throw IllegalArgumentException("component $componentId has no sha256"),
+            )
+        }.toList()
     }
 
     private fun parseComponentArray(text: String): List<ComponentRef> {
