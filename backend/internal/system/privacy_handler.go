@@ -11,13 +11,46 @@ import (
 
 func (h *Handler) PrivacyScan(c *gin.Context) { util.SuccessResponse(c, h.service.PrivacyScan()) }
 
-func (h *Handler) PrivacyMask(c *gin.Context) { util.SuccessResponse(c, h.service.PrivacyMask()) }
+func (h *Handler) PrivacyMask(c *gin.Context) {
+	var req struct {
+		IDs          []uint `json:"ids"`
+		ConfirmToken string `json:"confirmToken"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil || req.ConfirmToken != "确认脱敏" {
+		util.ErrorResponse(c, response.InvalidParams, "confirmToken must be 确认脱敏", nil)
+		return
+	}
+	if len(req.IDs) == 0 {
+		util.SuccessResponse(c, map[string]interface{}{"masked": true, "maskedCount": 0, "updatedSourceRecords": 0})
+		return
+	}
+	result := h.db.Table("messages").Where("id IN ?", req.IDs).Updates(map[string]interface{}{
+		"content":      "[已脱敏]",
+		"safety_level": "masked",
+	})
+	if result.Error != nil {
+		util.ErrorResponse(c, response.OperationFailed, "privacy mask failed", result.Error.Error())
+		return
+	}
+	if svc, ok := h.service.(*service); ok {
+		svc.markPrivacyFindingsMasked(req.IDs)
+	}
+	util.SuccessResponse(c, map[string]interface{}{
+		"masked":               true,
+		"maskedCount":          result.RowsAffected,
+		"updatedSourceRecords": result.RowsAffected,
+	})
+}
 
 func (h *Handler) PrivacyScanResults(c *gin.Context) {
 	util.SuccessResponse(c, h.service.PrivacyScanResults())
 }
 
 func (h *Handler) PrivacyScanResultsGet(c *gin.Context) {
+	util.SuccessResponse(c, h.service.PrivacyScanResults())
+}
+
+func (h *Handler) PrivacyScanResultByID(c *gin.Context) {
 	util.SuccessResponse(c, h.service.GetPrivacyScanResult(c.Param("id")))
 }
 

@@ -28,3 +28,7 @@ func (h *Handler) LogsModelErrors(c *gin.Context) {
 func (h *Handler) LogsDeleteModelErrors(c *gin.Context) {
 	util.SuccessResponse(c, h.service.DeleteLogsModelErrors())
 }
+
+func (h *Handler) LogsPromptTraces(c *gin.Context) {
+	util.SuccessResponse(c, h.service.GetLogsPromptTraces(100))
+}

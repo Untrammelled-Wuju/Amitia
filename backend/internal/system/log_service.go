@@ -3,6 +3,7 @@
 package system
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -117,4 +118,32 @@ func (s *service) GetLogsModelErrors() map[string]interface{} {
 
 func (s *service) DeleteLogsModelErrors() map[string]interface{} {
 	return map[string]interface{}{"deleted": true, "note": "Model error logs cleared"}
+}
+
+func (s *service) GetLogsPromptTraces(limit int) map[string]interface{} {
+	logDir := "logs"
+	entries, _ := os.ReadDir(logDir)
+	traces := make([]interface{}, 0)
+	for i := len(entries) - 1; i >= 0 && len(traces) < limit; i-- {
+		if entries[i].IsDir() || !strings.HasSuffix(entries[i].Name(), ".log") {
+			continue
+		}
+		data, err := os.ReadFile(filepath.Join(logDir, entries[i].Name()))
+		if err != nil {
+			continue
+		}
+		lines := strings.Split(string(data), "\n")
+		for j := len(lines) - 1; j >= 0 && len(traces) < limit; j-- {
+			line := strings.TrimSpace(lines[j])
+			if line == "" || !strings.Contains(line, `"stage":"prompt_trace"`) {
+				continue
+			}
+			var item map[string]interface{}
+			if err := json.Unmarshal([]byte(line), &item); err != nil {
+				continue
+			}
+			traces = append(traces, item)
+		}
+	}
+	return map[string]interface{}{"traces": traces}
 }

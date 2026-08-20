@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/pkg/util"
@@ -14,6 +15,29 @@ import (
 
 func (h *Handler) StorageBackups(c *gin.Context) {
 	util.SuccessResponse(c, h.service.GetStorageBackups())
+}
+
+func (h *Handler) StorageCreateBackup(c *gin.Context) {
+	result := h.service.CreatePhysicalSafetySnapshot()
+	if ok, exists := result["ok"].(bool); exists && !ok {
+		util.ErrorResponse(c, http.StatusInternalServerError, "创建备份失败", result)
+		return
+	}
+	util.SuccessResponse(c, result)
+}
+
+func (h *Handler) StorageRestoreBackup(c *gin.Context) {
+	name := filepath.Base(c.Param("name"))
+	if name == "." || name == "" || name != c.Param("name") {
+		util.ErrorResponse(c, http.StatusBadRequest, "无效备份名称", nil)
+		return
+	}
+	result := h.service.RestorePhysicalSafetySnapshot(name)
+	if ok, exists := result["ok"].(bool); exists && !ok {
+		util.ErrorResponse(c, http.StatusInternalServerError, "恢复备份失败", result)
+		return
+	}
+	util.SuccessResponse(c, result)
 }
 
 func (h *Handler) StorageDeleteBackup(c *gin.Context) {
@@ -54,9 +78,15 @@ func (h *Handler) StorageImportAmitia(c *gin.Context) {
 	}
 	defer file.Close()
 
-	exportDir := filepath.Join("data", "exports")
+	info := h.service.GetStorageInfo()
+	dataDir, _ := info["path"].(string)
+	if strings.TrimSpace(dataDir) == "" {
+		util.ErrorResponse(c, 500, "storage data directory unavailable", nil)
+		return
+	}
+	exportDir := filepath.Join(dataDir, "exports")
 	os.MkdirAll(exportDir, 0755)
-	dst := filepath.Join(exportDir, header.Filename)
+	dst := filepath.Join(exportDir, filepath.Base(header.Filename))
 	out, err := os.Create(dst)
 	if err != nil {
 		util.ErrorResponse(c, 500, err.Error(), nil)
@@ -74,8 +104,18 @@ func (h *Handler) StorageImportAmitia(c *gin.Context) {
 }
 
 func (h *Handler) StorageExportDownload(c *gin.Context) {
-	filename := c.Param("filename")
-	path := filepath.Join("data", "exports", filename)
+	filename := filepath.Base(c.Param("filename"))
+	if filename == "." || filename == "" || filename != c.Param("filename") {
+		util.ErrorResponse(c, http.StatusBadRequest, "invalid filename", nil)
+		return
+	}
+	info := h.service.GetStorageInfo()
+	dataDir, _ := info["path"].(string)
+	if strings.TrimSpace(dataDir) == "" {
+		util.ErrorResponse(c, 500, "storage data directory unavailable", nil)
+		return
+	}
+	path := filepath.Join(dataDir, "exports", filename)
 	if _, err := os.Stat(path); os.IsNotExist(err) {
 		c.String(http.StatusNotFound, "file not found")
 		return
