@@ -105,4 +105,9 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
 { path: "/memory-timeline", name: "memoryTimeline", component: () => import("@/views/memory-timeline/MemoryTimeline.vue"), meta: { requiresAuth: true } },
 { path: "/memory", redirect: "/memory-manager" },
 { path: "/privacy-scan", name: "privacyScan", component: () => import("@/views/privacy-scan/PrivacyScanView.vue"), meta: { requiresAuth: true } },
+{ path: "/game-center", name: "gameCenter", component: () => import("@/views/game-center/GameCenterView.vue"), meta: { requiresAuth: true } },
+{ path: "/devices", name: "devices", component: () => import("@/views/devices/DevicesView.vue"), meta: { requiresAuth: true } },
+{ path: "/asr", name: "asr", component: () => import("@/views/asr/AsrView.vue"), meta: { requiresAuth: true } },
+{ path: "/realtime-voice", name: "realtimeVoice", component: () => import("@/views/realtime/RealtimeVoiceView.vue"), meta: { requiresAuth: true } },
+{ path: "/long-running", name: "longRunning", component: () => import("@/views/long-running/LongRunningView.vue"), meta: { requiresAuth: true } },
 ];

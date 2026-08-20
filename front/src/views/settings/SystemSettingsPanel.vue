@@ -122,11 +122,24 @@ SPDX-License-Identifier: AGPL-3.0-only
             :auto-upload="false"
             :show-file-list="false"
             :on-change="handleImportFile"
-            accept=".json"
+            accept=".amitia,.zip,.tar,.gz"
           >
             <el-button size="small" :loading="importingAmitia"
               ><el-icon><Upload /></el-icon> 导入数据</el-button
             >
+          </el-upload>
+          <el-button size="small" @click="exportConfig" :loading="configBusy">
+            <el-icon><Download /></el-icon> 导出配置
+          </el-button>
+          <el-upload
+            :auto-upload="false"
+            :show-file-list="false"
+            :on-change="handleConfigImport"
+            accept=".json"
+          >
+            <el-button size="small" :loading="configBusy">
+              <el-icon><Upload /></el-icon> 导入配置
+            </el-button>
           </el-upload>
           <span
             v-if="importResult"
@@ -185,7 +198,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { ref, reactive, onMounted } from "vue";
 import { useRouter } from "vue-router";
 import axios from "axios";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import {
   Brush,
   ArrowRight,
@@ -239,6 +252,7 @@ const exportingAmitia = ref(false);
 
 const importingAmitia = ref(false);
 const importResult = ref("");
+const configBusy = ref(false);
 
 function goStorage() {
   router.push("/storage");
@@ -252,7 +266,8 @@ async function loadStorageInfo() {
   } catch {}
   try {
     const { data } = await axios.get(apiBaseUrl.value + "/api/storage/backups");
-    if (Array.isArray(data?.data)) backupList.value = data.data;
+    const payload = data?.data || data || {};
+    backupList.value = Array.isArray(payload.backups) ? payload.backups : [];
   } catch {}
   storageLoading.value = false;
 }
@@ -260,7 +275,7 @@ async function loadStorageInfo() {
 async function createBackup() {
   backupCreating.value = true;
   try {
-    await axios.post(apiBaseUrl.value + "/api/storage/backup");
+    await axios.post(apiBaseUrl.value + "/api/storage/backups");
     ElMessage.success("备份创建成功");
     await loadStorageInfo();
   } catch (err: any) {
@@ -275,8 +290,16 @@ async function createBackup() {
 async function exportUserData() {
   exportingData.value = true;
   try {
-    await axios.post(apiBaseUrl.value + "/api/storage/export-user-data");
-    ElMessage.success("导出请求已提交，请查看服务器目录");
+    const res = await axios.post(apiBaseUrl.value + "/api/storage/export-amitia", { scope: "all" });
+    const data = res.data?.data || res.data;
+    if (!data?.exported || !data?.file) {
+      throw new Error(data?.error || "后端未返回导出文件");
+    }
+    window.open(
+      apiBaseUrl.value + "/api/storage/export-download/" + encodeURIComponent(data.file),
+      "_blank",
+    );
+    ElMessage.success("用户数据已导出");
   } catch (err: any) {
     ElMessage.error("导出失败: " + (err?.response?.data?.msg || err.message));
   } finally {
@@ -341,6 +364,51 @@ async function loadExportCharacters() {
     const { data } = await axios.get(apiBaseUrl.value + "/api/characters");
     if (Array.isArray(data?.data)) exportCharacters.value = data.data;
   } catch {}
+}
+
+async function exportConfig() {
+  configBusy.value = true;
+  try {
+    const res = await axios.post(apiBaseUrl.value + "/api/config/export");
+    const data = res.data?.data || res.data;
+    if (!data?.exported) throw new Error(data?.error || "配置导出失败");
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "amitia-config.json";
+    a.click();
+    URL.revokeObjectURL(url);
+    ElMessage.success("配置已导出");
+  } catch (err: any) {
+    ElMessage.error("配置导出失败: " + (err?.response?.data?.msg || err.message));
+  } finally {
+    configBusy.value = false;
+  }
+}
+
+async function handleConfigImport(file: any) {
+  configBusy.value = true;
+  try {
+    const raw = await file.raw.text();
+    const previewRes = await axios.post(apiBaseUrl.value + "/api/config/import/preview", { raw });
+    const preview = previewRes.data?.data || previewRes.data;
+    if (!preview?.valid) throw new Error(preview?.error || "配置文件无效");
+    await ElMessageBox.confirm(
+      `共 ${preview.itemCount ?? 0} 项配置；新增 ${preview.newCount ?? 0} 项，修改 ${preview.changed ?? 0} 项，未变化 ${preview.unchanged ?? 0} 项。继续后会覆盖同名设置。`,
+      "确认导入配置",
+      { type: "warning", confirmButtonText: "导入", cancelButtonText: "取消" },
+    );
+    const confirmRes = await axios.post(apiBaseUrl.value + "/api/config/import/confirm", { raw });
+    const result = confirmRes.data?.data || confirmRes.data;
+    if (!result?.imported) throw new Error(result?.error || "配置导入失败");
+    ElMessage.success(`已导入 ${result.importedCount ?? 0} 项配置`);
+  } catch (err: any) {
+    if (err === "cancel" || err === "close") return;
+    ElMessage.error("配置导入失败: " + (err?.response?.data?.msg || err.message || err));
+  } finally {
+    configBusy.value = false;
+  }
 }
 
 async function handleImportFile(file: any) {

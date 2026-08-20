@@ -22,9 +22,14 @@ export const NAVIGATION_WHITELIST: readonly string[] = [
   "/memory-manager",
   "/memory-timeline",
   "/privacy-scan",
+  "/devices",
+  "/game-center",
   "/qq",
   "/wechat",
   "/runtime-debug",
+  "/asr",
+  "/realtime-voice",
+  "/long-running",
 ];
 
 const NAVIGATION_BLACKLIST: readonly string[] = [

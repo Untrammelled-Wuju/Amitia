@@ -22,9 +22,6 @@ import {
 } from "@element-plus/icons-vue";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 import type { UIProviderDefinition } from "@/ui-runtime/types";
-import { collectRegistryProviders } from "@/ui-runtime/providerCollection";
-import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
-import { selectProviderEntry, trustedWebModuleExport } from "@/ui-runtime/providerRuntime";
 
 export interface UINavigationItem {
   id: string;
@@ -93,16 +90,21 @@ const builtinItems: UINavigationItem[] = [
   { id: "memory.logs", route: "/logs", label: "聊天记录", icon: ChatLineRound, group: "memory", groupLabel: "记忆", groupIcon: Grid, order: 50 },
   { id: "workshop", route: "/creative-workshop", label: "创意工坊", icon: MagicStick, group: "workshop", order: 60, match: ["/creative-workshop"] },
   { id: "extensions", route: "/extensions", label: "扩展中心", icon: Menu, group: "extensions", order: 70, match: ["/extensions", "/kernel"] },
+  { id: "tools.game-center", route: "/game-center", label: "游戏中心", icon: MagicStick, group: "tools", groupLabel: "工具", groupIcon: Menu, order: 5 },
+  { id: "tools.devices", route: "/devices", label: "我的设备", icon: Connection, group: "tools", groupLabel: "工具", groupIcon: Menu, order: 8 },
+  { id: "tools.asr", route: "/asr", label: "语音识别", icon: ChatLineRound, group: "tools", groupLabel: "工具", groupIcon: Menu, order: 10 },
+  { id: "tools.realtime-voice", route: "/realtime-voice", label: "实时语音", icon: Connection, group: "tools", groupLabel: "工具", groupIcon: Menu, order: 20 },
+  { id: "tools.long-running", route: "/long-running", label: "长期运行维护", icon: Timer, group: "tools", groupLabel: "工具", groupIcon: Menu, order: 30 },
 ];
 
 function activeNavigationProviders(store: ReturnType<typeof useExtensionUIStore>) {
   const providers = [
-    ...collectRegistryProviders(store, "app.navigation"),
-    ...collectRegistryProviders(store, "route.registry"),
+    store.getResolvedProvider("app.navigation"),
+    store.getResolvedProvider("route.registry"),
   ];
   const seen = new Set<string>();
   return providers.filter((provider): provider is UIProviderDefinition => {
-    if (!provider || seen.has(provider.providerId)) return false;
+    if (!provider || !provider.enabled || provider.builtin || seen.has(provider.providerId)) return false;
     seen.add(provider.providerId);
     return true;
   });
@@ -144,22 +146,10 @@ function applyIconProvider(store: ReturnType<typeof useExtensionUIStore>, items:
   const provider = store.getResolvedProvider("ui.icons");
   if (!provider || !provider.enabled || provider.builtin) return items;
   const aliases = provider.metadata?.iconAliases;
-  const aliasMap = aliases && typeof aliases === "object" && !Array.isArray(aliases)
-    ? aliases as Record<string, unknown>
-    : {};
-  const exports = provider.metadata?.iconExports;
-  const exportMap = exports && typeof exports === "object" && !Array.isArray(exports)
-    ? exports as Record<string, unknown>
-    : {};
-  const entry = selectProviderEntry(provider, resolveHostEnvironment().platform);
-
+  if (!aliases || typeof aliases !== "object" || Array.isArray(aliases)) return items;
+  const map = aliases as Record<string, unknown>;
   return items.map((item) => {
-    const exportName = exportMap[item.id] ?? exportMap[item.group] ?? exportMap.default;
-    if (entry && exportName) {
-      const component = trustedWebModuleExport(provider, entry, String(exportName));
-      if (component) return { ...item, icon: component };
-    }
-    const name = aliasMap[item.id] ?? aliasMap[item.group] ?? aliasMap.default;
+    const name = map[item.id] ?? map[item.group] ?? map.default;
     return name ? { ...item, icon: resolveNavigationIcon(String(name)) } : item;
   });
 }
@@ -174,7 +164,7 @@ export function useUINavigationRegistry() {
     const map = new Map<string, UINavigationGroup>();
     let groupOrder = 0;
     for (const item of items.value) {
-      const current: UINavigationGroup = map.get(item.group) ?? {
+      const current = map.get(item.group) ?? {
         id: item.group,
         label: item.groupLabel,
         icon: item.groupIcon,
@@ -186,7 +176,7 @@ export function useUINavigationRegistry() {
     }
     return [...map.values()].sort((a, b) => a.order - b.order);
   });
-  const mobileItems = computed<UINavigationItem[]>(() => items.value.filter((item: UINavigationItem) => item.mobile));
+  const mobileItems = computed(() => items.value.filter((item) => item.mobile));
   return { items, groups, mobileItems };
 }
 

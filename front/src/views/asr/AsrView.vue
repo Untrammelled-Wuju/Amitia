@@ -167,18 +167,13 @@ async function uploadFile() {
   const formData = new FormData();
   formData.append("audio", audioFile.value);
   try {
-    const resp = await fetch("/api/asr/upload", {
-      method: "POST",
-      headers: {},
-      body: formData,
+    const resp = await apiClient.post("/api/asr/upload", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
     });
-    const json = await resp.json();
-    if (json.code === 200) {
-      audioUrl.value = json.data?.url || "";
-      ElMessage.success("文件已上传，URL已自动填入");
-    } else {
-      ElMessage.error(json.message || "上传失败");
-    }
+    const payload = (resp as any)?.data || {};
+    audioUrl.value = payload?.url || "";
+    if (!audioUrl.value) throw new Error("后端未返回音频地址");
+    ElMessage.success("文件已上传，URL已自动填入");
   } catch (err: any) {
     ElMessage.error("上传失败: " + (err?.message || "未知错误"));
   }
@@ -195,17 +190,12 @@ async function submitTask() {
     const formData = new FormData();
     formData.append("audioUrl", audioUrl.value.trim());
     if (language.value) formData.append("language", language.value);
-    const resp = await fetch("/api/asr/submit", {
-      method: "POST",
-      headers: {},
-      body: formData,
+    const resp = await apiClient.post("/api/asr/submit", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
     });
-    const json = await resp.json();
-    if (json.code !== 200) {
-      ElMessage.error(json.message || "提交失败");
-      return;
-    }
-    taskId.value = json.data?.taskId || "";
+    const payload = (resp as any)?.data || {};
+    taskId.value = payload?.taskId || "";
+    if (!taskId.value) throw new Error("后端未返回任务 ID");
     status.value = "已提交";
     result.value = "";
     ElMessage.success("任务已提交，自动轮询中...");

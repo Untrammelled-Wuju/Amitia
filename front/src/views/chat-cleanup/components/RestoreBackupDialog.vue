@@ -5,7 +5,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <el-dialog
     :model-value="visible"
-    title="恢复加密备份"
+    title="恢复数据库备份"
     width="500px"
     :close-on-click-modal="false"
     @update:model-value="emit('update:visible', $event)"
@@ -13,108 +13,43 @@ SPDX-License-Identifier: AGPL-3.0-only
   >
     <template v-if="backup">
       <div class="restore-info">
-        <div class="report-row">
-          <span>备份名称：</span><strong>{{ backup.name }}</strong>
-        </div>
-        <div class="report-row">
-          <span>创建时间：</span
-          ><span>{{ backup.createdAt?.slice(0, 19) || "—" }}</span>
-        </div>
-        <div class="report-row">
-          <span>大小：</span><span>{{ backup.sizeFormatted }}</span>
-        </div>
+        <div class="report-row"><span>备份名称：</span><strong>{{ backup.name }}</strong></div>
+        <div class="report-row"><span>创建时间：</span><span>{{ formatCreatedAt(backup) }}</span></div>
       </div>
 
       <el-alert
         type="warning"
-        title="恢复将覆盖当前数据库"
+        title="恢复将替换当前数据库状态"
         :closable="false"
         show-icon
         style="margin: 12px 0"
       >
         <template #default>
-          <p style="margin: 0; font-size: 12px">
-            恢复前将自动备份当前数据至 data/backups/ 目录。恢复完成后需要重启
-            Core 服务。
-          </p>
+          <p style="margin: 0; font-size: 12px">请确认当前重要数据已经另行备份。恢复完成后建议重新加载客户端。</p>
         </template>
       </el-alert>
 
-      <el-form label-position="top" style="margin-top: 12px">
-        <el-form-item label="备份密码">
-          <el-input
-            v-model="restorePassword"
-            type="password"
-            show-password
-            placeholder="输入备份时设置的密码"
-          />
-        </el-form-item>
-        <el-form-item>
-          <el-button
-            type="primary"
-            :disabled="!restorePassword"
-            :loading="restoreVerifying"
-            @click="verifyRestore"
-          >
-            验证备份
-          </el-button>
-        </el-form-item>
-      </el-form>
-
-      <div v-if="restoreVerifyResult" style="margin-top: 12px">
-        <el-alert
-          v-if="restoreVerifyResult.valid"
-          type="success"
-          title="备份有效且兼容"
-          :closable="false"
-          show-icon
+      <div class="confirm-row">
+        <span style="font-size: 13px">输入「确认恢复」以执行：</span>
+        <el-input
+          v-model="restoreConfirmText"
+          placeholder='输入"确认恢复"'
+          style="width: 160px"
+          size="small"
         />
-        <el-alert
-          v-else
-          type="error"
-          title="备份验证未通过"
-          :closable="false"
-          show-icon
-        >
-          <template #default>
-            <ul style="margin: 4px 0; padding-left: 16px; font-size: 13px">
-              <li v-for="e in restoreVerifyResult.errors" :key="e">{{ e }}</li>
-            </ul>
-          </template>
-        </el-alert>
-        <div
-          v-if="restoreVerifyResult.warnings?.length"
-          style="margin-top: 8px"
-        >
-          <el-alert
-            type="warning"
-            :title="restoreVerifyResult.warnings.join('; ')"
-            :closable="false"
-            show-icon
-          />
-        </div>
       </div>
+    </template>
 
-      <div v-if="restoreVerifyResult?.valid" style="margin-top: 16px">
-        <el-divider />
-        <div class="confirm-row" style="margin-bottom: 8px">
-          <span style="font-size: 13px">输入「确认恢复」以执行：</span>
-          <el-input
-            v-model="restoreConfirmText"
-            placeholder='输入"确认恢复"'
-            style="width: 160px"
-            size="small"
-          />
-        </div>
-        <el-button
-          type="danger"
-          :disabled="restoreConfirmText !== '确认恢复'"
-          :loading="restoreExecuting"
-          @click="executeRestore"
-        >
-          确认恢复
-        </el-button>
-      </div>
+    <template #footer>
+      <el-button @click="emit('update:visible', false)">取消</el-button>
+      <el-button
+        type="danger"
+        :disabled="restoreConfirmText !== '确认恢复' || !backup"
+        :loading="restoreExecuting"
+        @click="executeRestore"
+      >
+        确认恢复
+      </el-button>
     </template>
   </el-dialog>
 </template>
@@ -133,62 +68,29 @@ const emit = defineEmits<{
   (e: "update:visible", value: boolean): void;
 }>();
 
-const restorePassword = ref("");
-const restoreVerifyResult = ref<any>(null);
-const restoreVerifying = ref(false);
 const restoreExecuting = ref(false);
 const restoreConfirmText = ref("");
 
 function handleClosed() {
-  restorePassword.value = "";
-  restoreVerifyResult.value = null;
   restoreConfirmText.value = "";
 }
 
-async function verifyRestore() {
-  if (!restorePassword.value || !props.backup) return;
-  restoreVerifying.value = true;
-  restoreVerifyResult.value = null;
-  try {
-    const res = await apiClient.post("/api/storage/restore/verify", {
-      backupName: props.backup.name,
-      password: restorePassword.value,
-    });
-    const d = res.data?.data || res.data;
-    restoreVerifyResult.value = d;
-    if (d.valid) {
-      ElMessage.success("验证通过");
-    }
-  } catch (err: any) {
-    const msg = err.response?.data?.message || err.message;
-    restoreVerifyResult.value = { valid: false, errors: [msg] };
-    ElMessage.error("验证失败: " + msg);
-  } finally {
-    restoreVerifying.value = false;
-  }
+function formatCreatedAt(backup: any) {
+  const value = backup?.createdAt || backup?.modTime || backup?.created_at;
+  return value ? String(value).slice(0, 19) : "—";
 }
 
 async function executeRestore() {
-  if (
-    restoreConfirmText.value !== "确认恢复" ||
-    !props.backup ||
-    !restorePassword.value
-  )
-    return;
+  if (restoreConfirmText.value !== "确认恢复" || !props.backup?.name) return;
   restoreExecuting.value = true;
   try {
-    const res = await apiClient.post("/api/storage/restore/encrypted", {
-      backupName: props.backup.name,
-      password: restorePassword.value,
-      confirmText: "确认恢复",
-    });
-    const d = res.data?.data || res.data;
-    ElMessage.success(d.message || "恢复完成");
+    const name = encodeURIComponent(String(props.backup.name));
+    const res = await apiClient.post(`/api/storage/backups/${name}/restore`);
+    const body = res.data?.data || res.data;
+    ElMessage.success(body?.message || "恢复完成");
     emit("update:visible", false);
   } catch (err: any) {
-    ElMessage.error(
-      "恢复失败: " + (err.response?.data?.message || err.message),
-    );
+    ElMessage.error("恢复失败: " + (err.response?.data?.message || err.response?.data?.error || err.message));
   } finally {
     restoreExecuting.value = false;
   }
@@ -210,5 +112,6 @@ async function executeRestore() {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-top: 16px;
 }
 </style>
