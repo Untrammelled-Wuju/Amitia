@@ -1,11 +1,14 @@
 import { defineStore } from "pinia";
 import { ref, computed } from "vue";
+import type { UIProviderCapability, UIProviderDefinition, UIProfile } from "@/ui-runtime/types";
 import {
   fetchUISnapshot,
   fetchContributions,
   createBridgeSession,
   revokeBridgeSession,
+  updateUIProfile,
 } from "@/api/extension";
+import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
 
 export interface UIContributionSummary {
   contributionId: string;
@@ -48,8 +51,13 @@ export interface SlotSnapshot {
 
 export interface UIContributionSnapshot {
   slots: SlotSnapshot[];
+  contributions?: UIContributionSummary[];
   generatedAt: string;
   version: number;
+  providers?: UIProviderDefinition[];
+  profile?: UIProfile;
+  resolved?: Partial<Record<UIProviderCapability, UIProviderDefinition>>;
+  providerVersion?: number;
 }
 
 export interface SlotError {
@@ -101,6 +109,26 @@ export const useExtensionUIStore = defineStore("extensionUI", () => {
     const slot = slotsById.value.get(slotId);
     if (!slot) return [];
     return slot.contributions.filter((c) => c.visible && c.effective && c.enabled && c.runtimeReady);
+  }
+
+  function getContributionById(contributionId: string): UIContributionSummary | null {
+    if (!snapshot.value) return null;
+    const catalogMatch = snapshot.value.contributions?.find((item) => item.contributionId === contributionId);
+    if (catalogMatch) return catalogMatch;
+    for (const slot of snapshot.value.slots) {
+      const match = slot.contributions.find((item) => item.contributionId === contributionId);
+      if (match) return match;
+    }
+    return null;
+  }
+
+  function getResolvedProvider(capability: UIProviderCapability): UIProviderDefinition | null {
+    return snapshot.value?.resolved?.[capability] ?? null;
+  }
+
+  function getProviders(capability?: UIProviderCapability): UIProviderDefinition[] {
+    const providers = snapshot.value?.providers ?? [];
+    return capability ? providers.filter((provider) => provider.capability === capability) : providers;
   }
 
   function getVisibleContributions(slotId: string): UIContributionSummary[] {
@@ -166,7 +194,7 @@ export const useExtensionUIStore = defineStore("extensionUI", () => {
     if (!force && snapshot.value && Date.now() - lastFetchAt.value < 30_000) return;
     loading.value = true;
     try {
-      const next = await fetchUISnapshot();
+      const next = await fetchUISnapshot(resolveHostEnvironment().platform);
       snapshot.value = next;
       lastFetchAt.value = Date.now();
     } catch (e) {
@@ -184,6 +212,16 @@ export const useExtensionUIStore = defineStore("extensionUI", () => {
 
   async function loadAllContributions(): Promise<UIContributionSummary[]> {
     return fetchContributions();
+  }
+
+  async function selectProvider(capability: UIProviderCapability, providerId?: string): Promise<void> {
+    const current = snapshot.value?.profile ?? { profileId: "default", name: "Default", selections: {} };
+    const selections = { ...(current.selections ?? {}) };
+    if (providerId) selections[capability] = providerId;
+    else delete selections[capability];
+    const profile = await updateUIProfile({ ...current, selections, updatedAt: Date.now() });
+    if (snapshot.value) snapshot.value = { ...snapshot.value, profile };
+    await refreshSnapshot(true);
   }
 
   async function startSession(params: {
@@ -240,6 +278,10 @@ export const useExtensionUIStore = defineStore("extensionUI", () => {
     setSnapshot,
     getSlotContributions,
     getVisibleContributions,
+    getContributionById,
+    getResolvedProvider,
+    getProviders,
+    selectProvider,
     recordError,
     clearErrors,
     registerSession,
