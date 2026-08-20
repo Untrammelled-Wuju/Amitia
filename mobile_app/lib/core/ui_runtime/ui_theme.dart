@@ -322,20 +322,30 @@ ThemeData applyUIThemeProvider(ThemeData base, UIProviderDefinition? provider) {
         ? base.textTheme
         : base.textTheme.apply(fontFamily: typography.fontFamily),
     iconTheme: base.iconTheme.copyWith(size: icons.medium),
-    extensions: <ThemeExtension<dynamic>>[
-      ...base.extensions.values.where(
-        (extension) =>
-            extension is! AmitiaColorTokens &&
-            extension is! AmitiaLayoutTokens &&
-            extension is! AmitiaTypographyTokens &&
-            extension is! AmitiaIconTokens &&
-            extension is! AmitiaComponentTokens,
-      ).toList().cast<ThemeExtension<dynamic>>(),
-      colors,
-      layout,
-      typography,
-      icons,
-      components,
-    ],
+    extensions: _buildThemeExtensions(base, colors, layout, typography, icons, components),
   );
+}
+
+Iterable<ThemeExtension<dynamic>> _buildThemeExtensions(
+  ThemeData base,
+  AmitiaColorTokens colors,
+  AmitiaLayoutTokens layout,
+  AmitiaTypographyTokens typography,
+  AmitiaIconTokens icons,
+  AmitiaComponentTokens components,
+) sync* {
+  for (final e in base.extensions.values) {
+    if (e is! AmitiaColorTokens &&
+        e is! AmitiaLayoutTokens &&
+        e is! AmitiaTypographyTokens &&
+        e is! AmitiaIconTokens &&
+        e is! AmitiaComponentTokens) {
+      yield e;
+    }
+  }
+  yield colors;
+  yield layout;
+  yield typography;
+  yield icons;
+  yield components;
 }

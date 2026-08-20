@@ -4,6 +4,7 @@ import '../../app/theme/app_colors.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_typography.dart';
+import '../../app/theme/design_tokens.dart';
 
 class AmitiaButton extends StatelessWidget {
   final String label;
@@ -26,8 +27,8 @@ class AmitiaButton extends StatelessWidget {
     this.isFullWidth = false,
     this.icon,
     this.width,
-    this.height = AppSpacing.buttonHeight,
-  });
+    double? height,
+  }) : height = height ?? AppSpacing.buttonHeight;
 
   @override
   Widget build(BuildContext context) {
