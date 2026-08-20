@@ -218,22 +218,22 @@ class _SkillDraftContentState extends ConsumerState<_SkillDraftContent> {
         children: [
           Expanded(
             child: ListView(
-              padding: const EdgeInsets.all(AppSpacing.pagePadding),
+              padding: EdgeInsets.all(AppSpacing.pagePadding),
               children: [
                 _buildStatusBanner(context),
-                const SizedBox(height: AppSpacing.sectionGap),
+                SizedBox(height: AppSpacing.sectionGap),
                 _buildMetadataSection(context),
-                const SizedBox(height: AppSpacing.sectionGap),
+                SizedBox(height: AppSpacing.sectionGap),
                 _buildSchemaSection(context, '输入 Schema', _inputSchemaController, '定义技能的输入参数'),
-                const SizedBox(height: AppSpacing.sectionGap),
+                SizedBox(height: AppSpacing.sectionGap),
                 _buildSchemaSection(context, '输出 Schema', _outputSchemaController, '定义技能的输出结果'),
-                const SizedBox(height: AppSpacing.sectionGap),
+                SizedBox(height: AppSpacing.sectionGap),
                 _buildRiskSection(context),
-                const SizedBox(height: AppSpacing.sectionGap),
+                SizedBox(height: AppSpacing.sectionGap),
                 _buildTestSection(context),
-                const SizedBox(height: AppSpacing.sectionGap),
+                SizedBox(height: AppSpacing.sectionGap),
                 _buildInstallPreviewSection(context),
-                const SizedBox(height: AppSpacing.xxl),
+                SizedBox(height: AppSpacing.xxl),
               ],
             ),
           ),
@@ -245,7 +245,7 @@ class _SkillDraftContentState extends ConsumerState<_SkillDraftContent> {
 
   Widget _buildStatusBanner(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
+      padding: EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
         color: context.accentSoft,
         borderRadius: AppRadius.brMedium,
@@ -253,7 +253,7 @@ class _SkillDraftContentState extends ConsumerState<_SkillDraftContent> {
       child: Row(
         children: [
           Icon(Icons.edit_note, size: 22, color: context.accentPrimary),
-          const SizedBox(width: AppSpacing.sm),
+          SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -277,28 +277,28 @@ class _SkillDraftContentState extends ConsumerState<_SkillDraftContent> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('元数据', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         AmitiaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('技能名称', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               AmitiaTextField(
                 hintText: '输入技能名称',
                 controller: _nameController,
               ),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('描述', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               AmitiaTextField(
                 hintText: '输入技能描述',
                 controller: _descController,
                 maxLines: 3,
               ),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('版本信息', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               AmitiaTextField(
                 hintText: '例如：版本 1.0.0',
                 controller: _metadataController,
@@ -320,19 +320,19 @@ class _SkillDraftContentState extends ConsumerState<_SkillDraftContent> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(title, style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         AmitiaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(hint, style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               Container(
                 decoration: BoxDecoration(
                   color: context.surfaceSecondary,
                   borderRadius: AppRadius.brSmall,
                 ),
-                padding: const EdgeInsets.all(AppSpacing.md),
+                padding: EdgeInsets.all(AppSpacing.md),
                 child: AmitiaTextField(
                   hintText: '{"type": "object", ...}',
                   controller: controller,
@@ -351,7 +351,7 @@ class _SkillDraftContentState extends ConsumerState<_SkillDraftContent> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('能力风险评估', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         AmitiaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -363,13 +363,13 @@ class _SkillDraftContentState extends ConsumerState<_SkillDraftContent> {
                   AmitiaStatusBadge(label: _selectedRisk, type: _riskBadgeType(_selectedRisk)),
                 ],
               ),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               Row(
                 children: _riskOptions.map((risk) {
                   final isSelected = risk == _selectedRisk;
                   return Expanded(
                     child: Padding(
-                      padding: const EdgeInsets.only(right: AppSpacing.xs),
+                      padding: EdgeInsets.only(right: AppSpacing.xs),
                       child: GestureDetector(
                         onTap: () {
                           setState(() {
@@ -398,9 +398,9 @@ class _SkillDraftContentState extends ConsumerState<_SkillDraftContent> {
                   );
                 }).toList(),
               ),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('评估说明', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               AmitiaTextField(
                 hintText: '描述风险点和缓解措施',
                 controller: _riskController,
@@ -418,7 +418,7 @@ class _SkillDraftContentState extends ConsumerState<_SkillDraftContent> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('测试结果', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         AmitiaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -426,7 +426,7 @@ class _SkillDraftContentState extends ConsumerState<_SkillDraftContent> {
               Row(
                 children: [
                   Icon(Icons.science_outlined, size: 20, color: context.accentPrimary),
-                  const SizedBox(width: AppSpacing.sm),
+                  SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: Text(
                       _isTesting
@@ -445,10 +445,10 @@ class _SkillDraftContentState extends ConsumerState<_SkillDraftContent> {
                 ],
               ),
               if (_isTesting) ...[
-                const SizedBox(height: AppSpacing.sm),
+                SizedBox(height: AppSpacing.sm),
                 AmitiaProgressBar(progress: 0.7),
               ],
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               AmitiaButton(
                 label: _isTesting ? '测试中...' : '运行测试',
                 icon: Icons.play_arrow,
@@ -468,21 +468,21 @@ class _SkillDraftContentState extends ConsumerState<_SkillDraftContent> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('安装预览', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         AmitiaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildPreviewRow(context, '技能名称', _nameController.text.isEmpty ? '未命名' : _nameController.text),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               _buildPreviewRow(context, '版本', _metadataController.text.isEmpty ? '未设置' : _metadataController.text),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               _buildPreviewRow(context, '风险等级', _selectedRisk),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               _buildPreviewRow(context, '测试状态', _hasTested ? _testResult : '未测试'),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               _buildPreviewRow(context, '输入 Schema', _inputSchemaController.text.isEmpty ? '未定义' : '已定义'),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               _buildPreviewRow(context, '输出 Schema', _outputSchemaController.text.isEmpty ? '未定义' : '已定义'),
             ],
           ),
@@ -503,7 +503,7 @@ class _SkillDraftContentState extends ConsumerState<_SkillDraftContent> {
 
   Widget _buildBottomActions(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
         border: Border(
@@ -519,7 +519,7 @@ class _SkillDraftContentState extends ConsumerState<_SkillDraftContent> {
               onPressed: () => _confirmArchive(context),
             ),
           ),
-          const SizedBox(width: AppSpacing.sm),
+          SizedBox(width: AppSpacing.sm),
           Expanded(
             child: AmitiaButton(
               label: _isSaving ? '保存中...' : '提交',

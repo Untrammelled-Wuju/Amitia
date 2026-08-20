@@ -57,7 +57,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
         fallbackRoute: AppRoutes.workshop,
         actions: [
           Padding(
-            padding: const EdgeInsets.only(right: AppSpacing.sm),
+            padding: EdgeInsets.only(right: AppSpacing.sm),
             child: AmitiaIconButton(
               icon: Icons.add,
               color: context.accentPrimary,
@@ -90,7 +90,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
       );
     }
     return ListView.builder(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       itemCount: _installations.length,
       itemBuilder: (context, index) => _buildInstallationCard(context, _installations[index]),
     );
@@ -108,7 +108,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
     final pluginId = pet['pluginId']?.toString() ?? id;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: EdgeInsets.only(bottom: AppSpacing.sm),
       child: AmitiaCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -133,7 +133,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
                     ),
                   ),
                 ),
-                const SizedBox(width: AppSpacing.md),
+                SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -155,9 +155,9 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
                   AmitiaStatusBadge(label: '已停用', type: BadgeType.neutral),
               ],
             ),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+              padding: EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
               decoration: BoxDecoration(
                 color: context.surfaceSecondary,
                 borderRadius: AppRadius.brSmall,
@@ -165,11 +165,11 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
               child: Row(
                 children: [
                   Icon(Icons.play_circle_outline, size: 16, color: context.textSecondary),
-                  const SizedBox(width: AppSpacing.xs),
+                  SizedBox(width: AppSpacing.xs),
                   Text('默认动作', style: AppTypography.label(context)),
                   const Spacer(),
                   Text(_actionLabel(defaultAction), style: AppTypography.bodySmall(context)),
-                  const SizedBox(width: AppSpacing.xs),
+                  SizedBox(width: AppSpacing.xs),
                   GestureDetector(
                     onTap: () => _showDefaultActionSheet(id, defaultAction, actions),
                     child: Text(
@@ -180,7 +180,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
                 ],
               ),
             ),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Wrap(
               spacing: AppSpacing.xs,
               runSpacing: AppSpacing.xs,
@@ -202,7 +202,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
                 );
               }).toList(),
             ),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Row(
               children: [
                 Expanded(
@@ -214,7 +214,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
                     onPressed: () => _toggleEnabled(id, isEnabled),
                   ),
                 ),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: AmitiaButton(
                     label: '调整大小',
@@ -224,7 +224,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
                     onPressed: () => _showResizeDialog(id, scale),
                   ),
                 ),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: AmitiaButton(
                     label: '动作',
@@ -236,7 +236,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
                 ),
               ],
             ),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             AmitiaButton(
               label: '卸载桌宠',
               isDestructive: true,
@@ -344,7 +344,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text('当前缩放：${(tempScale * 100).round()}%', style: AppTypography.body(context)),
-                  const SizedBox(height: AppSpacing.md),
+                  SizedBox(height: AppSpacing.md),
                   Slider(
                     value: tempScale,
                     min: 0.5,
@@ -413,16 +413,16 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
       builder: (sheetContext) {
         return SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+            padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                  padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
                   child: Text('动作列表', style: AppTypography.sectionTitle(context)),
                 ),
-                const SizedBox(height: AppSpacing.md),
+                SizedBox(height: AppSpacing.md),
                 ...actions.map((action) {
                   final a = action.toString();
                   return AmitiaListTile(
@@ -442,9 +442,9 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
                     },
                   );
                 }),
-                const SizedBox(height: AppSpacing.sm),
+                SizedBox(height: AppSpacing.sm),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                  padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
                   child: AmitiaButton(
                     label: '关闭',
                     isSecondary: true,
@@ -470,16 +470,16 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
       builder: (sheetContext) {
         return SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+            padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                  padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
                   child: Text('更换默认待机动作', style: AppTypography.sectionTitle(context)),
                 ),
-                const SizedBox(height: AppSpacing.md),
+                SizedBox(height: AppSpacing.md),
                 ...actions.map((action) {
                   final a = action.toString();
                   final isSelected = a == currentDefault;
@@ -490,7 +490,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
                     },
                     behavior: HitTestBehavior.opaque,
                     child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 12),
+                      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 12),
                       child: Row(
                         children: [
                           Icon(
@@ -498,7 +498,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
                             size: 20,
                             color: isSelected ? context.accentPrimary : context.textTertiary,
                           ),
-                          const SizedBox(width: AppSpacing.md),
+                          SizedBox(width: AppSpacing.md),
                           Expanded(
                             child: Text(_actionLabel(a), style: AppTypography.body(context)),
                           ),
@@ -595,7 +595,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text('选择要安装的桌宠', style: AppTypography.caption(context)),
-                  const SizedBox(height: AppSpacing.sm),
+                  SizedBox(height: AppSpacing.sm),
                   ..._availableTasks.map((task) {
                     final taskName = task['name']?.toString() ?? '';
                     final isInstalled = _installations.any((p) => p['name']?.toString() == taskName);
@@ -620,7 +620,7 @@ class _PetInstallationsPageState extends ConsumerState<PetInstallationsPage> {
                                       ? context.textTertiary
                                       : context.textSecondary,
                             ),
-                            const SizedBox(width: AppSpacing.md),
+                            SizedBox(width: AppSpacing.md),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,

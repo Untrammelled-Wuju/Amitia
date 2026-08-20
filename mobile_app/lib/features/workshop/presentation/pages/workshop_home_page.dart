@@ -22,12 +22,12 @@ class WorkshopHomePage extends ConsumerWidget {
       body: SafeArea(
         top: false,
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(AppSpacing.pagePadding),
+          padding: EdgeInsets.all(AppSpacing.pagePadding),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildHeaderBanner(context),
-              const SizedBox(height: AppSpacing.xl),
+              SizedBox(height: AppSpacing.xl),
               _buildEntryCard(
                 context,
                 icon: Icons.psychology_outlined,
@@ -35,7 +35,7 @@ class WorkshopHomePage extends ConsumerWidget {
                 description: '创建和管理 AI 技能，定义输入输出 Schema、测试并安装到系统',
                 onTap: () => context.push(AppRoutes.workshopSkills),
               ),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               _buildEntryCard(
                 context,
                 icon: Icons.pets_outlined,
@@ -43,9 +43,9 @@ class WorkshopHomePage extends ConsumerWidget {
                 description: '生成自定义桌宠角色，处理动作帧、审核质量并安装到桌面',
                 onTap: () => context.push(AppRoutes.workshopPet),
               ),
-              const SizedBox(height: AppSpacing.xxl),
+              SizedBox(height: AppSpacing.xxl),
               Text('快速开始', style: AppTypography.sectionTitle(context)),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               _buildTipCard(context),
             ],
           ),
@@ -56,7 +56,7 @@ class WorkshopHomePage extends ConsumerWidget {
 
   Widget _buildHeaderBanner(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.xl),
+      padding: EdgeInsets.all(AppSpacing.xl),
       decoration: BoxDecoration(
         gradient: LinearGradient(
           begin: Alignment.topLeft,
@@ -74,7 +74,7 @@ class WorkshopHomePage extends ConsumerWidget {
           Row(
             children: [
               Icon(Icons.auto_awesome, size: 28, color: Colors.white),
-              const SizedBox(width: AppSpacing.sm),
+              SizedBox(width: AppSpacing.sm),
               Text(
                 '创意工坊',
                 style: TextStyle(
@@ -85,7 +85,7 @@ class WorkshopHomePage extends ConsumerWidget {
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.xs),
+          SizedBox(height: AppSpacing.xs),
           Text(
             '在这里制作专属技能和桌宠，释放你的创造力',
             style: TextStyle(
@@ -108,7 +108,7 @@ class WorkshopHomePage extends ConsumerWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(AppSpacing.xl),
+        padding: EdgeInsets.all(AppSpacing.xl),
         decoration: BoxDecoration(
           color: context.surfacePrimary,
           borderRadius: AppRadius.brLarge,
@@ -125,7 +125,7 @@ class WorkshopHomePage extends ConsumerWidget {
               ),
               child: Icon(icon, size: 28, color: context.accentPrimary),
             ),
-            const SizedBox(width: AppSpacing.md),
+            SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -158,12 +158,12 @@ class WorkshopHomePage extends ConsumerWidget {
         children: List.generate(tips.length, (i) {
           final tip = tips[i];
           return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.cardPadding, vertical: 12),
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.cardPadding, vertical: 12),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Icon(tip.$1, size: 20, color: context.accentPrimary),
-                const SizedBox(width: AppSpacing.md),
+                SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,

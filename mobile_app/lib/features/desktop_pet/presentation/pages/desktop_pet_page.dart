@@ -53,19 +53,19 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage> {
 
   Widget _buildStaticContent(BuildContext context) {
     return ListView(
-      padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
+      padding: EdgeInsets.only(bottom: AppSpacing.xxl),
       children: [
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         _buildCurrentPetCard(context, _defaultPetName),
-        const SizedBox(height: AppSpacing.sectionGap),
+        SizedBox(height: AppSpacing.sectionGap),
         const DesktopPetPluginSection(),
-        const SizedBox(height: AppSpacing.sectionGap),
+        SizedBox(height: AppSpacing.sectionGap),
         const AmitiaSectionHeader(title: '显示设置'),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         _buildSettingsCard(context),
-        const SizedBox(height: AppSpacing.sectionGap),
+        SizedBox(height: AppSpacing.sectionGap),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
           child: AmitiaCard(
             onTap: () => CenterNavigation.openExtensionCenter(context),
             child: Row(
@@ -79,7 +79,7 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage> {
                   ),
                   child: Icon(Icons.extension_outlined, size: 18, color: context.accentPrimary),
                 ),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -94,9 +94,9 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage> {
             ),
           ),
         ),
-        const SizedBox(height: AppSpacing.sectionGap),
+        SizedBox(height: AppSpacing.sectionGap),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
           child: AmitiaButton(
             label: '生成新桌宠',
             icon: Icons.auto_awesome_outlined,
@@ -110,19 +110,19 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage> {
 
   Widget _buildContentWithState(BuildContext context, String petName) {
     return ListView(
-      padding: const EdgeInsets.only(bottom: AppSpacing.xxl),
+      padding: EdgeInsets.only(bottom: AppSpacing.xxl),
       children: [
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         _buildCurrentPetCard(context, petName),
-        const SizedBox(height: AppSpacing.sectionGap),
+        SizedBox(height: AppSpacing.sectionGap),
         const DesktopPetPluginSection(),
-        const SizedBox(height: AppSpacing.sectionGap),
+        SizedBox(height: AppSpacing.sectionGap),
         const AmitiaSectionHeader(title: '显示设置'),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         _buildSettingsCard(context),
-        const SizedBox(height: AppSpacing.sectionGap),
+        SizedBox(height: AppSpacing.sectionGap),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
           child: AmitiaCard(
             onTap: () => CenterNavigation.openExtensionCenter(context),
             child: Row(
@@ -136,7 +136,7 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage> {
                   ),
                   child: Icon(Icons.extension_outlined, size: 18, color: context.accentPrimary),
                 ),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -151,9 +151,9 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage> {
             ),
           ),
         ),
-        const SizedBox(height: AppSpacing.sectionGap),
+        SizedBox(height: AppSpacing.sectionGap),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
           child: AmitiaButton(
             label: '生成新桌宠',
             icon: Icons.auto_awesome_outlined,
@@ -170,7 +170,7 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage> {
     final initial = _getInitial(petName);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       child: AmitiaCard(
         child: Row(
           children: [
@@ -192,7 +192,7 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage> {
                 ),
               ),
             ),
-            const SizedBox(width: AppSpacing.md),
+            SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -212,7 +212,7 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage> {
 
   Widget _buildSettingsCard(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
       child: AmitiaCard(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -239,7 +239,7 @@ class _DesktopPetPageState extends ConsumerState<DesktopPetPage> {
                 ),
               ],
             ),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             Row(
               children: [
                 Expanded(

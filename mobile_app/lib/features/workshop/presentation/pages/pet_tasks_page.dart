@@ -80,7 +80,7 @@ class _PetTasksPageState extends ConsumerState<PetTasksPage> {
         fallbackRoute: AppRoutes.workshop,
         actions: [
           Padding(
-            padding: const EdgeInsets.only(right: AppSpacing.sm),
+            padding: EdgeInsets.only(right: AppSpacing.sm),
             child: AmitiaIconButton(
               icon: Icons.add,
               color: context.accentPrimary,
@@ -113,7 +113,7 @@ class _PetTasksPageState extends ConsumerState<PetTasksPage> {
       );
     }
     return ListView.builder(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       itemCount: _tasks.length,
       itemBuilder: (context, index) => _buildTaskCard(context, _tasks[index]),
     );
@@ -133,7 +133,7 @@ class _PetTasksPageState extends ConsumerState<PetTasksPage> {
     final canProcess = status == 'pending' || status == 'processing';
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: EdgeInsets.only(bottom: AppSpacing.sm),
       child: AmitiaCard(
         onTap: () => context.push(AppRoutes.petProcessing(sessionId)),
         child: Column(
@@ -150,7 +150,7 @@ class _PetTasksPageState extends ConsumerState<PetTasksPage> {
                   ),
                   child: Icon(Icons.pets_outlined, size: 22, color: context.accentPrimary),
                 ),
-                const SizedBox(width: AppSpacing.md),
+                SizedBox(width: AppSpacing.md),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -167,17 +167,17 @@ class _PetTasksPageState extends ConsumerState<PetTasksPage> {
                 AmitiaStatusBadge(label: _statusLabel(status), type: _statusBadgeType(status)),
               ],
             ),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Row(
               children: [
                 Text('$completedActions/$totalActions 动作', style: AppTypography.caption(context)),
-                const SizedBox(width: AppSpacing.md),
+                SizedBox(width: AppSpacing.md),
                 Expanded(child: AmitiaProgressBar(progress: (progress / 100.0).clamp(0.0, 1.0))),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
                 Text('$progress%', style: AppTypography.caption(context)),
               ],
             ),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Row(
               children: [
                 if (canProcess)
@@ -199,7 +199,7 @@ class _PetTasksPageState extends ConsumerState<PetTasksPage> {
                       onPressed: () => context.push(AppRoutes.petProcessing(sessionId)),
                     ),
                   ),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: AmitiaButton(
                     label: '创建处理任务',
@@ -208,7 +208,7 @@ class _PetTasksPageState extends ConsumerState<PetTasksPage> {
                     onPressed: () => _showCreateProcessingConfirm(sessionId, name),
                   ),
                 ),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
                 if (canCancel)
                   SizedBox(
                     width: 38,

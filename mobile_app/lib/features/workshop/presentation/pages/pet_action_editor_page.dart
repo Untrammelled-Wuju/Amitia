@@ -107,22 +107,22 @@ class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
           children: [
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.all(AppSpacing.pagePadding),
+                padding: EdgeInsets.all(AppSpacing.pagePadding),
                 children: [
                   _buildPreviewSection(context),
-                  const SizedBox(height: AppSpacing.md),
+                  SizedBox(height: AppSpacing.md),
                   _buildFrameScrubber(context),
-                  const SizedBox(height: AppSpacing.sectionGap),
+                  SizedBox(height: AppSpacing.sectionGap),
                   _buildPlaybackSpeedSection(context),
-                  const SizedBox(height: AppSpacing.md),
+                  SizedBox(height: AppSpacing.md),
                   _buildCropRangeSection(context),
-                  const SizedBox(height: AppSpacing.md),
+                  SizedBox(height: AppSpacing.md),
                   _buildAnchorSection(context),
-                  const SizedBox(height: AppSpacing.md),
+                  SizedBox(height: AppSpacing.md),
                   _buildScaleSection(context),
-                  const SizedBox(height: AppSpacing.md),
+                  SizedBox(height: AppSpacing.md),
                   _buildLoopSection(context),
-                  const SizedBox(height: AppSpacing.xxl),
+                  SizedBox(height: AppSpacing.xxl),
                 ],
               ),
             ),
@@ -144,7 +144,7 @@ class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
             AmitiaStatusBadge(label: _actionName, type: BadgeType.accent),
           ],
         ),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         Container(
           width: double.infinity,
           height: 220,
@@ -242,7 +242,7 @@ class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
           Row(
             children: [
               Icon(Icons.speed, size: 20, color: context.accentPrimary),
-              const SizedBox(width: AppSpacing.sm),
+              SizedBox(width: AppSpacing.sm),
               Text('播放速度', style: AppTypography.body(context)),
               const Spacer(),
               Text('${_playbackSpeed.toStringAsFixed(1)}x', style: AppTypography.bodySmall(context)),
@@ -271,11 +271,11 @@ class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
           Row(
             children: [
               Icon(Icons.content_cut, size: 20, color: context.accentPrimary),
-              const SizedBox(width: AppSpacing.sm),
+              SizedBox(width: AppSpacing.sm),
               Text('裁切范围', style: AppTypography.body(context)),
             ],
           ),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Text('起始帧', style: AppTypography.label(context)),
           Slider(
             value: _cropStart,
@@ -298,7 +298,7 @@ class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
               setState(() { _cropEnd = value.clamp(_cropStart + 0.05, 1.0); });
             },
           ),
-          const SizedBox(height: AppSpacing.xs),
+          SizedBox(height: AppSpacing.xs),
           Text(
             '裁切范围：${(_cropStart * 100).round()}% - ${(_cropEnd * 100).round()}%',
             style: AppTypography.caption(context),
@@ -316,11 +316,11 @@ class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
           Row(
             children: [
               Icon(Icons.gps_fixed, size: 20, color: context.accentPrimary),
-              const SizedBox(width: AppSpacing.sm),
+              SizedBox(width: AppSpacing.sm),
               Text('锚点设置', style: AppTypography.body(context)),
             ],
           ),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Container(
             height: 120,
             decoration: BoxDecoration(
@@ -376,7 +376,7 @@ class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
               },
             ),
           ),
-          const SizedBox(height: AppSpacing.xs),
+          SizedBox(height: AppSpacing.xs),
           Text(
             '锚点位置：X ${(_anchorX * 100).round()}% · Y ${(_anchorY * 100).round()}%',
             style: AppTypography.caption(context),
@@ -394,7 +394,7 @@ class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
           Row(
             children: [
               Icon(Icons.zoom_in, size: 20, color: context.accentPrimary),
-              const SizedBox(width: AppSpacing.sm),
+              SizedBox(width: AppSpacing.sm),
               Text('缩放', style: AppTypography.body(context)),
               const Spacer(),
               Text('${(_scale * 100).round()}%', style: AppTypography.bodySmall(context)),
@@ -420,7 +420,7 @@ class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
       child: Row(
         children: [
           Icon(Icons.loop, size: 20, color: context.accentPrimary),
-          const SizedBox(width: AppSpacing.sm),
+          SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -445,7 +445,7 @@ class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
 
   Widget _buildBottomActions(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
         border: Border(top: BorderSide(color: context.borderPrimary, width: 0.5)),
@@ -460,7 +460,7 @@ class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
               onPressed: _saveDraft,
             ),
           ),
-          const SizedBox(width: AppSpacing.sm),
+          SizedBox(width: AppSpacing.sm),
           Expanded(
             child: AmitiaButton(
               label: '放弃',
@@ -468,7 +468,7 @@ class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
               onPressed: _showAbandonConfirm,
             ),
           ),
-          const SizedBox(width: AppSpacing.sm),
+          SizedBox(width: AppSpacing.sm),
           Expanded(
             child: AmitiaButton(
               label: '提交',
