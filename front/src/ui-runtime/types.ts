@@ -40,6 +40,8 @@ export function isUIProviderCapability(value: string): value is UIProviderCapabi
 }
 
 export type UIProviderMode = "replace" | "compose" | "augment";
+export type UIProviderPlacement = "any" | "cloud" | "device" | "hybrid";
+export type UIProfileScopeKind = "global" | "user" | "platform" | "device" | "device_platform" | "runtime";
 export type UIProviderEntryType =
   | "builtin_native"
   | "declarative"
@@ -57,6 +59,30 @@ export interface UIProviderEntry {
   contentHash?: string;
 }
 
+export interface UIDeviceRequirements {
+  platforms?: string[];
+  architectures?: string[];
+  minAppVersion?: string;
+  minRuntimeVersion?: string;
+  requiredFeatures?: string[];
+}
+
+export interface UIProfileScope {
+  userId?: string;
+  deviceId?: string;
+  platform?: string;
+  runtimeProfile?: string;
+}
+
+export interface UIProviderResolveContext extends UIProfileScope {
+  architecture?: string;
+  appVersion?: string;
+  runtimeVersion?: string;
+  deviceOnline?: boolean;
+  localRuntime?: boolean;
+  deviceCapabilities?: string[];
+}
+
 export interface UIProviderDefinition {
   providerId: string;
   extensionId: string;
@@ -69,6 +95,8 @@ export interface UIProviderDefinition {
   fallbackProviderId?: string;
   trustLevel?: string;
   permissions?: string[];
+  placement?: UIProviderPlacement;
+  deviceRequirements?: UIDeviceRequirements;
   generation?: number;
   enabled: boolean;
   builtin?: boolean;
@@ -79,12 +107,24 @@ export interface UIProfile {
   profileId: string;
   name: string;
   selections: Partial<Record<UIProviderCapability, string>>;
+  scope?: UIProfileScope;
+  revision?: number;
   updatedAt?: number;
+}
+
+export interface UIProfileEnvelope {
+  profile: UIProfile;
+  layers: UIProfile[];
+  context: UIProviderResolveContext;
+  scope: UIProfileScopeKind;
+  scopeProfile: UIProfile;
+  scopeExists: boolean;
 }
 
 export interface UIProviderResolution {
   capability: UIProviderCapability;
   platform: string;
+  context?: UIProviderResolveContext;
   provider?: UIProviderDefinition;
   fallbackChain?: string[];
   reason?: string;
