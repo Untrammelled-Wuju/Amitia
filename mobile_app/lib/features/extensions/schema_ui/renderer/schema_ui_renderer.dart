@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart' hide ActionDispatcher;
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
@@ -19,6 +20,7 @@ class SchemaUIRenderer extends StatefulWidget {
   final List<String>? permissions;
   final Map<String, dynamic>? initialContext;
   final DataSourceLoader? dataSourceLoader;
+  final FutureOr<dynamic> Function(ActionInvocation invocation)? onActionDispatch;
 
   const SchemaUIRenderer({
     super.key,
@@ -29,6 +31,7 @@ class SchemaUIRenderer extends StatefulWidget {
     this.permissions,
     this.initialContext,
     this.dataSourceLoader,
+    this.onActionDispatch,
   });
 
   @override
@@ -66,7 +69,15 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     if (!mounted) return;
     ActionDispatcher(
       onDispatch: (invocation) {
-        debugPrint('SchemaUI action: ${invocation.toJson()}');
+        final dispatcher = widget.onActionDispatch;
+        if (dispatcher != null) {
+          Future.sync(() => dispatcher(invocation)).catchError((Object error, StackTrace stack) {
+            debugPrint('SchemaUI host action failed: $error');
+            return null;
+          });
+        } else {
+          debugPrint('SchemaUI action: ${invocation.toJson()}');
+        }
       },
     ).dispatch(
       action: action,
@@ -113,7 +124,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
             return _buildEmptyState(context);
           }
           return ListView(
-            padding: const EdgeInsets.all(AppSpacing.pagePadding),
+            padding: EdgeInsets.all(AppSpacing.pagePadding),
             children: doc.children.map((node) => _buildNode(context, node, 0)).toList(),
           );
         },
@@ -144,13 +155,13 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
       switch (node.type) {
         case SchemaUI.nodePage:
         case SchemaUI.nodeSection:
-          return _buildSection(context, node);
+          return _buildSection(context, node, depth);
         case SchemaUI.nodeStack:
-          return _buildStack(context, node);
+          return _buildStack(context, node, depth);
         case SchemaUI.nodeRow:
-          return _buildRow(context, node);
+          return _buildRow(context, node, depth);
         case SchemaUI.nodeGrid:
-          return _buildGrid(context, node);
+          return _buildGrid(context, node, depth);
         case SchemaUI.nodeTabs:
           return _buildTabs(context, node);
         case SchemaUI.nodeCard:
@@ -199,31 +210,31 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     }
   }
 
-  Widget _buildSection(BuildContext context, SchemaUINode node) {
+  Widget _buildSection(BuildContext context, SchemaUINode node, int depth) {
     final title = node.props?['title'] as String?;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (title != null) ...[
           Text(title, style: AppTypography.sectionTitle(context)),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
         ],
         ...node.children.map((child) => Padding(
-          padding: const EdgeInsets.only(bottom: AppSpacing.componentGap),
+          padding: EdgeInsets.only(bottom: AppSpacing.componentGap),
           child: _buildNode(context, child, depth + 1),
         )),
       ],
     );
   }
 
-  Widget _buildStack(BuildContext context, SchemaUINode node) {
+  Widget _buildStack(BuildContext context, SchemaUINode node, int depth) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: node.children.map((child) => _buildNode(context, child, depth + 1)).toList(),
     );
   }
 
-  Widget _buildRow(BuildContext context, SchemaUINode node) {
+  Widget _buildRow(BuildContext context, SchemaUINode node, int depth) {
     return Wrap(
       spacing: AppSpacing.sm,
       runSpacing: AppSpacing.sm,
@@ -231,7 +242,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     );
   }
 
-  Widget _buildGrid(BuildContext context, SchemaUINode node) {
+  Widget _buildGrid(BuildContext context, SchemaUINode node, int depth) {
     final columns = (node.props?['columns'] as int?) ?? 2;
     return GridView.count(
       crossAxisCount: columns,
@@ -278,7 +289,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
         children: tabs.map((t) {
           if (t.children.isEmpty) return const SizedBox.shrink();
           return SingleChildScrollView(
-            padding: const EdgeInsets.all(AppSpacing.md),
+            padding: EdgeInsets.all(AppSpacing.md),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: t.children.map((child) => _buildNode(context, child, 0)).toList(),
@@ -292,11 +303,11 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
   Widget _buildCard(BuildContext context, SchemaUINode node) {
     return AmitiaCard(
       child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.md),
+        padding: EdgeInsets.all(AppSpacing.md),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: node.children.map((child) => Padding(
-            padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+            padding: EdgeInsets.only(bottom: AppSpacing.sm),
             child: _buildNode(context, child, 0),
           )).toList(),
         ),
@@ -485,7 +496,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
             filled: true,
             fillColor: context.surfaceSecondary,
             border: OutlineInputBorder(borderRadius: AppRadius.brMedium, borderSide: BorderSide.none),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+            contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           ),
           items: options,
           onChanged: (v) {
@@ -610,7 +621,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
     final variant = node.props?['variant'] as String? ?? 'info';
     final color = _alertColor(context, variant);
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
+      padding: EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: color.withValues(alpha: 0.08),
         borderRadius: AppRadius.brMedium,
@@ -646,7 +657,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
         final key = item is Map ? item['key']?.toString() ?? '' : '';
         final value = item is Map ? item['value']?.toString() ?? '' : '';
         return Padding(
-          padding: const EdgeInsets.only(bottom: AppSpacing.tightGap),
+          padding: EdgeInsets.only(bottom: AppSpacing.tightGap),
           child: Row(
             children: [
               Text(key, style: AppTypography.label(context)),
@@ -667,8 +678,8 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
 
   Widget _buildErrorWidget(BuildContext context, String message) {
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.sm),
-      margin: const EdgeInsets.symmetric(vertical: 4),
+      padding: EdgeInsets.all(AppSpacing.sm),
+      margin: EdgeInsets.symmetric(vertical: 4),
       decoration: BoxDecoration(
         color: context.error.withValues(alpha: 0.08),
         borderRadius: AppRadius.brSmall,

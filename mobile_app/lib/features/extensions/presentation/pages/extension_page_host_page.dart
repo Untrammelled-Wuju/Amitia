@@ -1,449 +1,261 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/app_spacing.dart';
-import '../../../../app/theme/app_radius.dart';
-import '../../../../app/theme/app_typography.dart';
-import '../../../../core/widgets/amitia_scaffold.dart';
-import '../../../../core/widgets/amitia_button.dart';
+import '../../../../core/services/providers.dart';
+import '../../../../core/ui_runtime/renderers/sandbox_web_provider_host.dart';
+import '../../../../core/ui_runtime/renderers/schema_provider_host.dart';
+import '../../../../core/ui_runtime/ui_provider.dart';
 import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/widgets/amitia_scaffold.dart';
 
 class ExtensionPageHostPage extends ConsumerStatefulWidget {
-  final String pageId;
+  const ExtensionPageHostPage({
+    super.key,
+    required this.pageId,
+    required this.extensionId,
+  });
 
-  const ExtensionPageHostPage({super.key, required this.pageId});
+  final String pageId;
+  final String extensionId;
 
   @override
   ConsumerState<ExtensionPageHostPage> createState() => _ExtensionPageHostPageState();
 }
 
 class _ExtensionPageHostPageState extends ConsumerState<ExtensionPageHostPage> {
-  bool _isLoading = true;
-  bool _hasPermission = false;
-  bool _recursiveScan = true;
-  bool _realtimeMonitor = false;
-  final _configNameController = TextEditingController(text: '默认配置');
-  final _scanPathController = TextEditingController(text: '/workspace/docs');
-
-  @override
-  void dispose() {
-    _configNameController.dispose();
-    _scanPathController.dispose();
-    super.dispose();
-  }
+  Map<String, dynamic>? _definition;
+  String? _sessionId;
+  String _state = 'resolving';
+  String? _error;
+  List<String> _missingPermissions = const [];
+  Timer? _pollTimer;
 
   @override
   void initState() {
     super.initState();
-    _loadPage();
+    Future.microtask(_open);
   }
 
-  void _loadPage() {
-    setState(() => _isLoading = true);
-    Future.delayed(const Duration(milliseconds: 800), () {
+  @override
+  void didUpdateWidget(covariant ExtensionPageHostPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.pageId != widget.pageId || oldWidget.extensionId != widget.extensionId) {
+      _restart();
+    }
+  }
+
+  Future<void> _restart() async {
+    await _close();
+    if (mounted) await _open();
+  }
+
+  Future<void> _open() async {
+    if (widget.extensionId.trim().isEmpty || widget.pageId.trim().isEmpty) {
       if (mounted) {
-        setState(() => _isLoading = false);
-        _showPermissionDialog();
+        setState(() {
+          _state = 'failed';
+          _error = '缺少 extensionId。请通过扩展中心打开该页面。';
+        });
       }
+      return;
+    }
+    _pollTimer?.cancel();
+    setState(() {
+      _state = 'resolving';
+      _error = null;
+      _definition = null;
+      _missingPermissions = const [];
+    });
+    try {
+      final result = await ref.read(extensionServiceProvider).openExtensionPage(
+        widget.extensionId,
+        widget.pageId,
+        scopeSnapshot: jsonEncode({
+          'platform': currentUIPlatform(),
+          'host': 'mobile',
+          'timestamp': DateTime.now().millisecondsSinceEpoch,
+        }),
+      );
+      if (!mounted) return;
+      _applyResult(result);
+      if (_state == 'loading' || _state == 'runtime_starting') _schedulePoll();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _state = 'failed';
+        _error = error.toString();
+      });
+    }
+  }
+
+  void _applyResult(Map<String, dynamic> result) {
+    final rawDefinition = result['definition'];
+    setState(() {
+      _sessionId = result['sessionId']?.toString();
+      _state = (result['state'] ?? 'failed').toString();
+      if (rawDefinition is Map) {
+        _definition = rawDefinition.cast<String, dynamic>();
+      }
+      _missingPermissions = ((result['missingPermissions'] as List?) ?? const [])
+          .map((item) => item.toString())
+          .toList(growable: false);
+      _error = result['reason']?.toString();
     });
   }
 
-  void _showPermissionDialog() {
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        backgroundColor: context.surfacePrimary,
-        shape: RoundedRectangleBorder(borderRadius: AppRadius.brLarge),
-        title: Row(
-          children: [
-            Icon(Icons.shield_outlined, color: context.warning, size: 24),
-            const SizedBox(width: 8),
-            Text('权限确认', style: AppTypography.cardTitle(context)),
-          ],
+  void _schedulePoll() {
+    _pollTimer?.cancel();
+    _pollTimer = Timer(const Duration(seconds: 1), _poll);
+  }
+
+  Future<void> _poll() async {
+    final sessionId = _sessionId;
+    if (sessionId == null || sessionId.isEmpty || !mounted) return;
+    try {
+      final result = await ref.read(extensionServiceProvider).getExtensionPageSessionStatus(sessionId);
+      if (!mounted) return;
+      if (result == null) return;
+      final preserved = _definition;
+      _applyResult(result);
+      if (_definition == null && preserved != null) {
+        setState(() => _definition = preserved);
+      }
+      if (_state == 'loading' || _state == 'runtime_starting') _schedulePoll();
+    } catch (error) {
+      if (!mounted) return;
+      setState(() {
+        _state = 'failed';
+        _error = error.toString();
+      });
+    }
+  }
+
+  Future<void> _close() async {
+    _pollTimer?.cancel();
+    _pollTimer = null;
+    final sessionId = _sessionId;
+    _sessionId = null;
+    if (sessionId == null || sessionId.isEmpty) return;
+    try {
+      await ref.read(extensionServiceProvider).closeExtensionPageSession(sessionId);
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _pollTimer?.cancel();
+    final sessionId = _sessionId;
+    if (sessionId != null && sessionId.isNotEmpty) {
+      unawaited(ref.read(extensionServiceProvider).closeExtensionPageSession(sessionId));
+    }
+    super.dispose();
+  }
+
+  UIProviderDefinition? _runtimeProvider() {
+    final definition = _definition;
+    if (definition == null) return null;
+    final kind = definition['entryKind']?.toString();
+    final contributionId = widget.pageId;
+    final entry = switch (kind) {
+      'schema_page' => UIProviderEntry(
+          contributionId: contributionId,
+          type: UIProviderEntryType.schemaRenderer,
+          schemaPath: definition['schemaPath']?.toString(),
         ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('扩展页面「${widget.pageId}」请求以下权限：', style: AppTypography.bodySmall(context)),
-            const SizedBox(height: 12),
-            _PermissionItem(text: '读取页面数据'),
-            _PermissionItem(text: '提交表单数据'),
-            _PermissionItem(text: '访问扩展状态'),
-          ],
+      'web_page' => UIProviderEntry(
+          contributionId: contributionId,
+          type: UIProviderEntryType.webRestricted,
+          path: definition['entryPath']?.toString(),
         ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              setState(() => _hasPermission = false);
-            },
-            child: Text('拒绝', style: TextStyle(color: context.textSecondary)),
-          ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              setState(() => _hasPermission = true);
-              ScaffoldMessenger.of(this.context).showSnackBar(
-                SnackBar(content: const Text('权限已授予'), backgroundColor: context.success),
-              );
-            },
-            child: Text('允许', style: TextStyle(color: context.accentPrimary)),
-          ),
-        ],
-      ),
+      _ => null,
+    };
+    if (entry == null) return null;
+    return UIProviderDefinition(
+      providerId: 'extension-page:${widget.extensionId}:${widget.pageId}',
+      extensionId: widget.extensionId,
+      capability: UICapability.extensionPage,
+      mode: UIProviderMode.replace,
+      priority: 0,
+      platforms: const [],
+      entries: {'mobile': entry},
+      permissions: ((definition['permissions'] as List?) ?? const [])
+          .map((item) => item.toString())
+          .toList(growable: false),
+      generation: 0,
+      enabled: true,
+      builtin: false,
+      metadata: const {},
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final title = ((_definition?['title'] as Map?)?['default'] ?? widget.pageId).toString();
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
-        title: '扩展页面',
+        title: title,
         showBackButton: true,
         actions: [
-          AmitiaIconButton(
-            icon: Icons.refresh,
-            onPressed: _loadPage,
-            tooltip: '刷新',
-          ),
+          AmitiaIconButton(icon: Icons.refresh, onPressed: _restart, tooltip: '刷新'),
         ],
       ),
-      body: SafeArea(
-        top: false,
-        child: _isLoading
-            ? const AmitiaLoadingState(message: '正在加载扩展页面...')
-            : !_hasPermission
-                ? _buildNoPermissionState(context)
-                : SingleChildScrollView(
-                    padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xxxl),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildHeader(context),
-                        const SizedBox(height: AppSpacing.sectionGap),
-                        _buildFormSurface(context),
-                        const SizedBox(height: AppSpacing.sectionGap),
-                        _buildStatusSurface(context),
-                        const SizedBox(height: AppSpacing.sectionGap),
-                        _buildTableSurface(context),
-                        const SizedBox(height: AppSpacing.sectionGap),
-                        _buildUnsupportedHint(context),
-                        const SizedBox(height: AppSpacing.xxl),
-                        _buildActionButtons(context),
-                      ],
-                    ),
-                  ),
-      ),
+      body: SafeArea(top: false, child: _buildBody(context)),
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
-    return AmitiaCard(
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: context.accentSoft,
-              borderRadius: AppRadius.brSmall,
-            ),
-            child: Icon(Icons.dashboard_customize_outlined, size: 24, color: context.accentPrimary),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('页面 ID: ${widget.pageId}', style: AppTypography.cardTitle(context)),
-                const SizedBox(height: 2),
-                Text('来源扩展: 文件系统扩展', style: AppTypography.caption(context)),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    Icon(Icons.verified, size: 12, color: context.success),
-                    const SizedBox(width: 4),
-                    Text('已验证 · v1.2.0', style: AppTypography.label(context)),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          AmitiaStatusBadge(label: '运行中', type: BadgeType.success),
-        ],
-      ),
-    );
-  }
+  Widget _buildBody(BuildContext context) {
+    if (_state == 'failed' ||
+        _state == 'disabled' ||
+        _state == 'not_installed' ||
+        _state == 'incompatible') {
+      final suffix = _missingPermissions.isEmpty
+          ? ''
+          : '\n缺少权限：${_missingPermissions.join(', ')}';
+      return AmitiaEmptyState(
+        icon: Icons.extension_off_outlined,
+        title: '扩展页面不可用',
+        subtitle: '${_error ?? _state}$suffix',
+        actionText: '重试',
+        onAction: _restart,
+      );
+    }
+    if (_state != 'ready') {
+      final label = _state == 'permission_check' && _missingPermissions.isNotEmpty
+          ? '等待权限：${_missingPermissions.join(', ')}'
+          : '正在加载扩展页面…';
+      return AmitiaLoadingState(message: label);
+    }
 
-  Widget _buildFormSurface(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(Icons.edit_note, size: 18, color: context.accentPrimary),
-            const SizedBox(width: 6),
-            Text('表单 Surface', style: AppTypography.sectionTitle(context)),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.md),
-        AmitiaCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('配置项名称', style: AppTypography.caption(context)),
-              const SizedBox(height: 6),
-              AmitiaTextField(hintText: '输入配置值', controller: _configNameController),
-              const SizedBox(height: AppSpacing.md),
-              Text('扫描范围', style: AppTypography.caption(context)),
-              const SizedBox(height: 6),
-              AmitiaTextField(hintText: '选择目录路径', prefixIcon: Icon(Icons.folder_outlined, size: 20), controller: _scanPathController),
-              const SizedBox(height: AppSpacing.md),
-              Row(
-                children: [
-                  Expanded(
-                    child: AmitiaSwitchTile(
-                      title: '递归扫描',
-                      subtitle: '包含子目录',
-                      value: _recursiveScan,
-                      onChanged: (val) {
-                        setState(() {
-                          _recursiveScan = val;
-                        });
-                      },
-                    ),
-                  ),
-                ],
-              ),
-              const Divider(height: 1),
-              AmitiaSwitchTile(
-                title: '实时监控',
-                subtitle: '文件变更时自动更新',
-                value: _realtimeMonitor,
-                onChanged: (val) {
-                  setState(() {
-                    _realtimeMonitor = val;
-                  });
-                },
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildStatusSurface(BuildContext context) {
-    final statusItems = [
-      {'label': '状态', 'value': '正常运行', 'color': context.success},
-      {'label': '已扫描文件', 'value': '1,247', 'color': context.info},
-      {'label': '新增文件', 'value': '23', 'color': context.accentPrimary},
-      {'label': '异常文件', 'value': '0', 'color': context.success},
-    ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(Icons.analytics_outlined, size: 18, color: context.accentPrimary),
-            const SizedBox(width: 6),
-            Text('状态 Surface', style: AppTypography.sectionTitle(context)),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.md),
-        AmitiaCard(
-          child: Column(
-            children: statusItems.map((item) => Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
-              child: Row(
-                children: [
-                  Text(item['label'] as String, style: AppTypography.caption(context)),
-                  const Spacer(),
-                  Text(item['value'] as String, style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600)),
-                  const SizedBox(width: 8),
-                  Container(
-                    width: 8,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: item['color'] as Color,
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                ],
-              ),
-            )).toList(),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTableSurface(BuildContext context) {
-    final tableData = [
-      {'name': 'config.json', 'size': '2.4 KB', 'modified': '2026-07-30', 'status': '已索引'},
-      {'name': 'data.csv', 'size': '15.8 KB', 'modified': '2026-07-29', 'status': '已索引'},
-      {'name': 'report.pdf', 'size': '1.2 MB', 'modified': '2026-07-28', 'status': '已索引'},
-      {'name': 'temp.tmp', 'size': '0.5 KB', 'modified': '2026-07-30', 'status': '待处理'},
-    ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(Icons.table_chart_outlined, size: 18, color: context.accentPrimary),
-            const SizedBox(width: 6),
-            Text('表格 Surface', style: AppTypography.sectionTitle(context)),
-          ],
-        ),
-        const SizedBox(height: AppSpacing.md),
-        AmitiaCard(
-          padding: EdgeInsets.zero,
-          child: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.cardPadding, vertical: 10),
-                decoration: BoxDecoration(
-                  color: context.surfaceSecondary,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(16),
-                    topRight: Radius.circular(16),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    Expanded(flex: 3, child: Text('文件名', style: AppTypography.label(context).copyWith(fontWeight: FontWeight.w600))),
-                    Expanded(flex: 2, child: Text('大小', style: AppTypography.label(context).copyWith(fontWeight: FontWeight.w600))),
-                    Expanded(flex: 2, child: Text('修改日期', style: AppTypography.label(context).copyWith(fontWeight: FontWeight.w600))),
-                    SizedBox(width: 60, child: Text('状态', style: AppTypography.label(context).copyWith(fontWeight: FontWeight.w600))),
-                  ],
-                ),
-              ),
-              ...tableData.map((row) => Container(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.cardPadding, vertical: 10),
-                    decoration: BoxDecoration(
-                      border: Border(bottom: BorderSide(color: context.borderSecondary, width: 0.5)),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(flex: 3, child: Text(row['name'] as String, style: AppTypography.bodySmall(context), overflow: TextOverflow.ellipsis)),
-                        Expanded(flex: 2, child: Text(row['size'] as String, style: AppTypography.label(context))),
-                        Expanded(flex: 2, child: Text(row['modified'] as String, style: AppTypography.label(context))),
-                        SizedBox(
-                          width: 60,
-                          child: AmitiaStatusBadge(
-                            label: row['status'] as String,
-                            type: row['status'] == '已索引' ? BadgeType.success : BadgeType.warning,
-                            fontSize: 10,
-                          ),
-                        ),
-                      ],
-                    ),
-                  )),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildUnsupportedHint(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: context.warning.withValues(alpha: 0.08),
-        borderRadius: AppRadius.brMedium,
-        border: Border.all(color: context.warning.withValues(alpha: 0.3), width: 1),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.info_outline, size: 18, color: context.warning),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('部分组件不支持', style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600, color: context.warning)),
-                const SizedBox(height: 2),
-                Text('该扩展页面包含图表、地图等当前版本不支持的组件类型，已用占位符替代。完整动态渲染功能将在后续版本中实现。', style: AppTypography.label(context).copyWith(color: context.warning)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildActionButtons(BuildContext context) {
-    return Row(
-      children: [
-        Expanded(
-          child: AmitiaButton(
-            label: '保存配置',
-            isSecondary: true,
-            icon: Icons.save_outlined,
-            onPressed: () {
-              amitiaSnackBar(context, '配置已保存');
-            },
-          ),
-        ),
-        const SizedBox(width: AppSpacing.sm),
-        Expanded(
-          child: AmitiaButton(
-            label: '执行操作',
-            icon: Icons.play_arrow,
-            onPressed: () {
-              amitiaSnackBar(context, '操作已触发');
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildNoPermissionState(BuildContext context) {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xxl),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.lock_outline, size: 56, color: context.textTertiary),
-            const SizedBox(height: AppSpacing.md),
-            Text('权限未授予', style: AppTypography.cardTitle(context)),
-            const SizedBox(height: 4),
-            Text('该扩展页面需要授权才能访问', style: AppTypography.caption(context), textAlign: TextAlign.center),
-            const SizedBox(height: AppSpacing.lg),
-            AmitiaButton(
-              label: '重新授权',
-              icon: Icons.shield_outlined,
-              onPressed: _showPermissionDialog,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _PermissionItem extends StatelessWidget {
-  final String text;
-
-  const _PermissionItem({required this.text});
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Icon(Icons.check_circle_outline, size: 18, color: context.accentPrimary),
-          const SizedBox(width: 10),
-          Expanded(child: Text(text, style: AppTypography.bodySmall(context))),
-        ],
-      ),
+    final provider = _runtimeProvider();
+    if (provider == null) {
+      return const AmitiaEmptyState(
+        icon: Icons.warning_amber_outlined,
+        title: '不支持的扩展页面类型',
+      );
+    }
+    final entry = provider.entryFor('mobile')!;
+    final runtimeContext = <String, dynamic>{
+      'extensionId': widget.extensionId,
+      'pageId': widget.pageId,
+      'sessionId': _sessionId,
+      'platform': currentUIPlatform(),
+      'host': 'mobile',
+    };
+    if (entry.type == UIProviderEntryType.schemaRenderer) {
+      return SchemaProviderHost(
+        provider: provider,
+        entry: entry,
+        context: runtimeContext,
+      );
+    }
+    return SandboxWebProviderHost(
+      provider: provider,
+      entry: entry,
+      context: runtimeContext,
     );
   }
 }

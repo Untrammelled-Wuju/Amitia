@@ -63,9 +63,9 @@ class _CompatibleSkillsPageState extends ConsumerState<CompatibleSkillsPage> {
       body: SafeArea(
         top: false,
         child: ListView.separated(
-          padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xxxl),
+          padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xxxl),
           itemCount: _skills.length,
-          separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+          separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
           itemBuilder: (context, index) => _buildSkillCard(context, _skills[index]),
         ),
       ),
@@ -123,7 +123,7 @@ class _CompatibleSkillsPageState extends ConsumerState<CompatibleSkillsPage> {
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           Row(
             children: [
               Text('v$version', style: AppTypography.label(context)),
@@ -135,7 +135,7 @@ class _CompatibleSkillsPageState extends ConsumerState<CompatibleSkillsPage> {
               ],
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -179,7 +179,7 @@ class _CompatibleSkillsPageState extends ConsumerState<CompatibleSkillsPage> {
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           GestureDetector(
             onTap: () => _showExecutionHistory(skill),
             child: Container(
@@ -506,7 +506,7 @@ class _TestRunningDialog extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           CircularProgressIndicator(color: context.accentPrimary),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           Text('正在测试「$skillName」...', style: AppTypography.bodySmall(context)),
           const SizedBox(height: 4),
           Text('请稍候', style: AppTypography.label(context)),

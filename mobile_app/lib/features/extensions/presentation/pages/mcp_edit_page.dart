@@ -131,16 +131,16 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
       body: SafeArea(
         top: false,
         child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xxxl),
+          padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xxxl),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildFormSection(context),
-              const SizedBox(height: AppSpacing.sectionGap),
+              SizedBox(height: AppSpacing.sectionGap),
               _buildEnvSection(context),
-              const SizedBox(height: AppSpacing.sectionGap),
+              SizedBox(height: AppSpacing.sectionGap),
               _buildCapabilitySection(context),
-              const SizedBox(height: AppSpacing.xxl),
+              SizedBox(height: AppSpacing.xxl),
               Row(
                 children: [
                   Expanded(
@@ -150,7 +150,7 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
                       onPressed: () => context.pop(),
                     ),
                   ),
-                  const SizedBox(width: AppSpacing.sm),
+                  SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: AmitiaButton(
                       label: '保存',
@@ -173,7 +173,7 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('基本信息', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
         AmitiaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -181,7 +181,7 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
               Text('服务名称', style: AppTypography.caption(context)),
               const SizedBox(height: 6),
               AmitiaTextField(hintText: '输入服务名称', controller: _nameController),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('Transport 类型', style: AppTypography.caption(context)),
               const SizedBox(height: 6),
               AmitiaSegmentedControl(
@@ -189,7 +189,7 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
                 selectedIndex: _transportIndex,
                 onChanged: (i) => setState(() => _transportIndex = i),
               ),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text(_transportIndex == 0 ? '启动命令' : '服务地址', style: AppTypography.caption(context)),
               const SizedBox(height: 6),
               AmitiaTextField(
@@ -231,7 +231,7 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
             ),
           ],
         ),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
         if (_envControllers.isEmpty)
           AmitiaCard(
             child: Center(
@@ -243,7 +243,7 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
             final index = entry.key;
             final pair = entry.value;
             return Padding(
-              padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+              padding: EdgeInsets.only(bottom: AppSpacing.sm),
               child: AmitiaCard(
                 child: Row(
                   children: [
@@ -283,7 +283,7 @@ class _McpEditPageState extends ConsumerState<McpEditPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('能力配置', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
         AmitiaCard(
           child: Column(
             children: [

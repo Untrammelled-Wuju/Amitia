@@ -46,7 +46,7 @@ class DataSourceRequest {
     required this.contributionId,
   });
 
-  String get cacheKey => '${extensionId}:${contributionId}:${dataSource.type}:${dataSource.endpoint}:${input.toString()}';
+  String get cacheKey => '${extensionId}:${contributionId}:${dataSource.type}:${dataSource.id}:${input.toString()}';
 }
 
 class DataSourceEntry {
@@ -64,7 +64,7 @@ class DataSourceLoader {
   final Map<String, DataSourceEntry> _cache = {};
   final Map<String, CancelToken> _inFlight = {};
 
-  const DataSourceLoader({required this.fetcher});
+  DataSourceLoader({required this.fetcher});
 
   Future<DataSourceResult> load(DataSourceRequest request) async {
     final key = request.cacheKey;

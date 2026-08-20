@@ -82,9 +82,9 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
                 onAction: _showImportSheet,
               )
             : ListView.separated(
-                padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xxxl),
+                padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.xxxl),
                 itemCount: _skills.length,
-                separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+                separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
                 itemBuilder: (context, index) => _buildSkillCard(context, _skills[index]),
               ),
       ),
@@ -144,7 +144,7 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           Container(
             padding: const EdgeInsets.all(10),
             decoration: BoxDecoration(
@@ -171,7 +171,7 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
               ],
             ),
           ),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           Wrap(
             spacing: 6,
             runSpacing: 6,
@@ -216,7 +216,7 @@ class _AgentSkillsPageState extends ConsumerState<AgentSkillsPage> {
               }),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           Row(
             children: [
               GestureDetector(

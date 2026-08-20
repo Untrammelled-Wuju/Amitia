@@ -107,31 +107,31 @@ class _ExtensionCenterPageState extends ConsumerState<ExtensionCenterPage> {
           children: [
             _buildManagementEntries(context),
             _buildCategoryTabs(context),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+                padding: EdgeInsets.only(bottom: AppSpacing.lg),
                 children: [
                   if (_filteredNeedsAction.isNotEmpty) ...[
                     const AmitiaSectionHeader(title: '需要处理'),
-                    const SizedBox(height: AppSpacing.sm),
+                    SizedBox(height: AppSpacing.sm),
                     ..._filteredNeedsAction.map((e) => _buildCard(context, e, isFromRecommended: false)),
                   ],
                   if (_filteredInstalled.isNotEmpty) ...[
                     const AmitiaSectionHeader(title: '已安装'),
-                    const SizedBox(height: AppSpacing.sm),
+                    SizedBox(height: AppSpacing.sm),
                     ..._filteredInstalled.map((e) => _buildCard(context, e, isFromRecommended: false)),
                   ],
                   if (_filteredUpdates.isNotEmpty) ...[
                     const AmitiaSectionHeader(title: '可更新'),
-                    const SizedBox(height: AppSpacing.sm),
+                    SizedBox(height: AppSpacing.sm),
                     ..._filteredUpdates.map((e) => _buildCard(context, e, isFromRecommended: false)),
                   ],
                   if (_filteredInstalled.isNotEmpty && _filteredRecommended.isNotEmpty)
-                    const SizedBox(height: AppSpacing.sectionGap),
+                    SizedBox(height: AppSpacing.sectionGap),
                   if (_filteredRecommended.isNotEmpty) ...[
                     const AmitiaSectionHeader(title: '推荐扩展'),
-                    const SizedBox(height: AppSpacing.sm),
+                    SizedBox(height: AppSpacing.sm),
                     ..._filteredRecommended.map((e) => _buildCard(context, e, isFromRecommended: true)),
                   ],
                   if (_filteredInstalled.isEmpty && _filteredRecommended.isEmpty && _filteredUpdates.isEmpty && _filteredNeedsAction.isEmpty)
@@ -154,9 +154,9 @@ class _ExtensionCenterPageState extends ConsumerState<ExtensionCenterPage> {
       height: 38,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
         itemCount: _categories.length,
-        separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.sm),
+        separatorBuilder: (_, _) => SizedBox(width: AppSpacing.sm),
         itemBuilder: (context, index) {
           final isSelected = _selectedCategory == index;
           return GestureDetector(
@@ -166,7 +166,7 @@ class _ExtensionCenterPageState extends ConsumerState<ExtensionCenterPage> {
               });
             },
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 8),
+              padding: EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: 8),
               decoration: BoxDecoration(
                 color: isSelected ? context.accentPrimary : context.surfaceSecondary,
                 borderRadius: AppRadius.brTag,
@@ -197,7 +197,7 @@ class _ExtensionCenterPageState extends ConsumerState<ExtensionCenterPage> {
     final isEnabled = _isEnabled(e);
 
     return Padding(
-      padding: const EdgeInsets.symmetric(
+      padding: EdgeInsets.symmetric(
         horizontal: AppSpacing.pagePadding,
         vertical: AppSpacing.xs,
       ),
@@ -240,22 +240,22 @@ class _ExtensionCenterPageState extends ConsumerState<ExtensionCenterPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         const AmitiaSectionHeader(title: '管理入口'),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         SizedBox(
           height: 80,
           child: ListView.separated(
             scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
             itemCount: entries.length,
-            separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.sm),
+            separatorBuilder: (_, _) => SizedBox(width: AppSpacing.sm),
             itemBuilder: (context, index) {
               final e = entries[index];
               return GestureDetector(
                 onTap: () => context.push(e.route),
                 child: AmitiaCard(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+                  padding: EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
                   child: SizedBox(
                     width: 56,
                     child: Column(
@@ -270,7 +270,7 @@ class _ExtensionCenterPageState extends ConsumerState<ExtensionCenterPage> {
                           ),
                           child: Icon(e.icon, size: 20, color: context.accentPrimary),
                         ),
-                        const SizedBox(height: AppSpacing.xs),
+                        SizedBox(height: AppSpacing.xs),
                         Text(
                           e.title,
                           style: AppTypography.label(context),
@@ -286,7 +286,7 @@ class _ExtensionCenterPageState extends ConsumerState<ExtensionCenterPage> {
             },
           ),
         ),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
         _buildCrossCenterEntries(context),
       ],
     );
@@ -297,16 +297,16 @@ class _ExtensionCenterPageState extends ConsumerState<ExtensionCenterPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const AmitiaSectionHeader(title: '其他中心'),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
           child: Row(
             children: [
               Expanded(
                 child: GestureDetector(
                   onTap: () => CenterNavigation.openGameCenter(context),
                   child: AmitiaCard(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+                    padding: EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
                     child: Row(
                       children: [
                         Container(
@@ -318,7 +318,7 @@ class _ExtensionCenterPageState extends ConsumerState<ExtensionCenterPage> {
                           ),
                           child: Icon(Icons.sports_esports_outlined, size: 18, color: context.accentPrimary),
                         ),
-                        const SizedBox(width: AppSpacing.sm),
+                        SizedBox(width: AppSpacing.sm),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -334,12 +334,12 @@ class _ExtensionCenterPageState extends ConsumerState<ExtensionCenterPage> {
                   ),
                 ),
               ),
-              const SizedBox(width: AppSpacing.sm),
+              SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: GestureDetector(
                   onTap: () => CenterNavigation.openDesktopPetCenter(context),
                   child: AmitiaCard(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+                    padding: EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
                     child: Row(
                       children: [
                         Container(
@@ -351,7 +351,7 @@ class _ExtensionCenterPageState extends ConsumerState<ExtensionCenterPage> {
                           ),
                           child: Icon(Icons.pets_outlined, size: 18, color: context.accentPrimary),
                         ),
-                        const SizedBox(width: AppSpacing.sm),
+                        SizedBox(width: AppSpacing.sm),
                         Expanded(
                           child: Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
@@ -370,7 +370,7 @@ class _ExtensionCenterPageState extends ConsumerState<ExtensionCenterPage> {
             ],
           ),
         ),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
       ],
     );
   }
