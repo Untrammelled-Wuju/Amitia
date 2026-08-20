@@ -1,4 +1,5 @@
 import '../backend_transport/backend_service_api.dart';
+import '../ui_runtime/ui_client_info.dart';
 
 class ExtensionCenterCard {
   final String extensionId;
@@ -71,10 +72,15 @@ class ExtensionService {
 
   ExtensionService(this._api);
 
-  Future<Map<String, dynamic>> getUISnapshot(String platform) async {
+  Future<Map<String, dynamic>> getUISnapshot(String platform, {String deviceId = ''}) async {
+    final client = currentUIClientInfo();
     final resp = await _api.get<Map<String, dynamic>>(
       '/api/extensions/ui/snapshot',
-      queryParameters: {'platform': platform},
+      queryParameters: {
+        'platform': platform,
+        if (deviceId.isNotEmpty) 'deviceId': deviceId,
+        ...client.toQueryParameters(),
+      },
     );
     return resp ?? <String, dynamic>{};
   }
@@ -87,12 +93,41 @@ class ExtensionService {
         .toList();
   }
 
-  Future<Map<String, dynamic>> getUIProfile() async {
-    return await _api.get<Map<String, dynamic>>('/api/extensions/ui/profile') ?? <String, dynamic>{};
+  Future<Map<String, dynamic>> getUIProfile({required String platform, String deviceId = '', String scope = 'user'}) async {
+    final client = currentUIClientInfo();
+    return await _api.get<Map<String, dynamic>>(
+      '/api/extensions/ui/profile',
+      queryParameters: {
+        'platform': platform,
+        'scope': scope,
+        if (deviceId.isNotEmpty) 'deviceId': deviceId,
+        ...client.toQueryParameters(),
+      },
+    ) ?? <String, dynamic>{};
   }
 
-  Future<Map<String, dynamic>> updateUIProfile(Map<String, dynamic> profile) async {
-    return await _api.put<Map<String, dynamic>>('/api/extensions/ui/profile', data: profile) ?? <String, dynamic>{};
+  Future<Map<String, dynamic>> updateUIProfile(Map<String, dynamic> profile, {required String platform, String deviceId = '', String scope = 'user'}) async {
+    final client = currentUIClientInfo();
+    return await _api.put<Map<String, dynamic>>(
+      '/api/extensions/ui/profile', data: profile,
+      queryParameters: {
+        'platform': platform,
+        'scope': scope,
+        if (deviceId.isNotEmpty) 'deviceId': deviceId,
+        ...client.toQueryParameters(),
+      },
+    ) ?? <String, dynamic>{};
+  }
+
+  Future<void> deleteUIProfileOverride({required String platform, String deviceId = '', required String scope, int? revision}) async {
+    final client = currentUIClientInfo();
+    await _api.delete('/api/extensions/ui/profile', queryParameters: {
+      'platform': platform,
+      'scope': scope,
+      if (deviceId.isNotEmpty) 'deviceId': deviceId,
+      if (revision != null) 'revision': revision,
+      ...client.toQueryParameters(),
+    });
   }
 
   Future<Map<String, dynamic>> getUISchema(String extensionId, String contributionId) async {

@@ -144,20 +144,23 @@ class BackendServiceApi {
   Future<T?> put<T>(
     String path, {
     Object? data,
+    Map<String, dynamic>? queryParameters,
     T Function(dynamic)? fromJson,
   }) async {
     final response = await _http.send(BackendHttpRequest(
       method: BackendHttpMethod.put,
       path: path,
+      queryParameters: queryParameters,
       body: data,
     ));
     return _parseResponse<T>(response, fromJson, path);
   }
 
-  Future<void> delete(String path) async {
+  Future<void> delete(String path, {Map<String, dynamic>? queryParameters}) async {
     final response = await _http.send(BackendHttpRequest(
       method: BackendHttpMethod.delete,
       path: path,
+      queryParameters: queryParameters,
     ));
     _parseSimpleResponse(response, path);
   }

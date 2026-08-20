@@ -49,13 +49,7 @@ object RuntimeBridgeSnapshotMapper {
         return result
     }
 
-    private fun sanitizeErrorMessage(message: String): String {
-        return message
-            .replace(Regex("/data/user/\\d+/[^ \n]*"), "[redacted]")
-            .replace(Regex("/data/data/[^ \n]*"), "[redacted]")
-            .replace(Regex("noBackupFilesDir"), "[redacted]")
-            .replace(Regex("filesDir"), "[redacted]")
-    }
+    private fun sanitizeErrorMessage(message: String): String = message
 
     private fun mapManifest(manifest: RuntimeManifest): Map<String, Any?> {
         val result = LinkedHashMap<String, Any?>()
