@@ -96,7 +96,7 @@ class _DevModePageState extends ConsumerState<DevModePage> {
                 onAction: _registerWorkspace,
               )
             : ListView.builder(
-                padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+                padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
                 itemCount: _workspaces.length,
                 itemBuilder: (context, index) => _buildWorkspaceCard(context, _workspaces[index]),
               ),
@@ -111,7 +111,7 @@ class _DevModePageState extends ConsumerState<DevModePage> {
     final id = workspace['id'] as String? ?? '';
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
       child: AmitiaCard(
         onTap: () => _showVersionDetailSheet(context, workspace),
         child: Column(
@@ -142,9 +142,9 @@ class _DevModePageState extends ConsumerState<DevModePage> {
                 _buildStatusBadge(status),
               ],
             ),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Container(
-              padding: const EdgeInsets.all(AppSpacing.sm),
+              padding: EdgeInsets.all(AppSpacing.sm),
               decoration: BoxDecoration(
                 color: context.surfaceSecondary,
                 borderRadius: AppRadius.brSmall,
@@ -161,9 +161,9 @@ class _DevModePageState extends ConsumerState<DevModePage> {
                 ],
               ),
             ),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             Container(
-              padding: const EdgeInsets.all(AppSpacing.sm),
+              padding: EdgeInsets.all(AppSpacing.sm),
               decoration: BoxDecoration(
                 color: context.surfaceSecondary,
                 borderRadius: AppRadius.brSmall,
@@ -178,7 +178,7 @@ class _DevModePageState extends ConsumerState<DevModePage> {
                 ],
               ),
             ),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Row(
               children: [
                 Expanded(
@@ -189,7 +189,7 @@ class _DevModePageState extends ConsumerState<DevModePage> {
                     onPressed: () => _buildWorkspace(context, workspace),
                   ),
                 ),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: AmitiaButton(
                     label: '热重载',
@@ -197,7 +197,7 @@ class _DevModePageState extends ConsumerState<DevModePage> {
                     onPressed: status == '开发中' ? () => _hotReload(context, workspace) : null,
                   ),
                 ),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: AmitiaButton(
                     label: '删除',
@@ -297,7 +297,7 @@ class _DevModePageState extends ConsumerState<DevModePage> {
                 _buildDetailRow(context, '工作区 ID', id),
                 const SizedBox(height: 16),
                 Text('版本历史', style: AppTypography.cardTitle(context).copyWith(fontSize: 14)),
-                const SizedBox(height: AppSpacing.sm),
+                SizedBox(height: AppSpacing.sm),
                 ..._buildVersionHistory(context, version),
                 const SizedBox(height: 20),
                 AmitiaButton(

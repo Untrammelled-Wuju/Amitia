@@ -93,7 +93,7 @@ class _WasmPageState extends ConsumerState<WasmPage> {
                       subtitle: '点击右上角新建定义',
                     )
                   : ListView.builder(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+                      padding: EdgeInsets.only(bottom: AppSpacing.lg),
                       itemCount: _modules.length,
                       itemBuilder: (context, index) => _buildModuleCard(context, _modules[index]),
                     ),
@@ -106,7 +106,7 @@ class _WasmPageState extends ConsumerState<WasmPage> {
 
   Widget _buildInfoCard(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       child: AmitiaCard(
         backgroundColor: context.accentSoft,
         border: Border.all(color: context.accentPrimary.withValues(alpha: 0.15), width: 0.5),
@@ -136,7 +136,7 @@ class _WasmPageState extends ConsumerState<WasmPage> {
     final isLoaded = status == '已加载';
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
       child: AmitiaCard(
         onTap: () => _showModuleOptions(context, module),
         child: Column(
@@ -170,7 +170,7 @@ class _WasmPageState extends ConsumerState<WasmPage> {
                 ),
               ],
             ),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Row(
               children: [
                 Text('配额', style: AppTypography.label(context)),
@@ -182,7 +182,7 @@ class _WasmPageState extends ConsumerState<WasmPage> {
                 Text('$used/$quota', style: AppTypography.label(context).copyWith(color: context.textSecondary)),
               ],
             ),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Row(
               children: [
                 if (isLoaded)
@@ -203,7 +203,7 @@ class _WasmPageState extends ConsumerState<WasmPage> {
                       onPressed: () => _loadModule(context, module),
                     ),
                   ),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: AmitiaButton(
                     label: '删除定义',

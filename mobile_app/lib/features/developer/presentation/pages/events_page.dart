@@ -81,7 +81,7 @@ class _EventsPageState extends ConsumerState<EventsPage> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.all(AppSpacing.pagePadding),
+              padding: EdgeInsets.all(AppSpacing.pagePadding),
               child: AmitiaSegmentedControl(
                 segments: _tabs,
                 selectedIndex: _selectedTab,
@@ -114,7 +114,7 @@ class _EventsPageState extends ConsumerState<EventsPage> {
 
   Widget _buildEventList(BuildContext context, List<Map<String, dynamic>> events, {required bool isDeadLetter}) {
     return ListView.builder(
-      padding: const EdgeInsets.only(bottom: AppSpacing.lg),
+      padding: EdgeInsets.only(bottom: AppSpacing.lg),
       itemCount: events.length,
       itemBuilder: (context, index) => _buildEventCard(context, events[index], isDeadLetter),
     );
@@ -128,7 +128,7 @@ class _EventsPageState extends ConsumerState<EventsPage> {
     final id = event['id'] as String? ?? '';
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.xs),
       child: AmitiaCard(
         onTap: () => _showEventDetailSheet(context, event, isDeadLetter),
         child: Column(
@@ -160,11 +160,11 @@ class _EventsPageState extends ConsumerState<EventsPage> {
               ],
             ),
             if (detail != null) ...[
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               Text(detail, style: AppTypography.caption(context)),
             ],
             if (isDeadLetter) ...[
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Row(
                 children: [
                   Expanded(
@@ -175,7 +175,7 @@ class _EventsPageState extends ConsumerState<EventsPage> {
                       onPressed: () => _showReplayConfirm(context, event),
                     ),
                   ),
-                  const SizedBox(width: AppSpacing.sm),
+                  SizedBox(width: AppSpacing.sm),
                   Expanded(
                     child: AmitiaButton(
                       label: '丢弃',
@@ -204,10 +204,10 @@ class _EventsPageState extends ConsumerState<EventsPage> {
     };
 
     return ListView(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+      padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
       children: types.entries.map((e) {
         return Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 2),
+          padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 2),
           child: AmitiaCard(
             child: Row(
               children: [
@@ -315,7 +315,7 @@ class _EventsPageState extends ConsumerState<EventsPage> {
                           },
                         ),
                       ),
-                      const SizedBox(width: AppSpacing.sm),
+                      SizedBox(width: AppSpacing.sm),
                       Expanded(
                         child: AmitiaButton(
                           label: '丢弃',

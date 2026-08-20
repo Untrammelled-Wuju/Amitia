@@ -66,22 +66,22 @@ class _KernelHomePageState extends ConsumerState<KernelHomePage> {
       body: SafeArea(
         top: false,
         child: ListView(
-          padding: const EdgeInsets.symmetric(vertical: AppSpacing.lg),
+          padding: EdgeInsets.symmetric(vertical: AppSpacing.lg),
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+              padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
               child: _buildKernelStatusCard(context),
             ),
-            const SizedBox(height: AppSpacing.xl),
+            SizedBox(height: AppSpacing.xl),
             const AmitiaSectionHeader(title: '内核模块'),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             Padding(
-              padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+              padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
               child: _buildModuleGrid(context),
             ),
-            const SizedBox(height: AppSpacing.xl),
+            SizedBox(height: AppSpacing.xl),
             const AmitiaSectionHeader(title: '更多入口'),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             ..._buildMoreEntries(context),
           ],
         ),
@@ -125,7 +125,7 @@ class _KernelHomePageState extends ConsumerState<KernelHomePage> {
               const AmitiaStatusBadge(label: '运行中', type: BadgeType.success),
             ],
           ),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           Row(
             children: [
               Expanded(
@@ -169,7 +169,7 @@ class _KernelHomePageState extends ConsumerState<KernelHomePage> {
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+      gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
         crossAxisCount: 2,
         mainAxisSpacing: AppSpacing.sm,
         crossAxisSpacing: AppSpacing.sm,
@@ -179,7 +179,7 @@ class _KernelHomePageState extends ConsumerState<KernelHomePage> {
       itemBuilder: (context, index) {
         final m = modules[index];
         return AmitiaCard(
-          padding: const EdgeInsets.all(AppSpacing.md),
+          padding: EdgeInsets.all(AppSpacing.md),
           onTap: () => context.push(m.route),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -194,7 +194,7 @@ class _KernelHomePageState extends ConsumerState<KernelHomePage> {
                 ),
                 child: Icon(m.icon, size: 18, color: context.accentPrimary),
               ),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               Text(m.title, style: AppTypography.cardTitle(context).copyWith(fontSize: 14)),
               const SizedBox(height: 2),
               Text(m.subtitle, style: AppTypography.label(context)),
@@ -218,7 +218,7 @@ class _KernelHomePageState extends ConsumerState<KernelHomePage> {
 
     return entries.map((e) {
       return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 2),
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: 2),
         child: AmitiaListTile(
           leading: Container(
             width: 36,
