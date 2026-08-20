@@ -93,10 +93,10 @@ class _ToolboxDeviceStatusPageState extends ConsumerState<ToolboxDeviceStatusPag
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '设备状态', showBackButton: true, fallbackRoute: AppRoutes.settingsToolbox),
       body: ListView(
-        padding: const EdgeInsets.all(AppSpacing.pagePadding),
+        padding: EdgeInsets.all(AppSpacing.pagePadding),
         children: [
           Container(
-            padding: const EdgeInsets.all(AppSpacing.cardPadding),
+            padding: EdgeInsets.all(AppSpacing.cardPadding),
             decoration: BoxDecoration(
               color: context.accentSoft,
               borderRadius: AppRadius.brMedium,
@@ -117,7 +117,7 @@ class _ToolboxDeviceStatusPageState extends ConsumerState<ToolboxDeviceStatusPag
               ],
             ),
           ),
-          const SizedBox(height: AppSpacing.lg),
+          SizedBox(height: AppSpacing.lg),
           Container(
             decoration: BoxDecoration(
               color: context.surfacePrimary,
@@ -128,7 +128,7 @@ class _ToolboxDeviceStatusPageState extends ConsumerState<ToolboxDeviceStatusPag
               children: [
                 for (int i = 0; i < _items.length; i++) ...[
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 14),
+                    padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg, vertical: 14),
                     child: Row(
                       children: [
                         Icon(_items[i].icon, size: 20, color: _items[i].isServer ? context.accentPrimary : context.textSecondary),
@@ -140,14 +140,14 @@ class _ToolboxDeviceStatusPageState extends ConsumerState<ToolboxDeviceStatusPag
                   ),
                   if (i < _items.length - 1)
                     Padding(
-                      padding: const EdgeInsets.only(left: AppSpacing.lg),
+                      padding: EdgeInsets.only(left: AppSpacing.lg),
                       child: Divider(height: 1, thickness: 0.5, color: context.borderSecondary),
                     ),
                 ],
               ],
             ),
           ),
-          const SizedBox(height: AppSpacing.xl),
+          SizedBox(height: AppSpacing.xl),
         ],
       ),
     );

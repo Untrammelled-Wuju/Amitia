@@ -84,9 +84,9 @@ class _ToolboxPromptTracePageState extends ConsumerState<ToolboxPromptTracePage>
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: 'Prompt Trace', showBackButton: true, fallbackRoute: AppRoutes.settingsToolbox),
       body: ListView.separated(
-        padding: const EdgeInsets.all(AppSpacing.pagePadding),
+        padding: EdgeInsets.all(AppSpacing.pagePadding),
         itemCount: _traces.length,
-        separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.md),
+        separatorBuilder: (_, _) => SizedBox(height: AppSpacing.md),
         itemBuilder: (context, i) {
           final t = _traces[i];
           final expanded = _expandedId == t.id;
@@ -102,7 +102,7 @@ class _ToolboxPromptTracePageState extends ConsumerState<ToolboxPromptTracePage>
                   behavior: HitTestBehavior.opaque,
                   onTap: () => setState(() => _expandedId = expanded ? null : t.id),
                   child: Padding(
-                    padding: const EdgeInsets.all(AppSpacing.cardPadding),
+                    padding: EdgeInsets.all(AppSpacing.cardPadding),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -136,7 +136,7 @@ class _ToolboxPromptTracePageState extends ConsumerState<ToolboxPromptTracePage>
                 if (expanded)
                   Container(
                     width: double.infinity,
-                    padding: const EdgeInsets.all(AppSpacing.cardPadding),
+                    padding: EdgeInsets.all(AppSpacing.cardPadding),
                     decoration: BoxDecoration(
                       color: context.surfaceSecondary,
                       borderRadius: const BorderRadius.vertical(bottom: Radius.circular(12)),

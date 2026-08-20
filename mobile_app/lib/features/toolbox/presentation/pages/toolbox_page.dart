@@ -47,9 +47,9 @@ class ToolboxPage extends ConsumerWidget {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '工具箱', showBackButton: true, fallbackRoute: AppRoutes.settings),
       body: Padding(
-        padding: const EdgeInsets.all(AppSpacing.pagePadding),
+        padding: EdgeInsets.all(AppSpacing.pagePadding),
         child: GridView.builder(
-          gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
             crossAxisCount: 2,
             mainAxisSpacing: AppSpacing.md,
             crossAxisSpacing: AppSpacing.md,
@@ -89,7 +89,7 @@ class _ToolCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(AppSpacing.lg),
+        padding: EdgeInsets.all(AppSpacing.lg),
         decoration: BoxDecoration(
           color: context.surfacePrimary,
           borderRadius: AppRadius.brMedium,

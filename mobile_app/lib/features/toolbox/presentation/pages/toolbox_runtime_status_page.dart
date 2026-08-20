@@ -90,10 +90,10 @@ class _ToolboxRuntimeStatusPageState extends ConsumerState<ToolboxRuntimeStatusP
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: 'Runtime 状态', showBackButton: true, fallbackRoute: AppRoutes.settingsToolbox),
       body: ListView(
-        padding: const EdgeInsets.all(AppSpacing.pagePadding),
+        padding: EdgeInsets.all(AppSpacing.pagePadding),
         children: [
           Container(
-            padding: const EdgeInsets.all(AppSpacing.cardPadding),
+            padding: EdgeInsets.all(AppSpacing.cardPadding),
             decoration: BoxDecoration(
               color: context.accentSoft,
               borderRadius: AppRadius.brMedium,
@@ -115,7 +115,7 @@ class _ToolboxRuntimeStatusPageState extends ConsumerState<ToolboxRuntimeStatusP
               ],
             ),
           ),
-          const SizedBox(height: AppSpacing.lg),
+          SizedBox(height: AppSpacing.lg),
           if (_components.isEmpty)
             const AmitiaEmptyState(icon: Icons.extension_outlined, title: '暂无组件数据', subtitle: '服务可能尚未就绪')
           else
@@ -125,9 +125,9 @@ class _ToolboxRuntimeStatusPageState extends ConsumerState<ToolboxRuntimeStatusP
               final version = (c['version'] ?? c['detail'] ?? c['info'] ?? '').toString();
               final iconKey = _iconNameToData(name);
               return Padding(
-                padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                padding: EdgeInsets.only(bottom: AppSpacing.md),
                 child: Container(
-                  padding: const EdgeInsets.all(AppSpacing.cardPadding),
+                  padding: EdgeInsets.all(AppSpacing.cardPadding),
                   decoration: BoxDecoration(
                     color: context.surfacePrimary,
                     borderRadius: AppRadius.brMedium,
@@ -161,7 +161,7 @@ class _ToolboxRuntimeStatusPageState extends ConsumerState<ToolboxRuntimeStatusP
                 ),
               );
             }),
-          const SizedBox(height: AppSpacing.xl),
+          SizedBox(height: AppSpacing.xl),
         ],
       ),
     );
