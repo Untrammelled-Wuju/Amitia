@@ -258,7 +258,14 @@ internal class DefaultSafeArchiveExtractor(
             }
             entry.isSymbolicLink -> {
                 val linkName = entry.linkName
-                if (linkName.split('/').any { it == ".." }) {
+                val boundaryPath = targetDir.absoluteFile.toPath().normalize()
+                val linkParent = File(targetDir, entryName).toPath().parent
+                val linkTarget = if (linkName.startsWith('/')) {
+                    boundaryPath.resolve(linkName.removePrefix("/")).normalize()
+                } else {
+                    linkParent.resolve(linkName).normalize()
+                }
+                if (!linkTarget.startsWith(boundaryPath)) {
                     throw IOException("symlink target invalid: $linkName")
                 }
                 createSymlink(targetFile, linkName)
