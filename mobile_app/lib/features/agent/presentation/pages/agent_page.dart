@@ -96,7 +96,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.md),
+            padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, AppSpacing.md),
             child: AmitiaSegmentedControl(
               segments: const ['进行中', '等待审批', '已完成'],
               selectedIndex: _selectedSegment,
@@ -123,7 +123,7 @@ class _AgentPageState extends ConsumerState<AgentPage> {
                                 : '暂无已完成的任务',
                       )
                     : ListView.builder(
-                        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+                        padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
                         itemCount: items.length,
                         itemBuilder: (context, index) {
                           final task = items[index];
@@ -238,7 +238,7 @@ class _TaskCard extends StatelessWidget {
     final iconData = _icon(task.status);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: AppSpacing.sm),
+      margin: EdgeInsets.only(bottom: AppSpacing.sm),
       child: AmitiaCard(
         onTap: onTap,
         child: Column(
@@ -270,9 +270,9 @@ class _TaskCard extends StatelessWidget {
               ],
             ),
             if (_showProgress) ...[
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               AmitiaProgressBar(progress: task.progress / 100),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               Row(
                 children: [
                   Text('${task.progress}%', style: AppTypography.label(context)),
@@ -288,7 +288,7 @@ class _TaskCard extends StatelessWidget {
                 ],
               ),
             ] else ...[
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Row(
                 children: [
                   if (task.requiredAbilities.isNotEmpty)
@@ -315,11 +315,11 @@ class _TaskCard extends StatelessWidget {
               ),
             ],
             if (task.status == AgentTaskStatus.completed && task.result != null) ...[
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               Text(task.result!, style: AppTypography.caption(context)),
             ],
             if (task.status == AgentTaskStatus.failed && task.error != null) ...[
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               Text(task.error!, style: AppTypography.caption(context).copyWith(color: context.error)),
             ],
           ],
