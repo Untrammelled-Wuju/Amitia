@@ -38,12 +38,12 @@ class CharacterDebugPage extends ConsumerWidget {
       body: SafeArea(
         top: false,
         child: ListView(
-          padding: const EdgeInsets.all(AppSpacing.pagePadding),
+          padding: EdgeInsets.all(AppSpacing.pagePadding),
           children: [
             _buildWarningBanner(context),
-            const SizedBox(height: AppSpacing.sectionGap),
+            SizedBox(height: AppSpacing.sectionGap),
             AmitiaSectionHeader(title: '角色状态'),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             companionAsync.when(
               loading: () => const Center(child: CircularProgressIndicator()),
               error: (err, _) => Text('加载失败: $err', style: AppTypography.bodySmall(context)),
@@ -63,9 +63,9 @@ class CharacterDebugPage extends ConsumerWidget {
                 );
               },
             ),
-            const SizedBox(height: AppSpacing.sectionGap),
+            SizedBox(height: AppSpacing.sectionGap),
             AmitiaSectionHeader(title: '调试操作'),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             _buildDebugAction(
               context,
               '测试角色对话',
@@ -90,7 +90,7 @@ class CharacterDebugPage extends ConsumerWidget {
               context.warning,
               () => _showResetConfirm(context, ref),
             ),
-            const SizedBox(height: AppSpacing.xxl),
+            SizedBox(height: AppSpacing.xxl),
           ],
         ),
       ),
@@ -99,12 +99,12 @@ class CharacterDebugPage extends ConsumerWidget {
 
   Widget _buildStatusRow(BuildContext context, String label, String value, IconData icon) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: EdgeInsets.only(bottom: AppSpacing.sm),
       child: AmitiaCard(
         child: Row(
           children: [
             Icon(icon, size: 20, color: context.accentPrimary),
-            const SizedBox(width: AppSpacing.md),
+            SizedBox(width: AppSpacing.md),
             Text(label, style: AppTypography.body(context)),
             const Spacer(),
             Text(value, style: AppTypography.bodySmall(context).copyWith(color: context.accentPrimary)),
@@ -116,7 +116,7 @@ class CharacterDebugPage extends ConsumerWidget {
 
   Widget _buildWarningBanner(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.lg),
+      padding: EdgeInsets.all(AppSpacing.lg),
       decoration: BoxDecoration(
         color: context.warning.withValues(alpha: 0.08),
         borderRadius: AppRadius.brMedium,
@@ -125,7 +125,7 @@ class CharacterDebugPage extends ConsumerWidget {
       child: Row(
         children: [
           Icon(Icons.warning_amber_rounded, size: 24, color: context.warning),
-          const SizedBox(width: AppSpacing.md),
+          SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -150,7 +150,7 @@ class CharacterDebugPage extends ConsumerWidget {
     VoidCallback onTap,
   ) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: EdgeInsets.only(bottom: AppSpacing.sm),
       child: AmitiaCard(
         child: Row(
           children: [
@@ -163,7 +163,7 @@ class CharacterDebugPage extends ConsumerWidget {
               ),
               child: Icon(icon, size: 22, color: color),
             ),
-            const SizedBox(width: AppSpacing.md),
+            SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -251,7 +251,7 @@ class CharacterDebugPage extends ConsumerWidget {
         title: Row(
           children: [
             Icon(Icons.warning_amber, color: context.warning, size: 22),
-            const SizedBox(width: AppSpacing.sm),
+            SizedBox(width: AppSpacing.sm),
             Text(title, style: AppTypography.cardTitle(context)),
           ],
         ),

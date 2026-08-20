@@ -43,14 +43,14 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
       body: SafeArea(
         top: false,
         child: ListView(
-          padding: const EdgeInsets.all(AppSpacing.pagePadding),
+          padding: EdgeInsets.all(AppSpacing.pagePadding),
           children: [
             _buildVoiceCloneEntry(context),
-            const SizedBox(height: AppSpacing.sectionGap),
+            SizedBox(height: AppSpacing.sectionGap),
             _buildVoiceListSection(context),
-            const SizedBox(height: AppSpacing.sectionGap),
+            SizedBox(height: AppSpacing.sectionGap),
             _buildParamsSection(context),
-            const SizedBox(height: AppSpacing.xxl),
+            SizedBox(height: AppSpacing.xxl),
           ],
         ),
       ),
@@ -71,7 +71,7 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
             ),
             child: const Icon(Icons.graphic_eq, color: Colors.white, size: 24),
           ),
-          const SizedBox(width: AppSpacing.md),
+          SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -97,7 +97,7 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         AmitiaSectionHeader(title: '预设音色'),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         FutureBuilder<List<VoiceConfigDto>>(
           future: ref.read(ttsServiceProvider).listConfigs(),
           builder: (context, snapshot) {
@@ -127,7 +127,7 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
     }
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: EdgeInsets.only(bottom: AppSpacing.sm),
       child: AmitiaCard(
         border: Border.all(
           color: isCurrent ? context.accentPrimary : context.borderPrimary,
@@ -148,7 +148,7 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
                 color: isCurrent ? Colors.white : context.accentPrimary,
               ),
             ),
-            const SizedBox(width: AppSpacing.md),
+            SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -157,7 +157,7 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
                     children: [
                       Text(voice.name, style: AppTypography.cardTitle(context)),
                       if (isCurrent) ...[
-                        const SizedBox(width: AppSpacing.sm),
+                        SizedBox(width: AppSpacing.sm),
                         AmitiaStatusBadge(label: '当前', type: BadgeType.accent),
                       ],
                     ],
@@ -210,14 +210,14 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         AmitiaSectionHeader(title: '语音参数'),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         AmitiaCard(
           child: Column(
             children: [
               _buildSliderRow(context, '语速', _speed, 0.5, 2.0, 'x', (v) => setState(() => _speed = v)),
-              const Divider(height: AppSpacing.lg),
+              Divider(height: AppSpacing.lg),
               _buildSliderRow(context, '音调', _pitch, 0.5, 2.0, 'x', (v) => setState(() => _pitch = v)),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               AmitiaButton(
                 label: '试听当前参数',
                 icon: Icons.volume_up,
@@ -361,21 +361,21 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
                   ),
                 ),
               ),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               Text(isEdit ? '编辑音色' : '新增音色', style: AppTypography.sectionTitle(context)),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               Text('音色名称', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               AmitiaTextField(controller: nameCtrl, hintText: '输入音色名称'),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('提供商', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               AmitiaTextField(controller: providerCtrl, hintText: '如：OpenAI, Azure'),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('音色ID', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               AmitiaTextField(controller: voiceIdCtrl, hintText: '如：alloy, nova'),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text('语速: $speed', style: AppTypography.label(context)),
               Slider(
                 value: speed.toDouble(),
@@ -394,7 +394,7 @@ class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
                 activeColor: context.accentPrimary,
                 onChanged: (v) => setSheetState(() => pitch = v.round()),
               ),
-              const SizedBox(height: AppSpacing.xl),
+              SizedBox(height: AppSpacing.xl),
               AmitiaButton(
                 label: isEdit ? '保存' : '添加',
                 isFullWidth: true,

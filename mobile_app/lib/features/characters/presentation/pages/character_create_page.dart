@@ -120,7 +120,7 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
         child: Column(
           children: [
             Padding(
-              padding: const EdgeInsets.symmetric(
+              padding: EdgeInsets.symmetric(
                 horizontal: AppSpacing.pagePadding,
                 vertical: AppSpacing.sm,
               ),
@@ -159,7 +159,7 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
               ),
             ),
             Padding(
-              padding: const EdgeInsets.all(AppSpacing.pagePadding),
+              padding: EdgeInsets.all(AppSpacing.pagePadding),
               child: Row(
                 children: [
                   if (_currentStep > 0)
@@ -171,7 +171,7 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
                         onPressed: _prevStep,
                       ),
                     ),
-                  if (_currentStep > 0) const SizedBox(width: AppSpacing.md),
+                  if (_currentStep > 0) SizedBox(width: AppSpacing.md),
                   Expanded(
                     child: AmitiaButton(
                       label: _currentStep == _steps.length - 1
@@ -199,12 +199,12 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
     int maxLines = 1,
   }) {
     return Padding(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(label, style: AppTypography.sectionTitle(context)),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           AmitiaTextField(
             hintText: hint,
             controller: controller,
@@ -217,12 +217,12 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
 
   Widget _buildAppearanceStep() {
     return Padding(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('选择角色主题色', style: AppTypography.sectionTitle(context)),
-          const SizedBox(height: AppSpacing.lg),
+          SizedBox(height: AppSpacing.lg),
           Center(
             child: Container(
               width: 80,
@@ -248,7 +248,7 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
               ),
             ),
           ),
-          const SizedBox(height: AppSpacing.xl),
+          SizedBox(height: AppSpacing.xl),
           Wrap(
             spacing: 12,
             runSpacing: 12,
@@ -311,12 +311,12 @@ class _CharacterCreatePageState extends ConsumerState<CharacterCreatePage> {
       int.parse('FF${_selectedColor.replaceAll('#', '')}', radix: 16),
     );
     return Padding(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text('完成预览', style: AppTypography.sectionTitle(context)),
-          const SizedBox(height: AppSpacing.lg),
+          SizedBox(height: AppSpacing.lg),
           Center(
             child: Container(
               padding: const EdgeInsets.all(20),

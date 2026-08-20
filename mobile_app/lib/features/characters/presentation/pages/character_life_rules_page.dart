@@ -52,16 +52,16 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
       body: SafeArea(
         top: false,
         child: ListView(
-          padding: const EdgeInsets.all(AppSpacing.pagePadding),
+          padding: EdgeInsets.all(AppSpacing.pagePadding),
           children: [
             _buildPromptSection(context),
-            const SizedBox(height: AppSpacing.sectionGap),
+            SizedBox(height: AppSpacing.sectionGap),
             _buildPersonalitySection(context),
-            const SizedBox(height: AppSpacing.sectionGap),
+            SizedBox(height: AppSpacing.sectionGap),
             _buildFixedEventsSection(context),
-            const SizedBox(height: AppSpacing.sectionGap),
+            SizedBox(height: AppSpacing.sectionGap),
             _buildSettingsSection(context),
-            const SizedBox(height: AppSpacing.xxl),
+            SizedBox(height: AppSpacing.xxl),
           ],
         ),
       ),
@@ -85,20 +85,20 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           AmitiaTextField(
             controller: _promptController,
             maxLines: 6,
             hintText: '输入角色 Prompt...',
           ),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Row(
             children: [
               AmitiaButtonOutline(
                 label: '预览完整Prompt',
                 onPressed: () => _showFullPromptPreview(context),
               ),
-              const SizedBox(width: AppSpacing.sm),
+              SizedBox(width: AppSpacing.sm),
               Expanded(
                 child: AmitiaButton(
                   label: '保存修改',
@@ -118,15 +118,15 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         AmitiaSectionHeader(title: '性格设置'),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         AmitiaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('性格倾向', style: AppTypography.cardTitle(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               Text('角色性格从温和到倾向的设置', style: AppTypography.caption(context)),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -159,26 +159,26 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         AmitiaSectionHeader(title: '固定日程'),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         FutureBuilder<List<Map<String, dynamic>>>(
           future: ref.read(companionServiceProvider).fixedEvents(),
           builder: (context, snapshot) {
             if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Padding(
+              return Padding(
                 padding: EdgeInsets.all(AppSpacing.lg),
                 child: Center(child: CircularProgressIndicator()),
               );
             }
             if (snapshot.hasError) {
               return Padding(
-                padding: const EdgeInsets.all(AppSpacing.md),
+                padding: EdgeInsets.all(AppSpacing.md),
                 child: Text('加载失败: ${snapshot.error}', style: AppTypography.caption(context)),
               );
             }
             final events = snapshot.data ?? [];
             if (events.isEmpty) {
               return Padding(
-                padding: const EdgeInsets.all(AppSpacing.md),
+                padding: EdgeInsets.all(AppSpacing.md),
                 child: Text('暂无固定日程', style: AppTypography.caption(context)),
               );
             }
@@ -199,7 +199,7 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
     final enabled = event['enabled'] == 1 || event['enabled'] == true;
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: EdgeInsets.only(bottom: AppSpacing.sm),
       child: AmitiaCard(
         child: Row(
           children: [
@@ -212,7 +212,7 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
               ),
               child: Icon(Icons.schedule, size: 22, color: enabled ? context.accentPrimary : context.textTertiary),
             ),
-            const SizedBox(width: AppSpacing.md),
+            SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -238,7 +238,7 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         AmitiaSectionHeader(title: '其他设置'),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         AmitiaCard(
           child: AmitiaSwitchTile(
             title: '时间感知',
@@ -291,7 +291,7 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
         minChildSize: 0.5,
         expand: false,
         builder: (ctx, controller) => Container(
-          padding: const EdgeInsets.all(AppSpacing.xl),
+          padding: EdgeInsets.all(AppSpacing.xl),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -305,14 +305,14 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
                   ),
                 ),
               ),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               Text('完整 Prompt 预览', style: AppTypography.sectionTitle(context)),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Expanded(
                 child: SingleChildScrollView(
                   controller: controller,
                   child: Container(
-                    padding: const EdgeInsets.all(AppSpacing.lg),
+                    padding: EdgeInsets.all(AppSpacing.lg),
                     decoration: BoxDecoration(
                       color: context.surfaceSecondary,
                       borderRadius: AppRadius.brMedium,
@@ -324,7 +324,7 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
                   ),
                 ),
               ),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               AmitiaButton(
                 label: '关闭',
                 isFullWidth: true,

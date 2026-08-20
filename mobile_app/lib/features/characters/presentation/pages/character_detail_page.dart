@@ -89,7 +89,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
           children: [
             _buildInfoSection(context, character),
             Padding(
-              padding: const EdgeInsets.fromLTRB(
+              padding: EdgeInsets.fromLTRB(
                 AppSpacing.pagePadding,
                 AppSpacing.md,
                 AppSpacing.pagePadding,
@@ -119,7 +119,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     final initial = character.name.isNotEmpty ? character.name[0] : '?';
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(
+      padding: EdgeInsets.fromLTRB(
         AppSpacing.pagePadding,
         AppSpacing.md,
         AppSpacing.pagePadding,
@@ -163,7 +163,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                 ),
             ],
           ),
-          const SizedBox(width: AppSpacing.md),
+          SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -176,7 +176,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                       label: character.status,
                       type: isOnline ? BadgeType.success : BadgeType.neutral,
                     ),
-                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(width: AppSpacing.sm),
                     Flexible(
                       child: Text(
                         '· ${character.speakingStyle}',
@@ -222,14 +222,14 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
 
   Widget _buildOverviewTab(BuildContext context, CharacterDto character, List<MemoryDto> memories, bool isDevMode) {
     return ListView(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       children: [
         AmitiaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('基本资料', style: AppTypography.cardTitle(context)),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               _buildInfoRow(context, '名字', character.name),
               _buildInfoRow(context, '身份', character.identity),
               _buildInfoRow(context, '性格', character.personality),
@@ -237,7 +237,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
             ],
           ),
         ),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         AmitiaCard(
           child: IntrinsicHeight(
             child: Row(
@@ -249,20 +249,20 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
             ),
           ),
         ),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         AmitiaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('最近记忆', style: AppTypography.cardTitle(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               ...memories.take(3).map((m) => _buildMemoryItem(context, m)),
               if (memories.isEmpty)
                 Text('暂无记忆', style: AppTypography.caption(context)),
             ],
           ),
         ),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         _buildManagementSection(context, character, isDevMode),
       ],
     );
@@ -270,14 +270,14 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
 
   Widget _buildSettingsTab(BuildContext context, CharacterDto character) {
     return ListView(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       children: [
         AmitiaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('角色设定', style: AppTypography.cardTitle(context)),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               _buildInfoRow(context, '名字', character.name),
               _buildInfoRow(context, '身份', character.identity),
               _buildInfoRow(context, '性格', character.personality),
@@ -285,13 +285,13 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
             ],
           ),
         ),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         AmitiaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('性格提示词', style: AppTypography.cardTitle(context)),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               AmitiaTextField(
                 controller: _promptController,
                 maxLines: 8,
@@ -306,14 +306,14 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
 
   Widget _buildMemoryTab(BuildContext context, List<MemoryDto> memories) {
     return ListView(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       children: [
         AmitiaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('最近记忆', style: AppTypography.cardTitle(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               ...memories.map((m) => _buildMemoryItem(context, m)),
               if (memories.isEmpty)
                 Text('暂无记忆', style: AppTypography.caption(context)),
@@ -326,7 +326,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
 
   Widget _buildRelationTab(BuildContext context, CharacterDto character) {
     return ListView(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       children: [
         AmitiaCard(
           child: IntrinsicHeight(
@@ -339,13 +339,13 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
             ),
           ),
         ),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         AmitiaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('关系标签', style: AppTypography.cardTitle(context)),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               Wrap(
                 spacing: AppSpacing.sm,
                 runSpacing: AppSpacing.sm,
@@ -365,7 +365,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
 
   Widget _buildAbilityTab(BuildContext context, CharacterDto character) {
     return ListView(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       children: [
         _buildAbilitySection(
           context,
@@ -373,7 +373,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
           'GPT-4',
           Icons.psychology_outlined,
         ),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         _buildAbilitySection(
           context,
           '语音类型',
@@ -386,26 +386,26 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
 
   Widget _buildLifeTab(BuildContext context, CharacterDto character) {
     return ListView(
-      padding: const EdgeInsets.all(AppSpacing.pagePadding),
+      padding: EdgeInsets.all(AppSpacing.pagePadding),
       children: [
         AmitiaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('当前状态', style: AppTypography.cardTitle(context)),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               _buildInfoRow(context, '状态', character.status),
               _buildInfoRow(context, '活跃', character.isActive == 1 ? '是' : '否'),
             ],
           ),
         ),
-        const SizedBox(height: AppSpacing.sm),
+        SizedBox(height: AppSpacing.sm),
         AmitiaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('作息', style: AppTypography.cardTitle(context)),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               _buildScheduleItem(context, '06:00 - 08:00', '晨间准备'),
               _buildScheduleItem(context, '08:00 - 12:00', '上午活动'),
               _buildScheduleItem(context, '12:00 - 14:00', '午间休息'),
@@ -429,7 +429,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
             width: 72,
             child: Text(label, style: AppTypography.caption(context)),
           ),
-          const SizedBox(width: AppSpacing.sm),
+          SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Text(value.isEmpty ? '-' : value, style: AppTypography.bodySmall(context)),
           ),
@@ -468,7 +468,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
               shape: BoxShape.circle,
             ),
           ),
-          const SizedBox(width: AppSpacing.sm),
+          SizedBox(width: AppSpacing.sm),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -510,7 +510,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
             ),
             child: Icon(icon, size: 20, color: context.accentPrimary),
           ),
-          const SizedBox(width: AppSpacing.md),
+          SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -584,15 +584,15 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     ];
 
     return AmitiaCard(
-      padding: const EdgeInsets.symmetric(vertical: AppSpacing.cardPadding),
+      padding: EdgeInsets.symmetric(vertical: AppSpacing.cardPadding),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
+            padding: EdgeInsets.symmetric(horizontal: AppSpacing.lg),
             child: Text('角色管理', style: AppTypography.cardTitle(context)),
           ),
-          const SizedBox(height: AppSpacing.xs),
+          SizedBox(height: AppSpacing.xs),
           ...entries.map((e) => AmitiaListTile(
                 leading: _buildManagementIcon(context, e.icon),
                 title: e.title,

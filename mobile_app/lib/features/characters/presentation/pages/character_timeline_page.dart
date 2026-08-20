@@ -52,10 +52,10 @@ class CharacterTimelinePage extends ConsumerWidget {
             }
             final grouped = _groupEventsByDate(events);
             return ListView(
-              padding: const EdgeInsets.all(AppSpacing.pagePadding),
+              padding: EdgeInsets.all(AppSpacing.pagePadding),
               children: [
                 ...grouped.entries.map((entry) => _buildDateGroup(context, entry.key, entry.value)),
-                const SizedBox(height: AppSpacing.xxl),
+                SizedBox(height: AppSpacing.xxl),
               ],
             );
           },
@@ -93,7 +93,7 @@ class CharacterTimelinePage extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Padding(
-          padding: const EdgeInsets.only(bottom: AppSpacing.sm, top: AppSpacing.sm),
+          padding: EdgeInsets.only(bottom: AppSpacing.sm, top: AppSpacing.sm),
           child: Row(
             children: [
               Container(
@@ -123,7 +123,7 @@ class CharacterTimelinePage extends ConsumerWidget {
             ),
           ],
         ),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
       ],
     );
   }
@@ -136,7 +136,7 @@ class CharacterTimelinePage extends ConsumerWidget {
     final emotion = event['emotion']?.toString();
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: AppSpacing.sm),
+      padding: EdgeInsets.only(bottom: AppSpacing.sm),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -162,7 +162,7 @@ class CharacterTimelinePage extends ConsumerWidget {
               ),
             ),
           ),
-          const SizedBox(width: AppSpacing.xs),
+          SizedBox(width: AppSpacing.xs),
           Expanded(
             child: AmitiaCard(
               child: Column(
@@ -171,7 +171,7 @@ class CharacterTimelinePage extends ConsumerWidget {
                   Row(
                     children: [
                       Icon(_getTypeIcon(type), size: 16, color: _getTypeColor(context, type)),
-                      const SizedBox(width: AppSpacing.xs),
+                      SizedBox(width: AppSpacing.xs),
                       Expanded(
                         child: Text(title, style: AppTypography.cardTitle(context)),
                       ),
@@ -179,11 +179,11 @@ class CharacterTimelinePage extends ConsumerWidget {
                     ],
                   ),
                   if (description.isNotEmpty) ...[
-                    const SizedBox(height: AppSpacing.xs),
+                    SizedBox(height: AppSpacing.xs),
                     Text(description, style: AppTypography.caption(context)),
                   ],
                   if (emotion != null) ...[
-                    const SizedBox(height: AppSpacing.xs),
+                    SizedBox(height: AppSpacing.xs),
                     Row(
                       children: [
                         Icon(Icons.mood_outlined, size: 14, color: context.warning),
