@@ -12,18 +12,27 @@ import (
 
 	"github.com/u-ai/backend/internal/extension"
 	"github.com/u-ai/backend/internal/mcp"
-	"github.com/u-ai/backend/internal/mcp/discovery"
-	"github.com/u-ai/backend/internal/mcp/manager"
-	"github.com/u-ai/backend/internal/mcp/skill"
 	"github.com/u-ai/backend/internal/scriptruntime/commandenv"
 	"gorm.io/gorm"
 )
 
+type ConnectionManager interface {
+	Connect(context.Context, string) error
+}
+
+type Discoverer interface {
+	Discover(context.Context, string) error
+}
+
+type ToolSyncer interface {
+	RegisterServer(context.Context, string) error
+}
+
 type Service struct {
 	repository      *mcp.Repository
-	connections     *manager.Manager
-	discovery       *discovery.Service
-	skills          *skill.Runtime
+	connections     ConnectionManager
+	discovery       Discoverer
+	skills          ToolSyncer
 	commandResolver commandenv.Resolver
 }
 
@@ -67,7 +76,7 @@ type InstallResult struct {
 	Missing                []string             `json:"missing"`
 }
 
-func New(repository *mcp.Repository, connections *manager.Manager, discoveryService *discovery.Service, skills *skill.Runtime, commandResolver commandenv.Resolver) *Service {
+func New(repository *mcp.Repository, connections ConnectionManager, discoveryService Discoverer, skills ToolSyncer, commandResolver commandenv.Resolver) *Service {
 	return &Service{
 		repository:      repository,
 		connections:     connections,
