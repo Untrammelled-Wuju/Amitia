@@ -429,8 +429,8 @@ internal class DefaultPackageVerifier : PackageVerifier {
         val runtimeVersion = extractJsonString(text, "runtimeVersion")
         val packageId = extractJsonStringOrNull(text, "packageId") ?: packageIdFallback
         val indexedComponents = componentIndexText?.let { parseComponentIndex(it) } ?: emptyList()
-        val legacyComponents = if (componentIndexText != null) emptyList() else parseComponentArray(text)
-        val objectComponents = if (componentIndexText != null) emptyList() else parseComponentObject(text)
+        val legacyComponents = parseComponentArray(text)
+        val objectComponents = parseComponentObject(text)
         val components = indexedComponents.ifEmpty { legacyComponents.ifEmpty { objectComponents } }
         if (components.isEmpty()) {
             throw IllegalArgumentException(

@@ -179,6 +179,7 @@ class _ExtensionPageHostPageState extends ConsumerState<ExtensionPageHostPage> {
       extensionId: widget.extensionId,
       capability: UICapability.extensionPage,
       mode: UIProviderMode.replace,
+      placement: UIProviderPlacement.any,
       priority: 0,
       platforms: const [],
       entries: {'mobile': entry},

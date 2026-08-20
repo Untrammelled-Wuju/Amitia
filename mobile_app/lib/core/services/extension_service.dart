@@ -125,7 +125,7 @@ class ExtensionService {
       'platform': platform,
       'scope': scope,
       if (deviceId.isNotEmpty) 'deviceId': deviceId,
-      if (revision != null) 'revision': revision,
+      'revision': ?revision,
       ...client.toQueryParameters(),
     });
   }

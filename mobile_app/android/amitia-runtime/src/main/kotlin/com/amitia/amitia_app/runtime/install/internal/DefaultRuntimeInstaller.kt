@@ -508,7 +508,14 @@ internal class DefaultRuntimeInstaller(
     }
 
     private fun buildManifestComponents(pkg: VerifiedPackage): List<RuntimeManifestComponent> {
-        return pkg.componentLock.components.map { comp ->
+        val lockComponents = pkg.componentLock.components
+        if (lockComponents.isEmpty()) {
+            throw IllegalStateException(
+                "manifest components empty; packageId=${pkg.packageIndex.packageId}" +
+                    " componentLockRuntime=${pkg.componentLock.runtimeVersion}"
+            )
+        }
+        return lockComponents.map { comp ->
             RuntimeManifestComponent(
                 id = comp.id,
                 version = comp.version,

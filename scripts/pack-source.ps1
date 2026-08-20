@@ -80,9 +80,17 @@ $excludes = @(
     "--exclude=backend/server_*.exe"
     "--exclude=*.tar"
     "--exclude=*.tar.gz"
+    "--exclude=*.tar.xz"
+    "--exclude=*.zip"
     "--exclude=artifacts"
     "--exclude=AmitiaData"
     "--exclude=U-Ai-source.tar.gz"
+    "--exclude=installed-runtime-package.zip"
+    "--exclude=amitia-runtime-root-debug.tar.xz"
+    "--exclude=rootfs-seed-debug.tar.xz"
+    "--exclude=.codex-temp-patches"
+    "--exclude=.codex-diff-apply"
+    "--exclude=classes*.dex.txt"
 )
 
 Set-Location $parentDir
