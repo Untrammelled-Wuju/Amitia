@@ -24,7 +24,7 @@ func NewHandler(svc *Service, ownDevices DeviceOwnershipValidator) *Handler {
 }
 
 func (h *Handler) RegisterRoutes(r *gin.RouterGroup, authMW gin.HandlerFunc) {
-	sync := r.Group("/api/v1/sync")
+	sync := r.Group("/v1/sync")
 	sync.Use(authMW)
 
 	sync.POST("/pull", h.HandlePull)
@@ -96,7 +96,7 @@ func (h *Handler) HandlePush(c *gin.Context) {
 
 func (h *Handler) HandleAck(c *gin.Context) {
 	var req struct {
-		DeviceID  string `json:"deviceId" binding:"required"`
+		DeviceID    string   `json:"deviceId" binding:"required"`
 		LastApplied Sequence `json:"lastApplied" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
