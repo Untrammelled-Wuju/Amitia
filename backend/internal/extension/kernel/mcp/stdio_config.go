@@ -2,14 +2,17 @@ package mcp
 
 import (
 	"time"
+
+	"github.com/u-ai/backend/internal/mcp/protocol"
 )
 
 type MCPStdioSpec struct {
-	ServerID string
-	Command  string
-	Args     []string
-	WorkDir  string
-	Env      map[string]string
+	ServerID     string
+	Command      string
+	Args         []string
+	WorkDir      string
+	Env          map[string]string
+	Capabilities protocol.ClientCapabilities
 
 	StartTimeout    time.Duration
 	ShutdownTimeout time.Duration
@@ -17,11 +20,12 @@ type MCPStdioSpec struct {
 }
 
 type MCPStdioResolvedSpec struct {
-	ServerID   string
-	Executable string
-	Args       []string
-	WorkDir    string
-	Env        map[string]string
+	ServerID     string
+	Executable   string
+	Args         []string
+	WorkDir      string
+	Env          map[string]string
+	Capabilities protocol.ClientCapabilities
 }
 
 type MCPStdioServerState string

@@ -46,6 +46,7 @@ func (f *CanonicalRemoteFactory) Create(ctx context.Context, spec MCPRemoteSpec)
 		Timeout:         spec.Timeout,
 		MaxMessageBytes: spec.MaxMessageBytes,
 		StaticHeaders:   spec.StaticHeaders,
+		Capabilities:    spec.Capabilities,
 	}
 
 	return &CanonicalRemoteConnection{
@@ -115,9 +116,7 @@ func (c *CanonicalRemoteConnection) performHandshake(ctx context.Context) error 
 			Title:   "Amitia",
 			Version: "1.0.0",
 		},
-		Capabilities: protocol.ClientCapabilities{
-			Roots: map[string]any{"listChanged": true},
-		},
+		Capabilities: normalizeClientCapabilities(c.spec.Capabilities),
 	})
 
 	if err := conn.Connect(ctx); err != nil {
@@ -161,6 +160,14 @@ func (c *CanonicalRemoteConnection) Close(ctx context.Context) error {
 
 	c.setState(MCPStdioStateStopped)
 	return closeErr
+}
+
+// ClientConnection exposes the initialized MCP client for compatibility HTTP APIs
+// while the canonical remote registry remains the connection owner.
+func (c *CanonicalRemoteConnection) ClientConnection() (*client.Connection, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.connection, c.state == MCPStdioStateReady && c.connection != nil
 }
 
 func (c *CanonicalRemoteConnection) Call(ctx context.Context, method string, params any) (json.RawMessage, error) {
