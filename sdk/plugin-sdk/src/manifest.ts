@@ -9,7 +9,8 @@ export type ModuleKind =
   | "task_runtime"
   | "trusted_service"
   | "wasm_runtime"
-  | "ui_contribution";
+  | "ui_contribution"
+  | "ui_provider";
 
 export interface AmitiaxManifestV2 {
   manifestVersion: 2;
@@ -156,6 +157,101 @@ export interface WorkflowStepDefinition {
   onError?: "continue" | "abort" | "retry";
 }
 
+export type UIProviderCapability =
+  | "app.shell" | "app.navigation" | "app.workspace"
+  | "route.registry" | "page.provider"
+  | "conversation.shell" | "conversation.header" | "conversation.messages"
+  | "conversation.message_renderer" | "conversation.sidebar" | "conversation.composer" | "conversation.overlay"
+  | "character.shell" | "character.detail" | "memory.shell" | "memory.detail"
+  | "settings.shell" | "settings.section" | "extension.center" | "extension.page"
+  | "ui.theme" | "ui.tokens" | "ui.icons" | "ui.components";
+
+export type UIProviderEntryType =
+  | "builtin_native" | "declarative" | "web_module" | "schema_renderer" | "web_restricted" | "web_isolated";
+
+export interface UIProviderEntry {
+  contributionId?: string;
+  type: UIProviderEntryType;
+  path?: string;
+  schemaPath?: string;
+  exportName?: string;
+  contentHash?: string;
+}
+
+export interface UINavigationItemDefinition {
+  id: string;
+  label: string;
+  route: string;
+  icon?: string;
+  group?: string;
+  groupLabel?: string;
+  groupIcon?: string;
+  panel?: "main" | "more";
+  order?: number;
+  match?: string[];
+  routePrefixes?: string[];
+  mobile?: boolean;
+}
+
+export interface UIRouteDefinition {
+  id: string;
+  path: string;
+  providerId: string;
+  capability?: UIProviderCapability;
+  title?: string;
+  priority?: number;
+}
+
+export interface UIMessageRendererSelector {
+  messageTypes?: string[];
+  roles?: string[];
+  mimeTypes?: string[];
+  extensionTypes?: string[];
+}
+
+export interface UIDesignTokenSet {
+  colors?: Record<string, string>;
+  spacing?: Record<string, string | number>;
+  radius?: Record<string, string | number>;
+  typography?: Record<string, string | number>;
+  icons?: Record<string, string | number>;
+  components?: Record<string, string | number>;
+  [key: `--${string}`]: unknown;
+}
+
+export interface UIProviderMetadata extends UIMessageRendererSelector {
+  routes?: Array<string | UIRouteDefinition>;
+  routePatterns?: string[];
+  navigationItems?: UINavigationItemDefinition[];
+  tokens?: UIDesignTokenSet | { light?: UIDesignTokenSet; dark?: UIDesignTokenSet };
+  cssVariables?: Record<string, string>;
+  iconAliases?: Record<string, string>;
+  components?: Record<string, unknown>;
+  [key: string]: unknown;
+}
+
+export interface UIProviderDefinition {
+  providerId: string;
+  extensionId?: string;
+  moduleId?: string;
+  capability: UIProviderCapability;
+  mode?: "replace" | "compose" | "augment";
+  priority?: number;
+  platforms?: string[];
+  entries: Record<string, UIProviderEntry>;
+  fallbackProviderId?: string;
+  trustLevel?: string;
+  permissions?: string[];
+  metadata?: UIProviderMetadata;
+}
+
+export interface UIProfile {
+  profileId: string;
+  name: string;
+  selections: Partial<Record<UIProviderCapability, string>>;
+  updatedAt?: number;
+}
+
 export interface UIContributionDefinition {
   contributionId: string;
   kind: string;
@@ -225,6 +321,15 @@ export function validateManifest(manifest: AmitiaxManifestV2): string[] {
     }
     if (module.runtime && !module.runtime.type) {
       errors.push(`module ${module.id}: runtime.type is required`);
+    }
+    for (const contribution of module.contributions ?? []) {
+      if (contribution.kind !== "ui_provider") continue;
+      const spec = contribution.spec as Partial<UIProviderDefinition> | undefined;
+      if (!spec?.providerId) errors.push(`module ${module.id} contribution ${contribution.id}: ui_provider.providerId is required`);
+      if (!spec?.capability) errors.push(`module ${module.id} contribution ${contribution.id}: ui_provider.capability is required`);
+      if (!spec?.entries || Object.keys(spec.entries).length === 0) {
+        errors.push(`module ${module.id} contribution ${contribution.id}: ui_provider.entries is required`);
+      }
     }
   }
   if (!manifest.integrity?.algorithm) {
