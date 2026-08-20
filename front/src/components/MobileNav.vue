@@ -6,37 +6,28 @@ SPDX-License-Identifier: AGPL-3.0-only
 <template>
   <nav class="mobile-nav">
     <router-link
-      v-for="item in mobileNavItems"
-      :key="item.key"
-      :to="item.to"
+      v-for="item in mobileItems"
+      :key="item.id"
+      :to="item.route"
       class="tab-item"
       :class="{ 'tab-active': isActive(item) }"
       :aria-current="isActive(item) ? 'page' : undefined"
     >
       <el-icon><component :is="item.icon" /></el-icon>
-      <span>{{ mobileLabelMap[item.key] || item.label }}</span>
+      <span>{{ item.label }}</span>
     </router-link>
   </nav>
 </template>
 
 <script setup lang="ts">
 import { useRoute } from "vue-router";
-import {
-  isNavItemActive,
-  mobileNavItems,
-  type AppNavItem,
-} from "@/navigation/app-nav";
+import { isUINavigationItemActive, useUINavigationRegistry, type UINavigationItem } from "@/ui-runtime/navigationRegistry";
 
 const route = useRoute();
+const { mobileItems } = useUINavigationRegistry();
 
-const mobileLabelMap: Record<string, string> = {
-  character: "角色",
-  memoryManager: "记忆",
-  logs: "记录",
-};
-
-function isActive(item: AppNavItem) {
-  return isNavItemActive(route.path, item);
+function isActive(item: UINavigationItem) {
+  return isUINavigationItemActive(route.path, item);
 }
 </script>
 
