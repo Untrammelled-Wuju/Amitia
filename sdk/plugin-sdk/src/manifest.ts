@@ -230,6 +230,32 @@ export interface UIProviderMetadata extends UIMessageRendererSelector {
   [key: string]: unknown;
 }
 
+export type UIProviderPlacement = "any" | "cloud" | "device" | "hybrid";
+
+export interface UIDeviceRequirements {
+  platforms?: string[];
+  architectures?: string[];
+  minAppVersion?: string;
+  minRuntimeVersion?: string;
+  requiredFeatures?: string[];
+}
+
+export interface UIProfileScope {
+  userId?: string;
+  deviceId?: string;
+  platform?: string;
+  runtimeProfile?: string;
+}
+
+export interface UIProviderResolveContext extends UIProfileScope {
+  architecture?: string;
+  appVersion?: string;
+  runtimeVersion?: string;
+  deviceOnline?: boolean;
+  localRuntime?: boolean;
+  deviceCapabilities?: string[];
+}
+
 export interface UIProviderDefinition {
   providerId: string;
   extensionId?: string;
@@ -242,6 +268,10 @@ export interface UIProviderDefinition {
   fallbackProviderId?: string;
   trustLevel?: string;
   permissions?: string[];
+  /** Host-populated from the owning module placement. */
+  placement?: UIProviderPlacement;
+  /** Host-populated from the owning module deviceRequirements. */
+  deviceRequirements?: UIDeviceRequirements;
   metadata?: UIProviderMetadata;
 }
 
@@ -249,6 +279,8 @@ export interface UIProfile {
   profileId: string;
   name: string;
   selections: Partial<Record<UIProviderCapability, string>>;
+  scope?: UIProfileScope;
+  revision?: number;
   updatedAt?: number;
 }
 
