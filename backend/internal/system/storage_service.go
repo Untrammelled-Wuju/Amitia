@@ -5,6 +5,7 @@ package system
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,13 +17,59 @@ import (
 func (s *service) GetStorageInfo() map[string]interface{} {
 	dir := s.dataDir
 	var totalSize int64
-	filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-		if err == nil && !info.IsDir() {
+	_ = filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err == nil && info != nil && !info.IsDir() {
 			totalSize += info.Size()
 		}
 		return nil
 	})
-	return map[string]interface{}{"totalMB": totalSize / 1024 / 1024, "usedMB": totalSize / 1024 / 1024, "freeMB": 0, "path": dir}
+
+	dbPath := filepath.Join(dir, "app.db")
+	var dbSize int64
+	if info, err := os.Stat(dbPath); err == nil && !info.IsDir() {
+		dbSize = info.Size()
+	}
+
+	return map[string]interface{}{
+		"totalMB":           totalSize / 1024 / 1024,
+		"usedMB":            totalSize / 1024 / 1024,
+		"freeMB":            0,
+		"path":              dir,
+		"dbSize":            formatStorageBytes(dbSize),
+		"dbSizeBytes":       dbSize,
+		"messageCount":      s.storageTableCount("messages"),
+		"conversationCount": s.storageTableCount("conversations"),
+		"memoryCount":       s.storageTableCount("memories"),
+	}
+}
+
+func (s *service) storageTableCount(table string) int64 {
+	if s.db == nil || !s.db.Migrator().HasTable(table) {
+		return 0
+	}
+	var count int64
+	if err := s.db.Table(table).Count(&count).Error; err != nil {
+		return 0
+	}
+	return count
+}
+
+func formatStorageBytes(size int64) string {
+	const (
+		kb = int64(1024)
+		mb = kb * 1024
+		gb = mb * 1024
+	)
+	switch {
+	case size >= gb:
+		return fmt.Sprintf("%.2f GB", float64(size)/float64(gb))
+	case size >= mb:
+		return fmt.Sprintf("%.2f MB", float64(size)/float64(mb))
+	case size >= kb:
+		return fmt.Sprintf("%.2f KB", float64(size)/float64(kb))
+	default:
+		return fmt.Sprintf("%d B", size)
+	}
 }
 
 func (s *service) GetStorageBackups() map[string]interface{} {
@@ -169,13 +216,19 @@ func (s *service) CreatePhysicalSafetySnapshot() map[string]interface{} {
 	if err != nil {
 		return map[string]interface{}{"ok": false, "error": err.Error()}
 	}
-	return map[string]interface{}{"snapshotName": name, "sizeMB": int64(len(srcData)) / 1024 / 1024}
+	return map[string]interface{}{"ok": true, "snapshotName": name, "name": name, "size": int64(len(srcData)), "sizeMB": int64(len(srcData)) / 1024 / 1024, "createdAt": time.Now().Format(time.DateTime)}
 }
 
 func (s *service) DeleteStorageBackup(name string) map[string]interface{} {
-	path := filepath.Join(s.dataDir, "backups", name)
-	os.Remove(path)
-	return map[string]interface{}{"deleted": true}
+	clean := filepath.Base(name)
+	if clean == "." || clean == "" || clean != name {
+		return map[string]interface{}{"deleted": false, "error": "invalid backup name"}
+	}
+	path := filepath.Join(s.dataDir, "backups", clean)
+	if err := os.Remove(path); err != nil {
+		return map[string]interface{}{"deleted": false, "error": err.Error()}
+	}
+	return map[string]interface{}{"deleted": true, "name": clean}
 }
 
 func (s *service) DeleteAllStorage() map[string]interface{} {
@@ -188,7 +241,11 @@ func (s *service) DeleteAllStorage() map[string]interface{} {
 }
 
 func (s *service) RestorePhysicalSafetySnapshot(name string) map[string]interface{} {
-	src := filepath.Join(s.dataDir, "backups", name)
+	clean := filepath.Base(name)
+	if clean == "." || clean == "" || clean != name {
+		return map[string]interface{}{"ok": false, "error": "invalid backup name"}
+	}
+	src := filepath.Join(s.dataDir, "backups", clean)
 	dst := filepath.Join(s.dataDir, "app.db")
 	data, err := os.ReadFile(src)
 	if err != nil {
@@ -198,7 +255,7 @@ func (s *service) RestorePhysicalSafetySnapshot(name string) map[string]interfac
 	if err != nil {
 		return map[string]interface{}{"ok": false, "error": err.Error()}
 	}
-	return map[string]interface{}{"restored": true}
+	return map[string]interface{}{"ok": true, "restored": true, "name": clean}
 }
 
 func sanitizeName(s string) string {
@@ -236,9 +293,31 @@ func (s *service) StorageExportAmitia(scope string, characterID string) map[stri
 		return map[string]interface{}{"exported": false, "error": err.Error()}
 	}
 
+	fileName := filepath.Base(result.Path)
+	exportDir := filepath.Join(s.dataDir, "exports")
+	if err := os.MkdirAll(exportDir, 0755); err != nil {
+		return map[string]interface{}{"exported": false, "error": err.Error()}
+	}
+	source, err := os.Open(result.Path)
+	if err != nil {
+		return map[string]interface{}{"exported": false, "error": err.Error()}
+	}
+	defer source.Close()
+	destination, err := os.Create(filepath.Join(exportDir, fileName))
+	if err != nil {
+		return map[string]interface{}{"exported": false, "error": err.Error()}
+	}
+	if _, err := io.Copy(destination, source); err != nil {
+		destination.Close()
+		return map[string]interface{}{"exported": false, "error": err.Error()}
+	}
+	if err := destination.Close(); err != nil {
+		return map[string]interface{}{"exported": false, "error": err.Error()}
+	}
+
 	return map[string]interface{}{
 		"exported": true,
-		"file":     filepath.Base(result.Path),
+		"file":     fileName,
 		"size":     result.SizeBytes,
 		"sizeKB":   result.SizeBytes / 1024,
 	}

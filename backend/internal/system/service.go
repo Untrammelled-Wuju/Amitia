@@ -9,6 +9,7 @@ import (
 	"github.com/u-ai/backend/internal/temporal"
 	"os"
 	"strconv"
+	"sync"
 	"time"
 
 	"github.com/u-ai/backend/pkg/app"
@@ -35,6 +36,8 @@ type Service interface {
 	ExportReleaseCheck() map[string]interface{}
 	GenerateRecoveryCodes() map[string]interface{}
 	GetAuditActions() []string
+	GetAuditLogs(limit int) []auditLogRecord
+	ClearAuditLogs() int64
 	GetAuditSettings() map[string]interface{}
 	GetAuditStats() map[string]interface{}
 	GetAbout() map[string]interface{}
@@ -43,6 +46,7 @@ type Service interface {
 	GetLogsFileContent(name string) string
 	GetLogsFiles() map[string]interface{}
 	GetLogsModelErrors() map[string]interface{}
+	GetLogsPromptTraces(limit int) map[string]interface{}
 	GetLogsRecent(limit int) map[string]interface{}
 	GetLogsRecentErrors(limit int) map[string]interface{}
 	GetLongRunningConfig() map[string]interface{}
@@ -159,6 +163,8 @@ type service struct {
 	temporalSvc    *temporal.Service
 	coordinator    *dataportability.Coordinator
 	runtimeProfile runtimeprofile.Profile
+	privacyMu      sync.RWMutex
+	privacyScans   []map[string]interface{}
 }
 
 func NewService(ctx *app.AppContext, profile runtimeprofile.Profile) Service {

@@ -117,8 +117,8 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.GET("/runtime/health-history", handler.HealthHistory)
 
 	r.GET("/audit/actions", handler.AuditActions)
-	r.GET("/audit/logs", handler.CurrentSession)
-	r.DELETE("/audit/logs", handler.CheckNow)
+	r.GET("/audit/logs", handler.AuditLogs)
+	r.DELETE("/audit/logs", handler.ClearAuditLogs)
 	r.GET("/audit/settings", handler.AuditSettings)
 	r.PUT("/audit/settings", handler.UpdateAuditSettings)
 	r.GET("/audit/stats", handler.AuditStats)
@@ -148,6 +148,7 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.POST("/wechat/reply-timing/recover", handler.WechatReplyTimingRecover)
 	r.GET("/wechat/reply-timing/status", handler.WechatReplyTimingStatus)
 
+	r.GET("/notifications/settings", handler.NotificationsSettings)
 	r.PUT("/notifications/settings", handler.UpdateNotificationsSettings)
 	r.GET("/notifications/status", handler.NotificationsStatus)
 	r.POST("/notifications/subscribe", handler.NotificationsSubscribe)
@@ -163,6 +164,7 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.POST("/privacy/scan", handler.PrivacyScan)
 	r.POST("/privacy/mask", handler.PrivacyMask)
 	r.GET("/privacy/scan-results", handler.PrivacyScanResultsGet)
+	r.GET("/privacy/scan-results/:id", handler.PrivacyScanResultByID)
 	r.DELETE("/privacy/scan-results", handler.PrivacyScanResults)
 	r.POST("/privacy/deletion/request", handler.PrivacyDeletionRequest)
 	r.GET("/privacy/deletion/status/:id", handler.PrivacyDeletionStatus)
@@ -182,6 +184,8 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.POST("/storage/import-user-data", handler.StorageImportUserData)
 	r.POST("/storage/import-amitia", handler.StorageImportAmitia)
 	r.GET("/storage/backups", handler.StorageBackups)
+	r.POST("/storage/backups", handler.StorageCreateBackup)
+	r.POST("/storage/backups/:name/restore", handler.StorageRestoreBackup)
 	r.DELETE("/storage/backups/:name", handler.StorageDeleteBackup)
 	r.DELETE("/storage/all", handler.StorageDeleteAll)
 	r.GET("/storage/info", handler.StorageInfo)
@@ -210,6 +214,7 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 
 	r.GET("/logs/recent", handler.LogsRecent)
 	r.GET("/logs/recent/errors", handler.LogsRecentErrors)
+	r.GET("/logs/prompt-traces", handler.LogsPromptTraces)
 	r.GET("/logs/files", handler.LogsFiles)
 	r.GET("/logs/files/:name", handler.LogsFileContent)
 	r.DELETE("/logs", handler.LogsDelete)
