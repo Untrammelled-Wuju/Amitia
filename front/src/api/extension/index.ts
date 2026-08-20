@@ -1,5 +1,6 @@
 import { apiClient } from "@/composables/useApi";
 import type { UIContributionSummary, UIContributionSnapshot, SlotSnapshot } from "@/stores/extensionUI";
+import type { UIProviderDefinition, UIProfile, UIProviderCapability } from "@/ui-runtime/types";
 import type {
   BackendUIContributionDefinition,
   BackendUIContributionSnapshot,
@@ -59,13 +60,18 @@ function transformSlotSnapshot(entry: BackendSlotSnapshotEntry): SlotSnapshot {
 function transformSnapshot(raw: BackendUIContributionSnapshot): UIContributionSnapshot {
   return {
     slots: raw.slots.map(transformSlotSnapshot),
+    contributions: (raw.contributions ?? []).map(transformContribution),
     generatedAt: raw.timestamp,
     version: 1,
+    providers: (raw.providers ?? []) as UIProviderDefinition[],
+    profile: raw.profile as UIProfile | undefined,
+    resolved: (raw.resolved ?? {}) as Partial<Record<UIProviderCapability, UIProviderDefinition>>,
+    providerVersion: raw.providerVersion ?? 1,
   };
 }
 
-export async function fetchUISnapshot(): Promise<UIContributionSnapshot> {
-  const res = await apiClient.get<BackendUIContributionSnapshot>("/api/extensions/ui/snapshot");
+export async function fetchUISnapshot(platform = "web"): Promise<UIContributionSnapshot> {
+  const res = await apiClient.get<BackendUIContributionSnapshot>("/api/extensions/ui/snapshot", { params: { platform } });
   return transformSnapshot(res.data);
 }
 
@@ -164,4 +170,24 @@ export async function fetchSchemaDocument(extensionId: string, contributionId: s
     `/api/extensions/ui/schema/${encodeURIComponent(extensionId)}/${encodeURIComponent(contributionId)}`,
   );
   return res.data.document;
+}
+
+export async function fetchUIProviders(): Promise<UIProviderDefinition[]> {
+  const res = await apiClient.get<{ providers: UIProviderDefinition[] }>("/api/extensions/ui/providers");
+  return res.data.providers ?? [];
+}
+
+export async function fetchUIProfile(): Promise<UIProfile> {
+  const res = await apiClient.get<UIProfile>("/api/extensions/ui/profile");
+  return res.data;
+}
+
+export async function updateUIProfile(profile: UIProfile): Promise<UIProfile> {
+  const res = await apiClient.put<UIProfile>("/api/extensions/ui/profile", profile);
+  return res.data;
+}
+
+export async function resolveUIProvider(capability: UIProviderCapability, platform: string): Promise<UIProviderDefinition | null> {
+  const res = await apiClient.get<{ provider?: UIProviderDefinition }>("/api/extensions/ui/providers/resolve", { params: { capability, platform } });
+  return res.data.provider ?? null;
 }

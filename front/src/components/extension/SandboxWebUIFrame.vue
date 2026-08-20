@@ -9,6 +9,7 @@ const props = defineProps<{
   contribution: UIContributionSummary;
   context?: Record<string, unknown>;
   slotId: string;
+  hostActions?: Record<string, (input?: unknown) => unknown | Promise<unknown>>;
 }>();
 
 const emit = defineEmits<{
@@ -239,7 +240,17 @@ async function handleBridgeMessage(msg: Record<string, unknown>) {
   }
   if (method === "ui.action.invoke") {
     const input = msg.input as Record<string, unknown> | null;
-    const actionId = input?.actionId as string;
+    const actionId = String(input?.actionId ?? input?.action_id ?? "");
+    const localAction = props.hostActions?.[actionId];
+    if (localAction) {
+      try {
+        const result = await localAction(input?.input);
+        sendBridgeResponse(msg, { ok: true, result });
+      } catch (e) {
+        sendBridgeResponse(msg, { ok: false, error: e instanceof Error ? e.message : String(e) });
+      }
+      return;
+    }
     emit("action", actionId, input?.input);
   }
   try {

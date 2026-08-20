@@ -104,9 +104,48 @@ export interface BackendSlotSnapshotEntry {
   contributions: BackendUIContributionDefinition[];
 }
 
+export interface BackendUIProviderEntry {
+  contributionId?: string;
+  type: string;
+  path?: string;
+  schemaPath?: string;
+  exportName?: string;
+  contentHash?: string;
+}
+
+export interface BackendUIProviderDefinition {
+  providerId: string;
+  extensionId: string;
+  moduleId?: string;
+  capability: string;
+  mode: string;
+  priority?: number;
+  platforms?: string[];
+  entries: Record<string, BackendUIProviderEntry>;
+  fallbackProviderId?: string;
+  trustLevel?: string;
+  permissions?: string[];
+  generation?: number;
+  enabled: boolean;
+  builtin?: boolean;
+  metadata?: Record<string, unknown>;
+}
+
+export interface BackendUIProfile {
+  profileId: string;
+  name: string;
+  selections: Record<string, string>;
+  updatedAt?: number;
+}
+
 export interface BackendUIContributionSnapshot {
   slots: BackendSlotSnapshotEntry[];
+  contributions?: BackendUIContributionDefinition[];
   timestamp: string;
+  providers?: BackendUIProviderDefinition[];
+  profile?: BackendUIProfile;
+  resolved?: Record<string, BackendUIProviderDefinition>;
+  providerVersion?: number;
 }
 
 export interface BackendBridgeSessionResponse {

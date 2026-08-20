@@ -21,6 +21,11 @@ const props = defineProps<{
   contribution: UIContributionSummary;
   context?: Record<string, unknown>;
   slotId: string;
+  hostActions?: Record<string, (input?: unknown) => unknown | Promise<unknown>>;
+}>();
+
+const emit = defineEmits<{
+  (e: "error", error: string): void;
 }>();
 
 const uiStore = useExtensionUIStore();
@@ -268,6 +273,16 @@ async function invokeAction(payload: { action: SchemaUIActionBinding; node: Sche
   }
   actionLoading[action.action_id] = true;
   try {
+    const localAction = props.hostActions?.[action.action_id];
+    if (localAction) {
+      const result = await localAction({ ...(action.input ?? {}), node_id: node.id, form_state: { ...formState } });
+      if (result && typeof result === "object") {
+        const data = result as Record<string, unknown>;
+        if (data.form_state && typeof data.form_state === "object") Object.assign(formState, data.form_state);
+        if (data.context_update && typeof data.context_update === "object") Object.assign(localContextOverride, data.context_update);
+      }
+      return;
+    }
     if (!sessionId.value || !sessionReady.value) {
       const token = ++restartToken;
       await createSession(token);
