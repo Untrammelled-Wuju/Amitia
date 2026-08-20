@@ -569,6 +569,24 @@ func (m Manifest) ToExtensionDefinition() (domain.ExtensionDefinition, error) {
 					c.Definition = map[string]any{}
 				}
 				c.Definition["trustLevel"] = normalized.Publisher.TrustLevel
+				// UI providers inherit module placement/device requirements. This keeps
+				// the .amitiax contract single-sourced: plugin authors declare where a
+				// module lives once, while the UI resolver can still make a per-device
+				// cloud/device decision without re-reading the manifest at request time.
+				placement := string(moduleDef.Placement)
+				if placement == "" {
+					placement = "cloud"
+				}
+				c.Definition["placement"] = placement
+				if moduleDef.DeviceRequirements != nil {
+					c.Definition["deviceRequirements"] = map[string]any{
+						"platforms":         append([]string(nil), moduleDef.DeviceRequirements.Platforms...),
+						"architectures":     append([]string(nil), moduleDef.DeviceRequirements.Architectures...),
+						"minAppVersion":     moduleDef.DeviceRequirements.MinAppVersion,
+						"minRuntimeVersion": moduleDef.DeviceRequirements.MinRuntimeVersion,
+						"requiredFeatures":  append([]string(nil), moduleDef.DeviceRequirements.RequiredFeatures...),
+					}
+				}
 				if len(c.RequiredPermissions) > 0 {
 					c.Definition["permissions"] = append([]string(nil), c.RequiredPermissions...)
 				}

@@ -180,6 +180,30 @@ func (i *TypedContributionInstaller) buildInstallOp(ctx context.Context, contrib
 	}
 }
 
+func (i *TypedContributionInstaller) enrichUIProviderPlacement(ctx context.Context, contrib domain.ContributionDefinition, def *ui_provider.ProviderDefinition) {
+	if def == nil || i.container == nil || i.container.ModuleRepository == nil {
+		return
+	}
+	module, err := i.container.ModuleRepository.GetModule(ctx, contrib.ExtensionID, contrib.ModuleID)
+	if err != nil {
+		return
+	}
+	switch module.Placement {
+	case domain.ModulePlacementDevice:
+		def.Placement = ui_provider.PlacementDevice
+	case domain.ModulePlacementCloud:
+		def.Placement = ui_provider.PlacementCloud
+	}
+	if module.DeviceRequirements != nil {
+		req := module.DeviceRequirements
+		def.DeviceRequirements = &ui_provider.DeviceRequirements{
+			Platforms: append([]string(nil), req.Platforms...), Architectures: append([]string(nil), req.Architectures...),
+			MinAppVersion: req.MinAppVersion, MinRuntimeVersion: req.MinRuntimeVersion,
+			RequiredFeatures: append([]string(nil), req.RequiredFeatures...),
+		}
+	}
+}
+
 func (i *TypedContributionInstaller) buildUIProviderOp(ctx context.Context, contrib domain.ContributionDefinition, defData []byte, generation int64) (installOp, error) {
 	if i.container.UIProviderRegistry == nil {
 		return installOp{}, fmt.Errorf("ui provider registry not configured")
@@ -202,6 +226,7 @@ func (i *TypedContributionInstaller) buildUIProviderOp(ctx context.Context, cont
 	}
 	def.Generation = generation
 	def.Enabled = true
+	i.enrichUIProviderPlacement(ctx, contrib, &def)
 	if err := def.Validate(); err != nil {
 		return installOp{}, err
 	}
@@ -962,6 +987,7 @@ func (i *TypedContributionInstaller) activateUIProvider(ctx context.Context, con
 			def.Generation = contrib.RuntimeBinding.Generation
 		}
 		def.Enabled = true
+		i.enrichUIProviderPlacement(ctx, contrib, &def)
 		if err := def.Validate(); err != nil {
 			return err
 		}
