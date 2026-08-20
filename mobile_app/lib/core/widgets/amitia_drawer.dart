@@ -6,8 +6,11 @@ import '../../app/theme/app_motion.dart';
 import '../../app/theme/app_spacing.dart';
 import '../../app/theme/app_radius.dart';
 import '../../app/theme/app_typography.dart';
+import '../../app/theme/design_tokens.dart';
 import '../../app/app_routes.dart';
 import '../../app/drawer_route_state.dart';
+import '../ui_runtime/ui_navigation_registry.dart';
+import '../ui_runtime/ui_runtime_controller.dart';
 import 'amitia_misc.dart';
 
 final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.light);
@@ -122,6 +125,9 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
     final isDark = themeMode == ThemeMode.dark;
     final characterId = ref.watch(currentCharacterIdProvider);
     final character = _getCharacter(characterId);
+    final navigationItems = UINavigationRegistry.resolve(
+      ref.watch(uiRuntimeProvider).valueOrNull,
+    );
 
     return PopScope(
       canPop: _currentPanel == DrawerPanel.main,
@@ -134,8 +140,8 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
         color: context.surfacePrimary,
         child: SafeArea(
           child: SizedBox(
-            width: MediaQuery.sizeOf(context).width * 0.82 > 340
-                ? 340
+            width: MediaQuery.sizeOf(context).width * 0.82 > context.uiComponents.drawerMaxWidth
+                ? context.uiComponents.drawerMaxWidth
                 : MediaQuery.sizeOf(context).width * 0.82,
             child: Column(
               children: [
@@ -167,11 +173,15 @@ class _AmitiaDrawerState extends ConsumerState<AmitiaDrawer> {
                         onMoreTap: _goToMorePanel,
                         onNavigate: _navigateTo,
                         onSettingsTap: () => _navigateTo(AppRoutes.settings),
+                        navigationItems: navigationItems,
+                        currentRoute: widget.currentRoute,
                       ),
                       _DrawerMorePanel(
                         routeState: _routeState,
+                        currentRoute: widget.currentRoute,
                         onNavigate: _navigateTo,
                         onBack: _backToMainPanel,
+                        navigationItems: navigationItems,
                       ),
                     ],
                   ),
@@ -194,6 +204,8 @@ class _DrawerMainPanel extends StatelessWidget {
   final VoidCallback onMoreTap;
   final ValueChanged<String> onNavigate;
   final VoidCallback onSettingsTap;
+  final List<UINavigationItem> navigationItems;
+  final String currentRoute;
 
   const _DrawerMainPanel({
     required this.character,
@@ -204,7 +216,20 @@ class _DrawerMainPanel extends StatelessWidget {
     required this.onMoreTap,
     required this.onNavigate,
     required this.onSettingsTap,
+    required this.navigationItems,
+    required this.currentRoute,
   });
+
+  bool _isMainItemSelected(DrawerRouteState state, UINavigationItem item) {
+    return switch (item.id) {
+      'builtin.chat' => state.mainItem == MainDrawerItem.chat,
+      'builtin.tasks' => state.mainItem == MainDrawerItem.tasks,
+      'builtin.characters' => state.mainItem == MainDrawerItem.characters,
+      'builtin.memory' => state.mainItem == MainDrawerItem.memory,
+      'builtin.devices' => state.mainItem == MainDrawerItem.devices,
+      _ => item.matches(currentRoute),
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -220,37 +245,17 @@ class _DrawerMainPanel extends StatelessWidget {
                 onToggleTheme: onToggleTheme,
                 onSearchTap: onSearchTap,
               ),
-              const SizedBox(height: AppSpacing.sm),
-              _MainMenuItem(
-                icon: Icons.chat_bubble_outline,
-                label: '对话',
-                isSelected: routeState.mainItem == MainDrawerItem.chat,
-                onTap: () => onNavigate(AppRoutes.chat),
-              ),
-              _MainMenuItem(
-                icon: Icons.auto_awesome,
-                label: '任务',
-                isSelected: routeState.mainItem == MainDrawerItem.tasks,
-                onTap: () => onNavigate(AppRoutes.agent),
-              ),
-              _MainMenuItem(
-                icon: Icons.people_outline,
-                label: '角色',
-                isSelected: routeState.mainItem == MainDrawerItem.characters,
-                onTap: () => onNavigate(AppRoutes.characters),
-              ),
-              _MainMenuItem(
-                icon: Icons.memory,
-                label: '记忆',
-                isSelected: routeState.mainItem == MainDrawerItem.memory,
-                onTap: () => onNavigate(AppRoutes.memory),
-              ),
-              _MainMenuItem(
-                icon: Icons.devices_outlined,
-                label: '设备',
-                isSelected: routeState.mainItem == MainDrawerItem.devices,
-                onTap: () => onNavigate(AppRoutes.settingsDevices),
-              ),
+              SizedBox(height: AppSpacing.sm),
+              ...navigationItems
+                  .where((item) => item.panel == UINavigationPanel.main)
+                  .map(
+                    (item) => _MainMenuItem(
+                      icon: item.icon,
+                      label: item.label,
+                      isSelected: _isMainItemSelected(routeState, item),
+                      onTap: () => onNavigate(item.route),
+                    ),
+                  ),
               _MainMenuItem(
                 icon: Icons.apps_outlined,
                 label: '更多',
@@ -276,12 +281,60 @@ class _DrawerMorePanel extends StatelessWidget {
   final DrawerRouteState routeState;
   final ValueChanged<String> onNavigate;
   final VoidCallback onBack;
+  final List<UINavigationItem> navigationItems;
+  final String currentRoute;
 
   const _DrawerMorePanel({
     required this.routeState,
     required this.onNavigate,
     required this.onBack,
+    required this.navigationItems,
+    required this.currentRoute,
   });
+
+  List<Widget> _buildGroups() {
+    final grouped = <String, List<UINavigationItem>>{};
+    for (final item in navigationItems.where((e) => e.panel == UINavigationPanel.more)) {
+      grouped.putIfAbsent(item.group.isEmpty ? '扩展' : item.group, () => <UINavigationItem>[]).add(item);
+    }
+    return grouped.entries
+        .map(
+          (entry) => _MoreGroup(
+            label: entry.key,
+            onNavigate: onNavigate,
+            selectedItem: routeState.moreItem,
+            currentRoute: currentRoute,
+            items: entry.value
+                .map(
+                  (item) => _MoreItemData(
+                    icon: item.icon,
+                    label: item.label,
+                    route: item.route,
+                    item: _legacyMoreItem(item.id),
+                  ),
+                )
+                .toList(),
+          ),
+        )
+        .toList();
+  }
+
+  MoreDrawerItem _legacyMoreItem(String id) {
+    return switch (id) {
+      'builtin.extensions' => MoreDrawerItem.extensions,
+      'builtin.workshop' => MoreDrawerItem.workshop,
+      'builtin.game-center' => MoreDrawerItem.gameCenter,
+      'builtin.channels' => MoreDrawerItem.channels,
+      'builtin.desktop-pet' => MoreDrawerItem.desktopPet,
+      'builtin.reminders' => MoreDrawerItem.reminders,
+      'builtin.dashboard' => MoreDrawerItem.dashboard,
+      'builtin.chat-logs' => MoreDrawerItem.chatLogs,
+      'builtin.chat-import' => MoreDrawerItem.chatImport,
+      'builtin.emotes' => MoreDrawerItem.emotes,
+      'builtin.developer' => MoreDrawerItem.developer,
+      _ => MoreDrawerItem.none,
+    };
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -296,89 +349,9 @@ class _DrawerMorePanel extends StatelessWidget {
         const Divider(height: 1),
         Expanded(
           child: ListView(
-            padding: const EdgeInsets.symmetric(vertical: AppSpacing.sm),
+            padding: EdgeInsets.symmetric(vertical: AppSpacing.sm),
             children: [
-              _MoreGroup(
-                label: '能力与扩展',
-                onNavigate: onNavigate,
-                selectedItem: routeState.moreItem,
-                items: [
-                  _MoreItemData(
-                    icon: Icons.extension_outlined,
-                    label: '扩展中心',
-                    route: AppRoutes.extensions,
-                    item: MoreDrawerItem.extensions,
-                  ),
-                  _MoreItemData(
-                    icon: Icons.brush_outlined,
-                    label: '创意工坊',
-                    route: AppRoutes.workshop,
-                    item: MoreDrawerItem.workshop,
-                  ),
-                ],
-              ),
-              _MoreGroup(
-                label: '连接与体验',
-                onNavigate: onNavigate,
-                selectedItem: routeState.moreItem,
-                items: [
-                  _MoreItemData(
-                    icon: Icons.sports_esports_outlined,
-                    label: '游戏中心',
-                    route: AppRoutes.gameCenter,
-                    item: MoreDrawerItem.gameCenter,
-                  ),
-                  _MoreItemData(
-                    icon: Icons.sync_alt,
-                    label: '渠道中心',
-                    route: AppRoutes.channels,
-                    item: MoreDrawerItem.channels,
-                  ),
-                  _MoreItemData(
-                    icon: Icons.pets_outlined,
-                    label: '桌宠中心',
-                    route: AppRoutes.desktopPet,
-                    item: MoreDrawerItem.desktopPet,
-                  ),
-                  _MoreItemData(
-                    icon: Icons.notifications_active_outlined,
-                    label: '日程与提醒',
-                    route: AppRoutes.reminders,
-                    item: MoreDrawerItem.reminders,
-                  ),
-                ],
-              ),
-              _MoreGroup(
-                label: '数据与内容',
-                onNavigate: onNavigate,
-                selectedItem: routeState.moreItem,
-                items: [
-                  _MoreItemData(
-                    icon: Icons.dashboard_outlined,
-                    label: '数据概览',
-                    route: AppRoutes.dashboard,
-                    item: MoreDrawerItem.dashboard,
-                  ),
-                  _MoreItemData(
-                    icon: Icons.history_edu_outlined,
-                    label: '聊天记录',
-                    route: AppRoutes.chatLogs,
-                    item: MoreDrawerItem.chatLogs,
-                  ),
-                  _MoreItemData(
-                    icon: Icons.file_download_outlined,
-                    label: '聊天记录导入',
-                    route: AppRoutes.chatImport,
-                    item: MoreDrawerItem.chatImport,
-                  ),
-                  _MoreItemData(
-                    icon: Icons.emoji_emotions_outlined,
-                    label: '表情包',
-                    route: AppRoutes.emotes,
-                    item: MoreDrawerItem.emotes,
-                  ),
-                ],
-              ),
+              ..._buildGroups(),
             ],
           ),
         ),
@@ -393,12 +366,14 @@ class _MoreGroup extends StatelessWidget {
   final List<_MoreItemData> items;
   final ValueChanged<String> onNavigate;
   final MoreDrawerItem selectedItem;
+  final String currentRoute;
 
   const _MoreGroup({
     required this.label,
     required this.items,
     required this.onNavigate,
     required this.selectedItem,
+    required this.currentRoute,
   });
 
   @override
@@ -414,7 +389,9 @@ class _MoreGroup extends StatelessWidget {
           (item) => _MainMenuItem(
             icon: item.icon,
             label: item.label,
-            isSelected: item.item == selectedItem,
+            isSelected: item.item == selectedItem ||
+                (item.item == MoreDrawerItem.none &&
+                    (currentRoute == item.route || currentRoute.startsWith('${item.route}/'))),
             onTap: () => onNavigate(item.route),
           ),
         ),

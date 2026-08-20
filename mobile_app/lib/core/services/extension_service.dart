@@ -71,6 +71,81 @@ class ExtensionService {
 
   ExtensionService(this._api);
 
+  Future<Map<String, dynamic>> getUISnapshot(String platform) async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/extensions/ui/snapshot',
+      queryParameters: {'platform': platform},
+    );
+    return resp ?? <String, dynamic>{};
+  }
+
+  Future<List<Map<String, dynamic>>> getUIProviders() async {
+    final resp = await _api.get<Map<String, dynamic>>('/api/extensions/ui/providers');
+    return ((resp?['providers'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((e) => e.cast<String, dynamic>())
+        .toList();
+  }
+
+  Future<Map<String, dynamic>> getUIProfile() async {
+    return await _api.get<Map<String, dynamic>>('/api/extensions/ui/profile') ?? <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> updateUIProfile(Map<String, dynamic> profile) async {
+    return await _api.put<Map<String, dynamic>>('/api/extensions/ui/profile', data: profile) ?? <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> getUISchema(String extensionId, String contributionId) async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/extensions/ui/schema/${Uri.encodeComponent(extensionId)}/${Uri.encodeComponent(contributionId)}',
+    );
+    final document = resp?['document'];
+    if (document is Map<String, dynamic>) return document;
+    if (document is Map) return document.cast<String, dynamic>();
+    throw StateError('UI schema document missing');
+  }
+
+  Future<Map<String, dynamic>> createWebUISession(Map<String, dynamic> request) async {
+    return await _api.post<Map<String, dynamic>>('/api/extension/webui/session', data: request) ?? <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> invokeWebUIBridge(String sessionId, Map<String, dynamic> request) async {
+    return await _api.post<Map<String, dynamic>>('/api/extension/webui/bridge/${Uri.encodeComponent(sessionId)}', data: request) ?? <String, dynamic>{};
+  }
+
+  Future<void> revokeWebUISession(String sessionId) async {
+    await _api.delete('/api/extension/webui/session/${Uri.encodeComponent(sessionId)}');
+  }
+
+  Future<Map<String, dynamic>> openExtensionPage(
+    String extensionId,
+    String pageId, {
+    Map<String, dynamic> params = const {},
+    String scopeSnapshot = '',
+  }) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/ui/open-page',
+          data: {
+            'extensionId': extensionId,
+            'pageId': pageId,
+            'params': params,
+            if (scopeSnapshot.isNotEmpty) 'scopeSnapshot': scopeSnapshot,
+          },
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> getExtensionPageSessionStatus(String sessionId) async {
+    return await _api.get<Map<String, dynamic>>(
+          '/api/extensions/ui/page-sessions/${Uri.encodeComponent(sessionId)}/status',
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<void> closeExtensionPageSession(String sessionId) async {
+    await _api.delete('/api/extensions/ui/page-sessions/${Uri.encodeComponent(sessionId)}');
+  }
+
   Future<ExtensionCenterView> getExtensionCenterView() async {
     final resp = await _api.get<Map<String, dynamic>>('/api/extension-center/view');
     if (resp == null) return ExtensionCenterView(installed: [], discover: [], updates: [], needsAction: []);
@@ -204,55 +279,6 @@ class ExtensionService {
 
   Future<Map<String, dynamic>?> getExtensionRun(String runId) async {
     final resp = await _api.get<Map<String, dynamic>>('/api/extensions/runs/$runId');
-    return resp;
-  }
-
-  Future<Map<String, dynamic>?> getUISnapshot(String platform) async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/extensions/ui/snapshot', queryParameters: {'platform': platform});
-    return resp;
-  }
-
-  Future<bool> updateUIProfile(Map<String, dynamic> profile) async {
-    await _api.post('/api/extensions/ui/profile', data: profile);
-    return true;
-  }
-
-  Future<Map<String, dynamic>?> getUISchema(String extensionId, String contributionId) async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/extensions/ui/schema', queryParameters: {'extensionId': extensionId, 'contributionId': contributionId});
-    return resp;
-  }
-
-  Future<Map<String, dynamic>?> openExtensionPage(String extensionId, String pageId, {String? scopeSnapshot}) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/extensions/page/open', data: {
-      'extensionId': extensionId,
-      'pageId': pageId,
-      'scopeSnapshot': scopeSnapshot,
-    });
-    return resp;
-  }
-
-  Future<Map<String, dynamic>?> getExtensionPageSessionStatus(String sessionId) async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/extensions/page/session/$sessionId/status');
-    return resp;
-  }
-
-  Future<bool> closeExtensionPageSession(String sessionId) async {
-    await _api.post('/api/extensions/page/session/$sessionId/close');
-    return true;
-  }
-
-  Future<Map<String, dynamic>?> createWebUISession(Map<String, dynamic> params) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/extensions/web-ui/session/create', data: params);
-    return resp;
-  }
-
-  Future<bool> revokeWebUISession(String sessionId) async {
-    await _api.post('/api/extensions/web-ui/session/$sessionId/revoke');
-    return true;
-  }
-
-  Future<Map<String, dynamic>?> invokeWebUIBridge(String sessionId, Map<String, dynamic> payload) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/extensions/web-ui/session/$sessionId/invoke', data: payload);
     return resp;
   }
 }

@@ -48,7 +48,7 @@ class AmitiaStatusBadge extends StatelessWidget {
         fgColor = context.textSecondary;
     }
     return Container(
-      padding: EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
       decoration: BoxDecoration(color: bgColor, borderRadius: AppRadius.brTag),
       child: Text(
         label,
@@ -143,7 +143,7 @@ class AmitiaButtonOutline extends StatelessWidget {
     return GestureDetector(
       onTap: onPressed,
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 20, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
         decoration: BoxDecoration(
           border: Border.all(color: context.accentPrimary, width: 1.5),
           borderRadius: AppRadius.brMedium,
@@ -290,7 +290,7 @@ class AmitiaSegmentedControl extends StatelessWidget {
               child: AnimatedContainer(
                 duration: AppMotion.standard,
                 curve: AppMotion.standardCurve,
-                padding: EdgeInsets.symmetric(vertical: 8),
+                padding: const EdgeInsets.symmetric(vertical: 8),
                 decoration: BoxDecoration(
                   color: isSelected
                       ? context.surfacePrimary
