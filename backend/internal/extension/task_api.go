@@ -22,6 +22,8 @@ func (api *TaskAPI) RegisterRoutes(group *gin.RouterGroup) {
 	tasks.POST("", api.enqueueTask)
 	tasks.GET("/:taskRunId", api.getTask)
 	tasks.POST("/:taskRunId/cancel", api.cancelTask)
+	tasks.POST("/:taskRunId/pause", api.pauseTask)
+	tasks.POST("/:taskRunId/resume", api.resumeTask)
 	tasks.POST("/:taskRunId/retry", api.retryTask)
 	tasks.POST("/:taskRunId/recover", api.recoverTask)
 	tasks.GET("/:taskRunId/progress", api.getProgress)
@@ -141,6 +143,47 @@ func (api *TaskAPI) cancelTask(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, gin.H{"taskRunId": taskRunID, "status": "cancelling"})
+}
+
+func (api *TaskAPI) pauseTask(c *gin.Context) {
+	svc := api.service(c)
+	if svc == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "task runtime unavailable"})
+		return
+	}
+	taskRunID := c.Param("taskRunId")
+	var body struct {
+		Reason     string `json:"reason"`
+		Generation int64  `json:"generation"`
+	}
+	_ = c.ShouldBindJSON(&body)
+	if body.Reason == "" {
+		body.Reason = "user_requested"
+	}
+	if err := svc.PauseTask(c.Request.Context(), task_runtime.PauseTaskRequest{TaskRunID: taskRunID, Reason: body.Reason, Generation: body.Generation}); err != nil {
+		writeTaskError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"taskRunId": taskRunID, "status": "paused"})
+}
+
+func (api *TaskAPI) resumeTask(c *gin.Context) {
+	svc := api.service(c)
+	if svc == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "task runtime unavailable"})
+		return
+	}
+	taskRunID := c.Param("taskRunId")
+	var body struct {
+		Generation int64  `json:"generation"`
+		ResumeKind string `json:"resumeKind"`
+	}
+	_ = c.ShouldBindJSON(&body)
+	if err := svc.ResumeTask(c.Request.Context(), task_runtime.ResumeTaskRequest{TaskRunID: taskRunID, Generation: body.Generation, ResumeKind: body.ResumeKind}); err != nil {
+		writeTaskError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"taskRunId": taskRunID, "status": "running"})
 }
 
 func (api *TaskAPI) retryTask(c *gin.Context) {

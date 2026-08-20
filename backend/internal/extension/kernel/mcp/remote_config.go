@@ -4,6 +4,8 @@ package mcp
 
 import (
 	"time"
+
+	"github.com/u-ai/backend/internal/mcp/protocol"
 )
 
 const (
@@ -29,6 +31,7 @@ type MCPRemoteSpec struct {
 	CredentialRef string
 
 	StaticHeaders map[string]string
+	Capabilities  protocol.ClientCapabilities
 }
 
 type MCPRemoteResolvedSpec struct {
@@ -37,6 +40,7 @@ type MCPRemoteResolvedSpec struct {
 	Timeout         time.Duration
 	MaxMessageBytes int64
 	StaticHeaders   map[string]string
+	Capabilities    protocol.ClientCapabilities
 }
 
 type RemoteTransportState string

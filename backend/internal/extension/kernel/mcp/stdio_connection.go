@@ -59,11 +59,12 @@ func (f *CanonicalStdioFactory) resolveSpec(ctx context.Context, spec MCPStdioSp
 		return MCPStdioResolvedSpec{}, fmt.Errorf("MCP_SERVER_CONFIGURATION_INVALID: command resolve failed: %w", err)
 	}
 	return MCPStdioResolvedSpec{
-		ServerID:   spec.ServerID,
-		Executable: inv.Executable,
-		Args:       inv.Args,
-		WorkDir:    spec.WorkDir,
-		Env:        spec.Env,
+		ServerID:     spec.ServerID,
+		Executable:   inv.Executable,
+		Args:         inv.Args,
+		WorkDir:      spec.WorkDir,
+		Env:          spec.Env,
+		Capabilities: spec.Capabilities,
 	}, nil
 }
 
@@ -142,6 +143,13 @@ func (c *CanonicalStdioConnection) buildTransport() (transport.MCPTransport, err
 	return transport.NewStdio(cfg), nil
 }
 
+func normalizeClientCapabilities(capabilities protocol.ClientCapabilities) protocol.ClientCapabilities {
+	if capabilities.Experimental == nil && capabilities.Roots == nil && capabilities.Sampling == nil && capabilities.Elicitation == nil && capabilities.Tasks == nil {
+		capabilities.Roots = map[string]any{"listChanged": true}
+	}
+	return capabilities
+}
+
 func (c *CanonicalStdioConnection) performHandshake(ctx context.Context) error {
 	c.setState(MCPStdioStateInitializing)
 
@@ -155,9 +163,7 @@ func (c *CanonicalStdioConnection) performHandshake(ctx context.Context) error {
 			Title:   "Amitia",
 			Version: "1.0.0",
 		},
-		Capabilities: protocol.ClientCapabilities{
-			Roots: map[string]any{"listChanged": true},
-		},
+		Capabilities: normalizeClientCapabilities(c.spec.Capabilities),
 	})
 
 	if err := conn.Connect(ctx); err != nil {
@@ -205,6 +211,15 @@ func (c *CanonicalStdioConnection) Close(ctx context.Context) error {
 
 	c.setState(MCPStdioStateStopped)
 	return closeErr
+}
+
+// ClientConnection exposes the initialized MCP client for compatibility HTTP APIs
+// such as resources, prompts and notifications. Runtime ownership stays in the
+// canonical registry.
+func (c *CanonicalStdioConnection) ClientConnection() (*client.Connection, bool) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.connection, c.state == MCPStdioStateReady && c.connection != nil
 }
 
 // Call sends a JSON-RPC request to the MCP server.
