@@ -36,6 +36,7 @@ abstract final class AppRoutes {
   static const settings = '/settings';
   static const settingsModels = '/settings/models';
   static const settingsAppearance = '/settings/appearance';
+  static const settingsUIProviders = '/settings/ui-providers';
   static const settingsRuntime = '/settings/runtime';
   static const settingsPermissions = '/settings/permissions';
   static const settingsBackup = '/settings/backup';
@@ -81,7 +82,9 @@ abstract final class AppRoutes {
   static String mcpEdit(String id) => '/extensions/mcp/$id/edit';
   static String skillDetail(String id) => '/extensions/skills/$id';
   static String pluginDetail(String id) => '/extensions/plugins/$id';
-  static String extensionPage(String pageId) => '/extension/page/$pageId';
+  static String extensionPage(String pageId, {String? extensionId}) => extensionId == null || extensionId.isEmpty
+      ? '/extension/page/$pageId'
+      : '/extension/page/$pageId?extensionId=${Uri.encodeQueryComponent(extensionId)}';
   static String petProcessing(String taskId) => '/workshop/pet/processing/$taskId';
   static String petActionEditor(String taskId, String actionKey) => '/workshop/pet/processing/$taskId/actions/$actionKey/editor';
   static String skillDraftEditor(String id) => '/workshop/skills/$id/editor';

@@ -11,6 +11,9 @@ import '../core/runtime/backend/mobile_deployment_mode.dart';
 import '../core/widgets/amitia_drawer.dart';
 import '../core/debug/debug_log_overlay.dart';
 import '../core/debug/debug_runtime_bridge.dart';
+import '../core/ui_runtime/ui_provider.dart';
+import '../core/ui_runtime/ui_runtime_controller.dart';
+import '../core/ui_runtime/ui_theme.dart';
 import 'theme/app_theme.dart';
 import 'router.dart';
 
@@ -276,13 +279,32 @@ class AmitiaApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     ref.watch(nativeBridgeRelayBootstrapProvider);
     final themeMode = ref.watch(themeModeProvider);
+    final runtimeSnapshot = ref.watch(uiRuntimeProvider).valueOrNull;
+    if (runtimeSnapshot == null) {
+      Future.microtask(() => ref.read(uiRuntimeProvider.notifier).ensureLoaded());
+    }
+    final visualProviders = <UIProviderDefinition?>[
+      runtimeSnapshot?.resolve(UICapability.theme),
+      runtimeSnapshot?.resolve(UICapability.tokens),
+      runtimeSnapshot?.resolve(UICapability.icons),
+      runtimeSnapshot?.resolve(UICapability.components),
+    ];
     final router = ref.watch(goRouterProvider);
+    ThemeData applyVisualProviders(ThemeData theme) {
+      var result = theme;
+      for (final provider in visualProviders) {
+        result = applyUIThemeProvider(result, provider);
+      }
+      return result;
+    }
+    final lightTheme = applyVisualProviders(AppTheme.lightTheme());
+    final darkTheme = applyVisualProviders(AppTheme.darkTheme());
 
     return MaterialApp.router(
       title: 'Amitia',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.lightTheme(),
-      darkTheme: AppTheme.darkTheme(),
+      theme: lightTheme,
+      darkTheme: darkTheme,
       themeMode: themeMode,
       routerConfig: router,
       builder: (context, child) {
