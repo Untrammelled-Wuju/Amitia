@@ -73,6 +73,12 @@ class _DebugLogOverlayState extends ConsumerState<DebugLogOverlay> {
       });
     }
 
+    final screenWidth = MediaQuery.of(context).size.width;
+    final screenHeight = MediaQuery.of(context).size.height;
+    final isMobile = screenWidth < 600;
+    final overlayWidth = _expanded ? (isMobile ? screenWidth * 0.85 : 480.0) : 200.0;
+    final overlayHeight = _expanded ? (isMobile ? screenHeight * 0.5 : 360.0) : 36.0;
+
     return Positioned(
       right: _expanded ? _right : _right,
       top: _top,
@@ -81,8 +87,8 @@ class _DebugLogOverlayState extends ConsumerState<DebugLogOverlay> {
           setState(() {
             _right -= d.delta.dx;
             _top += d.delta.dy;
-            _right = _right.clamp(-300.0, MediaQuery.of(context).size.width - 50);
-            _top = _top.clamp(0.0, MediaQuery.of(context).size.height - 50);
+            _right = _right.clamp(-300.0, screenWidth - 50);
+            _top = _top.clamp(0.0, screenHeight - 50);
           });
         },
         child: Material(
@@ -91,8 +97,8 @@ class _DebugLogOverlayState extends ConsumerState<DebugLogOverlay> {
           color: const Color(0xE61E1E1E),
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 200),
-            width: _expanded ? 480 : 200,
-            height: _expanded ? 360 : 36,
+            width: overlayWidth,
+            height: overlayHeight,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
