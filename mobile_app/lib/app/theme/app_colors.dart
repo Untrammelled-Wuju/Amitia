@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'design_tokens.dart';
 
 class AppColors {
   AppColors._();
@@ -73,34 +74,47 @@ class _DarkColors {
   final Color overlay = const Color(0x33000000);
 }
 
+AmitiaColorTokens defaultLightColorTokens() => AmitiaColorTokens(
+  backgroundPrimary: AppColors.light.backgroundPrimary, backgroundSecondary: AppColors.light.backgroundSecondary,
+  surfacePrimary: AppColors.light.surfacePrimary, surfaceSecondary: AppColors.light.surfaceSecondary,
+  accentPrimary: AppColors.light.accentPrimary, accentSecondary: AppColors.light.accentSecondary, accentSoft: AppColors.light.accentSoft, accentPressed: AppColors.light.accentPressed,
+  textPrimary: AppColors.light.textPrimary, textSecondary: AppColors.light.textSecondary, textTertiary: AppColors.light.textTertiary, textDisabled: AppColors.light.textDisabled,
+  borderPrimary: AppColors.light.borderPrimary, borderSecondary: AppColors.light.borderSecondary,
+  success: AppColors.light.success, warning: AppColors.light.warning, error: AppColors.light.error, info: AppColors.light.info, scrim: AppColors.light.scrim, overlay: AppColors.light.overlay,
+);
+
+AmitiaColorTokens defaultDarkColorTokens() => AmitiaColorTokens(
+  backgroundPrimary: AppColors.dark.backgroundPrimary, backgroundSecondary: AppColors.dark.backgroundSecondary,
+  surfacePrimary: AppColors.dark.surfacePrimary, surfaceSecondary: AppColors.dark.surfaceSecondary,
+  accentPrimary: AppColors.dark.accentPrimary, accentSecondary: AppColors.dark.accentSecondary, accentSoft: AppColors.dark.accentSoft, accentPressed: AppColors.dark.accentPressed,
+  textPrimary: AppColors.dark.textPrimary, textSecondary: AppColors.dark.textSecondary, textTertiary: AppColors.dark.textTertiary, textDisabled: AppColors.dark.textDisabled,
+  borderPrimary: AppColors.dark.borderPrimary, borderSecondary: AppColors.dark.borderSecondary,
+  success: AppColors.dark.success, warning: AppColors.dark.warning, error: AppColors.dark.error, info: AppColors.dark.info, scrim: AppColors.dark.scrim, overlay: AppColors.dark.overlay,
+);
+
 extension AppColorExtension on BuildContext {
   bool get isDark => Theme.of(this).brightness == Brightness.dark;
+  AmitiaColorTokens get _tokens => Theme.of(this).extension<AmitiaColorTokens>() ?? (isDark ? defaultDarkColorTokens() : defaultLightColorTokens());
 
-  Color get backgroundPrimary => isDark ? AppColors.dark.backgroundPrimary : AppColors.light.backgroundPrimary;
-  Color get backgroundSecondary => isDark ? AppColors.dark.backgroundSecondary : AppColors.light.backgroundSecondary;
-  Color get surfacePrimary => isDark ? AppColors.dark.surfacePrimary : AppColors.light.surfacePrimary;
-  Color get surfaceSecondary => isDark ? AppColors.dark.surfaceSecondary : AppColors.light.surfaceSecondary;
-
-  Color get accentPrimary => isDark ? AppColors.dark.accentPrimary : AppColors.light.accentPrimary;
-  Color get accentSecondary => isDark ? AppColors.dark.accentSecondary : AppColors.light.accentSecondary;
-  Color get accentSoft => isDark ? AppColors.dark.accentSoft : AppColors.light.accentSoft;
-  Color get accentPressed => isDark ? AppColors.dark.accentPressed : AppColors.light.accentPressed;
-
-  Color get textPrimary => isDark ? AppColors.dark.textPrimary : AppColors.light.textPrimary;
-  Color get textSecondary => isDark ? AppColors.dark.textSecondary : AppColors.light.textSecondary;
-  Color get textTertiary => isDark ? AppColors.dark.textTertiary : AppColors.light.textTertiary;
-  Color get textDisabled => isDark ? AppColors.dark.textDisabled : AppColors.light.textDisabled;
-
-  Color get borderPrimary => isDark ? AppColors.dark.borderPrimary : AppColors.light.borderPrimary;
-  Color get borderSecondary => isDark ? AppColors.dark.borderSecondary : AppColors.light.borderSecondary;
-
-  Color get success => isDark ? AppColors.dark.success : AppColors.light.success;
-  Color get warning => isDark ? AppColors.dark.warning : AppColors.light.warning;
-  Color get error => isDark ? AppColors.dark.error : AppColors.light.error;
-  Color get info => isDark ? AppColors.dark.info : AppColors.light.info;
-
-  Color get scrim => isDark ? AppColors.dark.scrim : AppColors.light.scrim;
-  Color get overlay => isDark ? AppColors.dark.overlay : AppColors.light.overlay;
-
-  Color get isSelected => isDark ? AppColors.dark.accentSoft : AppColors.light.accentSoft;
+  Color get backgroundPrimary => _tokens.backgroundPrimary;
+  Color get backgroundSecondary => _tokens.backgroundSecondary;
+  Color get surfacePrimary => _tokens.surfacePrimary;
+  Color get surfaceSecondary => _tokens.surfaceSecondary;
+  Color get accentPrimary => _tokens.accentPrimary;
+  Color get accentSecondary => _tokens.accentSecondary;
+  Color get accentSoft => _tokens.accentSoft;
+  Color get accentPressed => _tokens.accentPressed;
+  Color get textPrimary => _tokens.textPrimary;
+  Color get textSecondary => _tokens.textSecondary;
+  Color get textTertiary => _tokens.textTertiary;
+  Color get textDisabled => _tokens.textDisabled;
+  Color get borderPrimary => _tokens.borderPrimary;
+  Color get borderSecondary => _tokens.borderSecondary;
+  Color get success => _tokens.success;
+  Color get warning => _tokens.warning;
+  Color get error => _tokens.error;
+  Color get info => _tokens.info;
+  Color get scrim => _tokens.scrim;
+  Color get overlay => _tokens.overlay;
+  Color get isSelected => _tokens.accentSoft;
 }

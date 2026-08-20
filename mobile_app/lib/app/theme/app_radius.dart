@@ -1,17 +1,18 @@
 import 'package:flutter/material.dart';
+import 'design_tokens.dart';
 
 class AppRadius {
   AppRadius._();
 
-  static const double small = 12;
-  static const double medium = 16;
-  static const double large = 22;
-  static const double tag = 10;
-  static const double extraSmall = 8;
+  static double get small => DesignTokenRuntime.layout.radiusSmall;
+  static double get medium => DesignTokenRuntime.layout.radiusMedium;
+  static double get large => DesignTokenRuntime.layout.radiusLarge;
+  static double get tag => DesignTokenRuntime.layout.radiusTag;
+  static double get extraSmall => DesignTokenRuntime.layout.radiusExtraSmall;
 
-  static const BorderRadius brSmall = BorderRadius.all(Radius.circular(small));
-  static const BorderRadius brMedium = BorderRadius.all(Radius.circular(medium));
-  static const BorderRadius brLarge = BorderRadius.all(Radius.circular(large));
-  static const BorderRadius brTag = BorderRadius.all(Radius.circular(tag));
-  static const BorderRadius brExtraSmall = BorderRadius.all(Radius.circular(extraSmall));
+  static BorderRadius get brSmall => BorderRadius.all(Radius.circular(small));
+  static BorderRadius get brMedium => BorderRadius.all(Radius.circular(medium));
+  static BorderRadius get brLarge => BorderRadius.all(Radius.circular(large));
+  static BorderRadius get brTag => BorderRadius.all(Radius.circular(tag));
+  static BorderRadius get brExtraSmall => BorderRadius.all(Radius.circular(extraSmall));
 }
