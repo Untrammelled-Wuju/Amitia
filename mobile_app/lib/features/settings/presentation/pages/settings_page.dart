@@ -245,7 +245,7 @@ class _DevModeToggle extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
         decoration: BoxDecoration(
           color: isDevMode
               ? context.accentPrimary.withValues(alpha: 0.12)
@@ -342,7 +342,7 @@ class _SettingGroup extends StatelessWidget {
                 _SettingTile(item: group.items[i]),
                 if (i < group.items.length - 1)
                   Padding(
-                    padding: EdgeInsets.only(left: 56),
+                    padding: const EdgeInsets.only(left: 56),
                     child: Divider(
                       height: 1,
                       thickness: 0.5,
@@ -392,7 +392,7 @@ class _SettingTile extends StatelessWidget {
                   Text(item.title, style: AppTypography.body(context)),
                   if (item.subtitle != null)
                     Padding(
-                      padding: EdgeInsets.only(top: 2),
+                      padding: const EdgeInsets.only(top: 2),
                       child: Text(
                         item.subtitle!,
                         style: AppTypography.caption(context),
