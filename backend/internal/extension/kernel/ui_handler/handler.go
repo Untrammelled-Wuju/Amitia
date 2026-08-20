@@ -1,6 +1,8 @@
 package ui_handler
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -16,6 +18,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/sandbox_webui"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
+	"github.com/u-ai/backend/internal/extension/kernel/ui_provider"
 )
 
 type DialogResolver interface {
@@ -36,6 +39,7 @@ type HTTPHandler struct {
 	pageHost             *extension_page_host.PageHost
 	sandboxHost          *sandbox_webui.Host
 	chatRegistry         *chat_ui_extension.ChatExtensionRegistry
+	providerRegistry     *ui_provider.Registry
 	authorizer           *permission.UISessionAuthorizer
 	schemaLookup         func(extensionID, contributionID string) (json.RawMessage, bool)
 	scopeSnapshotCreator func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error)
@@ -58,6 +62,10 @@ func NewHTTPHandler(
 		sandboxHost:  sandboxHost,
 		chatRegistry: chatRegistry,
 	}
+}
+
+func (h *HTTPHandler) SetProviderRegistry(registry *ui_provider.Registry) {
+	h.providerRegistry = registry
 }
 
 func (h *HTTPHandler) SetAuthorizer(a *permission.UISessionAuthorizer) {
@@ -88,6 +96,10 @@ func (h *HTTPHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/extensions/ui/slots", h.handleSlots)
 	mux.HandleFunc("/api/extensions/ui/contributions", h.handleContributions)
 	mux.HandleFunc("/api/extensions/ui/snapshot", h.handleSnapshot)
+	mux.HandleFunc("/api/extensions/ui/providers", h.handleProviders)
+	mux.HandleFunc("/api/extensions/ui/providers/resolve", h.handleProviderResolve)
+	mux.HandleFunc("/api/extensions/ui/provider-module/", h.handleProviderModuleResource)
+	mux.HandleFunc("/api/extensions/ui/profile", h.handleProfile)
 	mux.HandleFunc("/api/extensions/ui/sessions", h.handleSessionsCollection)
 	mux.HandleFunc("/api/extensions/ui/sessions/", h.handleSessionItem)
 	mux.HandleFunc("/api/extensions/ui/page-sessions/", h.handlePageSession)
@@ -144,10 +156,163 @@ func (h *HTTPHandler) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 			Contributions: contribs,
 		})
 	}
-	writeJSON(w, http.StatusOK, map[string]any{
-		"slots":     out,
-		"timestamp": time.Now().UTC(),
-	})
+	payload := map[string]any{
+		"slots":         out,
+		"contributions": h.uiHost.ListAll(),
+		"timestamp":     time.Now().UTC(),
+	}
+	if h.providerRegistry != nil {
+		platform := r.URL.Query().Get("platform")
+		if platform == "" {
+			platform = "web"
+		}
+		providerSnapshot := h.providerRegistry.Snapshot(platform)
+		payload["providers"] = providerSnapshot.Providers
+		payload["profile"] = providerSnapshot.Profile
+		payload["resolved"] = providerSnapshot.Resolved
+		payload["providerVersion"] = providerSnapshot.Version
+	}
+	writeJSON(w, http.StatusOK, payload)
+}
+
+func (h *HTTPHandler) handleProviders(w http.ResponseWriter, r *http.Request) {
+	if h.providerRegistry == nil {
+		writeError(w, http.StatusServiceUnavailable, "ui_provider_registry_unavailable", "ui provider registry unavailable")
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, map[string]any{"providers": h.providerRegistry.List()})
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+	}
+}
+
+func (h *HTTPHandler) handleProviderResolve(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	if h.providerRegistry == nil {
+		writeError(w, http.StatusServiceUnavailable, "ui_provider_registry_unavailable", "ui provider registry unavailable")
+		return
+	}
+	capability := ui_provider.Capability(strings.TrimSpace(r.URL.Query().Get("capability")))
+	if !capability.Valid() {
+		writeError(w, http.StatusBadRequest, "invalid_capability", "invalid UI provider capability")
+		return
+	}
+	platform := strings.TrimSpace(r.URL.Query().Get("platform"))
+	if platform == "" {
+		platform = "web"
+	}
+	writeJSON(w, http.StatusOK, h.providerRegistry.Resolve(capability, platform))
+}
+
+func trustedModuleProvider(p *ui_provider.ProviderDefinition) bool {
+	if p == nil || !p.Enabled || p.Builtin {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(p.TrustLevel)) {
+	case "system", "official", "trusted", "user_trusted", "verified":
+		return true
+	default:
+		return false
+	}
+}
+
+func (h *HTTPHandler) handleProviderModuleResource(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	if h.providerRegistry == nil {
+		writeError(w, http.StatusServiceUnavailable, "ui_provider_registry_unavailable", "ui provider registry unavailable")
+		return
+	}
+	const prefix = "/api/extensions/ui/provider-module/"
+	rest := strings.TrimPrefix(r.URL.Path, prefix)
+	parts := strings.SplitN(rest, "/", 2)
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		writeError(w, http.StatusNotFound, "provider_module_not_found", "provider id and resource path required")
+		return
+	}
+	providerID := parts[0]
+	resourcePath := parts[1]
+	provider, ok := h.providerRegistry.Get(providerID)
+	if !ok || !trustedModuleProvider(provider) {
+		writeError(w, http.StatusForbidden, "provider_module_forbidden", "trusted web module provider required")
+		return
+	}
+	basePath := h.resolveExtensionBasePath(provider.ExtensionID)
+	if basePath == "" {
+		writeError(w, http.StatusNotFound, "extension_path_not_found", "extension bundle path not found")
+		return
+	}
+	cleanPath, err := sandbox_webui.NewProtocolHandler().SanitizePath(basePath, resourcePath)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid_path", err.Error())
+		return
+	}
+	fullPath := filepath.Join(basePath, cleanPath)
+	info, err := os.Stat(fullPath)
+	if err != nil || info.IsDir() {
+		writeError(w, http.StatusNotFound, "provider_module_resource_not_found", "provider module resource not found")
+		return
+	}
+	mime := sandbox_webui.LookupMIME(cleanPath)
+	if mime == "" || !sandbox_webui.IsMIMEAllowed(mime) {
+		writeError(w, http.StatusUnsupportedMediaType, "mime_not_allowed", "mime type not allowed")
+		return
+	}
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "read_failed", err.Error())
+		return
+	}
+	for _, entry := range provider.Entries {
+		if entry.Type != ui_provider.EntryWebModule || strings.TrimPrefix(entry.Path, "/") != cleanPath || strings.TrimSpace(entry.ContentHash) == "" {
+			continue
+		}
+		sum := sha256.Sum256(content)
+		actual := "sha256:" + hex.EncodeToString(sum[:])
+		expected := strings.ToLower(strings.TrimSpace(entry.ContentHash))
+		if expected != strings.ToLower(actual) {
+			writeError(w, http.StatusConflict, "provider_module_integrity_mismatch", "provider module content hash mismatch")
+			return
+		}
+	}
+	w.Header().Set("Content-Type", mime)
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(content)
+}
+
+func (h *HTTPHandler) handleProfile(w http.ResponseWriter, r *http.Request) {
+	if h.providerRegistry == nil {
+		writeError(w, http.StatusServiceUnavailable, "ui_provider_registry_unavailable", "ui provider registry unavailable")
+		return
+	}
+	switch r.Method {
+	case http.MethodGet:
+		writeJSON(w, http.StatusOK, h.providerRegistry.Profile())
+	case http.MethodPut, http.MethodPost:
+		var profile ui_provider.Profile
+		if err := decodeJSON(r, &profile); err != nil {
+			writeError(w, http.StatusBadRequest, "payload_invalid", err.Error())
+			return
+		}
+		profile.UpdatedAt = time.Now().UTC().UnixMilli()
+		if err := h.providerRegistry.SetProfile(profile); err != nil {
+			writeError(w, http.StatusBadRequest, "profile_invalid", err.Error())
+			return
+		}
+		writeJSON(w, http.StatusOK, h.providerRegistry.Profile())
+	default:
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+	}
 }
 
 func (h *HTTPHandler) handleSessionsCollection(w http.ResponseWriter, r *http.Request) {
@@ -575,16 +740,16 @@ func (h *HTTPHandler) handleWebUISessionCollection(w http.ResponseWriter, r *htt
 		}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"sessionId":      result.SessionID,
-		"entryUrl":       result.EntryURL,
-		"resourceUrl":    resourceURL,
-		"origin":         result.Origin,
-		"nonce":          result.Nonce,
-		"token":          result.Token,
-		"csp":            result.CSP,
-		"capabilities":   capabilities,
-		"grantedPerms":   auth.GrantedPerms,
-		"grantedScopes":  auth.GrantedScopes,
+		"sessionId":     result.SessionID,
+		"entryUrl":      result.EntryURL,
+		"resourceUrl":   resourceURL,
+		"origin":        result.Origin,
+		"nonce":         result.Nonce,
+		"token":         result.Token,
+		"csp":           result.CSP,
+		"capabilities":  capabilities,
+		"grantedPerms":  auth.GrantedPerms,
+		"grantedScopes": auth.GrantedScopes,
 	})
 }
 

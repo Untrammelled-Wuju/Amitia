@@ -23,6 +23,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
 	"github.com/u-ai/backend/internal/extension/kernel/task_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
+	"github.com/u-ai/backend/internal/extension/kernel/ui_provider"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
 )
 
@@ -168,6 +169,8 @@ func (i *TypedContributionInstaller) buildInstallOp(ctx context.Context, contrib
 		return i.buildMCPServerOp(ctx, contrib, defData)
 	case domain.ContributionKindUIPage, domain.ContributionKindUIPanel, domain.ContributionKindUIChat, domain.ContributionKindUIContextAction, domain.ContributionKindUIDesktop:
 		return i.buildUIContributionOp(ctx, contrib, defData, generation)
+	case domain.ContributionKindUIProvider:
+		return i.buildUIProviderOp(ctx, contrib, defData, generation)
 	case domain.ContributionKindGamePlugin:
 		return i.buildGamePluginOp(ctx, contrib, defData, generation)
 	case domain.ContributionKindDesktopPetPlugin:
@@ -175,6 +178,48 @@ func (i *TypedContributionInstaller) buildInstallOp(ctx context.Context, contrib
 	default:
 		return installOp{}, fmt.Errorf("unsupported contribution kind: %s", contrib.Kind)
 	}
+}
+
+func (i *TypedContributionInstaller) buildUIProviderOp(ctx context.Context, contrib domain.ContributionDefinition, defData []byte, generation int64) (installOp, error) {
+	if i.container.UIProviderRegistry == nil {
+		return installOp{}, fmt.Errorf("ui provider registry not configured")
+	}
+	var def ui_provider.ProviderDefinition
+	if err := json.Unmarshal(defData, &def); err != nil {
+		return installOp{}, fmt.Errorf("unmarshal ui provider: %w", err)
+	}
+	if def.ProviderID == "" {
+		def.ProviderID = string(contrib.ID)
+	}
+	if def.ExtensionID == "" {
+		def.ExtensionID = string(contrib.ExtensionID)
+	}
+	if def.ModuleID == "" {
+		def.ModuleID = string(contrib.ModuleID)
+	}
+	if def.ProviderID != string(contrib.ID) || def.ExtensionID != string(contrib.ExtensionID) || def.ModuleID != string(contrib.ModuleID) {
+		return installOp{}, fmt.Errorf("ui provider identity does not match manifest contribution")
+	}
+	def.Generation = generation
+	def.Enabled = true
+	if err := def.Validate(); err != nil {
+		return installOp{}, err
+	}
+	return installOp{
+		kind: domain.ContributionKindUIProvider,
+		doInstall: func(ctx context.Context) error {
+			if err := i.container.UIProviderRegistry.Register(def); err != nil {
+				return fmt.Errorf("register ui provider: %w", err)
+			}
+			if i.container.UIHostNotifier != nil {
+				i.container.UIHostNotifier.BroadcastExtensionChange("ui_provider_changed", string(contrib.ExtensionID), map[string]interface{}{"providerId": def.ProviderID, "capability": def.Capability})
+			}
+			return nil
+		},
+		doRollback: func(ctx context.Context) {
+			i.container.UIProviderRegistry.Unregister(def.ProviderID)
+		},
+	}, nil
 }
 
 func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib domain.ContributionDefinition, defData []byte, generation int64) (installOp, error) {
@@ -877,7 +922,59 @@ func (i *TypedContributionInstaller) activateSingle(ctx context.Context, contrib
 		return i.activateWorkflow(ctx, contrib)
 	case domain.ContributionKindUIPage, domain.ContributionKindUIPanel, domain.ContributionKindUIChat, domain.ContributionKindUIContextAction, domain.ContributionKindUIDesktop:
 		return i.activateUI(ctx, contrib)
+	case domain.ContributionKindUIProvider:
+		return i.activateUIProvider(ctx, contrib)
 	}
+	return nil
+}
+
+func (i *TypedContributionInstaller) activateUIProvider(ctx context.Context, contrib domain.ContributionDefinition) error {
+	if i.container.UIProviderRegistry == nil {
+		return fmt.Errorf("ui provider registry not configured")
+	}
+	broadcast := func() {
+		if i.container.UIHostNotifier != nil {
+			i.container.UIHostNotifier.BroadcastExtensionChange("ui_provider_changed", string(contrib.ExtensionID), map[string]interface{}{
+				"providerId": string(contrib.ID),
+				"enabled":    true,
+			})
+		}
+	}
+	if _, ok := i.container.UIProviderRegistry.Get(string(contrib.ID)); !ok {
+		defData, _ := json.Marshal(contrib.Definition)
+		var def ui_provider.ProviderDefinition
+		if err := json.Unmarshal(defData, &def); err != nil {
+			return fmt.Errorf("unmarshal ui provider for activate: %w", err)
+		}
+		if def.ProviderID == "" {
+			def.ProviderID = string(contrib.ID)
+		}
+		if def.ExtensionID == "" {
+			def.ExtensionID = string(contrib.ExtensionID)
+		}
+		if def.ModuleID == "" {
+			def.ModuleID = string(contrib.ModuleID)
+		}
+		if def.ProviderID != string(contrib.ID) || def.ExtensionID != string(contrib.ExtensionID) || def.ModuleID != string(contrib.ModuleID) {
+			return fmt.Errorf("ui provider identity does not match manifest contribution")
+		}
+		if contrib.RuntimeBinding != nil {
+			def.Generation = contrib.RuntimeBinding.Generation
+		}
+		def.Enabled = true
+		if err := def.Validate(); err != nil {
+			return err
+		}
+		if err := i.container.UIProviderRegistry.Register(def); err != nil {
+			return err
+		}
+		broadcast()
+		return nil
+	}
+	if err := i.container.UIProviderRegistry.SetEnabled(string(contrib.ID), true); err != nil {
+		return err
+	}
+	broadcast()
 	return nil
 }
 
@@ -1135,6 +1232,27 @@ func (i *TypedContributionInstaller) deactivateSingle(ctx context.Context, contr
 		return i.deactivateWorkflow(ctx, contrib)
 	case domain.ContributionKindUIPage, domain.ContributionKindUIPanel, domain.ContributionKindUIChat, domain.ContributionKindUIContextAction, domain.ContributionKindUIDesktop:
 		return i.deactivateUI(ctx, contrib)
+	case domain.ContributionKindUIProvider:
+		return i.deactivateUIProvider(ctx, contrib)
+	}
+	return nil
+}
+
+func (i *TypedContributionInstaller) deactivateUIProvider(ctx context.Context, contrib domain.ContributionDefinition) error {
+	if i.container.UIProviderRegistry == nil {
+		return nil
+	}
+	if _, ok := i.container.UIProviderRegistry.Get(string(contrib.ID)); !ok {
+		return nil
+	}
+	if err := i.container.UIProviderRegistry.SetEnabled(string(contrib.ID), false); err != nil {
+		return err
+	}
+	if i.container.UIHostNotifier != nil {
+		i.container.UIHostNotifier.BroadcastExtensionChange("ui_provider_changed", string(contrib.ExtensionID), map[string]interface{}{
+			"providerId": string(contrib.ID),
+			"enabled":    false,
+		})
 	}
 	return nil
 }
@@ -1669,9 +1787,25 @@ func (i *TypedContributionInstaller) discardSingleContribution(ctx context.Conte
 		return i.discardUIContribution(ctx, contrib, defData)
 	case domain.ContributionKindUIDesktop:
 		return i.discardDesktopContribution(ctx, contrib, defData)
+	case domain.ContributionKindUIProvider:
+		return i.discardUIProvider(ctx, contrib, defData)
 	default:
 		return nil
 	}
+}
+
+func (i *TypedContributionInstaller) discardUIProvider(ctx context.Context, contrib domain.ContributionDefinition, defData []byte) error {
+	if i.container.UIProviderRegistry == nil {
+		return nil
+	}
+	i.container.UIProviderRegistry.Unregister(string(contrib.ID))
+	if i.container.UIHostNotifier != nil {
+		i.container.UIHostNotifier.BroadcastExtensionChange("ui_provider_changed", string(contrib.ExtensionID), map[string]interface{}{
+			"providerId": string(contrib.ID),
+			"removed":    true,
+		})
+	}
+	return nil
 }
 
 func (i *TypedContributionInstaller) discardTool(ctx context.Context, contrib domain.ContributionDefinition, defData []byte) error {

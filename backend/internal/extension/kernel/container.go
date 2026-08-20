@@ -49,6 +49,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_ordering"
+	"github.com/u-ai/backend/internal/extension/kernel/ui_provider"
 	"github.com/u-ai/backend/internal/extension/kernel/update"
 	"github.com/u-ai/backend/internal/extension/kernel/wasm_runtime"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
@@ -156,6 +157,7 @@ type Container struct {
 	SandboxHost           *sandbox_webui.Host
 	ChatExtensionRegistry *chat_ui_extension.ChatExtensionRegistry
 	OrderingEngine        *ui_ordering.OrderingEngine
+	UIProviderRegistry    *ui_provider.Registry
 	ExtRoot               string
 
 	DesktopHost              *desktop.DesktopHost
