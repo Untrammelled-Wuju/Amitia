@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
 import 'app_radius.dart';
+import 'design_tokens.dart';
 
 class AppTheme {
   AppTheme._();
@@ -10,6 +11,13 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.light,
+      extensions: <ThemeExtension<dynamic>>[
+        defaultLightColorTokens(),
+        const AmitiaLayoutTokens(),
+        const AmitiaTypographyTokens(),
+        const AmitiaIconTokens(),
+        const AmitiaComponentTokens(),
+      ],
       scaffoldBackgroundColor: colors.backgroundPrimary,
       colorScheme: ColorScheme.light(
         primary: colors.accentPrimary,
@@ -108,6 +116,13 @@ class AppTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
+      extensions: <ThemeExtension<dynamic>>[
+        defaultDarkColorTokens(),
+        const AmitiaLayoutTokens(),
+        const AmitiaTypographyTokens(),
+        const AmitiaIconTokens(),
+        const AmitiaComponentTokens(),
+      ],
       scaffoldBackgroundColor: colors.backgroundPrimary,
       colorScheme: ColorScheme.dark(
         primary: colors.accentPrimary,

@@ -1,93 +1,131 @@
 import 'package:flutter/material.dart';
 import 'app_colors.dart';
+import 'design_tokens.dart';
 
 class AppTypography {
   AppTypography._();
 
-  static TextStyle pageTitle(BuildContext context) {
+  static TextStyle _style(
+    BuildContext context, {
+    required double size,
+    required int weight,
+    required Color color,
+    required double height,
+  }) {
+    final tokens = context.uiTypography;
     return TextStyle(
-      fontSize: 20,
-      fontWeight: FontWeight.w600,
+      fontFamily: tokens.fontFamily,
+      fontSize: size,
+      fontWeight: designFontWeight(weight),
+      color: color,
+      height: height,
+    );
+  }
+
+  static TextStyle pageTitle(BuildContext context) {
+    final t = context.uiTypography;
+    return _style(
+      context,
+      size: t.pageTitleSize,
+      weight: t.pageTitleWeight,
       color: context.textPrimary,
       height: 1.3,
     );
   }
 
   static TextStyle pageLargeTitle(BuildContext context) {
-    return TextStyle(
-      fontSize: 24,
-      fontWeight: FontWeight.w600,
+    final t = context.uiTypography;
+    return _style(
+      context,
+      size: t.pageLargeTitleSize,
+      weight: t.pageTitleWeight,
       color: context.textPrimary,
       height: 1.3,
     );
   }
 
   static TextStyle sectionTitle(BuildContext context) {
-    return TextStyle(
-      fontSize: 17,
-      fontWeight: FontWeight.w600,
+    final t = context.uiTypography;
+    return _style(
+      context,
+      size: t.sectionTitleSize,
+      weight: t.sectionTitleWeight,
       color: context.textPrimary,
       height: 1.35,
     );
   }
 
   static TextStyle cardTitle(BuildContext context) {
-    return TextStyle(
-      fontSize: 16,
-      fontWeight: FontWeight.w500,
+    final t = context.uiTypography;
+    return _style(
+      context,
+      size: t.cardTitleSize,
+      weight: t.cardTitleWeight,
       color: context.textPrimary,
       height: 1.35,
     );
   }
 
   static TextStyle body(BuildContext context) {
-    return TextStyle(
-      fontSize: 15,
-      fontWeight: FontWeight.w400,
+    final t = context.uiTypography;
+    return _style(
+      context,
+      size: t.bodySize,
+      weight: t.bodyWeight,
       color: context.textPrimary,
       height: 1.5,
     );
   }
 
   static TextStyle bodySmall(BuildContext context) {
-    return TextStyle(
-      fontSize: 14,
-      fontWeight: FontWeight.w400,
+    final t = context.uiTypography;
+    return _style(
+      context,
+      size: t.bodySmallSize,
+      weight: t.bodyWeight,
       color: context.textPrimary,
       height: 1.5,
     );
   }
 
   static TextStyle caption(BuildContext context) {
-    return TextStyle(
-      fontSize: 13,
-      fontWeight: FontWeight.w400,
+    final t = context.uiTypography;
+    return _style(
+      context,
+      size: t.captionSize,
+      weight: t.bodyWeight,
       color: context.textSecondary,
       height: 1.4,
     );
   }
 
   static TextStyle label(BuildContext context) {
-    return TextStyle(
-      fontSize: 12,
-      fontWeight: FontWeight.w400,
+    final t = context.uiTypography;
+    return _style(
+      context,
+      size: t.labelSize,
+      weight: t.labelWeight,
       color: context.textTertiary,
       height: 1.4,
     );
   }
 
   static TextStyle statusLabel(BuildContext context) {
+    final t = context.uiTypography;
     return TextStyle(
-      fontSize: 11,
-      fontWeight: FontWeight.w500,
+      fontFamily: t.fontFamily,
+      fontSize: t.statusLabelSize,
+      fontWeight: designFontWeight(t.buttonWeight),
       height: 1.3,
     );
   }
 
   static TextStyle button(BuildContext context) {
-    return TextStyle(
-      fontSize: 15,
-      fontWeight: FontWeight.w500,
+    final t = context.uiTypography;
+    return _style(
+      context,
+      size: t.buttonSize,
+      weight: t.buttonWeight,
       color: context.textPrimary,
       height: 1.2,
     );
