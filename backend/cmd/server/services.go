@@ -22,7 +22,6 @@ import (
 	"github.com/u-ai/backend/internal/character"
 	"github.com/u-ai/backend/internal/chat"
 	"github.com/u-ai/backend/internal/companion"
-	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/internal/decision"
 	"github.com/u-ai/backend/internal/delivery"
 	"github.com/u-ai/backend/internal/desktoppet"
@@ -38,6 +37,7 @@ import (
 	"github.com/u-ai/backend/internal/desktoppet/installation/coordinator"
 	installationprojection "github.com/u-ai/backend/internal/desktoppet/installation/projection"
 	installationrecovery "github.com/u-ai/backend/internal/desktoppet/installation/recovery"
+	"github.com/u-ai/backend/internal/runtimeidentity"
 
 	"github.com/u-ai/backend/internal/desktoppet/maintenance"
 	"github.com/u-ai/backend/internal/desktoppet/migration"
@@ -175,7 +175,9 @@ type AppServices struct {
 	SafeMode                     *readiness.SafeModeController
 	CanonicalStdioFactory        *extensionmcp.CanonicalStdioFactory
 	CanonicalStdioRegistry       *extensionmcp.CanonicalStdioRegistry
+	CanonicalRemoteRegistry      *extensionmcp.CanonicalRemoteRegistry
 	CanonicalStdioCaller         *CanonicalStdioCaller
+	MCPCompatibility             *MCPCompatibilityRuntime
 	DesktopInstanceStore         *security.DesktopInstanceStore
 	DeviceRepository             *device.Repository
 	RuntimeOrchestrator          RuntimeOrchestrator
@@ -368,6 +370,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	canonicalStdioRegistry := extensionmcp.NewCanonicalStdioRegistry(canonicalStdioFactory)
 	canonicalRemoteFactory := extensionmcp.NewCanonicalRemoteFactory()
 	canonicalRemoteRegistry := extensionmcp.NewCanonicalRemoteRegistry(canonicalRemoteFactory)
+	mcpRepository := mcp.NewRepository(ctx.DB)
 	mcpAcquisitionRuntime := newMCPAcquisitionRuntime(canonicalStdioRegistry, canonicalRemoteRegistry)
 
 	kernelBuilder := kernel.NewContainerBuilder().
@@ -392,6 +395,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		WithPendingInvocationManager(pendingInvocationManager).
 		WithPendingTaskManager(pendingTaskManager).
 		WithMeshHub(meshHub).
+		WithMCPRepository(mcpRepository).
 		WithMCPRuntimeConnectPort(mcpAcquisitionRuntime).
 		WithBackgroundBootstrapFunc(func() (backgroundremoval.Registry, error) {
 			// The kernel builder owns canonical provider registration. Returning an
@@ -652,10 +656,6 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	configureWorkflowHost(extensionRuntime, chatSvc, memSvc, deliveryStore, kernelContainer.HostEventEmitter)
 	mcpDuplicateStore := mcp.NewDuplicateStore(ctx.DB)
 	kernelContainer.MCPDuplicateProvider = &mcpDuplicateMetricAdapter{store: mcpDuplicateStore}
-	canonicalStdioFactory = extensionmcp.NewCanonicalStdioFactory(commandResolver)
-	canonicalStdioRegistry = extensionmcp.NewCanonicalStdioRegistry(canonicalStdioFactory)
-	canonicalRemoteFactory = extensionmcp.NewCanonicalRemoteFactory()
-	canonicalRemoteRegistry = extensionmcp.NewCanonicalRemoteRegistry(canonicalRemoteFactory)
 	canonicalMCPCaller := NewCanonicalMCPCaller(canonicalStdioRegistry, canonicalRemoteRegistry)
 	kernelContainer.WireMCPAdapter(makeKernelMCPCaller(canonicalMCPCaller), makeKernelMCPHealth(canonicalMCPCaller), nil)
 	desktopPetRepo := desktoppet.NewRepository(ctx.DB, ctx)
@@ -1037,6 +1037,21 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	syncApplier = syncpkg.NewBusinessApplier(ctx.DB)
 	syncService = syncpkg.NewService(ctx.DB, syncApplier)
 
+	mcpCompatibility, mcpCompatibilityErr := buildMCPCompatibilityRuntime(
+		ctx,
+		mcpRepository,
+		canonicalStdioRegistry,
+		canonicalRemoteRegistry,
+		commandResolver,
+		extensionRuntime,
+		kernelContainer.ToolFacade,
+		chatSvc,
+		mcpDataDirectory(ctx),
+	)
+	if mcpCompatibilityErr != nil {
+		return nil, fmt.Errorf("initialize canonical MCP compatibility runtime: %w", mcpCompatibilityErr)
+	}
+
 	services := &AppServices{
 		RuntimeProfile:               runtimeProfile,
 		RuntimePolicy:                policy,
@@ -1089,6 +1104,11 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		PackageImporter:              importer.NewPackageImporterWithJournal(releaseRepo, releaseStoragePort, importer.NewDefaultPackageValidator(pathRegistry, importStagingRepo), pathRegistry, importStagingRepo, releasebuild.NewPublishJournalManager(releaseRepo)),
 		Readiness:                    readinessSvc,
 		SafeMode:                     safeModeCtrl,
+		CanonicalStdioFactory:        canonicalStdioFactory,
+		CanonicalStdioRegistry:       canonicalStdioRegistry,
+		CanonicalRemoteRegistry:      canonicalRemoteRegistry,
+		CanonicalStdioCaller:         NewCanonicalStdioCaller(canonicalStdioRegistry),
+		MCPCompatibility:             mcpCompatibility,
 		DesktopInstanceStore:         desktopInstanceStore,
 		DeviceRepository:             deviceRepo,
 		RuntimeDomainEventConsumer:   runtimeDomainEventConsumer,

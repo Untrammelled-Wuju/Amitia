@@ -52,6 +52,7 @@ import (
 	"github.com/u-ai/backend/internal/graph"
 	"github.com/u-ai/backend/internal/imagegen"
 	iosnativebackground "github.com/u-ai/backend/internal/iosnative/background"
+	"github.com/u-ai/backend/internal/mcpapi"
 	"github.com/u-ai/backend/internal/memory"
 	"github.com/u-ai/backend/internal/middleware"
 	"github.com/u-ai/backend/internal/middleware/security"
@@ -70,6 +71,7 @@ import (
 	"github.com/u-ai/backend/internal/tts"
 	"github.com/u-ai/backend/internal/user"
 	"github.com/u-ai/backend/internal/vision"
+	"github.com/u-ai/backend/internal/workspace"
 	"github.com/u-ai/backend/internal/worldbook"
 	"github.com/u-ai/backend/log"
 	"github.com/u-ai/backend/pkg/app"
@@ -374,6 +376,10 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		})
 	}
 
+	if services.MCPCompatibility != nil {
+		mcpapi.RegisterOAuthCallback(r, services.MCPCompatibility.API)
+	}
+
 	apiGroup := r.Group("/api")
 	apiGroup.Use(security.AuthenticationMiddleware(security.AuthConfig{
 		Mode:             config.AppCfg.Security.Mode,
@@ -389,6 +395,9 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 	}))
 	{
 		accountsession.RegisterAuthenticatedRoutes(apiGroup, accountSessionRuntime.Handler)
+		if services.MCPCompatibility != nil {
+			mcpapi.RegisterRouter(apiGroup, ctx, services.MCPCompatibility.API)
+		}
 		user.RegisterUserRouter(apiGroup, ctx)
 		if services.Sync != nil && services.Sync.ChangeLog != nil {
 			character.RegisterCharacterRouterWithRecorder(apiGroup, ctx, services.Chat, services.Sync.ChangeLog)
@@ -430,13 +439,24 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 		safety.RegisterSafetyRouter(apiGroup, ctx.DB)
 		delivery.RegisterSubmitRouter(apiGroup, services.DeliveryStore)
 		extension.RegisterRouter(apiGroup, ctx, services.Extension)
+		if services.Artifact != nil && services.Artifact.Handler != nil {
+			services.Artifact.Handler.Register(apiGroup)
+		}
+		if services.WorkspaceService != nil {
+			workspace.NewHandler(services.WorkspaceService).RegisterRoutes(apiGroup)
+		}
 		if services.KernelContainer != nil {
 			cardProvider := extension_center.NewKernelCardProvider(services.KernelContainer.DefinitionRepository, services.KernelContainer.InstallationRepository)
 			centerSvc := extension_center.NewCenterService(cardProvider)
 			centerHandler := extension_center.NewHTTPHandler(centerSvc)
 			centerMux := http.NewServeMux()
 			centerHandler.Register(centerMux)
-			apiGroup.Any("/api/extension-center/*centerPath", gin.WrapH(centerMux))
+			apiGroup.Any("/extension-center/*centerPath", func(c *gin.Context) {
+				originalPath := c.Request.URL.Path
+				c.Request.URL.Path = "/api/extension-center" + c.Param("centerPath")
+				centerMux.ServeHTTP(c.Writer, c.Request)
+				c.Request.URL.Path = originalPath
+			})
 		}
 		if services.KernelContainer != nil && services.KernelContainer.WASMRuntimeFactory != nil {
 			wasmService := wasm_runtime.NewAPIService(services.KernelContainer.WASMRuntimeFactory, services.KernelContainer.WASMDefinitionRepo)
