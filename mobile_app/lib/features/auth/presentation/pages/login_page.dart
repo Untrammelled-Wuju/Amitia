@@ -92,11 +92,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     return AmitiaScaffold(
       body: SafeArea(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: AppSpacing.xxxl + 20),
+              SizedBox(height: AppSpacing.xxxl + 20),
               Center(
                 child: Container(
                   width: 88,
@@ -108,20 +108,20 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   child: Icon(Icons.auto_awesome, size: 44, color: context.accentPrimary),
                 ),
               ),
-              const SizedBox(height: AppSpacing.xl),
+              SizedBox(height: AppSpacing.xl),
               Center(
                 child: Text('Amitia', style: AppTypography.pageLargeTitle(context)),
               ),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               Center(
                 child: Text(
                   '欢迎回来，请登录你的账号',
                   style: AppTypography.body(context).copyWith(color: context.textSecondary),
                 ),
               ),
-              const SizedBox(height: AppSpacing.sectionGap + 8),
+              SizedBox(height: AppSpacing.sectionGap + 8),
               Text('用户名', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               Container(
                 decoration: BoxDecoration(
                   color: context.surfacePrimary,
@@ -141,9 +141,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               Text('密码', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               Container(
                 decoration: BoxDecoration(
                   color: context.surfacePrimary,
@@ -173,7 +173,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -192,7 +192,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                           child: Icon(Icons.check, size: 14, color: context.accentPrimary),
                         ),
                       ),
-                      const SizedBox(width: AppSpacing.sm),
+                      SizedBox(width: AppSpacing.sm),
                       Text('记住密码', style: AppTypography.caption(context)),
                     ],
                   ),
@@ -212,15 +212,15 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   ),
                 ],
               ),
-              const SizedBox(height: AppSpacing.xl),
+              SizedBox(height: AppSpacing.xl),
               if (_loginState == 1)
                 Center(
                   child: Padding(
-                    padding: const EdgeInsets.all(AppSpacing.md),
+                    padding: EdgeInsets.all(AppSpacing.md),
                     child: Column(
                       children: [
                         CircularProgressIndicator(strokeWidth: 2.5, color: context.accentPrimary),
-                        const SizedBox(height: AppSpacing.md),
+                        SizedBox(height: AppSpacing.md),
                         Text('正在登录...', style: AppTypography.caption(context)),
                       ],
                     ),
@@ -233,10 +233,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   isFullWidth: true,
                   onPressed: _login,
                 ),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               if (_loginState == 3 && _errorText.isNotEmpty)
                 Container(
-                  padding: const EdgeInsets.all(AppSpacing.md),
+                  padding: EdgeInsets.all(AppSpacing.md),
                   decoration: BoxDecoration(
                     color: context.error.withValues(alpha: 0.08),
                     borderRadius: AppRadius.brSmall,
@@ -244,7 +244,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   child: Row(
                     children: [
                       Icon(Icons.error_outline, size: 18, color: context.error),
-                      const SizedBox(width: AppSpacing.sm),
+                      SizedBox(width: AppSpacing.sm),
                       Expanded(
                         child: Text(
                           _errorText,
@@ -254,7 +254,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     ],
                   ),
                 ),
-              const SizedBox(height: AppSpacing.xl),
+              SizedBox(height: AppSpacing.xl),
               Center(
                 child: GestureDetector(
                   onTap: () => context.go(AppRoutes.onboarding),

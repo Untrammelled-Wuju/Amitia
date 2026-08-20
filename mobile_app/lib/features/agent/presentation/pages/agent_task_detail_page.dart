@@ -56,7 +56,7 @@ class AgentTaskDetailPage extends ConsumerWidget {
             return _buildNotFound(context);
           }
           return SingleChildScrollView(
-            padding: const EdgeInsets.fromLTRB(
+            padding: EdgeInsets.fromLTRB(
               AppSpacing.pagePadding,
               AppSpacing.sm,
               AppSpacing.pagePadding,
@@ -66,11 +66,11 @@ class AgentTaskDetailPage extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildStatusCard(context, task, ref),
-                const SizedBox(height: AppSpacing.sectionGap),
+                SizedBox(height: AppSpacing.sectionGap),
                 _buildExecutionPlan(context, task),
-                const SizedBox(height: AppSpacing.sectionGap),
+                SizedBox(height: AppSpacing.sectionGap),
                 _buildToolCalls(context),
-                const SizedBox(height: AppSpacing.xxxl),
+                SizedBox(height: AppSpacing.xxxl),
                 _buildBottomActions(context, task, ref),
               ],
             ),
@@ -86,9 +86,9 @@ class AgentTaskDetailPage extends ConsumerWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.search_off, size: 56, color: context.textTertiary),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           Text('任务不存在', style: AppTypography.cardTitle(context)),
-          const SizedBox(height: AppSpacing.lg),
+          SizedBox(height: AppSpacing.lg),
           AmitiaButton(
             label: '返回任务列表',
             icon: Icons.arrow_back,
@@ -114,9 +114,9 @@ class AgentTaskDetailPage extends ConsumerWidget {
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Text(task.description, style: AppTypography.caption(context)),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -130,9 +130,9 @@ class AgentTaskDetailPage extends ConsumerWidget {
               ),
             ],
           ),
-          const SizedBox(height: AppSpacing.xs),
+          SizedBox(height: AppSpacing.xs),
           AmitiaProgressBar(progress: task.progress / 100),
-          const SizedBox(height: AppSpacing.md),
+          SizedBox(height: AppSpacing.md),
           Row(
             children: [
               Icon(Icons.timer_outlined, size: 16, color: context.textTertiary),
@@ -144,7 +144,7 @@ class AgentTaskDetailPage extends ConsumerWidget {
               Text('步骤 ${task.currentStepIndex + 1}/${task.steps.length}', style: AppTypography.label(context)),
             ],
           ),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Wrap(
             spacing: 6,
             runSpacing: 4,
@@ -160,9 +160,9 @@ class AgentTaskDetailPage extends ConsumerWidget {
             }).toList(),
           ),
           if (task.result != null) ...[
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Container(
-              padding: const EdgeInsets.all(AppSpacing.md),
+              padding: EdgeInsets.all(AppSpacing.md),
               decoration: BoxDecoration(
                 color: context.success.withValues(alpha: 0.08),
                 borderRadius: AppRadius.brSmall,
@@ -180,9 +180,9 @@ class AgentTaskDetailPage extends ConsumerWidget {
             ),
           ],
           if (task.error != null) ...[
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Container(
-              padding: const EdgeInsets.all(AppSpacing.md),
+              padding: EdgeInsets.all(AppSpacing.md),
               decoration: BoxDecoration(
                 color: context.error.withValues(alpha: 0.08),
                 borderRadius: AppRadius.brSmall,
@@ -209,9 +209,9 @@ class AgentTaskDetailPage extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('执行计划', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
         Container(
-          padding: const EdgeInsets.all(AppSpacing.cardPadding),
+          padding: EdgeInsets.all(AppSpacing.cardPadding),
           decoration: BoxDecoration(
             color: context.surfacePrimary,
             borderRadius: AppRadius.brMedium,
@@ -244,7 +244,7 @@ class AgentTaskDetailPage extends ConsumerWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('工具调用记录', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
         Text('暂无工具调用记录', style: AppTypography.caption(context)),
       ],
     );
@@ -269,7 +269,7 @@ class AgentTaskDetailPage extends ConsumerWidget {
                 },
               ),
             ),
-            const SizedBox(width: AppSpacing.sm),
+            SizedBox(width: AppSpacing.sm),
             Expanded(
               child: AmitiaButton(
                 label: '取消',
@@ -303,7 +303,7 @@ class AgentTaskDetailPage extends ConsumerWidget {
                 },
               ),
             ),
-            const SizedBox(width: AppSpacing.sm),
+            SizedBox(width: AppSpacing.sm),
             Expanded(
               child: AmitiaButton(
                 label: '拒绝',
@@ -338,7 +338,7 @@ class AgentTaskDetailPage extends ConsumerWidget {
                 ),
               ),
             ),
-            const SizedBox(width: AppSpacing.sm),
+            SizedBox(width: AppSpacing.sm),
             Expanded(
               child: AmitiaButton(
                 label: '停止',
@@ -371,7 +371,7 @@ class AgentTaskDetailPage extends ConsumerWidget {
                 },
               ),
             ),
-            const SizedBox(width: AppSpacing.sm),
+            SizedBox(width: AppSpacing.sm),
             Expanded(
               child: AmitiaButton(
                 label: '停止',
@@ -404,7 +404,7 @@ class AgentTaskDetailPage extends ConsumerWidget {
                 },
               ),
             ),
-            const SizedBox(width: AppSpacing.sm),
+            SizedBox(width: AppSpacing.sm),
             Expanded(
               child: AmitiaButton(
                 label: '再次执行',
@@ -430,7 +430,7 @@ class AgentTaskDetailPage extends ConsumerWidget {
                 },
               ),
             ),
-            const SizedBox(width: AppSpacing.sm),
+            SizedBox(width: AppSpacing.sm),
             Expanded(
               child: AmitiaButton(
                 label: '重试',

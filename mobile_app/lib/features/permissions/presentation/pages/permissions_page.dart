@@ -97,7 +97,7 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage> {
     showModalBottomSheet(
       context: context,
       backgroundColor: context.surfacePrimary,
-      shape: const RoundedRectangleBorder(
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.vertical(
           top: Radius.circular(AppRadius.large),
         ),
@@ -136,12 +136,12 @@ class _PermissionsPageState extends ConsumerState<PermissionsPage> {
     return AmitiaScaffold(
       appBar: AmitiaAppBar(title: '系统权限', showBackButton: true, fallbackRoute: AppRoutes.settings),
       body: ListView.separated(
-        padding: const EdgeInsets.symmetric(
+        padding: EdgeInsets.symmetric(
           vertical: AppSpacing.md,
           horizontal: AppSpacing.pagePadding,
         ),
         itemCount: _permissions.length,
-        separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+        separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
         itemBuilder: (context, index) {
           final item = _permissions[index];
           return _PermissionCard(
@@ -171,7 +171,7 @@ class _PermissionCard extends StatelessWidget {
     return GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.all(AppSpacing.cardPadding),
+        padding: EdgeInsets.all(AppSpacing.cardPadding),
         decoration: BoxDecoration(
           color: context.surfacePrimary,
           borderRadius: AppRadius.brMedium,
@@ -188,7 +188,7 @@ class _PermissionCard extends StatelessWidget {
               ),
               child: Icon(item.icon, size: 20, color: context.accentPrimary),
             ),
-            const SizedBox(width: AppSpacing.md),
+            SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -204,7 +204,7 @@ class _PermissionCard extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: AppSpacing.sm),
+            SizedBox(width: AppSpacing.sm),
             AmitiaStatusBadge(label: item.status, type: badgeType),
           ],
         ),
@@ -229,7 +229,7 @@ class _PermissionGuideSheet extends StatelessWidget {
     ];
     return SafeArea(
       child: Padding(
-        padding: const EdgeInsets.fromLTRB(
+        padding: EdgeInsets.fromLTRB(
           AppSpacing.lg,
           AppSpacing.lg,
           AppSpacing.lg,
@@ -249,15 +249,15 @@ class _PermissionGuideSheet extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: AppSpacing.lg),
+            SizedBox(height: AppSpacing.lg),
             Text(item.name, style: AppTypography.sectionTitle(context)),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             Text(item.description, style: AppTypography.caption(context)),
-            const SizedBox(height: AppSpacing.lg),
+            SizedBox(height: AppSpacing.lg),
             ...steps.asMap().entries.map(
               (entry) {
                 return Padding(
-                  padding: const EdgeInsets.only(bottom: AppSpacing.md),
+                  padding: EdgeInsets.only(bottom: AppSpacing.md),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -279,7 +279,7 @@ class _PermissionGuideSheet extends StatelessWidget {
                           ),
                         ),
                       ),
-                      const SizedBox(width: AppSpacing.md),
+                      SizedBox(width: AppSpacing.md),
                       Expanded(
                         child: Text(
                           entry.value,

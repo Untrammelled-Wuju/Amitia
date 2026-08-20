@@ -19,7 +19,7 @@ class NotFoundPage extends ConsumerWidget {
     return AmitiaScaffold(
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
+          padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
@@ -37,7 +37,7 @@ class NotFoundPage extends ConsumerWidget {
                   color: context.accentPrimary,
                 ),
               ),
-              const SizedBox(height: AppSpacing.xl),
+              SizedBox(height: AppSpacing.xl),
               Text(
                 '404',
                 style: TextStyle(
@@ -47,21 +47,21 @@ class NotFoundPage extends ConsumerWidget {
                   height: 1.0,
                 ),
               ),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Text(
                 '无法找到页面',
                 style: AppTypography.pageLargeTitle(context),
               ),
-              const SizedBox(height: AppSpacing.sm),
+              SizedBox(height: AppSpacing.sm),
               Text(
                 '你访问的页面可能已被移动、删除或从未存在',
                 style: AppTypography.body(context).copyWith(color: context.textSecondary),
                 textAlign: TextAlign.center,
               ),
               if (attemptedPath != null) ...[
-                const SizedBox(height: AppSpacing.md),
+                SizedBox(height: AppSpacing.md),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+                  padding: EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
                   decoration: BoxDecoration(
                     color: context.surfaceSecondary,
                     borderRadius: AppRadius.brSmall,
@@ -75,7 +75,7 @@ class NotFoundPage extends ConsumerWidget {
                   ),
                 ),
               ],
-              const SizedBox(height: AppSpacing.xxl),
+              SizedBox(height: AppSpacing.xxl),
               AmitiaButton(
                 label: '返回上一页',
                 icon: Icons.arrow_back,
@@ -88,7 +88,7 @@ class NotFoundPage extends ConsumerWidget {
                   }
                 },
               ),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               AmitiaButton(
                 label: '返回聊天页',
                 icon: Icons.chat_bubble_outline,

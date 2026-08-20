@@ -135,7 +135,7 @@ class _QqPageState extends ConsumerState<QqPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text('即将使用以下配置连接 QQ Bot：', style: AppTypography.bodySmall(context)),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Text('AppID: ${_appIdController.text}', style: AppTypography.label(context)),
             Text('Token: ${_maskToken(_tokenController.text)}', style: AppTypography.label(context)),
           ],
@@ -224,13 +224,13 @@ class _QqPageState extends ConsumerState<QqPage> {
             Row(
               children: [
                 Icon(Icons.check_circle, size: 20, color: context.success),
-                const SizedBox(width: AppSpacing.sm),
+                SizedBox(width: AppSpacing.sm),
                 Text('发送成功', style: AppTypography.body(context).copyWith(color: context.success)),
               ],
             ),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Container(
-              padding: const EdgeInsets.all(AppSpacing.md),
+              padding: EdgeInsets.all(AppSpacing.md),
               decoration: BoxDecoration(
                 color: context.surfaceSecondary,
                 borderRadius: AppRadius.brSmall,
@@ -272,20 +272,20 @@ class _QqPageState extends ConsumerState<QqPage> {
       body: _loading
           ? const AmitiaLoadingState(message: '加载中...')
           : ListView(
-              padding: const EdgeInsets.all(AppSpacing.pagePadding),
+              padding: EdgeInsets.all(AppSpacing.pagePadding),
               children: [
                 _buildStatusCard(),
-                const SizedBox(height: AppSpacing.sectionGap),
+                SizedBox(height: AppSpacing.sectionGap),
                 _buildBotConfig(),
-                const SizedBox(height: AppSpacing.sectionGap),
+                SizedBox(height: AppSpacing.sectionGap),
                 _buildConnectionStatus(),
-                const SizedBox(height: AppSpacing.sectionGap),
+                SizedBox(height: AppSpacing.sectionGap),
                 if (_errorMessage != null && !_isConnected) ...[
                   _buildErrorState(),
-                  const SizedBox(height: AppSpacing.sectionGap),
+                  SizedBox(height: AppSpacing.sectionGap),
                 ],
                 _buildActions(),
-                const SizedBox(height: AppSpacing.sectionGap),
+                SizedBox(height: AppSpacing.sectionGap),
                 _buildLogs(),
               ],
             ),
@@ -311,7 +311,7 @@ class _QqPageState extends ConsumerState<QqPage> {
               color: _isConnected ? context.success : context.warning,
             ),
           ),
-          const SizedBox(width: AppSpacing.md),
+          SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -332,13 +332,13 @@ class _QqPageState extends ConsumerState<QqPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('Bot 配置', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
         AmitiaCard(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text('AppID', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               Container(
                 decoration: BoxDecoration(
                   color: context.surfaceSecondary,
@@ -357,9 +357,9 @@ class _QqPageState extends ConsumerState<QqPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: AppSpacing.lg),
+              SizedBox(height: AppSpacing.lg),
               Text('Token', style: AppTypography.label(context)),
-              const SizedBox(height: AppSpacing.xs),
+              SizedBox(height: AppSpacing.xs),
               Container(
                 decoration: BoxDecoration(
                   color: context.surfaceSecondary,
@@ -387,11 +387,11 @@ class _QqPageState extends ConsumerState<QqPage> {
                   ),
                 ),
               ),
-              const SizedBox(height: AppSpacing.md),
+              SizedBox(height: AppSpacing.md),
               Row(
                 children: [
                   Icon(Icons.info_outline, size: 14, color: context.textTertiary),
-                  const SizedBox(width: AppSpacing.xs),
+                  SizedBox(width: AppSpacing.xs),
                   Expanded(
                     child: Text(
                       '在 QQ 开放平台 > 应用管理 中获取 AppID 和 Token',
@@ -412,7 +412,7 @@ class _QqPageState extends ConsumerState<QqPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('连接状态', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
         AmitiaCard(
           child: Column(
             children: [
@@ -447,13 +447,13 @@ class _QqPageState extends ConsumerState<QqPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(Icons.error_outline, size: 20, color: context.error),
-          const SizedBox(width: AppSpacing.md),
+          SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text('错误状态', style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600, color: context.error)),
-                const SizedBox(height: AppSpacing.xs),
+                SizedBox(height: AppSpacing.xs),
                 Text(
                   _errorMessage ?? '未知错误',
                   style: AppTypography.caption(context).copyWith(color: context.error, height: 1.5),
@@ -471,7 +471,7 @@ class _QqPageState extends ConsumerState<QqPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('操作', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
         Wrap(
           spacing: AppSpacing.md,
           runSpacing: AppSpacing.md,
@@ -511,9 +511,9 @@ class _QqPageState extends ConsumerState<QqPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text('日志', style: AppTypography.sectionTitle(context)),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
         Container(
-          padding: const EdgeInsets.all(AppSpacing.cardPadding),
+          padding: EdgeInsets.all(AppSpacing.cardPadding),
           decoration: BoxDecoration(
             color: context.surfacePrimary,
             borderRadius: AppRadius.brMedium,
@@ -529,7 +529,7 @@ class _QqPageState extends ConsumerState<QqPage> {
                   children: _logs.take(8).map((log) {
                     final isError = log.contains('失败') || log.contains('断开');
                     return Padding(
-                      padding: const EdgeInsets.only(bottom: AppSpacing.xs),
+                      padding: EdgeInsets.only(bottom: AppSpacing.xs),
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -542,7 +542,7 @@ class _QqPageState extends ConsumerState<QqPage> {
                               shape: BoxShape.circle,
                             ),
                           ),
-                          const SizedBox(width: AppSpacing.sm),
+                          SizedBox(width: AppSpacing.sm),
                           Expanded(
                             child: Text(
                               log,

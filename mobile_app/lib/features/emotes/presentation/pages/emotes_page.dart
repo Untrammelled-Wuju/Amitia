@@ -99,9 +99,9 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
                                 subtitle: '点击右上角导入表情包',
                               )
                             : ListView.separated(
-                                padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
+                                padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
                                 itemCount: _filteredEmotes.length,
-                                separatorBuilder: (_, _) => const SizedBox(height: AppSpacing.sm),
+                                separatorBuilder: (_, _) => SizedBox(height: AppSpacing.sm),
                                 itemBuilder: (context, index) => _buildEmoteCard(context, _filteredEmotes[index]),
                               ),
                       ),
@@ -122,9 +122,9 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
       height: 50,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
-        padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
+        padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
         itemCount: allGroups.length,
-        separatorBuilder: (_, _) => const SizedBox(width: AppSpacing.sm),
+        separatorBuilder: (_, _) => SizedBox(width: AppSpacing.sm),
         itemBuilder: (context, index) {
           final group = allGroups[index];
           final isSelected = _selectedGroup == group;
@@ -149,7 +149,7 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
 
   Widget _buildBatchBar(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
       color: context.accentSoft,
       child: Row(
         children: [
@@ -196,7 +196,7 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
         children: [
           if (_batchMode)
             Padding(
-              padding: const EdgeInsets.only(right: AppSpacing.sm),
+              padding: EdgeInsets.only(right: AppSpacing.sm),
               child: Icon(isSelected ? Icons.check_circle : Icons.radio_button_unchecked, size: 20, color: isSelected ? context.accentPrimary : context.textTertiary),
             ),
           Container(
@@ -208,7 +208,7 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
             ),
             child: Center(child: Text(emoji, style: const TextStyle(fontSize: 28))),
           ),
-          const SizedBox(width: AppSpacing.md),
+          SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -216,7 +216,7 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
                 Row(
                   children: [
                     Expanded(child: Text(name, style: AppTypography.cardTitle(context))),
-                    const SizedBox(width: AppSpacing.sm),
+                    SizedBox(width: AppSpacing.sm),
                     if (characterId != null && characterId.isNotEmpty)
                       AmitiaStatusBadge(label: '专属', type: BadgeType.accent),
                   ],
@@ -227,7 +227,7 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
                 Row(
                   children: [
                     Text('分组：$group', style: AppTypography.label(context)),
-                    const SizedBox(width: AppSpacing.md),
+                    SizedBox(width: AppSpacing.md),
                     AmitiaStatusBadge(
                       label: isEnabled ? '启用' : '禁用',
                       type: isEnabled ? BadgeType.success : BadgeType.neutral,
@@ -237,7 +237,7 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
               ],
             ),
           ),
-          const SizedBox(width: AppSpacing.sm),
+          SizedBox(width: AppSpacing.sm),
           Column(
             children: [
               Text('发送概率', style: AppTypography.label(context)),
@@ -246,7 +246,7 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
             ],
           ),
           if (!_batchMode) ...[
-            const SizedBox(width: AppSpacing.sm),
+            SizedBox(width: AppSpacing.sm),
             AmitiaIconButton(
               icon: Icons.delete_outline,
               size: 18,
@@ -273,13 +273,13 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Center(child: Container(width: 40, height: 4, decoration: BoxDecoration(color: context.borderPrimary, borderRadius: BorderRadius.circular(2)))),
-            const SizedBox(height: AppSpacing.lg),
+            SizedBox(height: AppSpacing.lg),
             Text(isEdit ? '重命名分组' : '新建分组', style: AppTypography.sectionTitle(context)),
-            const SizedBox(height: AppSpacing.lg),
+            SizedBox(height: AppSpacing.lg),
             Text('分组名称', style: AppTypography.label(context)),
-            const SizedBox(height: AppSpacing.xs),
+            SizedBox(height: AppSpacing.xs),
             AmitiaTextField(controller: nameCtrl, hintText: '输入分组名称'),
-            const SizedBox(height: AppSpacing.xl),
+            SizedBox(height: AppSpacing.xl),
             Row(
               children: [
                 if (isEdit)
@@ -293,7 +293,7 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
                       },
                     ),
                   ),
-                if (isEdit) const SizedBox(width: AppSpacing.sm),
+                if (isEdit) SizedBox(width: AppSpacing.sm),
                 Expanded(
                   child: AmitiaButton(
                     label: isEdit ? '保存' : '创建',
@@ -360,18 +360,18 @@ class _EmotesPageState extends ConsumerState<EmotesPage> {
           children: [
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(AppSpacing.lg),
+              padding: EdgeInsets.all(AppSpacing.lg),
               decoration: BoxDecoration(color: context.surfaceSecondary, borderRadius: AppRadius.brMedium),
               child: Column(
                 children: [
                   Icon(Icons.folder_open, size: 40, color: context.accentPrimary),
-                  const SizedBox(height: AppSpacing.sm),
+                  SizedBox(height: AppSpacing.sm),
                   Text('表情包文件.zip', style: AppTypography.bodySmall(context)),
                   Text('包含 24 个表情', style: AppTypography.label(context)),
                 ],
               ),
             ),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Text('导入后将创建新分组并添加表情。', style: AppTypography.caption(context)),
           ],
         ),

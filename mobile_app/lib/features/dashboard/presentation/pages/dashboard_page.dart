@@ -47,7 +47,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
       body: Column(
         children: [
           Padding(
-            padding: const EdgeInsets.all(AppSpacing.pagePadding),
+            padding: EdgeInsets.all(AppSpacing.pagePadding),
             child: AmitiaSegmentedControl(
               segments: const ['运行概览', '数据概览'],
               selectedIndex: _selectedTab,
@@ -70,10 +70,10 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         final backendStatus = status?['database'] == true ? '运行中' : '已停止';
         final modelStatus = status?['orchestratorReady'] == true ? '就绪' : '未就绪';
         return ListView(
-          padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, 0, AppSpacing.pagePadding, AppSpacing.pagePadding),
+          padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, 0, AppSpacing.pagePadding, AppSpacing.pagePadding),
           children: [
             AmitiaSectionHeader(title: '系统状态'),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             _StatusGrid(
               items: [
                 _StatusItem(label: '后端', value: backendStatus, icon: Icons.dns_outlined, type: _statusBadgeType(backendStatus)),
@@ -84,9 +84,9 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 _StatusItem(label: '访问风险', value: '安全', icon: Icons.shield_outlined, type: BadgeType.success),
               ],
             ),
-            const SizedBox(height: AppSpacing.sectionGap),
+            SizedBox(height: AppSpacing.sectionGap),
             AmitiaSectionHeader(title: '应用信息'),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             AmitiaCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -98,7 +98,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                       Text(status?['status']?.toString() ?? 'unknown', style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600)),
                     ],
                   ),
-                  const SizedBox(height: AppSpacing.sm),
+                  SizedBox(height: AppSpacing.sm),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -106,7 +106,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                       Text('${status?['readyCount'] ?? 0}', style: AppTypography.bodySmall(context).copyWith(fontWeight: FontWeight.w600)),
                     ],
                   ),
-                  const SizedBox(height: AppSpacing.sm),
+                  SizedBox(height: AppSpacing.sm),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
@@ -117,7 +117,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
                 ],
               ),
             ),
-            const SizedBox(height: AppSpacing.sectionGap),
+            SizedBox(height: AppSpacing.sectionGap),
             AmitiaButton(
               label: '刷新状态',
               icon: Icons.refresh,
@@ -134,11 +134,11 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(Icons.error_outline, size: 48, color: context.error),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             Text('无法连接到后端', style: AppTypography.body(context)),
-            const SizedBox(height: AppSpacing.sm),
+            SizedBox(height: AppSpacing.sm),
             Text(err.toString(), style: AppTypography.caption(context)),
-            const SizedBox(height: AppSpacing.md),
+            SizedBox(height: AppSpacing.md),
             AmitiaButton(
               label: '重试',
               icon: Icons.refresh,
@@ -156,10 +156,10 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
     final characterCount = ref.watch(characterListProvider);
     final memoryCount = ref.watch(memoryListProvider);
     return ListView(
-      padding: const EdgeInsets.fromLTRB(AppSpacing.pagePadding, 0, AppSpacing.pagePadding, AppSpacing.pagePadding),
+      padding: EdgeInsets.fromLTRB(AppSpacing.pagePadding, 0, AppSpacing.pagePadding, AppSpacing.pagePadding),
       children: [
         AmitiaSectionHeader(title: '数据统计'),
-        const SizedBox(height: AppSpacing.md),
+        SizedBox(height: AppSpacing.md),
         GridView.count(
           shrinkWrap: true,
           physics: const NeverScrollableScrollPhysics(),
@@ -173,7 +173,7 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
             _StatCard(stat: _StatItem(label: '对话', value: statsAsync.valueOrNull?['conversationCount'] ?? 0, icon: Icons.chat_bubble_outline)),
           ],
         ),
-        const SizedBox(height: AppSpacing.sectionGap),
+        SizedBox(height: AppSpacing.sectionGap),
         AmitiaButton(
           label: '刷新数据',
           icon: Icons.refresh,
@@ -226,7 +226,7 @@ class _StatusCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
+      padding: EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
         borderRadius: AppRadius.brMedium,
@@ -243,7 +243,7 @@ class _StatusCard extends StatelessWidget {
             ),
             child: Icon(item.icon, size: 20, color: context.accentPrimary),
           ),
-          const SizedBox(width: AppSpacing.md),
+          SizedBox(width: AppSpacing.md),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -281,7 +281,7 @@ class _StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(AppSpacing.md),
+      padding: EdgeInsets.all(AppSpacing.md),
       decoration: BoxDecoration(
         color: context.surfacePrimary,
         borderRadius: AppRadius.brMedium,
@@ -291,7 +291,7 @@ class _StatCard extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(stat.icon, size: 24, color: context.accentPrimary),
-          const SizedBox(height: AppSpacing.sm),
+          SizedBox(height: AppSpacing.sm),
           Text(
             stat.value.toString(),
             style: AppTypography.cardTitle(context).copyWith(fontSize: 22, fontWeight: FontWeight.w700),
