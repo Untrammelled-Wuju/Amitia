@@ -74,6 +74,7 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
     { path: "safety", name: "settingsSafety", component: () => import("@/views/safety-settings/SafetySettingsView.vue"), meta: { requiresAuth: true } },
     { path: "maintenance", name: "settingsMaintenance", component: () => import("@/views/maintenance-diagnostics/MaintenanceDiagnosticsView.vue"), meta: { requiresAuth: true } },
     { path: "about", name: "settingsAbout", component: () => import("@/views/settings/AboutPanel.vue"), meta: { requiresAuth: true } },
+    { path: "ui-providers", name: "settingsUIProviders", component: () => import("@/views/settings/UIProviderSettingsView.vue"), meta: { requiresAuth: true } },
   ],
 },
 { path: "/model", redirect: "/settings/model" },

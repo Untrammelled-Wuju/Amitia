@@ -97,12 +97,6 @@ function createAppRouter() {
       { path: "/login", name: "login", component: () => import("@/views/login/LoginView.vue") },
       { path: "/privacy", name: "privacy", component: () => import("../views/privacy/Privacy.vue") },
       { path: "/usage-boundary", name: "usageBoundary", component: () => import("../views/usage-boundary/UsageBoundary.vue") },
-      {
-        path: "/settings/ui-providers",
-        name: "settingsUIProviders",
-        component: () => import("@/views/settings/UIProviderSettingsView.vue"),
-        meta: { requiresAuth: true, uiProviderControl: true, recoveryRoute: true },
-      },
       { path: "/", redirect: "/chat", meta: { requiresAuth: true } },
       ...builtinBusinessRoutes,
       { path: "/404", name: "notFound", component: () => import("@/views/NotFoundView.vue") },
