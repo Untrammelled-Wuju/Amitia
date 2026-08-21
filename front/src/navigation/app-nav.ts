@@ -129,7 +129,6 @@ const extraTitles = [
   { path: "/game-center", label: "游戏中心" },
   { path: "/devices", label: "我的设备" },
   { path: "/workspaces", label: "工作区" },
-  { path: "/asr", label: "语音识别" },
   { path: "/realtime-voice", label: "实时语音" },
   { path: "/long-running", label: "长期运行维护" },
 ];

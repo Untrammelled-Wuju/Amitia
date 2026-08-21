@@ -94,6 +94,8 @@ const visibleContributions = computed<UIContributionSummary[]>(() => {
 
 const layoutClass = computed(() => `extension-slot--layout-${resolvedLayout.value}`);
 
+const isHidden = computed(() => visibleContributions.value.length === 0 && resolvedFallback.value === 'none');
+
 const errorState = ref<Record<string, string>>({});
 
 onErrorCaptured((err, instance) => {
@@ -118,7 +120,7 @@ function retryContribution(contributionId: string) {
 </script>
 
 <template>
-  <div ref="rootRef" class="extension-slot" :class="[layoutClass, `extension-slot--${surfaceRole}`]" :data-slot-id="slotId">
+  <div v-if="!isHidden" ref="rootRef" class="extension-slot" :class="[layoutClass, `extension-slot--${surfaceRole}`]" :data-slot-id="slotId">
     <template v-if="visibleContributions.length === 0 && resolvedFallback !== 'none'">
       <div v-if="resolvedFallback === 'skeleton'" class="extension-slot__skeleton">
         <div class="skeleton-pulse"></div>
