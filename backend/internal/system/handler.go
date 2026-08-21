@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -39,10 +40,12 @@ type Handler struct {
 	reconciliation *mindruntime.ReconciliationEngine
 	versionInfo    atomic.Value
 	artifactSvc    *artifact.Service
+	shadowMu       sync.RWMutex
+	shadowState    mindruntime.ShadowState
 }
 
 func NewHandler(srv Service, db *gorm.DB, chatSvc chat.Service, dataLifecycle *mindruntime.DataLifecycleCoordinator, unifiedEntry *interaction.UnifiedEntry, reconciliation *mindruntime.ReconciliationEngine, memorySvc memory.Service) *Handler {
-	h := &Handler{service: srv, db: db, chatSvc: chatSvc, memorySvc: memorySvc, unifiedEntry: unifiedEntry, dataLifecycle: dataLifecycle, reconciliation: reconciliation}
+	h := &Handler{service: srv, db: db, chatSvc: chatSvc, memorySvc: memorySvc, unifiedEntry: unifiedEntry, dataLifecycle: dataLifecycle, reconciliation: reconciliation, shadowState: mindruntime.NewShadowState()}
 	h.versionInfo.Store(srv.GetVersion())
 	return h
 }

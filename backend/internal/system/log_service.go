@@ -75,9 +75,13 @@ func (s *service) GetLogsFiles() map[string]interface{} {
 
 func (s *service) GetLogsFileContent(name string) string {
 	logDir := "logs"
-	data, err := os.ReadFile(filepath.Join(logDir, name))
+	cleanName := filepath.Base(strings.TrimSpace(name))
+	if cleanName == "." || cleanName == "" || cleanName != name {
+		return "Invalid log file name"
+	}
+	data, err := os.ReadFile(filepath.Join(logDir, cleanName))
 	if err != nil {
-		return "File not found: " + name
+		return "File not found: " + cleanName
 	}
 	content := string(data)
 	if len(content) > 50000 {
@@ -117,7 +121,48 @@ func (s *service) GetLogsModelErrors() map[string]interface{} {
 }
 
 func (s *service) DeleteLogsModelErrors() map[string]interface{} {
-	return map[string]interface{}{"deleted": true, "note": "Model error logs cleared"}
+	logDir := "logs"
+	entries, err := os.ReadDir(logDir)
+	if err != nil {
+		return map[string]interface{}{"deleted": false, "removedLines": 0, "error": err.Error()}
+	}
+	removed := 0
+	updatedFiles := 0
+	for _, entry := range entries {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".log") {
+			continue
+		}
+		path := filepath.Join(logDir, entry.Name())
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			continue
+		}
+		lines := strings.Split(string(data), "\n")
+		kept := make([]string, 0, len(lines))
+		fileRemoved := 0
+		for _, line := range lines {
+			lower := strings.ToLower(line)
+			isModelError := strings.Contains(lower, "model") && (strings.Contains(lower, "error") || strings.Contains(lower, "fail"))
+			if isModelError {
+				removed++
+				fileRemoved++
+				continue
+			}
+			kept = append(kept, line)
+		}
+		if fileRemoved == 0 {
+			continue
+		}
+		info, statErr := os.Stat(path)
+		mode := os.FileMode(0o600)
+		if statErr == nil {
+			mode = info.Mode().Perm()
+		}
+		if writeErr := os.WriteFile(path, []byte(strings.Join(kept, "\n")), mode); writeErr == nil {
+			updatedFiles++
+		}
+	}
+	return map[string]interface{}{"deleted": true, "removedLines": removed, "updatedFiles": updatedFiles}
 }
 
 func (s *service) GetLogsPromptTraces(limit int) map[string]interface{} {

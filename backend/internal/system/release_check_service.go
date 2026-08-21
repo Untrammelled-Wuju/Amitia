@@ -11,12 +11,16 @@ import (
 )
 
 func (s *service) GetReleaseCheckLatest() map[string]interface{} {
-	return map[string]interface{}{"latest": map[string]interface{}{"version": "1.0.0", "date": time.Now().Format("2006-01-02")}}
+	versionInfo := s.GetVersion()
+	version, _ := versionInfo["version"].(string)
+	return map[string]interface{}{"latest": map[string]interface{}{"version": version, "date": time.Now().Format("2006-01-02"), "source": "local_release_metadata"}}
 }
 
 func (s *service) GetReleaseCheckHistory() map[string]interface{} {
 	lastCheck := s.getAppSetting("last_release_check")
-	return map[string]interface{}{"history": []interface{}{map[string]interface{}{"version": "1.0.0", "checkedAt": lastCheck, "hasUpdate": false}}}
+	versionInfo := s.GetVersion()
+	version, _ := versionInfo["version"].(string)
+	return map[string]interface{}{"history": []interface{}{map[string]interface{}{"version": version, "checkedAt": lastCheck, "hasUpdate": false, "source": "local_release_metadata"}}}
 }
 
 func (s *service) ExportReleaseCheck() map[string]interface{} {
