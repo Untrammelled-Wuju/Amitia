@@ -306,6 +306,14 @@ type ConversationListResponse struct {
 	TotalPages int            `json:"totalPages"`
 }
 
+type MessageSearchResponse struct {
+	Items      []Message `json:"items"`
+	Total      int64     `json:"total"`
+	Page       int       `json:"page"`
+	PageSize   int       `json:"pageSize"`
+	TotalPages int       `json:"totalPages"`
+}
+
 type ProcessMessageRequest struct {
 	CharacterID              string                       `json:"characterId"`
 	Message                  string                       `json:"message"`

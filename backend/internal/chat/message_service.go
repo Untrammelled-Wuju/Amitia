@@ -169,23 +169,25 @@ func (s *service) DeleteSingleMessageScoped(id string, characterID string) error
 	return s.DeleteSingleMessage(id)
 }
 
-func (s *service) SearchMessages(q MessageSearchQuery) (*ConversationListResponse, error) {
+func (s *service) SearchMessages(q MessageSearchQuery) (*MessageSearchResponse, error) {
 	if q.Page <= 0 {
 		q.Page = 1
 	}
 	if q.PageSize <= 0 {
 		q.PageSize = 20
 	}
-	_, total, err := s.repo.SearchMessages(q)
+	items, total, err := s.repo.SearchMessages(q)
 	if err != nil {
 		return nil, err
 	}
 	totalPages := int((total + int64(q.PageSize) - 1) / int64(q.PageSize))
-	items := make([]Conversation, 0)
-	return &ConversationListResponse{Items: items, Total: total, Page: q.Page, PageSize: q.PageSize, TotalPages: totalPages}, nil
+	if items == nil {
+		items = []Message{}
+	}
+	return &MessageSearchResponse{Items: items, Total: total, Page: q.Page, PageSize: q.PageSize, TotalPages: totalPages}, nil
 }
 
-func (s *service) SearchMessagesScoped(q MessageSearchQuery, characterID string) (*ConversationListResponse, error) {
+func (s *service) SearchMessagesScoped(q MessageSearchQuery, characterID string) (*MessageSearchResponse, error) {
 	if q.ConversationID != "" {
 		if err := s.requireConversationCharacter(q.ConversationID, characterID); err != nil {
 			return nil, err

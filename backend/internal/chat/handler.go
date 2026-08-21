@@ -17,6 +17,7 @@ import (
 	"github.com/u-ai/backend/internal/requestidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
 	"github.com/u-ai/backend/pkg/util"
+	"gorm.io/gorm"
 )
 
 type Handler struct {
@@ -447,14 +448,53 @@ func (h *Handler) DetectModels(c *gin.Context) {
 }
 
 func (h *Handler) GetSummary(c *gin.Context) {
-	util.SuccessResponse(c, gin.H{"summary": "", "conversationId": c.Param("id")})
+	summary, err := h.service.GetConversationSummary(c.Param("id"))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			util.SuccessResponse(c, gin.H{"conversationId": c.Param("id"), "summaryText": ""})
+			return
+		}
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, summary)
 }
-func (h *Handler) UpdateSummary(c *gin.Context)   { util.SuccessResponse(c, gin.H{"updated": true}) }
-func (h *Handler) DeleteSummary(c *gin.Context)   { util.SuccessResponse(c, gin.H{"deleted": true}) }
-func (h *Handler) GenerateSummary(c *gin.Context) { util.SuccessResponse(c, gin.H{"generated": true}) }
-func (h *Handler) CleanupPreview(c *gin.Context)  { util.SuccessResponse(c, gin.H{"deletable": 0}) }
-func (h *Handler) CleanupConfirm(c *gin.Context)  { util.SuccessResponse(c, gin.H{"cleaned": 0}) }
-func (h *Handler) CleanupVacuum(c *gin.Context)   { util.SuccessResponse(c, gin.H{"vacuumed": true}) }
+
+func (h *Handler) UpdateSummary(c *gin.Context) {
+	var body struct {
+		SummaryText string `json:"summaryText"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil || strings.TrimSpace(body.SummaryText) == "" {
+		util.ErrorResponse(c, response.InvalidParams, "summaryText 不能为空", nil)
+		return
+	}
+	summary, err := h.service.UpdateConversationSummary(c.Param("id"), body.SummaryText)
+	if err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, summary)
+}
+
+func (h *Handler) DeleteSummary(c *gin.Context) {
+	if err := h.service.DeleteConversationSummary(c.Param("id")); err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, gin.H{"deleted": true})
+}
+
+func (h *Handler) GenerateSummary(c *gin.Context) {
+	summary, err := h.service.GenerateConversationSummary(c.Request.Context(), c.Param("id"))
+	if err != nil {
+		util.ErrorResponse(c, response.OperationFailed, err.Error(), nil)
+		return
+	}
+	util.SuccessResponse(c, summary)
+}
+func (h *Handler) CleanupPreview(c *gin.Context) { util.SuccessResponse(c, gin.H{"deletable": 0}) }
+func (h *Handler) CleanupConfirm(c *gin.Context) { util.SuccessResponse(c, gin.H{"cleaned": 0}) }
+func (h *Handler) CleanupVacuum(c *gin.Context)  { util.SuccessResponse(c, gin.H{"vacuumed": true}) }
 func (h *Handler) Export(c *gin.Context) {
 	var body struct {
 		Format          string   `json:"format"`
