@@ -215,20 +215,31 @@ class BackendServiceApi {
   ) {
     final data = response.data;
     if (data is Map<String, dynamic> && data.containsKey('code')) {
-      final code = data['code'] as int? ?? 0;
+      final rawCode = data['code'];
       final message = data['message'] as String? ?? data['msg'] as String? ?? '';
       final detail = data['detail'] as String?;
-      if (code != 200) {
-        throw ServiceApiException(code: code, message: message, detail: detail);
+      if (rawCode is num) {
+        final code = rawCode.toInt();
+        if (code != 200) {
+          throw ServiceApiException(code: code, message: message, detail: detail);
+        }
+        final responseData = data['data'];
+        if (responseData == null) return null;
+        if (fromJson != null) return fromJson(responseData);
+        return responseData as T?;
       }
-      final responseData = data['data'];
-      if (responseData == null) {
-        return null;
+      if (rawCode is String) {
+        final normalized = rawCode.trim().toLowerCase();
+        final success = normalized == 'ok' || normalized == 'success' || normalized == 'no_update';
+        if (!success) {
+          throw ServiceApiException(code: 500, message: message.isEmpty ? rawCode : message, detail: detail);
+        }
+        final responseData = data.containsKey('data') ? data['data'] : data;
+        if (responseData == null) return null;
+        if (fromJson != null) return fromJson(responseData);
+        return responseData as T?;
       }
-      if (fromJson != null) {
-        return fromJson(responseData);
-      }
-      return responseData as T?;
+      throw ServiceApiException(code: 500, message: message.isEmpty ? '无效响应状态' : message, detail: detail);
     }
     if (fromJson != null && data != null) {
       return fromJson(data);
@@ -261,10 +272,16 @@ class BackendServiceApi {
   void _parseSimpleResponse(BackendHttpResponse response, String path) {
     final data = response.data;
     if (data is Map<String, dynamic> && data.containsKey('code')) {
-      final code = data['code'] as int? ?? 0;
+      final rawCode = data['code'];
       final message = data['message'] as String? ?? data['msg'] as String? ?? '';
-      if (code != 200) {
-        throw ServiceApiException(code: code, message: message);
+      if (rawCode is num && rawCode.toInt() != 200) {
+        throw ServiceApiException(code: rawCode.toInt(), message: message);
+      }
+      if (rawCode is String) {
+        final normalized = rawCode.trim().toLowerCase();
+        if (normalized != 'ok' && normalized != 'success' && normalized != 'no_update') {
+          throw ServiceApiException(code: 500, message: message.isEmpty ? rawCode : message);
+        }
       }
     }
   }

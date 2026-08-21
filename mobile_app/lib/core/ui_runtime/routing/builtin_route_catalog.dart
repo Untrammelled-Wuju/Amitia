@@ -108,8 +108,13 @@ import '../../../features/developer/presentation/pages/dev_mode_page.dart';
 List<RouteBase> buildBuiltinBusinessRoutes() => <RouteBase>[
 GoRoute(
   path: '/chat',
-  pageBuilder: (context, state) =>
-      chatRootPage(state: state, child: const ChatPage()),
+  pageBuilder: (context, state) => chatRootPage(
+    state: state,
+    child: ChatPage(
+      initialConversationId: state.uri.queryParameters['conversationId'],
+      initialCharacterId: state.uri.queryParameters['characterId'],
+    ),
+  ),
 ),
 GoRoute(
   path: '/conversations',
