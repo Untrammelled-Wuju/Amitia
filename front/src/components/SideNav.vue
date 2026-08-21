@@ -21,7 +21,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           <el-icon><Search /></el-icon>
         </button>
         <button
-          v-if="!isDesktopShell()"
+          v-if="!isDesktopShell() && !isOnboardingPage"
           type="button"
           class="icon-btn"
           :aria-label="appStore.sidebarCollapsed ? '展开导航' : '收起导航'"
@@ -154,6 +154,9 @@ import { useUIComponentVariant } from "@/ui-runtime/componentRegistry";
 
 const route = useRoute();
 const router = useRouter();
+const isOnboardingPage = computed(
+  () => route.path === "/onboarding" || route.path.startsWith("/onboarding/"),
+);
 const appStore = useAppStore();
 const { groups: navigationGroups, items: navigationItems } = useUINavigationRegistry();
 const { style: navigationItemStyle } = useUIComponentVariant("navigationItem");
