@@ -21,8 +21,10 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
   @override
   void initState() {
     super.initState();
-    Future.microtask(() {
-      ref.read(gameCenterControllerProvider.notifier).loadPlugins();
+    Future.microtask(() async {
+      final controller = ref.read(gameCenterControllerProvider.notifier);
+      await controller.loadPlugins();
+      await controller.loadCenterHealth();
     });
   }
 
@@ -36,10 +38,19 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
         navigation: AmitiaAppBarNavigation.back,
         actions: [
           IconButton(
+            icon: const Icon(Icons.add_box_outlined),
+            tooltip: '安装插件',
+            onPressed: () => _showInstallDialog(context),
+          ),
+          IconButton(
             icon: const Icon(Icons.refresh),
             onPressed: state.pluginsRefreshing
                 ? null
-                : () => ref.read(gameCenterControllerProvider.notifier).refreshPlugins(),
+                : () async {
+                    final controller = ref.read(gameCenterControllerProvider.notifier);
+                    await controller.refreshPlugins();
+                    await controller.loadCenterHealth();
+                  },
           ),
         ],
       ),
@@ -74,12 +85,49 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
 
   Widget _buildPluginList(BuildContext context, GameCenterState state) {
     return RefreshIndicator(
-      onRefresh: () => ref.read(gameCenterControllerProvider.notifier).refreshPlugins(),
+      onRefresh: () async {
+        final controller = ref.read(gameCenterControllerProvider.notifier);
+        await controller.refreshPlugins();
+        await controller.loadCenterHealth();
+      },
       child: ListView.builder(
         padding: EdgeInsets.all(AppSpacing.pagePadding),
-        itemCount: state.plugins.length,
+        itemCount: state.plugins.length + 1,
         itemBuilder: (context, index) {
-          final plugin = state.plugins[index];
+          if (index == 0) {
+            final center = state.centerHealth;
+            return Card(
+              margin: EdgeInsets.only(bottom: AppSpacing.md),
+              child: Padding(
+                padding: EdgeInsets.all(AppSpacing.md),
+                child: Row(
+                  children: [
+                    Icon(Icons.monitor_heart_outlined, color: Theme.of(context).colorScheme.primary),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Game Center Runtime', style: AppTypography.cardTitle(context)),
+                          Text(
+                            state.centerHealthLoading
+                                ? '正在检查运行状态...'
+                                : '状态: ${center?.status.isNotEmpty == true ? center!.status : 'unknown'}',
+                            style: AppTypography.caption(context),
+                          ),
+                        ],
+                      ),
+                    ),
+                    AmitiaStatusBadge(
+                      label: center?.status == 'healthy' ? '正常' : (center?.status ?? '未知'),
+                      type: center?.status == 'healthy' ? BadgeType.success : BadgeType.neutral,
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+          final plugin = state.plugins[index - 1];
           return _PluginCard(
             plugin: plugin,
             onTap: () {
