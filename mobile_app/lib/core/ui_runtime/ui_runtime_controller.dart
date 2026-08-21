@@ -28,7 +28,7 @@ class UIRuntimeController extends StateNotifier<AsyncValue<UIProviderSnapshot?>>
         super(const AsyncValue.data(null)) {
     // Mobile does not depend on the web SSE transport. Periodic reconciliation
     // keeps cloud profile/provider changes convergent while app is alive.
-    _syncTimer = Timer.periodic(const Duration(seconds: 30), (_) {
+    _syncTimer = Timer.periodic(const Duration(minutes: 2), (_) {
       if (state.valueOrNull != null && !_loading) {
         unawaited(ensureLoaded(force: true));
       }
