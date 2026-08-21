@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
+import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 
 class DecisionVizPage extends ConsumerStatefulWidget {
@@ -57,7 +58,7 @@ class _DecisionVizPageState extends ConsumerState<DecisionVizPage> {
 
   Widget _planCard(String title, Map<String, dynamic> plan, List<String> fields) => Card(
         child: Padding(
-          padding: const EdgeInsets.all(AppSpacing.md),
+          padding: EdgeInsets.all(AppSpacing.md),
           child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
             Text(title, style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 8),
@@ -93,7 +94,7 @@ class _DecisionVizPageState extends ConsumerState<DecisionVizPage> {
                   children: [
                     Card(
                       child: Padding(
-                        padding: const EdgeInsets.all(AppSpacing.md),
+                        padding: EdgeInsets.all(AppSpacing.md),
                         child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                           Text('运行状态', style: Theme.of(context).textTheme.titleMedium),
                           _field('降级', meta['degraded'] == true ? '是' : '否'),

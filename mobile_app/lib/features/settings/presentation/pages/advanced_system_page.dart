@@ -8,6 +8,7 @@ import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
+import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 
 class AdvancedSystemPage extends ConsumerStatefulWidget {
@@ -258,9 +259,9 @@ class _AdvancedSystemPageState extends ConsumerState<AdvancedSystemPage> {
   String _pretty(dynamic value) => const JsonEncoder.withIndent('  ').convert(value ?? const {});
 
   Widget _jsonCard(String title, dynamic value, {List<Widget> actions = const []}) => Card(
-    margin: const EdgeInsets.only(bottom: AppSpacing.md),
+    margin: EdgeInsets.only(bottom: AppSpacing.md),
     child: Padding(
-      padding: const EdgeInsets.all(AppSpacing.md),
+      padding: EdgeInsets.all(AppSpacing.md),
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
         Row(children: [Expanded(child: Text(title, style: Theme.of(context).textTheme.titleMedium)), ...actions]),
         const SizedBox(height: 10),
@@ -282,17 +283,17 @@ class _AdvancedSystemPageState extends ConsumerState<AdvancedSystemPage> {
                   child: Column(children: [
                     const TabBar(isScrollable: true, tabs: [Tab(text: '账号'), Tab(text: '审计'), Tab(text: '观测'), Tab(text: 'Bridge')]),
                     Expanded(child: TabBarView(children: [
-                      ListView(padding: const EdgeInsets.all(AppSpacing.md), children: [
+                      ListView(padding: EdgeInsets.all(AppSpacing.md), children: [
                         _jsonCard('当前会话', _currentSession),
                         _jsonCard('恢复代码状态', _recovery, actions: [TextButton(onPressed: _busy ? null : _generateRecoveryCodes, child: const Text('重新生成'))]),
                         _jsonCard('会话策略', _sessionSettings, actions: [TextButton(onPressed: _busy ? null : _editSessionSettings, child: const Text('编辑'))]),
                         _jsonCard('登录历史', _loginHistory),
                       ]),
-                      ListView(padding: const EdgeInsets.all(AppSpacing.md), children: [
+                      ListView(padding: EdgeInsets.all(AppSpacing.md), children: [
                         _jsonCard('审计统计', {'stats': _auditStats, 'actions': _auditActions, 'settings': _auditSettings}, actions: [TextButton(onPressed: _busy ? null : _editAudit, child: const Text('设置')), TextButton(onPressed: _busy ? null : () => _run(() async { await ref.read(backendServiceProvider).delete('/api/audit/logs'); }, '审计日志已清空'), child: const Text('清空'))]),
                         _jsonCard('审计日志', _auditLogs),
                       ]),
-                      ListView(padding: const EdgeInsets.all(AppSpacing.md), children: [
+                      ListView(padding: EdgeInsets.all(AppSpacing.md), children: [
                         _jsonCard('Mood Detection', _mood, actions: [Switch(value: _mood['enabled'] == true, onChanged: _busy ? null : (v) => _run(() async { await ref.read(backendServiceProvider).put<Map<String, dynamic>>('/api/config/mood-detection', data: {'enabled': v, 'threshold': _mood['threshold'] ?? .5}); }, 'Mood Detection 已更新'))]),
                         _jsonCard('Shadow Mode', {'status': _shadowStatus, 'thresholds': _shadowThresholds, 'rollbacks': _shadowRollbacks}, actions: [
                           TextButton(onPressed: _busy ? null : () => _shadowAction('start', data: const {'phase': 'interaction'}), child: const Text('启动')),
@@ -308,11 +309,11 @@ class _AdvancedSystemPageState extends ConsumerState<AdvancedSystemPage> {
                         _jsonCard('Usage · 按模型', _usageModels),
                         _jsonCard('Usage · 按来源', _usageSources, actions: [TextButton(onPressed: _busy ? null : () => _run(() async { await ref.read(backendServiceProvider).delete('/api/usage/clear'); }, 'Usage 统计已清空'), child: const Text('清空统计'))]),
                       ]),
-                      ListView(padding: const EdgeInsets.all(AppSpacing.md), children: [
+                      ListView(padding: EdgeInsets.all(AppSpacing.md), children: [
                         _jsonCard('访问安全', {'config': _accessConfig, 'status': _accessStatus, 'account': _accountCheck}, actions: [TextButton(onPressed: _busy ? null : _editAccess, child: const Text('编辑'))]),
                         _jsonCard('微信 Bridge', {'status': _wechatBridge, 'replyTiming': _wechatReplyTiming, 'events': _wechatEvents}, actions: [TextButton(onPressed: _busy ? null : () => _run(() async { final api=ref.read(backendServiceProvider); await api.post<Map<String,dynamic>>('/api/wechat/bridge/recover',data: const {}); await api.post<Map<String,dynamic>>('/api/wechat/reply-timing/recover',data: const {}); }, '微信 Bridge 恢复已执行'), child: const Text('恢复'))]),
                         _jsonCard('QQ Bridge', {'status': _qqBridge, 'events': _qqEvents}, actions: [TextButton(onPressed: _busy ? null : () => _run(() async { await ref.read(backendServiceProvider).post<Map<String,dynamic>>('/api/qq/bridge/recover',data: const {}); }, 'QQ Bridge 恢复已执行'), child: const Text('恢复'))]),
-                        Card(margin: const EdgeInsets.only(bottom: AppSpacing.md), child: Padding(padding: const EdgeInsets.all(AppSpacing.md), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Card(margin: EdgeInsets.only(bottom: AppSpacing.md), child: Padding(padding: EdgeInsets.all(AppSpacing.md), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                           Text('Voice Sessions', style: Theme.of(context).textTheme.titleMedium), const SizedBox(height: 8),
                           if (_voiceSessions.isEmpty) const Text('暂无活动 Voice Session') else for (final raw in _voiceSessions) if (raw is Map) ...[
                             ListTile(contentPadding: EdgeInsets.zero, title: Text('${raw['sessionId'] ?? ''}'), subtitle: Text('conversation=${raw['conversationId'] ?? '—'} · character=${raw['characterId'] ?? '—'}')),

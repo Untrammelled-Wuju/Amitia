@@ -5,6 +5,7 @@ import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_typography.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_button.dart';
 import '../../../../core/widgets/amitia_misc.dart';
@@ -37,7 +38,7 @@ class _MaintenancePageState extends ConsumerState<MaintenancePage> {
     });
     try {
       final api = ref.read(backendServiceProvider);
-      final values = await Future.wait([
+      final values = await Future.wait<Map<String, dynamic>?>([
         api.get<Map<String, dynamic>>('/api/maintenance/status'),
         api.post<Map<String, dynamic>>('/api/maintenance/diagnose'),
       ]);
