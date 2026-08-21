@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
 	"github.com/u-ai/backend/internal/extension/kernel/schema_ui"
 )
 
@@ -16,6 +17,7 @@ const (
 	UIContributionWebPage           UIContributionKind = "web_page"
 	UIContributionPanel             UIContributionKind = "panel"
 	UIContributionCard              UIContributionKind = "card"
+	UIContributionBadge             UIContributionKind = "badge"
 	UIContributionAction            UIContributionKind = "action"
 	UIContributionMenuItem          UIContributionKind = "menu_item"
 	UIContributionToolbarItem       UIContributionKind = "toolbar_item"
@@ -32,7 +34,7 @@ const (
 func (k UIContributionKind) Valid() bool {
 	switch k {
 	case UIContributionSchemaPage, UIContributionWebPage, UIContributionPanel,
-		UIContributionCard, UIContributionAction, UIContributionMenuItem,
+		UIContributionCard, UIContributionBadge, UIContributionAction, UIContributionMenuItem,
 		UIContributionToolbarItem, UIContributionStatusItem,
 		UIContributionMessageAction, UIContributionMessageRenderer,
 		UIContributionComposerAction, UIContributionSettingsSection,
@@ -45,7 +47,7 @@ func (k UIContributionKind) Valid() bool {
 
 func (k UIContributionKind) DefaultSandbox() UISandboxType {
 	switch k {
-	case UIContributionSchemaPage, UIContributionSettingsSection, UIContributionCard:
+	case UIContributionSchemaPage, UIContributionSettingsSection, UIContributionCard, UIContributionBadge:
 		return SandboxSchemaRenderer
 	case UIContributionWebPage:
 		return SandboxWebRestricted
@@ -173,11 +175,25 @@ type UIVisibilityRule struct {
 }
 
 type UIDataContract struct {
-	InputSchema     json.RawMessage `json:"input_schema,omitempty"`
-	OutputSchema    json.RawMessage `json:"output_schema,omitempty"`
-	RefreshPolicy   string          `json:"refresh_policy,omitempty"`
-	SensitiveFields []string        `json:"sensitive_fields,omitempty"`
-	MaxPayloadBytes int64           `json:"max_payload_bytes,omitempty"`
+	InputSchema     json.RawMessage                   `json:"input_schema,omitempty"`
+	OutputSchema    json.RawMessage                   `json:"output_schema,omitempty"`
+	RefreshPolicy   string                            `json:"refresh_policy,omitempty"`
+	SensitiveFields []string                          `json:"sensitive_fields,omitempty"`
+	MaxPayloadBytes int64                             `json:"max_payload_bytes,omitempty"`
+	Projection      *UIConversationProjectionContract `json:"projection,omitempty"`
+}
+
+// UIConversationProjectionContract declares how arbitrary conversation events
+// are folded into a durable visual node. The browser runtime keeps an event
+// history per node and exposes the folded state to the contribution renderer.
+type UIConversationProjectionContract struct {
+	EventTypes  []string `json:"event_types"`
+	StartEvents []string `json:"start_events,omitempty"`
+	EndEvents   []string `json:"end_events,omitempty"`
+	NodeType    string   `json:"node_type,omitempty"`
+	KeyPath     string   `json:"key_path,omitempty"`
+	TitlePath   string   `json:"title_path,omitempty"`
+	MaxEvents   int      `json:"max_events,omitempty"`
 }
 
 type UIDataSourceDefinition struct {
@@ -620,117 +636,95 @@ type UIContributionChatSidebar struct {
 	Resizable   bool           `json:"resizable,omitempty"`
 }
 
-var DefaultSlots = map[string]*UISlotContract{
-	"extension.settings.page": {
-		SlotID:           "extension.settings.page",
-		Version:          1,
-		SupportedKinds:   []UIContributionKind{UIContributionSchemaPage, UIContributionSettingsSection, UIContributionWebPage},
-		AllowedSandboxes: []UISandboxType{SandboxSchemaRenderer, SandboxWebRestricted},
-		Multiplicity:     MultiplicityMultiple,
-		OrderingPolicy:   "category_priority",
-		FailurePolicy:    "isolate",
+var DefaultSlots = buildDefaultSlotContracts()
+
+// SlotContractFromDefinition converts the public slot registry contract into the
+// stricter UIHost contract. extension_slots is the single source of truth for
+// slot identity, layout, multiplicity and performance/fallback metadata; UIHost
+// only adds sandbox policy required to validate concrete contributions.
+func SlotContractFromDefinition(def *extension_slots.SlotDefinition) (*UISlotContract, error) {
+	if def == nil || def.SlotID == "" {
+		return nil, errors.New("ui_contribution: invalid slot definition")
+	}
+	kinds := make([]UIContributionKind, 0, len(def.SupportedKinds))
+	seenKinds := make(map[UIContributionKind]struct{})
+	sandboxes := make([]UISandboxType, 0, 4)
+	seenSandboxes := make(map[UISandboxType]struct{})
+	for _, rawKind := range def.SupportedKinds {
+		kind := UIContributionKind(rawKind)
+		if !kind.Valid() {
+			return nil, fmt.Errorf("ui_contribution: unsupported slot kind %q for %s", rawKind, def.SlotID)
+		}
+		if _, ok := seenKinds[kind]; !ok {
+			seenKinds[kind] = struct{}{}
+			kinds = append(kinds, kind)
+		}
+		for _, sandbox := range allowedSandboxesForKind(kind) {
+			if _, ok := seenSandboxes[sandbox]; ok {
+				continue
+			}
+			seenSandboxes[sandbox] = struct{}{}
+			sandboxes = append(sandboxes, sandbox)
+		}
+	}
+	return &UISlotContract{
+		SlotID:           string(def.SlotID),
+		Version:          def.ContractVersion,
+		SupportedKinds:   kinds,
+		InputSchema:      append(json.RawMessage(nil), def.ContextSchema...),
+		AllowedSandboxes: sandboxes,
+		Multiplicity:     SlotMultiplicity(def.Multiplicity),
+		OrderingPolicy:   def.OrderingPolicy,
+		FailurePolicy:    def.FailurePolicy,
 		PerformanceBudget: UIPerformanceBudget{
-			FirstPaintMs: 500, BundleSizeKB: 512, MemoryMB: 64,
-			EventRatePerSec: 50, UpdateRateHz: 4, RenderMs: 100,
-			MaxConcurrentReq: 4, SuspendOnHidden: true,
+			FirstPaintMs:     def.PerformanceBudget.FirstPaint.Milliseconds(),
+			BundleSizeKB:     def.PerformanceBudget.BundleSize / 1024,
+			MemoryMB:         def.PerformanceBudget.MemoryBytes / (1024 * 1024),
+			EventRatePerSec:  def.PerformanceBudget.MessageRate,
+			UpdateRateHz:     durationToRateHz(def.PerformanceBudget.UpdateFrequency),
+			RenderMs:         100,
+			MaxConcurrentReq: 4,
+			SuspendOnHidden:  def.Layout != extension_slots.LayoutHidden,
 		},
-	},
-	"chat.sidebar.panel": {
-		SlotID:           "chat.sidebar.panel",
-		Version:          1,
-		SupportedKinds:   []UIContributionKind{UIContributionPanel, UIContributionCard},
-		AllowedSandboxes: []UISandboxType{SandboxSchemaRenderer, SandboxWebRestricted},
-		Multiplicity:     MultiplicityOrderedMultiple,
-		OrderingPolicy:   "priority",
-		FailurePolicy:    "isolate",
-		PerformanceBudget: UIPerformanceBudget{
-			FirstPaintMs: 300, BundleSizeKB: 256, MemoryMB: 32,
-			EventRatePerSec: 20, UpdateRateHz: 2, RenderMs: 50,
-			MaxConcurrentReq: 2, SuspendOnHidden: true,
-		},
-	},
-	"chat.message.action": {
-		SlotID:           "chat.message.action",
-		Version:          1,
-		SupportedKinds:   []UIContributionKind{UIContributionMessageAction, UIContributionAction},
-		AllowedSandboxes: []UISandboxType{SandboxHostNative},
-		Multiplicity:     MultiplicityMultiple,
-		OrderingPolicy:   "priority",
-		FailurePolicy:    "isolate",
-		PerformanceBudget: UIPerformanceBudget{
-			FirstPaintMs: 100, BundleSizeKB: 0, MemoryMB: 8,
-			EventRatePerSec: 5, UpdateRateHz: 1, RenderMs: 16,
-			MaxConcurrentReq: 1, SuspendOnHidden: false,
-		},
-	},
-	"chat.message.renderer": {
-		SlotID:           "chat.message.renderer",
-		Version:          1,
-		SupportedKinds:   []UIContributionKind{UIContributionMessageRenderer},
-		AllowedSandboxes: []UISandboxType{SandboxSchemaRenderer, SandboxWebRestricted},
-		Multiplicity:     MultiplicityReplaceableSingle,
-		OrderingPolicy:   "priority",
-		FailurePolicy:    "fallback_host",
-		PerformanceBudget: UIPerformanceBudget{
-			FirstPaintMs: 200, BundleSizeKB: 256, MemoryMB: 24,
-			EventRatePerSec: 10, UpdateRateHz: 2, RenderMs: 32,
-			MaxConcurrentReq: 2, SuspendOnHidden: false,
-		},
-	},
-	"chat.composer.action": {
-		SlotID:           "chat.composer.action",
-		Version:          1,
-		SupportedKinds:   []UIContributionKind{UIContributionComposerAction},
-		AllowedSandboxes: []UISandboxType{SandboxHostNative},
-		Multiplicity:     MultiplicityMultiple,
-		OrderingPolicy:   "priority",
-		FailurePolicy:    "isolate",
-		PerformanceBudget: UIPerformanceBudget{
-			FirstPaintMs: 100, BundleSizeKB: 0, MemoryMB: 8,
-			EventRatePerSec: 5, UpdateRateHz: 1, RenderMs: 16,
-			MaxConcurrentReq: 1, SuspendOnHidden: false,
-		},
-	},
-	"desktop.tray.item": {
-		SlotID:           "desktop.tray.item",
-		Version:          1,
-		SupportedKinds:   []UIContributionKind{UIContributionMenuItem, UIContributionAction},
-		AllowedSandboxes: []UISandboxType{SandboxHostNative},
-		Multiplicity:     MultiplicityOrderedMultiple,
-		OrderingPolicy:   "priority",
-		FailurePolicy:    "isolate",
-		PerformanceBudget: UIPerformanceBudget{
-			FirstPaintMs: 100, BundleSizeKB: 0, MemoryMB: 4,
-			EventRatePerSec: 2, UpdateRateHz: 1, RenderMs: 16,
-			MaxConcurrentReq: 1, SuspendOnHidden: false,
-		},
-	},
-	"system.status.item": {
-		SlotID:           "system.status.item",
-		Version:          1,
-		SupportedKinds:   []UIContributionKind{UIContributionStatusItem},
-		AllowedSandboxes: []UISandboxType{SandboxHostNative},
-		Multiplicity:     MultiplicityOrderedMultiple,
-		OrderingPolicy:   "priority",
-		FailurePolicy:    "isolate",
-		PerformanceBudget: UIPerformanceBudget{
-			FirstPaintMs: 80, BundleSizeKB: 0, MemoryMB: 4,
-			EventRatePerSec: 2, UpdateRateHz: 1, RenderMs: 16,
-			MaxConcurrentReq: 1, SuspendOnHidden: false,
-		},
-	},
-	"extension.detail.tab": {
-		SlotID:           "extension.detail.tab",
-		Version:          1,
-		SupportedKinds:   []UIContributionKind{UIContributionSchemaPage, UIContributionWebPage},
-		AllowedSandboxes: []UISandboxType{SandboxSchemaRenderer, SandboxWebRestricted},
-		Multiplicity:     MultiplicityOrderedMultiple,
-		OrderingPolicy:   "priority",
-		FailurePolicy:    "isolate",
-		PerformanceBudget: UIPerformanceBudget{
-			FirstPaintMs: 400, BundleSizeKB: 512, MemoryMB: 48,
-			EventRatePerSec: 30, UpdateRateHz: 4, RenderMs: 100,
-			MaxConcurrentReq: 4, SuspendOnHidden: true,
-		},
-	},
+	}, nil
+}
+
+func buildDefaultSlotContracts() map[string]*UISlotContract {
+	out := make(map[string]*UISlotContract)
+	for _, def := range extension_slots.DefaultSlots() {
+		contract, err := SlotContractFromDefinition(def)
+		if err != nil {
+			continue
+		}
+		out[contract.SlotID] = contract
+	}
+	return out
+}
+
+func durationToRateHz(updateFrequency time.Duration) int {
+	if updateFrequency <= 0 {
+		return 0
+	}
+	rate := int(time.Second / updateFrequency)
+	if rate < 1 {
+		return 1
+	}
+	return rate
+}
+
+func allowedSandboxesForKind(kind UIContributionKind) []UISandboxType {
+	switch kind {
+	case UIContributionSchemaPage, UIContributionSettingsSection, UIContributionPanel,
+		UIContributionCard, UIContributionBadge, UIContributionDetailSectionKind,
+		UIContributionChatSidebarKind:
+		return []UISandboxType{SandboxSchemaRenderer, SandboxWebRestricted, SandboxWebIsolated}
+	case UIContributionWebPage, UIContributionMessageRenderer:
+		return []UISandboxType{SandboxSchemaRenderer, SandboxWebRestricted, SandboxWebIsolated}
+	case UIContributionAction, UIContributionMenuItem, UIContributionToolbarItem,
+		UIContributionStatusItem, UIContributionMessageAction, UIContributionComposerAction,
+		UIContributionDesktopCommand:
+		return []UISandboxType{SandboxHostNative}
+	default:
+		return []UISandboxType{kind.DefaultSandbox()}
+	}
 }

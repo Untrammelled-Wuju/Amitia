@@ -146,7 +146,8 @@ func contributionTags(ext domain.ExtensionDefinition) []ContributionTag {
 				tagSet[TagMCP] = true
 			case domain.ContributionKindUIPage, domain.ContributionKindUIPanel,
 				domain.ContributionKindUIChat, domain.ContributionKindUIContextAction,
-				domain.ContributionKindUIDesktop, domain.ContributionKindUIProvider:
+				domain.ContributionKindUIDesktop, domain.ContributionKindUIProvider,
+				domain.ContributionKindUISlot:
 				tagSet[TagUI] = true
 			case domain.ContributionKindHook:
 				tagSet[TagHooks] = true

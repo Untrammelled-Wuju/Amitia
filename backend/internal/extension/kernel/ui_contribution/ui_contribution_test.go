@@ -180,12 +180,37 @@ func TestUIHostRegisterContribution(t *testing.T) {
 	}
 }
 
-func TestUIHostRegisterContributionSlotNotRegistered(t *testing.T) {
+func TestUIHostRegisterContributionWaitsForSlot(t *testing.T) {
 	h := NewUIHost()
 	def := makeValidDefinition()
 	def.Slot.SlotID = "missing.slot"
-	if err := h.RegisterContribution(def); err == nil {
-		t.Fatalf("expected slot unsupported error")
+	if err := h.RegisterContribution(def); err != nil {
+		t.Fatalf("register pending contribution: %v", err)
+	}
+	if len(h.ListPending()) != 1 {
+		t.Fatalf("expected one pending contribution")
+	}
+	if err := h.Mount(def.ContributionID); err != nil {
+		t.Fatalf("mark pending contribution mounted: %v", err)
+	}
+	if err := h.RegisterSlot(&UISlotContract{
+		SlotID:           "missing.slot",
+		Version:          1,
+		SupportedKinds:   []UIContributionKind{UIContributionSchemaPage},
+		AllowedSandboxes: []UISandboxType{SandboxSchemaRenderer},
+		Multiplicity:     MultiplicityOrderedMultiple,
+	}); err != nil {
+		t.Fatalf("register restored slot: %v", err)
+	}
+	if len(h.ListPending()) != 0 || len(h.ListBySlot("missing.slot")) != 1 {
+		t.Fatalf("expected pending contribution to attach after slot declaration")
+	}
+	inst, err := h.GetInstance(def.ContributionID)
+	if err != nil {
+		t.Fatalf("get instance: %v", err)
+	}
+	if inst.Snapshot().State != UIStateVisible {
+		t.Fatalf("expected restored contribution visible, got %s", inst.Snapshot().State)
 	}
 }
 
@@ -193,12 +218,14 @@ func TestUIHostListBySlot(t *testing.T) {
 	h := NewUIHost()
 	def1 := makeValidDefinition()
 	def1.ContributionID = "contrib-1"
+	def1.Slot.SlotID = "extension.settings.section"
 	def2 := makeValidDefinition()
 	def2.ContributionID = "contrib-2"
-	def2.Kind = UIContributionSettingsSection
+	def2.Slot.SlotID = "extension.settings.section"
+	def2.Kind = UIContributionPanel
 	_ = h.RegisterContribution(def1)
 	_ = h.RegisterContribution(def2)
-	list := h.ListBySlot("extension.settings.page")
+	list := h.ListBySlot("extension.settings.section")
 	if len(list) != 2 {
 		t.Fatalf("expected 2 contributions, got %d", len(list))
 	}

@@ -163,21 +163,48 @@ func (h *HTTPHandler) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 	}
 	slots := h.slotRegistry.List()
 	type slotSnapshotEntry struct {
-		SlotID        string                                      `json:"slotId"`
-		Contributions []*ui_contribution.UIContributionDefinition `json:"contributions"`
+		SlotID            string                                      `json:"slotId"`
+		ContractVersion   int                                         `json:"contractVersion"`
+		SupportedKinds    []string                                    `json:"supportedKinds"`
+		Multiplicity      extension_slots.SlotMultiplicity            `json:"multiplicity"`
+		Layout            extension_slots.SlotLayout                  `json:"layout"`
+		FallbackPolicy    extension_slots.FallbackPolicy              `json:"fallbackPolicy"`
+		PerformanceBudget extension_slots.PerformanceBudget           `json:"performanceBudget"`
+		Description       string                                      `json:"description,omitempty"`
+		Platform          []string                                    `json:"platform,omitempty"`
+		OrderingPolicy    string                                      `json:"orderingPolicy,omitempty"`
+		FailurePolicy     string                                      `json:"failurePolicy,omitempty"`
+		OwnerExtension    string                                      `json:"ownerExtension,omitempty"`
+		ParentSlotID      extension_slots.SlotID                      `json:"parentSlotId,omitempty"`
+		Dynamic           bool                                        `json:"dynamic,omitempty"`
+		Contributions     []*ui_contribution.UIContributionDefinition `json:"contributions"`
 	}
 	out := make([]slotSnapshotEntry, 0, len(slots))
 	for _, s := range slots {
 		contribs := h.uiHost.ListBySlot(string(s.SlotID))
 		out = append(out, slotSnapshotEntry{
-			SlotID:        string(s.SlotID),
-			Contributions: contribs,
+			SlotID:            string(s.SlotID),
+			ContractVersion:   s.ContractVersion,
+			SupportedKinds:    append([]string(nil), s.SupportedKinds...),
+			Multiplicity:      s.Multiplicity,
+			Layout:            s.Layout,
+			FallbackPolicy:    s.FallbackPolicy,
+			PerformanceBudget: s.PerformanceBudget,
+			Description:       s.Description,
+			Platform:          append([]string(nil), s.Platform...),
+			OrderingPolicy:    s.OrderingPolicy,
+			FailurePolicy:     s.FailurePolicy,
+			OwnerExtension:    s.OwnerExtension,
+			ParentSlotID:      s.ParentSlotID,
+			Dynamic:           s.Dynamic,
+			Contributions:     contribs,
 		})
 	}
 	payload := map[string]any{
-		"slots":         out,
-		"contributions": h.uiHost.ListAll(),
-		"timestamp":     time.Now().UTC(),
+		"slots":                out,
+		"contributions":        h.uiHost.ListAll(),
+		"pendingContributions": h.uiHost.ListPending(),
+		"timestamp":            time.Now().UTC(),
 	}
 	if h.providerRegistry != nil {
 		platform := strings.TrimSpace(r.URL.Query().Get("platform"))
