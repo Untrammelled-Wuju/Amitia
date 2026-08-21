@@ -123,26 +123,35 @@ function toggleViewMenu() {
   viewMenuOpen.value = !viewMenuOpen.value;
 }
 
-function handleZoomIn() {
-  if (zoomLevel.value < 200) {
-    zoomLevel.value += 10;
-    document.body.style.zoom = `${zoomLevel.value}%`;
+async function handleZoomIn() {
+  if (window.amitiaDesktop?.zoomIn) {
+    await window.amitiaDesktop.zoomIn();
+    await syncZoomLevel();
   }
   viewMenuOpen.value = false;
 }
 
-function handleZoomOut() {
-  if (zoomLevel.value > 50) {
-    zoomLevel.value -= 10;
-    document.body.style.zoom = `${zoomLevel.value}%`;
+async function handleZoomOut() {
+  if (window.amitiaDesktop?.zoomOut) {
+    await window.amitiaDesktop.zoomOut();
+    await syncZoomLevel();
   }
   viewMenuOpen.value = false;
 }
 
-function handleZoomReset() {
-  zoomLevel.value = 100;
-  document.body.style.zoom = '100%';
+async function handleZoomReset() {
+  if (window.amitiaDesktop?.zoomReset) {
+    await window.amitiaDesktop.zoomReset();
+    await syncZoomLevel();
+  }
   viewMenuOpen.value = false;
+}
+
+async function syncZoomLevel() {
+  if (window.amitiaDesktop?.getZoomFactor) {
+    const factor = await window.amitiaDesktop.getZoomFactor();
+    zoomLevel.value = Math.round(factor * 100);
+  }
 }
 
 async function handleFullscreen() {
@@ -255,6 +264,7 @@ onMounted(async () => {
   try {
     appVersion.value = await window.amitiaDesktop?.getVersion() ?? '';
   } catch {}
+  await syncZoomLevel();
 });
 
 onUnmounted(() => {
