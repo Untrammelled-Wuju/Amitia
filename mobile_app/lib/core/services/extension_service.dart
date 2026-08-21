@@ -289,6 +289,70 @@ class ExtensionService {
     return items.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
   }
 
+  Future<Map<String, dynamic>> checkKernelExtensionUpdate(String extensionId) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/${Uri.encodeComponent(extensionId)}/updates/check',
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> downloadKernelExtensionUpdate(String extensionId, String version) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/${Uri.encodeComponent(extensionId)}/updates/download',
+          data: {'version': version},
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> installKernelExtensionUpdate(String extensionId, String operationId) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/${Uri.encodeComponent(extensionId)}/updates/install',
+          data: {'operationId': operationId},
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> cancelKernelExtensionUpdate(String extensionId, String operationId) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/${Uri.encodeComponent(extensionId)}/updates/cancel',
+          data: {'operationId': operationId},
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> retryKernelExtensionUpdate(String extensionId, String operationId) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/${Uri.encodeComponent(extensionId)}/updates/retry',
+          data: {'operationId': operationId},
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> rollbackKernelExtensionUpdate(String extensionId, String operationId) async {
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/${Uri.encodeComponent(extensionId)}/updates/rollback',
+          data: {'operationId': operationId},
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> kernelUpdateOperation(String operationId) async {
+    return await _api.get<Map<String, dynamic>>(
+          '/api/extensions/updates/operations/${Uri.encodeComponent(operationId)}',
+        ) ??
+        <String, dynamic>{};
+  }
+
+  Future<List<Map<String, dynamic>>> kernelUpdateOperationSteps(String operationId) async {
+    final resp = await _api.get<dynamic>(
+      '/api/extensions/updates/operations/${Uri.encodeComponent(operationId)}/steps',
+    );
+    dynamic raw = resp;
+    if (raw is Map && raw['items'] is List) raw = raw['items'];
+    if (raw is! List) return const [];
+    return raw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList(growable: false);
+  }
+
   Future<Map<String, dynamic>> kernelExtension(String id) async {
     return await _api.get<Map<String, dynamic>>(
           '/api/extensions/kernel/extension',

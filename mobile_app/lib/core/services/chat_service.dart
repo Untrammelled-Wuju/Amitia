@@ -111,6 +111,45 @@ class ChatService {
     await _api.delete('/api/chats/conversations/$conversationId/summary');
   }
 
+  Future<Map<String, dynamic>?> updateConversationSummary(String conversationId, String summaryText) {
+    return _api.put<Map<String, dynamic>>(
+      '/api/chats/conversations/$conversationId/summary',
+      data: {'summaryText': summaryText.trim()},
+    );
+  }
+
+  Future<String> exportConversation(String conversationId, {String format = 'markdown'}) async {
+    final resp = await _api.post<Map<String, dynamic>>(
+      '/api/chats/export',
+      data: {
+        'format': format == 'json' ? 'json' : 'markdown',
+        'conversationIds': [conversationId],
+      },
+    );
+    return (resp?['exportUrl'] ?? '').toString();
+  }
+
+  Future<List<Map<String, dynamic>>> messageFeedback(String messageId) async {
+    final resp = await _api.get<dynamic>('/api/messages/$messageId/feedback');
+    return _mapList(resp);
+  }
+
+  Future<List<Map<String, dynamic>>> recentFeedback({int limit = 100}) async {
+    final resp = await _api.get<dynamic>('/api/messages/feedback/recent', queryParameters: {'limit': limit});
+    return _mapList(resp, keys: const ['items']);
+  }
+
+  Future<Map<String, dynamic>?> contextPreview(String conversationId) {
+    return _api.get<Map<String, dynamic>>(
+      '/api/agent/context-preview',
+      queryParameters: {'conversationId': conversationId},
+    );
+  }
+
+  Future<Map<String, dynamic>?> messagePsyche(String messageId) {
+    return _api.get<Map<String, dynamic>>('/api/psyche/messages/$messageId');
+  }
+
   Future<List<MessageDto>> searchMessages(String keyword, {String? conversationId, int page = 1, int pageSize = 50}) async {
     final resp = await _api.get<Map<String, dynamic>>(
       '/api/chats/search',
@@ -209,5 +248,16 @@ class ChatService {
       },
     );
     return resp;
+  }
+
+  List<Map<String, dynamic>> _mapList(dynamic resp, {List<String> keys = const []}) {
+    dynamic raw = resp;
+    if (raw is Map) {
+      for (final key in keys) {
+        if (raw[key] is List) { raw = raw[key]; break; }
+      }
+    }
+    if (raw is! List) return const [];
+    return raw.whereType<Map>().map((row) => Map<String, dynamic>.from(row)).toList(growable: false);
   }
 }
