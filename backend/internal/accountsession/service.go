@@ -86,24 +86,26 @@ type AuthUserDTO struct {
 }
 
 type AccountSessionService struct {
-	db          *gorm.DB
-	sessions    SessionRepository
-	refresh     RefreshRepository
-	refreshSvc  *RefreshService
-	audit       AuditLogger
-	guard       *LoginGuardService
-	recovery    RecoveryService
-	maxSessions int
+	db                    *gorm.DB
+	sessions              SessionRepository
+	refresh               RefreshRepository
+	refreshSvc            *RefreshService
+	audit                 AuditLogger
+	guard                 *LoginGuardService
+	recovery              RecoveryService
+	maxSessions           int
+	disableDeviceTracking bool
 }
 
 type AccountSessionServiceConfig struct {
-	Sessions    SessionRepository
-	Refresh     RefreshRepository
-	Audit       AuditLogger
-	Guard       *LoginGuardService
-	Recovery    RecoveryService
-	UserService AccountUserService
-	MaxSessions int
+	Sessions              SessionRepository
+	Refresh               RefreshRepository
+	Audit                 AuditLogger
+	Guard                 *LoginGuardService
+	Recovery              RecoveryService
+	UserService           AccountUserService
+	MaxSessions           int
+	DisableDeviceTracking bool
 }
 
 func NewAccountSessionService(db *gorm.DB, cfg AccountSessionServiceConfig) *AccountSessionService {
@@ -111,13 +113,14 @@ func NewAccountSessionService(db *gorm.DB, cfg AccountSessionServiceConfig) *Acc
 		cfg.MaxSessions = 10
 	}
 	svc := &AccountSessionService{
-		db:          db,
-		sessions:    cfg.Sessions,
-		refresh:     cfg.Refresh,
-		audit:       cfg.Audit,
-		guard:       cfg.Guard,
-		recovery:    cfg.Recovery,
-		maxSessions: cfg.MaxSessions,
+		db:                    db,
+		sessions:              cfg.Sessions,
+		refresh:               cfg.Refresh,
+		audit:                 cfg.Audit,
+		guard:                 cfg.Guard,
+		recovery:              cfg.Recovery,
+		maxSessions:           cfg.MaxSessions,
+		disableDeviceTracking: cfg.DisableDeviceTracking,
 	}
 	svc.refreshSvc = NewRefreshService(cfg.Refresh, cfg.Sessions, db)
 	return svc
@@ -268,15 +271,19 @@ func (s *AccountSessionService) createSessionAndTokens(userID int, username, rol
 			activeCount--
 		}
 
+		deviceName, storedIP, storedUA := parseDeviceName(ua), ip, ua
+		if s.disableDeviceTracking {
+			deviceName, storedIP, storedUA = "", "", ""
+		}
 		session := &Session{
 			PublicID:          sessionPublicID,
 			UserID:            int64(userID),
 			Username:          username,
 			Role:              role,
 			Status:            SessionStatusActive,
-			DeviceName:        parseDeviceName(ua),
-			IPAddress:         ip,
-			UserAgent:         ua,
+			DeviceName:        deviceName,
+			IPAddress:         storedIP,
+			UserAgent:         storedUA,
 			Revision:          1,
 			TokenHash:         &accessTokenHash,
 			CreatedAt:         now,
