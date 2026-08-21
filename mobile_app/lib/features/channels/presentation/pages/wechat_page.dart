@@ -272,7 +272,7 @@ class _WechatPageState extends ConsumerState<WechatPage> {
       }
     }
     if (raw.startsWith('http://') || raw.startsWith('https://')) {
-      return Image.network(raw, fit: BoxFit.contain, errorBuilder: (_, __, ___) => const SizedBox.shrink());
+      return Image.network(raw, fit: BoxFit.contain, cacheWidth: 360, errorBuilder: (_, __, ___) => const SizedBox.shrink());
     }
     try {
       final bytes = base64Decode(raw);
