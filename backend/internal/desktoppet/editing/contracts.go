@@ -299,6 +299,7 @@ type ActionEditSummary struct {
 	ActionKey         string              `json:"actionKey"`
 	ActiveRevisionID  string              `json:"activeRevisionId"`
 	ActiveRevisionNum int                 `json:"activeRevisionNum"`
+	BindingVersion    int64               `json:"bindingVersion"`
 	FrameCount        int                 `json:"frameCount"`
 	DurationMS        int                 `json:"durationMs"`
 	QualityVerdict    string              `json:"qualityVerdict"`
