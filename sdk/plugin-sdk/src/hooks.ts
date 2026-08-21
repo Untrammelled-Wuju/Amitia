@@ -185,6 +185,16 @@ export function listHooks(pipeline?: string, stage?: string, phase?: HookPhase):
   });
 }
 
+export function unregisterHook<I = unknown, O = unknown>(registration: HookRegistration<I, O>): boolean {
+  for (const [key, value] of hookRegistry.entries()) {
+    if (value === registration) {
+      hookRegistry.delete(key);
+      return true;
+    }
+  }
+  return false;
+}
+
 export function clearHooks(): void {
   hookRegistry.clear();
 }

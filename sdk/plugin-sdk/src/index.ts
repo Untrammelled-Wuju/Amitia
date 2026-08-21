@@ -12,6 +12,7 @@ export * from "./secrets";
 export * from "./ui";
 export * from "./context";
 export * from "./control";
+export * from "./fiber";
 
 export {
   defineExtension,
@@ -58,3 +59,5 @@ export function getCompatibilityMatrix(): CompatibilityMatrix {
     minAmitiaVersion: MIN_AMITIA_VERSION,
   };
 }
+
+export * from "./client-plugin-runtime";

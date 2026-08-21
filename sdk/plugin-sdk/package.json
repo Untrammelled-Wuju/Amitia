@@ -66,6 +66,14 @@
     "./testing": {
       "types": "./dist/testing.d.ts",
       "import": "./dist/testing.js"
+    },
+    "./fiber": {
+      "types": "./dist/fiber.d.ts",
+      "import": "./dist/fiber.js"
+    },
+    "./client-plugin-runtime": {
+      "types": "./dist/client-plugin-runtime.d.ts",
+      "import": "./dist/client-plugin-runtime.js"
     }
   },
   "scripts": {

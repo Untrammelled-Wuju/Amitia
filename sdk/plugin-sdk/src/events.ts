@@ -90,6 +90,10 @@ export function listEventSpecs(): EventSubscriptionSpec[] {
   return Array.from(eventHandlers.values());
 }
 
+export function unregisterEventSpec(eventType: string): boolean {
+  return eventHandlers.delete(eventType);
+}
+
 export function clearEventSpecs(): void {
   eventHandlers.clear();
 }

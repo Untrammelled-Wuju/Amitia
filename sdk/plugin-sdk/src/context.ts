@@ -5,9 +5,9 @@ import type { ExtensionID, ModuleID } from "./types";
 import { makeExtensionID, makeModuleID } from "./types";
 import type { RuntimeScope, RuntimeContext } from "./runtime";
 import type { ToolHandler, ToolRegistration } from "./tools";
-import { defineTool, listTools, clearTools } from "./tools";
+import { defineTool, listTools, unregisterTool } from "./tools";
 import type { EventSubscriptionSpec } from "./events";
-import { defineEvent, listEventSpecs, clearEventSpecs } from "./events";
+import { defineEvent, listEventSpecs, unregisterEventSpec } from "./events";
 import type { HookRegistration } from "./hooks";
 import {
   defineBeforeHook,
@@ -15,17 +15,20 @@ import {
   defineTransformHook,
   defineObserveHook,
   listHooks,
-  clearHooks,
+  unregisterHook,
 } from "./hooks";
 import type { TaskDefinition, TaskInput } from "./tasks";
-import { defineTask, listTasks, clearTasks } from "./tasks";
+import { defineTask, listTasks, unregisterTask } from "./tasks";
 import type { StorageClient } from "./storage";
 import { NamespacedStorageClient, type StorageBackend } from "./storage";
 import type { SecretReferenceClient } from "./secrets";
 import { NamespacedSecretClient, type SecretBackend, InMemorySecretBackend } from "./secrets";
 import type { HostClient } from "./host";
 import { DefaultHostClient, type HostBridgeLike } from "./host";
-import type { UIBridge } from "./ui";
+import type { UIBridge, UISlotClient, UIActionHandler } from "./ui";
+import { defineUIAction } from "./ui";
+import type { ExtensionFiber } from "./fiber";
+import { RuntimeFiber } from "./fiber";
 import { AmitiaError, ValidationError, PermissionDeniedError } from "./errors";
 
 export interface ExtensionIdentity {
@@ -87,7 +90,9 @@ export interface ExtensionContext {
   readonly events: { emit<T>(type: string, payload: T): Promise<void> };
   readonly logger: ExtensionLogger;
   readonly lifecycle: RuntimeLifecycleClient;
+  readonly fiber: ExtensionFiber;
   readonly ui?: UIBridge;
+  readonly slots?: UISlotClient;
 }
 
 export interface ExtensionDefinition {
@@ -191,6 +196,7 @@ export function bootstrapExtension(
   };
 
   const resources: ResourceClient = bootstrap.resourceBackend;
+  const fiber = new RuntimeFiber(namespace);
 
   const assertEntry = (entryName: string) => {
     if (!allowedEntries.has(entryName)) {
@@ -204,35 +210,50 @@ export function bootstrapExtension(
   const handlers: HandlerBinder = {
     bindTool: (entryName, def, handler) => {
       assertEntry(entryName);
-      return defineTool(def, handler);
+      const registration = defineTool(def, handler);
+      fiber.own(() => { unregisterTool(def.toolId); });
+      return registration;
     },
     bindEvent: (entryName, spec) => {
       assertEntry(entryName);
-      return defineEvent(spec);
+      const registration = defineEvent(spec);
+      fiber.own(() => { unregisterEventSpec(spec.eventType); });
+      return registration;
     },
     bindBeforeHook: (entryName, pipeline, stage, handler) => {
       assertEntry(entryName);
-      return defineBeforeHook(pipeline, stage, handler as never);
+      const registration = defineBeforeHook(pipeline, stage, handler as never);
+      fiber.own(() => { unregisterHook(registration); });
+      return registration;
     },
     bindFilterHook: (entryName, pipeline, stage, handler) => {
       assertEntry(entryName);
-      return defineFilterHook(pipeline, stage, handler as never);
+      const registration = defineFilterHook(pipeline, stage, handler as never);
+      fiber.own(() => { unregisterHook(registration); });
+      return registration;
     },
-    bindTransformHook: (entryName, pipeline, stage, handler) => {
+    bindTransformHook: <I, O>(entryName: string, pipeline: string, stage: string, handler: (input: I, ctx: unknown) => Promise<O>): HookRegistration<I, O> => {
       assertEntry(entryName);
-      return defineTransformHook(pipeline, stage, handler as never);
+      const registration = defineTransformHook<I, O>(pipeline, stage, handler as never);
+      fiber.own(() => { unregisterHook(registration); });
+      return registration;
     },
-    bindObserveHook: (entryName, pipeline, stage, handler) => {
+    bindObserveHook: <I>(entryName: string, pipeline: string, stage: string, handler: (input: I, ctx: unknown) => Promise<void>): HookRegistration<I, void> => {
       assertEntry(entryName);
-      return defineObserveHook(pipeline, stage, handler as never);
+      const registration = defineObserveHook<I>(pipeline, stage, handler as never);
+      fiber.own(() => { unregisterHook(registration); });
+      return registration;
     },
     bindTask: (entryName, taskDef) => {
       assertEntry(entryName);
-      return defineTask(taskDef);
+      const registration = defineTask(taskDef);
+      fiber.own(() => { unregisterTask(taskDef.taskId); });
+      return registration;
     },
-    bindUIAction: (entryName, _actionId, _handler) => {
+    bindUIAction: (entryName, actionId, handler) => {
       assertEntry(entryName);
-      // UI actions are registered via ui.ts; we only assert entry allowance here
+      const registration = defineUIAction(actionId, handler as UIActionHandler);
+      fiber.own(() => registration.dispose());
     },
   };
 
@@ -248,20 +269,20 @@ export function bootstrapExtension(
     events,
     logger,
     lifecycle,
+    fiber,
     ui: bootstrap.uiBridge,
+    slots: bootstrap.uiBridge?.slots,
   };
 
   const cleanup = async () => {
-    clearTools();
-    clearEventSpecs();
-    clearHooks();
-    clearTasks();
     try {
       if (definition.deactivate) {
         await definition.deactivate(aborted ? "aborted" : "shutdown");
       }
     } catch (cause) {
       logger.error("extension deactivate failed", { error: cause instanceof Error ? cause.message : String(cause) });
+    } finally {
+      await fiber.dispose();
     }
   };
 

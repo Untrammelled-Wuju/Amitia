@@ -1,4 +1,8 @@
-import type { Client as RunnerClient } from "./runtime";
+export interface RunnerClient {
+  call(method: string, payload: unknown): Promise<unknown>;
+  registerRequest(method: string, handler: (payload: unknown) => Promise<unknown> | unknown): void;
+  unregisterRequest?(method: string): void;
+}
 
 export interface ControlSinkRegisterInput {
   readonly sinkId: string;
@@ -58,6 +62,7 @@ export function registerControlSink(
   client: RunnerClient,
   input: ControlSinkRegisterInput,
 ): ControlSinkRegisterResult {
+  void client;
   return {
     sinkId: input.sinkId,
     kind: input.kind,
