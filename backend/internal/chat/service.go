@@ -38,7 +38,11 @@ type Service interface {
 	GetMessages(convID string, page, pageSize int) ([]Message, int64, error)
 	DeleteMessages(convID string) error
 	DeleteSingleMessage(id string) error
-	SearchMessages(q MessageSearchQuery) (*ConversationListResponse, error)
+	SearchMessages(q MessageSearchQuery) (*MessageSearchResponse, error)
+	GetConversationSummary(convID string) (*ConversationSummary, error)
+	UpdateConversationSummary(convID, summaryText string) (*ConversationSummary, error)
+	DeleteConversationSummary(convID string) error
+	GenerateConversationSummary(ctx context.Context, convID string) (*ConversationSummary, error)
 	ChangeCharacter(convID, charID string) (*Conversation, error)
 	GetStats() (*ChatStatsResponse, error)
 	Chat(req *ChatRequest) (*ChatResponse, error)
