@@ -126,9 +126,14 @@ class _SystemSettingsPageState extends ConsumerState<SystemSettingsPage> {
     try {
       final result = await ref.read(systemServiceProvider).testNotification();
       if (!mounted) return;
-      final sentAt = result?['sentAt']?.toString();
+      final accepted = result?['accepted'] == true;
+      final reason = result?['reason']?.toString();
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(sentAt == null ? '测试通知已发送' : '测试通知已发送 · $sentAt')),
+        SnackBar(
+          content: Text(accepted
+              ? '通知配置验证通过；实际通知由客户端本地通知能力投递'
+              : (reason?.isNotEmpty == true ? '通知配置未就绪：$reason' : '通知配置未就绪')),
+        ),
       );
     } catch (e) {
       if (mounted) {

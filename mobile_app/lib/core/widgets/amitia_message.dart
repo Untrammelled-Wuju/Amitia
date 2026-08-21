@@ -900,7 +900,8 @@ class AmitiaChatInput extends StatefulWidget {
   final FutureOr<void> Function(bool camera)? onPickVideo;
   final FutureOr<void> Function()? onPickAudio;
   final void Function(String lang, String code)? onSendCode;
-  final void Function(String emoji, String name)? onSendEmote;
+  final Future<List<Map<String, dynamic>>> Function()? onLoadEmotes;
+  final void Function(String emoteId, String displayText)? onSendEmote;
 
   const AmitiaChatInput({
     super.key,
@@ -912,6 +913,7 @@ class AmitiaChatInput extends StatefulWidget {
     this.onPickVideo,
     this.onPickAudio,
     this.onSendCode,
+    this.onLoadEmotes,
     this.onSendEmote,
   });
 
@@ -1194,9 +1196,10 @@ class _AmitiaChatInputState extends State<AmitiaChatInput> {
       ),
       builder: (sheetCtx) {
         return _EmotePicker(
-          onSend: (emoji, name) {
+          loadEmotes: widget.onLoadEmotes,
+          onSend: (emoteId, displayText) {
             Navigator.pop(sheetCtx);
-            widget.onSendEmote?.call(emoji, name);
+            widget.onSendEmote?.call(emoteId, displayText);
           },
         );
       },
@@ -1494,104 +1497,117 @@ class _ComposerTool extends StatelessWidget {
 }
 
 class _EmotePicker extends StatefulWidget {
-  final void Function(String emoji, String name) onSend;
-  const _EmotePicker({required this.onSend});
+  final Future<List<Map<String, dynamic>>> Function()? loadEmotes;
+  final void Function(String emoteId, String displayText) onSend;
+  const _EmotePicker({this.loadEmotes, required this.onSend});
 
   @override
   State<_EmotePicker> createState() => _EmotePickerState();
 }
 
 class _EmotePickerState extends State<_EmotePicker> {
-  int _group = 0;
+  bool _loading = true;
+  String? _error;
+  List<Map<String, dynamic>> _items = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    final loader = widget.loadEmotes;
+    if (loader == null) {
+      setState(() => _loading = false);
+      return;
+    }
+    try {
+      final items = await loader();
+      if (!mounted) return;
+      setState(() {
+        _items = items.where((item) {
+          final enabled = item['enabled'];
+          return enabled == null || enabled == true || enabled == 1;
+        }).toList(growable: false);
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    final group = _emojiGroups[_group];
     return SafeArea(
       child: Padding(
-        padding: EdgeInsets.fromLTRB(12, 0, 12, 20),
+        padding: const EdgeInsets.fromLTRB(12, 8, 12, 20),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(height: 8),
             Center(
               child: Container(
                 width: 40,
                 height: 4,
-                decoration: BoxDecoration(
-                  color: context.borderPrimary,
-                  borderRadius: BorderRadius.circular(2),
-                ),
+                decoration: BoxDecoration(color: context.borderPrimary, borderRadius: BorderRadius.circular(2)),
               ),
             ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8),
-              child: Row(
-                children: List.generate(_emojiGroups.length, (i) {
-                  final isSelected = i == _group;
-                  return GestureDetector(
-                    onTap: () => setState(() => _group = i),
-                    child: Container(
-                      padding: EdgeInsets.symmetric(
-                        horizontal: 14,
-                        vertical: 6,
-                      ),
-                      margin: EdgeInsets.only(right: 8),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? context.accentSoft
-                            : Colors.transparent,
-                        borderRadius: AppRadius.brTag,
-                      ),
-                      child: Text(
-                        _emojiGroups[i].$1,
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: isSelected
-                              ? FontWeight.w600
-                              : FontWeight.w400,
-                          color: isSelected
-                              ? context.accentPrimary
-                              : context.textSecondary,
-                        ),
-                      ),
-                    ),
-                  );
-                }),
-              ),
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                Expanded(child: Text('角色表情', style: AppTypography.cardTitle(context))),
+                IconButton(onPressed: _load, icon: const Icon(Icons.refresh, size: 20)),
+              ],
             ),
-            const Divider(height: 20),
+            const SizedBox(height: 8),
             SizedBox(
-              height: 220,
-              child: GridView.builder(
-                padding: EdgeInsets.symmetric(horizontal: 4),
-                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-                  crossAxisCount: 5,
-                  mainAxisSpacing: 4,
-                  crossAxisSpacing: 4,
-                  childAspectRatio: 1,
-                ),
-                itemCount: group.$2.length,
-                itemBuilder: (ctx, i) {
-                  final emoji = group.$2[i];
-                  return GestureDetector(
-                    onTap: () => widget.onSend(emoji, group.$1),
-                    child: Container(
-                      decoration: BoxDecoration(
-                        color: context.surfaceSecondary,
-                        borderRadius: AppRadius.brSmall,
-                      ),
-                      child: Center(
-                        child: Text(
-                          emoji,
-                          style: const TextStyle(fontSize: 28),
-                        ),
-                      ),
-                    ),
-                  );
-                },
-              ),
+              height: 240,
+              child: _loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : _error != null
+                      ? Center(child: Text('加载表情失败：$_error', textAlign: TextAlign.center))
+                      : _items.isEmpty
+                          ? const Center(child: Text('暂无已启用的服务端表情，请先在“表情管理”中导入'))
+                          : GridView.builder(
+                              gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                crossAxisCount: 4,
+                                mainAxisSpacing: 8,
+                                crossAxisSpacing: 8,
+                                childAspectRatio: .9,
+                              ),
+                              itemCount: _items.length,
+                              itemBuilder: (context, index) {
+                                final item = _items[index];
+                                final id = (item['id'] ?? '').toString();
+                                final name = (item['name'] ?? item['altText'] ?? '表情').toString();
+                                final emoji = (item['emoji'] ?? '').toString();
+                                final imageUrl = (item['imageUrl'] ?? item['url'] ?? item['path'] ?? '').toString();
+                                return InkWell(
+                                  borderRadius: AppRadius.brSmall,
+                                  onTap: id.isEmpty ? null : () => widget.onSend(id, emoji.isNotEmpty ? emoji : name),
+                                  child: Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(color: context.surfaceSecondary, borderRadius: AppRadius.brSmall),
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Expanded(
+                                          child: imageUrl.startsWith('http') || imageUrl.startsWith('/')
+                                              ? Image.network(imageUrl, fit: BoxFit.contain, errorBuilder: (_, __, ___) => Text(emoji.isNotEmpty ? emoji : '🙂', style: const TextStyle(fontSize: 28)))
+                                              : Center(child: Text(emoji.isNotEmpty ? emoji : '🙂', style: const TextStyle(fontSize: 28))),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(name, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 11)),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
             ),
           ],
         ),

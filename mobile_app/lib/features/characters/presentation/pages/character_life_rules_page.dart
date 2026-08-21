@@ -1,17 +1,18 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../../app/app_routes.dart';
-import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
-import '../../../../app/theme/app_radius.dart';
-import '../../../../core/widgets/amitia_scaffold.dart';
-import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../app/theme/app_typography.dart';
 import '../../../../core/services/providers.dart';
+import '../../../../core/widgets/amitia_button.dart';
+import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/widgets/amitia_scaffold.dart';
 
 class CharacterLifeRulesPage extends ConsumerStatefulWidget {
   final String characterId;
-
   const CharacterLifeRulesPage({super.key, required this.characterId});
 
   @override
@@ -19,15 +20,410 @@ class CharacterLifeRulesPage extends ConsumerStatefulWidget {
 }
 
 class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage> {
+  static const Map<String, int> _personalityDefaults = {
+    'familiarity': 78,
+    'formality': 22,
+    'customerServiceAvoidance': 92,
+    'directness': 75,
+    'verbosity': 32,
+    'structureLevel': 40,
+    'shortSentence': 85,
+    'toneWords': 45,
+    'warmth': 58,
+    'comfortLevel': 55,
+    'preachingAvoidance': 88,
+    'companionship': 55,
+    'boundary': 85,
+    'dependencyAvoidance': 85,
+    'execution': 75,
+    'explanationDepth': 55,
+    'judgment': 75,
+    'clarification': 35,
+    'rationality': 50,
+    'humor': 40,
+    'initiative': 50,
+    'teasing': 30,
+    'patience': 60,
+    'intimacyExpression': 25,
+    'flirtiness': 0,
+    'romanticTone': 0,
+    'suggestivenessAvoidance': 100,
+    'intimacyBoundary': 90,
+  };
+
+  static const Map<String, String> _personalityLabels = {
+    'familiarity': '熟悉感',
+    'formality': '正式度',
+    'customerServiceAvoidance': '客服腔抑制',
+    'directness': '直接程度',
+    'verbosity': '回复长度',
+    'structureLevel': '结构化程度',
+    'shortSentence': '短句程度',
+    'toneWords': '语气词使用',
+    'warmth': '亲和度',
+    'comfortLevel': '安抚强度',
+    'preachingAvoidance': '说教抑制',
+    'companionship': '陪伴感',
+    'boundary': '边界感',
+    'dependencyAvoidance': '依赖引导抑制',
+    'execution': '执行力',
+    'explanationDepth': '解释深度',
+    'judgment': '判断力',
+    'clarification': '追问倾向',
+    'rationality': '理性程度',
+    'humor': '幽默感',
+    'initiative': '主动性',
+    'teasing': '吐槽程度',
+    'patience': '耐心',
+    'intimacyExpression': '亲近表达',
+    'flirtiness': '暧昧倾向',
+    'romanticTone': '浪漫语气',
+    'suggestivenessAvoidance': '暗示性内容抑制',
+    'intimacyBoundary': '亲密边界',
+  };
+
+  static const Map<String, String> _lifestyleLabels = {
+    'punctualityTendency': '守时倾向',
+    'earlyPrepareTendency': '提前准备',
+    'selfDisciplineTendency': '自律程度',
+    'sleepinessTendency': '嗜睡程度',
+    'randomnessTendency': '随机性',
+    'activityEnergy': '活动精力',
+    'socialEnergy': '社交精力',
+    'careTendency': '关心倾向',
+    'dailyShareTendency': '日常分享倾向',
+  };
+
   final _promptController = TextEditingController();
+  final _bedController = TextEditingController();
+  final _wakeController = TextEditingController();
+  final _selfReferenceController = TextEditingController();
+  final _addressingController = TextEditingController();
+  final _workStartController = TextEditingController();
+  final _workEndController = TextEditingController();
+  final _workDaysController = TextEditingController();
+
+  bool _loading = true;
+  bool _saving = false;
+  String? _error;
   bool _timeAwareness = true;
-  int _personalityScore = 65;
+  bool _sleepEnabled = true;
+  String _gender = 'UNSPECIFIED';
+  String _pronoun = 'TA';
+  int _genderExpression = 30;
+  String _lifeIdentity = 'CUSTOM';
+  Map<String, dynamic> _personalityConfig = <String, dynamic>{};
+  Map<String, dynamic> _lifestyle = <String, dynamic>{};
+  Map<String, dynamic> _workProfile = <String, dynamic>{};
+  Map<String, dynamic> _relationshipTime = <String, dynamic>{};
+  bool _relationshipTimeAvailable = true;
+  List<Map<String, dynamic>> _fixedEvents = const [];
+  List<Map<String, dynamic>> _specialEvents = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
 
   @override
   void dispose() {
-    _promptController.dispose();
+    for (final controller in [
+      _promptController,
+      _bedController,
+      _wakeController,
+      _selfReferenceController,
+      _addressingController,
+      _workStartController,
+      _workEndController,
+      _workDaysController,
+    ]) {
+      controller.dispose();
+    }
     super.dispose();
   }
+
+  Map<String, dynamic> _decodeConfig(dynamic raw) {
+    if (raw is Map) return Map<String, dynamic>.from(raw);
+    if (raw is String && raw.trim().isNotEmpty) {
+      try {
+        final decoded = jsonDecode(raw);
+        if (decoded is Map) return Map<String, dynamic>.from(decoded);
+      } catch (_) {}
+    }
+    return <String, dynamic>{};
+  }
+
+  bool _bool(dynamic value, {bool fallback = false}) {
+    if (value is bool) return value;
+    if (value is num) return value != 0;
+    return fallback;
+  }
+
+  int _int(dynamic value, int fallback) => value is num ? value.round() : int.tryParse('$value') ?? fallback;
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final characterService = ref.read(characterDetailServiceProvider);
+      final companion = ref.read(companionServiceProvider);
+      final temporal = ref.read(temporalServiceProvider);
+      Map<String, dynamic>? relationshipTime;
+      var relationshipTimeAvailable = true;
+      try {
+        relationshipTime = await temporal.relationshipTimeSettings(widget.characterId);
+      } catch (_) {
+        relationshipTimeAvailable = false;
+      }
+      final values = await Future.wait<dynamic>([
+        characterService.character(widget.characterId),
+        characterService.roleProfile(characterId: widget.characterId),
+        companion.fixedEvents(characterId: widget.characterId),
+        companion.specialEvents(characterId: widget.characterId),
+        companion.sleepSetting(characterId: widget.characterId),
+        companion.lifestyleTendency(characterId: widget.characterId),
+        companion.workProfile(characterId: widget.characterId),
+        temporal.characterProfile(widget.characterId),
+      ]);
+      final character = values[0] as Map<String, dynamic>? ?? <String, dynamic>{};
+      final role = values[1] as Map<String, dynamic>? ?? <String, dynamic>{};
+      final sleep = values[4] as Map<String, dynamic>? ?? <String, dynamic>{};
+      final temporalProfile = values[7] as Map<String, dynamic>? ?? <String, dynamic>{};
+      final personality = <String, dynamic>{..._personalityDefaults, ..._decodeConfig(character['personalityConfig'])};
+      if (!mounted) return;
+      setState(() {
+        _promptController.text = (character['basePrompt'] ?? '').toString();
+        _personalityConfig = personality;
+        _fixedEvents = (values[2] as List<Map<String, dynamic>>?) ?? const [];
+        _specialEvents = (values[3] as List<Map<String, dynamic>>?) ?? const [];
+        _bedController.text = (sleep['bedTime'] ?? '23:00').toString();
+        _wakeController.text = (sleep['wakeTime'] ?? '07:00').toString();
+        _sleepEnabled = _bool(sleep['enabled'], fallback: true);
+        _timeAwareness = _bool(temporalProfile['enabled'], fallback: true);
+        _gender = (role['gender'] ?? character['gender'] ?? 'UNSPECIFIED').toString();
+        _pronoun = (role['pronoun'] ?? character['pronoun'] ?? 'TA').toString();
+        _genderExpression = _int(role['genderExpression'] ?? character['genderExpression'], 30).clamp(0, 100);
+        _selfReferenceController.text = (role['selfReference'] ?? character['selfReference'] ?? '我').toString();
+        _addressingController.text = (role['userAddressingStyle'] ?? character['userAddressingStyle'] ?? '').toString();
+        _lifeIdentity = (role['lifeIdentity'] ?? character['lifeIdentity'] ?? 'CUSTOM').toString();
+        _lifestyle = Map<String, dynamic>.from((values[5] as Map<String, dynamic>?) ?? const {});
+        _workProfile = Map<String, dynamic>.from((values[6] as Map<String, dynamic>?) ?? const {});
+        _relationshipTimeAvailable = relationshipTimeAvailable;
+        _relationshipTime = Map<String, dynamic>.from(relationshipTime ?? const {});
+        _workStartController.text = (_workProfile['workStartTime'] ?? '09:00').toString();
+        _workEndController.text = (_workProfile['workEndTime'] ?? '18:00').toString();
+        _workDaysController.text = (_workProfile['workDays'] ?? 'MON,TUE,WED,THU,FRI').toString();
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    try {
+      final characterService = ref.read(characterDetailServiceProvider);
+      final companion = ref.read(companionServiceProvider);
+      final temporal = ref.read(temporalServiceProvider);
+      final currentTemporal = await temporal.characterProfile(widget.characterId) ?? <String, dynamic>{};
+      final updatedTemporal = Map<String, dynamic>.from(currentTemporal)
+        ..['enabled'] = _timeAwareness
+        ..['source'] = 'explicit'
+        ..['confidence'] = 100;
+      final work = Map<String, dynamic>.from(_workProfile)
+        ..['workStartTime'] = _workStartController.text.trim()
+        ..['workEndTime'] = _workEndController.text.trim()
+        ..['workDays'] = _workDaysController.text.trim();
+      final lifestyle = Map<String, dynamic>.from(_lifestyle)..['manuallyConfigured'] = true;
+      final saveOperations = <Future<dynamic>>[
+        characterService.updateCharacter(widget.characterId, {
+          'basePrompt': _promptController.text.trim(),
+          'personalityConfig': _personalityConfig,
+          'lifeIdentity': _lifeIdentity,
+        }),
+        characterService.updateRoleProfile({
+          'gender': _gender,
+          'pronoun': _pronoun,
+          'selfReference': _selfReferenceController.text.trim().isEmpty ? '我' : _selfReferenceController.text.trim(),
+          'userAddressingStyle': _addressingController.text.trim().isEmpty ? null : _addressingController.text.trim(),
+          'genderExpression': _genderExpression,
+          'lifeIdentity': _lifeIdentity,
+        }, characterId: widget.characterId),
+        companion.updateSleepSetting({
+          'enabled': _sleepEnabled,
+          'bedTime': _bedController.text.trim(),
+          'wakeTime': _wakeController.text.trim(),
+        }, characterId: widget.characterId),
+        companion.updateLifestyleTendency(lifestyle, characterId: widget.characterId),
+        companion.updateWorkProfile(work, characterId: widget.characterId),
+        temporal.updateCharacterProfile(widget.characterId, updatedTemporal),
+      ];
+      if (_relationshipTimeAvailable) {
+        saveOperations.add(temporal.updateRelationshipTimeSettings(widget.characterId, _relationshipTime));
+      }
+      await Future.wait(saveOperations);
+      if (!mounted) return;
+      setState(() {
+        _workProfile = work;
+        _lifestyle = lifestyle;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('角色生活规则已保存')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('保存失败：$e')));
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _resetToDefaults() async {
+    setState(() {
+      _promptController.clear();
+      _personalityConfig = Map<String, dynamic>.from(_personalityDefaults);
+      _timeAwareness = true;
+      _sleepEnabled = true;
+      _bedController.text = '23:00';
+      _wakeController.text = '07:00';
+      _gender = 'UNSPECIFIED';
+      _pronoun = 'TA';
+      _genderExpression = 30;
+      _selfReferenceController.text = '我';
+      _addressingController.clear();
+      _lifeIdentity = 'CUSTOM';
+      _lifestyle = {for (final key in _lifestyleLabels.keys) key: 50, 'manuallyConfigured': true};
+      _workProfile = <String, dynamic>{'enabled': false};
+      _workStartController.text = '09:00';
+      _workEndController.text = '18:00';
+      _workDaysController.text = 'MON,TUE,WED,THU,FRI';
+      _relationshipTime = {
+        'enabled': true,
+        'reunionEnabled': true,
+        'sensitivity': 'balanced',
+        'allowMemoryRecall': true,
+        'allowRelationshipAge': true,
+        'allowReunionMention': true,
+        'allowProactiveReference': true,
+        'maxMentionSentences': 1,
+      };
+    });
+    await _save();
+  }
+
+  Future<void> _editEvent({Map<String, dynamic>? event, required bool special}) async {
+    final title = TextEditingController(text: (event?['title'] ?? '').toString());
+    final start = TextEditingController(text: (event?[special ? 'startDate' : 'startTime'] ?? (special ? '' : '09:00')).toString());
+    final end = TextEditingController(text: (event?[special ? 'endDate' : 'endTime'] ?? (special ? '' : '10:00')).toString());
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(event == null ? '新增${special ? '特殊事件' : '固定日程'}' : '编辑${special ? '特殊事件' : '固定日程'}'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          TextField(controller: title, decoration: const InputDecoration(labelText: '名称')),
+          TextField(controller: start, decoration: InputDecoration(labelText: special ? '开始日期 YYYY-MM-DD' : '开始时间 HH:mm')),
+          TextField(controller: end, decoration: InputDecoration(labelText: special ? '结束日期 YYYY-MM-DD' : '结束时间 HH:mm')),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, special
+                ? {'title': title.text.trim(), 'startDate': start.text.trim(), 'endDate': end.text.trim(), 'enabled': true}
+                : {'title': title.text.trim(), 'startTime': start.text.trim(), 'endTime': end.text.trim(), 'enabled': true}),
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    title.dispose();
+    start.dispose();
+    end.dispose();
+    if (result == null || (result['title'] as String?)?.isEmpty == true) return;
+    final companion = ref.read(companionServiceProvider);
+    if (special) {
+      if (event == null) {
+        await companion.createSpecialEvent(result, characterId: widget.characterId);
+      } else {
+        await companion.updateSpecialEvent('${event['id']}', result, characterId: widget.characterId);
+      }
+    } else {
+      if (event == null) {
+        await companion.createFixedEvent(result, characterId: widget.characterId);
+      } else {
+        await companion.updateFixedEvent('${event['id']}', result, characterId: widget.characterId);
+      }
+    }
+    await _load();
+  }
+
+  Future<void> _deleteEvent(Map<String, dynamic> event, {required bool special}) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('确认删除'),
+        content: Text('确定删除“${event['title'] ?? '未命名'}”？'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(context, true), child: const Text('删除')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final companion = ref.read(companionServiceProvider);
+    if (special) {
+      await companion.deleteSpecialEvent('${event['id']}', characterId: widget.characterId);
+    } else {
+      await companion.deleteFixedEvent('${event['id']}', characterId: widget.characterId);
+    }
+    await _load();
+  }
+
+  Widget _section(String title, Widget child) => Padding(
+        padding: EdgeInsets.only(bottom: AppSpacing.sectionGap),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+          AmitiaSectionHeader(title: title),
+          SizedBox(height: AppSpacing.sm),
+          AmitiaCard(child: child),
+        ]),
+      );
+
+  Widget _slider(String label, int value, ValueChanged<int> onChanged) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [Expanded(child: Text(label)), Text('$value')]),
+          Slider(value: value.clamp(0, 100).toDouble(), min: 0, max: 100, divisions: 100, onChanged: (v) => onChanged(v.round())),
+        ],
+      );
+
+  Widget _eventsSection(String title, List<Map<String, dynamic>> events, {required bool special}) => _section(
+        '$title (${events.length})',
+        Column(
+          children: [
+            Align(alignment: Alignment.centerRight, child: OutlinedButton.icon(onPressed: () => _editEvent(special: special), icon: const Icon(Icons.add), label: const Text('新增'))),
+            if (events.isEmpty)
+              Padding(padding: const EdgeInsets.all(12), child: Text('当前角色暂无$title', style: AppTypography.caption(context)))
+            else
+              ...events.map((event) => ListTile(
+                    contentPadding: EdgeInsets.zero,
+                    leading: Icon(special ? Icons.event_note_outlined : Icons.schedule_outlined),
+                    title: Text((event['title'] ?? '未命名').toString()),
+                    subtitle: Text(special
+                        ? '${event['startDate'] ?? '—'} - ${event['endDate'] ?? '—'}'
+                        : '${event['startTime'] ?? '—'} - ${event['endTime'] ?? '—'}'),
+                    trailing: Wrap(spacing: 4, children: [
+                      IconButton(icon: const Icon(Icons.edit_outlined), tooltip: '编辑', onPressed: () => _editEvent(event: event, special: special)),
+                      IconButton(icon: const Icon(Icons.delete_outline), tooltip: '删除', onPressed: () => _deleteEvent(event, special: special)),
+                    ]),
+                  )),
+          ],
+        ),
+      );
 
   @override
   Widget build(BuildContext context) {
@@ -37,303 +433,127 @@ class _CharacterLifeRulesPageState extends ConsumerState<CharacterLifeRulesPage>
         showBackButton: true,
         fallbackRoute: AppRoutes.characters,
         actions: [
-          AmitiaIconButton(
-            icon: Icons.visibility_outlined,
-            tooltip: '预览完整Prompt',
-            onPressed: () => _showFullPromptPreview(context),
-          ),
-          AmitiaIconButton(
-            icon: Icons.refresh,
-            tooltip: '恢复默认',
-            onPressed: () => _resetToDefaults(),
-          ),
+          AmitiaIconButton(icon: Icons.refresh, tooltip: '刷新', onPressed: _load),
+          AmitiaIconButton(icon: Icons.restart_alt, tooltip: '恢复默认并保存', onPressed: _resetToDefaults),
         ],
       ),
       body: SafeArea(
         top: false,
-        child: ListView(
-          padding: EdgeInsets.all(AppSpacing.pagePadding),
-          children: [
-            _buildPromptSection(context),
-            SizedBox(height: AppSpacing.sectionGap),
-            _buildPersonalitySection(context),
-            SizedBox(height: AppSpacing.sectionGap),
-            _buildFixedEventsSection(context),
-            SizedBox(height: AppSpacing.sectionGap),
-            _buildSettingsSection(context),
-            SizedBox(height: AppSpacing.xxl),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPromptSection(BuildContext context) {
-    return AmitiaCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('角色 Prompt', style: AppTypography.cardTitle(context)),
-              AmitiaIconButton(
-                icon: Icons.check,
-                color: context.accentPrimary,
-                backgroundColor: context.accentSoft,
-                onPressed: () => _savePrompt(),
-              ),
-            ],
-          ),
-          SizedBox(height: AppSpacing.sm),
-          AmitiaTextField(
-            controller: _promptController,
-            maxLines: 6,
-            hintText: '输入角色 Prompt...',
-          ),
-          SizedBox(height: AppSpacing.sm),
-          Row(
-            children: [
-              AmitiaButtonOutline(
-                label: '预览完整Prompt',
-                onPressed: () => _showFullPromptPreview(context),
-              ),
-              SizedBox(width: AppSpacing.sm),
-              Expanded(
-                child: AmitiaButton(
-                  label: '保存修改',
-                  icon: Icons.save_outlined,
-                  onPressed: () => _savePrompt(),
-                ),
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildPersonalitySection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        AmitiaSectionHeader(title: '性格设置'),
-        SizedBox(height: AppSpacing.sm),
-        AmitiaCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('性格倾向', style: AppTypography.cardTitle(context)),
-              SizedBox(height: AppSpacing.xs),
-              Text('角色性格从温和到倾向的设置', style: AppTypography.caption(context)),
-              SizedBox(height: AppSpacing.md),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text('温和', style: AppTypography.label(context)),
-                  Text('$_personalityScore', style: AppTypography.label(context).copyWith(color: context.accentPrimary, fontWeight: FontWeight.w600)),
-                  Text('强势', style: AppTypography.label(context)),
-                ],
-              ),
-              Slider(
-                value: _personalityScore.toDouble(),
-                min: 0,
-                max: 100,
-                divisions: 100,
-                activeColor: context.accentPrimary,
-                onChanged: (value) {
-                  setState(() {
-                    _personalityScore = value.round();
-                  });
-                },
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFixedEventsSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        AmitiaSectionHeader(title: '固定日程'),
-        SizedBox(height: AppSpacing.sm),
-        FutureBuilder<List<Map<String, dynamic>>>(
-          future: ref.read(companionServiceProvider).fixedEvents(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return Padding(
-                padding: EdgeInsets.all(AppSpacing.lg),
-                child: Center(child: CircularProgressIndicator()),
-              );
-            }
-            if (snapshot.hasError) {
-              return Padding(
-                padding: EdgeInsets.all(AppSpacing.md),
-                child: Text('加载失败: ${snapshot.error}', style: AppTypography.caption(context)),
-              );
-            }
-            final events = snapshot.data ?? [];
-            if (events.isEmpty) {
-              return Padding(
-                padding: EdgeInsets.all(AppSpacing.md),
-                child: Text('暂无固定日程', style: AppTypography.caption(context)),
-              );
-            }
-            return Column(
-              children: events.map((e) => _buildScheduleItem(context, e)).toList(),
-            );
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildScheduleItem(BuildContext context, Map<String, dynamic> event) {
-    final title = event['title']?.toString() ?? '';
-    final startTime = event['startTime']?.toString() ?? '';
-    final endTime = event['endTime']?.toString() ?? '';
-    final type = event['type']?.toString() ?? '';
-    final enabled = event['enabled'] == 1 || event['enabled'] == true;
-
-    return Padding(
-      padding: EdgeInsets.only(bottom: AppSpacing.sm),
-      child: AmitiaCard(
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: enabled ? context.accentSoft : context.surfaceSecondary,
-                borderRadius: AppRadius.brSmall,
-              ),
-              child: Icon(Icons.schedule, size: 22, color: enabled ? context.accentPrimary : context.textTertiary),
-            ),
-            SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title, style: AppTypography.cardTitle(context)),
-                  const SizedBox(height: 2),
-                  Text('$startTime - $endTime', style: AppTypography.caption(context)),
-                ],
-              ),
-            ),
-            AmitiaStatusBadge(
-              label: type.isEmpty ? '日程' : type,
-              type: enabled ? BadgeType.success : BadgeType.neutral,
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildSettingsSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        AmitiaSectionHeader(title: '其他设置'),
-        SizedBox(height: AppSpacing.sm),
-        AmitiaCard(
-          child: AmitiaSwitchTile(
-            title: '时间感知',
-            subtitle: '角色能感知当前时间并据此调整行为',
-            value: _timeAwareness,
-            onChanged: (value) async {
-              setState(() => _timeAwareness = value);
-              final svc = ref.read(companionServiceProvider);
-              await svc.updateSleepSetting({'timeAwareness': value});
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('时间感知已${value ? '开启' : '关闭'}'), duration: const Duration(seconds: 1)),
-                );
-              }
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  void _resetToDefaults() {
-    setState(() {
-      _promptController.text = '';
-      _timeAwareness = true;
-      _personalityScore = 65;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('已恢复默认设置'), duration: Duration(seconds: 1)),
-    );
-  }
-
-  Future<void> _savePrompt() async {
-    final svc = ref.read(characterDetailServiceProvider);
-    await svc.updateRoleProfile({'prompt': _promptController.text, 'personalityScore': _personalityScore});
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Prompt 已保存'), duration: Duration(seconds: 1)),
-      );
-    }
-  }
-
-  void _showFullPromptPreview(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) => DraggableScrollableSheet(
-        initialChildSize: 0.7,
-        maxChildSize: 0.9,
-        minChildSize: 0.5,
-        expand: false,
-        builder: (ctx, controller) => Container(
-          padding: EdgeInsets.all(AppSpacing.xl),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: context.borderPrimary,
-                    borderRadius: BorderRadius.circular(2),
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+                ? Center(child: Text('加载失败：$_error'))
+                : ListView(
+                    padding: EdgeInsets.all(AppSpacing.pagePadding),
+                    children: [
+                      _section('角色 Prompt', AmitiaTextField(controller: _promptController, maxLines: 7, hintText: '角色基础 Prompt')),
+                      _section(
+                        '角色身份',
+                        Column(children: [
+                          DropdownButtonFormField<String>(
+                            value: const ['UNSPECIFIED', 'MALE', 'FEMALE', 'NON_BINARY', 'CUSTOM'].contains(_gender) ? _gender : 'CUSTOM',
+                            decoration: const InputDecoration(labelText: '性别'),
+                            items: const [
+                              DropdownMenuItem(value: 'UNSPECIFIED', child: Text('不强调性别')),
+                              DropdownMenuItem(value: 'MALE', child: Text('男生')),
+                              DropdownMenuItem(value: 'FEMALE', child: Text('女生')),
+                              DropdownMenuItem(value: 'NON_BINARY', child: Text('非二元')),
+                              DropdownMenuItem(value: 'CUSTOM', child: Text('自定义')),
+                            ],
+                            onChanged: (value) => setState(() {
+                              _gender = value ?? 'UNSPECIFIED';
+                              if (_gender == 'MALE') _pronoun = '他';
+                              if (_gender == 'FEMALE') _pronoun = '她';
+                              if (_gender == 'NON_BINARY' || _gender == 'UNSPECIFIED') _pronoun = 'TA';
+                            }),
+                          ),
+                          DropdownButtonFormField<String>(
+                            value: const ['TA', '他', '她'].contains(_pronoun) ? _pronoun : 'TA',
+                            decoration: const InputDecoration(labelText: '代词'),
+                            items: const [DropdownMenuItem(value: 'TA', child: Text('TA')), DropdownMenuItem(value: '他', child: Text('他')), DropdownMenuItem(value: '她', child: Text('她'))],
+                            onChanged: (value) => setState(() => _pronoun = value ?? 'TA'),
+                          ),
+                          TextField(controller: _selfReferenceController, decoration: const InputDecoration(labelText: '自称')),
+                          TextField(controller: _addressingController, decoration: const InputDecoration(labelText: '用户称呼风格')),
+                          _slider('性别表达强度', _genderExpression, (v) => setState(() => _genderExpression = v)),
+                          DropdownButtonFormField<String>(
+                            value: const ['SCHOOL', 'WORK', 'UNEMPLOYED', 'HOME', 'CUSTOM'].contains(_lifeIdentity) ? _lifeIdentity : 'CUSTOM',
+                            decoration: const InputDecoration(labelText: '生活场景'),
+                            items: const [
+                              DropdownMenuItem(value: 'SCHOOL', child: Text('上学')),
+                              DropdownMenuItem(value: 'WORK', child: Text('工作')),
+                              DropdownMenuItem(value: 'UNEMPLOYED', child: Text('待业')),
+                              DropdownMenuItem(value: 'HOME', child: Text('居家')),
+                              DropdownMenuItem(value: 'CUSTOM', child: Text('自定义')),
+                            ],
+                            onChanged: (value) => setState(() => _lifeIdentity = value ?? 'CUSTOM'),
+                          ),
+                        ]),
+                      ),
+                      _section(
+                        '性格参数',
+                        ExpansionTile(
+                          tilePadding: EdgeInsets.zero,
+                          title: Text('完整 ${_personalityDefaults.length} 项性格配置'),
+                          subtitle: const Text('与桌面端使用同一 personalityConfig'),
+                          children: _personalityDefaults.keys
+                              .map((key) => _slider(_personalityLabels[key] ?? key, _int(_personalityConfig[key], _personalityDefaults[key]!), (value) => setState(() => _personalityConfig[key] = value)))
+                              .toList(),
+                        ),
+                      ),
+                      _section(
+                        '生活倾向',
+                        ExpansionTile(
+                          tilePadding: EdgeInsets.zero,
+                          title: const Text('生活习惯参数'),
+                          children: _lifestyleLabels.keys
+                              .map((key) => _slider(_lifestyleLabels[key]!, _int(_lifestyle[key], 50), (value) => setState(() => _lifestyle[key] = value)))
+                              .toList(),
+                        ),
+                      ),
+                      _section(
+                        '时间与睡眠',
+                        Column(children: [
+                          SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('时间感知'), subtitle: const Text('使用当前角色 Temporal Profile'), value: _timeAwareness, onChanged: (v) => setState(() => _timeAwareness = v)),
+                          SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('睡眠规则'), value: _sleepEnabled, onChanged: (v) => setState(() => _sleepEnabled = v)),
+                          Row(children: [Expanded(child: TextField(controller: _bedController, decoration: const InputDecoration(labelText: '入睡时间'))), const SizedBox(width: 12), Expanded(child: TextField(controller: _wakeController, decoration: const InputDecoration(labelText: '起床时间')))]),
+                        ]),
+                      ),
+                      _section(
+                        '关系时间',
+                        !_relationshipTimeAvailable
+                            ? const Text('当前后端未启用 Relationship Time 功能；其余角色设置仍可正常使用。')
+                            : Column(children: [
+                          SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('启用关系时间'), value: _bool(_relationshipTime['enabled'], fallback: true), onChanged: (v) => setState(() => _relationshipTime['enabled'] = v)),
+                          SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('重逢感知'), value: _bool(_relationshipTime['reunionEnabled'], fallback: true), onChanged: (v) => setState(() => _relationshipTime['reunionEnabled'] = v)),
+                          SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('允许回忆记忆'), value: _bool(_relationshipTime['allowMemoryRecall'], fallback: true), onChanged: (v) => setState(() => _relationshipTime['allowMemoryRecall'] = v)),
+                          SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('允许提及关系时长'), value: _bool(_relationshipTime['allowRelationshipAge'], fallback: true), onChanged: (v) => setState(() => _relationshipTime['allowRelationshipAge'] = v)),
+                          SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('允许主动引用关系时间'), value: _bool(_relationshipTime['allowProactiveReference'], fallback: true), onChanged: (v) => setState(() => _relationshipTime['allowProactiveReference'] = v)),
+                          DropdownButtonFormField<String>(
+                            value: const ['conservative', 'balanced', 'expressive'].contains(_relationshipTime['sensitivity']) ? _relationshipTime['sensitivity'] as String : 'balanced',
+                            decoration: const InputDecoration(labelText: '敏感度'),
+                            items: const [DropdownMenuItem(value: 'conservative', child: Text('保守')), DropdownMenuItem(value: 'balanced', child: Text('平衡')), DropdownMenuItem(value: 'expressive', child: Text('表达丰富'))],
+                            onChanged: (v) => setState(() => _relationshipTime['sensitivity'] = v ?? 'balanced'),
+                          ),
+                        ]),
+                      ),
+                      _section(
+                        '工作规则',
+                        Column(children: [
+                          SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('启用工作状态'), value: _bool(_workProfile['enabled']), onChanged: (v) => setState(() => _workProfile['enabled'] = v)),
+                          TextField(controller: _workDaysController, decoration: const InputDecoration(labelText: '工作日', hintText: 'MON,TUE,WED,THU,FRI')),
+                          Row(children: [Expanded(child: TextField(controller: _workStartController, decoration: const InputDecoration(labelText: '开始时间'))), const SizedBox(width: 12), Expanded(child: TextField(controller: _workEndController, decoration: const InputDecoration(labelText: '结束时间')))]),
+                          SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('允许加班'), value: _bool(_workProfile['allowOvertime']), onChanged: (v) => setState(() => _workProfile['allowOvertime'] = v)),
+                          SwitchListTile(contentPadding: EdgeInsets.zero, title: const Text('延迟回复'), value: _bool(_workProfile['delayedReplyEnabled']), onChanged: (v) => setState(() => _workProfile['delayedReplyEnabled'] = v)),
+                          _slider('下班分享概率', _int(_workProfile['commuteHomeShareProbability'], 60), (v) => setState(() => _workProfile['commuteHomeShareProbability'] = v)),
+                        ]),
+                      ),
+                      _eventsSection('固定日程', _fixedEvents, special: false),
+                      _eventsSection('特殊事件', _specialEvents, special: true),
+                      AmitiaButton(label: _saving ? '保存中...' : '保存全部修改', icon: Icons.save_outlined, isFullWidth: true, onPressed: _saving ? null : _save),
+                      SizedBox(height: AppSpacing.sectionGap),
+                    ],
                   ),
-                ),
-              ),
-              SizedBox(height: AppSpacing.lg),
-              Text('完整 Prompt 预览', style: AppTypography.sectionTitle(context)),
-              SizedBox(height: AppSpacing.md),
-              Expanded(
-                child: SingleChildScrollView(
-                  controller: controller,
-                  child: Container(
-                    padding: EdgeInsets.all(AppSpacing.lg),
-                    decoration: BoxDecoration(
-                      color: context.surfaceSecondary,
-                      borderRadius: AppRadius.brMedium,
-                    ),
-                    child: SelectableText(
-                      _promptController.text.isEmpty ? '暂无Prompt' : _promptController.text,
-                      style: AppTypography.bodySmall(context).copyWith(height: 1.6),
-                    ),
-                  ),
-                ),
-              ),
-              SizedBox(height: AppSpacing.lg),
-              AmitiaButton(
-                label: '关闭',
-                isFullWidth: true,
-                isSecondary: true,
-                onPressed: () => Navigator.pop(ctx),
-              ),
-            ],
-          ),
-        ),
       ),
     );
   }

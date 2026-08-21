@@ -1,18 +1,22 @@
+import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
-import '../../../../app/theme/app_radius.dart';
-import '../../../../core/widgets/amitia_scaffold.dart';
-import '../../../../core/widgets/amitia_misc.dart';
-import '../../../../core/services/providers.dart';
+import '../../../../app/theme/app_typography.dart';
+import '../../../../core/backend_connection/backend_connection_availability.dart';
+import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
 import '../../../../core/models/voice.dart';
+import '../../../../core/services/providers.dart';
+import '../../../../core/widgets/amitia_button.dart';
+import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/widgets/amitia_scaffold.dart';
 
 class CharacterVoicePage extends ConsumerStatefulWidget {
   final String characterId;
-
   const CharacterVoicePage({super.key, required this.characterId});
 
   @override
@@ -20,412 +24,264 @@ class CharacterVoicePage extends ConsumerStatefulWidget {
 }
 
 class _CharacterVoicePageState extends ConsumerState<CharacterVoicePage> {
-  double _speed = 1.0;
-  double _pitch = 1.0;
-  String? _activeConfigId;
-  List<VoiceConfigDto> _configs = [];
+  bool _loading = true;
+  bool _saving = false;
+  String? _error;
+  String _voiceMode = 'preset';
+  String _voiceType = 'zh_female_vv_uranus_bigtts';
+  String _customVoiceId = '';
+  String _emotion = '';
+  int _emotionScale = 4;
+  double _speed = 1;
+  double _pitch = 1;
+  double _volume = 1;
+  List<Map<String, dynamic>> _voices = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final values = await Future.wait<dynamic>([
+        ref.read(characterDetailServiceProvider).character(widget.characterId),
+        ref.read(ttsServiceProvider).voices(),
+      ]);
+      final character = values[0] as Map<String, dynamic>? ?? <String, dynamic>{};
+      if (!mounted) return;
+      setState(() {
+        _voices = values[1] as List<Map<String, dynamic>>;
+        _voiceMode = (character['voiceMode'] ?? 'preset').toString();
+        _voiceType = (character['voiceType'] ?? _voiceType).toString();
+        _customVoiceId = (character['customVoiceId'] ?? '').toString();
+        _speed = (character['voiceSpeed'] as num?)?.toDouble() ?? 1;
+        _pitch = (character['voicePitch'] as num?)?.toDouble() ?? 1;
+        _volume = (character['voiceVolume'] as num?)?.toDouble() ?? 1;
+        _emotion = (character['emotion'] ?? '').toString();
+        _emotionScale = (character['emotionScale'] as num?)?.toInt() ?? 4;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _error = e.toString();
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _save() async {
+    if (_saving) return;
+    if (_voiceMode == 'clone' && _customVoiceId.trim().isEmpty) {
+      _show('请先完成声音复刻或填写克隆音色 ID', error: true);
+      return;
+    }
+    setState(() => _saving = true);
+    try {
+      await ref.read(characterDetailServiceProvider).updateCharacter(widget.characterId, {
+        'voiceMode': _voiceMode,
+        'voiceType': _voiceType,
+        'customVoiceId': _customVoiceId.trim(),
+        'voiceSpeed': _speed,
+        'voicePitch': _pitch,
+        'voiceVolume': _volume,
+        'emotion': _emotion,
+        'emotionScale': _emotionScale,
+      });
+      _show('当前角色语音设置已保存');
+    } catch (e) {
+      _show('保存失败：$e', error: true);
+    } finally {
+      if (mounted) setState(() => _saving = false);
+    }
+  }
+
+  Future<void> _preview() async {
+    try {
+      await _save();
+      final result = await ref.read(ttsServiceProvider).synthesizeForCharacter(widget.characterId, '你好，这是当前角色的语音试听。');
+      final url = (result?['audioUrl'] ?? '').toString();
+      _show(url.isEmpty ? '试听请求已完成' : '试听音频已生成：$url');
+    } catch (e) {
+      _show('试听失败：$e', error: true);
+    }
+  }
+
+  Future<Dio> _dio() async {
+    final availability = await ref.read(backendConnectionProvider.future);
+    if (availability is! BackendConnectionAvailable) throw StateError('后端当前不可用');
+    return createAuthenticatedDio(availability.config);
+  }
+
+  Future<void> _cloneVoice() async {
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['wav', 'mp3', 'm4a', 'aac', 'ogg', 'pcm'],
+    );
+    if (picked == null || picked.files.isEmpty || picked.files.first.path == null) return;
+    final nameController = TextEditingController(text: '角色专属音色');
+    final name = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('声音复刻'),
+        content: TextField(controller: nameController, decoration: const InputDecoration(labelText: '音色名称')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(dialogContext, nameController.text.trim()), child: const Text('开始复刻')),
+        ],
+      ),
+    );
+    if (name == null || name.isEmpty) return;
+    Dio? dio;
+    try {
+      final configs = await ref.read(ttsServiceProvider).listConfigs();
+      VoiceConfigDto? active;
+      for (final cfg in configs) {
+        if (cfg.isActive == 1) {
+          active = cfg;
+          break;
+        }
+      }
+      active ??= configs.isEmpty ? null : configs.first;
+      final apiKey = active?.apiKey ?? '';
+      if (apiKey.isEmpty && (active?.realtimeAccessToken ?? '').isEmpty) {
+        throw StateError('请先在 TTS 配置中设置 API Key');
+      }
+      dio = await _dio();
+      final file = picked.files.first;
+      final form = FormData.fromMap({
+        'name': name,
+        'language': 'cn',
+        'audio': await MultipartFile.fromFile(file.path!, filename: file.name),
+      });
+      final response = await dio.post(
+        '/api/tts/voice-clone',
+        queryParameters: {'apiKey': apiKey.isNotEmpty ? apiKey : active!.realtimeAccessToken},
+        data: form,
+      );
+      final body = response.data;
+      final data = body is Map ? body['data'] : null;
+      final speakerId = data is Map ? (data['speakerId'] ?? '').toString() : '';
+      if (speakerId.isEmpty) throw StateError('后端未返回 speakerId');
+      setState(() {
+        _customVoiceId = speakerId;
+        _voiceMode = 'clone';
+      });
+      await _save();
+      _show('声音复刻完成并已绑定到当前角色');
+    } catch (e) {
+      _show('声音复刻失败：$e', error: true);
+    } finally {
+      dio?.close(force: true);
+    }
+  }
+
+  void _show(String message, {bool error = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: error ? context.error : null));
+  }
 
   @override
   Widget build(BuildContext context) {
+    final presetValues = _voices.map((item) => (item['name'] ?? '').toString()).where((value) => value.isNotEmpty).toSet().toList();
+    if (!presetValues.contains(_voiceType) && _voiceType.isNotEmpty) presetValues.insert(0, _voiceType);
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
-        title: '拟态语音',
+        title: '角色语音',
         showBackButton: true,
         fallbackRoute: AppRoutes.characters,
-        actions: [
-          AmitiaIconButton(
-            icon: Icons.add,
-            tooltip: '新增音色',
-            onPressed: () => _showVoiceEditor(context, null),
-          ),
-        ],
+        actions: [AmitiaIconButton(icon: Icons.refresh, tooltip: '刷新', onPressed: _load)],
       ),
       body: SafeArea(
         top: false,
-        child: ListView(
-          padding: EdgeInsets.all(AppSpacing.pagePadding),
-          children: [
-            _buildVoiceCloneEntry(context),
-            SizedBox(height: AppSpacing.sectionGap),
-            _buildVoiceListSection(context),
-            SizedBox(height: AppSpacing.sectionGap),
-            _buildParamsSection(context),
-            SizedBox(height: AppSpacing.xxl),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildVoiceCloneEntry(BuildContext context) {
-    return AmitiaCard(
-      backgroundColor: context.accentSoft,
-      child: Row(
-        children: [
-          Container(
-            width: 48,
-            height: 48,
-            decoration: BoxDecoration(
-              color: context.accentPrimary,
-              borderRadius: AppRadius.brSmall,
-            ),
-            child: const Icon(Icons.graphic_eq, color: Colors.white, size: 24),
-          ),
-          SizedBox(width: AppSpacing.md),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('声音复刻', style: AppTypography.cardTitle(context)),
-                const SizedBox(height: 2),
-                Text('上传3-10秒语音样本，克隆专属音色', style: AppTypography.caption(context)),
-              ],
-            ),
-          ),
-          AmitiaButton(
-            label: '开始',
-            isSecondary: true,
-            onPressed: () => _startVoiceClone(context),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildVoiceListSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        AmitiaSectionHeader(title: '预设音色'),
-        SizedBox(height: AppSpacing.sm),
-        FutureBuilder<List<VoiceConfigDto>>(
-          future: ref.read(ttsServiceProvider).listConfigs(),
-          builder: (context, snapshot) {
-            if (snapshot.connectionState == ConnectionState.waiting) {
-              return const Center(child: CircularProgressIndicator());
-            }
-            if (snapshot.hasError) {
-              return Text('加载失败: ${snapshot.error}', style: AppTypography.caption(context));
-            }
-            _configs = snapshot.data ?? [];
-            if (_configs.isEmpty) {
-              return Text('暂无音色配置', style: AppTypography.caption(context));
-            }
-            return Column(
-              children: _configs.map((v) => _buildVoiceItem(context, v)).toList(),
-            );
-          },
-        ),
-      ],
-    );
-  }
-
-  Widget _buildVoiceItem(BuildContext context, VoiceConfigDto voice) {
-    final isCurrent = voice.id == _activeConfigId || voice.isActive == 1;
-    if (_activeConfigId == null && voice.isActive == 1) {
-      _activeConfigId = voice.id;
-    }
-
-    return Padding(
-      padding: EdgeInsets.only(bottom: AppSpacing.sm),
-      child: AmitiaCard(
-        border: Border.all(
-          color: isCurrent ? context.accentPrimary : context.borderPrimary,
-          width: isCurrent ? 1.5 : 0.5,
-        ),
-        child: Row(
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              decoration: BoxDecoration(
-                color: isCurrent ? context.accentPrimary : context.accentSoft,
-                borderRadius: AppRadius.brSmall,
-              ),
-              child: Icon(
-                isCurrent ? Icons.check_circle : Icons.record_voice_over,
-                size: 22,
-                color: isCurrent ? Colors.white : context.accentPrimary,
-              ),
-            ),
-            SizedBox(width: AppSpacing.md),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
+        child: _loading
+            ? const Center(child: CircularProgressIndicator())
+            : _error != null
+                ? Center(child: Text('加载失败：$_error'))
+                : ListView(
+                    padding: EdgeInsets.all(AppSpacing.pagePadding),
                     children: [
-                      Text(voice.name, style: AppTypography.cardTitle(context)),
-                      if (isCurrent) ...[
+                      AmitiaSectionHeader(title: '角色专属音色'),
+                      SizedBox(height: AppSpacing.sm),
+                      AmitiaCard(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            SegmentedButton<String>(
+                              segments: const [
+                                ButtonSegment(value: 'preset', label: Text('预设音色'), icon: Icon(Icons.record_voice_over_outlined)),
+                                ButtonSegment(value: 'clone', label: Text('复刻音色'), icon: Icon(Icons.graphic_eq)),
+                              ],
+                              selected: {_voiceMode},
+                              onSelectionChanged: (value) => setState(() => _voiceMode = value.first),
+                            ),
+                            SizedBox(height: AppSpacing.lg),
+                            if (_voiceMode == 'preset')
+                              DropdownButtonFormField<String>(
+                                value: presetValues.contains(_voiceType) ? _voiceType : null,
+                                decoration: const InputDecoration(labelText: '预设音色'),
+                                items: presetValues.map((value) {
+                                  final item = _voices.cast<Map<String, dynamic>?>().firstWhere(
+                                    (row) => (row?['name'] ?? '').toString() == value,
+                                    orElse: () => null,
+                                  );
+                                  return DropdownMenuItem(value: value, child: Text((item?['label'] ?? value).toString(), overflow: TextOverflow.ellipsis));
+                                }).toList(),
+                                onChanged: (value) => setState(() => _voiceType = value ?? _voiceType),
+                              )
+                            else ...[
+                              Text('当前 speakerId：${_customVoiceId.isEmpty ? '尚未复刻' : _customVoiceId}', style: AppTypography.bodySmall(context)),
+                              SizedBox(height: AppSpacing.sm),
+                              AmitiaButton(label: '上传语音样本并复刻', icon: Icons.upload_file, isSecondary: true, onPressed: _cloneVoice),
+                            ],
+                          ],
+                        ),
+                      ),
+                      SizedBox(height: AppSpacing.sectionGap),
+                      AmitiaSectionHeader(title: '角色语音参数'),
+                      SizedBox(height: AppSpacing.sm),
+                      AmitiaCard(
+                        child: Column(
+                          children: [
+                            _slider('语速', _speed, 0.5, 2, (v) => setState(() => _speed = v)),
+                            _slider('音调', _pitch, 0.5, 2, (v) => setState(() => _pitch = v)),
+                            _slider('音量', _volume, 0.2, 2, (v) => setState(() => _volume = v)),
+                            DropdownButtonFormField<String>(
+                              value: const ['', 'happy', 'sad', 'angry', 'fearful', 'surprised', 'neutral'].contains(_emotion) ? _emotion : '',
+                              decoration: const InputDecoration(labelText: '情绪'),
+                              items: const ['', 'happy', 'sad', 'angry', 'fearful', 'surprised', 'neutral'].map((value) => DropdownMenuItem(value: value, child: Text(value.isEmpty ? '无' : value))).toList(),
+                              onChanged: (value) => setState(() => _emotion = value ?? ''),
+                            ),
+                            _slider('情绪强度', _emotionScale.toDouble(), 1, 5, (v) => setState(() => _emotionScale = v.round()), divisions: 4),
+                          ],
+                        ),
+                      ),
+                      SizedBox(height: AppSpacing.sectionGap),
+                      Row(children: [
+                        Expanded(child: AmitiaButton(label: '试听', icon: Icons.volume_up_outlined, isSecondary: true, onPressed: _preview)),
                         SizedBox(width: AppSpacing.sm),
-                        AmitiaStatusBadge(label: '当前', type: BadgeType.accent),
-                      ],
+                        Expanded(child: AmitiaButton(label: _saving ? '保存中...' : '保存', icon: Icons.save_outlined, onPressed: _saving ? null : _save)),
+                      ]),
+                      SizedBox(height: AppSpacing.xxl),
                     ],
                   ),
-                  const SizedBox(height: 2),
-                  Text('提供商：${voice.provider} · 音色：${voice.voiceId}', style: AppTypography.caption(context)),
-                ],
-              ),
-            ),
-            AmitiaIconButton(
-              icon: Icons.play_circle_outline,
-              size: 26,
-              color: context.accentPrimary,
-              onPressed: () => _testVoice(voice),
-            ),
-            AmitiaIconButton(
-              icon: Icons.edit_outlined,
-              size: 18,
-              onPressed: () => _showVoiceEditor(context, voice),
-            ),
-            if (!isCurrent)
-              AmitiaIconButton(
-                icon: Icons.delete_outline,
-                size: 18,
-                color: context.error,
-                onPressed: () => _deleteVoice(voice),
-              ),
-          ],
-        ),
-        onTap: () async {
-          final svc = ref.read(ttsServiceProvider);
-          await svc.activate(voice.id);
-          setState(() {
-            _activeConfigId = voice.id;
-            _speed = voice.speed.toDouble();
-            _pitch = voice.pitch.toDouble();
-          });
-          if (mounted) {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(content: Text('已切换到「${voice.name}」'), duration: const Duration(seconds: 1)),
-            );
-          }
-        },
       ),
     );
   }
 
-  Widget _buildParamsSection(BuildContext context) {
+  Widget _slider(String label, double value, double min, double max, ValueChanged<double> onChanged, {int? divisions}) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        AmitiaSectionHeader(title: '语音参数'),
-        SizedBox(height: AppSpacing.sm),
-        AmitiaCard(
-          child: Column(
-            children: [
-              _buildSliderRow(context, '语速', _speed, 0.5, 2.0, 'x', (v) => setState(() => _speed = v)),
-              Divider(height: AppSpacing.lg),
-              _buildSliderRow(context, '音调', _pitch, 0.5, 2.0, 'x', (v) => setState(() => _pitch = v)),
-              SizedBox(height: AppSpacing.md),
-              AmitiaButton(
-                label: '试听当前参数',
-                icon: Icons.volume_up,
-                isFullWidth: true,
-                isSecondary: true,
-                onPressed: () => _testCurrentVoice(context),
-              ),
-            ],
-          ),
-        ),
+        Text('$label：${value.toStringAsFixed(1)}', style: AppTypography.label(context)),
+        Slider(value: value.clamp(min, max).toDouble(), min: min, max: max, divisions: divisions ?? 30, onChanged: onChanged),
       ],
-    );
-  }
-
-  Widget _buildSliderRow(
-    BuildContext context,
-    String label,
-    double value,
-    double min,
-    double max,
-    String suffix,
-    ValueChanged<double> onChanged,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(label, style: AppTypography.body(context)),
-            Text(
-              '${value.toStringAsFixed(1)}$suffix',
-              style: AppTypography.bodySmall(context).copyWith(color: context.accentPrimary, fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
-        Slider(
-          value: value,
-          min: min,
-          max: max,
-          divisions: 50,
-          activeColor: context.accentPrimary,
-          onChanged: onChanged,
-        ),
-      ],
-    );
-  }
-
-  Future<void> _testVoice(VoiceConfigDto voice) async {
-    final svc = ref.read(ttsServiceProvider);
-    await svc.test(voice.id);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('正在测试「${voice.name}」...'), duration: const Duration(seconds: 2)),
-      );
-    }
-  }
-
-  Future<void> _testCurrentVoice(BuildContext context) async {
-    if (_activeConfigId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('请先选择一个音色')),
-      );
-      return;
-    }
-    final svc = ref.read(ttsServiceProvider);
-    await svc.synthesize('你好，这是一段语音测试。', voiceId: _activeConfigId);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('正在试听...'), duration: Duration(seconds: 2)),
-      );
-    }
-  }
-
-  Future<void> _startVoiceClone(BuildContext context) async {
-    final result = await ref.read(characterDetailServiceProvider).uploadAvatar(widget.characterId, 'voice_sample.wav');
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result != null ? '声音复刻已启动' : '请先上传语音样本')),
-      );
-    }
-  }
-
-  Future<void> _deleteVoice(VoiceConfigDto voice) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('删除音色', style: AppTypography.cardTitle(context)),
-        content: Text('确定要删除「${voice.name}」吗？此操作不可撤销。', style: AppTypography.bodySmall(context)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, true),
-            child: Text('删除', style: TextStyle(color: context.error)),
-          ),
-        ],
-      ),
-    );
-    if (confirmed == true) {
-      final svc = ref.read(ttsServiceProvider);
-      await svc.deleteConfig(voice.id);
-      setState(() {});
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('音色已删除'), duration: Duration(seconds: 1)),
-        );
-      }
-    }
-  }
-
-  void _showVoiceEditor(BuildContext context, VoiceConfigDto? existing) {
-    final isEdit = existing != null;
-    final nameCtrl = TextEditingController(text: existing?.name ?? '');
-    final providerCtrl = TextEditingController(text: existing?.provider ?? '');
-    final voiceIdCtrl = TextEditingController(text: existing?.voiceId ?? '');
-    double speed = existing?.speed ?? 1;
-    double pitch = existing?.pitch ?? 1;
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setSheetState) => Padding(
-          padding: EdgeInsets.fromLTRB(
-            AppSpacing.xl,
-            AppSpacing.lg,
-            AppSpacing.xl,
-            MediaQuery.of(ctx).viewInsets.bottom + AppSpacing.xl,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: context.borderPrimary,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              SizedBox(height: AppSpacing.lg),
-              Text(isEdit ? '编辑音色' : '新增音色', style: AppTypography.sectionTitle(context)),
-              SizedBox(height: AppSpacing.lg),
-              Text('音色名称', style: AppTypography.label(context)),
-              SizedBox(height: AppSpacing.xs),
-              AmitiaTextField(controller: nameCtrl, hintText: '输入音色名称'),
-              SizedBox(height: AppSpacing.md),
-              Text('提供商', style: AppTypography.label(context)),
-              SizedBox(height: AppSpacing.xs),
-              AmitiaTextField(controller: providerCtrl, hintText: '如：OpenAI, Azure'),
-              SizedBox(height: AppSpacing.md),
-              Text('音色ID', style: AppTypography.label(context)),
-              SizedBox(height: AppSpacing.xs),
-              AmitiaTextField(controller: voiceIdCtrl, hintText: '如：alloy, nova'),
-              SizedBox(height: AppSpacing.md),
-              Text('语速: $speed', style: AppTypography.label(context)),
-              Slider(
-                value: speed.toDouble(),
-                min: 1,
-                max: 3,
-                divisions: 4,
-                activeColor: context.accentPrimary,
-                onChanged: (v) => setSheetState(() => speed = v),
-              ),
-              Text('音调: $pitch', style: AppTypography.label(context)),
-              Slider(
-                value: pitch.toDouble(),
-                min: 1,
-                max: 3,
-                divisions: 4,
-                activeColor: context.accentPrimary,
-                onChanged: (v) => setSheetState(() => pitch = v),
-              ),
-              SizedBox(height: AppSpacing.xl),
-              AmitiaButton(
-                label: isEdit ? '保存' : '添加',
-                isFullWidth: true,
-                onPressed: () async {
-                  if (nameCtrl.text.trim().isEmpty) return;
-                  Navigator.pop(ctx);
-                  final svc = ref.read(ttsServiceProvider);
-                  final data = {
-                    'name': nameCtrl.text.trim(),
-                    'apiType': providerCtrl.text.trim(),
-                    'voiceType': voiceIdCtrl.text.trim(),
-                    'speed': speed,
-                    'pitch': pitch,
-                  };
-                  if (isEdit) {
-                    await svc.updateConfig(existing.id, data);
-                  } else {
-                    await svc.createConfig(data);
-                  }
-                  setState(() {});
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(isEdit ? '音色已更新' : '音色已添加'), duration: const Duration(seconds: 1)),
-                    );
-                  }
-                },
-              ),
-            ],
-          ),
-        ),
-      ),
     );
   }
 }

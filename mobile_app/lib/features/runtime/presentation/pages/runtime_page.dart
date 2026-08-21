@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 import '../../../../app/app_routes.dart';
 import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
@@ -119,11 +120,6 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
     );
   }
 
-  void _showInfo(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), duration: const Duration(seconds: 1)),
-    );
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -203,7 +199,7 @@ class _RuntimePageState extends ConsumerState<RuntimePage> {
                 label: '查看日志',
                 icon: Icons.description_outlined,
                 isSecondary: true,
-                onPressed: () => _showInfo('暂无运行日志'),
+                onPressed: () => context.push(AppRoutes.toolboxLog),
               ),
               if (status.runtimeInstalled)
                 AmitiaButton(
