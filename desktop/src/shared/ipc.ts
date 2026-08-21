@@ -26,6 +26,7 @@ export const IPC_CHANNELS = {
   meshCloudListDevices: "amitia:mesh:cloud:list-devices",
   meshCloudRevokeDevice: "amitia:mesh:cloud:revoke-device",
   meshCloudProbe: "amitia:mesh:cloud:probe",
+  quitApp: "amitia:app:quit",
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
