@@ -465,110 +465,111 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 			wasmHandler.Register(wasmMux)
 			apiGroup.Any("/wasm/*wasmPath", gin.WrapH(wasmMux))
 		}
-		if services.KernelContainer != nil && services.KernelContainer.GameHost != nil {
-			kernelReader := management.NewKernelReaderWithContributions(services.KernelContainer.DefinitionRepository, services.KernelContainer.InstallationRepository, services.KernelContainer.ContributionRepository)
-			gameCenterSvc := management.NewProductionService(services.KernelContainer.GameHost, kernelReader)
-			management.RegisterGameCenterRouter(apiGroup, gameCenterSvc)
+	if services.KernelContainer != nil && services.KernelContainer.GameHost != nil {
+		log.Info("[GameCenter] GameHost detected, registering game-center routes")
+		kernelReader := management.NewKernelReaderWithContributions(services.KernelContainer.DefinitionRepository, services.KernelContainer.InstallationRepository, services.KernelContainer.ContributionRepository)
+		gameCenterSvc := management.NewProductionService(services.KernelContainer.GameHost, kernelReader)
+		management.RegisterGameCenterRouter(apiGroup, gameCenterSvc)
 
-			if services.Extension != nil {
-				kernelMutation := management.NewKernelMutationFromFuncs(management.KernelMutationOptions{
-					InstallFn: func(ctx context.Context, archivePath string) (management.KernelInstalledExtension, error) {
-						installed, err := services.Extension.Kernel.Install(ctx, archivePath)
+		if services.Extension != nil {
+			kernelMutation := management.NewKernelMutationFromFuncs(management.KernelMutationOptions{
+				InstallFn: func(ctx context.Context, archivePath string) (management.KernelInstalledExtension, error) {
+					installed, err := services.Extension.Kernel.Install(ctx, archivePath)
+					if err != nil {
+						return management.KernelInstalledExtension{}, err
+					}
+					return management.KernelInstalledExtension{ID: installed.ID, Name: installed.Name, Version: installed.Version}, nil
+				},
+				UpdateFn: func(ctx context.Context, archivePath string) (management.KernelInstalledExtension, error) {
+					installed, err := services.Extension.Kernel.Update(ctx, archivePath)
+					if err != nil {
+						return management.KernelInstalledExtension{}, err
+					}
+					return management.KernelInstalledExtension{ID: installed.ID, Name: installed.Name, Version: installed.Version}, nil
+				},
+				EnableFn: func(ctx context.Context, extensionID string) error {
+					return services.Extension.Kernel.Enable(ctx, extensionID)
+				},
+				DisableFn: func(ctx context.Context, extensionID string) error {
+					return services.Extension.Kernel.Disable(ctx, extensionID)
+				},
+				UninstallFn: func(ctx context.Context, extensionID string) error {
+					return services.Extension.Kernel.Uninstall(ctx, extensionID)
+				},
+			})
+			var upgradeCoordinator management.PackageUpgradeCoordinator = nil
+			if services.KernelContainer.GameHost != nil && services.KernelContainer.GameHost.UpgradeCoordinator != nil {
+				upgradeCoordinator = &management.GameHostUpgradeCoordinatorAdapter{UC: services.KernelContainer.GameHost.UpgradeCoordinator}
+			}
+			packageSvc := management.NewProductionPackageMutationServiceFromKernelReader(kernelReader, management.NewGameHostPluginRegistryFromContainer(services.KernelContainer.GameHost), kernelMutation, upgradeCoordinator)
+			runtimeSvc := management.NewProductionRuntimeMutationService(services.KernelContainer.GameHost)
+			gameCenterMutationHandler := management.NewMutationHandler(packageSvc, runtimeSvc)
+			management.RegisterGameCenterMutationRouter(apiGroup, gameCenterMutationHandler)
+
+			if services.KernelContainer.GameHost != nil && services.KernelContainer.GameHost.TakeoverService != nil {
+				controlHandler := management.NewControlHandlerFromFuncs(management.ControlServiceOptions{
+					TakeoverFn: func(ctx context.Context, runtimeID string) (management.TakeoverResult, error) {
+						_, err := services.KernelContainer.GameHost.TakeoverService.Takeover(ctx, control.TakeoverRequest{
+							RuntimeID: domain.RuntimeInstanceID(runtimeID),
+							Actor:     "game_center_user",
+						})
 						if err != nil {
-							return management.KernelInstalledExtension{}, err
+							return management.TakeoverResult{}, err
 						}
-						return management.KernelInstalledExtension{ID: installed.ID, Name: installed.Name, Version: installed.Version}, nil
+						return management.TakeoverResult{Success: true}, nil
 					},
-					UpdateFn: func(ctx context.Context, archivePath string) (management.KernelInstalledExtension, error) {
-						installed, err := services.Extension.Kernel.Update(ctx, archivePath)
+					ReleaseFn: func(ctx context.Context, runtimeID string, targetMode string, expectedEpoch uint64) (management.ReleaseResult, error) {
+						_, err := services.KernelContainer.GameHost.TakeoverService.Release(ctx, control.ReleaseRequest{
+							RuntimeID:     domain.RuntimeInstanceID(runtimeID),
+							TargetMode:    domain.ControlMode(targetMode),
+							Actor:         "game_center_user",
+							ExpectedEpoch: expectedEpoch,
+							UseExpected:   expectedEpoch > 0,
+						})
 						if err != nil {
-							return management.KernelInstalledExtension{}, err
+							return management.ReleaseResult{}, err
 						}
-						return management.KernelInstalledExtension{ID: installed.ID, Name: installed.Name, Version: installed.Version}, nil
+						return management.ReleaseResult{Success: true}, nil
 					},
-					EnableFn: func(ctx context.Context, extensionID string) error {
-						return services.Extension.Kernel.Enable(ctx, extensionID)
-					},
-					DisableFn: func(ctx context.Context, extensionID string) error {
-						return services.Extension.Kernel.Disable(ctx, extensionID)
-					},
-					UninstallFn: func(ctx context.Context, extensionID string) error {
-						return services.Extension.Kernel.Uninstall(ctx, extensionID)
+					EmergencyStopFn: func(ctx context.Context, runtimeID string) (control.EmergencyStopResult, error) {
+						return services.KernelContainer.GameHost.EmergencyStopService.Execute(ctx, domain.RuntimeInstanceID(runtimeID))
 					},
 				})
-				var upgradeCoordinator management.PackageUpgradeCoordinator = nil
-				if services.KernelContainer.GameHost != nil && services.KernelContainer.GameHost.UpgradeCoordinator != nil {
-					upgradeCoordinator = &management.GameHostUpgradeCoordinatorAdapter{UC: services.KernelContainer.GameHost.UpgradeCoordinator}
-				}
-				packageSvc := management.NewProductionPackageMutationServiceFromKernelReader(kernelReader, management.NewGameHostPluginRegistryFromContainer(services.KernelContainer.GameHost), kernelMutation, upgradeCoordinator)
-				runtimeSvc := management.NewProductionRuntimeMutationService(services.KernelContainer.GameHost)
-				gameCenterMutationHandler := management.NewMutationHandler(packageSvc, runtimeSvc)
-				management.RegisterGameCenterMutationRouter(apiGroup, gameCenterMutationHandler)
+				management.RegisterGameCenterControlRouter(apiGroup, controlHandler)
+			}
 
-				if services.KernelContainer.GameHost != nil && services.KernelContainer.GameHost.TakeoverService != nil {
-					controlHandler := management.NewControlHandlerFromFuncs(management.ControlServiceOptions{
-						TakeoverFn: func(ctx context.Context, runtimeID string) (management.TakeoverResult, error) {
-							_, err := services.KernelContainer.GameHost.TakeoverService.Takeover(ctx, control.TakeoverRequest{
-								RuntimeID: domain.RuntimeInstanceID(runtimeID),
-								Actor:     "game_center_user",
-							})
-							if err != nil {
-								return management.TakeoverResult{}, err
-							}
-							return management.TakeoverResult{Success: true}, nil
-						},
-						ReleaseFn: func(ctx context.Context, runtimeID string, targetMode string, expectedEpoch uint64) (management.ReleaseResult, error) {
-							_, err := services.KernelContainer.GameHost.TakeoverService.Release(ctx, control.ReleaseRequest{
-								RuntimeID:     domain.RuntimeInstanceID(runtimeID),
-								TargetMode:    domain.ControlMode(targetMode),
-								Actor:         "game_center_user",
-								ExpectedEpoch: expectedEpoch,
-								UseExpected:   expectedEpoch > 0,
-							})
-							if err != nil {
-								return management.ReleaseResult{}, err
-							}
-							return management.ReleaseResult{Success: true}, nil
-						},
-						EmergencyStopFn: func(ctx context.Context, runtimeID string) (control.EmergencyStopResult, error) {
-							return services.KernelContainer.GameHost.EmergencyStopService.Execute(ctx, domain.RuntimeInstanceID(runtimeID))
-						},
-					})
-					management.RegisterGameCenterControlRouter(apiGroup, controlHandler)
-				}
+			if services.KernelContainer.GameHost != nil && services.KernelContainer.GameHost.ControlPlane != nil {
+				rpcInvoker := management.NewControlPlaneRPCInvoker(
+					services.KernelContainer.GameHost.ControlPlane,
+					management.NewGameHostTopologyStore(services.KernelContainer.GameHost.RuntimeTopologyStore),
+					management.NewGameHostPluginRegistry(services.KernelContainer.GameHost.PluginRegistry),
+				)
+				rpcHandler := management.NewRPCHandler(rpcInvoker)
+				management.RegisterRPCRouter(apiGroup, rpcHandler)
 
-				if services.KernelContainer.GameHost != nil && services.KernelContainer.GameHost.ControlPlane != nil {
-					rpcInvoker := management.NewControlPlaneRPCInvoker(
-						services.KernelContainer.GameHost.ControlPlane,
-						management.NewGameHostTopologyStore(services.KernelContainer.GameHost.RuntimeTopologyStore),
-						management.NewGameHostPluginRegistry(services.KernelContainer.GameHost.PluginRegistry),
-					)
-					rpcHandler := management.NewRPCHandler(rpcInvoker)
-					management.RegisterRPCRouter(apiGroup, rpcHandler)
-
-					debugHandler := management.NewDebugHandler(services.KernelContainer.GameHost)
-					management.RegisterDebugRouter(apiGroup, debugHandler)
-				}
+				debugHandler := management.NewDebugHandler(services.KernelContainer.GameHost)
+				management.RegisterDebugRouter(apiGroup, debugHandler)
 			}
 		}
-		emote.RegisterRouter(apiGroup, services.Emote)
-		temporal.RegisterRouter(apiGroup, services.Temporal, services.RelTimeCoordinator)
-		mood.RegisterMoodRouter(apiGroup, ctx)
-		if services.Sync != nil {
-			syncHandler := sync.NewHandler(services.Sync, services.DeviceRepository)
-			syncHandler.RegisterRoutes(apiGroup, security.AuthenticationMiddleware(security.AuthConfig{
-				Mode:             config.AppCfg.Security.Mode,
-				JWTSecret:        config.AppCfg.JWT.Secret,
-				JWTIssuer:        config.AppCfg.JWT.Issuer,
-				JWTAudience:      config.AppCfg.JWT.Audience,
-				LocalCredentials: localCredentialStore,
-				LocalUserID:      config.AppCfg.Security.LocalUserID,
-				ListenAddress:    config.AppCfg.Server.Host,
-				AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
-				SessionService:   sessionSvc,
-				AccountSessions:  accountSessionRuntime.Validator,
-			}))
-		}
+	}
+	emote.RegisterRouter(apiGroup, services.Emote)
+	temporal.RegisterRouter(apiGroup, services.Temporal, services.RelTimeCoordinator)
+	mood.RegisterMoodRouter(apiGroup, ctx)
+	if services.Sync != nil {
+		syncHandler := sync.NewHandler(services.Sync, services.DeviceRepository)
+		syncHandler.RegisterRoutes(apiGroup, security.AuthenticationMiddleware(security.AuthConfig{
+			Mode:             config.AppCfg.Security.Mode,
+			JWTSecret:        config.AppCfg.JWT.Secret,
+			JWTIssuer:        config.AppCfg.JWT.Issuer,
+			JWTAudience:      config.AppCfg.JWT.Audience,
+			LocalCredentials: localCredentialStore,
+			LocalUserID:      config.AppCfg.Security.LocalUserID,
+			ListenAddress:    config.AppCfg.Server.Host,
+			AllowedOrigins:   config.AppCfg.Security.AllowedOrigins,
+			SessionService:   sessionSvc,
+			AccountSessions:  accountSessionRuntime.Validator,
+		}))
+	}
 
 		if services.DeviceMesh == nil || services.DeviceMesh.BootstrapSvc == nil || services.DeviceMesh.CredentialSvc == nil || services.DeviceMesh.Hub == nil || services.DeviceMesh.Handler == nil {
 			return nil, fmt.Errorf("device mesh: required cloud runtime dependencies are not initialized")
