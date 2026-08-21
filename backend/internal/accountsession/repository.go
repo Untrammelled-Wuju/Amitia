@@ -104,8 +104,8 @@ func (r *sessionRepository) Revoke(publicID, reason string) error {
 	now := time.Now().UTC()
 	return r.db.Model(&Session{}).Where("public_id = ? AND status = ?", publicID, SessionStatusActive).
 		Updates(map[string]interface{}{
-			"status":       SessionStatusRevoked,
-			"revoked_at":   now,
+			"status":        SessionStatusRevoked,
+			"revoked_at":    now,
 			"revoke_reason": reason,
 		}).Error
 }
@@ -114,8 +114,8 @@ func (r *sessionRepository) RevokeOwned(userID int64, publicID, reason string) e
 	now := time.Now().UTC()
 	return r.db.Model(&Session{}).Where("public_id = ? AND user_id = ? AND status = ?", publicID, userID, SessionStatusActive).
 		Updates(map[string]interface{}{
-			"status":       SessionStatusRevoked,
-			"revoked_at":   now,
+			"status":        SessionStatusRevoked,
+			"revoked_at":    now,
 			"revoke_reason": reason,
 		}).Error
 }
@@ -124,8 +124,8 @@ func (r *sessionRepository) RevokeAllUser(userID int64, reason string) error {
 	now := time.Now().UTC()
 	return r.db.Model(&Session{}).Where("user_id = ? AND status = ?", userID, SessionStatusActive).
 		Updates(map[string]interface{}{
-			"status":       SessionStatusRevoked,
-			"revoked_at":   now,
+			"status":        SessionStatusRevoked,
+			"revoked_at":    now,
 			"revoke_reason": reason,
 		}).Error
 }
@@ -134,8 +134,8 @@ func (r *sessionRepository) RevokeAllUserExcept(userID int64, exceptPublicID, re
 	now := time.Now().UTC()
 	return r.db.Model(&Session{}).Where("user_id = ? AND status = ? AND public_id != ?", userID, SessionStatusActive, exceptPublicID).
 		Updates(map[string]interface{}{
-			"status":       SessionStatusRevoked,
-			"revoked_at":   now,
+			"status":        SessionStatusRevoked,
+			"revoked_at":    now,
 			"revoke_reason": reason,
 		}).Error
 }
@@ -180,8 +180,8 @@ func (r *sessionRepository) MarkLegacySessionsRevoked(userID int64) error {
 	now := time.Now().UTC()
 	return r.db.Model(&Session{}).Where("user_id = ? AND status = ? AND public_id = ''", userID, SessionStatusActive).
 		Updates(map[string]interface{}{
-			"status":       SessionStatusRevoked,
-			"revoked_at":   now,
+			"status":        SessionStatusRevoked,
+			"revoked_at":    now,
 			"revoke_reason": "legacy_session_migrated",
 		}).Error
 }
@@ -220,8 +220,8 @@ func (r *refreshRepository) MarkUsed(tokenID string, replacedBy string) error {
 	now := time.Now().UTC()
 	return r.db.Model(&RefreshToken{}).Where("token_id = ? AND status = ?", tokenID, RefreshStatusActive).
 		Updates(map[string]interface{}{
-			"status":              RefreshStatusUsed,
-			"used_at":             now,
+			"status":               RefreshStatusUsed,
+			"used_at":              now,
 			"replaced_by_token_id": replacedBy,
 		}).Error
 }
@@ -358,7 +358,11 @@ func (r *recoveryRepository) CreateBatch(userID int64, hashes []string, generati
 
 func (r *recoveryRepository) ConsumeCode(userID int64, hash string) (bool, *RecoveryCode, error) {
 	var code RecoveryCode
-	err := r.db.Where("user_id = ? AND code_hash = ? AND status = ?", userID, hash, RecoveryStatusActive).First(&code).Error
+	query := r.db.Where("code_hash = ? AND status = ?", hash, RecoveryStatusActive)
+	if userID > 0 {
+		query = query.Where("user_id = ?", userID)
+	}
+	err := query.First(&code).Error
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return false, nil, nil
 	}
@@ -371,7 +375,7 @@ func (r *recoveryRepository) ConsumeCode(userID int64, hash string) (bool, *Reco
 	now := time.Now().UTC()
 	result := r.db.Model(&RecoveryCode{}).Where("code_id = ? AND status = ?", code.CodeID, RecoveryStatusActive).
 		Updates(map[string]interface{}{
-			"status": RecoveryStatusUsed,
+			"status":  RecoveryStatusUsed,
 			"used_at": now,
 		})
 	if result.RowsAffected != 1 {

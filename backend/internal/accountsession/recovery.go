@@ -15,7 +15,7 @@ import (
 const recoveryCodeAlphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
 
 type RecoveryService struct {
-	codes RecoveryRepository
+	codes  RecoveryRepository
 	grants GrantRepository
 	audit  AuditLogger
 }
@@ -46,9 +46,9 @@ func (s RecoveryService) GenerateCodes(userID int64) ([]GeneratedCode, int64, er
 }
 
 type ConsumeResult struct {
-	Success  bool
-	CodeID   string
-	UserID   int64
+	Success bool
+	CodeID  string
+	UserID  int64
 }
 
 func (s RecoveryService) ConsumeCode(code string) ConsumeResult {
@@ -63,6 +63,18 @@ func (s RecoveryService) ConsumeCode(code string) ConsumeResult {
 		CodeID:  rec.CodeID,
 		UserID:  rec.UserID,
 	}
+}
+
+// ConsumeCodeForUser validates and consumes a recovery code owned by the authenticated user.
+func (s RecoveryService) ConsumeCodeForUser(userID int64, code string) ConsumeResult {
+	normalized := strings.ToUpper(strings.TrimSpace(code))
+	hashValue := hashRecoveryCode(normalized)
+	success, rec, _ := s.codes.ConsumeCode(userID, hashValue)
+	if !success || rec == nil {
+		return ConsumeResult{Success: false}
+	}
+	s.audit.LogRecoveryCodeUsed(userID, rec.CodeID)
+	return ConsumeResult{Success: true, CodeID: rec.CodeID, UserID: rec.UserID}
 }
 
 func (s RecoveryService) CreateRecoveryGrant(userID int64) (string, time.Time, error) {
