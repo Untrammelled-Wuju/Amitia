@@ -8,9 +8,14 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
 )
 
-type ChatSlotID string
+// ChatSlotID is an alias of the canonical Extension Kernel SlotID. Chat-specific
+// metadata lives in this package, but the UI slot surface itself is declared and
+// lifecycle-managed exclusively by extension_slots.SlotRegistry.
+type ChatSlotID = extension_slots.SlotID
 
 const (
 	SlotChatHeaderAction       ChatSlotID = "chat.header.action"

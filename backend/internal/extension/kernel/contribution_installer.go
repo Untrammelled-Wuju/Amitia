@@ -16,6 +16,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/event"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
+	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
 	"github.com/u-ai/backend/internal/extension/kernel/hook"
 	"github.com/u-ai/backend/internal/extension/kernel/persistence/sqlite"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
@@ -106,8 +107,12 @@ func (i *TypedContributionInstaller) InstallContributions(ctx context.Context, c
 		return fmt.Errorf("contribution-installer: container not attached")
 	}
 
-	ops := make([]installOp, 0, len(contribs))
-	for _, contrib := range contribs {
+	ordered, err := orderContributionsForInstall(contribs)
+	if err != nil {
+		return fmt.Errorf("contribution-installer: order contributions: %w", err)
+	}
+	ops := make([]installOp, 0, len(ordered))
+	for _, contrib := range ordered {
 		op, err := i.buildInstallOp(ctx, contrib, generation)
 		if err != nil {
 			return fmt.Errorf("contribution-installer: build op for %s: %w", contrib.ID, err)
@@ -136,6 +141,79 @@ func (i *TypedContributionInstaller) InstallContributions(ctx context.Context, c
 	}
 
 	return nil
+}
+
+func orderContributionsForInstall(contribs []domain.ContributionDefinition) ([]domain.ContributionDefinition, error) {
+	if len(contribs) < 2 {
+		return append([]domain.ContributionDefinition(nil), contribs...), nil
+	}
+	type slotItem struct {
+		contrib domain.ContributionDefinition
+		slotID  extension_slots.SlotID
+		parent  extension_slots.SlotID
+	}
+	slots := make([]slotItem, 0)
+	others := make([]domain.ContributionDefinition, 0, len(contribs))
+	batchSlots := make(map[extension_slots.SlotID]struct{})
+	for _, contrib := range contribs {
+		if contrib.Kind != domain.ContributionKindUISlot {
+			others = append(others, contrib)
+			continue
+		}
+		data, err := json.Marshal(contrib.Definition)
+		if err != nil {
+			return nil, fmt.Errorf("marshal ui slot %s: %w", contrib.ID, err)
+		}
+		def, err := normalizeUISlotDefinition(contrib, data)
+		if err != nil {
+			return nil, err
+		}
+		slots = append(slots, slotItem{contrib: contrib, slotID: def.SlotID, parent: def.ParentSlotID})
+		batchSlots[def.SlotID] = struct{}{}
+	}
+	ordered := make([]domain.ContributionDefinition, 0, len(contribs))
+	emitted := make(map[extension_slots.SlotID]bool, len(slots))
+	remaining := append([]slotItem(nil), slots...)
+	for len(remaining) > 0 {
+		progress := false
+		next := make([]slotItem, 0, len(remaining))
+		for _, item := range remaining {
+			_, parentInBatch := batchSlots[item.parent]
+			if item.parent == "" || !parentInBatch || emitted[item.parent] {
+				ordered = append(ordered, item.contrib)
+				emitted[item.slotID] = true
+				progress = true
+				continue
+			}
+			next = append(next, item)
+		}
+		if !progress {
+			return nil, fmt.Errorf("dynamic ui slot dependency cycle")
+		}
+		remaining = next
+	}
+	ordered = append(ordered, others...)
+	return ordered, nil
+}
+
+func orderContributionsForTeardown(contribs []domain.ContributionDefinition) ([]domain.ContributionDefinition, error) {
+	ordered, err := orderContributionsForInstall(contribs)
+	if err != nil {
+		return nil, err
+	}
+	nonSlots := make([]domain.ContributionDefinition, 0, len(ordered))
+	slots := make([]domain.ContributionDefinition, 0)
+	for _, contrib := range ordered {
+		if contrib.Kind == domain.ContributionKindUISlot {
+			slots = append(slots, contrib)
+		} else {
+			nonSlots = append(nonSlots, contrib)
+		}
+	}
+	for idx := len(slots) - 1; idx >= 0; idx-- {
+		nonSlots = append(nonSlots, slots[idx])
+	}
+	return nonSlots, nil
 }
 
 func (i *TypedContributionInstaller) buildInstallOp(ctx context.Context, contrib domain.ContributionDefinition, generation int64) (installOp, error) {
@@ -171,6 +249,8 @@ func (i *TypedContributionInstaller) buildInstallOp(ctx context.Context, contrib
 		return i.buildUIContributionOp(ctx, contrib, defData, generation)
 	case domain.ContributionKindUIProvider:
 		return i.buildUIProviderOp(ctx, contrib, defData, generation)
+	case domain.ContributionKindUISlot:
+		return i.buildUISlotOp(ctx, contrib, defData)
 	case domain.ContributionKindGamePlugin:
 		return i.buildGamePluginOp(ctx, contrib, defData, generation)
 	case domain.ContributionKindDesktopPetPlugin:
@@ -178,6 +258,100 @@ func (i *TypedContributionInstaller) buildInstallOp(ctx context.Context, contrib
 	default:
 		return installOp{}, fmt.Errorf("unsupported contribution kind: %s", contrib.Kind)
 	}
+}
+
+func (i *TypedContributionInstaller) buildUISlotOp(ctx context.Context, contrib domain.ContributionDefinition, defData []byte) (installOp, error) {
+	if i.container.SlotRegistry == nil || i.container.UIHost == nil {
+		return installOp{}, fmt.Errorf("ui slot registry not configured")
+	}
+	def, err := normalizeUISlotDefinition(contrib, defData)
+	if err != nil {
+		return installOp{}, err
+	}
+	return installOp{
+		kind: domain.ContributionKindUISlot,
+		doInstall: func(ctx context.Context) error {
+			if err := i.container.SlotRegistry.RegisterOwned(string(contrib.ExtensionID), def); err != nil {
+				return fmt.Errorf("register ui slot: %w", err)
+			}
+			if err := i.syncUISlotSubtree(def.SlotID); err != nil {
+				removed, _ := i.container.SlotRegistry.Unregister(def.SlotID)
+				for _, slotID := range removed {
+					i.container.UIHost.UnregisterSlot(string(slotID))
+				}
+				return fmt.Errorf("register ui slot host contract: %w", err)
+			}
+			i.broadcastUISlotChange(contrib.ExtensionID, def.SlotID, true, false)
+			return nil
+		},
+		doRollback: func(ctx context.Context) {
+			removed, _ := i.container.SlotRegistry.Unregister(def.SlotID)
+			for _, slotID := range removed {
+				i.container.UIHost.UnregisterSlot(string(slotID))
+			}
+		},
+	}, nil
+}
+
+func (i *TypedContributionInstaller) syncUISlotSubtree(root extension_slots.SlotID) error {
+	for _, slotDef := range i.container.SlotRegistry.Subtree(root) {
+		contract, err := ui_contribution.SlotContractFromDefinition(slotDef)
+		if err != nil {
+			return err
+		}
+		if err := i.container.UIHost.UpsertSlot(contract); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (i *TypedContributionInstaller) broadcastUISlotChange(extID domain.ExtensionID, slotID extension_slots.SlotID, enabled bool, removed bool) {
+	if i.container.UIHostNotifier == nil {
+		return
+	}
+	payload := map[string]interface{}{
+		"slotId":  string(slotID),
+		"enabled": enabled,
+	}
+	if removed {
+		payload["removed"] = true
+	}
+	i.container.UIHostNotifier.BroadcastExtensionChange("ui_slot_changed", string(extID), payload)
+}
+
+func normalizeUISlotDefinition(contrib domain.ContributionDefinition, defData []byte) (*extension_slots.SlotDefinition, error) {
+	var def extension_slots.SlotDefinition
+	if err := json.Unmarshal(defData, &def); err != nil {
+		return nil, fmt.Errorf("unmarshal ui slot: %w", err)
+	}
+	if def.SlotID == "" {
+		def.SlotID = extension_slots.SlotID(contrib.ID)
+	}
+	if def.ContractVersion == 0 {
+		def.ContractVersion = 1
+	}
+	if def.Multiplicity == "" {
+		def.Multiplicity = extension_slots.MultiplicityOrderedMultiple
+	}
+	if def.Layout == "" {
+		def.Layout = extension_slots.LayoutStack
+	}
+	if def.FallbackPolicy == "" {
+		def.FallbackPolicy = extension_slots.FallbackEmpty
+	}
+	if def.OrderingPolicy == "" {
+		def.OrderingPolicy = "priority"
+	}
+	if def.FailurePolicy == "" {
+		def.FailurePolicy = "isolate"
+	}
+	if len(def.SupportedKinds) == 0 {
+		return nil, fmt.Errorf("ui slot %s requires supportedKinds", def.SlotID)
+	}
+	def.OwnerExtension = string(contrib.ExtensionID)
+	def.Dynamic = true
+	return &def, nil
 }
 
 func (i *TypedContributionInstaller) enrichUIProviderPlacement(ctx context.Context, contrib domain.ContributionDefinition, def *ui_provider.ProviderDefinition) {
@@ -905,10 +1079,14 @@ func (i *TypedContributionInstaller) ActivateContributions(ctx context.Context, 
 		generation = inst.Generation
 	}
 
-	activated := make([]domain.ContributionDefinition, 0, len(contribs))
-	seen := make(map[domain.ContributionID]bool, len(contribs))
+	ordered, err := orderContributionsForInstall(contribs)
+	if err != nil {
+		return fmt.Errorf("contribution-installer: order activate contributions: %w", err)
+	}
+	activated := make([]domain.ContributionDefinition, 0, len(ordered))
+	seen := make(map[domain.ContributionID]bool, len(ordered))
 
-	for _, contrib := range contribs {
+	for _, contrib := range ordered {
 		if seen[contrib.ID] {
 			continue
 		}
@@ -949,7 +1127,35 @@ func (i *TypedContributionInstaller) activateSingle(ctx context.Context, contrib
 		return i.activateUI(ctx, contrib)
 	case domain.ContributionKindUIProvider:
 		return i.activateUIProvider(ctx, contrib)
+	case domain.ContributionKindUISlot:
+		return i.activateUISlot(ctx, contrib)
 	}
+	return nil
+}
+
+func (i *TypedContributionInstaller) activateUISlot(ctx context.Context, contrib domain.ContributionDefinition) error {
+	if i.container.SlotRegistry == nil || i.container.UIHost == nil {
+		return fmt.Errorf("ui slot registry not configured")
+	}
+	defData, _ := json.Marshal(contrib.Definition)
+	def, err := normalizeUISlotDefinition(contrib, defData)
+	if err != nil {
+		return err
+	}
+	if existing, getErr := i.container.SlotRegistry.Get(def.SlotID); getErr == nil {
+		if existing.OwnerExtension != string(contrib.ExtensionID) {
+			return fmt.Errorf("ui slot %s already owned by %s", def.SlotID, existing.OwnerExtension)
+		}
+		return i.syncUISlotSubtree(def.SlotID)
+	}
+	if err := i.container.SlotRegistry.RegisterOwned(string(contrib.ExtensionID), def); err != nil {
+		return fmt.Errorf("activate ui slot %s: %w", def.SlotID, err)
+	}
+	if err := i.syncUISlotSubtree(def.SlotID); err != nil {
+		_, _ = i.container.SlotRegistry.Unregister(def.SlotID)
+		return err
+	}
+	i.broadcastUISlotChange(contrib.ExtensionID, def.SlotID, true, false)
 	return nil
 }
 
@@ -1220,9 +1426,13 @@ func (i *TypedContributionInstaller) DeactivateContributions(ctx context.Context
 		generation = inst.Generation
 	}
 
-	seen := make(map[domain.ContributionID]bool, len(contribs))
+	ordered, orderErr := orderContributionsForTeardown(contribs)
+	if orderErr != nil {
+		return fmt.Errorf("contribution-installer: order deactivate contributions: %w", orderErr)
+	}
+	seen := make(map[domain.ContributionID]bool, len(ordered))
 	var firstErr error
-	for _, contrib := range contribs {
+	for _, contrib := range ordered {
 		if seen[contrib.ID] {
 			continue
 		}
@@ -1260,7 +1470,32 @@ func (i *TypedContributionInstaller) deactivateSingle(ctx context.Context, contr
 		return i.deactivateUI(ctx, contrib)
 	case domain.ContributionKindUIProvider:
 		return i.deactivateUIProvider(ctx, contrib)
+	case domain.ContributionKindUISlot:
+		return i.deactivateUISlot(ctx, contrib)
 	}
+	return nil
+}
+
+func (i *TypedContributionInstaller) deactivateUISlot(ctx context.Context, contrib domain.ContributionDefinition) error {
+	if i.container.SlotRegistry == nil || i.container.UIHost == nil {
+		return nil
+	}
+	defData, _ := json.Marshal(contrib.Definition)
+	def, err := normalizeUISlotDefinition(contrib, defData)
+	if err != nil {
+		return err
+	}
+	removed, err := i.container.SlotRegistry.Unregister(def.SlotID)
+	if err != nil {
+		if existing, getErr := i.container.SlotRegistry.Get(def.SlotID); getErr != nil || existing.OwnerExtension != string(contrib.ExtensionID) {
+			return nil
+		}
+		return err
+	}
+	for _, slotID := range removed {
+		i.container.UIHost.UnregisterSlot(string(slotID))
+	}
+	i.broadcastUISlotChange(contrib.ExtensionID, def.SlotID, false, false)
 	return nil
 }
 
@@ -1483,13 +1718,20 @@ func (i *TypedContributionInstaller) UninstallContributions(ctx context.Context,
 		}
 	}
 	if i.container.UIHost != nil {
-		for _, uiDef := range i.container.UIHost.ListAll() {
-			if string(uiDef.ExtensionID) == string(extID) {
-				if err := i.container.UIHost.UnregisterContribution(uiDef.ContributionID); err != nil {
-					i.recordAudit(domain.ContributionDefinition{ID: domain.ContributionID(uiDef.ContributionID), Kind: domain.ContributionKindUIPage, ExtensionID: extID}, operationID, generation, startedAt, auditResultFailed, err)
-					return fmt.Errorf("uninstall ui contribution %s for %s: %w", uiDef.ContributionID, extID, err)
-				}
+		i.container.UIHost.UnregisterByExtension(ui_contribution.ExtensionID(extID))
+	}
+	if i.container.SlotRegistry != nil {
+		removedSlots := i.container.SlotRegistry.UnregisterOwned(string(extID))
+		for _, slotID := range removedSlots {
+			if i.container.UIHost != nil {
+				i.container.UIHost.UnregisterSlot(string(slotID))
 			}
+		}
+		if len(removedSlots) > 0 && i.container.UIHostNotifier != nil {
+			i.container.UIHostNotifier.BroadcastExtensionChange("ui_slot_changed", string(extID), map[string]interface{}{
+				"removedSlots": removedSlots,
+				"enabled":      false,
+			})
 		}
 	}
 	if i.container.PageHost != nil {
@@ -1748,7 +1990,11 @@ func (i *TypedContributionInstaller) DiscardCandidateContributions(ctx context.C
 		scheduleIDSet[id] = true
 	}
 
-	for _, contrib := range contribs {
+	ordered, orderErr := orderContributionsForTeardown(contribs)
+	if orderErr != nil {
+		return fmt.Errorf("discard candidate order contributions: %w", orderErr)
+	}
+	for _, contrib := range ordered {
 		if err := i.discardSingleContribution(ctx, contrib, scheduleIDSet); err != nil {
 			i.recordAudit(contrib, operationID, generation, startedAt, auditResultFailed, err)
 			if firstErr == nil {
@@ -1815,9 +2061,30 @@ func (i *TypedContributionInstaller) discardSingleContribution(ctx context.Conte
 		return i.discardDesktopContribution(ctx, contrib, defData)
 	case domain.ContributionKindUIProvider:
 		return i.discardUIProvider(ctx, contrib, defData)
+	case domain.ContributionKindUISlot:
+		return i.discardUISlot(ctx, contrib, defData)
 	default:
 		return nil
 	}
+}
+
+func (i *TypedContributionInstaller) discardUISlot(ctx context.Context, contrib domain.ContributionDefinition, defData []byte) error {
+	if i.container.SlotRegistry == nil || i.container.UIHost == nil {
+		return nil
+	}
+	def, err := normalizeUISlotDefinition(contrib, defData)
+	if err != nil {
+		return err
+	}
+	removed, err := i.container.SlotRegistry.Unregister(def.SlotID)
+	if err != nil {
+		return nil
+	}
+	for _, slotID := range removed {
+		i.container.UIHost.UnregisterSlot(string(slotID))
+	}
+	i.broadcastUISlotChange(contrib.ExtensionID, def.SlotID, false, true)
+	return nil
 }
 
 func (i *TypedContributionInstaller) discardUIProvider(ctx context.Context, contrib domain.ContributionDefinition, defData []byte) error {

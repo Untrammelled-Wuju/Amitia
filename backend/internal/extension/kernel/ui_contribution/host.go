@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 )
@@ -33,12 +34,13 @@ import (
 // Use this type for UI contribution registration, mounting, and UI bridge session management.
 // Use host_registry.Registry for finding and communicating with connected UI endpoints.
 type UIHost struct {
-	mu            sync.RWMutex
-	slots         map[string]*UISlotContract
-	contributions map[string]*UIContributionDefinition
-	instances     map[string]*UIInstance
-	bridge        *UIBridge
-	logger        func(level, msg string, fields map[string]any)
+	mu                   sync.RWMutex
+	slots                map[string]*UISlotContract
+	contributions        map[string]*UIContributionDefinition
+	pendingContributions map[string]*UIContributionDefinition
+	instances            map[string]*UIInstance
+	bridge               *UIBridge
+	logger               func(level, msg string, fields map[string]any)
 }
 
 // UIInstance represents the lifecycle state of a registered UI contribution.
@@ -46,13 +48,14 @@ type UIHost struct {
 //   - capability.ProviderInstance (kernel provider instance)
 //   - runtimeorchestrator provider/infrastructure instance
 type UIInstance struct {
-	Definition   *UIContributionDefinition
-	State        UILifecycleState
-	MountedAt    *time.Time
-	LastActiveAt *time.Time
-	Failures     int
-	LastError    string
-	mu           sync.RWMutex
+	Definition     *UIContributionDefinition
+	State          UILifecycleState
+	MountedAt      *time.Time
+	LastActiveAt   *time.Time
+	Failures       int
+	LastError      string
+	DesiredMounted bool
+	mu             sync.RWMutex
 }
 
 func (i *UIInstance) SetState(s UILifecycleState) {
@@ -82,21 +85,23 @@ func (i *UIInstance) Snapshot() UIInstance {
 	i.mu.RLock()
 	defer i.mu.RUnlock()
 	return UIInstance{
-		Definition:   i.Definition,
-		State:        i.State,
-		MountedAt:    i.MountedAt,
-		LastActiveAt: i.LastActiveAt,
-		Failures:     i.Failures,
-		LastError:    i.LastError,
+		Definition:     i.Definition,
+		State:          i.State,
+		MountedAt:      i.MountedAt,
+		LastActiveAt:   i.LastActiveAt,
+		Failures:       i.Failures,
+		LastError:      i.LastError,
+		DesiredMounted: i.DesiredMounted,
 	}
 }
 
 func NewUIHost() *UIHost {
 	h := &UIHost{
-		slots:         make(map[string]*UISlotContract),
-		contributions: make(map[string]*UIContributionDefinition),
-		instances:     make(map[string]*UIInstance),
-		logger:        func(level, msg string, fields map[string]any) {},
+		slots:                make(map[string]*UISlotContract),
+		contributions:        make(map[string]*UIContributionDefinition),
+		pendingContributions: make(map[string]*UIContributionDefinition),
+		instances:            make(map[string]*UIInstance),
+		logger:               func(level, msg string, fields map[string]any) {},
 	}
 	h.bridge = NewUIBridge(h)
 	for id, slot := range DefaultSlots {
@@ -123,15 +128,59 @@ func (h *UIHost) RegisterSlot(slot *UISlotContract) error {
 	if _, exists := h.slots[slot.SlotID]; exists {
 		return fmt.Errorf("ui_contribution: slot %s already registered", slot.SlotID)
 	}
-	h.slots[slot.SlotID] = slot
+	h.slots[slot.SlotID] = cloneSlotContract(slot)
+	h.attachPendingForSlotLocked(slot.SlotID)
 	return nil
+}
+
+// UpsertSlot synchronizes a slot contract from the canonical slot registry.
+// Built-in startup synchronization uses this method so UIHost cannot drift from
+// extension_slots when new host surfaces are added.
+func (h *UIHost) UpsertSlot(slot *UISlotContract) error {
+	if slot == nil || slot.SlotID == "" {
+		return errors.New("ui_contribution: invalid slot")
+	}
+	if !slot.Multiplicity.Valid() {
+		return fmt.Errorf("%w: %s", ErrInvalidMultiplicity, slot.Multiplicity)
+	}
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.slots[slot.SlotID] = cloneSlotContract(slot)
+	h.attachPendingForSlotLocked(slot.SlotID)
+	return nil
+}
+
+// UnregisterSlot removes a dynamic surface from the active graph. Contributions
+// targeting the surface are not destroyed; they move into a pending state and
+// are automatically reattached if the same slot contract is declared again.
+// This mirrors inject-style lifecycle semantics and avoids install-order races.
+func (h *UIHost) UnregisterSlot(slotID string) []ContributionID {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if _, ok := h.slots[slotID]; !ok {
+		return nil
+	}
+	delete(h.slots, slotID)
+	moved := make([]ContributionID, 0)
+	for id, def := range h.contributions {
+		if def.Slot.SlotID != slotID {
+			continue
+		}
+		h.pendingContributions[id] = def
+		delete(h.contributions, id)
+		if inst, ok := h.instances[id]; ok {
+			inst.SetState(UIStateUnmounted)
+		}
+		moved = append(moved, ContributionID(id))
+	}
+	return moved
 }
 
 func (h *UIHost) GetSlot(slotID string) (*UISlotContract, bool) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	s, ok := h.slots[slotID]
-	return s, ok
+	return cloneSlotContract(s), ok
 }
 
 func (h *UIHost) RegisterContribution(def *UIContributionDefinition) error {
@@ -140,9 +189,21 @@ func (h *UIHost) RegisterContribution(def *UIContributionDefinition) error {
 	}
 	h.mu.Lock()
 	defer h.mu.Unlock()
+	if _, exists := h.contributions[string(def.ContributionID)]; exists {
+		return fmt.Errorf("ui_contribution: contribution %s already registered", def.ContributionID)
+	}
+	if _, exists := h.pendingContributions[string(def.ContributionID)]; exists {
+		return fmt.Errorf("ui_contribution: contribution %s already registered", def.ContributionID)
+	}
 	slot, ok := h.slots[def.Slot.SlotID]
 	if !ok {
-		return NewUIError(UIErrSlotUnsupported, "slot not registered: "+def.Slot.SlotID, nil)
+		h.pendingContributions[string(def.ContributionID)] = def
+		h.instances[string(def.ContributionID)] = &UIInstance{Definition: def, State: UIStateRegistered}
+		h.logger("debug", "ui contribution waiting for slot declaration", map[string]any{
+			"contributionId": def.ContributionID,
+			"slotId":         def.Slot.SlotID,
+		})
+		return nil
 	}
 	if err := ValidateAgainstSlot(def, slot); err != nil {
 		return err
@@ -155,9 +216,6 @@ func (h *UIHost) RegisterContribution(def *UIContributionDefinition) error {
 			}
 		}
 	}
-	if _, exists := h.contributions[string(def.ContributionID)]; exists {
-		return fmt.Errorf("ui_contribution: contribution %s already registered", def.ContributionID)
-	}
 	h.contributions[string(def.ContributionID)] = def
 	h.instances[string(def.ContributionID)] = &UIInstance{
 		Definition: def,
@@ -169,13 +227,16 @@ func (h *UIHost) RegisterContribution(def *UIContributionDefinition) error {
 func (h *UIHost) UnregisterContribution(id ContributionID) error {
 	h.mu.Lock()
 	defer h.mu.Unlock()
-	if _, exists := h.contributions[string(id)]; !exists {
+	_, active := h.contributions[string(id)]
+	_, pending := h.pendingContributions[string(id)]
+	if !active && !pending {
 		return fmt.Errorf("ui_contribution: contribution %s not found", id)
 	}
 	if inst, ok := h.instances[string(id)]; ok && inst.State.IsActive() {
 		inst.SetState(UIStateUnmounted)
 	}
 	delete(h.contributions, string(id))
+	delete(h.pendingContributions, string(id))
 	delete(h.instances, string(id))
 	return nil
 }
@@ -184,6 +245,9 @@ func (h *UIHost) GetContribution(id ContributionID) (*UIContributionDefinition, 
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 	def, ok := h.contributions[string(id)]
+	if !ok {
+		def, ok = h.pendingContributions[string(id)]
+	}
 	if !ok {
 		return nil, fmt.Errorf("ui_contribution: contribution %s not found", id)
 	}
@@ -212,6 +276,45 @@ func (h *UIHost) ListAll() []*UIContributionDefinition {
 	return out
 }
 
+// UnregisterByExtension removes both active and inject-waiting contributions.
+// Pending registrations are extension resources too and must not survive an
+// uninstall simply because their target slot was absent at the time.
+func (h *UIHost) UnregisterByExtension(extensionID ExtensionID) []ContributionID {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	removed := make([]ContributionID, 0)
+	remove := func(source map[string]*UIContributionDefinition) {
+		for id, def := range source {
+			if def.ExtensionID != extensionID {
+				continue
+			}
+			if inst, ok := h.instances[id]; ok {
+				inst.SetState(UIStateUnmounted)
+			}
+			delete(source, id)
+			delete(h.instances, id)
+			removed = append(removed, ContributionID(id))
+		}
+	}
+	remove(h.contributions)
+	remove(h.pendingContributions)
+	sort.Slice(removed, func(i, j int) bool { return removed[i] < removed[j] })
+	return removed
+}
+
+// ListPending returns contributions whose target slot is currently absent.
+// They remain registered with their extension and are reactivated when the
+// owning UI surface returns.
+func (h *UIHost) ListPending() []*UIContributionDefinition {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	out := make([]*UIContributionDefinition, 0, len(h.pendingContributions))
+	for _, def := range h.pendingContributions {
+		out = append(out, def)
+	}
+	return out
+}
+
 func (h *UIHost) GetInstance(id ContributionID) (*UIInstance, error) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
@@ -225,9 +328,22 @@ func (h *UIHost) GetInstance(id ContributionID) (*UIInstance, error) {
 func (h *UIHost) Mount(id ContributionID) error {
 	h.mu.Lock()
 	inst, ok := h.instances[string(id)]
+	_, pending := h.pendingContributions[string(id)]
+	if ok {
+		inst.mu.Lock()
+		inst.DesiredMounted = true
+		inst.mu.Unlock()
+	}
 	h.mu.Unlock()
 	if !ok {
 		return fmt.Errorf("ui_contribution: instance %s not found", id)
+	}
+	// inject-style contributions may be activated before their target slot is
+	// declared. Record the desired state now and mount automatically when the
+	// slot becomes available.
+	if pending {
+		inst.SetState(UIStateRegistered)
+		return nil
 	}
 	inst.SetState(UIStateLoading)
 	inst.SetState(UIStateMounted)
@@ -238,6 +354,11 @@ func (h *UIHost) Mount(id ContributionID) error {
 func (h *UIHost) Unmount(id ContributionID) error {
 	h.mu.Lock()
 	inst, ok := h.instances[string(id)]
+	if ok {
+		inst.mu.Lock()
+		inst.DesiredMounted = false
+		inst.mu.Unlock()
+	}
 	h.mu.Unlock()
 	if !ok {
 		return fmt.Errorf("ui_contribution: instance %s not found", id)
@@ -259,6 +380,73 @@ func (h *UIHost) DisableExtension(extensionID ExtensionID) {
 	for _, id := range ids {
 		_ = h.Unmount(ContributionID(id))
 	}
+}
+
+func (h *UIHost) attachPendingForSlotLocked(slotID string) {
+	slot, ok := h.slots[slotID]
+	if !ok {
+		return
+	}
+	ids := make([]string, 0)
+	for id, def := range h.pendingContributions {
+		if def.Slot.SlotID == slotID {
+			ids = append(ids, id)
+		}
+	}
+	// Stable ordering prevents nondeterministic winner selection for replaceable
+	// or exclusive slots. Explicit contribution ordering is applied by the
+	// frontend ordering engine after attachment.
+	sort.Strings(ids)
+	for _, id := range ids {
+		def := h.pendingContributions[id]
+		if err := ValidateAgainstSlot(def, slot); err != nil {
+			h.logger("warn", "pending ui contribution rejected by restored slot", map[string]any{
+				"contributionId": def.ContributionID,
+				"slotId":         slotID,
+				"error":          err.Error(),
+			})
+			continue
+		}
+		if slot.Multiplicity == MultiplicitySingle || slot.Multiplicity == MultiplicityExclusive {
+			occupied := false
+			for _, existing := range h.contributions {
+				if existing.Slot.SlotID == slotID {
+					occupied = true
+					break
+				}
+			}
+			if occupied {
+				continue
+			}
+		}
+		h.contributions[id] = def
+		delete(h.pendingContributions, id)
+		if inst, ok := h.instances[id]; ok {
+			inst.mu.RLock()
+			desiredMounted := inst.DesiredMounted
+			inst.mu.RUnlock()
+			if desiredMounted {
+				inst.SetState(UIStateLoading)
+				inst.SetState(UIStateMounted)
+				inst.SetState(UIStateVisible)
+			} else {
+				inst.SetState(UIStateRegistered)
+			}
+		}
+	}
+}
+
+func cloneSlotContract(slot *UISlotContract) *UISlotContract {
+	if slot == nil {
+		return nil
+	}
+	copySlot := *slot
+	copySlot.SupportedKinds = append([]UIContributionKind(nil), slot.SupportedKinds...)
+	copySlot.InputSchema = append(json.RawMessage(nil), slot.InputSchema...)
+	copySlot.OutputSchema = append(json.RawMessage(nil), slot.OutputSchema...)
+	copySlot.AllowedActions = append([]string(nil), slot.AllowedActions...)
+	copySlot.AllowedSandboxes = append([]UISandboxType(nil), slot.AllowedSandboxes...)
+	return &copySlot
 }
 
 // BridgeSession represents a UI sandbox/bridge capability session.

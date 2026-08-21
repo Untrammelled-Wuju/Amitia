@@ -47,6 +47,7 @@ const (
 	NodeResourceLink      NodeType = "resource_link"
 	NodePermissionSummary NodeType = "permission_summary"
 	NodeRuntimeStatus     NodeType = "runtime_status"
+	NodeExtensionSlot     NodeType = "extension_slot"
 	NodeTabItem           NodeType = "tab_item"
 	NodeColumn            NodeType = "column"
 )
@@ -60,7 +61,7 @@ var allowedNodeTypes = map[NodeType]bool{
 	NodeTable: true, NodeEmptyState: true, NodeAlert: true, NodeProgress: true,
 	NodeCode: true, NodeKeyValue: true, NodeResourceLink: true,
 	NodePermissionSummary: true, NodeRuntimeStatus: true,
-	NodeTabItem: true, NodeColumn: true,
+	NodeExtensionSlot: true, NodeTabItem: true, NodeColumn: true,
 }
 
 var forbiddenNodeTypes = map[string]bool{
@@ -373,6 +374,14 @@ func (v *Validator) validateNode(node *SchemaUINode, depth int, result *Validati
 		_ = json.Unmarshal(node.Props, &props)
 		if props.Columns > v.limits.MaxGridColumns {
 			result.Errors = append(result.Errors, fmt.Sprintf("%v: %d > %d", ErrGridColumnsExceeded, props.Columns, v.limits.MaxGridColumns))
+		}
+	}
+	if node.Type == NodeExtensionSlot {
+		var props struct {
+			SlotID string `json:"slotId"`
+		}
+		if len(node.Props) == 0 || json.Unmarshal(node.Props, &props) != nil || strings.TrimSpace(props.SlotID) == "" {
+			result.Errors = append(result.Errors, "node "+node.ID+": extension_slot requires props.slotId")
 		}
 	}
 	if node.Type == NodeTable {

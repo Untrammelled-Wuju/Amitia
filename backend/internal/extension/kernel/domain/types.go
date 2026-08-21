@@ -474,6 +474,7 @@ const (
 	ContributionKindUIContextAction   ContributionKind = "ui_context_action"
 	ContributionKindUIDesktop         ContributionKind = "ui_desktop"
 	ContributionKindUIProvider        ContributionKind = "ui_provider"
+	ContributionKindUISlot            ContributionKind = "ui_slot"
 	ContributionKindBackgroundTask    ContributionKind = "background_task"
 	ContributionKindBackgroundService ContributionKind = "background_task"
 	// Deprecated: legacy manifest input only. Production definitions must use Module.Provider.
@@ -523,14 +524,14 @@ type Exposure struct {
 type RuntimeType string
 
 const (
-RuntimeTypeBuiltin           RuntimeType = "builtin"
-RuntimeTypeGo                RuntimeType = "go"
-RuntimeTypeJavaScript        RuntimeType = "javascript"
-RuntimeTypeWASM              RuntimeType = "wasm"
-RuntimeTypeService           RuntimeType = "service"
-RuntimeTypeMCP               RuntimeType = "mcp"
-RuntimeTypeTask              RuntimeType = "task"
-RuntimeTypeBackgroundRemoval RuntimeType = "background_removal"
+	RuntimeTypeBuiltin           RuntimeType = "builtin"
+	RuntimeTypeGo                RuntimeType = "go"
+	RuntimeTypeJavaScript        RuntimeType = "javascript"
+	RuntimeTypeWASM              RuntimeType = "wasm"
+	RuntimeTypeService           RuntimeType = "service"
+	RuntimeTypeMCP               RuntimeType = "mcp"
+	RuntimeTypeTask              RuntimeType = "task"
+	RuntimeTypeBackgroundRemoval RuntimeType = "background_removal"
 )
 
 type RuntimeDefinition struct {
