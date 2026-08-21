@@ -24,6 +24,18 @@ SPDX-License-Identifier: AGPL-3.0-only
         >系统设置</router-link
       >
       <router-link
+        to="/settings/notifications"
+        class="settings-tab"
+        active-class="settings-tab-active"
+        >通知</router-link
+      >
+      <router-link
+        to="/settings/advanced"
+        class="settings-tab"
+        active-class="settings-tab-active"
+        >高级系统</router-link
+      >
+      <router-link
         to="/settings/ui-providers"
         class="settings-tab"
         active-class="settings-tab-active"

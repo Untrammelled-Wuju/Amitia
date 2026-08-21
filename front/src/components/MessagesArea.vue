@@ -178,8 +178,10 @@ defineExpose({ rootEl });
   align-items: center;
   justify-content: center;
   height: 100%;
+  min-height: 100%;
   text-align: center;
   padding: 40px 20px;
+  margin: auto 0;
 }
 
 .empty-icon {

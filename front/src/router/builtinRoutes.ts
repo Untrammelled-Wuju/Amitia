@@ -55,6 +55,8 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
     { path: "deployment", name: "settingsDeployment", component: () => import("@/views/settings/DeploymentPanel.vue"), meta: { requiresAuth: true } },
     { path: "runtime", name: "settingsRuntime", component: () => import("@/views/settings/RuntimePanel.vue"), meta: { requiresAuth: true } },
     { path: "system", name: "settingsSystem", component: () => import("@/views/settings/SystemSettingsPanel.vue"), meta: { requiresAuth: true } },
+    { path: "notifications", name: "settingsNotifications", component: () => import("@/views/settings/NotificationSettingsView.vue"), meta: { requiresAuth: true } },
+    { path: "advanced", name: "settingsAdvanced", component: () => import("@/views/settings/AdvancedSystemView.vue"), meta: { requiresAuth: true } },
     { path: "temporal", name: "settingsTemporal", component: () => import("@/views/settings/TemporalSettingsView.vue"), meta: { requiresAuth: true } },
     {
       path: "model",
@@ -100,7 +102,9 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
 { path: "/user-settings", name: "userSettings", component: () => import("@/views/user-settings/UserSettingsView.vue"), meta: { requiresAuth: true } },
 { path: "/episodic", name: "episodic", component: () => import("@/views/episodic/EpisodicView.vue"), meta: { requiresAuth: true } },
 { path: "/world-book", name: "worldBook", component: () => import("@/views/world-book/WorldBookView.vue"), meta: { requiresAuth: true } },
+{ path: '/runtime-debug', name: 'runtimeDebug', component: () => import('@/views/runtime-debug/RuntimeDebugView.vue'), meta: { requiresAuth: true } },
 { path: '/decision-viz', name: 'decisionViz', component: () => import('@/views/decision-viz/DecisionVizView.vue'), meta: { requiresAuth: true } },
+{ path: '/workspaces', name: 'workspaces', component: () => import('@/views/workspace/WorkspaceBrowserView.vue'), meta: { requiresAuth: true } },
 { path: "/memory-manager", name: "memoryManager", component: () => import("@/views/memory-manager/MemoryManagerView.vue"), meta: { requiresAuth: true } },
 { path: "/memory-timeline", name: "memoryTimeline", component: () => import("@/views/memory-timeline/MemoryTimeline.vue"), meta: { requiresAuth: true } },
 { path: "/memory", redirect: "/memory-manager" },

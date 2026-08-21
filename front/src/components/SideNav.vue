@@ -73,6 +73,10 @@ SPDX-License-Identifier: AGPL-3.0-only
           <el-icon><UserFilled /></el-icon>
           <span>用户信息</span>
         </button>
+        <button type="button" role="menuitem" class="profile-menu__item" @click="openDevices">
+          <el-icon><Connection /></el-icon>
+          <span>我的设备</span>
+        </button>
         <button
           type="button"
           role="menuitem"
@@ -120,6 +124,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
+  Connection,
   DArrowLeft,
   DArrowRight,
   Moon,
@@ -236,6 +241,11 @@ const activeIndex = computed(() => {
 function openUserProfile() {
   profileMenuOpen.value = false;
   router.push("/user-settings");
+}
+
+function openDevices() {
+  profileMenuOpen.value = false;
+  router.push("/devices");
 }
 
 function openSettings() {

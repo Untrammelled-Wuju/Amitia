@@ -91,7 +91,6 @@ const builtinItems: UINavigationItem[] = [
   { id: "workshop", route: "/creative-workshop", label: "创意工坊", icon: MagicStick, group: "workshop", order: 60, match: ["/creative-workshop"] },
   { id: "extensions", route: "/extensions", label: "扩展中心", icon: Menu, group: "extensions", order: 70, match: ["/extensions", "/kernel"] },
   { id: "tools.game-center", route: "/game-center", label: "游戏中心", icon: MagicStick, group: "tools", groupLabel: "工具", groupIcon: Menu, order: 5 },
-  { id: "tools.devices", route: "/devices", label: "我的设备", icon: Connection, group: "tools", groupLabel: "工具", groupIcon: Menu, order: 8 },
   { id: "tools.asr", route: "/asr", label: "语音识别", icon: ChatLineRound, group: "tools", groupLabel: "工具", groupIcon: Menu, order: 10 },
   { id: "tools.realtime-voice", route: "/realtime-voice", label: "实时语音", icon: Connection, group: "tools", groupLabel: "工具", groupIcon: Menu, order: 20 },
   { id: "tools.long-running", route: "/long-running", label: "长期运行维护", icon: Timer, group: "tools", groupLabel: "工具", groupIcon: Menu, order: 30 },
