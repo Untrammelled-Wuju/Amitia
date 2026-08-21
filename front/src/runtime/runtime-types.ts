@@ -70,6 +70,10 @@ export interface AmitiaDesktopAPI {
   toggleMaximizeWindow(): Promise<boolean>;
   closeWindow(): Promise<void>;
   quitApp(): Promise<void>;
+  zoomIn(): Promise<void>;
+  zoomOut(): Promise<void>;
+  zoomReset(): Promise<void>;
+  getZoomFactor(): Promise<number>;
   writeClipboardText(text: string): Promise<void>;
   getAutoLaunch(): Promise<boolean>;
   setAutoLaunch(enabled: boolean): Promise<boolean>;
