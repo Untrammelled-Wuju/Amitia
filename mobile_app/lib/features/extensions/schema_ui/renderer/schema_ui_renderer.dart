@@ -439,6 +439,7 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
         src,
         height: 120,
         fit: BoxFit.cover,
+        cacheWidth: 240,
         errorBuilder: (_, __, ___) => Container(
           height: 120,
           color: context.surfaceSecondary,
