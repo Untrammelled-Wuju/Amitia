@@ -235,6 +235,36 @@ export function registerIpcHandlers(
     app.quit();
   });
 
+  const ZOOM_STEP = 0.2;
+  const MIN_ZOOM = 0.5;
+  const MAX_ZOOM = 2.0;
+
+  ipcMain.handle(IPC_CHANNELS.zoomIn, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return;
+    const current = win.webContents.getZoomFactor();
+    const next = Math.min(current + ZOOM_STEP, MAX_ZOOM);
+    win.webContents.setZoomFactor(next);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.zoomOut, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (!win) return;
+    const current = win.webContents.getZoomFactor();
+    const next = Math.max(current - ZOOM_STEP, MIN_ZOOM);
+    win.webContents.setZoomFactor(next);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.zoomReset, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    if (win) win.webContents.setZoomFactor(1);
+  });
+
+  ipcMain.handle(IPC_CHANNELS.getZoomFactor, (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender);
+    return win ? win.webContents.getZoomFactor() : 1;
+  });
+
   ipcMain.handle("window-minimize", (event) => {
     BrowserWindow.fromWebContents(event.sender)?.minimize();
   });

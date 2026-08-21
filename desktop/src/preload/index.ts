@@ -66,6 +66,18 @@ const api = {
   quitApp(): Promise<void> {
     return ipcRenderer.invoke(IPC_CHANNELS.quitApp);
   },
+  zoomIn(): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.zoomIn);
+  },
+  zoomOut(): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.zoomOut);
+  },
+  zoomReset(): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.zoomReset);
+  },
+  getZoomFactor(): Promise<number> {
+    return ipcRenderer.invoke(IPC_CHANNELS.getZoomFactor);
+  },
   writeClipboardText(text: string): Promise<void> {
     return ipcRenderer.invoke(IPC_CHANNELS.clipboardWriteText, text);
   },

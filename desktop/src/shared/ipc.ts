@@ -27,6 +27,10 @@ export const IPC_CHANNELS = {
   meshCloudRevokeDevice: "amitia:mesh:cloud:revoke-device",
   meshCloudProbe: "amitia:mesh:cloud:probe",
   quitApp: "amitia:app:quit",
+  zoomIn: "amitia:zoom:in",
+  zoomOut: "amitia:zoom:out",
+  zoomReset: "amitia:zoom:reset",
+  getZoomFactor: "amitia:zoom:get-factor",
 } as const;
 
 export type IpcChannel = (typeof IPC_CHANNELS)[keyof typeof IPC_CHANNELS];
