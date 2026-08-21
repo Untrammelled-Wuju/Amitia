@@ -15,7 +15,7 @@ import type {
 export type * from "./types";
 
 function transformContribution(def: BackendUIContributionDefinition): UIContributionSummary {
-  const perms = (def.permissions ?? []).map((p) => p.permission);
+  const perms = (def.permissions ?? []).map((p) => p.name ?? p.permission).filter((p): p is string => !!p);
   const actions = (def.actions ?? []).map((a) => ({
     actionId: a.action_id,
     title: a.title?.default ?? a.action_id,
@@ -42,17 +42,36 @@ function transformContribution(def: BackendUIContributionDefinition): UIContribu
     sandbox: def.sandbox?.type,
     entryPath: def.entry?.path,
     schemaPath: def.entry?.schema_path,
+    dataContract: def.data_contract && typeof def.data_contract === "object"
+      ? def.data_contract as Record<string, unknown>
+      : undefined,
     actions,
+    visibility: def.visibility ? {
+      requiredContext: def.visibility.required_context,
+      platforms: def.visibility.platforms,
+      messageTypes: def.visibility.message_types,
+      conditions: def.visibility.conditions,
+      userSetting: def.visibility.user_setting,
+    } : undefined,
   };
 }
 
 function transformSlotSnapshot(entry: BackendSlotSnapshotEntry): SlotSnapshot {
   return {
     slotId: entry.slotId,
-    contractVersion: 1,
-    layout: "stack",
-    multiplicity: "single",
-    fallbackPolicy: "hide",
+    contractVersion: entry.contractVersion ?? 1,
+    supportedKinds: entry.supportedKinds ?? [],
+    layout: entry.layout ?? "stack",
+    multiplicity: entry.multiplicity ?? "ordered_multiple",
+    fallbackPolicy: entry.fallbackPolicy ?? "empty",
+    description: entry.description,
+    platforms: entry.platform,
+    orderingPolicy: entry.orderingPolicy,
+    failurePolicy: entry.failurePolicy,
+    ownerExtension: entry.ownerExtension,
+    parentSlotId: entry.parentSlotId,
+    dynamic: entry.dynamic,
+    performanceBudget: entry.performanceBudget,
     contributions: entry.contributions.map(transformContribution),
     generatedAt: new Date().toISOString(),
   };
@@ -62,6 +81,7 @@ function transformSnapshot(raw: BackendUIContributionSnapshot): UIContributionSn
   return {
     slots: raw.slots.map(transformSlotSnapshot),
     contributions: (raw.contributions ?? []).map(transformContribution),
+    pendingContributions: (raw.pendingContributions ?? []).map(transformContribution),
     generatedAt: raw.timestamp,
     version: 1,
     providers: (raw.providers ?? []) as UIProviderDefinition[],

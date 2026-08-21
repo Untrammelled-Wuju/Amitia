@@ -38,6 +38,7 @@ export interface UIContributionSummary {
   sandbox?: string;
   entryPath?: string;
   schemaPath?: string;
+  dataContract?: Record<string, unknown>;
   actions?: Array<{
     actionId: string;
     title: string;
@@ -45,14 +46,36 @@ export interface UIContributionSummary {
     riskLevel?: string;
   }>;
   hiddenReason?: string;
+  visibility?: {
+    requiredContext?: string[];
+    platforms?: string[];
+    messageTypes?: string[];
+    conditions?: Array<{ field: string; operator: string; value?: unknown }>;
+    userSetting?: string;
+  };
 }
 
 export interface SlotSnapshot {
   slotId: string;
   contractVersion: number;
-  layout: string;
-  multiplicity: string;
-  fallbackPolicy: string;
+  supportedKinds?: string[];
+  layout: "inline" | "stack" | "row" | "grid" | "tabs" | "panel" | "drawer" | "modal" | "hidden";
+  multiplicity: "single" | "multiple" | "ordered_multiple" | "replaceable_single" | "exclusive";
+  fallbackPolicy: "none" | "skeleton" | "empty" | "default";
+  description?: string;
+  platforms?: string[];
+  orderingPolicy?: string;
+  failurePolicy?: string;
+  ownerExtension?: string;
+  parentSlotId?: string;
+  dynamic?: boolean;
+  performanceBudget?: {
+    firstPaint: number;
+    bundleSize: number;
+    memoryBytes: number;
+    messageRate: number;
+    updateFrequency: number;
+  };
   contributions: UIContributionSummary[];
   generatedAt: string;
 }
@@ -60,6 +83,7 @@ export interface SlotSnapshot {
 export interface UIContributionSnapshot {
   slots: SlotSnapshot[];
   contributions?: UIContributionSummary[];
+  pendingContributions?: UIContributionSummary[];
   generatedAt: string;
   version: number;
   providers?: UIProviderDefinition[];
@@ -179,17 +203,67 @@ export const useExtensionUIStore = defineStore("extensionUI", () => {
     return capability ? providers.filter((provider) => provider.capability === capability) : providers;
   }
 
-  function getVisibleContributions(slotId: string): UIContributionSummary[] {
+  function getVisibleContributions(slotId: string, context?: Record<string, unknown>): UIContributionSummary[] {
     const all = getSlotContributions(slotId);
     const pref = layoutPrefs.value[slotId];
-    if (!pref) return [...all].sort((a, b) => a.ordering - b.ordering);
-    return all
+    const filtered = context ? all.filter((contribution) => matchesVisibility(contribution, context)) : all;
+    if (!pref) return [...filtered].sort((a, b) => a.ordering - b.ordering);
+    return filtered
       .filter((c) => !pref.hiddenContributions.includes(c.contributionId))
       .sort((a, b) => {
         const oa = pref.ordering[a.contributionId] ?? a.ordering;
         const ob = pref.ordering[b.contributionId] ?? b.ordering;
         return oa - ob;
       });
+  }
+
+  function matchesVisibility(contribution: UIContributionSummary, context: Record<string, unknown>): boolean {
+    const rule = contribution.visibility;
+    if (!rule) return true;
+    const platform = String(context.platform ?? resolveHostEnvironment().platform);
+    if (rule.platforms?.length && !rule.platforms.includes(platform)) return false;
+    const messageType = String(context.messageType ?? context.type ?? "");
+    if (rule.messageTypes?.length && !rule.messageTypes.includes(messageType)) return false;
+    if (rule.requiredContext?.some((key) => lookupContext(context, key) === undefined)) return false;
+    if (rule.conditions?.some((condition) => !matchesCondition(context, condition))) return false;
+    return true;
+  }
+
+  function lookupContext(context: Record<string, unknown>, path: string): unknown {
+    if (!path) return undefined;
+    let current: unknown = context;
+    for (const segment of path.split(".")) {
+      if (!current || typeof current !== "object" || !(segment in (current as Record<string, unknown>))) return undefined;
+      current = (current as Record<string, unknown>)[segment];
+    }
+    return current;
+  }
+
+  function matchesCondition(
+    context: Record<string, unknown>,
+    condition: { field: string; operator: string; value?: unknown },
+  ): boolean {
+    const actual = lookupContext(context, condition.field);
+    switch (condition.operator) {
+      case "==":
+      case "eq":
+        return actual === condition.value;
+      case "!=":
+      case "ne":
+        return actual !== condition.value;
+      case "in":
+        return Array.isArray(condition.value) && condition.value.includes(actual);
+      case "not_in":
+        return Array.isArray(condition.value) && !condition.value.includes(actual);
+      case "not_null":
+        return actual !== undefined && actual !== null;
+      case "is_null":
+        return actual === undefined || actual === null;
+      case "contains":
+        return typeof actual === "string" && typeof condition.value === "string" && actual.includes(condition.value);
+      default:
+        return false;
+    }
   }
 
   function recordError(error: SlotError) {

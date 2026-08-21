@@ -7,13 +7,16 @@ const props = defineProps<{ contribution: UIContributionSummary; context: Record
 const emit = defineEmits<{ (e: "error", error: string): void }>();
 
 const renderer = computed(() => {
+  if (props.contribution.sandbox === "schema_renderer") return defineAsyncComponent(() => import("./SchemaUIRenderer.vue"));
+  if (["web_restricted", "web_isolated"].includes(props.contribution.sandbox ?? "")) return defineAsyncComponent(() => import("./SandboxWebUIFrame.vue"));
+  if (props.contribution.sandbox === "host_native") return defineAsyncComponent(() => import("./HostNativeAction.vue"));
   if (["schema_page", "settings_section", "panel", "card"].includes(props.contribution.kind)) return defineAsyncComponent(() => import("./SchemaUIRenderer.vue"));
   if (props.contribution.kind === "web_page") return defineAsyncComponent(() => import("./SandboxWebUIFrame.vue"));
-  if (["action", "menu_item", "toolbar_item", "status_item", "message_action", "composer_action", "desktop_command"].includes(props.contribution.kind)) return defineAsyncComponent(() => import("./HostNativeAction.vue"));
+  if (["action", "menu_item", "toolbar_item", "status_item", "message_action", "composer_action", "desktop_command", "badge"].includes(props.contribution.kind)) return defineAsyncComponent(() => import("./HostNativeAction.vue"));
   return null;
 });
 const surfaceRole = computed(() => String((props.context.surface as Record<string, unknown> | undefined)?.role ?? "main"));
-const needsSurface = computed(() => ["schema_page", "settings_section", "panel", "card", "web_page"].includes(props.contribution.kind));
+const needsSurface = computed(() => props.contribution.sandbox !== "host_native" || ["schema_page", "settings_section", "panel", "card", "web_page", "message_renderer"].includes(props.contribution.kind));
 </script>
 
 <template>

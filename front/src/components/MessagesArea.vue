@@ -65,6 +65,12 @@ SPDX-License-Identifier: AGPL-3.0-only
       /></template><template #actions><MessageActionExtensionHost :message-id="msg.id" :message-type="msg.type || 'text'" :direction="msg.role === 'user' ? 'outgoing' : msg.role === 'assistant' ? 'incoming' : 'system'" :sender-type="msg.role === 'user' ? 'user' : msg.role === 'assistant' ? 'character' : 'system'" :character-id="characterId" :conversation-id="msg.conversationId || ''" /></template></UIProviderHost>
     </div>
 
+    <ConversationProjectionHost
+      :conversation-id="String(extensionContext?.conversationId ?? messages[0]?.conversationId ?? '')"
+      :messages="messages"
+      :context="extensionContext"
+    />
+
     <transition name="fade">
       <el-button
         v-if="showScrollBtn"
@@ -86,6 +92,7 @@ import MessageExtensionHost from "./extension/chat/MessageExtensionHost.vue";
 import ChatEmptyStateExtensionHost from "./extension/chat/ChatEmptyStateExtensionHost.vue";
 import MessageActionExtensionHost from "./extension/chat/MessageActionExtensionHost.vue";
 import MessageBadgeExtensionHost from "./extension/chat/MessageBadgeExtensionHost.vue";
+import ConversationProjectionHost from "./extension/chat/ConversationProjectionHost.vue";
 import UIProviderHost from "./ui-runtime/UIProviderHost.vue";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 import { resolveMessageRenderer } from "@/ui-runtime/messageRendererRegistry";

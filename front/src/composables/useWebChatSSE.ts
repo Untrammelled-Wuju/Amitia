@@ -7,6 +7,7 @@ import {
 } from "../runtime/runtime-adapter";
 import { getAccessToken } from "../stores/refresh-coordinator";
 import { calcTypingDelay } from "@/utils/typing";
+import { emitConversationRuntimeEvent } from "@/ui-runtime/conversationProjection";
 import {
   compareChatMessages,
   insertTransientModelError,
@@ -181,10 +182,23 @@ export function useWebChatSSE(
             .filter((line) => line.startsWith("data:"))
             .map((line) => line.slice(5).trimStart())
             .join("\n");
-          if (
-            data &&
-            (type === "message_created" || type === "message_updated")
-          ) {
+          if (data && type) {
+            try {
+              const payload = JSON.parse(data) as Record<string, unknown>;
+              const conversationId = String(payload.conversationId ?? convId.value ?? "");
+              if (conversationId) {
+                emitConversationRuntimeEvent({
+                  id: String(payload.messageId ?? payload.id ?? `${type}-${Date.now()}`),
+                  eventType: type,
+                  conversationId,
+                  timestamp: String(payload.createdAt ?? new Date().toISOString()),
+                  source: "message_sse",
+                  payload,
+                });
+              }
+            } catch {}
+          }
+          if (data && (type === "message_created" || type === "message_updated")) {
             handleMessageEvent({ data } as MessageEvent);
           }
           boundary = buffer.indexOf("\n\n");

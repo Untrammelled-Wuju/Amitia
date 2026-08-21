@@ -40,7 +40,15 @@ export function useExtensionSlot(options: UseExtensionSlotOptions) {
   const { resolvedMode } = useTheme();
 
   const slotSnapshot = computed(() => store.slotsById.get(slotId) ?? null);
-  const contributions = computed<UIContributionSummary[]>(() => store.getVisibleContributions(slotId));
+  const contributions = computed<UIContributionSummary[]>(() => {
+    const env = resolveHostEnvironment();
+    return store.getVisibleContributions(slotId, {
+      ...contextRef.value,
+      platform: env.platform,
+      host: env.host,
+      os: env.os,
+    });
+  });
   const fallback = computed(() => {
     if (options.fallback) return options.fallback;
     return slotSnapshot.value?.fallbackPolicy ?? "empty";
