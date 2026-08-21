@@ -36,6 +36,8 @@ class ChatPage extends ConsumerStatefulWidget {
 class _ChatPageState extends ConsumerState<ChatPage> {
   final _scrollController = ScrollController();
   late final ConversationRuntimeController _runtime;
+  Map<String, dynamic>? _cachedProviderContext;
+  List<ChatMessage>? _cachedMessagesForContext;
 
   @override
   void initState() {
@@ -46,8 +48,38 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   void _onRuntimeChanged() {
     if (!mounted) return;
+    _cachedProviderContext = null;
+    _cachedMessagesForContext = null;
     setState(() {});
     _scrollToBottom();
+  }
+
+  Map<String, dynamic> _buildProviderContext(String characterId, String characterName, String avatarInitial, String avatarColor) {
+    final currentMessages = _runtime.messages;
+    if (_cachedProviderContext != null && _cachedMessagesForContext != null && _cachedMessagesForContext!.length == currentMessages.length) {
+      bool same = true;
+      for (int i = 0; i < currentMessages.length; i++) {
+        if (_cachedMessagesForContext![i].id != currentMessages[i].id ||
+            _cachedMessagesForContext![i].status != currentMessages[i].status) {
+          same = false;
+          break;
+        }
+      }
+      if (same) return _cachedProviderContext!;
+    }
+    final messagesMap = currentMessages.map(_providerMessage).toList(growable: false);
+    _cachedMessagesForContext = List<ChatMessage>.from(currentMessages);
+    _cachedProviderContext = <String, dynamic>{
+      'route': '/chat',
+      'character': {
+        'id': characterId,
+        'name': characterName,
+        'avatarInitial': avatarInitial,
+        'avatarColor': avatarColor,
+      },
+      'messages': messagesMap,
+    };
+    return _cachedProviderContext!;
   }
 
   @override
@@ -366,20 +398,11 @@ class _ChatPageState extends ConsumerState<ChatPage> {
         '#${(((character?.name.hashCode ?? 0) & 0xFFFFFF) | 0xFF000000).toRadixString(16).padLeft(8, '0')}';
     final characterName = character?.name ?? '';
 
-    final providerContext = <String, dynamic>{
-      'route': '/chat',
-      'character': {
-        'id': characterId,
-        'name': characterName,
-        'avatarInitial': avatarInitial,
-        'avatarColor': avatarColor,
-      },
-      'messages': _runtime.messages.map(_providerMessage).toList(growable: false),
-      'agentMode': isAgentMode,
-      'conversationState': _runtime.state,
-      'sending': _runtime.sending,
-      'conversationId': _runtime.conversationId,
-    };
+    final providerContext = _buildProviderContext(characterId, characterName, avatarInitial, avatarColor);
+    providerContext['agentMode'] = isAgentMode;
+    providerContext['conversationState'] = _runtime.state;
+    providerContext['sending'] = _runtime.sending;
+    providerContext['conversationId'] = _runtime.conversationId;
     final providerActions = <String, FutureOr<dynamic> Function(dynamic)>{
       ConversationUIAction.send: (input) {
         final value = input is Map ? input['text'] : input;
@@ -464,18 +487,20 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                             final message = _runtime.messages[index];
                             final isAgentTask =
                                 message.type == MessageType.agentTask;
-                            final builtinMessage = AmitiaMessageBubble(
-                              message: message,
-                              showAvatar: _shouldShowAvatar(index),
-                              avatarInitial: avatarInitial,
-                              avatarColor: avatarColor,
-                              characterName: characterName,
-                              onRetry: message.status == MessageStatus.error
-                                  ? () => _retryMessage(index)
-                                  : null,
-                              onAgentTaskTap: isAgentTask
-                                  ? () => context.push(AppRoutes.agent)
-                                  : null,
+                            final builtinMessage = RepaintBoundary(
+                              child: AmitiaMessageBubble(
+                                message: message,
+                                showAvatar: _shouldShowAvatar(index),
+                                avatarInitial: avatarInitial,
+                                avatarColor: avatarColor,
+                                characterName: characterName,
+                                onRetry: message.status == MessageStatus.error
+                                    ? () => _retryMessage(index)
+                                    : null,
+                                onAgentTaskTap: isAgentTask
+                                    ? () => context.push(AppRoutes.agent)
+                                    : null,
+                              ),
                             );
                             final messageRenderer = UIMessageRendererRegistry.resolve(
                               uiSnapshot,

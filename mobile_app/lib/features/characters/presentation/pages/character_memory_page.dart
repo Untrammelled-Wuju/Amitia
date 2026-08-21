@@ -33,7 +33,7 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
 
   @override
   Widget build(BuildContext context) {
-    final memoriesAsync = ref.watch(memoryListProvider);
+    final memoriesAsync = ref.watch(memoryListByCharacterProvider(widget.characterId));
 
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
@@ -210,9 +210,9 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
   void _showMemoryEditor(BuildContext context, MemoryDto? existing) {
     final isEdit = existing != null;
     final contentCtrl = TextEditingController(text: existing?.content ?? '');
-    String type = existing?.type ?? '情景记忆';
+    String type = existing?.type ?? 'fact';
     int importance = existing?.importance ?? 5;
-    String status = existing?.status ?? 'active';
+    String status = existing?.status ?? 'user_verified';
 
     showModalBottomSheet(
       context: context,
@@ -260,17 +260,25 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
               SizedBox(height: AppSpacing.xs),
               Wrap(
                 spacing: AppSpacing.sm,
-                children: ['长期记忆', '情景记忆', '关系记忆', '世界设定'].map((c) {
-                  final isSelected = type == c;
+                children: const [
+                  ('fact', '事实'),
+                  ('personal_info', '个人信息'),
+                  ('preference', '偏好'),
+                  ('relationship', '关系'),
+                  ('plan', '计划'),
+                  ('habit', '习惯'),
+                  ('custom', '其他'),
+                ].map((item) {
+                  final isSelected = type == item.$1;
                   return GestureDetector(
-                    onTap: () => setSheetState(() => type = c),
+                    onTap: () => setSheetState(() => type = item.$1),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       decoration: BoxDecoration(
                         color: isSelected ? context.accentPrimary : context.surfaceSecondary,
                         borderRadius: AppRadius.brTag,
                       ),
-                      child: Text(c, style: TextStyle(fontSize: 13, color: isSelected ? Colors.white : context.textSecondary)),
+                      child: Text(item.$2, style: TextStyle(fontSize: 13, color: isSelected ? Colors.white : context.textSecondary)),
                     ),
                   );
                 }).toList(),
@@ -285,19 +293,27 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
                   final svc = ref.read(memoryServiceProvider);
                   if (isEdit) {
                     await svc.update(existing.id, {
-                      'content': contentCtrl.text.trim(),
-                      'type': type,
+                      'characterId': widget.characterId,
+                      'key': existing.key.isNotEmpty ? existing.key : contentCtrl.text.trim(),
+                      'value': contentCtrl.text.trim(),
+                      'memoryType': type,
                       'importance': importance,
-                      'status': status,
+                      'verifiedStatus': status,
                     });
                   } else {
                     await svc.create({
-                      'content': contentCtrl.text.trim(),
-                      'type': type,
+                      'characterId': widget.characterId,
+                      'key': contentCtrl.text.trim(),
+                      'value': contentCtrl.text.trim(),
+                      'memoryType': type,
                       'importance': importance,
-                      'status': status,
+                      'verifiedStatus': status,
+                      'source': 'manual',
+                      'scope': 'character',
+                      'confidence': 100,
                     });
                   }
+                  ref.invalidate(memoryListByCharacterProvider(widget.characterId));
                   ref.invalidate(memoryListProvider);
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -326,6 +342,7 @@ class _CharacterMemoryPageState extends ConsumerState<CharacterMemoryPage> {
               Navigator.pop(ctx);
               final svc = ref.read(memoryServiceProvider);
               await svc.delete(memory.id);
+              ref.invalidate(memoryListByCharacterProvider(widget.characterId));
               ref.invalidate(memoryListProvider);
               if (mounted) {
                 ScaffoldMessenger.of(context).showSnackBar(

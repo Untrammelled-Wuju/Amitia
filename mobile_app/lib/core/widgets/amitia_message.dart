@@ -344,6 +344,12 @@ class _ImageMessage extends StatelessWidget {
                   ? Image.network(
                       url!,
                       fit: BoxFit.cover,
+                      cacheWidth: 360,
+                      frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                        if (wasSynchronouslyLoaded) return child;
+                        if (frame != null) return child;
+                        return _placeholder(context);
+                      },
                       errorBuilder: (_, __, ___) => _placeholder(context),
                     )
                   : _placeholder(context),

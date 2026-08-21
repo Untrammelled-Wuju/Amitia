@@ -48,12 +48,14 @@ final class DynamicBackendServiceApiProxy implements BackendServiceApi {
   Future<T?> get<T>(
     String path, {
     Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) {
     final api = _requireCurrentApi();
     return api.get<T>(
       path,
       queryParameters: queryParameters,
+      headers: headers,
       fromJson: fromJson,
     );
   }
@@ -63,6 +65,7 @@ final class DynamicBackendServiceApiProxy implements BackendServiceApi {
     String path, {
     Object? data,
     Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) {
     final api = _requireCurrentApi();
@@ -70,6 +73,7 @@ final class DynamicBackendServiceApiProxy implements BackendServiceApi {
       path,
       data: data,
       queryParameters: queryParameters,
+      headers: headers,
       fromJson: fromJson,
     );
   }
@@ -78,10 +82,11 @@ final class DynamicBackendServiceApiProxy implements BackendServiceApi {
   Future<T?> postPayload<T>(
     String path, {
     Object? data,
+    Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) {
     final api = _requireCurrentApi();
-    return api.postPayload<T>(path, data: data, fromJson: fromJson);
+    return api.postPayload<T>(path, data: data, headers: headers, fromJson: fromJson);
   }
 
   @override
@@ -89,6 +94,7 @@ final class DynamicBackendServiceApiProxy implements BackendServiceApi {
     String path, {
     Object? data,
     Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) {
     final api = _requireCurrentApi();
@@ -96,23 +102,43 @@ final class DynamicBackendServiceApiProxy implements BackendServiceApi {
       path,
       data: data,
       queryParameters: queryParameters,
+      headers: headers,
       fromJson: fromJson,
     );
   }
 
   @override
-  Future<void> delete(String path, {Map<String, dynamic>? queryParameters}) {
+  Future<T?> patch<T>(
+    String path, {
+    Object? data,
+    Map<String, dynamic>? queryParameters,
+    Map<String, String>? headers,
+    T Function(dynamic)? fromJson,
+  }) {
     final api = _requireCurrentApi();
-    return api.delete(path, queryParameters: queryParameters);
+    return api.patch<T>(
+      path,
+      data: data,
+      queryParameters: queryParameters,
+      headers: headers,
+      fromJson: fromJson,
+    );
+  }
+
+  @override
+  Future<void> delete(String path, {Map<String, dynamic>? queryParameters, Map<String, String>? headers}) {
+    final api = _requireCurrentApi();
+    return api.delete(path, queryParameters: queryParameters, headers: headers);
   }
 
   @override
   Future<T?> deleteWithResponse<T>(
     String path, {
     Object? data,
+    Map<String, String>? headers,
     T Function(dynamic)? fromJson,
   }) {
     final api = _requireCurrentApi();
-    return api.deleteWithResponse<T>(path, data: data, fromJson: fromJson);
+    return api.deleteWithResponse<T>(path, data: data, headers: headers, fromJson: fromJson);
   }
 }

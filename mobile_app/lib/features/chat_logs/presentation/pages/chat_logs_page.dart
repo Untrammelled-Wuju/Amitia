@@ -21,38 +21,51 @@ class ChatLogsPage extends ConsumerStatefulWidget {
 
 class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
   String? _selectedConversationId;
-  String _characterFilter = '全部';
-  String _channelFilter = '全部';
-  List<MessageDto> _messages = [];
+  String _characterFilter = '';
+  String _channelFilter = '';
+  List<MessageDto> _messages = const [];
+  List<MessageDto> _searchResults = const [];
+  bool _loadingMessages = false;
+  bool _searching = false;
+  final TextEditingController _searchController = TextEditingController();
 
-  final _characters = ['全部', 'Amitia', '小雨', 'Epsilon', 'Karin'];
-  final _channels = ['全部', 'App', '微信', 'QQ'];
+  static const Map<String, String> _channelLabels = {
+    '': '全部渠道',
+    'web': 'App / Web',
+    'wechat': '微信',
+    'qq': 'QQ',
+  };
 
-  List<ConversationDto> get _filteredConversations {
-    final conversations = _conversationList;
-    return conversations.where((c) {
-      if (_characterFilter != '全部') {
-        final charName = _getCharacterName(c.characterId);
-        if (charName != _characterFilter) return false;
-      }
-      if (_channelFilter != '全部' && c.channel != _channelFilter) return false;
-      return true;
-    }).toList();
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
-  List<ConversationDto> get _conversationList {
-    final async = ref.watch(conversationListProvider);
-    return async.valueOrNull ?? [];
+  List<ConversationDto> get _conversationList =>
+      ref.watch(conversationListProvider).valueOrNull ?? const [];
+
+  List<ConversationDto> get _filteredConversations {
+    return _conversationList.where((c) {
+      if (_characterFilter.isNotEmpty && c.characterId != _characterFilter) return false;
+      if (_channelFilter.isNotEmpty && c.channel != _channelFilter) return false;
+      return true;
+    }).toList(growable: false);
   }
 
   ConversationDto? get _selectedConversation {
-    final conversations = _filteredConversations;
-    return conversations.where((c) => c.id == _selectedConversationId).firstOrNull;
+    final id = _selectedConversationId;
+    if (id == null) return null;
+    for (final conversation in _conversationList) {
+      if (conversation.id == id) return conversation;
+    }
+    return null;
   }
 
   @override
   Widget build(BuildContext context) {
     final conversationsAsync = ref.watch(conversationListProvider);
+    final charactersAsync = ref.watch(characterListProvider);
 
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
@@ -67,7 +80,13 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
           AmitiaIconButton(
             icon: Icons.summarize_outlined,
             tooltip: '会话摘要',
-            onPressed: () => _showConversationSummary(context),
+            onPressed: _selectedConversation == null ? null : _showConversationSummary,
+          ),
+          AmitiaIconButton(
+            icon: Icons.delete_forever_outlined,
+            tooltip: '删除全部聊天记录',
+            color: context.error,
+            onPressed: _deleteAll,
           ),
         ],
       ),
@@ -75,28 +94,7 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
         top: false,
         child: conversationsAsync.when(
           loading: () => const Center(child: CircularProgressIndicator()),
-          error: (err, _) => Center(
-            child: Padding(
-              padding: const EdgeInsets.all(32),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.error_outline, size: 48, color: context.textSecondary),
-                  const SizedBox(height: 16),
-                  Text(
-                    '加载失败: ${err.toString().replaceFirst('Exception: ', '')}',
-                    style: AppTypography.body(context).copyWith(color: context.error),
-                    textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 16),
-                  AmitiaButton(
-                    label: '重试',
-                    onPressed: () => ref.invalidate(conversationListProvider),
-                  ),
-                ],
-              ),
-            ),
-          ),
+          error: (err, _) => _errorState(context, err),
           data: (conversations) {
             if (conversations.isEmpty) {
               return AmitiaEmptyState(
@@ -105,32 +103,21 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
                 subtitle: '开始一个新的对话吧',
               );
             }
-
             if (_selectedConversationId == null && conversations.isNotEmpty) {
               WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (mounted) {
-                  setState(() => _selectedConversationId = conversations.first.id);
-                  _loadMessages(conversations.first.id);
-                }
+                if (!mounted || _selectedConversationId != null) return;
+                _selectConversation(conversations.first.id);
               });
             }
-
-            if (_selectedConversationId != null && _messages.isEmpty) {
-              _loadMessages(_selectedConversationId!);
-            }
-
             return Column(
               children: [
-                _buildFilters(context),
+                _buildFilters(context, charactersAsync.valueOrNull ?? const []),
                 Expanded(
                   child: Row(
                     children: [
-                      SizedBox(
-                        width: 160,
-                        child: _buildConversationList(context),
-                      ),
+                      SizedBox(width: 180, child: _buildConversationList(context)),
                       Container(width: 0.5, color: context.borderPrimary),
-                      Expanded(child: _buildMessagePanel(context)),
+                      Expanded(child: _buildMessagePanel(context, charactersAsync.valueOrNull ?? const [])),
                     ],
                   ),
                 ),
@@ -142,80 +129,133 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
     );
   }
 
-  void _loadMessages(String conversationId) {
-    final chatApi = ref.read(chatServiceProvider);
-    chatApi.getMessages(conversationId).then((msgs) {
-      if (mounted) {
-        setState(() => _messages = msgs);
-      }
-    });
-  }
-
-  Widget _buildFilters(BuildContext context) {
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: Row(
+  Widget _errorState(BuildContext context, Object err) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(32),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            _buildFilterChip(context, '角色', _characterFilter, _characters, (v) => setState(() => _characterFilter = v)),
-            SizedBox(width: AppSpacing.sm),
-            _buildFilterChip(context, '渠道', _channelFilter, _channels, (v) => setState(() => _channelFilter = v)),
+            Icon(Icons.error_outline, size: 48, color: context.textSecondary),
+            const SizedBox(height: 16),
+            Text('加载失败: ${err.toString().replaceFirst('Exception: ', '')}',
+                style: AppTypography.body(context).copyWith(color: context.error), textAlign: TextAlign.center),
+            const SizedBox(height: 16),
+            AmitiaButton(label: '重试', onPressed: () => ref.invalidate(conversationListProvider)),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildFilterChip(BuildContext context, String label, String current, List<String> options, ValueChanged<String> onSelected) {
-    return GestureDetector(
-      onTap: () => showModalBottomSheet(
-        context: context,
-        builder: (ctx) => Container(
-          padding: EdgeInsets.all(AppSpacing.xl),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('$label筛选', style: AppTypography.sectionTitle(context)),
-              SizedBox(height: AppSpacing.md),
-              Wrap(
-                spacing: AppSpacing.sm,
-                runSpacing: AppSpacing.sm,
-                children: options.map((o) => GestureDetector(
-                  onTap: () { onSelected(o); Navigator.pop(ctx); },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: o == current ? context.accentPrimary : context.accentSoft,
-                      borderRadius: AppRadius.brTag,
-                    ),
-                    child: Text(o, style: TextStyle(fontSize: 14, color: o == current ? Colors.white : context.accentPrimary)),
-                  ),
-                )).toList(),
+  Future<void> _selectConversation(String id) async {
+    setState(() {
+      _selectedConversationId = id;
+      _messages = const [];
+      _searchResults = const [];
+      _searchController.clear();
+      _loadingMessages = true;
+    });
+    try {
+      final messages = await ref.read(chatServiceProvider).getMessages(id);
+      if (mounted && _selectedConversationId == id) setState(() => _messages = messages);
+    } catch (e) {
+      _showError('加载消息失败：$e');
+    } finally {
+      if (mounted && _selectedConversationId == id) setState(() => _loadingMessages = false);
+    }
+  }
+
+  Future<void> _runSearch(String value) async {
+    final keyword = value.trim();
+    if (keyword.isEmpty) {
+      if (mounted) setState(() => _searchResults = const []);
+      return;
+    }
+    setState(() => _searching = true);
+    try {
+      final results = await ref.read(chatServiceProvider).searchMessages(keyword);
+      if (mounted && _searchController.text.trim() == keyword) setState(() => _searchResults = results);
+    } catch (e) {
+      _showError('搜索失败：$e');
+    } finally {
+      if (mounted) setState(() => _searching = false);
+    }
+  }
+
+  Widget _buildFilters(BuildContext context, List<dynamic> characters) {
+    return Padding(
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _searchController,
+              decoration: InputDecoration(
+                isDense: true,
+                prefixIcon: const Icon(Icons.search, size: 18),
+                hintText: '全局搜索消息内容',
+                suffixIcon: _searching
+                    ? const Padding(padding: EdgeInsets.all(12), child: SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)))
+                    : (_searchController.text.isEmpty
+                        ? null
+                        : IconButton(
+                            icon: const Icon(Icons.close, size: 18),
+                            onPressed: () {
+                              _searchController.clear();
+                              setState(() => _searchResults = const []);
+                            },
+                          )),
               ),
-              SizedBox(height: AppSpacing.xl),
-            ],
+              onSubmitted: _runSearch,
+            ),
           ),
-        ),
+          SizedBox(width: AppSpacing.sm),
+          _filterMenu(
+            context,
+            label: _characterFilter.isEmpty ? '全部角色' : _characterName(_characterFilter),
+            items: [
+              const MapEntry('', '全部角色'),
+              ...characters.map((c) => MapEntry(c.id.toString(), c.name.toString())),
+            ],
+            onSelected: (value) => setState(() => _characterFilter = value),
+          ),
+          SizedBox(width: AppSpacing.sm),
+          _filterMenu(
+            context,
+            label: _channelLabels[_channelFilter] ?? _channelFilter,
+            items: _channelLabels.entries.toList(),
+            onSelected: (value) => setState(() => _channelFilter = value),
+          ),
+        ],
       ),
+    );
+  }
+
+  Widget _filterMenu(
+    BuildContext context, {
+    required String label,
+    required List<MapEntry<String, String>> items,
+    required ValueChanged<String> onSelected,
+  }) {
+    return PopupMenuButton<String>(
+      onSelected: onSelected,
+      itemBuilder: (_) => items.map((e) => PopupMenuItem(value: e.key, child: Text(e.value))).toList(),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(color: context.surfaceSecondary, borderRadius: AppRadius.brTag, border: Border.all(color: context.borderPrimary, width: 0.5)),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text('$label: $current', style: TextStyle(fontSize: 12, color: context.textSecondary)),
-            const SizedBox(width: 4),
-            Icon(Icons.arrow_drop_down, size: 16, color: context.textTertiary),
-          ],
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+        decoration: BoxDecoration(
+          color: context.surfaceSecondary,
+          borderRadius: AppRadius.brTag,
+          border: Border.all(color: context.borderPrimary, width: 0.5),
         ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [Text(label, style: AppTypography.label(context)), const Icon(Icons.arrow_drop_down, size: 17)]),
       ),
     );
   }
 
   Widget _buildConversationList(BuildContext context) {
     final filtered = _filteredConversations;
+    if (filtered.isEmpty) return const Center(child: Text('无匹配会话'));
     return ListView.separated(
       padding: EdgeInsets.symmetric(horizontal: AppSpacing.sm),
       itemCount: filtered.length,
@@ -223,32 +263,20 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
       itemBuilder: (context, index) {
         final conv = filtered[index];
         final isSelected = conv.id == _selectedConversationId;
-        return GestureDetector(
-          onTap: () {
-            setState(() {
-              _selectedConversationId = conv.id;
-              _messages = [];
-            });
-            _loadMessages(conv.id);
-          },
+        return InkWell(
+          borderRadius: AppRadius.brSmall,
+          onTap: () => _selectConversation(conv.id),
           child: Container(
             padding: EdgeInsets.symmetric(horizontal: AppSpacing.sm, vertical: AppSpacing.md),
-            decoration: BoxDecoration(
-              color: isSelected ? context.accentSoft : Colors.transparent,
-              borderRadius: AppRadius.brSmall,
-            ),
+            decoration: BoxDecoration(color: isSelected ? context.accentSoft : Colors.transparent, borderRadius: AppRadius.brSmall),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(conv.title, style: AppTypography.bodySmall(context).copyWith(fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400), maxLines: 1, overflow: TextOverflow.ellipsis),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    AmitiaStatusBadge(label: _getCharacterName(conv.characterId), type: BadgeType.accent, fontSize: 10),
-                    const SizedBox(width: 4),
-                    AmitiaStatusBadge(label: conv.channel.isEmpty ? 'App' : conv.channel, type: BadgeType.neutral, fontSize: 10),
-                  ],
-                ),
+                Text(conv.title.isEmpty ? '新对话' : conv.title,
+                    style: AppTypography.bodySmall(context).copyWith(fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400),
+                    maxLines: 1, overflow: TextOverflow.ellipsis),
+                const SizedBox(height: 4),
+                Text('${_characterName(conv.characterId)} · ${_channelLabels[conv.channel] ?? conv.channel} ', style: AppTypography.label(context), maxLines: 1, overflow: TextOverflow.ellipsis),
                 const SizedBox(height: 2),
                 Text('${conv.messageCount}条 · ${_formatTime(conv.updatedAt)}', style: AppTypography.label(context)),
               ],
@@ -259,178 +287,324 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
     );
   }
 
-  Widget _buildMessagePanel(BuildContext context) {
-    final conv = _selectedConversation;
-    if (conv == null) {
-      return AmitiaEmptyState(icon: Icons.chat_bubble_outline, title: '选择会话', subtitle: '请从左侧选择一个会话');
+  Widget _buildMessagePanel(BuildContext context, List<dynamic> characters) {
+    if (_searchController.text.trim().isNotEmpty) {
+      return _buildSearchResults(context);
     }
+    final conv = _selectedConversation;
+    if (conv == null) return AmitiaEmptyState(icon: Icons.chat_bubble_outline, title: '选择会话', subtitle: '请从左侧选择一个会话');
     return Column(
       children: [
-        _buildMessageHeader(context, conv),
-        Expanded(child: _buildMessageList(context)),
+        _buildMessageHeader(context, conv, characters),
+        Expanded(
+          child: _loadingMessages
+              ? const Center(child: CircularProgressIndicator())
+              : _messages.isEmpty
+                  ? const Center(child: Text('此会话暂无消息'))
+                  : ListView.separated(
+                      padding: EdgeInsets.all(AppSpacing.sm),
+                      itemCount: _messages.length,
+                      separatorBuilder: (_, _) => SizedBox(height: AppSpacing.xs),
+                      itemBuilder: (_, index) => _buildMessageItem(context, _messages[index]),
+                    ),
+        ),
       ],
     );
   }
 
-  Widget _buildMessageHeader(BuildContext context, ConversationDto conv) {
+  Widget _buildSearchResults(BuildContext context) {
+    if (_searching) return const Center(child: CircularProgressIndicator());
+    if (_searchResults.isEmpty) return const Center(child: Text('没有找到匹配消息'));
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Padding(
+          padding: EdgeInsets.all(AppSpacing.md),
+          child: Text('全局搜索结果 · ${_searchResults.length} 条', style: AppTypography.cardTitle(context)),
+        ),
+        Expanded(
+          child: ListView.separated(
+            padding: EdgeInsets.all(AppSpacing.sm),
+            itemCount: _searchResults.length,
+            separatorBuilder: (_, _) => SizedBox(height: AppSpacing.xs),
+            itemBuilder: (_, index) => _buildMessageItem(context, _searchResults[index], showConversation: true),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildMessageHeader(BuildContext context, ConversationDto conv, List<dynamic> characters) {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
       decoration: BoxDecoration(color: context.surfacePrimary, border: Border(bottom: BorderSide(color: context.borderPrimary, width: 0.5))),
       child: Row(
         children: [
           Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(conv.title, style: AppTypography.cardTitle(context), maxLines: 1, overflow: TextOverflow.ellipsis),
-                Text('${_getCharacterName(conv.characterId)} · ${conv.channel.isEmpty ? "App" : conv.channel} · ${conv.messageCount}条消息', style: AppTypography.label(context)),
-              ],
-            ),
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(conv.title.isEmpty ? '新对话' : conv.title, style: AppTypography.cardTitle(context), maxLines: 1, overflow: TextOverflow.ellipsis),
+              Text('${_characterName(conv.characterId)} · ${_channelLabels[conv.channel] ?? conv.channel} · ${conv.messageCount}条消息', style: AppTypography.label(context)),
+            ]),
           ),
-          AmitiaIconButton(icon: Icons.delete_sweep_outlined, size: 18, color: context.error, tooltip: '清空会话', onPressed: () => _showClearConfirm(context, conv)),
+          PopupMenuButton<String>(
+            tooltip: '切换角色',
+            onSelected: (characterId) => _changeCharacter(conv.id, characterId),
+            itemBuilder: (_) => characters.map<PopupMenuEntry<String>>((c) => PopupMenuItem<String>(value: c.id.toString(), child: Text(c.name.toString()))).toList(),
+            icon: const Icon(Icons.person_outline),
+          ),
+          IconButton(icon: const Icon(Icons.summarize_outlined), tooltip: '摘要', onPressed: _showConversationSummary),
+          IconButton(icon: const Icon(Icons.delete_sweep_outlined), color: context.error, tooltip: '清空消息', onPressed: () => _clearMessages(conv)),
+          IconButton(icon: const Icon(Icons.delete_outline), color: context.error, tooltip: '删除会话', onPressed: () => _deleteConversation(conv)),
         ],
       ),
     );
   }
 
-  Widget _buildMessageList(BuildContext context) {
-    if (_messages.isEmpty) {
-      return const Center(child: CircularProgressIndicator());
-    }
-    return ListView.separated(
-      padding: EdgeInsets.all(AppSpacing.sm),
-      itemCount: _messages.length,
-      separatorBuilder: (_, _) => SizedBox(height: AppSpacing.xs),
-      itemBuilder: (context, index) => _buildMessageItem(context, _messages[index]),
+  Widget _buildMessageItem(BuildContext context, MessageDto message, {bool showConversation = false}) {
+    final isUser = message.role == 'user';
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
+      decoration: BoxDecoration(
+        color: isUser ? context.accentSoft : context.surfacePrimary,
+        borderRadius: AppRadius.brSmall,
+        border: Border.all(color: context.borderPrimary, width: 0.5),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(children: [
+            Text(isUser ? '用户' : 'AI', style: AppTypography.label(context).copyWith(fontWeight: FontWeight.w600)),
+            if (showConversation) ...[
+              const SizedBox(width: 8),
+              Expanded(child: Text('会话 ${message.conversationId}', style: AppTypography.label(context), overflow: TextOverflow.ellipsis)),
+            ] else
+              const Spacer(),
+            Text(_formatMsgTime(message.createdAt), style: AppTypography.label(context)),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.info_outline, size: 17),
+              tooltip: '消息状态',
+              onPressed: () => _showMessageStatus(message),
+            ),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.delete_outline, size: 17),
+              color: context.error,
+              tooltip: '删除消息',
+              onPressed: () => _deleteMessage(message),
+            ),
+          ]),
+          Text(message.content, style: AppTypography.bodySmall(context)),
+          if (message.status.isNotEmpty) ...[
+            const SizedBox(height: 5),
+            Text('状态 ${message.status}${message.tokens == null ? '' : ' · ${message.tokens} tokens'}', style: AppTypography.label(context)),
+          ],
+        ],
+      ),
     );
   }
 
-  Widget _buildMessageItem(BuildContext context, MessageDto message) {
-    final isUser = message.role == 'user';
-    return GestureDetector(
-      child: Container(
-        padding: EdgeInsets.symmetric(horizontal: AppSpacing.md, vertical: AppSpacing.sm),
-        decoration: BoxDecoration(
-          color: isUser ? context.accentSoft : context.surfacePrimary,
-          borderRadius: AppRadius.brSmall,
-          border: Border.all(color: context.borderPrimary, width: 0.5),
+  Future<void> _showMessageStatus(MessageDto message) async {
+    try {
+      final status = await ref.read(chatServiceProvider).messageStatus(message.id);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('消息状态'),
+          content: SelectableText(
+            status == null || status.isEmpty
+                ? '后端未返回状态数据'
+                : status.entries.map((entry) => '${entry.key}: ${entry.value}').join('\n'),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('关闭'))],
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    color: isUser ? context.accentPrimary : context.info,
-                    shape: BoxShape.circle,
-                  ),
-                  child: Center(
-                    child: Text(isUser ? '我' : 'AI', style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600)),
-                  ),
-                ),
-                SizedBox(width: AppSpacing.sm),
-                Text(isUser ? '用户' : '角色', style: AppTypography.label(context).copyWith(fontWeight: FontWeight.w500)),
-                const Spacer(),
-                Text(_formatMsgTime(message.createdAt), style: AppTypography.label(context)),
-              ],
+      );
+    } catch (e) {
+      _showError('读取消息状态失败：$e');
+    }
+  }
+
+  Future<void> _changeCharacter(String conversationId, String characterId) async {
+    try {
+      await ref.read(chatServiceProvider).changeCharacter(conversationId, characterId);
+      ref.invalidate(conversationListProvider);
+      _show('会话角色已切换');
+    } catch (e) {
+      _showError('切换角色失败：$e');
+    }
+  }
+
+  Future<void> _deleteMessage(MessageDto message) async {
+    try {
+      await ref.read(chatServiceProvider).deleteMessage(message.id);
+      if (_searchController.text.trim().isNotEmpty) {
+        await _runSearch(_searchController.text);
+      } else if (_selectedConversationId != null) {
+        await _selectConversation(_selectedConversationId!);
+      }
+      ref.invalidate(conversationListProvider);
+      _show('消息已删除');
+    } catch (e) {
+      _showError('删除消息失败：$e');
+    }
+  }
+
+  Future<void> _clearMessages(ConversationDto conv) async {
+    final ok = await _confirm('清空消息', '确定清空「${conv.title.isEmpty ? '新对话' : conv.title}」的所有消息吗？会话本身会保留。');
+    if (!ok) return;
+    try {
+      await ref.read(chatServiceProvider).deleteMessages(conv.id);
+      setState(() => _messages = const []);
+      ref.invalidate(conversationListProvider);
+      _show('会话消息已清空');
+    } catch (e) {
+      _showError('清空失败：$e');
+    }
+  }
+
+  Future<void> _deleteConversation(ConversationDto conv) async {
+    final ok = await _confirm('删除会话', '确定删除该会话及其全部消息吗？此操作不可撤销。');
+    if (!ok) return;
+    try {
+      await ref.read(chatServiceProvider).deleteConversation(conv.id);
+      setState(() {
+        _selectedConversationId = null;
+        _messages = const [];
+      });
+      ref.invalidate(conversationListProvider);
+      _show('会话已删除');
+    } catch (e) {
+      _showError('删除会话失败：$e');
+    }
+  }
+
+  Future<void> _deleteAll() async {
+    final ok = await _confirm('删除全部聊天记录', '确定删除当前账号的全部会话和消息吗？此操作不可撤销。');
+    if (!ok) return;
+    try {
+      await ref.read(chatServiceProvider).deleteAllConversations();
+      setState(() {
+        _selectedConversationId = null;
+        _messages = const [];
+        _searchResults = const [];
+      });
+      ref.invalidate(conversationListProvider);
+      _show('全部聊天记录已删除');
+    } catch (e) {
+      _showError('删除全部记录失败：$e');
+    }
+  }
+
+  Future<void> _showConversationSummary() async {
+    final conv = _selectedConversation;
+    if (conv == null) return;
+    Map<String, dynamic>? initial;
+    try {
+      initial = await ref.read(chatServiceProvider).conversationSummary(conv.id);
+    } catch (_) {
+      initial = null;
+    }
+    if (!mounted) return;
+    var summary = (initial?['summaryText'] ?? '').toString();
+    var busy = false;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('会话摘要'),
+          content: SizedBox(
+            width: 520,
+            child: busy
+                ? const Center(child: Padding(padding: EdgeInsets.all(24), child: CircularProgressIndicator()))
+                : SelectableText(summary.isEmpty ? '尚未生成摘要。' : summary),
+          ),
+          actions: [
+            if (summary.isNotEmpty)
+              TextButton(
+                onPressed: busy
+                    ? null
+                    : () async {
+                        setLocal(() => busy = true);
+                        try {
+                          await ref.read(chatServiceProvider).deleteConversationSummary(conv.id);
+                          setLocal(() => summary = '');
+                        } finally {
+                          setLocal(() => busy = false);
+                        }
+                      },
+                child: Text('删除摘要', style: TextStyle(color: context.error)),
+              ),
+            TextButton(
+              onPressed: busy
+                  ? null
+                  : () async {
+                      setLocal(() => busy = true);
+                      try {
+                        final result = await ref.read(chatServiceProvider).generateConversationSummary(conv.id);
+                        setLocal(() => summary = (result?['summaryText'] ?? '').toString());
+                      } catch (e) {
+                        if (mounted) _showError('生成摘要失败：$e');
+                      } finally {
+                        setLocal(() => busy = false);
+                      }
+                    },
+              child: Text(summary.isEmpty ? '生成摘要' : '重新生成'),
             ),
-            SizedBox(height: AppSpacing.xs),
-            Text(message.content, style: AppTypography.bodySmall(context)),
+            TextButton(onPressed: busy ? null : () => Navigator.pop(dialogContext), child: const Text('关闭')),
           ],
         ),
       ),
     );
   }
 
-  void _showConversationSummary(BuildContext context) {
-    final conv = _selectedConversation;
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('会话摘要', style: AppTypography.cardTitle(context)),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(conv?.title ?? '未选择会话', style: AppTypography.cardTitle(context)),
-              SizedBox(height: AppSpacing.sm),
-              Container(
-                width: double.infinity,
-                padding: EdgeInsets.all(AppSpacing.lg),
-                decoration: BoxDecoration(color: context.accentSoft, borderRadius: AppRadius.brMedium),
-                child: Text(
-                  '${_getCharacterName(conv?.characterId ?? "")} · ${_messages.length}条消息',
-                  style: AppTypography.bodySmall(context).copyWith(height: 1.6),
-                ),
-              ),
-              SizedBox(height: AppSpacing.md),
-              Text('消息数：${conv?.messageCount ?? 0}', style: AppTypography.caption(context)),
+  Future<bool> _confirm(String title, String content) async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(title),
+            content: Text(content),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('取消')),
+              TextButton(onPressed: () => Navigator.pop(ctx, true), child: Text('确认', style: TextStyle(color: context.error))),
             ],
           ),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭')),
-        ],
-      ),
-    );
+        ) ??
+        false;
   }
 
-  void _showClearConfirm(BuildContext context, ConversationDto conv) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('清空会话', style: AppTypography.cardTitle(context)),
-        content: Text('确定要清空「${conv.title}」的所有消息吗？此操作不可撤销。', style: AppTypography.bodySmall(context)),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              final chatApi = ref.read(chatServiceProvider);
-              chatApi.deleteConversation(conv.id).then((_) {
-                if (mounted) {
-                  ref.invalidate(conversationListProvider);
-                  setState(() => _selectedConversationId = null);
-                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('会话已删除'), duration: Duration(seconds: 1)));
-                }
-              });
-            },
-            child: Text('清空', style: TextStyle(color: context.error)),
-          ),
-        ],
-      ),
-    );
+  String _characterName(String id) {
+    final characters = ref.read(characterListProvider).valueOrNull ?? const [];
+    for (final character in characters) {
+      if (character.id == id) return character.name;
+    }
+    return id.isEmpty ? '未绑定角色' : id;
   }
 
-  String _getCharacterName(String id) {
-    final characters = ref.read(characterListProvider).valueOrNull ?? [];
-    final character = characters.where((c) => c.id == id).firstOrNull;
-    return character?.name ?? '未知';
+  void _show(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
   }
 
-  String _formatTime(String updatedAt) {
-    final time = DateTime.tryParse(updatedAt);
+  void _showError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message), backgroundColor: context.error));
+  }
+
+  String _formatTime(String value) {
+    final time = DateTime.tryParse(value);
     if (time == null) return '';
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
-    final convDate = DateTime(time.year, time.month, time.day);
-    if (convDate == today) {
-      return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
-    } else if (convDate == today.subtract(const Duration(days: 1))) {
-      return '昨天';
-    } else {
-      return '${time.month}/${time.day}';
-    }
+    final date = DateTime(time.year, time.month, time.day);
+    if (date == today) return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+    if (date == today.subtract(const Duration(days: 1))) return '昨天';
+    return '${time.month}/${time.day}';
   }
 
-  String _formatMsgTime(String createdAt) {
-    final time = DateTime.tryParse(createdAt);
+  String _formatMsgTime(String value) {
+    final time = DateTime.tryParse(value);
     if (time == null) return '';
-    return '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
+    return '${time.month}/${time.day} ${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}';
   }
 }

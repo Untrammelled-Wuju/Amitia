@@ -1,40 +1,33 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../../../app/theme/app_colors.dart';
-import '../../../../app/theme/app_typography.dart';
-import '../../../../app/theme/app_spacing.dart';
-import '../../../../app/theme/app_radius.dart';
-import '../../../../core/widgets/amitia_scaffold.dart';
-import '../../../../core/widgets/amitia_misc.dart';
+
 import '../../../../app/app_routes.dart';
-import '../../../../core/services/providers.dart';
+import '../../../../app/theme/app_colors.dart';
+import '../../../../app/theme/app_spacing.dart';
+import '../../../../app/theme/app_typography.dart';
+import '../../../../core/backend_transport/providers/backend_transport_providers.dart';
+import '../../../../core/widgets/amitia_misc.dart';
+import '../../../../core/widgets/amitia_scaffold.dart';
 
 class PetActionEditorPage extends ConsumerStatefulWidget {
   final String taskId;
   final String actionKey;
 
-  const PetActionEditorPage({
-    super.key,
-    required this.taskId,
-    required this.actionKey,
-  });
+  const PetActionEditorPage({super.key, required this.taskId, required this.actionKey});
 
   @override
   ConsumerState<PetActionEditorPage> createState() => _PetActionEditorPageState();
 }
 
 class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
-  Map<String, dynamic>? _skill;
-  int _currentFrame = 0;
-  double _playbackSpeed = 1.0;
-  double _cropStart = 0.0;
-  double _cropEnd = 1.0;
-  double _scale = 1.0;
-  double _anchorX = 0.5;
-  double _anchorY = 0.5;
-  bool _loop = true;
   bool _loading = true;
+  bool _busy = false;
   String? _error;
+  Map<String, dynamic> _summary = const {};
+  String? _sessionId;
+  int _sessionVersion = 0;
+  int _fps = 12;
+  String _loopType = 'loop';
 
   @override
   void initState() {
@@ -42,530 +35,251 @@ class _PetActionEditorPageState extends ConsumerState<PetActionEditorPage> {
     _load();
   }
 
+  String _key(String prefix) => '$prefix-${DateTime.now().microsecondsSinceEpoch}';
+
   Future<void> _load() async {
     setState(() { _loading = true; _error = null; });
     try {
-      final svc = ref.read(extensionServiceProvider);
-      final data = await svc.getSkill(widget.actionKey);
-      if (mounted) {
-        if (data != null) {
-          final config = data['config'] as Map<String, dynamic>?;
-          setState(() {
-            _skill = data;
-            if (config != null) {
-              _playbackSpeed = (config['playbackSpeed'] is num) ? (config['playbackSpeed'] as num).toDouble() : 1.0;
-              _cropStart = (config['cropStart'] is num) ? (config['cropStart'] as num).toDouble() : 0.0;
-              _cropEnd = (config['cropEnd'] is num) ? (config['cropEnd'] as num).toDouble() : 1.0;
-              _scale = (config['scale'] is num) ? (config['scale'] as num).toDouble() : 1.0;
-              _anchorX = (config['anchorX'] is num) ? (config['anchorX'] as num).toDouble() : 0.5;
-              _anchorY = (config['anchorY'] is num) ? (config['anchorY'] as num).toDouble() : 0.5;
-              _loop = config['loop'] == true;
-            }
-            _loading = false;
-          });
-        } else {
-          setState(() { _loading = false; _error = '未找到该技能'; });
-        }
-      }
+      final api = ref.read(backendServiceProvider);
+      final response = await api.get<dynamic>(
+        '/api/desktop-pets/processing-tasks/${widget.taskId}/actions/${widget.actionKey}/edit-summary',
+      );
+      final summary = response is Map ? Map<String, dynamic>.from(response) : const <String, dynamic>{};
+      if (summary.isEmpty) throw StateError('未找到动作编辑数据');
+      if (!mounted) return;
+      setState(() { _summary = summary; _loading = false; });
     } catch (e) {
       if (mounted) setState(() { _error = e.toString(); _loading = false; });
     }
   }
 
-  String get _actionName => _skill?['name']?.toString() ?? widget.actionKey;
+  Future<void> _ensureSession() async {
+    if (_sessionId != null) return;
+    final revisionId = (_summary['activeRevisionId'] ?? '').toString();
+    if (revisionId.isEmpty) throw StateError('当前动作没有可编辑的活动修订');
+    final response = await ref.read(backendServiceProvider).post<dynamic>(
+      '/api/desktop-pets/processing-tasks/${widget.taskId}/actions/${widget.actionKey}/edit-sessions',
+      data: {
+        'baseRevisionId': revisionId,
+        'clientInstanceId': 'mobile-app',
+        'idempotencyKey': _key('session'),
+      },
+    );
+    if (response is! Map) throw StateError('创建编辑会话失败');
+    final map = Map<String, dynamic>.from(response);
+    _sessionId = (map['sessionId'] ?? '').toString();
+    _sessionVersion = (map['sessionVersion'] as num?)?.toInt() ?? 0;
+    if (_sessionId!.isEmpty) throw StateError('后端未返回编辑会话 ID');
+  }
 
-  int get _totalFrames {
-    final frames = _skill?['frames'];
-    if (frames is List) return frames.length;
-    final config = _skill?['config'] as Map<String, dynamic>?;
-    if (config != null && config['totalFrames'] is num) {
-      return (config['totalFrames'] as num).toInt();
+  Future<void> _apply(String type, Map<String, dynamic> payload) async {
+    setState(() => _busy = true);
+    try {
+      await _ensureSession();
+      final response = await ref.read(backendServiceProvider).post<dynamic>(
+        '/api/desktop-pets/edit-sessions/$_sessionId/operations',
+        data: {
+          'baseSessionVersion': _sessionVersion,
+          'idempotencyKey': _key('op'),
+          'operation': {'type': type, 'schemaVersion': 1, 'payload': payload},
+        },
+      );
+      if (response is Map) _sessionVersion = (response['sessionVersion'] as num?)?.toInt() ?? _sessionVersion;
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('修改已写入编辑会话')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('修改失败：$e')));
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
-    return 8;
+  }
+
+  Future<void> _undo() => _historyAction('undo');
+  Future<void> _redo() => _historyAction('redo');
+
+  Future<void> _historyAction(String action) async {
+    setState(() => _busy = true);
+    try {
+      await _ensureSession();
+      final response = await ref.read(backendServiceProvider).post<dynamic>(
+        '/api/desktop-pets/edit-sessions/$_sessionId/$action',
+        queryParameters: {'baseSessionVersion': _sessionVersion},
+      );
+      if (response is Map) _sessionVersion = (response['sessionVersion'] as num?)?.toInt() ?? _sessionVersion;
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('${action == 'undo' ? '撤销' : '重做'}失败：$e')));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _commit() async {
+    setState(() => _busy = true);
+    try {
+      await _ensureSession();
+      await ref.read(backendServiceProvider).post<dynamic>(
+        '/api/desktop-pets/edit-sessions/$_sessionId/commit',
+        data: {
+          'expectedSessionVersion': _sessionVersion,
+          'changeSummary': 'Mobile action editor changes',
+          'activationPolicy': 'activate',
+          'idempotencyKey': _key('commit'),
+        },
+      );
+      _sessionId = null;
+      _sessionVersion = 0;
+      await _load();
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('动作修订已提交')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('提交失败：$e')));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _abandon() async {
+    final sessionId = _sessionId;
+    if (sessionId == null) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(backendServiceProvider).post<dynamic>('/api/desktop-pets/edit-sessions/$sessionId/abandon');
+      _sessionId = null;
+      _sessionVersion = 0;
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('未提交修改已放弃')));
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('放弃失败：$e')));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_loading) {
-      return const AmitiaScaffold(body: Center(child: CircularProgressIndicator()));
-    }
-    if (_error != null) {
-      return AmitiaScaffold(
-        body: SafeArea(child: Center(child: Text('加载失败: $_error'))),
-      );
-    }
-
     return AmitiaScaffold(
       appBar: AmitiaAppBar(
-        title: '动作编辑器',
+        title: '动作编辑 · ${widget.actionKey}',
         showBackButton: true,
-        fallbackRoute: AppRoutes.workshop,
-      ),
-      body: SafeArea(
-        top: false,
-        child: Column(
-          children: [
-            Expanded(
-              child: ListView(
-                padding: EdgeInsets.all(AppSpacing.pagePadding),
-                children: [
-                  _buildPreviewSection(context),
-                  SizedBox(height: AppSpacing.md),
-                  _buildFrameScrubber(context),
-                  SizedBox(height: AppSpacing.sectionGap),
-                  _buildPlaybackSpeedSection(context),
-                  SizedBox(height: AppSpacing.md),
-                  _buildCropRangeSection(context),
-                  SizedBox(height: AppSpacing.md),
-                  _buildAnchorSection(context),
-                  SizedBox(height: AppSpacing.md),
-                  _buildScaleSection(context),
-                  SizedBox(height: AppSpacing.md),
-                  _buildLoopSection(context),
-                  SizedBox(height: AppSpacing.xxl),
-                ],
-              ),
-            ),
-            _buildBottomActions(context),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPreviewSection(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Text('帧预览', style: AppTypography.sectionTitle(context)),
-            const Spacer(),
-            AmitiaStatusBadge(label: _actionName, type: BadgeType.accent),
-          ],
-        ),
-        SizedBox(height: AppSpacing.sm),
-        Container(
-          width: double.infinity,
-          height: 220,
-          decoration: BoxDecoration(
-            color: context.surfaceSecondary,
-            borderRadius: AppRadius.brLarge,
-            border: Border.all(color: context.borderPrimary, width: 0.5),
-          ),
-          child: Stack(
-            children: [
-              Center(
-                child: Icon(Icons.image, size: 80, color: context.textTertiary),
-              ),
-              Positioned(
-                top: AppSpacing.sm,
-                left: AppSpacing.sm,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: context.scrim,
-                    borderRadius: AppRadius.brTag,
-                  ),
-                  child: Text(
-                    '帧 ${_currentFrame + 1}/$_totalFrames',
-                    style: const TextStyle(fontSize: 12, color: Colors.white),
-                  ),
-                ),
-              ),
-              if (_loop)
-                Positioned(
-                  top: AppSpacing.sm,
-                  right: AppSpacing.sm,
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: context.accentPrimary.withValues(alpha: 0.9),
-                      borderRadius: AppRadius.brTag,
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.loop, size: 12, color: Colors.white),
-                        SizedBox(width: 4),
-                        Text('循环', style: TextStyle(fontSize: 11, color: Colors.white)),
-                      ],
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildFrameScrubber(BuildContext context) {
-    final totalFrames = _totalFrames;
-    return Row(
-      children: [
-        AmitiaIconButton(
-          icon: Icons.skip_previous,
-          color: context.textSecondary,
-          onPressed: _currentFrame > 0
-              ? () { setState(() { _currentFrame--; }); }
-              : null,
-        ),
-        Expanded(
-          child: Slider(
-            value: _currentFrame.toDouble().clamp(0, (totalFrames - 1).toDouble()),
-            min: 0,
-            max: (totalFrames - 1).toDouble().clamp(0, double.infinity),
-            divisions: totalFrames > 1 ? totalFrames - 1 : 1,
-            activeColor: context.accentPrimary,
-            onChanged: (value) {
-              setState(() { _currentFrame = value.round(); });
-            },
-          ),
-        ),
-        AmitiaIconButton(
-          icon: Icons.skip_next,
-          color: context.textSecondary,
-          onPressed: _currentFrame < totalFrames - 1
-              ? () { setState(() { _currentFrame++; }); }
-              : null,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPlaybackSpeedSection(BuildContext context) {
-    return AmitiaCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.speed, size: 20, color: context.accentPrimary),
-              SizedBox(width: AppSpacing.sm),
-              Text('播放速度', style: AppTypography.body(context)),
-              const Spacer(),
-              Text('${_playbackSpeed.toStringAsFixed(1)}x', style: AppTypography.bodySmall(context)),
-            ],
-          ),
-          Slider(
-            value: _playbackSpeed,
-            min: 0.25,
-            max: 3.0,
-            divisions: 11,
-            activeColor: context.accentPrimary,
-            onChanged: (value) {
-              setState(() { _playbackSpeed = value; });
-            },
-          ),
+        fallbackRoute: AppRoutes.petProcessing(widget.taskId),
+        actions: [
+          AmitiaIconButton(icon: Icons.undo, onPressed: _busy ? null : _undo, color: context.textSecondary),
+          AmitiaIconButton(icon: Icons.redo, onPressed: _busy ? null : _redo, color: context.textSecondary),
+          AmitiaIconButton(icon: Icons.refresh, onPressed: _busy ? null : _load, color: context.textSecondary),
         ],
       ),
+      body: SafeArea(top: false, child: _buildBody(context)),
     );
   }
 
-  Widget _buildCropRangeSection(BuildContext context) {
-    return AmitiaCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.content_cut, size: 20, color: context.accentPrimary),
-              SizedBox(width: AppSpacing.sm),
-              Text('裁切范围', style: AppTypography.body(context)),
-            ],
-          ),
-          SizedBox(height: AppSpacing.sm),
-          Text('起始帧', style: AppTypography.label(context)),
-          Slider(
-            value: _cropStart,
-            min: 0.0,
-            max: 1.0,
-            divisions: 20,
-            activeColor: context.accentPrimary,
-            onChanged: (value) {
-              setState(() { _cropStart = value.clamp(0.0, _cropEnd - 0.05); });
-            },
-          ),
-          Text('结束帧', style: AppTypography.label(context)),
-          Slider(
-            value: _cropEnd,
-            min: 0.0,
-            max: 1.0,
-            divisions: 20,
-            activeColor: context.accentPrimary,
-            onChanged: (value) {
-              setState(() { _cropEnd = value.clamp(_cropStart + 0.05, 1.0); });
-            },
-          ),
-          SizedBox(height: AppSpacing.xs),
-          Text(
-            '裁切范围：${(_cropStart * 100).round()}% - ${(_cropEnd * 100).round()}%',
-            style: AppTypography.caption(context),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAnchorSection(BuildContext context) {
-    return AmitiaCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.gps_fixed, size: 20, color: context.accentPrimary),
-              SizedBox(width: AppSpacing.sm),
-              Text('锚点设置', style: AppTypography.body(context)),
-            ],
-          ),
-          SizedBox(height: AppSpacing.sm),
-          Container(
-            height: 120,
-            decoration: BoxDecoration(
-              color: context.surfaceSecondary,
-              borderRadius: AppRadius.brSmall,
-              border: Border.all(color: context.borderPrimary, width: 0.5),
-            ),
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                return GestureDetector(
-                  onTapDown: (details) {
-                    setState(() {
-                      _anchorX = details.localPosition.dx / constraints.maxWidth;
-                      _anchorY = details.localPosition.dy / constraints.maxHeight;
-                    });
-                  },
-                  onPanUpdate: (details) {
-                    setState(() {
-                      _anchorX = (details.localPosition.dx / constraints.maxWidth).clamp(0.0, 1.0);
-                      _anchorY = (details.localPosition.dy / constraints.maxHeight).clamp(0.0, 1.0);
-                    });
-                  },
-                  child: Stack(
-                    children: [
-                      Center(
-                        child: Container(
-                          width: 40,
-                          height: 40,
-                          decoration: BoxDecoration(
-                            color: context.accentSoft,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: context.borderPrimary),
-                          ),
-                        ),
-                      ),
-                      Positioned(
-                        left: _anchorX * constraints.maxWidth - 12,
-                        top: _anchorY * constraints.maxHeight - 12,
-                        child: Container(
-                          width: 24,
-                          height: 24,
-                          decoration: BoxDecoration(
-                            color: context.accentPrimary,
-                            shape: BoxShape.circle,
-                            border: Border.all(color: Colors.white, width: 2),
-                          ),
-                          child: const Icon(Icons.center_focus_strong, size: 14, color: Colors.white),
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              },
-            ),
-          ),
-          SizedBox(height: AppSpacing.xs),
-          Text(
-            '锚点位置：X ${(_anchorX * 100).round()}% · Y ${(_anchorY * 100).round()}%',
-            style: AppTypography.caption(context),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildScaleSection(BuildContext context) {
-    return AmitiaCard(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.zoom_in, size: 20, color: context.accentPrimary),
-              SizedBox(width: AppSpacing.sm),
-              Text('缩放', style: AppTypography.body(context)),
-              const Spacer(),
-              Text('${(_scale * 100).round()}%', style: AppTypography.bodySmall(context)),
-            ],
-          ),
-          Slider(
-            value: _scale,
-            min: 0.5,
-            max: 2.0,
-            divisions: 15,
-            activeColor: context.accentPrimary,
-            onChanged: (value) {
-              setState(() { _scale = value; });
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildLoopSection(BuildContext context) {
-    return AmitiaCard(
-      child: Row(
-        children: [
-          Icon(Icons.loop, size: 20, color: context.accentPrimary),
-          SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('循环播放', style: AppTypography.body(context)),
-                const SizedBox(height: 2),
-                Text('动作播放完毕后自动重新开始', style: AppTypography.label(context)),
-              ],
-            ),
-          ),
-          Switch(
-            value: _loop,
-            activeThumbColor: context.accentPrimary,
-            onChanged: (value) {
-              setState(() { _loop = value; });
-            },
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBottomActions(BuildContext context) {
-    return Container(
+  Widget _buildBody(BuildContext context) {
+    if (_loading) return const AmitiaLoadingState();
+    if (_error != null) return AmitiaErrorState(message: _error!, onRetry: _load);
+    final timelineRaw = _summary['timeline'];
+    final frames = timelineRaw is List ? timelineRaw.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList() : const <Map<String, dynamic>>[];
+    return ListView(
       padding: EdgeInsets.all(AppSpacing.pagePadding),
-      decoration: BoxDecoration(
-        color: context.surfacePrimary,
-        border: Border(top: BorderSide(color: context.borderPrimary, width: 0.5)),
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: AmitiaButton(
-              label: '保存草稿',
-              isSecondary: true,
-              icon: Icons.save_outlined,
-              onPressed: _saveDraft,
+      children: [
+        AmitiaCard(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(widget.actionKey, style: AppTypography.cardTitle(context)),
+            SizedBox(height: AppSpacing.xs),
+            Text('活动修订 ${_summary['activeRevisionNum'] ?? '-'} · ${_summary['frameCount'] ?? frames.length} 帧 · 质量 ${_summary['qualityVerdict'] ?? '-'}', style: AppTypography.caption(context)),
+            if (_sessionId != null) ...[
+              SizedBox(height: AppSpacing.xs),
+              Text('编辑会话 $_sessionId · v$_sessionVersion', style: AppTypography.label(context).copyWith(color: context.accentPrimary)),
+            ],
+          ]),
+        ),
+        SizedBox(height: AppSpacing.lg),
+        const AmitiaSectionHeader(title: '播放参数'),
+        SizedBox(height: AppSpacing.sm),
+        AmitiaCard(child: Column(children: [
+          Row(children: [
+            const Expanded(child: Text('默认 FPS')),
+            DropdownButton<int>(
+              value: _fps,
+              items: const [6, 8, 10, 12, 15, 24].map((e) => DropdownMenuItem(value: e, child: Text('$e'))).toList(),
+              onChanged: _busy ? null : (value) {
+                if (value == null) return;
+                setState(() => _fps = value);
+                _apply('action.set_default_fps', {'defaultFps': value, 'recalculate': true});
+              },
             ),
-          ),
+          ]),
+          Row(children: [
+            const Expanded(child: Text('循环类型')),
+            DropdownButton<String>(
+              value: _loopType,
+              items: const ['loop', 'once', 'ping_pong'].map((e) => DropdownMenuItem(value: e, child: Text(e))).toList(),
+              onChanged: _busy ? null : (value) {
+                if (value == null) return;
+                setState(() => _loopType = value);
+                _apply('action.set_loop_type', {'loopType': value});
+              },
+            ),
+          ]),
+        ])),
+        SizedBox(height: AppSpacing.lg),
+        const AmitiaSectionHeader(title: '帧时间线'),
+        SizedBox(height: AppSpacing.sm),
+        if (frames.isEmpty)
+          const SizedBox(height: 180, child: AmitiaEmptyState(icon: Icons.photo_library_outlined, title: '暂无帧'))
+        else
+          ...frames.map((frame) => _frameCard(context, frame)),
+        SizedBox(height: AppSpacing.lg),
+        Row(children: [
+          Expanded(child: OutlinedButton(onPressed: _busy || _sessionId == null ? null : _abandon, child: const Text('放弃会话'))),
           SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: AmitiaButton(
-              label: '放弃',
-              isDestructive: true,
-              onPressed: _showAbandonConfirm,
-            ),
-          ),
-          SizedBox(width: AppSpacing.sm),
-          Expanded(
-            child: AmitiaButton(
-              label: '提交',
-              icon: Icons.check,
-              onPressed: _showSubmitConfirm,
-            ),
-          ),
+          Expanded(child: FilledButton(onPressed: _busy ? null : _commit, child: Text(_busy ? '处理中…' : '提交修订'))),
+        ]),
+        SizedBox(height: AppSpacing.xxl),
+      ],
+    );
+  }
+
+  Widget _frameCard(BuildContext context, Map<String, dynamic> frame) {
+    final id = (frame['frameId'] ?? '').toString();
+    final index = (frame['logicalIndex'] as num?)?.toInt() ?? 0;
+    final duration = (frame['durationMs'] as num?)?.toInt() ?? 0;
+    final issue = frame['hasQualityIssue'] == true;
+    return Padding(
+      padding: EdgeInsets.only(bottom: AppSpacing.xs),
+      child: AmitiaCard(child: Row(children: [
+        Icon(issue ? Icons.warning_amber_rounded : Icons.image_outlined, color: issue ? context.warning : context.textSecondary),
+        SizedBox(width: AppSpacing.sm),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('帧 ${index + 1}', style: AppTypography.bodySmall(context)),
+          Text('${frame['width'] ?? 0}×${frame['height'] ?? 0} · ${duration}ms', style: AppTypography.caption(context)),
+        ])),
+        PopupMenuButton<String>(
+          enabled: !_busy,
+          onSelected: (value) {
+            if (value == 'duration') _editDuration(id, duration);
+            if (value == 'delete') _apply('frame.delete', {'frameId': id});
+            if (value == 'duplicate') _apply('frame.duplicate', {'frameId': id});
+          },
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: 'duration', child: Text('修改时长')),
+            PopupMenuItem(value: 'duplicate', child: Text('复制帧')),
+            PopupMenuItem(value: 'delete', child: Text('删除帧')),
+          ],
+        ),
+      ])),
+    );
+  }
+
+  Future<void> _editDuration(String frameId, int current) async {
+    final controller = TextEditingController(text: current.toString());
+    final value = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('修改帧时长'),
+        content: TextField(controller: controller, keyboardType: TextInputType.number, decoration: const InputDecoration(suffixText: 'ms')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('取消')),
+          TextButton(onPressed: () => Navigator.pop(dialogContext, int.tryParse(controller.text)), child: const Text('保存')),
         ],
       ),
     );
-  }
-
-  void _saveDraft() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('「$_actionName」草稿已保存')),
-    );
-  }
-
-  Future<void> _updateConfig() async {
-    try {
-      final svc = ref.read(extensionServiceProvider);
-      await svc.updateSkillConfig(widget.actionKey, {
-        'playbackSpeed': _playbackSpeed,
-        'cropStart': _cropStart,
-        'cropEnd': _cropEnd,
-        'scale': _scale,
-        'anchorX': _anchorX,
-        'anchorY': _anchorY,
-        'loop': _loop,
-      });
-    } catch (_) {}
-  }
-
-  void _showSubmitConfirm() {
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
-          title: Text('提交会话', style: AppTypography.cardTitle(context)),
-          content: Text(
-            '确认提交动作「$_actionName」的编辑会话？提交后编辑配置将生效。',
-            style: AppTypography.body(context),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text('取消', style: TextStyle(color: context.textSecondary)),
-            ),
-            TextButton(
-              onPressed: () async {
-                Navigator.pop(dialogContext);
-                await _updateConfig();
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('「$_actionName」会话已提交')),
-                  );
-                  Navigator.pop(context);
-                }
-              },
-              child: Text('提交', style: TextStyle(color: context.accentPrimary)),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  void _showAbandonConfirm() {
-    showDialog(
-      context: context,
-      builder: (dialogContext) {
-        return AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
-          title: Text('放弃会话', style: AppTypography.cardTitle(context)),
-          content: Text(
-            '确认放弃动作「$_actionName」的编辑会话？所有未保存的修改将丢失。',
-            style: AppTypography.body(context),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text('保留', style: TextStyle(color: context.textSecondary)),
-            ),
-            TextButton(
-              onPressed: () {
-                Navigator.pop(dialogContext);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('「$_actionName」会话已放弃')),
-                );
-                Navigator.pop(context);
-              },
-              child: Text('放弃', style: TextStyle(color: context.error)),
-            ),
-          ],
-        );
-      },
-    );
+    controller.dispose();
+    if (value != null && value > 0) await _apply('frame.set_duration', {'frameId': frameId, 'durationMs': value});
   }
 }

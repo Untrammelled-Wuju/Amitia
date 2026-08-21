@@ -66,9 +66,9 @@ class CharacterTimelinePage extends ConsumerWidget {
 
   Future<List<Map<String, dynamic>>> _loadTimeline(WidgetRef ref) async {
     final memorySvc = ref.read(memoryServiceProvider);
-    final timelineData = await memorySvc.timeline();
+    final timelineData = await memorySvc.timeline(characterId: characterId);
     final companionSvc = ref.read(companionServiceProvider);
-    final fixedEvents = await companionSvc.todaySchedule();
+    final fixedEvents = await companionSvc.todaySchedule(characterId: characterId);
     final allEvents = <Map<String, dynamic>>[...timelineData, ...fixedEvents];
     allEvents.sort((a, b) {
       final timeA = DateTime.tryParse(a['time']?.toString() ?? '') ?? DateTime(2000);

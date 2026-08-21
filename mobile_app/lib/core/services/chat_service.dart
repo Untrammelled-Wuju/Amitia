@@ -78,6 +78,61 @@ class ChatService {
     return true;
   }
 
+  Future<void> deleteMessages(String conversationId) async {
+    await _api.delete('/api/chats/conversations/$conversationId/messages');
+  }
+
+  Future<void> deleteMessage(String messageId) async {
+    await _api.delete('/api/chats/messages/$messageId');
+  }
+
+  Future<void> deleteAllConversations() async {
+    await _api.delete('/api/chats/all');
+  }
+
+  Future<ConversationDto?> changeCharacter(String conversationId, String characterId) async {
+    final resp = await _api.put<Map<String, dynamic>>(
+      '/api/chats/conversations/$conversationId/character',
+      data: {'characterId': characterId},
+    );
+    if (resp == null) return null;
+    return ConversationDto.fromJson(resp);
+  }
+
+  Future<Map<String, dynamic>?> conversationSummary(String conversationId) async {
+    return _api.get<Map<String, dynamic>>('/api/chats/conversations/$conversationId/summary');
+  }
+
+  Future<Map<String, dynamic>?> generateConversationSummary(String conversationId) async {
+    return _api.post<Map<String, dynamic>>('/api/chats/conversations/$conversationId/summary/generate');
+  }
+
+  Future<void> deleteConversationSummary(String conversationId) async {
+    await _api.delete('/api/chats/conversations/$conversationId/summary');
+  }
+
+  Future<List<MessageDto>> searchMessages(String keyword, {String? conversationId, int page = 1, int pageSize = 50}) async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/chats/search',
+      queryParameters: {
+        'keyword': keyword,
+        'page': page,
+        'pageSize': pageSize,
+        if (conversationId != null && conversationId.isNotEmpty) 'conversationId': conversationId,
+      },
+    );
+    final rows = resp?['items'];
+    if (rows is! List) return const [];
+    return rows
+        .whereType<Map>()
+        .map((row) => MessageDto.fromJson(Map<String, dynamic>.from(row)))
+        .toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>?> messageStatus(String messageId) async {
+    return _api.get<Map<String, dynamic>>('/api/web-chat/message-status/$messageId');
+  }
+
   Future<ChatSubmitResult> submitMessage({
     required String message,
     String? conversationId,

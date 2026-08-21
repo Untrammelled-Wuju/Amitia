@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,6 +8,9 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
+import '../../../../core/artifact/artifact_providers.dart';
+import '../../../../core/backend_connection/backend_connection_availability.dart';
+import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/services/providers.dart';
 import '../../../../core/widgets/amitia_misc.dart';
@@ -661,7 +666,7 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
                 ),
                 AmitiaListTile(
                   leading: _buildActionIcon(context, Icons.file_download_outlined, context.accentPrimary),
-                  title: '导出角色包',
+                  title: '导出角色卡',
                   onTap: () {
                     Navigator.pop(sheetContext);
                     _exportCharacter(character);
@@ -714,13 +719,38 @@ class _CharacterDetailPageState extends ConsumerState<CharacterDetailPage> {
     );
   }
 
+  Future<Dio> _dio() async {
+    final availability = await ref.read(backendConnectionProvider.future);
+    if (availability is! BackendConnectionAvailable) {
+      throw StateError('后端当前不可用');
+    }
+    return createAuthenticatedDio(availability.config);
+  }
+
   Future<void> _exportCharacter(CharacterDto character) async {
-    final svc = ref.read(characterDetailServiceProvider);
-    final result = await svc.exportPack(widget.characterId);
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(result != null ? '已导出角色包：${character.name}' : '导出失败')),
+    final output = await FilePicker.platform.saveFile(
+      dialogTitle: '保存角色卡',
+      fileName: '${character.name}.charx',
+      type: FileType.custom,
+      allowedExtensions: const ['charx'],
+    );
+    if (output == null || output.isEmpty) return;
+    final dio = await _dio();
+    try {
+      await dio.download(
+        '/api/characters/${widget.characterId}/export-card',
+        output,
+        queryParameters: const {'format': 'v3_charx', 'download': 'true'},
       );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('已导出角色卡：${character.name}')));
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('导出失败：$e')));
+      }
+    } finally {
+      dio.close(force: true);
     }
   }
 
