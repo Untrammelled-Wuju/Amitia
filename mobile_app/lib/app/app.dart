@@ -96,15 +96,12 @@ class _BootstrapGate extends ConsumerWidget {
       case RuntimeBootstrapPhase.stopped:
       case RuntimeBootstrapPhase.starting:
       case RuntimeBootstrapPhase.stopping:
+      case RuntimeBootstrapPhase.installRequired:
+      case RuntimeBootstrapPhase.failed:
+      case RuntimeBootstrapPhase.unavailable:
         return const AmitiaApp();
       case RuntimeBootstrapPhase.initializing:
         return const _BootstrapInitializingWidget();
-      case RuntimeBootstrapPhase.installRequired:
-        return const _BootstrapInstallRequiredWidget();
-      case RuntimeBootstrapPhase.failed:
-        return const _BootstrapFailedWidget();
-      case RuntimeBootstrapPhase.unavailable:
-        return const _BootstrapUnavailableWidget();
     }
   }
 }
