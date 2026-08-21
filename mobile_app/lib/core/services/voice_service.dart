@@ -72,6 +72,13 @@ class TTSService {
     );
     return resp;
   }
+
+  Future<Map<String, dynamic>?> synthesizeForCharacter(String characterId, String text) async {
+    return _api.post<Map<String, dynamic>>(
+      '/api/tts/synthesize',
+      data: {'characterId': characterId, 'text': text},
+    );
+  }
 }
 
 class ASRService {

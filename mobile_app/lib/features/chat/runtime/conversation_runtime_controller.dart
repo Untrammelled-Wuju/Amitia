@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../../core/models/conversation.dart';
 import '../../../core/services/chat_service.dart';
+import '../../../core/services/channel_service.dart';
 import '../../../shared/models/models.dart';
 
 /// UI-agnostic conversation runtime shared by the built-in UI and extension UI.
@@ -13,11 +14,11 @@ import '../../../shared/models/models.dart';
 /// submit -> generation status -> persisted messages. This keeps cancellation,
 /// retries and media messages backed by real server state instead of UI mocks.
 class ConversationRuntimeController extends ChangeNotifier {
-  ConversationRuntimeController(this._chatService);
+  ConversationRuntimeController(this._chatService, this._emoteService);
 
   final ChatService _chatService;
+  final EmoteService _emoteService;
   final List<ChatMessage> _messages = <ChatMessage>[];
-  final Map<String, String> _agentTaskStatus = <String, String>{};
   String? _conversationId;
   String? _characterId;
   bool _sending = false;
@@ -26,8 +27,6 @@ class ConversationRuntimeController extends ChangeNotifier {
 
   UnmodifiableListView<ChatMessage> get messages =>
       UnmodifiableListView<ChatMessage>(_messages);
-  Map<String, String> get agentTaskStatus =>
-      UnmodifiableMapView<String, String>(_agentTaskStatus);
   String? get conversationId => _conversationId;
   bool get sending => _sending;
   Object? get lastError => _lastError;
@@ -98,20 +97,27 @@ class ConversationRuntimeController extends ChangeNotifier {
     );
   }
 
-  Future<void> sendEmote(String emoji, String name) async {
-    final value = emoji.trim().isNotEmpty ? emoji.trim() : name.trim();
-    if (value.isEmpty || _sending) return;
-    await _send(
-      ChatMessage(
-        id: _localId('u'),
-        role: MessageRole.user,
-        type: MessageType.emote,
-        content: value,
-        time: DateTime.now(),
-        status: MessageStatus.sending,
-      ),
-      message: value,
-    );
+  Future<void> sendEmote(String emoteId, String displayText) async {
+    if (emoteId.trim().isEmpty || _sending) return;
+    final conv = _conversationId;
+    final character = _characterId;
+    if (conv == null || conv.isEmpty || character == null || character.isEmpty) {
+      _lastError = StateError('发送表情前需要有效会话和角色');
+      notifyListeners();
+      return;
+    }
+    _sending = true;
+    _lastError = null;
+    notifyListeners();
+    try {
+      await _emoteService.sendEmote(conv, character, emoteId);
+      await _syncMessages();
+    } catch (error) {
+      _lastError = error;
+    } finally {
+      _sending = false;
+      notifyListeners();
+    }
   }
 
   Future<void> sendImage({
@@ -437,17 +443,6 @@ class ConversationRuntimeController extends ChangeNotifier {
     }
   }
 
-  void pauseAgentTask(int index) {
-    if (index < 0 || index >= _messages.length) return;
-    _agentTaskStatus[_messages[index].id] = '已暂停';
-    notifyListeners();
-  }
-
-  void resumeAgentTask(int index) {
-    if (index < 0 || index >= _messages.length) return;
-    _agentTaskStatus[_messages[index].id] = '运行中';
-    notifyListeners();
-  }
 
   Future<void> regenerate({String? messageId}) async {
     final conv = _conversationId;
@@ -473,7 +468,6 @@ class ConversationRuntimeController extends ChangeNotifier {
     final index = _messages.indexWhere((message) => message.id == messageId);
     if (index < 0) return;
     _messages.removeAt(index);
-    _agentTaskStatus.remove(messageId);
     notifyListeners();
   }
 
@@ -500,7 +494,6 @@ class ConversationRuntimeController extends ChangeNotifier {
     _conversationId = conversation.id;
     _characterId = characterId;
     _messages.clear();
-    _agentTaskStatus.clear();
     _lastError = null;
     notifyListeners();
     return true;
@@ -508,7 +501,6 @@ class ConversationRuntimeController extends ChangeNotifier {
 
   void clear({bool addSystemNotice = false}) {
     _messages.clear();
-    _agentTaskStatus.clear();
     if (addSystemNotice) {
       _messages.add(
         ChatMessage(

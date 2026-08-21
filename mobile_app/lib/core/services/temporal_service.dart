@@ -15,6 +15,28 @@ class TemporalService {
     return true;
   }
 
+  Future<Map<String, dynamic>?> characterProfile(String characterId) {
+    return _api.get<Map<String, dynamic>>('/api/temporal/characters/$characterId/profile');
+  }
+
+  Future<bool> updateCharacterProfile(String characterId, Map<String, dynamic> data) async {
+    await _api.put('/api/temporal/characters/$characterId/profile', data: data);
+    return true;
+  }
+
+  Future<Map<String, dynamic>?> relationshipTimeSettings(String characterId) {
+    return _api.get<Map<String, dynamic>>('/api/temporal/characters/$characterId/relationship-time/settings');
+  }
+
+  Future<bool> updateRelationshipTimeSettings(String characterId, Map<String, dynamic> data) async {
+    await _api.put('/api/temporal/characters/$characterId/relationship-time/settings', data: data);
+    return true;
+  }
+
+  Future<Map<String, dynamic>?> relationshipTimeState(String characterId) {
+    return _api.get<Map<String, dynamic>>('/api/temporal/characters/$characterId/relationship-time/state');
+  }
+
   Future<List<Map<String, dynamic>>> anchors() async {
     final resp = await _api.get<List<dynamic>>('/api/temporal/anchors');
     if (resp == null) return [];

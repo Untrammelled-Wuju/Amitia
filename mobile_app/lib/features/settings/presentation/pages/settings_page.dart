@@ -24,7 +24,11 @@ final _settingsGroups = <SettingGroup>[
     SettingItem(title: '时间感知', icon: Icons.schedule_outlined, route: AppRoutes.settingsTemporal),
   ]),
   SettingGroup(title: '系统与维护', items: [
-    SettingItem(title: 'Runtime', icon: Icons.terminal, value: '运行中', route: AppRoutes.settingsRuntime),
+    SettingItem(title: 'Runtime', icon: Icons.terminal, route: AppRoutes.settingsRuntime),
+    SettingItem(title: '运行模式', icon: Icons.hub_outlined, subtitle: '桌面本地 / 私有云部署模式', route: AppRoutes.settingsRuntimeMode),
+    SettingItem(title: '长期运行维护', icon: Icons.schedule_send_outlined, subtitle: '长期任务、健康历史与日志维护', route: AppRoutes.settingsLongRunning),
+    SettingItem(title: '高级系统', icon: Icons.admin_panel_settings_outlined, subtitle: '账号、审计、Usage、Bridge 与 Voice Session', route: AppRoutes.settingsAdvanced),
+    SettingItem(title: 'BDI 决策可视化', icon: Icons.account_tree_outlined, subtitle: 'BehaviorPlan、ExpressionPlan 与降级状态', route: AppRoutes.settingsDecisionViz),
     SettingItem(title: '系统权限', icon: Icons.lock_outlined, route: AppRoutes.settingsPermissions),
     SettingItem(title: '存储管理', icon: Icons.storage_outlined, route: AppRoutes.settingsStorage),
     SettingItem(title: '安全设置', icon: Icons.security_outlined, route: AppRoutes.settingsSafety),
@@ -38,7 +42,7 @@ final _settingsGroups = <SettingGroup>[
   ]),
   SettingGroup(title: '关于', items: [
     SettingItem(title: '备份与恢复', icon: Icons.backup_outlined, route: AppRoutes.settingsBackup),
-    SettingItem(title: '关于 Amitia', icon: Icons.info_outline, value: 'v1.0.0', route: AppRoutes.settingsAbout),
+    SettingItem(title: '关于 Amitia', icon: Icons.info_outline, route: AppRoutes.settingsAbout),
   ]),
 ];
 

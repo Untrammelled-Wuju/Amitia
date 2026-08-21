@@ -40,7 +40,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   @override
   void initState() {
     super.initState();
-    _runtime = ConversationRuntimeController(ref.read(chatServiceProvider));
+    _runtime = ConversationRuntimeController(ref.read(chatServiceProvider), ref.read(emoteServiceProvider));
     _runtime.addListener(_onRuntimeChanged);
   }
 
@@ -76,7 +76,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       final target = (index * 76.0).clamp(
         0.0,
         _scrollController.position.maxScrollExtent,
-      );
+      ).toDouble();
       _scrollController.animateTo(
         target,
         duration: AppMotion.extended,
@@ -89,15 +89,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _runtime.retryMessage(index);
   }
 
-  void _pauseAgentTask(int index) {
-    _runtime.pauseAgentTask(index);
-    amitiaSnackBar(context, '任务已暂停');
-  }
 
-  void _resumeAgentTask(int index) {
-    _runtime.resumeAgentTask(index);
-    amitiaSnackBar(context, '任务已继续执行');
-  }
+
+
 
   void _onSend(String text) {
     _runtime.sendText(text);
@@ -215,8 +209,8 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _runtime.sendCode(lang, code);
   }
 
-  void _onSendEmote(String emoji, String name) {
-    _runtime.sendEmote(emoji, name);
+  void _onSendEmote(String emoteId, String displayText) {
+    _runtime.sendEmote(emoteId, displayText);
   }
 
   bool _shouldShowAvatar(int index) {
@@ -430,9 +424,9 @@ class _ChatPageState extends ConsumerState<ChatPage> {
       ConversationUIAction.sendVoice: (_) => _pickAndSendAudio(),
       ConversationUIAction.sendEmote: (input) {
         final row = input is Map ? input : const <String, dynamic>{};
-        final emoji = row['emoji']?.toString() ?? '';
-        final name = row['name']?.toString() ?? '';
-        if (emoji.isNotEmpty || name.isNotEmpty) _runtime.sendEmote(emoji, name);
+        final emoteId = row['emoteId']?.toString() ?? '';
+        final displayText = row['displayText']?.toString() ?? row['name']?.toString() ?? '';
+        if (emoteId.isNotEmpty) _runtime.sendEmote(emoteId, displayText);
         return null;
       },
     };
@@ -480,17 +474,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                                   ? () => _retryMessage(index)
                                   : null,
                               onAgentTaskTap: isAgentTask
-                                  ? () =>
-                                        context.push(AppRoutes.agentTask('t1'))
-                                  : null,
-                              onPauseAgentTask: isAgentTask
-                                  ? () => _pauseAgentTask(index)
-                                  : null,
-                              onResumeAgentTask: isAgentTask
-                                  ? () => _resumeAgentTask(index)
-                                  : null,
-                              agentTaskStatusLabel: isAgentTask
-                                  ? (_runtime.agentTaskStatus[message.id] ?? '运行中')
+                                  ? () => context.push(AppRoutes.agent)
                                   : null,
                             );
                             final messageRenderer = UIMessageRendererRegistry.resolve(
@@ -539,6 +523,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                     onPickVideo: _pickAndSendVideo,
                     onPickAudio: _pickAndSendAudio,
                     onSendCode: _onSendCode,
+                    onLoadEmotes: () => ref.read(emoteServiceProvider).listEmotes(),
                     onSendEmote: _onSendEmote,
                     ),
                   ),

@@ -385,9 +385,10 @@ class EmoteService {
   }
 
   Future<List<Map<String, dynamic>>> listEmotes() async {
-    final resp = await _api.get<List<dynamic>>('/api/emotes');
-    if (resp == null) return [];
-    return resp.map((e) => e as Map<String, dynamic>).toList();
+    final resp = await _api.get<Map<String, dynamic>>('/api/emotes');
+    final items = resp?['items'];
+    if (items is! List) return [];
+    return items.whereType<Map>().map((e) => Map<String, dynamic>.from(e)).toList();
   }
 
   Future<Map<String, dynamic>?> uploadEmote(String filePath) async {
@@ -395,10 +396,10 @@ class EmoteService {
     return resp;
   }
 
-  Future<Map<String, dynamic>?> sendEmote(String characterId, String emoteId) async {
+  Future<Map<String, dynamic>?> sendEmote(String conversationId, String characterId, String emoteId) async {
     final resp = await _api.post<Map<String, dynamic>>(
       '/api/chat/send-emote',
-      data: {'characterId': characterId, 'emoteId': emoteId},
+      data: {'conversationId': conversationId, 'characterId': characterId, 'emoteId': emoteId},
     );
     return resp;
   }
@@ -419,8 +420,11 @@ class ProactiveService {
 
   ProactiveService(this._api);
 
-  Future<List<Map<String, dynamic>>> rules() async {
-    final resp = await _api.get<List<dynamic>>('/api/proactive/rules');
+  Future<List<Map<String, dynamic>>> rules({String? characterId}) async {
+    final resp = await _api.get<List<dynamic>>(
+      '/api/proactive/rules',
+      queryParameters: {if (characterId != null && characterId.isNotEmpty) 'characterId': characterId},
+    );
     if (resp == null) return [];
     return resp.map((e) => e as Map<String, dynamic>).toList();
   }
@@ -450,8 +454,11 @@ class ProactiveService {
     return true;
   }
 
-  Future<Map<String, dynamic>?> status() async {
-    final resp = await _api.get<Map<String, dynamic>>('/api/proactive/status');
+  Future<Map<String, dynamic>?> status({String? characterId}) async {
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/proactive/status',
+      queryParameters: {if (characterId != null && characterId.isNotEmpty) 'characterId': characterId},
+    );
     return resp;
   }
 

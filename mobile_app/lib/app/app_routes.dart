@@ -38,6 +38,10 @@ abstract final class AppRoutes {
   static const settingsAppearance = '/settings/appearance';
   static const settingsUIProviders = '/settings/ui-providers';
   static const settingsRuntime = '/settings/runtime';
+  static const settingsRuntimeMode = '/settings/runtime-mode';
+  static const settingsLongRunning = '/settings/long-running';
+  static const settingsAdvanced = '/settings/advanced';
+  static const settingsDecisionViz = '/settings/decision-viz';
   static const settingsPermissions = '/settings/permissions';
   static const settingsBackup = '/settings/backup';
   static const settingsAi = '/settings/ai';

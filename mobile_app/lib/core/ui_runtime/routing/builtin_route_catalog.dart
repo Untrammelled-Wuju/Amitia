@@ -59,6 +59,10 @@ import '../../../features/settings/presentation/pages/settings_page.dart';
 import '../../../features/settings/presentation/pages/model_settings_page.dart';
 import '../../../features/settings/presentation/pages/appearance_settings_page.dart';
 import '../../../features/runtime/presentation/pages/runtime_page.dart';
+import '../../../features/settings/presentation/pages/runtime_mode_page.dart';
+import '../../../features/settings/presentation/pages/long_running_page.dart';
+import '../../../features/settings/presentation/pages/advanced_system_page.dart';
+import '../../../features/settings/presentation/pages/decision_viz_page.dart';
 import '../../../features/permissions/presentation/pages/permissions_page.dart';
 import '../../../features/settings/presentation/pages/backup_page.dart';
 import '../../../features/settings/presentation/pages/ai_config_page.dart';
@@ -636,6 +640,38 @@ GoRoute(
     context: context,
     state: state,
     child: const MaintenancePage(),
+  ),
+),
+GoRoute(
+  path: '/settings/runtime-mode',
+  pageBuilder: (context, state) => slideFadePage(
+    context: context,
+    state: state,
+    child: const RuntimeModePage(),
+  ),
+),
+GoRoute(
+  path: '/settings/long-running',
+  pageBuilder: (context, state) => slideFadePage(
+    context: context,
+    state: state,
+    child: const LongRunningPage(),
+  ),
+),
+GoRoute(
+  path: '/settings/advanced',
+  pageBuilder: (context, state) => slideFadePage(
+    context: context,
+    state: state,
+    child: const AdvancedSystemPage(),
+  ),
+),
+GoRoute(
+  path: '/settings/decision-viz',
+  pageBuilder: (context, state) => slideFadePage(
+    context: context,
+    state: state,
+    child: const DecisionVizPage(),
   ),
 ),
 GoRoute(

@@ -116,11 +116,13 @@ class BackendServiceApi {
   Future<T?> post<T>(
     String path, {
     Object? data,
+    Map<String, dynamic>? queryParameters,
     T Function(dynamic)? fromJson,
   }) async {
     final response = await _http.send(BackendHttpRequest(
       method: BackendHttpMethod.post,
       path: path,
+      queryParameters: queryParameters,
       body: data,
     ));
     return _parseResponse<T>(response, fromJson, path);
