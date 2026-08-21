@@ -115,7 +115,6 @@ class DebugLogService {
     if (lower.contains('frame ')) return true;
     if (lower.contains('wfp ')) return true;
     if (lower.contains('chunk ')) return true;
-    if (lower.startsWith('')) return false;
     return false;
   }
 
