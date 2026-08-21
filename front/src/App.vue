@@ -9,10 +9,7 @@ SPDX-License-Identifier: AGPL-3.0-only
   <PrivacyConsent v-if="!isPublicPage && !renderError" />
   <NotFoundView v-if="renderError" :error="capturedError" />
   <Transition v-else name="route-slide" mode="out-in">
-    <div v-if="isUIProviderRecoveryPage" key="ui-provider-recovery" class="ui-provider-recovery-root">
-      <router-view />
-    </div>
-    <AppLayout v-else-if="!isPublicPage" key="app">
+    <AppLayout v-if="!isPublicPage" key="app">
       <router-view v-slot="{ Component }">
         <RouteSurfaceHost v-if="Component" :fallback="Component" />
       </router-view>
@@ -81,6 +78,10 @@ onErrorCaptured((err, _instance, info) => {
   const errorMessage = err instanceof Error ? err.message : String(err);
   if (errorMessage.includes("Cannot read properties of null") || errorMessage.includes("reading 'type'") || errorMessage.includes("reading 'exposed'")) {
     console.warn("[App] suppressed unmount error:", errorMessage);
+    return false;
+  }
+  if (errorMessage.includes("Request failed") || errorMessage.includes("404") || errorMessage.includes("401") || errorMessage.includes("500")) {
+    console.warn("[App] API error suppressed:", errorMessage);
     return false;
   }
   console.error("[App] render error:", err, info);
