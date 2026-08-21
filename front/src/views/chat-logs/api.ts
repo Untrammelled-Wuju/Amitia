@@ -60,6 +60,10 @@ export function generateSummaryApi(convId: string) {
   return post(`/api/chats/conversations/${convId}/summary/generate`);
 }
 
+export function updateSummaryApi(convId: string, summaryText: string) {
+  return put(`/api/chats/conversations/${convId}/summary`, { summaryText });
+}
+
 export function deleteSummaryApi(convId: string) {
   return del(`/api/chats/conversations/${convId}/summary`);
 }

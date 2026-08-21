@@ -16,6 +16,7 @@ import {
   fetchMoodsApi,
   fetchSummaryApi,
   generateSummaryApi,
+  updateSummaryApi,
   deleteSummaryApi,
   switchCharacterApi,
   fetchContextPreviewApi,
@@ -264,6 +265,26 @@ export function useConversationLogs() {
     summaryVisible.value = true;
   }
 
+  async function editSummary() {
+    if (!selectedConvId.value) return;
+    const { value } = await ElMessageBox.prompt(
+      "可直接修改当前会话摘要，保存后后续上下文压缩将使用新内容。",
+      "编辑会话摘要",
+      {
+        inputType: "textarea",
+        inputValue: currentSummary.value?.summaryText || "",
+        inputValidator: (value) => String(value || "").trim().length > 0 || "摘要不能为空",
+        confirmButtonText: "保存",
+        cancelButtonText: "取消",
+      },
+    );
+    const text = String(value || "").trim();
+    if (!text) return;
+    const updated = await updateSummaryApi(selectedConvId.value, text);
+    currentSummary.value = updated || { ...(currentSummary.value || {}), summaryText: text };
+    ElMessage.success("摘要已更新");
+  }
+
   async function delSummary() {
     await ElMessageBox.confirm("确定删除此会话的摘要?", "确认", {
       type: "warning",
@@ -434,6 +455,7 @@ export function useConversationLogs() {
     fetchSummary,
     genSummary,
     viewSummary,
+    editSummary,
     delSummary,
     devMode,
     ctxPreviewVisible,
