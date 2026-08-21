@@ -167,7 +167,7 @@ backend/cmd/server/backend.exe
 backend/server
 backend/.zip
 backend/dev/
-data/
+/data/
 backend/qdrant/
 backend/surrealdb/
 qdrant/
