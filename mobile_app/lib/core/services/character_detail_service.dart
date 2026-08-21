@@ -15,27 +15,6 @@ class CharacterDetailService {
     return CharacterDto.fromJson(resp);
   }
 
-  Future<Map<String, dynamic>?> exportPack(String id) async {
-    final resp = await _api.post<Map<String, dynamic>>('/api/characters/$id/export-pack');
-    return resp;
-  }
-
-  Future<Map<String, dynamic>?> importPreview(String packPath) async {
-    final resp = await _api.post<Map<String, dynamic>>(
-      '/api/characters/import-pack/preview',
-      data: {'packPath': packPath},
-    );
-    return resp;
-  }
-
-  Future<Map<String, dynamic>?> importConfirm(String packPath) async {
-    final resp = await _api.post<Map<String, dynamic>>(
-      '/api/characters/import-pack/confirm',
-      data: {'packPath': packPath},
-    );
-    return resp;
-  }
-
   Future<List<Map<String, dynamic>>> packHistory() async {
     final resp = await _api.get<List<dynamic>>('/api/characters/packs/history');
     if (resp == null) return [];

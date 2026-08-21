@@ -1,3 +1,5 @@
+import 'package:dio/dio.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,6 +8,9 @@ import '../../../../app/theme/app_colors.dart';
 import '../../../../app/theme/app_typography.dart';
 import '../../../../app/theme/app_spacing.dart';
 import '../../../../app/theme/app_radius.dart';
+import '../../../../core/artifact/artifact_providers.dart';
+import '../../../../core/backend_connection/backend_connection_availability.dart';
+import '../../../../core/backend_connection/providers/backend_connection_providers.dart';
 import '../../../../core/widgets/amitia_scaffold.dart';
 import '../../../../core/widgets/amitia_misc.dart';
 import '../../../../core/widgets/amitia_drawer.dart';
@@ -169,6 +174,104 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
     return '离线';
   }
 
+  Future<Dio> _dio() async {
+    final availability = await ref.read(backendConnectionProvider.future);
+    if (availability is! BackendConnectionAvailable) {
+      throw StateError('后端当前不可用');
+    }
+    return createAuthenticatedDio(availability.config);
+  }
+
+  Future<void> _exportCharacter(CharacterDto character) async {
+    final output = await FilePicker.platform.saveFile(
+      dialogTitle: '保存角色卡',
+      fileName: '${character.name}.charx',
+      type: FileType.custom,
+      allowedExtensions: const ['charx'],
+    );
+    if (output == null || output.isEmpty) return;
+    final dio = await _dio();
+    try {
+      await dio.download(
+        '/api/characters/${character.id}/export-card',
+        output,
+        queryParameters: const {'format': 'v3_charx', 'download': 'true'},
+      );
+      if (!mounted) return;
+      amitiaSnackBar(context, '角色 ${character.name} 已导出');
+    } catch (e) {
+      if (!mounted) return;
+      amitiaSnackBar(context, '导出失败：$e');
+    } finally {
+      dio.close(force: true);
+    }
+  }
+
+  Future<void> _importCharacterCard() async {
+    final picked = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: const ['charx', 'json', 'png'],
+    );
+    if (picked == null || picked.files.isEmpty) return;
+    final file = picked.files.first;
+    final path = file.path;
+    if (path == null || path.isEmpty) {
+      if (mounted) amitiaSnackBar(context, '无法读取所选角色卡文件');
+      return;
+    }
+
+    final dio = await _dio();
+    try {
+      final previewForm = FormData.fromMap({
+        'card': await MultipartFile.fromFile(path, filename: file.name),
+      });
+      final previewResponse = await dio.post('/api/characters/import-card/preview', data: previewForm);
+      final body = previewResponse.data;
+      final payload = body is Map ? body['data'] : null;
+      if (payload is! Map) throw StateError('后端未返回有效的角色卡预览');
+      final preview = payload['preview'] is Map ? Map<String, dynamic>.from(payload['preview'] as Map) : <String, dynamic>{};
+      final risks = preview['risks'] is List ? preview['risks'] as List : const [];
+      if (!mounted) return;
+      final confirmed = await showDialog<bool>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          backgroundColor: dialogContext.surfacePrimary,
+          shape: RoundedRectangleBorder(borderRadius: AppRadius.brMedium),
+          title: Text('导入角色卡', style: AppTypography.cardTitle(dialogContext)),
+          content: Text(
+            '名称：${preview['name'] ?? file.name}\n'
+            '格式：${preview['format'] ?? payload['format'] ?? '-'}\n'
+            '问候语：${preview['greetingCount'] ?? 0}\n'
+            '世界书条目：${preview['lorebookEntryCount'] ?? 0}\n'
+            '风险提示：${risks.length} 项\n\n确认导入该角色卡吗？',
+            style: AppTypography.body(dialogContext),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext, false), child: const Text('取消')),
+            TextButton(onPressed: () => Navigator.pop(dialogContext, true), child: const Text('确认导入')),
+          ],
+        ),
+      );
+      if (confirmed != true) return;
+
+      final confirmForm = FormData.fromMap({
+        'card': await MultipartFile.fromFile(path, filename: file.name),
+      });
+      final confirmResponse = await dio.post('/api/characters/import-card/confirm', data: confirmForm);
+      final confirmBody = confirmResponse.data;
+      final result = confirmBody is Map ? confirmBody['data'] : null;
+      if (result is! Map) throw StateError('角色卡导入未完成');
+      ref.invalidate(characterListProvider);
+      if (!mounted) return;
+      amitiaSnackBar(context, '已导入角色 ${(result['name'] ?? preview['name'] ?? '').toString()}');
+    } catch (e) {
+      if (!mounted) return;
+      amitiaSnackBar(context, '导入失败：$e');
+    } finally {
+      dio.close(force: true);
+    }
+  }
+
   void _showManageSheet(BuildContext context) {
     showModalBottomSheet(
       context: context,
@@ -228,12 +331,20 @@ class _CharacterListPageState extends ConsumerState<CharacterListPage> {
                   },
                 ),
                 AmitiaListTile(
-                  leading: _buildSheetIcon(context, Icons.file_download_outlined, context.accentPrimary),
-                  title: '导出角色',
+                  leading: _buildSheetIcon(context, Icons.file_upload_outlined, context.accentPrimary),
+                  title: '导入角色卡',
                   onTap: () {
                     Navigator.pop(sheetContext);
-                    _showCharacterSelection(context, '导出角色', (character) {
-                      amitiaSnackBar(context, '角色 ${character.name} 已导出为 JSON 文件');
+                    _importCharacterCard();
+                  },
+                ),
+                AmitiaListTile(
+                  leading: _buildSheetIcon(context, Icons.file_download_outlined, context.accentPrimary),
+                  title: '导出角色卡',
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    _showCharacterSelection(context, '导出角色卡', (character) {
+                      _exportCharacter(character);
                     });
                   },
                 ),

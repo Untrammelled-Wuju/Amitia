@@ -120,6 +120,11 @@ final memoryListProvider = FutureProvider.autoDispose<List<MemoryDto>>((ref) asy
   return svc.list();
 });
 
+final memoryListByCharacterProvider = FutureProvider.autoDispose.family<List<MemoryDto>, String>((ref, characterId) async {
+  final svc = ref.read(memoryServiceProvider);
+  return svc.list(characterId: characterId);
+});
+
 final memoryCandidateListProvider = FutureProvider.autoDispose<List<MemoryCandidateDto>>((ref) async {
   final svc = ref.read(memoryServiceProvider);
   return svc.listCandidates();
@@ -153,6 +158,20 @@ final modelConfigListProvider = FutureProvider.autoDispose<List<ModelConfigDto>>
 final companionStateProvider = FutureProvider.autoDispose<Map<String, dynamic>?>((ref) async {
   final svc = ref.read(companionServiceProvider);
   final state = await svc.state();
+  if (state == null) return null;
+  return {
+    'state': state.state,
+    'isSleeping': state.isSleeping,
+    'currentActivity': state.currentActivity,
+    'nextActivity': state.nextActivity,
+    'wakeTime': state.wakeTime,
+    'sleepTime': state.sleepTime,
+  };
+});
+
+final companionStateByCharacterProvider = FutureProvider.autoDispose.family<Map<String, dynamic>?, String>((ref, characterId) async {
+  final svc = ref.read(companionServiceProvider);
+  final state = await svc.state(characterId: characterId);
   if (state == null) return null;
   return {
     'state': state.state,

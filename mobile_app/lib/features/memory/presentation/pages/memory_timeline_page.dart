@@ -24,7 +24,6 @@ class _MemoryTimelinePageState extends ConsumerState<MemoryTimelinePage> {
 
   final _months = ['全部', '7月', '6月', '5月'];
   final _types = ['全部', '对话', '主动消息', '记忆形成', '情绪', '关系', '行为'];
-  final _characters = ['全部', 'Amitia', '小雨', 'Epsilon', 'Karin'];
 
   @override
   Widget build(BuildContext context) {
@@ -112,6 +111,8 @@ class _MemoryTimelinePageState extends ConsumerState<MemoryTimelinePage> {
   }
 
   Widget _buildFilters(BuildContext context) {
+    final characters = ref.watch(characterListProvider).valueOrNull ?? const [];
+    final characterOptions = ['全部', ...characters.map((e) => e.name).where((e) => e.isNotEmpty)];
     return Container(
       padding: EdgeInsets.symmetric(horizontal: AppSpacing.pagePadding, vertical: AppSpacing.sm),
       child: SingleChildScrollView(
@@ -122,7 +123,7 @@ class _MemoryTimelinePageState extends ConsumerState<MemoryTimelinePage> {
             SizedBox(width: AppSpacing.sm),
             _buildFilterChip(context, '类型', _typeFilter, _types, (v) => setState(() => _typeFilter = v)),
             SizedBox(width: AppSpacing.sm),
-            _buildFilterChip(context, '角色', _characterFilter, _characters, (v) => setState(() => _characterFilter = v)),
+            _buildFilterChip(context, '角色', _characterFilter, characterOptions, (v) => setState(() => _characterFilter = v)),
           ],
         ),
       ),
@@ -335,13 +336,11 @@ class _MemoryTimelinePageState extends ConsumerState<MemoryTimelinePage> {
   }
 
   String _getCharacterName(String id) {
-    switch (id) {
-      case 'c1': return 'Amitia';
-      case 'c2': return '小雨';
-      case 'c3': return 'Epsilon';
-      case 'c4': return 'Karin';
-      default: return '未知';
+    final characters = ref.read(characterListProvider).valueOrNull ?? const [];
+    for (final character in characters) {
+      if (character.id == id) return character.name.isEmpty ? id : character.name;
     }
+    return id.isEmpty ? '未知' : id;
   }
 
   String _formatDate(DateTime time) {
