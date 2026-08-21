@@ -231,7 +231,29 @@ func (s *service) GetAbout() map[string]interface{} {
 
 func (s *service) MoodDetectionConfig() map[string]interface{} {
 	enabled := s.getAppSetting("mood_detection_enabled") == "true"
-	return map[string]interface{}{"enabled": enabled, "threshold": 0.5}
+	threshold := 0.5
+	if raw := strings.TrimSpace(s.getAppSetting("mood_detection_threshold")); raw != "" {
+		if value, err := strconv.ParseFloat(raw, 64); err == nil && value >= 0 && value <= 1 {
+			threshold = value
+		}
+	}
+	return map[string]interface{}{"enabled": enabled, "threshold": threshold}
+}
+
+func (s *service) UpdateMoodDetectionConfig(body map[string]interface{}) map[string]interface{} {
+	if enabled, ok := body["enabled"].(bool); ok {
+		s.setAppSetting("mood_detection_enabled", strconv.FormatBool(enabled))
+	}
+	if value, ok := body["threshold"].(float64); ok {
+		if value < 0 {
+			value = 0
+		}
+		if value > 1 {
+			value = 1
+		}
+		s.setAppSetting("mood_detection_threshold", strconv.FormatFloat(value, 'f', -1, 64))
+	}
+	return s.MoodDetectionConfig()
 }
 
 func (s *service) GetTheme() map[string]interface{} {

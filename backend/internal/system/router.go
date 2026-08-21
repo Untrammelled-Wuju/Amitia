@@ -103,6 +103,7 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 
 	r.GET("/runtime/health", handler.RuntimeHealth)
 	r.GET("/runtime/modules/health", handler.RuntimeModulesHealth)
+	r.GET("/runtime/debug/snapshot", handler.RuntimeDebugSnapshot)
 	r.POST("/runtime/check-db-integrity", handler.CheckDBIntegrity)
 	r.POST("/runtime/check-now", handler.CheckNow)
 	r.POST("/runtime/cleanup-temp", handler.CleanupTemp)
@@ -155,6 +156,7 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.POST("/notifications/test", handler.NotificationsTest)
 	r.POST("/notifications/unsubscribe", handler.NotificationsUnsubscribe)
 
+	r.GET("/security/access-config", handler.SecurityAccessConfig)
 	r.PUT("/security/access-config", handler.UpdateSecurityAccessConfig)
 	r.GET("/security/access-status", handler.SecurityAccessStatus)
 	r.GET("/security/account-check", handler.SecurityAccountCheck)
@@ -255,12 +257,14 @@ func RegisterSystemRouter(r *gin.RouterGroup, ctx *app.AppContext, chatSvc chat.
 	r.POST("/web-chat/send-stream", handler.WebChatSendStream)
 	r.POST("/web-chat/conversations/from-import", handler.WebChatFromImport)
 	r.GET("/web-chat/conversations/:id/generations/current/status", handler.WebChatGenerationStatus)
+	r.POST("/web-chat/conversations/:id/generations/current/cancel", handler.WebChatCancelGeneration)
 	r.POST("/web-chat/conversations/:id/generations/:generationId/cancel", handler.WebChatCancelGeneration)
 	r.POST("/voice/upload", handler.VoiceUpload)
 	r.POST("/image/upload", handler.ImageUpload)
 	r.POST("/video/upload", handler.VideoUpload)
 	r.POST("/voice/transcribe", handler.VoiceTranscribe)
 
+	RegisterShadowRouter(r, handler)
 }
 
 func RegisterShadowRouter(r *gin.RouterGroup, handler *Handler) {
@@ -268,7 +272,11 @@ func RegisterShadowRouter(r *gin.RouterGroup, handler *Handler) {
 	g.GET("/status", handler.ShadowModeStatus)
 	g.POST("/start", handler.ShadowModeStart)
 	g.POST("/stop", handler.ShadowModeStop)
+	g.POST("/phase/advance", handler.ShadowModePhaseAdvance)
 	g.GET("/thresholds", handler.ShadowModeThresholds)
+	g.PUT("/thresholds", handler.ShadowModeUpdateThresholds)
 	g.POST("/compare", handler.ShadowModeCompare)
+	g.GET("/rollbacks", handler.ShadowModeRollbacks)
 	g.POST("/load-sim", handler.ShadowModeLoadSim)
+	g.POST("/longitudinal-sim", handler.ShadowModeLongitudinalSim)
 }

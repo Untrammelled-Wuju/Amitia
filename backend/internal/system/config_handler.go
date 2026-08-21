@@ -5,6 +5,7 @@ package system
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/u-ai/backend/pkg/util"
+	"net/http"
 )
 
 func (h *Handler) AppConfig(c *gin.Context) { util.SuccessResponse(c, h.service.AppConfig()) }
@@ -32,5 +33,14 @@ func (h *Handler) ConfigImportConfirm(c *gin.Context) {
 }
 
 func (h *Handler) MoodDetectionConfig(c *gin.Context) {
+	if c.Request.Method == http.MethodPut {
+		var body map[string]interface{}
+		if err := c.ShouldBindJSON(&body); err != nil {
+			util.ErrorResponse(c, http.StatusBadRequest, "请求参数错误", err.Error())
+			return
+		}
+		util.SuccessResponse(c, h.service.UpdateMoodDetectionConfig(body))
+		return
+	}
 	util.SuccessResponse(c, h.service.MoodDetectionConfig())
 }
