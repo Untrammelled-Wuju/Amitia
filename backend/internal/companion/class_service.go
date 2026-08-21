@@ -19,7 +19,7 @@ func (s *service) ListClassAdjustments(characterID string) []map[string]interfac
 }
 
 func (s *service) CreateClassAdjustment(body map[string]interface{}, characterID string) map[string]interface{} {
-	a := ClassAdjustment{AdjustType: "swap"}
+	a := ClassAdjustment{CharacterID: characterID, AdjustType: "swap"}
 	if v, ok := body["date"].(string); ok {
 		a.Date = v
 	}
