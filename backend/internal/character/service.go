@@ -259,6 +259,9 @@ func (s *service) UpdateForUser(id string, req *UpdateCharacterRequest, userID s
 	if req.Description != nil {
 		updates["description"] = *req.Description
 	}
+	if req.BasePrompt != nil {
+		updates["base_prompt"] = *req.BasePrompt
+	}
 	if req.Status != nil {
 		updates["status"] = *req.Status
 	}

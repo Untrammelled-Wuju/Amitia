@@ -99,6 +99,7 @@ type UpdateCharacterRequest struct {
 	CharacterBase     *string          `json:"characterBase"`
 	BoundaryRules     *string          `json:"boundaryRules"`
 	Description       *string          `json:"description"`
+	BasePrompt        *string          `json:"basePrompt"`
 	Status            *string          `json:"status"`
 	IsActive          *int             `json:"isActive"`
 	SortOrder         *int             `json:"sortOrder"`
