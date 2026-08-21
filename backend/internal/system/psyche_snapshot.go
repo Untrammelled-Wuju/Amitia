@@ -49,6 +49,7 @@ func RegisterPsycheSnapshotRouter(r *gin.RouterGroup, db *gorm.DB) {
 	handler := newPsycheSnapshotHandler(db)
 	r.GET("/psyche/state", handler.handle)
 	r.GET("/psyche/snapshot", handler.handle)
+	r.GET("/psyche/messages/:messageId", handler.handleMessageSnapshot)
 }
 
 type psycheSnapshotHandler struct {
@@ -57,6 +58,109 @@ type psycheSnapshotHandler struct {
 
 func newPsycheSnapshotHandler(db *gorm.DB) *psycheSnapshotHandler {
 	return &psycheSnapshotHandler{db: db}
+}
+
+func (h *psycheSnapshotHandler) handleMessageSnapshot(c *gin.Context) {
+	messageID := c.Param("messageId")
+	if messageID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "messageId is required"})
+		return
+	}
+
+	var row struct {
+		CharacterID string `gorm:"column:character_id"`
+		CreatedAt   string `gorm:"column:created_at"`
+	}
+	err := h.db.Table("messages AS m").
+		Select("c.character_id, m.created_at").
+		Joins("JOIN conversations AS c ON c.id = m.conversation_id").
+		Where("m.id = ?", messageID).
+		Take(&row).Error
+	if err != nil || row.CharacterID == "" {
+		c.JSON(http.StatusNotFound, gin.H{"code": 404, "msg": "message not found"})
+		return
+	}
+
+	messageTime := parseChatTimestamp(row.CreatedAt)
+	var snapshotRecord struct {
+		SnapshotData string    `gorm:"column:snapshot_data"`
+		CreatedAt    time.Time `gorm:"column:created_at"`
+	}
+	query := h.db.Table("psyche_snapshots").
+		Select("snapshot_data, created_at").
+		Where("character_id = ?", row.CharacterID)
+	if !messageTime.IsZero() {
+		query = query.Where("created_at <= ?", messageTime)
+	}
+	query = query.Order("created_at DESC").Limit(1)
+
+	var snapshot psyche.PsycheSnapshot
+	if err := query.Take(&snapshotRecord).Error; err == nil && snapshotRecord.SnapshotData != "" {
+		if json.Unmarshal([]byte(snapshotRecord.SnapshotData), &snapshot) != nil {
+			snapshot = psyche.PsycheSnapshot{}
+		}
+	}
+
+	if snapshot.CharacterID == "" {
+		store := psyche.NewSQLitePsycheStore(h.db)
+		state, loadErr := store.LoadState(row.CharacterID)
+		if loadErr == nil && state != nil {
+			snapshot = psyche.CreateSnapshot(*state)
+		} else {
+			defaultState := psyche.NewPsycheState(row.CharacterID)
+			snapshot = psyche.CreateSnapshot(defaultState)
+		}
+	}
+
+	valence := snapshot.EmotionValence
+	if valence < 0 {
+		valence = 0
+	}
+	if valence > 1 {
+		valence = 1
+	}
+	affectLabel := "平静"
+	if valence > 0.55 {
+		affectLabel = "积极"
+	} else if valence < 0.45 {
+		affectLabel = "消极"
+	}
+	if snapshot.Stress > 0.55 {
+		affectLabel = "紧张"
+	}
+	collectedAt := snapshot.Timestamp
+	if collectedAt.IsZero() {
+		collectedAt = snapshotRecord.CreatedAt
+	}
+	if collectedAt.IsZero() {
+		collectedAt = time.Now().UTC()
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"code": 200,
+		"msg":  "操作成功",
+		"data": gin.H{
+			"messageId": messageID,
+			"emotion": gin.H{
+				"positive":  valence,
+				"negative":  1 - valence,
+				"arousal":   snapshot.EmotionArousal,
+				"dominance": snapshot.EmotionDominance,
+			},
+			"affectLabel": affectLabel,
+			"stress":      snapshot.Stress,
+			"collectedAt": collectedAt.Format(time.RFC3339),
+		},
+	})
+}
+
+func parseChatTimestamp(value string) time.Time {
+	for _, layout := range []string{time.RFC3339Nano, time.RFC3339, "2006-01-02 15:04:05", "2006-01-02T15:04:05"} {
+		if parsed, err := time.Parse(layout, value); err == nil {
+			return parsed
+		}
+	}
+	return time.Time{}
 }
 
 func (h *psycheSnapshotHandler) handle(c *gin.Context) {
