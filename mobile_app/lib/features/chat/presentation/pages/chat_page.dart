@@ -38,6 +38,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   late final ConversationRuntimeController _runtime;
   Map<String, dynamic>? _cachedProviderContext;
   List<ChatMessage>? _cachedMessagesForContext;
+  Map<String, FutureOr<dynamic> Function(dynamic)>? _cachedProviderActions;
 
   @override
   void initState() {
@@ -50,6 +51,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     if (!mounted) return;
     _cachedProviderContext = null;
     _cachedMessagesForContext = null;
+    _cachedProviderActions = null;
     setState(() {});
     _scrollToBottom();
   }
@@ -378,6 +380,55 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Map<String, dynamic> _providerMessage(ChatMessage message) =>
       _runtime.serializeMessage(message);
 
+  Map<String, FutureOr<dynamic> Function(dynamic)> _providerActions(String characterId) {
+    return _cachedProviderActions ??= <String, FutureOr<dynamic> Function(dynamic)>{
+      ConversationUIAction.send: (input) {
+        final value = input is Map ? input['text'] : input;
+        final text = value?.toString() ?? '';
+        if (text.trim().isNotEmpty) _onSend(text);
+        return null;
+      },
+      ConversationUIAction.retry: (input) {
+        final id = input is Map ? input['messageId']?.toString() : input?.toString();
+        final index = _runtime.messages.indexWhere((message) => message.id == id);
+        if (index >= 0) _retryMessage(index);
+        return null;
+      },
+      ConversationUIAction.regenerate: (input) {
+        final id = input is Map ? input['messageId']?.toString() : input?.toString();
+        return _runtime.regenerate(messageId: id);
+      },
+      ConversationUIAction.stop: (_) => _runtime.stop(),
+      ConversationUIAction.delete: (input) {
+        final id = input is Map ? input['messageId']?.toString() : input?.toString();
+        if (id != null && id.isNotEmpty) _runtime.deleteMessage(id);
+        return null;
+      },
+      ConversationUIAction.newConversation: (_) => _runtime.createConversation(characterId),
+      ConversationUIAction.openDrawer: (_) => _openDrawer(context),
+      ConversationUIAction.sendFile: (_) => _pickAndSendFile(),
+      ConversationUIAction.sendImage: (input) {
+        final camera = input is Map && input['source']?.toString() == 'camera';
+        return _pickAndSendImage(camera);
+      },
+      ConversationUIAction.sendCode: (input) {
+        final row = input is Map ? input : const <String, dynamic>{};
+        final language = row['language']?.toString() ?? 'text';
+        final code = row['code']?.toString() ?? '';
+        if (code.isNotEmpty) _runtime.sendCode(language, code);
+        return null;
+      },
+      ConversationUIAction.sendVoice: (_) => _pickAndSendAudio(),
+      ConversationUIAction.sendEmote: (input) {
+        final row = input is Map ? input : const <String, dynamic>{};
+        final emoteId = row['emoteId']?.toString() ?? '';
+        final displayText = row['displayText']?.toString() ?? row['name']?.toString() ?? '';
+        if (emoteId.isNotEmpty) _runtime.sendEmote(emoteId, displayText);
+        return null;
+      },
+    };
+  }
+
   @override
   Widget build(BuildContext context) {
     final isAgentMode = ref.watch(isAgentModeProvider);
@@ -403,56 +454,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     providerContext['conversationState'] = _runtime.state;
     providerContext['sending'] = _runtime.sending;
     providerContext['conversationId'] = _runtime.conversationId;
-    final providerActions = <String, FutureOr<dynamic> Function(dynamic)>{
-      ConversationUIAction.send: (input) {
-        final value = input is Map ? input['text'] : input;
-        final text = value?.toString() ?? '';
-        if (text.trim().isNotEmpty) _onSend(text);
-        return null;
-      },
-      ConversationUIAction.retry: (input) {
-        final id = input is Map ? input['messageId']?.toString() : input?.toString();
-        final index = _runtime.messages.indexWhere((message) => message.id == id);
-        if (index >= 0) _retryMessage(index);
-        return null;
-      },
-      ConversationUIAction.regenerate: (input) {
-        final id = input is Map ? input['messageId']?.toString() : input?.toString();
-        return _runtime.regenerate(messageId: id);
-      },
-      ConversationUIAction.stop: (_) => _runtime.stop(),
-      ConversationUIAction.delete: (input) {
-        final id = input is Map ? input['messageId']?.toString() : input?.toString();
-        if (id != null && id.isNotEmpty) _runtime.deleteMessage(id);
-        return null;
-      },
-      ConversationUIAction.newConversation: (_) =>
-          _runtime.createConversation(characterId),
-      ConversationUIAction.openDrawer: (_) {
-        _openDrawer(context);
-        return null;
-      },
-      ConversationUIAction.sendFile: (_) => _pickAndSendFile(),
-      ConversationUIAction.sendImage: (input) {
-        final camera = input is Map && input['source']?.toString() == 'camera';
-        return _pickAndSendImage(camera);
-      },
-      ConversationUIAction.sendCode: (input) {
-        final row = input is Map ? input : const <String, dynamic>{};
-        final language = row['language']?.toString() ?? 'text';
-        final code = row['code']?.toString() ?? '';
-        if (code.isNotEmpty) _runtime.sendCode(language, code);
-        return null;
-      },
-      ConversationUIAction.sendVoice: (_) => _pickAndSendAudio(),
-      ConversationUIAction.sendEmote: (input) {
-        final row = input is Map ? input : const <String, dynamic>{};
-        final emoteId = row['emoteId']?.toString() ?? '';
-        final displayText = row['displayText']?.toString() ?? row['name']?.toString() ?? '';
-        if (emoteId.isNotEmpty) _runtime.sendEmote(emoteId, displayText);
-        return null;
-      },
-    };
+    final providerActions = _providerActions(characterId);
 
     final uiSnapshot = ref.watch(uiRuntimeProvider).valueOrNull;
     bool externalProvider(String capability) {
