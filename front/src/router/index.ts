@@ -8,105 +8,194 @@
  */
 import { createRouter, createWebHashHistory, createWebHistory } from "vue-router"
 import { getAccessToken } from "../stores/refresh-coordinator"
+import { useSessionStore } from "../stores/session-store"
 import { apiClient } from "../ui-index"
 import { shouldUseHashRouting } from "../runtime/runtime-capabilities"
 import { builtinBusinessRoutes } from "./builtinRoutes"
 
-function isLoggedIn(): boolean {
-  return !!getAccessToken()
+const TOKEN_CACHE_TTL = 5 * 60 * 1000
+
+interface AuthCache {
+  onboardingCompleted: boolean | null
+  onboardingCheckedAt: number
+  userAuthenticated: boolean | null
+  userCheckedAt: number
 }
+
+const authCache: AuthCache = {
+  onboardingCompleted: null,
+  onboardingCheckedAt: 0,
+  userAuthenticated: null,
+  userCheckedAt: 0,
+}
+
+let routerInstance: ReturnType<typeof createRouter> | null = null
 
 function getToken(): string | null {
   return getAccessToken()
 }
 
+function getUserId(): string | null {
+  return useSessionStore().state.value.userId
+}
 
-const router = createRouter({
-  history: shouldUseHashRouting() ? createWebHashHistory() : createWebHistory(),
-  routes: [
-    { path: "/onboarding", name: "onboarding", component: () => import("../views/onboarding/OnboardingView.vue") },
-    { path: "/login", name: "login", component: () => import("@/views/login/LoginView.vue") },
-    { path: "/privacy", name: "privacy", component: () => import("../views/privacy/Privacy.vue") },
-    { path: "/usage-boundary", name: "usageBoundary", component: () => import("../views/usage-boundary/UsageBoundary.vue") },
-    {
-      path: "/settings/ui-providers",
-      name: "settingsUIProviders",
-      component: () => import("@/views/settings/UIProviderSettingsView.vue"),
-      meta: { requiresAuth: true, uiProviderControl: true, recoveryRoute: true },
-    },
-    { path: "/", redirect: "/chat", meta: { requiresAuth: true } },
-    ...builtinBusinessRoutes,
-    { path: "/404", name: "notFound", component: () => import("@/views/NotFoundView.vue") },
-    { path: "/:pathMatch(.*)*", name: "catchAll", component: () => import("@/views/NotFoundView.vue") },
-  ],
-});
+function isUserAuthenticatedCached(): boolean {
+  return (
+    authCache.userAuthenticated === true &&
+    Date.now() - authCache.userCheckedAt < TOKEN_CACHE_TTL
+  )
+}
 
-router.beforeEach(async (to, _from, next) => {
-  const token = getToken()
-  const PUBLIC_PATHS = ["/login", "/onboarding", "/privacy", "/usage-boundary"]
-  const isPublic = PUBLIC_PATHS.includes(to.path)
-  console.log(`[GUARD-RUN] path=${to.path} isPublic=${isPublic} token=${token ? "Y" : "N"}`)
-
-  if (isPublic) {
-    if (to.path === "/login") {
-      try {
-        const res = await apiClient.get("/api/public/onboarding/status")
-        const data = res.data?.data || res.data
-        if (!data?.completed) {
-          return next("/onboarding")
+function refreshOnboardingStatus(): void {
+  apiClient
+    .get("/api/public/onboarding/status")
+    .then((res) => {
+      const data = res.data?.data || res.data
+      const completed = !!data?.completed
+      authCache.onboardingCompleted = completed
+      authCache.onboardingCheckedAt = Date.now()
+      if (!completed && routerInstance) {
+        const currentPath = window.location.hash.replace(/^#/, "")
+        if (currentPath && currentPath !== "/onboarding") {
+          routerInstance.push("/onboarding").catch(() => {})
         }
-      } catch {}
-      if (token) {
-        return next("/chat")
       }
-    }
-    if (to.path === "/onboarding") {
-      try {
-        const res = await apiClient.get("/api/public/onboarding/status")
-        const data = res.data?.data || res.data
-        if (data?.completed) {
-          return next(token ? "/chat" : "/login")
+    })
+    .catch(() => {
+      authCache.onboardingCompleted = null
+      authCache.onboardingCheckedAt = 0
+    })
+}
+
+function refreshAuthStatus(): void {
+  apiClient
+    .get("/api/auth/me")
+    .then((res) => {
+      const userData = res.data?.data || res.data
+      const valid = !!(userData?.id || userData?.userId)
+      authCache.userAuthenticated = valid
+      authCache.userCheckedAt = Date.now()
+      if (!valid && routerInstance) {
+        const currentPath = window.location.hash.replace(/^#/, "")
+        const PUBLIC_PATHS = ["/login", "/onboarding", "/privacy", "/usage-boundary"]
+        if (currentPath && !PUBLIC_PATHS.includes(currentPath)) {
+          routerInstance.push("/login").catch(() => {})
         }
-      } catch {}
-    }
-    return next()
-  }
-
-  if (to.meta?.requiresAuth) {
-    console.log(`[GUARD] checking onboarding for ${to.path}`)
-    try {
-      const res = await apiClient.get("/api/public/onboarding/status")
-      const onboardingData = res.data?.data || res.data
-      console.log(`[GUARD] onboarding completed=${onboardingData?.completed}`)
-      if (!onboardingData?.completed) {
-        console.log(`[GUARD] redirecting ${to.path} -> /onboarding`)
-        return next("/onboarding")
       }
-      console.log(`[GUARD] allowing ${to.path}, onboarding done`)
-    } catch (e) {
-      console.log("[GUARD] onboarding check error:", e)
+    })
+    .catch(() => {
+      authCache.userAuthenticated = null
+      authCache.userCheckedAt = 0
+    })
+}
+
+function createAppRouter() {
+  const r = createRouter({
+    history: shouldUseHashRouting() ? createWebHashHistory() : createWebHistory(),
+    routes: [
+      { path: "/onboarding", name: "onboarding", component: () => import("../views/onboarding/OnboardingView.vue") },
+      { path: "/login", name: "login", component: () => import("@/views/login/LoginView.vue") },
+      { path: "/privacy", name: "privacy", component: () => import("../views/privacy/Privacy.vue") },
+      { path: "/usage-boundary", name: "usageBoundary", component: () => import("../views/usage-boundary/UsageBoundary.vue") },
+      {
+        path: "/settings/ui-providers",
+        name: "settingsUIProviders",
+        component: () => import("@/views/settings/UIProviderSettingsView.vue"),
+        meta: { requiresAuth: true, uiProviderControl: true, recoveryRoute: true },
+      },
+      { path: "/", redirect: "/chat", meta: { requiresAuth: true } },
+      ...builtinBusinessRoutes,
+      { path: "/404", name: "notFound", component: () => import("@/views/NotFoundView.vue") },
+      { path: "/:pathMatch(.*)*", name: "catchAll", component: () => import("@/views/NotFoundView.vue") },
+    ],
+  })
+
+  routerInstance = r
+
+  r.beforeEach((to, _from, next) => {
+    const token = getToken()
+    const userId = getUserId()
+    const PUBLIC_PATHS = ["/login", "/onboarding", "/privacy", "/usage-boundary"]
+    const isPublic = PUBLIC_PATHS.includes(to.path)
+
+    if (isPublic) {
+      if (to.path === "/login") {
+        if (token && (userId || isUserAuthenticatedCached())) {
+          refreshOnboardingStatus()
+          refreshAuthStatus()
+          return next("/chat")
+        }
+        apiClient
+          .get("/api/public/onboarding/status")
+          .then((res) => {
+            const data = res.data?.data || res.data
+            authCache.onboardingCompleted = !!data?.completed
+            authCache.onboardingCheckedAt = Date.now()
+            if (!data?.completed) {
+              next("/onboarding")
+            } else {
+              next()
+            }
+          })
+          .catch(() => next())
+        return
+      }
+      if (to.path === "/onboarding") {
+        if (authCache.onboardingCompleted === true && token) {
+          return next("/chat")
+        }
+        apiClient
+          .get("/api/public/onboarding/status")
+          .then((res) => {
+            const data = res.data?.data || res.data
+            authCache.onboardingCompleted = !!data?.completed
+            authCache.onboardingCheckedAt = Date.now()
+            if (data?.completed) {
+              next(token ? "/chat" : "/login")
+            } else {
+              next()
+            }
+          })
+          .catch(() => next())
+        return
+      }
+      next()
+      return
     }
-  }
 
-  if (!to.meta?.requiresAuth) {
-    return next()
-  }
-
-  if (!token) {
-    return next("/login")
-  }
-
-  try {
-    const res = await apiClient.get("/api/auth/me")
-    const userData = res.data?.data || res.data
-    if (!(userData?.id || userData?.userId)) {
-      return next("/login")
+    if (!to.meta?.requiresAuth) {
+      next()
+      return
     }
-  } catch {
-    return next("/login")
-  }
 
-  next()
-})
+    if (!token) {
+      next("/login")
+      return
+    }
+
+    const authenticated = userId || isUserAuthenticatedCached()
+    const onboardingDone = authCache.onboardingCompleted !== false
+
+    if (!authenticated || !onboardingDone) {
+      refreshAuthStatus()
+      refreshOnboardingStatus()
+      next()
+      return
+    }
+
+    if (Date.now() - authCache.onboardingCheckedAt > TOKEN_CACHE_TTL) {
+      refreshOnboardingStatus()
+    }
+    if (Date.now() - authCache.userCheckedAt > TOKEN_CACHE_TTL) {
+      refreshAuthStatus()
+    }
+
+    next()
+  })
+
+  return r
+}
+
+const router = createAppRouter()
 
 export default router
