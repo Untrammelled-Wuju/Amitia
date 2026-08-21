@@ -393,6 +393,7 @@ class _ImageMessage extends StatelessWidget {
                 child: Image.network(
                   value,
                   fit: BoxFit.contain,
+                  cacheWidth: 1080,
                   errorBuilder: (_, __, ___) => const Icon(
                     Icons.broken_image_outlined,
                     color: Colors.white,
@@ -626,7 +627,7 @@ class _CodeMessage extends StatelessWidget {
           Container(
             width: double.infinity,
             padding: EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            child: SelectableText(
+            child: Text(
               body,
               style: const TextStyle(
                 fontFamily: 'monospace',
@@ -1603,7 +1604,7 @@ class _EmotePickerState extends State<_EmotePicker> {
                                       children: [
                                         Expanded(
                                           child: imageUrl.startsWith('http') || imageUrl.startsWith('/')
-                                              ? Image.network(imageUrl, fit: BoxFit.contain, errorBuilder: (_, __, ___) => Text(emoji.isNotEmpty ? emoji : '🙂', style: const TextStyle(fontSize: 28)))
+                                              ? Image.network(imageUrl, fit: BoxFit.contain, cacheWidth: 64, errorBuilder: (_, __, ___) => Text(emoji.isNotEmpty ? emoji : '🙂', style: const TextStyle(fontSize: 28)))
                                               : Center(child: Text(emoji.isNotEmpty ? emoji : '🙂', style: const TextStyle(fontSize: 28))),
                                         ),
                                         const SizedBox(height: 4),
