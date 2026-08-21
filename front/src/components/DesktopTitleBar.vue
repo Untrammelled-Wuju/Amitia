@@ -19,7 +19,16 @@ const helpMenuOpen = ref(false);
 const zoomLevel = ref(100);
 const isFullscreen = ref(false);
 const appVersion = ref('');
+const canGoBack = ref(false);
+const canGoForward = ref(false);
 let documentObserver: MutationObserver | null = null;
+const historyStack: string[] = [];
+let currentIndex = 0;
+
+function updateNavigationState() {
+  canGoBack.value = currentIndex > 0;
+  canGoForward.value = currentIndex < historyStack.length - 1;
+}
 
 function toggleEditMenu() {
   fileMenuOpen.value = false;
@@ -265,6 +274,17 @@ onMounted(async () => {
     appVersion.value = await window.amitiaDesktop?.getVersion() ?? '';
   } catch {}
   await syncZoomLevel();
+  historyStack.push(router.currentRoute.value.path);
+  updateNavigationState();
+  router.afterEach((to) => {
+    const path = to.path;
+    if (historyStack[currentIndex] !== path) {
+      historyStack.splice(currentIndex + 1);
+      historyStack.push(path);
+      currentIndex = historyStack.length - 1;
+    }
+    updateNavigationState();
+  });
 });
 
 onUnmounted(() => {
@@ -277,6 +297,20 @@ onUnmounted(() => {
 
 async function handleMinimize() {
   await window.electronWindowApi!.minimize("main");
+}
+
+function handleGoBack() {
+  if (currentIndex > 0) {
+    currentIndex--;
+    router.go(-1);
+  }
+}
+
+function handleGoForward() {
+  if (currentIndex < historyStack.length - 1) {
+    currentIndex++;
+    router.go(1);
+  }
 }
 
 async function handleToggleMaximize() {
@@ -314,6 +348,33 @@ async function handleClose() {
           <path d="M15.4 8.9L12.6 12L15.4 15.1" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </button>
+      <div v-if="!hasOnboardingWorld" class="nav-buttons">
+
+        <button
+          type="button"
+          class="nav-icon-btn no-drag"
+          title="后退"
+          aria-label="后退"
+          :disabled="!canGoBack"
+          @click="handleGoBack"
+        >
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M15 18L9 12L15 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+        <button
+          type="button"
+          class="nav-icon-btn no-drag"
+          title="前进"
+          aria-label="前进"
+          :disabled="!canGoForward"
+          @click="handleGoForward"
+        >
+          <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M9 18L15 12L9 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </button>
+      </div>
       <div v-if="!hasOnboardingWorld" class="file-menu-container">
         <button
           type="button"
@@ -653,11 +714,46 @@ async function handleClose() {
   width: 20px;
   height: 20px;
 }
-.sidebar-toggle-btn + .sidebar-toggle-btn,
+.sidebar-toggle-btn + .nav-buttons,
 .sidebar-toggle-btn + .file-menu-container,
 .sidebar-toggle-btn + .edit-menu-container,
 .sidebar-toggle-btn + .view-menu-container,
 .sidebar-toggle-btn + .help-menu-container {
+  margin-left: 4px;
+}
+.nav-buttons {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.nav-icon-btn {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.nav-icon-btn:hover:not(:disabled) {
+  background: var(--workbench-sidebar-hover);
+  color: var(--text-primary);
+}
+.nav-icon-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+.nav-icon-btn svg {
+  width: 18px;
+  height: 18px;
+}
+.nav-buttons + .file-menu-container,
+.nav-buttons + .edit-menu-container,
+.nav-buttons + .view-menu-container,
+.nav-buttons + .help-menu-container {
   margin-left: 4px;
 }
 .text-btn {
