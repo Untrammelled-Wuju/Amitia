@@ -28,7 +28,6 @@ export const NAVIGATION_WHITELIST: readonly string[] = [
   "/wechat",
   "/runtime-debug",
   "/workspaces",
-  "/asr",
   "/realtime-voice",
   "/long-running",
 ];
