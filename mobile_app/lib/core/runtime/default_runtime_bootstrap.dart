@@ -62,6 +62,11 @@ class DefaultRuntimeBootstrap implements RuntimeBootstrap {
     final phase = _mapToBootstrapPhase(snapshot);
     _updatePhase(phase, snapshot);
 
+    if (snapshot.state == RuntimeBridgeState.failed) {
+      _autoInstallDecided = false;
+      _autoStartDecided = false;
+    }
+
     if (!_autoInstallDecided &&
         _policy.autoInstallRuntime &&
         snapshot.state == RuntimeBridgeState.notInstalled) {
@@ -118,6 +123,8 @@ class DefaultRuntimeBootstrap implements RuntimeBootstrap {
     final result = await _bridge.install();
     if (_disposed) return;
     if (result.accepted) {
+      await Future.delayed(const Duration(seconds: 2));
+      if (_disposed) return;
       await _bridge.start();
     }
   }
