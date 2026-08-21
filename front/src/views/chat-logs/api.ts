@@ -22,6 +22,14 @@ export function deleteConversationApi(convId: string) {
   return del(`/api/chats/conversations/${convId}`);
 }
 
+export function deleteAllConversationsApi() {
+  return del(`/api/chats/all`);
+}
+
+export function searchMessagesApi(keyword: string, page = 1, pageSize = 100) {
+  return get<any>("/api/chats/search", { keyword, page, pageSize });
+}
+
 export function exportConversationApi(
   format: string,
   conversationIds: string[],
@@ -72,6 +80,10 @@ export function continueChatApi(body: any) {
 
 export function loadCharactersApi() {
   return get<any[]>("/api/characters");
+}
+
+export function fetchMessageStatusApi(messageId: string) {
+  return get<any>(`/api/web-chat/message-status/${messageId}`);
 }
 
 export interface MessagePsycheSnapshot {

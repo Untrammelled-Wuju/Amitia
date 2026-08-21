@@ -66,6 +66,7 @@ export const builtinBusinessRoutes: RouteRecordRaw[] = [
       children: [
         { path: "llm", name: "settingsModelLlm", component: () => import("@/views/model-config/ModelConfigLlmView.vue"), meta: { requiresAuth: true } },
         { path: "voice", name: "settingsModelVoice", component: () => import("@/views/model-config/VoiceModelConfigView.vue"), meta: { requiresAuth: true } },
+        { path: "asr", name: "settingsModelAsr", component: () => import("@/views/model-config/AsrModelConfigView.vue"), meta: { requiresAuth: true } },
         { path: "embedding", name: "settingsModelEmbedding", component: () => import("@/views/model-config/VectorModelConfigView.vue") },
         { path: "vision", name: "settingsModelVision", component: () => import("@/views/model-config/VisionModelConfigView.vue"), meta: { requiresAuth: true } },
         { path: "imagegen", name: "settingsModelImageGen", component: () => import("@/views/model-config/ImageGenModelConfigView.vue"), meta: { requiresAuth: true } },

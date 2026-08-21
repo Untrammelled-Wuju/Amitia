@@ -6,9 +6,11 @@ SPDX-License-Identifier: AGPL-3.0-only
   <div class="logs-page">
     <div class="page-heading">
       <h2 class="page-title">聊天记录</h2>
-      <el-button size="small" type="primary" plain @click="goToImport">
-        导入记录
-      </el-button>
+      <div class="page-heading-actions">
+        <el-button size="small" @click="messageSearchVisible = true">全局搜索消息</el-button>
+        <el-button size="small" type="primary" plain @click="goToImport">导入记录</el-button>
+        <el-button size="small" type="danger" plain @click="deleteAllConversations">删除全部</el-button>
+      </div>
     </div>
 
     <div class="logs-layout">
@@ -133,7 +135,7 @@ SPDX-License-Identifier: AGPL-3.0-only
             <template #title>
               <span
                 >会话摘要 ({{
-                  fmtTime(currentSummary.updatedAt || currentSummary.createdAt)
+                  fmtTime(currentSummary.updatedAt || currentSummary.compressedAt || currentSummary.createdAt)
                 }})</span
               >
               <el-button
@@ -152,11 +154,11 @@ SPDX-License-Identifier: AGPL-3.0-only
             <div class="summary-content">{{ currentSummary?.summaryText }}</div>
             <div
               class="summary-meta"
-              v-if="currentSummary?.updatedAt || currentSummary?.createdAt"
+              v-if="currentSummary?.updatedAt || currentSummary?.compressedAt || currentSummary?.createdAt"
             >
               生成时间:
               {{
-                fmtTime(currentSummary.updatedAt || currentSummary.createdAt)
+                fmtTime(currentSummary.updatedAt || currentSummary.compressedAt || currentSummary.createdAt)
               }}
             </div>
           </el-dialog>
@@ -164,7 +166,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 
         <div class="detail-filters">
           <el-input
-            v-model="roleFilter"
+            v-model="messageKeywordFilter"
             placeholder="搜索消息"
             size="small"
             clearable
@@ -217,11 +219,23 @@ SPDX-License-Identifier: AGPL-3.0-only
               <el-button
                 text
                 size="small"
+                :loading="messageStatusLoadingMap[m.id]"
+                @click="toggleMessageStatus(m.id)"
+                >{{ messageStatusMap[m.id] ? "收起状态" : "消息状态" }}</el-button
+              >
+              <el-button
+                text
+                size="small"
                 type="danger"
                 class="mi-delete"
                 @click="delMsg(m.id)"
                 >删除</el-button
               >
+            </div>
+            <div v-if="messageStatusMap[m.id]" class="mi-status-panel">
+              <el-tag size="small" effect="plain">{{ messageStatusMap[m.id]?.status || "unknown" }}</el-tag>
+              <span v-if="messageStatusMap[m.id]?.interactionStatus">interaction: {{ messageStatusMap[m.id]?.interactionStatus }}</span>
+              <span v-if="messageStatusMap[m.id]?.updatedAt">updated: {{ fmtTime(messageStatusMap[m.id]?.updatedAt) }}</span>
             </div>
             <div class="mi-content">{{ m.content }}</div>
             <div
@@ -389,6 +403,29 @@ SPDX-License-Identifier: AGPL-3.0-only
       </main>
     </div>
 
+    <el-dialog v-model="messageSearchVisible" title="全局搜索消息" width="720px">
+      <div class="global-search-toolbar">
+        <el-input
+          v-model="messageSearchKeyword"
+          clearable
+          placeholder="输入消息内容关键词"
+          @keyup.enter="searchMessagesGlobal"
+        />
+        <el-button type="primary" :loading="messageSearchLoading" @click="searchMessagesGlobal">搜索</el-button>
+      </div>
+      <div v-loading="messageSearchLoading" class="global-search-results">
+        <el-empty v-if="!messageSearchLoading && messageSearchResults.length === 0" description="暂无搜索结果" :image-size="48" />
+        <div v-for="item in messageSearchResults" :key="item.id" class="global-search-item">
+          <div class="global-search-meta">
+            <span>{{ item.role === 'user' ? '用户' : 'AI' }}</span>
+            <span>{{ fmtTime(item.createdAt) }}</span>
+            <span class="global-search-conv">{{ item.conversationId }}</span>
+          </div>
+          <div class="global-search-content">{{ item.content }}</div>
+        </div>
+      </div>
+    </el-dialog>
+
     <ContextPreviewDialog
       v-model="ctxPreviewVisible"
       :loading="ctxPreviewLoading"
@@ -422,6 +459,7 @@ const {
   messages,
   msgPage,
   msgTotal,
+  messageKeywordFilter,
   roleFilter,
   msgListRef,
   filteredMessages,
@@ -433,6 +471,12 @@ const {
   feedbackMap,
   clearConv,
   delConv,
+  deleteAllConversations,
+  messageSearchVisible,
+  messageSearchKeyword,
+  messageSearchResults,
+  messageSearchLoading,
+  searchMessagesGlobal,
   exportConv,
   currentSummary,
   summaryVisible,
@@ -448,6 +492,9 @@ const {
   switchCharacter,
   continueChat,
   loadCharacters,
+  messageStatusMap,
+  messageStatusLoadingMap,
+  toggleMessageStatus,
   psycheMap,
   psycheLoadingMap,
   toggleMessagePsyche,
@@ -725,5 +772,22 @@ function goToImport() {
 .psyche-appraisal-key {
   font-weight: 600;
   color: var(--ac-color-text-secondary);
+}
+
+.page-heading-actions { display: flex; gap: 8px; align-items: center; }
+.global-search-toolbar { display: flex; gap: 8px; margin-bottom: 12px; }
+.global-search-results { min-height: 180px; max-height: 480px; overflow-y: auto; }
+.global-search-item { padding: 10px 4px; border-bottom: 1px solid var(--ac-color-border-light); }
+.global-search-meta { display: flex; gap: 10px; color: var(--ac-color-text-muted); font-size: var(--ac-font-size-xs); margin-bottom: 5px; }
+.global-search-conv { margin-left: auto; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.global-search-content { white-space: pre-wrap; word-break: break-word; font-size: var(--ac-font-size-sm); }
+
+.mi-status-panel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 6px 0;
+  font-size: 12px;
+  color: var(--el-text-color-secondary);
 }
 </style>

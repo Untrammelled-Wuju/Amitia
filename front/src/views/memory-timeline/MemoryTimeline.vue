@@ -225,6 +225,7 @@ async function fetchTimeline() {
   try {
     const params: any = { page: page.value, pageSize };
     params.userId = "default";
+    if (injectedCharacterId.value) params.characterId = injectedCharacterId.value;
     if (sourceFilter.value) params.source = sourceFilter.value;
     if (typeFilter.value) params.memoryType = typeFilter.value;
     if (timelineType.value) params.type = timelineType.value;

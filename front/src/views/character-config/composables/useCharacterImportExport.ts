@@ -2,10 +2,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { ref } from "vue";
 import { ElMessage } from "element-plus";
-import { useApi } from "../../../composables/useApi";
+import { apiClient, useApi } from "../../../composables/useApi";
 
 export function useCharacterImportExport() {
-  const { get, post, postUpload } = useApi();
+  const { get, postUpload } = useApi();
 
   const exportingPack = ref(false);
   const showImportDialog = ref(false);
@@ -21,13 +21,25 @@ export function useCharacterImportExport() {
     if (!characterId) return;
     exportingPack.value = true;
     try {
-      const result = await post<any>(
-        `/api/characters/${characterId}/export-card?format=v3_charx`,
+      const response = await apiClient.get(
+        `/api/characters/${characterId}/export-card`,
+        {
+          params: { format: "v3_charx", download: "true" },
+          responseType: "blob",
+        },
       );
-      ElMessage.success(`已导出角色包: ${characterName}`);
-      if (result?.resourceUri) {
-        window.open(result.resourceUri, "_blank");
-      }
+      const blob = response.data instanceof Blob
+        ? response.data
+        : new Blob([response.data], { type: "application/octet-stream" });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `${characterName || "character"}.charx`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      ElMessage.success(`已导出角色卡: ${characterName}`);
     } catch (err: any) {
       ElMessage.error(
         "导出失败: " + (err.response?.data?.message || err.message),

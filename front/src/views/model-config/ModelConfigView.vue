@@ -9,6 +9,7 @@ SPDX-License-Identifier: AGPL-3.0-only
     <el-tabs :model-value="activeTab" @tab-change="onTabChange">
       <el-tab-pane label="普通模型" name="llm" />
       <el-tab-pane label="语音模型" name="voice" />
+      <el-tab-pane label="语音识别" name="asr" />
       <el-tab-pane label="视觉模型" name="vision" />
       <el-tab-pane label="向量模型" name="embedding" />
       <el-tab-pane label="生图模型" name="imagegen" />
@@ -29,6 +30,7 @@ const activeTab = computed(() => {
   const path = route.path;
   if (path.includes("/model/llm")) return "llm";
   if (path.includes("/model/voice")) return "voice";
+  if (path.includes("/model/asr")) return "asr";
   if (path.includes("/model/vision")) return "vision";
   if (path.includes("/model/embedding")) return "embedding";
   if (path.includes("/model/imagegen")) return "imagegen";
