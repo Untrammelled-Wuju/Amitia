@@ -41,6 +41,10 @@ export function listTools(): ToolRegistration[] {
   return Array.from(toolRegistry.values());
 }
 
+export function unregisterTool(toolId: string): boolean {
+  return toolRegistry.delete(toolId);
+}
+
 export function clearTools(): void {
   toolRegistry.clear();
 }

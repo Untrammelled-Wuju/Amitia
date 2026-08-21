@@ -131,6 +131,10 @@ export function listTasks(): TaskDefinition[] {
   return Array.from(taskRegistry.values());
 }
 
+export function unregisterTask(taskId: string): boolean {
+  return taskRegistry.delete(taskId);
+}
+
 export function clearTasks(): void {
   taskRegistry.clear();
 }

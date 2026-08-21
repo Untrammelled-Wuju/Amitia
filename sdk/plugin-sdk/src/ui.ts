@@ -23,6 +23,29 @@ export interface UIBridge {
   actions: UIActionClient;
   state: UIStateClient;
   host: UIHostClient;
+  slots?: UISlotClient;
+}
+
+export interface UISlotDefinition {
+  readonly slotId: string;
+  readonly contractVersion?: number;
+  readonly supportedKinds: string[];
+  readonly multiplicity?: "single" | "multiple" | "ordered_multiple" | "replaceable_single" | "exclusive";
+  readonly layout?: "inline" | "stack" | "row" | "grid" | "tabs" | "panel" | "drawer" | "modal" | "hidden";
+  readonly fallbackPolicy?: "none" | "skeleton" | "empty" | "default";
+  readonly parentSlotId?: string;
+  readonly description?: string;
+}
+
+export interface UISlotRegistration {
+  readonly definition: UISlotDefinition;
+  dispose(): void | Promise<void>;
+}
+
+export interface UISlotClient {
+  declare(definition: UISlotDefinition): Promise<UISlotRegistration>;
+  list(): Promise<UISlotDefinition[]>;
+  inject(slotId: string, callback: (definition: UISlotDefinition) => void): Promise<() => void>;
 }
 
 export interface UIActionClient {
@@ -71,11 +94,16 @@ export interface UILogger {
 
 const uiActionRegistry = new Map<string, { handler: UIActionHandler; descriptor: UIActionDescriptor }>();
 
+export interface UIActionRegistration {
+  readonly actionId: string;
+  dispose(): void;
+}
+
 export function defineUIAction(
   actionId: string,
   handler: UIActionHandler,
   descriptor?: Partial<UIActionDescriptor>,
-): void {
+): UIActionRegistration {
   if (!actionId) {
     throw new ValidationError("actionId is required");
   }
@@ -91,6 +119,16 @@ export function defineUIAction(
       deprecated: descriptor?.deprecated,
     },
   });
+  return {
+    actionId,
+    dispose: () => {
+      uiActionRegistry.delete(actionId);
+    },
+  };
+}
+
+export function unregisterUIAction(actionId: string): boolean {
+  return uiActionRegistry.delete(actionId);
 }
 
 export function listUIActions(): UIActionDescriptor[] {
@@ -105,9 +143,29 @@ export function createAmitiaUI(bridge: UIBridge): UIBridge {
   return bridge;
 }
 
+export function defineUISlot(definition: UISlotDefinition): UISlotDefinition {
+  if (!definition.slotId?.trim()) throw new ValidationError("ui slot slotId is required");
+  if (!Array.isArray(definition.supportedKinds) || definition.supportedKinds.length === 0) {
+    throw new ValidationError(`ui slot ${definition.slotId} requires supportedKinds`);
+  }
+  if (definition.parentSlotId === definition.slotId) {
+    throw new ValidationError(`ui slot ${definition.slotId} cannot parent itself`);
+  }
+  return {
+    ...definition,
+    slotId: definition.slotId.trim(),
+    contractVersion: definition.contractVersion ?? 1,
+    multiplicity: definition.multiplicity ?? "ordered_multiple",
+    layout: definition.layout ?? "stack",
+    fallbackPolicy: definition.fallbackPolicy ?? "empty",
+  };
+}
+
 export class InMemoryUIBridge implements UIBridge {
   private readonly stateValues = new Map<string, unknown>();
   private readonly subscribers = new Map<string, Set<(value: unknown) => void>>();
+  private readonly slotValues = new Map<string, UISlotDefinition>();
+  private readonly slotSubscribers = new Map<string, Set<(definition: UISlotDefinition) => void>>();
 
   async ready(): Promise<UIReadyEvent> {
     return {
@@ -167,6 +225,32 @@ export class InMemoryUIBridge implements UIBridge {
     setTitle: async (_title: string): Promise<void> => {},
     notify: async (_message: string, _kind?: "info" | "success" | "warning" | "error"): Promise<void> => {
       // no-op in memory
+    },
+  };
+
+  readonly slots: UISlotClient = {
+    declare: async (input: UISlotDefinition): Promise<UISlotRegistration> => {
+      const definition = defineUISlot(input);
+      this.slotValues.set(definition.slotId, definition);
+      for (const callback of this.slotSubscribers.get(definition.slotId) ?? []) callback(definition);
+      return {
+        definition,
+        dispose: () => {
+          this.slotValues.delete(definition.slotId);
+        },
+      };
+    },
+    list: async (): Promise<UISlotDefinition[]> => Array.from(this.slotValues.values()),
+    inject: async (slotId: string, callback: (definition: UISlotDefinition) => void): Promise<() => void> => {
+      let subscribers = this.slotSubscribers.get(slotId);
+      if (!subscribers) {
+        subscribers = new Set();
+        this.slotSubscribers.set(slotId, subscribers);
+      }
+      subscribers.add(callback);
+      const current = this.slotValues.get(slotId);
+      if (current) callback(current);
+      return () => subscribers?.delete(callback);
     },
   };
 }
