@@ -9,6 +9,8 @@ import {
   deleteMessageApi,
   clearConversationApi,
   deleteConversationApi,
+  deleteAllConversationsApi,
+  searchMessagesApi,
   exportConversationApi,
   fetchFeedbackApi,
   fetchMoodsApi,
@@ -21,6 +23,7 @@ import {
   loadCharactersApi,
   type MessagePsycheSnapshot,
   fetchMessagePsycheApi,
+  fetchMessageStatusApi,
 } from "./api";
 
 export function useConversationLogs() {
@@ -44,12 +47,21 @@ export function useConversationLogs() {
   const messages = ref<any[]>([]);
   const msgPage = ref(1);
   const msgTotal = ref(0);
+  const messageKeywordFilter = ref("");
   const roleFilter = ref("");
   const msgListRef = ref<HTMLElement>();
 
   const filteredMessages = computed(() => {
-    if (!roleFilter.value) return messages.value;
-    return messages.value.filter((m) => m.role === roleFilter.value);
+    const keyword = messageKeywordFilter.value.trim().toLowerCase();
+    return messages.value.filter((m) => {
+      if (roleFilter.value && m.role !== roleFilter.value) return false;
+      if (!keyword) return true;
+      const haystack = [m.content, m.source, m.modelName]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(keyword);
+    });
   });
 
   async function fetchConvs() {
@@ -150,6 +162,51 @@ export function useConversationLogs() {
     fetchConvs();
   }
 
+  const messageSearchVisible = ref(false);
+  const messageSearchKeyword = ref("");
+  const messageSearchResults = ref<any[]>([]);
+  const messageSearchLoading = ref(false);
+
+  async function searchMessagesGlobal() {
+    const keyword = messageSearchKeyword.value.trim();
+    if (!keyword) {
+      messageSearchResults.value = [];
+      return;
+    }
+    messageSearchLoading.value = true;
+    try {
+      const result = await searchMessagesApi(keyword, 1, 100);
+      messageSearchResults.value = Array.isArray(result)
+        ? result
+        : result?.items || [];
+    } catch (e: any) {
+      messageSearchResults.value = [];
+      ElMessage.error(e?.message || "消息搜索失败");
+    } finally {
+      messageSearchLoading.value = false;
+    }
+  }
+
+  async function deleteAllConversations() {
+    await ElMessageBox.confirm(
+      "确定删除全部会话和聊天消息？此操作不可撤销。",
+      "删除全部聊天记录",
+      {
+        type: "warning",
+        confirmButtonText: "全部删除",
+        confirmButtonClass: "el-button--danger",
+      },
+    );
+    await deleteAllConversationsApi();
+    selectedConv.value = null;
+    selectedConvId.value = "";
+    messages.value = [];
+    convs.value = [];
+    convTotal.value = 0;
+    ElMessage.success("全部聊天记录已删除");
+    await fetchConvs();
+  }
+
   async function delConv() {
     const boundChar = characters.value.find(
       (c: any) => c.conversationId === selectedConvId.value,
@@ -215,6 +272,28 @@ export function useConversationLogs() {
     await deleteSummaryApi(selectedConvId.value);
     currentSummary.value = null;
     ElMessage.success("已删除");
+  }
+
+  const messageStatusMap = ref<Record<string, any>>({});
+  const messageStatusLoadingMap = ref<Record<string, boolean>>({});
+
+  async function toggleMessageStatus(messageId: string) {
+    if (messageStatusMap.value[messageId]) {
+      const next = { ...messageStatusMap.value };
+      delete next[messageId];
+      messageStatusMap.value = next;
+      return;
+    }
+    if (messageStatusLoadingMap.value[messageId]) return;
+    messageStatusLoadingMap.value = { ...messageStatusLoadingMap.value, [messageId]: true };
+    try {
+      const data = await fetchMessageStatusApi(messageId);
+      messageStatusMap.value = { ...messageStatusMap.value, [messageId]: data || {} };
+    } catch {
+      ElMessage.error("读取消息状态失败");
+    } finally {
+      messageStatusLoadingMap.value = { ...messageStatusLoadingMap.value, [messageId]: false };
+    }
   }
 
   const psycheMap = ref<Record<string, MessagePsycheSnapshot>>({});
@@ -328,6 +407,7 @@ export function useConversationLogs() {
     messages,
     msgPage,
     msgTotal,
+    messageKeywordFilter,
     roleFilter,
     msgListRef,
     filteredMessages,
@@ -341,6 +421,12 @@ export function useConversationLogs() {
     fetchMoods,
     clearConv,
     delConv,
+    deleteAllConversations,
+    messageSearchVisible,
+    messageSearchKeyword,
+    messageSearchResults,
+    messageSearchLoading,
+    searchMessagesGlobal,
     exportConv,
     currentSummary,
     summaryVisible,
@@ -357,6 +443,9 @@ export function useConversationLogs() {
     switchCharacter,
     continueChat,
     loadCharacters,
+    messageStatusMap,
+    messageStatusLoadingMap,
+    toggleMessageStatus,
     psycheMap,
     psycheLoadingMap,
     loadMessagePsyche,
