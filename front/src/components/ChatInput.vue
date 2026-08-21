@@ -1428,7 +1428,7 @@ defineExpose({ focus, setText, clear: clearText });
 }
 .input-row {
   display: grid;
-  grid-template-columns: auto 1fr auto;
+  grid-template-columns: max-content 1fr max-content;
   grid-template-rows: auto 34px;
   align-items: center;
   gap: 2px 6px;
@@ -1461,6 +1461,15 @@ defineExpose({ focus, setText, clear: clearText });
 .add-btn, .voice-mode-toggle {
   width: 30px;
   height: 30px;
+}
+:deep(.el-button--small) {
+  min-width: unset !important;
+  width: unset !important;
+}
+.input-left-actions :deep(.el-button),
+.input-actions :deep(.el-button) {
+  min-width: unset !important;
+  width: unset !important;
 }
 .composer-context { padding-bottom: 4px; }
 .reply-preview-bar { margin-bottom: 2px; }
