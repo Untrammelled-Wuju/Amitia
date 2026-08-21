@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../app/theme/app_colors.dart';
@@ -76,6 +77,16 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
             icon: Icons.download_outlined,
             tooltip: '导入聊天记录',
             onPressed: () => context.push(AppRoutes.chatImport),
+          ),
+          PopupMenuButton<String>(
+            tooltip: '导出当前会话',
+            enabled: _selectedConversation != null,
+            onSelected: _exportConversation,
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'markdown', child: Text('导出 Markdown')),
+              PopupMenuItem(value: 'json', child: Text('导出 JSON')),
+            ],
+            icon: const Icon(Icons.upload_file_outlined),
           ),
           AmitiaIconButton(
             icon: Icons.summarize_outlined,
@@ -346,6 +357,17 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
               Text('${_characterName(conv.characterId)} · ${_channelLabels[conv.channel] ?? conv.channel} · ${conv.messageCount}条消息', style: AppTypography.label(context)),
             ]),
           ),
+          IconButton(icon: const Icon(Icons.play_arrow_outlined), tooltip: '继续此会话', onPressed: () => _continueConversation(conv)),
+          IconButton(icon: const Icon(Icons.data_object), tooltip: 'Agent 上下文预览', onPressed: () => _showContextPreview(conv)),
+          PopupMenuButton<String>(
+            tooltip: '导出当前会话',
+            onSelected: _exportConversation,
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'markdown', child: Text('Markdown')),
+              PopupMenuItem(value: 'json', child: Text('JSON')),
+            ],
+            icon: const Icon(Icons.upload_file_outlined),
+          ),
           PopupMenuButton<String>(
             tooltip: '切换角色',
             onSelected: (characterId) => _changeCharacter(conv.id, characterId),
@@ -382,6 +404,18 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
             Text(_formatMsgTime(message.createdAt), style: AppTypography.label(context)),
             IconButton(
               visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.thumb_up_alt_outlined, size: 17),
+              tooltip: '消息反馈',
+              onPressed: () => _showMessageFeedback(message),
+            ),
+            IconButton(
+              visualDensity: VisualDensity.compact,
+              icon: const Icon(Icons.psychology_outlined, size: 17),
+              tooltip: '心理快照',
+              onPressed: () => _showMessagePsyche(message),
+            ),
+            IconButton(
+              visualDensity: VisualDensity.compact,
               icon: const Icon(Icons.info_outline, size: 17),
               tooltip: '消息状态',
               onPressed: () => _showMessageStatus(message),
@@ -402,6 +436,126 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
         ],
       ),
     );
+  }
+
+  Future<void> _exportConversation(String format) async {
+    final conv = _selectedConversation;
+    if (conv == null) return;
+    try {
+      final url = await ref.read(chatServiceProvider).exportConversation(conv.id, format: format);
+      if (url.isNotEmpty) {
+        await Clipboard.setData(ClipboardData(text: url));
+        _show('导出完成，资源地址已复制：$url');
+      } else {
+        _show('导出完成');
+      }
+    } catch (e) {
+      _showError('导出失败：$e');
+    }
+  }
+
+  Future<void> _showContextPreview(ConversationDto conv) async {
+    try {
+      final data = await ref.read(chatServiceProvider).contextPreview(conv.id);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Agent 上下文预览'),
+          content: SizedBox(width: 640, child: SingleChildScrollView(child: SelectableText(_formatObject(data ?? const {})))),
+          actions: [
+            TextButton(onPressed: () async { await Clipboard.setData(ClipboardData(text: _formatObject(data ?? const {}))); if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(const SnackBar(content: Text('已复制'))); }, child: const Text('复制')),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭')),
+          ],
+        ),
+      );
+    } catch (e) {
+      _showError('上下文预览失败：$e');
+    }
+  }
+
+  void _continueConversation(ConversationDto conv) {
+    final uri = '${AppRoutes.chat}?conversationId=${Uri.encodeQueryComponent(conv.id)}&characterId=${Uri.encodeQueryComponent(conv.characterId)}';
+    context.go(uri);
+  }
+
+  Future<void> _showMessageFeedback(MessageDto message) async {
+    try {
+      final rows = await ref.read(chatServiceProvider).messageFeedback(message.id);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('消息反馈'),
+          content: SizedBox(
+            width: 520,
+            child: rows.isEmpty
+                ? const Text('该消息暂无反馈')
+                : ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: rows.length,
+                    separatorBuilder: (_, _) => const Divider(height: 1),
+                    itemBuilder: (_, i) {
+                      final row = rows[i];
+                      return ListTile(
+                        dense: true,
+                        title: Text((row['feedbackType'] ?? 'unknown').toString()),
+                        subtitle: Text('${row['reason'] ?? ''}${row['createdAt'] == null ? '' : '\n${row['createdAt']}'}'),
+                      );
+                    },
+                  ),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭'))],
+        ),
+      );
+    } catch (e) {
+      _showError('读取反馈失败：$e');
+    }
+  }
+
+  Future<void> _showMessagePsyche(MessageDto message) async {
+    try {
+      final data = await ref.read(chatServiceProvider).messagePsyche(message.id);
+      if (!mounted) return;
+      await showDialog<void>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('消息时点心理快照'),
+          content: SizedBox(width: 560, child: SingleChildScrollView(child: SelectableText(_formatObject(data ?? const {})))),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('关闭'))],
+        ),
+      );
+    } catch (e) {
+      _showError('心理快照读取失败：$e');
+    }
+  }
+
+  Future<String?> _editSummary(String current) async {
+    final controller = TextEditingController(text: current);
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('编辑会话摘要'),
+        content: TextField(controller: controller, maxLines: 8, minLines: 4, decoration: const InputDecoration(hintText: '输入摘要内容')),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('取消')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, controller.text), child: const Text('保存')),
+        ],
+      ),
+    );
+    controller.dispose();
+    return result;
+  }
+
+  String _formatObject(dynamic value, {int depth = 0}) {
+    final indent = List<String>.filled(depth, '  ').join();
+    if (value is Map) {
+      return value.entries.map((e) => '$indent${e.key}: ${e.value is Map || e.value is List ? '\n${_formatObject(e.value, depth: depth + 1)}' : e.value}').join('\n');
+    }
+    if (value is List) {
+      return value.map((e) => '$indent- ${e is Map || e is List ? '\n${_formatObject(e, depth: depth + 1)}' : e}').join('\n');
+    }
+    return value?.toString() ?? '';
   }
 
   Future<void> _showMessageStatus(MessageDto message) async {
@@ -534,6 +688,25 @@ class _ChatLogsPageState extends ConsumerState<ChatLogsPage> {
                         }
                       },
                 child: Text('删除摘要', style: TextStyle(color: context.error)),
+              ),
+            if (summary.isNotEmpty)
+              TextButton(
+                onPressed: busy
+                    ? null
+                    : () async {
+                        final edited = await _editSummary(summary);
+                        if (edited == null || edited.trim().isEmpty) return;
+                        setLocal(() => busy = true);
+                        try {
+                          final result = await ref.read(chatServiceProvider).updateConversationSummary(conv.id, edited);
+                          setLocal(() => summary = (result?['summaryText'] ?? edited).toString());
+                        } catch (e) {
+                          if (mounted) _showError('保存摘要失败：$e');
+                        } finally {
+                          setLocal(() => busy = false);
+                        }
+                      },
+                child: const Text('编辑摘要'),
               ),
             TextButton(
               onPressed: busy

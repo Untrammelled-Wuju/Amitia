@@ -488,6 +488,24 @@ class ConversationRuntimeController extends ChangeNotifier {
     }
   }
 
+  Future<void> openConversation(String conversationId, {String? characterId}) async {
+    final id = conversationId.trim();
+    if (id.isEmpty) return;
+    ++_generationEpoch;
+    _conversationId = id;
+    _characterId = characterId?.trim().isEmpty == true ? null : characterId;
+    _messages.clear();
+    _lastError = null;
+    _sending = false;
+    notifyListeners();
+    try {
+      await _syncMessages();
+    } catch (error) {
+      _lastError = error;
+      notifyListeners();
+    }
+  }
+
   Future<bool> createConversation(String? characterId) async {
     final conversation = await _chatService.createConversation(characterId);
     if (conversation == null) return false;

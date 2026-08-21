@@ -27,7 +27,10 @@ import '../../../../shared/models/models.dart';
 import 'realtime_voice_call_sheet.dart';
 
 class ChatPage extends ConsumerStatefulWidget {
-  const ChatPage({super.key});
+  const ChatPage({super.key, this.initialConversationId, this.initialCharacterId});
+
+  final String? initialConversationId;
+  final String? initialCharacterId;
 
   @override
   ConsumerState<ChatPage> createState() => _ChatPageState();
@@ -45,6 +48,20 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     super.initState();
     _runtime = ConversationRuntimeController(ref.read(chatServiceProvider), ref.read(emoteServiceProvider));
     _runtime.addListener(_onRuntimeChanged);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _openInitialConversation());
+  }
+
+  Future<void> _openInitialConversation() async {
+    final conversationId = widget.initialConversationId?.trim() ?? '';
+    if (!mounted || conversationId.isEmpty) return;
+    final characterId = widget.initialCharacterId?.trim() ?? '';
+    if (characterId.isNotEmpty) {
+      ref.read(currentCharacterIdProvider.notifier).state = characterId;
+    }
+    await _runtime.openConversation(
+      conversationId,
+      characterId: characterId.isEmpty ? null : characterId,
+    );
   }
 
   void _onRuntimeChanged() {
