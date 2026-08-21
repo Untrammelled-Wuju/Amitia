@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
+import ExtensionSlot from "./ExtensionSlot.vue";
 import {
   SCHEMA_UI_MAX_DEPTH,
   isAllowedNodeType,
@@ -131,6 +132,27 @@ const tableData = computed<Record<string, unknown>[]>(() => {
 const listItems = computed<string[]>(() => toStringArray(mergedProps.value.items));
 
 const kvItems = computed(() => toKeyValueItems(mergedProps.value.items ?? mergedProps.value.data));
+
+const extensionSlotFallback = computed(() => {
+  const value = toText(mergedProps.value.fallback);
+  return ["none", "skeleton", "empty", "default"].includes(value)
+    ? value as "none" | "skeleton" | "empty" | "default"
+    : undefined;
+});
+
+const extensionSlotLayout = computed(() => {
+  const value = toText(mergedProps.value.layout);
+  return ["inline", "stack", "row", "grid", "tabs", "panel", "drawer", "modal"].includes(value)
+    ? value as "inline" | "stack" | "row" | "grid" | "tabs" | "panel" | "drawer" | "modal"
+    : undefined;
+});
+
+const extensionSlotSurfaceRole = computed(() => {
+  const value = toText(mergedProps.value.surfaceRole) || "main";
+  return ["header", "status", "sidebar", "message", "composer", "main", "overlay"].includes(value)
+    ? value as "header" | "status" | "sidebar" | "message" | "composer" | "main" | "overlay"
+    : "main";
+});
 
 const permissionList = computed<string[]>(() => {
   const perms = mergedProps.value.permissions ?? mergedProps.value.items;
@@ -695,6 +717,17 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
         {{ runtimeStatusInfo.message }}
       </p>
     </div>
+
+    <ExtensionSlot
+      v-else-if="nodeType === 'extension_slot'"
+      class="schema-ui-extension-slot schema-ui-node"
+      :data-node-id="node.id"
+      :slot-id="toText(mergedProps.slotId)"
+      :context="context"
+      :fallback="extensionSlotFallback"
+      :layout="extensionSlotLayout"
+      :surface-role="extensionSlotSurfaceRole"
+    />
 
     <el-tab-pane
       v-else-if="nodeType === 'tab_item'"

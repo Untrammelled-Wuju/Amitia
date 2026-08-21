@@ -28,6 +28,7 @@ export type SchemaUINodeType =
   | "resource_link"
   | "permission_summary"
   | "runtime_status"
+  | "extension_slot"
   | "tab_item"
   | "column"
   | "input";
@@ -143,6 +144,7 @@ export const ALLOWED_NODE_TYPES = new Set<string>([
   "resource_link",
   "permission_summary",
   "runtime_status",
+  "extension_slot",
   "tab_item",
   "column",
   "input",

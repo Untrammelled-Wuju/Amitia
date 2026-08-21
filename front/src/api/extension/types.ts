@@ -66,9 +66,24 @@ export interface BackendUIActionDefinition {
 }
 
 export interface BackendPermissionRequirement {
-  permission: string;
+  name?: string;
+  permission?: string;
   required: boolean;
   scope?: string;
+}
+
+export interface BackendUICondition {
+  field: string;
+  operator: string;
+  value?: unknown;
+}
+
+export interface BackendUIVisibilityRule {
+  required_context?: string[];
+  platforms?: string[];
+  message_types?: string[];
+  conditions?: BackendUICondition[];
+  user_setting?: string;
 }
 
 export interface BackendContributionIntegrity {
@@ -87,7 +102,7 @@ export interface BackendUIContributionDefinition {
   contract_version: number;
   display: BackendUIDisplayMetadata;
   entry: BackendUIEntryDefinition;
-  visibility?: unknown;
+  visibility?: BackendUIVisibilityRule;
   data_contract?: unknown;
   actions?: BackendUIActionDefinition[];
   permissions?: BackendPermissionRequirement[];
@@ -101,6 +116,25 @@ export interface BackendUIContributionDefinition {
 
 export interface BackendSlotSnapshotEntry {
   slotId: string;
+  contractVersion: number;
+  supportedKinds?: string[];
+  multiplicity: string;
+  layout: string;
+  fallbackPolicy: string;
+  performanceBudget?: {
+    firstPaint: number;
+    bundleSize: number;
+    memoryBytes: number;
+    messageRate: number;
+    updateFrequency: number;
+  };
+  description?: string;
+  platform?: string[];
+  orderingPolicy?: string;
+  failurePolicy?: string;
+  ownerExtension?: string;
+  parentSlotId?: string;
+  dynamic?: boolean;
   contributions: BackendUIContributionDefinition[];
 }
 
@@ -151,6 +185,7 @@ export interface BackendUIProfile {
 export interface BackendUIContributionSnapshot {
   slots: BackendSlotSnapshotEntry[];
   contributions?: BackendUIContributionDefinition[];
+  pendingContributions?: BackendUIContributionDefinition[];
   timestamp: string;
   providers?: BackendUIProviderDefinition[];
   profile?: BackendUIProfile;
