@@ -27,7 +27,6 @@ export { default as ChatLogsView } from "./views/chat-logs/ChatLogsView.vue";
 export { default as ChatImportView } from "./views/chat-import/ChatImportView.vue";
 export { default as SafetySettingsView } from "./views/safety-settings/SafetySettingsView.vue";
 export { default as SettingsView } from "./views/settings/SettingsView.vue";
-export { default as LogsView } from "./views/logs/LogsView.vue";
 export { default as ChatCleanupView } from "./views/chat-cleanup/ChatCleanupView.vue";
 export { default as PrivacyScanView } from "./views/privacy-scan/PrivacyScanView.vue";
 

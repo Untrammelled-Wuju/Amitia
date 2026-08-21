@@ -20,6 +20,88 @@ SPDX-License-Identifier: AGPL-3.0-only
       >
     </div>
 
+    <el-card class="debug-card" shadow="never" v-loading="managementLoading">
+      <template #header>
+        <div class="temporal-header">
+          <span>课程 / 日程 / 规则管理</span>
+          <div class="temporal-badges">
+            <el-button size="small" @click="loadManagement">刷新</el-button>
+            <el-button size="small" type="primary" @click="openAdjustment()">新增调课</el-button>
+            <el-button size="small" type="warning" @click="regenerateTimeline">重建时间线</el-button>
+          </div>
+        </div>
+      </template>
+      <el-tabs v-model="managementTab">
+        <el-tab-pane label="日程冲突" name="conflicts">
+          <el-table :data="management.scheduleConflicts" size="small" stripe>
+            <el-table-column prop="date" label="日期" width="120" />
+            <el-table-column prop="type" label="类型" width="140" />
+            <el-table-column prop="title" label="标题" min-width="160" />
+            <el-table-column prop="description" label="说明" min-width="220" show-overflow-tooltip />
+          </el-table>
+          <el-empty v-if="!management.scheduleConflicts.length" description="当前没有日程冲突" :image-size="42" />
+        </el-tab-pane>
+        <el-tab-pane label="生效课程" name="classes">
+          <el-table :data="management.effectiveClasses" size="small" stripe>
+            <el-table-column prop="title" label="课程 / 事件" min-width="170" />
+            <el-table-column prop="startTime" label="开始" width="90" />
+            <el-table-column prop="endTime" label="结束" width="90" />
+            <el-table-column prop="location" label="地点" min-width="110" />
+            <el-table-column prop="sourceType" label="来源" min-width="130" />
+            <el-table-column prop="adjustmentType" label="调整类型" min-width="120" />
+          </el-table>
+          <el-empty v-if="!management.effectiveClasses.length" description="当天没有生效课程" :image-size="42" />
+        </el-tab-pane>
+        <el-tab-pane label="临时调课" name="adjustments">
+          <el-table :data="management.classAdjustments" size="small" stripe>
+            <el-table-column prop="date" label="日期" width="120" />
+            <el-table-column prop="slotIndex" label="节次" width="80" />
+            <el-table-column prop="className" label="课程" min-width="150" />
+            <el-table-column prop="adjustType" label="调整" width="110" />
+            <el-table-column prop="description" label="说明" min-width="180" show-overflow-tooltip />
+            <el-table-column label="操作" width="140" fixed="right">
+              <template #default="{ row }">
+                <el-button link type="primary" @click="openAdjustment(row)">编辑</el-button>
+                <el-button link type="danger" @click="deleteAdjustment(row)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+          <el-empty v-if="!management.classAdjustments.length" description="没有临时调课" :image-size="42" />
+        </el-tab-pane>
+        <el-tab-pane label="规则日志" name="logs">
+          <el-table :data="management.ruleLogs" size="small" stripe>
+            <el-table-column prop="createdAt" label="时间" min-width="160" />
+            <el-table-column prop="ruleName" label="规则" min-width="150" />
+            <el-table-column prop="action" label="动作" min-width="120" />
+            <el-table-column label="详情" min-width="260">
+              <template #default="{ row }"><code>{{ prettyJSON(row) }}</code></template>
+            </el-table-column>
+          </el-table>
+          <el-empty v-if="!management.ruleLogs.length" description="暂无规则日志" :image-size="42" />
+        </el-tab-pane>
+      </el-tabs>
+    </el-card>
+
+    <el-dialog v-model="adjustmentDialogVisible" :title="adjustmentEditing ? '编辑调课' : '新增调课'" width="520px">
+      <el-form label-width="90px">
+        <el-form-item label="日期"><el-date-picker v-model="adjustmentForm.date" type="date" value-format="YYYY-MM-DD" style="width:100%" /></el-form-item>
+        <el-form-item label="节次"><el-input-number v-model="adjustmentForm.slotIndex" :min="0" :max="20" /></el-form-item>
+        <el-form-item label="课程名"><el-input v-model="adjustmentForm.className" /></el-form-item>
+        <el-form-item label="调整类型">
+          <el-select v-model="adjustmentForm.adjustType" style="width:100%">
+            <el-option label="调换 / 覆盖" value="swap" />
+            <el-option label="新增" value="added" />
+            <el-option label="取消" value="canceled" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="说明"><el-input v-model="adjustmentForm.description" type="textarea" :rows="3" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="adjustmentDialogVisible=false">取消</el-button>
+        <el-button type="primary" :loading="adjustmentSaving" @click="saveAdjustment">保存</el-button>
+      </template>
+    </el-dialog>
+
     <el-card
       class="debug-card temporal-runtime-card"
       shadow="never"
@@ -560,7 +642,7 @@ const injectedCharacterId = inject<Ref<string | null>>(
   "currentCharacterId",
   ref(null),
 );
-const { get, post } = useApi();
+const { get, post, put, del } = useApi();
 const loading = ref(false);
 const regenerating = ref(false);
 const triggeringActive = ref(false);
@@ -571,6 +653,25 @@ const reunionEpisodes = ref<ReunionEpisode[]>([]);
 const temporalLoading = ref(false);
 const temporalError = ref("");
 const temporalActiveTab = ref("core");
+const managementLoading = ref(false);
+const managementTab = ref("conflicts");
+const adjustmentDialogVisible = ref(false);
+const adjustmentEditing = ref(false);
+const adjustmentSaving = ref(false);
+const adjustmentForm = reactive({
+  id: 0,
+  date: new Date().toISOString().slice(0, 10),
+  slotIndex: 0,
+  className: "",
+  adjustType: "swap",
+  description: "",
+});
+const management = reactive({
+  scheduleConflicts: [] as any[],
+  classAdjustments: [] as any[],
+  effectiveClasses: [] as any[],
+  ruleLogs: [] as any[],
+});
 
 const relationshipFeatureEnabled = computed(
   () =>
@@ -618,7 +719,95 @@ async function loadAll() {
   } finally {
     loading.value = false;
   }
-  await loadTemporal();
+  await Promise.all([loadTemporal(), loadManagement()]);
+}
+
+async function loadManagement() {
+  managementLoading.value = true;
+  const characterId = injectedCharacterId?.value ?? "";
+  const params = { characterId: characterId || undefined };
+  try {
+    const [conflicts, adjustments, effective, logs] = await Promise.all([
+      get<any[]>("/api/companion/schedule/conflicts", params),
+      get<any[]>("/api/companion/class-adjustments", params),
+      get<any[]>("/api/companion/classes/effective", params),
+      get<any[]>("/api/companion/rule-logs", params),
+    ]);
+    management.scheduleConflicts = Array.isArray(conflicts) ? conflicts : [];
+    management.classAdjustments = Array.isArray(adjustments) ? adjustments : [];
+    management.effectiveClasses = Array.isArray(effective) ? effective : [];
+    management.ruleLogs = Array.isArray(logs) ? logs : [];
+  } catch (e: any) {
+    ElMessage.error(e?.message || "课程与规则管理数据加载失败");
+  } finally {
+    managementLoading.value = false;
+  }
+}
+
+function openAdjustment(row?: any) {
+  adjustmentEditing.value = !!row;
+  Object.assign(adjustmentForm, {
+    id: row?.id || 0,
+    date: row?.date || new Date().toISOString().slice(0, 10),
+    slotIndex: Number(row?.slotIndex || 0),
+    className: row?.className || "",
+    adjustType: row?.adjustType || "swap",
+    description: row?.description || "",
+  });
+  adjustmentDialogVisible.value = true;
+}
+
+async function saveAdjustment() {
+  if (!adjustmentForm.date || !adjustmentForm.className.trim()) {
+    ElMessage.warning("日期和课程名不能为空");
+    return;
+  }
+  adjustmentSaving.value = true;
+  const characterId = injectedCharacterId?.value ?? "";
+  const suffix = `?characterId=${encodeURIComponent(characterId)}`;
+  const payload = {
+    date: adjustmentForm.date,
+    slotIndex: adjustmentForm.slotIndex,
+    className: adjustmentForm.className.trim(),
+    adjustType: adjustmentForm.adjustType,
+    description: adjustmentForm.description.trim(),
+  };
+  try {
+    if (adjustmentEditing.value) await put(`/api/companion/class-adjustments/${adjustmentForm.id}${suffix}`, payload);
+    else await post(`/api/companion/class-adjustments${suffix}`, payload);
+    adjustmentDialogVisible.value = false;
+    ElMessage.success(adjustmentEditing.value ? "调课已更新" : "调课已创建");
+    await loadManagement();
+  } catch (e: any) {
+    ElMessage.error(e?.message || "保存调课失败");
+  } finally {
+    adjustmentSaving.value = false;
+  }
+}
+
+async function deleteAdjustment(row: any) {
+  try {
+    await ElMessageBox.confirm(`确定删除 ${row.date || ""} 的调课「${row.className || ""}」？`, "确认", { type: "warning" });
+  } catch { return; }
+  const characterId = injectedCharacterId?.value ?? "";
+  try {
+    await del(`/api/companion/class-adjustments/${row.id}?characterId=${encodeURIComponent(characterId)}`);
+    ElMessage.success("调课已删除");
+    await loadManagement();
+  } catch (e: any) {
+    ElMessage.error(e?.message || "删除调课失败");
+  }
+}
+
+async function regenerateTimeline() {
+  const characterId = injectedCharacterId?.value ?? "";
+  try {
+    await post(`/api/companion/timeline/regenerate?characterId=${encodeURIComponent(characterId)}`);
+    ElMessage.success("时间线已重建");
+    await loadAll();
+  } catch (e: any) {
+    ElMessage.error(e?.message || "时间线重建失败");
+  }
 }
 
 async function loadTemporal() {

@@ -161,6 +161,10 @@ SPDX-License-Identifier: AGPL-3.0-only
                 fmtTime(currentSummary.updatedAt || currentSummary.compressedAt || currentSummary.createdAt)
               }}
             </div>
+            <template #footer>
+              <el-button @click="summaryVisible = false">关闭</el-button>
+              <el-button type="primary" @click="editSummary">编辑摘要</el-button>
+            </template>
           </el-dialog>
         </div>
 
@@ -483,6 +487,7 @@ const {
   genSummaryLoading,
   genSummary,
   viewSummary,
+  editSummary,
   delSummary,
   devMode,
   ctxPreviewVisible,
