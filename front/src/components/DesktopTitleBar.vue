@@ -213,7 +213,9 @@ async function handleExit() {
   } catch {
     return;
   }
-  window.electronWindowApi!.close("main");
+  if (window.amitiaDesktop?.quitApp) {
+    await window.amitiaDesktop.quitApp();
+  }
 }
 
 function handleClickOutside(event: MouseEvent) {
@@ -284,6 +286,7 @@ async function handleClose() {
   >
     <div class="titlebar-left">
       <button
+        v-if="!hasOnboardingWorld"
         type="button"
         class="sidebar-toggle-btn no-drag"
         :title="appStore.sidebarCollapsed ? '展开导航' : '收起导航'"
@@ -301,7 +304,7 @@ async function handleClose() {
           <path d="M15.4 8.9L12.6 12L15.4 15.1" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </button>
-      <div class="file-menu-container">
+      <div v-if="!hasOnboardingWorld" class="file-menu-container">
         <button
           type="button"
           class="text-btn no-drag"
@@ -334,11 +337,11 @@ async function handleClose() {
               <path d="M16 17L21 12L16 7" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/>
               <path d="M21 12H9" stroke="currentColor" stroke-width="1.35" stroke-linecap="round"/>
             </svg>
-            <span class="menu-item-label">退出程序</span>
+            <span class="menu-item-label">关闭程序</span>
           </button>
         </div>
       </div>
-      <div class="edit-menu-container">
+      <div v-if="!hasOnboardingWorld" class="edit-menu-container">
         <button
           type="button"
           class="text-btn no-drag"
