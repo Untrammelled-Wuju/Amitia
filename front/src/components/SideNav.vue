@@ -27,7 +27,16 @@ SPDX-License-Identifier: AGPL-3.0-only
           :title="appStore.sidebarCollapsed ? '展开导航' : '收起导航'"
           @click="appStore.toggleSidebar"
         >
-          <el-icon><DArrowRight v-if="appStore.sidebarCollapsed" /><DArrowLeft v-else /></el-icon>
+          <svg v-if="appStore.sidebarCollapsed" class="toggle-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="3.5" y="4" width="17" height="16" rx="3" stroke="currentColor" stroke-width="1.7"/>
+            <path d="M9 4.8V19.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            <path d="M12.8 8.8L16 12L12.8 15.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          <svg v-else class="toggle-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="3.5" y="4" width="17" height="16" rx="3" stroke="currentColor" stroke-width="1.7"/>
+            <path d="M9 4.8V19.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
+            <path d="M15.6 8.8L12.4 12L15.6 15.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
         </button>
       </div>
     </div>
@@ -125,8 +134,6 @@ import { computed, onMounted, onUnmounted, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import {
   Connection,
-  DArrowLeft,
-  DArrowRight,
   Moon,
   Search,
   Setting,
@@ -322,6 +329,7 @@ onUnmounted(() => {
 .brand-actions { display: flex; align-items: center; gap: 2px; }
 .icon-btn { display: grid; place-items: center; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 7px; background: transparent; color: var(--text-muted); cursor: pointer; }
 .icon-btn:hover, .icon-btn:focus-visible { background: var(--workbench-sidebar-hover); color: var(--text-primary); outline: none; }
+.toggle-icon { width: 20px; height: 20px; display: block; color: var(--text-muted); }
 .side-nav.is-collapsed .brand-row { justify-content: center; flex-direction: column; padding-bottom: 8px; }
 .side-nav.is-collapsed .brand-actions { width: 100%; justify-content: center; }
 .new-chat { display: flex; align-items: center; gap: 9px; min-height: 34px; width: 100%; margin: 2px 0 7px; padding: 0 9px; border: 0; border-radius: 7px; background: transparent; color: var(--text-primary); cursor: pointer; font: inherit; font-size: 13px; text-align: left; }

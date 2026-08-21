@@ -1463,13 +1463,13 @@ defineExpose({ focus, setText, clear: clearText });
   height: 30px;
 }
 :deep(.el-button--small) {
-  min-width: unset !important;
-  width: unset !important;
+  min-width: 32px !important;
+  width: 32px !important;
 }
 .input-left-actions :deep(.el-button),
 .input-actions :deep(.el-button) {
-  min-width: unset !important;
-  width: unset !important;
+  min-width: 32px !important;
+  width: 32px !important;
 }
 .composer-context { padding-bottom: 4px; }
 .reply-preview-bar { margin-bottom: 2px; }
