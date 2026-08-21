@@ -21,6 +21,7 @@ SPDX-License-Identifier: AGPL-3.0-only
           <el-icon><Search /></el-icon>
         </button>
         <button
+          v-if="!isDesktopShell()"
           type="button"
           class="icon-btn"
           :aria-label="appStore.sidebarCollapsed ? '展开导航' : '收起导航'"
@@ -28,14 +29,14 @@ SPDX-License-Identifier: AGPL-3.0-only
           @click="appStore.toggleSidebar"
         >
           <svg v-if="appStore.sidebarCollapsed" class="toggle-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="3.5" y="4" width="17" height="16" rx="3" stroke="currentColor" stroke-width="1.7"/>
-            <path d="M9 4.8V19.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-            <path d="M12.8 8.8L16 12L12.8 15.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect x="3.5" y="4" width="17" height="16" rx="3" stroke="currentColor" stroke-width="1.25"/>
+            <path d="M9 4.8V19.2" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>
+            <path d="M12.6 8.9L15.4 12L12.6 15.1" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
           <svg v-else class="toggle-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <rect x="3.5" y="4" width="17" height="16" rx="3" stroke="currentColor" stroke-width="1.7"/>
-            <path d="M9 4.8V19.2" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/>
-            <path d="M15.6 8.8L12.4 12L15.6 15.2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+            <rect x="3.5" y="4" width="17" height="16" rx="3" stroke="currentColor" stroke-width="1.25"/>
+            <path d="M9 4.8V19.2" stroke="currentColor" stroke-width="1.25" stroke-linecap="round"/>
+            <path d="M15.4 8.9L12.6 12L15.4 15.1" stroke="currentColor" stroke-width="1.35" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
         </button>
       </div>
@@ -146,6 +147,7 @@ import { useAppStore } from "@/stores/app";
 import { useBrandLogo } from "@/composables/useBrandLogo";
 import { apiClient, useApi } from "@/composables/useApi";
 import { forceCleanupSession } from "@/stores/refresh-coordinator";
+import { isDesktopShell } from "@/runtime/runtime-capabilities";
 import SearchModal from "./SearchModal.vue";
 import { isUINavigationItemActive, useUINavigationRegistry } from "@/ui-runtime/navigationRegistry";
 import { useUIComponentVariant } from "@/ui-runtime/componentRegistry";
