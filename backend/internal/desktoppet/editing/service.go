@@ -72,6 +72,7 @@ type Service interface {
 	CancelRegenerationJob(ctx context.Context, jobID, userID string) error
 	AcceptCandidate(ctx context.Context, candidateID, userID string, req AcceptCandidateRequest) error
 	RejectCandidate(ctx context.Context, candidateID, userID string, req RejectCandidateRequest) error
+	ListCandidates(ctx context.Context, sessionID string) ([]EditCandidate, error)
 
 	UploadCandidate(ctx context.Context, sessionID, userID string, data []byte, mimeType string, targetFrameID string) (*UploadCandidateResponse, error)
 
@@ -1150,6 +1151,7 @@ func (s *service) GetActionEditSummary(ctx context.Context, processingTaskID, ac
 		ActionKey:         actionKey,
 		ActiveRevisionID:  binding.RevisionID,
 		ActiveRevisionNum: rev.RevisionNumber,
+		BindingVersion:    binding.BindingVersion,
 		FrameCount:        rev.FrameCount,
 		DurationMS:        rev.DurationMS,
 		QualityVerdict:    rev.QualityVerdict,
@@ -1814,6 +1816,24 @@ func (s *service) RejectCandidate(ctx context.Context, candidateID, userID strin
 		return ErrCandidateAlreadyDecided
 	}
 	return s.repo.UpdateCandidateStatus(candidateID, CandidateStatusRejected, userID)
+}
+
+func (s *service) ListCandidates(ctx context.Context, sessionID string) ([]EditCandidate, error) {
+	session, err := s.repo.GetEditSession(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if err := s.validateSession(session); err != nil {
+		return nil, err
+	}
+	candidates, err := s.repo.ListCandidatesBySession(sessionID)
+	if err != nil {
+		return nil, err
+	}
+	if candidates == nil {
+		candidates = []EditCandidate{}
+	}
+	return candidates, nil
 }
 
 func (s *service) UploadCandidate(ctx context.Context, sessionID, userID string, data []byte, mimeType string, targetFrameID string) (*UploadCandidateResponse, error) {

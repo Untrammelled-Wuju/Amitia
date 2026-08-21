@@ -518,6 +518,25 @@ func (h *Handler) ListRegenerationJobs(c *gin.Context) {
 	util.SuccessResponse(c, jobs)
 }
 
+func (h *Handler) ListCandidates(c *gin.Context) {
+	sessionID := c.Param("sessionId")
+	actor, err := middleware.GetActorFromContext(c)
+	if err != nil {
+		util.ErrorResponse(c, response.Unauthorized, "认证失败", gin.H{"errorCode": "AUTH_REQUIRED"})
+		return
+	}
+	if _, err := h.ownershipGuard.RequireEditSession(c.Request.Context(), actor, sessionID); err != nil {
+		writeEditOwnershipError(c, err)
+		return
+	}
+	candidates, err := h.service.ListCandidates(c.Request.Context(), sessionID)
+	if err != nil {
+		writeEditError(c, err)
+		return
+	}
+	util.SuccessResponse(c, candidates)
+}
+
 func (h *Handler) AcceptCandidate(c *gin.Context) {
 	candidateID := c.Param("candidateId")
 	actor, err := middleware.GetActorFromContext(c)

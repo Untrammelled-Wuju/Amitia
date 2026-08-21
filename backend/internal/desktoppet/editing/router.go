@@ -45,6 +45,7 @@ func RegisterEditingRouterWithService(r *gin.RouterGroup, svc Service, guard sec
 		g.POST("/edit-sessions/:sessionId/regeneration-jobs/:jobId/cancel", handler.CancelRegenerationJob)
 		g.GET("/regeneration-jobs/:jobId", handler.GetRegenerationJobByID)
 		g.GET("/regeneration-jobs", handler.ListRegenerationJobs)
+		g.GET("/edit-sessions/:sessionId/candidates", handler.ListCandidates)
 		g.POST("/edit-sessions/:sessionId/candidates/:candidateId/accept", handler.AcceptCandidate)
 		g.POST("/edit-sessions/:sessionId/candidates/:candidateId/reject", handler.RejectCandidate)
 
