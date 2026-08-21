@@ -61,7 +61,7 @@ import { ElMessage } from "element-plus";
 import { isDesktopShell } from "@/runtime/runtime-capabilities";
 import { useBrandLogo } from "@/composables/useBrandLogo";
 
-const version = "26.1.5";
+const version = ref("—");
 
 const checking = ref(false);
 const releaseNotes = ref("");
@@ -77,16 +77,21 @@ async function handleCheckUpdate() {
   await window.amitiaDesktop.checkUpdate();
   if (!updateHandled) {
     checking.value = false;
-    ElMessage.success("已是最新版本");
   }
 }
 
-onMounted(() => {
+onMounted(async () => {
   isDesktop.value = isDesktopShell();
 
   if (!window.amitiaDesktop) return;
 
   const api = window.amitiaDesktop;
+
+  try {
+    version.value = await api.getCurrentVersion();
+  } catch {
+    version.value = "—";
+  }
 
   api.getReleaseNotes().then((notes) => {
     releaseNotes.value = notes;
@@ -98,6 +103,8 @@ onMounted(() => {
 
   api.onUpdateAvailable(() => {
     checking.value = false;
+    updateHandled = true;
+    ElMessage.info("发现新版本，请在更新弹窗中继续操作");
   });
 
   api.onUpdateNotAvailable(() => {
