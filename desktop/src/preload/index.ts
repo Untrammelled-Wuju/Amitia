@@ -63,6 +63,9 @@ const api = {
   closeWindow(): Promise<void> {
     return ipcRenderer.invoke(IPC_CHANNELS.closeWindow);
   },
+  quitApp(): Promise<void> {
+    return ipcRenderer.invoke(IPC_CHANNELS.quitApp);
+  },
   writeClipboardText(text: string): Promise<void> {
     return ipcRenderer.invoke(IPC_CHANNELS.clipboardWriteText, text);
   },

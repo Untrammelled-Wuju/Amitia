@@ -231,6 +231,10 @@ export function registerIpcHandlers(
     BrowserWindow.fromWebContents(event.sender)?.close();
   });
 
+  ipcMain.handle(IPC_CHANNELS.quitApp, () => {
+    app.quit();
+  });
+
   ipcMain.handle("window-minimize", (event) => {
     BrowserWindow.fromWebContents(event.sender)?.minimize();
   });
