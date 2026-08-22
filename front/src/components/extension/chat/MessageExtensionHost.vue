@@ -38,13 +38,6 @@ const isCustomMessage = computed(() => !!props.message.extensionType);
 <template>
   <div class="message-extension-host" :data-message-id="message.messageId">
     <div class="message-extension-host__content">
-      <ExtensionSlot
-        slot-id="chat.message.renderer"
-        :context="messageContext"
-        fallback="none"
-        layout="stack"
-        surface-role="message"
-      />
       <template v-if="isCustomMessage">
         <ExtensionSlot
           slot-id="chat.message.custom_renderer"
