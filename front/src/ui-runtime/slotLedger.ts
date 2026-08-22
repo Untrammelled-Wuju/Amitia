@@ -50,7 +50,15 @@ export function hasUnifiedSlotItem(
 }
 
 function compareStable(a: UnifiedSlotItem, b: UnifiedSlotItem): number {
-  return a.ordering - b.ordering || b.priority - a.priority || a.key.localeCompare(b.key);
+  const ordering = a.ordering - b.ordering;
+  if (ordering !== 0) return ordering;
+  // Strict DSH list dispatch already resolved shadow priority inside each cell.
+  // Across different cells, preserve registration assembly order instead of
+  // incorrectly re-sorting the visible list by priority.
+  if (a.source === "client" && b.source === "client" && a.client.strict && b.client.strict) {
+    return a.client.sequence - b.client.sequence || a.key.localeCompare(b.key);
+  }
+  return b.priority - a.priority || a.key.localeCompare(b.key);
 }
 
 function compareReplacement(a: UnifiedSlotItem, b: UnifiedSlotItem): number {

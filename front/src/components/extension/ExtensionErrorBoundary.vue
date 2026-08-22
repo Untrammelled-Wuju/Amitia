@@ -1,15 +1,19 @@
 <script setup lang="ts">
 import { ref, computed, onErrorCaptured, onUnmounted } from "vue";
 import { useExtensionUIStore } from "@/stores/extensionUI";
+import { browserClientPluginRuntime } from "@/ui-runtime/clientPluginRuntime";
 
 const props = withDefaults(
   defineProps<{
     slotId: string;
     contributionId: string;
     maxRetries?: number;
+    /** Strict shadowing entries yield to the next survivor after a crash. */
+    abdicateOnError?: boolean;
   }>(),
   {
     maxRetries: 3,
+    abdicateOnError: false,
   }
 );
 
@@ -25,14 +29,19 @@ const showDebug = import.meta.env.DEV;
 
 onErrorCaptured((err: unknown) => {
   const message = err instanceof Error ? err.message : String(err);
-  error.value = message;
+  const abdicated = browserClientPluginRuntime.slots.reportEntryError(
+    props.contributionId,
+    err,
+    { abdicate: props.abdicateOnError },
+  );
+  if (!abdicated) error.value = message;
   try {
     uiStore.recordError({
       contributionId: props.contributionId,
       slotId: props.slotId,
       message,
       timestamp: Date.now(),
-      recoverable: true,
+      recoverable: !abdicated,
     });
   } catch {
   }

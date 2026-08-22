@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"strings"
 	"sync"
 	"time"
 )
@@ -14,6 +13,7 @@ import (
 type SlotID string
 
 type SlotMultiplicity string
+type SlotDispatchKind string
 type SlotScope string
 
 const (
@@ -28,6 +28,13 @@ const (
 	MultiplicityOrderedMultiple   SlotMultiplicity = "ordered_multiple"
 	MultiplicityReplaceableSingle SlotMultiplicity = "replaceable_single"
 	MultiplicityExclusive         SlotMultiplicity = "exclusive"
+)
+
+const (
+	DispatchSingle SlotDispatchKind = "single"
+	DispatchList   SlotDispatchKind = "list"
+	DispatchKeyed  SlotDispatchKind = "keyed"
+	DispatchChain  SlotDispatchKind = "chain"
 )
 
 type SlotLayout string
@@ -57,6 +64,7 @@ type SlotDefinition struct {
 	SlotID            SlotID            `json:"slotId"`
 	ContractVersion   int               `json:"contractVersion"`
 	SupportedKinds    []string          `json:"supportedKinds"`
+	DispatchKind      SlotDispatchKind  `json:"kind,omitempty"`
 	Multiplicity      SlotMultiplicity  `json:"multiplicity"`
 	Layout            SlotLayout        `json:"layout"`
 	ContextSchema     json.RawMessage   `json:"contextSchema,omitempty"`
@@ -134,6 +142,15 @@ func (r *SlotRegistry) register(ownerExtension string, def *SlotDefinition, dyna
 		return ErrNoSupportedKinds
 	}
 	copyDef := cloneSlotDefinition(def)
+	if copyDef.DispatchKind == "" {
+		copyDef.DispatchKind = dispatchKindFromMultiplicity(copyDef.Multiplicity)
+	}
+	if !validDispatchKind(copyDef.DispatchKind) {
+		return fmt.Errorf("%w: %s", ErrInvalidSlotDispatchKind, copyDef.DispatchKind)
+	}
+	if copyDef.Multiplicity == "" {
+		copyDef.Multiplicity = multiplicityFromDispatchKind(copyDef.DispatchKind)
+	}
 	if dynamic {
 		copyDef.Dynamic = true
 		copyDef.OwnerExtension = ownerExtension
@@ -169,6 +186,31 @@ func (r *SlotRegistry) register(ownerExtension string, def *SlotDefinition, dyna
 	r.slots[copyDef.SlotID] = copyDef
 	r.restoreSuspendedChildrenLocked(copyDef.SlotID)
 	return nil
+}
+
+func validDispatchKind(kind SlotDispatchKind) bool {
+	switch kind {
+	case DispatchSingle, DispatchList, DispatchKeyed, DispatchChain:
+		return true
+	default:
+		return false
+	}
+}
+
+func dispatchKindFromMultiplicity(m SlotMultiplicity) SlotDispatchKind {
+	switch m {
+	case MultiplicitySingle, MultiplicityReplaceableSingle, MultiplicityExclusive:
+		return DispatchSingle
+	default:
+		return DispatchList
+	}
+}
+
+func multiplicityFromDispatchKind(kind SlotDispatchKind) SlotMultiplicity {
+	if kind == DispatchSingle {
+		return MultiplicityReplaceableSingle
+	}
+	return MultiplicityOrderedMultiple
 }
 
 func scopeCanContain(parent SlotScope, child SlotScope) bool {
@@ -542,17 +584,69 @@ func DefaultSlots() []*SlotDefinition {
 		"chat.empty_state.card":                  "provider.conversation.messages",
 		"chat.status.item":                       "provider.conversation.shell",
 	}
+	dispatchKinds := map[SlotID]SlotDispatchKind{
+		"root":                                   DispatchSingle,
+		"provider.app.shell":                     DispatchChain,
+		"provider.app.navigation":                DispatchChain,
+		"provider.app.workspace":                 DispatchChain,
+		"provider.route.registry":                DispatchList,
+		"provider.page.provider":                 DispatchChain,
+		"provider.conversation.shell":            DispatchChain,
+		"provider.conversation.header":           DispatchChain,
+		"provider.conversation.messages":         DispatchChain,
+		"provider.conversation.message_renderer": DispatchChain,
+		"provider.conversation.sidebar":          DispatchChain,
+		"provider.conversation.composer":         DispatchChain,
+		"provider.conversation.overlay":          DispatchList,
+		"provider.character.shell":               DispatchChain,
+		"provider.character.detail":              DispatchChain,
+		"provider.memory.shell":                  DispatchChain,
+		"provider.memory.detail":                 DispatchChain,
+		"provider.settings.shell":                DispatchChain,
+		"provider.settings.section":              DispatchList,
+		"provider.extension.center":              DispatchChain,
+		"provider.extension.page":                DispatchChain,
+		"provider.ui.theme":                      DispatchChain,
+		"provider.ui.tokens":                     DispatchChain,
+		"provider.ui.icons":                      DispatchChain,
+		"provider.ui.components":                 DispatchChain,
+		"chat.message.renderer":                  DispatchChain,
+		"chat.message.custom_renderer":           DispatchChain,
+		"chat.message.attachment_renderer":       DispatchChain,
+		"desktop.command":                        DispatchKeyed,
+		"desktop.window.page":                    DispatchKeyed,
+	}
+	sessionScopes := map[SlotID]SlotScope{
+		"provider.conversation.shell":            ScopeSessionMaybe,
+		"provider.conversation.header":           ScopeSessionMaybe,
+		"provider.conversation.messages":         ScopeSessionMaybe,
+		"provider.conversation.message_renderer": ScopeSession,
+		"provider.conversation.sidebar":          ScopeSessionMaybe,
+		"provider.conversation.composer":         ScopeSessionMaybe,
+		"provider.conversation.overlay":          ScopeSessionMaybe,
+		"chat.header.action":                     ScopeSessionMaybe,
+		"chat.sidebar.panel":                     ScopeSessionMaybe,
+		"chat.message.action":                    ScopeSession,
+		"chat.message.renderer":                  ScopeSession,
+		"chat.conversation.node":                 ScopeSession,
+		"chat.message.custom_renderer":           ScopeSession,
+		"chat.message.attachment_renderer":       ScopeSession,
+		"chat.message.badge":                     ScopeSession,
+		"chat.composer.action":                   ScopeSessionMaybe,
+		"chat.composer.attachment":               ScopeSessionMaybe,
+		"chat.composer.hint":                     ScopeSessionMaybe,
+		"chat.empty_state.card":                  ScopeSessionMaybe,
+		"chat.status.item":                       ScopeSessionMaybe,
+	}
 	for _, def := range slots {
-		id := string(def.SlotID)
-		switch {
-		case id == "root":
-			def.Scope = ScopeRoot
-		case strings.HasPrefix(id, "chat."):
-			def.Scope = ScopeSession
-		case strings.HasPrefix(id, "provider.conversation."):
-			def.Scope = ScopeSessionMaybe
-		default:
-			def.Scope = ScopeRoot
+		def.Scope = ScopeRoot
+		if scope, ok := sessionScopes[def.SlotID]; ok {
+			def.Scope = scope
+		}
+		if kind, ok := dispatchKinds[def.SlotID]; ok {
+			def.DispatchKind = kind
+		} else {
+			def.DispatchKind = DispatchList
 		}
 		if parent, ok := parents[def.SlotID]; ok {
 			def.ParentSlotID = parent
@@ -598,6 +692,7 @@ type SlotSnapshot struct {
 	SlotID            SlotID                 `json:"slotId"`
 	ContractVersion   int                    `json:"contractVersion"`
 	SupportedKinds    []string               `json:"supportedKinds,omitempty"`
+	DispatchKind      SlotDispatchKind       `json:"kind,omitempty"`
 	Layout            SlotLayout             `json:"layout"`
 	Multiplicity      SlotMultiplicity       `json:"multiplicity"`
 	FallbackPolicy    FallbackPolicy         `json:"fallbackPolicy"`
@@ -666,6 +761,7 @@ func (s *SnapshotService) GetSnapshot(ctx context.Context) (*UIContributionSnaps
 			SlotID:            slotDef.SlotID,
 			ContractVersion:   slotDef.ContractVersion,
 			SupportedKinds:    append([]string(nil), slotDef.SupportedKinds...),
+			DispatchKind:      slotDef.DispatchKind,
 			Layout:            slotDef.Layout,
 			Multiplicity:      slotDef.Multiplicity,
 			FallbackPolicy:    slotDef.FallbackPolicy,
@@ -796,5 +892,6 @@ var (
 	ErrSlotParentCycle          = errors.New("extension_slots: slot cannot be its own parent")
 	ErrStaticSlotImmutable      = errors.New("extension_slots: built-in slot is immutable")
 	ErrInvalidSlotScope         = errors.New("extension_slots: invalid slot scope")
+	ErrInvalidSlotDispatchKind  = errors.New("extension_slots: invalid slot dispatch kind")
 	ErrSlotScopeEscape          = errors.New("extension_slots: session child slot cannot escape to root scope")
 )

@@ -181,6 +181,7 @@ func (h *HTTPHandler) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 		ContractVersion   int                                         `json:"contractVersion"`
 		SupportedKinds    []string                                    `json:"supportedKinds"`
 		Multiplicity      extension_slots.SlotMultiplicity            `json:"multiplicity"`
+		DispatchKind      extension_slots.SlotDispatchKind            `json:"kind,omitempty"`
 		Layout            extension_slots.SlotLayout                  `json:"layout"`
 		FallbackPolicy    extension_slots.FallbackPolicy              `json:"fallbackPolicy"`
 		PerformanceBudget extension_slots.PerformanceBudget           `json:"performanceBudget"`
@@ -203,6 +204,7 @@ func (h *HTTPHandler) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 			ContractVersion:   s.ContractVersion,
 			SupportedKinds:    append([]string(nil), s.SupportedKinds...),
 			Multiplicity:      s.Multiplicity,
+			DispatchKind:      s.DispatchKind,
 			Layout:            s.Layout,
 			FallbackPolicy:    s.FallbackPolicy,
 			PerformanceBudget: s.PerformanceBudget,

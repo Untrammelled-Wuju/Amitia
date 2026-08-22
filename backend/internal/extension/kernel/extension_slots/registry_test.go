@@ -136,8 +136,8 @@ func TestSlotScopeDefaultsAndInheritance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if chat.Scope != ScopeSession {
-		t.Fatalf("chat scope = %q, want %q", chat.Scope, ScopeSession)
+	if chat.Scope != ScopeSessionMaybe {
+		t.Fatalf("chat scope = %q, want %q", chat.Scope, ScopeSessionMaybe)
 	}
 	root, err := r.Get("extension.detail.tab")
 	if err != nil {
@@ -154,14 +154,14 @@ func TestSlotScopeDefaultsAndInheritance(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if registered.Scope != ScopeSession {
-		t.Fatalf("child scope = %q, want inherited %q", registered.Scope, ScopeSession)
+	if registered.Scope != ScopeSessionMaybe {
+		t.Fatalf("child scope = %q, want inherited %q", registered.Scope, ScopeSessionMaybe)
 	}
 }
 
 func TestSessionSlotRejectsRootChild(t *testing.T) {
 	r := DefaultSlotRegistry()
-	child := dynamicTestSlot("scope.escape", "chat.sidebar.panel", "scope.ext")
+	child := dynamicTestSlot("scope.escape", "chat.message.action", "scope.ext")
 	child.Scope = ScopeRoot
 	if err := r.RegisterOwned("scope.ext", child); !errors.Is(err, ErrSlotScopeEscape) {
 		t.Fatalf("register root child under session slot error = %v, want %v", err, ErrSlotScopeEscape)
@@ -217,6 +217,9 @@ func TestDefaultProviderSlotsFormRootedTree(t *testing.T) {
 	if composer.Multiplicity != MultiplicityReplaceableSingle {
 		t.Fatalf("composer multiplicity = %q, want %q", composer.Multiplicity, MultiplicityReplaceableSingle)
 	}
+	if composer.DispatchKind != DispatchChain {
+		t.Fatalf("composer dispatch kind = %q, want %q", composer.DispatchKind, DispatchChain)
+	}
 
 	action, err := r.Get("chat.composer.action")
 	if err != nil {
@@ -225,8 +228,24 @@ func TestDefaultProviderSlotsFormRootedTree(t *testing.T) {
 	if action.ParentSlotID != "provider.conversation.composer" {
 		t.Fatalf("chat composer action parent = %q, want provider.conversation.composer", action.ParentSlotID)
 	}
-	if action.Scope != ScopeSession {
-		t.Fatalf("chat composer action scope = %q, want %q", action.Scope, ScopeSession)
+	if action.Scope != ScopeSessionMaybe {
+		t.Fatalf("chat composer action scope = %q, want %q", action.Scope, ScopeSessionMaybe)
+	}
+
+	messageRenderer, err := r.Get("provider.conversation.message_renderer")
+	if err != nil {
+		t.Fatalf("get provider message renderer: %v", err)
+	}
+	if messageRenderer.Scope != ScopeSession || messageRenderer.DispatchKind != DispatchChain {
+		t.Fatalf("message renderer contract = scope %q kind %q, want session/chain", messageRenderer.Scope, messageRenderer.DispatchKind)
+	}
+
+	desktopCommand, err := r.Get("desktop.command")
+	if err != nil {
+		t.Fatalf("get desktop command: %v", err)
+	}
+	if desktopCommand.DispatchKind != DispatchKeyed {
+		t.Fatalf("desktop command dispatch kind = %q, want %q", desktopCommand.DispatchKind, DispatchKeyed)
 	}
 }
 
@@ -253,5 +272,31 @@ func TestSnapshotIncludesSlotContractMetadata(t *testing.T) {
 	}
 	if len(composer.SupportedKinds) == 0 {
 		t.Fatal("snapshot contract lost supported kinds")
+	}
+	if composer.DispatchKind != DispatchChain {
+		t.Fatalf("snapshot contract lost dispatch kind: got %q", composer.DispatchKind)
+	}
+}
+
+func TestRegisterValidatesAndDerivesDispatchKind(t *testing.T) {
+	r := DefaultSlotRegistry()
+	def := dynamicTestSlot("dispatch.chain", "chat.sidebar.panel", "dispatch.ext")
+	def.DispatchKind = DispatchChain
+	def.Multiplicity = ""
+	if err := r.RegisterOwned("dispatch.ext", def); err != nil {
+		t.Fatalf("register chain: %v", err)
+	}
+	registered, err := r.Get("dispatch.chain")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if registered.DispatchKind != DispatchChain || registered.Multiplicity != MultiplicityOrderedMultiple {
+		t.Fatalf("derived dispatch contract = kind %q multiplicity %q", registered.DispatchKind, registered.Multiplicity)
+	}
+
+	invalid := dynamicTestSlot("dispatch.invalid", "chat.sidebar.panel", "dispatch.ext")
+	invalid.DispatchKind = SlotDispatchKind("unknown")
+	if err := r.RegisterOwned("dispatch.ext", invalid); !errors.Is(err, ErrInvalidSlotDispatchKind) {
+		t.Fatalf("invalid dispatch error = %v, want %v", err, ErrInvalidSlotDispatchKind)
 	}
 }

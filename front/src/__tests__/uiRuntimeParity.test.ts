@@ -63,7 +63,7 @@ describe("DSH parity runtime contracts", () => {
       id: "store-plugin",
       setup(ctx) {
         ctx.services.provide("demo.greeting", "hello");
-        ctx.slots.register("typed.store.slot", "view", {} as any, {
+        ctx.slots.registerLegacy("typed.store.slot", "view", {} as any, {
           store: () => clientSlotStoreResource({ count: 7 }, () => { disposed += 1; }),
           inject: ({ store, services }) => ({
             count: (store as { count: number }).count,
@@ -81,6 +81,161 @@ describe("DSH parity runtime contracts", () => {
     await runtime.stop("store-plugin");
     expect(runtime.slots.listContributions("typed.store.slot")).toHaveLength(0);
     expect(disposed).toBe(1);
+  });
+
+  it("creates framework-owned store instances per session and disposes them with the session", async () => {
+    const slots = new BrowserSlotRuntime();
+    await slots.declare({
+      slotId: "typed.session.slot",
+      contractVersion: 1,
+      supportedKinds: ["panel"],
+      scope: "session",
+      kind: "single",
+      multiplicity: "single",
+    });
+    const created: string[] = [];
+    const disposed: string[] = [];
+    const disposeEntry = (slots.registerEntry as any)("plugin", {
+      name: "typed.session.slot",
+      key: "view",
+      store: ({ sessionId }: { sessionId?: string }) => clientSlotStoreResource(
+        { sessionId, count: 0 },
+        () => { disposed.push(String(sessionId)); },
+      ),
+      inject: ({ store }: { store: { sessionId?: string } }) => ({ sessionId: store.sessionId }),
+    }, {} as any);
+
+    const contribution = slots.listContributions("typed.session.slot")[0]!;
+    const a = slots.acquireContributionInstance(contribution.contributionId, "session-a");
+    created.push(String((a.store as { sessionId?: string }).sessionId));
+    const b = slots.acquireContributionInstance(contribution.contributionId, "session-b");
+    created.push(String((b.store as { sessionId?: string }).sessionId));
+
+    expect(a).not.toBe(b);
+    expect(created).toEqual(["session-a", "session-b"]);
+    expect(a.injected).toEqual({ sessionId: "session-a" });
+    expect(b.injected).toEqual({ sessionId: "session-b" });
+
+    await slots.disposeSessionRuntime("session-a");
+    expect(disposed).toEqual(["session-a"]);
+    expect(slots.acquireContributionInstance(contribution.contributionId, "session-b")).toBe(b);
+    await disposeEntry();
+    expect(disposed).toEqual(["session-a", "session-b"]);
+  });
+
+  it("preserves keyed dispatch for legacy entries without owner knowledge of installed entries", async () => {
+    const slots = new BrowserSlotRuntime();
+    await slots.declare({
+      slotId: "typed.keyed.slot",
+      contractVersion: 1,
+      supportedKinds: ["panel"],
+      kind: "keyed",
+      multiplicity: "multiple",
+    });
+    slots.registerLegacy("a", "typed.keyed.slot", "a", {} as any, { entryKey: "alpha" });
+    slots.registerLegacy("b", "typed.keyed.slot", "b", {} as any, { entryKey: "beta" });
+    expect(slots.dispatchContributions("typed.keyed.slot", {}, "beta").map((item) => item.contribution.pluginId)).toEqual(["b"]);
+    expect(slots.dispatchContributions("typed.keyed.slot", {}, "missing")).toEqual([]);
+  });
+
+  it("preserves legacy chain ordering with a matched payload", async () => {
+    const slots = new BrowserSlotRuntime();
+    await slots.declare({
+      slotId: "typed.chain.slot",
+      contractVersion: 1,
+      supportedKinds: ["renderer"],
+      kind: "chain",
+      multiplicity: "replaceable_single",
+    });
+    slots.registerLegacy("high", "typed.chain.slot", "high", {} as any, {
+      priority: 100,
+      select: () => null,
+    });
+    slots.registerLegacy("match", "typed.chain.slot", "match", {} as any, {
+      priority: 50,
+      select: (owner) => owner.kind === "demo" ? { renderer: "match" } : null,
+    });
+    slots.registerLegacy("fallback", "typed.chain.slot", "fallback", {} as any, {
+      priority: 1,
+      select: () => ({ renderer: "fallback" }),
+    });
+    const resolved = slots.dispatchContributions("typed.chain.slot", { kind: "demo" });
+    expect(resolved).toHaveLength(1);
+    expect(resolved[0]?.contribution.pluginId).toBe("match");
+    expect(resolved[0]?.matched).toEqual({ renderer: "match" });
+  });
+
+  it("implements strict DSH list/keyed/chain dispatch semantics", async () => {
+    const slots = new BrowserSlotRuntime();
+    await slots.declare({ slotId: "strict.list", contractVersion: 1, supportedKinds: ["panel"], kind: "list", multiplicity: "ordered_multiple" });
+    (slots.registerEntry as any)("list-high", { name: "strict.list", key: "high", id: "cell", priority: 10 }, {} as any);
+    (slots.registerEntry as any)("list-low", { name: "strict.list", key: "low", id: "cell", priority: 1 }, {} as any);
+    expect(slots.dispatchContributions("strict.list").map((item) => item.contribution.pluginId)).toEqual(["list-low"]);
+    expect(() => (slots.registerEntry as any)("list-conflict", { name: "strict.list", key: "conflict", id: "cell", priority: 1 }, {} as any)).toThrow(/strict priority/);
+
+    await slots.declare({ slotId: "strict.keyed", contractVersion: 1, supportedKinds: ["panel"], kind: "keyed", multiplicity: "ordered_multiple" });
+    (slots.registerEntry as any)("key-high", { name: "strict.keyed", key: "high", entryKey: "alpha", priority: 8 }, {} as any);
+    (slots.registerEntry as any)("key-low", { name: "strict.keyed", key: "low", entryKey: "alpha", priority: 2 }, {} as any);
+    expect(slots.dispatchContributions("strict.keyed", {}, "alpha")[0]?.contribution.pluginId).toBe("key-low");
+
+    await slots.declare({ slotId: "strict.chain", contractVersion: 1, supportedKinds: ["renderer"], kind: "chain", multiplicity: "ordered_multiple" });
+    (slots.registerEntry as any)("chain-decline", { name: "strict.chain", key: "decline", priority: 1, select: () => null }, {} as any);
+    (slots.registerEntry as any)("chain-match", { name: "strict.chain", key: "match", priority: 5, select: () => ({ route: "matched" }) }, {} as any);
+    (slots.registerEntry as any)("chain-late", { name: "strict.chain", key: "late", priority: 100, select: () => ({ route: "late" }) }, {} as any);
+    const chain = slots.dispatchContributions("strict.chain", {});
+    expect(chain[0]?.contribution.pluginId).toBe("chain-match");
+    expect(chain[0]?.matched).toEqual({ route: "matched" });
+  });
+
+  it("binds strict child render authority to the registering entry lifetime", async () => {
+    const slots = new BrowserSlotRuntime();
+    await slots.declare({
+      slotId: "typed.parent.slot",
+      contractVersion: 1,
+      supportedKinds: ["panel"],
+      kind: "single",
+      multiplicity: "single",
+    });
+    const dispose = (slots.registerEntry as any)("parent-plugin", {
+      name: "typed.parent.slot",
+      key: "view",
+      children: {
+        "typed.parent.child": { kind: "list", scope: "root", supportedKinds: ["action"] },
+      },
+    }, {} as any);
+    const contribution = slots.listContributions("typed.parent.slot")[0]!;
+    expect(() => slots.assertRenderAuthority(contribution.contributionId, "typed.parent.child")).not.toThrow();
+    expect(slots.getDefinition("typed.parent.child")?.ownerEntryId).toBe(contribution.contributionId);
+    await dispose();
+    expect(slots.getDefinition("typed.parent.child")).toBeUndefined();
+    expect(() => slots.assertRenderAuthority(contribution.contributionId, "typed.parent.child")).toThrow(/not authorized/);
+  });
+
+  it("recursively collapses child entries, stores, and grandchildren with the declaring parent", async () => {
+    const slots = new BrowserSlotRuntime();
+    await slots.declare({ slotId: "cascade.parent", contractVersion: 1, supportedKinds: ["panel"], kind: "single", multiplicity: "single" });
+    const disposeParent = (slots.registerEntry as any)("parent", {
+      name: "cascade.parent",
+      key: "parent",
+      children: { "cascade.child": { kind: "single", scope: "root", supportedKinds: ["panel"] } },
+    }, {} as any);
+
+    let childStoreDisposed = 0;
+    const disposeChild = (slots.registerEntry as any)("child", {
+      name: "cascade.child",
+      key: "child",
+      store: () => clientSlotStoreResource({ alive: true }, () => { childStoreDisposed += 1; }),
+      children: { "cascade.grandchild": { kind: "list", scope: "root", supportedKinds: ["action"] } },
+    }, {} as any);
+
+    expect(slots.getDefinition("cascade.grandchild")).toBeTruthy();
+    await disposeParent();
+    expect(slots.getDefinition("cascade.child")).toBeUndefined();
+    expect(slots.getDefinition("cascade.grandchild")).toBeUndefined();
+    expect(slots.listContributions("cascade.child")).toEqual([]);
+    expect(childStoreDisposed).toBe(1);
+    await disposeChild();
+    expect(childStoreDisposed).toBe(1);
   });
 
   it("keeps lifecycle observation separate from business injection", async () => {
