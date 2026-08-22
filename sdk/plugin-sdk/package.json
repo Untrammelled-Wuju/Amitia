@@ -74,6 +74,10 @@
     "./client-plugin-runtime": {
       "types": "./dist/client-plugin-runtime.d.ts",
       "import": "./dist/client-plugin-runtime.js"
+    },
+    "./client-package-runtime": {
+      "types": "./dist/client-package-runtime.d.ts",
+      "import": "./dist/client-package-runtime.js"
     }
   },
   "scripts": {
