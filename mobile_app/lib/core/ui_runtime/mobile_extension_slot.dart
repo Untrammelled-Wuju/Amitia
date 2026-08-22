@@ -7,6 +7,7 @@ import '../../features/extensions/schema_ui/renderer/schema_ui_renderer.dart';
 import 'renderers/sandbox_web_provider_host.dart';
 import 'ui_provider.dart';
 import 'ui_runtime_controller.dart';
+import 'mobile_dynamic_runtime.dart';
 
 class MobileExtensionSlot extends ConsumerWidget {
   const MobileExtensionSlot({
@@ -16,6 +17,8 @@ class MobileExtensionSlot extends ConsumerWidget {
     this.context = const {},
     this.actions = const {},
     this.fallback,
+    this.declaredBySlotId,
+    this.declaredByOwner,
   });
 
   final String slotId;
@@ -23,29 +26,51 @@ class MobileExtensionSlot extends ConsumerWidget {
   final Map<String, dynamic> context;
   final Map<String, FutureOr<dynamic> Function(dynamic input)> actions;
   final Widget? fallback;
+  final String? declaredBySlotId;
+  final String? declaredByOwner;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final snapshot = ref.watch(uiRuntimeProvider).valueOrNull;
-    final slot = snapshot?.slot(slotId);
+    if (snapshot == null) return fallback ?? const SizedBox.shrink();
+    final conversationId = (this.context['conversationId'] ?? '').toString().trim();
+    final runtimeState = conversationId.isEmpty
+        ? null
+        : ref.watch(clientRuntimeSessionStateProvider(conversationId)).valueOrNull;
+    final slot = snapshot.slot(slotId) ?? MobileDynamicRuntime.slotDefinition(
+      sessionState: runtimeState,
+      slotId: slotId,
+    );
     if (slot == null) return fallback ?? const SizedBox.shrink();
-    var contributions = snapshot!.contributionsForSlot(slotId)
-        .where((item) => _matchesVisibility(item, this.context))
-        .toList(growable: false);
+    if (declaredBySlotId != null || declaredByOwner != null) {
+      if (slot.parentSlotId != declaredBySlotId || slot.ownerExtension != declaredByOwner) {
+        return const SizedBox.shrink();
+      }
+    }
+    if (slot.scope == 'session' && conversationId.isEmpty) return const SizedBox.shrink();
+    final slotContext = <String, dynamic>{
+      ...this.context,
+      'slotScope': slot.scope,
+      if (conversationId.isNotEmpty) 'sessionId': conversationId,
+    };
+    final dynamicContributions = MobileDynamicRuntime.slotContributions(
+      snapshot: snapshot,
+      sessionState: runtimeState,
+      slotId: slotId,
+    );
+    var contributions = MobileDynamicRuntime.resolveSlot(
+      slot: slot,
+      server: snapshot.contributionsForSlot(slotId),
+      dynamic: dynamicContributions,
+    ).where((item) => _matchesVisibility(item, slotContext)).toList(growable: false);
     if (contributionId != null && contributionId!.isNotEmpty) {
       contributions = contributions.where((item) => item.contributionId == contributionId).toList(growable: false);
     }
     if (contributions.isEmpty) return fallback ?? const SizedBox.shrink();
 
-    final effective = (slot.multiplicity == 'single' ||
-            slot.multiplicity == 'replaceable_single' ||
-            slot.multiplicity == 'exclusive')
-        ? contributions.take(1).toList(growable: false)
-        : contributions;
-
-    final children = effective.map((item) => _ContributionHost(
+    final children = contributions.map((item) => _ContributionHost(
       contribution: item,
-      runtimeContext: this.context,
+      runtimeContext: slotContext,
       actions: actions,
     )).toList(growable: false);
 
@@ -125,7 +150,7 @@ class _ContributionHost extends ConsumerWidget {
         return FutureBuilder<Map<String, dynamic>>(
           future: ref.read(extensionServiceProvider).getUISchema(
                 contribution.extensionId,
-                contribution.contributionId,
+                contribution.sourceContributionId ?? contribution.contributionId,
               ),
           builder: (context, snapshot) {
             if (snapshot.hasError) return const SizedBox.shrink();
@@ -139,7 +164,7 @@ class _ContributionHost extends ConsumerWidget {
             return SchemaUIRenderer(
               document: document,
               extensionId: contribution.extensionId,
-              contributionId: contribution.contributionId,
+              contributionId: contribution.sourceContributionId ?? contribution.contributionId,
               moduleId: contribution.moduleId,
               permissions: contribution.permissions,
               initialContext: {'runtime': runtimeContext, ...runtimeContext},
@@ -149,6 +174,10 @@ class _ContributionHost extends ConsumerWidget {
                 contributionId: childContributionId,
                 context: {...runtimeContext, ...childContext},
                 actions: actions,
+                declaredBySlotId: contribution.slotId,
+                declaredByOwner: contribution.runtimePackageId?.isNotEmpty == true
+                    ? 'client-runtime:${contribution.runtimePackageId}'
+                    : contribution.extensionId,
               ),
               onActionDispatch: (invocation) async {
                 final handler = actions[invocation.actionId];

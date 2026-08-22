@@ -24,6 +24,7 @@ import '../../../../core/ui_runtime/ui_message_renderer_registry.dart';
 import '../../../../core/ui_runtime/conversation_ui_contract.dart';
 import '../../../../core/ui_runtime/mobile_extension_slot.dart';
 import '../../../../core/ui_runtime/mobile_conversation_projection.dart';
+import '../../../../core/ui_runtime/mobile_dynamic_runtime.dart';
 import '../../runtime/conversation_runtime_controller.dart';
 import '../../../../shared/models/models.dart';
 import 'realtime_voice_call_sheet.dart';
@@ -44,6 +45,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
   Map<String, dynamic>? _cachedProviderContext;
   List<ChatMessage>? _cachedMessagesForContext;
   Map<String, FutureOr<dynamic> Function(dynamic)>? _cachedProviderActions;
+  Timer? _conversationEventRefreshTimer;
 
   @override
   void initState() {
@@ -71,6 +73,14 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     _cachedProviderContext = null;
     _cachedMessagesForContext = null;
     _cachedProviderActions = null;
+    final conversationId = _runtime.conversationId?.trim() ?? '';
+    _conversationEventRefreshTimer?.cancel();
+    if (conversationId.isNotEmpty) {
+      _conversationEventRefreshTimer = Timer(const Duration(milliseconds: 350), () {
+        if (!mounted) return;
+        ref.invalidate(conversationUIEventWindowProvider(conversationId));
+      });
+    }
     setState(() {});
     _scrollToBottom();
   }
@@ -105,6 +115,7 @@ class _ChatPageState extends ConsumerState<ChatPage> {
 
   @override
   void dispose() {
+    _conversationEventRefreshTimer?.cancel();
     _runtime.removeListener(_onRuntimeChanged);
     _runtime.dispose();
     _scrollController.dispose();
@@ -483,13 +494,35 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final hasSidebarProvider = externalProvider(UICapability.conversationSidebar);
     final hasOverlayProvider = externalProvider(UICapability.conversationOverlay);
 
+    final conversationId = _runtime.conversationId?.trim() ?? '';
     final serializedMessages = _runtime.messages.map(_providerMessage).toList(growable: false);
-    final projectionContributions = uiSnapshot?.contributionsForSlot('chat.conversation.node') ?? const <UIContributionSnapshotEntry>[];
+    final durableConversationRecords = ref
+            .watch(conversationUIEventWindowProvider(conversationId))
+            .valueOrNull ??
+        const <Map<String, dynamic>>[];
+    final runtimeSessionState = conversationId.isEmpty
+        ? null
+        : ref.watch(clientRuntimeSessionStateProvider(conversationId)).valueOrNull;
+    final projectionContributions = uiSnapshot == null
+        ? const <UIContributionSnapshotEntry>[]
+        : <UIContributionSnapshotEntry>[
+            ...uiSnapshot.contributionsForSlot('chat.conversation.node'),
+            ...MobileDynamicRuntime.conversationNodeContributions(
+              snapshot: uiSnapshot,
+              sessionState: runtimeSessionState,
+            ),
+          ];
     final conversationNodes = MobileConversationProjection.assemble(
-      events: MobileConversationProjection.messageEvents(
-        conversationId: _runtime.conversationId,
-        messages: serializedMessages,
-      ),
+      events: MobileConversationProjection.mergeEvents([
+        MobileConversationProjection.messageEvents(
+          conversationId: conversationId,
+          messages: serializedMessages,
+        ),
+        MobileConversationProjection.durableEvents(
+          conversationId: conversationId,
+          records: durableConversationRecords,
+        ),
+      ]),
       contributions: projectionContributions,
     );
     final flowItems = <_MobileChatFlowItem>[

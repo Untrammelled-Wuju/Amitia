@@ -85,6 +85,73 @@ class ExtensionService {
     return resp ?? <String, dynamic>{};
   }
 
+  Future<List<Map<String, dynamic>>> getConversationUIEvents(
+    String conversationId, {
+    int limit = 2000,
+    int offset = 0,
+  }) async {
+    final id = conversationId.trim();
+    if (id.isEmpty) return const <Map<String, dynamic>>[];
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/extensions/events/conversation-ui/${Uri.encodeComponent(id)}',
+      queryParameters: {
+        'limit': limit.clamp(1, 5000),
+        'offset': offset < 0 ? 0 : offset,
+      },
+    );
+    return ((resp?['items'] as List?) ?? const <dynamic>[])
+        .whereType<Map>()
+        .map((item) => item.cast<String, dynamic>())
+        .toList(growable: false);
+  }
+
+  Future<List<Map<String, dynamic>>> getConversationUIEventsAfterSequence(
+    String conversationId, {
+    int afterSequence = 0,
+    int limit = 2000,
+  }) async {
+    final id = conversationId.trim();
+    if (id.isEmpty) return const <Map<String, dynamic>>[];
+    final resp = await _api.get<Map<String, dynamic>>(
+      '/api/extensions/events/conversation-ui/${Uri.encodeComponent(id)}',
+      queryParameters: {
+        'limit': limit.clamp(1, 5000),
+        'afterSequence': afterSequence < 0 ? 0 : afterSequence,
+      },
+    );
+    return ((resp?['items'] as List?) ?? const <dynamic>[])
+        .whereType<Map>()
+        .map((item) => item.cast<String, dynamic>())
+        .toList(growable: false);
+  }
+
+  Future<Map<String, dynamic>> getClientRuntimeSessionState(String conversationId) async {
+    final id = conversationId.trim();
+    if (id.isEmpty) {
+      return const <String, dynamic>{'conversationId': '', 'revision': 0, 'packages': <dynamic>[]};
+    }
+    return await _api.get<Map<String, dynamic>>(
+          '/api/extensions/ui/client-runtime-state',
+          queryParameters: {'conversationId': id},
+        ) ??
+        <String, dynamic>{'conversationId': id, 'revision': 0, 'packages': <dynamic>[]};
+  }
+
+  Future<Map<String, dynamic>> acknowledgeClientRuntimeSessionState(
+    String conversationId,
+    int revision,
+  ) async {
+    final id = conversationId.trim();
+    if (id.isEmpty) {
+      return const <String, dynamic>{'conversationId': '', 'revision': 0, 'packages': <dynamic>[]};
+    }
+    return await _api.post<Map<String, dynamic>>(
+          '/api/extensions/ui/client-runtime-session-ack',
+          data: {'conversationId': id, 'revision': revision},
+        ) ??
+        <String, dynamic>{'conversationId': id, 'revision': revision, 'packages': <dynamic>[]};
+  }
+
   Future<List<Map<String, dynamic>>> getUIProviders() async {
     final resp = await _api.get<Map<String, dynamic>>('/api/extensions/ui/providers');
     return ((resp?['providers'] as List?) ?? const [])

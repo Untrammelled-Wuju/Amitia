@@ -41,6 +41,7 @@ internal class DefaultInstalledRuntimeVerifier(
         "node/lib/node_modules/npm/bin/npm-cli.js" to "npm",
         "node/lib/node_modules/npm/bin/npx-cli.js" to "npx",
         "qdrant/bin/qdrant" to "qdrant",
+        "surrealdb/surreal" to "surrealdb",
         "plugin-host/dist/index.js" to "plugin-host",
         "task-host/dist/index.js" to "task-host",
         "scripts/node/amitia-node-prepare.sh" to "node-scripts-prepare",

@@ -22,6 +22,9 @@ object GuestLayout {
     const val QDRANT_DIR = "$PROGRAM/qdrant"
     const val QDRANT_BIN = "$QDRANT_DIR/bin/qdrant"
 
+    const val SURREALDB_DIR = "$PROGRAM/surrealdb"
+    const val SURREALDB_BIN = "$SURREALDB_DIR/surreal"
+
     const val PLUGIN_HOST_DIR = "$PROGRAM/plugin-host"
     const val PLUGIN_HOST_ENTRY = "$PLUGIN_HOST_DIR/dist/index.js"
 
@@ -58,7 +61,7 @@ object GuestLayout {
 
     val PROGRAM_SUBDIRS = listOf(
         "backend", "node", "qdrant", "sidecar", "qq-sidecar",
-        "plugin-host", "task-host", "scripts", "manifest", "licenses",
+        "surrealdb", "plugin-host", "task-host", "scripts", "manifest", "licenses",
     )
 
     val ALL_ROOTS = listOf(
