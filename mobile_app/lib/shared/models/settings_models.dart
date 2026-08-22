@@ -110,16 +110,108 @@ class PrivacyScanResult {
 
 class TimeAnchor {
   final String id;
-  final String name;
-  final String type;
-  final String value;
+  final String scopeType;
+  final String characterId;
+  final String anchorType;
+  final String title;
+  final String description;
+  final String timeKind;
+  final String instantAtUtc;
+  final String localDate;
+  final String localTime;
+  final String timezone;
+  final String rrule;
+  final int importance;
+  final int confidence;
+  final bool allowPromptMention;
+  final bool allowProactiveMention;
+  final bool requiresConfirmation;
+  final String source;
+  final String status;
+  final String nextOccurrenceAtUtc;
 
-  TimeAnchor({
+  const TimeAnchor({
     required this.id,
-    required this.name,
-    required this.type,
-    required this.value,
+    this.scopeType = 'user',
+    this.characterId = '',
+    this.anchorType = 'custom',
+    required this.title,
+    this.description = '',
+    required this.timeKind,
+    this.instantAtUtc = '',
+    this.localDate = '',
+    this.localTime = '',
+    this.timezone = 'Asia/Shanghai',
+    this.rrule = '',
+    this.importance = 70,
+    this.confidence = 100,
+    this.allowPromptMention = true,
+    this.allowProactiveMention = false,
+    this.requiresConfirmation = false,
+    this.source = 'manual',
+    this.status = 'active',
+    this.nextOccurrenceAtUtc = '',
   });
+
+  factory TimeAnchor.fromJson(Map<String, dynamic> json) {
+    return TimeAnchor(
+      id: (json['id'] ?? '').toString(),
+      scopeType: (json['scopeType'] ?? 'user').toString(),
+      characterId: (json['characterId'] ?? '').toString(),
+      anchorType: (json['anchorType'] ?? 'custom').toString(),
+      title: (json['title'] ?? '').toString(),
+      description: (json['description'] ?? '').toString(),
+      timeKind: (json['timeKind'] ?? 'local_date').toString(),
+      instantAtUtc: (json['instantAtUtc'] ?? '').toString(),
+      localDate: (json['localDate'] ?? '').toString(),
+      localTime: (json['localTime'] ?? '').toString(),
+      timezone: (json['timezone'] ?? 'Asia/Shanghai').toString(),
+      rrule: (json['rrule'] ?? '').toString(),
+      importance: (json['importance'] as num?)?.toInt() ?? 70,
+      confidence: (json['confidence'] as num?)?.toInt() ?? 100,
+      allowPromptMention: json['allowPromptMention'] as bool? ?? true,
+      allowProactiveMention: json['allowProactiveMention'] as bool? ?? false,
+      requiresConfirmation: json['requiresConfirmation'] as bool? ?? false,
+      source: (json['source'] ?? 'manual').toString(),
+      status: (json['status'] ?? 'active').toString(),
+      nextOccurrenceAtUtc: (json['nextOccurrenceAtUtc'] ?? '').toString(),
+    );
+  }
+
+  bool get isPeriodic => timeKind == 'recurring';
+
+  bool get isSpecialDate =>
+      timeKind == 'annual_date' ||
+      timeKind == 'local_date' ||
+      timeKind == 'local_datetime';
+
+  String get displayType {
+    switch (timeKind) {
+      case 'recurring':
+        return '周期锚点';
+      case 'annual_date':
+        return '每年日期';
+      case 'local_date':
+      case 'local_datetime':
+        return '单次日期';
+      case 'instant':
+        return '时间点';
+      case 'range':
+        return '时间范围';
+      default:
+        return '其他锚点';
+    }
+  }
+
+  String get displayValue {
+    if (timeKind == 'instant') return instantAtUtc.isEmpty ? '—' : instantAtUtc;
+    final parts = <String>[
+      if (localDate.isNotEmpty) localDate,
+      if (localTime.isNotEmpty) localTime,
+    ];
+    if (timeKind == 'recurring' && rrule.isNotEmpty) parts.add(rrule);
+    return parts.isEmpty ? '—' : parts.join(' · ');
+  }
 }
 
 class DeploymentConfig {
