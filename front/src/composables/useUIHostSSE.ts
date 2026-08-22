@@ -155,6 +155,7 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
 		"extension_contributions_changed",
 		"ui_provider_changed",
 		"ui_profile_changed",
+		"ui_slot_changed",
 	]);
 
 	function handleExtensionChange(event: MessageEvent) {
@@ -225,6 +226,7 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
       case "extension_contributions_changed":
       case "ui_provider_changed":
       case "ui_profile_changed":
+      case "ui_slot_changed":
         handleExtensionChange(event);
         break;
     }

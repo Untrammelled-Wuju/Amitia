@@ -17,13 +17,21 @@ import router from "./router";
 import { getRuntimeConnection } from "./runtime/runtime-adapter";
 import { shouldRegisterServiceWorker } from "./runtime/runtime-capabilities";
 import { setErrorPanelHandler, setErrorBannerHandler } from "./ui-index";
+import { useExtensionUIStore } from "./stores/extensionUI";
+import { browserClientPluginRuntime, syncBrowserClientSlots } from "./ui-runtime/clientPluginRuntime";
 
 async function bootstrap() {
   await getRuntimeConnection();
   const app = createApp(App);
-  app.use(createPinia());
+  const pinia = createPinia();
+  app.use(pinia);
   app.use(router);
   app.use(ElementPlus, { locale: zhCn });
+  const extensionUI = useExtensionUIStore(pinia);
+  await extensionUI.refreshSnapshot().catch(() => undefined);
+  await syncBrowserClientSlots(extensionUI.snapshot);
+  extensionUI.$subscribe((_mutation, state) => { void syncBrowserClientSlots(state.snapshot); });
+  window.amitiaClientPlugins = browserClientPluginRuntime;
   setErrorPanelHandler((err) => {
     import("element-plus").then(({ ElMessageBox }) => {
       ElMessageBox.alert(err.detail || err.message, err.message, {

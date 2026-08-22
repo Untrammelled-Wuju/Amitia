@@ -12,10 +12,7 @@ SPDX-License-Identifier: AGPL-3.0-only
     @touchmove="$emit('touchMove', $event)"
     @touchend="$emit('touchEnd')"
   >
-    <div
-      class="pull-indicator"
-      :class="{ pulling: isPulling, ready: pullReady }"
-    >
+    <div class="pull-indicator" :class="{ pulling: isPulling, ready: pullReady }">
       <el-icon :size="18" class="pull-icon" :class="{ spin: pullLoading }">
         <Loading v-if="pullLoading" />
         <ArrowDown v-else />
@@ -24,52 +21,80 @@ SPDX-License-Identifier: AGPL-3.0-only
     </div>
 
     <div v-if="messages.length === 0 && !sending" class="empty-chat">
-      <div class="empty-icon">
-        <el-icon :size="48"><ChatDotRound /></el-icon>
-      </div>
+      <div class="empty-icon"><el-icon :size="48"><ChatDotRound /></el-icon></div>
       <p class="empty-text">你好，我是 {{ charName || "AI 陪伴角色" }}</p>
       <p class="empty-hint">随时可以和我聊聊天，我在这里陪你。</p>
       <ChatEmptyStateExtensionHost :context="extensionContext" />
     </div>
 
-    <div v-for="msg in messages" :key="msg.id" :data-message-id="msg.id">
-      <UIProviderHost
-        capability="conversation.message_renderer"
-        :provider-id="messageRendererId(msg)"
-        :fallback="ChatBubble"
-        :context="{ ...(extensionContext || {}), message: messageContext(msg) }"
-        :actions="messageActions(msg)"
-        :message="msg"
-        :char-name="charName"
-        :char-avatar="charAvatar"
-        :character-id="characterId"
-        :status="msg.status"
-        @retry="$emit('retry', $event)"
-        @reply="$emit('reply', $event)"
-        @scroll-to-message="(id) => scrollToMessage(id)"
-            ><template #badges><MessageBadgeExtensionHost :message-id="msg.id" :message-type="msg.type || 'text'" :direction="msg.role === 'user' ? 'outgoing' : msg.role === 'assistant' ? 'incoming' : 'system'" :sender-type="msg.role === 'user' ? 'user' : msg.role === 'assistant' ? 'character' : 'system'" :character-id="characterId" :conversation-id="msg.conversationId || ''" /></template><template #extension-content><MessageExtensionHost :message="{
-          messageId: msg.id,
-          type: msg.type || 'text',
-          direction: msg.role === 'user' ? 'outgoing' : msg.role === 'assistant' ? 'incoming' : 'system',
-          senderType: msg.role === 'user' ? 'user' : msg.role === 'assistant' ? 'character' : 'system',
-          createdAt: msg.createdAt || '',
-          status: msg.status || 'sent',
-          hasText: !!(msg.content || msg.text),
-          attachmentTypes: msg.attachments?.map((a: any) => a.type) || [],
-          extensionType: msg.extensionType || msg.extension_type || '',
-          content: msg.content || msg.text || '',
-          metadata: msg.metadata || {},
-        }"
-        :character-id="characterId"
-        :conversation-id="msg.conversationId || ''"
-      /></template><template #actions><MessageActionExtensionHost :message-id="msg.id" :message-type="msg.type || 'text'" :direction="msg.role === 'user' ? 'outgoing' : msg.role === 'assistant' ? 'incoming' : 'system'" :sender-type="msg.role === 'user' ? 'user' : msg.role === 'assistant' ? 'character' : 'system'" :character-id="characterId" :conversation-id="msg.conversationId || ''" /></template></UIProviderHost>
-    </div>
+    <template v-for="item in flowItems" :key="item.key">
+      <div
+        v-if="item.kind === 'message'"
+        :data-message-id="item.message.id"
+        class="conversation-flow-item conversation-flow-item--message"
+      >
+        <ExtensionSlot
+          v-if="messageSlotRendererId(item.message)"
+          slot-id="chat.message.renderer"
+          :contribution-id="messageSlotRendererId(item.message)"
+          :context="messageSlotContext(item.message)"
+          fallback="default"
+          layout="stack"
+          surface-role="message"
+        />
+        <UIProviderHost
+          v-else
+          capability="conversation.message_renderer"
+          :provider-id="messageRendererId(item.message)"
+          :fallback="ChatBubble"
+          :context="{ ...(extensionContext || {}), message: messageContext(item.message) }"
+          :actions="messageActions(item.message)"
+          :message="item.message"
+          :char-name="charName"
+          :char-avatar="charAvatar"
+          :character-id="characterId"
+          :status="item.message.status"
+          @retry="$emit('retry', $event)"
+          @reply="$emit('reply', $event)"
+          @scroll-to-message="(id) => scrollToMessage(id)"
+        >
+          <template #badges>
+            <MessageBadgeExtensionHost
+              :message-id="item.message.id"
+              :message-type="item.message.type || 'text'"
+              :direction="item.message.role === 'user' ? 'outgoing' : item.message.role === 'assistant' ? 'incoming' : 'system'"
+              :sender-type="item.message.role === 'user' ? 'user' : item.message.role === 'assistant' ? 'character' : 'system'"
+              :character-id="characterId"
+              :conversation-id="item.message.conversationId || conversationId"
+            />
+          </template>
+          <template #extension-content>
+            <MessageExtensionHost
+              :message="messageExtensionSummary(item.message)"
+              :character-id="characterId"
+              :conversation-id="item.message.conversationId || conversationId"
+            />
+          </template>
+          <template #actions>
+            <MessageActionExtensionHost
+              :message-id="item.message.id"
+              :message-type="item.message.type || 'text'"
+              :direction="item.message.role === 'user' ? 'outgoing' : item.message.role === 'assistant' ? 'incoming' : 'system'"
+              :sender-type="item.message.role === 'user' ? 'user' : item.message.role === 'assistant' ? 'character' : 'system'"
+              :character-id="characterId"
+              :conversation-id="item.message.conversationId || conversationId"
+            />
+          </template>
+        </UIProviderHost>
+      </div>
 
-    <ConversationProjectionHost
-      :conversation-id="String(extensionContext?.conversationId ?? messages[0]?.conversationId ?? '')"
-      :messages="messages"
-      :context="extensionContext"
-    />
+      <ConversationProjectionHost
+        v-else
+        class="conversation-flow-item conversation-flow-item--node"
+        :node="item.node"
+        :context="extensionContext"
+      />
+    </template>
 
     <transition name="fade">
       <el-button
@@ -85,7 +110,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { ChatDotRound, ArrowDown, Loading } from "@element-plus/icons-vue";
 import ChatBubble from "./ChatBubble.vue";
 import MessageExtensionHost from "./extension/chat/MessageExtensionHost.vue";
@@ -93,9 +118,20 @@ import ChatEmptyStateExtensionHost from "./extension/chat/ChatEmptyStateExtensio
 import MessageActionExtensionHost from "./extension/chat/MessageActionExtensionHost.vue";
 import MessageBadgeExtensionHost from "./extension/chat/MessageBadgeExtensionHost.vue";
 import ConversationProjectionHost from "./extension/chat/ConversationProjectionHost.vue";
+import ExtensionSlot from "./extension/ExtensionSlot.vue";
 import UIProviderHost from "./ui-runtime/UIProviderHost.vue";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 import { resolveMessageRenderer } from "@/ui-runtime/messageRendererRegistry";
+import {
+  assembleConversationNodes,
+  compareTimeline,
+  loadConversationEventJournal,
+  mergeConversationEvents,
+  messageHistoryEvents,
+  subscribeConversationRuntimeEvents,
+  type ConversationNode,
+  type RuntimeConversationEvent,
+} from "@/ui-runtime/conversationProjection";
 
 const props = defineProps<{
   messages: any[];
@@ -124,6 +160,73 @@ const emit = defineEmits<{
 }>();
 
 const store = useExtensionUIStore();
+const rootEl = ref<HTMLElement>();
+const runtimeEvents = ref<RuntimeConversationEvent[]>([]);
+let unsubscribeConversationEvents: (() => void) | null = null;
+
+const conversationId = computed(() => String(
+  props.extensionContext?.conversationId ?? props.messages[0]?.conversationId ?? "",
+));
+
+const projectionContributions = computed(() => store.getVisibleContributions("chat.conversation.node", {
+  ...(props.extensionContext ?? {}),
+  conversationId: conversationId.value,
+}));
+
+const conversationNodes = computed(() => assembleConversationNodes(
+  runtimeEvents.value.filter((event) => event.conversationId === conversationId.value),
+  projectionContributions.value,
+));
+
+type FlowItem =
+  | { kind: "message"; key: string; message: any; sequence?: number; timestamp: string }
+  | { kind: "node"; key: string; node: ConversationNode; sequence?: number; timestamp: string };
+
+const flowItems = computed<FlowItem[]>(() => {
+  const items: FlowItem[] = props.messages.map((message, index) => ({
+    kind: "message",
+    key: `message:${String(message?.id ?? index)}`,
+    message,
+    sequence: finiteNumber(message?.seq ?? message?.sequence),
+    timestamp: String(message?.createdAt ?? message?.timestamp ?? ""),
+  }));
+  for (const node of conversationNodes.value) {
+    items.push({
+      kind: "node",
+      key: `node:${node.nodeId}`,
+      node,
+      sequence: node.anchorSeq,
+      timestamp: node.anchorTimestamp,
+    });
+  }
+  return items.sort((a, b) => {
+    const order = compareTimeline(a.sequence, a.timestamp, b.sequence, b.timestamp);
+    if (order !== 0) return order;
+    if (a.kind !== b.kind) return a.kind === "message" ? -1 : 1;
+    return a.key.localeCompare(b.key);
+  });
+});
+
+function rebuildConversationEventLog() {
+  const id = conversationId.value;
+  if (!id) {
+    runtimeEvents.value = [];
+    return;
+  }
+  runtimeEvents.value = mergeConversationEvents(
+    messageHistoryEvents(props.messages, id),
+    loadConversationEventJournal(id),
+    runtimeEvents.value.filter((event) => event.conversationId === id && event.source !== "history"),
+  );
+}
+
+function consumeConversationEvent(event: RuntimeConversationEvent) {
+  if (!event.conversationId || event.conversationId !== conversationId.value) return;
+  runtimeEvents.value = mergeConversationEvents(runtimeEvents.value, [event]);
+}
+
+watch(() => [conversationId.value, props.messages] as const, rebuildConversationEventLog, { deep: true });
+
 function messageContext(msg: any) {
   return {
     messageId: msg.id,
@@ -135,6 +238,24 @@ function messageContext(msg: any) {
     metadata: msg.metadata || {},
   };
 }
+
+function messageSlotContext(msg: any) {
+  return {
+    ...(props.extensionContext ?? {}),
+    messageId: msg.id,
+    messageType: msg.type || "text",
+    direction: msg.role === "user" ? "outgoing" : msg.role === "assistant" ? "incoming" : "system",
+    senderType: msg.role === "user" ? "user" : msg.role === "assistant" ? "character" : "system",
+    characterId: props.characterId,
+    conversationId: msg.conversationId || conversationId.value,
+    message: messageContext(msg),
+  };
+}
+
+function messageSlotRendererId(msg: any): string | undefined {
+  return store.getVisibleContributions("chat.message.renderer", messageSlotContext(msg))[0]?.contributionId;
+}
+
 function messageRendererId(msg: any): string | undefined {
   return resolveMessageRenderer(
     store.getProviders("conversation.message_renderer"),
@@ -143,6 +264,7 @@ function messageRendererId(msg: any): string | undefined {
     store.snapshot?.providerContext,
   )?.providerId;
 }
+
 function messageActions(msg: any) {
   return {
     ...(props.providerActions ?? {}),
@@ -151,7 +273,27 @@ function messageActions(msg: any) {
     "conversation.scrollToMessage": async (input?: unknown) => scrollToMessage(String((input as any)?.messageId ?? input ?? msg.id)),
   };
 }
-onMounted(() => { if (!store.snapshot) void store.refreshSnapshot(); });
+
+function messageExtensionSummary(msg: any) {
+  return {
+    messageId: msg.id,
+    type: msg.type || "text",
+    direction: msg.role === "user" ? "outgoing" : msg.role === "assistant" ? "incoming" : "system",
+    senderType: msg.role === "user" ? "user" : msg.role === "assistant" ? "character" : "system",
+    createdAt: msg.createdAt || "",
+    status: msg.status || "sent",
+    hasText: !!(msg.content || msg.text),
+    attachmentTypes: msg.attachments?.map((a: any) => a.type) || [],
+    extensionType: msg.extensionType || msg.extension_type || "",
+    content: msg.content || msg.text || "",
+    metadata: msg.metadata || {},
+  } as const;
+}
+
+function finiteNumber(value: unknown): number | undefined {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : undefined;
+}
 
 function scrollToMessage(messageId: string) {
   if (!rootEl.value) return;
@@ -163,7 +305,13 @@ function scrollToMessage(messageId: string) {
   }
 }
 
-const rootEl = ref<HTMLElement>();
+onMounted(() => {
+  if (!store.snapshot) void store.refreshSnapshot();
+  rebuildConversationEventLog();
+  unsubscribeConversationEvents = subscribeConversationRuntimeEvents(consumeConversationEvent);
+});
+
+onBeforeUnmount(() => unsubscribeConversationEvents?.());
 defineExpose({ rootEl });
 </script>
 
