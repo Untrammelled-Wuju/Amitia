@@ -42,10 +42,18 @@ export interface UISlotRegistration {
   dispose(): void | Promise<void>;
 }
 
+export type UISlotInjectionCleanup = () => void | Promise<void>;
+export type UISlotInjectionEffect = void | UISlotInjectionCleanup | Promise<void | UISlotInjectionCleanup>;
+
 export interface UISlotClient {
   declare(definition: UISlotDefinition): Promise<UISlotRegistration>;
   list(): Promise<UISlotDefinition[]>;
-  inject(slotId: string, callback: (definition: UISlotDefinition) => void): Promise<() => void>;
+  /**
+   * Depend on the lifetime of a slot declaration. The callback is invoked once
+   * for each declaration epoch. If the declaration disappears, its returned
+   * cleanup is awaited before a later declaration can activate a new epoch.
+   */
+  inject(slotId: string, callback: (definition: UISlotDefinition) => UISlotInjectionEffect): Promise<UISlotInjectionCleanup>;
 }
 
 export interface UIActionClient {
@@ -165,7 +173,11 @@ export class InMemoryUIBridge implements UIBridge {
   private readonly stateValues = new Map<string, unknown>();
   private readonly subscribers = new Map<string, Set<(value: unknown) => void>>();
   private readonly slotValues = new Map<string, UISlotDefinition>();
-  private readonly slotSubscribers = new Map<string, Set<(definition: UISlotDefinition) => void>>();
+  private readonly slotEpochs = new Map<string, number>();
+  private readonly slotSubscribers = new Map<string, Set<{
+    callback: (definition: UISlotDefinition) => UISlotInjectionEffect;
+    cleanup?: UISlotInjectionCleanup;
+  }>>();
 
   async ready(): Promise<UIReadyEvent> {
     return {
@@ -231,28 +243,58 @@ export class InMemoryUIBridge implements UIBridge {
   readonly slots: UISlotClient = {
     declare: async (input: UISlotDefinition): Promise<UISlotRegistration> => {
       const definition = defineUISlot(input);
+      const previousEpoch = this.slotEpochs.get(definition.slotId) ?? 0;
+      if (this.slotValues.has(definition.slotId)) {
+        await this.deactivateSlotEpoch(definition.slotId);
+      }
+      const epoch = previousEpoch + 1;
+      this.slotEpochs.set(definition.slotId, epoch);
       this.slotValues.set(definition.slotId, definition);
-      for (const callback of this.slotSubscribers.get(definition.slotId) ?? []) callback(definition);
+      await this.activateSlotEpoch(definition.slotId, definition);
       return {
         definition,
-        dispose: () => {
+        dispose: async () => {
+          if (this.slotEpochs.get(definition.slotId) !== epoch) return;
+          await this.deactivateSlotEpoch(definition.slotId);
           this.slotValues.delete(definition.slotId);
         },
       };
     },
     list: async (): Promise<UISlotDefinition[]> => Array.from(this.slotValues.values()),
-    inject: async (slotId: string, callback: (definition: UISlotDefinition) => void): Promise<() => void> => {
-      let subscribers = this.slotSubscribers.get(slotId);
+    inject: async (slotId: string, callback: (definition: UISlotDefinition) => UISlotInjectionEffect): Promise<UISlotInjectionCleanup> => {
+      const id = slotId.trim();
+      if (!id) throw new ValidationError("ui slot injection requires slotId");
+      let subscribers = this.slotSubscribers.get(id);
       if (!subscribers) {
         subscribers = new Set();
-        this.slotSubscribers.set(slotId, subscribers);
+        this.slotSubscribers.set(id, subscribers);
       }
-      subscribers.add(callback);
-      const current = this.slotValues.get(slotId);
-      if (current) callback(current);
-      return () => subscribers?.delete(callback);
+      const subscriber = { callback, cleanup: undefined as UISlotInjectionCleanup | undefined };
+      subscribers.add(subscriber);
+      const current = this.slotValues.get(id);
+      if (current) subscriber.cleanup = await callback(current) || undefined;
+      return async () => {
+        subscribers?.delete(subscriber);
+        if (subscriber.cleanup) await subscriber.cleanup();
+        subscriber.cleanup = undefined;
+        if (subscribers?.size === 0) this.slotSubscribers.delete(id);
+      };
     },
   };
+
+  private async deactivateSlotEpoch(slotId: string): Promise<void> {
+    for (const subscriber of this.slotSubscribers.get(slotId) ?? []) {
+      if (subscriber.cleanup) await subscriber.cleanup();
+      subscriber.cleanup = undefined;
+    }
+  }
+
+  private async activateSlotEpoch(slotId: string, definition: UISlotDefinition): Promise<void> {
+    for (const subscriber of this.slotSubscribers.get(slotId) ?? []) {
+      if (subscriber.cleanup) await subscriber.cleanup();
+      subscriber.cleanup = await subscriber.callback(definition) || undefined;
+    }
+  }
 }
 
 const noopUILogger: UILogger = {

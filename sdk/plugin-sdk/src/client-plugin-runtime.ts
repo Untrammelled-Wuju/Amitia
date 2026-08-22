@@ -1,5 +1,5 @@
 import { RuntimeFiber, type ExtensionFiber, type Disposer } from "./fiber";
-import type { UISlotClient, UISlotDefinition, UISlotRegistration } from "./ui";
+import type { UISlotClient, UISlotDefinition, UISlotRegistration, UISlotInjectionEffect } from "./ui";
 import { ValidationError } from "./errors";
 
 export interface ClientPluginServiceRegistry {
@@ -17,7 +17,7 @@ export interface ClientPluginEventBus {
 
 export interface ClientPluginSlotContext {
   declare(definition: UISlotDefinition): Promise<UISlotRegistration>;
-  inject(slotId: string, callback: (definition: UISlotDefinition) => void): Promise<Disposer>;
+  inject(slotId: string, callback: (definition: UISlotDefinition) => UISlotInjectionEffect): Promise<Disposer>;
   list(): Promise<UISlotDefinition[]>;
 }
 

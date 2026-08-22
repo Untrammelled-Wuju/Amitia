@@ -61,3 +61,5 @@ export function getCompatibilityMatrix(): CompatibilityMatrix {
 }
 
 export * from "./client-plugin-runtime";
+
+export * from "./client-package-runtime";
