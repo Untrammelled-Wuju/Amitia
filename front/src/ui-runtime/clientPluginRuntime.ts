@@ -14,6 +14,16 @@ import {
   type ConversationProjectionSpec,
   type ProgrammaticConversationNodeDefinition,
 } from "@/ui-runtime/conversationProjection";
+import type {
+  ClientKnownSlotId,
+  ClientSlotEntryDefinition,
+  ClientSlotInjectFactory,
+  ClientSlotInjected,
+  ClientSlotProps,
+  ClientSlotStore,
+  ClientSlotStoreFactory,
+  ClientSlotStoreResource,
+} from "@/ui-runtime/slotContract";
 
 export type ClientDisposer = () => void | Promise<void>;
 export type ClientSlotEffect = void | ClientDisposer | readonly ClientDisposer[] | Iterable<ClientDisposer> | Promise<void | ClientDisposer | readonly ClientDisposer[] | Iterable<ClientDisposer>>;
@@ -37,11 +47,19 @@ export interface ClientSlotRegistration {
   dispose(): void | Promise<void>;
 }
 
-export interface ClientSlotContributionOptions {
+export interface ClientSlotContributionOptions<
+  TProps extends Record<string, unknown> = Record<string, unknown>,
+  TStore = unknown,
+  TInjected extends Record<string, unknown> = Record<string, unknown>,
+> {
   ordering?: number;
   priority?: number;
-  props?: Record<string, unknown>;
+  props?: TProps;
   children?: readonly ClientSlotDefinition[];
+  /** Stable state owned by this contribution. It is disposed with the contribution/fiber. */
+  store?: TStore | ClientSlotStoreFactory<TStore>;
+  /** Business capability face injected into this contribution only. */
+  inject?: ClientSlotInjectFactory<TStore, TInjected>;
 }
 
 export interface ClientSlotContribution {
@@ -53,6 +71,18 @@ export interface ClientSlotContribution {
   ordering: number;
   priority: number;
   props?: Record<string, unknown>;
+  store?: unknown;
+  injected?: Record<string, unknown>;
+}
+
+interface ClientSlotRegistrationEnvironment {
+  services: {
+    get<T>(serviceId: string): T | undefined;
+    list(): string[];
+  };
+  events: {
+    emit<T>(eventType: string, payload: T): Promise<void>;
+  };
 }
 
 interface SlotSubscriber {
@@ -117,7 +147,7 @@ export class BrowserSlotRuntime {
     };
   }
 
-  async inject(slotId: string, callback: (definition: ClientSlotDefinition) => ClientSlotEffect): Promise<ClientDisposer> {
+  async observe(slotId: string, callback: (definition: ClientSlotDefinition) => ClientSlotEffect): Promise<ClientDisposer> {
     const id = slotId.trim();
     if (!id) throw new Error("slotId is required");
     let subscribers = this.subscribers.get(id);
@@ -137,22 +167,67 @@ export class BrowserSlotRuntime {
     };
   }
 
+  /** @deprecated Use observe(). Business injection now belongs to register({ inject }). */
+  inject(slotId: string, callback: (definition: ClientSlotDefinition) => ClientSlotEffect): Promise<ClientDisposer> {
+    return this.observe(slotId, callback);
+  }
+
+  register<SlotId extends ClientKnownSlotId>(
+    pluginId: string,
+    slotId: SlotId,
+    key: string,
+    component: Component,
+    options?: ClientSlotContributionOptions<ClientSlotProps<SlotId>, ClientSlotStore<SlotId>, ClientSlotInjected<SlotId>>,
+    environment?: ClientSlotRegistrationEnvironment,
+  ): ClientDisposer;
   register(
     pluginId: string,
     slotId: string,
     key: string,
     component: Component,
+    options?: ClientSlotContributionOptions,
+    environment?: ClientSlotRegistrationEnvironment,
+  ): ClientDisposer;
+  register<SlotId extends string>(
+    pluginId: string,
+    entry: ClientSlotEntryDefinition<SlotId> & { children?: readonly ClientSlotDefinition[] },
+    environment?: ClientSlotRegistrationEnvironment,
+  ): ClientDisposer;
+  register(
+    pluginId: string,
+    slotOrEntry: string | (ClientSlotEntryDefinition<string> & { children?: readonly ClientSlotDefinition[] }),
+    keyOrEnvironment?: string | ClientSlotRegistrationEnvironment,
+    component?: Component,
     options: ClientSlotContributionOptions = {},
+    legacyEnvironment?: ClientSlotRegistrationEnvironment,
   ): ClientDisposer {
     const normalizedPluginId = pluginId.trim();
+    const entryMode = typeof slotOrEntry !== "string";
+    const slotId = entryMode ? slotOrEntry.slotId : slotOrEntry;
+    const key = entryMode ? slotOrEntry.key : String(keyOrEnvironment ?? "");
+    const resolvedComponent = entryMode ? slotOrEntry.component : component;
+    const resolvedOptions: ClientSlotContributionOptions = entryMode
+      ? {
+          ordering: slotOrEntry.ordering,
+          priority: slotOrEntry.priority,
+          props: slotOrEntry.props,
+          children: slotOrEntry.children,
+          store: slotOrEntry.store,
+          inject: slotOrEntry.inject,
+        }
+      : options;
+    const environment = entryMode
+      ? (keyOrEnvironment && typeof keyOrEnvironment !== "string" ? keyOrEnvironment : undefined)
+      : legacyEnvironment;
     const normalizedSlotId = slotId.trim();
     const normalizedKey = key.trim();
     if (!normalizedPluginId) throw new Error("pluginId is required");
     if (!normalizedSlotId) throw new Error("slotId is required");
     if (!normalizedKey) throw new Error("client slot contribution key is required");
+    if (!resolvedComponent) throw new Error("client slot contribution component is required");
     if (!this.current(normalizedSlotId)) throw new Error(`client slot ${normalizedSlotId} is not declared`);
     const parentDefinition = this.current(normalizedSlotId);
-    const childInputs = (options.children ?? []).map((child) => normalizeDefinition({
+    const childInputs = (resolvedOptions.children ?? []).map((child) => normalizeDefinition({
       ...child,
       parentSlotId: normalizedSlotId,
       scope: child.scope ?? parentDefinition?.scope,
@@ -176,18 +251,54 @@ export class BrowserSlotRuntime {
     if (slotContributions.has(mapKey)) {
       throw new Error(`client slot contribution ${normalizedSlotId}/${mapKey} already registered`);
     }
+    const resourceDisposers: ClientDisposer[] = [];
+    const resourceContext = {
+      pluginId: normalizedPluginId,
+      slotId: normalizedSlotId,
+      key: normalizedKey,
+      scope: parentDefinition?.scope ?? "root",
+    } as const;
+    let store: unknown;
+    if (typeof resolvedOptions.store === "function") {
+      const created = (resolvedOptions.store as ClientSlotStoreFactory<unknown>)(resourceContext);
+      if (isClientSlotStoreResource(created)) {
+        store = created.store;
+        if (created.dispose) resourceDisposers.push(() => created.dispose?.());
+      } else {
+        store = created;
+      }
+    } else {
+      store = resolvedOptions.store;
+    }
+    let injected: Record<string, unknown> | undefined;
+    try {
+      if (resolvedOptions.inject) {
+        injected = (resolvedOptions.inject as ClientSlotInjectFactory<unknown, Record<string, unknown>>)({
+          ...resourceContext,
+          store,
+          services: environment?.services ?? { get: () => undefined, list: () => [] },
+          events: environment?.events ?? { emit: async () => undefined },
+        });
+      }
+    } catch (error) {
+      for (let index = resourceDisposers.length - 1; index >= 0; index--) void resourceDisposers[index]?.();
+      throw error;
+    }
     const contribution: ClientSlotContribution = {
       contributionId: `client:${normalizedPluginId}:${normalizedSlotId}:${normalizedKey}`,
       pluginId: normalizedPluginId,
       key: normalizedKey,
       slotId: normalizedSlotId,
-      component: markRaw(component),
-      ordering: Number.isFinite(options.ordering) ? Number(options.ordering) : 0,
-      priority: Number.isFinite(options.priority) ? Number(options.priority) : 0,
-      props: options.props ? { ...options.props } : undefined,
+      component: markRaw(resolvedComponent),
+      ordering: Number.isFinite(resolvedOptions.ordering) ? Number(resolvedOptions.ordering) : 0,
+      priority: Number.isFinite(resolvedOptions.priority) ? Number(resolvedOptions.priority) : 0,
+      props: resolvedOptions.props ? { ...resolvedOptions.props } : undefined,
+      store,
+      injected,
     };
     slotContributions.set(mapKey, contribution);
     const childEpochs: Array<{ slotId: string; epoch: number }> = [];
+    const childActivations: Promise<unknown>[] = [];
     for (const child of childInputs) {
       const epoch = Math.max(this.epochs.get(child.slotId) ?? 0, child.declarationEpoch ?? 0) + 1;
       this.epochs.set(child.slotId, epoch);
@@ -195,7 +306,9 @@ export class BrowserSlotRuntime {
       this.local.set(child.slotId, definition);
       childEpochs.push({ slotId: child.slotId, epoch });
       this.bumpRevision();
-      void this.activate(child.slotId, definition).catch(async () => {
+      const activation = this.activate(child.slotId, definition);
+      childActivations.push(activation.catch(() => undefined));
+      activation.catch(async () => {
         if (this.epochs.get(child.slotId) !== epoch) return;
         await this.deactivate(child.slotId);
         this.local.delete(child.slotId);
@@ -207,6 +320,7 @@ export class BrowserSlotRuntime {
     return async () => {
       if (!active) return;
       active = false;
+      await Promise.allSettled(childActivations);
       for (let index = childEpochs.length - 1; index >= 0; index--) {
         const child = childEpochs[index]!;
         if (this.epochs.get(child.slotId) !== child.epoch || !this.local.has(child.slotId)) continue;
@@ -219,6 +333,7 @@ export class BrowserSlotRuntime {
       const current = this.contributions.get(normalizedSlotId);
       current?.delete(mapKey);
       if (current?.size === 0) this.contributions.delete(normalizedSlotId);
+      for (let index = resourceDisposers.length - 1; index >= 0; index--) await resourceDisposers[index]?.();
       this.bumpRevision();
     };
   }
@@ -346,8 +461,24 @@ export interface BrowserClientPluginContext {
   };
   slots: {
     declare(definition: ClientSlotDefinition): Promise<ClientSlotRegistration>;
+    observe(slotId: string, callback: (definition: ClientSlotDefinition) => ClientSlotEffect): Promise<ClientDisposer>;
+    /** @deprecated Use observe(). Business injection is configured on register(). */
     inject(slotId: string, callback: (definition: ClientSlotDefinition) => ClientSlotEffect): Promise<ClientDisposer>;
-    register(slotId: string, key: string, component: Component, options?: ClientSlotContributionOptions): ClientDisposer;
+    register<SlotId extends ClientKnownSlotId>(
+      slotId: SlotId,
+      key: string,
+      component: Component,
+      options?: ClientSlotContributionOptions<ClientSlotProps<SlotId>, ClientSlotStore<SlotId>, ClientSlotInjected<SlotId>>,
+    ): ClientDisposer;
+    register(
+      slotId: string,
+      key: string,
+      component: Component,
+      options?: ClientSlotContributionOptions,
+    ): ClientDisposer;
+    register<SlotId extends string>(
+      entry: ClientSlotEntryDefinition<SlotId> & { children?: readonly ClientSlotDefinition[] },
+    ): ClientDisposer;
     list(): ClientSlotDefinition[];
   };
   conversationNodes: {
@@ -406,6 +537,7 @@ export interface BrowserClientRuntimeSessionPackage {
   transitionState?: string;
   transitionMode?: "run" | "update" | string;
   runId?: string;
+  pluginRunId?: string;
   running?: boolean;
 }
 
@@ -611,7 +743,7 @@ export class BrowserClientPluginRuntime {
       setup: async (ctx) => {
         for (const contribution of normalized.contributions ?? []) {
           const component = contribution.clientCode ? DynamicClientSandboxContribution : ClientRuntimeSchemaContribution;
-          await ctx.slots.inject(contribution.slotId, () => ctx.slots.register(
+          await ctx.slots.observe(contribution.slotId, () => ctx.slots.register(
             contribution.slotId,
             contribution.key,
             component,
@@ -634,7 +766,7 @@ export class BrowserClientPluginRuntime {
           ));
         }
         for (const node of normalized.conversationNodes ?? []) {
-          await ctx.slots.inject("chat.conversation.node", () => ctx.conversationNodes.register(
+          await ctx.slots.observe("chat.conversation.node", () => ctx.conversationNodes.register(
             node.key,
             ClientRuntimeSchemaContribution,
             declarativeConversationNodeDefinition(node.projection),
@@ -878,12 +1010,33 @@ export class BrowserClientPluginRuntime {
           fiber.own(registration.dispose);
           return registration;
         },
-        inject: async (slotId, callback) => {
-          const dispose = await this.slots.inject(slotId, callback);
+        observe: async (slotId, callback) => {
+          const dispose = await this.slots.observe(slotId, callback);
           fiber.own(dispose);
           return dispose;
         },
-        register: (slotId, key, component, options) => fiber.own(this.slots.register(pluginId, slotId, key, component, options)),
+        inject: async (slotId, callback) => {
+          const dispose = await this.slots.observe(slotId, callback);
+          fiber.own(dispose);
+          return dispose;
+        },
+        register: ((slotOrEntry: string | (ClientSlotEntryDefinition<string> & { children?: readonly ClientSlotDefinition[] }), key?: string, component?: Component, options?: ClientSlotContributionOptions) => {
+          const environment: ClientSlotRegistrationEnvironment = {
+            services: {
+              get: <T>(serviceId: string) => this.services.get(serviceId) as T | undefined,
+              list: () => Array.from(this.services.keys()).sort(),
+            },
+            events: {
+              emit: async <T>(eventType: string, payload: T) => {
+                for (const handler of Array.from(this.events.get(eventType) ?? [])) await handler(payload);
+              },
+            },
+          };
+          const dispose = typeof slotOrEntry === "string"
+            ? this.slots.register(pluginId, slotOrEntry as ClientKnownSlotId, key ?? "", component!, options as ClientSlotContributionOptions, environment)
+            : this.slots.register(pluginId, slotOrEntry, environment);
+          return fiber.own(dispose);
+        }) as BrowserClientPluginContext["slots"]["register"],
         list: () => this.slots.list(),
       },
       conversationNodes: {
@@ -897,7 +1050,24 @@ export class BrowserClientPluginRuntime {
           if (!normalizedKey) throw new Error("conversation node key is required");
           const slotId = "chat.conversation.node";
           const contributionId = `client:${pluginId}:${slotId}:${normalizedKey}`;
-          const disposeView = this.slots.register(pluginId, slotId, normalizedKey, component, options);
+          const disposeView = this.slots.register(
+            pluginId,
+            slotId,
+            normalizedKey,
+            component,
+            options,
+            {
+              services: {
+                get: <T>(serviceId: string) => this.services.get(serviceId) as T | undefined,
+                list: () => Array.from(this.services.keys()).sort(),
+              },
+              events: {
+                emit: async <T>(eventType: string, payload: T) => {
+                  for (const handler of Array.from(this.events.get(eventType) ?? [])) await handler(payload);
+                },
+              },
+            },
+          );
           let disposeDefinition: ClientDisposer;
           try {
             disposeDefinition = registerProgrammaticConversationNodeDefinition({
@@ -921,6 +1091,10 @@ export class BrowserClientPluginRuntime {
       },
     };
   }
+}
+
+function isClientSlotStoreResource(value: unknown): value is ClientSlotStoreResource<unknown> {
+  return !!value && typeof value === "object" && (value as { __amitiaSlotStoreResource?: unknown }).__amitiaSlotStoreResource === true;
 }
 
 function normalizeDeclarativePackage(spec: BrowserDeclarativeClientPackage): BrowserDeclarativeClientPackage {

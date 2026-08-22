@@ -82,18 +82,11 @@ onUnmounted(() => {
 
 <style scoped>
 .extension-error-boundary {
-  width: 100%;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
+  display: contents;
   color: var(--amitia-text-primary, var(--amitia-color-text, inherit));
-  background: var(--amitia-bg-surface, var(--amitia-color-surface, transparent));
 }
 .extension-error-boundary__content {
-  width: 100%;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
+  display: contents;
 }
 .extension-error-boundary__error {
   display: flex;
