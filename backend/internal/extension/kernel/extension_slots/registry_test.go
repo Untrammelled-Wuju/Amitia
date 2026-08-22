@@ -1,6 +1,9 @@
 package extension_slots
 
-import "testing"
+import (
+	"errors"
+	"testing"
+)
 
 func dynamicTestSlot(id, parent, owner string) *SlotDefinition {
 	return &SlotDefinition{
@@ -66,5 +69,119 @@ func TestUnregisterOwnedDoesNotRestoreRemovedOwners(t *testing.T) {
 	}
 	if len(r.Suspended()) != 0 {
 		t.Fatalf("disabled extension must not leave suspended declarations")
+	}
+}
+
+func TestDeclarationEpochIncrementsAcrossRedeclare(t *testing.T) {
+	r := DefaultSlotRegistry()
+	def := dynamicTestSlot("epoch.slot", "chat.sidebar.panel", "epoch.ext")
+	if err := r.RegisterOwned("epoch.ext", def); err != nil {
+		t.Fatal(err)
+	}
+	first, err := r.Get("epoch.slot")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if first.DeclarationEpoch == 0 {
+		t.Fatalf("first declaration must have a non-zero epoch")
+	}
+	if _, err := r.Unregister("epoch.slot"); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.RegisterOwned("epoch.ext", def); err != nil {
+		t.Fatal(err)
+	}
+	second, err := r.Get("epoch.slot")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if second.DeclarationEpoch <= first.DeclarationEpoch {
+		t.Fatalf("redeclared slot epoch = %d, want > %d", second.DeclarationEpoch, first.DeclarationEpoch)
+	}
+}
+
+func TestRestoredChildGetsNewDeclarationEpoch(t *testing.T) {
+	r := DefaultSlotRegistry()
+	parent := dynamicTestSlot("epoch.parent", "chat.sidebar.panel", "parent.ext")
+	child := dynamicTestSlot("epoch.child", "epoch.parent", "child.ext")
+	if err := r.RegisterOwned("parent.ext", parent); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.RegisterOwned("child.ext", child); err != nil {
+		t.Fatal(err)
+	}
+	before, err := r.Get("epoch.child")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := r.Unregister("epoch.parent"); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.RegisterOwned("parent.ext", parent); err != nil {
+		t.Fatal(err)
+	}
+	after, err := r.Get("epoch.child")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.DeclarationEpoch <= before.DeclarationEpoch {
+		t.Fatalf("restored child epoch = %d, want > %d", after.DeclarationEpoch, before.DeclarationEpoch)
+	}
+}
+
+func TestSlotScopeDefaultsAndInheritance(t *testing.T) {
+	r := DefaultSlotRegistry()
+	chat, err := r.Get("chat.sidebar.panel")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if chat.Scope != ScopeSession {
+		t.Fatalf("chat scope = %q, want %q", chat.Scope, ScopeSession)
+	}
+	root, err := r.Get("extension.detail.tab")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if root.Scope != ScopeRoot {
+		t.Fatalf("root scope = %q, want %q", root.Scope, ScopeRoot)
+	}
+	child := dynamicTestSlot("scope.child", "chat.sidebar.panel", "scope.ext")
+	if err := r.RegisterOwned("scope.ext", child); err != nil {
+		t.Fatal(err)
+	}
+	registered, err := r.Get("scope.child")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if registered.Scope != ScopeSession {
+		t.Fatalf("child scope = %q, want inherited %q", registered.Scope, ScopeSession)
+	}
+}
+
+func TestSessionSlotRejectsRootChild(t *testing.T) {
+	r := DefaultSlotRegistry()
+	child := dynamicTestSlot("scope.escape", "chat.sidebar.panel", "scope.ext")
+	child.Scope = ScopeRoot
+	if err := r.RegisterOwned("scope.ext", child); !errors.Is(err, ErrSlotScopeEscape) {
+		t.Fatalf("register root child under session slot error = %v, want %v", err, ErrSlotScopeEscape)
+	}
+}
+
+func TestSessionMaybeScopeCanNarrowButNotEscape(t *testing.T) {
+	r := DefaultSlotRegistry()
+	parent := dynamicTestSlot("scope.maybe", "extension.detail.tab", "scope.ext")
+	parent.Scope = ScopeSessionMaybe
+	if err := r.RegisterOwned("scope.ext", parent); err != nil {
+		t.Fatal(err)
+	}
+	strict := dynamicTestSlot("scope.maybe.strict", "scope.maybe", "strict.ext")
+	strict.Scope = ScopeSession
+	if err := r.RegisterOwned("strict.ext", strict); err != nil {
+		t.Fatalf("session child under session-maybe failed: %v", err)
+	}
+	escape := dynamicTestSlot("scope.maybe.escape", "scope.maybe", "escape.ext")
+	escape.Scope = ScopeRoot
+	if err := r.RegisterOwned("escape.ext", escape); !errors.Is(err, ErrSlotScopeEscape) {
+		t.Fatalf("root child under session-maybe error = %v, want %v", err, ErrSlotScopeEscape)
 	}
 }

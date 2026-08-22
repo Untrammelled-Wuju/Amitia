@@ -24,7 +24,6 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/canary"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/capability/acquisition"
-	"github.com/u-ai/backend/internal/extension/kernel/chat_ui_extension"
 	"github.com/u-ai/backend/internal/extension/kernel/contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/dependency"
 	"github.com/u-ai/backend/internal/extension/kernel/desktop"
@@ -724,6 +723,24 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 
 	uiHostNotifier := NewSSEUIHostNotifierWithRegistry(sse.Global, deviceRegistry)
+	uiHostNotifier.SetClientRuntimeDatabase(db)
+	tool.SetExecutionEventSink(func(eventCtx context.Context, execCtx tool.ToolExecutionContext, name string, result tool.ToolCallResult) {
+		payload, err := json.Marshal(map[string]interface{}{
+			"type":           "tool.invocation_completed",
+			"conversationId": execCtx.ConversationID,
+			"characterId":    execCtx.CharacterID,
+			"channel":        execCtx.Channel,
+			"requestId":      execCtx.RequestID,
+			"toolCallId":     execCtx.ToolCallID,
+			"toolName":       name,
+			"status":         string(result.Status),
+			"errorCode":      result.ErrorCode,
+		})
+		if err != nil {
+			return
+		}
+		_, _, _ = eventSvc.PublishConversationUIEvent(eventCtx, execCtx.ConversationID, payload, execCtx.RequestID)
+	})
 	stateLoader := newContainerStateLoader(instRepo, defRepo, moduleRepo, contribRepo, runtimeRepo, stateStore)
 	preflightChecker := newContainerPreflightChecker(dependencyResolver)
 	typedInstaller := NewTypedContributionInstaller(nil)
@@ -1328,7 +1345,6 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 			return dataSourceProvider.Query(ctx, session.SessionID, session.ExtensionID, session.ModuleID, sourceID, session.ScopeSnapshotID, session.PermissionSnapshotID, params)
 		},
 	)
-	chatExtRegistry := chat_ui_extension.NewChatExtensionRegistry()
 	orderingEngine := ui_ordering.NewOrderingEngine()
 
 	desktopHost := desktop.NewDesktopHost()
@@ -1515,20 +1531,19 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 
 		NativeBridgeRelay: b.nativeBridgeRelay,
 
-		UIHost:                uiHost,
-		UIHostNotifier:        uiHostNotifier,
-		ClipboardHostBridge:   bridgeClipboardHost,
-		UIContributionRepo:    uiContribRepo,
-		SlotRegistry:          slotRegistry,
-		PageHost:              pageHost,
-		SchemaValidator:       schemaValidator,
-		SchemaCompilerCache:   schemaCache,
-		SchemaRegistry:        schemaRegistry,
-		SandboxHost:           sandboxHost,
-		ChatExtensionRegistry: chatExtRegistry,
-		OrderingEngine:        orderingEngine,
-		UIProviderRegistry:    uiProviderRegistry,
-		ExtRoot:               b.extRoot,
+		UIHost:              uiHost,
+		UIHostNotifier:      uiHostNotifier,
+		ClipboardHostBridge: bridgeClipboardHost,
+		UIContributionRepo:  uiContribRepo,
+		SlotRegistry:        slotRegistry,
+		PageHost:            pageHost,
+		SchemaValidator:     schemaValidator,
+		SchemaCompilerCache: schemaCache,
+		SchemaRegistry:      schemaRegistry,
+		SandboxHost:         sandboxHost,
+		OrderingEngine:      orderingEngine,
+		UIProviderRegistry:  uiProviderRegistry,
+		ExtRoot:             b.extRoot,
 
 		DesktopHost:              desktopHost,
 		UpdateManager:            updateManager,
@@ -1608,6 +1623,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 
 	builtin.SetUIAgentPublisher(newUIAgentPublisher(b.extRoot, schemaRegistry, uiContribRepo, uiHost))
+	builtin.SetUIAgentClientRuntime(uiHostNotifier)
 	builtContainer = container
 
 	if b.iosNativeProvider != nil {
@@ -1808,7 +1824,6 @@ func validateExecutionWiring(kernel *execution.ExecutionPipeline, adapters *capa
 	}
 	return nil
 }
-
 
 func makeSearchCallFunc(cfg search.Config, broker *secret.Broker) capability.SearchCallFunc {
 	svc := buildSearchService(cfg, broker)

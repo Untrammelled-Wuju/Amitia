@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/auth"
-	"github.com/u-ai/backend/internal/extension/kernel/chat_ui_extension"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_page_host"
 	"github.com/u-ai/backend/internal/extension/kernel/extension_slots"
 	"github.com/u-ai/backend/internal/extension/kernel/permission"
@@ -27,6 +26,16 @@ type DialogResolver interface {
 	ResolveDialogWithHost(dialogID string, hostClientID string, hostSessionID string, result string) bool
 }
 
+type ClientRuntimeCommandResolver interface {
+	ResolveClientRuntimeCommand(commandID string, result map[string]interface{}, commandErr string) bool
+}
+
+type ScopedClientRuntimeCommandResolver interface {
+	ResolveClientRuntimeCommandWithHost(commandID, hostClientID, hostSessionID string, result map[string]interface{}, commandErr string) bool
+	ClientRuntimeSessionState(userID, conversationID string) map[string]interface{}
+	AcknowledgeClientRuntimeSession(userID, conversationID string, revision int64) (map[string]interface{}, error)
+}
+
 type ClipboardResolver interface {
 	ResolveClipboardRequest(requestID string, text string) bool
 	FailClipboardRequest(requestID string, err error) bool
@@ -35,20 +44,20 @@ type ClipboardResolver interface {
 }
 
 type HTTPHandler struct {
-	uiHost               *ui_contribution.UIHost
-	slotRegistry         *extension_slots.SlotRegistry
-	pageHost             *extension_page_host.PageHost
-	sandboxHost          *sandbox_webui.Host
-	chatRegistry         *chat_ui_extension.ChatExtensionRegistry
-	providerRegistry     *ui_provider.Registry
-	providerContext      func(*http.Request, string) ui_provider.ResolveContext
-	providerBroadcaster  func(string, map[string]interface{})
-	authorizer           *permission.UISessionAuthorizer
-	schemaLookup         func(extensionID, contributionID string) (json.RawMessage, bool)
-	scopeSnapshotCreator func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error)
-	dialogResolver       DialogResolver
-	clipboardResolver    ClipboardResolver
-	extRoot              string
+	uiHost                *ui_contribution.UIHost
+	slotRegistry          *extension_slots.SlotRegistry
+	pageHost              *extension_page_host.PageHost
+	sandboxHost           *sandbox_webui.Host
+	providerRegistry      *ui_provider.Registry
+	providerContext       func(*http.Request, string) ui_provider.ResolveContext
+	providerBroadcaster   func(string, map[string]interface{})
+	authorizer            *permission.UISessionAuthorizer
+	schemaLookup          func(extensionID, contributionID string) (json.RawMessage, bool)
+	scopeSnapshotCreator  func(extensionID, moduleID string, generation int64, characterID, conversationID string) (string, error)
+	dialogResolver        DialogResolver
+	clientRuntimeResolver ClientRuntimeCommandResolver
+	clipboardResolver     ClipboardResolver
+	extRoot               string
 }
 
 func NewHTTPHandler(
@@ -56,14 +65,12 @@ func NewHTTPHandler(
 	slotRegistry *extension_slots.SlotRegistry,
 	pageHost *extension_page_host.PageHost,
 	sandboxHost *sandbox_webui.Host,
-	chatRegistry *chat_ui_extension.ChatExtensionRegistry,
 ) *HTTPHandler {
 	return &HTTPHandler{
 		uiHost:       uiHost,
 		slotRegistry: slotRegistry,
 		pageHost:     pageHost,
 		sandboxHost:  sandboxHost,
-		chatRegistry: chatRegistry,
 	}
 }
 
@@ -106,6 +113,10 @@ func (h *HTTPHandler) SetDialogResolver(r DialogResolver) {
 	h.dialogResolver = r
 }
 
+func (h *HTTPHandler) SetClientRuntimeCommandResolver(r ClientRuntimeCommandResolver) {
+	h.clientRuntimeResolver = r
+}
+
 func (h *HTTPHandler) SetClipboardResolver(r ClipboardResolver) {
 	h.clipboardResolver = r
 }
@@ -135,6 +146,9 @@ func (h *HTTPHandler) Register(mux *http.ServeMux) {
 	mux.HandleFunc("/api/extension/action/", h.handleAction)
 	mux.HandleFunc("/api/extension/composer/action/", h.handleComposerAction)
 	mux.HandleFunc("/api/extensions/ui/dialog-response", h.handleDialogResponse)
+	mux.HandleFunc("/api/extensions/ui/client-runtime-response", h.handleClientRuntimeResponse)
+	mux.HandleFunc("/api/extensions/ui/client-runtime-state", h.handleClientRuntimeState)
+	mux.HandleFunc("/api/extensions/ui/client-runtime-session-ack", h.handleClientRuntimeSessionAck)
 	mux.HandleFunc("/api/extensions/ui/clipboard-response", h.handleClipboardResponse)
 }
 
@@ -177,6 +191,8 @@ func (h *HTTPHandler) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 		OwnerExtension    string                                      `json:"ownerExtension,omitempty"`
 		ParentSlotID      extension_slots.SlotID                      `json:"parentSlotId,omitempty"`
 		Dynamic           bool                                        `json:"dynamic,omitempty"`
+		Scope             extension_slots.SlotScope                   `json:"scope"`
+		DeclarationEpoch  uint64                                      `json:"declarationEpoch"`
 		Contributions     []*ui_contribution.UIContributionDefinition `json:"contributions"`
 	}
 	out := make([]slotSnapshotEntry, 0, len(slots))
@@ -197,6 +213,8 @@ func (h *HTTPHandler) handleSnapshot(w http.ResponseWriter, r *http.Request) {
 			OwnerExtension:    s.OwnerExtension,
 			ParentSlotID:      s.ParentSlotID,
 			Dynamic:           s.Dynamic,
+			Scope:             s.Scope,
+			DeclarationEpoch:  s.DeclarationEpoch,
 			Contributions:     contribs,
 		})
 	}
@@ -1217,6 +1235,100 @@ func (h *HTTPHandler) handleDialogResponse(w http.ResponseWriter, r *http.Reques
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "dialogId": req.DialogID})
+}
+
+func (h *HTTPHandler) handleClientRuntimeResponse(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	if h.clientRuntimeResolver == nil {
+		writeError(w, http.StatusServiceUnavailable, "client_runtime_resolver_unavailable", "client runtime resolver not configured")
+		return
+	}
+	var req struct {
+		CommandID     string                 `json:"commandId"`
+		HostClientID  string                 `json:"hostClientId"`
+		HostSessionID string                 `json:"hostSessionId"`
+		Result        map[string]interface{} `json:"result"`
+		Error         string                 `json:"error"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "payload_invalid", err.Error())
+		return
+	}
+	if strings.TrimSpace(req.CommandID) == "" {
+		writeError(w, http.StatusBadRequest, "missing_param", "commandId is required")
+		return
+	}
+	resolved := false
+	if scoped, ok := h.clientRuntimeResolver.(ScopedClientRuntimeCommandResolver); ok {
+		resolved = scoped.ResolveClientRuntimeCommandWithHost(req.CommandID, strings.TrimSpace(req.HostClientID), strings.TrimSpace(req.HostSessionID), req.Result, req.Error)
+	} else {
+		resolved = h.clientRuntimeResolver.ResolveClientRuntimeCommand(req.CommandID, req.Result, req.Error)
+	}
+	if !resolved {
+		writeError(w, http.StatusNotFound, "client_runtime_command_not_found", "pending client runtime command/host binding not found: "+req.CommandID)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "commandId": req.CommandID})
+}
+
+func (h *HTTPHandler) handleClientRuntimeState(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	scoped, ok := h.clientRuntimeResolver.(ScopedClientRuntimeCommandResolver)
+	if !ok {
+		writeError(w, http.StatusServiceUnavailable, "client_runtime_state_unavailable", "scoped client runtime resolver not configured")
+		return
+	}
+	conversationID := strings.TrimSpace(r.URL.Query().Get("conversationId"))
+	if conversationID == "" {
+		writeError(w, http.StatusBadRequest, "missing_param", "conversationId is required")
+		return
+	}
+	userID := ""
+	if actor, ok := auth.FromContext(r.Context()); ok && actor != nil {
+		userID = actor.UserID.String()
+	}
+	writeJSON(w, http.StatusOK, scoped.ClientRuntimeSessionState(userID, conversationID))
+}
+
+func (h *HTTPHandler) handleClientRuntimeSessionAck(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeError(w, http.StatusMethodNotAllowed, "method_not_allowed", "method not allowed")
+		return
+	}
+	scoped, ok := h.clientRuntimeResolver.(ScopedClientRuntimeCommandResolver)
+	if !ok {
+		writeError(w, http.StatusServiceUnavailable, "client_runtime_state_unavailable", "scoped client runtime resolver not configured")
+		return
+	}
+	var req struct {
+		ConversationID string `json:"conversationId"`
+		Revision       int64  `json:"revision"`
+	}
+	if err := decodeJSON(r, &req); err != nil {
+		writeError(w, http.StatusBadRequest, "payload_invalid", err.Error())
+		return
+	}
+	req.ConversationID = strings.TrimSpace(req.ConversationID)
+	if req.ConversationID == "" {
+		writeError(w, http.StatusBadRequest, "missing_param", "conversationId is required")
+		return
+	}
+	userID := ""
+	if actor, ok := auth.FromContext(r.Context()); ok && actor != nil {
+		userID = actor.UserID.String()
+	}
+	state, err := scoped.AcknowledgeClientRuntimeSession(userID, req.ConversationID, req.Revision)
+	if err != nil {
+		writeJSON(w, http.StatusConflict, map[string]any{"error": "client_runtime_revision_conflict", "message": err.Error(), "state": state})
+		return
+	}
+	writeJSON(w, http.StatusOK, state)
 }
 
 func (h *HTTPHandler) handleClipboardResponse(w http.ResponseWriter, r *http.Request) {

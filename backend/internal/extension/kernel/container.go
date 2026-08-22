@@ -15,7 +15,6 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/canary"
 	"github.com/u-ai/backend/internal/extension/kernel/capability"
 	"github.com/u-ai/backend/internal/extension/kernel/capability/acquisition"
-	"github.com/u-ai/backend/internal/extension/kernel/chat_ui_extension"
 	"github.com/u-ai/backend/internal/extension/kernel/contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/dependency"
 	"github.com/u-ai/backend/internal/extension/kernel/desktop"
@@ -145,20 +144,19 @@ type Container struct {
 	JSRuntimeFactory         *javascript_main.RuntimeFactory
 	EventDeliveryAdapter     *javascript_main.EventDeliveryAdapter
 
-	UIHost                *ui_contribution.UIHost
-	UIHostNotifier        *SSEUIHostNotifier
-	ClipboardHostBridge   *BridgeClipboardHost
-	UIContributionRepo    *sqlite.SQLiteUIContributionRepository
-	SlotRegistry          *extension_slots.SlotRegistry
-	PageHost              *extension_page_host.PageHost
-	SchemaValidator       *schema_ui.Validator
-	SchemaCompilerCache   *schema_ui.CompilerCache
-	SchemaRegistry        *schema_ui.SchemaRegistry
-	SandboxHost           *sandbox_webui.Host
-	ChatExtensionRegistry *chat_ui_extension.ChatExtensionRegistry
-	OrderingEngine        *ui_ordering.OrderingEngine
-	UIProviderRegistry    *ui_provider.Registry
-	ExtRoot               string
+	UIHost              *ui_contribution.UIHost
+	UIHostNotifier      *SSEUIHostNotifier
+	ClipboardHostBridge *BridgeClipboardHost
+	UIContributionRepo  *sqlite.SQLiteUIContributionRepository
+	SlotRegistry        *extension_slots.SlotRegistry
+	PageHost            *extension_page_host.PageHost
+	SchemaValidator     *schema_ui.Validator
+	SchemaCompilerCache *schema_ui.CompilerCache
+	SchemaRegistry      *schema_ui.SchemaRegistry
+	SandboxHost         *sandbox_webui.Host
+	OrderingEngine      *ui_ordering.OrderingEngine
+	UIProviderRegistry  *ui_provider.Registry
+	ExtRoot             string
 
 	DesktopHost              *desktop.DesktopHost
 	UpdateManager            *desktop_update.UpdateManager
