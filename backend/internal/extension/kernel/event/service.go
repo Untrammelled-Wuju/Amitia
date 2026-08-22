@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"time"
 )
@@ -142,11 +143,40 @@ func (s *Service) GetEventType(ctx context.Context, typeID EventTypeID, version 
 }
 
 func (s *Service) Publish(ctx context.Context, typeID EventTypeID, version int, payload json.RawMessage, opts PublishOptions) (PublishResult, error) {
-	return s.publisher.Publish(ctx, typeID, version, payload, opts)
+	conversationID, canonicalPayload, mirror := conversationProjectionFor(typeID, payload, opts)
+	if !mirror {
+		return s.publisher.Publish(ctx, typeID, version, payload, opts)
+	}
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return PublishResult{}, err
+	}
+	defer tx.Rollback()
+	result, err := s.publisher.PublishTx(ctx, tx, typeID, version, payload, opts)
+	if err != nil {
+		return PublishResult{}, err
+	}
+	if _, _, err := s.publishConversationUIEventTx(ctx, tx, conversationID, canonicalPayload, opts.OperationID); err != nil {
+		return PublishResult{}, err
+	}
+	if err := tx.Commit(); err != nil {
+		return PublishResult{}, err
+	}
+	return result, nil
 }
 
 func (s *Service) PublishTx(ctx context.Context, tx *sql.Tx, typeID EventTypeID, version int, payload json.RawMessage, opts PublishOptions) (PublishResult, error) {
-	return s.publisher.PublishTx(ctx, tx, typeID, version, payload, opts)
+	result, err := s.publisher.PublishTx(ctx, tx, typeID, version, payload, opts)
+	if err != nil {
+		return PublishResult{}, err
+	}
+	conversationID, canonicalPayload, mirror := conversationProjectionFor(typeID, payload, opts)
+	if mirror {
+		if _, _, err := s.publishConversationUIEventTx(ctx, tx, conversationID, canonicalPayload, opts.OperationID); err != nil {
+			return PublishResult{}, err
+		}
+	}
+	return result, nil
 }
 
 func (s *Service) BeginTx(ctx context.Context) (*sql.Tx, error) {
@@ -325,6 +355,124 @@ func (s *Service) GetOutboxByEventID(ctx context.Context, eventID string) (Outbo
 
 func (s *Service) ListOutboxByExtension(ctx context.Context, extensionID string, limit, offset int) ([]OutboxRecord, error) {
 	return s.outboxRepo.ListByExtension(ctx, extensionID, limit, offset)
+}
+
+func (s *Service) PublishConversationUIEvent(ctx context.Context, conversationID string, payload json.RawMessage, operationID string) (PublishResult, int64, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return PublishResult{}, 0, err
+	}
+	defer tx.Rollback()
+	result, sequence, err := s.publishConversationUIEventTx(ctx, tx, conversationID, payload, operationID)
+	if err != nil {
+		return PublishResult{}, 0, err
+	}
+	if err := tx.Commit(); err != nil {
+		return PublishResult{}, 0, err
+	}
+	return result, sequence, nil
+}
+
+func (s *Service) publishConversationUIEventTx(ctx context.Context, tx *sql.Tx, conversationID string, payload json.RawMessage, operationID string) (PublishResult, int64, error) {
+	conversationID = strings.TrimSpace(conversationID)
+	if conversationID == "" {
+		return PublishResult{}, 0, errors.New("event: conversation id required")
+	}
+	var body map[string]interface{}
+	if err := json.Unmarshal(payload, &body); err != nil {
+		return PublishResult{}, 0, fmt.Errorf("event: decode conversation event: %w", err)
+	}
+	eventType := strings.TrimSpace(fmt.Sprint(body["type"]))
+	if eventType == "" || eventType == "<nil>" {
+		return PublishResult{}, 0, errors.New("event: conversation event type required")
+	}
+	sequence, err := s.outboxRepo.NextConversationSequenceTx(ctx, tx, conversationID)
+	if err != nil {
+		return PublishResult{}, 0, err
+	}
+	body["conversationId"] = conversationID
+	body["sequence"] = sequence
+	if strings.TrimSpace(fmt.Sprint(body["createdAt"])) == "" || fmt.Sprint(body["createdAt"]) == "<nil>" {
+		body["createdAt"] = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+	canonicalPayload, err := json.Marshal(body)
+	if err != nil {
+		return PublishResult{}, 0, err
+	}
+	result, err := s.publisher.PublishTx(ctx, tx, "conversation.ui_event", 1, canonicalPayload, PublishOptions{
+		ProducerID:       "system",
+		ProducerType:     EventProducerTypeSystem,
+		Domain:           EventDomainInteraction,
+		AggregateType:    "conversation",
+		AggregateID:      conversationID,
+		AggregateVersion: &sequence,
+		PartitionKey:     conversationID,
+		OrderingKey:      fmt.Sprintf("%020d", sequence),
+		OperationID:      strings.TrimSpace(operationID),
+	})
+	if err != nil {
+		return PublishResult{}, 0, err
+	}
+	return result, sequence, nil
+}
+
+func conversationProjectionFor(typeID EventTypeID, payload json.RawMessage, opts PublishOptions) (string, json.RawMessage, bool) {
+	if typeID == "conversation.ui_event" || strings.HasPrefix(string(typeID), "message.") {
+		return "", nil, false
+	}
+	conversationID := ""
+	if strings.TrimSpace(opts.AggregateType) == "conversation" {
+		conversationID = strings.TrimSpace(opts.AggregateID)
+	}
+	var raw interface{}
+	if err := json.Unmarshal(payload, &raw); err != nil {
+		return "", nil, false
+	}
+	body, isObject := raw.(map[string]interface{})
+	if !isObject {
+		body = map[string]interface{}{"data": raw}
+	}
+	if conversationID == "" {
+		conversationID = strings.TrimSpace(fmt.Sprint(body["conversationId"]))
+		if conversationID == "<nil>" {
+			conversationID = ""
+		}
+	}
+	if conversationID == "" {
+		return "", nil, false
+	}
+	copyBody := make(map[string]interface{}, len(body)+2)
+	for key, value := range body {
+		copyBody[key] = value
+	}
+	copyBody["type"] = string(typeID)
+	copyBody["conversationId"] = conversationID
+	canonical, err := json.Marshal(copyBody)
+	if err != nil {
+		return "", nil, false
+	}
+	return conversationID, canonical, true
+}
+
+func (s *Service) ListConversationUIEvents(ctx context.Context, conversationID string, limit, offset int) ([]OutboxRecord, error) {
+	if strings.TrimSpace(conversationID) == "" {
+		return nil, errors.New("event: conversation id required")
+	}
+	return s.outboxRepo.ListConversationUIEvents(ctx, conversationID, limit, offset)
+}
+
+func (s *Service) ListConversationUIEventsBeforeSequence(ctx context.Context, conversationID string, beforeSequence int64, limit int) ([]OutboxRecord, error) {
+	if strings.TrimSpace(conversationID) == "" {
+		return nil, errors.New("event: conversation id required")
+	}
+	return s.outboxRepo.ListConversationUIEventsBeforeSequence(ctx, conversationID, beforeSequence, limit)
+}
+
+func (s *Service) ListConversationUIEventsAfterSequence(ctx context.Context, conversationID string, afterSequence int64, limit int) ([]OutboxRecord, error) {
+	if strings.TrimSpace(conversationID) == "" {
+		return nil, errors.New("event: conversation id required")
+	}
+	return s.outboxRepo.ListConversationUIEventsAfterSequence(ctx, conversationID, afterSequence, limit)
 }
 
 func (s *Service) ListOutboxByStatus(ctx context.Context, status OutboxStatus, limit, offset int) ([]OutboxRecord, error) {
