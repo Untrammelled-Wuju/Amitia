@@ -115,6 +115,91 @@ final conversationListProvider = FutureProvider.autoDispose<List<ConversationDto
   return svc.listConversations();
 });
 
+final clientRuntimeSessionStateProvider = StreamProvider.autoDispose
+    .family<Map<String, dynamic>, String>((ref, conversationId) async* {
+  final id = conversationId.trim();
+  if (id.isEmpty) {
+    yield const <String, dynamic>{'conversationId': '', 'revision': 0, 'packages': <dynamic>[]};
+    return;
+  }
+  final svc = ref.read(extensionServiceProvider);
+  var lastRevision = -1;
+  while (true) {
+    try {
+      var state = await svc.getClientRuntimeSessionState(id);
+      var revision = (state['revision'] as num?)?.toInt() ?? 0;
+      final packages = (state['packages'] as List?) ?? const <dynamic>[];
+      final hasPendingActivation = packages.whereType<Map>().any((raw) {
+        final package = raw.cast<String, dynamic>();
+        final transition = (package['transitionState'] ?? '').toString().toLowerCase();
+        return package['running'] == true &&
+            (package['targetVersion'] ?? '').toString().trim().isNotEmpty &&
+            (transition == 'starting' || transition == 'awaiting_client');
+      });
+      if (hasPendingActivation) {
+        try {
+          state = await svc.acknowledgeClientRuntimeSessionState(id, revision);
+          revision = (state['revision'] as num?)?.toInt() ?? revision;
+        } catch (_) {
+        }
+      }
+      if (revision != lastRevision) {
+        lastRevision = revision;
+        yield state;
+      }
+    } catch (_) {
+    }
+    await Future<void>.delayed(const Duration(seconds: 2));
+  }
+});
+
+final conversationUIEventWindowProvider = StreamProvider.autoDispose
+    .family<List<Map<String, dynamic>>, String>((ref, conversationId) async* {
+  final id = conversationId.trim();
+  if (id.isEmpty) {
+    yield const <Map<String, dynamic>>[];
+    return;
+  }
+  final svc = ref.read(extensionServiceProvider);
+  final records = <Map<String, dynamic>>[];
+  final seen = <String>{};
+  var cursor = 0;
+  var emittedInitial = false;
+  const pageSize = 2000;
+
+  while (true) {
+    var changed = false;
+    while (true) {
+      try {
+        final page = await svc.getConversationUIEventsAfterSequence(
+          id,
+          afterSequence: cursor,
+          limit: pageSize,
+        );
+        if (page.isEmpty) break;
+        for (final row in page) {
+          final sequence = (row['sequence'] as num?)?.toInt() ?? 0;
+          final eventId = (row['eventId'] ?? '').toString();
+          final key = sequence > 0 ? 'seq:$sequence' : 'id:$eventId';
+          if (seen.add(key)) {
+            records.add(row);
+            changed = true;
+          }
+          if (sequence > cursor) cursor = sequence;
+        }
+        if (page.length < pageSize) break;
+      } catch (_) {
+        break;
+      }
+    }
+    if (changed || !emittedInitial) {
+      emittedInitial = true;
+      yield List<Map<String, dynamic>>.unmodifiable(records);
+    }
+    await Future<void>.delayed(const Duration(seconds: 1));
+  }
+});
+
 final memoryListProvider = FutureProvider.autoDispose<List<MemoryDto>>((ref) async {
   final svc = ref.read(memoryServiceProvider);
   return svc.list();

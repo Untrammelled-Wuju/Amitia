@@ -291,6 +291,9 @@ class UIProfileEnvelope {
 
 class UIContributionSnapshotEntry {
   final String contributionId;
+  final String? sourceContributionId;
+  final String? runtimePackageId;
+  final String? runtimePackageVersion;
   final String extensionId;
   final String moduleId;
   final String kind;
@@ -303,9 +306,13 @@ class UIContributionSnapshotEntry {
   final Map<String, dynamic> dataContract;
   final Map<String, dynamic> visibility;
   final int ordering;
+  final int priority;
 
   const UIContributionSnapshotEntry({
     required this.contributionId,
+    this.sourceContributionId,
+    this.runtimePackageId,
+    this.runtimePackageVersion,
     required this.extensionId,
     required this.moduleId,
     required this.kind,
@@ -318,6 +325,7 @@ class UIContributionSnapshotEntry {
     required this.dataContract,
     required this.visibility,
     required this.ordering,
+    required this.priority,
   });
 
   factory UIContributionSnapshotEntry.fromJson(Map<String, dynamic> json) {
@@ -331,6 +339,9 @@ class UIContributionSnapshotEntry {
         .toList(growable: false);
     return UIContributionSnapshotEntry(
       contributionId: (json['contribution_id'] ?? json['contributionId'] ?? '').toString(),
+      sourceContributionId: (json['source_contribution_id'] ?? json['sourceContributionId'])?.toString(),
+      runtimePackageId: (json['runtime_package_id'] ?? json['runtimePackageId'])?.toString(),
+      runtimePackageVersion: (json['runtime_package_version'] ?? json['runtimePackageVersion'])?.toString(),
       extensionId: (json['extension_id'] ?? json['extensionId'] ?? '').toString(),
       moduleId: (json['module_id'] ?? json['moduleId'] ?? '').toString(),
       kind: (json['kind'] ?? '').toString(),
@@ -343,6 +354,7 @@ class UIContributionSnapshotEntry {
       dataContract: (json['data_contract'] as Map?)?.cast<String, dynamic>() ?? (json['dataContract'] as Map?)?.cast<String, dynamic>() ?? const {},
       visibility: (json['visibility'] as Map?)?.cast<String, dynamic>() ?? const {},
       ordering: (ordering['priority'] as num?)?.toInt() ?? 0,
+      priority: (ordering['priority'] as num?)?.toInt() ?? 0,
     );
   }
 }
@@ -355,6 +367,8 @@ class UISlotSnapshotEntry {
   final String fallbackPolicy;
   final String? ownerExtension;
   final String? parentSlotId;
+  final int declarationEpoch;
+  final String scope;
   final bool dynamicSlot;
   final List<UIContributionSnapshotEntry> contributions;
 
@@ -366,6 +380,8 @@ class UISlotSnapshotEntry {
     required this.fallbackPolicy,
     this.ownerExtension,
     this.parentSlotId,
+    required this.declarationEpoch,
+    required this.scope,
     required this.dynamicSlot,
     required this.contributions,
   });
@@ -378,6 +394,8 @@ class UISlotSnapshotEntry {
     fallbackPolicy: (json['fallbackPolicy'] ?? 'empty').toString(),
     ownerExtension: json['ownerExtension']?.toString(),
     parentSlotId: json['parentSlotId']?.toString(),
+    declarationEpoch: (json['declarationEpoch'] as num?)?.toInt() ?? 0,
+    scope: (json['scope'] ?? 'root').toString(),
     dynamicSlot: json['dynamic'] == true,
     contributions: ((json['contributions'] as List?) ?? const [])
         .whereType<Map>()
