@@ -15,11 +15,23 @@ import (
 )
 
 var (
-	tools      []Tool
-	funcMap    = make(map[string]ToolCallFunc)
-	memTools   []Tool
-	memFuncMap = make(map[string]ToolCallFunc)
+	tools              []Tool
+	funcMap            = make(map[string]ToolCallFunc)
+	memTools           []Tool
+	memFuncMap         = make(map[string]ToolCallFunc)
+	executionEventSink func(context.Context, ToolExecutionContext, string, ToolCallResult)
 )
+
+func SetExecutionEventSink(sink func(context.Context, ToolExecutionContext, string, ToolCallResult)) {
+	executionEventSink = sink
+}
+
+func emitExecutionEvent(ctx context.Context, execCtx ToolExecutionContext, name string, result ToolCallResult) {
+	if executionEventSink == nil || execCtx.ConversationID == "" {
+		return
+	}
+	executionEventSink(ctx, execCtx, name, result)
+}
 
 func Register(t Tool, fn ToolCallFunc) {
 	tools = append(tools, t)
@@ -106,6 +118,7 @@ func ExecuteWithContextAndCancel(callCtx context.Context, execCtx ToolExecutionC
 	result := fn(callCtx, execCtx, args)
 	result = normalizeResult(result, execCtx)
 	recordToolCallResult(intentID, execCtx, name, result)
+	emitExecutionEvent(callCtx, execCtx, name, result)
 	applog.TraceInfo(trace.WithStage("tool_execute_completed"), applog.Fields{
 		"tool_name":    name,
 		"tool_call_id": execCtx.ToolCallID,
@@ -152,6 +165,7 @@ func ExecuteMemoryWithContextAndCancel(callCtx context.Context, execCtx ToolExec
 	result := fn(callCtx, execCtx, args)
 	result = normalizeResult(result, execCtx)
 	recordToolCallResult(intentID, execCtx, name, result)
+	emitExecutionEvent(callCtx, execCtx, name, result)
 	return result, true
 }
 

@@ -1344,8 +1344,12 @@ func wrapWithWorkflowEvent(hostEmitter event.HostEventEmitter, action string, ha
 				"requestId":      scope.RequestID,
 			})
 			opts := event.PublishOptions{
-				TraceID:     scope.TraceID,
-				OperationID: scope.RequestID,
+				TraceID:       scope.TraceID,
+				OperationID:   scope.RequestID,
+				AggregateType: "conversation",
+				AggregateID:   scope.ConversationID,
+				PartitionKey:  scope.ConversationID,
+				OrderingKey:   scope.ConversationID,
 			}
 			_, _ = hostEmitter.EmitWorkflowCompleted(ctx, payload, opts)
 		}

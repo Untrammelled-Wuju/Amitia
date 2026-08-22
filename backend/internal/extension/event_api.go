@@ -52,6 +52,8 @@ func (api *EventAPI) RegisterRoutes(group *gin.RouterGroup) {
 	events.POST("/dead-letters/:deadLetterId/discard", api.discardDeadLetter)
 	events.GET("/stats", api.getStats)
 	events.GET("/outbox", api.listOutbox)
+	events.GET("/conversation-ui/:conversationId", api.listConversationUIEvents)
+	events.GET("/conversation-ui/:conversationId/stream", api.streamConversationUIEvents)
 	events.GET("/audit", api.listAudit)
 	events.POST("/circuits/:subscriptionId/reset", api.resetCircuit)
 }
@@ -458,6 +460,129 @@ func (api *EventAPI) listOutbox(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusBadRequest, gin.H{"error": "extensionId or status required"})
+}
+
+func (api *EventAPI) listConversationUIEvents(c *gin.Context) {
+	svc := api.service(c)
+	if svc == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "event service unavailable"})
+		return
+	}
+	conversationID := strings.TrimSpace(c.Param("conversationId"))
+	if conversationID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "conversation id required"})
+		return
+	}
+	limit, _ := strconv.Atoi(c.DefaultQuery("limit", "1000"))
+	offset, _ := strconv.Atoi(c.DefaultQuery("offset", "0"))
+	afterSequence, _ := strconv.ParseInt(c.DefaultQuery("afterSequence", "0"), 10, 64)
+	beforeSequence, _ := strconv.ParseInt(c.DefaultQuery("beforeSequence", "0"), 10, 64)
+	_, hasBeforeSequence := c.GetQuery("beforeSequence")
+	var records []event.OutboxRecord
+	var err error
+	if afterSequence > 0 {
+		records, err = svc.ListConversationUIEventsAfterSequence(c.Request.Context(), conversationID, afterSequence, limit)
+	} else if hasBeforeSequence {
+		records, err = svc.ListConversationUIEventsBeforeSequence(c.Request.Context(), conversationID, beforeSequence, limit)
+	} else {
+		records, err = svc.ListConversationUIEvents(c.Request.Context(), conversationID, limit, offset)
+	}
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	type item struct {
+		EventID    string          `json:"eventId"`
+		Sequence   int64           `json:"sequence"`
+		OccurredAt time.Time       `json:"occurredAt"`
+		Payload    json.RawMessage `json:"payload"`
+	}
+	items := make([]item, 0, len(records))
+	for _, record := range records {
+		sequence := int64(0)
+		if record.AggregateVersion != nil {
+			sequence = *record.AggregateVersion
+		}
+		items = append(items, item{EventID: record.EventID, Sequence: sequence, OccurredAt: record.OccurredAt, Payload: record.Payload})
+	}
+	c.JSON(http.StatusOK, gin.H{"items": items, "total": len(items), "offset": offset, "afterSequence": afterSequence, "beforeSequence": beforeSequence})
+}
+
+func (api *EventAPI) streamConversationUIEvents(c *gin.Context) {
+	svc := api.service(c)
+	if svc == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "event service unavailable"})
+		return
+	}
+	conversationID := strings.TrimSpace(c.Param("conversationId"))
+	if conversationID == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "conversation id required"})
+		return
+	}
+	afterSequence, _ := strconv.ParseInt(c.DefaultQuery("afterSequence", "0"), 10, 64)
+	if afterSequence < 0 {
+		afterSequence = 0
+	}
+
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("X-Accel-Buffering", "no")
+	flusher, ok := c.Writer.(http.Flusher)
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "SSE not supported"})
+		return
+	}
+	fmt.Fprintf(c.Writer, "event: connected\ndata: {\"conversationId\":%q,\"afterSequence\":%d}\n\n", conversationID, afterSequence)
+	flusher.Flush()
+
+	cursor := afterSequence
+	ticker := time.NewTicker(500 * time.Millisecond)
+	defer ticker.Stop()
+	for {
+		for {
+			records, err := svc.ListConversationUIEventsAfterSequence(c.Request.Context(), conversationID, cursor, 500)
+			if err != nil {
+				fmt.Fprintf(c.Writer, "event: stream_error\ndata: %s\n\n", marshalEventJSON(map[string]interface{}{"error": err.Error(), "afterSequence": cursor}))
+				flusher.Flush()
+				return
+			}
+			for _, record := range records {
+				sequence := int64(0)
+				if record.AggregateVersion != nil {
+					sequence = *record.AggregateVersion
+				}
+				if sequence <= cursor {
+					continue
+				}
+				data := map[string]interface{}{
+					"eventId":    record.EventID,
+					"sequence":   sequence,
+					"occurredAt": record.OccurredAt,
+					"payload":    json.RawMessage(record.Payload),
+				}
+				fmt.Fprintf(c.Writer, "event: conversation_ui_event\nid: %d\ndata: %s\n\n", sequence, marshalEventJSON(data))
+				cursor = sequence
+			}
+			if len(records) < 500 {
+				break
+			}
+		}
+		flusher.Flush()
+		select {
+		case <-c.Request.Context().Done():
+			return
+		case <-ticker.C:
+		}
+	}
+}
+
+func marshalEventJSON(value interface{}) []byte {
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return []byte(`{"error":"json_encode_failed"}`)
+	}
+	return raw
 }
 
 func (api *EventAPI) listAudit(c *gin.Context) {
