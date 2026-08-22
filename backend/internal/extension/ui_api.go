@@ -39,7 +39,6 @@ func (api *UIAPI) RegisterRoutes(extensions *gin.RouterGroup, parent *gin.Router
 		container.SlotRegistry,
 		container.PageHost,
 		container.SandboxHost,
-		container.ChatExtensionRegistry,
 	)
 	handler.SetExtensionRoot(container.ExtRoot)
 	handler.SetProviderRegistry(container.UIProviderRegistry)
@@ -114,6 +113,7 @@ func (api *UIAPI) RegisterRoutes(extensions *gin.RouterGroup, parent *gin.Router
 
 	if container.UIHostNotifier != nil {
 		handler.SetDialogResolver(container.UIHostNotifier)
+		handler.SetClientRuntimeCommandResolver(container.UIHostNotifier)
 		handler.SetProviderChangeBroadcaster(func(eventType string, extra map[string]interface{}) {
 			container.UIHostNotifier.BroadcastExtensionChange(eventType, "builtin.amitia.ui", extra)
 		})
