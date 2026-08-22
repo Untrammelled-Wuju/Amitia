@@ -264,7 +264,6 @@ func (h *Handler) GetReunionEpisode(c *gin.Context) {
 		return
 	}
 	h.respond(c, episode, nil)
-	h.respond(c, episode, err)
 }
 
 func (h *Handler) respond(c *gin.Context, data interface{}, err error) {
