@@ -22,6 +22,14 @@ SPDX-License-Identifier: AGPL-3.0-only
         <p>所有操作都会记录到审计日志中。</p>
       </template>
     </el-alert>
+    <ExtensionSlot
+      slot-id="system.diagnostics.tab"
+      :context="{ route: '/settings/maintenance', surface: 'diagnostics' }"
+      fallback="none"
+      layout="tabs"
+      surface-role="main"
+      class="diagnostics-extension-slot"
+    />
     <DiagnosticsPanel @exported="onExported" />
     <ServiceStatusPanel />
     <OperationsPanel />
@@ -36,6 +44,7 @@ import ServiceStatusPanel from "./ServiceStatusPanel.vue";
 import OperationsPanel from "./OperationsPanel.vue";
 import ExportHistoryPanel from "./ExportHistoryPanel.vue";
 import type { ExportRecord } from "./types";
+import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
 
 const showRestartWarning = ref(true);
 const exportHistory = ref<ExportRecord[]>([]);
@@ -65,4 +74,5 @@ function onExported(record: ExportRecord) {
 .mp-alert {
   margin-bottom: 12px;
 }
+.diagnostics-extension-slot { margin-bottom: 12px; }
 </style>

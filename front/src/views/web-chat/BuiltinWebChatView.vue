@@ -210,6 +210,8 @@ import ProviderUnavailableSurface from "@/components/ui-runtime/ProviderUnavaila
 import BuiltinConversationSidebar from "@/components/ui-runtime/BuiltinConversationSidebar.vue";
 import BuiltinConversationOverlay from "@/components/ui-runtime/BuiltinConversationOverlay.vue";
 import { provideConversationUIContext, readonlyMessages } from "@/ui-runtime/conversationContext";
+import { browserClientPluginRuntime } from "@/ui-runtime/clientPluginRuntime";
+import { hasUnifiedSlotItem } from "@/ui-runtime/slotLedger";
 
 const router = useRouter();
 const callActive = ref(false);
@@ -315,8 +317,17 @@ const conversationProviderContext = computed(() => ({
   offline: isOffline.value,
   canRegenerate: canRegenerate.value,
 }));
-const hasSidebarExtensions = computed(() => extensionUIStore.getVisibleContributions("chat.sidebar.panel").length > 0);
-const hasStatusExtensions = computed(() => extensionUIStore.getVisibleContributions("chat.status.item").length > 0);
+function hasSlotExtensions(slotId: string): boolean {
+  browserClientPluginRuntime.slots.revision.value;
+  const contract = extensionUIStore.slotsById.get(slotId) ?? browserClientPluginRuntime.slots.getDefinition(slotId);
+  return hasUnifiedSlotItem(
+    contract,
+    extensionUIStore.getVisibleContributions(slotId, chatExtensionContext.value),
+    browserClientPluginRuntime.slots.listContributions(slotId),
+  );
+}
+const hasSidebarExtensions = computed(() => hasSlotExtensions("chat.sidebar.panel"));
+const hasStatusExtensions = computed(() => hasSlotExtensions("chat.status.item"));
 const hasExternalSidebarProvider = computed(() => {
   const provider = extensionUIStore.getResolvedProvider("conversation.sidebar");
   return !!provider && provider.enabled && !provider.builtin;

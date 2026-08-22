@@ -34,9 +34,8 @@ SPDX-License-Identifier: AGPL-3.0-only
         class="conversation-flow-item conversation-flow-item--message"
       >
         <ExtensionSlot
-          v-if="messageSlotRendererId(item.message)"
+          v-if="hasMessageSlotRenderer(item.message)"
           slot-id="chat.message.renderer"
-          :contribution-id="messageSlotRendererId(item.message)"
           :context="messageSlotContext(item.message)"
           fallback="default"
           layout="stack"
@@ -121,15 +120,23 @@ import ConversationProjectionHost from "./extension/chat/ConversationProjectionH
 import ExtensionSlot from "./extension/ExtensionSlot.vue";
 import UIProviderHost from "./ui-runtime/UIProviderHost.vue";
 import { useExtensionUIStore } from "@/stores/extensionUI";
+import { browserClientPluginRuntime } from "@/ui-runtime/clientPluginRuntime";
+import { hasUnifiedSlotItem } from "@/ui-runtime/slotLedger";
+import { acknowledgeClientRuntimeSessionState, fetchClientRuntimeSessionState, fetchConversationUIEventsBeforeSequence } from "@/api/extension";
+import { createConversationUIEventStream } from "@/composables/useConversationUIEventStream";
 import { resolveMessageRenderer } from "@/ui-runtime/messageRendererRegistry";
 import {
-  assembleConversationNodes,
+  ConversationNodeAssembler,
   compareTimeline,
+  durableConversationEvents,
+  listProgrammaticConversationNodeDefinitions,
   loadConversationEventJournal,
   mergeConversationEvents,
   messageHistoryEvents,
+  subscribeProgrammaticConversationNodeDefinitions,
   subscribeConversationRuntimeEvents,
   type ConversationNode,
+  type DurableConversationUIEventRecord,
   type RuntimeConversationEvent,
 } from "@/ui-runtime/conversationProjection";
 
@@ -162,7 +169,13 @@ const emit = defineEmits<{
 const store = useExtensionUIStore();
 const rootEl = ref<HTMLElement>();
 const runtimeEvents = ref<RuntimeConversationEvent[]>([]);
+const durableEvents = ref<RuntimeConversationEvent[]>([]);
+const conversationNodes = ref<ConversationNode[]>([]);
+const conversationAssembler = new ConversationNodeAssembler();
 let unsubscribeConversationEvents: (() => void) | null = null;
+let unsubscribeConversationDefinitions: (() => void) | null = null;
+let stopCanonicalConversationStream: (() => void) | null = null;
+let durableRequestGeneration = 0;
 
 const conversationId = computed(() => String(
   props.extensionContext?.conversationId ?? props.messages[0]?.conversationId ?? "",
@@ -172,11 +185,6 @@ const projectionContributions = computed(() => store.getVisibleContributions("ch
   ...(props.extensionContext ?? {}),
   conversationId: conversationId.value,
 }));
-
-const conversationNodes = computed(() => assembleConversationNodes(
-  runtimeEvents.value.filter((event) => event.conversationId === conversationId.value),
-  projectionContributions.value,
-));
 
 type FlowItem =
   | { kind: "message"; key: string; message: any; sequence?: number; timestamp: string }
@@ -211,21 +219,118 @@ function rebuildConversationEventLog() {
   const id = conversationId.value;
   if (!id) {
     runtimeEvents.value = [];
+    conversationAssembler.setContributions([]);
+    conversationAssembler.replaceEvents([]);
+    conversationNodes.value = [];
     return;
   }
   runtimeEvents.value = mergeConversationEvents(
     messageHistoryEvents(props.messages, id),
+    durableEvents.value.filter((event) => event.conversationId === id),
     loadConversationEventJournal(id),
-    runtimeEvents.value.filter((event) => event.conversationId === id && event.source !== "history"),
+    runtimeEvents.value.filter((event) => event.conversationId === id && event.source !== "history" && event.source !== "durable"),
   );
+  conversationAssembler.setContributions(projectionContributions.value);
+  conversationAssembler.setProgrammaticDefinitions(listProgrammaticConversationNodeDefinitions());
+  conversationAssembler.replaceEvents(runtimeEvents.value);
+  conversationNodes.value = conversationAssembler.nodes();
+}
+
+async function loadDurableConversationEventWindow(id: string) {
+  const generation = ++durableRequestGeneration;
+  if (!id) {
+    stopCanonicalConversationStream?.();
+    stopCanonicalConversationStream = null;
+    durableEvents.value = [];
+    rebuildConversationEventLog();
+    return;
+  }
+  const records: DurableConversationUIEventRecord[] = [];
+  const pageSize = 2000;
+  let beforeSequence = 0;
+  try {
+    while (true) {
+      const page = await fetchConversationUIEventsBeforeSequence(id, beforeSequence, pageSize);
+      if (generation !== durableRequestGeneration || id !== conversationId.value) return;
+      const items = page.items ?? [];
+      if (items.length > 0) {
+        records.unshift(...items);
+        const firstSequence = finiteNumber(items[0]?.sequence) ?? 0;
+        if (firstSequence <= 0 || firstSequence === beforeSequence) break;
+        beforeSequence = firstSequence;
+      }
+      if (items.length < pageSize) break;
+    }
+    durableEvents.value = durableConversationEvents(records, id);
+  } catch {
+    if (generation !== durableRequestGeneration || id !== conversationId.value) return;
+    durableEvents.value = [];
+  }
+  rebuildConversationEventLog();
+  if (generation !== durableRequestGeneration || id !== conversationId.value) return;
+  startCanonicalConversationStream(id);
+}
+
+function startCanonicalConversationStream(id: string) {
+  stopCanonicalConversationStream?.();
+  stopCanonicalConversationStream = null;
+  if (!id) return;
+  const afterSequence = durableEvents.value.reduce((max, event) => Math.max(max, finiteNumber(event.sequence) ?? 0), 0);
+  stopCanonicalConversationStream = createConversationUIEventStream({
+    conversationId: id,
+    afterSequence,
+    onEvent: (record) => {
+      if (id !== conversationId.value) return;
+      const event = durableConversationEvents([record], id)[0];
+      if (!event) return;
+      durableEvents.value = mergeConversationEvents(durableEvents.value, [event]);
+      runtimeEvents.value = mergeConversationEvents(runtimeEvents.value, [event]);
+      conversationAssembler.append(event);
+      conversationNodes.value = conversationAssembler.nodes();
+    },
+  });
 }
 
 function consumeConversationEvent(event: RuntimeConversationEvent) {
   if (!event.conversationId || event.conversationId !== conversationId.value) return;
   runtimeEvents.value = mergeConversationEvents(runtimeEvents.value, [event]);
+  conversationAssembler.append(event);
+  conversationNodes.value = conversationAssembler.nodes();
 }
 
-watch(() => [conversationId.value, props.messages] as const, rebuildConversationEventLog, { deep: true });
+let clientRuntimeSessionGeneration = 0;
+async function loadClientRuntimeSession(id: string) {
+  const generation = ++clientRuntimeSessionGeneration;
+  const scopeGeneration = await browserClientPluginRuntime.activateConversationScope(id);
+  if (!id) return;
+  try {
+    const state = await fetchClientRuntimeSessionState(id);
+    if (generation !== clientRuntimeSessionGeneration || id !== conversationId.value) return;
+    const applied = await browserClientPluginRuntime.synchronizeSession(state as any, {
+      expectedScopeGeneration: scopeGeneration,
+    });
+    if (!applied || generation !== clientRuntimeSessionGeneration || id !== conversationId.value) return;
+
+    const hasPendingActivation = (state.packages ?? []).some((item) => {
+      const transition = String(item.transitionState ?? "").toLowerCase();
+      return !!item.running && !!item.targetVersion && (transition === "starting" || transition === "awaiting_client");
+    });
+    if (hasPendingActivation) {
+      const committed = await acknowledgeClientRuntimeSessionState(id, Number(state.revision ?? 0));
+      if (generation !== clientRuntimeSessionGeneration || id !== conversationId.value) return;
+      await browserClientPluginRuntime.synchronizeSession(committed as any, {
+        expectedScopeGeneration: scopeGeneration,
+      });
+    }
+  } catch {
+  }
+}
+
+watch(() => [conversationId.value, props.messages, projectionContributions.value] as const, rebuildConversationEventLog, { deep: true });
+watch(conversationId, (id) => {
+  void loadDurableConversationEventWindow(id);
+  void loadClientRuntimeSession(id);
+}, { immediate: true });
 
 function messageContext(msg: any) {
   return {
@@ -252,8 +357,15 @@ function messageSlotContext(msg: any) {
   };
 }
 
-function messageSlotRendererId(msg: any): string | undefined {
-  return store.getVisibleContributions("chat.message.renderer", messageSlotContext(msg))[0]?.contributionId;
+function hasMessageSlotRenderer(msg: any): boolean {
+  browserClientPluginRuntime.slots.revision.value;
+  const slotId = "chat.message.renderer";
+  const contract = store.slotsById.get(slotId) ?? browserClientPluginRuntime.slots.getDefinition(slotId);
+  return hasUnifiedSlotItem(
+    contract,
+    store.getVisibleContributions(slotId, messageSlotContext(msg)),
+    browserClientPluginRuntime.slots.listContributions(slotId),
+  );
 }
 
 function messageRendererId(msg: any): string | undefined {
@@ -309,9 +421,15 @@ onMounted(() => {
   if (!store.snapshot) void store.refreshSnapshot();
   rebuildConversationEventLog();
   unsubscribeConversationEvents = subscribeConversationRuntimeEvents(consumeConversationEvent);
+  unsubscribeConversationDefinitions = subscribeProgrammaticConversationNodeDefinitions(rebuildConversationEventLog);
 });
 
-onBeforeUnmount(() => unsubscribeConversationEvents?.());
+onBeforeUnmount(() => {
+  unsubscribeConversationEvents?.();
+  unsubscribeConversationDefinitions?.();
+  stopCanonicalConversationStream?.();
+  stopCanonicalConversationStream = null;
+});
 defineExpose({ rootEl });
 </script>
 

@@ -67,12 +67,52 @@ SPDX-License-Identifier: AGPL-3.0-only
       >
     </div>
     <div class="settings-content">
+      <ExtensionSlot
+        slot-id="system.status.item"
+        :context="settingsContext"
+        fallback="none"
+        layout="inline"
+        surface-role="status"
+        class="settings-status-slot"
+      />
       <router-view />
+      <ExtensionSlot
+        slot-id="system.settings.section"
+        :context="settingsContext"
+        fallback="none"
+        layout="stack"
+        surface-role="main"
+      />
+      <ExtensionSlot
+        slot-id="extension.settings.section"
+        :context="settingsContext"
+        fallback="none"
+        layout="stack"
+        surface-role="main"
+      />
+      <ExtensionSlot
+        slot-id="extension.settings.page"
+        :context="settingsContext"
+        fallback="none"
+        layout="stack"
+        surface-role="main"
+      />
     </div>
   </div>
 </template>
 
-<script setup lang="ts"></script>
+<script setup lang="ts">
+import { computed } from "vue";
+import { useRoute } from "vue-router";
+import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
+
+const route = useRoute();
+const settingsContext = computed(() => ({
+  route: route.fullPath,
+  routeName: String(route.name ?? ""),
+  section: String(route.path.split("/").filter(Boolean).at(-1) ?? "settings"),
+}));
+</script>
 
 <style scoped>
 .settings-layout {
@@ -110,5 +150,8 @@ SPDX-License-Identifier: AGPL-3.0-only
 }
 .settings-content {
   min-height: 400px;
+}
+.settings-status-slot {
+  margin-bottom: 12px;
 }
 </style>
