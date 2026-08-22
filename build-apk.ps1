@@ -174,9 +174,13 @@ try {
         if (-not $SkipPubGet) { & $flutter pub get }
         $env:AMITIA_RUNTIME_CANDIDATE_BUILD = '1'; $env:FROZEN_RUNTIME_PACKAGE_PATH = [System.IO.Path]::GetFullPath($RuntimePackagePath)
         & $flutter build apk --release --target-platform android-arm64 --no-tree-shake-icons
-        if ($LASTEXITCODE -ne 0) { throw 'Flutter Release 构建失败。' }
-        $source = Join-Path $temp 'android\app\build\outputs\flutter-apk\app-release.apk'
-        if (-not (Test-Path -LiteralPath $source)) { throw 'Flutter APK 构建失败。' }
+        $flutterExitCode = $LASTEXITCODE
+        $source = @(
+            (Join-Path $temp 'build\app\outputs\flutter-apk\app-release.apk'),
+            (Join-Path $temp 'android\app\build\outputs\flutter-apk\app-release.apk')
+        ) | Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } | Select-Object -First 1
+        if (-not $source -and $flutterExitCode -ne 0) { throw 'Flutter Release 构建失败。' }
+        if (-not $source) { throw 'Flutter APK 构建失败。' }
         Copy-Item $source $target -Force
     }
     finally {
