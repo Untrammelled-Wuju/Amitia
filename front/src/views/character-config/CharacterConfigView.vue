@@ -16,18 +16,35 @@ SPDX-License-Identifier: AGPL-3.0-only
     </el-alert>
 
     <div class="char-layout">
-      <CharacterSidebar
-        :characters="characters"
-        :selected-id="selectedId"
-        @create="createNew"
-        @open-templates="showTemplateDialog = true"
-        @select="onSelectChar"
-        @copy="copyChar"
-        @delete="delChar"
-      />
+      <div class="char-sidebar-stack">
+        <CharacterSidebar
+          :characters="characters"
+          :selected-id="selectedId"
+          @create="createNew"
+          @open-templates="showTemplateDialog = true"
+          @select="onSelectChar"
+          @copy="copyChar"
+          @delete="delChar"
+        />
+        <ExtensionSlot
+          slot-id="character.sidebar.card"
+          :context="characterExtensionContext"
+          fallback="none"
+          layout="stack"
+          surface-role="sidebar"
+        />
+      </div>
 
       <div class="char-main" :class="{ empty: !selected }">
         <template v-if="selected">
+          <ExtensionSlot
+            slot-id="character.detail.action"
+            :context="characterExtensionContext"
+            fallback="none"
+            layout="inline"
+            surface-role="header"
+            class="character-action-slot"
+          />
           <CharacterEditForm
             v-model:active-tab="activeTab"
             v-model:name="form.name"
@@ -60,6 +77,14 @@ SPDX-License-Identifier: AGPL-3.0-only
               />
             </template>
           </CharacterEditForm>
+          <ExtensionSlot
+            slot-id="character.detail.tab"
+            :context="characterExtensionContext"
+            fallback="none"
+            layout="tabs"
+            surface-role="main"
+            class="character-detail-slot"
+          />
         </template>
 
         <div v-else class="char-main-empty">
@@ -131,7 +156,7 @@ SPDX-License-Identifier: AGPL-3.0-only
 </template>
 
 <script setup lang="ts">
-import { onMounted } from "vue";
+import { computed, onMounted } from "vue";
 import { useCharacterConfig } from "./composables/useCharacterConfig";
 import { useCharacterTestChat } from "./composables/useCharacterTestChat";
 import { useCharacterImportExport } from "./composables/useCharacterImportExport";
@@ -140,6 +165,7 @@ import CharacterEditForm from "./components/CharacterEditForm.vue";
 import CharacterTestChat from "./components/CharacterTestChat.vue";
 import TemplatePickerDialog from "./components/TemplatePickerDialog.vue";
 import ImportPackDialog from "./components/ImportPackDialog.vue";
+import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
 
 const {
   templates,
@@ -171,6 +197,13 @@ const {
 
 const { testMessages, testMsg, testLoading, sendTest, clearTestMessages } =
   useCharacterTestChat();
+
+const characterExtensionContext = computed(() => ({
+  characterId: selectedId.value,
+  characterName: selected.value?.name ?? "",
+  activeTab: activeTab.value,
+  surface: "character-detail",
+}));
 
 const {
   exportingPack,
@@ -232,6 +265,16 @@ onMounted(async () => {
   flex: 1;
   min-height: 0;
 }
+
+.char-sidebar-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+}
+.char-sidebar-stack :deep(.extension-slot) { max-height: 40%; }
+.character-action-slot { margin-bottom: 8px; }
+.character-detail-slot { margin-top: 12px; }
 
 .char-main {
   flex: 1;

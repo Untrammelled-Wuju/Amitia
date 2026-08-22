@@ -21,7 +21,13 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
         ><div class="actions">
           <el-button :icon="Lock" @click="permissionVisible = true"
             >管理权限</el-button
-          ><el-button :loading="reloading" @click="reload">重新加载</el-button
+          ><ExtensionSlot
+            slot-id="extension.detail.action"
+            :context="extensionDetailContext"
+            fallback="none"
+            layout="inline"
+            surface-role="header"
+          /><el-button :loading="reloading" @click="reload">重新加载</el-button
           ><el-button
             :type="plugin.enabled ? 'danger' : 'primary'"
             plain
@@ -316,6 +322,15 @@ compatibility, maintenance, testing, and migration to Extension Kernel.
             <pre>{{ pretty(plugin.manifest) }}</pre>
           </el-card></el-tab-pane
         >
+        <el-tab-pane label="扩展界面" name="extension-ui">
+          <ExtensionSlot
+            slot-id="extension.detail.tab"
+            :context="extensionDetailContext"
+            fallback="empty"
+            layout="tabs"
+            surface-role="main"
+          />
+        </el-tab-pane>
       </el-tabs>
     </template>
 
@@ -341,6 +356,7 @@ import { Lock } from "@element-plus/icons-vue";
 import ExtensionPageHeader from "./components/ExtensionPageHeader.vue";
 import PermissionDialog from "./components/PermissionDialog.vue";
 import SchemaSurfaceRenderer from "./components/SchemaSurfaceRenderer.vue";
+import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
 import {
   executePluginAction,
   fetchCapabilities,
@@ -373,6 +389,7 @@ import type {
 
 const route = useRoute();
 const pluginId = computed(() => String(route.params.id || ""));
+const extensionDetailContext = computed(() => ({ extensionId: pluginId.value, route: route.fullPath, surface: "extension-detail" }));
 const plugin = ref<PluginDetail>();
 const characterId = ref("");
 const loading = ref(false);

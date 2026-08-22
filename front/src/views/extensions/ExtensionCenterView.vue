@@ -1,8 +1,17 @@
 <template>
   <main class="center-page">
-    <header>
-      <h1>扩展中心</h1>
-      <p>统一管理扩展包、系统插件、Skill 与外部能力。</p>
+    <header class="center-header">
+      <div>
+        <h1>扩展中心</h1>
+        <p>统一管理扩展包、系统插件、Skill 与外部能力。</p>
+      </div>
+      <ExtensionSlot
+        slot-id="extension.center.header.action"
+        :context="{ route: '/extensions', surface: 'extension-center' }"
+        fallback="none"
+        layout="inline"
+        surface-role="header"
+      />
     </header>
 
     <section class="entry-grid">
@@ -16,6 +25,13 @@
         <div>
           <h2>{{ entry.title }}</h2>
           <p>{{ entry.description }}</p>
+          <ExtensionSlot
+            slot-id="extension.center.card.badge"
+            :context="{ entryId: entry.id, route: entry.to, title: entry.title }"
+            fallback="none"
+            layout="inline"
+            surface-role="main"
+          />
         </div>
         <el-icon><ArrowRight /></el-icon>
       </router-link>
@@ -33,14 +49,15 @@ import {
   SetUp,
   Tickets,
 } from "@element-plus/icons-vue";
+import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
 
 const entries = [
-  { to: "/extensions/packages", title: "扩展包", description: "安装和管理 .amitiax 扩展包", icon: Box },
-  { to: "/extensions/mcp", title: "MCP 服务", description: "连接外部 MCP 服务", icon: Connection },
-  { to: "/extensions/agent-skills", title: "Agent Skills", description: "管理 SKILL.md 指令包", icon: DocumentChecked },
-  { to: "/extensions/plugins", title: "系统插件", description: "管理系统 Plugin Runtime", icon: SetUp },
-  { to: "/extensions/skills", title: "兼容技能", description: "管理旧 Skill 能力", icon: Operation },
-  { to: "/extensions/runs", title: "执行记录", description: "查看运行结果和耗时", icon: Tickets },
+  { id: "packages", to: "/extensions/packages", title: "扩展包", description: "安装和管理 .amitiax 扩展包", icon: Box },
+  { id: "mcp", to: "/extensions/mcp", title: "MCP 服务", description: "连接外部 MCP 服务", icon: Connection },
+  { id: "agent-skills", to: "/extensions/agent-skills", title: "Agent Skills", description: "管理 SKILL.md 指令包", icon: DocumentChecked },
+  { id: "plugins", to: "/extensions/plugins", title: "系统插件", description: "管理系统 Plugin Runtime", icon: SetUp },
+  { id: "skills", to: "/extensions/skills", title: "兼容技能", description: "管理旧 Skill 能力", icon: Operation },
+  { id: "runs", to: "/extensions/runs", title: "执行记录", description: "查看运行结果和耗时", icon: Tickets },
 ];
 </script>
 
@@ -49,6 +66,8 @@ const entries = [
   height: 100%;
   overflow: auto;
 }
+.center-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.center-header :deep(.extension-slot) { width: auto; }
 header h1 {
   margin: 0 0 6px;
   color: var(--console-text);
