@@ -1,11 +1,18 @@
 import { AmitiaError, ValidationError, PermissionDeniedError } from "./errors";
 import type { UIProviderDefinition, UIProviderEntry } from "./manifest";
 import type {
+  UIChildrenDecl,
   UIKnownSlotId,
+  UISlotEntryKey,
   UISlotInjectFactory,
-  UISlotInjected,
-  UISlotProps,
+  UISlotKind,
+  UISlotRegisterOptions,
+  UISlotRegistrationComponent,
+  UISlotComponent,
+  UISlotScope,
   UISlotStore,
+  UISlotManagedStoreHandle,
+  UISlotManagedStoreInstance,
   UISlotStoreFactory,
   UISlotStoreResource,
 } from "./slot-contract";
@@ -38,14 +45,18 @@ export interface UIBridge {
 export interface UISlotDefinition {
   readonly slotId: string;
   readonly contractVersion?: number;
-  readonly supportedKinds: string[];
+  readonly supportedKinds: readonly string[];
+  /** DSH-compatible dispatch semantics. When omitted it is derived from multiplicity. */
+  readonly kind?: UISlotKind;
   readonly multiplicity?: "single" | "multiple" | "ordered_multiple" | "replaceable_single" | "exclusive";
   readonly layout?: "inline" | "stack" | "row" | "grid" | "tabs" | "panel" | "drawer" | "modal" | "hidden";
   readonly fallbackPolicy?: "none" | "skeleton" | "empty" | "default";
   readonly parentSlotId?: string;
   readonly description?: string;
   readonly declarationEpoch?: number;
-  readonly scope?: "root" | "session-maybe" | "session";
+  readonly scope?: UISlotScope;
+  /** In-memory/runtime inspection seat for the parent-declared common inject face. */
+  readonly commonInject?: Readonly<Record<string, unknown>>;
 }
 
 export interface UISlotRegistration {
@@ -61,6 +72,8 @@ export type UISlotInjectionEffect =
   | Iterable<UISlotInjectionCleanup>
   | Promise<void | UISlotInjectionCleanup | readonly UISlotInjectionCleanup[] | Iterable<UISlotInjectionCleanup>>;
 
+/** Explicit compatibility API for old declarative callers. It intentionally is
+ * not an overload of register(), so it cannot weaken SlotMap type checking. */
 export interface UISlotContributionOptions<
   TProps extends Record<string, unknown> = Record<string, unknown>,
   TStore = unknown,
@@ -72,55 +85,70 @@ export interface UISlotContributionOptions<
   readonly children?: readonly UISlotDefinition[];
   readonly store?: TStore | UISlotStoreFactory<TStore>;
   readonly inject?: UISlotInjectFactory<TStore, TInjected>;
+  readonly entryKey?: string;
+  /** DSH list-cell identity (distinct from stable registration key). */
+  readonly cellId?: string;
+  readonly label?: string | (() => string);
+  readonly select?: (owner: Record<string, unknown>) => unknown | null;
 }
 
-export interface UISlotEntryDefinition<SlotId extends string = string, TRenderable = unknown> {
-  readonly slotId: SlotId;
+/** Legacy manifest entry retained as a named compatibility shape. */
+export interface UISlotEntryDefinition<TRenderable = unknown> {
+  readonly slotId: string;
   readonly key: string;
   readonly renderable: TRenderable;
   readonly ordering?: number;
   readonly priority?: number;
-  readonly props?: UISlotProps<SlotId>;
+  readonly props?: Record<string, unknown>;
   readonly children?: readonly UISlotDefinition[];
-  readonly store?: UISlotStore<SlotId> | UISlotStoreFactory<UISlotStore<SlotId>>;
-  readonly inject?: UISlotInjectFactory<UISlotStore<SlotId>, UISlotInjected<SlotId>>;
+  readonly store?: unknown | UISlotStoreFactory<unknown>;
+  readonly inject?: UISlotInjectFactory<unknown, Record<string, unknown>>;
+  readonly entryKey?: string;
+  readonly select?: (owner: Record<string, unknown>) => unknown | null;
 }
 
-export interface UISlotContributionRegistration<T = unknown, TStore = unknown, TInjected extends Record<string, unknown> = Record<string, unknown>> {
+export interface UISlotContributionRegistration<
+  T = unknown,
+  TStore = unknown,
+  TInjected extends Record<string, unknown> = Record<string, unknown>,
+> {
   readonly slotId: string;
   readonly key: string;
   readonly renderable: T;
+  /** Root-scoped compatibility aliases. Session-scoped state is instantiated per session. */
   readonly store?: TStore;
   readonly injected?: Readonly<TInjected>;
   dispose(): void | Promise<void>;
 }
 
 export interface UISlotClient {
+  /** Advanced compatibility primitive. DSH-style composition should declare children in register(). */
   declare(definition: UISlotDefinition): Promise<UISlotRegistration>;
-  register<SlotId extends UIKnownSlotId, T = unknown>(
-    slotId: SlotId,
-    key: string,
-    renderable: T,
-    options?: UISlotContributionOptions<UISlotProps<SlotId>, UISlotStore<SlotId>, UISlotInjected<SlotId>>,
-  ): UISlotContributionRegistration<T, UISlotStore<SlotId>, UISlotInjected<SlotId>>;
-  register<T = unknown>(
+  /** Strong single composition API. No string catch-all overload is provided. */
+  register<
+    K extends UIKnownSlotId,
+    const D extends UIChildrenDecl = {},
+    S = UISlotStore<K>,
+    I extends Record<string, unknown> = {},
+    N extends keyof import("./slot-contract").UILocaleNamespaceMap & string | undefined = undefined,
+    const EntryKey extends UISlotEntryKey<K> = UISlotEntryKey<K>,
+    C extends UISlotComponent<never> = UISlotComponent<never>,
+  >(
+    options: UISlotRegisterOptions<K, D, S, I, N, EntryKey>,
+    renderable: UISlotRegistrationComponent<K, D, S, I, N, EntryKey, C>,
+  ): UISlotContributionRegistration<C, S, I>;
+  /** Explicit compatibility escape hatch for old manifests/declarative packages. */
+  registerLegacy<T = unknown>(
     slotId: string,
     key: string,
     renderable: T,
     options?: UISlotContributionOptions,
   ): UISlotContributionRegistration<T>;
-  register<SlotId extends string, T = unknown>(
-    entry: UISlotEntryDefinition<SlotId, T>,
-  ): UISlotContributionRegistration<T, UISlotStore<SlotId>, UISlotInjected<SlotId>>;
   list(): Promise<UISlotDefinition[]>;
-  /**
-   * Depend on the lifetime of a slot declaration. The callback is invoked once
-   * for each declaration epoch. If the declaration disappears, its returned
-   * cleanup is awaited before a later declaration can activate a new epoch.
-   */
-  observe(slotId: string, callback: (definition: UISlotDefinition) => UISlotInjectionEffect): Promise<UISlotInjectionCleanup>;
-  /** @deprecated Use observe(). Business injection belongs to register({ inject }). */
+  /** Slot-declaration lifetime injection; retained as a first-class API. */
   inject(slotId: string, callback: (definition: UISlotDefinition) => UISlotInjectionEffect): Promise<UISlotInjectionCleanup>;
+  /** Alias with clearer semantics for callers that prefer it. */
+  observe(slotId: string, callback: (definition: UISlotDefinition) => UISlotInjectionEffect): Promise<UISlotInjectionCleanup>;
 }
 
 export interface UIActionClient {
@@ -227,6 +255,16 @@ function slotScopeCanContain(
   return true;
 }
 
+
+function multiplicityFromSlotKind(kind: import("./slot-contract").UISlotKind): NonNullable<UISlotDefinition["multiplicity"]> {
+  if (kind === "single") return "replaceable_single";
+  return "ordered_multiple";
+}
+
+function slotKindFromMultiplicity(multiplicity: UISlotDefinition["multiplicity"]): import("./slot-contract").UISlotKind {
+  if (multiplicity === "single" || multiplicity === "replaceable_single" || multiplicity === "exclusive") return "single";
+  return "list";
+}
 export function defineUISlot(definition: UISlotDefinition): UISlotDefinition {
   if (!definition.slotId?.trim()) throw new ValidationError("ui slot slotId is required");
   if (!Array.isArray(definition.supportedKinds) || definition.supportedKinds.length === 0) {
@@ -242,7 +280,8 @@ export function defineUISlot(definition: UISlotDefinition): UISlotDefinition {
     ...definition,
     slotId: definition.slotId.trim(),
     contractVersion: definition.contractVersion ?? 1,
-    multiplicity: definition.multiplicity ?? "ordered_multiple",
+    kind: definition.kind ?? slotKindFromMultiplicity(definition.multiplicity),
+    multiplicity: definition.multiplicity ?? multiplicityFromSlotKind(definition.kind ?? "list"),
     layout: definition.layout ?? "stack",
     fallbackPolicy: definition.fallbackPolicy ?? "empty",
     scope: definition.scope ?? "root",
@@ -259,6 +298,25 @@ export class InMemoryUIBridge implements UIBridge {
     callback: (definition: UISlotDefinition) => UISlotInjectionEffect;
     cleanup?: UISlotInjectionCleanup;
   }>>();
+
+  constructor() {
+    // Root is the sole foundational composition seat. Amitia may expose
+    // additional built-in host surfaces, but strict plugin trees can always
+    // bootstrap from this DSH-compatible root without out-of-band setup.
+    const root = defineUISlot({
+      slotId: "root",
+      contractVersion: 1,
+      supportedKinds: ["panel", "schema_page", "web_page"],
+      kind: "single",
+      multiplicity: "replaceable_single",
+      layout: "stack",
+      fallbackPolicy: "default",
+      scope: "root",
+      declarationEpoch: 1,
+    });
+    this.slotValues.set("root", root);
+    this.slotEpochs.set("root", 1);
+  }
 
   async ready(): Promise<UIReadyEvent> {
     return {
@@ -336,6 +394,7 @@ export class InMemoryUIBridge implements UIBridge {
       });
       const previousEpoch = this.slotEpochs.get(definition.slotId) ?? 0;
       if (this.slotValues.has(definition.slotId)) {
+        await this.collapseSlotEntries(definition.slotId);
         await this.deactivateSlotEpoch(definition.slotId);
       }
       const epoch = previousEpoch + 1;
@@ -346,32 +405,49 @@ export class InMemoryUIBridge implements UIBridge {
       return {
         definition: activeDefinition,
         dispose: async () => {
-          if (this.slotEpochs.get(definition.slotId) !== epoch) return;
-          await this.deactivateSlotEpoch(definition.slotId);
-          this.slotValues.delete(definition.slotId);
+          await this.collapseSlotEpoch(definition.slotId, epoch);
         },
       };
     },
-    register: ((
-      slotOrEntry: string | UISlotEntryDefinition<string, unknown>,
-      key?: string,
-      renderable?: unknown,
+    register: ((options: UISlotRegisterOptions<UIKnownSlotId, UIChildrenDecl, unknown, Record<string, unknown>>, renderable: unknown) => {
+      const children: UISlotDefinition[] = Object.entries(options.children ?? {}).map(([slotId, raw]) => {
+        const spec = raw as NonNullable<UIChildrenDecl[UIKnownSlotId]>;
+        return {
+          slotId,
+          contractVersion: spec.contractVersion ?? 1,
+          supportedKinds: [...(spec.supportedKinds ?? ["panel"])],
+          kind: spec.kind,
+          scope: spec.scope,
+          multiplicity: spec.multiplicity ?? multiplicityFromSlotKind(spec.kind),
+          layout: spec.layout,
+          fallbackPolicy: spec.fallbackPolicy,
+          description: spec.description,
+          commonInject: spec.inject as Readonly<Record<string, unknown>> | undefined,
+        };
+      });
+      return this.slots.registerLegacy(options.name, options.key, renderable, {
+        ordering: (options as { order?: number }).order ?? options.ordering,
+        priority: options.priority,
+        props: options.ownerDefaults as Record<string, unknown> | undefined,
+        children,
+        store: options.store as unknown,
+        inject: options.inject as UISlotInjectFactory<unknown, Record<string, unknown>> | undefined,
+        entryKey: (options as { entryKey?: string }).entryKey,
+        cellId: (options as { id?: string }).id,
+        label: (options as { label?: string | (() => string) }).label,
+        select: (options as { select?: (owner: Record<string, unknown>) => unknown | null }).select,
+      });
+    }) as UISlotClient["register"],
+    registerLegacy: ((
+      slotId: string,
+      key: string,
+      renderable: unknown,
       options: UISlotContributionOptions = {},
     ): UISlotContributionRegistration<unknown> => {
-      const entryMode = typeof slotOrEntry !== "string";
-      const id = (entryMode ? slotOrEntry.slotId : slotOrEntry).trim();
-      const contributionKey = (entryMode ? slotOrEntry.key : key ?? "").trim();
-      const contributionRenderable = entryMode ? slotOrEntry.renderable : renderable;
-      const resolvedOptions: UISlotContributionOptions = entryMode
-        ? {
-            ordering: slotOrEntry.ordering,
-            priority: slotOrEntry.priority,
-            props: slotOrEntry.props,
-            children: slotOrEntry.children,
-            store: slotOrEntry.store,
-            inject: slotOrEntry.inject,
-          }
-        : options;
+      const id = slotId.trim();
+      const contributionKey = key.trim();
+      const contributionRenderable = renderable;
+      const resolvedOptions = options;
       if (!id || !contributionKey) throw new ValidationError("ui slot registration requires slotId and key");
       if (!this.slotValues.has(id)) throw new ValidationError(`ui slot ${id} is not declared`);
 
@@ -406,14 +482,26 @@ export class InMemoryUIBridge implements UIBridge {
         scope: parentDefinition.scope ?? "root",
       } as const;
       let store: unknown;
+      let actions: Readonly<Record<string, (...args: any[]) => any>> = {};
+      const attachManagedStore = (handle: UISlotManagedStoreHandle<unknown, any>) => {
+        const managed = handle.create(resourceContext.scope) as UISlotManagedStoreInstance<unknown, any>;
+        store = managed.getSnapshot();
+        actions = Object.freeze({ ...(managed.actions ?? {}) });
+        resourceDisposers.push(() => managed.dispose());
+      };
       if (typeof resolvedOptions.store === "function") {
         const created = (resolvedOptions.store as UISlotStoreFactory<unknown>)(resourceContext);
         if (isUISlotStoreResource(created)) {
           store = created.store;
+          actions = Object.freeze({ ...(created.actions ?? {}) });
           if (created.dispose) resourceDisposers.push(() => created.dispose?.());
+        } else if (isUISlotManagedStoreHandle(created)) {
+          attachManagedStore(created);
         } else {
           store = created;
         }
+      } else if (isUISlotManagedStoreHandle(resolvedOptions.store)) {
+        attachManagedStore(resolvedOptions.store);
       } else {
         store = resolvedOptions.store;
       }
@@ -423,6 +511,7 @@ export class InMemoryUIBridge implements UIBridge {
           injected = (resolvedOptions.inject as UISlotInjectFactory<unknown, Record<string, unknown>>)({
             ...resourceContext,
             store,
+            actions,
             services: { get: () => undefined, list: () => [] },
             events: { emit: async () => undefined },
           });
@@ -440,9 +529,7 @@ export class InMemoryUIBridge implements UIBridge {
         this.slotValues.set(child.slotId, activeDefinition);
         childEpochs.push({ slotId: child.slotId, epoch });
         void this.activateSlotEpoch(child.slotId, activeDefinition).catch(async () => {
-          if (this.slotEpochs.get(child.slotId) !== epoch) return;
-          await this.deactivateSlotEpoch(child.slotId);
-          this.slotValues.delete(child.slotId);
+          await this.collapseSlotEpoch(child.slotId, epoch);
         });
       }
 
@@ -458,9 +545,7 @@ export class InMemoryUIBridge implements UIBridge {
           active = false;
           for (let index = childEpochs.length - 1; index >= 0; index--) {
             const child = childEpochs[index]!;
-            if (this.slotEpochs.get(child.slotId) !== child.epoch || !this.slotValues.has(child.slotId)) continue;
-            await this.deactivateSlotEpoch(child.slotId);
-            this.slotValues.delete(child.slotId);
+            await this.collapseSlotEpoch(child.slotId, child.epoch);
           }
           const current = this.slotContributions.get(id);
           current?.delete(contributionKey);
@@ -470,7 +555,7 @@ export class InMemoryUIBridge implements UIBridge {
       };
       entries.set(contributionKey, registration as UISlotContributionRegistration);
       return registration;
-    }) as UISlotClient["register"],
+    }) as UISlotClient["registerLegacy"],
     list: async (): Promise<UISlotDefinition[]> => Array.from(this.slotValues.values()),
     observe: async (slotId: string, callback: (definition: UISlotDefinition) => UISlotInjectionEffect): Promise<UISlotInjectionCleanup> => {
       const id = slotId.trim();
@@ -496,6 +581,22 @@ export class InMemoryUIBridge implements UIBridge {
     },
   };
 
+  private async collapseSlotEntries(slotId: string): Promise<void> {
+    const entries = Array.from(this.slotContributions.get(slotId)?.values() ?? []);
+    for (let index = entries.length - 1; index >= 0; index--) {
+      await entries[index]!.dispose();
+    }
+    this.slotContributions.delete(slotId);
+  }
+
+  private async collapseSlotEpoch(slotId: string, epoch: number): Promise<void> {
+    if (this.slotEpochs.get(slotId) !== epoch || !this.slotValues.has(slotId)) return;
+    await this.collapseSlotEntries(slotId);
+    await this.deactivateSlotEpoch(slotId);
+    if (this.slotEpochs.get(slotId) !== epoch) return;
+    this.slotValues.delete(slotId);
+  }
+
   private async deactivateSlotEpoch(slotId: string): Promise<void> {
     for (const subscriber of this.slotSubscribers.get(slotId) ?? []) {
       if (subscriber.cleanup) await subscriber.cleanup();
@@ -509,6 +610,13 @@ export class InMemoryUIBridge implements UIBridge {
       subscriber.cleanup = await normalizeUISlotInjectionEffect(subscriber.callback(definition));
     }
   }
+}
+
+function isUISlotManagedStoreHandle(value: unknown): value is UISlotManagedStoreHandle<unknown, any> {
+  return !!value
+    && typeof value === "object"
+    && (value as { __amitiaManagedSlotStoreHandle?: unknown }).__amitiaManagedSlotStoreHandle === true
+    && typeof (value as { create?: unknown }).create === "function";
 }
 
 function isUISlotStoreResource(value: unknown): value is UISlotStoreResource<unknown> {

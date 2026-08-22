@@ -18,6 +18,16 @@ const props = withDefaults(
     startIndex?: number;
     surfaceRole?: ExtensionSurfaceRole;
     contributionId?: string;
+    /** Keyed-slot dispatch key. */
+    dispatchKey?: string;
+    /** List-slot cell filter (`renderSlot(..., { only })`). */
+    dispatchOnly?: string;
+    /** Keep chain fallback mounted while an elected entry is visible. */
+    chainOverlay?: boolean;
+    /** Opaque render-occurrence context used to bind slot-level hook factories. */
+    hookContext?: unknown;
+    /** Exact parent contribution that authorized rendering this child slot. */
+    authorizedBy?: string;
     bare?: boolean;
   }>(),
   {
@@ -27,6 +37,11 @@ const props = withDefaults(
     startIndex: 0,
     surfaceRole: "main",
     contributionId: undefined,
+    dispatchKey: undefined,
+    dispatchOnly: undefined,
+    chainOverlay: false,
+    hookContext: undefined,
+    authorizedBy: undefined,
     bare: false,
   }
 );
@@ -93,24 +108,44 @@ const visibleContributions = computed<UIContributionSummary[]>(() => {
   return contributions.value;
 });
 
-const clientContributions = computed<ClientSlotContribution[]>(() => {
+const dispatchedClientContributions = computed(() => {
   browserClientPluginRuntime.slots.revision.value;
-  const items = browserClientPluginRuntime.slots.listContributions(props.slotId);
-  return props.contributionId ? items.filter((item) => item.contributionId === props.contributionId) : items;
+  if (props.authorizedBy) {
+    browserClientPluginRuntime.slots.assertRenderAuthority(props.authorizedBy, props.slotId);
+  }
+  const dispatched = browserClientPluginRuntime.slots.dispatchContributions(
+    props.slotId,
+    renderContext.value,
+    props.dispatchKey,
+    props.dispatchOnly,
+  );
+  return props.contributionId
+    ? dispatched.filter((item) => item.contribution.contributionId === props.contributionId)
+    : dispatched;
 });
 
-type RenderItem = UnifiedSlotItem;
+type RenderItem = UnifiedSlotItem & { matched?: unknown };
+
+const slotKind = computed(() => browserClientPluginRuntime.slots.getDefinition(props.slotId)?.kind);
 
 const visibleItems = computed<RenderItem[]>(() => {
   if (!scopeReady.value) return [];
   const contract = store.slotsById.get(props.slotId) ?? browserClientPluginRuntime.slots.getDefinition(props.slotId);
-  const server = props.contributionId
+  const kind = slotKind.value;
+  const serverBase = props.contributionId
     ? visibleContributions.value.filter((item) => item.contributionId === props.contributionId)
     : visibleContributions.value;
-  const client = props.contributionId
-    ? clientContributions.value.filter((item) => item.contributionId === props.contributionId)
-    : clientContributions.value;
-  const items = buildUnifiedSlotItems(contract, server, client);
+  // Strict keyed/chain dispatch is owned by the client Slot runtime. Server
+  // contributions are retained as legacy fallback only when no strict client
+  // entry matches, preserving Amitia's broader server-driven UI support.
+  const server = (kind === "keyed" || kind === "chain") && dispatchedClientContributions.value.length > 0
+    ? []
+    : serverBase;
+  const client = dispatchedClientContributions.value.map((item) => item.contribution);
+  const matchedById = new Map(dispatchedClientContributions.value.map((item) => [item.contribution.contributionId, item.matched]));
+  const items = buildUnifiedSlotItems(contract, server, client).map((item) =>
+    item.source === "client" ? { ...item, matched: matchedById.get(item.client.contributionId) } : item,
+  );
   const start = Math.max(0, props.startIndex);
   if (props.maxItems && props.maxItems > 0) return items.slice(start, start + props.maxItems);
   return items.slice(start);
@@ -118,7 +153,7 @@ const visibleItems = computed<RenderItem[]>(() => {
 
 const layoutClass = computed(() => `extension-slot--layout-${resolvedLayout.value}`);
 
-const isHidden = computed(() => !scopeReady.value || (visibleItems.value.length === 0 && resolvedFallback.value === 'none'));
+const isHidden = computed(() => !scopeReady.value || (!props.chainOverlay && visibleItems.value.length === 0 && resolvedFallback.value === 'none'));
 
 const rootEl = computed(() => rootRef.value ?? null);
 function interactiveElement(): HTMLInputElement | HTMLTextAreaElement | HTMLElement | null {
@@ -152,7 +187,14 @@ defineExpose({ rootEl, focus, setText, clear });
 
 <template>
   <div v-if="!isHidden" ref="rootRef" class="extension-slot" :class="[layoutClass, `extension-slot--${surfaceRole}`, { 'extension-slot--bare': bare }]" :data-slot-id="slotId">
-    <template v-if="visibleItems.length === 0 && resolvedFallback !== 'none'">
+    <div
+      v-if="chainOverlay"
+      class="extension-slot__chain-fallback"
+      :style="visibleItems.length > 0 ? { display: 'none' } : undefined"
+    >
+      <slot name="default"></slot>
+    </div>
+    <template v-if="!chainOverlay && visibleItems.length === 0 && resolvedFallback !== 'none'">
       <div v-if="resolvedFallback === 'skeleton'" class="extension-slot__skeleton">
         <div class="skeleton-pulse"></div>
       </div>
@@ -186,10 +228,16 @@ defineExpose({ rootEl, focus, setText, clear });
           :data-contribution-id="item.client.contributionId"
           :data-extension-id="item.client.pluginId"
         >
-          <ExtensionErrorBoundary :slot-id="slotId" :contribution-id="item.client.contributionId">
+          <ExtensionErrorBoundary
+            :slot-id="slotId"
+            :contribution-id="item.client.contributionId"
+            :abdicate-on-error="item.client.strict && slotKind !== 'chain'"
+          >
             <ClientSlotContributionHost
               :contribution="item.client"
               :context="renderContext"
+              :matched="item.matched"
+              :hook-context="hookContext"
             />
           </ExtensionErrorBoundary>
         </div>

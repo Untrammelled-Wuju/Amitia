@@ -1,7 +1,7 @@
 import { RuntimeFiber, type ExtensionFiber, type Disposer } from "./fiber";
-import type { UISlotClient, UISlotDefinition, UISlotRegistration, UISlotInjectionEffect, UISlotContributionOptions, UISlotContributionRegistration, UISlotEntryDefinition } from "./ui";
+import type { UISlotClient, UISlotDefinition, UISlotRegistration, UISlotInjectionEffect, UISlotContributionOptions, UISlotContributionRegistration } from "./ui";
 import { ValidationError } from "./errors";
-import type { UIKnownSlotId, UISlotInjectContext, UISlotInjected, UISlotProps, UISlotStore, UISlotStoreContext } from "./slot-contract";
+import type { UIChildrenDecl, UIKnownSlotId, UILocaleNamespaceMap, UISlotEntryKey, UISlotComponent, UISlotInjectContext, UISlotRegisterOptions, UISlotRegistrationComponent, UISlotStore, UISlotStoreContext } from "./slot-contract";
 
 export interface ClientPluginServiceRegistry {
   provide<T>(serviceId: string, value: T): Disposer;
@@ -18,23 +18,26 @@ export interface ClientPluginEventBus {
 
 export interface ClientPluginSlotContext {
   declare(definition: UISlotDefinition): Promise<UISlotRegistration>;
-  register<SlotId extends UIKnownSlotId, T = unknown>(
-    slotId: SlotId,
-    key: string,
-    renderable: T,
-    options?: UISlotContributionOptions<UISlotProps<SlotId>, UISlotStore<SlotId>, UISlotInjected<SlotId>>,
-  ): UISlotContributionRegistration<T, UISlotStore<SlotId>, UISlotInjected<SlotId>>;
-  register<T = unknown>(
+  register<
+    K extends UIKnownSlotId,
+    const D extends UIChildrenDecl = {},
+    S = UISlotStore<K>,
+    I extends Record<string, unknown> = {},
+    N extends keyof UILocaleNamespaceMap & string | undefined = undefined,
+    const EntryKey extends UISlotEntryKey<K> = UISlotEntryKey<K>,
+    C extends UISlotComponent<never> = UISlotComponent<never>,
+  >(
+    options: UISlotRegisterOptions<K, D, S, I, N, EntryKey>,
+    renderable: UISlotRegistrationComponent<K, D, S, I, N, EntryKey, C>,
+  ): UISlotContributionRegistration<C, S, I>;
+  registerLegacy<T = unknown>(
     slotId: string,
     key: string,
     renderable: T,
     options?: UISlotContributionOptions,
   ): UISlotContributionRegistration<T>;
-  register<SlotId extends string, T = unknown>(
-    entry: UISlotEntryDefinition<SlotId, T>,
-  ): UISlotContributionRegistration<T, UISlotStore<SlotId>, UISlotInjected<SlotId>>;
   observe(slotId: string, callback: (definition: UISlotDefinition) => UISlotInjectionEffect): Promise<Disposer>;
-  /** @deprecated Use observe(). Business injection is configured on register(). */
+  /** Slot-declaration lifetime dependency. Business injection belongs to register({ inject }). */
   inject(slotId: string, callback: (definition: UISlotDefinition) => UISlotInjectionEffect): Promise<Disposer>;
   list(): Promise<UISlotDefinition[]>;
 }
@@ -193,15 +196,12 @@ export class ClientPluginRuntime {
     services: ClientPluginServiceRegistry,
     events: ClientPluginEventBus,
   ): ClientPluginSlotContext {
-    const scopeOptions = (input?: UISlotContributionOptions): UISlotContributionOptions | undefined => {
+    const scopeLegacyOptions = (input?: UISlotContributionOptions): UISlotContributionOptions | undefined => {
       if (!input) return undefined;
       const originalStore = input.store;
       const originalInject = input.inject;
       return {
-        ordering: input.ordering,
-        priority: input.priority,
-        props: input.props,
-        children: input.children,
+        ...input,
         store: typeof originalStore === "function"
           ? ((context: UISlotStoreContext) => originalStore({ ...context, pluginId }))
           : originalStore,
@@ -222,26 +222,40 @@ export class ClientPluginRuntime {
         fiber.own(registration.dispose);
         return registration;
       },
-      register: ((slotOrEntry: string | UISlotEntryDefinition<string, unknown>, key?: string, renderable?: unknown, options?: UISlotContributionOptions) => {
-        const registration = typeof slotOrEntry === "string"
-          ? slots.register(slotOrEntry as UIKnownSlotId, `${fiber.id}:${key ?? ""}`, renderable, scopeOptions(options))
-          : slots.register({
-              ...slotOrEntry,
-              key: `${fiber.id}:${slotOrEntry.key}`,
-              ...scopeOptions(slotOrEntry),
-              slotId: slotOrEntry.slotId,
-              renderable: slotOrEntry.renderable,
-            });
+      register: ((options: UISlotRegisterOptions<UIKnownSlotId, UIChildrenDecl, unknown, Record<string, unknown>>, renderable: (props: any) => unknown) => {
+        const originalStore = options.store;
+        const originalInject = options.inject;
+        const registration = (slots.register as any)({
+          ...options,
+          key: `${fiber.id}:${options.key}`,
+          registrant: pluginId,
+          store: typeof originalStore === "function"
+            ? ((context: UISlotStoreContext) => (originalStore as (context: UISlotStoreContext) => unknown)({ ...context, pluginId })) as never
+            : originalStore as never,
+          inject: originalInject
+            ? ((context: UISlotInjectContext<unknown>) => (originalInject as (context: UISlotInjectContext<unknown>) => Record<string, unknown>)({
+                ...context,
+                pluginId,
+                services: { get: services.get, list: services.list },
+                events: { emit: events.emit },
+              })) as never
+            : undefined,
+        } as never, renderable as never);
         fiber.own(registration.dispose);
         return registration;
       }) as ClientPluginSlotContext["register"],
+      registerLegacy: (slotId, key, renderable, options) => {
+        const registration = slots.registerLegacy(slotId, `${fiber.id}:${key}`, renderable, scopeLegacyOptions(options));
+        fiber.own(registration.dispose);
+        return registration;
+      },
       observe: async (slotId, callback) => {
         const dispose = await slots.observe(slotId, callback);
         fiber.own(dispose);
         return dispose;
       },
       inject: async (slotId, callback) => {
-        const dispose = await slots.observe(slotId, callback);
+        const dispose = await slots.inject(slotId, callback);
         fiber.own(dispose);
         return dispose;
       },
