@@ -34,6 +34,7 @@ class SchemaUI {
   static const String nodeRuntimeStatus = 'runtime_status';
   static const String nodeTabItem = 'tab_item';
   static const String nodeColumn = 'column';
+  static const String nodeExtensionSlot = 'extension_slot';
 
   static const Set<String> allowedNodeTypes = {
     nodePage, nodeSection, nodeStack, nodeRow, nodeGrid, nodeTabs, nodeCard,
@@ -41,7 +42,7 @@ class SchemaUI {
     nodeField, nodeSelect, nodeSwitch, nodeSlider, nodeButton, nodeButtonGroup,
     nodeList, nodeTable, nodeEmptyState, nodeAlert, nodeProgress, nodeCode,
     nodeKeyValue, nodeResourceLink, nodePermissionSummary, nodeRuntimeStatus,
-    nodeTabItem, nodeColumn,
+    nodeTabItem, nodeColumn, nodeExtensionSlot,
   };
 
   static const Set<String> forbiddenNodeTypes = {

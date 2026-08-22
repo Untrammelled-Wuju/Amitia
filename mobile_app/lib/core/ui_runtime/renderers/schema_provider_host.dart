@@ -5,6 +5,7 @@ import '../../services/providers.dart';
 import '../../../features/extensions/schema_ui/models/schema_ui_types.dart';
 import '../../../features/extensions/schema_ui/renderer/schema_ui_renderer.dart';
 import '../ui_provider.dart';
+import '../mobile_extension_slot.dart';
 
 class SchemaProviderHost extends ConsumerStatefulWidget {
   const SchemaProviderHost({super.key, required this.provider, required this.entry, this.context = const {}, this.actions = const {}, this.fallback, this.onFailure});
@@ -64,6 +65,12 @@ class _SchemaProviderHostState extends ConsumerState<SchemaProviderHost> {
         'providerId': widget.provider.providerId,
         'capability': widget.provider.capability,
       },
+      slotBuilder: (slotId, contributionId, childContext) => MobileExtensionSlot(
+        slotId: slotId,
+        contributionId: contributionId,
+        context: {...widget.context, ...childContext},
+        actions: widget.actions,
+      ),
       onActionDispatch: (invocation) async {
         final action = widget.actions[invocation.actionId];
         if (action != null) return action(invocation.input ?? const <String, dynamic>{});

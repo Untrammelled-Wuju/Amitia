@@ -288,14 +288,113 @@ class UIProfileEnvelope {
   }
 }
 
+
+class UIContributionSnapshotEntry {
+  final String contributionId;
+  final String extensionId;
+  final String moduleId;
+  final String kind;
+  final String slotId;
+  final int contractVersion;
+  final String entryType;
+  final String entryPath;
+  final String? schemaPath;
+  final List<String> permissions;
+  final Map<String, dynamic> dataContract;
+  final Map<String, dynamic> visibility;
+  final int ordering;
+
+  const UIContributionSnapshotEntry({
+    required this.contributionId,
+    required this.extensionId,
+    required this.moduleId,
+    required this.kind,
+    required this.slotId,
+    required this.contractVersion,
+    required this.entryType,
+    required this.entryPath,
+    this.schemaPath,
+    required this.permissions,
+    required this.dataContract,
+    required this.visibility,
+    required this.ordering,
+  });
+
+  factory UIContributionSnapshotEntry.fromJson(Map<String, dynamic> json) {
+    final slot = (json['slot'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+    final entry = (json['entry'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+    final ordering = (json['ordering'] as Map?)?.cast<String, dynamic>() ?? const <String, dynamic>{};
+    final permissions = ((json['permissions'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((item) => (item['name'] ?? item['permission'] ?? '').toString())
+        .where((item) => item.isNotEmpty)
+        .toList(growable: false);
+    return UIContributionSnapshotEntry(
+      contributionId: (json['contribution_id'] ?? json['contributionId'] ?? '').toString(),
+      extensionId: (json['extension_id'] ?? json['extensionId'] ?? '').toString(),
+      moduleId: (json['module_id'] ?? json['moduleId'] ?? '').toString(),
+      kind: (json['kind'] ?? '').toString(),
+      slotId: (slot['slot_id'] ?? slot['slotId'] ?? '').toString(),
+      contractVersion: (json['contract_version'] as num?)?.toInt() ?? (json['contractVersion'] as num?)?.toInt() ?? 1,
+      entryType: (entry['type'] ?? '').toString(),
+      entryPath: (entry['path'] ?? '').toString(),
+      schemaPath: (entry['schema_path'] ?? entry['schemaPath'])?.toString(),
+      permissions: permissions,
+      dataContract: (json['data_contract'] as Map?)?.cast<String, dynamic>() ?? (json['dataContract'] as Map?)?.cast<String, dynamic>() ?? const {},
+      visibility: (json['visibility'] as Map?)?.cast<String, dynamic>() ?? const {},
+      ordering: (ordering['priority'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+class UISlotSnapshotEntry {
+  final String slotId;
+  final int contractVersion;
+  final String multiplicity;
+  final String layout;
+  final String fallbackPolicy;
+  final String? ownerExtension;
+  final String? parentSlotId;
+  final bool dynamicSlot;
+  final List<UIContributionSnapshotEntry> contributions;
+
+  const UISlotSnapshotEntry({
+    required this.slotId,
+    required this.contractVersion,
+    required this.multiplicity,
+    required this.layout,
+    required this.fallbackPolicy,
+    this.ownerExtension,
+    this.parentSlotId,
+    required this.dynamicSlot,
+    required this.contributions,
+  });
+
+  factory UISlotSnapshotEntry.fromJson(Map<String, dynamic> json) => UISlotSnapshotEntry(
+    slotId: (json['slotId'] ?? '').toString(),
+    contractVersion: (json['contractVersion'] as num?)?.toInt() ?? 1,
+    multiplicity: (json['multiplicity'] ?? 'ordered_multiple').toString(),
+    layout: (json['layout'] ?? 'stack').toString(),
+    fallbackPolicy: (json['fallbackPolicy'] ?? 'empty').toString(),
+    ownerExtension: json['ownerExtension']?.toString(),
+    parentSlotId: json['parentSlotId']?.toString(),
+    dynamicSlot: json['dynamic'] == true,
+    contributions: ((json['contributions'] as List?) ?? const [])
+        .whereType<Map>()
+        .map((item) => UIContributionSnapshotEntry.fromJson(item.cast<String, dynamic>()))
+        .toList(growable: false),
+  );
+}
+
 class UIProviderSnapshot {
   final List<UIProviderDefinition> providers;
+  final List<UISlotSnapshotEntry> slots;
   final UIProfile profile;
   final List<UIProfile> profileLayers;
   final UIProviderResolveContext context;
   final Map<String, UIProviderDefinition> resolved;
   final int version;
-  const UIProviderSnapshot({required this.providers, required this.profile, required this.profileLayers, required this.context, required this.resolved, required this.version});
+  const UIProviderSnapshot({required this.providers, required this.slots, required this.profile, required this.profileLayers, required this.context, required this.resolved, required this.version});
 
   factory UIProviderSnapshot.fromJson(Map<String, dynamic> json) {
     final providers = ((json['providers'] as List?) ?? const [])
@@ -309,12 +408,29 @@ class UIProviderSnapshot {
     }
     return UIProviderSnapshot(
       providers: providers,
+      slots: ((json['slots'] as List?) ?? const [])
+          .whereType<Map>()
+          .map((item) => UISlotSnapshotEntry.fromJson(item.cast<String, dynamic>()))
+          .toList(growable: false),
       profile: UIProfile.fromJson(((json['profile'] as Map?) ?? const {}).cast<String, dynamic>()),
       profileLayers: ((json['profileLayers'] as List?) ?? const []).whereType<Map>().map((e) => UIProfile.fromJson(e.cast<String, dynamic>())).toList(),
       context: UIProviderResolveContext.fromJson(((json['providerContext'] as Map?) ?? const {}).cast<String, dynamic>()),
       resolved: resolved,
       version: (json['providerVersion'] as num?)?.toInt() ?? (json['version'] as num?)?.toInt() ?? 1,
     );
+  }
+
+  UISlotSnapshotEntry? slot(String slotId) {
+    for (final item in slots) {
+      if (item.slotId == slotId) return item;
+    }
+    return null;
+  }
+
+  List<UIContributionSnapshotEntry> contributionsForSlot(String slotId) {
+    final items = slot(slotId)?.contributions ?? const <UIContributionSnapshotEntry>[];
+    final sorted = [...items]..sort((a, b) => a.ordering.compareTo(b.ordering));
+    return sorted;
   }
 
   UIProviderDefinition? resolve(String capability, {String? providerId}) {

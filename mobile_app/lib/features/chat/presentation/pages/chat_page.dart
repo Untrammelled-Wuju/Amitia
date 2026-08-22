@@ -22,6 +22,8 @@ import '../../../../core/ui_runtime/ui_provider_host.dart';
 import '../../../../core/ui_runtime/ui_runtime_controller.dart';
 import '../../../../core/ui_runtime/ui_message_renderer_registry.dart';
 import '../../../../core/ui_runtime/conversation_ui_contract.dart';
+import '../../../../core/ui_runtime/mobile_extension_slot.dart';
+import '../../../../core/ui_runtime/mobile_conversation_projection.dart';
 import '../../runtime/conversation_runtime_controller.dart';
 import '../../../../shared/models/models.dart';
 import 'realtime_voice_call_sheet.dart';
@@ -481,6 +483,33 @@ class _ChatPageState extends ConsumerState<ChatPage> {
     final hasSidebarProvider = externalProvider(UICapability.conversationSidebar);
     final hasOverlayProvider = externalProvider(UICapability.conversationOverlay);
 
+    final serializedMessages = _runtime.messages.map(_providerMessage).toList(growable: false);
+    final projectionContributions = uiSnapshot?.contributionsForSlot('chat.conversation.node') ?? const <UIContributionSnapshotEntry>[];
+    final conversationNodes = MobileConversationProjection.assemble(
+      events: MobileConversationProjection.messageEvents(
+        conversationId: _runtime.conversationId,
+        messages: serializedMessages,
+      ),
+      contributions: projectionContributions,
+    );
+    final flowItems = <_MobileChatFlowItem>[
+      for (var index = 0; index < _runtime.messages.length; index++)
+        _MobileChatFlowItem.message(
+          message: _runtime.messages[index],
+          messageIndex: index,
+          timestamp: _runtime.messages[index].time,
+        ),
+      for (final node in conversationNodes)
+        _MobileChatFlowItem.node(node),
+    ]..sort((left, right) {
+      final order = MobileConversationProjection.compareTimeline(
+        left.sequence, left.timestamp, right.sequence, right.timestamp,
+      );
+      if (order != 0) return order;
+      if (left.isMessage != right.isMessage) return left.isMessage ? -1 : 1;
+      return left.key.compareTo(right.key);
+    });
+
     final builtinConversation = AmitiaScaffold(
       resizeToAvoidBottomInset: false,
       body: Stack(
@@ -501,11 +530,26 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                           ListView.builder(
                           controller: _scrollController,
                           padding: const EdgeInsets.symmetric(vertical: 32),
-                          itemCount: _runtime.messages.length,
-                          itemBuilder: (context, index) {
-                            final message = _runtime.messages[index];
-                            final isAgentTask =
-                                message.type == MessageType.agentTask;
+                          itemCount: flowItems.length,
+                          itemBuilder: (context, flowIndex) {
+                            final item = flowItems[flowIndex];
+                            if (!item.isMessage) {
+                              final node = item.node!;
+                              return MobileExtensionSlot(
+                                slotId: 'chat.conversation.node',
+                                contributionId: node.contributionId,
+                                context: {
+                                  ...providerContext,
+                                  'conversationNode': node.toJson(),
+                                  'eventType': node.eventType,
+                                },
+                                actions: providerActions,
+                              );
+                            }
+
+                            final index = item.messageIndex!;
+                            final message = item.message!;
+                            final isAgentTask = message.type == MessageType.agentTask;
                             final builtinMessage = RepaintBoundary(
                               child: AmitiaMessageBubble(
                                 message: message,
@@ -526,12 +570,24 @@ class _ChatPageState extends ConsumerState<ChatPage> {
                               messageType: message.type.name,
                               role: message.role.name,
                             );
-                            return UIProviderHost(
+                            final providerMessage = UIProviderHost(
                               capability: UICapability.conversationMessageRenderer,
                               providerId: messageRenderer?.providerId,
                               fallback: builtinMessage,
                               context: { ...providerContext, 'message': _providerMessage(message), 'messageIndex': index },
                               actions: providerActions,
+                            );
+                            return MobileExtensionSlot(
+                              slotId: 'chat.message.renderer',
+                              context: {
+                                ...providerContext,
+                                'messageId': message.id,
+                                'messageType': message.type.name,
+                                'message': _providerMessage(message),
+                                'messageIndex': index,
+                              },
+                              actions: providerActions,
+                              fallback: providerMessage,
                             );
                           },
                         ),
@@ -900,4 +956,43 @@ class _MessageSearchSheetState extends State<_MessageSearchSheet> {
       ),
     );
   }
+}
+
+
+class _MobileChatFlowItem {
+  const _MobileChatFlowItem._({
+    required this.key,
+    required this.timestamp,
+    this.sequence,
+    this.message,
+    this.messageIndex,
+    this.node,
+  });
+
+  factory _MobileChatFlowItem.message({
+    required ChatMessage message,
+    required int messageIndex,
+    required DateTime timestamp,
+  }) => _MobileChatFlowItem._(
+    key: 'message:${message.id}',
+    timestamp: timestamp,
+    message: message,
+    messageIndex: messageIndex,
+  );
+
+  factory _MobileChatFlowItem.node(MobileConversationNode node) => _MobileChatFlowItem._(
+    key: 'node:${node.nodeId}',
+    timestamp: node.anchorTimestamp,
+    sequence: node.anchorSeq,
+    node: node,
+  );
+
+  final String key;
+  final DateTime timestamp;
+  final int? sequence;
+  final ChatMessage? message;
+  final int? messageIndex;
+  final MobileConversationNode? node;
+
+  bool get isMessage => message != null;
 }
