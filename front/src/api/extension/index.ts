@@ -34,6 +34,7 @@ function transformContribution(def: BackendUIContributionDefinition): UIContribu
     description: def.display?.description?.default,
     icon: def.display?.icon,
     ordering: def.ordering?.priority ?? 0,
+    priority: def.ordering?.priority ?? 0,
     visible: true,
     effective: true,
     enabled: true,
@@ -71,6 +72,8 @@ function transformSlotSnapshot(entry: BackendSlotSnapshotEntry): SlotSnapshot {
     ownerExtension: entry.ownerExtension,
     parentSlotId: entry.parentSlotId,
     dynamic: entry.dynamic,
+    scope: entry.scope,
+    declarationEpoch: entry.declarationEpoch,
     performanceBudget: entry.performanceBudget,
     contributions: entry.contributions.map(transformContribution),
     generatedAt: new Date().toISOString(),
@@ -110,6 +113,80 @@ export async function fetchContributions(): Promise<UIContributionSummary[]> {
     "/api/extensions/ui/contributions",
   );
   return res.data.contributions.map(transformContribution);
+}
+
+
+export interface ConversationUIEventRecord {
+  eventId: string;
+  sequence: number;
+  occurredAt: string;
+  payload: Record<string, unknown>;
+}
+
+export async function fetchConversationUIEvents(
+  conversationId: string,
+  limit = 1000,
+  offset = 0,
+): Promise<{ items: ConversationUIEventRecord[]; total: number; offset: number }> {
+  const res = await apiClient.get<{ items: ConversationUIEventRecord[]; total: number; offset: number }>(
+    `/api/extensions/events/conversation-ui/${encodeURIComponent(conversationId)}`,
+    { params: { limit, offset } },
+  );
+  return res.data;
+}
+
+export async function fetchConversationUIEventsBeforeSequence(
+  conversationId: string,
+  beforeSequence = 0,
+  limit = 1000,
+): Promise<{ items: ConversationUIEventRecord[]; total: number; beforeSequence: number }> {
+  const res = await apiClient.get<{ items: ConversationUIEventRecord[]; total: number; beforeSequence: number }>(
+    `/api/extensions/events/conversation-ui/${encodeURIComponent(conversationId)}`,
+    { params: { limit, beforeSequence } },
+  );
+  return res.data;
+}
+
+export interface ClientRuntimeSessionState {
+  userId?: string;
+  conversationId: string;
+  revision: number;
+  packages: Array<{
+    id: string;
+    versions: Array<Record<string, unknown>>;
+    approvedVersions?: string[];
+    approveFutureVersions?: boolean;
+    activeVersion?: string;
+    currentPackageId?: string;
+    targetVersion?: string;
+    nextPackageId?: string;
+    transitionState?: string;
+    transitionMode?: string;
+    runId?: string;
+    pluginRunId?: string;
+    lastError?: string;
+    lastTransitionAt?: string;
+    running?: boolean;
+  }>;
+}
+
+export async function fetchClientRuntimeSessionState(conversationId: string): Promise<ClientRuntimeSessionState> {
+  const res = await apiClient.get<ClientRuntimeSessionState>(
+    "/api/extensions/ui/client-runtime-state",
+    { params: { conversationId } },
+  );
+  return res.data;
+}
+
+export async function acknowledgeClientRuntimeSessionState(
+  conversationId: string,
+  revision: number,
+): Promise<ClientRuntimeSessionState> {
+  const res = await apiClient.post<ClientRuntimeSessionState>(
+    "/api/extensions/ui/client-runtime-session-ack",
+    { conversationId, revision },
+  );
+  return res.data;
 }
 
 export async function fetchExtensionContributions(extensionId: string): Promise<UIContributionSummary[]> {

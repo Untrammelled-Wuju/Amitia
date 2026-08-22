@@ -2,6 +2,7 @@ import { ref, computed, type Ref } from "vue";
 import { useExtensionUIStore, type UIContributionSummary } from "@/stores/extensionUI";
 import { useTheme } from "@/composables/useTheme";
 import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
+import { browserClientPluginRuntime } from "@/ui-runtime/clientPluginRuntime";
 
 export type ExtensionSurfaceRole = "header" | "status" | "sidebar" | "message" | "composer" | "main" | "overlay";
 
@@ -23,6 +24,8 @@ export interface SlotContext {
   os: "windows" | "macos" | "linux" | "unknown";
   surface: ExtensionSurfaceContext;
   capabilities: string[];
+  scope: "root" | "session-maybe" | "session";
+  sessionId?: string;
 }
 
 export interface UseExtensionSlotOptions {
@@ -40,6 +43,10 @@ export function useExtensionSlot(options: UseExtensionSlotOptions) {
   const { resolvedMode } = useTheme();
 
   const slotSnapshot = computed(() => store.slotsById.get(slotId) ?? null);
+  const clientSlotDefinition = computed(() => {
+    browserClientPluginRuntime.slots.revision.value;
+    return browserClientPluginRuntime.slots.getDefinition(slotId) ?? null;
+  });
   const contributions = computed<UIContributionSummary[]>(() => {
     const env = resolveHostEnvironment();
     return store.getVisibleContributions(slotId, {
@@ -51,9 +58,17 @@ export function useExtensionSlot(options: UseExtensionSlotOptions) {
   });
   const fallback = computed(() => {
     if (options.fallback) return options.fallback;
-    return slotSnapshot.value?.fallbackPolicy ?? "empty";
+    return slotSnapshot.value?.fallbackPolicy ?? clientSlotDefinition.value?.fallbackPolicy ?? "empty";
   });
-  const layout = computed(() => options.layout ?? slotSnapshot.value?.layout ?? "stack");
+  const layout = computed(() => options.layout ?? slotSnapshot.value?.layout ?? clientSlotDefinition.value?.layout ?? "stack");
+  const scope = computed<"root" | "session-maybe" | "session">(() =>
+    slotSnapshot.value?.scope ?? clientSlotDefinition.value?.scope ?? "root"
+  );
+  const sessionId = computed(() => {
+    const value = contextRef.value.sessionId ?? contextRef.value.conversationId;
+    return typeof value === "string" ? value.trim() : "";
+  });
+  const scopeReady = computed(() => scope.value !== "session" || sessionId.value.length > 0);
   const isEmpty = computed(() => contributions.value.length === 0);
   const hasError = computed(() => store.errors.some((e) => e.slotId === slotId));
   const slotErrors = computed(() => store.errors.filter((e) => e.slotId === slotId));
@@ -66,12 +81,12 @@ export function useExtensionSlot(options: UseExtensionSlotOptions) {
       height: 0,
       breakpoint: "xs" as const,
     };
-  const capabilities = Array.isArray(contextRef.value.capabilities)
-    ? (contextRef.value.capabilities as unknown[]).filter((item): item is string => typeof item === "string")
-    : [];
+    const capabilities = Array.isArray(contextRef.value.capabilities)
+      ? (contextRef.value.capabilities as unknown[]).filter((item): item is string => typeof item === "string")
+      : [];
     return {
       slotId,
-      contractVersion: slotSnapshot.value?.contractVersion ?? 1,
+      contractVersion: slotSnapshot.value?.contractVersion ?? clientSlotDefinition.value?.contractVersion ?? 1,
       platform: env.platform,
       theme: { mode: resolvedMode.value, density: surface.breakpoint === "xs" || surface.breakpoint === "sm" ? "compact" : "comfortable" },
       locale: detectLocale(),
@@ -80,6 +95,8 @@ export function useExtensionSlot(options: UseExtensionSlotOptions) {
       os: env.os,
       surface,
       capabilities,
+      scope: scope.value,
+      ...(sessionId.value ? { sessionId: sessionId.value } : {}),
     };
   }
 
@@ -129,7 +146,11 @@ export function useExtensionSlot(options: UseExtensionSlotOptions) {
   return {
     slotId,
     slotSnapshot,
+    clientSlotDefinition,
     contributions,
+    scope,
+    sessionId,
+    scopeReady,
     fallback,
     layout,
     isEmpty,

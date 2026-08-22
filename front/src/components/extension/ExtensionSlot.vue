@@ -4,6 +4,8 @@ import { useExtensionSlot, type ExtensionSurfaceContext, type ExtensionSurfaceRo
 import { useExtensionUIStore, type UIContributionSummary } from "@/stores/extensionUI";
 import ExtensionContributionRenderer from "./ExtensionContributionRenderer.vue";
 import ExtensionRenderState from "./ExtensionRenderState.vue";
+import { browserClientPluginRuntime, type ClientSlotContribution } from "@/ui-runtime/clientPluginRuntime";
+import { buildUnifiedSlotItems, type UnifiedSlotItem } from "@/ui-runtime/slotLedger";
 
 const props = withDefaults(
   defineProps<{
@@ -26,6 +28,7 @@ const props = withDefaults(
   }
 );
 
+const store = useExtensionUIStore();
 const localContext = ref<Record<string, unknown>>(props.context ?? {});
 const rootRef = ref<HTMLElement>();
 const surface = ref<ExtensionSurfaceContext>({ role: props.surfaceRole, width: 0, height: 0, breakpoint: "xs" });
@@ -33,9 +36,9 @@ let observer: ResizeObserver | null = null;
 let resizeFrame = 0;
 const {
   contributions,
+  scopeReady,
   fallback: resolvedFallback,
   layout: resolvedLayout,
-  isEmpty,
   reportError,
   buildContext,
 } = useExtensionSlot({
@@ -85,16 +88,35 @@ const visibleContributions = computed<UIContributionSummary[]>(() => {
   if (props.contributionId) {
     return contributions.value.filter((c) => c.contributionId === props.contributionId);
   }
-  const contributionList = contributions.value.slice(props.startIndex);
-  if (props.maxItems && props.maxItems > 0) {
-    return contributionList.slice(0, props.maxItems);
-  }
-  return contributionList;
+  return contributions.value;
+});
+
+const clientContributions = computed<ClientSlotContribution[]>(() => {
+  browserClientPluginRuntime.slots.revision.value;
+  const items = browserClientPluginRuntime.slots.listContributions(props.slotId);
+  return props.contributionId ? items.filter((item) => item.contributionId === props.contributionId) : items;
+});
+
+type RenderItem = UnifiedSlotItem;
+
+const visibleItems = computed<RenderItem[]>(() => {
+  if (!scopeReady.value) return [];
+  const contract = store.slotsById.get(props.slotId) ?? browserClientPluginRuntime.slots.getDefinition(props.slotId);
+  const server = props.contributionId
+    ? visibleContributions.value.filter((item) => item.contributionId === props.contributionId)
+    : visibleContributions.value;
+  const client = props.contributionId
+    ? clientContributions.value.filter((item) => item.contributionId === props.contributionId)
+    : clientContributions.value;
+  const items = buildUnifiedSlotItems(contract, server, client);
+  const start = Math.max(0, props.startIndex);
+  if (props.maxItems && props.maxItems > 0) return items.slice(start, start + props.maxItems);
+  return items.slice(start);
 });
 
 const layoutClass = computed(() => `extension-slot--layout-${resolvedLayout.value}`);
 
-const isHidden = computed(() => visibleContributions.value.length === 0 && resolvedFallback.value === 'none');
+const isHidden = computed(() => !scopeReady.value || (visibleItems.value.length === 0 && resolvedFallback.value === 'none'));
 
 const errorState = ref<Record<string, string>>({});
 
@@ -113,7 +135,6 @@ onErrorCaptured((err, instance) => {
 
 function retryContribution(contributionId: string) {
   delete errorState.value[contributionId];
-  const store = useExtensionUIStore();
   store.clearErrors(contributionId);
 }
 
@@ -121,7 +142,7 @@ function retryContribution(contributionId: string) {
 
 <template>
   <div v-if="!isHidden" ref="rootRef" class="extension-slot" :class="[layoutClass, `extension-slot--${surfaceRole}`]" :data-slot-id="slotId">
-    <template v-if="visibleContributions.length === 0 && resolvedFallback !== 'none'">
+    <template v-if="visibleItems.length === 0 && resolvedFallback !== 'none'">
       <div v-if="resolvedFallback === 'skeleton'" class="extension-slot__skeleton">
         <div class="skeleton-pulse"></div>
       </div>
@@ -134,22 +155,38 @@ function retryContribution(contributionId: string) {
     </template>
 
     <template v-else>
-      <template v-for="contribution in visibleContributions" :key="contribution.contributionId">
+      <template v-for="item in visibleItems" :key="item.key">
         <div
+          v-if="item.source === 'server'"
           class="extension-slot__contribution"
-          :data-contribution-id="contribution.contributionId"
-          :data-extension-id="contribution.extensionId"
+          :data-contribution-id="item.server.contributionId"
+          :data-extension-id="item.server.extensionId"
         >
-          <template v-if="errorState[contribution.contributionId]">
-            <ExtensionRenderState state="error" :detail="errorState[contribution.contributionId]" @retry="retryContribution(contribution.contributionId)" />
+          <template v-if="errorState[item.server.contributionId]">
+            <ExtensionRenderState state="error" :detail="errorState[item.server.contributionId]" @retry="retryContribution(item.server.contributionId)" />
           </template>
           <template v-else>
             <ExtensionContributionRenderer
-              :contribution="contribution"
+              :contribution="item.server"
               :context="renderContext"
               :slot-id="slotId"
             />
           </template>
+        </div>
+        <div
+          v-else
+          class="extension-slot__contribution extension-slot__contribution--client"
+          :data-contribution-id="item.client.contributionId"
+          :data-extension-id="item.client.pluginId"
+        >
+          <component
+            :is="item.client.component"
+            v-bind="item.client.props || {}"
+            :context="renderContext"
+            :slot-id="slotId"
+            :plugin-id="item.client.pluginId"
+            :contribution-id="item.client.contributionId"
+          />
         </div>
       </template>
     </template>
