@@ -59,6 +59,10 @@
       "types": "./dist/ui.d.ts",
       "import": "./dist/ui.js"
     },
+    "./slot-contract": {
+      "types": "./dist/slot-contract.d.ts",
+      "import": "./dist/slot-contract.js"
+    },
     "./context": {
       "types": "./dist/context.d.ts",
       "import": "./dist/context.js"

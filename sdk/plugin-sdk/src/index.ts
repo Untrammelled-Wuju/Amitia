@@ -10,6 +10,7 @@ export * from "./host";
 export * from "./storage";
 export * from "./secrets";
 export * from "./ui";
+export * from "./slot-contract";
 export * from "./context";
 export * from "./control";
 export * from "./fiber";
