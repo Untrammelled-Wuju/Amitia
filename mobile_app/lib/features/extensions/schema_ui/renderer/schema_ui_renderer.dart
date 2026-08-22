@@ -21,6 +21,8 @@ class SchemaUIRenderer extends StatefulWidget {
   final Map<String, dynamic>? initialContext;
   final DataSourceLoader? dataSourceLoader;
   final FutureOr<dynamic> Function(ActionInvocation invocation)? onActionDispatch;
+  final Widget Function(String slotId, String? contributionId, Map<String, dynamic> context)? slotBuilder;
+  final bool embedded;
 
   const SchemaUIRenderer({
     super.key,
@@ -32,6 +34,8 @@ class SchemaUIRenderer extends StatefulWidget {
     this.initialContext,
     this.dataSourceLoader,
     this.onActionDispatch,
+    this.slotBuilder,
+    this.embedded = false,
   });
 
   @override
@@ -123,9 +127,20 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
           if (doc.children.isEmpty) {
             return _buildEmptyState(context);
           }
+          final children = doc.children.map((node) => _buildNode(context, node, 0)).toList();
+          if (widget.embedded) {
+            return Padding(
+              padding: EdgeInsets.all(AppSpacing.pagePadding),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: children,
+              ),
+            );
+          }
           return ListView(
             padding: EdgeInsets.all(AppSpacing.pagePadding),
-            children: doc.children.map((node) => _buildNode(context, node, 0)).toList(),
+            children: children,
           );
         },
       ),
@@ -202,12 +217,26 @@ class _SchemaUIRendererState extends State<SchemaUIRenderer> {
           return _buildProgress(context, node);
         case SchemaUI.nodeKeyValue:
           return _buildKeyValue(context, node);
+        case SchemaUI.nodeExtensionSlot:
+          return _buildExtensionSlot(context, node);
         default:
           return _buildErrorWidget(context, 'Unknown node type: ${node.type}');
       }
     } catch (e) {
       return _buildErrorWidget(context, 'Render error: $e');
     }
+  }
+
+  Widget _buildExtensionSlot(BuildContext context, SchemaUINode node) {
+    final builder = widget.slotBuilder;
+    if (builder == null) return const SizedBox.shrink();
+    final slotId = (node.props?['slotId'] ?? node.props?['slot_id'] ?? '').toString().trim();
+    if (slotId.isEmpty) return _buildErrorWidget(context, 'extension_slot requires slotId');
+    final contributionId = (node.props?['contributionId'] ?? node.props?['contribution_id'])?.toString();
+    return builder(slotId, contributionId, {
+      ...?widget.initialContext,
+      'schemaNodeId': node.id,
+    });
   }
 
   Widget _buildSection(BuildContext context, SchemaUINode node, int depth) {
