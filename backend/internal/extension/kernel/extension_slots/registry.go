@@ -447,6 +447,31 @@ func DefaultSlots() []*SlotDefinition {
 		UpdateFrequency: 5 * time.Second,
 	}
 	slots := []*SlotDefinition{
+		{SlotID: "root", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "UI 根组合槽位"},
+		{SlotID: "provider.app.shell", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "应用 Shell Provider 组合边界"},
+		{SlotID: "provider.app.navigation", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "应用导航 Provider 组合边界"},
+		{SlotID: "provider.app.workspace", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "应用工作区 Provider 组合边界"},
+		{SlotID: "provider.route.registry", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "路由注册 Provider 组合边界"},
+		{SlotID: "provider.page.provider", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "页面 Provider 组合边界"},
+		{SlotID: "provider.conversation.shell", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "会话 Shell Provider 组合边界"},
+		{SlotID: "provider.conversation.header", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "会话头部 Provider 组合边界"},
+		{SlotID: "provider.conversation.messages", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "会话消息区 Provider 组合边界"},
+		{SlotID: "provider.conversation.message_renderer", ContractVersion: 1, SupportedKinds: []string{"message_renderer", "panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "消息渲染 Provider 组合边界"},
+		{SlotID: "provider.conversation.sidebar", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "会话侧栏 Provider 组合边界"},
+		{SlotID: "provider.conversation.composer", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "会话输入区 Provider 组合边界"},
+		{SlotID: "provider.conversation.overlay", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "会话浮层 Provider 组合边界"},
+		{SlotID: "provider.character.shell", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "角色 Shell Provider 组合边界"},
+		{SlotID: "provider.character.detail", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "角色详情 Provider 组合边界"},
+		{SlotID: "provider.memory.shell", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "记忆 Shell Provider 组合边界"},
+		{SlotID: "provider.memory.detail", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "记忆详情 Provider 组合边界"},
+		{SlotID: "provider.settings.shell", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "设置 Shell Provider 组合边界"},
+		{SlotID: "provider.settings.section", ContractVersion: 1, SupportedKinds: []string{"settings_section", "panel", "schema_page", "web_page"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "设置分节 Provider 组合边界"},
+		{SlotID: "provider.extension.center", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "扩展中心 Provider 组合边界"},
+		{SlotID: "provider.extension.page", ContractVersion: 1, SupportedKinds: []string{"panel", "schema_page", "web_page"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "扩展页面 Provider 组合边界"},
+		{SlotID: "provider.ui.theme", ContractVersion: 1, SupportedKinds: []string{"panel"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "主题 Provider 组合边界"},
+		{SlotID: "provider.ui.tokens", ContractVersion: 1, SupportedKinds: []string{"panel"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "Token Provider 组合边界"},
+		{SlotID: "provider.ui.icons", ContractVersion: 1, SupportedKinds: []string{"panel"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "图标 Provider 组合边界"},
+		{SlotID: "provider.ui.components", ContractVersion: 1, SupportedKinds: []string{"panel"}, Multiplicity: MultiplicityReplaceableSingle, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "组件 Provider 组合边界"},
 		{SlotID: "extension.center.header.action", ContractVersion: 1, SupportedKinds: []string{"action", "menu_item"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutInline, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "扩展中心顶部操作区"},
 		{SlotID: "extension.center.card.badge", ContractVersion: 1, SupportedKinds: []string{"card", "badge"}, Multiplicity: MultiplicityMultiple, Layout: LayoutGrid, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackEmpty, Description: "扩展中心卡片徽章"},
 		{SlotID: "extension.detail.tab", ContractVersion: 1, SupportedKinds: []string{"schema_page", "web_page"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutTabs, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackEmpty, Description: "扩展详情标签页"},
@@ -478,11 +503,61 @@ func DefaultSlots() []*SlotDefinition {
 		{SlotID: "desktop.tray.item", ContractVersion: 1, SupportedKinds: []string{"menu_item", "action"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "托盘菜单项"},
 		{SlotID: "desktop.window.page", ContractVersion: 1, SupportedKinds: []string{"schema_page", "web_page"}, Multiplicity: MultiplicitySingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "桌面独立窗口页面"},
 	}
+	parents := map[SlotID]SlotID{
+		"provider.app.shell":                     "root",
+		"provider.app.navigation":                "provider.app.shell",
+		"provider.app.workspace":                 "provider.app.shell",
+		"provider.route.registry":                "provider.app.workspace",
+		"provider.page.provider":                 "provider.app.workspace",
+		"provider.conversation.shell":            "provider.app.workspace",
+		"provider.conversation.header":           "provider.conversation.shell",
+		"provider.conversation.messages":         "provider.conversation.shell",
+		"provider.conversation.message_renderer": "provider.conversation.messages",
+		"provider.conversation.sidebar":          "provider.conversation.shell",
+		"provider.conversation.composer":         "provider.conversation.shell",
+		"provider.conversation.overlay":          "provider.conversation.shell",
+		"provider.character.shell":               "provider.app.workspace",
+		"provider.character.detail":              "provider.character.shell",
+		"provider.memory.shell":                  "provider.app.workspace",
+		"provider.memory.detail":                 "provider.memory.shell",
+		"provider.settings.shell":                "provider.app.workspace",
+		"provider.settings.section":              "provider.settings.shell",
+		"provider.extension.center":              "provider.app.workspace",
+		"provider.extension.page":                "provider.extension.center",
+		"provider.ui.theme":                      "root",
+		"provider.ui.tokens":                     "provider.ui.theme",
+		"provider.ui.icons":                      "root",
+		"provider.ui.components":                 "root",
+		"chat.header.action":                     "provider.conversation.header",
+		"chat.sidebar.panel":                     "provider.conversation.sidebar",
+		"chat.message.action":                    "provider.conversation.messages",
+		"chat.message.renderer":                  "provider.conversation.message_renderer",
+		"chat.conversation.node":                 "provider.conversation.messages",
+		"chat.message.custom_renderer":           "provider.conversation.messages",
+		"chat.message.attachment_renderer":       "provider.conversation.messages",
+		"chat.message.badge":                     "provider.conversation.messages",
+		"chat.composer.action":                   "provider.conversation.composer",
+		"chat.composer.attachment":               "provider.conversation.composer",
+		"chat.composer.hint":                     "provider.conversation.composer",
+		"chat.empty_state.card":                  "provider.conversation.messages",
+		"chat.status.item":                       "provider.conversation.shell",
+	}
 	for _, def := range slots {
-		if strings.HasPrefix(string(def.SlotID), "chat.") {
-			def.Scope = ScopeSession
-		} else {
+		id := string(def.SlotID)
+		switch {
+		case id == "root":
 			def.Scope = ScopeRoot
+		case strings.HasPrefix(id, "chat."):
+			def.Scope = ScopeSession
+		case strings.HasPrefix(id, "provider.conversation."):
+			def.Scope = ScopeSessionMaybe
+		default:
+			def.Scope = ScopeRoot
+		}
+		if parent, ok := parents[def.SlotID]; ok {
+			def.ParentSlotID = parent
+		} else if def.SlotID != "root" {
+			def.ParentSlotID = "root"
 		}
 	}
 	return slots
@@ -520,13 +595,24 @@ type ActionSummary struct {
 }
 
 type SlotSnapshot struct {
-	SlotID          SlotID                 `json:"slotId"`
-	ContractVersion int                    `json:"contractVersion"`
-	Layout          SlotLayout             `json:"layout"`
-	Multiplicity    SlotMultiplicity       `json:"multiplicity"`
-	FallbackPolicy  FallbackPolicy         `json:"fallbackPolicy"`
-	Contributions   []*ContributionSummary `json:"contributions"`
-	GeneratedAt     time.Time              `json:"generatedAt"`
+	SlotID            SlotID                 `json:"slotId"`
+	ContractVersion   int                    `json:"contractVersion"`
+	SupportedKinds    []string               `json:"supportedKinds,omitempty"`
+	Layout            SlotLayout             `json:"layout"`
+	Multiplicity      SlotMultiplicity       `json:"multiplicity"`
+	FallbackPolicy    FallbackPolicy         `json:"fallbackPolicy"`
+	Description       string                 `json:"description,omitempty"`
+	Platform          []string               `json:"platforms,omitempty"`
+	OrderingPolicy    string                 `json:"orderingPolicy,omitempty"`
+	FailurePolicy     string                 `json:"failurePolicy,omitempty"`
+	OwnerExtension    string                 `json:"ownerExtension,omitempty"`
+	ParentSlotID      SlotID                 `json:"parentSlotId,omitempty"`
+	Dynamic           bool                   `json:"dynamic,omitempty"`
+	Scope             SlotScope              `json:"scope"`
+	DeclarationEpoch  uint64                 `json:"declarationEpoch"`
+	PerformanceBudget PerformanceBudget      `json:"performanceBudget"`
+	Contributions     []*ContributionSummary `json:"contributions"`
+	GeneratedAt       time.Time              `json:"generatedAt"`
 }
 
 type UIContributionSnapshot struct {
@@ -577,13 +663,24 @@ func (s *SnapshotService) GetSnapshot(ctx context.Context) (*UIContributionSnaps
 			continue
 		}
 		snap.Slots = append(snap.Slots, &SlotSnapshot{
-			SlotID:          slotDef.SlotID,
-			ContractVersion: slotDef.ContractVersion,
-			Layout:          slotDef.Layout,
-			Multiplicity:    slotDef.Multiplicity,
-			FallbackPolicy:  slotDef.FallbackPolicy,
-			Contributions:   contribs,
-			GeneratedAt:     time.Now().UTC(),
+			SlotID:            slotDef.SlotID,
+			ContractVersion:   slotDef.ContractVersion,
+			SupportedKinds:    append([]string(nil), slotDef.SupportedKinds...),
+			Layout:            slotDef.Layout,
+			Multiplicity:      slotDef.Multiplicity,
+			FallbackPolicy:    slotDef.FallbackPolicy,
+			Description:       slotDef.Description,
+			Platform:          append([]string(nil), slotDef.Platform...),
+			OrderingPolicy:    slotDef.OrderingPolicy,
+			FailurePolicy:     slotDef.FailurePolicy,
+			OwnerExtension:    slotDef.OwnerExtension,
+			ParentSlotID:      slotDef.ParentSlotID,
+			Dynamic:           slotDef.Dynamic,
+			Scope:             slotDef.Scope,
+			DeclarationEpoch:  slotDef.DeclarationEpoch,
+			PerformanceBudget: slotDef.PerformanceBudget,
+			Contributions:     contribs,
+			GeneratedAt:       time.Now().UTC(),
 		})
 	}
 	s.mu.Lock()
