@@ -1,5 +1,5 @@
 import { RuntimeFiber, type ExtensionFiber, type Disposer } from "./fiber";
-import type { UISlotClient, UISlotDefinition, UISlotRegistration, UISlotInjectionEffect } from "./ui";
+import type { UISlotClient, UISlotDefinition, UISlotRegistration, UISlotInjectionEffect, UISlotContributionOptions, UISlotContributionRegistration } from "./ui";
 import { ValidationError } from "./errors";
 
 export interface ClientPluginServiceRegistry {
@@ -17,6 +17,7 @@ export interface ClientPluginEventBus {
 
 export interface ClientPluginSlotContext {
   declare(definition: UISlotDefinition): Promise<UISlotRegistration>;
+  register<T = unknown>(slotId: string, key: string, renderable: T, options?: UISlotContributionOptions): UISlotContributionRegistration<T>;
   inject(slotId: string, callback: (definition: UISlotDefinition) => UISlotInjectionEffect): Promise<Disposer>;
   list(): Promise<UISlotDefinition[]>;
 }
@@ -170,6 +171,11 @@ export class ClientPluginRuntime {
     return {
       declare: async (definition) => {
         const registration = await slots.declare(definition);
+        fiber.own(registration.dispose);
+        return registration;
+      },
+      register: <T = unknown>(slotId: string, key: string, renderable: T, options?: UISlotContributionOptions) => {
+        const registration = slots.register(slotId, `${fiber.id}:${key}`, renderable, options);
         fiber.own(registration.dispose);
         return registration;
       },

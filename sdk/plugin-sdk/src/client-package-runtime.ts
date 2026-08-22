@@ -49,14 +49,23 @@ export class ClientPackageRuntime {
     const selected = version ?? this.order.get(id)?.at(-1);
     const pkg = selected ? versions?.get(selected) : undefined;
     if (!pkg || !selected) throw new ValidationError(`client package ${id}@${selected ?? "?"} is not defined`);
+    const previousVersion = this.active.get(id);
+    const previousPackage = previousVersion ? versions?.get(previousVersion) : undefined;
+    if (previousVersion === selected) return;
+
     await this.runtime.undefine(id);
     this.runtime.define(pkg);
-    this.active.set(id, selected);
     try {
       await this.runtime.run(id);
+      this.active.set(id, selected);
     } catch (error) {
-      this.active.delete(id);
       await this.runtime.undefine(id);
+      this.active.delete(id);
+      if (previousPackage && previousVersion) {
+        this.runtime.define(previousPackage);
+        await this.runtime.run(id);
+        this.active.set(id, previousVersion);
+      }
       throw error;
     }
   }
