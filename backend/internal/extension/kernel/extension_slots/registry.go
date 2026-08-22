@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -13,6 +14,13 @@ import (
 type SlotID string
 
 type SlotMultiplicity string
+type SlotScope string
+
+const (
+	ScopeRoot         SlotScope = "root"
+	ScopeSessionMaybe SlotScope = "session-maybe"
+	ScopeSession      SlotScope = "session"
+)
 
 const (
 	MultiplicitySingle            SlotMultiplicity = "single"
@@ -61,6 +69,8 @@ type SlotDefinition struct {
 	OwnerExtension    string            `json:"ownerExtension,omitempty"`
 	ParentSlotID      SlotID            `json:"parentSlotId,omitempty"`
 	Dynamic           bool              `json:"dynamic,omitempty"`
+	Scope             SlotScope         `json:"scope"`
+	DeclarationEpoch  uint64            `json:"declarationEpoch"`
 }
 
 type PerformanceBudget struct {
@@ -75,12 +85,14 @@ type SlotRegistry struct {
 	mu        sync.RWMutex
 	slots     map[SlotID]*SlotDefinition
 	suspended map[SlotID]*SlotDefinition
+	epochs    map[SlotID]uint64
 }
 
 func NewSlotRegistry() *SlotRegistry {
 	return &SlotRegistry{
 		slots:     make(map[SlotID]*SlotDefinition),
 		suspended: make(map[SlotID]*SlotDefinition),
+		epochs:    make(map[SlotID]uint64),
 	}
 }
 
@@ -135,14 +147,39 @@ func (r *SlotRegistry) register(ownerExtension string, def *SlotDefinition, dyna
 		if copyDef.ParentSlotID == copyDef.SlotID {
 			return ErrSlotParentCycle
 		}
-		if _, exists := r.slots[copyDef.ParentSlotID]; !exists {
+		parent, exists := r.slots[copyDef.ParentSlotID]
+		if !exists {
 			return fmt.Errorf("%w: %s", ErrParentSlotNotFound, copyDef.ParentSlotID)
 		}
+		if copyDef.Scope == "" {
+			copyDef.Scope = parent.Scope
+		}
+		if !scopeCanContain(parent.Scope, copyDef.Scope) {
+			return fmt.Errorf("%w: %s", ErrSlotScopeEscape, copyDef.SlotID)
+		}
+	}
+	if copyDef.Scope == "" {
+		copyDef.Scope = ScopeRoot
+	}
+	if copyDef.Scope != ScopeRoot && copyDef.Scope != ScopeSessionMaybe && copyDef.Scope != ScopeSession {
+		return fmt.Errorf("%w: %s", ErrInvalidSlotScope, copyDef.Scope)
 	}
 	delete(r.suspended, copyDef.SlotID)
+	copyDef.DeclarationEpoch = r.nextEpochLocked(copyDef.SlotID)
 	r.slots[copyDef.SlotID] = copyDef
 	r.restoreSuspendedChildrenLocked(copyDef.SlotID)
 	return nil
+}
+
+func scopeCanContain(parent SlotScope, child SlotScope) bool {
+	switch parent {
+	case ScopeSession:
+		return child == ScopeSession
+	case ScopeSessionMaybe:
+		return child == ScopeSessionMaybe || child == ScopeSession
+	default:
+		return child == ScopeRoot || child == ScopeSessionMaybe || child == ScopeSession
+	}
 }
 
 func (r *SlotRegistry) Get(slotID SlotID) (*SlotDefinition, error) {
@@ -306,7 +343,9 @@ func (r *SlotRegistry) restoreSuspendedChildrenLocked(parent SlotID) {
 			if _, parentExists := r.slots[def.ParentSlotID]; !parentExists {
 				continue
 			}
-			r.slots[id] = cloneSlotDefinition(def)
+			restoredDef := cloneSlotDefinition(def)
+			restoredDef.DeclarationEpoch = r.nextEpochLocked(id)
+			r.slots[id] = restoredDef
 			delete(r.suspended, id)
 			restored = true
 		}
@@ -322,6 +361,12 @@ func (r *SlotRegistry) restoreSuspendedChildrenLocked(parent SlotID) {
 		}
 		return
 	}
+}
+
+func (r *SlotRegistry) nextEpochLocked(slotID SlotID) uint64 {
+	next := r.epochs[slotID] + 1
+	r.epochs[slotID] = next
+	return next
 }
 
 func (r *SlotRegistry) collectDescendantsLocked(root SlotID) []SlotID {
@@ -401,7 +446,7 @@ func DefaultSlots() []*SlotDefinition {
 		MessageRate:     60,
 		UpdateFrequency: 5 * time.Second,
 	}
-	return []*SlotDefinition{
+	slots := []*SlotDefinition{
 		{SlotID: "extension.center.header.action", ContractVersion: 1, SupportedKinds: []string{"action", "menu_item"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutInline, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "扩展中心顶部操作区"},
 		{SlotID: "extension.center.card.badge", ContractVersion: 1, SupportedKinds: []string{"card", "badge"}, Multiplicity: MultiplicityMultiple, Layout: LayoutGrid, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackEmpty, Description: "扩展中心卡片徽章"},
 		{SlotID: "extension.detail.tab", ContractVersion: 1, SupportedKinds: []string{"schema_page", "web_page"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutTabs, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackEmpty, Description: "扩展详情标签页"},
@@ -428,10 +473,19 @@ func DefaultSlots() []*SlotDefinition {
 		{SlotID: "system.settings.section", ContractVersion: 1, SupportedKinds: []string{"settings_section", "schema_page"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackEmpty, Description: "系统设置分节"},
 		{SlotID: "system.diagnostics.tab", ContractVersion: 1, SupportedKinds: []string{"schema_page", "panel"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutTabs, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackEmpty, Description: "系统诊断标签页"},
 		{SlotID: "desktop.command", ContractVersion: 1, SupportedKinds: []string{"desktop_command"}, Multiplicity: MultiplicityMultiple, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "桌面命令"},
-		{SlotID: "desktop.menu.item", ContractVersion: 1, SupportedKinds: []string{"menu_item"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "桌面菜单项"},
+		{SlotID: "desktop.application_menu.item", ContractVersion: 1, SupportedKinds: []string{"menu_item"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "桌面菜单项"},
+		{SlotID: "desktop.context_menu.item", ContractVersion: 1, SupportedKinds: []string{"menu_item"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "桌面上下文菜单项"},
 		{SlotID: "desktop.tray.item", ContractVersion: 1, SupportedKinds: []string{"menu_item", "action"}, Multiplicity: MultiplicityOrderedMultiple, Layout: LayoutHidden, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackNone, Description: "托盘菜单项"},
 		{SlotID: "desktop.window.page", ContractVersion: 1, SupportedKinds: []string{"schema_page", "web_page"}, Multiplicity: MultiplicitySingle, Layout: LayoutStack, PerformanceBudget: defaultBudget, FallbackPolicy: FallbackDefault, Description: "桌面独立窗口页面"},
 	}
+	for _, def := range slots {
+		if strings.HasPrefix(string(def.SlotID), "chat.") {
+			def.Scope = ScopeSession
+		} else {
+			def.Scope = ScopeRoot
+		}
+	}
+	return slots
 }
 
 type ContributionSummary struct {
@@ -644,4 +698,6 @@ var (
 	ErrParentSlotNotFound       = errors.New("extension_slots: parent slot not found")
 	ErrSlotParentCycle          = errors.New("extension_slots: slot cannot be its own parent")
 	ErrStaticSlotImmutable      = errors.New("extension_slots: built-in slot is immutable")
+	ErrInvalidSlotScope         = errors.New("extension_slots: invalid slot scope")
+	ErrSlotScopeEscape          = errors.New("extension_slots: session child slot cannot escape to root scope")
 )

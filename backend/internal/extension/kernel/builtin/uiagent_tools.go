@@ -27,6 +27,7 @@ var (
 	uiAgentSourceEditor     source.SourceEditor
 	uiAgentDiagnosticRunner adapters.DiagnosticRunner
 	uiAgentPublisher        UIAgentPublisher
+	uiAgentClientRuntime    UIAgentClientRuntime
 )
 
 type UIAgentPublishResult struct {
@@ -36,6 +37,10 @@ type UIAgentPublishResult struct {
 
 type UIAgentPublisher interface {
 	Publish(ctx context.Context, workspaceID string, doc *schema.SchemaUIDocument) (UIAgentPublishResult, error)
+}
+
+type UIAgentClientRuntime interface {
+	ExecuteClientRuntimeCommand(ctx context.Context, action string, payload map[string]interface{}) (map[string]interface{}, error)
 }
 
 func SetUIAgentInspector(inspector source.SourceInspector) {
@@ -80,6 +85,10 @@ func SetUIAgentDiagnosticRunner(runner adapters.DiagnosticRunner) {
 
 func SetUIAgentPublisher(publisher UIAgentPublisher) {
 	uiAgentPublisher = publisher
+}
+
+func SetUIAgentClientRuntime(runtime UIAgentClientRuntime) {
+	uiAgentClientRuntime = runtime
 }
 
 func init() {
@@ -180,6 +189,89 @@ func init() {
 			},
 		},
 	}, uiagentPreviewHandler)
+
+	tool.Register(tool.Tool{
+		Type: "function",
+		Function: tool.Function{
+			Name:        "uiagent.client_runtime",
+			Description: "Inspect and control the session-owned UI runtime using immutable packages. Packages may compose published Schema UI/conversation projections or provide browser-only clientCode executed inside an isolated iframe sandbox with scripts enabled but no same-origin, network, host DOM, or host runtime privileges. Trusted host JavaScript is not accepted by this tool. Production activation requires user approval for the exact package version unless the user explicitly grants future-version approval for that plugin.",
+			Parameters: tool.Parameters{
+				Type: "object",
+				Properties: map[string]tool.Property{
+					"action": {
+						Type:        "string",
+						Description: "Runtime action: inspect, define, run, stop, rollback, or undefine.",
+						Enum:        []string{"inspect", "define", "run", "stop", "rollback", "undefine"},
+					},
+					"package": {
+						Type:        "object",
+						Description: "Client package for define. Must contain id/version. Contributions may reference published Schema UI sources or provide sandboxed clientCode {html,css,script,minHeight,maxHeight}; conversation nodes may reference published projections.",
+					},
+					"id":      {Type: "string", Description: "Client package id for run/stop/rollback/undefine."},
+					"version": {Type: "string", Description: "Optional package version for run/undefine."},
+					"mode":    {Type: "string", Description: "Optional run mode: run for first/restart/same-current activation, update when switching current to a different package.", Enum: []string{"run", "update"}},
+				},
+				Required: []string{"action"},
+			},
+		},
+	}, uiagentClientRuntimeHandler)
+}
+
+func uiagentClientRuntimeHandler(ctx context.Context, execCtx tool.ToolExecutionContext, args map[string]interface{}) tool.ToolCallResult {
+	if uiAgentClientRuntime == nil {
+		return tool.ErrorResult("ui_agent_unavailable", "client runtime command bridge not configured")
+	}
+	action, _ := args["action"].(string)
+	action = strings.TrimSpace(action)
+	switch action {
+	case "inspect", "define", "run", "stop", "rollback", "undefine":
+	default:
+		return tool.ErrorResult("invalid_input", "action must be inspect, define, run, stop, rollback, or undefine")
+	}
+	payload := make(map[string]interface{}, len(args))
+	for key, value := range args {
+		if key == "action" {
+			continue
+		}
+		payload[key] = value
+	}
+	if action == "define" {
+		pkg, ok := payload["package"].(map[string]interface{})
+		if !ok || runtimeArgString(pkg, "id") == "" || runtimeArgString(pkg, "version") == "" {
+			return tool.ErrorResult("invalid_input", "define requires package.id and package.version")
+		}
+	}
+	if action != "inspect" && action != "define" && runtimeArgString(payload, "id") == "" {
+		return tool.ErrorResult("invalid_input", action+" requires id")
+	}
+	payload["_runtimeScope"] = map[string]interface{}{
+		"userId":         strings.TrimSpace(execCtx.User),
+		"conversationId": strings.TrimSpace(execCtx.ConversationID),
+		"requestId":      strings.TrimSpace(execCtx.RequestID),
+	}
+	result, err := uiAgentClientRuntime.ExecuteClientRuntimeCommand(ctx, action, payload)
+	if err != nil {
+		return tool.ErrorResult("client_runtime_failed", err.Error())
+	}
+	data, _ := json.Marshal(result)
+	return tool.ToolCallResult{
+		Status:      tool.ToolStatusSuccess,
+		Content:     string(data),
+		VisibleText: fmt.Sprintf("Client runtime %s completed", action),
+		Confidence:  1,
+	}
+}
+
+func runtimeArgString(values map[string]interface{}, key string) string {
+	value, ok := values[key]
+	if !ok || value == nil {
+		return ""
+	}
+	text, ok := value.(string)
+	if !ok {
+		return ""
+	}
+	return strings.TrimSpace(text)
 }
 
 func uiagentInspectHandler(ctx context.Context, execCtx tool.ToolExecutionContext, args map[string]interface{}) tool.ToolCallResult {

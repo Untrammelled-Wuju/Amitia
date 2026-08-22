@@ -573,6 +573,20 @@ var schemaMigrations = []string{
 	`CREATE INDEX IF NOT EXISTS idx_ext_event_outbox_idempotency ON extension_event_outbox(idempotency_key)`,
 	`CREATE INDEX IF NOT EXISTS idx_ext_event_outbox_available ON extension_event_outbox(available_at)`,
 
+	`CREATE TABLE IF NOT EXISTS extension_conversation_event_sequences (
+		conversation_id TEXT PRIMARY KEY,
+		last_sequence INTEGER NOT NULL DEFAULT 0,
+		updated_at DATETIME NOT NULL
+	)`,
+
+	`CREATE TABLE IF NOT EXISTS extension_client_runtime_sessions (
+		user_id TEXT NOT NULL,
+		conversation_id TEXT NOT NULL,
+		state_json TEXT NOT NULL,
+		updated_at DATETIME NOT NULL,
+		PRIMARY KEY (user_id, conversation_id)
+	)`,
+
 	`CREATE TABLE IF NOT EXISTS extension_event_subscriptions (
 		contribution_id TEXT PRIMARY KEY,
 		extension_id TEXT NOT NULL,
