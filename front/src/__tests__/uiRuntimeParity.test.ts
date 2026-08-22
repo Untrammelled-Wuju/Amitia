@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { BrowserClientPluginRuntime, BrowserSlotRuntime } from "@/ui-runtime/clientPluginRuntime";
 import { buildUnifiedSlotItems } from "@/ui-runtime/slotLedger";
+import { clientSlotStoreResource } from "@/ui-runtime/slotContract";
+import { providerSlotId } from "@/ui-runtime/providerSlotAdapter";
 import {
   ConversationNodeAssembler,
   listProgrammaticConversationNodeDefinitions,
@@ -50,6 +52,48 @@ describe("DSH parity runtime contracts", () => {
 
     expect(activated).toBe(2);
     expect(cleaned).toBe(1);
+  });
+
+  it("owns contribution store and business injection for the contribution lifetime", async () => {
+    const runtime = new BrowserClientPluginRuntime();
+    await runtime.slots.declare({ slotId: "typed.store.slot", contractVersion: 1, supportedKinds: ["panel"] });
+    let disposed = 0;
+
+    runtime.define({
+      id: "store-plugin",
+      setup(ctx) {
+        ctx.services.provide("demo.greeting", "hello");
+        ctx.slots.register("typed.store.slot", "view", {} as any, {
+          store: () => clientSlotStoreResource({ count: 7 }, () => { disposed += 1; }),
+          inject: ({ store, services }) => ({
+            count: (store as { count: number }).count,
+            greeting: services.get<string>("demo.greeting"),
+          }),
+        });
+      },
+    });
+
+    await runtime.run("store-plugin");
+    const contribution = runtime.slots.listContributions("typed.store.slot")[0];
+    expect(contribution?.store).toEqual({ count: 7 });
+    expect(contribution?.injected).toEqual({ count: 7, greeting: "hello" });
+
+    await runtime.stop("store-plugin");
+    expect(runtime.slots.listContributions("typed.store.slot")).toHaveLength(0);
+    expect(disposed).toBe(1);
+  });
+
+  it("keeps lifecycle observation separate from business injection", async () => {
+    const slots = new BrowserSlotRuntime();
+    let observed = 0;
+    await slots.observe("late.slot", () => { observed += 1; });
+    await slots.declare({ slotId: "late.slot", contractVersion: 1, supportedKinds: ["panel"] });
+    expect(observed).toBe(1);
+  });
+
+  it("maps every provider capability onto the unified provider slot namespace", () => {
+    expect(providerSlotId("conversation.composer")).toBe("provider.conversation.composer");
+    expect(providerSlotId("app.shell")).toBe("provider.app.shell");
   });
 
   it("keeps the current atomic package alive when a candidate version fails", async () => {
