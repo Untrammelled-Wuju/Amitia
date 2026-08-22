@@ -1,6 +1,7 @@
 package extension_slots
 
 import (
+	"context"
 	"errors"
 	"testing"
 )
@@ -183,5 +184,74 @@ func TestSessionMaybeScopeCanNarrowButNotEscape(t *testing.T) {
 	escape.Scope = ScopeRoot
 	if err := r.RegisterOwned("escape.ext", escape); !errors.Is(err, ErrSlotScopeEscape) {
 		t.Fatalf("root child under session-maybe error = %v, want %v", err, ErrSlotScopeEscape)
+	}
+}
+
+type emptySlotResolver struct{}
+
+func (emptySlotResolver) Resolve(context.Context, SlotID) ([]*ContributionSummary, error) {
+	return nil, nil
+}
+
+func TestDefaultProviderSlotsFormRootedTree(t *testing.T) {
+	r := DefaultSlotRegistry()
+
+	root, err := r.Get("root")
+	if err != nil {
+		t.Fatalf("get root slot: %v", err)
+	}
+	if root.ParentSlotID != "" || root.Scope != ScopeRoot {
+		t.Fatalf("root contract = parent %q scope %q, want no parent and root scope", root.ParentSlotID, root.Scope)
+	}
+
+	composer, err := r.Get("provider.conversation.composer")
+	if err != nil {
+		t.Fatalf("get provider conversation composer: %v", err)
+	}
+	if composer.ParentSlotID != "provider.conversation.shell" {
+		t.Fatalf("composer parent = %q, want provider.conversation.shell", composer.ParentSlotID)
+	}
+	if composer.Scope != ScopeSessionMaybe {
+		t.Fatalf("composer scope = %q, want %q", composer.Scope, ScopeSessionMaybe)
+	}
+	if composer.Multiplicity != MultiplicityReplaceableSingle {
+		t.Fatalf("composer multiplicity = %q, want %q", composer.Multiplicity, MultiplicityReplaceableSingle)
+	}
+
+	action, err := r.Get("chat.composer.action")
+	if err != nil {
+		t.Fatalf("get chat composer action: %v", err)
+	}
+	if action.ParentSlotID != "provider.conversation.composer" {
+		t.Fatalf("chat composer action parent = %q, want provider.conversation.composer", action.ParentSlotID)
+	}
+	if action.Scope != ScopeSession {
+		t.Fatalf("chat composer action scope = %q, want %q", action.Scope, ScopeSession)
+	}
+}
+
+func TestSnapshotIncludesSlotContractMetadata(t *testing.T) {
+	r := DefaultSlotRegistry()
+	svc := NewSnapshotService(r, emptySlotResolver{})
+	snap, err := svc.GetSnapshot(context.Background())
+	if err != nil {
+		t.Fatalf("get snapshot: %v", err)
+	}
+
+	var composer *SlotSnapshot
+	for _, slot := range snap.Slots {
+		if slot.SlotID == "provider.conversation.composer" {
+			composer = slot
+			break
+		}
+	}
+	if composer == nil {
+		t.Fatal("provider.conversation.composer missing from snapshot")
+	}
+	if composer.ParentSlotID != "provider.conversation.shell" || composer.Scope != ScopeSessionMaybe {
+		t.Fatalf("snapshot contract lost parent/scope metadata: %#v", composer)
+	}
+	if len(composer.SupportedKinds) == 0 {
+		t.Fatal("snapshot contract lost supported kinds")
 	}
 }
