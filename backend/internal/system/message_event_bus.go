@@ -99,17 +99,37 @@ func (bus *MessageEventBus) Unsubscribe(id string) {
 }
 
 func (bus *MessageEventBus) Publish(event MessageEvent) {
+	bus.PublishContext(context.Background(), event)
+}
+
+// PublishContext publishes to the realtime in-process subscribers and mirrors the
+// same event into the configured durable event log. Realtime delivery remains
+// best-effort; durable publishing is isolated from the subscriber lock so a slow
+// persistence backend cannot block subscription management.
+func (bus *MessageEventBus) PublishContext(ctx context.Context, event MessageEvent) {
 	bus.mu.RLock()
-	defer bus.mu.RUnlock()
+	subscribers := make([]*MessageEventSubscriber, 0, len(bus.subscribers))
+	for _, sub := range bus.subscribers {
+		subscribers = append(subscribers, sub)
+	}
+	durable := bus.durable
+	bus.mu.RUnlock()
+
 	payload, _ := json.Marshal(event)
 	applog.Info(fmt.Sprintf("[MessageEventBus] publish event=%s channel=%s", event.Type, event.Channel))
-	for _, sub := range bus.subscribers {
+	for _, sub := range subscribers {
 		if len(sub.Channels) == 0 || sub.Channels[event.Channel] {
 			select {
 			case sub.Events <- event:
 			default:
 				applog.Warn(fmt.Sprintf("[MessageEventBus] subscriber %s channel full, dropping event", sub.ID))
 			}
+		}
+	}
+
+	if durable != nil {
+		if err := durable.PublishMessageEvent(ctx, event); err != nil {
+			applog.Warn(fmt.Sprintf("[MessageEventBus] durable publish failed event=%s conversation=%s: %v", event.Type, event.ConversationID, err))
 		}
 	}
 	_ = payload

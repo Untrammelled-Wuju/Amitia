@@ -417,6 +417,7 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 		panic("failed to initialize kernel container")
 	}
 	extensionRuntime.Kernel.SetContainer(kernelContainer)
+	wireMessageEventDurableBridge(kernelContainer.EventService)
 	if err := extensionRuntime.Kernel.RecoverPackageOperations(context.Background()); err != nil {
 		log.Error("package operation recovery failed: ", err)
 		panic("failed to recover package operations")
