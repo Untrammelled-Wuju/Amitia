@@ -1,6 +1,7 @@
 import { RuntimeFiber, type ExtensionFiber, type Disposer } from "./fiber";
-import type { UISlotClient, UISlotDefinition, UISlotRegistration, UISlotInjectionEffect, UISlotContributionOptions, UISlotContributionRegistration } from "./ui";
+import type { UISlotClient, UISlotDefinition, UISlotRegistration, UISlotInjectionEffect, UISlotContributionOptions, UISlotContributionRegistration, UISlotEntryDefinition } from "./ui";
 import { ValidationError } from "./errors";
+import type { UIKnownSlotId, UISlotInjectContext, UISlotInjected, UISlotProps, UISlotStore, UISlotStoreContext } from "./slot-contract";
 
 export interface ClientPluginServiceRegistry {
   provide<T>(serviceId: string, value: T): Disposer;
@@ -17,7 +18,23 @@ export interface ClientPluginEventBus {
 
 export interface ClientPluginSlotContext {
   declare(definition: UISlotDefinition): Promise<UISlotRegistration>;
-  register<T = unknown>(slotId: string, key: string, renderable: T, options?: UISlotContributionOptions): UISlotContributionRegistration<T>;
+  register<SlotId extends UIKnownSlotId, T = unknown>(
+    slotId: SlotId,
+    key: string,
+    renderable: T,
+    options?: UISlotContributionOptions<UISlotProps<SlotId>, UISlotStore<SlotId>, UISlotInjected<SlotId>>,
+  ): UISlotContributionRegistration<T, UISlotStore<SlotId>, UISlotInjected<SlotId>>;
+  register<T = unknown>(
+    slotId: string,
+    key: string,
+    renderable: T,
+    options?: UISlotContributionOptions,
+  ): UISlotContributionRegistration<T>;
+  register<SlotId extends string, T = unknown>(
+    entry: UISlotEntryDefinition<SlotId, T>,
+  ): UISlotContributionRegistration<T, UISlotStore<SlotId>, UISlotInjected<SlotId>>;
+  observe(slotId: string, callback: (definition: UISlotDefinition) => UISlotInjectionEffect): Promise<Disposer>;
+  /** @deprecated Use observe(). Business injection is configured on register(). */
   inject(slotId: string, callback: (definition: UISlotDefinition) => UISlotInjectionEffect): Promise<Disposer>;
   list(): Promise<UISlotDefinition[]>;
 }
@@ -74,12 +91,14 @@ export class ClientPluginRuntime {
     if (!definition) throw new ValidationError(`client plugin ${pluginId} is not defined`);
     if (this.running.has(pluginId)) return;
     const fiber = new RuntimeFiber(`client-plugin:${pluginId}`);
+    const services = this.scopedServices(fiber);
+    const events = this.scopedEvents(fiber);
     const context: ClientPluginContext = {
       pluginId,
       fiber,
-      services: this.scopedServices(fiber),
-      events: this.scopedEvents(fiber),
-      slots: this.slotClient ? this.scopedSlots(fiber, this.slotClient) : undefined,
+      services,
+      events,
+      slots: this.slotClient ? this.scopedSlots(pluginId, fiber, this.slotClient, services, events) : undefined,
     };
     this.running.set(pluginId, { definition, fiber });
     try {
@@ -167,26 +186,69 @@ export class ClientPluginRuntime {
     };
   }
 
-  private scopedSlots(fiber: RuntimeFiber, slots: UISlotClient): ClientPluginSlotContext {
+  private scopedSlots(
+    pluginId: string,
+    fiber: RuntimeFiber,
+    slots: UISlotClient,
+    services: ClientPluginServiceRegistry,
+    events: ClientPluginEventBus,
+  ): ClientPluginSlotContext {
+    const scopeOptions = (input?: UISlotContributionOptions): UISlotContributionOptions | undefined => {
+      if (!input) return undefined;
+      const originalStore = input.store;
+      const originalInject = input.inject;
+      return {
+        ordering: input.ordering,
+        priority: input.priority,
+        props: input.props,
+        children: input.children,
+        store: typeof originalStore === "function"
+          ? ((context: UISlotStoreContext) => originalStore({ ...context, pluginId }))
+          : originalStore,
+        inject: originalInject
+          ? ((context: UISlotInjectContext<unknown>) => originalInject({
+              ...context,
+              pluginId,
+              services: { get: services.get, list: services.list },
+              events: { emit: events.emit },
+            }))
+          : undefined,
+      };
+    };
+
     return {
       declare: async (definition) => {
         const registration = await slots.declare(definition);
         fiber.own(registration.dispose);
         return registration;
       },
-      register: <T = unknown>(slotId: string, key: string, renderable: T, options?: UISlotContributionOptions) => {
-        const registration = slots.register(slotId, `${fiber.id}:${key}`, renderable, options);
+      register: ((slotOrEntry: string | UISlotEntryDefinition<string, unknown>, key?: string, renderable?: unknown, options?: UISlotContributionOptions) => {
+        const registration = typeof slotOrEntry === "string"
+          ? slots.register(slotOrEntry as UIKnownSlotId, `${fiber.id}:${key ?? ""}`, renderable, scopeOptions(options))
+          : slots.register({
+              ...slotOrEntry,
+              key: `${fiber.id}:${slotOrEntry.key}`,
+              ...scopeOptions(slotOrEntry),
+              slotId: slotOrEntry.slotId,
+              renderable: slotOrEntry.renderable,
+            });
         fiber.own(registration.dispose);
         return registration;
+      }) as ClientPluginSlotContext["register"],
+      observe: async (slotId, callback) => {
+        const dispose = await slots.observe(slotId, callback);
+        fiber.own(dispose);
+        return dispose;
       },
       inject: async (slotId, callback) => {
-        const dispose = await slots.inject(slotId, callback);
+        const dispose = await slots.observe(slotId, callback);
         fiber.own(dispose);
         return dispose;
       },
       list: () => slots.list(),
     };
   }
+
 }
 
 export const defaultClientPluginRuntime = new ClientPluginRuntime();
