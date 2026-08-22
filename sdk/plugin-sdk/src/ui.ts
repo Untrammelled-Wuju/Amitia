@@ -35,6 +35,8 @@ export interface UISlotDefinition {
   readonly fallbackPolicy?: "none" | "skeleton" | "empty" | "default";
   readonly parentSlotId?: string;
   readonly description?: string;
+  readonly declarationEpoch?: number;
+  readonly scope?: "root" | "session-maybe" | "session";
 }
 
 export interface UISlotRegistration {
@@ -43,10 +45,30 @@ export interface UISlotRegistration {
 }
 
 export type UISlotInjectionCleanup = () => void | Promise<void>;
-export type UISlotInjectionEffect = void | UISlotInjectionCleanup | Promise<void | UISlotInjectionCleanup>;
+export type UISlotInjectionEffect =
+  | void
+  | UISlotInjectionCleanup
+  | readonly UISlotInjectionCleanup[]
+  | Iterable<UISlotInjectionCleanup>
+  | Promise<void | UISlotInjectionCleanup | readonly UISlotInjectionCleanup[] | Iterable<UISlotInjectionCleanup>>;
+
+export interface UISlotContributionOptions {
+  readonly ordering?: number;
+  readonly priority?: number;
+  readonly props?: Record<string, unknown>;
+  readonly children?: readonly UISlotDefinition[];
+}
+
+export interface UISlotContributionRegistration<T = unknown> {
+  readonly slotId: string;
+  readonly key: string;
+  readonly renderable: T;
+  dispose(): void | Promise<void>;
+}
 
 export interface UISlotClient {
   declare(definition: UISlotDefinition): Promise<UISlotRegistration>;
+  register<T = unknown>(slotId: string, key: string, renderable: T, options?: UISlotContributionOptions): UISlotContributionRegistration<T>;
   list(): Promise<UISlotDefinition[]>;
   /**
    * Depend on the lifetime of a slot declaration. The callback is invoked once
@@ -151,6 +173,15 @@ export function createAmitiaUI(bridge: UIBridge): UIBridge {
   return bridge;
 }
 
+function slotScopeCanContain(
+  parent: NonNullable<UISlotDefinition["scope"]>,
+  child: NonNullable<UISlotDefinition["scope"]>,
+): boolean {
+  if (parent === "session") return child === "session";
+  if (parent === "session-maybe") return child === "session-maybe" || child === "session";
+  return true;
+}
+
 export function defineUISlot(definition: UISlotDefinition): UISlotDefinition {
   if (!definition.slotId?.trim()) throw new ValidationError("ui slot slotId is required");
   if (!Array.isArray(definition.supportedKinds) || definition.supportedKinds.length === 0) {
@@ -159,6 +190,9 @@ export function defineUISlot(definition: UISlotDefinition): UISlotDefinition {
   if (definition.parentSlotId === definition.slotId) {
     throw new ValidationError(`ui slot ${definition.slotId} cannot parent itself`);
   }
+  if (definition.scope && definition.scope !== "root" && definition.scope !== "session-maybe" && definition.scope !== "session") {
+    throw new ValidationError(`ui slot ${definition.slotId} has invalid scope ${definition.scope}`);
+  }
   return {
     ...definition,
     slotId: definition.slotId.trim(),
@@ -166,6 +200,7 @@ export function defineUISlot(definition: UISlotDefinition): UISlotDefinition {
     multiplicity: definition.multiplicity ?? "ordered_multiple",
     layout: definition.layout ?? "stack",
     fallbackPolicy: definition.fallbackPolicy ?? "empty",
+    scope: definition.scope ?? "root",
   };
 }
 
@@ -174,6 +209,7 @@ export class InMemoryUIBridge implements UIBridge {
   private readonly subscribers = new Map<string, Set<(value: unknown) => void>>();
   private readonly slotValues = new Map<string, UISlotDefinition>();
   private readonly slotEpochs = new Map<string, number>();
+  private readonly slotContributions = new Map<string, Map<string, UISlotContributionRegistration>>();
   private readonly slotSubscribers = new Map<string, Set<{
     callback: (definition: UISlotDefinition) => UISlotInjectionEffect;
     cleanup?: UISlotInjectionCleanup;
@@ -242,23 +278,99 @@ export class InMemoryUIBridge implements UIBridge {
 
   readonly slots: UISlotClient = {
     declare: async (input: UISlotDefinition): Promise<UISlotRegistration> => {
-      const definition = defineUISlot(input);
+      const parentId = input.parentSlotId?.trim();
+      const parent = parentId ? this.slotValues.get(parentId) : undefined;
+      if (parentId && !parent) throw new ValidationError(`parent ui slot ${parentId} is not declared`);
+      if (parent && !slotScopeCanContain(parent.scope ?? "root", input.scope ?? parent.scope ?? "root")) {
+        throw new ValidationError(`child slot ${input.slotId} cannot escape parent scope ${parent.scope}`);
+      }
+      const definition = defineUISlot({
+        ...input,
+        parentSlotId: parentId || undefined,
+        scope: input.scope ?? parent?.scope,
+      });
       const previousEpoch = this.slotEpochs.get(definition.slotId) ?? 0;
       if (this.slotValues.has(definition.slotId)) {
         await this.deactivateSlotEpoch(definition.slotId);
       }
       const epoch = previousEpoch + 1;
       this.slotEpochs.set(definition.slotId, epoch);
-      this.slotValues.set(definition.slotId, definition);
-      await this.activateSlotEpoch(definition.slotId, definition);
+      const activeDefinition = { ...definition, declarationEpoch: epoch };
+      this.slotValues.set(definition.slotId, activeDefinition);
+      await this.activateSlotEpoch(definition.slotId, activeDefinition);
       return {
-        definition,
+        definition: activeDefinition,
         dispose: async () => {
           if (this.slotEpochs.get(definition.slotId) !== epoch) return;
           await this.deactivateSlotEpoch(definition.slotId);
           this.slotValues.delete(definition.slotId);
         },
       };
+    },
+    register: <T = unknown>(slotId: string, key: string, renderable: T, options: UISlotContributionOptions = {}): UISlotContributionRegistration<T> => {
+      const id = slotId.trim();
+      const contributionKey = key.trim();
+      if (!id || !contributionKey) throw new ValidationError("ui slot registration requires slotId and key");
+      if (!this.slotValues.has(id)) throw new ValidationError(`ui slot ${id} is not declared`);
+
+      const parentDefinition = this.slotValues.get(id)!;
+      const childDefinitions = (options.children ?? []).map((child) => {
+        if (!slotScopeCanContain(parentDefinition.scope ?? "root", child.scope ?? parentDefinition.scope ?? "root")) {
+          throw new ValidationError(`child slot ${child.slotId} cannot escape parent scope ${parentDefinition.scope}`);
+        }
+        return defineUISlot({
+          ...child,
+          parentSlotId: id,
+          scope: child.scope ?? parentDefinition.scope,
+        });
+      });
+      const childIds = new Set<string>();
+      for (const child of childDefinitions) {
+        if (child.slotId === id) throw new ValidationError(`child slot ${child.slotId} cannot equal its parent`);
+        if (childIds.has(child.slotId)) throw new ValidationError(`duplicate child slot ${child.slotId}`);
+        if (this.slotValues.has(child.slotId)) throw new ValidationError(`child slot ${child.slotId} is already declared`);
+        childIds.add(child.slotId);
+      }
+
+      let entries = this.slotContributions.get(id);
+      if (!entries) { entries = new Map(); this.slotContributions.set(id, entries); }
+      if (entries.has(contributionKey)) throw new ValidationError(`ui slot contribution ${id}/${contributionKey} already registered`);
+
+      const childEpochs: Array<{ slotId: string; epoch: number }> = [];
+      for (const child of childDefinitions) {
+        const epoch = Math.max(this.slotEpochs.get(child.slotId) ?? 0, child.declarationEpoch ?? 0) + 1;
+        this.slotEpochs.set(child.slotId, epoch);
+        const activeDefinition = { ...child, declarationEpoch: epoch };
+        this.slotValues.set(child.slotId, activeDefinition);
+        childEpochs.push({ slotId: child.slotId, epoch });
+        void this.activateSlotEpoch(child.slotId, activeDefinition).catch(async () => {
+          if (this.slotEpochs.get(child.slotId) !== epoch) return;
+          await this.deactivateSlotEpoch(child.slotId);
+          this.slotValues.delete(child.slotId);
+        });
+      }
+
+      let active = true;
+      const registration: UISlotContributionRegistration<T> = {
+        slotId: id,
+        key: contributionKey,
+        renderable,
+        dispose: async () => {
+          if (!active) return;
+          active = false;
+          for (let index = childEpochs.length - 1; index >= 0; index--) {
+            const child = childEpochs[index]!;
+            if (this.slotEpochs.get(child.slotId) !== child.epoch || !this.slotValues.has(child.slotId)) continue;
+            await this.deactivateSlotEpoch(child.slotId);
+            this.slotValues.delete(child.slotId);
+          }
+          const current = this.slotContributions.get(id);
+          current?.delete(contributionKey);
+          if (current?.size === 0) this.slotContributions.delete(id);
+        },
+      };
+      entries.set(contributionKey, registration as UISlotContributionRegistration);
+      return registration;
     },
     list: async (): Promise<UISlotDefinition[]> => Array.from(this.slotValues.values()),
     inject: async (slotId: string, callback: (definition: UISlotDefinition) => UISlotInjectionEffect): Promise<UISlotInjectionCleanup> => {
@@ -272,7 +384,7 @@ export class InMemoryUIBridge implements UIBridge {
       const subscriber = { callback, cleanup: undefined as UISlotInjectionCleanup | undefined };
       subscribers.add(subscriber);
       const current = this.slotValues.get(id);
-      if (current) subscriber.cleanup = await callback(current) || undefined;
+      if (current) subscriber.cleanup = await normalizeUISlotInjectionEffect(callback(current));
       return async () => {
         subscribers?.delete(subscriber);
         if (subscriber.cleanup) await subscriber.cleanup();
@@ -292,9 +404,30 @@ export class InMemoryUIBridge implements UIBridge {
   private async activateSlotEpoch(slotId: string, definition: UISlotDefinition): Promise<void> {
     for (const subscriber of this.slotSubscribers.get(slotId) ?? []) {
       if (subscriber.cleanup) await subscriber.cleanup();
-      subscriber.cleanup = await subscriber.callback(definition) || undefined;
+      subscriber.cleanup = await normalizeUISlotInjectionEffect(subscriber.callback(definition));
     }
   }
+}
+
+async function normalizeUISlotInjectionEffect(effect: UISlotInjectionEffect): Promise<UISlotInjectionCleanup | undefined> {
+  const resolved = await effect;
+  if (!resolved) return undefined;
+  if (typeof resolved === "function") return resolved;
+  const cleanups: UISlotInjectionCleanup[] = [];
+  try {
+    for (const cleanup of resolved) {
+      if (typeof cleanup !== "function") throw new ValidationError("slot injection iterable must yield cleanup functions");
+      cleanups.push(cleanup);
+    }
+  } catch (error) {
+    for (let index = cleanups.length - 1; index >= 0; index--) {
+      try { await cleanups[index]?.(); } catch { /* retain setup failure */ }
+    }
+    throw error;
+  }
+  return async () => {
+    for (let index = cleanups.length - 1; index >= 0; index--) await cleanups[index]?.();
+  };
 }
 
 const noopUILogger: UILogger = {
