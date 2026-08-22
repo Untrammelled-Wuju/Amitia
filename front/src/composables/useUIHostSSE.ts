@@ -5,6 +5,7 @@ import { resolveApiUrl, createAuthorizedRequestInit } from "../runtime/runtime-a
 import { isNavigationAllowed } from "../navigation/nav-whitelist";
 import { useExtensionUIStore } from "../stores/extensionUI";
 import { getAccessToken } from "../stores/refresh-coordinator";
+import { browserClientPluginRuntime, type BrowserDeclarativeClientPackage } from "../ui-runtime/clientPluginRuntime";
 
 interface SSEEventEnvelope {
   eventType: string;
@@ -70,6 +71,146 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
       await fetch(url, init);
     } catch {
       // ignore
+    }
+  }
+
+  async function sendClientRuntimeResponse(
+    commandId: string,
+    hostClientId: string,
+    hostSessionId: string,
+    result: Record<string, unknown> = {},
+    error = "",
+  ): Promise<void> {
+    try {
+      const url = await resolveApiUrl("/api/extensions/ui/client-runtime-response");
+      const init = await createAuthorizedRequestInit({
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ commandId, hostClientId, hostSessionId, result, error }),
+      });
+      await fetch(url, init);
+    } catch {
+      // The backend command has its own timeout. A disconnected response path must
+      // not crash the UI host or leave the runtime half-applied.
+    }
+  }
+
+  function readRuntimeCommandId(payload: Record<string, unknown>): string {
+    return typeof payload.commandId === "string" ? payload.commandId.trim() : "";
+  }
+
+  async function executeClientRuntimeCommand(
+    action: string,
+    payload: Record<string, unknown>,
+    conversationId: string,
+  ): Promise<Record<string, unknown>> {
+    switch (action) {
+      case "inspect":
+        return browserClientPluginRuntime.inspect() as unknown as Record<string, unknown>;
+      case "define": {
+        const pkg = payload.package as BrowserDeclarativeClientPackage | undefined;
+        if (!pkg || typeof pkg !== "object") throw new Error("define requires a declarative package");
+        browserClientPluginRuntime.defineScopedDeclarativePackage(conversationId, pkg);
+        return { ok: true, id: pkg.id, version: pkg.version, state: "defined" };
+      }
+      case "run": {
+        const id = String(payload.id ?? "").trim();
+        const version = String(payload.version ?? "").trim() || undefined;
+        if (!id) throw new Error("run requires id");
+        const scopedId = browserClientPluginRuntime.scopedPackageId(conversationId, id);
+        await browserClientPluginRuntime.runPackage(scopedId, version);
+        return { ok: true, id, version: version ?? null, state: "running" };
+      }
+      case "stop": {
+        const id = String(payload.id ?? "").trim();
+        if (!id) throw new Error("stop requires id");
+        const scopedId = browserClientPluginRuntime.scopedPackageId(conversationId, id);
+        await browserClientPluginRuntime.stopPackage(scopedId);
+        return { ok: true, id, state: "stopped" };
+      }
+      case "rollback": {
+        const id = String(payload.id ?? "").trim();
+        if (!id) throw new Error("rollback requires id");
+        const scopedId = browserClientPluginRuntime.scopedPackageId(conversationId, id);
+        const version = await browserClientPluginRuntime.rollbackPackage(scopedId);
+        return { ok: true, id, version, state: "running" };
+      }
+      case "undefine": {
+        const id = String(payload.id ?? "").trim();
+        if (!id) throw new Error("undefine requires id");
+        const scopedId = browserClientPluginRuntime.scopedPackageId(conversationId, id);
+        let version = String(payload.version ?? "").trim();
+        if (!version) {
+          const inspection = browserClientPluginRuntime.inspect();
+          const pkg = inspection.packages.find((item) => item.id === scopedId);
+          version = pkg?.activeVersion || pkg?.versions.at(-1) || "";
+        }
+        if (!version) throw new Error(`client package ${id} has no defined version`);
+        await browserClientPluginRuntime.undefinePackage(scopedId, version);
+        return { ok: true, id, version, state: "undefined" };
+      }
+      default:
+        throw new Error(`unsupported client runtime action: ${action}`);
+    }
+  }
+
+  async function handleClientRuntimeCommand(event: MessageEvent) {
+    const envelope = parseEnvelope(event);
+    if (!envelope || !envelope.payload) return;
+    if (!shouldProcess(envelope)) return;
+    const commandId = readRuntimeCommandId(envelope.payload);
+    if (!commandId) return;
+    const action = typeof envelope.payload.action === "string" ? envelope.payload.action.trim() : "";
+    const payload = envelope.payload.payload && typeof envelope.payload.payload === "object"
+      ? envelope.payload.payload as Record<string, unknown>
+      : {};
+    const conversationId = String(envelope.payload.conversationId ?? "").trim();
+    const hostClientId = String(envelope.payload.hostClientId ?? "").trim();
+    const hostSessionId = String(envelope.payload.hostSessionId ?? "").trim();
+    const expectResponse = envelope.payload.expectResponse !== false;
+    const respond = async (result: Record<string, unknown>, error = "") => {
+      if (!expectResponse) return;
+      await sendClientRuntimeResponse(commandId, hostClientId, hostSessionId, result, error);
+    };
+    try {
+      const sessionState = envelope.payload.sessionState;
+      if (conversationId && !browserClientPluginRuntime.isActiveConversationScope(conversationId)) {
+        const deferredRevision = sessionState && typeof sessionState === "object"
+          ? Number((sessionState as Record<string, unknown>).revision ?? 0)
+          : 0;
+        await respond({
+          ok: true,
+          state: "deferred",
+          revision: Number.isFinite(deferredRevision) ? deferredRevision : 0,
+        });
+        return;
+      }
+      const reconcileOnly = envelope.payload.reconcileOnly === true;
+      let applied = false;
+      if (sessionState && typeof sessionState === "object") {
+        applied = await browserClientPluginRuntime.synchronizeSession(sessionState as any);
+        if (!applied && conversationId && !browserClientPluginRuntime.isActiveConversationScope(conversationId)) {
+          const deferredRevision = Number((sessionState as Record<string, unknown>).revision ?? 0);
+          await respond({
+            ok: true,
+            state: "deferred",
+            revision: Number.isFinite(deferredRevision) ? deferredRevision : 0,
+          });
+          return;
+        }
+      }
+      const result = reconcileOnly
+        ? {
+            ok: true,
+            state: "reconciled",
+            applied,
+            revision: browserClientPluginRuntime.getSessionRevision(conversationId) ?? 0,
+            inspection: action === "inspect" ? browserClientPluginRuntime.inspect() : undefined,
+          }
+        : await executeClientRuntimeCommand(action, payload, conversationId);
+      await respond(result);
+    } catch (error) {
+      await respond({}, error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -207,6 +348,9 @@ export function useUIHostSSE(connected?: Ref<boolean>) {
         break;
       case "ui_dialog":
         handleDialog(event);
+        break;
+      case "ui_client_runtime_command":
+        void handleClientRuntimeCommand(event);
         break;
       case "proactive_message":
         window.dispatchEvent(

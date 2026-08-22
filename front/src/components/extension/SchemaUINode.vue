@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import ExtensionSlot from "./ExtensionSlot.vue";
+import { useExtensionUIStore } from "@/stores/extensionUI";
+import { browserClientPluginRuntime } from "@/ui-runtime/clientPluginRuntime";
 import {
   SCHEMA_UI_MAX_DEPTH,
   isAllowedNodeType,
@@ -36,6 +38,7 @@ const emit = defineEmits<{
   (e: "error", payload: { nodeId: string; message: string }): void;
 }>();
 
+const uiStore = useExtensionUIStore();
 const nodeType = computed(() => props.node.type);
 const typeAllowed = computed(() => isAllowedNodeType(nodeType.value));
 const depthExceeded = computed(() => props.depth > SCHEMA_UI_MAX_DEPTH);
@@ -132,6 +135,19 @@ const tableData = computed<Record<string, unknown>[]>(() => {
 const listItems = computed<string[]>(() => toStringArray(mergedProps.value.items));
 
 const kvItems = computed(() => toKeyValueItems(mergedProps.value.items ?? mergedProps.value.data));
+
+const extensionSlotAuthorized = computed(() => {
+  if (nodeType.value !== "extension_slot") return true;
+  browserClientPluginRuntime.slots.revision.value;
+  const childSlotId = toText(mergedProps.value.slotId).trim();
+  const parentSlotId = toText(props.context.slotId).trim();
+  if (!childSlotId || !parentSlotId) return false;
+  const serverDefinition = uiStore.slotsById.get(childSlotId);
+  const clientDefinition = browserClientPluginRuntime.slots.getDefinition(childSlotId);
+  const expectedOwner = toText(props.context.clientRuntimePluginId).trim() || props.extensionId;
+  if (clientDefinition?.parentSlotId === parentSlotId && clientDefinition.ownerId === expectedOwner) return true;
+  return serverDefinition?.parentSlotId === parentSlotId && serverDefinition.ownerExtension === props.extensionId;
+});
 
 const extensionSlotFallback = computed(() => {
   const value = toText(mergedProps.value.fallback);
@@ -719,7 +735,7 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
     </div>
 
     <ExtensionSlot
-      v-else-if="nodeType === 'extension_slot'"
+      v-else-if="nodeType === 'extension_slot' && extensionSlotAuthorized"
       class="schema-ui-extension-slot schema-ui-node"
       :data-node-id="node.id"
       :slot-id="toText(mergedProps.slotId)"
@@ -728,6 +744,8 @@ function onActionFromChild(payload: { action: SchemaUIActionBinding; node: Schem
       :layout="extensionSlotLayout"
       :surface-role="extensionSlotSurfaceRole"
     />
+
+    <template v-else-if="nodeType === 'extension_slot'"></template>
 
     <el-tab-pane
       v-else-if="nodeType === 'tab_item'"

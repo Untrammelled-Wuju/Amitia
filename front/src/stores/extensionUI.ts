@@ -30,6 +30,7 @@ export interface UIContributionSummary {
   description?: string;
   icon?: string;
   ordering: number;
+  priority?: number;
   visible: boolean;
   effective: boolean;
   enabled: boolean;
@@ -69,6 +70,8 @@ export interface SlotSnapshot {
   ownerExtension?: string;
   parentSlotId?: string;
   dynamic?: boolean;
+  scope?: "root" | "session-maybe" | "session";
+  declarationEpoch?: number;
   performanceBudget?: {
     firstPaint: number;
     bundleSize: number;

@@ -135,6 +135,8 @@ export interface BackendSlotSnapshotEntry {
   ownerExtension?: string;
   parentSlotId?: string;
   dynamic?: boolean;
+  scope?: "root" | "session-maybe" | "session";
+  declarationEpoch?: number;
   contributions: BackendUIContributionDefinition[];
 }
 
