@@ -3,9 +3,13 @@ import { computed, onErrorCaptured, onMounted, ref, shallowRef, watch, type Comp
 import { useRoute } from "vue-router";
 import { resolveHostEnvironment } from "@/composables/useHostEnvironment";
 import ExtensionContributionRenderer from "@/components/extension/ExtensionContributionRenderer.vue";
+import ExtensionSlot from "@/components/extension/ExtensionSlot.vue";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 import { isProviderCompatible, selectProviderEntry, trustedWebModule } from "@/ui-runtime/providerRuntime";
 import type { UIProviderCapability, UIProviderDefinition, UIProviderRenderContext } from "@/ui-runtime/types";
+import { providerSlotId } from "@/ui-runtime/providerSlotAdapter";
+
+defineOptions({ inheritAttrs: false });
 
 const props = defineProps<{
   capability: UIProviderCapability;
@@ -20,6 +24,7 @@ const route = useRoute();
 const env = resolveHostEnvironment();
 const loadError = shallowRef<string | null>(null);
 const activeRef = shallowRef<any>(null);
+const slotBoundaryRef = shallowRef<any>(null);
 const fallbackIndex = ref(0);
 
 const requestedProvider = computed<UIProviderDefinition | null>(() => {
@@ -73,10 +78,11 @@ const mergedContext = computed<Record<string, unknown>>(() => ({
   ...(props.context ?? {}),
 }));
 
-const rootEl = computed(() => activeRef.value?.rootEl ?? activeRef.value?.$el ?? null);
-function focus(...args: unknown[]) { return activeRef.value?.focus?.(...args); }
-function setText(...args: unknown[]) { return activeRef.value?.setText?.(...args); }
-function clear(...args: unknown[]) { return activeRef.value?.clear?.(...args); }
+const surfaceSlotId = computed(() => providerSlotId(props.capability));
+const rootEl = computed(() => activeRef.value?.rootEl ?? activeRef.value?.$el ?? slotBoundaryRef.value?.rootEl ?? slotBoundaryRef.value?.$el ?? null);
+function focus(...args: unknown[]) { return activeRef.value?.focus?.(...args) ?? slotBoundaryRef.value?.focus?.(...args); }
+function setText(...args: unknown[]) { return activeRef.value?.setText?.(...args) ?? slotBoundaryRef.value?.setText?.(...args); }
+function clear(...args: unknown[]) { return activeRef.value?.clear?.(...args) ?? slotBoundaryRef.value?.clear?.(...args); }
 defineExpose({ rootEl, focus, setText, clear });
 
 function advanceFallback(error: unknown) {
@@ -108,6 +114,16 @@ onMounted(() => { if (!store.snapshot) void store.refreshSnapshot(); });
 </script>
 
 <template>
+  <ExtensionSlot
+    ref="slotBoundaryRef"
+    :slot-id="surfaceSlotId"
+    :context="mergedContext"
+    fallback="default"
+    layout="stack"
+    surface-role="main"
+    bare
+  >
+    <template #default>
   <!-- Built-in/no-provider is the stable recovery boundary. -->
   <component
     ref="activeRef"
@@ -144,7 +160,7 @@ onMounted(() => { if (!store.snapshot) void store.refreshSnapshot(); });
       v-else-if="sourceContribution"
       :contribution="sourceContribution"
       :context="mergedContext"
-      :slot-id="`provider:${capability}`"
+      :slot-id="surfaceSlotId"
       :host-actions="actions"
       @error="advanceFallback"
     />
@@ -171,10 +187,13 @@ onMounted(() => { if (!store.snapshot) void store.refreshSnapshot(); });
     v-else-if="sourceContribution"
     :contribution="sourceContribution"
     :context="mergedContext"
-    :slot-id="`provider:${capability}`"
+    :slot-id="surfaceSlotId"
     :host-actions="actions"
     @error="advanceFallback"
   />
+
+    </template>
+  </ExtensionSlot>
 </template>
 
 <style scoped>

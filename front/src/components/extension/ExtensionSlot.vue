@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onErrorCaptured, onMounted, ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useExtensionSlot, type ExtensionSurfaceContext, type ExtensionSurfaceRole } from "@/composables/useExtensionSlot";
 import { useExtensionUIStore, type UIContributionSummary } from "@/stores/extensionUI";
 import ExtensionContributionRenderer from "./ExtensionContributionRenderer.vue";
-import ExtensionRenderState from "./ExtensionRenderState.vue";
 import { browserClientPluginRuntime, type ClientSlotContribution } from "@/ui-runtime/clientPluginRuntime";
+import ExtensionErrorBoundary from "./ExtensionErrorBoundary.vue";
+import ClientSlotContributionHost from "./ClientSlotContributionHost.vue";
 import { buildUnifiedSlotItems, type UnifiedSlotItem } from "@/ui-runtime/slotLedger";
 
 const props = withDefaults(
@@ -17,6 +18,7 @@ const props = withDefaults(
     startIndex?: number;
     surfaceRole?: ExtensionSurfaceRole;
     contributionId?: string;
+    bare?: boolean;
   }>(),
   {
     fallback: undefined,
@@ -25,6 +27,7 @@ const props = withDefaults(
     startIndex: 0,
     surfaceRole: "main",
     contributionId: undefined,
+    bare: false,
   }
 );
 
@@ -39,7 +42,6 @@ const {
   scopeReady,
   fallback: resolvedFallback,
   layout: resolvedLayout,
-  reportError,
   buildContext,
 } = useExtensionSlot({
   slotId: props.slotId,
@@ -118,30 +120,38 @@ const layoutClass = computed(() => `extension-slot--layout-${resolvedLayout.valu
 
 const isHidden = computed(() => !scopeReady.value || (visibleItems.value.length === 0 && resolvedFallback.value === 'none'));
 
-const errorState = ref<Record<string, string>>({});
-
-onErrorCaptured((err, instance) => {
-  const props = instance?.$props as { contribution?: UIContributionSummary | string | { contributionId?: string } };
-  let contributionId = "unknown";
-  if (props?.contribution && typeof props.contribution === "object") {
-    contributionId = (props.contribution as UIContributionSummary).contributionId ?? "unknown";
-  } else if (typeof props?.contribution === "string") {
-    contributionId = props.contribution;
-  }
-  errorState.value[contributionId] = err instanceof Error ? err.message : String(err);
-  reportError(contributionId, errorState.value[contributionId], true);
-  return false;
-});
-
-function retryContribution(contributionId: string) {
-  delete errorState.value[contributionId];
-  store.clearErrors(contributionId);
+const rootEl = computed(() => rootRef.value ?? null);
+function interactiveElement(): HTMLInputElement | HTMLTextAreaElement | HTMLElement | null {
+  return rootRef.value?.querySelector<HTMLInputElement | HTMLTextAreaElement | HTMLElement>(
+    "textarea, input, [contenteditable='true'], [tabindex]:not([tabindex='-1']), button",
+  ) ?? null;
 }
+function focus() {
+  interactiveElement()?.focus?.();
+}
+function setText(value: unknown) {
+  const element = interactiveElement();
+  if (!element) return;
+  const text = value == null ? "" : String(value);
+  if (element instanceof HTMLInputElement || element instanceof HTMLTextAreaElement) {
+    const prototype = element instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+    const descriptor = Object.getOwnPropertyDescriptor(prototype, "value");
+    descriptor?.set?.call(element, text);
+    element.dispatchEvent(new Event("input", { bubbles: true }));
+    return;
+  }
+  if (element.isContentEditable) {
+    element.textContent = text;
+    element.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: text }));
+  }
+}
+function clear() { setText(""); }
+defineExpose({ rootEl, focus, setText, clear });
 
 </script>
 
 <template>
-  <div v-if="!isHidden" ref="rootRef" class="extension-slot" :class="[layoutClass, `extension-slot--${surfaceRole}`]" :data-slot-id="slotId">
+  <div v-if="!isHidden" ref="rootRef" class="extension-slot" :class="[layoutClass, `extension-slot--${surfaceRole}`, { 'extension-slot--bare': bare }]" :data-slot-id="slotId">
     <template v-if="visibleItems.length === 0 && resolvedFallback !== 'none'">
       <div v-if="resolvedFallback === 'skeleton'" class="extension-slot__skeleton">
         <div class="skeleton-pulse"></div>
@@ -162,16 +172,13 @@ function retryContribution(contributionId: string) {
           :data-contribution-id="item.server.contributionId"
           :data-extension-id="item.server.extensionId"
         >
-          <template v-if="errorState[item.server.contributionId]">
-            <ExtensionRenderState state="error" :detail="errorState[item.server.contributionId]" @retry="retryContribution(item.server.contributionId)" />
-          </template>
-          <template v-else>
+          <ExtensionErrorBoundary :slot-id="slotId" :contribution-id="item.server.contributionId">
             <ExtensionContributionRenderer
               :contribution="item.server"
               :context="renderContext"
               :slot-id="slotId"
             />
-          </template>
+          </ExtensionErrorBoundary>
         </div>
         <div
           v-else
@@ -179,14 +186,12 @@ function retryContribution(contributionId: string) {
           :data-contribution-id="item.client.contributionId"
           :data-extension-id="item.client.pluginId"
         >
-          <component
-            :is="item.client.component"
-            v-bind="item.client.props || {}"
-            :context="renderContext"
-            :slot-id="slotId"
-            :plugin-id="item.client.pluginId"
-            :contribution-id="item.client.contributionId"
-          />
+          <ExtensionErrorBoundary :slot-id="slotId" :contribution-id="item.client.contributionId">
+            <ClientSlotContributionHost
+              :contribution="item.client"
+              :context="renderContext"
+            />
+          </ExtensionErrorBoundary>
         </div>
       </template>
     </template>
@@ -247,6 +252,11 @@ function retryContribution(contributionId: string) {
   flex-direction: column;
 }
 .extension-slot--message .extension-slot__contribution { max-width: 100%; }
+.extension-slot--bare,
+.extension-slot--bare > .extension-slot__default,
+.extension-slot--bare > .extension-slot__contribution {
+  display: contents;
+}
 .extension-slot__skeleton {
   width: 100%;
   height: 32px;
