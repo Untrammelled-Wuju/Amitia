@@ -197,6 +197,30 @@ func DefaultHostEventTypes() []EventTypeDefinition {
 	maxMeta := int64(32 * 1024)
 	return []EventTypeDefinition{
 		{
+			EventTypeID: "conversation.ui_event", Version: 1,
+			Description:     "Durable conversation UI projection event",
+			PayloadSchema:   json.RawMessage(`{"type":"object","required":["type","conversationId","sequence"],"properties":{"type":{"type":"string"},"conversationId":{"type":"string"},"sequence":{"type":"integer","minimum":1},"messageId":{"type":"string"},"channel":{"type":"string"},"direction":{"type":"string"},"role":{"type":"string"},"content":{"type":"string"},"createdAt":{"type":"string"},"status":{"type":"string"},"data":{}}}`),
+			MaxPayloadBytes: maxPayload, MaxMetadataBytes: maxMeta,
+			RiskLevel:        RiskLevelMedium,
+			ProducerPolicy:   EventProducerPolicy{AllowedProducers: []string{"host", "system"}, RequireSystemTrust: true, MaxPayloadBytes: maxPayload, MaxMetadataBytes: maxMeta},
+			SubscriberPolicy: EventSubscriberPolicy{AllowThirdParty: false, MaxSubscribers: 16, RequireApproval: true, RequiredPermissions: []string{"conversation.read"}},
+			DeliveryPolicy:   EventDeliveryPolicy{Timeout: 5e9, MaxAttempts: 5, InitialBackoff: 1e9, MaxBackoff: 3e8, BackoffMultiplier: 2, JitterFactor: 0.2, OrderingRequirement: OrderingPerPartition, MaxInFlight: 4},
+			OrderingPolicy:   OrderingPerPartition,
+			RetentionPolicy:  EventRetentionPolicy{MaxAge: 30 * 24 * 60 * 60 * 1e9, MaxDeliveryCount: 5},
+			SensitiveFields: []SensitiveFieldRule{
+				{Path: "content", Classification: "message_content", DefaultAction: SensitiveAllowWithPermission, RequiredPermission: []PermissionRequirement{{PermissionID: "message.read"}}},
+				{Path: "data", Classification: "conversation_context", DefaultAction: SensitiveOmit},
+			},
+			ProjectionRules: []EventProjectionRule{
+				{SourcePath: "type", TargetPath: "type"},
+				{SourcePath: "conversationId", TargetPath: "conversationId"},
+				{SourcePath: "sequence", TargetPath: "sequence"},
+				{SourcePath: "messageId", TargetPath: "messageId"},
+				{SourcePath: "channel", TargetPath: "channel"},
+				{SourcePath: "createdAt", TargetPath: "createdAt"},
+			},
+		},
+		{
 			EventTypeID: "message.created", Version: 1,
 			Description:     "Message created in conversation",
 			MaxPayloadBytes: maxPayload, MaxMetadataBytes: maxMeta,

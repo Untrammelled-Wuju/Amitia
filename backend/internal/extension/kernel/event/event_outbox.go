@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -91,6 +92,27 @@ type OutboxRepository struct {
 
 func NewOutboxRepository(db *sql.DB) *OutboxRepository {
 	return &OutboxRepository{db: db}
+}
+
+func (r *OutboxRepository) NextConversationSequenceTx(ctx context.Context, tx *sql.Tx, conversationID string) (int64, error) {
+	conversationID = strings.TrimSpace(conversationID)
+	if conversationID == "" {
+		return 0, errors.New("event: conversation id required")
+	}
+	now := time.Now().UTC()
+	var sequence int64
+	err := tx.QueryRowContext(ctx, `
+		INSERT INTO extension_conversation_event_sequences(conversation_id, last_sequence, updated_at)
+		VALUES (?, 1, ?)
+		ON CONFLICT(conversation_id) DO UPDATE SET
+			last_sequence = extension_conversation_event_sequences.last_sequence + 1,
+			updated_at = excluded.updated_at
+		RETURNING last_sequence
+	`, conversationID, now).Scan(&sequence)
+	if err != nil {
+		return 0, fmt.Errorf("event: allocate conversation sequence: %w", err)
+	}
+	return sequence, nil
 }
 
 func (r *OutboxRepository) EnqueueTx(ctx context.Context, tx OutboxTx, record OutboxRecord) error {
@@ -342,6 +364,88 @@ func (r *OutboxRepository) ListByExtension(ctx context.Context, extensionID stri
 		limit = 100
 	}
 	rows, err := r.db.QueryContext(ctx, outboxSelectQuery+" WHERE producer_id = ? ORDER BY created_at DESC LIMIT ? OFFSET ?", extensionID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanOutboxRecords(rows)
+}
+
+// ListConversationUIEvents returns the durable event window used to rebuild
+// conversation UI projections on another browser/device. It deliberately reads
+// only the internal conversation.ui_event stream for the requested aggregate.
+func (r *OutboxRepository) ListConversationUIEvents(ctx context.Context, conversationID string, limit, offset int) ([]OutboxRecord, error) {
+	if limit <= 0 {
+		limit = 1000
+	}
+	if limit > 5000 {
+		limit = 5000
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	rows, err := r.db.QueryContext(ctx, outboxSelectQuery+
+		" WHERE event_type_id = ? AND aggregate_type = ? AND aggregate_id = ? ORDER BY COALESCE(aggregate_version, 0) ASC, occurred_at ASC, created_at ASC, event_id ASC LIMIT ? OFFSET ?",
+		"conversation.ui_event", "conversation", conversationID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	return scanOutboxRecords(rows)
+}
+
+func (r *OutboxRepository) ListConversationUIEventsBeforeSequence(ctx context.Context, conversationID string, beforeSequence int64, limit int) ([]OutboxRecord, error) {
+	conversationID = strings.TrimSpace(conversationID)
+	if conversationID == "" {
+		return nil, errors.New("event: conversation id required")
+	}
+	if limit <= 0 {
+		limit = 500
+	}
+	if limit > 5000 {
+		limit = 5000
+	}
+	query := outboxSelectQuery +
+		" WHERE event_type_id = ? AND aggregate_type = ? AND aggregate_id = ?"
+	args := []interface{}{"conversation.ui_event", "conversation", conversationID}
+	if beforeSequence > 0 {
+		query += " AND COALESCE(aggregate_version, 0) < ?"
+		args = append(args, beforeSequence)
+	}
+	query += " ORDER BY aggregate_version DESC, occurred_at DESC, created_at DESC, event_id DESC LIMIT ?"
+	args = append(args, limit)
+	rows, err := r.db.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	records, err := scanOutboxRecords(rows)
+	if err != nil {
+		return nil, err
+	}
+	for left, right := 0, len(records)-1; left < right; left, right = left+1, right-1 {
+		records[left], records[right] = records[right], records[left]
+	}
+	return records, nil
+}
+
+func (r *OutboxRepository) ListConversationUIEventsAfterSequence(ctx context.Context, conversationID string, afterSequence int64, limit int) ([]OutboxRecord, error) {
+	conversationID = strings.TrimSpace(conversationID)
+	if conversationID == "" {
+		return nil, errors.New("event: conversation id required")
+	}
+	if afterSequence < 0 {
+		afterSequence = 0
+	}
+	if limit <= 0 {
+		limit = 500
+	}
+	if limit > 5000 {
+		limit = 5000
+	}
+	rows, err := r.db.QueryContext(ctx, outboxSelectQuery+
+		" WHERE event_type_id = ? AND aggregate_type = ? AND aggregate_id = ? AND COALESCE(aggregate_version, 0) > ? ORDER BY aggregate_version ASC, occurred_at ASC, created_at ASC, event_id ASC LIMIT ?",
+		"conversation.ui_event", "conversation", conversationID, afterSequence, limit)
 	if err != nil {
 		return nil, err
 	}
