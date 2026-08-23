@@ -613,6 +613,9 @@ func NewAppServices(ctx *app.AppContext, graphSvc graph.Service, bootstrap *runt
 	chatSvc.EnsureChannelConversation("qq")
 
 	entry := interaction.NewUnifiedEntry(orch, resolver, temporal.SystemClock{})
+	if kernelContainer != nil && kernelContainer.GameHost != nil {
+		kernelContainer.GameHost.SetAgentWakeupPort(&gameHostAgentWakeupAdapter{entry: entry})
+	}
 	if kernelContainer != nil && kernelContainer.ExecutionService != nil {
 		entry.SetExecutionService(kernelContainer.ExecutionService)
 	}
