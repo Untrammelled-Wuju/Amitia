@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
+	"github.com/u-ai/backend/internal/gamehost/agentbridge"
 	"github.com/u-ai/backend/internal/gamehost/channel"
 	"github.com/u-ai/backend/internal/gamehost/config"
 	"github.com/u-ai/backend/internal/gamehost/control"
@@ -50,6 +51,7 @@ type GameHostContainer struct {
 	ReadyGate           *handshake.ReadyGate
 	ConnectionRegistry  *ipc.ConnectionRegistry
 	ControlPlane        ipc.ControlPlane
+	AgentBridge         *agentbridge.RuntimeAdapter
 	RPCDispatcher       *rpc.RPCDispatcher
 	RPCLifecycle        *rpc.RequestLifecycleManager
 	HostHandlerRegistry rpc.HandlerRegistry

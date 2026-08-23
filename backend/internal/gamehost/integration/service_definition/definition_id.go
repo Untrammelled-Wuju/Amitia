@@ -10,6 +10,8 @@ import (
 const (
 	DefinitionIDSeparator = "/"
 	ServiceRuntimeType    = "service"
+	JavaScriptRuntimeType = "javascript"
+	GoRuntimeType         = "go"
 )
 
 func BuildServiceDefinitionID(extensionID, moduleID string) string {
@@ -35,5 +37,10 @@ func DefinitionIDFromServiceRuntime(def *trusted_service.ServiceRuntimeDefinitio
 }
 
 func IsValidServiceRuntimeType(runtimeType string) bool {
-	return runtimeType == ServiceRuntimeType
+	switch runtimeType {
+	case ServiceRuntimeType, JavaScriptRuntimeType, GoRuntimeType:
+		return true
+	default:
+		return false
+	}
 }

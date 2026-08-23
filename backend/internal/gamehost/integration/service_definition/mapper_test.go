@@ -48,8 +48,11 @@ func TestIsValidServiceRuntimeType(t *testing.T) {
 	if !IsValidServiceRuntimeType("service") {
 		t.Error("expected service to be valid")
 	}
-	if IsValidServiceRuntimeType("javascript") {
-		t.Error("expected javascript to be invalid")
+	if !IsValidServiceRuntimeType("javascript") {
+		t.Error("expected javascript to be valid")
+	}
+	if !IsValidServiceRuntimeType("go") {
+		t.Error("expected go to be valid")
 	}
 	if IsValidServiceRuntimeType("wasm") {
 		t.Error("expected wasm to be invalid")
@@ -144,8 +147,8 @@ func TestDefinitionMapper_MapToDefinition_UnsupportedType(t *testing.T) {
 	view := ServiceRuntimeView{
 		ExtensionID: "ext",
 		ModuleID:    "mod",
-		RuntimeType: "javascript",
-		EntryPoint:  "index.js",
+		RuntimeType: "wasm",
+		EntryPoint:  "module.wasm",
 	}
 
 	_, err := mapper.MapToDefinition(view)

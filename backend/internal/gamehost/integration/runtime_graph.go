@@ -2,9 +2,17 @@ package integration
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
+	"encoding/json"
 	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
 
 	kerneldomain "github.com/u-ai/backend/internal/extension/kernel/domain"
+	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 	kernelsecret "github.com/u-ai/backend/internal/extension/kernel/secret"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	ghdomain "github.com/u-ai/backend/internal/gamehost/domain"
@@ -12,6 +20,7 @@ import (
 	"github.com/u-ai/backend/internal/gamehost/registry"
 	ghruntime "github.com/u-ai/backend/internal/gamehost/runtime"
 	gamehostsecret "github.com/u-ai/backend/internal/gamehost/secret"
+	gameprotocol "github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
 type StartupSecretManifestRegistrar interface {
@@ -29,6 +38,8 @@ type RuntimeGraphProvisioner struct {
 	supervisor       *trusted_service.ProcessSupervisor
 	definitionMapper *service_definition.DefinitionMapper
 	secretRegistrar  StartupSecretManifestRegistrar
+	extensionRoot    string
+	nodeResolver     script_host.NodeEnvironmentResolver
 }
 
 type RuntimeGraphProvisionerOptions struct {
@@ -40,6 +51,8 @@ type RuntimeGraphProvisionerOptions struct {
 	Supervisor       *trusted_service.ProcessSupervisor
 	DefinitionMapper *service_definition.DefinitionMapper
 	SecretRegistrar  StartupSecretManifestRegistrar
+	ExtensionRoot    string
+	NodeResolver     script_host.NodeEnvironmentResolver
 }
 
 func NewRuntimeGraphProvisioner(opts RuntimeGraphProvisionerOptions) (*RuntimeGraphProvisioner, error) {
@@ -73,7 +86,16 @@ func NewRuntimeGraphProvisioner(opts RuntimeGraphProvisionerOptions) (*RuntimeGr
 		supervisor:       opts.Supervisor,
 		definitionMapper: opts.DefinitionMapper,
 		secretRegistrar:  opts.SecretRegistrar,
+		extensionRoot:    opts.ExtensionRoot,
+		nodeResolver:     opts.NodeResolver,
 	}, nil
+}
+
+func (p *RuntimeGraphProvisioner) SetSecretRegistrar(registrar StartupSecretManifestRegistrar) {
+	if p == nil {
+		return
+	}
+	p.secretRegistrar = registrar
 }
 
 func (p *RuntimeGraphProvisioner) Reconcile(ctx context.Context) error {
@@ -81,18 +103,16 @@ func (p *RuntimeGraphProvisioner) Reconcile(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("list enabled game plugins: %w", err)
 	}
-
 	for _, kp := range plugins {
 		if err := p.reconcilePlugin(ctx, kp); err != nil {
 			return fmt.Errorf("reconcile plugin %s/%s: %w", kp.Extension.ID, kp.Contribution.ID, err)
 		}
 	}
-
 	return nil
 }
 
 func (p *RuntimeGraphProvisioner) reconcilePlugin(ctx context.Context, kp KernelGamePlugin) error {
-	bootService, err := p.buildBootService(kp)
+	bootService, err := p.buildBootService(ctx, kp)
 	if err != nil {
 		return fmt.Errorf("build boot service: %w", err)
 	}
@@ -107,42 +127,53 @@ func (p *RuntimeGraphProvisioner) reconcilePlugin(ctx context.Context, kp Kernel
 		return fmt.Errorf("ensure primary runtime: %w", err)
 	}
 
-	bootServiceID := bootService.ID
-
+	metadata := map[string]string{"protocol": bootService.Protocol}
 	svcView := service_definition.ServiceRuntimeView{
-		ExtensionID: string(kp.Extension.ID),
-		ModuleID:    bootService.ModuleID,
-		RuntimeType: "service",
-		Name:        bootService.Name,
-		Description: bootService.Name,
-		EntryPoint:  bootService.EntryPoint,
-		Env:         bootService.Env,
-		Enabled:     true,
+		ExtensionID:      string(kp.Extension.ID),
+		ModuleID:         bootService.ModuleID,
+		RuntimeType:      bootService.RuntimeType,
+		Name:             bootService.Name,
+		Description:      bootService.Name,
+		EntryPoint:       bootService.EntryPoint,
+		ExecutablePath:   bootService.ExecutablePath,
+		ExecutableSHA256: bootService.ExecutableSHA256,
+		Arguments:        bootService.Arguments,
+		IntegrityValue:   bootService.IntegrityValue,
+		Env:              bootService.Env,
+		Metadata:         metadata,
+		Enabled:          true,
 	}
 
 	definitionID := svcView.ToDefinitionID()
-
-	if !p.supervisor.HasDefinition(definitionID) {
-		def, err := p.definitionMapper.MapToDefinition(svcView)
-		if err != nil {
-			return fmt.Errorf("map to definition: %w", err)
+	def, err := p.definitionMapper.MapToDefinition(svcView)
+	if err != nil {
+		return fmt.Errorf("map to definition: %w", err)
+	}
+	if p.supervisor.HasDefinition(definitionID) {
+		existing, getErr := p.supervisor.GetDefinition(definitionID)
+		if getErr != nil {
+			return fmt.Errorf("read existing definition: %w", getErr)
 		}
-		if err := p.supervisor.Register(def); err != nil {
-			return fmt.Errorf("register definition: %w", err)
+		if existing.ManifestHash != def.ManifestHash {
+			if err := p.supervisor.Unregister(definitionID); err != nil {
+				return fmt.Errorf("replace stale definition: %w", err)
+			}
+			if err := p.supervisor.Register(def); err != nil {
+				return fmt.Errorf("register replacement definition: %w", err)
+			}
 		}
+	} else if err := p.supervisor.Register(def); err != nil {
+		return fmt.Errorf("register definition: %w", err)
 	}
 
+	bootServiceID := bootService.ID
 	descriptor.Services = append(descriptor.Services, ghdomain.ServiceDescriptor{
 		ID:       bootServiceID,
 		Name:     bootService.Name,
 		Kind:     ghdomain.ServiceKindProcess,
 		Required: true,
 	})
-
-	definitionIDs := map[ghdomain.ServiceID]string{
-		bootServiceID: definitionID,
-	}
-
+	definitionIDs := map[ghdomain.ServiceID]string{bootServiceID: definitionID}
 	if err := p.topologyStore.PutRuntimeGraph(runtime, descriptor, definitionIDs); err != nil {
 		return fmt.Errorf("put runtime graph: %w", err)
 	}
@@ -164,7 +195,6 @@ func (p *RuntimeGraphProvisioner) reconcilePlugin(ctx context.Context, kp Kernel
 			p.secretRegistrar.RegisterStartupManifest(string(runtime.ID), serviceID, manifest)
 		}
 	}
-
 	return nil
 }
 
@@ -175,7 +205,6 @@ type topologyServiceView struct {
 func newTopologyServiceView(snapshot ghruntime.RuntimeTopologySnapshot) *topologyServiceView {
 	return &topologyServiceView{snapshot: snapshot}
 }
-
 func (v *topologyServiceView) HasService(serviceID string) bool {
 	for _, svc := range v.snapshot.Services {
 		if string(svc.ServiceID) == serviceID {
@@ -184,7 +213,6 @@ func (v *topologyServiceView) HasService(serviceID string) bool {
 	}
 	return false
 }
-
 func (v *topologyServiceView) ExecutableServiceCount() int {
 	count := 0
 	for _, svc := range v.snapshot.Services {
@@ -194,7 +222,6 @@ func (v *topologyServiceView) ExecutableServiceCount() int {
 	}
 	return count
 }
-
 func (v *topologyServiceView) DefaultExecutableService() (string, bool) {
 	for _, svc := range v.snapshot.Services {
 		if svc.ServiceKind == ghdomain.ServiceKindProcess {
@@ -214,12 +241,7 @@ func (p *RuntimeGraphProvisioner) extractSecretManifestGrouped(kp KernelGamePlug
 		if sr.Ref == "" {
 			continue
 		}
-		manifest := gamehostsecret.ServiceSecretManifest{
-			Ref:       kernelsecret.SecretRef(sr.Ref),
-			Purpose:   gamehostsecret.Purpose(sr.Purpose),
-			Required:  sr.Required,
-			ServiceID: sr.ServiceID,
-		}
+		manifest := gamehostsecret.ServiceSecretManifest{Ref: kernelsecret.SecretRef(sr.Ref), Purpose: gamehostsecret.Purpose(sr.Purpose), Required: sr.Required, ServiceID: sr.ServiceID}
 		binded, err := gamehostsecret.ValidateAndBindSecretRef(manifest, view)
 		if err != nil {
 			errs = append(errs, err)
@@ -231,23 +253,29 @@ func (p *RuntimeGraphProvisioner) extractSecretManifestGrouped(kp KernelGamePlug
 }
 
 type bootServiceInfo struct {
-	ID         ghdomain.ServiceID
-	ModuleID   string
-	Name       string
-	EntryPoint string
-	Env        map[string]string
+	ID               ghdomain.ServiceID
+	ModuleID         string
+	Name             string
+	RuntimeType      string
+	EntryPoint       string
+	ExecutablePath   string
+	ExecutableSHA256 string
+	Arguments        []string
+	IntegrityValue   string
+	Protocol         string
+	Env              map[string]string
 }
 
-func (p *RuntimeGraphProvisioner) buildBootService(kp KernelGamePlugin) (bootServiceInfo, error) {
+func (p *RuntimeGraphProvisioner) buildBootService(ctx context.Context, kp KernelGamePlugin) (bootServiceInfo, error) {
 	runtimeModuleID, ok := kp.Contribution.Definition["runtimeModuleId"].(string)
-	if !ok || runtimeModuleID == "" {
+	if !ok || strings.TrimSpace(runtimeModuleID) == "" {
 		return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: runtimeModuleId is required", kp.Extension.ID, kp.Contribution.ID)
 	}
 	module, found := kp.Extension.FindModule(kerneldomain.ModuleID(runtimeModuleID))
 	if !found || module.Runtime == nil {
 		return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: runtime module %s is unavailable", kp.Extension.ID, kp.Contribution.ID, runtimeModuleID)
 	}
-	if module.Runtime.EntryPoint == "" {
+	if strings.TrimSpace(module.Runtime.EntryPoint) == "" {
 		return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: entry point is required", kp.Extension.ID, kp.Contribution.ID)
 	}
 
@@ -258,17 +286,193 @@ func (p *RuntimeGraphProvisioner) buildBootService(kp KernelGamePlugin) (bootSer
 	if name == "" {
 		name = string(kp.Contribution.ID)
 	}
-
 	serviceID := module.Runtime.ServiceID
 	if serviceID == "" {
 		serviceID = string(module.ID)
 	}
+	protocolVersion := gameprotocol.ProtocolVersion
+	if raw, ok := kp.Contribution.Definition["protocolVersion"].(string); ok && strings.TrimSpace(raw) != "" {
+		protocolVersion = strings.TrimSpace(raw)
+	}
+	if protocolVersion != gameprotocol.ProtocolVersion {
+		return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: unsupported protocolVersion %q", kp.Extension.ID, kp.Contribution.ID, protocolVersion)
+	}
 
-	return bootServiceInfo{
-		ID:         ghdomain.ServiceID(serviceID),
-		ModuleID:   runtimeModuleID,
-		Name:       name,
-		EntryPoint: module.Runtime.EntryPoint,
-		Env:        module.Runtime.Env,
-	}, nil
+	info := bootServiceInfo{
+		ID:          ghdomain.ServiceID(serviceID),
+		ModuleID:    runtimeModuleID,
+		Name:        name,
+		RuntimeType: string(module.Runtime.Type),
+		EntryPoint:  module.Runtime.EntryPoint,
+		Protocol:    protocolVersion,
+		Env:         module.Runtime.Env,
+	}
+	if info.RuntimeType == "" {
+		info.RuntimeType = service_definition.ServiceRuntimeType
+	}
+	if !service_definition.IsValidServiceRuntimeType(info.RuntimeType) {
+		return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: unsupported game runtime type %q", kp.Extension.ID, kp.Contribution.ID, info.RuntimeType)
+	}
+
+	entryPath := module.Runtime.EntryPoint
+	if p.extensionRoot != "" {
+		definitionHash, hashErr := hashExtensionDefinition(kp.Extension)
+		if hashErr != nil {
+			return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: hash installed definition: %w", kp.Extension.ID, kp.Contribution.ID, hashErr)
+		}
+		bundlePath := resolveGamePluginBundlePath(
+			p.extensionRoot,
+			string(kp.Extension.ID),
+			fmt.Sprintf("%v", kp.Extension.Version),
+			definitionHash,
+		)
+		if bundlePath == "" {
+			return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: installed bundle path not found", kp.Extension.ID, kp.Contribution.ID)
+		}
+		var resolveErr error
+		entryPath, resolveErr = resolveGamePluginEntry(bundlePath, entryPath)
+		if resolveErr != nil {
+			return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: entry point: %w", kp.Extension.ID, kp.Contribution.ID, resolveErr)
+		}
+		if err := ensureRegularFile(entryPath); err != nil {
+			return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: entry point: %w", kp.Extension.ID, kp.Contribution.ID, err)
+		}
+	}
+
+	switch info.RuntimeType {
+	case service_definition.JavaScriptRuntimeType:
+		if p.nodeResolver == nil {
+			return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: managed Node resolver is unavailable", kp.Extension.ID, kp.Contribution.ID)
+		}
+		nodeEnv, err := p.nodeResolver.Resolve(ctx)
+		if err != nil {
+			return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: resolve managed Node: %w", kp.Extension.ID, kp.Contribution.ID, err)
+		}
+		if err := ensureRegularFile(nodeEnv.NodeBinary); err != nil {
+			return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: managed Node: %w", kp.Extension.ID, kp.Contribution.ID, err)
+		}
+		sha, err := hashRuntimeFile(nodeEnv.NodeBinary)
+		if err != nil {
+			return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: hash managed Node: %w", kp.Extension.ID, kp.Contribution.ID, err)
+		}
+		info.ExecutablePath = nodeEnv.NodeBinary
+		info.ExecutableSHA256 = sha
+		info.IntegrityValue = "managed-node:sha256:" + sha
+		info.Arguments = []string{entryPath}
+	default:
+		info.ExecutablePath = entryPath
+		if _, err := os.Stat(entryPath); err == nil {
+			sha, hashErr := hashRuntimeFile(entryPath)
+			if hashErr != nil {
+				return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: hash runtime executable: %w", kp.Extension.ID, kp.Contribution.ID, hashErr)
+			}
+			info.ExecutableSHA256 = sha
+			info.IntegrityValue = "package-runtime:sha256:" + sha
+		}
+	}
+	return info, nil
+}
+
+func resolveGamePluginBundlePath(extRoot, extensionID, version, definitionHash string) string {
+	if extRoot == "" || extensionID == "" {
+		return ""
+	}
+	safeID := strings.NewReplacer("/", "__", "\\", "__", ":", "_", "..", "_").Replace(extensionID)
+	installedRoot := filepath.Join(extRoot, "installed", safeID)
+
+	if version != "" && definitionHash != "" {
+		candidate := filepath.Join(installedRoot, version, definitionHash)
+		if _, err := os.Stat(filepath.Join(candidate, "manifest.json")); err == nil {
+			return candidate
+		}
+	}
+
+	if version != "" {
+		return newestInstalledGeneration(filepath.Join(installedRoot, version))
+	}
+
+	versions, err := os.ReadDir(installedRoot)
+	if err != nil {
+		return ""
+	}
+	for i := len(versions) - 1; i >= 0; i-- {
+		if !versions[i].IsDir() {
+			continue
+		}
+		if candidate := newestInstalledGeneration(filepath.Join(installedRoot, versions[i].Name())); candidate != "" {
+			return candidate
+		}
+	}
+	return ""
+}
+
+func newestInstalledGeneration(versionDir string) string {
+	artifacts, err := os.ReadDir(versionDir)
+	if err != nil {
+		return ""
+	}
+	for i := len(artifacts) - 1; i >= 0; i-- {
+		if !artifacts[i].IsDir() {
+			continue
+		}
+		candidate := filepath.Join(versionDir, artifacts[i].Name())
+		if _, err := os.Stat(filepath.Join(candidate, "manifest.json")); err == nil {
+			return candidate
+		}
+	}
+	return ""
+}
+
+func hashExtensionDefinition(def kerneldomain.ExtensionDefinition) (string, error) {
+	data, err := json.Marshal(def)
+	if err != nil {
+		return "", err
+	}
+	sum := sha256.Sum256(data)
+	return hex.EncodeToString(sum[:]), nil
+}
+
+func resolveGamePluginEntry(bundlePath, entryPoint string) (string, error) {
+	if filepath.IsAbs(entryPoint) {
+		return "", fmt.Errorf("absolute entry point is not allowed")
+	}
+	bundleAbs, err := filepath.Abs(bundlePath)
+	if err != nil {
+		return "", err
+	}
+	entryAbs, err := filepath.Abs(filepath.Join(bundleAbs, filepath.Clean(entryPoint)))
+	if err != nil {
+		return "", err
+	}
+	if entryAbs == bundleAbs || !strings.HasPrefix(entryAbs, bundleAbs+string(os.PathSeparator)) {
+		return "", fmt.Errorf("entry point escapes installed bundle")
+	}
+	return entryAbs, nil
+}
+
+func ensureRegularFile(path string) error {
+	if strings.TrimSpace(path) == "" {
+		return fmt.Errorf("path is empty")
+	}
+	info, err := os.Stat(path)
+	if err != nil {
+		return err
+	}
+	if info.IsDir() {
+		return fmt.Errorf("%s is a directory", path)
+	}
+	return nil
+}
+
+func hashRuntimeFile(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
 }

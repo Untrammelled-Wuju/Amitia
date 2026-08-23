@@ -28,7 +28,9 @@ func TestMapGamePluginContribution(t *testing.T) {
 		Kind: kerneldomain.ContributionKindGamePlugin,
 		Name: kerneldomain.LocalizedText{Default: "Test Game Plugin"},
 		Definition: map[string]any{
-			"capabilities": []interface{}{"realtime_control", "custom_rpc"},
+			"protocolVersion": "amitia-game-host/1",
+			"runtimeModuleId": "runtime",
+			"capabilities":    []interface{}{"realtime_control", "custom_rpc"},
 		},
 		Metadata: map[string]any{
 			"author": "test",
@@ -55,16 +57,17 @@ func TestMapperPreservesExtensionID(t *testing.T) {
 	ctx := context.Background()
 
 	ext := kerneldomain.ExtensionDefinition{
-		ID:   "com.example.minecraft",
-		Name: kerneldomain.LocalizedText{Default: "Minecraft"},
+		ID:      "com.example.minecraft",
+		Name:    kerneldomain.LocalizedText{Default: "Minecraft"},
 		Version: kerneldomain.SemanticVersion{Major: 1, Minor: 2, Patch: 0},
-		Domain: kerneldomain.ExtensionDomainGame,
+		Domain:  kerneldomain.ExtensionDomainGame,
 	}
 
 	contrib := kerneldomain.ContributionDefinition{
-		ID:   "core",
-		Kind: kerneldomain.ContributionKindGamePlugin,
-		Name: kerneldomain.LocalizedText{Default: "Minecraft Core"},
+		ID:         "core",
+		Kind:       kerneldomain.ContributionKindGamePlugin,
+		Name:       kerneldomain.LocalizedText{Default: "Minecraft Core"},
+		Definition: map[string]any{"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime"},
 	}
 
 	desc, err := mapper.ToDescriptor(ctx, ext, contrib)
@@ -82,16 +85,17 @@ func TestMapperGeneratesStablePluginID(t *testing.T) {
 	ctx := context.Background()
 
 	ext := kerneldomain.ExtensionDefinition{
-		ID:   "com.example.stable",
-		Name: kerneldomain.LocalizedText{Default: "Stable"},
+		ID:      "com.example.stable",
+		Name:    kerneldomain.LocalizedText{Default: "Stable"},
 		Version: kerneldomain.SemanticVersion{Major: 1},
-		Domain: kerneldomain.ExtensionDomainGame,
+		Domain:  kerneldomain.ExtensionDomainGame,
 	}
 
 	contrib := kerneldomain.ContributionDefinition{
-		ID:   "plugin",
-		Kind: kerneldomain.ContributionKindGamePlugin,
-		Name: kerneldomain.LocalizedText{Default: "Plugin"},
+		ID:         "plugin",
+		Kind:       kerneldomain.ContributionKindGamePlugin,
+		Name:       kerneldomain.LocalizedText{Default: "Plugin"},
+		Definition: map[string]any{"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime"},
 	}
 
 	desc1, err := mapper.ToDescriptor(ctx, ext, contrib)
@@ -114,16 +118,17 @@ func TestMapperPreservesProtocolVersion(t *testing.T) {
 	ctx := context.Background()
 
 	ext := kerneldomain.ExtensionDefinition{
-		ID:   "com.example.protocol",
-		Name: kerneldomain.LocalizedText{Default: "Protocol"},
+		ID:      "com.example.protocol",
+		Name:    kerneldomain.LocalizedText{Default: "Protocol"},
 		Version: kerneldomain.SemanticVersion{Major: 1},
-		Domain: kerneldomain.ExtensionDomainGame,
+		Domain:  kerneldomain.ExtensionDomainGame,
 	}
 
 	contrib := kerneldomain.ContributionDefinition{
-		ID:   "main",
-		Kind: kerneldomain.ContributionKindGamePlugin,
-		Name: kerneldomain.LocalizedText{Default: "Main"},
+		ID:         "main",
+		Kind:       kerneldomain.ContributionKindGamePlugin,
+		Name:       kerneldomain.LocalizedText{Default: "Main"},
+		Definition: map[string]any{"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime"},
 	}
 
 	desc, err := mapper.ToDescriptor(ctx, ext, contrib)
@@ -141,10 +146,10 @@ func TestMapperPreservesCapabilities(t *testing.T) {
 	ctx := context.Background()
 
 	ext := kerneldomain.ExtensionDefinition{
-		ID:   "com.example.cap",
-		Name: kerneldomain.LocalizedText{Default: "Capabilities"},
+		ID:      "com.example.cap",
+		Name:    kerneldomain.LocalizedText{Default: "Capabilities"},
 		Version: kerneldomain.SemanticVersion{Major: 1},
-		Domain: kerneldomain.ExtensionDomainGame,
+		Domain:  kerneldomain.ExtensionDomainGame,
 	}
 
 	contrib := kerneldomain.ContributionDefinition{
@@ -152,7 +157,9 @@ func TestMapperPreservesCapabilities(t *testing.T) {
 		Kind: kerneldomain.ContributionKindGamePlugin,
 		Name: kerneldomain.LocalizedText{Default: "Main"},
 		Definition: map[string]any{
-			"capabilities": []interface{}{"realtime_control", "custom_rpc", "minecraft.pathfinding"},
+			"protocolVersion": "amitia-game-host/1",
+			"runtimeModuleId": "runtime",
+			"capabilities":    []interface{}{"realtime_control", "custom_rpc", "minecraft.pathfinding"},
 		},
 	}
 
@@ -162,8 +169,8 @@ func TestMapperPreservesCapabilities(t *testing.T) {
 	}
 
 	expectedCaps := map[gamehostdomain.Capability]struct{}{
-		"realtime_control":     {},
-		"custom_rpc":           {},
+		"realtime_control":      {},
+		"custom_rpc":            {},
 		"minecraft.pathfinding": {},
 	}
 
@@ -183,16 +190,17 @@ func TestMapperRejectsInvalidDescriptor(t *testing.T) {
 	ctx := context.Background()
 
 	ext := kerneldomain.ExtensionDefinition{
-		ID:   "", // 非法空ID
-		Name: kerneldomain.LocalizedText{Default: "Invalid"},
+		ID:      "", // 非法空ID
+		Name:    kerneldomain.LocalizedText{Default: "Invalid"},
 		Version: kerneldomain.SemanticVersion{Major: 1},
-		Domain: kerneldomain.ExtensionDomainGame,
+		Domain:  kerneldomain.ExtensionDomainGame,
 	}
 
 	contrib := kerneldomain.ContributionDefinition{
-		ID:   "main",
-		Kind: kerneldomain.ContributionKindGamePlugin,
-		Name: kerneldomain.LocalizedText{Default: "Main"},
+		ID:         "main",
+		Kind:       kerneldomain.ContributionKindGamePlugin,
+		Name:       kerneldomain.LocalizedText{Default: "Main"},
+		Definition: map[string]any{"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime"},
 	}
 
 	_, err := mapper.ToDescriptor(ctx, ext, contrib)

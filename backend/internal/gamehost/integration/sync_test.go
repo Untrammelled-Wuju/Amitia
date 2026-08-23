@@ -4,11 +4,10 @@ import (
 	"context"
 	"testing"
 
-	gamehostdomain "github.com/u-ai/backend/internal/gamehost/domain"
 	kerneldomain "github.com/u-ai/backend/internal/extension/kernel/domain"
+	gamehostdomain "github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/registry"
 )
-
 
 // mockRegistry 内存实现的PluginRegistry用于测试
 type mockRegistry struct {
@@ -78,17 +77,19 @@ func TestFullSyncRegistersEnabledGamePlugins(t *testing.T) {
 		plugins: []KernelGamePlugin{
 			{
 				Extension: kerneldomain.ExtensionDefinition{
-					ID:   "com.example.game1",
-					Name: kerneldomain.LocalizedText{Default: "Game 1"},
+					ID:      "com.example.game1",
+					Name:    kerneldomain.LocalizedText{Default: "Game 1"},
 					Version: kerneldomain.SemanticVersion{Major: 1},
-					Domain: kerneldomain.ExtensionDomainGame,
+					Domain:  kerneldomain.ExtensionDomainGame,
 				},
 				Contribution: kerneldomain.ContributionDefinition{
 					ID:   "main",
 					Kind: kerneldomain.ContributionKindGamePlugin,
 					Name: kerneldomain.LocalizedText{Default: "Game 1 Plugin"},
 					Definition: map[string]any{
-						"capabilities": []interface{}{"realtime_control"},
+						"protocolVersion": "amitia-game-host/1",
+						"runtimeModuleId": "runtime",
+						"capabilities":    []interface{}{"realtime_control"},
 					},
 				},
 			},
@@ -122,15 +123,16 @@ func TestFullSyncIsIdempotent(t *testing.T) {
 		plugins: []KernelGamePlugin{
 			{
 				Extension: kerneldomain.ExtensionDefinition{
-					ID:   "com.example.idempotent",
-					Name: kerneldomain.LocalizedText{Default: "Idempotent"},
+					ID:      "com.example.idempotent",
+					Name:    kerneldomain.LocalizedText{Default: "Idempotent"},
 					Version: kerneldomain.SemanticVersion{Major: 1},
-					Domain: kerneldomain.ExtensionDomainGame,
+					Domain:  kerneldomain.ExtensionDomainGame,
 				},
 				Contribution: kerneldomain.ContributionDefinition{
-					ID:   "main",
-					Kind: kerneldomain.ContributionKindGamePlugin,
-					Name: kerneldomain.LocalizedText{Default: "Idempotent Plugin"},
+					ID:         "main",
+					Kind:       kerneldomain.ContributionKindGamePlugin,
+					Name:       kerneldomain.LocalizedText{Default: "Idempotent Plugin"},
+					Definition: map[string]any{"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime"},
 				},
 			},
 		},
@@ -164,10 +166,10 @@ func TestFullSyncSkipsDesktopPetPlugin(t *testing.T) {
 		plugins: []KernelGamePlugin{
 			{
 				Extension: kerneldomain.ExtensionDefinition{
-					ID:   "com.example.pet",
-					Name: kerneldomain.LocalizedText{Default: "Pet"},
+					ID:      "com.example.pet",
+					Name:    kerneldomain.LocalizedText{Default: "Pet"},
 					Version: kerneldomain.SemanticVersion{Major: 1},
-					Domain: kerneldomain.ExtensionDomainDesktopPet, // 桌宠domain，跳过
+					Domain:  kerneldomain.ExtensionDomainDesktopPet, // 桌宠domain，跳过
 				},
 				Contribution: kerneldomain.ContributionDefinition{
 					ID:   "main",
@@ -196,28 +198,30 @@ func TestFullSyncMultiplePluginsPerExtension(t *testing.T) {
 		plugins: []KernelGamePlugin{
 			{
 				Extension: kerneldomain.ExtensionDefinition{
-					ID:   "com.example.multi",
-					Name: kerneldomain.LocalizedText{Default: "Multi"},
+					ID:      "com.example.multi",
+					Name:    kerneldomain.LocalizedText{Default: "Multi"},
 					Version: kerneldomain.SemanticVersion{Major: 1},
-					Domain: kerneldomain.ExtensionDomainGame,
+					Domain:  kerneldomain.ExtensionDomainGame,
 				},
 				Contribution: kerneldomain.ContributionDefinition{
-					ID:   "plugin1",
-					Kind: kerneldomain.ContributionKindGamePlugin,
-					Name: kerneldomain.LocalizedText{Default: "Plugin 1"},
+					ID:         "plugin1",
+					Kind:       kerneldomain.ContributionKindGamePlugin,
+					Name:       kerneldomain.LocalizedText{Default: "Plugin 1"},
+					Definition: map[string]any{"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime"},
 				},
 			},
 			{
 				Extension: kerneldomain.ExtensionDefinition{
-					ID:   "com.example.multi",
-					Name: kerneldomain.LocalizedText{Default: "Multi"},
+					ID:      "com.example.multi",
+					Name:    kerneldomain.LocalizedText{Default: "Multi"},
 					Version: kerneldomain.SemanticVersion{Major: 1},
-					Domain: kerneldomain.ExtensionDomainGame,
+					Domain:  kerneldomain.ExtensionDomainGame,
 				},
 				Contribution: kerneldomain.ContributionDefinition{
-					ID:   "plugin2",
-					Kind: kerneldomain.ContributionKindGamePlugin,
-					Name: kerneldomain.LocalizedText{Default: "Plugin 2"},
+					ID:         "plugin2",
+					Kind:       kerneldomain.ContributionKindGamePlugin,
+					Name:       kerneldomain.LocalizedText{Default: "Plugin 2"},
+					Definition: map[string]any{"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime"},
 				},
 			},
 		},
@@ -256,10 +260,10 @@ func TestUnregisterExtension(t *testing.T) {
 
 	// 先手动注册两个插件
 	err = reg.Register(context.Background(), gamehostdomain.PluginDescriptor{
-		ID:          "com.example.ext/plugin1",
-		ExtensionID: "com.example.ext",
-		Name:        "Plugin 1",
-		Version:     "1.0.0",
+		ID:              "com.example.ext/plugin1",
+		ExtensionID:     "com.example.ext",
+		Name:            "Plugin 1",
+		Version:         "1.0.0",
 		ProtocolVersion: "amitia-game-host/1",
 	})
 	if err != nil {
@@ -267,10 +271,10 @@ func TestUnregisterExtension(t *testing.T) {
 	}
 
 	err = reg.Register(context.Background(), gamehostdomain.PluginDescriptor{
-		ID:          "com.example.ext/plugin2",
-		ExtensionID: "com.example.ext",
-		Name:        "Plugin 2",
-		Version:     "1.0.0",
+		ID:              "com.example.ext/plugin2",
+		ExtensionID:     "com.example.ext",
+		Name:            "Plugin 2",
+		Version:         "1.0.0",
 		ProtocolVersion: "amitia-game-host/1",
 	})
 	if err != nil {
