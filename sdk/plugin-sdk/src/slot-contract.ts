@@ -175,70 +175,134 @@ export interface UISlotContract<
  * compatibility surfaces; plugins may add their own keys without modifying
  * the host package.
  */
-type UIRootList = UISlotContract<Record<string, unknown>, unknown, Record<string, unknown>, "root", "list">;
-type UIRootChain = UISlotContract<Record<string, unknown>, unknown, Record<string, unknown>, "root", "chain">;
-type UISessionList = UISlotContract<Record<string, unknown>, unknown, Record<string, unknown>, "session", "list">;
-type UISessionChain = UISlotContract<Record<string, unknown>, unknown, Record<string, unknown>, "session", "chain">;
-type UISessionMaybeList = UISlotContract<Record<string, unknown>, unknown, Record<string, unknown>, "session-maybe", "list">;
-type UISessionMaybeChain = UISlotContract<Record<string, unknown>, unknown, Record<string, unknown>, "session-maybe", "chain">;
-type UIRootKeyed = UISlotContract<Record<string, unknown>, unknown, Record<string, unknown>, "root", "keyed", Record<string, Record<string, unknown>>>;
+export type UIHostPlatform = "windows" | "macos" | "linux" | "web";
+export type UIHostKind = "web" | "desktop";
+export type UIHostOS = "windows" | "macos" | "linux" | "unknown";
+export type UIHostSurfaceRole = "header" | "status" | "sidebar" | "message" | "composer" | "main" | "overlay";
+
+export interface UIRootOwner extends Record<string, unknown> {
+  slotId?: string;
+  route?: string;
+  platform?: UIHostPlatform;
+  host?: UIHostKind;
+  os?: UIHostOS;
+  locale?: string;
+  capabilities?: readonly string[];
+}
+
+export interface UIExtensionOwner extends UIRootOwner {
+  extensionId?: string;
+  moduleId?: string;
+  contributionId?: string;
+}
+
+export interface UISessionOwner extends UIRootOwner {
+  sessionId?: string;
+  conversationId: string;
+  characterId?: string;
+}
+
+export interface UIMessageOwner extends UISessionOwner {
+  messageId: string;
+  messageType: string;
+  direction?: "incoming" | "outgoing" | "system";
+  senderType?: "user" | "character" | "system" | "extension";
+  extensionType?: string;
+  message?: Readonly<Record<string, unknown>>;
+}
+
+export interface UIConversationNodeOwner extends UISessionOwner {
+  nodeId?: string;
+  nodeType?: string;
+  eventType?: string;
+  node?: Readonly<Record<string, unknown>>;
+}
+
+export interface UICharacterOwner extends UIRootOwner {
+  characterId: string;
+  tabId?: string;
+}
+
+export interface UIDesktopOwner extends UIRootOwner {
+  commandId?: string;
+  windowId?: string;
+  menuId?: string;
+  selection?: Readonly<Record<string, unknown>>;
+}
+
+export interface UIProviderOwner extends UIRootOwner {
+  capability: string;
+  providerId?: string;
+  providerMode?: "replace" | "compose" | "augment";
+}
+
+export interface UIProviderSessionOwner extends UISessionOwner {
+  capability: string;
+  providerId?: string;
+  providerMode?: "replace" | "compose" | "augment";
+}
+
+type UINoInject = Record<string, never>;
+type UIList<Owner extends Record<string, unknown>, Scope extends UISlotScope = "root"> = UISlotContract<Owner, unknown, UINoInject, Scope, "list">;
+type UIChain<Owner extends Record<string, unknown>, Scope extends UISlotScope = "root"> = UISlotContract<Owner, unknown, UINoInject, Scope, "chain">;
+type UIKeyed<Owner extends Record<string, unknown>, Scope extends UISlotScope = "root"> = UISlotContract<Owner, unknown, UINoInject, Scope, "keyed", Record<string, Owner>>;
 
 export interface UISlotMap {
-  root: UISlotContract<Record<string, unknown>, unknown, Record<string, unknown>, "root", "single">;
-  "extension.center.header.action": UIRootList;
-  "extension.center.card.badge": UIRootList;
-  "extension.detail.tab": UIRootList;
-  "extension.detail.action": UIRootList;
-  "extension.settings.page": UIRootList;
-  "extension.settings.section": UIRootList;
-  "chat.header.action": UISessionMaybeList;
-  "chat.sidebar.panel": UISessionMaybeList;
-  "chat.message.action": UISessionList;
-  "chat.message.renderer": UISessionChain;
-  "chat.conversation.node": UISessionList;
-  "chat.message.custom_renderer": UISessionChain;
-  "chat.message.attachment_renderer": UISessionChain;
-  "chat.message.badge": UISessionList;
-  "chat.composer.action": UISessionMaybeList;
-  "chat.composer.attachment": UISessionMaybeList;
-  "chat.composer.hint": UISessionMaybeList;
-  "chat.empty_state.card": UISessionMaybeList;
-  "chat.status.item": UISessionMaybeList;
-  "character.detail.tab": UIRootList;
-  "character.detail.action": UIRootList;
-  "character.sidebar.card": UIRootList;
-  "system.status.item": UIRootList;
-  "system.settings.section": UIRootList;
-  "system.diagnostics.tab": UIRootList;
-  "desktop.command": UIRootKeyed;
-  "desktop.application_menu.item": UIRootList;
-  "desktop.context_menu.item": UIRootList;
-  "desktop.tray.item": UIRootList;
-  "desktop.window.page": UIRootKeyed;
-  "provider.app.shell": UIRootChain;
-  "provider.app.navigation": UIRootChain;
-  "provider.app.workspace": UIRootChain;
-  "provider.route.registry": UIRootList;
-  "provider.page.provider": UIRootChain;
-  "provider.conversation.shell": UISessionMaybeChain;
-  "provider.conversation.header": UISessionMaybeChain;
-  "provider.conversation.messages": UISessionMaybeChain;
-  "provider.conversation.message_renderer": UISessionChain;
-  "provider.conversation.sidebar": UISessionMaybeChain;
-  "provider.conversation.composer": UISessionMaybeChain;
-  "provider.conversation.overlay": UISessionMaybeList;
-  "provider.character.shell": UIRootChain;
-  "provider.character.detail": UIRootChain;
-  "provider.memory.shell": UIRootChain;
-  "provider.memory.detail": UIRootChain;
-  "provider.settings.shell": UIRootChain;
-  "provider.settings.section": UIRootList;
-  "provider.extension.center": UIRootChain;
-  "provider.extension.page": UIRootChain;
-  "provider.ui.theme": UIRootChain;
-  "provider.ui.tokens": UIRootChain;
-  "provider.ui.icons": UIRootChain;
-  "provider.ui.components": UIRootChain;
+  root: UISlotContract<UIRootOwner, unknown, UINoInject, "root", "single">;
+  "extension.center.header.action": UIList<UIExtensionOwner>;
+  "extension.center.card.badge": UIList<UIExtensionOwner>;
+  "extension.detail.tab": UIList<UIExtensionOwner>;
+  "extension.detail.action": UIList<UIExtensionOwner>;
+  "extension.settings.page": UIList<UIExtensionOwner>;
+  "extension.settings.section": UIList<UIExtensionOwner>;
+  "chat.header.action": UIList<UISessionOwner, "session-maybe">;
+  "chat.sidebar.panel": UIList<UISessionOwner, "session-maybe">;
+  "chat.message.action": UIList<UIMessageOwner, "session">;
+  "chat.message.renderer": UIChain<UIMessageOwner, "session">;
+  "chat.conversation.node": UIList<UIConversationNodeOwner, "session">;
+  "chat.message.custom_renderer": UIChain<UIMessageOwner, "session">;
+  "chat.message.attachment_renderer": UIChain<UIMessageOwner, "session">;
+  "chat.message.badge": UIList<UIMessageOwner, "session">;
+  "chat.composer.action": UIList<UISessionOwner, "session-maybe">;
+  "chat.composer.attachment": UIList<UISessionOwner, "session-maybe">;
+  "chat.composer.hint": UIList<UISessionOwner, "session-maybe">;
+  "chat.empty_state.card": UIList<UISessionOwner, "session-maybe">;
+  "chat.status.item": UIList<UISessionOwner, "session-maybe">;
+  "character.detail.tab": UIList<UICharacterOwner>;
+  "character.detail.action": UIList<UICharacterOwner>;
+  "character.sidebar.card": UIList<UICharacterOwner>;
+  "system.status.item": UIList<UIRootOwner>;
+  "system.settings.section": UIList<UIRootOwner>;
+  "system.diagnostics.tab": UIList<UIRootOwner>;
+  "desktop.command": UIKeyed<UIDesktopOwner>;
+  "desktop.application_menu.item": UIList<UIDesktopOwner>;
+  "desktop.context_menu.item": UIList<UIDesktopOwner>;
+  "desktop.tray.item": UIList<UIDesktopOwner>;
+  "desktop.window.page": UIKeyed<UIDesktopOwner>;
+  "provider.app.shell": UIChain<UIProviderOwner>;
+  "provider.app.navigation": UIChain<UIProviderOwner>;
+  "provider.app.workspace": UIChain<UIProviderOwner>;
+  "provider.route.registry": UIList<UIProviderOwner>;
+  "provider.page.provider": UIChain<UIProviderOwner>;
+  "provider.conversation.shell": UIChain<UIProviderSessionOwner, "session-maybe">;
+  "provider.conversation.header": UIChain<UIProviderSessionOwner, "session-maybe">;
+  "provider.conversation.messages": UIChain<UIProviderSessionOwner, "session-maybe">;
+  "provider.conversation.message_renderer": UIChain<UIMessageOwner, "session">;
+  "provider.conversation.sidebar": UIChain<UIProviderSessionOwner, "session-maybe">;
+  "provider.conversation.composer": UIChain<UIProviderSessionOwner, "session-maybe">;
+  "provider.conversation.overlay": UIList<UIProviderSessionOwner, "session-maybe">;
+  "provider.character.shell": UIChain<UIProviderOwner>;
+  "provider.character.detail": UIChain<UIProviderOwner>;
+  "provider.memory.shell": UIChain<UIProviderOwner>;
+  "provider.memory.detail": UIChain<UIProviderOwner>;
+  "provider.settings.shell": UIChain<UIProviderOwner>;
+  "provider.settings.section": UIList<UIProviderOwner>;
+  "provider.extension.center": UIChain<UIProviderOwner>;
+  "provider.extension.page": UIChain<UIProviderOwner>;
+  "provider.ui.theme": UIChain<UIProviderOwner>;
+  "provider.ui.tokens": UIChain<UIProviderOwner>;
+  "provider.ui.icons": UIChain<UIProviderOwner>;
+  "provider.ui.components": UIChain<UIProviderOwner>;
 }
 
 export interface UILocaleNamespaceMap {}
