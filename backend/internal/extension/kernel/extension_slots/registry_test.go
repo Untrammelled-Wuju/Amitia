@@ -278,6 +278,30 @@ func TestSnapshotIncludesSlotContractMetadata(t *testing.T) {
 	}
 }
 
+func TestDefaultDispatchKindOwnsLegacyMultiplicityProjection(t *testing.T) {
+	r := DefaultSlotRegistry()
+	cases := []struct {
+		slot         string
+		kind         SlotDispatchKind
+		multiplicity SlotMultiplicity
+	}{
+		{"provider.conversation.overlay", DispatchList, MultiplicityOrderedMultiple},
+		{"extension.settings.page", DispatchList, MultiplicityOrderedMultiple},
+		{"chat.message.custom_renderer", DispatchChain, MultiplicityReplaceableSingle},
+		{"chat.message.attachment_renderer", DispatchChain, MultiplicityReplaceableSingle},
+		{"desktop.window.page", DispatchKeyed, MultiplicityMultiple},
+	}
+	for _, tc := range cases {
+		def, err := r.Get(SlotID(tc.slot))
+		if err != nil {
+			t.Fatalf("get %s: %v", tc.slot, err)
+		}
+		if def.DispatchKind != tc.kind || def.Multiplicity != tc.multiplicity {
+			t.Fatalf("%s contract kind/multiplicity = %q/%q, want %q/%q", tc.slot, def.DispatchKind, def.Multiplicity, tc.kind, tc.multiplicity)
+		}
+	}
+}
+
 func TestRegisterValidatesAndDerivesDispatchKind(t *testing.T) {
 	r := DefaultSlotRegistry()
 	def := dynamicTestSlot("dispatch.chain", "chat.sidebar.panel", "dispatch.ext")
@@ -290,7 +314,7 @@ func TestRegisterValidatesAndDerivesDispatchKind(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if registered.DispatchKind != DispatchChain || registered.Multiplicity != MultiplicityOrderedMultiple {
+	if registered.DispatchKind != DispatchChain || registered.Multiplicity != MultiplicityReplaceableSingle {
 		t.Fatalf("derived dispatch contract = kind %q multiplicity %q", registered.DispatchKind, registered.Multiplicity)
 	}
 

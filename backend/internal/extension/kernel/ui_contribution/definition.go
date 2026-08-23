@@ -298,6 +298,16 @@ type UIConflictPolicy struct {
 	Override bool   `json:"override,omitempty"`
 }
 
+// UIContributionDispatch carries server/declarative dispatch identity. Trusted
+// client plugins can use executable select() functions; server-driven entries
+// use Visibility as their chain predicate and these stable identities for
+// list/keyed cells. All fields are optional for backwards compatibility.
+type UIContributionDispatch struct {
+	EntryKey string          `json:"entry_key,omitempty"`
+	CellID   string          `json:"cell_id,omitempty"`
+	Matched  json.RawMessage `json:"matched,omitempty"`
+}
+
 type UILifecyclePolicy struct {
 	Initial      string        `json:"initial"`
 	AutoSuspend  bool          `json:"auto_suspend,omitempty"`
@@ -329,6 +339,7 @@ type UIContributionDefinition struct {
 	ScopeRule       ScopeRule                `json:"scope_rule,omitempty"`
 	Ordering        UIOrderingRule           `json:"ordering,omitempty"`
 	ConflictPolicy  UIConflictPolicy         `json:"conflict_policy,omitempty"`
+	Dispatch        *UIContributionDispatch  `json:"dispatch,omitempty"`
 	Sandbox         UISandboxPolicy          `json:"sandbox"`
 	Lifecycle       UILifecyclePolicy        `json:"lifecycle"`
 	Integrity       ContributionIntegrity    `json:"integrity"`
@@ -346,17 +357,18 @@ type UIPerformanceBudget struct {
 }
 
 type UISlotContract struct {
-	SlotID            string               `json:"slot_id"`
-	Version           int                  `json:"version"`
-	SupportedKinds    []UIContributionKind `json:"supported_kinds"`
-	InputSchema       json.RawMessage      `json:"input_schema,omitempty"`
-	OutputSchema      json.RawMessage      `json:"output_schema,omitempty"`
-	AllowedActions    []string             `json:"allowed_actions,omitempty"`
-	AllowedSandboxes  []UISandboxType      `json:"allowed_sandboxes"`
-	Multiplicity      SlotMultiplicity     `json:"multiplicity"`
-	OrderingPolicy    string               `json:"ordering_policy,omitempty"`
-	FailurePolicy     string               `json:"failure_policy,omitempty"`
-	PerformanceBudget UIPerformanceBudget  `json:"performance_budget"`
+	SlotID            string                           `json:"slot_id"`
+	Version           int                              `json:"version"`
+	SupportedKinds    []UIContributionKind             `json:"supported_kinds"`
+	InputSchema       json.RawMessage                  `json:"input_schema,omitempty"`
+	OutputSchema      json.RawMessage                  `json:"output_schema,omitempty"`
+	AllowedActions    []string                         `json:"allowed_actions,omitempty"`
+	AllowedSandboxes  []UISandboxType                  `json:"allowed_sandboxes"`
+	DispatchKind      extension_slots.SlotDispatchKind `json:"kind"`
+	Multiplicity      SlotMultiplicity                 `json:"multiplicity"`
+	OrderingPolicy    string                           `json:"ordering_policy,omitempty"`
+	FailurePolicy     string                           `json:"failure_policy,omitempty"`
+	PerformanceBudget UIPerformanceBudget              `json:"performance_budget"`
 }
 
 var (
@@ -673,6 +685,7 @@ func SlotContractFromDefinition(def *extension_slots.SlotDefinition) (*UISlotCon
 		SupportedKinds:   kinds,
 		InputSchema:      append(json.RawMessage(nil), def.ContextSchema...),
 		AllowedSandboxes: sandboxes,
+		DispatchKind:     def.DispatchKind,
 		Multiplicity:     SlotMultiplicity(def.Multiplicity),
 		OrderingPolicy:   def.OrderingPolicy,
 		FailurePolicy:    def.FailurePolicy,
