@@ -351,6 +351,9 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 			"installedTreeHash": generationTreeHash,
 			"devOnly":           preview.DevOnly,
 			"ownerUserId":       request.UserID, "scopeType": request.ScopeType, "scopeId": request.ScopeID}, targetGeneration.Current, targetPath, operationID)}
+	if r.container.ExtensionProviderReconciler != nil {
+		providerSnapshot = r.container.ExtensionProviderReconciler.SnapshotExtension(string(definition.ID))
+	}
 	err = r.container.TransactionManager.WithTransaction(ctx, func(txCtx context.Context) error {
 		if err := r.container.PackageRepository.VerifyFencingTokenInContext(txCtx, guard); err != nil {
 			return err
@@ -379,6 +382,7 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	if err != nil {
 		return fail(StepCommitKernelRepositories, err, targetPath)
 	}
+	readModelCommitted = true
 	artifact.InstalledPath = targetPath
 	if err := r.container.PackageRepository.SetArtifactInstalledPath(ctx, artifact.ArtifactID, targetPath, guard); err != nil {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", "persist_artifact_metadata", "PACKAGE_RECOVERY_REQUIRED", err.Error(), false, guard)
@@ -395,6 +399,11 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	}
 	if err := step(8, StepReconcileCapabilityProviders, "completed", "{}", ""); err != nil {
 		return KernelInstallResult{}, err
+	}
+	if err := r.reconcileGameHostExtension(ctx, session.ExtensionID); err != nil {
+		result, failErr := fail("reconcile_game_host", err, targetPath)
+		_ = r.reconcileGameHostExtension(context.Background(), session.ExtensionID)
+		return result, failErr
 	}
 	if err := r.container.PackageRepository.ConsumePreview(ctx, session.SessionID); err != nil {
 		_ = r.container.PackageRepository.SetOperation(context.Background(), operationID, "requires_recovery", "consume_preview_session", "PACKAGE_RECOVERY_REQUIRED", err.Error(), false, guard)

@@ -1220,6 +1220,7 @@ func (i *TypedContributionInstaller) activateTool(ctx context.Context, contrib d
 		ToolID       string          `json:"toolId"`
 		ModelName    string          `json:"modelName"`
 		CapabilityID string          `json:"capabilityId,omitempty"`
+		HandlerName  string          `json:"handlerName,omitempty"`
 		InputSchema  json.RawMessage `json:"inputSchema"`
 		OutputSchema json.RawMessage `json:"outputSchema"`
 		RiskLevel    string          `json:"riskLevel,omitempty"`
@@ -1227,8 +1228,25 @@ func (i *TypedContributionInstaller) activateTool(ctx context.Context, contrib d
 		Permissions  json.RawMessage `json:"permissions,omitempty"`
 		Scope        json.RawMessage `json:"scope,omitempty"`
 		Internal     bool            `json:"internal,omitempty"`
+		Runtime      map[string]any  `json:"runtime,omitempty"`
 	}
-	_ = json.Unmarshal(defData, &def)
+	if err := json.Unmarshal(defData, &def); err != nil {
+		return fmt.Errorf("unmarshal tool definition for activate: %w", err)
+	}
+	runtimeType := ""
+	runtimeID := ""
+	handlerName := def.HandlerName
+	if len(def.Runtime) > 0 {
+		if v, ok := def.Runtime["runtimeType"].(string); ok {
+			runtimeType = v
+		}
+		if v, ok := def.Runtime["runtimeId"].(string); ok {
+			runtimeID = v
+		}
+		if v, ok := def.Runtime["handlerName"].(string); ok && v != "" {
+			handlerName = v
+		}
+	}
 	toolID := def.ToolID
 	if toolID == "" {
 		toolID = string(contrib.ID)
@@ -1272,7 +1290,7 @@ func (i *TypedContributionInstaller) activateTool(ctx context.Context, contrib d
 		SideEffect:   capability.SideEffectLevel(def.SideEffect),
 		Permissions:  perms,
 		Scope:        scope,
-		Runtime:      i.buildRuntimeBinding(contrib),
+		Runtime:      i.buildRuntimeBindingFromValues(contrib, handlerName, runtimeType, runtimeID, toolID),
 	}
 	if err := i.container.ToolRegistry.Replace(ctx, toolDef); err != nil {
 		return fmt.Errorf("activate tool %s: %w", toolID, err)

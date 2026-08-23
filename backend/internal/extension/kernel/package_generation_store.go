@@ -281,6 +281,30 @@ func (s *PackageGenerationStore) SwitchCurrent(extensionID, expectedGenerationID
 	return s.replaceCurrentLocked(extensionID, next)
 }
 
+// ResolveCurrentGeneration returns the authoritative active generation and its verified on-disk path.
+// Consumers must use this instead of reconstructing installation paths independently.
+func (s *PackageGenerationStore) ResolveCurrentGeneration(ctx context.Context, extensionID string) (PackageGenerationCurrent, string, error) {
+	current, err := s.ReadCurrent(extensionID)
+	if err != nil {
+		return PackageGenerationCurrent{}, "", err
+	}
+	if err := s.VerifyGeneration(ctx, current); err != nil {
+		return PackageGenerationCurrent{}, "", err
+	}
+	_, generationPath, err := s.paths(current.ExtensionID, current.GenerationID, current.OperationID)
+	if err != nil {
+		return PackageGenerationCurrent{}, "", err
+	}
+	info, err := os.Stat(generationPath)
+	if err != nil {
+		return PackageGenerationCurrent{}, "", err
+	}
+	if !info.IsDir() {
+		return PackageGenerationCurrent{}, "", fmt.Errorf("%w: current generation is not a directory", ErrPackageGenerationUnsafe)
+	}
+	return current, generationPath, nil
+}
+
 func (s *PackageGenerationStore) VerifyGeneration(ctx context.Context, current PackageGenerationCurrent) error {
 	if err := validateCurrent(current); err != nil {
 		return err
