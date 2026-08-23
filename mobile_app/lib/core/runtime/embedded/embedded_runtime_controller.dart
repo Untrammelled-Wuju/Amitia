@@ -2,6 +2,7 @@ import '../backend/backend_topology.dart';
 
 enum EmbeddedRuntimeStatus {
   notInstalled,
+  installing,
   stopped,
   starting,
   ready,

@@ -1,4 +1,5 @@
 import 'dart:async';
+
 import 'mobile_deployment_mode.dart';
 import 'backend_topology.dart';
 import 'backend_topology_resolver.dart';
@@ -7,6 +8,9 @@ import '../embedded/embedded_runtime_controller.dart';
 import '../../backend_transport/connectivity/backend_connectivity_probe.dart';
 
 export '../embedded/embedded_runtime_controller.dart' show EmbeddedRuntimeStatus;
+
+const Duration _embeddedRuntimeStartupTimeout = Duration(seconds: 100);
+const Duration _embeddedRuntimePollInterval = Duration(milliseconds: 250);
 
 enum RuntimeDeploymentState {
   unavailable,
@@ -237,12 +241,14 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
     );
 
     try {
-      final status = await _embeddedRuntime.ensureRunning(
+      final status = await _ensureEmbeddedRuntimeReady(
         EmbeddedRuntimeProfile.local,
+        expectedGeneration,
       );
       if (expectedGeneration != _generation) return;
 
       if (status != EmbeddedRuntimeStatus.ready) {
+        final message = _embeddedRuntimeFailureMessage(status, 'local');
         _emitStatus(MobileBackendStatus(
           mode: MobileDeploymentMode.local,
           state: RuntimeDeploymentState.failed,
@@ -250,12 +256,12 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
             state: RuntimeDeploymentState.failed,
             baseUri: topology.businessCore.httpBaseUri,
             profile: 'local',
-            message: 'embedded runtime failed to start',
+            message: message,
           ),
           localRuntime: BackendNodeStatus(
             state: RuntimeDeploymentState.failed,
             profile: 'local',
-            message: 'embedded runtime failed to start',
+            message: message,
           ),
           generation: expectedGeneration,
         ));
@@ -301,8 +307,9 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
       topology.businessCore.httpBaseUri,
     );
 
-    final localFuture = _embeddedRuntime.ensureRunning(
+    final localFuture = _ensureEmbeddedRuntimeReady(
       EmbeddedRuntimeProfile.deviceAgent,
+      expectedGeneration,
     );
     final remoteFuture = _remoteProbe.probe(topology.businessCore.httpBaseUri);
 
@@ -320,7 +327,7 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
       baseUri: topology.localRuntime?.httpBaseUri,
       profile: 'device-agent',
       message: localStatus != EmbeddedRuntimeStatus.ready
-          ? 'device-agent not ready'
+          ? _embeddedRuntimeFailureMessage(localStatus, 'device-agent')
           : null,
     );
 
@@ -347,6 +354,80 @@ class DefaultMobileBackendLifecycle implements MobileBackendLifecycle {
         localRuntime: localNodeStatus,
         generation: expectedGeneration,
       ));
+    }
+  }
+
+  Future<EmbeddedRuntimeStatus> _ensureEmbeddedRuntimeReady(
+    EmbeddedRuntimeProfile profile,
+    int expectedGeneration,
+  ) async {
+    final deadline = DateTime.now().add(_embeddedRuntimeStartupTimeout);
+    var status = await _embeddedRuntime.getStatus();
+    var startIssued = false;
+
+    while (!_disposed && expectedGeneration == _generation) {
+      if (status == EmbeddedRuntimeStatus.ready ||
+          status == EmbeddedRuntimeStatus.unsupported ||
+          status == EmbeddedRuntimeStatus.notInstalled) {
+        return status;
+      }
+
+      if (DateTime.now().isAfter(deadline)) {
+        return EmbeddedRuntimeStatus.failed;
+      }
+
+      switch (status) {
+        case EmbeddedRuntimeStatus.stopped:
+        case EmbeddedRuntimeStatus.failed:
+          if (startIssued) {
+            return status;
+          }
+          startIssued = true;
+          status = await _embeddedRuntime.ensureRunning(profile);
+          if (status == EmbeddedRuntimeStatus.ready) {
+            return status;
+          }
+          break;
+        case EmbeddedRuntimeStatus.starting:
+        case EmbeddedRuntimeStatus.installing:
+        case EmbeddedRuntimeStatus.stopping:
+          await Future.delayed(_embeddedRuntimePollInterval);
+          if (_disposed || expectedGeneration != _generation) {
+            return EmbeddedRuntimeStatus.stopped;
+          }
+          status = await _embeddedRuntime.getStatus();
+          break;
+        case EmbeddedRuntimeStatus.ready:
+        case EmbeddedRuntimeStatus.notInstalled:
+        case EmbeddedRuntimeStatus.unsupported:
+          return status;
+      }
+    }
+
+    return EmbeddedRuntimeStatus.stopped;
+  }
+
+  String _embeddedRuntimeFailureMessage(
+    EmbeddedRuntimeStatus status,
+    String profile,
+  ) {
+    switch (status) {
+      case EmbeddedRuntimeStatus.notInstalled:
+        return 'embedded runtime is not installed for profile $profile';
+      case EmbeddedRuntimeStatus.installing:
+        return 'embedded runtime installation did not complete for profile $profile';
+      case EmbeddedRuntimeStatus.starting:
+        return 'embedded runtime startup timed out for profile $profile';
+      case EmbeddedRuntimeStatus.stopping:
+        return 'embedded runtime is stopping for profile $profile';
+      case EmbeddedRuntimeStatus.unsupported:
+        return 'embedded runtime is unsupported on this platform';
+      case EmbeddedRuntimeStatus.stopped:
+        return 'embedded runtime stopped before becoming ready for profile $profile';
+      case EmbeddedRuntimeStatus.failed:
+        return 'embedded runtime failed to become ready for profile $profile';
+      case EmbeddedRuntimeStatus.ready:
+        return 'embedded runtime is ready';
     }
   }
 

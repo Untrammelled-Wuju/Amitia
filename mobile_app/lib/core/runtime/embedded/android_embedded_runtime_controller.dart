@@ -1,19 +1,19 @@
 import 'dart:async';
+
 import 'package:flutter/services.dart';
+
 import '../backend/backend_topology.dart';
 import 'embedded_runtime_controller.dart';
 
 const String _methodStartWithProfile = 'runtime.startWithProfile';
 const String _methodStop = 'runtime.stop';
 const String _methodSnapshot = 'runtime.snapshot';
-const int _defaultProbeTimeoutMs = 5000;
 
 class AndroidEmbeddedRuntimeController implements EmbeddedRuntimeController {
-  static const MethodChannel _channel =
-      MethodChannel('com.amitia.runtime/bridge');
+  static const MethodChannel _channel = MethodChannel(
+    'com.amitia.runtime/bridge',
+  );
 
-  int _currentProfileGeneration = 0;
-  EmbeddedRuntimeProfile? _pendingProfile;
   BackendEndpoint? _lastEndpoint;
   int _startGeneration = 0;
 
@@ -22,9 +22,23 @@ class AndroidEmbeddedRuntimeController implements EmbeddedRuntimeController {
     EmbeddedRuntimeProfile profile,
   ) async {
     final capturedGeneration = ++_startGeneration;
-    _pendingProfile = profile;
 
     try {
+      final currentStatus = await getStatus();
+      if (capturedGeneration != _startGeneration) {
+        return EmbeddedRuntimeStatus.stopped;
+      }
+
+      // Never issue a second start while Native is already transitioning.
+      if (currentStatus == EmbeddedRuntimeStatus.ready ||
+          currentStatus == EmbeddedRuntimeStatus.starting ||
+          currentStatus == EmbeddedRuntimeStatus.installing ||
+          currentStatus == EmbeddedRuntimeStatus.stopping ||
+          currentStatus == EmbeddedRuntimeStatus.notInstalled ||
+          currentStatus == EmbeddedRuntimeStatus.unsupported) {
+        return currentStatus;
+      }
+
       final result = await _channel.invokeMethod<Map<Object?, Object?>>(
         _methodStartWithProfile,
         {'profile': profile.runtimeProfileArg},
@@ -33,23 +47,22 @@ class AndroidEmbeddedRuntimeController implements EmbeddedRuntimeController {
       if (capturedGeneration != _startGeneration) {
         return EmbeddedRuntimeStatus.stopped;
       }
-
       if (result == null) {
         return EmbeddedRuntimeStatus.failed;
       }
 
-      final map = _convertMap(result);
+      final map = _stringKeyMap(result);
       final accepted = map['accepted'] as bool? ?? false;
-      final snapshot = map['snapshot'] as Map<String, dynamic>? ?? {};
-
-      final bridgeState = snapshot['state'] as String?;
-      final status = _mapBridgeState(bridgeState);
+      final snapshot = _stringKeyMap(map['snapshot']);
+      final status = _mapBridgeState(snapshot['state'] as String?);
 
       if (status == EmbeddedRuntimeStatus.ready) {
-        _currentProfileGeneration = capturedGeneration;
         _lastEndpoint = await getEndpoint();
       }
 
+      // A start command may legally report STARTING before the native startup
+      // detector reaches READY. Rejection is only fatal when Native also
+      // reports a terminal/non-startable state.
       if (!accepted &&
           status != EmbeddedRuntimeStatus.ready &&
           status != EmbeddedRuntimeStatus.starting) {
@@ -57,10 +70,12 @@ class AndroidEmbeddedRuntimeController implements EmbeddedRuntimeController {
       }
 
       return status;
-    } on PlatformException {
-      return EmbeddedRuntimeStatus.failed;
     } on MissingPluginException {
       return EmbeddedRuntimeStatus.unsupported;
+    } on PlatformException {
+      return EmbeddedRuntimeStatus.failed;
+    } catch (_) {
+      return EmbeddedRuntimeStatus.failed;
     }
   }
 
@@ -70,7 +85,9 @@ class AndroidEmbeddedRuntimeController implements EmbeddedRuntimeController {
     try {
       await _channel.invokeMethod<void>(_methodStop, null);
     } on PlatformException {
+      // Native already stopped/failed. The lifecycle will observe the snapshot.
     } on MissingPluginException {
+      // Unsupported platform.
     }
   }
 
@@ -82,13 +99,14 @@ class AndroidEmbeddedRuntimeController implements EmbeddedRuntimeController {
         null,
       );
       if (result == null) return EmbeddedRuntimeStatus.failed;
-      final map = _convertMap(result);
-      final bridgeState = map['state'] as String?;
-      return _mapBridgeState(bridgeState);
-    } on PlatformException {
-      return EmbeddedRuntimeStatus.failed;
+      final map = _stringKeyMap(result);
+      return _mapBridgeState(map['state'] as String?);
     } on MissingPluginException {
       return EmbeddedRuntimeStatus.unsupported;
+    } on PlatformException {
+      return EmbeddedRuntimeStatus.failed;
+    } catch (_) {
+      return EmbeddedRuntimeStatus.failed;
     }
   }
 
@@ -108,12 +126,18 @@ class AndroidEmbeddedRuntimeController implements EmbeddedRuntimeController {
   EmbeddedRuntimeStatus _mapBridgeState(String? bridgeState) {
     switch (bridgeState) {
       case 'READY':
+      case 'DEGRADED':
         return EmbeddedRuntimeStatus.ready;
+      case 'INSTALLING':
+      case 'VERIFYING':
+      case 'REPAIRING':
+        return EmbeddedRuntimeStatus.installing;
       case 'STARTING':
         return EmbeddedRuntimeStatus.starting;
       case 'STOPPING':
         return EmbeddedRuntimeStatus.stopping;
       case 'STOPPED':
+      case 'INSTALLED':
         return EmbeddedRuntimeStatus.stopped;
       case 'NOT_INSTALLED':
         return EmbeddedRuntimeStatus.notInstalled;
@@ -125,12 +149,12 @@ class AndroidEmbeddedRuntimeController implements EmbeddedRuntimeController {
     }
   }
 
-  Map<String, dynamic> _convertMap(Map<Object?, Object?> result) {
+  Map<String, dynamic> _stringKeyMap(Object? value) {
+    if (value is! Map) return <String, dynamic>{};
     final map = <String, dynamic>{};
-    for (final entry in result.entries) {
+    for (final entry in value.entries) {
       map[entry.key.toString()] = entry.value;
     }
     return map;
   }
 }
-
