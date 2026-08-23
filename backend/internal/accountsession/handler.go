@@ -1,11 +1,14 @@
 package accountsession
 
 import (
+	"crypto/subtle"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/u-ai/backend/config"
 	"github.com/u-ai/backend/internal/auth"
 	"github.com/u-ai/backend/internal/runtimeidentity"
 	"github.com/u-ai/backend/pkg/comment/response"
@@ -61,6 +64,11 @@ func (h *Handler) Setup(c *gin.Context) {
 		return
 	}
 
+	if err := authorizeInitialAdminSetup(c); err != nil {
+		util.ErrorResponse(c, response.Forbidden, err.Error(), gin.H{"errorCode": "auth.setup_forbidden"})
+		return
+	}
+
 	clientType := detectClientType(c)
 	ip := c.ClientIP()
 	ua := c.Request.UserAgent()
@@ -111,6 +119,28 @@ func (h *Handler) Setup(c *gin.Context) {
 	}
 
 	util.SuccessResponse(c, result)
+}
+
+// authorizeInitialAdminSetup keeps local desktop bootstrap frictionless while making
+// network/cloud bootstrap fail closed. A Cloud Core operator must explicitly provide
+// AMITIA_SETUP_TOKEN (minimum 32 characters) and send the same value in the
+// X-Amitia-Setup-Token header. The token is never accepted from the URL/body so it is
+// less likely to leak through access logs, analytics, or browser history.
+func authorizeInitialAdminSetup(c *gin.Context) error {
+	if config.AppCfg == nil || config.AppCfg.Security.Mode != "network" {
+		return nil
+	}
+
+	expected := strings.TrimSpace(os.Getenv("AMITIA_SETUP_TOKEN"))
+	if len(expected) < 32 {
+		return fmt.Errorf("网络模式首次管理员初始化已禁用：请先设置至少 32 位的 AMITIA_SETUP_TOKEN")
+	}
+
+	provided := strings.TrimSpace(c.GetHeader("X-Amitia-Setup-Token"))
+	if len(provided) != len(expected) || subtle.ConstantTimeCompare([]byte(provided), []byte(expected)) != 1 {
+		return fmt.Errorf("首次管理员初始化凭据无效")
+	}
+	return nil
 }
 
 func (h *Handler) Login(c *gin.Context) {
