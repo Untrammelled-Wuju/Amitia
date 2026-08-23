@@ -5,16 +5,20 @@ import (
 )
 
 type ServiceRuntimeView struct {
-	ExtensionID    string
-	ModuleID       string
-	RuntimeType    string
-	Name           string
-	Description    string
-	EntryPoint     string
-	Env            map[string]string
-	Metadata       map[string]string
-	Enabled        bool
-	ExtensionState string
+	ExtensionID      string
+	ModuleID         string
+	RuntimeType      string
+	Name             string
+	Description      string
+	EntryPoint       string
+	ExecutablePath   string
+	ExecutableSHA256 string
+	Arguments        []string
+	IntegrityValue   string
+	Env              map[string]string
+	Metadata         map[string]string
+	Enabled          bool
+	ExtensionState   string
 }
 
 func (v ServiceRuntimeView) ToDefinitionID() string {
@@ -22,7 +26,7 @@ func (v ServiceRuntimeView) ToDefinitionID() string {
 }
 
 func (v ServiceRuntimeView) IsValidProcessService() bool {
-	return v.RuntimeType == ServiceRuntimeType && v.EntryPoint != ""
+	return IsValidServiceRuntimeType(v.RuntimeType) && v.EntryPoint != ""
 }
 
 type ServiceDefinitionSource interface {

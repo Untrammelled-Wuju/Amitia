@@ -33,10 +33,14 @@ func (m *DefinitionMapper) MapToDefinition(view ServiceRuntimeView) (*trusted_se
 	}
 
 	definitionID := view.ToDefinitionID()
-
-	envCopy := make(map[string]string, len(view.Env))
-	for k, v := range view.Env {
-		envCopy[k] = v
+	envCopy := cloneStringMap(view.Env)
+	executablePath := view.ExecutablePath
+	if executablePath == "" {
+		executablePath = view.EntryPoint
+	}
+	integrityValue := view.IntegrityValue
+	if integrityValue == "" && view.ExecutableSHA256 != "" {
+		integrityValue = "sha256:" + view.ExecutableSHA256
 	}
 
 	return &trusted_service.ServiceRuntimeDefinition{
@@ -48,11 +52,17 @@ func (m *DefinitionMapper) MapToDefinition(view ServiceRuntimeView) (*trusted_se
 		TrustLevel:  "trusted",
 		Executables: []trusted_service.PlatformExecutable{
 			{
-				Platform:    trusted_service.CurrentPlatform(),
-				Entry:       view.EntryPoint,
-				EnvTemplate: envCopy,
+				Platform:     trusted_service.CurrentPlatform(),
+				Path:         executablePath,
+				Sha256:       view.ExecutableSHA256,
+				Entry:        view.EntryPoint,
+				ArgsTemplate: append([]string(nil), view.Arguments...),
+				EnvTemplate:  envCopy,
 				Signature: trusted_service.BinarySignature{
-					Trusted: true,
+					Algorithm: "sha256-integrity",
+					Value:     integrityValue,
+					Signer:    view.ExtensionID,
+					Trusted:   true,
 				},
 			},
 		},
@@ -92,7 +102,7 @@ func (m *DefinitionMapper) MapToDefinition(view ServiceRuntimeView) (*trusted_se
 			LoopbackOnly:   false,
 		},
 		ManifestHash:      computeManifestHash(view),
-		DefinitionVersion: 1,
+		DefinitionVersion: 2,
 		AutoStart:         false,
 		AllowedNamespaces: []string{},
 	}, nil
@@ -101,7 +111,6 @@ func (m *DefinitionMapper) MapToDefinition(view ServiceRuntimeView) (*trusted_se
 func (m *DefinitionMapper) MapToViews(views []ServiceRuntimeView) ([]*trusted_service.ServiceRuntimeDefinition, []error) {
 	var defs []*trusted_service.ServiceRuntimeDefinition
 	var errs []error
-
 	for _, view := range views {
 		def, err := m.MapToDefinition(view)
 		if err != nil {
@@ -110,7 +119,6 @@ func (m *DefinitionMapper) MapToViews(views []ServiceRuntimeView) ([]*trusted_se
 		}
 		defs = append(defs, def)
 	}
-
 	return defs, errs
 }
 
@@ -120,8 +128,13 @@ func computeManifestHash(view ServiceRuntimeView) string {
 	h.Write([]byte(view.ModuleID))
 	h.Write([]byte(view.RuntimeType))
 	h.Write([]byte(view.EntryPoint))
+	h.Write([]byte(view.ExecutablePath))
+	h.Write([]byte(view.ExecutableSHA256))
+	h.Write([]byte(view.IntegrityValue))
 	h.Write([]byte(view.Name))
-
+	for _, arg := range view.Arguments {
+		h.Write([]byte(arg))
+	}
 	envKeys := make([]string, 0, len(view.Env))
 	for k := range view.Env {
 		envKeys = append(envKeys, k)
@@ -131,7 +144,6 @@ func computeManifestHash(view ServiceRuntimeView) string {
 		h.Write([]byte(k))
 		h.Write([]byte(view.Env[k]))
 	}
-
 	return hex.EncodeToString(h.Sum(nil))
 }
 
@@ -151,9 +163,20 @@ func CanonicalizeEnv(env map[string]string) []string {
 	return result
 }
 
-const DesktopPetProtocol = "amitia.desktop.pet/1"
+func cloneStringMap(in map[string]string) map[string]string {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(in))
+	for k, v := range in {
+		out[k] = v
+	}
+	return out
+}
 
+const DesktopPetProtocol = "amitia.desktop.pet/1"
 const TrustedServiceProtocol = "amitia-trusted-service/1"
+const GameHostProtocol = "amitia-game-host/1"
 
 func resolveProtocol(view ServiceRuntimeView) string {
 	if view.Metadata != nil {

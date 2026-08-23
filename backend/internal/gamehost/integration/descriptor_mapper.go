@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	gamehostdomain "github.com/u-ai/backend/internal/gamehost/domain"
 	kerneldomain "github.com/u-ai/backend/internal/extension/kernel/domain"
+	gamehostdomain "github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
@@ -43,6 +43,13 @@ func (m *DefaultGamePluginContributionMapper) ToDescriptor(
 
 	// G38: ProtocolVersion 单一来源 protocol.ProtocolVersion (G13)
 	protocolVersion := protocol.ProtocolVersion
+	gameSpec, specErr := protocol.ParseGamePluginSpec(contribution.Definition)
+	if specErr != nil {
+		return gamehostdomain.PluginDescriptor{}, fmt.Errorf("parse game plugin spec: %w", specErr)
+	}
+	if err := gameSpec.Validate(); err != nil {
+		return gamehostdomain.PluginDescriptor{}, fmt.Errorf("validate game plugin spec: %w", err)
+	}
 
 	// 转换能力列表，从Contribution的Definition map中读取capabilities，如果没有则返回空
 	capabilities := make([]gamehostdomain.Capability, 0)
@@ -66,6 +73,15 @@ func (m *DefaultGamePluginContributionMapper) ToDescriptor(
 		}
 	}
 
+	metadata["gameProtocolVersion"] = gameSpec.GameProtocolVersion
+	metadata["runtimeModuleId"] = gameSpec.RuntimeModuleID
+	if gameSpec.GameID != "" {
+		metadata["gameId"] = gameSpec.GameID
+	}
+	if gameSpec.GameFamily != "" {
+		metadata["gameFamily"] = gameSpec.GameFamily
+	}
+
 	descriptor := gamehostdomain.PluginDescriptor{
 		ID:              pluginID,
 		ExtensionID:     string(extension.ID),
@@ -87,12 +103,12 @@ func (m *DefaultGamePluginContributionMapper) ToDescriptor(
 // isKernelPrivateMetadataKey 判断是否为Kernel私有敏感字段
 func isKernelPrivateMetadataKey(key string) bool {
 	privateKeys := map[string]struct{}{
-		"signature":       {},
-		"secret":          {},
-		"token":           {},
-		"install_path":    {},
-		"db_record_id":    {},
-		"internal_state":  {},
+		"signature":      {},
+		"secret":         {},
+		"token":          {},
+		"install_path":   {},
+		"db_record_id":   {},
+		"internal_state": {},
 	}
 	_, ok := privateKeys[key]
 	return ok

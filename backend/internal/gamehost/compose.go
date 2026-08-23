@@ -12,9 +12,11 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 	kernelpermission "github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/scope"
+	"github.com/u-ai/backend/internal/extension/kernel/script_host"
 	"github.com/u-ai/backend/internal/extension/kernel/secret"
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	ghTrustedService "github.com/u-ai/backend/internal/extension/kernel/trusted_service"
+	"github.com/u-ai/backend/internal/gamehost/agentbridge"
 	"github.com/u-ai/backend/internal/gamehost/channel"
 	"github.com/u-ai/backend/internal/gamehost/config"
 	"github.com/u-ai/backend/internal/gamehost/control"
@@ -48,6 +50,7 @@ type GameHostComposeOptions struct {
 	DataRoot            string
 	KernelSource        integration.KernelContributionSource
 	TrustedSupervisor   *ghTrustedService.ProcessSupervisor
+	NodeResolver        script_host.NodeEnvironmentResolver
 	EventService        *event.Service
 	HostAPIGateway      host_api.Gateway
 	ArchiveUpdater      upgrade.KernelArchiveUpdater
@@ -301,6 +304,8 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 			Supervisor:       opts.TrustedSupervisor,
 			DefinitionMapper: service_definition.NewDefinitionMapper(),
 			SecretRegistrar:  secretLifecycle,
+			ExtensionRoot:    opts.DataRoot,
+			NodeResolver:     opts.NodeResolver,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("compose runtime graph provisioner: %w", err)
@@ -386,6 +391,9 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 
 		if secretLifecycle == nil {
 			secretLifecycle = gamehostsecret.NewLifecycleOrchestrator(secretAdapter)
+		}
+		if runtimeProvisioner != nil {
+			runtimeProvisioner.SetSecretRegistrar(secretLifecycle)
 		}
 		secretSubscriptions = gamehostsecret.NewSubscriptionAdapter(secretAdapter)
 		if leaseAwareExecutor, ok := serviceExecutor.(runtime.SecretLeaseAwareServiceExecutor); ok {
@@ -727,6 +735,11 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		return nil, fmt.Errorf("compose recovery coordinator: %w", err)
 	}
 
+	gameAgentBridge, err := agentbridge.NewRuntimeAdapter(pluginReg, runtimeManager, topologyStore, controlPlane)
+	if err != nil {
+		return nil, fmt.Errorf("compose game agent bridge: %w", err)
+	}
+
 	container := &GameHostContainer{
 		DirectoryManager:         dirMgr,
 		CheckpointStore:          checkpointStore,
@@ -744,6 +757,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		ReadyGate:                readyGate,
 		ConnectionRegistry:       connReg,
 		ControlPlane:             controlPlane,
+		AgentBridge:              gameAgentBridge,
 		RPCDispatcher:            rpcDispatcher,
 		RPCLifecycle:             rpcLifecycle,
 		HostHandlerRegistry:      hostHandlers,

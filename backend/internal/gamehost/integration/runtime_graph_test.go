@@ -62,6 +62,7 @@ func makeTestPlugin(extensionID, pluginID string, entryPoint string) KernelGameP
 			Kind:        domain.ContributionKindGamePlugin,
 			Name:        domain.LocalizedText{Default: "Test Plugin"},
 			Definition: map[string]any{
+				"protocolVersion": "amitia-game-host/1",
 				"runtimeModuleId": "runtime-module",
 			},
 		},
@@ -198,7 +199,7 @@ func TestRuntimeGraphProvisioner_Reconcile_NoEntryPoint_FailClosed(t *testing.T)
 			ModuleID:    domain.ModuleID("game"),
 			ExtensionID: domain.ExtensionID("ext-a"),
 			Kind:        domain.ContributionKindGamePlugin,
-			Definition:  map[string]any{"runtimeModuleId": "runtime-module"},
+			Definition:  map[string]any{"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime-module"},
 		},
 	}
 
