@@ -12,9 +12,9 @@ const (
 )
 
 type EventPublishInput struct {
-	ChannelID string          `json:"channelId"`
-	EventID   string          `json:"eventId"`
-	Payload   json.RawMessage `json:"payload"`
+	ChannelID string                     `json:"channelId"`
+	EventID   string                     `json:"eventId"`
+	Payload   json.RawMessage            `json:"payload"`
 	Metadata  map[string]json.RawMessage `json:"metadata,omitempty"`
 }
 
@@ -28,4 +28,17 @@ func (c *Client) PublishEvent(ctx context.Context, input EventPublishInput, opts
 		payload["metadata"] = input.Metadata
 	}
 	return c.sendHostNotification(ctx, MethodEventPublish, payload, opts...)
+}
+
+func (c *Client) PublishGameEvent(ctx context.Context, event protocol.GameEvent, metadata map[string]json.RawMessage, opts ...MessageOption) (protocol.Envelope, error) {
+	payload, err := json.Marshal(event)
+	if err != nil {
+		return protocol.Envelope{}, err
+	}
+	return c.PublishEvent(ctx, EventPublishInput{
+		ChannelID: event.SessionID,
+		EventID:   protocol.EventIDGameEvent,
+		Payload:   payload,
+		Metadata:  metadata,
+	}, opts...)
 }
