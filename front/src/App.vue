@@ -130,9 +130,15 @@ onMounted(async () => {
   }
 });
 
-watch(() => extensionUIStore.snapshot?.providerVersion, () => {
-  syncProviderRoutes(router, extensionUIStore);
-});
+watch(
+  [
+    () => extensionUIStore.snapshot?.providers,
+    () => extensionUIStore.snapshot?.providerContext,
+  ],
+  () => {
+    syncProviderRoutes(router, extensionUIStore);
+  },
+);
 
 watch(
   [

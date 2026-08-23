@@ -374,3 +374,34 @@ func TestToExtensionDefinitionServiceRuntime(t *testing.T) {
 		t.Errorf("expected module type service, got %s", def.Modules[0].Type)
 	}
 }
+
+func TestToExtensionDefinitionDoesNotTrustManifestPublisherClaim(t *testing.T) {
+	m, err := Parse([]byte(`{
+		"manifestVersion": 2,
+		"extension": {"id": "com.example/nav", "name": {"default": "Nav"}, "version": "1.0.0"},
+		"publisher": {"id": "com.example", "displayName": "Example", "trustLevel": "trusted"},
+		"modules": [{
+			"id": "ui", "name": {"default": "UI"}, "type": "javascript",
+			"runtime": {"type": "javascript", "entryPoint": "index.js"},
+			"contributions": [{
+				"id": "nav-provider", "kind": "ui_provider", "name": {"default": "Navigation"},
+				"definition": {"providerId": "nav-provider", "capability": "app.navigation", "trustLevel": "trusted"}
+			}]
+		}],
+		"integrity": {"algorithm": "sha256", "contentTreeHash": "abc123"}
+	}`))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	def, err := m.ToExtensionDefinition()
+	if err != nil {
+		t.Fatalf("ToExtensionDefinition: %v", err)
+	}
+	if def.Publisher.TrustLevel != "unknown" {
+		t.Fatalf("manifest publisher trust must not become authoritative, got %q", def.Publisher.TrustLevel)
+	}
+	got := def.Modules[0].Contributions[0].Definition["trustLevel"]
+	if got != "unknown" {
+		t.Fatalf("ui provider trust must default to unknown, got %#v", got)
+	}
+}

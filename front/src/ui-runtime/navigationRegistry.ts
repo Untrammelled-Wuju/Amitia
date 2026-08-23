@@ -22,6 +22,8 @@ import {
 } from "@element-plus/icons-vue";
 import { useExtensionUIStore } from "@/stores/extensionUI";
 import type { UIProviderDefinition } from "@/ui-runtime/types";
+import { collectRegistryProviders } from "./providerCollection";
+import { effectiveExtensionRouteKeys, effectiveProviderRouteKeys, shadowsProtectedRoute } from "./providerRoutes";
 
 export interface UINavigationItem {
   id: string;
@@ -93,22 +95,46 @@ const builtinItems: UINavigationItem[] = [
   { id: "extensions", route: "/extensions", label: "扩展中心", icon: Menu, group: "extensions", order: 90, match: ["/extensions", "/kernel"] },
 ];
 
-function activeNavigationProviders(store: ReturnType<typeof useExtensionUIStore>) {
-  const providers = [
-    store.getResolvedProvider("app.navigation"),
-    store.getResolvedProvider("route.registry"),
-  ];
-  const seen = new Set<string>();
-  return providers.filter((provider): provider is UIProviderDefinition => {
-    if (!provider || !provider.enabled || provider.builtin || seen.has(provider.providerId)) return false;
-    seen.add(provider.providerId);
-    return true;
-  });
+function finiteNumber(value: unknown, fallback: number): number {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : fallback;
 }
 
-function readExtensionItems(store: ReturnType<typeof useExtensionUIStore>): UINavigationItem[] {
+function absolutePrefixes(value: unknown): string[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const prefixes = value
+    .map((item) => String(item).trim())
+    .filter((item) => item.startsWith("/") && item !== "/");
+  return prefixes.length > 0 ? prefixes : undefined;
+}
+
+function activeNavigationProviders(store: ReturnType<typeof useExtensionUIStore>): UIProviderDefinition[] {
+  const providers = [
+    ...collectRegistryProviders(store, "app.navigation"),
+    ...collectRegistryProviders(store, "route.registry"),
+  ];
+  const seen = new Set<string>();
+  return providers
+    .filter((provider) => {
+      if (seen.has(provider.providerId)) return false;
+      seen.add(provider.providerId);
+      return true;
+    })
+    .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0) || a.providerId.localeCompare(b.providerId));
+}
+
+/**
+ * Resolve additive navigation contributions from every enabled compatible
+ * provider. route.registry navigation items are shown only when their route won
+ * conflict resolution and is still backed by a live provider from the same extension.
+ */
+export function collectExtensionNavigationItems(
+  store: ReturnType<typeof useExtensionUIStore>,
+): UINavigationItem[] {
   const result: UINavigationItem[] = [];
   const seen = new Set<string>();
+  const effectiveRouteKeys = effectiveProviderRouteKeys(store);
+  const effectiveExtensionRoutes = effectiveExtensionRouteKeys(store);
   for (const provider of activeNavigationProviders(store)) {
     const raw = provider.metadata?.navigationItems;
     if (!Array.isArray(raw)) continue;
@@ -119,18 +145,28 @@ function readExtensionItems(store: ReturnType<typeof useExtensionUIStore>): UINa
       const route = String(row.route ?? "").trim();
       const label = String(row.label ?? "").trim();
       const key = `${provider.extensionId}:${id}`;
-      if (!id || !route.startsWith("/") || !label || !seen.add(key)) continue;
+      if (!id || !route.startsWith("/") || route === "/" || !label) continue;
+      if (provider.capability === "route.registry") {
+        if (!effectiveRouteKeys.has(`${provider.providerId}\u0000${route}`)) continue;
+      } else if (
+        !shadowsProtectedRoute(route) &&
+        !effectiveExtensionRoutes.has(`${provider.extensionId}\u0000${route}`)
+      ) {
+        continue;
+      }
+      if (!seen.add(key)) continue;
+      const group = String(row.group ?? `extension:${provider.extensionId}`).trim() || `extension:${provider.extensionId}`;
       result.push({
         id: key,
         route,
         label,
         icon: resolveNavigationIcon(String(row.icon ?? "extension")),
-        order: Number(row.order ?? 1000),
-        group: String(row.group ?? `extension:${provider.extensionId}`),
-        groupLabel: row.groupLabel ? String(row.groupLabel) : "扩展",
+        order: finiteNumber(row.order, 1000),
+        group,
+        groupLabel: row.groupLabel ? String(row.groupLabel).trim() : "扩展",
         groupIcon: resolveNavigationIcon(String(row.groupIcon ?? row.icon ?? "extension")),
-        match: Array.isArray(row.match) ? row.match.map(String) : undefined,
-        mobile: row.mobile === true,
+        match: absolutePrefixes(row.match ?? row.routePrefixes),
+        mobile: row.mobile === true || String(row.panel ?? "").trim() === "main",
         extensionId: provider.extensionId,
       });
     }
@@ -153,7 +189,7 @@ function applyIconProvider(store: ReturnType<typeof useExtensionUIStore>, items:
 export function useUINavigationRegistry() {
   const store = useExtensionUIStore();
   const items = computed<UINavigationItem[]>(() => {
-    const merged = applyIconProvider(store, [...builtinItems, ...readExtensionItems(store)]);
+    const merged = applyIconProvider(store, [...builtinItems, ...collectExtensionNavigationItems(store)]);
     return merged.sort((a, b) => a.order - b.order || a.id.localeCompare(b.id));
   });
   const groups = computed<UINavigationGroup[]>(() => {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/url"
 	"sort"
 	"strconv"
@@ -278,26 +279,126 @@ func validateProviderMetadata(d ProviderDefinition) error {
 		}
 		return rows, nil
 	}
+	optionalString := func(row map[string]any, name string) error {
+		value, ok := row[name]
+		if !ok || value == nil {
+			return nil
+		}
+		if _, ok := value.(string); !ok {
+			return fmt.Errorf("ui_provider: %s must be a string", name)
+		}
+		return nil
+	}
+	optionalInteger := func(row map[string]any, name string) error {
+		value, ok := row[name]
+		if !ok || value == nil {
+			return nil
+		}
+		switch number := value.(type) {
+		case float64:
+			if math.IsNaN(number) || math.IsInf(number, 0) || math.Trunc(number) != number {
+				return fmt.Errorf("ui_provider: %s must be a finite integer", name)
+			}
+		case float32:
+			f := float64(number)
+			if math.IsNaN(f) || math.IsInf(f, 0) || math.Trunc(f) != f {
+				return fmt.Errorf("ui_provider: %s must be a finite integer", name)
+			}
+		case int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64:
+		default:
+			return fmt.Errorf("ui_provider: %s must be a finite integer", name)
+		}
+		return nil
+	}
+	absoluteStringList := func(row map[string]any, name string) error {
+		value, ok := row[name]
+		if !ok || value == nil {
+			return nil
+		}
+		items, ok := value.([]any)
+		if !ok {
+			return fmt.Errorf("ui_provider: %s must be an array", name)
+		}
+		for _, item := range items {
+			text, ok := item.(string)
+			if !ok {
+				return fmt.Errorf("ui_provider: %s entries must be non-root absolute routes", name)
+			}
+			value := strings.TrimSpace(text)
+			if value == "" || value == "/" || !strings.HasPrefix(value, "/") ||
+				strings.ContainsAny(value, "?#%\\") || strings.IndexByte(value, 0) >= 0 {
+				return fmt.Errorf("ui_provider: %s entries must be non-root absolute routes", name)
+			}
+			for _, segment := range strings.Split(strings.TrimPrefix(value, "/"), "/") {
+				if segment == "" || segment == "." || segment == ".." || strings.HasPrefix(segment, ":") || strings.Contains(segment, "*") {
+					return fmt.Errorf("ui_provider: %s entries must be concrete route prefixes", name)
+				}
+			}
+		}
+		return nil
+	}
+	field := func(row map[string]any, name string) string {
+		value, exists := row[name]
+		if !exists || value == nil {
+			return ""
+		}
+		return strings.TrimSpace(fmt.Sprint(value))
+	}
+	safeRoutePath := func(raw string, allowParameters bool) bool {
+		value := strings.TrimSpace(raw)
+		if value == "" || value == "/" || !strings.HasPrefix(value, "/") ||
+			strings.ContainsAny(value, "?#%\\") || strings.IndexByte(value, 0) >= 0 {
+			return false
+		}
+		segments := strings.Split(strings.TrimPrefix(value, "/"), "/")
+		if len(segments) == 0 || segments[0] == "" || strings.HasPrefix(segments[0], ":") || strings.Contains(segments[0], "*") {
+			return false
+		}
+		for _, segment := range segments {
+			if segment == "" || segment == "." || segment == ".." {
+				return false
+			}
+			if !allowParameters && (strings.HasPrefix(segment, ":") || strings.Contains(segment, "*")) {
+				return false
+			}
+		}
+		return true
+	}
 
+	routePaths := map[string]struct{}{}
 	if d.Capability == CapabilityRouteRegistry {
 		routes, err := arrayField("routes")
 		if err != nil {
 			return err
 		}
+		seenIDs := map[string]struct{}{}
 		for _, raw := range routes {
 			row, ok := raw.(map[string]any)
 			if !ok {
 				return errors.New("ui_provider: route.registry metadata.routes entries must be objects")
 			}
-			field := func(name string) string {
-				value, exists := row[name]
-				if !exists || value == nil {
-					return ""
-				}
-				return strings.TrimSpace(fmt.Sprint(value))
+			id := field(row, "id")
+			path := field(row, "path")
+			providerID := field(row, "providerId")
+			if id == "" || providerID == "" || !safeRoutePath(path, true) {
+				return errors.New("ui_provider: route.registry routes require id, safe extension path and providerId")
 			}
-			if field("id") == "" || field("path") == "" || field("providerId") == "" {
-				return errors.New("ui_provider: route.registry routes require id, path and providerId")
+			if _, exists := seenIDs[id]; exists {
+				return fmt.Errorf("ui_provider: duplicate route.registry route id %q", id)
+			}
+			if _, exists := routePaths[path]; exists {
+				return fmt.Errorf("ui_provider: duplicate route.registry path %q", path)
+			}
+			seenIDs[id] = struct{}{}
+			routePaths[path] = struct{}{}
+			if capability := field(row, "capability"); capability != "" && !Capability(capability).Valid() {
+				return fmt.Errorf("ui_provider: route.registry route %s has unsupported capability %q", id, capability)
+			}
+			if err := optionalString(row, "title"); err != nil {
+				return err
+			}
+			if err := optionalInteger(row, "priority"); err != nil {
+				return err
 			}
 		}
 	}
@@ -306,20 +407,51 @@ func validateProviderMetadata(d ProviderDefinition) error {
 		if err != nil {
 			return err
 		}
+		seenIDs := map[string]struct{}{}
 		for _, raw := range items {
 			row, ok := raw.(map[string]any)
 			if !ok {
 				return errors.New("ui_provider: navigationItems entries must be objects")
 			}
-			field := func(name string) string {
-				value, exists := row[name]
-				if !exists || value == nil {
-					return ""
-				}
-				return strings.TrimSpace(fmt.Sprint(value))
+			id := field(row, "id")
+			label := field(row, "label")
+			route := field(row, "route")
+			if id == "" || label == "" || !safeRoutePath(route, false) {
+				return errors.New("ui_provider: navigationItems require id, label and concrete absolute route")
 			}
-			if field("id") == "" || field("label") == "" || !strings.HasPrefix(field("route"), "/") {
-				return errors.New("ui_provider: navigationItems require id, label and absolute route")
+			if _, exists := seenIDs[id]; exists {
+				return fmt.Errorf("ui_provider: duplicate navigationItems id %q", id)
+			}
+			seenIDs[id] = struct{}{}
+			if d.Capability == CapabilityRouteRegistry {
+				if _, exists := routePaths[route]; !exists {
+					return fmt.Errorf("ui_provider: route.registry navigation item %s references undeclared route %q", id, route)
+				}
+			}
+			for _, name := range []string{"icon", "group", "groupLabel", "groupIcon"} {
+				if err := optionalString(row, name); err != nil {
+					return err
+				}
+			}
+			if err := optionalInteger(row, "order"); err != nil {
+				return err
+			}
+			if value, exists := row["mobile"]; exists && value != nil {
+				if _, ok := value.(bool); !ok {
+					return errors.New("ui_provider: navigationItems mobile must be a boolean")
+				}
+			}
+			if value, exists := row["panel"]; exists && value != nil {
+				panel, ok := value.(string)
+				if !ok || (panel != "main" && panel != "more") {
+					return errors.New("ui_provider: navigationItems panel must be main or more")
+				}
+			}
+			if err := absoluteStringList(row, "match"); err != nil {
+				return err
+			}
+			if err := absoluteStringList(row, "routePrefixes"); err != nil {
+				return err
 			}
 		}
 	}

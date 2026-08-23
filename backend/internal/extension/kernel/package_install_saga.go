@@ -289,6 +289,7 @@ func (r *Runtime) ExecutePackageInstall(ctx context.Context, request PackageInst
 	if err != nil {
 		return fail(StepBuildCandidateDefinitions, err, "")
 	}
+	bindAuthoritativePublisherTrust(&definition, preview.TrustDecision)
 	if err := step(4, StepBuildCandidateDefinitions, "completed", "{}", ""); err != nil {
 		return fail(StepBuildCandidateDefinitions, err, "")
 	}

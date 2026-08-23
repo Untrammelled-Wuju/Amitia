@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/app_routes.dart';
 import 'ui_provider.dart';
 import 'ui_icon_registry.dart';
+import 'ui_route_registry.dart';
 
 enum UINavigationPanel { main, more }
 
@@ -212,6 +213,8 @@ abstract final class UINavigationRegistry {
         return priority != 0 ? priority : a.providerId.compareTo(b.providerId);
       });
 
+    final effectiveRoutes = effectiveProviderRouteKeys(snapshot);
+    final effectiveExtensionRoutes = effectiveExtensionRouteKeys(snapshot);
     final seenIds = <String>{};
     for (final provider in sources) {
       final raw = provider.metadata['navigationItems'];
@@ -223,9 +226,21 @@ abstract final class UINavigationRegistry {
         final label = (row['label'] ?? '').toString().trim();
         final route = (row['route'] ?? '').toString().trim();
         final compositeId = '${provider.extensionId}:$id';
-        if (id.isEmpty || label.isEmpty || !route.startsWith('/') || !seenIds.add(compositeId)) {
+        if (id.isEmpty ||
+            label.isEmpty ||
+            !route.startsWith('/') ||
+            route == '/') {
           continue;
         }
+        if (provider.capability == UICapability.routeRegistry) {
+          if (!effectiveRoutes.contains('${provider.providerId}\u0000$route')) continue;
+        } else if (!isProtectedProviderRoutePath(route) &&
+            !effectiveExtensionRoutes.contains('${provider.extensionId}\u0000$route')) {
+          continue;
+        }
+        if (!seenIds.add(compositeId)) continue;
+        final rawOrder = row['order'];
+        final rawPrefixes = row['routePrefixes'] ?? row['match'];
         final baseIcon = UIIconRegistry.iconFromName((row['icon'] ?? 'extension').toString());
         items.add(
           UINavigationItem(
@@ -233,14 +248,17 @@ abstract final class UINavigationRegistry {
             label: label,
             route: route,
             icon: baseIcon,
-            panel: (row['panel'] ?? 'more').toString() == 'main'
+            panel: (row['panel'] ?? '').toString() == 'main' ||
+                    (row['panel'] == null && row['mobile'] == true)
                 ? UINavigationPanel.main
                 : UINavigationPanel.more,
-            group: (row['group'] ?? '扩展').toString(),
-            order: (row['order'] as num?)?.toInt() ?? 1000,
-            routePrefixes: ((row['routePrefixes'] as List?) ?? const <dynamic>[])
-                .map((e) => e.toString())
-                .where((e) => e.startsWith('/'))
+            group: (row['group'] ?? '扩展').toString().trim().isEmpty
+                ? '扩展'
+                : (row['group'] ?? '扩展').toString().trim(),
+            order: rawOrder is num ? rawOrder.toInt() : 1000,
+            routePrefixes: (rawPrefixes is List ? rawPrefixes : const <dynamic>[])
+                .map((e) => e.toString().trim())
+                .where((e) => e.startsWith('/') && e != '/')
                 .toList(),
             extensionId: provider.extensionId,
           ),
