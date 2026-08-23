@@ -8,8 +8,10 @@ $workspace = Split-Path -Parent $scriptDir
 $parentDir = Split-Path $workspace -Parent
 $folderName = Split-Path $workspace -Leaf
 $outputFile = Join-Path $workspace "$OutputName.tar.gz"
+$tempFile = "$env:TEMP\$OutputName.tar.gz"
 
 if (Test-Path $outputFile) { Remove-Item $outputFile -Force }
+if (Test-Path $tempFile) { Remove-Item $tempFile -Force }
 
 $excludes = @(
     "--exclude=node_modules"
@@ -24,11 +26,9 @@ $excludes = @(
     "--exclude=mobile_app/android/app/build"
     "--exclude=mobile_app/android/amitia-runtime/build"
     "--exclude=mobile_app/android/.gradle"
-    # Flutter/Android 本地生成物：不得进入源码包
     "--exclude=$folderName/mobile_app/windows/flutter/ephemeral"
     "--exclude=$folderName/mobile_app/.flutter-plugins-dependencies"
     "--exclude=$folderName/mobile_app/android/local.properties"
-    "--exclude=$folderName/mobile_app/android/.gradle"
     "--exclude=$folderName/mobile_app/android/.cxx"
     "--exclude=$folderName/mobile_app/android/app/.cxx"
     "--exclude=$folderName/mobile_app/android/amitia-runtime/.cxx"
@@ -45,8 +45,6 @@ $excludes = @(
     "--exclude=qdrant/storage"
     "--exclude=surrealdb/surreal.exe"
     "--exclude=surrealdb-data-temp"
-    "--exclude=desktop/release"
-    "--exclude=desktop/build"
     "--exclude=desktop/dist-types"
     "--exclude=desktop/resources/core"
     "--exclude=sdk/plugin-sdk/dist"
@@ -65,7 +63,6 @@ $excludes = @(
     "--exclude=.publish-config.json"
     "--exclude=backend/data"
     "--exclude=backend/cmd/data"
-    # 仅排除仓库根运行时 data；不要使用 --exclude=data，否则会吞掉 features/*/data 源码目录
     "--exclude=$folderName/data"
     "--exclude=logs"
     "--exclude=runtime/out"
@@ -114,11 +111,16 @@ Set-Location $parentDir
 Write-Host "Packing source: $folderName -> $outputFile"
 $startTime = Get-Date
 
-& tar -czf $outputFile @excludes $folderName
+& tar -czf $tempFile @excludes $folderName
 
-$elapsed = (Get-Date) - $startTime
-$size = (Get-Item $outputFile).Length
-
-Write-Host "Done in $($elapsed.ToString('mm\:ss'))"
-Write-Host "Output: $outputFile"
-Write-Host "Size: $([math]::Round($size / 1MB, 2)) MB"
+if ($LASTEXITCODE -eq 0) {
+    Move-Item $tempFile $outputFile -Force
+    $elapsed = (Get-Date) - $startTime
+    $size = (Get-Item $outputFile).Length
+    Write-Host "Done in $($elapsed.ToString('mm\:ss'))"
+    Write-Host "Output: $outputFile"
+    Write-Host "Size: $([math]::Round($size / 1MB, 2)) MB"
+} else {
+    Write-Host "tar failed with exit code: $LASTEXITCODE"
+    if (Test-Path $tempFile) { Remove-Item $tempFile -Force }
+}
