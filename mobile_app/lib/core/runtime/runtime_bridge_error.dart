@@ -24,6 +24,11 @@ class RuntimeBridgeError {
     );
   }
 
+  static RuntimeBridgeError? tryFromMap(Map<String, dynamic>? map) {
+    if (map == null) return null;
+    return RuntimeBridgeError.fromMap(map);
+  }
+
   @override
   bool operator ==(Object other) =>
       identical(this, other) ||
