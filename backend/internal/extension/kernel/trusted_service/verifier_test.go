@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 )
 
@@ -354,5 +355,71 @@ func TestBinaryVerifierAllowMissingFile(t *testing.T) {
 	v.allowMissingFile = true
 	if !v.allowMissingFile {
 		t.Fatal("allowMissingFile should be settable")
+	}
+}
+
+func TestVerifyAcceptsRequiredDependencyWithMatchingHash(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits differ on Windows")
+	}
+	root := t.TempDir()
+	exePath := filepath.Join(root, "runner")
+	exeContent := []byte("runner")
+	if err := os.WriteFile(exePath, exeContent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	depPath := filepath.Join(root, "entry.js")
+	depContent := []byte("console.log('ok')")
+	if err := os.WriteFile(depPath, depContent, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	exeHash := sha256.Sum256(exeContent)
+	depHash := sha256.Sum256(depContent)
+
+	exe := &PlatformExecutable{
+		Path:      exePath,
+		Sha256:    hex.EncodeToString(exeHash[:]),
+		Signature: BinarySignature{Trusted: true, Value: "sig"},
+		Dependencies: []LibraryDep{{
+			Name:     "entrypoint",
+			Path:     depPath,
+			Sha256:   hex.EncodeToString(depHash[:]),
+			Required: true,
+		}},
+	}
+	if err := NewBinaryVerifier().Verify(context.Background(), exe, ""); err != nil {
+		t.Fatalf("unexpected dependency verification error: %v", err)
+	}
+}
+
+func TestVerifyRejectsRequiredDependencyHashMismatch(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("permission bits differ on Windows")
+	}
+	root := t.TempDir()
+	exePath := filepath.Join(root, "runner")
+	exeContent := []byte("runner")
+	if err := os.WriteFile(exePath, exeContent, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	depPath := filepath.Join(root, "entry.js")
+	if err := os.WriteFile(depPath, []byte("tampered"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	exeHash := sha256.Sum256(exeContent)
+
+	exe := &PlatformExecutable{
+		Path:      exePath,
+		Sha256:    hex.EncodeToString(exeHash[:]),
+		Signature: BinarySignature{Trusted: true, Value: "sig"},
+		Dependencies: []LibraryDep{{
+			Name:     "entrypoint",
+			Path:     depPath,
+			Sha256:   strings.Repeat("0", 64),
+			Required: true,
+		}},
+	}
+	if err := NewBinaryVerifier().Verify(context.Background(), exe, ""); err == nil {
+		t.Fatal("expected dependency hash mismatch")
 	}
 }

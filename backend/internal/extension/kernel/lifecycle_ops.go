@@ -70,6 +70,10 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 	if err != nil {
 		return fmt.Errorf("kernel: list modules: %w", err)
 	}
+	gameHostOwnedModules, err := r.gameHostOwnedRuntimeModules(ctx, extID)
+	if err != nil {
+		return fmt.Errorf("kernel: resolve game runtime ownership: %w", err)
+	}
 
 	moduleSnapshots := make([]moduleEnablementSnapshot, 0, len(modules))
 	for _, mod := range modules {
@@ -126,6 +130,9 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 	var startedInstanceIDs []string
 	if r.container.RuntimeSupervisor != nil {
 		for _, mod := range modules {
+			if isGameHostOwnedRuntimeModule(gameHostOwnedModules, mod.ID) {
+				continue
+			}
 			if mod.Runtime != nil && mod.Runtime.Type != "" && mod.Runtime.Type != domain.RuntimeTypeBuiltin {
 				defID := runtime_supervisor.BuildRuntimeDefinitionID(extensionID, string(mod.ID), mod.Runtime.Type)
 				spec := runtime_supervisor.InstanceSpec{
@@ -346,7 +353,18 @@ func (r *Runtime) Enable(ctx context.Context, extensionID string) error {
 	}
 	r.logEnableStep(operationID, extensionID, "register_ui", "succeeded", nil)
 	r.persistLifecycleStep(ctx, operationID, "register_ui", LifecycleStepSucceeded, nil)
-	r.updateLifecycleOperationStatus(ctx, operationID, LifecycleOperationCompleted, "register_ui", nil)
+
+	if err := r.reconcileGameHostExtension(ctx, extensionID); err != nil {
+		tx.rollback(ctx)
+		_ = r.reconcileGameHostExtension(ctx, extensionID)
+		r.logEnableStep(operationID, extensionID, "reconcile_game_host", "failed", err)
+		r.persistLifecycleStep(ctx, operationID, "reconcile_game_host", LifecycleStepFailed, err)
+		r.updateLifecycleOperationStatus(ctx, operationID, LifecycleOperationCompensating, "reconcile_game_host", err)
+		return fmt.Errorf("kernel: reconcile game host after enable: %w", err)
+	}
+	r.logEnableStep(operationID, extensionID, "reconcile_game_host", "succeeded", nil)
+	r.persistLifecycleStep(ctx, operationID, "reconcile_game_host", LifecycleStepSucceeded, nil)
+	r.updateLifecycleOperationStatus(ctx, operationID, LifecycleOperationCompleted, "reconcile_game_host", nil)
 
 	if r.container != nil && r.container.UIHostNotifier != nil {
 		r.container.UIHostNotifier.BroadcastExtensionChange("extension_enabled", extensionID, nil)
@@ -632,6 +650,10 @@ func (r *Runtime) Disable(ctx context.Context, extensionID string) error {
 	if err != nil {
 		return fmt.Errorf("kernel: list modules: %w", err)
 	}
+	gameHostOwnedModules, err := r.gameHostOwnedRuntimeModules(ctx, extID)
+	if err != nil {
+		return fmt.Errorf("kernel: resolve game runtime ownership: %w", err)
+	}
 
 	extSubject := enablement.StateSubject{Kind: enablement.SubjectExtension, ID: extensionID}
 	var disableErrs []error
@@ -663,6 +685,9 @@ func (r *Runtime) Disable(ctx context.Context, extensionID string) error {
 	var stopErrs []error
 	if r.container.RuntimeSupervisor != nil {
 		for _, mod := range modules {
+			if isGameHostOwnedRuntimeModule(gameHostOwnedModules, mod.ID) {
+				continue
+			}
 			if mod.Runtime != nil && mod.Runtime.Type != "" && mod.Runtime.Type != domain.RuntimeTypeBuiltin {
 				defID := runtime_supervisor.BuildRuntimeDefinitionID(extensionID, string(mod.ID), mod.Runtime.Type)
 				snap := r.container.RuntimeSupervisor.Snapshot(ctx, defID)
@@ -719,6 +744,15 @@ func (r *Runtime) Disable(ctx context.Context, extensionID string) error {
 		return fmt.Errorf("kernel: update installation: %w", err)
 	}
 
+	if err := r.reconcileGameHostExtension(ctx, extensionID); err != nil {
+		inst.EnablementState = domain.EnablementPartiallyDisabled
+		inst.UpdatedAt = time.Now().UTC()
+		if putErr := r.container.InstallationRepository.PutInstallation(ctx, inst); putErr != nil {
+			return errors.Join(fmt.Errorf("kernel: reconcile game host after disable: %w", err), fmt.Errorf("persist partially disabled state: %w", putErr))
+		}
+		return fmt.Errorf("kernel: reconcile game host after disable: %w", err)
+	}
+
 	if r.container.UIHostNotifier != nil {
 		r.container.UIHostNotifier.BroadcastExtensionChange("extension_disabled", extensionID, nil)
 		r.container.UIHostNotifier.BroadcastExtensionChange("extension_generation_changed", extensionID, map[string]interface{}{"generation": newGeneration})
@@ -740,11 +774,24 @@ func (r *Runtime) Uninstall(ctx context.Context, extensionID string) error {
 		version = inst.InstalledVersion.String()
 	}
 
+	gameHostOwnedModules, ownershipErr := r.gameHostOwnedRuntimeModules(ctx, extID)
+	if ownershipErr != nil {
+		return fmt.Errorf("kernel: resolve game runtime ownership: %w", ownershipErr)
+	}
+	if r.container.GameHost != nil {
+		if err := r.container.GameHost.QuiesceExtension(ctx, extensionID); err != nil {
+			return fmt.Errorf("kernel: quiesce game runtime before uninstall: %w", err)
+		}
+	}
+
 	if r.container.RuntimeSupervisor != nil {
 		uninstallModules, modErr := r.container.ModuleRepository.ListModules(ctx, extID)
 		if modErr == nil {
 			var stopErrs []error
 			for _, mod := range uninstallModules {
+				if isGameHostOwnedRuntimeModule(gameHostOwnedModules, mod.ID) {
+					continue
+				}
 				if mod.Runtime != nil && mod.Runtime.Type != "" && mod.Runtime.Type != domain.RuntimeTypeBuiltin {
 					defID := runtime_supervisor.BuildRuntimeDefinitionID(extensionID, string(mod.ID), mod.Runtime.Type)
 					snap := r.container.RuntimeSupervisor.Snapshot(ctx, defID)
@@ -897,6 +944,10 @@ func (r *Runtime) Uninstall(ctx context.Context, extensionID string) error {
 	r.mu.Lock()
 	delete(r.installed, extensionID)
 	r.mu.Unlock()
+
+	if err := r.reconcileGameHostExtension(ctx, extensionID); err != nil {
+		return fmt.Errorf("kernel: reconcile game host after uninstall: %w", err)
+	}
 
 	if r.container.UIHostNotifier != nil {
 		r.container.UIHostNotifier.BroadcastExtensionChange("extension_uninstalled", extensionID, nil)

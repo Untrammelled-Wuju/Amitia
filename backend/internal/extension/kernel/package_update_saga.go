@@ -387,6 +387,11 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	if err := r.recordPackageVersionAfterOperation(ctx, op.OperationID, "update", confirmed.session.ExtensionID, confirmed.session.Version, confirmed.artifact.ArtifactID, targetGeneration.GenerationPath, targetGeneration.Current.TreeHash, confirmed.artifact.ArchiveHash, confirmed.artifact.ManifestHash, confirmed.artifact.ContentTreeHash, targetGeneration.Current.GenerationID, guard); err != nil {
 		return KernelInstallResult{}, r.failPackageUpdateOperation(op.OperationID, "record_version", err, compensation, guard)
 	}
+	if err := r.reconcileGameHostExtension(ctx, confirmed.session.ExtensionID); err != nil {
+		failErr := r.failPackageUpdateOperation(op.OperationID, "reconcile_game_host", err, compensation, guard)
+		_ = r.reconcileGameHostExtension(context.Background(), confirmed.session.ExtensionID)
+		return KernelInstallResult{}, failErr
+	}
 	if err := r.FinalizePackageOperation(ctx, op.OperationID, confirmed.session.ExtensionID, leaseGuard, guard); err != nil {
 		if compensation != nil {
 			_ = compensation.run()

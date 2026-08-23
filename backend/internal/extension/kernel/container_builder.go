@@ -1668,15 +1668,16 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	}
 
 	gameHost, err := gamehost.ComposeGameHost(gamehost.GameHostComposeOptions{
-		DataRoot:          b.extRoot,
-		KernelSource:      kernelSource,
-		TrustedSupervisor: trustedSupervisor,
-		NodeResolver:      nodeResolver,
-		EventService:      eventSvc,
-		HostAPIGateway:    hostAPIGateway,
-		SecretBroker:      kernelSecretBroker,
-		PermissionBroker:  permBroker,
-		ArchiveUpdater:    archiveUpdater,
+		DataRoot:           b.extRoot,
+		KernelSource:       kernelSource,
+		TrustedSupervisor:  trustedSupervisor,
+		NodeResolver:       nodeResolver,
+		GenerationResolver: newGameHostInstalledGenerationResolver(packageGenerationStore),
+		EventService:       eventSvc,
+		HostAPIGateway:     hostAPIGateway,
+		SecretBroker:       kernelSecretBroker,
+		PermissionBroker:   permBroker,
+		ArchiveUpdater:     archiveUpdater,
 
 		KernelPermissionBroker:        permBroker,
 		KernelPermissionSnapshotStore: permSnapshotStore,

@@ -128,6 +128,49 @@ func (v *BinaryVerifier) Verify(ctx context.Context, exe *PlatformExecutable, ba
 	if exe.Signature.Value == "" {
 		return fmt.Errorf("%w: missing signature value", ErrInvalidSignature)
 	}
+	if err := v.verifyDependencies(exe, basePath); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (v *BinaryVerifier) verifyDependencies(exe *PlatformExecutable, basePath string) error {
+	for i := range exe.Dependencies {
+		dep := exe.Dependencies[i]
+		path := strings.TrimSpace(dep.Path)
+		if path == "" {
+			if dep.Required {
+				return fmt.Errorf("trusted_service: required dependency %q missing path", dep.Name)
+			}
+			continue
+		}
+		if !filepath.IsAbs(path) && basePath != "" {
+			path = filepath.Join(basePath, path)
+		}
+		info, err := os.Stat(path)
+		if err != nil {
+			if os.IsNotExist(err) && !dep.Required {
+				continue
+			}
+			return fmt.Errorf("trusted_service: dependency %q unavailable: %w", dep.Name, err)
+		}
+		if info.IsDir() {
+			return fmt.Errorf("trusted_service: dependency %q is a directory: %s", dep.Name, path)
+		}
+		if strings.TrimSpace(dep.Sha256) == "" {
+			if dep.Required {
+				return fmt.Errorf("trusted_service: required dependency %q missing sha256", dep.Name)
+			}
+			continue
+		}
+		hash, err := v.hashFile(path)
+		if err != nil {
+			return fmt.Errorf("trusted_service: hash dependency %q: %w", dep.Name, err)
+		}
+		if hash != dep.Sha256 {
+			return fmt.Errorf("%w: dependency %q expected %s got %s", ErrBinaryHashMismatch, dep.Name, dep.Sha256, hash)
+		}
+	}
 	return nil
 }
 

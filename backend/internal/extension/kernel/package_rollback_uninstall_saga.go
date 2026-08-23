@@ -1064,6 +1064,12 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 	if err := r.container.PackageRepository.SetOperationGenerationEvidence(ctx, op.OperationID, currentPointer.GenerationID, "", packageGenerationJSON(currentPointer), uninstallGuard); err != nil {
 		return op, err
 	}
+	if r.container.GameHost != nil {
+		if err := r.container.GameHost.QuiesceExtension(ctx, extensionID); err != nil {
+			persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "failed", "quiesce_game_runtime", "PACKAGE_GAME_RUNTIME_QUIESCE_FAILED", err.Error(), true, uninstallGuard)
+			return op, errors.Join(fmt.Errorf("kernel: quiesce game runtime before uninstall: %w", err), persistErr)
+		}
+	}
 	if err := leaseGuard.AssertAlive(ctx); err != nil {
 		persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", "renew_lease", "PACKAGE_LEASE_LOST", err.Error(), false, uninstallGuard)
 		return op, errors.Join(err, persistErr)
@@ -1169,6 +1175,10 @@ func (r *Runtime) ExecutePackageUninstall(ctx context.Context, req ExecutePackag
 	if err := r.completeSimplePackageStep(ctx, op.OperationID, "cleanup_kernel_repositories", 3, uninstallGuard); err != nil {
 		persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", "cleanup_kernel_repositories", "PACKAGE_RECOVERY_REQUIRED", err.Error(), false, uninstallGuard)
 		return op, errors.Join(err, persistErr)
+	}
+	if err := r.reconcileGameHostExtension(ctx, extensionID); err != nil {
+		persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", "reconcile_game_host", "PACKAGE_GAME_RUNTIME_RECONCILE_FAILED", err.Error(), false, uninstallGuard)
+		return op, errors.Join(fmt.Errorf("kernel: reconcile game host after uninstall repository cleanup: %w", err), persistErr)
 	}
 	if err := r.executeRemoveArtifactStep(ctx, op, preview, ArtifactPolicy(claims.ArtifactPolicy), uninstallGuard); err != nil {
 		persistErr := r.container.PackageRepository.SetOperation(context.Background(), op.OperationID, "requires_recovery", StepRemoveArtifact, "PACKAGE_UNINSTALL_ARTIFACT_REMOVAL_FAILED", err.Error(), false, uninstallGuard)
