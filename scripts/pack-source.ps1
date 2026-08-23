@@ -8,10 +8,12 @@ $workspace = Split-Path -Parent $scriptDir
 $parentDir = Split-Path $workspace -Parent
 $folderName = Split-Path $workspace -Leaf
 $outputFile = Join-Path $workspace "$OutputName.tar.gz"
-$tempFile = "$env:TEMP\$OutputName.tar.gz"
+$tempTar = "$env:TEMP\$OutputName.tar"
+$tempGz = "$env:TEMP\$OutputName.tar.gz"
 
 if (Test-Path $outputFile) { Remove-Item $outputFile -Force }
-if (Test-Path $tempFile) { Remove-Item $tempFile -Force }
+if (Test-Path $tempTar) { Remove-Item $tempTar -Force }
+if (Test-Path $tempGz) { Remove-Item $tempGz -Force }
 
 $excludes = @(
     "--exclude=node_modules"
@@ -63,6 +65,17 @@ $excludes = @(
     "--exclude=.publish-config.json"
     "--exclude=backend/data"
     "--exclude=backend/cmd/data"
+    "--exclude=backend/surrealdb/data"
+    "--exclude=backend/surrealdb/data.sdb"
+    "--exclude=backend/qdrant/storage"
+    "--exclude=backend/logs"
+    "--exclude=backend/AmitiaData"
+    "--exclude=backend/bin"
+    "--exclude=backend/target"
+    "--exclude=backend/node/node.exe"
+    "--exclude=backend/sidecar/node_modules"
+    "--exclude=backend/qq-sidecar/node_modules"
+    "--exclude=backend/qq-sidecar/data"
     "--exclude=$folderName/data"
     "--exclude=logs"
     "--exclude=runtime/out"
@@ -111,16 +124,81 @@ Set-Location $parentDir
 Write-Host "Packing source: $folderName -> $outputFile"
 $startTime = Get-Date
 
-& tar -czf $tempFile @excludes $folderName
+# Step 1: Create uncompressed tar
+Write-Host "Step 1: Creating uncompressed tar..."
+& tar -cf $tempTar @excludes $folderName
 
-if ($LASTEXITCODE -eq 0) {
-    Move-Item $tempFile $outputFile -Force
-    $elapsed = (Get-Date) - $startTime
-    $size = (Get-Item $outputFile).Length
-    Write-Host "Done in $($elapsed.ToString('mm\:ss'))"
-    Write-Host "Output: $outputFile"
-    Write-Host "Size: $([math]::Round($size / 1MB, 2)) MB"
-} else {
+if ($LASTEXITCODE -ne 0 -and $LASTEXITCODE -ne 1) {
     Write-Host "tar failed with exit code: $LASTEXITCODE"
-    if (Test-Path $tempFile) { Remove-Item $tempFile -Force }
+    if (Test-Path $tempTar) { Remove-Item $tempTar -Force }
+    exit 1
 }
+
+if (-not (Test-Path $tempTar)) {
+    Write-Host "tar did not create output file"
+    exit 1
+}
+
+$tarSize = (Get-Item $tempTar).Length
+Write-Host "Tar created: $([math]::Round($tarSize / 1MB, 2)) MB"
+
+# Step 2: Compress with Python (avoids Windows tar gzip truncation)
+Write-Host "Step 2: Compressing with Python..."
+python -c @"
+import gzip
+import shutil
+import sys
+
+src = r'$tempTar'
+dst = r'$tempGz'
+
+try:
+    with open(src, 'rb') as f_in:
+        with gzip.open(dst, 'wb', compresslevel=6) as f_out:
+            shutil.copyfileobj(f_in, f_out, length=1024*1024)
+    print('gzip compression complete')
+except Exception as e:
+    print(f'Error: {e}', file=sys.stderr)
+    sys.exit(1)
+"@
+
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "gzip compression failed"
+    if (Test-Path $tempTar) { Remove-Item $tempTar -Force }
+    if (Test-Path $tempGz) { Remove-Item $tempGz -Force }
+    exit 1
+}
+
+# Move to final location
+Move-Item $tempGz $outputFile -Force
+if (Test-Path $tempTar) { Remove-Item $tempTar -Force }
+
+# Step 3: Verify
+Write-Host "Step 3: Verifying archive..."
+$verifyResult = & tar -tzf $outputFile 2>&1
+if ($LASTEXITCODE -eq 0 -or $LASTEXITCODE -eq 1) {
+    $entries = ($verifyResult | Measure-Object -Line).Lines
+    Write-Host "Verified: $entries entries"
+    
+    $gcFound = $verifyResult | Select-String "game_center_api.dart"
+    if ($gcFound) {
+        Write-Host "game_center_api.dart: FOUND"
+    } else {
+        Write-Host "game_center_api.dart: MISSING!"
+    }
+    
+    $goFiles = ($verifyResult | Select-String "\.go$" | Measure-Object).Count
+    Write-Host ".go files: $goFiles"
+    
+    $dartFiles = ($verifyResult | Select-String "\.dart$" | Measure-Object).Count
+    Write-Host ".dart files: $dartFiles"
+} else {
+    Write-Host "Verification failed"
+}
+
+$elapsed = (Get-Date) - $startTime
+$size = (Get-Item $outputFile).Length
+Write-Host ""
+Write-Host "Done in $($elapsed.ToString('mm\:ss'))"
+Write-Host "Output: $outputFile"
+Write-Host "Size: $([math]::Round($size / 1MB, 2)) MB"
