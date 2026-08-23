@@ -2,8 +2,7 @@
   <div class="game-mode-page">
     <header class="page-head">
       <div class="page-copy">
-        <span class="eyebrow">GAME MODE</span>
-        <h1>游戏模式</h1>
+<h1>游戏模式</h1>
         <p>连接游戏后，让 Amitia 感知游戏状态、接管控制并执行任务。</p>
       </div>
       <div class="head-actions">
@@ -17,7 +16,7 @@
     <section class="current-game-card" :class="{ 'is-connected': !!activeRuntime?.connected }">
       <div class="current-game-visual" aria-hidden="true">
         <div class="visual-grid"></div>
-        <div class="visual-mark">{{ gameInitial(activePlugin?.name || 'Amitia') }}</div>
+        <div class="visual-mark">{{ gameInitial(activePlugin?.name || 'GAME') }}</div>
       </div>
 
       <div class="current-game-content">
@@ -559,8 +558,8 @@ async function refresh() {
 }
 
 function gameInitial(name: string) {
-  const cleaned = String(name || "G").trim();
-  return cleaned.slice(0, 2).toUpperCase();
+  const cleaned = String(name || "GAME").trim();
+  return cleaned.slice(0, 4).toUpperCase();
 }
 
 function pluginRuntime(plugin: Plugin) {
@@ -1032,7 +1031,7 @@ onMounted(refresh);
 
 .page-head h1 {
   margin: 5px 0 7px;
-  font-size: 28px;
+  font-size: 24px;
   line-height: 1.18;
   letter-spacing: -0.02em;
 }
