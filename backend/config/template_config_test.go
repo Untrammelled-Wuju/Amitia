@@ -125,7 +125,7 @@ func TestConfigTemplatePreservesExistingProviderValues(t *testing.T) {
 		{
 			name:       "backend/config",
 			dir:        ".",
-			expectPort: 9178,
+			expectPort: 19178,
 			expectVDim: 1536,
 			expectNS:   "uai",
 			expectDB:   "memory_graph",
