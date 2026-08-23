@@ -148,9 +148,11 @@ func (r *SlotRegistry) register(ownerExtension string, def *SlotDefinition, dyna
 	if !validDispatchKind(copyDef.DispatchKind) {
 		return fmt.Errorf("%w: %s", ErrInvalidSlotDispatchKind, copyDef.DispatchKind)
 	}
-	if copyDef.Multiplicity == "" {
-		copyDef.Multiplicity = multiplicityFromDispatchKind(copyDef.DispatchKind)
-	}
+	// DispatchKind is the authoritative composition contract. Multiplicity is
+	// retained only as a backwards-compatible projection for older clients.
+	// Normalize incompatible legacy values here so a keyed/chain/list slot can
+	// never be silently collapsed by an old multiplicity branch downstream.
+	copyDef.Multiplicity = compatibleMultiplicity(copyDef.DispatchKind, copyDef.Multiplicity)
 	if dynamic {
 		copyDef.Dynamic = true
 		copyDef.OwnerExtension = ownerExtension
@@ -207,10 +209,44 @@ func dispatchKindFromMultiplicity(m SlotMultiplicity) SlotDispatchKind {
 }
 
 func multiplicityFromDispatchKind(kind SlotDispatchKind) SlotMultiplicity {
-	if kind == DispatchSingle {
+	switch kind {
+	case DispatchSingle, DispatchChain:
+		// Legacy multiplicity has no chain selector. Rendering one winner is the
+		// safest compatibility projection and avoids rendering every fallback.
 		return MultiplicityReplaceableSingle
+	case DispatchKeyed:
+		return MultiplicityMultiple
+	case DispatchList:
+		return MultiplicityOrderedMultiple
+	default:
+		return MultiplicityOrderedMultiple
 	}
-	return MultiplicityOrderedMultiple
+}
+
+func compatibleMultiplicity(kind SlotDispatchKind, multiplicity SlotMultiplicity) SlotMultiplicity {
+	switch kind {
+	case DispatchSingle:
+		switch multiplicity {
+		case MultiplicitySingle, MultiplicityReplaceableSingle, MultiplicityExclusive:
+			return multiplicity
+		}
+	case DispatchList:
+		switch multiplicity {
+		case MultiplicityMultiple, MultiplicityOrderedMultiple:
+			return multiplicity
+		}
+	case DispatchKeyed:
+		switch multiplicity {
+		case MultiplicityMultiple, MultiplicityOrderedMultiple:
+			return multiplicity
+		}
+	case DispatchChain:
+		switch multiplicity {
+		case MultiplicitySingle, MultiplicityReplaceableSingle, MultiplicityExclusive:
+			return multiplicity
+		}
+	}
+	return multiplicityFromDispatchKind(kind)
 }
 
 func scopeCanContain(parent SlotScope, child SlotScope) bool {
@@ -648,6 +684,7 @@ func DefaultSlots() []*SlotDefinition {
 		} else {
 			def.DispatchKind = DispatchList
 		}
+		def.Multiplicity = compatibleMultiplicity(def.DispatchKind, def.Multiplicity)
 		if parent, ok := parents[def.SlotID]; ok {
 			def.ParentSlotID = parent
 		} else if def.SlotID != "root" {
