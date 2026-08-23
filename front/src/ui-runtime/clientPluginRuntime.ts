@@ -1194,9 +1194,18 @@ export interface BrowserClientPluginDefinition {
   setup(context: BrowserClientPluginContext): void | ClientDisposer | Promise<void | ClientDisposer>;
 }
 
+export interface BrowserDeclarativeMatchRule {
+  field: string;
+  operator?: "eq" | "ne" | "in" | "not_in" | "contains" | "exists";
+  value?: unknown;
+}
+
 export interface BrowserDeclarativeClientContribution {
   slotId: string;
   key: string;
+  cellId?: string;
+  entryKey?: string;
+  match?: BrowserDeclarativeMatchRule[];
   sourceExtensionId?: string;
   sourceContributionId?: string;
   clientCode?: DynamicClientSandboxCode;
@@ -1451,6 +1460,9 @@ export class BrowserClientPluginRuntime {
             {
               ordering: contribution.ordering ?? 0,
               priority: contribution.priority ?? 0,
+              entryKey: contribution.entryKey ?? contribution.key,
+              cellId: contribution.cellId ?? contribution.key,
+              select: (owner) => matchesDeclarativeOwner(owner, contribution.match) ? { owner } : null,
               children: contribution.children ?? [],
               props: contribution.clientCode
                 ? {
@@ -1839,6 +1851,9 @@ function normalizeDeclarativePackage(spec: BrowserDeclarativeClientPackage): Bro
       ...item,
       slotId,
       key,
+      cellId: typeof item.cellId === "string" && item.cellId.trim() ? item.cellId.trim() : undefined,
+      entryKey: typeof item.entryKey === "string" && item.entryKey.trim() ? item.entryKey.trim() : undefined,
+      match: normalizeDeclarativeMatch(item.match),
       sourceExtensionId: sourceExtensionId || undefined,
       sourceContributionId: sourceContributionId || undefined,
       clientCode,
@@ -1860,6 +1875,44 @@ function normalizeDeclarativePackage(spec: BrowserDeclarativeClientPackage): Bro
     return { ...item, key, sourceExtensionId, sourceContributionId, projection: { ...item.projection } };
   });
   return { ...spec, id, version, contributions, conversationNodes };
+}
+
+function normalizeDeclarativeMatch(value: unknown): BrowserDeclarativeMatchRule[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const rules = value.flatMap((item): BrowserDeclarativeMatchRule[] => {
+    if (!item || typeof item !== "object") return [];
+    const raw = item as Record<string, unknown>;
+    const field = typeof raw.field === "string" ? raw.field.trim() : "";
+    if (!field) return [];
+    const operator = typeof raw.operator === "string" ? raw.operator : "eq";
+    if (!["eq", "ne", "in", "not_in", "contains", "exists"].includes(operator)) return [];
+    return [{ field, operator: operator as BrowserDeclarativeMatchRule["operator"], value: raw.value }];
+  });
+  return rules.length ? rules : undefined;
+}
+
+function matchesDeclarativeOwner(owner: Record<string, unknown>, rules?: readonly BrowserDeclarativeMatchRule[]): boolean {
+  if (!rules?.length) return true;
+  const lookup = (path: string): unknown => {
+    let current: unknown = owner;
+    for (const segment of path.split(".")) {
+      if (!current || typeof current !== "object" || !(segment in (current as Record<string, unknown>))) return undefined;
+      current = (current as Record<string, unknown>)[segment];
+    }
+    return current;
+  };
+  return rules.every((rule) => {
+    const actual = lookup(rule.field);
+    switch (rule.operator ?? "eq") {
+      case "eq": return actual === rule.value;
+      case "ne": return actual !== rule.value;
+      case "in": return Array.isArray(rule.value) && rule.value.includes(actual);
+      case "not_in": return Array.isArray(rule.value) && !rule.value.includes(actual);
+      case "contains": return typeof actual === "string" && typeof rule.value === "string" && actual.includes(rule.value);
+      case "exists": return actual !== undefined && actual !== null;
+      default: return false;
+    }
+  });
 }
 
 function normalizeDynamicClientCode(value: DynamicClientSandboxCode | undefined): DynamicClientSandboxCode | undefined {

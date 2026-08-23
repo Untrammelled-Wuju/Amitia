@@ -126,7 +126,9 @@ const dispatchedClientContributions = computed(() => {
 
 type RenderItem = UnifiedSlotItem & { matched?: unknown };
 
-const slotKind = computed(() => browserClientPluginRuntime.slots.getDefinition(props.slotId)?.kind);
+const slotKind = computed(() =>
+  store.slotsById.get(props.slotId)?.kind ?? browserClientPluginRuntime.slots.getDefinition(props.slotId)?.kind,
+);
 
 const visibleItems = computed<RenderItem[]>(() => {
   if (!scopeReady.value) return [];
@@ -135,17 +137,13 @@ const visibleItems = computed<RenderItem[]>(() => {
   const serverBase = props.contributionId
     ? visibleContributions.value.filter((item) => item.contributionId === props.contributionId)
     : visibleContributions.value;
-  // Strict keyed/chain dispatch is owned by the client Slot runtime. Server
-  // contributions are retained as legacy fallback only when no strict client
-  // entry matches, preserving Amitia's broader server-driven UI support.
-  const server = (kind === "keyed" || kind === "chain") && dispatchedClientContributions.value.length > 0
-    ? []
-    : serverBase;
   const client = dispatchedClientContributions.value.map((item) => item.contribution);
   const matchedById = new Map(dispatchedClientContributions.value.map((item) => [item.contribution.contributionId, item.matched]));
-  const items = buildUnifiedSlotItems(contract, server, client).map((item) =>
-    item.source === "client" ? { ...item, matched: matchedById.get(item.client.contributionId) } : item,
-  );
+  const items = buildUnifiedSlotItems(contract, serverBase, client, {
+    dispatchKey: props.dispatchKey,
+    listOnly: props.dispatchOnly,
+    clientMatched: matchedById,
+  });
   const start = Math.max(0, props.startIndex);
   if (props.maxItems && props.maxItems > 0) return items.slice(start, start + props.maxItems);
   return items.slice(start);

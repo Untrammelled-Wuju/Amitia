@@ -34,6 +34,12 @@ export interface BackendUIOrderingRule {
   sort_key?: string;
 }
 
+export interface BackendUIContributionDispatch {
+  entry_key?: string;
+  cell_id?: string;
+  matched?: unknown;
+}
+
 export interface BackendUISandboxPolicy {
   type: string;
   csp?: string;
@@ -109,6 +115,7 @@ export interface BackendUIContributionDefinition {
   scope_rule?: unknown;
   ordering?: BackendUIOrderingRule;
   conflict_policy?: unknown;
+  dispatch?: BackendUIContributionDispatch;
   sandbox: BackendUISandboxPolicy;
   lifecycle?: unknown;
   integrity?: BackendContributionIntegrity;
@@ -118,6 +125,7 @@ export interface BackendSlotSnapshotEntry {
   slotId: string;
   contractVersion: number;
   supportedKinds?: string[];
+  kind?: "single" | "list" | "keyed" | "chain";
   multiplicity: string;
   layout: string;
   fallbackPolicy: string;

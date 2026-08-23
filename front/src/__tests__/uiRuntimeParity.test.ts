@@ -365,6 +365,85 @@ describe("DSH parity runtime contracts", () => {
     expect(resolved[0]?.source).toBe("client");
   });
 
+  it("treats kind as authoritative over incompatible legacy multiplicity", () => {
+    const server = ["a", "b"].map((id, index) => ({
+      contributionId: `server-${id}`,
+      extensionId: "server",
+      moduleId: "server",
+      kind: "panel",
+      slotId: "provider.conversation.overlay",
+      contractVersion: 1,
+      generation: 1,
+      title: id,
+      ordering: index,
+      priority: index,
+      cellId: id,
+      visible: true,
+      effective: true,
+      enabled: true,
+      runtimeReady: true,
+    }));
+    const resolved = buildUnifiedSlotItems({ kind: "list", multiplicity: "replaceable_single" }, server, []);
+    expect(resolved).toHaveLength(2);
+  });
+
+  it("dispatches server keyed entries and chain fallbacks in the unified ledger", () => {
+    const server = [{
+      contributionId: "server-window",
+      extensionId: "server",
+      moduleId: "server",
+      kind: "schema_page",
+      slotId: "desktop.window.page",
+      contractVersion: 1,
+      generation: 1,
+      title: "Window",
+      ordering: 0,
+      priority: 5,
+      entryKey: "diagnostics",
+      visible: true,
+      effective: true,
+      enabled: true,
+      runtimeReady: true,
+    }];
+    expect(buildUnifiedSlotItems(
+      { kind: "keyed", multiplicity: "single" },
+      server,
+      [],
+      { dispatchKey: "diagnostics" },
+    )).toHaveLength(1);
+    expect(buildUnifiedSlotItems(
+      { kind: "keyed", multiplicity: "single" },
+      server,
+      [],
+      { dispatchKey: "other" },
+    )).toHaveLength(0);
+
+    const client = [{
+      contributionId: "client-chain",
+      pluginId: "test",
+      key: "chain",
+      slotId: "chat.message.custom_renderer",
+      component: {} as any,
+      ordering: 0,
+      priority: 10,
+      sequence: 1,
+      strict: true,
+      active: true,
+      abdicated: false,
+      childSlotIds: new Set<string>(),
+      scope: "session" as const,
+      environment: { services: { get: () => undefined, list: () => [] }, events: { emit: async () => undefined } },
+      instances: new Map(),
+      ownedChildEpochs: [],
+      claimedStaticChildren: [],
+      childActivations: [],
+    }];
+    const chainServer = [{ ...server[0]!, slotId: "chat.message.custom_renderer", priority: 3, entryKey: undefined }];
+    const chain = buildUnifiedSlotItems({ kind: "chain", multiplicity: "ordered_multiple" }, chainServer, client as any);
+    expect(chain).toHaveLength(1);
+    expect(chain[0]?.source).toBe("server");
+  });
+
   it("rolls back iterable slot injection setup in reverse order", async () => {
     const slots = new BrowserSlotRuntime();
     await slots.declare({ slotId: "transaction.slot", contractVersion: 1, supportedKinds: ["panel"] });

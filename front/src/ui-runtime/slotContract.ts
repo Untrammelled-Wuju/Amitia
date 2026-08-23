@@ -171,70 +171,133 @@ export interface ClientSlotContract<
 
 /** Declaration-merging authority for trusted browser plugins. Built-in keys are
  * compatibility surfaces; plugins can add new typed descendants freely. */
-type ClientRootList = ClientSlotContract<Record<string, unknown>, unknown, Record<string, unknown>, "root", "list">;
-type ClientRootChain = ClientSlotContract<Record<string, unknown>, unknown, Record<string, unknown>, "root", "chain">;
-type ClientSessionList = ClientSlotContract<Record<string, unknown>, unknown, Record<string, unknown>, "session", "list">;
-type ClientSessionChain = ClientSlotContract<Record<string, unknown>, unknown, Record<string, unknown>, "session", "chain">;
-type ClientSessionMaybeList = ClientSlotContract<Record<string, unknown>, unknown, Record<string, unknown>, "session-maybe", "list">;
-type ClientSessionMaybeChain = ClientSlotContract<Record<string, unknown>, unknown, Record<string, unknown>, "session-maybe", "chain">;
-type ClientRootKeyed = ClientSlotContract<Record<string, unknown>, unknown, Record<string, unknown>, "root", "keyed", Record<string, Record<string, unknown>>>;
+export type ClientHostPlatform = "windows" | "macos" | "linux" | "web";
+export type ClientHostKind = "web" | "desktop";
+export type ClientHostOS = "windows" | "macos" | "linux" | "unknown";
+
+export interface ClientRootOwner extends Record<string, unknown> {
+  slotId?: string;
+  route?: string;
+  platform?: ClientHostPlatform;
+  host?: ClientHostKind;
+  os?: ClientHostOS;
+  locale?: string;
+  capabilities?: readonly string[];
+}
+
+export interface ClientExtensionOwner extends ClientRootOwner {
+  extensionId?: string;
+  moduleId?: string;
+  contributionId?: string;
+}
+
+export interface ClientSessionOwner extends ClientRootOwner {
+  sessionId?: string;
+  conversationId: string;
+  characterId?: string;
+}
+
+export interface ClientMessageOwner extends ClientSessionOwner {
+  messageId: string;
+  messageType: string;
+  direction?: "incoming" | "outgoing" | "system";
+  senderType?: "user" | "character" | "system" | "extension";
+  extensionType?: string;
+  message?: Readonly<Record<string, unknown>>;
+}
+
+export interface ClientConversationNodeOwner extends ClientSessionOwner {
+  nodeId?: string;
+  nodeType?: string;
+  eventType?: string;
+  node?: Readonly<Record<string, unknown>>;
+}
+
+export interface ClientCharacterOwner extends ClientRootOwner {
+  characterId: string;
+  tabId?: string;
+}
+
+export interface ClientDesktopOwner extends ClientRootOwner {
+  commandId?: string;
+  windowId?: string;
+  menuId?: string;
+  selection?: Readonly<Record<string, unknown>>;
+}
+
+export interface ClientProviderOwner extends ClientRootOwner {
+  capability: string;
+  providerId?: string;
+  providerMode?: "replace" | "compose" | "augment";
+}
+
+export interface ClientProviderSessionOwner extends ClientSessionOwner {
+  capability: string;
+  providerId?: string;
+  providerMode?: "replace" | "compose" | "augment";
+}
+
+type ClientNoInject = Record<string, never>;
+type ClientList<Owner extends Record<string, unknown>, Scope extends ClientSlotScope = "root"> = ClientSlotContract<Owner, unknown, ClientNoInject, Scope, "list">;
+type ClientChain<Owner extends Record<string, unknown>, Scope extends ClientSlotScope = "root"> = ClientSlotContract<Owner, unknown, ClientNoInject, Scope, "chain">;
+type ClientKeyed<Owner extends Record<string, unknown>, Scope extends ClientSlotScope = "root"> = ClientSlotContract<Owner, unknown, ClientNoInject, Scope, "keyed", Record<string, Owner>>;
 
 export interface ClientSlotMap {
-  root: ClientSlotContract<Record<string, unknown>, unknown, Record<string, unknown>, "root", "single">;
-  "extension.center.header.action": ClientRootList;
-  "extension.center.card.badge": ClientRootList;
-  "extension.detail.tab": ClientRootList;
-  "extension.detail.action": ClientRootList;
-  "extension.settings.page": ClientRootList;
-  "extension.settings.section": ClientRootList;
-  "chat.header.action": ClientSessionMaybeList;
-  "chat.sidebar.panel": ClientSessionMaybeList;
-  "chat.message.action": ClientSessionList;
-  "chat.message.renderer": ClientSessionChain;
-  "chat.conversation.node": ClientSessionList;
-  "chat.message.custom_renderer": ClientSessionChain;
-  "chat.message.attachment_renderer": ClientSessionChain;
-  "chat.message.badge": ClientSessionList;
-  "chat.composer.action": ClientSessionMaybeList;
-  "chat.composer.attachment": ClientSessionMaybeList;
-  "chat.composer.hint": ClientSessionMaybeList;
-  "chat.empty_state.card": ClientSessionMaybeList;
-  "chat.status.item": ClientSessionMaybeList;
-  "character.detail.tab": ClientRootList;
-  "character.detail.action": ClientRootList;
-  "character.sidebar.card": ClientRootList;
-  "system.status.item": ClientRootList;
-  "system.settings.section": ClientRootList;
-  "system.diagnostics.tab": ClientRootList;
-  "desktop.command": ClientRootKeyed;
-  "desktop.application_menu.item": ClientRootList;
-  "desktop.context_menu.item": ClientRootList;
-  "desktop.tray.item": ClientRootList;
-  "desktop.window.page": ClientRootKeyed;
-  "provider.app.shell": ClientRootChain;
-  "provider.app.navigation": ClientRootChain;
-  "provider.app.workspace": ClientRootChain;
-  "provider.route.registry": ClientRootList;
-  "provider.page.provider": ClientRootChain;
-  "provider.conversation.shell": ClientSessionMaybeChain;
-  "provider.conversation.header": ClientSessionMaybeChain;
-  "provider.conversation.messages": ClientSessionMaybeChain;
-  "provider.conversation.message_renderer": ClientSessionChain;
-  "provider.conversation.sidebar": ClientSessionMaybeChain;
-  "provider.conversation.composer": ClientSessionMaybeChain;
-  "provider.conversation.overlay": ClientSessionMaybeList;
-  "provider.character.shell": ClientRootChain;
-  "provider.character.detail": ClientRootChain;
-  "provider.memory.shell": ClientRootChain;
-  "provider.memory.detail": ClientRootChain;
-  "provider.settings.shell": ClientRootChain;
-  "provider.settings.section": ClientRootList;
-  "provider.extension.center": ClientRootChain;
-  "provider.extension.page": ClientRootChain;
-  "provider.ui.theme": ClientRootChain;
-  "provider.ui.tokens": ClientRootChain;
-  "provider.ui.icons": ClientRootChain;
-  "provider.ui.components": ClientRootChain;
+  root: ClientSlotContract<ClientRootOwner, unknown, ClientNoInject, "root", "single">;
+  "extension.center.header.action": ClientList<ClientExtensionOwner>;
+  "extension.center.card.badge": ClientList<ClientExtensionOwner>;
+  "extension.detail.tab": ClientList<ClientExtensionOwner>;
+  "extension.detail.action": ClientList<ClientExtensionOwner>;
+  "extension.settings.page": ClientList<ClientExtensionOwner>;
+  "extension.settings.section": ClientList<ClientExtensionOwner>;
+  "chat.header.action": ClientList<ClientSessionOwner, "session-maybe">;
+  "chat.sidebar.panel": ClientList<ClientSessionOwner, "session-maybe">;
+  "chat.message.action": ClientList<ClientMessageOwner, "session">;
+  "chat.message.renderer": ClientChain<ClientMessageOwner, "session">;
+  "chat.conversation.node": ClientList<ClientConversationNodeOwner, "session">;
+  "chat.message.custom_renderer": ClientChain<ClientMessageOwner, "session">;
+  "chat.message.attachment_renderer": ClientChain<ClientMessageOwner, "session">;
+  "chat.message.badge": ClientList<ClientMessageOwner, "session">;
+  "chat.composer.action": ClientList<ClientSessionOwner, "session-maybe">;
+  "chat.composer.attachment": ClientList<ClientSessionOwner, "session-maybe">;
+  "chat.composer.hint": ClientList<ClientSessionOwner, "session-maybe">;
+  "chat.empty_state.card": ClientList<ClientSessionOwner, "session-maybe">;
+  "chat.status.item": ClientList<ClientSessionOwner, "session-maybe">;
+  "character.detail.tab": ClientList<ClientCharacterOwner>;
+  "character.detail.action": ClientList<ClientCharacterOwner>;
+  "character.sidebar.card": ClientList<ClientCharacterOwner>;
+  "system.status.item": ClientList<ClientRootOwner>;
+  "system.settings.section": ClientList<ClientRootOwner>;
+  "system.diagnostics.tab": ClientList<ClientRootOwner>;
+  "desktop.command": ClientKeyed<ClientDesktopOwner>;
+  "desktop.application_menu.item": ClientList<ClientDesktopOwner>;
+  "desktop.context_menu.item": ClientList<ClientDesktopOwner>;
+  "desktop.tray.item": ClientList<ClientDesktopOwner>;
+  "desktop.window.page": ClientKeyed<ClientDesktopOwner>;
+  "provider.app.shell": ClientChain<ClientProviderOwner>;
+  "provider.app.navigation": ClientChain<ClientProviderOwner>;
+  "provider.app.workspace": ClientChain<ClientProviderOwner>;
+  "provider.route.registry": ClientList<ClientProviderOwner>;
+  "provider.page.provider": ClientChain<ClientProviderOwner>;
+  "provider.conversation.shell": ClientChain<ClientProviderSessionOwner, "session-maybe">;
+  "provider.conversation.header": ClientChain<ClientProviderSessionOwner, "session-maybe">;
+  "provider.conversation.messages": ClientChain<ClientProviderSessionOwner, "session-maybe">;
+  "provider.conversation.message_renderer": ClientChain<ClientMessageOwner, "session">;
+  "provider.conversation.sidebar": ClientChain<ClientProviderSessionOwner, "session-maybe">;
+  "provider.conversation.composer": ClientChain<ClientProviderSessionOwner, "session-maybe">;
+  "provider.conversation.overlay": ClientList<ClientProviderSessionOwner, "session-maybe">;
+  "provider.character.shell": ClientChain<ClientProviderOwner>;
+  "provider.character.detail": ClientChain<ClientProviderOwner>;
+  "provider.memory.shell": ClientChain<ClientProviderOwner>;
+  "provider.memory.detail": ClientChain<ClientProviderOwner>;
+  "provider.settings.shell": ClientChain<ClientProviderOwner>;
+  "provider.settings.section": ClientList<ClientProviderOwner>;
+  "provider.extension.center": ClientChain<ClientProviderOwner>;
+  "provider.extension.page": ClientChain<ClientProviderOwner>;
+  "provider.ui.theme": ClientChain<ClientProviderOwner>;
+  "provider.ui.tokens": ClientChain<ClientProviderOwner>;
+  "provider.ui.icons": ClientChain<ClientProviderOwner>;
+  "provider.ui.components": ClientChain<ClientProviderOwner>;
 }
 
 export type ClientKnownSlotId = keyof ClientSlotMap & string;
