@@ -9,25 +9,28 @@ import (
 
 	"github.com/u-ai/backend/internal/gamehost/domain"
 	"github.com/u-ai/backend/internal/gamehost/ipc"
+	"github.com/u-ai/backend/internal/gamehost/notification"
 	"github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
 var _ ipc.Dispatcher = (*RPCDispatcher)(nil)
 
 type RPCDispatcher struct {
-	mu           sync.RWMutex
-	controlPlane ipc.ControlPlane
-	namespaces   NamespaceRegistry
-	hostHandlers HandlerRegistry
-	idGenerator  func() string
-	lifecycle    *RequestLifecycleManager
+	mu            sync.RWMutex
+	controlPlane  ipc.ControlPlane
+	namespaces    NamespaceRegistry
+	hostHandlers  HandlerRegistry
+	idGenerator   func() string
+	lifecycle     *RequestLifecycleManager
+	notifications notification.NotificationBridge
 }
 
 type DispatcherConfig struct {
-	Namespaces   NamespaceRegistry
-	HostHandlers HandlerRegistry
-	IDGenerator  func() string
-	Lifecycle    *RequestLifecycleManager
+	Namespaces    NamespaceRegistry
+	HostHandlers  HandlerRegistry
+	IDGenerator   func() string
+	Lifecycle     *RequestLifecycleManager
+	Notifications notification.NotificationBridge
 }
 
 func NewRPCDispatcher(config DispatcherConfig) *RPCDispatcher {
@@ -42,10 +45,11 @@ func NewRPCDispatcher(config DispatcherConfig) *RPCDispatcher {
 	}
 
 	return &RPCDispatcher{
-		namespaces:   config.Namespaces,
-		hostHandlers: config.HostHandlers,
-		idGenerator:  idGen,
-		lifecycle:    dm,
+		namespaces:    config.Namespaces,
+		hostHandlers:  config.HostHandlers,
+		idGenerator:   idGen,
+		lifecycle:     dm,
+		notifications: config.Notifications,
 	}
 }
 
@@ -88,7 +92,14 @@ func (d *RPCDispatcher) Dispatch(ctx context.Context, source ipc.DispatchSource,
 			}
 			return nil
 		}
-		return nil
+		if d.notifications == nil {
+			return nil
+		}
+		return d.notifications.Handle(ctx, notification.RouteContext{
+			PluginID:  source.Peer.PluginID,
+			RuntimeID: source.Peer.RuntimeID,
+			ServiceID: source.Peer.ServiceID,
+		}, envelope.Method, envelope.Payload, envelope.Metadata)
 	default:
 		return nil
 	}

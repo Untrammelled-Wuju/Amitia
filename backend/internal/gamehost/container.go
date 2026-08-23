@@ -8,6 +8,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
 	"github.com/u-ai/backend/internal/gamehost/agentbridge"
 	"github.com/u-ai/backend/internal/gamehost/channel"
+	"github.com/u-ai/backend/internal/gamehost/companion"
 	"github.com/u-ai/backend/internal/gamehost/config"
 	"github.com/u-ai/backend/internal/gamehost/control"
 	"github.com/u-ai/backend/internal/gamehost/domain"
@@ -36,6 +37,7 @@ type GameHostContainer struct {
 	CheckpointStore  checkpoint.CheckpointStore
 	ConfigStore      *config.FileStore
 	ConfigResolver   *config.Resolver
+	CompanionManager *companion.Manager
 
 	PluginRegistry   *registry.Registry
 	ContributionSync *integration.GamePluginSyncService
@@ -58,6 +60,7 @@ type GameHostContainer struct {
 	ChannelRegistry     channel.Registry
 
 	NotificationBridge   *notification.Bridge
+	AgentEventSink       *notification.AgentEventSink
 	StateStore           *state.LatestStateStore
 	BinaryObjectRegistry binary.ObjectRegistry
 	StreamManager        *stream.StreamManager
@@ -148,6 +151,13 @@ func (c *GameHostContainer) QuiesceExtension(ctx context.Context, extensionID st
 	return nil
 }
 
+func (c *GameHostContainer) SetAgentWakeupPort(port notification.AgentWakeupPort) {
+	if c == nil || c.AgentEventSink == nil {
+		return
+	}
+	c.AgentEventSink.SetPort(port)
+}
+
 func (c *GameHostContainer) CountRuntimeProcesses(runtimeID domain.RuntimeInstanceID) int {
 	if c == nil || c.RuntimeTopologyStore == nil || c.procAdapter == nil || runtimeID == "" {
 		return 0
@@ -169,6 +179,9 @@ func (c *GameHostContainer) CountRuntimeProcesses(runtimeID domain.RuntimeInstan
 func (c *GameHostContainer) Start(ctx context.Context) error {
 	if c == nil {
 		return nil
+	}
+	if c.AgentEventSink != nil {
+		c.AgentEventSink.Start(ctx)
 	}
 
 	if c.ContributionSync != nil {
@@ -198,6 +211,9 @@ func (c *GameHostContainer) Start(ctx context.Context) error {
 func (c *GameHostContainer) Shutdown(ctx context.Context) error {
 	if c == nil {
 		return nil
+	}
+	if c.AgentEventSink != nil {
+		c.AgentEventSink.Shutdown()
 	}
 	if c.StartupGate != nil {
 		c.StartupGate.Close()

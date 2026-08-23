@@ -115,8 +115,10 @@ func (a *KernelEventAdapter) Publish(ctx context.Context, n Notification) error 
 		"receivedAt":          jsonRaw(strconv.FormatInt(n.ReceivedAt.UTC().UnixNano(), 10)),
 	}
 
-	for k, v := range n.Metadata {
-		opts[k] = v
+	if len(n.Metadata) > 0 {
+		if encoded, err := json.Marshal(n.Metadata); err == nil {
+			opts["pluginMetadata"] = encoded
+		}
 	}
 
 	return a.publisher.Publish(ctx, typeID, version, n.Payload, opts)

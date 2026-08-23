@@ -29,6 +29,9 @@ func NewHandshakeControllerAdapter(mgr *HandshakeManager, gate *ReadyGate) *Hand
 // Register registers the connection ID with the underlying manager.
 func (a *HandshakeControllerAdapter) Register(id ipc.ConnectionID) {
 	a.inner.RegisterConnection(string(id))
+	if a.readyGate != nil {
+		a.readyGate.Register(string(id))
+	}
 }
 
 // Remove clears all handshake state for the given connection.
@@ -55,10 +58,13 @@ func (a *HandshakeControllerAdapter) HandleHello(
 		}
 		return nil, err
 	}
+	return json.Marshal(resp)
+}
+
+func (a *HandshakeControllerAdapter) ConfirmReady(connID ipc.ConnectionID) {
 	if a.readyGate != nil {
 		a.readyGate.MarkReady(string(connID))
 	}
-	return json.Marshal(resp)
 }
 
 // CanProcess implements the ReadyGate-style method rule:
@@ -69,11 +75,14 @@ func (a *HandshakeControllerAdapter) CanProcess(connID ipc.ConnectionID, method 
 	if method == ipc.HandshakeMethod {
 		return true
 	}
-	state, ok := a.inner.GetState(string(connID))
-	if !ok {
-		return false
+	if a.readyGate != nil && a.readyGate.IsAllowedPreReady(method) {
+		return true
 	}
-	return state == HandshakeStateReady
+	if a.readyGate != nil {
+		return a.readyGate.IsReady(string(connID))
+	}
+	state, ok := a.inner.GetState(string(connID))
+	return ok && state == HandshakeStateReady
 }
 
 // MapError converts a handshake failure into a protocol ProtocolError. It
