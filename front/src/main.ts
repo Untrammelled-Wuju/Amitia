@@ -19,9 +19,11 @@ import { shouldRegisterServiceWorker } from "./runtime/runtime-capabilities";
 import { setErrorPanelHandler, setErrorBannerHandler } from "./ui-index";
 import { useExtensionUIStore } from "./stores/extensionUI";
 import { browserClientPluginRuntime, syncBrowserClientSlots } from "./ui-runtime/clientPluginRuntime";
+import { restoreSessionOnStartup } from "./stores/refresh-coordinator";
 
 async function bootstrap() {
   await getRuntimeConnection();
+  await restoreSessionOnStartup();
   const app = createApp(App);
   const pinia = createPinia();
   app.use(pinia);
