@@ -7,7 +7,7 @@ storage:
   dataDir: "AmitiaData/data"
 
 jwt:
-  secret: ""
+  secret: "f8b/XN8YQhOvhYzsUvmDPvFiNLkMUmzClPGxSoTitLma3LYbf+VjUFPgSEF05AxXJn8mQaUMqvjwZ0+L4aQ4kQ=="
   issuer: "amitia"
   audience: "amitia-api"
   expireDays: 7
