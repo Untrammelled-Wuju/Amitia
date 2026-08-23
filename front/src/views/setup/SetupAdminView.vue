@@ -193,7 +193,7 @@ async function handleSetup() {
 }
 
 .setup-header p {
-  font-size: 14px;
+  font-size: 13px;
   color: var(--ac-color-text-secondary);
   line-height: 1.6;
 }

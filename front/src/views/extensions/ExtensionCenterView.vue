@@ -78,6 +78,7 @@ header p,
   margin: 0;
   color: var(--console-text-muted);
   line-height: 1.6;
+  font-size: 13px;
 }
 .entry-grid {
   display: grid;

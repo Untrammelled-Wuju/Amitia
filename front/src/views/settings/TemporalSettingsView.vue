@@ -648,6 +648,7 @@ onMounted(async () => {
   margin: 0;
   color: var(--ac-color-text-muted);
   line-height: 1.5;
+  font-size: 13px;
 }
 .suggestion-alert {
   margin-bottom: 16px;

@@ -73,10 +73,10 @@ function retry() {
 }
 
 .nf-desc {
-  font-size: 14px;
-  color: var(--el-text-color-secondary);
-  margin: 0 0 24px;
-  line-height: 1.6;
+font-size: 13px;
+color: var(--el-text-color-secondary);
+margin: 0 0 24px;
+line-height: 1.6;
 }
 
 .nf-error {

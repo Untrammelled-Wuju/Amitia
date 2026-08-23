@@ -1012,6 +1012,7 @@ onMounted(refresh);
 
 .page-head {
   gap: 20px;
+  align-items: flex-start;
 }
 
 .page-copy {
@@ -1030,14 +1031,11 @@ onMounted(refresh);
 }
 
 .page-head h1 {
-  margin: 5px 0 7px;
+  margin: 0 0 6px;
+  color: var(--console-text);
   font-size: 24px;
-  line-height: 1.18;
-  letter-spacing: -0.02em;
 }
 
-.page-head p,
-.section-heading p,
 .current-game-content p,
 .game-card-body p,
 .preview-head p,
@@ -1048,6 +1046,9 @@ onMounted(refresh);
 
 .page-head p,
 .section-heading p {
+  margin: 0;
+  color: var(--console-text-muted);
+  line-height: 1.6;
   font-size: 13px;
 }
 
