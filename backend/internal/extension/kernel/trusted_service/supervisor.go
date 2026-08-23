@@ -118,7 +118,7 @@ func NewProcessSupervisorWithVerifier(rootDir string, verifier *BinaryVerifier) 
 	if verifier == nil {
 		verifier = NewBinaryVerifier()
 	}
-	return &ProcessSupervisor{
+	s := &ProcessSupervisor{
 		instances:        make(map[string]*ServiceInstance),
 		defs:             make(map[string]*ServiceRuntimeDefinition),
 		verifier:         verifier,
@@ -130,7 +130,12 @@ func NewProcessSupervisorWithVerifier(rootDir string, verifier *BinaryVerifier) 
 		rootDir:          rootDir,
 		logger:           func(level, msg string, fields map[string]any) {},
 		protocolHandlers: make(map[string]StdioProtocolHandler),
+		ownerStore:       NewProcessOwnerStore(filepath.Join(rootDir, "process_owners")),
 	}
+	if s.ownerStore != nil && s.ownerStore.durable {
+		s.ownerStoreErr = s.ownerStore.load()
+	}
+	return s
 }
 
 func (s *ProcessSupervisor) SetLogger(l func(level, msg string, fields map[string]any)) {

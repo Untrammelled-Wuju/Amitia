@@ -79,7 +79,8 @@ func TestGamePluginContributionSchema(t *testing.T) {
 						"kind": "game_plugin",
 						"name": {"default": "Example Game"},
 						"spec": {
-							"protocolVersion": "amitia-game-host/1"
+							"protocolVersion": "amitia-game-host/1",
+							"runtimeModuleId": "game-runtime"
 						}
 					}
 				]
@@ -118,7 +119,7 @@ func TestGamePluginRequiresID(t *testing.T) {
 					{
 						"kind": "game_plugin",
 						"name": {"default": "Game"},
-						"spec": {"protocolVersion": "amitia-game-host/1"}
+						"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "main"}
 					}
 				]
 			}
@@ -228,13 +229,13 @@ func TestDuplicateGamePluginIDRejected(t *testing.T) {
 						"id": "game-1",
 						"kind": "game_plugin",
 						"name": {"default": "Game 1"},
-						"spec": {"protocolVersion": "amitia-game-host/1"}
+						"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "main"}
 					},
 					{
 						"id": "game-1",
 						"kind": "game_plugin",
 						"name": {"default": "Game 2"},
-						"spec": {"protocolVersion": "amitia-game-host/1"}
+						"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "main"}
 					}
 				]
 			}
@@ -265,18 +266,19 @@ func TestMultipleGamePluginsAllowed(t *testing.T) {
 				"id": "main",
 				"name": {"default": "Main"},
 				"type": "javascript",
+				"runtime": {"type": "javascript", "entryPoint": "dist/index.js"},
 				"contributions": [
 					{
 						"id": "plugin-a",
 						"kind": "game_plugin",
 						"name": {"default": "Plugin A"},
-						"spec": {"protocolVersion": "amitia-game-host/1"}
+						"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "main"}
 					},
 					{
 						"id": "plugin-b",
 						"kind": "game_plugin",
 						"name": {"default": "Plugin B"},
-						"spec": {"protocolVersion": "amitia-game-host/1"}
+						"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "main"}
 					}
 				]
 			}
@@ -312,7 +314,7 @@ func TestGamePluginPreservedInExtensionDefinition(t *testing.T) {
 						"id": "game-1",
 						"kind": "game_plugin",
 						"name": {"default": "Game"},
-						"spec": {"protocolVersion": "amitia-game-host/1"}
+						"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "main"}
 					}
 				]
 			}
@@ -394,12 +396,13 @@ func TestDomainMappingGamePlugin(t *testing.T) {
 				"id": "main",
 				"name": {"default": "Main"},
 				"type": "javascript",
+				"runtime": {"type": "javascript", "entryPoint": "dist/index.js"},
 				"contributions": [
 					{
 						"id": "game-1",
 						"kind": "game_plugin",
 						"name": {"default": "Game"},
-						"spec": {"protocolVersion": "amitia-game-host/1"}
+						"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "main"}
 					}
 				]
 			}

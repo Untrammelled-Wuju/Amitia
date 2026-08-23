@@ -14,6 +14,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/dependency"
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
 	"github.com/u-ai/backend/internal/extension/kernel/mcp_manifest"
+	gameprotocol "github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
 const ManifestVersion = 2
@@ -384,6 +385,7 @@ func (m Manifest) Validate() ValidationReport {
 		report.AddError("modules", "missing", "at least one module required")
 	}
 	moduleIDs := make(map[string]bool)
+	moduleRuntimes := make(map[string]*RuntimeMeta)
 	moduleTypes := map[string]bool{
 		"builtin": true, "javascript": true, "data_only": true, "wasm": true,
 		"native": true, "service": true,
@@ -413,6 +415,7 @@ func (m Manifest) Validate() ValidationReport {
 			continue
 		}
 		moduleIDs[mod.ID] = true
+		moduleRuntimes[mod.ID] = mod.Runtime
 		if mod.Name.Default == "" {
 			report.AddError(path+".name.default", "missing", "module name required")
 		}
@@ -448,7 +451,7 @@ func (m Manifest) Validate() ValidationReport {
 				report.AddError(cpath+".name.default", "missing", "contribution name required")
 			}
 			if c.Kind == "game_plugin" {
-				if err := validateGamePluginContribution(c.Spec, cpath, moduleIDs); err != nil {
+				if err := validateGamePluginContribution(c.Spec, cpath, moduleIDs, moduleRuntimes); err != nil {
 					report.AddError(cpath+".spec", "invalid_game_plugin", err.Error())
 				}
 			}
@@ -748,18 +751,28 @@ func deref[T any](p *T) T {
 	return *p
 }
 
-func validateGamePluginContribution(spec map[string]any, cpath string, moduleIDs map[string]bool) error {
-	if spec == nil {
-		return fmt.Errorf("game_plugin requires spec with protocolVersion")
+func validateGamePluginContribution(spec map[string]any, cpath string, moduleIDs map[string]bool, moduleRuntimes map[string]*RuntimeMeta) error {
+	parsed, err := gameprotocol.ParseGamePluginSpec(spec)
+	if err != nil {
+		return fmt.Errorf("%s.spec: %w", cpath, err)
 	}
-	protocolVersion, ok := spec["protocolVersion"].(string)
-	if !ok || protocolVersion == "" {
-		return fmt.Errorf("game_plugin requires protocolVersion")
+	if err := parsed.Validate(); err != nil {
+		return fmt.Errorf("%s.spec: %w", cpath, err)
 	}
-	if runtimeModuleID, ok := spec["runtimeModuleId"].(string); ok && runtimeModuleID != "" {
-		if !moduleIDs[runtimeModuleID] {
-			return fmt.Errorf("game_plugin references unknown module: %s", runtimeModuleID)
-		}
+	if !moduleIDs[parsed.RuntimeModuleID] {
+		return fmt.Errorf("game_plugin references unknown module: %s", parsed.RuntimeModuleID)
+	}
+	runtime := moduleRuntimes[parsed.RuntimeModuleID]
+	if runtime == nil {
+		return fmt.Errorf("game_plugin runtime module %s has no runtime definition", parsed.RuntimeModuleID)
+	}
+	if strings.TrimSpace(runtime.EntryPoint) == "" {
+		return fmt.Errorf("game_plugin runtime module %s requires runtime.entryPoint", parsed.RuntimeModuleID)
+	}
+	switch runtime.Type {
+	case "service", "javascript":
+	default:
+		return fmt.Errorf("game_plugin runtime module %s uses unsupported runtime type %q", parsed.RuntimeModuleID, runtime.Type)
 	}
 	return nil
 }

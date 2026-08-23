@@ -109,18 +109,11 @@ func BuildGameHostExtension(version string) Definition {
 }
 
 func buildGameHostContributions(extID domain.ExtensionID, modID domain.ModuleID) []domain.ContributionDefinition {
-	return []domain.ContributionDefinition{
-		{
-			ID:          domain.ContributionID("game_host_plugin"),
-			ModuleID:    modID,
-			ExtensionID: extID,
-			Kind:        domain.ContributionKindGamePlugin,
-			Name:        domain.LocalizedText{Default: "Game Host Plugin"},
-			Description: domain.LocalizedText{
-				Default: "Game plugin contribution providing runtime hosting for game sessions, assets, plugins, scripts, and devices.",
-			},
-		},
-	}
+	_ = extID
+	_ = modID
+	// GameHost is host infrastructure, not a game_plugin contribution. Concrete games
+	// (Minecraft, Stardew Valley, etc.) are installed as independent .amitiax packages.
+	return nil
 }
 
 const (
