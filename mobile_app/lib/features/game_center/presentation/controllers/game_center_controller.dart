@@ -230,29 +230,6 @@ class GameCenterController extends StateNotifier<GameCenterState> {
     );
   }
 
-  Future<bool> install(String archivePath) async {
-    try {
-      await api.installPlugin(archivePath);
-      await refreshPlugins();
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  Future<bool> update(String extensionId, String archivePath) async {
-    return _withPackageOp(extensionId, () async {
-      await api.updatePlugin(extensionId, archivePath);
-      await refreshPlugins();
-      final pluginId = state.selectedPluginId;
-      final extId = state.selectedExtensionId;
-      if (pluginId != null && extId != null) {
-        await selectPlugin(pluginId, extensionId: extId);
-      }
-      return true;
-    });
-  }
-
   Future<bool> enable(String extensionId) async {
     return _withPackageOp(extensionId, () async {
       final ok = await api.enablePlugin(extensionId);
@@ -283,14 +260,24 @@ class GameCenterController extends StateNotifier<GameCenterState> {
     });
   }
 
-  Future<bool> uninstall(String extensionId) async {
+  Future<bool> runPackageOperation(
+    String extensionId,
+    Future<void> Function() operation, {
+    bool clearSelectionAfterSuccess = false,
+  }) async {
     return _withPackageOp(extensionId, () async {
-      final ok = await api.uninstallPlugin(extensionId);
-      if (ok) {
-        await refreshPlugins();
+      await operation();
+      await refreshPlugins();
+      if (clearSelectionAfterSuccess) {
         clearSelection();
+      } else {
+        final pluginId = state.selectedPluginId;
+        final extId = state.selectedExtensionId;
+        if (pluginId != null && extId != null) {
+          await selectPlugin(pluginId, extensionId: extId);
+        }
       }
-      return ok;
+      return true;
     });
   }
 
