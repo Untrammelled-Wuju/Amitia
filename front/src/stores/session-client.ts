@@ -55,7 +55,6 @@ export async function loginUser(req: LoginRequest): Promise<LoginResponse> {
 
 export async function refreshToken(req: RefreshRequest): Promise<RefreshResponse> {
   const res = await apiClient.post<RefreshResponse>("/api/public/auth/refresh", req);
-  console.log("[refreshToken] raw response keys:", Object.keys(res.data || {}));
   return res.data as unknown as RefreshResponse;
 }
 

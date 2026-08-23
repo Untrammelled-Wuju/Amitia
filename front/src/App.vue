@@ -37,6 +37,8 @@ import { useTheme } from "./ui-index";
 import { isDesktopShell } from "./runtime/runtime-capabilities";
 import NotFoundView from "./views/NotFoundView.vue";
 import { useExtensionUIStore } from "./stores/extensionUI";
+import { saveCurrentUser } from "./stores/refresh-coordinator";
+import { useSessionStore } from "./stores/session-store";
 import { syncProviderRoutes } from "./ui-runtime/providerRoutes";
 import { applyProviderTheme } from "./ui-runtime/providerTheme";
 import RouteSurfaceHost from "./components/ui-runtime/RouteSurfaceHost.vue";
@@ -91,13 +93,13 @@ onErrorCaptured((err, _instance, info) => {
 });
 
 onMounted(async () => {
-  try {
-    await themeRuntime.loadFromServer();
-  } catch {}
-
   if (publicPaths.some((p) => route.path === p)) {
     return;
   }
+
+  try {
+    await themeRuntime.loadFromServer();
+  } catch {}
 
   try {
     const onboardingRes = await apiClient.get("/api/public/onboarding/status");
@@ -123,6 +125,18 @@ onMounted(async () => {
     if (!userData?.id) {
       router.replace("/login");
     } else {
+      const { state, setSession } = useSessionStore();
+      saveCurrentUser({
+        userId: userData.id,
+        username: userData.username,
+        role: userData.role,
+      });
+      setSession({
+        ...state.value,
+        userId: String(userData.id),
+        username: userData.username || null,
+        role: userData.role || null,
+      });
       extensionUIStore.refreshSnapshot(true).then(() => syncProviderRoutes(router, extensionUIStore)).catch(() => {});
     }
   } catch {

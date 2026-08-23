@@ -44,12 +44,6 @@ function clearRefreshTimer(): void {
   }
 }
 
-export function saveRefreshToken(token: string): void {
-  try {
-    localStorage.setItem(REFRESH_TOKEN_KEY, token);
-  } catch {}
-}
-
 export function loadRefreshToken(): string | null {
   try {
     return localStorage.getItem(REFRESH_TOKEN_KEY);
@@ -138,6 +132,7 @@ export function clearPersistedSession(): void {
 function scheduleRefresh(expiresAt: string) {
   clearRefreshTimer();
   const expiry = new Date(expiresAt).getTime();
+  if (!Number.isFinite(expiry)) return;
   const now = Date.now();
   const refreshIn = Math.max(expiry - now - 60000, 5000);
   refreshTimer = setTimeout(() => {
@@ -187,7 +182,7 @@ async function performRefresh(): Promise<string> {
           throw new Error("NO_REFRESH_TOKEN");
         }
         const result = await refreshToken({ refreshToken: storedRefreshToken });
-        if (epoch !== sessionEpoch || loadRefreshToken() !== storedRefreshToken) {
+        if (epoch !== sessionEpoch || loadPersistedSession().refreshToken !== storedRefreshToken) {
           throw new Error("SESSION_CHANGED");
         }
         saveAuthenticatedSession({
@@ -234,7 +229,7 @@ export function getAccessToken(): string | null {
 }
 
 export function forceCleanupSession(): void {
-  const storedRefreshToken = loadRefreshToken();
+  const storedRefreshToken = loadPersistedSession().refreshToken;
   stopRefreshCoordinator();
   clearPersistedSession();
   useSessionStore().clearSession();

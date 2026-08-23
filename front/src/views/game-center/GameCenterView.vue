@@ -773,15 +773,16 @@ async function commitPackageInstall() {
 
 async function waitForPackageOperation(operationId?: string) {
   if (!operationId) return;
-  for (let attempt = 0; attempt < 12; attempt += 1) {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
     const operation = await api.get<PackageOperationView>(`/api/extensions/packages/operations/${encodeURIComponent(operationId)}`);
-    const status = String(operation?.status || "");
+    const status = String(operation?.status || "").toLowerCase();
     if (status === "completed") return;
     if (status === "failed" || status === "requires_recovery") {
       throw new Error(operation?.errorCode || "扩展包操作失败");
     }
-    await new Promise((resolve) => window.setTimeout(resolve, 250));
+    await new Promise((resolve) => window.setTimeout(resolve, 500));
   }
+  throw new Error("扩展包操作等待超时，请刷新游戏中心检查最终状态");
 }
 
 async function pluginMenuAction(plugin: Plugin, command: string) {
@@ -900,21 +901,53 @@ async function togglePlugin(plugin: Plugin) {
 }
 
 async function uninstall(plugin: Plugin) {
-  try {
-    await ElMessageBox.confirm(
-      `确定卸载「${plugin.name}」吗？对应游戏能力将立即从游戏模式移除。`,
-      "卸载游戏扩展",
-      { type: "warning", confirmButtonText: "卸载", cancelButtonText: "取消" },
-    );
-  } catch {
-    return;
-  }
   busy.value = plugin.extensionId;
   try {
-    await api.del(`/api/game-center/plugins/${encodeURIComponent(plugin.extensionId)}`);
+    const preview = await api.post<Record<string, any>>(
+      "/api/extensions/kernel/extensions/uninstall/preview",
+      { extensionId: plugin.extensionId, scopeType: "global", scopeId: "" },
+    );
+    if (preview?.uninstallable === false) {
+      throw new Error("后端判定当前游戏扩展不可卸载");
+    }
+    const dependents = Array.isArray(preview?.dependents) ? preview.dependents.map(String) : [];
+    const required = Array.isArray(preview?.requiredConfirmations)
+      ? preview.requiredConfirmations.map(String).filter(Boolean)
+      : [];
+    const detail = [
+      `确定卸载「${plugin.name}」吗？对应游戏能力将立即从游戏模式移除。`,
+      dependents.length ? `\n依赖此扩展：${dependents.join("、")}` : "",
+      preview?.artifactPolicy ? `\n制品策略：${String(preview.artifactPolicy)}` : "",
+    ].join("");
+    await ElMessageBox.confirm(detail, "卸载游戏扩展", {
+      type: "warning",
+      confirmButtonText: "卸载",
+      cancelButtonText: "取消",
+    });
+
+    const confirmation = await api.post<Record<string, any>>(
+      "/api/extensions/kernel/extensions/uninstall/confirm",
+      {
+        extensionId: plugin.extensionId,
+        scopeType: "global",
+        scopeId: "",
+        confirmations: Object.fromEntries(required.map((key) => [key, true])),
+      },
+    );
+    const confirmationToken = String(confirmation?.confirmationToken || "");
+    if (!confirmationToken) throw new Error("卸载确认令牌缺失");
+
+    const result = await api.post<{ operationId?: string }>("/api/extensions/kernel/extensions/uninstall", {
+      extensionId: plugin.extensionId,
+      scopeType: "global",
+      scopeId: "",
+      confirmationToken,
+    });
+    await waitForPackageOperation(result?.operationId);
     ElMessage.success("游戏扩展已卸载");
     await refresh();
   } catch (err: any) {
+    if (err === "cancel" || err === "close" || err?.toString?.().includes("cancel")) return;
     ElMessage.error(err?.message || "卸载失败");
   } finally {
     busy.value = "";
