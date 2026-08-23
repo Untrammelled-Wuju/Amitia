@@ -1,7 +1,10 @@
 package handshake_test
 
 import (
+	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/u-ai/backend/internal/gamehost/handshake"
 )
@@ -96,5 +99,42 @@ func TestReadyGate_AllowPreReady(t *testing.T) {
 
 	if !gate.IsAllowedPreReady("control.request.cancel") {
 		t.Error("dynamically allowed method should work")
+	}
+}
+
+func TestReadyGateWaitReadyUnblocksAfterMarkReady(t *testing.T) {
+	gate := handshake.NewReadyGate(nil)
+	gate.Register("conn-wait")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- gate.WaitReady(ctx, "conn-wait") }()
+	time.Sleep(10 * time.Millisecond)
+	gate.MarkReady("conn-wait")
+	if err := <-done; err != nil {
+		t.Fatalf("WaitReady() error = %v", err)
+	}
+}
+
+func TestReadyGateWaitReadyFailsWhenConnectionRemoved(t *testing.T) {
+	gate := handshake.NewReadyGate(nil)
+	gate.Register("conn-removed")
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- gate.WaitReady(ctx, "conn-removed") }()
+	time.Sleep(10 * time.Millisecond)
+	gate.Remove("conn-removed")
+	if err := <-done; !errors.Is(err, handshake.ErrReadyGateRemoved) {
+		t.Fatalf("WaitReady() error = %v, want ErrReadyGateRemoved", err)
+	}
+}
+
+func TestReadyGateWaitReadyHonorsContext(t *testing.T) {
+	gate := handshake.NewReadyGate(nil)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	defer cancel()
+	if err := gate.WaitReady(ctx, "conn-timeout"); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("WaitReady() error = %v, want context deadline", err)
 	}
 }

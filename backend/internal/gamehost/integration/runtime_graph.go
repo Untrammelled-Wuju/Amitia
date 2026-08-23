@@ -228,6 +228,7 @@ func (p *RuntimeGraphProvisioner) reconcilePlugin(ctx context.Context, kp Kernel
 		Dependencies:     bootService.Dependencies,
 		Env:              bootService.Env,
 		Metadata:         metadata,
+		Network:          bootService.Network,
 		Enabled:          true,
 	}
 
@@ -339,6 +340,47 @@ func (p *RuntimeGraphProvisioner) extractSecretManifestGrouped(kp KernelGamePlug
 	return grouped, errs
 }
 
+func buildGameNetworkPolicy(spec *gameprotocol.GameNetworkPolicy, permissions []string) (trusted_service.ServiceNetworkPolicy, error) {
+	if spec == nil || strings.TrimSpace(spec.Mode) == "" {
+		return trusted_service.ServiceNetworkPolicy{}, nil
+	}
+	mode := strings.ToLower(strings.TrimSpace(spec.Mode))
+	policy := trusted_service.ServiceNetworkPolicy{Mode: mode, Enforce: true, AuditAll: spec.AuditAll, RequireProxy: spec.RequireProxy}
+	switch mode {
+	case "none":
+		return policy, nil
+	case "loopback":
+		policy.AllowOutbound = true
+		policy.LoopbackOnly = true
+		return policy, nil
+	case "unrestricted":
+		if !containsString(permissions, "service.network.request") {
+			return trusted_service.ServiceNetworkPolicy{}, fmt.Errorf("unrestricted outbound network requires service.network.request")
+		}
+		policy.AllowOutbound = true
+		return policy, nil
+	case "restricted":
+		if !containsString(permissions, "service.network.request") {
+			return trusted_service.ServiceNetworkPolicy{}, fmt.Errorf("restricted outbound network requires service.network.request")
+		}
+		policy.AllowOutbound = true
+		policy.AllowedDomains = append([]string(nil), spec.AllowedDomains...)
+		policy.AllowedPorts = append([]int(nil), spec.AllowedPorts...)
+		return policy, nil
+	default:
+		return trusted_service.ServiceNetworkPolicy{}, fmt.Errorf("unsupported mode %q", mode)
+	}
+}
+
+func containsString(values []string, target string) bool {
+	for _, value := range values {
+		if strings.TrimSpace(value) == target {
+			return true
+		}
+	}
+	return false
+}
+
 type bootServiceInfo struct {
 	ID               ghdomain.ServiceID
 	ModuleID         string
@@ -352,9 +394,17 @@ type bootServiceInfo struct {
 	Dependencies     []trusted_service.LibraryDep
 	Protocol         string
 	Env              map[string]string
+	Network          trusted_service.ServiceNetworkPolicy
 }
 
 func (p *RuntimeGraphProvisioner) buildBootService(ctx context.Context, kp KernelGamePlugin) (bootServiceInfo, error) {
+	gameSpec, err := gameprotocol.ParseGamePluginSpec(kp.Contribution.Definition)
+	if err != nil {
+		return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: parse game plugin spec: %w", kp.Extension.ID, kp.Contribution.ID, err)
+	}
+	if err := gameSpec.Validate(); err != nil {
+		return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: validate game plugin spec: %w", kp.Extension.ID, kp.Contribution.ID, err)
+	}
 	runtimeModuleID, ok := kp.Contribution.Definition["runtimeModuleId"].(string)
 	if !ok || strings.TrimSpace(runtimeModuleID) == "" {
 		return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: runtimeModuleId is required", kp.Extension.ID, kp.Contribution.ID)
@@ -386,6 +436,11 @@ func (p *RuntimeGraphProvisioner) buildBootService(ctx context.Context, kp Kerne
 		return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: unsupported protocolVersion %q", kp.Extension.ID, kp.Contribution.ID, protocolVersion)
 	}
 
+	networkPolicy, err := buildGameNetworkPolicy(gameSpec.Network, kp.Contribution.RequiredPermissions)
+	if err != nil {
+		return bootServiceInfo{}, fmt.Errorf("plugin %s/%s: network policy: %w", kp.Extension.ID, kp.Contribution.ID, err)
+	}
+
 	info := bootServiceInfo{
 		ID:          ghdomain.ServiceID(serviceID),
 		ModuleID:    runtimeModuleID,
@@ -394,6 +449,7 @@ func (p *RuntimeGraphProvisioner) buildBootService(ctx context.Context, kp Kerne
 		EntryPoint:  module.Runtime.EntryPoint,
 		Protocol:    protocolVersion,
 		Env:         module.Runtime.Env,
+		Network:     networkPolicy,
 	}
 	if info.RuntimeType == "" {
 		info.RuntimeType = service_definition.ServiceRuntimeType

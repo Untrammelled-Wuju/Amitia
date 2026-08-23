@@ -101,11 +101,7 @@ func (m *DefinitionMapper) MapToDefinition(view ServiceRuntimeView) (*trusted_se
 			MaxDiskMB:          1024,
 			MaxSubprocesses:    8,
 		},
-		Network: trusted_service.ServiceNetworkPolicy{
-			AllowOutbound:  true,
-			AllowedDomains: []string{"localhost", "127.0.0.1"},
-			LoopbackOnly:   false,
-		},
+		Network:           resolveNetworkPolicy(view.Network),
 		ManifestHash:      computeManifestHash(view),
 		DefinitionVersion: 2,
 		AutoStart:         false,
@@ -149,8 +145,45 @@ func computeManifestHash(view ServiceRuntimeView) string {
 	h.Write([]byte(view.Name))
 	h.Write([]byte(view.PublisherID))
 	h.Write([]byte(view.PublisherTrust))
+	h.Write([]byte(view.Network.Mode))
 	for _, arg := range view.Arguments {
 		h.Write([]byte(arg))
+	}
+	if view.Network.Enforce {
+		h.Write([]byte{1})
+	} else {
+		h.Write([]byte{0})
+	}
+	if view.Network.AllowInbound {
+		h.Write([]byte{1})
+	} else {
+		h.Write([]byte{0})
+	}
+	if view.Network.AllowOutbound {
+		h.Write([]byte{1})
+	} else {
+		h.Write([]byte{0})
+	}
+	if view.Network.LoopbackOnly {
+		h.Write([]byte{1})
+	} else {
+		h.Write([]byte{0})
+	}
+	if view.Network.RequireProxy {
+		h.Write([]byte{1})
+	} else {
+		h.Write([]byte{0})
+	}
+	if view.Network.AuditAll {
+		h.Write([]byte{1})
+	} else {
+		h.Write([]byte{0})
+	}
+	for _, domain := range view.Network.AllowedDomains {
+		h.Write([]byte(domain))
+	}
+	for _, port := range view.Network.AllowedPorts {
+		h.Write([]byte(fmt.Sprintf("%d", port)))
 	}
 	envKeys := make([]string, 0, len(view.Env))
 	for k := range view.Env {
@@ -174,6 +207,20 @@ func authoritativeServiceTrustLevel(raw string) trusted_service.TrustLevel {
 		return trusted_service.TrustLevelCommunity
 	default:
 		return trusted_service.TrustLevelUnknown
+	}
+}
+
+func resolveNetworkPolicy(policy trusted_service.ServiceNetworkPolicy) trusted_service.ServiceNetworkPolicy {
+	if policy.Mode != "" || policy.Enforce || policy.AllowInbound || policy.AllowOutbound || policy.LoopbackOnly || policy.RequireProxy || len(policy.AllowedDomains) > 0 || len(policy.AllowedPorts) > 0 {
+		policy.AllowedDomains = append([]string(nil), policy.AllowedDomains...)
+		policy.AllowedPorts = append([]int(nil), policy.AllowedPorts...)
+		return policy
+	}
+	// Legacy definitions did not declare a game network policy. Preserve their
+	// historical behavior while new game plugins opt into enforceable policy.
+	return trusted_service.ServiceNetworkPolicy{
+		AllowOutbound:  true,
+		AllowedDomains: []string{"localhost", "127.0.0.1"},
 	}
 }
 

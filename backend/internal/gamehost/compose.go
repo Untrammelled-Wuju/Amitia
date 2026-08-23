@@ -18,6 +18,7 @@ import (
 	ghTrustedService "github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	"github.com/u-ai/backend/internal/gamehost/agentbridge"
 	"github.com/u-ai/backend/internal/gamehost/channel"
+	"github.com/u-ai/backend/internal/gamehost/companion"
 	"github.com/u-ai/backend/internal/gamehost/config"
 	"github.com/u-ai/backend/internal/gamehost/control"
 	"github.com/u-ai/backend/internal/gamehost/domain"
@@ -147,6 +148,14 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	configStore := config.NewFileStore(dirMgr)
 	configResolver := config.NewResolver(configStore, nil, nil)
 
+	var companionManager *companion.Manager
+	if opts.KernelSource != nil && opts.GenerationResolver != nil {
+		companionManager, err = companion.NewManager(opts.DataRoot, opts.KernelSource, opts.GenerationResolver)
+		if err != nil {
+			return nil, fmt.Errorf("compose companion manager: %w", err)
+		}
+	}
+
 	pluginReg := registry.NewRegistry()
 	runtimeManager := runtime.NewManager(runtime.ManagerOptions{})
 	topologyStore := runtime.NewTopologyStore()
@@ -162,13 +171,10 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 
 	nsReg := rpc.NewNamespaceRegistry(rpc.NamespaceRegistryConfig{})
 
-	var notifSink notification.NotificationSink
+	var durableNotifSink notification.NotificationSink
 	if opts.EventService != nil {
-		notifSink = integration.NewKernelEventNotificationSink(opts.EventService, pluginReg)
-	} else {
-		notifSink = notification.NewCompositeSink()
+		durableNotifSink = integration.NewKernelEventNotificationSink(opts.EventService, pluginReg)
 	}
-	notifBridge := notification.NewBridge(notifSink)
 
 	connReg := ipc.NewConnectionRegistry()
 
@@ -188,10 +194,13 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 
 	hostHandlers := rpc.NewHostHandlerRegistry()
 	rpcLifecycle := rpc.NewLifecycleManager(rpc.LifecycleManagerConfig{})
+	notifComposite := notification.NewCompositeSink(durableNotifSink)
+	notifBridge := notification.NewBridge(notifComposite)
 	rpcDispatcher := rpc.NewRPCDispatcher(rpc.DispatcherConfig{
-		Namespaces:   nsReg,
-		HostHandlers: hostHandlers,
-		Lifecycle:    rpcLifecycle,
+		Namespaces:    nsReg,
+		HostHandlers:  hostHandlers,
+		Lifecycle:     rpcLifecycle,
+		Notifications: notifBridge,
 	})
 
 	handshakeController := handshake.NewHandshakeControllerAdapter(handshakeMgr, readyGate)
@@ -743,12 +752,18 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	if err != nil {
 		return nil, fmt.Errorf("compose game agent bridge: %w", err)
 	}
+	if companionManager != nil {
+		gameAgentBridge.SetCompanionPreparer(companionManager)
+	}
+	agentEventSink := notification.NewAgentEventSink(gameAgentBridge.SessionRegistry())
+	notifComposite.Add(agentEventSink)
 
 	container := &GameHostContainer{
 		DirectoryManager:         dirMgr,
 		CheckpointStore:          checkpointStore,
 		ConfigStore:              configStore,
 		ConfigResolver:           configResolver,
+		CompanionManager:         companionManager,
 		PluginRegistry:           pluginReg,
 		ContributionSync:         contributionSync,
 		RuntimeManager:           runtimeManager,
@@ -767,6 +782,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		HostHandlerRegistry:      hostHandlers,
 		ChannelRegistry:          channelReg,
 		NotificationBridge:       notifBridge,
+		AgentEventSink:           agentEventSink,
 		StateStore:               stateStore,
 		BinaryObjectRegistry:     binaryReg,
 		StreamManager:            streamMgr,
@@ -941,6 +957,7 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 			runtimeManager,
 			topologyStore,
 			pluginReg,
+			readyGate,
 		)
 		if err := opts.TrustedSupervisor.RegisterStdioProtocolHandler(protocol.ProtocolVersion, handler); err != nil {
 			return nil, fmt.Errorf("register gamehost stdio protocol handler: %w", err)

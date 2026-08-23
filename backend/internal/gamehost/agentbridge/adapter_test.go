@@ -15,6 +15,21 @@ import (
 	"github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
+type captureCompanionPreparer struct {
+	calls       int
+	extensionID string
+	gameRoot    string
+	gameVersion string
+}
+
+func (p *captureCompanionPreparer) PrepareRequired(_ context.Context, extensionID, gameRoot, gameVersion string) error {
+	p.calls++
+	p.extensionID = extensionID
+	p.gameRoot = gameRoot
+	p.gameVersion = gameVersion
+	return nil
+}
+
 type gameProtocolControlPlane struct {
 	methods []string
 }
@@ -90,6 +105,8 @@ func TestRuntimeAdapterGameProtocolV2Lifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	preparer := &captureCompanionPreparer{}
+	adapter.SetCompanionPreparer(preparer)
 	binding := capability.RuntimeBinding{
 		RuntimeType: capability.RuntimeTypeGameHost,
 		Metadata:    map[string]any{"extensionId": "com.amitia.minecraft", "serviceId": "main"},
@@ -99,7 +116,7 @@ func TestRuntimeAdapterGameProtocolV2Lifecycle(t *testing.T) {
 		method string
 		input  any
 	}{
-		{protocol.MethodGameSessionOpen, map[string]any{"gameId": "minecraft-java"}},
+		{protocol.MethodGameSessionOpen, protocol.GameSessionOpenRequest{GameRoot: "/games/minecraft", GameVersion: "1.21.8"}},
 		{protocol.MethodGameObservationGet, map[string]any{"sessionId": "session-1"}},
 		{protocol.MethodGameActionExecute, protocol.GameAction{ID: "action-1", SessionID: "session-1", Type: "minecraft.move", Parameters: json.RawMessage(`{"x":1}`)}},
 	}
@@ -109,7 +126,14 @@ func TestRuntimeAdapterGameProtocolV2Lifecycle(t *testing.T) {
 			t.Fatal(err)
 		}
 		binding.HandlerName = call.method
-		result := adapter.Execute(ctx, binding, capability.ToolInvocationContext{InvocationID: fmt.Sprintf("invoke-%d", idx+1)}, input)
+		result := adapter.Execute(ctx, binding, capability.ToolInvocationContext{
+			InvocationID:   fmt.Sprintf("invoke-%d", idx+1),
+			UserID:         "user-1",
+			CharacterID:    "char-1",
+			ConversationID: "conv-1",
+			Channel:        "web",
+			SessionID:      "host-session-1",
+		}, input)
 		if result.Status != capability.ToolResultStatusSuccess {
 			t.Fatalf("%s failed: %+v", call.method, result.Error)
 		}
@@ -119,6 +143,17 @@ func TestRuntimeAdapterGameProtocolV2Lifecycle(t *testing.T) {
 		if len(result.Structured) == 0 {
 			t.Fatalf("%s returned empty structured result", call.method)
 		}
+	}
+
+	if preparer.calls != 1 || preparer.extensionID != "com.amitia.minecraft" || preparer.gameRoot != "/games/minecraft" || preparer.gameVersion != "1.21.8" {
+		t.Fatalf("unexpected companion preparation: %+v", preparer)
+	}
+	scope, ok := adapter.SessionRegistry().Resolve(rt.ID, "session-1")
+	if !ok {
+		t.Fatal("game session scope was not bound")
+	}
+	if scope.CharacterID != "char-1" || scope.UserID != "user-1" || scope.ConversationID != "conv-1" || scope.HostSessionID != "host-session-1" {
+		t.Fatalf("unexpected game session scope: %+v", scope)
 	}
 
 	want := []string{protocol.MethodGameSessionOpen, protocol.MethodGameObservationGet, protocol.MethodGameActionExecute}

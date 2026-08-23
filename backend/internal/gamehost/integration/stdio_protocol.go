@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
 	"github.com/u-ai/backend/internal/gamehost/contracts"
 	"github.com/u-ai/backend/internal/gamehost/domain"
+	"github.com/u-ai/backend/internal/gamehost/handshake"
 	"github.com/u-ai/backend/internal/gamehost/ipc"
 	"github.com/u-ai/backend/internal/gamehost/runtime"
 )
@@ -17,6 +19,8 @@ type GameHostStdioProtocolHandler struct {
 	runtimes     RuntimeReader
 	topology     RuntimeTopologyReader
 	plugins      contracts.PluginRegistry
+	readyGate    *handshake.ReadyGate
+	readyTimeout time.Duration
 }
 
 func NewGameHostStdioProtocolHandler(
@@ -24,12 +28,15 @@ func NewGameHostStdioProtocolHandler(
 	runtimes RuntimeReader,
 	topology RuntimeTopologyReader,
 	plugins contracts.PluginRegistry,
+	readyGate *handshake.ReadyGate,
 ) *GameHostStdioProtocolHandler {
 	return &GameHostStdioProtocolHandler{
 		controlPlane: controlPlane,
 		runtimes:     runtimes,
 		topology:     topology,
 		plugins:      plugins,
+		readyGate:    readyGate,
+		readyTimeout: 15 * time.Second,
 	}
 }
 
@@ -87,6 +94,17 @@ func (h *GameHostStdioProtocolHandler) Attach(
 	conn, err := h.controlPlane.Attach(ctx, peer, transport)
 	if err != nil {
 		return nil, fmt.Errorf("gamehost stdio: control plane attach failed: %w", err)
+	}
+
+	if h.readyGate == nil {
+		_ = h.controlPlane.Detach(context.Background(), conn.ID)
+		return nil, fmt.Errorf("gamehost stdio: ready gate is unavailable")
+	}
+	waitCtx, cancel := context.WithTimeout(ctx, h.readyTimeout)
+	defer cancel()
+	if err := h.readyGate.WaitReady(waitCtx, string(conn.ID)); err != nil {
+		_ = h.controlPlane.Detach(context.Background(), conn.ID)
+		return nil, fmt.Errorf("gamehost stdio: plugin handshake did not reach ready: %w", err)
 	}
 
 	return &attachedConnectionCloser{

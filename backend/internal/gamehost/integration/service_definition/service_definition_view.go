@@ -20,6 +20,7 @@ type ServiceRuntimeView struct {
 	Dependencies     []trusted_service.LibraryDep
 	Env              map[string]string
 	Metadata         map[string]string
+	Network          trusted_service.ServiceNetworkPolicy
 	Enabled          bool
 	ExtensionState   string
 }

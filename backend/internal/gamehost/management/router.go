@@ -57,3 +57,12 @@ func RegisterRPCRouter(group *gin.RouterGroup, rpcHandler *RPCHandler) {
 		gameCenter.POST("/runtimes/:runtimeId/services/:serviceId/rpc", rpcHandler.InvokeRPC)
 	}
 }
+
+func RegisterGameCenterCompanionRouter(group *gin.RouterGroup, handler *CompanionHandler) {
+	gameCenter := group.Group("/game-center")
+	gameCenter.GET("/plugins/:extensionId/companions", handler.List)
+	gameCenter.POST("/plugins/:extensionId/companions/install-required", handler.InstallRequired)
+	gameCenter.POST("/plugins/:extensionId/companions/:artifactId/install", handler.Install)
+	gameCenter.POST("/plugins/:extensionId/companions/:artifactId/verify", handler.Verify)
+	gameCenter.DELETE("/plugins/:extensionId/companions/:artifactId", handler.Remove)
+}

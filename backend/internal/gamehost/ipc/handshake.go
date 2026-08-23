@@ -38,6 +38,10 @@ type HandshakeController interface {
 		payload json.RawMessage,
 	) (json.RawMessage, error)
 
+	// ConfirmReady commits the ready state only after the hello response has
+	// been successfully written to the transport.
+	ConfirmReady(id ConnectionID)
+
 	// CanProcess reports whether the given connection is allowed to process the
 	// specified method name right now. Implementations MUST return true for
 	// HandshakeMethod (and any other pre-ready allowlisted methods) regardless of
@@ -72,6 +76,8 @@ func (n *NoopHandshakeController) HandleHello(
 		"handshake is not enabled",
 	)
 }
+
+func (n *NoopHandshakeController) ConfirmReady(_ ConnectionID) {}
 
 func (n *NoopHandshakeController) CanProcess(_ ConnectionID, _ string) bool {
 	return true

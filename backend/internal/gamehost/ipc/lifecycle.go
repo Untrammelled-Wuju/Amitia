@@ -298,6 +298,9 @@ func (cp *controlPlane) Send(ctx context.Context, peer Peer, envelope protocol.E
 			nil,
 		)
 	}
+	if !cp.handshakeController.CanProcess(conn.ID, envelope.Method) {
+		return NewIPCError(IPCErrorProtocol, domain.ErrInvalidState, "connection has not completed the game protocol handshake")
+	}
 
 	FillRouting(&envelope, peer)
 
@@ -333,6 +336,9 @@ func (cp *controlPlane) SendRequest(ctx context.Context, peer Peer, envelope pro
 			"connection is not active",
 			nil,
 		)
+	}
+	if !cp.handshakeController.CanProcess(conn.ID, envelope.Method) {
+		return nil, NewIPCError(IPCErrorProtocol, domain.ErrInvalidState, "connection has not completed the game protocol handshake")
 	}
 
 	if envelope.ID == "" {
@@ -516,7 +522,9 @@ func (cp *controlPlane) handleHandshakeHello(conn *Connection, envelope protocol
 
 	if err := conn.Transport().Send(context.Background(), resp); err != nil {
 		cp.connHandler.OnError(conn, err)
+		return
 	}
+	cp.handshakeController.ConfirmReady(conn.ID)
 }
 
 func (cp *controlPlane) sendHelloError(conn *Connection, envelope protocol.Envelope, err error) {
