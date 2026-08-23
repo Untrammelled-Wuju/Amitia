@@ -58,9 +58,21 @@ func translateKernelPackagePreviewDirect(ctx context.Context, container *kernelr
 		Dependencies:            []PackageDependencyView{}, Files: []PackageFileView{}, Risks: []PackageRisk{},
 		Warnings: []string{}, Errors: []string{}, AvailableActions: []string{}, ExpiresAt: preview.ExpiresAt,
 		Conflict: PackageConflictNew}
+	for _, permission := range preview.RequiredPermissions {
+		if permission.Name != "" {
+			result.Capabilities = append(result.Capabilities, permission.Name)
+		}
+	}
 	for _, dependency := range preview.MissingDependencies {
 		result.Dependencies = append(result.Dependencies, PackageDependencyView{ID: dependency.ID,
 			VersionConstraint: dependency.Version, Required: !dependency.Optional, Installed: !dependency.Missing})
+	}
+	for _, warning := range preview.ValidationReport.Warnings {
+		message := warning.Message
+		if warning.Code != "" {
+			message = warning.Code + ": " + message
+		}
+		result.Warnings = append(result.Warnings, message)
 	}
 	for _, issue := range preview.Issues {
 		result.Errors = append(result.Errors, issue.Code+": "+issue.Message)
@@ -68,6 +80,7 @@ func translateKernelPackagePreviewDirect(ctx context.Context, container *kernelr
 	for _, risk := range preview.RiskFlags {
 		result.Risks = append(result.Risks, PackageRisk{Code: risk, Severity: "high", Message: risk})
 	}
+	result.ManagementTarget, result.ContributionKinds = packagePreviewManagementTarget(preview)
 	if preview.Installable {
 		result.AvailableActions = []string{"install"}
 	}
@@ -81,6 +94,37 @@ func translateKernelPackagePreviewDirect(ctx context.Context, container *kernelr
 		}
 	}
 	return result
+}
+
+func packagePreviewManagementTarget(preview kernelruntime.InstallPreview) (string, []string) {
+	kinds := make([]domain.ContributionKind, 0)
+	kindNames := make([]string, 0)
+	seen := make(map[string]struct{})
+	for _, module := range preview.Manifest.Modules {
+		for _, contribution := range module.Contributions {
+			kind := string(contribution.Kind)
+			if kind == "" {
+				continue
+			}
+			kinds = append(kinds, domain.ContributionKind(kind))
+			if _, exists := seen[kind]; !exists {
+				seen[kind] = struct{}{}
+				kindNames = append(kindNames, kind)
+			}
+		}
+	}
+	if len(kinds) == 0 {
+		return "", kindNames
+	}
+	extensionDomain, err := domain.ResolveDomainFromKinds(kinds)
+	if err != nil {
+		return "", kindNames
+	}
+	target, err := domain.ManagementTargetForDomain(extensionDomain)
+	if err != nil {
+		return "", kindNames
+	}
+	return string(target), kindNames
 }
 
 func kernelPackageOperationView(record kernelruntime.PackageOperationRecord, steps []kernelruntime.PackageOperationStep) PackageOperationView {
