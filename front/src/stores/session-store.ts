@@ -37,12 +37,12 @@ export function useSessionStore() {
   const isAuthenticated = computed(() => !!state.value.accessToken);
 
   function setSession(data: {
-    accessToken: string;
-    accessTokenExpiresAt?: string;
-    sessionId?: string;
-    userId?: string;
-    username?: string;
-    role?: string;
+    accessToken: string | null;
+    accessTokenExpiresAt?: string | null;
+    sessionId?: string | null;
+    userId?: string | null;
+    username?: string | null;
+    role?: string | null;
   }) {
     state.value = {
       accessToken: data.accessToken,
@@ -54,7 +54,7 @@ export function useSessionStore() {
     };
   }
 
-  function setAccessToken(token: string, expiresAt?: string) {
+  function setAccessToken(token: string, expiresAt?: string | null) {
     state.value.accessToken = token;
     state.value.accessTokenExpiresAt = expiresAt ?? null;
   }

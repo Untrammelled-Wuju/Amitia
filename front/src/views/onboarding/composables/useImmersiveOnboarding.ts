@@ -3,6 +3,7 @@ import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { useApi } from "../../../composables/useApi";
 import { useSessionStore } from "../../../stores/session-store";
+import { saveAuthenticatedSession } from "../../../stores/refresh-coordinator";
 import { getApiBaseURL } from "@/runtime/runtime-adapter";
 
 export function useImmersiveOnboarding() {
@@ -424,13 +425,23 @@ export function useImmersiveOnboarding() {
       });
       if (loginRes?.token || loginRes?.accessToken) {
         const { setSession } = useSessionStore();
+        const accessToken = loginRes.accessToken || loginRes.token;
         setSession({
-          accessToken: loginRes.accessToken || loginRes.token,
+          accessToken,
           accessTokenExpiresAt: loginRes.accessTokenExpiresAt || null,
           sessionId: loginRes.sessionId || (loginRes.session?.sessionId) || null,
           userId: loginRes.userId?.toString() || null,
           username: loginRes.username || data.username || null,
           role: loginRes.role || null,
+        });
+        saveAuthenticatedSession({
+          accessToken,
+          accessTokenExpiresAt: loginRes.accessTokenExpiresAt,
+          refreshToken: loginRes.refreshToken,
+          sessionId: loginRes.sessionId || loginRes.session?.sessionId,
+          userId: loginRes.user?.id || loginRes.userId,
+          username: loginRes.user?.username || loginRes.username || data.username,
+          role: loginRes.user?.role || loginRes.role,
         });
       }
 

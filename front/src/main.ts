@@ -23,14 +23,16 @@ import { restoreSessionOnStartup } from "./stores/refresh-coordinator";
 
 async function bootstrap() {
   await getRuntimeConnection();
-  await restoreSessionOnStartup();
+  const isAuthenticated = await restoreSessionOnStartup();
   const app = createApp(App);
   const pinia = createPinia();
   app.use(pinia);
   app.use(router);
   app.use(ElementPlus, { locale: zhCn });
   const extensionUI = useExtensionUIStore(pinia);
-  await extensionUI.refreshSnapshot().catch(() => undefined);
+  if (isAuthenticated) {
+    await extensionUI.refreshSnapshot().catch(() => undefined);
+  }
   await syncBrowserClientSlots(extensionUI.snapshot);
   extensionUI.$subscribe((_mutation, state) => { void syncBrowserClientSlots(state.snapshot); });
   window.amitiaClientPlugins = browserClientPluginRuntime;

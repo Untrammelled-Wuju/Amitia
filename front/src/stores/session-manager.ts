@@ -2,7 +2,11 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 import { useSessionStore } from "./session-store";
 import { loginUser, logoutUser, logoutAll } from "./session-client";
-import { initRefreshCoordinator, stopRefreshCoordinator } from "./refresh-coordinator";
+import {
+  initRefreshCoordinator,
+  saveAuthenticatedSession,
+  stopRefreshCoordinator,
+} from "./refresh-coordinator";
 
 export function useSessionManager() {
   const { state, isAuthenticated, setSession, clearSession } = useSessionStore();
@@ -20,6 +24,15 @@ export function useSessionManager() {
     if (result.accessTokenExpiresAt) {
       initRefreshCoordinator(result.accessTokenExpiresAt);
     }
+    saveAuthenticatedSession({
+      accessToken: result.accessToken,
+      accessTokenExpiresAt: result.accessTokenExpiresAt,
+      refreshToken: result.refreshToken,
+      sessionId: result.session?.sessionId,
+      userId: result.user?.id,
+      username: result.user?.username,
+      role: result.user?.role,
+    });
     return result;
   }
 

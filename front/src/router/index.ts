@@ -8,6 +8,7 @@
  */
 import { createRouter, createWebHashHistory, createWebHistory } from "vue-router"
 import { getAccessToken } from "../stores/refresh-coordinator"
+import { saveCurrentUser } from "../stores/refresh-coordinator"
 import { useSessionStore } from "../stores/session-store"
 import { apiClient } from "../ui-index"
 import { shouldUseHashRouting } from "../runtime/runtime-capabilities"
@@ -73,6 +74,20 @@ function refreshAuthStatus(): void {
     .then((res) => {
       const userData = res.data?.data || res.data
       const valid = !!(userData?.id || userData?.userId)
+      if (valid) {
+        saveCurrentUser({
+          userId: userData?.userId || userData?.id,
+          username: userData?.username,
+          role: userData?.role,
+        })
+        const { state, setSession } = useSessionStore()
+        setSession({
+          ...state.value,
+          userId: String(userData?.userId || userData?.id),
+          username: userData?.username || null,
+          role: userData?.role || null,
+        })
+      }
       authCache.userAuthenticated = valid
       authCache.userCheckedAt = Date.now()
       if (!valid && routerInstance) {

@@ -80,6 +80,7 @@ import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { apiClient } from "../../ui-index";
 import { useSessionStore } from "../../stores/session-store";
+import { saveAuthenticatedSession } from "../../stores/refresh-coordinator";
 
 const router = useRouter();
 const formRef = ref();
@@ -146,6 +147,15 @@ async function handleSetup() {
         userId: data.userId?.toString() || null,
         username: data.username || null,
         role: data.role || null,
+      });
+      saveAuthenticatedSession({
+        accessToken: data.accessToken || data.token,
+        accessTokenExpiresAt: data.accessTokenExpiresAt,
+        refreshToken: data.refreshToken,
+        sessionId: data.sessionId || data.session?.sessionId,
+        userId: data.user?.id || data.userId,
+        username: data.user?.username || data.username,
+        role: data.user?.role || data.role,
       });
       ElMessage.success("管理员设置成功，已自动登录");
       router.push("/chat");
