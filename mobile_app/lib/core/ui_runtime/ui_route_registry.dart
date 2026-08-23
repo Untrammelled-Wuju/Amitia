@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../app/app_routes.dart';
 import 'ui_provider.dart';
 import 'ui_provider_host.dart';
 
@@ -17,17 +18,60 @@ class ProviderRouteUnavailable extends StatelessWidget {
       );
 }
 
-const _protectedRoutePrefixes = <String>{
-  '/onboarding', '/login', '/setup', '/privacy', '/usage-boundary',
-  '/settings/ui-providers', '/chat', '/characters', '/character', '/memory',
-  '/settings', '/extensions', '/extension/page',
+const _protectedRouteNamespaces = <String>{
+  AppRoutes.onboarding,
+  AppRoutes.login,
+  AppRoutes.privacy,
+  '/usage-boundary',
+  AppRoutes.chat,
+  AppRoutes.conversations,
+  AppRoutes.dashboard,
+  AppRoutes.channels,
+  AppRoutes.characters,
+  AppRoutes.agent,
+  AppRoutes.memory,
+  AppRoutes.reminders,
+  AppRoutes.emotes,
+  AppRoutes.chatLogs,
+  AppRoutes.chatImport,
+  AppRoutes.extensions,
+  '/extension',
+  AppRoutes.workshop,
+  AppRoutes.settings,
+  AppRoutes.developer,
+  AppRoutes.gameCenter,
+  AppRoutes.desktopPet,
 };
 
-bool _shadowsCoreRoute(String path) {
-  for (final prefix in _protectedRoutePrefixes) {
-    if (path == prefix || path.startsWith('$prefix/')) return true;
+String? _rootNamespace(String path) {
+  final normalized = path.trim();
+  if (!normalized.startsWith('/') || normalized == '/') return null;
+  final segment = normalized.substring(1).split('/').first.trim();
+  if (segment.isEmpty || segment.startsWith(':') || segment.contains('*')) return null;
+  return '/$segment';
+}
+
+bool isProtectedProviderRoutePath(String path) {
+  final namespace = _rootNamespace(path);
+  return namespace != null && _protectedRouteNamespaces.contains(namespace);
+}
+
+bool _hasSafeProviderRouteSyntax(String path) {
+  final normalized = path.trim();
+  if (!normalized.startsWith('/') ||
+      normalized == '/' ||
+      normalized.contains('\\') ||
+      normalized.contains('?') ||
+      normalized.contains('#') ||
+      normalized.contains('%') ||
+      normalized.contains('\u0000') ||
+      _rootNamespace(normalized) == null) {
+    return false;
   }
-  return false;
+  return normalized
+      .substring(1)
+      .split('/')
+      .every((segment) => segment.isNotEmpty && segment != '.' && segment != '..');
 }
 
 class _ProviderRouteSpec {
@@ -65,6 +109,7 @@ List<UIProviderDefinition> _activeRegistries(UIProviderSnapshot snapshot) {
 
 List<_ProviderRouteSpec> _routeSpecs(UIProviderSnapshot snapshot) {
   final specs = <_ProviderRouteSpec>[];
+  final platform = currentUIPlatform();
   for (final registry in _activeRegistries(snapshot)) {
     final rawRoutes = registry.metadata['routes'];
     if (rawRoutes is! List) continue;
@@ -74,25 +119,30 @@ List<_ProviderRouteSpec> _routeSpecs(UIProviderSnapshot snapshot) {
       final id = (row['id'] ?? '').toString().trim();
       final path = (row['path'] ?? '').toString().trim();
       final providerId = (row['providerId'] ?? '').toString().trim();
-      final capability = (row['capability'] ?? UICapability.pageProvider).toString();
-      if (id.isEmpty || providerId.isEmpty || !path.startsWith('/') ||
-          !UICapability.all.contains(capability) || _shadowsCoreRoute(path)) {
+      final capability = (row['capability'] ?? UICapability.pageProvider).toString().trim();
+      if (id.isEmpty ||
+          providerId.isEmpty ||
+          !_hasSafeProviderRouteSyntax(path) ||
+          !UICapability.all.contains(capability) ||
+          isProtectedProviderRoutePath(path)) {
         continue;
       }
       final target = snapshot.providers.where((p) => p.providerId == providerId).firstOrNull;
       if (target == null ||
+          target.extensionId != registry.extensionId ||
           target.capability != capability ||
           !target.enabled ||
-          !target.compatibleWith(snapshot.context, currentUIPlatform())) {
+          !target.compatibleWith(snapshot.context, platform)) {
         continue;
       }
+      final rawPriority = row['priority'];
       specs.add(_ProviderRouteSpec(
         registry: registry,
         id: id,
         path: path,
         providerId: providerId,
         capability: capability,
-        priority: (row['priority'] as num?)?.toInt() ?? registry.priority,
+        priority: rawPriority is num ? rawPriority.toInt() : registry.priority,
       ));
     }
   }
@@ -100,11 +150,23 @@ List<_ProviderRouteSpec> _routeSpecs(UIProviderSnapshot snapshot) {
     final priority = b.priority.compareTo(a.priority);
     if (priority != 0) return priority;
     final extension = a.registry.extensionId.compareTo(b.registry.extensionId);
-    return extension != 0 ? extension : a.id.compareTo(b.id);
+    if (extension != 0) return extension;
+    final registry = a.registry.providerId.compareTo(b.registry.providerId);
+    return registry != 0 ? registry : a.id.compareTo(b.id);
   });
   final seen = <String>{};
   return specs.where((spec) => seen.add(spec.path)).toList(growable: false);
 }
+
+/// Keys for routes that survived compatibility, ownership, core-namespace and
+/// path-conflict checks. Used by navigation registries to hide stale links.
+Set<String> effectiveProviderRouteKeys(UIProviderSnapshot snapshot) => _routeSpecs(snapshot)
+    .map((spec) => '${spec.registry.providerId}\u0000${spec.path}')
+    .toSet();
+
+Set<String> effectiveExtensionRouteKeys(UIProviderSnapshot snapshot) => _routeSpecs(snapshot)
+    .map((spec) => '${spec.registry.extensionId}\u0000${spec.path}')
+    .toSet();
 
 /// Stable signature used by the router provider. Snapshot/theme refreshes do not
 /// recreate GoRouter unless the effective extension route table actually changes.
@@ -129,7 +191,7 @@ String uiRouteRegistrySignature(UIProviderSnapshot? snapshot) {
 List<RouteBase> buildProviderRoutes(UIProviderSnapshot? snapshot) {
   if (snapshot == null) return const <RouteBase>[];
   return _routeSpecs(snapshot).map((spec) {
-    final routeName = 'ui-provider-${spec.registry.extensionId}-${spec.id}'.replaceAll(':', '-');
+    final routeName = 'ui-provider-${spec.registry.extensionId}-${spec.registry.providerId}-${spec.id}'.replaceAll(':', '-');
     return GoRoute(
       name: routeName,
       path: spec.path,

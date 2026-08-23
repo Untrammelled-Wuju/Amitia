@@ -23,13 +23,13 @@ const state = ref<SessionState>({
 
 let revoking = false;
 
-export function revokeOnServer(): void {
+export function revokeOnServer(refreshToken?: string | null): void {
   if (revoking) {
     return;
   }
-  revoking = true
-  revokeRefreshToken().finally(() => {
-    revoking = false
+  revoking = true;
+  revokeRefreshToken(refreshToken).finally(() => {
+    revoking = false;
   });
 }
 
@@ -68,7 +68,6 @@ export function useSessionStore() {
       username: null,
       role: null,
     };
-    revokeOnServer();
   }
 
   return {

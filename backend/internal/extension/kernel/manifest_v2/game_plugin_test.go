@@ -309,6 +309,7 @@ func TestGamePluginPreservedInExtensionDefinition(t *testing.T) {
 				"id": "main",
 				"name": {"default": "Main"},
 				"type": "javascript",
+				"runtime": {"type": "javascript", "entryPoint": "dist/index.js"},
 				"contributions": [
 					{
 						"id": "game-1",

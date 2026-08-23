@@ -539,7 +539,9 @@ func (m Manifest) ToExtensionDefinition() (domain.ExtensionDefinition, error) {
 		Publisher: domain.PublisherReference{
 			PublisherID: normalized.Publisher.ID,
 			DisplayName: normalized.Publisher.DisplayName,
-			TrustLevel:  normalized.Publisher.TrustLevel,
+			// Publisher trust is an installation-time security decision. Never
+			// promote a manifest-authored trustLevel into the runtime definition.
+			TrustLevel: "unknown",
 		},
 		Compatibility: domain.ExtensionCompatibility{
 			MinHostVersion: normalized.Compatibility.MinHostVersion,
@@ -571,7 +573,9 @@ func (m Manifest) ToExtensionDefinition() (domain.ExtensionDefinition, error) {
 				if c.Definition == nil {
 					c.Definition = map[string]any{}
 				}
-				c.Definition["trustLevel"] = normalized.Publisher.TrustLevel
+				// The package cannot self-assert root UI trust. Verified installation
+				// flows replace this value with the authoritative trust decision.
+				c.Definition["trustLevel"] = "unknown"
 				// UI providers inherit module placement/device requirements. This keeps
 				// the .amitiax contract single-sourced: plugin authors declare where a
 				// module lives once, while the UI resolver can still make a per-device

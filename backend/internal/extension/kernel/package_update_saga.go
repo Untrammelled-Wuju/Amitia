@@ -226,6 +226,7 @@ func (r *Runtime) ExecutePackageUpdate(ctx context.Context, request PackageInsta
 	if err != nil {
 		return KernelInstallResult{}, err
 	}
+	bindAuthoritativePublisherTrust(&targetDefinition, confirmed.preview.TrustDecision)
 	migrationPreflight, err := r.revalidatePackageMigrationPreflight(ctx, current, confirmed)
 	if err != nil {
 		return KernelInstallResult{}, err
