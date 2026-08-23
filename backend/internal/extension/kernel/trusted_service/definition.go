@@ -147,6 +147,8 @@ type ServiceRuntimeDefinition struct {
 }
 
 type ServiceNetworkPolicy struct {
+	Mode           string   `json:"mode,omitempty"`
+	Enforce        bool     `json:"enforce,omitempty"`
 	AllowInbound   bool     `json:"allow_inbound"`
 	AllowOutbound  bool     `json:"allow_outbound"`
 	AllowedDomains []string `json:"allowed_domains,omitempty"`

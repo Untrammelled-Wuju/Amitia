@@ -402,6 +402,10 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 	}
 
 	env := s.buildSafeEnvironment(exe, def, req.SessionToken, instanceID, req.Generation, tempDir, defaultLogLevel(req.LogLevel), req.SecretLease)
+	launchPath, launchArgs, err := prepareNetworkLaunch(def.Network, fullExePath, args, workingDir, tempDir)
+	if err != nil {
+		return nil, fmt.Errorf("trusted_service: enforce network policy: %w", err)
+	}
 
 	instance := &ServiceInstance{
 		InstanceID:        instanceID,
@@ -435,7 +439,7 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 	isRPC := def.Protocol == "jsonrpc" || def.Protocol == "amitia_jsonrpc_v1"
 
 	if isRPC {
-		if err := s.startRPCService(ctx, instance, def, exe, fullExePath, args, env, workingDir, req); err != nil {
+		if err := s.startRPCService(ctx, instance, def, exe, launchPath, launchArgs, env, workingDir, req); err != nil {
 			instance.SetState(ServiceStateFailed)
 			instance.circuit.RecordFailure()
 			s.mu.Lock()
@@ -444,7 +448,7 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 			return nil, err
 		}
 	} else if handler, ok := s.protocolHandlers[def.Protocol]; ok {
-		if err := s.startManagedStdioProtocolService(ctx, instance, def, exe, fullExePath, args, env, workingDir, req, handler); err != nil {
+		if err := s.startManagedStdioProtocolService(ctx, instance, def, exe, launchPath, launchArgs, env, workingDir, req, handler); err != nil {
 			instance.SetState(ServiceStateFailed)
 			instance.circuit.RecordFailure()
 			s.mu.Lock()
@@ -453,7 +457,7 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 			return nil, err
 		}
 	} else if def.Protocol == "" || def.Protocol == "plain" {
-		if err := s.startPlainService(ctx, instance, def, exe, fullExePath, args, env, workingDir, req); err != nil {
+		if err := s.startPlainService(ctx, instance, def, exe, launchPath, launchArgs, env, workingDir, req); err != nil {
 			instance.SetState(ServiceStateFailed)
 			instance.circuit.RecordFailure()
 			s.mu.Lock()
