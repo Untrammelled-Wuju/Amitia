@@ -26,6 +26,7 @@ import (
 	"github.com/u-ai/backend/internal/extension/kernel/ui_contribution"
 	"github.com/u-ai/backend/internal/extension/kernel/ui_provider"
 	"github.com/u-ai/backend/internal/extension/kernel/workflow"
+	gameprotocol "github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
 type TypedContributionInstaller struct {
@@ -529,16 +530,16 @@ func (i *TypedContributionInstaller) buildToolOp(ctx context.Context, contrib do
 }
 
 func (i *TypedContributionInstaller) buildGamePluginOp(ctx context.Context, contrib domain.ContributionDefinition, defData []byte, generation int64) (installOp, error) {
-	var def struct {
-		ProtocolVersion string `json:"protocolVersion"`
-		RuntimeModuleID string `json:"runtimeModuleId,omitempty"`
-		DisplayName     string `json:"displayName,omitempty"`
-	}
-	if err := json.Unmarshal(defData, &def); err != nil {
+	var raw map[string]any
+	if err := json.Unmarshal(defData, &raw); err != nil {
 		return installOp{}, fmt.Errorf("unmarshal game plugin: %w", err)
 	}
-	if def.ProtocolVersion == "" {
-		return installOp{}, fmt.Errorf("game_plugin: protocolVersion required")
+	spec, err := gameprotocol.ParseGamePluginSpec(raw)
+	if err != nil {
+		return installOp{}, fmt.Errorf("game_plugin: %w", err)
+	}
+	if err := spec.Validate(); err != nil {
+		return installOp{}, fmt.Errorf("game_plugin: %w", err)
 	}
 	if contrib.ID == "" {
 		return installOp{}, fmt.Errorf("game_plugin: id required")

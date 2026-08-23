@@ -34,6 +34,7 @@ const (
 	RuntimeTypeBackgroundRemoval RuntimeType = "background_removal"
 	RuntimeTypeWorkspace         RuntimeType = "workspace"
 	RuntimeTypeChannel           RuntimeType = "channel"
+	RuntimeTypeGameHost          RuntimeType = "game_host"
 )
 
 type RuntimeBinding struct {

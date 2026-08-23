@@ -377,7 +377,10 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 	_ = supervisor.RegisterFactory(wasmFactory)
 
 	trustedSvcRoot := filepath.Join(b.extRoot, "trusted-services")
-	trustedSupervisor := trusted_service.NewProcessSupervisor(trustedSvcRoot)
+	trustedSupervisor := trusted_service.NewProcessSupervisorWithVerifier(
+		trustedSvcRoot,
+		trusted_service.NewBinaryVerifierWithManagedNode(newManagedNodeChecker(nodeResolver)),
+	)
 	defProvider := newMemoryDefinitionProvider()
 	trustedFactory := trusted_service.NewTrustedServiceFactory(trustedSupervisor, defProvider, b.extRoot)
 	_ = supervisor.RegisterFactory(trustedFactory)
@@ -1668,6 +1671,7 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		DataRoot:          b.extRoot,
 		KernelSource:      kernelSource,
 		TrustedSupervisor: trustedSupervisor,
+		NodeResolver:      nodeResolver,
 		EventService:      eventSvc,
 		HostAPIGateway:    hostAPIGateway,
 		SecretBroker:      kernelSecretBroker,
@@ -1685,6 +1689,11 @@ func (b *ContainerBuilder) Build(ctx context.Context) (*Container, error) {
 		return nil, fmt.Errorf("kernel: compose gamehost: %w", err)
 	}
 	container.GameHost = gameHost
+	if gameHost.AgentBridge != nil {
+		if err := adapterRegistry.RegisterAdapter(capability.RuntimeTypeGameHost, gameHost.AgentBridge); err != nil {
+			return nil, fmt.Errorf("kernel: register game host runtime adapter: %w", err)
+		}
+	}
 
 	if productionArchiveUpdater != nil {
 		productionArchiveUpdater.SetContainer(container)
