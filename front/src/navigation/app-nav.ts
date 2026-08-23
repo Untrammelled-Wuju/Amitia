@@ -61,7 +61,7 @@ export const desktopNavGroups: AppNavGroup[] = [
   {
     key: "system",
     items: [
-      { key: "gameCenter", to: "/game-center", label: "游戏中心", icon: MagicStick },
+      { key: "gameCenter", to: "/game-center", label: "游戏", icon: MagicStick },
       { key: "devices", to: "/devices", label: "我的设备", icon: Connection },
       { key: "workspaces", to: "/workspaces", label: "工作区", icon: Share },
       {
@@ -126,7 +126,7 @@ const extraTitles = [
   { path: "/kernel/dev-console", label: "开发者诊断控制台" },
   { path: "/kernel/migrations", label: "迁移与灰度中心" },
   { path: "/kernel/dev-mode", label: "开发模式中心" },
-  { path: "/game-center", label: "游戏中心" },
+  { path: "/game-center", label: "游戏" },
   { path: "/devices", label: "我的设备" },
   { path: "/workspaces", label: "工作区" },
   { path: "/realtime-voice", label: "实时语音" },
