@@ -159,6 +159,21 @@ onUnmounted(() => {
 <style>
 /* Cross-platform declarative ui.components primitives. These variables are
    emitted by providerTheme.ts from metadata.componentVariants. */
+:root {
+  --ui-component-button-min-height: var(--el-component-size);
+  --ui-component-button-radius: var(--el-border-radius-base);
+  --ui-component-button-gap: 6px;
+  --ui-component-button-font-size: inherit;
+  --ui-component-button-font-weight: inherit;
+  --ui-component-button-padding-x: var(--el-button-padding-horizontal, 15px);
+
+  --ui-component-input-min-height: var(--el-component-size);
+  --ui-component-input-radius: var(--el-input-border-radius, var(--el-border-radius-base));
+  --ui-component-input-padding-x: 11px;
+
+  --ui-component-dialog-radius: var(--el-border-radius-base);
+  --ui-component-card-radius: var(--el-card-border-radius, var(--el-border-radius-base));
+}
 .el-button {
   min-height: var(--ui-component-button-min-height, var(--el-component-size));
   border-radius: var(--ui-component-button-radius, var(--el-border-radius-base));
