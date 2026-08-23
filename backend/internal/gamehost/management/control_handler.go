@@ -88,7 +88,7 @@ func (h *ControlHandler) Takeover(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": ControlMutationResult{Success: result.Success, NewEpoch: result.NewEpoch, Mode: "user"}})
+	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": ControlMutationResult{Success: result.Success, NewEpoch: result.NewEpoch, Mode: "user_control"}})
 }
 
 func (h *ControlHandler) Release(c *gin.Context) {
@@ -108,9 +108,11 @@ func (h *ControlHandler) Release(c *gin.Context) {
 		// body optional
 	}
 
-	targetMode := req.TargetMode
-	if targetMode == "" {
-		targetMode = "observe"
+	targetMode := strings.TrimSpace(req.TargetMode)
+	if targetMode == "" || targetMode == "observe" {
+		// "observe" was emitted by the legacy Game Center UI. Keep it as a
+		// compatibility alias while returning the canonical domain value.
+		targetMode = "observe_only"
 	}
 
 	result, err := h.releaseFn(c.Request.Context(), runtimeID, targetMode, req.ExpectedEpoch)
