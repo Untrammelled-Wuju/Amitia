@@ -473,28 +473,11 @@ func setupRouter(ctx *app.AppContext, services *AppServices, bootstrap *runtimeB
 
 		if services.Extension != nil {
 			kernelMutation := management.NewKernelMutationFromFuncs(management.KernelMutationOptions{
-				InstallFn: func(ctx context.Context, archivePath string) (management.KernelInstalledExtension, error) {
-					installed, err := services.Extension.Kernel.Install(ctx, archivePath)
-					if err != nil {
-						return management.KernelInstalledExtension{}, err
-					}
-					return management.KernelInstalledExtension{ID: installed.ID, Name: installed.Name, Version: installed.Version}, nil
-				},
-				UpdateFn: func(ctx context.Context, archivePath string) (management.KernelInstalledExtension, error) {
-					installed, err := services.Extension.Kernel.Update(ctx, archivePath)
-					if err != nil {
-						return management.KernelInstalledExtension{}, err
-					}
-					return management.KernelInstalledExtension{ID: installed.ID, Name: installed.Name, Version: installed.Version}, nil
-				},
 				EnableFn: func(ctx context.Context, extensionID string) error {
 					return services.Extension.Kernel.Enable(ctx, extensionID)
 				},
 				DisableFn: func(ctx context.Context, extensionID string) error {
 					return services.Extension.Kernel.Disable(ctx, extensionID)
-				},
-				UninstallFn: func(ctx context.Context, extensionID string) error {
-					return services.Extension.Kernel.Uninstall(ctx, extensionID)
 				},
 			})
 			var upgradeCoordinator management.PackageUpgradeCoordinator = nil
