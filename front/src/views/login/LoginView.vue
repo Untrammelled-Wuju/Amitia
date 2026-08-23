@@ -83,7 +83,7 @@ import { useRouter, useRoute } from "vue-router";
 import { ElMessage } from "element-plus";
 import { apiClient } from "../../composables/useApi";
 import { useSessionStore } from "../../stores/session-store";
-import { saveRefreshToken, clearPersistedSession } from "../../stores/refresh-coordinator";
+import { saveAuthenticatedSession } from "../../stores/refresh-coordinator";
 
 const router = useRouter();
 const route = useRoute();
@@ -126,26 +126,28 @@ async function handleLogin() {
       password: pw,
     });
     const data = res.data?.data || res.data;
-    console.log("[Login] response data keys:", Object.keys(data || {}));
-    console.log("[Login] has refreshToken:", !!data?.refreshToken);
     if (data?.accessToken || data?.token) {
       const { setSession } = useSessionStore();
+      const accessToken = data.accessToken || data.token;
       setSession({
-        accessToken: data.accessToken || data.token,
+        accessToken,
         accessTokenExpiresAt: data.accessTokenExpiresAt || null,
         sessionId: data.session?.sessionId || null,
         userId: data.user?.id?.toString() || null,
         username: data.user?.username || data.username || name,
         role: data.user?.role || data.role || null,
       });
-      if (data.refreshToken) {
-        saveRefreshToken(data.refreshToken);
-        console.log("[Login] refreshToken saved to localStorage");
-      } else {
-        console.warn("[Login] no refreshToken in response");
-      }
+      saveAuthenticatedSession({
+        accessToken,
+        accessTokenExpiresAt: data.accessTokenExpiresAt,
+        refreshToken: data.refreshToken,
+        sessionId: data.session?.sessionId,
+        userId: data.user?.id,
+        username: data.user?.username || data.username || name,
+        role: data.user?.role || data.role,
+      });
       if (window.amitiaDesktop?.setAuthToken) {
-        void window.amitiaDesktop.setAuthToken(data.accessToken || data.token);
+        void window.amitiaDesktop.setAuthToken(accessToken);
       }
       ElMessage.success(`欢迎回来，${data.user?.username || data.username || name}`);
       const redirect = (route.query.redirect as string) || "/chat";
