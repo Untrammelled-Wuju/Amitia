@@ -16,6 +16,7 @@ const PUBLIC_AUTH_PATHS = new Set([
   "/api/public/auth/setup",
   "/api/public/auth/login",
   "/api/public/auth/refresh",
+  "/api/public/auth/logout/revoke",
   "/api/public/onboarding/status",
   "/api/public/onboarding/complete",
 ]);
@@ -38,6 +39,7 @@ apiClient.interceptors.request.use(async (config) => {
     delete config.headers["X-Amitia-Desktop-Session"];
     delete config.headers["X-Amitia-Desktop-Instance"];
     config.headers["X-Amitia-Client-Type"] = "desktop";
+    (config as AxiosRequestConfig & { __amitiaPublicAuth?: boolean }).__amitiaPublicAuth = true;
     return config;
   }
 
@@ -81,7 +83,10 @@ apiClient.interceptors.response.use(
     if (error && typeof error === "object" && "severity" in error) {
       return Promise.reject(error);
     }
-    if (error?.response?.status === 401) {
+    const requestConfig = error?.config as
+      | (AxiosRequestConfig & { __amitiaPublicAuth?: boolean })
+      | undefined;
+    if (error?.response?.status === 401 && !requestConfig?.__amitiaPublicAuth) {
       forceCleanupSession();
     }
     const body = (error.response?.data as ApiResponse) || null;
