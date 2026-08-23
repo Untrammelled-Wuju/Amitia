@@ -1,4 +1,5 @@
 export * from './protocol';
+export * from './game';
 export * from './descriptor';
 export * from './transport';
 export * from './errors';
