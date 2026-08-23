@@ -7,7 +7,7 @@ storage:
   dataDir: "AmitiaData/data"
 
 jwt:
-  secret: "zTMPXMQGsKBp0WuYlEWHZNLaUOd2lPbFeRSu1fRNrBU"
+  secret: ""
   issuer: "amitia"
   audience: "amitia-api"
   expireDays: 7
@@ -69,7 +69,7 @@ providers:
       namespace: "uai"
       database: "memory_graph"
       username: "root"
-      password: "root"
+      password: ""
       dataPath: "data/graph.db"
 
 components:

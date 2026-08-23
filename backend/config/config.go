@@ -120,13 +120,13 @@ type StorageConfig struct {
 }
 
 type JWTConfig struct {
-	Secret            string `mapstructure:"secret"`
-	Issuer            string `mapstructure:"issuer"`
-	Audience          string `mapstructure:"audience"`
-	ExpireDays        int    `mapstructure:"expireDays"`
-	AccessTokenMinutes int   `mapstructure:"accessTokenMinutes"`
-	RefreshTokenDays   int   `mapstructure:"refreshTokenDays"`
-	AbsoluteSessionDays int  `mapstructure:"absoluteSessionDays"`
+	Secret              string `mapstructure:"secret"`
+	Issuer              string `mapstructure:"issuer"`
+	Audience            string `mapstructure:"audience"`
+	ExpireDays          int    `mapstructure:"expireDays"`
+	AccessTokenMinutes  int    `mapstructure:"accessTokenMinutes"`
+	RefreshTokenDays    int    `mapstructure:"refreshTokenDays"`
+	AbsoluteSessionDays int    `mapstructure:"absoluteSessionDays"`
 }
 
 type AppConfig struct {
@@ -452,7 +452,7 @@ func setDefaults(v *viper.Viper) {
 	v.SetDefault("providers.graphStore.surrealdb.namespace", "uai")
 	v.SetDefault("providers.graphStore.surrealdb.database", "memory_graph")
 	v.SetDefault("providers.graphStore.surrealdb.username", "root")
-	v.SetDefault("providers.graphStore.surrealdb.password", "root")
+	v.SetDefault("providers.graphStore.surrealdb.password", "")
 	v.SetDefault("providers.graphStore.surrealdb.dataPath", "data/graph.db")
 	v.SetDefault("providers.graphStore.surrealdb.enabled", true)
 	v.SetDefault("providers.graphStore.surrealdb.binaryPath", "")
@@ -520,6 +520,7 @@ var runtimeEnvEntries = []runtimeEnvEntry{
 	{key: "server.port", environments: []string{"AMITIA_SERVER_PORT"}},
 	{key: "server.mode", environments: []string{"AMITIA_SERVER_MODE"}},
 	{key: "storage.dataDir", environments: []string{"AMITIA_DATA_DIR"}},
+	{key: "jwt.secret", environments: []string{"AMITIA_JWT_SECRET"}},
 	{key: "app.deployMode", environments: []string{"AMITIA_DEPLOY_MODE"}},
 	{key: "security.mode", environments: []string{"AMITIA_SECURITY_MODE"}},
 	{key: "security.allowRemoteAccess", environments: []string{"AMITIA_ALLOW_REMOTE_ACCESS"}},
@@ -771,6 +772,20 @@ func validateComponentURI(raw string) error {
 	return err
 }
 
+var knownInsecureJWTSecrets = map[string]struct{}{
+	"IJ8ffa4-WAmfBfTFnmEdwdRx1k2kooXHgFQpYMVMUjs": {},
+	"gIWcNHCKHdZWQyOanUhLvhLOVFgz1Z64G0xDYsUNWGA": {},
+	"zTMPXMQGsKBp0WuYlEWHZNLaUOd2lPbFeRSu1fRNrBU": {},
+}
+
 func isStrongSecret(secret string) bool {
-	return len(secret) >= 16 && !strings.Contains(secret, "change") && !strings.Contains(secret, "default")
+	secret = strings.TrimSpace(secret)
+	if len(secret) < 32 {
+		return false
+	}
+	if _, compromised := knownInsecureJWTSecrets[secret]; compromised {
+		return false
+	}
+	lower := strings.ToLower(secret)
+	return !strings.Contains(lower, "change") && !strings.Contains(lower, "default")
 }
