@@ -22,6 +22,7 @@ void main() {
       expect(snapshot.generation, 12);
       expect(snapshot.runtimeInstalled, true);
       expect(snapshot.runtimeAvailable, true);
+      expect(snapshot.lastError, isNull);
     });
 
     test('fromMap with error', () {
@@ -96,10 +97,7 @@ void main() {
     });
 
     test('fromNative maps READY', () {
-      expect(
-        RuntimeBridgeState.fromNative('READY'),
-        RuntimeBridgeState.ready,
-      );
+      expect(RuntimeBridgeState.fromNative('READY'), RuntimeBridgeState.ready);
     });
 
     test('fromNative maps STARTING', () {
@@ -169,6 +167,11 @@ void main() {
       final error = RuntimeBridgeError.fromMap(null);
       expect(error.code, 'UNKNOWN');
       expect(error.retryable, false);
+    });
+
+    test('tryFromMap returns null for null', () {
+      final error = RuntimeBridgeError.tryFromMap(null);
+      expect(error, isNull);
     });
 
     test('equality works correctly', () {

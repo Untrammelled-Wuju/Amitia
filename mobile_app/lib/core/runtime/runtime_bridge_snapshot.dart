@@ -28,7 +28,7 @@ class RuntimeBridgeSnapshot {
       generation: map['generation'] as int? ?? 0,
       runtimeInstalled: map['runtimeInstalled'] as bool? ?? false,
       runtimeAvailable: map['runtimeAvailable'] as bool? ?? false,
-      lastError: RuntimeBridgeError.fromMap(
+      lastError: RuntimeBridgeError.tryFromMap(
         map['lastError'] is Map
             ? Map<String, dynamic>.from(map['lastError'] as Map)
             : null,

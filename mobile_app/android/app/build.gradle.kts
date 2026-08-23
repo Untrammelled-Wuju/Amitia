@@ -36,19 +36,24 @@ android {
         }
     }
 
-    val keystorePath: String? = System.getenv("AMITIA_KEYSTORE_PATH")
-    val keystorePassword: String? = System.getenv("AMITIA_KEYSTORE_PASSWORD")
-    val keyAliasValue: String? = System.getenv("AMITIA_KEY_ALIAS")
-    val keyPasswordValue: String? = System.getenv("AMITIA_KEY_PASSWORD")
-    val hasReleaseKeystore = keystorePath != null && file(keystorePath).exists()
+    val keystorePath: String? = System.getenv("AMITIA_KEYSTORE_PATH")?.trim()?.takeIf { it.isNotEmpty() }
+    val keystorePassword: String? = System.getenv("AMITIA_KEYSTORE_PASSWORD")?.takeIf { it.isNotEmpty() }
+    val keyAliasValue: String? = System.getenv("AMITIA_KEY_ALIAS")?.trim()?.takeIf { it.isNotEmpty() }
+    val keyPasswordValue: String? = System.getenv("AMITIA_KEY_PASSWORD")?.takeIf { it.isNotEmpty() }
 
     signingConfigs {
         create("release") {
-            if (hasReleaseKeystore) {
-                storeFile = file(keystorePath!!)
-                storePassword = keystorePassword ?: ""
-                keyAlias = keyAliasValue ?: "amitia"
-                keyPassword = keyPasswordValue ?: ""
+            if (keystorePath != null) {
+                storeFile = file(keystorePath)
+            }
+            if (keystorePassword != null) {
+                storePassword = keystorePassword
+            }
+            if (keyAliasValue != null) {
+                keyAlias = keyAliasValue
+            }
+            if (keyPasswordValue != null) {
+                keyPassword = keyPasswordValue
             }
         }
     }
@@ -59,11 +64,9 @@ android {
             isDebuggable = true
         }
         release {
-            signingConfig = if (hasReleaseKeystore) {
-                signingConfigs.getByName("release")
-            } else {
-                signingConfigs.getByName("debug")
-            }
+            // Never silently fall back to the debug certificate. Validation below
+            // aborts every release build unless all production signing inputs exist.
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -90,6 +93,42 @@ android {
             aidl.srcDirs("src/main/aidl")
         }
     }
+}
+
+
+val releaseSigningEnvironment = mapOf(
+    "AMITIA_KEYSTORE_PATH" to System.getenv("AMITIA_KEYSTORE_PATH")?.trim(),
+    "AMITIA_KEYSTORE_PASSWORD" to System.getenv("AMITIA_KEYSTORE_PASSWORD"),
+    "AMITIA_KEY_ALIAS" to System.getenv("AMITIA_KEY_ALIAS")?.trim(),
+    "AMITIA_KEY_PASSWORD" to System.getenv("AMITIA_KEY_PASSWORD"),
+)
+
+val validateReleaseSigning by tasks.registering {
+    group = "verification"
+    description = "Fails closed when production Android signing credentials are missing or invalid"
+    doLast {
+        val missing = releaseSigningEnvironment
+            .filterValues { it.isNullOrBlank() }
+            .keys
+            .sorted()
+        if (missing.isNotEmpty()) {
+            throw GradleException(
+                "Release signing is not configured. Missing: ${missing.joinToString(", ")}. " +
+                    "Debug signing fallback is intentionally disabled."
+            )
+        }
+
+        val configuredKeystore = file(releaseSigningEnvironment.getValue("AMITIA_KEYSTORE_PATH")!!)
+        if (!configuredKeystore.isFile) {
+            throw GradleException(
+                "AMITIA_KEYSTORE_PATH does not point to a readable keystore file: ${configuredKeystore.absolutePath}"
+            )
+        }
+    }
+}
+
+tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+    dependsOn(validateReleaseSigning)
 }
 
 val frozenRuntimePackagePath: String? = System.getenv("FROZEN_RUNTIME_PACKAGE_PATH")
