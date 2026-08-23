@@ -153,24 +153,6 @@ class GameCenterApi {
     return GameCenterHealthResponse.fromJson(data ?? const <String, dynamic>{});
   }
 
-  Future<PackageMutationResult> installPlugin(String archivePath) async {
-    final data = await _api.post<Map<String, dynamic>>(
-      '/api/game-center/plugins/install',
-      data: {'archivePath': archivePath},
-    );
-    if (data == null) throw StateError('Game Center install response is empty');
-    return PackageMutationResult.fromJson(data);
-  }
-
-  Future<PackageMutationResult> updatePlugin(String extensionId, String archivePath) async {
-    final data = await _api.post<Map<String, dynamic>>(
-      '/api/game-center/plugins/$extensionId/update',
-      data: {'archivePath': archivePath},
-    );
-    if (data == null) throw StateError('Game Center update response is empty');
-    return PackageMutationResult.fromJson(data);
-  }
-
   Future<bool> enablePlugin(String extensionId) async {
     final data = await _api.post<Map<String, dynamic>>('/api/game-center/plugins/$extensionId/enable');
     return _packageMutationSucceeded(data);
@@ -178,11 +160,6 @@ class GameCenterApi {
 
   Future<bool> disablePlugin(String extensionId) async {
     final data = await _api.post<Map<String, dynamic>>('/api/game-center/plugins/$extensionId/disable');
-    return _packageMutationSucceeded(data);
-  }
-
-  Future<bool> uninstallPlugin(String extensionId) async {
-    final data = await _api.deleteWithResponse<Map<String, dynamic>>('/api/game-center/plugins/$extensionId');
     return _packageMutationSucceeded(data);
   }
 

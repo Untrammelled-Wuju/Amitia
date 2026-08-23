@@ -9,6 +9,7 @@ import '../../domain/game_center_dto.dart';
 import '../controllers/game_center_providers.dart';
 import '../controllers/game_center_controller.dart';
 import 'plugin_detail_page.dart';
+import '../widgets/game_package_confirmation.dart';
 
 class GameCenterPage extends ConsumerStatefulWidget {
   const GameCenterPage({super.key});
@@ -164,7 +165,7 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('安装游戏插件'),
-        content: const Text('请选择插件安装包文件'),
+        content: const Text('请选择 .amitiax 游戏扩展包。安装将使用统一的扩展包预览、确认与事务生命周期。'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
@@ -176,15 +177,32 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
               final result = await FilePicker.platform.pickFiles(
                 allowMultiple: false,
                 type: FileType.custom,
-                allowedExtensions: const ['zip', 'amitia', 'tar', 'gz'],
+                allowedExtensions: const ['amitiax'],
               );
               final path = result?.files.single.path;
               if (path == null || path.isEmpty) return;
-              final ok = await ref.read(gameCenterControllerProvider.notifier).install(path);
-              if (!context.mounted) return;
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(ok ? '游戏插件安装完成' : '游戏插件安装失败')),
-              );
+              try {
+                final lifecycle = ref.read(gameCenterPackageLifecycleProvider);
+                final preview = await lifecycle.previewPackage(path);
+                if (!context.mounted) return;
+                final accepted = await showGamePackagePreviewConfirmation(
+                  context,
+                  preview,
+                  actionLabel: (preview['currentVersion'] ?? '').toString().isEmpty ? '安装' : '更新',
+                );
+                if (!accepted) return;
+                final operationId = await lifecycle.commitPackage(preview);
+                await ref.read(gameCenterControllerProvider.notifier).refreshPlugins();
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(operationId.isEmpty ? '游戏插件操作已完成' : '游戏插件操作已完成 · $operationId')),
+                );
+              } catch (e) {
+                if (!context.mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('游戏插件安装失败: $e')),
+                );
+              }
             },
             child: const Text('选择文件'),
           ),
@@ -193,18 +211,33 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
     );
   }
 
-  void _confirmUninstall(BuildContext context, GamePluginSummary plugin) {
-    showAmitiaConfirmDialog(
-      context,
-      title: '卸载游戏插件',
-      message: '确定要卸载「${plugin.name}」吗？此操作不可撤销。',
-      confirmLabel: '卸载',
-      isDestructive: true,
-    ).then((confirmed) {
-      if (confirmed == true) {
-        ref.read(gameCenterControllerProvider.notifier).uninstall(plugin.extensionId);
-      }
-    });
+  Future<void> _confirmUninstall(BuildContext context, GamePluginSummary plugin) async {
+    final lifecycle = ref.read(gameCenterPackageLifecycleProvider);
+    try {
+      final preview = await lifecycle.previewUninstall(plugin.extensionId);
+      if (!context.mounted) return;
+      final confirmed = await showGamePackageUninstallConfirmation(
+        context,
+        preview,
+        displayName: plugin.name,
+      );
+      if (!confirmed) return;
+      final controller = ref.read(gameCenterControllerProvider.notifier);
+      final ok = await controller.runPackageOperation(
+        plugin.extensionId,
+        () => lifecycle.commitUninstall(plugin.extensionId, preview),
+        clearSelectionAfterSuccess: true,
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ok ? '游戏插件卸载完成' : '游戏插件卸载失败')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('游戏插件卸载失败: $e')),
+      );
+    }
   }
 }
 

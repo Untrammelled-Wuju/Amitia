@@ -9,6 +9,7 @@ import '../../domain/game_center_dto.dart';
 import '../controllers/game_center_providers.dart';
 import '../controllers/game_center_controller.dart';
 import 'runtime_detail_page.dart';
+import '../widgets/game_package_confirmation.dart';
 
 class PluginDetailPage extends ConsumerWidget {
   final String pluginId;
@@ -43,13 +44,14 @@ class PluginDetailPage extends ConsumerWidget {
       ),
       body: SafeArea(
         top: false,
-        child: _buildBody(context, detail, isLoading, error, hasOp, controller, state),
+        child: _buildBody(context, ref, detail, isLoading, error, hasOp, controller, state),
       ),
     );
   }
 
   Widget _buildBody(
     BuildContext context,
+    WidgetRef ref,
     GamePluginDetail? detail,
     bool isLoading,
     String? error,
@@ -78,7 +80,7 @@ class PluginDetailPage extends ConsumerWidget {
       children: [
         _buildInfoSection(context, detail),
         SizedBox(height: AppSpacing.lg),
-        _buildActionsSection(context, detail, hasOp, controller),
+        _buildActionsSection(context, ref, detail, hasOp, controller),
         SizedBox(height: AppSpacing.lg),
         _buildRuntimesSection(context, detail, state),
       ],
@@ -128,6 +130,7 @@ class PluginDetailPage extends ConsumerWidget {
 
   Widget _buildActionsSection(
     BuildContext context,
+    WidgetRef ref,
     GamePluginDetail detail,
     bool hasOp,
     GameCenterController controller,
@@ -169,13 +172,13 @@ class PluginDetailPage extends ConsumerWidget {
                     label: '更新',
                     isSecondary: true,
                     height: 36,
-                    onPressed: () => _pickUpdate(context, controller, detail),
+                    onPressed: () => _pickUpdate(context, ref, controller, detail),
                   ),
                   AmitiaButton(
                     label: '卸载',
                     isDestructive: true,
                     height: 36,
-                    onPressed: () => _confirmUninstall(context, controller, detail),
+                    onPressed: () => _confirmUninstall(context, ref, controller, detail),
                   ),
                 ],
               ),
@@ -295,34 +298,80 @@ class PluginDetailPage extends ConsumerWidget {
 
   Future<void> _pickUpdate(
     BuildContext context,
+    WidgetRef ref,
     GameCenterController controller,
     GamePluginDetail detail,
   ) async {
     final result = await FilePicker.platform.pickFiles(
       allowMultiple: false,
       type: FileType.custom,
-      allowedExtensions: const ['zip', 'amitia', 'tar', 'gz'],
+      allowedExtensions: const ['amitiax'],
     );
     final path = result?.files.single.path;
     if (path == null || path.isEmpty) return;
-    final ok = await controller.update(detail.extensionId, path);
-    if (!context.mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(ok ? '插件更新完成' : '插件更新失败')),
-    );
+    final lifecycle = ref.read(gameCenterPackageLifecycleProvider);
+    try {
+      final preview = await lifecycle.previewPackage(
+        path,
+        expectedExtensionId: detail.extensionId,
+      );
+      if (!context.mounted) return;
+      final confirmed = await showGamePackagePreviewConfirmation(
+        context,
+        preview,
+        actionLabel: '更新',
+      );
+      if (!confirmed) return;
+      final ok = await controller.runPackageOperation(
+        detail.extensionId,
+        () => lifecycle.commitPackage(
+          preview,
+          expectedExtensionId: detail.extensionId,
+        ),
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ok ? '插件更新完成' : '插件更新失败')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('插件更新失败: $e')),
+      );
+    }
   }
 
-  void _confirmUninstall(BuildContext context, GameCenterController controller, GamePluginDetail detail) {
-    showAmitiaConfirmDialog(
-      context,
-      title: '卸载游戏插件',
-      message: '确定要卸载「${detail.name}」吗？此操作不可撤销。',
-      confirmLabel: '卸载',
-      isDestructive: true,
-    ).then((confirmed) {
-      if (confirmed == true) {
-        controller.uninstall(detail.extensionId);
-      }
-    });
+  Future<void> _confirmUninstall(
+    BuildContext context,
+    WidgetRef ref,
+    GameCenterController controller,
+    GamePluginDetail detail,
+  ) async {
+    final lifecycle = ref.read(gameCenterPackageLifecycleProvider);
+    try {
+      final preview = await lifecycle.previewUninstall(detail.extensionId);
+      if (!context.mounted) return;
+      final confirmed = await showGamePackageUninstallConfirmation(
+        context,
+        preview,
+        displayName: detail.name,
+      );
+      if (!confirmed) return;
+      final ok = await controller.runPackageOperation(
+        detail.extensionId,
+        () => lifecycle.commitUninstall(detail.extensionId, preview),
+        clearSelectionAfterSuccess: true,
+      );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(ok ? '插件卸载完成' : '插件卸载失败')),
+      );
+      if (ok && context.mounted) Navigator.of(context).maybePop();
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('插件卸载失败: $e')),
+      );
+    }
   }
 }
