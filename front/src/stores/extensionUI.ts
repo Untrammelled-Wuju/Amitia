@@ -31,6 +31,12 @@ export interface UIContributionSummary {
   icon?: string;
   ordering: number;
   priority?: number;
+  /** Stable DSH-style list cell identity for server/declarative entries. */
+  cellId?: string;
+  /** Stable DSH-style keyed dispatch identity for server/declarative entries. */
+  entryKey?: string;
+  /** Optional static matched payload emitted by a server/declarative chain. */
+  matched?: unknown;
   visible: boolean;
   effective: boolean;
   enabled: boolean;
