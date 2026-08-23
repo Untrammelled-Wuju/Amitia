@@ -10,11 +10,14 @@ type ServiceRuntimeView struct {
 	RuntimeType      string
 	Name             string
 	Description      string
+	PublisherID      string
+	PublisherTrust   string
 	EntryPoint       string
 	ExecutablePath   string
 	ExecutableSHA256 string
 	Arguments        []string
 	IntegrityValue   string
+	Dependencies     []trusted_service.LibraryDep
 	Env              map[string]string
 	Metadata         map[string]string
 	Enabled          bool

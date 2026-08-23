@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"sync"
 
-	gamehostdomain "github.com/u-ai/backend/internal/gamehost/domain"
 	kerneldomain "github.com/u-ai/backend/internal/extension/kernel/domain"
 	contracts "github.com/u-ai/backend/internal/gamehost/contracts"
+	gamehostdomain "github.com/u-ai/backend/internal/gamehost/domain"
 )
 
 // KernelContributionSource 定义从Kernel获取game_plugin的接口，避免直接依赖Kernel实现
@@ -47,10 +47,10 @@ func (r SyncResult) HasError() bool {
 
 // GamePluginSyncService Kernel到GameHost的同步服务
 type GamePluginSyncService struct {
-	registry   contracts.PluginRegistry
-	mapper     GamePluginContributionMapper
-	source     KernelContributionSource
-	mu         sync.Mutex
+	registry contracts.PluginRegistry
+	mapper   GamePluginContributionMapper
+	source   KernelContributionSource
+	mu       sync.Mutex
 }
 
 // NewGamePluginSyncService 创建同步服务实例
@@ -69,9 +69,9 @@ func NewGamePluginSyncService(
 		return nil, fmt.Errorf("kernel contribution source is required")
 	}
 	return &GamePluginSyncService{
-		registry:   reg,
-		mapper:     mapper,
-		source:     source,
+		registry: reg,
+		mapper:   mapper,
+		source:   source,
 	}, nil
 }
 
@@ -187,8 +187,6 @@ func (s *GamePluginSyncService) SyncExtension(ctx context.Context, extensionID s
 	defer s.mu.Unlock()
 
 	result := SyncResult{}
-
-	// 1. 获取该Extension下的所有启用game_plugin
 	plugins, err := s.source.ListEnabledGamePlugins(ctx)
 	if err != nil {
 		result.Failed++
@@ -196,67 +194,81 @@ func (s *GamePluginSyncService) SyncExtension(ctx context.Context, extensionID s
 		return result
 	}
 
-	// 过滤出当前Extension的game_plugin
-	extensionPlugins := make([]KernelGamePlugin, 0, len(plugins))
+	desired := make(map[gamehostdomain.PluginID]gamehostdomain.PluginDescriptor)
 	for _, p := range plugins {
-		if string(p.Extension.ID) != extensionID {
+		if string(p.Extension.ID) != extensionID || p.Extension.Domain != kerneldomain.ExtensionDomainGame || p.Contribution.Kind != kerneldomain.ContributionKindGamePlugin {
 			continue
 		}
-		if p.Contribution.Kind != kerneldomain.ContributionKindGamePlugin {
-			continue
-		}
-		extensionPlugins = append(extensionPlugins, p)
-	}
-
-	// 转换所有Descriptor，如果有失败的则全部取消
-	descriptors := make([]gamehostdomain.PluginDescriptor, 0, len(extensionPlugins))
-	for _, p := range extensionPlugins {
-		desc, err := s.mapper.ToDescriptor(ctx, p.Extension, p.Contribution)
-		if err != nil {
+		desc, mapErr := s.mapper.ToDescriptor(ctx, p.Extension, p.Contribution)
+		if mapErr != nil {
 			result.Failed++
-			result.Errors = append(result.Errors, fmt.Errorf("failed to map game plugin %s/%s: %w", p.Extension.ID, p.Contribution.ID, err))
-			return result // 原子性：有一个失败就取消全部
+			result.Errors = append(result.Errors, fmt.Errorf("failed to map game plugin %s/%s: %w", p.Extension.ID, p.Contribution.ID, mapErr))
+			return result
 		}
-		descriptors = append(descriptors, desc)
+		desired[desc.ID] = desc
 	}
 
-	// 记录已经注册的插件，用于回滚
-	registeredPlugins := make([]gamehostdomain.PluginID, 0, len(descriptors))
-	// 执行注册
-	for _, desc := range descriptors {
-		// 如果已经存在且一致则跳过
-		current, err := s.registry.Get(ctx, desc.ID)
-		if err == nil && gamehostdomain.EqualPluginDescriptor(current, desc) {
+	original, err := s.registry.ListByExtension(ctx, extensionID)
+	if err != nil {
+		result.Failed++
+		result.Errors = append(result.Errors, fmt.Errorf("failed to list registered plugins for extension %s: %w", extensionID, err))
+		return result
+	}
+	originalByID := make(map[gamehostdomain.PluginID]gamehostdomain.PluginDescriptor, len(original))
+	for _, desc := range original {
+		originalByID[desc.ID] = desc
+	}
+
+	rollback := func(cause error) {
+		current, listErr := s.registry.ListByExtension(ctx, extensionID)
+		if listErr != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("rollback list extension %s: %w", extensionID, listErr))
+			return
+		}
+		for _, desc := range current {
+			if unregisterErr := s.registry.Unregister(ctx, desc.ID); unregisterErr != nil {
+				result.Errors = append(result.Errors, fmt.Errorf("rollback unregister plugin %s: %w", desc.ID, unregisterErr))
+			}
+		}
+		for _, desc := range original {
+			if registerErr := s.registry.Register(ctx, desc); registerErr != nil {
+				result.Errors = append(result.Errors, fmt.Errorf("rollback restore plugin %s: %w", desc.ID, registerErr))
+			}
+		}
+		result.Failed++
+		result.Errors = append(result.Errors, cause)
+	}
+
+	// Remove registrations that no longer exist in the enabled Kernel view first.
+	for _, current := range original {
+		if _, keep := desired[current.ID]; keep {
+			continue
+		}
+		if err := s.registry.Unregister(ctx, current.ID); err != nil {
+			rollback(fmt.Errorf("failed to unregister stale plugin %s: %w", current.ID, err))
+			return result
+		}
+		result.Unregistered++
+	}
+
+	for id, want := range desired {
+		current, exists := originalByID[id]
+		if exists && gamehostdomain.EqualPluginDescriptor(current, want) {
 			result.Unchanged++
 			continue
 		}
-
-		// 存在旧的先注销
-		if err == nil {
-			if err := s.registry.Unregister(ctx, desc.ID); err != nil {
-				result.Failed++
-				result.Errors = append(result.Errors, fmt.Errorf("failed to unregister old plugin %s: %w", desc.ID, err))
-				break // 失败触发回滚
-			}
-		}
-
-		// 注册新的
-		if err := s.registry.Register(ctx, desc); err != nil {
-			result.Failed++
-			result.Errors = append(result.Errors, fmt.Errorf("failed to register plugin %s: %w", desc.ID, err))
-			break // 失败触发回滚
-		}
-		registeredPlugins = append(registeredPlugins, desc.ID)
-		result.Registered++
-	}
-
-	// 如果有失败，回滚本次注册的插件
-	if result.HasError() {
-		for _, id := range registeredPlugins {
+		if exists {
 			if err := s.registry.Unregister(ctx, id); err != nil {
-				result.Errors = append(result.Errors, fmt.Errorf("failed to rollback plugin %s: %w", id, err))
+				rollback(fmt.Errorf("failed to unregister outdated plugin %s: %w", id, err))
+				return result
 			}
+			result.Unregistered++
 		}
+		if err := s.registry.Register(ctx, want); err != nil {
+			rollback(fmt.Errorf("failed to register plugin %s: %w", id, err))
+			return result
+		}
+		result.Registered++
 	}
 
 	return result

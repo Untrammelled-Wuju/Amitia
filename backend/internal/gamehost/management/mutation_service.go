@@ -71,37 +71,9 @@ func NewPackageMutationService(opts PackageMutationServiceOptions) *PackageMutat
 }
 
 func (s *PackageMutationService) Install(ctx context.Context, req PackageInstallRequest) (*PackageMutationResult, error) {
-	if s.kernel == nil {
-		return nil, ErrKernelUnavailable
-	}
-	if req.ArchivePath == "" {
-		return nil, ErrInvalidInput
-	}
-
-	preview, err := s.preflightArchive(ctx, req.ArchivePath, kerneldomain.ManagementTargetGameCenter)
-	if err != nil {
-		return nil, err
-	}
-
-	installed, err := s.kernel.Install(ctx, req.ArchivePath)
-	if err != nil {
-		return nil, fmt.Errorf("install failed: %w", err)
-	}
-
-	if installed.ID != preview.ExtensionID {
-		return nil, ErrPackageIdentityMismatch
-	}
-
-	if err := s.requireGameCenterExtension(ctx, installed.ID); err != nil {
-		return nil, ErrNotGamePlugin
-	}
-
-	return &PackageMutationResult{
-		ExtensionID:    installed.ID,
-		Operation:      "install",
-		State:          "installed",
-		CurrentVersion: installed.Version,
-	}, nil
+	_ = ctx
+	_ = req
+	return nil, ErrPackageLifecycleRequired
 }
 
 func (s *PackageMutationService) preflightArchive(ctx context.Context, archivePath string, expected kerneldomain.ManagementTarget) (*PackageTargetPreview, error) {
@@ -116,68 +88,9 @@ func (s *PackageMutationService) preflightArchive(ctx context.Context, archivePa
 }
 
 func (s *PackageMutationService) Update(ctx context.Context, req PackageUpdateRequest) (*PackageMutationResult, error) {
-	if req.ExtensionID == "" {
-		return nil, ErrInvalidInput
-	}
-
-	if err := s.requireGameCenterExtension(ctx, req.ExtensionID); err != nil {
-		return nil, err
-	}
-
-	if req.ArchivePath == "" {
-		return nil, ErrInvalidInput
-	}
-
-	preview, err := s.preflightArchive(ctx, req.ArchivePath, kerneldomain.ManagementTargetGameCenter)
-	if err != nil {
-		return nil, err
-	}
-
-	if preview.ExtensionID != req.ExtensionID {
-		return nil, ErrPackageIdentityMismatch
-	}
-
-	if s.upgradeCoordinator != nil {
-		if err := s.upgradeCoordinator.ExecuteUpgrade(ctx, req.ExtensionID, req.ArchivePath); err != nil {
-			return nil, fmt.Errorf("update failed: %w", err)
-		}
-		def, inst, readErr := s.reader.GetGameCenterExtension(ctx, req.ExtensionID)
-		version := ""
-		if readErr == nil && def != nil {
-			version = def.Version.String()
-		} else if readErr == nil && inst != nil {
-			version = inst.InstalledVersion.String()
-		}
-		return &PackageMutationResult{
-			ExtensionID:    req.ExtensionID,
-			Operation:      "update",
-			State:          "installed",
-			CurrentVersion: version,
-		}, nil
-	}
-
-	if s.kernel == nil {
-		return nil, ErrKernelUnavailable
-	}
-	installed, err := s.kernel.Update(ctx, req.ArchivePath)
-	if err != nil {
-		return nil, fmt.Errorf("update failed: %w", err)
-	}
-
-	if installed.ID != req.ExtensionID {
-		return nil, ErrPackageIdentityMismatch
-	}
-
-	if err := s.requireGameCenterExtension(ctx, installed.ID); err != nil {
-		return nil, ErrNotGamePlugin
-	}
-
-	return &PackageMutationResult{
-		ExtensionID:    installed.ID,
-		Operation:      "update",
-		State:          "installed",
-		CurrentVersion: installed.Version,
-	}, nil
+	_ = ctx
+	_ = req
+	return nil, ErrPackageLifecycleRequired
 }
 
 func (s *PackageMutationService) Enable(ctx context.Context, extensionID string) (*PackageMutationResult, error) {
@@ -227,26 +140,9 @@ func (s *PackageMutationService) Disable(ctx context.Context, extensionID string
 }
 
 func (s *PackageMutationService) Uninstall(ctx context.Context, extensionID string) (*PackageMutationResult, error) {
-	if s.kernel == nil {
-		return nil, ErrKernelUnavailable
-	}
-	if extensionID == "" {
-		return nil, ErrInvalidInput
-	}
-
-	if !s.isGameCenterExtension(ctx, extensionID) {
-		return nil, ErrNotGamePlugin
-	}
-
-	if err := s.kernel.Uninstall(ctx, extensionID); err != nil {
-		return nil, fmt.Errorf("uninstall failed: %w", err)
-	}
-
-	return &PackageMutationResult{
-		ExtensionID: extensionID,
-		Operation:   "uninstall",
-		State:       "uninstalled",
-	}, nil
+	_ = ctx
+	_ = extensionID
+	return nil, ErrPackageLifecycleRequired
 }
 
 func (s *PackageMutationService) requireGameCenterExtension(ctx context.Context, extensionID string) error {
@@ -387,13 +283,14 @@ func (s *RuntimeMutationService) validateRuntimeBelongsToGameCenter(ctx context.
 }
 
 var (
-	ErrKernelUnavailable         = errors.New("game-center: extension kernel unavailable")
+	ErrKernelUnavailable          = errors.New("game-center: extension kernel unavailable")
 	ErrRuntimeExecutorUnavailable = errors.New("game-center: runtime executor unavailable")
-	ErrInvalidInput              = errors.New("game-center: invalid input")
-	ErrNotGamePlugin             = errors.New("game-center: extension is not a game_plugin")
-	ErrRuntimeNotGameCenter      = errors.New("game-center: runtime does not belong to game_center")
-	ErrManagementTargetMismatch  = errors.New("game-center: package management target mismatch")
-	ErrPackageIdentityMismatch   = errors.New("game-center: package identity mismatch")
+	ErrInvalidInput               = errors.New("game-center: invalid input")
+	ErrNotGamePlugin              = errors.New("game-center: extension is not a game_plugin")
+	ErrRuntimeNotGameCenter       = errors.New("game-center: runtime does not belong to game_center")
+	ErrManagementTargetMismatch   = errors.New("game-center: package management target mismatch")
+	ErrPackageIdentityMismatch    = errors.New("game-center: package identity mismatch")
+	ErrPackageLifecycleRequired   = errors.New("game-center: package writes must use the extension package preview/confirmation lifecycle")
 )
 
 type RuntimeMutationResult struct {

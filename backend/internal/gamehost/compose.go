@@ -51,6 +51,7 @@ type GameHostComposeOptions struct {
 	KernelSource        integration.KernelContributionSource
 	TrustedSupervisor   *ghTrustedService.ProcessSupervisor
 	NodeResolver        script_host.NodeEnvironmentResolver
+	GenerationResolver  integration.InstalledGenerationResolver
 	EventService        *event.Service
 	HostAPIGateway      host_api.Gateway
 	ArchiveUpdater      upgrade.KernelArchiveUpdater
@@ -296,16 +297,17 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 	if opts.TrustedSupervisor != nil && procAdapter != nil {
 		var err error
 		runtimeProvisioner, err = integration.NewRuntimeGraphProvisioner(integration.RuntimeGraphProvisionerOptions{
-			Source:           opts.KernelSource,
-			Mapper:           integration.NewDefaultGamePluginContributionMapper(),
-			PluginRegistry:   pluginReg,
-			RuntimeManager:   runtimeManager,
-			TopologyStore:    topologyStore,
-			Supervisor:       opts.TrustedSupervisor,
-			DefinitionMapper: service_definition.NewDefinitionMapper(),
-			SecretRegistrar:  secretLifecycle,
-			ExtensionRoot:    opts.DataRoot,
-			NodeResolver:     opts.NodeResolver,
+			Source:             opts.KernelSource,
+			Mapper:             integration.NewDefaultGamePluginContributionMapper(),
+			PluginRegistry:     pluginReg,
+			RuntimeManager:     runtimeManager,
+			TopologyStore:      topologyStore,
+			Supervisor:         opts.TrustedSupervisor,
+			DefinitionMapper:   service_definition.NewDefinitionMapper(),
+			SecretRegistrar:    secretLifecycle,
+			ExtensionRoot:      opts.DataRoot,
+			NodeResolver:       opts.NodeResolver,
+			GenerationResolver: opts.GenerationResolver,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("compose runtime graph provisioner: %w", err)
@@ -331,6 +333,8 @@ func ComposeGameHost(opts GameHostComposeOptions) (*GameHostContainer, error) {
 		if err != nil {
 			return nil, fmt.Errorf("compose runtime executor: %w", err)
 		}
+
+		runtimeProvisioner.SetRuntimeExecutor(runtimeExecutor)
 
 		runtimeExecutor.SetResolveDefinition(
 			func(definitionID string) (*trusted_service.ServiceRuntimeDefinition, error) {
