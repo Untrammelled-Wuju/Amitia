@@ -17,17 +17,19 @@ import (
 type EntrySource string
 
 const (
-	EntrySourceWeb     EntrySource = "web"
-	EntrySourceWeChat  EntrySource = "wechat"
-	EntrySourceQQ      EntrySource = "qq"
-	EntrySourceVoice   EntrySource = "voice"
-	EntrySourceUnknown EntrySource = "unknown"
+	EntrySourceWeb       EntrySource = "web"
+	EntrySourceWeChat    EntrySource = "wechat"
+	EntrySourceQQ        EntrySource = "qq"
+	EntrySourceVoice     EntrySource = "voice"
+	EntrySourceProactive EntrySource = "proactive"
+	EntrySourceRuntime   EntrySource = "runtime"
+	EntrySourceUnknown   EntrySource = "unknown"
 )
 
 func ParseEntrySource(source string) EntrySource {
 	s := EntrySource(strings.ToLower(strings.TrimSpace(source)))
 	switch s {
-	case EntrySourceWeb, EntrySourceWeChat, EntrySourceQQ, EntrySourceVoice:
+	case EntrySourceWeb, EntrySourceWeChat, EntrySourceQQ, EntrySourceVoice, EntrySourceProactive, EntrySourceRuntime:
 		return s
 	default:
 		return EntrySourceUnknown
@@ -129,13 +131,13 @@ type UnifiedEntryRequest struct {
 }
 
 type UnifiedEntry struct {
-	orchestrator     *Orchestrator
-	resolver         ScopeResolver
-	execService      *coreexec.ExecutionService
-	bpCfg            BackpressureConfig
-	bpState          *BackpressureState
-	mu               sync.Mutex
-	clock            temporal.Clock
+	orchestrator *Orchestrator
+	resolver     ScopeResolver
+	execService  *coreexec.ExecutionService
+	bpCfg        BackpressureConfig
+	bpState      *BackpressureState
+	mu           sync.Mutex
+	clock        temporal.Clock
 }
 
 func NewUnifiedEntry(orchestrator *Orchestrator, resolver ScopeResolver, clock temporal.Clock) *UnifiedEntry {
