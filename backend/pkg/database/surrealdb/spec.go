@@ -4,8 +4,10 @@ package surrealdb
 
 import (
 	"fmt"
+	"net"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/u-ai/backend/config"
@@ -21,6 +23,13 @@ func BuildSurrealProcessSpec(instanceID string) (runtimehost.ProcessSpec, error)
 		instanceID = "surrealdb-unsigned"
 	}
 	cfg := config.AppCfg.Providers.GraphStore.SurrealDB
+	bindHost, err := normalizeLoopbackHost(cfg.Host)
+	if err != nil {
+		return runtimehost.ProcessSpec{}, err
+	}
+	if err := validateSurrealCredentials(cfg.Username, cfg.Password); err != nil {
+		return runtimehost.ProcessSpec{}, err
+	}
 	workDir := util.RuntimeRoot()
 	surrealDir := filepath.Join(workDir, "surrealdb")
 
@@ -53,12 +62,13 @@ func BuildSurrealProcessSpec(instanceID string) (runtimehost.ProcessSpec, error)
 		return runtimehost.ProcessSpec{}, fmt.Errorf("executable must be absolute: %s", surrealPath)
 	}
 
-	healthURL := fmt.Sprintf("http://127.0.0.1:%d/health", cfg.Port)
+	bindAddress := net.JoinHostPort(bindHost, fmt.Sprintf("%d", cfg.Port))
+	healthURL := "http://" + bindAddress + "/health"
 
 	args := []string{
 		"start",
 		"surrealkv:" + dataPath,
-		"--bind", fmt.Sprintf("0.0.0.0:%d", cfg.Port),
+		"--bind", bindAddress,
 		"--user", cfg.Username,
 		"--pass", cfg.Password,
 	}
@@ -79,7 +89,7 @@ func BuildSurrealProcessSpec(instanceID string) (runtimehost.ProcessSpec, error)
 			},
 		},
 		Ports: []runtimehost.LoopbackPortClaim{
-			{Host: "127.0.0.1", Port: cfg.Port, Protocol: "tcp"},
+			{Host: bindHost, Port: cfg.Port, Protocol: "tcp"},
 		},
 		StartupTimeout:  runtimehost.DefaultStartupTimeout,
 		StopGracePeriod: runtimehost.DefaultStopGracePeriod,
@@ -94,4 +104,28 @@ func BuildSurrealProcessSpec(instanceID string) (runtimehost.ProcessSpec, error)
 		},
 		SensitiveArgIndexes: []int{sensitiveIdx},
 	}, nil
+}
+
+func normalizeLoopbackHost(raw string) (string, error) {
+	host := strings.TrimSpace(strings.Trim(raw, "[]"))
+	if host == "" || strings.EqualFold(host, "localhost") {
+		return "127.0.0.1", nil
+	}
+	ip := net.ParseIP(host)
+	if ip == nil || !ip.IsLoopback() {
+		return "", fmt.Errorf("surrealdb host must be loopback, got %q", raw)
+	}
+	return ip.String(), nil
+}
+
+func validateSurrealCredentials(username, password string) error {
+	if strings.TrimSpace(username) == "" {
+		return fmt.Errorf("surrealdb username must not be empty")
+	}
+	trimmed := strings.TrimSpace(password)
+	lower := strings.ToLower(trimmed)
+	if len(trimmed) < 24 || lower == "root" || lower == "admin" || lower == "password" {
+		return fmt.Errorf("surrealdb password is missing or insecure; configure a per-installation random password of at least 24 characters")
+	}
+	return nil
 }

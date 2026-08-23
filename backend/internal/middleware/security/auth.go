@@ -205,33 +205,43 @@ func handleNetworkAuth(c *gin.Context, cfg AuthConfig) {
 		return
 	}
 
-	if claims.SessionID != "" {
-		result := cfg.AccountSessions.ValidateAccessSession(claims.SessionID, claims.UserID)
-		if !result.Valid {
-			switch {
-			case errors.Is(result.Reason, accountsession.ErrSessionRevoked):
-				util.ErrorResponse(c, response.Unauthorized, "auth.session_revoked", nil)
-			case errors.Is(result.Reason, accountsession.ErrSessionExpired):
-				util.ErrorResponse(c, response.Unauthorized, "auth.session_expired", nil)
-			default:
-				util.ErrorResponse(c, response.Unauthorized, "auth.access_invalid", nil)
-			}
-			c.Abort()
-			return
-		}
-		if result.Session != nil {
-			if err := cfg.AccountSessions.TouchSession(result.Session.PublicID); err != nil {
-				util.ErrorResponse(c, response.InternalError, "更新会话失败", nil)
-				c.Abort()
-				return
-			}
-		}
+	if strings.TrimSpace(claims.SessionID) == "" {
+		util.ErrorResponse(c, response.Unauthorized, "auth.session_required", nil)
+		c.Abort()
+		return
 	}
 
+	result := cfg.AccountSessions.ValidateAccessSession(claims.SessionID, claims.UserID)
+	if !result.Valid {
+		switch {
+		case errors.Is(result.Reason, accountsession.ErrSessionRevoked):
+			util.ErrorResponse(c, response.Unauthorized, "auth.session_revoked", nil)
+		case errors.Is(result.Reason, accountsession.ErrSessionExpired):
+			util.ErrorResponse(c, response.Unauthorized, "auth.session_expired", nil)
+		default:
+			util.ErrorResponse(c, response.Unauthorized, "auth.access_invalid", nil)
+		}
+		c.Abort()
+		return
+	}
+	if result.Session == nil || result.User == nil {
+		util.ErrorResponse(c, response.Unauthorized, "auth.access_invalid", nil)
+		c.Abort()
+		return
+	}
+	if err := cfg.AccountSessions.TouchSession(result.Session.PublicID); err != nil {
+		util.ErrorResponse(c, response.InternalError, "更新会话失败", nil)
+		c.Abort()
+		return
+	}
+
+	// Never authorize from the role carried by the JWT. The database-backed user
+	// record is authoritative so a forged/stale role claim cannot elevate privileges.
+	serverRole := strings.TrimSpace(result.User.Role)
 	actorType := auth.ActorTypeUser
 	roles := []string{"user"}
 	permissions := auth.DefaultUserPermissions()
-	if claims.Role == "admin" {
+	if serverRole == "admin" {
 		actorType = auth.ActorTypeAdmin
 		roles = []string{"admin"}
 		permissions = auth.AdminPermissions()
