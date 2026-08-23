@@ -88,7 +88,7 @@ const builtinItems: UINavigationItem[] = [
   { id: "memory.graph", route: "/graph", label: "记忆图谱", icon: Share, group: "memory", groupLabel: "记忆", groupIcon: Grid, order: 65 },
   { id: "memory.timeline", route: "/memory-timeline", label: "时间线", icon: Timer, group: "memory", groupLabel: "记忆", groupIcon: Grid, order: 70 },
   { id: "memory.logs", route: "/logs", label: "聊天记录", icon: ChatLineRound, group: "memory", groupLabel: "记忆", groupIcon: Grid, order: 75 },
-  { id: "workshop.game-center", route: "/game-center", label: "游戏", icon: MagicStick, group: "workshop", order: 80 },
+  { id: "workshop.game-center", route: "/game-center", label: "游戏模式", icon: MagicStick, group: "workshop", order: 80 },
   { id: "workshop", route: "/creative-workshop", label: "创意工坊", icon: MagicStick, group: "workshop", order: 85, match: ["/creative-workshop"] },
   { id: "extensions", route: "/extensions", label: "扩展中心", icon: Menu, group: "extensions", order: 90, match: ["/extensions", "/kernel"] },
 ];
