@@ -145,6 +145,138 @@ function migrateConfig(configPath: string): void {
   }
 }
 
+const KNOWN_INSECURE_JWT_SECRETS = new Set([
+  "IJ8ffa4-WAmfBfTFnmEdwdRx1k2kooXHgFQpYMVMUjs",
+  "gIWcNHCKHdZWQyOanUhLvhLOVFgz1Z64G0xDYsUNWGA",
+  "zTMPXMQGsKBp0WuYlEWHZNLaUOd2lPbFeRSu1fRNrBU",
+]);
+
+type YamlScalarLocation = {
+  index: number;
+  indent: number;
+  key: string;
+  value: string;
+};
+
+function yamlScalarValue(raw: string): string {
+  const trimmed = raw.trim();
+  if (trimmed.length >= 2) {
+    const first = trimmed[0];
+    const last = trimmed[trimmed.length - 1];
+    if ((first === '"' && last === '"') || (first === "'" && last === "'")) {
+      return trimmed.slice(1, -1);
+    }
+  }
+  return trimmed.replace(/\s+#.*$/, "").trim();
+}
+
+function findYamlScalar(lines: string[], pathParts: string[]): YamlScalarLocation | null {
+  const stack: Array<{ indent: number; key: string }> = [];
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index];
+    if (!line.trim() || line.trimStart().startsWith("#")) {
+      continue;
+    }
+    const match = line.match(/^(\s*)([A-Za-z0-9_-]+):(?:\s*(.*))?$/);
+    if (!match) {
+      continue;
+    }
+
+    const indent = match[1].replace(/\t/g, "  ").length;
+    while (stack.length > 0 && stack[stack.length - 1].indent >= indent) {
+      stack.pop();
+    }
+
+    const key = match[2];
+    const rawValue = (match[3] ?? "").trim();
+    const currentPath = [...stack.map((entry) => entry.key), key];
+    if (currentPath.length === pathParts.length && currentPath.every((part, i) => part === pathParts[i])) {
+      return { index, indent, key, value: yamlScalarValue(rawValue) };
+    }
+
+    if (rawValue === "") {
+      stack.push({ indent, key });
+    }
+  }
+  return null;
+}
+
+function setYamlScalar(lines: string[], pathParts: string[], value: string): void {
+  const existing = findYamlScalar(lines, pathParts);
+  const escaped = value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  if (existing) {
+    lines[existing.index] = `${" ".repeat(existing.indent)}${existing.key}: "${escaped}"`;
+    return;
+  }
+
+  const parentPath = pathParts.slice(0, -1);
+  const parent = findYamlScalar(lines, parentPath);
+  if (!parent) {
+    throw new Error(`配置缺少必要节点: ${parentPath.join(".")}`);
+  }
+  lines.splice(parent.index + 1, 0, `${" ".repeat(parent.indent + 2)}${pathParts[pathParts.length - 1]}: "${escaped}"`);
+}
+
+function ensureGeneratedRuntimeSecrets(configPath: string): void {
+  try {
+    const original = fs.readFileSync(configPath, "utf8");
+    const hadTrailingNewline = /\r?\n$/.test(original);
+    const lines = original.replace(/\r\n/g, "\n").split("\n");
+    if (hadTrailingNewline && lines[lines.length - 1] === "") {
+      lines.pop();
+    }
+
+    const { randomBytes } = require("crypto");
+    let changed = false;
+
+    const jwtPath = ["jwt", "secret"];
+    const jwt = findYamlScalar(lines, jwtPath);
+    const jwtSecret = jwt?.value.trim() ?? "";
+    if (jwtSecret.length < 32 || KNOWN_INSECURE_JWT_SECRETS.has(jwtSecret)) {
+      setYamlScalar(lines, jwtPath, randomBytes(48).toString("base64url"));
+      changed = true;
+      console.warn("[CoreManager] 检测到缺失/不安全的 JWT Secret，已完成本机随机轮换；现有登录会话需要重新登录");
+    }
+
+    const surrealPasswordPath = ["providers", "graphStore", "surrealdb", "password"];
+    const surrealPassword = findYamlScalar(lines, surrealPasswordPath)?.value.trim() ?? "";
+    const insecureSurreal =
+      surrealPassword.length < 24 ||
+      ["root", "admin", "password"].includes(surrealPassword.toLowerCase());
+    if (insecureSurreal) {
+      setYamlScalar(lines, surrealPasswordPath, randomBytes(32).toString("base64url"));
+      changed = true;
+      console.warn("[CoreManager] 检测到缺失/不安全的 SurrealDB 密码，已生成本机随机凭据");
+    }
+
+    if (!changed) {
+      return;
+    }
+
+    const output = lines.join("\n") + (hadTrailingNewline ? "\n" : "");
+    const tmpPath = `${configPath}.secrets.tmp`;
+    fs.writeFileSync(tmpPath, output, { encoding: "utf8", mode: 0o600 });
+    try {
+      fs.chmodSync(tmpPath, 0o600);
+    } catch {
+      // Windows may ignore POSIX permission bits.
+    }
+    try {
+      fs.renameSync(tmpPath, configPath);
+    } catch {
+      fs.copyFileSync(tmpPath, configPath);
+      fs.unlinkSync(tmpPath);
+    }
+    try {
+      fs.chmodSync(configPath, 0o600);
+    } catch {
+      // Windows may ignore POSIX permission bits.
+    }
+  } catch (err) {
+    throw new Error(`安全凭据初始化失败: ${err instanceof Error ? err.message : String(err)}`);
+  }
+}
+
 function ensureDefaultConfig(dataDir: string): void {
   const configDir = path.join(dataDir, "config");
   const destConfig = path.join(configDir, "config.yml");
@@ -164,10 +296,12 @@ function ensureDefaultConfig(dataDir: string): void {
     fs.copyFileSync(templatePath, destConfig, fs.constants.COPYFILE_EXCL);
     console.log("[CoreManager] 配置文件已创建:", destConfig);
     migrateConfig(destConfig);
+    ensureGeneratedRuntimeSecrets(destConfig);
     return;
   }
   console.log("[CoreManager] 配置文件已存在, 跳过覆盖:", destConfig);
   migrateConfig(destConfig);
+  ensureGeneratedRuntimeSecrets(destConfig);
 }
 
 function ensureLocalToken(dataDir: string): void {
