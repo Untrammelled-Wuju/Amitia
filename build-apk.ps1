@@ -184,6 +184,7 @@ try {
         Copy-Item $source $target -Force
     }
     finally {
+        try { & '.\android\gradlew.bat' --stop } catch { }
         Remove-Item Env:AMITIA_RUNTIME_CANDIDATE_BUILD -ErrorAction SilentlyContinue
         Remove-Item Env:FROZEN_RUNTIME_PACKAGE_PATH -ErrorAction SilentlyContinue
         Pop-Location
