@@ -3,11 +3,14 @@ package protocol
 import (
 	"encoding/json"
 	"fmt"
+	"path"
 	"strings"
 	"time"
 )
 
 const GameProtocolVersion = "amitia-game/2"
+
+const EventIDGameEvent = "game.event"
 
 const (
 	MethodGameSessionOpen     = "game.session.open"
@@ -29,6 +32,18 @@ const (
 	GameSessionClosed     GameSessionStatus = "closed"
 	GameSessionFailed     GameSessionStatus = "failed"
 )
+
+type GameSessionOpenRequest struct {
+	GameRoot              string          `json:"gameRoot,omitempty"`
+	GameVersion           string          `json:"gameVersion,omitempty"`
+	CharacterID           string          `json:"characterId,omitempty"`
+	AutoInstallCompanions *bool           `json:"autoInstallCompanions,omitempty"`
+	Payload               json.RawMessage `json:"payload,omitempty"`
+}
+
+func (r GameSessionOpenRequest) ShouldAutoInstallCompanions() bool {
+	return r.AutoInstallCompanions == nil || *r.AutoInstallCompanions
+}
 
 type GameSession struct {
 	ID             string            `json:"id"`
@@ -155,6 +170,14 @@ type GameCompanionArtifact struct {
 	SHA256        string   `json:"sha256,omitempty"`
 }
 
+type GameNetworkPolicy struct {
+	Mode           string   `json:"mode,omitempty"`
+	AllowedDomains []string `json:"allowedDomains,omitempty"`
+	AllowedPorts   []int    `json:"allowedPorts,omitempty"`
+	RequireProxy   bool     `json:"requireProxy,omitempty"`
+	AuditAll       bool     `json:"auditAll,omitempty"`
+}
+
 type GamePluginSpec struct {
 	ProtocolVersion     string                  `json:"protocolVersion"`
 	GameProtocolVersion string                  `json:"gameProtocolVersion,omitempty"`
@@ -168,6 +191,7 @@ type GamePluginSpec struct {
 	Actions             []GameCapability        `json:"actions,omitempty"`
 	Observations        []GameCapability        `json:"observations,omitempty"`
 	CompanionArtifacts  []GameCompanionArtifact `json:"companionArtifacts,omitempty"`
+	Network             *GameNetworkPolicy      `json:"network,omitempty"`
 }
 
 func ParseGamePluginSpec(spec map[string]any) (GamePluginSpec, error) {
@@ -205,10 +229,57 @@ func (s GamePluginSpec) Validate() error {
 	if s.RuntimeModuleID == "" {
 		return fmt.Errorf("runtimeModuleId is required")
 	}
+	if s.Network != nil {
+		mode := strings.ToLower(strings.TrimSpace(s.Network.Mode))
+		switch mode {
+		case "none", "loopback", "unrestricted", "restricted":
+		default:
+			return fmt.Errorf("unsupported network mode %q", s.Network.Mode)
+		}
+		if mode != "restricted" && (len(s.Network.AllowedDomains) > 0 || len(s.Network.AllowedPorts) > 0) {
+			return fmt.Errorf("allowedDomains/allowedPorts require network mode restricted")
+		}
+		if s.Network.RequireProxy && mode != "restricted" {
+			return fmt.Errorf("requireProxy requires network mode restricted")
+		}
+		if mode == "restricted" && len(s.Network.AllowedDomains) == 0 && len(s.Network.AllowedPorts) == 0 && !s.Network.RequireProxy {
+			return fmt.Errorf("restricted network mode requires an allowlist or requireProxy")
+		}
+		for _, port := range s.Network.AllowedPorts {
+			if port < 1 || port > 65535 {
+				return fmt.Errorf("network port %d is out of range", port)
+			}
+		}
+	}
+	seenArtifacts := make(map[string]struct{}, len(s.CompanionArtifacts))
 	for _, artifact := range s.CompanionArtifacts {
-		if strings.TrimSpace(artifact.ID) == "" || strings.TrimSpace(artifact.Type) == "" || strings.TrimSpace(artifact.Source) == "" {
-			return fmt.Errorf("companion artifact id, type and source are required")
+		id := strings.TrimSpace(artifact.ID)
+		if id == "" || strings.TrimSpace(artifact.Type) == "" || strings.TrimSpace(artifact.Source) == "" || strings.TrimSpace(artifact.InstallTarget) == "" {
+			return fmt.Errorf("companion artifact id, type, source and installTarget are required")
+		}
+		if _, exists := seenArtifacts[id]; exists {
+			return fmt.Errorf("duplicate companion artifact id %q", id)
+		}
+		seenArtifacts[id] = struct{}{}
+		if !safePackageRelativePath(artifact.Source) {
+			return fmt.Errorf("companion artifact %q source must be a safe package-relative path", id)
+		}
+		if !safePackageRelativePath(artifact.InstallTarget) {
+			return fmt.Errorf("companion artifact %q installTarget must be a safe game-root-relative path", id)
 		}
 	}
 	return nil
+}
+
+func safePackageRelativePath(raw string) bool {
+	normalized := strings.ReplaceAll(strings.TrimSpace(raw), "\\", "/")
+	if normalized == "" || strings.HasPrefix(normalized, "/") {
+		return false
+	}
+	// Reject Windows drive/ADS syntax even when validation runs on Unix.
+	if strings.Contains(normalized, ":") {
+		return false
+	}
+	clean := path.Clean(normalized)
+	return clean != "." && clean != ".." && !strings.HasPrefix(clean, "../")
 }

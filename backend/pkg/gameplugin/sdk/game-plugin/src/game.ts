@@ -13,6 +13,14 @@ export const GAME_METHODS = {
 export type GameSessionStatus = 'created' | 'connecting' | 'ready' | 'paused' | 'closed' | 'failed';
 export type GameActionStatus = 'succeeded' | 'failed' | 'cancelled' | 'rejected';
 
+export interface GameSessionOpenRequest {
+  gameRoot?: string;
+  gameVersion?: string;
+  characterId?: string;
+  autoInstallCompanions?: boolean;
+  payload?: unknown;
+}
+
 export interface GameSession {
   id: string;
   gameId: string;
@@ -129,6 +137,15 @@ export interface GameCompanionArtifact {
   sha256?: string;
 }
 
+
+export interface GameNetworkPolicy {
+  mode?: 'none' | 'loopback' | 'unrestricted' | 'restricted';
+  allowedDomains?: string[];
+  allowedPorts?: number[];
+  requireProxy?: boolean;
+  auditAll?: boolean;
+}
+
 export interface GamePluginSpec {
   protocolVersion: string;
   gameProtocolVersion?: string;
@@ -142,4 +159,5 @@ export interface GamePluginSpec {
   actions?: GameCapability[];
   observations?: GameCapability[];
   companionArtifacts?: GameCompanionArtifact[];
+  network?: GameNetworkPolicy;
 }

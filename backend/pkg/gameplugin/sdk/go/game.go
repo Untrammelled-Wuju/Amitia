@@ -1,8 +1,9 @@
-package gamepluginsdk
+package sdk
 
 import "github.com/u-ai/backend/pkg/gameplugin/protocol"
 
 const GameProtocolVersion = protocol.GameProtocolVersion
+const EventIDGameEvent = protocol.EventIDGameEvent
 
 const (
 	MethodGameSessionOpen     = protocol.MethodGameSessionOpen
@@ -14,6 +15,7 @@ const (
 	MethodGameCapabilitiesGet = protocol.MethodGameCapabilitiesGet
 )
 
+type GameSessionOpenRequest = protocol.GameSessionOpenRequest
 type GameSession = protocol.GameSession
 type GameSessionStatus = protocol.GameSessionStatus
 type GameLocation = protocol.GameLocation
@@ -29,3 +31,4 @@ type GameGoal = protocol.GameGoal
 type GameCapability = protocol.GameCapability
 type GameCompanionArtifact = protocol.GameCompanionArtifact
 type GamePluginSpec = protocol.GamePluginSpec
+type GameNetworkPolicy = protocol.GameNetworkPolicy
