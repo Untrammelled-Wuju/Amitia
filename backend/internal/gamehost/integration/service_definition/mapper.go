@@ -43,13 +43,17 @@ func (m *DefinitionMapper) MapToDefinition(view ServiceRuntimeView) (*trusted_se
 		integrityValue = "sha256:" + view.ExecutableSHA256
 	}
 
+	trustLevel := authoritativeServiceTrustLevel(view.PublisherTrust)
+	signatureTrusted := trustLevel.AllowedForService()
+
 	return &trusted_service.ServiceRuntimeDefinition{
 		ServiceID:   definitionID,
 		ExtensionID: view.ExtensionID,
 		ModuleID:    view.ModuleID,
 		Name:        view.Name,
 		Description: view.Description,
-		TrustLevel:  "trusted",
+		Publisher:   view.PublisherID,
+		TrustLevel:  string(trustLevel),
 		Executables: []trusted_service.PlatformExecutable{
 			{
 				Platform:     trusted_service.CurrentPlatform(),
@@ -61,9 +65,10 @@ func (m *DefinitionMapper) MapToDefinition(view ServiceRuntimeView) (*trusted_se
 				Signature: trusted_service.BinarySignature{
 					Algorithm: "sha256-integrity",
 					Value:     integrityValue,
-					Signer:    view.ExtensionID,
-					Trusted:   true,
+					Signer:    view.PublisherID,
+					Trusted:   signatureTrusted,
 				},
+				Dependencies: append([]trusted_service.LibraryDep(nil), view.Dependencies...),
 			},
 		},
 		Protocol:       resolveProtocol(view),
@@ -131,7 +136,19 @@ func computeManifestHash(view ServiceRuntimeView) string {
 	h.Write([]byte(view.ExecutablePath))
 	h.Write([]byte(view.ExecutableSHA256))
 	h.Write([]byte(view.IntegrityValue))
+	for _, dep := range view.Dependencies {
+		h.Write([]byte(dep.Name))
+		h.Write([]byte(dep.Path))
+		h.Write([]byte(dep.Sha256))
+		if dep.Required {
+			h.Write([]byte{1})
+		} else {
+			h.Write([]byte{0})
+		}
+	}
 	h.Write([]byte(view.Name))
+	h.Write([]byte(view.PublisherID))
+	h.Write([]byte(view.PublisherTrust))
 	for _, arg := range view.Arguments {
 		h.Write([]byte(arg))
 	}
@@ -145,6 +162,19 @@ func computeManifestHash(view ServiceRuntimeView) string {
 		h.Write([]byte(view.Env[k]))
 	}
 	return hex.EncodeToString(h.Sum(nil))
+}
+
+func authoritativeServiceTrustLevel(raw string) trusted_service.TrustLevel {
+	switch raw {
+	case "official":
+		return trusted_service.TrustLevelOfficial
+	case "trusted", "user_trusted":
+		return trusted_service.TrustLevelTrusted
+	case "community":
+		return trusted_service.TrustLevelCommunity
+	default:
+		return trusted_service.TrustLevelUnknown
+	}
 }
 
 func CanonicalizeEnv(env map[string]string) []string {

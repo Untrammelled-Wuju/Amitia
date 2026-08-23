@@ -149,7 +149,7 @@ func (a *processSupervisorAdapter) resolveTrustLevel(def *trusted_service.Servic
 	if def.TrustLevel != "" {
 		return trusted_service.TrustLevel(def.TrustLevel)
 	}
-	return trusted_service.TrustLevelTrusted
+	return trusted_service.TrustLevelUnknown
 }
 
 func secretSessionID(execCtx ServiceExecutionContext) string {

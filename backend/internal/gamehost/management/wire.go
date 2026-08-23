@@ -67,22 +67,37 @@ func NewKernelMutationFromFuncs(opts KernelMutationOptions) KernelMutation {
 }
 
 func (f *kernelMutationFromFuncs) Install(ctx context.Context, archivePath string) (KernelInstalledExtension, error) {
+	if f.opts.InstallFn == nil {
+		return KernelInstalledExtension{}, ErrPackageLifecycleRequired
+	}
 	return f.opts.InstallFn(ctx, archivePath)
 }
 
 func (f *kernelMutationFromFuncs) Update(ctx context.Context, archivePath string) (KernelInstalledExtension, error) {
+	if f.opts.UpdateFn == nil {
+		return KernelInstalledExtension{}, ErrPackageLifecycleRequired
+	}
 	return f.opts.UpdateFn(ctx, archivePath)
 }
 
 func (f *kernelMutationFromFuncs) Enable(ctx context.Context, extensionID string) error {
+	if f.opts.EnableFn == nil {
+		return fmt.Errorf("management: enable mutation is unavailable")
+	}
 	return f.opts.EnableFn(ctx, extensionID)
 }
 
 func (f *kernelMutationFromFuncs) Disable(ctx context.Context, extensionID string) error {
+	if f.opts.DisableFn == nil {
+		return fmt.Errorf("management: disable mutation is unavailable")
+	}
 	return f.opts.DisableFn(ctx, extensionID)
 }
 
 func (f *kernelMutationFromFuncs) Uninstall(ctx context.Context, extensionID string) error {
+	if f.opts.UninstallFn == nil {
+		return ErrPackageLifecycleRequired
+	}
 	return f.opts.UninstallFn(ctx, extensionID)
 }
 

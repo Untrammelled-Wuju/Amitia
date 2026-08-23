@@ -91,6 +91,63 @@ type GameHostContainer struct {
 	ProcessExitBridge   runtime.ProcessExitBridge
 }
 
+// ReconcileExtension refreshes one extension's plugin registry view and then
+// converges the complete GameHost runtime graph. It is safe to call after
+// enable, disable, update, rollback, or uninstall.
+func (c *GameHostContainer) ReconcileExtension(ctx context.Context, extensionID string) error {
+	if c == nil {
+		return nil
+	}
+	if c.ContributionSync != nil {
+		result := c.ContributionSync.SyncExtension(ctx, extensionID)
+		if result.HasError() {
+			return fmt.Errorf("gamehost: sync extension %s failed: %v", extensionID, result.Errors)
+		}
+	}
+	if c.RuntimeProvisioner != nil {
+		if err := c.RuntimeProvisioner.Reconcile(ctx); err != nil {
+			return fmt.Errorf("gamehost: reconcile extension %s runtime graph: %w", extensionID, err)
+		}
+	}
+	return nil
+}
+
+// QuiesceExtension stops active game runtimes owned by an extension while
+// preserving registry/topology state. Package uninstall uses this before moving
+// the active generation so Windows and other platforms never quarantine files
+// that are still in use by a game process.
+func (c *GameHostContainer) QuiesceExtension(ctx context.Context, extensionID string) error {
+	if c == nil || c.PluginRegistry == nil || c.RuntimeManager == nil {
+		return nil
+	}
+	plugins, err := c.PluginRegistry.ListByExtension(ctx, extensionID)
+	if err != nil {
+		return fmt.Errorf("gamehost: list extension plugins before quiesce: %w", err)
+	}
+	owned := make(map[domain.PluginID]struct{}, len(plugins))
+	for _, plugin := range plugins {
+		owned[plugin.ID] = struct{}{}
+	}
+	for _, runtimeRef := range c.RuntimeManager.ListRuntimes() {
+		if runtimeRef == nil {
+			continue
+		}
+		if _, ok := owned[runtimeRef.PluginID]; !ok {
+			continue
+		}
+		if !domain.IsActiveRuntimeState(runtimeRef.State) {
+			continue
+		}
+		if c.RuntimeExecutor == nil {
+			return fmt.Errorf("gamehost: runtime executor unavailable while quiescing %s", runtimeRef.ID)
+		}
+		if err := c.RuntimeExecutor.StopRuntime(ctx, runtimeRef.ID); err != nil {
+			return fmt.Errorf("gamehost: stop runtime %s before package mutation: %w", runtimeRef.ID, err)
+		}
+	}
+	return nil
+}
+
 func (c *GameHostContainer) CountRuntimeProcesses(runtimeID domain.RuntimeInstanceID) int {
 	if c == nil || c.RuntimeTopologyStore == nil || c.procAdapter == nil || runtimeID == "" {
 		return 0

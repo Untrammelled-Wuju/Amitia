@@ -20,73 +20,28 @@ func NewMutationHandler(packageSvc *PackageMutationService, runtimeSvc *RuntimeM
 	}
 }
 
+func writePackageLifecycleRetired(c *gin.Context) {
+	c.JSON(http.StatusGone, gin.H{
+		"code": 410,
+		"msg":  ErrPackageLifecycleRequired.Error(),
+		"replacement": gin.H{
+			"upload":           "/api/extensions/packages/artifacts",
+			"confirm":          "/api/extensions/packages/previews/:sessionId/confirm",
+			"install":          "/api/extensions/packages/operations/install",
+			"update":           "/api/extensions/packages/operations/update",
+			"uninstallPreview": "/api/extensions/kernel/extensions/uninstall/preview",
+			"uninstallConfirm": "/api/extensions/kernel/extensions/uninstall/confirm",
+			"uninstall":        "/api/extensions/kernel/extensions/uninstall",
+		},
+	})
+}
+
 func (h *MutationHandler) Install(c *gin.Context) {
-	if h.packageSvc == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "package mutation service unavailable"})
-		return
-	}
-
-	var req PackageInstallRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "invalid request body"})
-		return
-	}
-
-	result, err := h.packageSvc.Install(c.Request.Context(), req)
-	if err != nil {
-		if errors.Is(err, ErrInvalidInput) {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
-			return
-		}
-		if errors.Is(err, ErrNotGamePlugin) || errors.Is(err, ErrManagementTargetMismatch) || errors.Is(err, ErrPackageIdentityMismatch) {
-			c.JSON(http.StatusConflict, gin.H{"code": 409, "msg": err.Error()})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": result})
+	writePackageLifecycleRetired(c)
 }
 
 func (h *MutationHandler) Update(c *gin.Context) {
-	if h.packageSvc == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "package mutation service unavailable"})
-		return
-	}
-
-	extensionID := strings.TrimSpace(c.Param("extensionId"))
-	if extensionID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "extensionId required"})
-		return
-	}
-
-	var body PackageUpdateBody
-	if err := c.ShouldBindJSON(&body); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "invalid request body"})
-		return
-	}
-
-	req := PackageUpdateRequest{
-		ExtensionID: extensionID,
-		ArchivePath: body.ArchivePath,
-	}
-
-	result, err := h.packageSvc.Update(c.Request.Context(), req)
-	if err != nil {
-		if errors.Is(err, ErrInvalidInput) {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
-			return
-		}
-		if errors.Is(err, ErrNotGamePlugin) || errors.Is(err, ErrManagementTargetMismatch) || errors.Is(err, ErrPackageIdentityMismatch) {
-			c.JSON(http.StatusConflict, gin.H{"code": 409, "msg": err.Error()})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": result})
+	writePackageLifecycleRetired(c)
 }
 
 func (h *MutationHandler) Enable(c *gin.Context) {
@@ -148,32 +103,7 @@ func (h *MutationHandler) Disable(c *gin.Context) {
 }
 
 func (h *MutationHandler) Uninstall(c *gin.Context) {
-	if h.packageSvc == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"code": 503, "msg": "package mutation service unavailable"})
-		return
-	}
-
-	extensionID := strings.TrimSpace(c.Param("extensionId"))
-	if extensionID == "" {
-		c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": "extensionId required"})
-		return
-	}
-
-	result, err := h.packageSvc.Uninstall(c.Request.Context(), extensionID)
-	if err != nil {
-		if errors.Is(err, ErrInvalidInput) {
-			c.JSON(http.StatusBadRequest, gin.H{"code": 400, "msg": err.Error()})
-			return
-		}
-		if errors.Is(err, ErrNotGamePlugin) {
-			c.JSON(http.StatusConflict, gin.H{"code": 409, "msg": err.Error()})
-			return
-		}
-		c.JSON(http.StatusInternalServerError, gin.H{"code": 500, "msg": err.Error()})
-		return
-	}
-
-	c.JSON(http.StatusOK, gin.H{"code": 200, "msg": "ok", "data": result})
+	writePackageLifecycleRetired(c)
 }
 
 func (h *MutationHandler) StartRuntime(c *gin.Context) {
