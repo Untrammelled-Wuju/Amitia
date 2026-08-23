@@ -37,6 +37,7 @@ apiClient.interceptors.request.use(async (config) => {
     delete config.headers.Authorization;
     delete config.headers["X-Amitia-Desktop-Session"];
     delete config.headers["X-Amitia-Desktop-Instance"];
+    config.headers["X-Amitia-Client-Type"] = "desktop";
     return config;
   }
 
@@ -46,6 +47,8 @@ apiClient.interceptors.request.use(async (config) => {
       config.headers[key] = value;
     }
   }
+
+  config.headers["X-Amitia-Client-Type"] = "desktop";
 
   const token = await ensureValidToken();
   if (token) {

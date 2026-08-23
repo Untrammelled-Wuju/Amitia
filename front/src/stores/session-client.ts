@@ -50,12 +50,13 @@ export interface SessionInfo {
 
 export async function loginUser(req: LoginRequest): Promise<LoginResponse> {
   const res = await apiClient.post<LoginResponse>("/api/public/auth/login", req);
-  return res as unknown as LoginResponse;
+  return res.data as unknown as LoginResponse;
 }
 
 export async function refreshToken(req: RefreshRequest): Promise<RefreshResponse> {
   const res = await apiClient.post<RefreshResponse>("/api/public/auth/refresh", req);
-  return res as unknown as RefreshResponse;
+  console.log("[refreshToken] raw response keys:", Object.keys(res.data || {}));
+  return res.data as unknown as RefreshResponse;
 }
 
 export async function logoutUser(): Promise<void> {
@@ -71,7 +72,7 @@ export async function revokeRefreshToken(): Promise<void> {
 
 export async function listSessions(): Promise<SessionInfo[]> {
   const res = await apiClient.get<SessionInfo[]>("/api/auth/sessions");
-  return res as unknown as SessionInfo[];
+  return res.data as unknown as SessionInfo[];
 }
 
 export async function revokeSession(sessionId: string): Promise<void> {
@@ -80,7 +81,7 @@ export async function revokeSession(sessionId: string): Promise<void> {
 
 export async function revokeOtherSessions(): Promise<{ revokedCount: number }> {
   const res = await apiClient.delete<{ revokedCount: number }>("/api/auth/sessions");
-  return res as unknown as { revokedCount: number };
+  return res.data as unknown as { revokedCount: number };
 }
 
 export async function logoutAll(): Promise<void> {

@@ -83,6 +83,7 @@ import { useRouter, useRoute } from "vue-router";
 import { ElMessage } from "element-plus";
 import { apiClient } from "../../composables/useApi";
 import { useSessionStore } from "../../stores/session-store";
+import { saveRefreshToken, clearPersistedSession } from "../../stores/refresh-coordinator";
 
 const router = useRouter();
 const route = useRoute();
@@ -125,6 +126,8 @@ async function handleLogin() {
       password: pw,
     });
     const data = res.data?.data || res.data;
+    console.log("[Login] response data keys:", Object.keys(data || {}));
+    console.log("[Login] has refreshToken:", !!data?.refreshToken);
     if (data?.accessToken || data?.token) {
       const { setSession } = useSessionStore();
       setSession({
@@ -135,6 +138,12 @@ async function handleLogin() {
         username: data.user?.username || data.username || name,
         role: data.user?.role || data.role || null,
       });
+      if (data.refreshToken) {
+        saveRefreshToken(data.refreshToken);
+        console.log("[Login] refreshToken saved to localStorage");
+      } else {
+        console.warn("[Login] no refreshToken in response");
+      }
       if (window.amitiaDesktop?.setAuthToken) {
         void window.amitiaDesktop.setAuthToken(data.accessToken || data.token);
       }
