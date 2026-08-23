@@ -133,7 +133,7 @@ onMounted(refresh);
 .devices-page { padding: 24px; display: flex; flex-direction: column; gap: 18px; }
 .page-head, .device-head, .detail-row, .runtime-row, .card-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .page-head h2 { margin: 0 0 6px; font-size: 22px; }
-.page-head p { margin: 0; color: var(--el-text-color-secondary); }
+.page-head p { margin: 0; color: var(--el-text-color-secondary); font-size: 13px; }
 .device-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 14px; }
 .device-card { min-width: 0; }
 .muted, small { color: var(--el-text-color-secondary); font-size: 12px; margin-top: 4px; }

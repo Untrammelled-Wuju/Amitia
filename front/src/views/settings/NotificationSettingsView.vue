@@ -67,4 +67,4 @@ async function test(){
 }
 onMounted(load);
 </script>
-<style scoped>.panel{display:grid;gap:16px}.head{display:flex;align-items:flex-start;justify-content:space-between}.head h2{margin:0 0 4px}.head p{margin:0;color:var(--el-text-color-secondary)}.actions{display:flex;gap:10px;flex-wrap:wrap}code{word-break:break-all}</style>
+<style scoped>.panel{display:grid;gap:16px}.head{display:flex;align-items:flex-start;justify-content:space-between}.head h2{margin:0 0 4px}.head p{margin:0;color:var(--el-text-color-secondary);font-size:13px}.actions{display:flex;gap:10px;flex-wrap:wrap}code{word-break:break-all}</style>

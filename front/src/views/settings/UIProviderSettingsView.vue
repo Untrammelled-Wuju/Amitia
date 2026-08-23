@@ -135,7 +135,7 @@ void refreshAll();
 .provider-settings { display: grid; gap: 18px; }
 .heading { display:flex; justify-content:space-between; align-items:flex-start; gap:16px; }
 h2 { margin:0 0 6px; font-size:22px; }
-p { margin:0; color:var(--el-text-color-secondary); }
+p { margin:0; color:var(--el-text-color-secondary); font-size:13px; }
 .scope-bar { display:flex; align-items:center; gap:12px; flex-wrap:wrap; padding:12px 14px; border:1px solid var(--el-border-color-light); border-radius:12px; }
 .scope-bar > div { display:flex; flex-direction:column; gap:2px; margin-right:auto; }
 .scope-bar span { color:var(--el-text-color-secondary); font-size:12px; }

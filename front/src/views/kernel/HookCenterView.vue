@@ -406,7 +406,7 @@ onMounted(() => {
 .subtitle {
   margin: 0;
   color: var(--el-text-color-secondary);
-  font-size: 14px;
+  font-size: 13px;
 }
 
 .header-right {
