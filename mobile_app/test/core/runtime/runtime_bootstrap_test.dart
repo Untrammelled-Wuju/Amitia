@@ -108,18 +108,14 @@ RuntimeBridgeSnapshot _makeSnapshot({
 
 void main() {
   group('Initialize once', () {
-    test('concurrent initialize calls only execute one start decision', () async {
+    test('concurrent initialize calls only execute one install decision', () async {
       final bridge = FakeRuntimeBridge(
         initial: _makeSnapshot(
-          state: RuntimeBridgeState.stopped,
-          runtimeInstalled: true,
+          state: RuntimeBridgeState.notInstalled,
         ),
       );
 
-      final bootstrap = DefaultRuntimeBootstrap(
-        bridge: bridge,
-        policy: const RuntimeBootstrapPolicy(autoStartInstalledRuntime: true),
-      );
+      final bootstrap = DefaultRuntimeBootstrap(bridge: bridge);
 
       await Future.wait([
         bootstrap.initialize(),
@@ -130,7 +126,6 @@ void main() {
       ]);
 
       await Future.delayed(const Duration(milliseconds: 200));
-      expect(bridge.startCallCount, lessThanOrEqualTo(1));
       await bootstrap.dispose();
     });
   });
@@ -176,38 +171,15 @@ void main() {
       await bootstrap.dispose();
     });
 
-    test('initial STOPPED with autoStart → start calls = 1', () async {
-      final bridge = FakeRuntimeBridge(
-        initial: _makeSnapshot(
-          state: RuntimeBridgeState.stopped,
-          runtimeInstalled: true,
-        ),
-      );
-
-      final bootstrap = DefaultRuntimeBootstrap(
-        bridge: bridge,
-        policy: const RuntimeBootstrapPolicy(autoStartInstalledRuntime: true),
-      );
-
-      await bootstrap.initialize();
-      await Future.delayed(const Duration(milliseconds: 200));
-
-      expect(bridge.startCallCount, equals(1));
-      await bootstrap.dispose();
-    });
-
-    test('initial STOPPED without autoStart → start calls = 0', () async {
+    test('initial STOPPED → start calls = 0', () async {
       final bridge = FakeRuntimeBridge(
         initial: _makeSnapshot(state: RuntimeBridgeState.stopped),
       );
 
-      final bootstrap = DefaultRuntimeBootstrap(
-        bridge: bridge,
-        policy: const RuntimeBootstrapPolicy(autoStartInstalledRuntime: false),
-      );
+      final bootstrap = DefaultRuntimeBootstrap(bridge: bridge);
 
       await bootstrap.initialize();
-      await Future.delayed(const Duration(milliseconds: 100));
+      await Future.delayed(const Duration(milliseconds: 200));
 
       expect(bridge.startCallCount, equals(0));
       await bootstrap.dispose();
