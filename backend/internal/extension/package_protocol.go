@@ -195,6 +195,8 @@ type PackageImportPreview struct {
 	Errors                  []string                 `json:"errors"`
 	Conflict                PackageConflictStatus    `json:"conflict"`
 	AvailableActions        []string                 `json:"availableActions"`
+	ManagementTarget        string                   `json:"managementTarget,omitempty"`
+	ContributionKinds       []string                 `json:"contributionKinds,omitempty"`
 	CurrentVersion          string                   `json:"currentVersion,omitempty"`
 	RollbackVersion         string                   `json:"rollbackVersion,omitempty"`
 	UpgradeDiff             *PackageVersionDiff      `json:"upgradeDiff,omitempty"`

@@ -207,6 +207,20 @@
           "name": {
             "type": "string"
           },
+          "managementTarget": {
+            "enum": [
+              "extension_center",
+              "game_center",
+              "desktop_pet_center"
+            ],
+            "type": "string"
+          },
+          "contributionKinds": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array"
+          },
           "packageHash": {
             "type": "string"
           },
