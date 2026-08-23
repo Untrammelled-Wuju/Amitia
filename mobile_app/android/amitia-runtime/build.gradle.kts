@@ -29,24 +29,31 @@ android {
         }
 
         val frozenRuntimePackagePath: String? = System.getenv("FROZEN_RUNTIME_PACKAGE_PATH")
-        val isCandidateBuild: Boolean = System.getenv("AMITIA_RUNTIME_CANDIDATE_BUILD") == "1"
-        val runtimeSha = if (isCandidateBuild && frozenRuntimePackagePath != null) {
-            val srcFile = file(frozenRuntimePackagePath)
-            if (srcFile.exists()) {
-                srcFile.inputStream().use { input ->
-                    val digest = MessageDigest.getInstance("SHA-256")
-                    val buffer = ByteArray(8192)
-                    var read: Int
-                    while (input.read(buffer).also { read = it } != -1) {
-                        digest.update(buffer, 0, read)
-                    }
-                    digest.digest().joinToString("") { it.toInt().and(0xFF).toString(16).padStart(2, '0') }
+            ?.trim()
+            ?.takeIf { it.isNotEmpty() }
+        val explicitRuntimePackage = frozenRuntimePackagePath?.let { file(it) }
+        val preservedBundledAsset = file(
+            "../app/src/main/assets/runtime-package/amitia-runtime-1.0.0.zip"
+        )
+        val runtimePackageForHash = when {
+            explicitRuntimePackage?.isFile == true -> explicitRuntimePackage
+            preservedBundledAsset.isFile -> preservedBundledAsset
+            else -> null
+        }
+        val runtimeSha = if (runtimePackageForHash != null) {
+            runtimePackageForHash.inputStream().use { input ->
+                val digest = MessageDigest.getInstance("SHA-256")
+                val buffer = ByteArray(8192)
+                var read: Int
+                while (input.read(buffer).also { read = it } != -1) {
+                    digest.update(buffer, 0, read)
                 }
-            } else {
-                "ASSET_FILE_MISSING"
+                digest.digest().joinToString("") {
+                    it.toInt().and(0xFF).toString(16).padStart(2, '0')
+                }
             }
         } else {
-            "NO_CANDIDATE_BUILD"
+            "BUNDLED_RUNTIME_PACKAGE_MISSING"
         }
         buildConfigField("String", "RUNTIME_PACKAGE_SHA256", "\"$runtimeSha\"")
     }

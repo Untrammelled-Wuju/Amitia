@@ -132,33 +132,53 @@ tasks.matching { it.name == "preReleaseBuild" }.configureEach {
 }
 
 val frozenRuntimePackagePath: String? = System.getenv("FROZEN_RUNTIME_PACKAGE_PATH")
+    ?.trim()
+    ?.takeIf { it.isNotEmpty() }
 val amitiaRuntimeCandidateBuild: String? = System.getenv("AMITIA_RUNTIME_CANDIDATE_BUILD")
 val isCandidateBuild = amitiaRuntimeCandidateBuild == "1"
+val bundledRuntimeAssetDir = layout.projectDirectory.dir("src/main/assets/runtime-package")
+val bundledRuntimeAsset = bundledRuntimeAssetDir.file("amitia-runtime-1.0.0.zip")
 
 tasks.register<Delete>("cleanFrozenRuntimePackage") {
     group = "candidate"
-    description = "Removes previously copied frozen Runtime Package from assets"
-    delete(layout.projectDirectory.dir("src/main/assets/runtime-package"))
+    description = "Removes the generated frozen Runtime Package before replacing it"
+    // Ordinary debug/dev builds must never erase a previously bundled runtime.
+    onlyIf { frozenRuntimePackagePath != null }
+    delete(bundledRuntimeAssetDir)
 }
 
 tasks.register<Copy>("copyFrozenRuntimePackage") {
     group = "candidate"
-    description = "Copies the frozen Runtime Package into APK assets"
-    dependsOn("cleanFrozenRuntimePackage")
-    if (isCandidateBuild && frozenRuntimePackagePath != null) {
+    description = "Copies the configured frozen Runtime Package into APK assets"
+
+    if (frozenRuntimePackagePath != null) {
+        dependsOn("cleanFrozenRuntimePackage")
         val sourceFile = file(frozenRuntimePackagePath)
-        if (!sourceFile.exists()) {
-            throw GradleException("copyFrozenRuntimePackage: FROZEN_RUNTIME_PACKAGE_PATH declared but file missing: $frozenRuntimePackagePath")
+        if (!sourceFile.isFile) {
+            throw GradleException(
+                "copyFrozenRuntimePackage: FROZEN_RUNTIME_PACKAGE_PATH declared but file missing: $frozenRuntimePackagePath"
+            )
         }
         from(sourceFile) {
             rename { "amitia-runtime-1.0.0.zip" }
         }
-        into(layout.projectDirectory.dir("src/main/assets/runtime-package"))
+        into(bundledRuntimeAssetDir)
     } else if (isCandidateBuild) {
-        throw GradleException("copyFrozenRuntimePackage: Candidate build requires FROZEN_RUNTIME_PACKAGE_PATH")
+        throw GradleException(
+            "copyFrozenRuntimePackage: Candidate build requires FROZEN_RUNTIME_PACKAGE_PATH"
+        )
     } else {
         doLast {
-            logger.lifecycle("copyFrozenRuntimePackage: Candidate environment not set, skipping asset embed")
+            if (bundledRuntimeAsset.asFile.isFile) {
+                logger.lifecycle(
+                    "copyFrozenRuntimePackage: preserving existing bundled runtime asset: ${bundledRuntimeAsset.asFile.absolutePath}"
+                )
+            } else {
+                logger.warn(
+                    "copyFrozenRuntimePackage: no bundled runtime asset is present. " +
+                        "Fresh-device installation requires FROZEN_RUNTIME_PACKAGE_PATH when building the APK."
+                )
+            }
         }
     }
 }
