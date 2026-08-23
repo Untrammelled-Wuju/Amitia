@@ -193,6 +193,57 @@ type ServiceInstance struct {
 	mu                sync.RWMutex
 	stopCh            chan struct{}
 	healthCancel      context.CancelFunc
+	processCancel     context.CancelFunc
+	startupDetached   bool
+	waitOwnerClaimed  bool
+	restartRequest    StartRequest
+}
+
+func (i *ServiceInstance) bindProcessLifetime(cancel context.CancelFunc) {
+	i.mu.Lock()
+	i.processCancel = cancel
+	i.startupDetached = false
+	i.mu.Unlock()
+}
+
+// cancelProcessForStartup propagates cancellation only while Start is still
+// establishing the process. Once startup is detached, request/operation
+// contexts no longer own the long-lived service process.
+func (i *ServiceInstance) cancelProcessForStartup() {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if i.startupDetached || i.processCancel == nil {
+		return
+	}
+	i.processCancel()
+}
+
+func (i *ServiceInstance) detachStartupCancellation() {
+	i.mu.Lock()
+	i.startupDetached = true
+	i.mu.Unlock()
+}
+
+func (i *ServiceInstance) cancelProcessLifetime() {
+	i.mu.Lock()
+	cancel := i.processCancel
+	i.processCancel = nil
+	i.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+}
+
+// claimWaitOwner guarantees that exactly one goroutine may call Wait on the
+// exec.Cmd backing this service instance.
+func (i *ServiceInstance) claimWaitOwner() bool {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if i.waitOwnerClaimed {
+		return false
+	}
+	i.waitOwnerClaimed = true
+	return true
 }
 
 func (i *ServiceInstance) SetState(state ServiceState) {
@@ -231,6 +282,13 @@ func (i *ServiceInstance) MarkStopped() {
 func (i *ServiceInstance) MarkCrashed() {
 	i.mu.Lock()
 	i.State = ServiceStateCrashed
+	// Keep stopCh open while recovery is pending. Stop/disable/uninstall closes
+	// it via MarkStopped, which cancels a delayed automatic restart.
+	i.mu.Unlock()
+}
+
+func (i *ServiceInstance) cancelPendingRecovery() {
+	i.mu.Lock()
 	if i.stopCh != nil {
 		close(i.stopCh)
 		i.stopCh = nil

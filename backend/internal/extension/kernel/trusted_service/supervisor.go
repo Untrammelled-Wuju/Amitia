@@ -326,6 +326,9 @@ type StartRequest struct {
 	SecretLease      string
 	LogLevel         string
 	Args             map[string]string
+	// RestartCount is carried internally across supervisor-managed recovery
+	// attempts so a crashing service cannot reset its restart budget.
+	RestartCount int
 }
 
 type StartResult struct {
@@ -346,9 +349,15 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 		s.mu.Unlock()
 		return nil, ErrServiceNotFound
 	}
-	if inst, exists := s.instances[req.ServiceID]; exists && !inst.State_().IsTerminal() {
-		s.mu.Unlock()
-		return nil, fmt.Errorf("%w: %s", ErrAlreadyRunning, req.ServiceID)
+	if inst, exists := s.instances[req.ServiceID]; exists {
+		state := inst.State_()
+		if !state.IsTerminal() && state != ServiceStateCrashed {
+			s.mu.Unlock()
+			return nil, fmt.Errorf("%w: %s", ErrAlreadyRunning, req.ServiceID)
+		}
+		if state == ServiceStateCrashed {
+			inst.cancelPendingRecovery()
+		}
 	}
 	if s.quarantine.IsQuarantined(req.ServiceID) {
 		s.mu.Unlock()
@@ -423,10 +432,40 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 		State:             ServiceStateStarting,
 		WorkingDir:        workingDir,
 		SessionToken:      req.SessionToken,
+		RestartCount:      req.RestartCount,
 		circuit:           NewCircuitBreaker(DefaultCircuitConfig()),
 		stopCh:            make(chan struct{}),
+		restartRequest:    cloneStartRequest(req),
 	}
+	instance.restartRequest.InstanceID = instanceID
+	instance.restartRequest.ServiceID = req.ServiceID
+	instance.restartRequest.RestartCount = req.RestartCount
 	instance.SetState(ServiceStateStarting)
+
+	// The caller context owns only startup/handshake. The service process gets
+	// an independent lifetime context so an HTTP request, Agent turn, or
+	// recovery timeout ending after Ready cannot kill a long-lived runtime.
+	processCtx, processCancel := context.WithCancel(context.Background())
+	instance.bindProcessLifetime(processCancel)
+	stopStartupPropagation := context.AfterFunc(ctx, instance.cancelProcessForStartup)
+	startupComplete := false
+	ownershipRecorded := false
+	var startedCmd *exec.Cmd
+	defer func() {
+		stopStartupPropagation()
+		if !startupComplete {
+			s.abortStartupProcess(instance, startedCmd)
+			if ownershipRecorded && s.ownerStore != nil && instance.ProcessInstanceID != "" {
+				if err := s.ownerStore.RemoveOwnership(instance.ProcessInstanceID); err != nil {
+					s.ownerStoreErr = err
+					s.log("error", "failed to roll back process ownership after startup failure", map[string]any{
+						"service": instance.ServiceID,
+						"error":   err.Error(),
+					})
+				}
+			}
+		}
+	}()
 
 	if !instance.circuit.AllowStart() {
 		instance.SetState(ServiceStateFailed)
@@ -439,7 +478,8 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 	isRPC := def.Protocol == "jsonrpc" || def.Protocol == "amitia_jsonrpc_v1"
 
 	if isRPC {
-		if err := s.startRPCService(ctx, instance, def, exe, launchPath, launchArgs, env, workingDir, req); err != nil {
+		startedCmd, err = s.startRPCService(processCtx, instance, def, exe, launchPath, launchArgs, env, workingDir, req)
+		if err != nil {
 			instance.SetState(ServiceStateFailed)
 			instance.circuit.RecordFailure()
 			s.mu.Lock()
@@ -448,7 +488,8 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 			return nil, err
 		}
 	} else if handler, ok := s.protocolHandlers[def.Protocol]; ok {
-		if err := s.startManagedStdioProtocolService(ctx, instance, def, exe, launchPath, launchArgs, env, workingDir, req, handler); err != nil {
+		startedCmd, err = s.startManagedStdioProtocolService(processCtx, ctx, instance, def, exe, launchPath, launchArgs, env, workingDir, req, handler)
+		if err != nil {
 			instance.SetState(ServiceStateFailed)
 			instance.circuit.RecordFailure()
 			s.mu.Lock()
@@ -457,7 +498,8 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 			return nil, err
 		}
 	} else if def.Protocol == "" || def.Protocol == "plain" {
-		if err := s.startPlainService(ctx, instance, def, exe, launchPath, launchArgs, env, workingDir, req); err != nil {
+		startedCmd, err = s.startPlainService(processCtx, instance, def, exe, launchPath, launchArgs, env, workingDir, req)
+		if err != nil {
 			instance.SetState(ServiceStateFailed)
 			instance.circuit.RecordFailure()
 			s.mu.Lock()
@@ -487,11 +529,23 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 	if s.ownerStore != nil {
 		if _, err := s.ownerStore.RecordOwnership(instance, instance.HostInstanceID, instance.HostSessionID); err != nil {
 			s.ownerStoreErr = err
-			s.killProcessTree(instance)
+			instance.SetState(ServiceStateFailed)
 			return nil, fmt.Errorf("trusted_service: persist process ownership: %w", err)
 		}
+		ownershipRecorded = true
 	}
 
+	if err := ctx.Err(); err != nil {
+		instance.SetState(ServiceStateFailed)
+		return nil, fmt.Errorf("trusted_service: startup canceled before ready handoff: %w", err)
+	}
+	instance.detachStartupCancellation()
+	stopStartupPropagation()
+	startupComplete = true
+
+	// There is exactly one Wait owner for each exec.Cmd, and it is registered
+	// only after startup has reached the durable Ready handoff.
+	go s.watchProcess(instance, startedCmd)
 	go s.healthMon.Monitor(instance, def)
 
 	return &StartResult{
@@ -503,44 +557,46 @@ func (s *ProcessSupervisor) Start(ctx context.Context, req StartRequest) (*Start
 	}, nil
 }
 
-func (s *ProcessSupervisor) startRPCService(ctx context.Context, instance *ServiceInstance, def *ServiceRuntimeDefinition, exe *PlatformExecutable, fullExePath string, args, env []string, workingDir string, req StartRequest) error {
-	cmd := exec.CommandContext(ctx, fullExePath, args...)
+func (s *ProcessSupervisor) startRPCService(processCtx context.Context, instance *ServiceInstance, def *ServiceRuntimeDefinition, exe *PlatformExecutable, fullExePath string, args, env []string, workingDir string, req StartRequest) (*exec.Cmd, error) {
+	cmd := exec.CommandContext(processCtx, fullExePath, args...)
 	cmd.Dir = workingDir
 	cmd.Env = env
 	process.ConfigureProcess(cmd)
 
 	stdinPipe, err := cmd.StdinPipe()
 	if err != nil {
-		return fmt.Errorf("trusted_service: create stdin pipe: %w", err)
+		return cmd, fmt.Errorf("trusted_service: create stdin pipe: %w", err)
 	}
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
 		stdinPipe.Close()
-		return fmt.Errorf("trusted_service: create stdout pipe: %w", err)
+		return cmd, fmt.Errorf("trusted_service: create stdout pipe: %w", err)
 	}
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
 		stdinPipe.Close()
 		stdoutPipe.Close()
-		return fmt.Errorf("trusted_service: create stderr pipe: %w", err)
+		return cmd, fmt.Errorf("trusted_service: create stderr pipe: %w", err)
 	}
 
 	if err := cmd.Start(); err != nil {
 		stdinPipe.Close()
 		stdoutPipe.Close()
 		stderrPipe.Close()
-		return fmt.Errorf("trusted_service: start process: %w", err)
-	}
-
-	handle, attachErr := process.AttachProcessTree(cmd)
-	if attachErr != nil {
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
-		return fmt.Errorf("trusted_service: attach process tree: %w", attachErr)
+		return cmd, fmt.Errorf("trusted_service: start process: %w", err)
 	}
 
 	instance.PID = cmd.Process.Pid
 	instance.managedProc = cmd
+
+	handle, attachErr := process.AttachProcessTree(cmd)
+	if attachErr != nil {
+		stdinPipe.Close()
+		stdoutPipe.Close()
+		stderrPipe.Close()
+		return cmd, fmt.Errorf("trusted_service: attach process tree: %w", attachErr)
+	}
+
 	instance.procHandle = uint64(handle)
 
 	nonce := generateNonce()
@@ -574,13 +630,13 @@ func (s *ProcessSupervisor) startRPCService(ctx context.Context, instance *Servi
 	if err != nil {
 		s.killProcessTree(instance)
 		rpcSession.Close()
-		return fmt.Errorf("trusted_service: rpc handshake failed (hello): %w", err)
+		return cmd, fmt.Errorf("trusted_service: rpc handshake failed (hello): %w", err)
 	}
 
 	if hello.ProtocolVersion != protocolVersion {
 		s.killProcessTree(instance)
 		rpcSession.Close()
-		return fmt.Errorf("trusted_service: protocol version mismatch: expected %s got %s", protocolVersion, hello.ProtocolVersion)
+		return cmd, fmt.Errorf("trusted_service: protocol version mismatch: expected %s got %s", protocolVersion, hello.ProtocolVersion)
 	}
 
 	welcomeExpiry := time.Now().UTC().Add(30 * time.Minute)
@@ -592,14 +648,14 @@ func (s *ProcessSupervisor) startRPCService(ctx context.Context, instance *Servi
 	}, welcomeExpiry); err != nil {
 		s.killProcessTree(instance)
 		rpcSession.Close()
-		return fmt.Errorf("trusted_service: rpc send welcome: %w", err)
+		return cmd, fmt.Errorf("trusted_service: rpc send welcome: %w", err)
 	}
 
 	initReq, err := rpcSession.WaitForInitialize(helloTimeout)
 	if err != nil {
 		s.killProcessTree(instance)
 		rpcSession.Close()
-		return fmt.Errorf("trusted_service: rpc handshake failed (initialize): %w", err)
+		return cmd, fmt.Errorf("trusted_service: rpc handshake failed (initialize): %w", err)
 	}
 
 	s.log("info", "service initialized", map[string]any{
@@ -611,24 +667,22 @@ func (s *ProcessSupervisor) startRPCService(ctx context.Context, instance *Servi
 	if err := rpcSession.RespondInitialize(true, "accepted"); err != nil {
 		s.killProcessTree(instance)
 		rpcSession.Close()
-		return fmt.Errorf("trusted_service: rpc respond initialize: %w", err)
+		return cmd, fmt.Errorf("trusted_service: rpc respond initialize: %w", err)
 	}
 
 	if err := rpcSession.WaitForReady(helloTimeout); err != nil {
 		s.killProcessTree(instance)
 		rpcSession.Close()
-		return fmt.Errorf("trusted_service: rpc handshake failed (ready): %w", err)
+		return cmd, fmt.Errorf("trusted_service: rpc handshake failed (ready): %w", err)
 	}
 
 	instance.StdioConn = "jsonrpc-stdio"
 
-	go s.watchProcess(instance, cmd)
-
-	return nil
+	return cmd, nil
 }
 
-func (s *ProcessSupervisor) startPlainService(ctx context.Context, instance *ServiceInstance, def *ServiceRuntimeDefinition, exe *PlatformExecutable, fullExePath string, args, env []string, workingDir string, req StartRequest) error {
-	cmd := exec.CommandContext(ctx, fullExePath, args...)
+func (s *ProcessSupervisor) startPlainService(processCtx context.Context, instance *ServiceInstance, def *ServiceRuntimeDefinition, exe *PlatformExecutable, fullExePath string, args, env []string, workingDir string, req StartRequest) (*exec.Cmd, error) {
+	cmd := exec.CommandContext(processCtx, fullExePath, args...)
 	cmd.Dir = workingDir
 	cmd.Env = env
 	cmd.Stdout = newLogWriter(s.logger, "info", req.ServiceID)
@@ -636,27 +690,25 @@ func (s *ProcessSupervisor) startPlainService(ctx context.Context, instance *Ser
 	process.ConfigureProcess(cmd)
 
 	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("trusted_service: start process: %w", err)
-	}
-
-	handle, attachErr := process.AttachProcessTree(cmd)
-	if attachErr != nil {
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
-		return fmt.Errorf("trusted_service: attach process tree: %w", attachErr)
+		return cmd, fmt.Errorf("trusted_service: start process: %w", err)
 	}
 
 	instance.PID = cmd.Process.Pid
 	instance.managedProc = cmd
+
+	handle, attachErr := process.AttachProcessTree(cmd)
+	if attachErr != nil {
+		return cmd, fmt.Errorf("trusted_service: attach process tree: %w", attachErr)
+	}
+
 	instance.procHandle = uint64(handle)
 
-	go s.watchProcess(instance, cmd)
-
-	return nil
+	return cmd, nil
 }
 
 func (s *ProcessSupervisor) startManagedStdioProtocolService(
-	ctx context.Context,
+	processCtx context.Context,
+	startupCtx context.Context,
 	instance *ServiceInstance,
 	def *ServiceRuntimeDefinition,
 	exe *PlatformExecutable,
@@ -665,47 +717,46 @@ func (s *ProcessSupervisor) startManagedStdioProtocolService(
 	workingDir string,
 	req StartRequest,
 	handler StdioProtocolHandler,
-) error {
-	cmd := exec.CommandContext(ctx, fullExePath, args...)
+) (*exec.Cmd, error) {
+	cmd := exec.CommandContext(processCtx, fullExePath, args...)
 	cmd.Dir = workingDir
 	cmd.Env = env
 	process.ConfigureProcess(cmd)
 
 	stdinPipe, err := cmd.StdinPipe()
 	if err != nil {
-		return fmt.Errorf("trusted_service: create stdin pipe: %w", err)
+		return cmd, fmt.Errorf("trusted_service: create stdin pipe: %w", err)
 	}
 	stdoutPipe, err := cmd.StdoutPipe()
 	if err != nil {
 		stdinPipe.Close()
-		return fmt.Errorf("trusted_service: create stdout pipe: %w", err)
+		return cmd, fmt.Errorf("trusted_service: create stdout pipe: %w", err)
 	}
 	stderrPipe, err := cmd.StderrPipe()
 	if err != nil {
 		stdinPipe.Close()
 		stdoutPipe.Close()
-		return fmt.Errorf("trusted_service: create stderr pipe: %w", err)
+		return cmd, fmt.Errorf("trusted_service: create stderr pipe: %w", err)
 	}
 
 	if err := cmd.Start(); err != nil {
 		stdinPipe.Close()
 		stdoutPipe.Close()
 		stderrPipe.Close()
-		return fmt.Errorf("trusted_service: start process: %w", err)
-	}
-
-	handle, attachErr := process.AttachProcessTree(cmd)
-	if attachErr != nil {
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
-		stdinPipe.Close()
-		stdoutPipe.Close()
-		stderrPipe.Close()
-		return fmt.Errorf("trusted_service: attach process tree: %w", attachErr)
+		return cmd, fmt.Errorf("trusted_service: start process: %w", err)
 	}
 
 	instance.PID = cmd.Process.Pid
 	instance.managedProc = cmd
+
+	handle, attachErr := process.AttachProcessTree(cmd)
+	if attachErr != nil {
+		stdinPipe.Close()
+		stdoutPipe.Close()
+		stderrPipe.Close()
+		return cmd, fmt.Errorf("trusted_service: attach process tree: %w", attachErr)
+	}
+
 	instance.procHandle = uint64(handle)
 
 	go s.drainStderr(stderrPipe, instance.ServiceID, instance.InstanceID)
@@ -719,18 +770,16 @@ func (s *ProcessSupervisor) startManagedStdioProtocolService(
 		Generation:  instance.Generation,
 	}
 
-	closer, err := handler.Attach(ctx, meta, stdinPipe, stdoutPipe)
+	closer, err := handler.Attach(startupCtx, meta, stdinPipe, stdoutPipe)
 	if err != nil {
 		s.killProcessTree(instance)
-		return fmt.Errorf("trusted_service: protocol handler attach failed: %w", err)
+		return cmd, fmt.Errorf("trusted_service: protocol handler attach failed: %w", err)
 	}
 
 	instance.protocolSession = closer
 	instance.StdioConn = def.Protocol + "-stdio"
 
-	go s.watchProcess(instance, cmd)
-
-	return nil
+	return cmd, nil
 }
 
 func (s *ProcessSupervisor) drainStderr(stderrPipe io.ReadCloser, serviceID, instanceID string) {
@@ -777,8 +826,39 @@ func (s *ProcessSupervisor) buildSafeEnvironment(exe *PlatformExecutable, def *S
 	return envB.BuildFiltered()
 }
 
+func (s *ProcessSupervisor) abortStartupProcess(inst *ServiceInstance, cmd *exec.Cmd) {
+	if inst == nil {
+		return
+	}
+	inst.cancelProcessLifetime()
+	if cmd == nil || cmd.Process == nil {
+		return
+	}
+	s.killProcessTree(inst)
+	if inst.claimWaitOwner() {
+		_ = cmd.Wait()
+	}
+	handle := process.ProcessTreeHandle(inst.procHandle)
+	if handle != 0 {
+		process.CloseProcessTree(handle)
+		inst.procHandle = 0
+	}
+}
+
 func (s *ProcessSupervisor) watchProcess(inst *ServiceInstance, cmd *exec.Cmd) {
+	if inst == nil || cmd == nil {
+		return
+	}
+	if !inst.claimWaitOwner() {
+		s.log("error", "duplicate process wait owner rejected", map[string]any{
+			"service":  inst.ServiceID,
+			"instance": inst.InstanceID,
+		})
+		return
+	}
 	err := cmd.Wait()
+	inst.cancelProcessLifetime()
+	s.healthMon.Stop(inst)
 	exitCode := 0
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -916,34 +996,53 @@ func (s *ProcessSupervisor) calculateBackoff(policy ServiceRecoveryPolicy, resta
 }
 
 func (s *ProcessSupervisor) restart(inst *ServiceInstance) {
-	inst.IncrementRestart()
-	def := inst.Definition
-	if def == nil {
+	if inst == nil || inst.Definition == nil {
 		return
 	}
+	nextCount := inst.IncrementRestart()
+	req := restartStartRequest(inst, nextCount)
+
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
-	_, err := s.Start(ctx, StartRequest{
-		ServiceID:      inst.ServiceID,
-		InstanceID:     newServiceInstanceID(inst.ServiceID),
-		RuntimeID:      inst.RuntimeID,
-		Generation:     inst.Generation,
-		PublisherTrust: TrustLevel(def.TrustLevel),
-		WorkingDir:     inst.WorkingDir,
-		SessionToken:   inst.SessionToken,
-		LogLevel:       "info",
-	})
+	_, err := s.Start(ctx, req)
 	if err != nil {
-		s.log("error", "restart failed", map[string]any{"service": inst.ServiceID, "error": err.Error()})
-		if inst.RestartCount >= def.Recovery.MaxRestarts {
+		s.log("error", "restart failed", map[string]any{"service": inst.ServiceID, "error": err.Error(), "restarts": nextCount})
+		if nextCount >= inst.Definition.Recovery.MaxRestarts {
 			inst.SetState(ServiceStateQuarantined)
 			_ = s.quarantine.Quarantine(inst.ServiceID, inst.InstanceID, QuarantineFrequentCrash,
-				fmt.Sprintf("restart failed, restarts %d/%d", inst.RestartCount, def.Recovery.MaxRestarts),
-				map[string]any{"restarts": inst.RestartCount})
+				fmt.Sprintf("restart failed, restarts %d/%d", nextCount, inst.Definition.Recovery.MaxRestarts),
+				map[string]any{"restarts": nextCount})
 		}
 	} else {
-		s.log("info", "service restarted", map[string]any{"service": inst.ServiceID, "restarts": inst.RestartCount})
+		s.log("info", "service restarted", map[string]any{"service": inst.ServiceID, "restarts": nextCount, "instance": inst.InstanceID})
 	}
+}
+
+func restartStartRequest(inst *ServiceInstance, restartCount int) StartRequest {
+	req := cloneStartRequest(inst.restartRequest)
+	req.ServiceID = inst.ServiceID
+	req.InstanceID = inst.InstanceID
+	req.RuntimeID = inst.RuntimeID
+	req.PluginID = inst.PluginID
+	req.LogicalServiceID = inst.LogicalServiceID
+	req.ExtensionID = inst.ExtensionID
+	req.Generation = inst.Generation
+	req.RestartCount = restartCount
+	if req.PublisherTrust == "" && inst.Definition != nil {
+		req.PublisherTrust = TrustLevel(inst.Definition.TrustLevel)
+	}
+	return req
+}
+
+func cloneStartRequest(req StartRequest) StartRequest {
+	cloned := req
+	if req.Args != nil {
+		cloned.Args = make(map[string]string, len(req.Args))
+		for key, value := range req.Args {
+			cloned.Args[key] = value
+		}
+	}
+	return cloned
 }
 
 type StopRequest struct {
@@ -1056,6 +1155,7 @@ func (s *ProcessSupervisor) waitForProcessExit(inst *ServiceInstance, timeout ti
 }
 
 func (s *ProcessSupervisor) killProcessTree(inst *ServiceInstance) {
+	inst.cancelProcessLifetime()
 	pid := inst.PID
 	handle := process.ProcessTreeHandle(inst.procHandle)
 
