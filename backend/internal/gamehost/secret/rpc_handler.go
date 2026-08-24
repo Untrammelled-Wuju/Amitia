@@ -35,30 +35,26 @@ type acquireHandler struct {
 }
 
 func (h acquireHandler) Handle(ctx context.Context, request rpc.RPCRequest) (rpc.RPCResponse, error) {
-	var payload SecretAcquireRequest
+	var payload struct {
+		Ref      kernelsecret.SecretRef `json:"ref"`
+		Purpose  Purpose                `json:"purpose"`
+		Required bool                   `json:"required"`
+	}
 	if len(request.Payload) > 0 {
 		if err := json.Unmarshal(request.Payload, &payload); err != nil {
-			return rpc.RPCResponse{Error: &rpc.RPCRoutedError{Code: "INVALID_PAYLOAD", Message: "invalid acquire payload"}}, nil
+			return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: "INVALID_PAYLOAD", Message: "invalid acquire payload"}}, nil
 		}
 	}
 
-	if payload.RuntimeID != "" && payload.RuntimeID != string(request.RuntimeID) {
-		return rpc.RPCResponse{Error: &rpc.RPCRoutedError{Code: "IDENTITY_MISMATCH", Message: "runtimeId does not match trusted identity"}}, nil
-	}
-	if payload.ServiceID != "" && payload.ServiceID != string(request.ServiceID) {
-		return rpc.RPCResponse{Error: &rpc.RPCRoutedError{Code: "IDENTITY_MISMATCH", Message: "serviceId does not match trusted identity"}}, nil
-	}
-
 	if !payload.Ref.Valid() {
-		return rpc.RPCResponse{Error: &rpc.RPCRoutedError{Code: "INVALID_REF", Message: "invalid secret ref"}}, nil
+		return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: "INVALID_REF", Message: "invalid secret ref"}}, nil
+	}
+	if payload.Purpose != PurposeStartup && payload.Purpose != PurposeRuntime {
+		return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: "INVALID_PURPOSE", Message: "purpose must be startup or runtime"}}, nil
 	}
 	if request.Generation <= 0 {
-		return rpc.RPCResponse{Error: &rpc.RPCRoutedError{Code: "INVALID_GENERATION", Message: "trusted generation must be positive"}}, nil
+		return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: "INVALID_GENERATION", Message: "trusted generation must be positive"}}, nil
 	}
-	if payload.Generation != 0 && payload.Generation != request.Generation {
-		return rpc.RPCResponse{Error: &rpc.RPCRoutedError{Code: "IDENTITY_MISMATCH", Message: "generation does not match trusted identity"}}, nil
-	}
-
 	result, err := h.adapter.AcquireServiceLease(
 		ctx,
 		string(request.RuntimeID),
@@ -70,7 +66,7 @@ func (h acquireHandler) Handle(ctx context.Context, request rpc.RPCRequest) (rpc
 		request.Generation,
 	)
 	if err != nil {
-		return rpc.RPCResponse{Error: &rpc.RPCRoutedError{Code: "LEASE_DENIED", Message: err.Error()}}, nil
+		return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: "LEASE_DENIED", Message: err.Error()}}, nil
 	}
 
 	respPayload, _ := json.Marshal(map[string]interface{}{
@@ -91,19 +87,17 @@ type releaseHandler struct {
 
 func (h releaseHandler) Handle(ctx context.Context, request rpc.RPCRequest) (rpc.RPCResponse, error) {
 	var payload struct {
-		LeaseID    string `json:"leaseId"`
-		ServiceID  string `json:"serviceId"`
-		Reason     string `json:"reason"`
-		Generation int64  `json:"generation"`
+		LeaseID string `json:"leaseId"`
+		Reason  string `json:"reason"`
 	}
 	if err := json.Unmarshal(request.Payload, &payload); err != nil || payload.LeaseID == "" {
-		return rpc.RPCResponse{Error: &rpc.RPCRoutedError{Code: "INVALID_PAYLOAD", Message: "leaseId is required"}}, nil
+		return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: "INVALID_PAYLOAD", Message: "leaseId is required"}}, nil
 	}
-	if (payload.ServiceID != "" && payload.ServiceID != string(request.ServiceID)) || (payload.Generation != 0 && payload.Generation != request.Generation) || request.Generation <= 0 {
-		return rpc.RPCResponse{Error: &rpc.RPCRoutedError{Code: "IDENTITY_MISMATCH", Message: "release identity does not match trusted identity"}}, nil
+	if request.Generation <= 0 {
+		return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: "INVALID_GENERATION", Message: "trusted generation must be positive"}}, nil
 	}
 	if err := h.adapter.ReleaseServiceLease(string(request.RuntimeID), string(request.ServiceID), request.Generation, kernelsecret.LeaseID(payload.LeaseID), payload.Reason); err != nil {
-		return rpc.RPCResponse{Error: &rpc.RPCRoutedError{Code: "LEASE_DENIED", Message: err.Error()}}, nil
+		return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: "LEASE_DENIED", Message: err.Error()}}, nil
 	}
 	response, _ := json.Marshal(map[string]interface{}{"released": true, "reason": payload.Reason})
 	return rpc.RPCResponse{RequestID: request.ID, Payload: response}, nil
@@ -115,21 +109,33 @@ type queryHandler struct {
 
 func (h queryHandler) Handle(ctx context.Context, request rpc.RPCRequest) (rpc.RPCResponse, error) {
 	var payload struct {
-		LeaseID    string `json:"leaseId"`
-		ServiceID  string `json:"serviceId"`
-		Generation int64  `json:"generation"`
+		LeaseID string `json:"leaseId"`
 	}
 	if err := json.Unmarshal(request.Payload, &payload); err != nil || payload.LeaseID == "" {
-		return rpc.RPCResponse{Error: &rpc.RPCRoutedError{Code: "INVALID_PAYLOAD", Message: "leaseId is required"}}, nil
+		return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: "INVALID_PAYLOAD", Message: "leaseId is required"}}, nil
 	}
-	if (payload.ServiceID != "" && payload.ServiceID != string(request.ServiceID)) || (payload.Generation != 0 && payload.Generation != request.Generation) || request.Generation <= 0 {
-		return rpc.RPCResponse{Error: &rpc.RPCRoutedError{Code: "IDENTITY_MISMATCH", Message: "query identity does not match trusted identity"}}, nil
+	if request.Generation <= 0 {
+		return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: "INVALID_GENERATION", Message: "trusted generation must be positive"}}, nil
 	}
 	lease, valid, err := h.adapter.QueryServiceLease(string(request.RuntimeID), string(request.ServiceID), request.Generation, kernelsecret.LeaseID(payload.LeaseID))
 	if err != nil {
-		return rpc.RPCResponse{Error: &rpc.RPCRoutedError{Code: "LEASE_DENIED", Message: err.Error()}}, nil
+		return rpc.RPCResponse{RequestID: request.ID, Error: &rpc.RPCRoutedError{Code: "LEASE_DENIED", Message: err.Error()}}, nil
 	}
-	response, _ := json.Marshal(map[string]interface{}{"leaseId": string(lease.ID), "ref": string(lease.Ref), "granted": valid, "valid": valid, "expiresAt": lease.ExpiresAt.UnixNano()})
+	responsePayload := map[string]interface{}{
+		"leaseId": payload.LeaseID,
+		"granted": valid,
+		"valid":   valid,
+	}
+	if lease.ID != "" {
+		responsePayload["leaseId"] = string(lease.ID)
+	}
+	if lease.Ref != "" {
+		responsePayload["ref"] = string(lease.Ref)
+	}
+	if !lease.ExpiresAt.IsZero() {
+		responsePayload["expiresAt"] = lease.ExpiresAt.UnixNano()
+	}
+	response, _ := json.Marshal(responsePayload)
 	return rpc.RPCResponse{RequestID: request.ID, Payload: response}, nil
 }
 
