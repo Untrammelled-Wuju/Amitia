@@ -3,9 +3,11 @@ package kernel
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/u-ai/backend/internal/extension/kernel/domain"
+	gameprotocol "github.com/u-ai/backend/pkg/gameplugin/protocol"
 )
 
 // gameHostOwnedRuntimeModules returns module IDs whose process lifecycle is
@@ -25,14 +27,44 @@ func (r *Runtime) gameHostOwnedRuntimeModules(ctx context.Context, extensionID d
 		if contribution.Kind != domain.ContributionKindGamePlugin {
 			continue
 		}
-		raw, _ := contribution.Definition["runtimeModuleId"].(string)
-		raw = strings.TrimSpace(raw)
-		if raw == "" {
-			return nil, fmt.Errorf("game_plugin %s is missing runtimeModuleId", contribution.ID)
+		moduleIDs, err := gameHostContributionRuntimeModules(contribution)
+		if err != nil {
+			return nil, err
 		}
-		owned[domain.ModuleID(raw)] = struct{}{}
+		for _, moduleID := range moduleIDs {
+			owned[moduleID] = struct{}{}
+		}
 	}
 	return owned, nil
+}
+
+func gameHostContributionRuntimeModules(contribution domain.ContributionDefinition) ([]domain.ModuleID, error) {
+	spec, err := gameprotocol.ParsePluginHostSpec(contribution.Definition)
+	if err != nil {
+		return nil, fmt.Errorf("game_plugin %s has invalid host spec: %w", contribution.ID, err)
+	}
+	if err := spec.Validate(); err != nil {
+		return nil, fmt.Errorf("game_plugin %s has invalid host spec: %w", contribution.ID, err)
+	}
+	seen := make(map[domain.ModuleID]struct{})
+	if runtimeModuleID := strings.TrimSpace(spec.RuntimeModuleID); runtimeModuleID != "" {
+		seen[domain.ModuleID(runtimeModuleID)] = struct{}{}
+	}
+	for _, service := range spec.Services {
+		moduleID := strings.TrimSpace(service.ModuleID)
+		if moduleID != "" {
+			seen[domain.ModuleID(moduleID)] = struct{}{}
+		}
+	}
+	if len(seen) == 0 {
+		return nil, fmt.Errorf("game_plugin %s does not declare any runtime module", contribution.ID)
+	}
+	result := make([]domain.ModuleID, 0, len(seen))
+	for moduleID := range seen {
+		result = append(result, moduleID)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i] < result[j] })
+	return result, nil
 }
 
 func isGameHostOwnedRuntimeModule(owned map[domain.ModuleID]struct{}, moduleID domain.ModuleID) bool {

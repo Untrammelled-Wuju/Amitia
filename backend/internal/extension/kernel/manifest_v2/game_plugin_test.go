@@ -34,7 +34,7 @@ func TestGamePluginContributionManifest(t *testing.T) {
 						"name": {"default": "Example Game"},
 						"spec": {
 							"protocolVersion": "amitia-game-host/1",
-							"runtimeModuleId": "game-runtime"
+							"runtimeModuleId": "game-runtime", "network": {"mode": "none"}
 						}
 					}
 				]
@@ -80,7 +80,7 @@ func TestGamePluginContributionSchema(t *testing.T) {
 						"name": {"default": "Example Game"},
 						"spec": {
 							"protocolVersion": "amitia-game-host/1",
-							"runtimeModuleId": "game-runtime"
+							"runtimeModuleId": "game-runtime", "network": {"mode": "none"}
 						}
 					}
 				]
@@ -119,7 +119,7 @@ func TestGamePluginRequiresID(t *testing.T) {
 					{
 						"kind": "game_plugin",
 						"name": {"default": "Game"},
-						"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "main"}
+						"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "main", "network": {"mode": "none"}}
 					}
 				]
 			}
@@ -192,7 +192,7 @@ func TestGamePluginRuntimeModuleMustExist(t *testing.T) {
 						"name": {"default": "Game"},
 						"spec": {
 							"protocolVersion": "amitia-game-host/1",
-							"runtimeModuleId": "nonexistent-module"
+							"runtimeModuleId": "nonexistent-module", "network": {"mode": "none"}
 						}
 					}
 				]
@@ -229,13 +229,13 @@ func TestDuplicateGamePluginIDRejected(t *testing.T) {
 						"id": "game-1",
 						"kind": "game_plugin",
 						"name": {"default": "Game 1"},
-						"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "main"}
+						"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "main", "network": {"mode": "none"}}
 					},
 					{
 						"id": "game-1",
 						"kind": "game_plugin",
 						"name": {"default": "Game 2"},
-						"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "main"}
+						"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "main", "network": {"mode": "none"}}
 					}
 				]
 			}
@@ -272,13 +272,13 @@ func TestMultipleGamePluginsAllowed(t *testing.T) {
 						"id": "plugin-a",
 						"kind": "game_plugin",
 						"name": {"default": "Plugin A"},
-						"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "main"}
+						"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "main", "network": {"mode": "none"}}
 					},
 					{
 						"id": "plugin-b",
 						"kind": "game_plugin",
 						"name": {"default": "Plugin B"},
-						"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "main"}
+						"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "main", "network": {"mode": "none"}}
 					}
 				]
 			}
@@ -315,7 +315,7 @@ func TestGamePluginPreservedInExtensionDefinition(t *testing.T) {
 						"id": "game-1",
 						"kind": "game_plugin",
 						"name": {"default": "Game"},
-						"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "main"}
+						"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "main", "network": {"mode": "none"}}
 					}
 				]
 			}
@@ -362,7 +362,7 @@ func TestGamePluginJSONRoundTrip(t *testing.T) {
 						"name": {"default": "Game"},
 						"spec": {
 							"protocolVersion": "amitia-game-host/1",
-							"runtimeModuleId": "main"
+							"runtimeModuleId": "main", "network": {"mode": "none"}
 						}
 					}
 				]
@@ -403,7 +403,7 @@ func TestDomainMappingGamePlugin(t *testing.T) {
 						"id": "game-1",
 						"kind": "game_plugin",
 						"name": {"default": "Game"},
-						"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "main"}
+						"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "main", "network": {"mode": "none"}}
 					}
 				]
 			}
@@ -420,5 +420,40 @@ func TestDomainMappingGamePlugin(t *testing.T) {
 	}
 	if m.Modules[0].Contributions[0].Kind != "game_plugin" {
 		t.Errorf("expected game_plugin kind, got %s", m.Modules[0].Contributions[0].Kind)
+	}
+}
+
+func TestGamePluginUnrestrictedNetworkRequiresPermission(t *testing.T) {
+	manifest := `{
+		"manifestVersion": 2,
+		"extension": {"id": "com.example/network-game", "name": {"default": "Network Game"}, "version": "1.0.0"},
+		"publisher": {"id": "com.example", "displayName": "Example"},
+		"modules": [{
+			"id": "runtime",
+			"name": {"default": "Runtime"},
+			"type": "service",
+			"runtime": {"type": "service", "entryPoint": "bin/runtime"},
+			"contributions": [{
+				"id": "game",
+				"kind": "game_plugin",
+				"name": {"default": "Game"},
+				"spec": {"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime", "network": {"mode": "unrestricted"}}
+			}]
+		}],
+		"integrity": {"algorithm": "sha256", "contentTreeHash": "test"}
+	}`
+	m, err := Parse([]byte(manifest))
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	report := m.Validate()
+	if !report.HasErrors() {
+		t.Fatal("expected unrestricted game plugin without service.network.request to be rejected")
+	}
+
+	m.Modules[0].Contributions[0].RequiredPermissions = []string{"service.network.request"}
+	report = m.Validate()
+	if report.HasErrors() {
+		t.Fatalf("expected unrestricted game plugin with network permission to pass, got %v", report.Errors)
 	}
 }
