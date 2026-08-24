@@ -17,6 +17,7 @@ type PlatformIsolationReport struct {
 func (r PlatformIsolationReport) IsFullyIsolated() bool {
 	return r.ProcessTreeIsolation &&
 		r.MemoryLimit &&
+		r.CPULimit &&
 		r.FilesystemIsolation &&
 		r.NetworkIsolation
 }
