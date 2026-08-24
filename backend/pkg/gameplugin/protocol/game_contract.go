@@ -1,6 +1,7 @@
 package protocol
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"path"
@@ -22,136 +23,70 @@ const (
 	MethodGameCapabilitiesGet = "game.capabilities.get"
 )
 
-type GameSessionStatus string
+type PluginSessionStatus string
 
 const (
-	GameSessionCreated    GameSessionStatus = "created"
-	GameSessionConnecting GameSessionStatus = "connecting"
-	GameSessionReady      GameSessionStatus = "ready"
-	GameSessionPaused     GameSessionStatus = "paused"
-	GameSessionClosed     GameSessionStatus = "closed"
-	GameSessionFailed     GameSessionStatus = "failed"
+	PluginSessionCreated    PluginSessionStatus = "created"
+	PluginSessionConnecting PluginSessionStatus = "connecting"
+	PluginSessionReady      PluginSessionStatus = "ready"
+	PluginSessionPaused     PluginSessionStatus = "paused"
+	PluginSessionClosed     PluginSessionStatus = "closed"
+	PluginSessionFailed     PluginSessionStatus = "failed"
 )
 
-type GameSessionOpenRequest struct {
-	GameRoot              string          `json:"gameRoot,omitempty"`
-	GameVersion           string          `json:"gameVersion,omitempty"`
-	CharacterID           string          `json:"characterId,omitempty"`
-	AutoInstallCompanions *bool           `json:"autoInstallCompanions,omitempty"`
-	Payload               json.RawMessage `json:"payload,omitempty"`
+type PluginSessionOpenRequest struct {
+	Context  map[string]any  `json:"context,omitempty"`
+	Metadata map[string]any  `json:"metadata,omitempty"`
+	Payload  json.RawMessage `json:"payload,omitempty"`
 }
 
-func (r GameSessionOpenRequest) ShouldAutoInstallCompanions() bool {
-	return r.AutoInstallCompanions == nil || *r.AutoInstallCompanions
+type PluginSession struct {
+	ID        string              `json:"id"`
+	Status    PluginSessionStatus `json:"status"`
+	StartedAt time.Time           `json:"startedAt,omitempty"`
+	UpdatedAt time.Time           `json:"updatedAt,omitempty"`
+	Metadata  map[string]any      `json:"metadata,omitempty"`
+	Payload   json.RawMessage     `json:"payload,omitempty"`
 }
 
-type GameSession struct {
-	ID             string            `json:"id"`
-	GameID         string            `json:"gameId"`
-	GameVersion    string            `json:"gameVersion,omitempty"`
-	Edition        string            `json:"edition,omitempty"`
-	Status         GameSessionStatus `json:"status"`
-	CharacterID    string            `json:"characterId,omitempty"`
-	WorldID        string            `json:"worldId,omitempty"`
-	ConnectionMode string            `json:"connectionMode,omitempty"`
-	StartedAt      time.Time         `json:"startedAt,omitempty"`
-	UpdatedAt      time.Time         `json:"updatedAt,omitempty"`
-	Metadata       map[string]any    `json:"metadata,omitempty"`
-	Payload        json.RawMessage   `json:"payload,omitempty"`
-}
-
-type GameLocation struct {
-	World       string             `json:"world,omitempty"`
-	Region      string             `json:"region,omitempty"`
-	Coordinates map[string]float64 `json:"coordinates,omitempty"`
-	Payload     json.RawMessage    `json:"payload,omitempty"`
-}
-
-type GameEntity struct {
+type PluginEvent struct {
 	ID         string          `json:"id"`
-	Type       string          `json:"type"`
-	Name       string          `json:"name,omitempty"`
-	Location   *GameLocation   `json:"location,omitempty"`
-	Attributes map[string]any  `json:"attributes,omitempty"`
-	Payload    json.RawMessage `json:"payload,omitempty"`
-}
-
-type GameInventoryItem struct {
-	ID         string          `json:"id"`
-	Type       string          `json:"type"`
-	Name       string          `json:"name,omitempty"`
-	Quantity   float64         `json:"quantity,omitempty"`
-	Slot       string          `json:"slot,omitempty"`
-	Attributes map[string]any  `json:"attributes,omitempty"`
-	Payload    json.RawMessage `json:"payload,omitempty"`
-}
-
-type GameInventory struct {
-	Items    []GameInventoryItem `json:"items,omitempty"`
-	Capacity *int                `json:"capacity,omitempty"`
-	Payload  json.RawMessage     `json:"payload,omitempty"`
-}
-
-type GameObservation struct {
-	SessionID  string          `json:"sessionId"`
-	Sequence   uint64          `json:"sequence"`
-	ObservedAt time.Time       `json:"observedAt"`
-	Location   *GameLocation   `json:"location,omitempty"`
-	Entities   []GameEntity    `json:"entities,omitempty"`
-	Inventory  *GameInventory  `json:"inventory,omitempty"`
-	State      map[string]any  `json:"state,omitempty"`
-	Payload    json.RawMessage `json:"payload,omitempty"`
-}
-
-type GameEvent struct {
-	ID         string          `json:"id"`
-	SessionID  string          `json:"sessionId"`
+	SessionID  string          `json:"sessionId,omitempty"`
 	Type       string          `json:"type"`
 	OccurredAt time.Time       `json:"occurredAt"`
-	EntityIDs  []string        `json:"entityIds,omitempty"`
+	Metadata   map[string]any  `json:"metadata,omitempty"`
 	Payload    json.RawMessage `json:"payload,omitempty"`
 }
 
-type GameAction struct {
+type PluginOperation struct {
 	ID             string          `json:"id"`
-	SessionID      string          `json:"sessionId"`
+	SessionID      string          `json:"sessionId,omitempty"`
 	Type           string          `json:"type"`
 	Parameters     json.RawMessage `json:"parameters,omitempty"`
 	IdempotencyKey string          `json:"idempotencyKey,omitempty"`
 	DeadlineMS     int64           `json:"deadlineMs,omitempty"`
 }
 
-type GameActionStatus string
+type PluginOperationStatus string
 
 const (
-	GameActionSucceeded GameActionStatus = "succeeded"
-	GameActionFailed    GameActionStatus = "failed"
-	GameActionCancelled GameActionStatus = "cancelled"
-	GameActionRejected  GameActionStatus = "rejected"
+	PluginOperationSucceeded PluginOperationStatus = "succeeded"
+	PluginOperationFailed    PluginOperationStatus = "failed"
+	PluginOperationCancelled PluginOperationStatus = "cancelled"
+	PluginOperationRejected  PluginOperationStatus = "rejected"
 )
 
-type GameActionResult struct {
-	ActionID     string           `json:"actionId"`
-	SessionID    string           `json:"sessionId"`
-	Status       GameActionStatus `json:"status"`
-	Observation  *GameObservation `json:"observation,omitempty"`
-	Output       json.RawMessage  `json:"output,omitempty"`
-	ErrorCode    string           `json:"errorCode,omitempty"`
-	ErrorMessage string           `json:"errorMessage,omitempty"`
-	Retryable    bool             `json:"retryable,omitempty"`
+type PluginOperationResult struct {
+	OperationID  string                `json:"operationId"`
+	SessionID    string                `json:"sessionId,omitempty"`
+	Status       PluginOperationStatus `json:"status"`
+	Output       json.RawMessage       `json:"output,omitempty"`
+	ErrorCode    string                `json:"errorCode,omitempty"`
+	ErrorMessage string                `json:"errorMessage,omitempty"`
+	Retryable    bool                  `json:"retryable,omitempty"`
 }
 
-type GameGoal struct {
-	ID          string          `json:"id"`
-	SessionID   string          `json:"sessionId"`
-	Description string          `json:"description"`
-	Priority    int             `json:"priority,omitempty"`
-	State       string          `json:"state,omitempty"`
-	Constraints json.RawMessage `json:"constraints,omitempty"`
-	Payload     json.RawMessage `json:"payload,omitempty"`
-}
-
-type GameCapability struct {
+type PluginCapability struct {
 	ID          string          `json:"id"`
 	Kind        string          `json:"kind"`
 	Description string          `json:"description,omitempty"`
@@ -159,18 +94,35 @@ type GameCapability struct {
 	Metadata    map[string]any  `json:"metadata,omitempty"`
 }
 
-type GameCompanionArtifact struct {
-	ID            string   `json:"id"`
-	Type          string   `json:"type"`
-	Platforms     []string `json:"platforms,omitempty"`
-	GameVersions  []string `json:"gameVersions,omitempty"`
-	Source        string   `json:"source"`
-	InstallTarget string   `json:"installTarget,omitempty"`
-	Required      bool     `json:"required,omitempty"`
-	SHA256        string   `json:"sha256,omitempty"`
+type PluginArtifact struct {
+	ID                    string   `json:"id"`
+	Type                  string   `json:"type"`
+	Platforms             []string `json:"platforms,omitempty"`
+	Architectures         []string `json:"architectures,omitempty"`
+	CompatibilityVersions []string `json:"compatibilityVersions,omitempty"`
+	Source                string   `json:"source"`
+	Target                string   `json:"target,omitempty"`
+	Required              bool     `json:"required,omitempty"`
+	SHA256                string   `json:"sha256,omitempty"`
+	GameVersions          []string `json:"gameVersions,omitempty"`
+	InstallTarget         string   `json:"installTarget,omitempty"`
 }
 
-type GameNetworkPolicy struct {
+func (a PluginArtifact) EffectiveCompatibilityVersions() []string {
+	if len(a.CompatibilityVersions) > 0 {
+		return a.CompatibilityVersions
+	}
+	return a.GameVersions
+}
+
+func (a PluginArtifact) EffectiveTarget() string {
+	if strings.TrimSpace(a.Target) != "" {
+		return a.Target
+	}
+	return a.InstallTarget
+}
+
+type PluginNetworkPolicy struct {
 	Mode           string   `json:"mode,omitempty"`
 	AllowedDomains []string `json:"allowedDomains,omitempty"`
 	AllowedPorts   []int    `json:"allowedPorts,omitempty"`
@@ -178,20 +130,28 @@ type GameNetworkPolicy struct {
 	AuditAll       bool     `json:"auditAll,omitempty"`
 }
 
+type GameCapability = PluginCapability
+type GameCompanionArtifact = PluginArtifact
+type GameNetworkPolicy = PluginNetworkPolicy
+
 type GamePluginSpec struct {
-	ProtocolVersion     string                  `json:"protocolVersion"`
-	GameProtocolVersion string                  `json:"gameProtocolVersion,omitempty"`
-	RuntimeModuleID     string                  `json:"runtimeModuleId"`
-	GameID              string                  `json:"gameId,omitempty"`
-	GameFamily          string                  `json:"gameFamily,omitempty"`
-	Editions            []string                `json:"editions,omitempty"`
-	SupportedVersions   []string                `json:"supportedVersions,omitempty"`
-	ConnectionModes     []string                `json:"connectionModes,omitempty"`
-	Services            []string                `json:"services,omitempty"`
-	Actions             []GameCapability        `json:"actions,omitempty"`
-	Observations        []GameCapability        `json:"observations,omitempty"`
-	CompanionArtifacts  []GameCompanionArtifact `json:"companionArtifacts,omitempty"`
-	Network             *GameNetworkPolicy      `json:"network,omitempty"`
+	ProtocolVersion     string               `json:"protocolVersion"`
+	GameProtocolVersion string               `json:"gameProtocolVersion,omitempty"`
+	RuntimeModuleID     string               `json:"runtimeModuleId"`
+	Capabilities        []PluginCapability   `json:"capabilities,omitempty"`
+	Artifacts           []PluginArtifact     `json:"artifacts,omitempty"`
+	Network             *PluginNetworkPolicy `json:"network,omitempty"`
+	Metadata            map[string]any       `json:"metadata,omitempty"`
+
+	GameID             string           `json:"gameId,omitempty"`
+	GameFamily         string           `json:"gameFamily,omitempty"`
+	Editions           []string         `json:"editions,omitempty"`
+	SupportedVersions  []string         `json:"supportedVersions,omitempty"`
+	ConnectionModes    []string         `json:"connectionModes,omitempty"`
+	Services           []string         `json:"services,omitempty"`
+	Actions            []GameCapability `json:"actions,omitempty"`
+	Observations       []GameCapability `json:"observations,omitempty"`
+	CompanionArtifacts []PluginArtifact `json:"companionArtifacts,omitempty"`
 }
 
 func ParseGamePluginSpec(spec map[string]any) (GamePluginSpec, error) {
@@ -203,7 +163,9 @@ func ParseGamePluginSpec(spec map[string]any) (GamePluginSpec, error) {
 		return GamePluginSpec{}, fmt.Errorf("marshal game plugin spec: %w", err)
 	}
 	var parsed GamePluginSpec
-	if err := json.Unmarshal(data, &parsed); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&parsed); err != nil {
 		return GamePluginSpec{}, fmt.Errorf("decode game plugin spec: %w", err)
 	}
 	parsed.ProtocolVersion = strings.TrimSpace(parsed.ProtocolVersion)
@@ -214,6 +176,13 @@ func ParseGamePluginSpec(spec map[string]any) (GamePluginSpec, error) {
 		parsed.GameProtocolVersion = GameProtocolVersion
 	}
 	return parsed, nil
+}
+
+func (s GamePluginSpec) EffectiveArtifacts() []PluginArtifact {
+	if len(s.Artifacts) > 0 {
+		return s.Artifacts
+	}
+	return s.CompanionArtifacts
 }
 
 func (s GamePluginSpec) Validate() error {
@@ -251,21 +220,23 @@ func (s GamePluginSpec) Validate() error {
 			}
 		}
 	}
-	seenArtifacts := make(map[string]struct{}, len(s.CompanionArtifacts))
-	for _, artifact := range s.CompanionArtifacts {
+	artifacts := s.EffectiveArtifacts()
+	seenArtifacts := make(map[string]struct{}, len(artifacts))
+	for _, artifact := range artifacts {
 		id := strings.TrimSpace(artifact.ID)
-		if id == "" || strings.TrimSpace(artifact.Type) == "" || strings.TrimSpace(artifact.Source) == "" || strings.TrimSpace(artifact.InstallTarget) == "" {
-			return fmt.Errorf("companion artifact id, type, source and installTarget are required")
+		target := strings.TrimSpace(artifact.EffectiveTarget())
+		if id == "" || strings.TrimSpace(artifact.Type) == "" || strings.TrimSpace(artifact.Source) == "" || target == "" {
+			return fmt.Errorf("artifact id, type, source and target are required")
 		}
 		if _, exists := seenArtifacts[id]; exists {
-			return fmt.Errorf("duplicate companion artifact id %q", id)
+			return fmt.Errorf("duplicate artifact id %q", id)
 		}
 		seenArtifacts[id] = struct{}{}
 		if !safePackageRelativePath(artifact.Source) {
-			return fmt.Errorf("companion artifact %q source must be a safe package-relative path", id)
+			return fmt.Errorf("artifact %q source must be a safe package-relative path", id)
 		}
-		if !safePackageRelativePath(artifact.InstallTarget) {
-			return fmt.Errorf("companion artifact %q installTarget must be a safe game-root-relative path", id)
+		if !safePackageRelativePath(target) {
+			return fmt.Errorf("artifact %q target must be a safe target-relative path", id)
 		}
 	}
 	return nil
@@ -276,7 +247,6 @@ func safePackageRelativePath(raw string) bool {
 	if normalized == "" || strings.HasPrefix(normalized, "/") {
 		return false
 	}
-	// Reject Windows drive/ADS syntax even when validation runs on Unix.
 	if strings.Contains(normalized, ":") {
 		return false
 	}
