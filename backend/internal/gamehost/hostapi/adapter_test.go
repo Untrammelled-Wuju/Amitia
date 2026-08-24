@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"github.com/u-ai/backend/internal/extension/kernel/host_api"
+	ghpermission "github.com/u-ai/backend/internal/extension/kernel/permission"
 	"github.com/u-ai/backend/internal/extension/kernel/runtime_supervisor"
 	"github.com/u-ai/backend/internal/gamehost/ipc"
+	"github.com/u-ai/backend/internal/gamehost/permission"
 )
 
 type fakeIdentityMapper struct {
@@ -45,6 +47,24 @@ type fakeScopeProvider struct{ snapID string }
 type fakeReady struct{ ready bool }
 
 func (f *fakeReady) IsReady(connKey string) bool { return f.ready }
+
+type fakeServicePermissionChecker struct {
+	runtimeID string
+	pluginID  string
+	serviceID string
+	permID    string
+	result    permission.DecisionResult
+	calls     int
+}
+
+func (f *fakeServicePermissionChecker) CheckServicePermission(ctx context.Context, runtimeID string, pluginID string, serviceID string, permID string) permission.DecisionResult {
+	f.calls++
+	f.runtimeID = runtimeID
+	f.pluginID = pluginID
+	f.serviceID = serviceID
+	f.permID = permID
+	return f.result
+}
 
 func (f *fakePermProvider) CurrentSnapshotID(ctx context.Context, extensionID string, moduleID string, generation int64) (string, bool, error) {
 	return f.snapID, f.snapID != "", nil
@@ -250,5 +270,73 @@ func TestAdapter_PreservesDeadline(t *testing.T) {
 
 	if gw.calls == 0 {
 		t.Fatalf("expected gateway call")
+	}
+}
+
+func TestAdapter_UsesServiceScopedPermissionCheck(t *testing.T) {
+	gw := &fakeGateway{result: host_api.CallResult{Status: host_api.StatusSuccess, Output: json.RawMessage(`{}`)}}
+	mapper := &fakeIdentityMapper{identity: runtime_supervisor.RuntimeIdentity{
+		InstanceID:  "runtime-1",
+		ExtensionID: "test.example/app",
+		ModuleID:    "module-b",
+	}}
+	checker := &fakeServicePermissionChecker{result: permission.DecisionResult{Decision: permission.DecisionAllowed}}
+	adapter, err := NewHostAPIAdapter(HostAPIAdapterConfig{
+		Gateway:            gw,
+		Mapper:             mapper,
+		PermissionProvider: &fakePermProvider{},
+		ScopeProvider:      &fakeScopeProvider{},
+		ReadyVerifier:      &fakeReady{ready: true},
+		IDGenerator:        DefaultIDGenerator(),
+		PermissionChecker:  checker,
+	})
+	if err != nil {
+		t.Fatalf("NewHostAPIAdapter: %v", err)
+	}
+
+	_, err = adapter.Call(context.Background(), Request{
+		Peer:  ipc.Peer{PluginID: "p1", RuntimeID: "r1", ServiceID: "service-b"},
+		Route: "host.runtime.health",
+	})
+	if err != nil {
+		t.Fatalf("Call: %v", err)
+	}
+	if checker.calls != 1 {
+		t.Fatalf("expected one permission check, got %d", checker.calls)
+	}
+	if checker.runtimeID != "r1" || checker.pluginID != "p1" || checker.serviceID != "service-b" {
+		t.Fatalf("unexpected permission identity: runtime=%s plugin=%s service=%s", checker.runtimeID, checker.pluginID, checker.serviceID)
+	}
+	if checker.permID != ghpermission.PermissionGameHostAPIInvoke {
+		t.Fatalf("unexpected permission id: %s", checker.permID)
+	}
+}
+
+func TestAdapter_ServicePermissionDeniedStopsGateway(t *testing.T) {
+	gw := &fakeGateway{result: host_api.CallResult{Status: host_api.StatusSuccess}}
+	mapper := &fakeIdentityMapper{identity: runtime_supervisor.RuntimeIdentity{InstanceID: "runtime-1", ExtensionID: "test.example/app", ModuleID: "module-b"}}
+	checker := &fakeServicePermissionChecker{result: permission.DecisionResult{Decision: permission.DecisionDenied, Reason: permission.ReasonScopeDenied}}
+	adapter, err := NewHostAPIAdapter(HostAPIAdapterConfig{
+		Gateway:            gw,
+		Mapper:             mapper,
+		PermissionProvider: &fakePermProvider{},
+		ScopeProvider:      &fakeScopeProvider{},
+		IDGenerator:        DefaultIDGenerator(),
+		PermissionChecker:  checker,
+	})
+	if err != nil {
+		t.Fatalf("NewHostAPIAdapter: %v", err)
+	}
+
+	_, err = adapter.Call(context.Background(), Request{
+		Peer:  ipc.Peer{PluginID: "p1", RuntimeID: "r1", ServiceID: "service-b"},
+		Route: "host.runtime.health",
+	})
+	var denied *PermissionDeniedError
+	if !errors.As(err, &denied) {
+		t.Fatalf("expected PermissionDeniedError, got %v", err)
+	}
+	if gw.calls != 0 {
+		t.Fatalf("gateway must not run after permission denial, got %d calls", gw.calls)
 	}
 }

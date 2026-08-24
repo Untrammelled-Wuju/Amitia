@@ -107,16 +107,17 @@ func (m *DefaultGamePluginContributionMapper) ToDescriptor(
 	metadata["runtimeModuleId"] = spec.RuntimeModuleID
 
 	descriptor := gamehostdomain.PluginDescriptor{
-		ID:              pluginID,
-		ExtensionID:     string(extension.ID),
-		Name:            name,
-		Version:         fmt.Sprintf("%v", extension.Version),
-		ProtocolVersion: protocol.ProtocolVersion,
-		Capabilities:    hostFeatures,
-		Services:        services,
-		Channels:        channels,
-		ControlSinks:    controlSinks,
-		Metadata:        metadata,
+		ID:                  pluginID,
+		ExtensionID:         string(extension.ID),
+		Name:                name,
+		Version:             fmt.Sprintf("%v", extension.Version),
+		ProtocolVersion:     protocol.ProtocolVersion,
+		Capabilities:        hostFeatures,
+		RequiredPermissions: append([]string(nil), contribution.RequiredPermissions...),
+		Services:            services,
+		Channels:            channels,
+		ControlSinks:        controlSinks,
+		Metadata:            metadata,
 	}
 	if err := descriptor.Validate(); err != nil {
 		return gamehostdomain.PluginDescriptor{}, fmt.Errorf("mapped plugin descriptor validation failed: %w", err)

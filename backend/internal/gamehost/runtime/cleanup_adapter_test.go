@@ -7,6 +7,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	goruntime "runtime"
 	"testing"
 
 	"github.com/u-ai/backend/internal/extension/kernel/trusted_service"
@@ -76,16 +77,22 @@ func TestCleanupVerifier_RunningServiceNotCleaned(t *testing.T) {
 
 	supervisor := trusted_service.NewProcessSupervisor(t.TempDir())
 
-	pingExe, err := exec.LookPath("ping.exe")
+	executableName := "sleep"
+	args := []string{"60"}
+	if goruntime.GOOS == "windows" {
+		executableName = "ping.exe"
+		args = []string{"127.0.0.1", "-n", "60"}
+	}
+	executablePath, err := exec.LookPath(executableName)
 	if err != nil {
-		t.Fatalf("ping.exe not found: %v", err)
+		t.Fatalf("%s not found: %v", executableName, err)
 	}
 
-	pingContent, err := os.ReadFile(pingExe)
+	executableContent, err := os.ReadFile(executablePath)
 	if err != nil {
-		t.Fatalf("failed to read ping.exe: %v", err)
+		t.Fatalf("failed to read %s: %v", executableName, err)
 	}
-	hash := sha256.Sum256(pingContent)
+	hash := sha256.Sum256(executableContent)
 	expectedHash := hex.EncodeToString(hash[:])
 
 	def := &trusted_service.ServiceRuntimeDefinition{
@@ -96,13 +103,13 @@ func TestCleanupVerifier_RunningServiceNotCleaned(t *testing.T) {
 		Executables: []trusted_service.PlatformExecutable{
 			{
 				Platform:     trusted_service.CurrentPlatform(),
-				Path:         pingExe,
-				ArgsTemplate: []string{"127.0.0.1", "-n", "60"},
+				Path:         executablePath,
+				ArgsTemplate: args,
 				Sha256:       expectedHash,
 				Signature:    trusted_service.BinarySignature{Trusted: true, Value: "test-sig"},
 			},
 		},
-		Network: trusted_service.ServiceNetworkPolicy{LoopbackOnly: true},
+		Network: trusted_service.ServiceNetworkPolicy{Enforce: false},
 	}
 	_ = supervisor.Register(def)
 
@@ -223,7 +230,7 @@ func TestQuarantineError(t *testing.T) {
 func TestCrashHandlerError(t *testing.T) {
 	err := &CrashHandlerError{
 		RuntimeID:    "rt-1",
-		ServiceID:   "bridge",
+		ServiceID:    "bridge",
 		ExitExpected: false,
 	}
 

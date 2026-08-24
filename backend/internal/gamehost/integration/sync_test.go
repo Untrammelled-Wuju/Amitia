@@ -14,6 +14,24 @@ type mockRegistry struct {
 	plugins map[gamehostdomain.PluginID]gamehostdomain.PluginDescriptor
 }
 
+func syncTestExtension(id kerneldomain.ExtensionID, name string) kerneldomain.ExtensionDefinition {
+	return kerneldomain.ExtensionDefinition{
+		ID:      id,
+		Name:    kerneldomain.LocalizedText{Default: name},
+		Version: kerneldomain.SemanticVersion{Major: 1},
+		Domain:  kerneldomain.ExtensionDomainGame,
+		Modules: []kerneldomain.ModuleDefinition{{
+			ID:          "runtime",
+			ExtensionID: id,
+			Type:        kerneldomain.ModuleTypeService,
+			Runtime: &kerneldomain.RuntimeDefinition{
+				Type:       kerneldomain.RuntimeTypeService,
+				EntryPoint: "bin/runtime",
+			},
+		}},
+	}
+}
+
 func newMockRegistry() *mockRegistry {
 	return &mockRegistry{
 		plugins: make(map[gamehostdomain.PluginID]gamehostdomain.PluginDescriptor),
@@ -76,12 +94,7 @@ func TestFullSyncRegistersEnabledGamePlugins(t *testing.T) {
 	source := &mockSource{
 		plugins: []KernelGamePlugin{
 			{
-				Extension: kerneldomain.ExtensionDefinition{
-					ID:      "com.example.game1",
-					Name:    kerneldomain.LocalizedText{Default: "Game 1"},
-					Version: kerneldomain.SemanticVersion{Major: 1},
-					Domain:  kerneldomain.ExtensionDomainGame,
-				},
+				Extension: syncTestExtension("com.example.game1", "Game 1"),
 				Contribution: kerneldomain.ContributionDefinition{
 					ID:   "main",
 					Kind: kerneldomain.ContributionKindGamePlugin,
@@ -89,7 +102,8 @@ func TestFullSyncRegistersEnabledGamePlugins(t *testing.T) {
 					Definition: map[string]any{
 						"protocolVersion": "amitia-game-host/1",
 						"runtimeModuleId": "runtime",
-						"capabilities":    []interface{}{"realtime_control"},
+						"hostFeatures":    []interface{}{"realtime_control"},
+						"network":         map[string]any{"mode": "none"},
 					},
 				},
 			},
@@ -122,17 +136,12 @@ func TestFullSyncIsIdempotent(t *testing.T) {
 	source := &mockSource{
 		plugins: []KernelGamePlugin{
 			{
-				Extension: kerneldomain.ExtensionDefinition{
-					ID:      "com.example.idempotent",
-					Name:    kerneldomain.LocalizedText{Default: "Idempotent"},
-					Version: kerneldomain.SemanticVersion{Major: 1},
-					Domain:  kerneldomain.ExtensionDomainGame,
-				},
+				Extension: syncTestExtension("com.example.idempotent", "Idempotent"),
 				Contribution: kerneldomain.ContributionDefinition{
 					ID:         "main",
 					Kind:       kerneldomain.ContributionKindGamePlugin,
 					Name:       kerneldomain.LocalizedText{Default: "Idempotent Plugin"},
-					Definition: map[string]any{"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime"},
+					Definition: map[string]any{"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime", "network": map[string]any{"mode": "none"}},
 				},
 			},
 		},
@@ -197,31 +206,21 @@ func TestFullSyncMultiplePluginsPerExtension(t *testing.T) {
 	source := &mockSource{
 		plugins: []KernelGamePlugin{
 			{
-				Extension: kerneldomain.ExtensionDefinition{
-					ID:      "com.example.multi",
-					Name:    kerneldomain.LocalizedText{Default: "Multi"},
-					Version: kerneldomain.SemanticVersion{Major: 1},
-					Domain:  kerneldomain.ExtensionDomainGame,
-				},
+				Extension: syncTestExtension("com.example.multi", "Multi"),
 				Contribution: kerneldomain.ContributionDefinition{
 					ID:         "plugin1",
 					Kind:       kerneldomain.ContributionKindGamePlugin,
 					Name:       kerneldomain.LocalizedText{Default: "Plugin 1"},
-					Definition: map[string]any{"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime"},
+					Definition: map[string]any{"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime", "network": map[string]any{"mode": "none"}},
 				},
 			},
 			{
-				Extension: kerneldomain.ExtensionDefinition{
-					ID:      "com.example.multi",
-					Name:    kerneldomain.LocalizedText{Default: "Multi"},
-					Version: kerneldomain.SemanticVersion{Major: 1},
-					Domain:  kerneldomain.ExtensionDomainGame,
-				},
+				Extension: syncTestExtension("com.example.multi", "Multi"),
 				Contribution: kerneldomain.ContributionDefinition{
 					ID:         "plugin2",
 					Kind:       kerneldomain.ContributionKindGamePlugin,
 					Name:       kerneldomain.LocalizedText{Default: "Plugin 2"},
-					Definition: map[string]any{"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime"},
+					Definition: map[string]any{"protocolVersion": "amitia-game-host/1", "runtimeModuleId": "runtime", "network": map[string]any{"mode": "none"}},
 				},
 			},
 		},

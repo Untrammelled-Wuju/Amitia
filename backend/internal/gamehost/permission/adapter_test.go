@@ -108,6 +108,7 @@ type fakeRuntimeInfo struct {
 
 type fakeServiceInfo struct {
 	pluginID string
+	moduleID string
 }
 
 func newFakeResolver() *fakeResolver {
@@ -133,7 +134,7 @@ func (r *fakeResolver) addRuntime(runtimeID, pluginID string, state domain.Runti
 func (r *fakeResolver) addService(runtimeID, serviceID, pluginID string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.services[runtimeID+"/"+serviceID] = fakeServiceInfo{pluginID: pluginID}
+	r.services[runtimeID+"/"+serviceID] = fakeServiceInfo{pluginID: pluginID, moduleID: serviceID}
 }
 
 func (r *fakeResolver) ResolveExtensionID(pluginID string) (string, bool) {
@@ -153,14 +154,14 @@ func (r *fakeResolver) RuntimeExists(runtimeID string) (string, domain.RuntimeSt
 	return info.pluginID, info.state, nil
 }
 
-func (r *fakeResolver) ServiceExists(runtimeID string, serviceID string) (string, error) {
+func (r *fakeResolver) ServiceExists(runtimeID string, serviceID string) (string, string, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	info, ok := r.services[runtimeID+"/"+serviceID]
 	if !ok {
-		return "", fmt.Errorf("service not found")
+		return "", "", fmt.Errorf("service not found")
 	}
-	return info.pluginID, nil
+	return info.pluginID, info.moduleID, nil
 }
 
 func (r *fakeResolver) GetRuntimeState(runtimeID string) (domain.RuntimeState, error) {
@@ -334,7 +335,7 @@ func TestCheck_HostPolicyDeny(t *testing.T) {
 		t.Fatal("expected DENY for host policy deny")
 	}
 	if result.Reason != ghpermission.ReasonPolicyDenied {
-		t.Fatalf("expected reason host_policy_deny, got %s", result.Reason)
+		t.Fatalf("expected reason host_policy_denied, got %s", result.Reason)
 	}
 }
 
@@ -535,3 +536,35 @@ func TestCheck_HighRiskPermission(t *testing.T) {
 	}
 }
 
+func TestMapServiceSubjectRejectsEmptyServiceID(t *testing.T) {
+	resolver := newFakeResolver()
+	mapper := ghpermission.NewGameHostSubjectMapper(resolver)
+	if _, err := mapper.MapServiceSubject("rt-1", "plugin-1", ""); err == nil {
+		t.Fatal("expected empty service id to be rejected for service-scoped subject")
+	}
+}
+
+func TestEffectiveViewRevisionStableAndOrderIndependent(t *testing.T) {
+	broker := newFakeBroker()
+	broker.addGrant("runtime:rt-1", "gamehost.control", kernelpermission.DecisionAllow)
+	adapter, resolver, _ := buildTestAdapter(broker, nil)
+	resolver.addPlugin("plugin-1", "ext-1")
+	resolver.addRuntime("rt-1", "plugin-1", domain.RuntimeStateRunning)
+
+	subject := ghpermission.EffectiveSubject{RuntimeID: "rt-1", PluginID: "plugin-1", ExtensionID: "ext-1"}
+	first := adapter.ResolveRuntimePermissions(context.Background(), subject, "gamehost.control", "gamehost.channel.use")
+	time.Sleep(time.Millisecond)
+	second := adapter.ResolveRuntimePermissions(context.Background(), subject, "gamehost.channel.use", "gamehost.control")
+	if first.Revision == "" || second.Revision == "" {
+		t.Fatal("permission revision must not be empty")
+	}
+	if first.Revision != second.Revision {
+		t.Fatalf("same effective permission state must have stable revision: %q vs %q", first.Revision, second.Revision)
+	}
+
+	broker.addGrant("runtime:rt-1", "gamehost.control", kernelpermission.DecisionDeny)
+	third := adapter.ResolveRuntimePermissions(context.Background(), subject, "gamehost.control", "gamehost.channel.use")
+	if third.Revision == first.Revision {
+		t.Fatalf("permission decision change must change revision: %q", third.Revision)
+	}
+}

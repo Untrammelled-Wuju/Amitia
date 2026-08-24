@@ -17,8 +17,8 @@ type ReadyVerifier interface {
 	IsReady(connKey string) bool
 }
 
-type RuntimePermissionChecker interface {
-	CheckRuntimePermission(ctx context.Context, runtimeID string, pluginID string, permID string) permission.DecisionResult
+type ServicePermissionChecker interface {
+	CheckServicePermission(ctx context.Context, runtimeID string, pluginID string, serviceID string, permID string) permission.DecisionResult
 }
 
 type NegotiatedFeatureChecker interface {
@@ -33,7 +33,7 @@ type HostAPIAdapter struct {
 	ready       ReadyVerifier
 	idGen       func() string
 	tracker     InvocationTracker
-	permChecker RuntimePermissionChecker
+	permChecker ServicePermissionChecker
 	featureGate NegotiatedFeatureChecker
 }
 
@@ -50,7 +50,7 @@ type HostAPIAdapterConfig struct {
 	ReadyVerifier      ReadyVerifier
 	IDGenerator        func() string
 	InvocationTracker  InvocationTracker
-	PermissionChecker  RuntimePermissionChecker
+	PermissionChecker  ServicePermissionChecker
 	FeatureChecker     NegotiatedFeatureChecker
 }
 
@@ -118,7 +118,7 @@ func (a *HostAPIAdapter) Call(ctx context.Context, req Request) (Response, error
 	}
 
 	if a.permChecker != nil && req.Peer.RuntimeID != "" && req.Peer.PluginID != "" {
-		result := a.permChecker.CheckRuntimePermission(ctx, string(req.Peer.RuntimeID), string(req.Peer.PluginID), ghpermission.PermissionGameHostAPIInvoke)
+		result := a.permChecker.CheckServicePermission(ctx, string(req.Peer.RuntimeID), string(req.Peer.PluginID), string(req.Peer.ServiceID), ghpermission.PermissionGameHostAPIInvoke)
 		if !result.Allowed() {
 			return Response{}, &PermissionDeniedError{Reason: string(result.Reason)}
 		}

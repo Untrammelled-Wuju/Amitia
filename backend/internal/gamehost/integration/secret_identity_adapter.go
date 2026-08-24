@@ -75,43 +75,35 @@ func (r *SecretRuntimeIdentityReader) ResolveService(
 ) (
 	pluginID string,
 	extensionID string,
+	moduleID string,
 	state string,
 	err error,
 ) {
 	if runtimeID == "" {
-		return "", "", "", fmt.Errorf("runtime id is required")
+		return "", "", "", "", fmt.Errorf("runtime id is required")
 	}
 	if serviceID == "" {
-		return "", "", "", fmt.Errorf("service id is required")
+		return "", "", "", "", fmt.Errorf("service id is required")
 	}
 
 	rt, err := r.runtimes.GetRuntime(domain.RuntimeInstanceID(runtimeID))
 	if err != nil {
-		return "", "", "", fmt.Errorf("resolve runtime %s: %w", runtimeID, err)
+		return "", "", "", "", fmt.Errorf("resolve runtime %s: %w", runtimeID, err)
 	}
 
-	topology, err := r.topologies.GetTopologySnapshot(domain.RuntimeInstanceID(runtimeID))
+	moduleID, err := r.topologies.ResolveModuleID(domain.RuntimeInstanceID(runtimeID), domain.ServiceID(serviceID))
 	if err != nil {
-		return "", "", "", fmt.Errorf("resolve topology for runtime %s: %w", runtimeID, err)
+		return "", "", "", "", fmt.Errorf("resolve module binding for service %s in runtime %s: %w", serviceID, runtimeID, err)
 	}
-
-	svcFound := false
-	for _, svc := range topology.Services {
-		if string(svc.ServiceID) == serviceID {
-			svcFound = true
-			break
-		}
-	}
-	if !svcFound {
-		return "", "", "", fmt.Errorf("service %s not found in runtime %s topology", serviceID, runtimeID)
+	if moduleID == "" {
+		return "", "", "", "", fmt.Errorf("service %s has no kernel module binding", serviceID)
 	}
 
 	plugin, err := r.pluginReg.Get(ctx, rt.PluginID)
 	if err != nil {
-		return "", "", "", fmt.Errorf("resolve plugin %s: %w", rt.PluginID, err)
+		return "", "", "", "", fmt.Errorf("resolve plugin %s: %w", rt.PluginID, err)
 	}
-
-	return string(rt.PluginID), plugin.ExtensionID, string(rt.State), nil
+	return string(rt.PluginID), plugin.ExtensionID, moduleID, string(rt.State), nil
 }
 
 func (r *SecretRuntimeIdentityReader) ExtensionEnabled(

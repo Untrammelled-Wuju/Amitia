@@ -210,6 +210,16 @@ func (r *Registry) Count() int {
 	return len(r.plugins)
 }
 
+func (r *Registry) DescriptorRequiredPermissions(pluginID string) ([]string, error) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	p, ok := r.plugins[domain.PluginID(pluginID)]
+	if !ok {
+		return nil, fmt.Errorf("plugin not found: %s", pluginID)
+	}
+	return append([]string(nil), p.RequiredPermissions...), nil
+}
+
 func (r *Registry) DescriptorCapabilities(pluginID string) ([]string, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()

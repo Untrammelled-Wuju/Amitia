@@ -12,6 +12,7 @@ type EffectiveSubject struct {
 	RuntimeID   string
 	PluginID    string
 	ServiceID   string
+	ModuleID    string
 	ExtensionID string
 }
 
@@ -26,15 +27,19 @@ func (s EffectiveSubject) KernelSubject() permission.PermissionSubject {
 		subj.ID = s.RuntimeID
 		subj.ExtensionID = s.ExtensionID
 	}
-	if s.ServiceID != "" {
-		subj.ModuleID = s.ServiceID
+	if moduleID := s.EffectiveModuleID(); moduleID != "" {
+		subj.ModuleID = moduleID
 	}
 	return subj
 }
 
+func (s EffectiveSubject) EffectiveModuleID() string {
+	return s.ModuleID
+}
+
 func (s EffectiveSubject) String() string {
 	if s.ServiceID != "" {
-		return fmt.Sprintf("runtime:%s/service:%s/ext:%s", s.RuntimeID, s.ServiceID, s.ExtensionID)
+		return fmt.Sprintf("runtime:%s/service:%s/module:%s/ext:%s", s.RuntimeID, s.ServiceID, s.EffectiveModuleID(), s.ExtensionID)
 	}
 	return fmt.Sprintf("runtime:%s/ext:%s", s.RuntimeID, s.ExtensionID)
 }
@@ -42,7 +47,7 @@ func (s EffectiveSubject) String() string {
 type SubjectResolver interface {
 	ResolveExtensionID(pluginID string) (string, bool)
 	RuntimeExists(runtimeID string) (pluginID string, state domain.RuntimeState, err error)
-	ServiceExists(runtimeID string, serviceID string) (pluginID string, err error)
+	ServiceExists(runtimeID string, serviceID string) (pluginID string, moduleID string, err error)
 	GetRuntimeState(runtimeID string) (domain.RuntimeState, error)
 }
 
@@ -94,16 +99,15 @@ func (m *GameHostSubjectMapper) MapSubject(runtimeID string, pluginID string) (E
 }
 
 func (m *GameHostSubjectMapper) MapServiceSubject(runtimeID string, pluginID string, serviceID string) (EffectiveSubject, error) {
+	if serviceID == "" {
+		return EffectiveSubject{}, fmt.Errorf("%w: service id required for service-scoped permission subject", ErrInvalidSubject)
+	}
 	base, err := m.MapSubject(runtimeID, pluginID)
 	if err != nil {
 		return EffectiveSubject{}, err
 	}
 
-	if serviceID == "" {
-		return base, nil
-	}
-
-	svcPluginID, err := m.resolver.ServiceExists(runtimeID, serviceID)
+	svcPluginID, moduleID, err := m.resolver.ServiceExists(runtimeID, serviceID)
 	if err != nil {
 		return EffectiveSubject{}, fmt.Errorf("%w: service %s not found in runtime %s: %v", ErrInvalidSubject, serviceID, runtimeID, err)
 	}
@@ -111,6 +115,10 @@ func (m *GameHostSubjectMapper) MapServiceSubject(runtimeID string, pluginID str
 		return EffectiveSubject{}, fmt.Errorf("%w: service %s does not belong to plugin %s", ErrInvalidSubject, serviceID, pluginID)
 	}
 
+	if moduleID == "" {
+		return EffectiveSubject{}, fmt.Errorf("%w: service %s has no kernel module binding", ErrInvalidSubject, serviceID)
+	}
 	base.ServiceID = serviceID
+	base.ModuleID = moduleID
 	return base, nil
 }
