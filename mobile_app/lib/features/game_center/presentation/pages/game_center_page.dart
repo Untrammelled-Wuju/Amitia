@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:file_picker/file_picker.dart';
@@ -19,6 +20,10 @@ class GameCenterPage extends ConsumerStatefulWidget {
 }
 
 class _GameCenterPageState extends ConsumerState<GameCenterPage> {
+  Timer? _approvalPollTimer;
+  List<GameHostPendingApproval> _pendingApprovals = const [];
+  String? _approvalBusyId;
+
   @override
   void initState() {
     super.initState();
@@ -26,7 +31,19 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
       final controller = ref.read(gameCenterControllerProvider.notifier);
       await controller.loadPlugins();
       await controller.loadCenterHealth();
+      await _loadPendingApprovals();
     });
+    _approvalPollTimer = Timer.periodic(
+      const Duration(seconds: 1),
+      (_) => _loadPendingApprovals(),
+    );
+  }
+
+  @override
+  void dispose() {
+    _approvalPollTimer?.cancel();
+    _approvalPollTimer = null;
+    super.dispose();
   }
 
   @override
@@ -57,9 +74,122 @@ class _GameCenterPageState extends ConsumerState<GameCenterPage> {
       ),
       body: SafeArea(
         top: false,
-        child: _buildBody(context, state),
+        child: Column(
+          children: [
+            if (_pendingApprovals.isNotEmpty) _buildApprovalPanel(context),
+            Expanded(child: _buildBody(context, state)),
+          ],
+        ),
       ),
     );
+  }
+
+  Future<void> _loadPendingApprovals() async {
+    try {
+      final items = await ref.read(gameCenterApiProvider).listPendingApprovals();
+      if (!mounted) return;
+      final current = items.map((item) => item.id).join('|');
+      final previous = _pendingApprovals.map((item) => item.id).join('|');
+      if (current != previous) {
+        setState(() => _pendingApprovals = items);
+      }
+    } catch (_) {
+      // Permission polling is auxiliary and must not make Game Center unavailable.
+    }
+  }
+
+  Future<void> _resolveApproval(GameHostPendingApproval approval, bool approve) async {
+    if (_approvalBusyId != null) return;
+    setState(() => _approvalBusyId = approval.id);
+    try {
+      await ref.read(gameCenterApiProvider).resolveApproval(approval.id, approve: approve);
+      await _loadPendingApprovals();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(approve ? '已允许本次操作' : '已拒绝本次操作')),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('权限确认失败: $e')),
+      );
+      await _loadPendingApprovals();
+    } finally {
+      if (mounted) setState(() => _approvalBusyId = null);
+    }
+  }
+
+  Widget _buildApprovalPanel(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      margin: EdgeInsets.fromLTRB(AppSpacing.pagePadding, AppSpacing.sm, AppSpacing.pagePadding, 0),
+      padding: EdgeInsets.all(AppSpacing.md),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('等待权限确认', style: AppTypography.cardTitle(context)),
+          const SizedBox(height: 4),
+          Text('每次确认只允许当前高风险操作执行一次。', style: AppTypography.caption(context)),
+          const SizedBox(height: 10),
+          for (final approval in _pendingApprovals)
+            Padding(
+              padding: const EdgeInsets.only(top: 6),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(_permissionLabel(approval.permissionId), style: AppTypography.label(context)),
+                        Text(
+                          approval.serviceId.isEmpty
+                              ? approval.pluginId
+                              : '${approval.pluginId} · ${approval.serviceId}',
+                          style: AppTypography.caption(context),
+                        ),
+                        if ((approval.targetPath ?? '').isNotEmpty)
+                          Text(
+                            '目标目录：${approval.targetPath}',
+                            style: AppTypography.caption(context),
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                      ],
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _approvalBusyId == null ? () => _resolveApproval(approval, false) : null,
+                    child: const Text('拒绝'),
+                  ),
+                  FilledButton(
+                    onPressed: _approvalBusyId == null ? () => _resolveApproval(approval, true) : null,
+                    child: _approvalBusyId == approval.id
+                        ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                        : const Text('允许一次'),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _permissionLabel(String permissionId) {
+    switch (permissionId) {
+      case 'gamehost.control':
+        return '执行本次游戏控制操作';
+      case 'gamehost.artifact.deploy':
+        return '执行本次插件制品部署';
+      case 'service.runtime.execute':
+        return '启动本次插件 Runtime';
+      default:
+        return '允许一次：$permissionId';
+    }
   }
 
   Widget _buildBody(BuildContext context, GameCenterState state) {

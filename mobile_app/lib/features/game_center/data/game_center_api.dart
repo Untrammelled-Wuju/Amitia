@@ -131,6 +131,26 @@ class GameCenterApi {
     }
   }
 
+  Future<List<GameHostPendingApproval>> listPendingApprovals() async {
+    final data = await _api.get<Map<String, dynamic>>('/api/game-center/approvals');
+    final items = ((data?['items'] as List?) ?? const <dynamic>[])
+        .whereType<Map>()
+        .map((item) => GameHostPendingApproval.fromJson(Map<String, dynamic>.from(item)))
+        .where((item) => item.id.isNotEmpty && item.status == 'pending')
+        .toList(growable: false);
+    return items;
+  }
+
+  Future<void> resolveApproval(String approvalId, {required bool approve}) async {
+    final action = approve ? 'approve' : 'reject';
+    await _api.post<void>(
+      '/api/game-center/approvals/${Uri.encodeComponent(approvalId)}/$action',
+      data: <String, dynamic>{
+        'reason': approve ? 'approved from mobile Game Center' : 'rejected from mobile Game Center',
+      },
+    );
+  }
+
   Future<dynamic> invokeServiceRpc(
     String runtimeId,
     String serviceId, {

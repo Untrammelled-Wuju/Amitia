@@ -13,6 +13,39 @@
 
     <el-alert v-if="error" :title="error" type="error" show-icon :closable="false" />
 
+    <section v-if="pendingApprovals.length" class="approval-section" aria-live="polite">
+      <div class="section-heading">
+        <div>
+          <h2>等待权限确认</h2>
+          <p>高风险游戏插件操作不会自动执行。每次确认只允许当前请求执行一次，超时后自动失效。</p>
+        </div>
+        <span class="section-count">{{ pendingApprovals.length }} 个</span>
+      </div>
+      <div class="approval-list">
+        <article v-for="approval in pendingApprovals" :key="approval.id" class="approval-card">
+          <div class="approval-copy">
+            <strong>{{ permissionLabel(approval.permissionId) }}</strong>
+            <span>{{ approval.pluginId }}<template v-if="approval.serviceId"> · {{ approval.serviceId }}</template></span>
+            <small v-if="approval.target?.path" class="approval-target" :title="approval.target.path">目标目录：{{ approval.target.path }}</small>
+            <small>仅本次请求 · {{ approvalExpiryLabel(approval.expiresAt) }}</small>
+          </div>
+          <div class="approval-actions">
+            <el-button
+              size="small"
+              :loading="approvalBusy === approval.id"
+              @click="resolveApproval(approval, false)"
+            >拒绝</el-button>
+            <el-button
+              type="primary"
+              size="small"
+              :loading="approvalBusy === approval.id"
+              @click="resolveApproval(approval, true)"
+            >允许一次</el-button>
+          </div>
+        </article>
+      </div>
+    </section>
+
     <section class="current-game-card" :class="{ 'is-connected': !!activeRuntime?.connected }">
       <div class="current-game-visual" aria-hidden="true">
         <div class="visual-grid"></div>
@@ -419,7 +452,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
@@ -459,6 +492,18 @@ type Runtime = {
 
 type GameService = { serviceId: string; state?: string; health?: string };
 type PackageOperationView = { status?: string; errorCode?: string };
+type PendingApproval = {
+  id: string;
+  runtimeId: string;
+  pluginId: string;
+  serviceId?: string;
+  extensionId: string;
+  permissionId: string;
+  target?: { type?: string; id?: string; path?: string; url?: string };
+  status: string;
+  requestedAt: string;
+  expiresAt: string;
+};
 
 const api = useApi();
 const router = useRouter();
@@ -469,6 +514,9 @@ const error = ref("");
 const plugins = ref<Plugin[]>([]);
 const runtimes = ref<Runtime[]>([]);
 const developerAccess = ref(false);
+const pendingApprovals = ref<PendingApproval[]>([]);
+const approvalBusy = ref("");
+let approvalPollTimer: number | undefined;
 
 const readyRuntimeCount = computed(() => runtimes.value.filter((item) => item.ready).length);
 const activeRuntime = computed<Runtime | null>(() =>
@@ -558,6 +606,51 @@ async function refresh() {
   } finally {
     loading.value = false;
   }
+}
+
+async function refreshApprovals() {
+  try {
+    const result = await api.get<{ items?: PendingApproval[] }>("/api/game-center/approvals");
+    pendingApprovals.value = (result?.items ?? []).filter((item) => item?.status === "pending");
+  } catch {
+    // Approval polling must never make the whole Game Center unavailable.
+  }
+}
+
+async function resolveApproval(approval: PendingApproval, approve: boolean) {
+  if (!approval?.id || approvalBusy.value) return;
+  approvalBusy.value = approval.id;
+  try {
+    await api.post(
+      `/api/game-center/approvals/${encodeURIComponent(approval.id)}/${approve ? "approve" : "reject"}`,
+      { reason: approve ? "approved from Game Center" : "rejected from Game Center" },
+      { timeout: 10000 },
+    );
+    ElMessage.success(approve ? "已允许本次操作" : "已拒绝本次操作");
+    await refreshApprovals();
+  } catch (err: any) {
+    ElMessage.error(err?.message || "权限确认失败");
+    await refreshApprovals();
+  } finally {
+    approvalBusy.value = "";
+  }
+}
+
+function permissionLabel(permissionId: string) {
+  const labels: Record<string, string> = {
+    "gamehost.control": "允许游戏插件执行本次控制操作",
+    "gamehost.artifact.deploy": "允许游戏插件执行本次制品部署",
+    "service.runtime.execute": "允许启动本次插件 Runtime",
+    "service.process.spawn": "允许本次插件进程操作",
+  };
+  return labels[permissionId] || `允许一次：${permissionId}`;
+}
+
+function approvalExpiryLabel(expiresAt: string) {
+  const expires = Date.parse(expiresAt);
+  if (!Number.isFinite(expires)) return "即将过期";
+  const seconds = Math.max(0, Math.ceil((expires - Date.now()) / 1000));
+  return `${seconds} 秒后过期`;
 }
 
 function gameInitial(name: string) {
@@ -969,7 +1062,7 @@ async function uninstall(plugin: Plugin) {
 async function runtimeAction(runtimeId: string, action: "start" | "stop" | "restart") {
   busy.value = runtimeId;
   try {
-    await api.post(`/api/game-center/runtimes/${encodeURIComponent(runtimeId)}/${action}`);
+    await api.post(`/api/game-center/runtimes/${encodeURIComponent(runtimeId)}/${action}`, undefined, { timeout: 125000 });
     ElMessage.success(action === "start" ? "启动请求已提交" : action === "stop" ? "停止请求已提交" : "重启请求已提交");
     await refresh();
   } catch (err: any) {
@@ -988,9 +1081,9 @@ async function controlAction(runtimeId: string, action: string, successMessage =
       await api.post(`/api/game-center/runtimes/${encodeURIComponent(runtimeId)}/release`, {
         targetMode: "observe_only",
         expectedEpoch: authority?.epoch ?? 0,
-      });
+      }, { timeout: 125000 });
     } else {
-      await api.post(`/api/game-center/runtimes/${encodeURIComponent(runtimeId)}/${action}`);
+      await api.post(`/api/game-center/runtimes/${encodeURIComponent(runtimeId)}/${action}`, undefined, { timeout: 125000 });
     }
     ElMessage.success(successMessage);
     await refresh();
@@ -1005,7 +1098,20 @@ async function controlAction(runtimeId: string, action: string, successMessage =
   }
 }
 
-onMounted(refresh);
+onMounted(() => {
+  void refresh();
+  void refreshApprovals();
+  approvalPollTimer = window.setInterval(() => {
+    void refreshApprovals();
+  }, 1000);
+});
+
+onBeforeUnmount(() => {
+  if (approvalPollTimer !== undefined) {
+    window.clearInterval(approvalPollTimer);
+    approvalPollTimer = undefined;
+  }
+});
 </script>
 
 <style scoped>
@@ -1058,6 +1164,51 @@ onMounted(refresh);
 .page-head {
   gap: 20px;
   align-items: flex-start;
+}
+
+.approval-section {
+  border: 1px solid var(--game-border);
+  border-radius: 16px;
+  padding: 18px;
+  background: var(--game-panel);
+}
+
+.approval-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.approval-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px;
+  border: 1px solid var(--game-border-light);
+  border-radius: 12px;
+  background: var(--game-panel-soft);
+}
+
+.approval-copy {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.approval-copy span,
+.approval-copy small {
+  color: var(--game-text-muted);
+}
+
+.approval-target {
+  overflow-wrap: anywhere;
+}
+
+.approval-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
 }
 
 .page-copy {
